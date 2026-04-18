@@ -47,6 +47,81 @@ fn ifelse_has_direct_break(branch: &IfElse) -> bool {
     }
 }
 
+/// Phase 1.14: walk the current loop level's body and collect the types
+/// of every `B <expr>` break statement. Returns the unified type if all
+/// break-values agree, or None if no break carries a value.
+fn collect_break_value_type(
+    checker: &mut TypeChecker,
+    stmts: &[Spanned<Stmt>],
+) -> Option<ResolvedType> {
+    let mut break_exprs: Vec<Spanned<Expr>> = Vec::new();
+    collect_break_values_stmts(stmts, &mut break_exprs);
+    if break_exprs.is_empty() {
+        return None;
+    }
+    let mut unified: Option<ResolvedType> = None;
+    for e in &break_exprs {
+        let t = match checker.check_expr(e) {
+            Ok(t) => t,
+            Err(_) => return None,
+        };
+        match unified {
+            None => unified = Some(t),
+            Some(ref prev) => {
+                if checker.unify(prev, &t).is_err() {
+                    return None;
+                }
+            }
+        }
+    }
+    unified.map(|t| checker.apply_substitutions(&t))
+}
+
+fn collect_break_values_stmts(stmts: &[Spanned<Stmt>], out: &mut Vec<Spanned<Expr>>) {
+    for s in stmts {
+        collect_break_values_stmt(s, out);
+    }
+}
+
+fn collect_break_values_stmt(stmt: &Spanned<Stmt>, out: &mut Vec<Spanned<Expr>>) {
+    match &stmt.node {
+        Stmt::Break(Some(e)) => out.push((**e).clone()),
+        Stmt::Expr(e) => collect_break_values_expr(e, out),
+        _ => {}
+    }
+}
+
+fn collect_break_values_expr(expr: &Spanned<Expr>, out: &mut Vec<Spanned<Expr>>) {
+    match &expr.node {
+        Expr::Loop { .. } | Expr::While { .. } => {}
+        Expr::If { then, else_, .. } => {
+            collect_break_values_stmts(then, out);
+            if let Some(b) = else_ {
+                collect_break_values_ifelse(b, out);
+            }
+        }
+        Expr::Block(stmts) => collect_break_values_stmts(stmts, out),
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                collect_break_values_expr(&arm.body, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_break_values_ifelse(branch: &IfElse, out: &mut Vec<Spanned<Expr>>) {
+    match branch {
+        IfElse::Else(stmts) => collect_break_values_stmts(stmts, out),
+        IfElse::ElseIf(_, stmts, next) => {
+            collect_break_values_stmts(stmts, out);
+            if let Some(n) = next {
+                collect_break_values_ifelse(n, out);
+            }
+        }
+    }
+}
+
 impl TypeChecker {
     /// Check if-else branch
     pub(crate) fn check_if_else(&mut self, branch: &IfElse) -> TypeResult<ResolvedType> {
@@ -235,12 +310,19 @@ impl TypeChecker {
                 self.loop_depth -= 1;
                 self.pop_scope();
 
+                // Phase 1.14: if the loop body contains `B <expr>` at this level,
+                // use the break value's type as the loop type (loop-as-expression).
+                // Multiple breaks must agree on the type.
+                let break_value_type = collect_break_value_type(self, body);
+
                 // Phase 283: A bare infinite loop (`L {}` with no pattern/iter)
                 // that has no reachable `break` at this loop level is diverging —
                 // all exits are via `R` (return). Assign it the `Never` type so
                 // it unifies with any declared return type (e.g. Result<T,E>)
                 // without a spurious E001 "expected Result, found ()" error.
-                let loop_type = if pattern.is_none() && iter.is_none()
+                let loop_type = if let Some(t) = break_value_type {
+                    t
+                } else if pattern.is_none() && iter.is_none()
                     && !stmts_have_direct_break(body)
                 {
                     ResolvedType::Never

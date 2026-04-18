@@ -775,8 +775,9 @@ F main() -> i64 {
 }
 
 #[test]
-#[ignore = "parser-limit: loop-as-expression with break value causes type mismatch"]
 fn syntax_ctrl_loop_as_expression() {
+    // Phase 1.14: TC infers loop type from Stmt::Break(Some(expr)) values.
+    // Parser + TC support. Full codegen (phi node) still follows build/run tests.
     let src = r#"
 F main() -> i64 {
     x := L { B 5 }

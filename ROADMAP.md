@@ -290,7 +290,15 @@ progress: 9/18 (50%)
   [완료 기준]:
   - LIVING_SPEC const_compile_time.vais 원본 (const 사용) 통과
   - e2e 1개 추가
-- [ ] 1.14 Break-with-value `B <expr>` 지원 (impl-sonnet) [blockedBy: 1.13]
+- [x] 1.14 Break-with-value `B <expr>` TC 지원 (Opus direct) ✅ 2026-04-19
+  detail: Parser는 이미 `Stmt::Break(Option<Expr>)` 수용. TC에 collect_break_value_type 추가 — 현재 loop 레벨 내 모든 break value expression 수집, 타입 통합 후 loop 반환 타입으로 사용.
+  changes:
+    - crates/vais-types/src/checker_expr/control_flow.rs — collect_break_value_type + 재귀 helper (collect_break_values_stmts/stmt/expr/ifelse)
+    - Loop TC에서 break_value_type 있으면 loop_type으로 사용
+    - crates/vaisc/tests/integrity/compiler_syntax.rs — syntax_ctrl_loop_as_expression ignore 해제
+    - docs/language/COOKBOOK.md 항목 22 — "Phase 1.14 해결됨"
+  verify: `x := L { B 5 }` TC OK, `x: i64 = 5`. integrity gate green.
+  codegen 주의: 복잡한 loop-as-expr의 LLVM phi node 처리는 Phase 3.x 확장 작업.
   detail: `result := L { I done { B 42 } }` 패턴. Parser + TC (loop-as-expression) 확인.
   [완료 기준]:
   - compiler_syntax B_break_value 테스트 추가 + passing

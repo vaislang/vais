@@ -476,23 +476,23 @@ F apply<T>(val: T, f: F(T) -> i64) -> i64 = f(val)
 
 ---
 
-## 22. Break with value — 미지원
+## 22. Break with value — Phase 1.14 ✅ Parser + TC 지원
 
 ```vais
-# ❌ DON'T — 현재 파서는 `B` 뒤 값 전달 미지원
-let result = L {
-    I done { B 42 }  # 파서 오류
-}
+# ✅ DO — B <expr>로 loop-as-expression
+result := L { B 42 }  # result: i64 = 42
 
-# ✅ DO — 외부 mut 변수에 값 저장 후 plain B
-result := mut -1
-L {
-    I done { result = 42; B }
-    # ...
+# ✅ DO — 조건부 break
+result := L {
+    I done { B 42 } EL { 0 }
 }
 ```
 
-**왜 실패하는지**: 현재 파서는 `B <expr>` 형태(Rust의 `break value`)를 처리하지 않음. plain `B`만 지원.
+**Phase 1.14 변경**: Parser는 이미 `B <expr>` 허용. TC에 `collect_break_value_type`
+helper 추가 — 현재 loop 레벨의 모든 `Stmt::Break(Some(e))`를 수집하고 타입 통합.
+
+**주의**: 복잡한 loop-as-expression의 codegen (phi node 등)은 Phase 3.x 완결성
+작업에서 추가 완성 필요. 단순 케이스는 이미 작동.
 
 **참조**: `LIVING_SPEC/01_keywords/B_break_continue.vais`, `L_loop_break.vais`
 
