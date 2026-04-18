@@ -143,20 +143,18 @@ force expr
 
 ---
 
-## 6. 빈 Vec 리터럴 `[]`은 타입 추론 안됨
+## 6. 빈 Vec 리터럴 `[]` — Phase 1.12 ✅ 해결됨
 
 ```vais
-# ❌ DON'T — 타입 추론 실패: `expected Vec<i64>, found *?0`
+# ✅ DO — 타입 어노테이션 있으면 Vec<T>로 추론
 a: Vec<i64> := []
+b: Vec<i64> := [1, 2, 3]
 
-# ✅ DO — Vec::new() 생성자
-a: Vec<i64> = Vec::new()
-
-# ✅ DO — 원소 있는 리터럴 (현재 파서에서는 `*i64`로 추론될 수 있어 주의)
-# 정확한 Vec<T>는 Vec::new() 후 push 권장
+# ✅ DO — Vec::new() 생성자 (타입 어노테이션 없이도 안전)
+c: Vec<i64> = Vec::new()
 ```
 
-**왜 실패하는지**: 현재 컴파일러에서 빈 `[]`는 포인터 또는 `*?0` 타입으로 추론. `Vec::new()`가 안전.
+**Phase 1.12 변경**: `Stmt::Let`가 `ty` hint를 bidirectional check로 전파. `[...]` 리터럴이 expected type (Array/Vec/Pointer/Slice/Named "Vec") 에 맞게 추론됨.
 
 **참조**: `LIVING_SPEC/04_stdlib/vec_new_push.vais`, `LIVING_SPEC/02_patterns/pattern_empty_vec.vais`
 

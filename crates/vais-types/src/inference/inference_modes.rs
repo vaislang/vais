@@ -141,15 +141,47 @@ impl TypeChecker {
         expected: &ResolvedType,
         _span: &vais_ast::Span,
     ) -> TypeResult<ResolvedType> {
+        // Phase 1.12: extract element type from various container hints —
+        // Array<T>, Vec<T> (builtin Named), Pointer<T>, Slice<T>, ConstArray<T>.
         let expected_elem = match expected {
-            ResolvedType::Array(inner) => Some(inner.as_ref().clone()),
+            ResolvedType::Array(inner)
+            | ResolvedType::Pointer(inner)
+            | ResolvedType::Slice(inner)
+            | ResolvedType::SliceMut(inner) => Some(inner.as_ref().clone()),
+            ResolvedType::ConstArray { element, .. }
+            | ResolvedType::Vector { element, .. } => Some(element.as_ref().clone()),
+            ResolvedType::Named { name, generics }
+                if (name == "Vec" || name == "VecMut") && generics.len() == 1 =>
+            {
+                Some(generics[0].clone())
+            }
             _ => None,
+        };
+
+        // Phase 1.12: preserve the container shape from the expected hint so
+        // `a: Vec<i64> := []` returns `Vec<i64>`, not `Array<i64>`.
+        let wrap_result = |elem_ty: ResolvedType| -> ResolvedType {
+            match expected {
+                ResolvedType::Array(_) => ResolvedType::Array(Box::new(elem_ty)),
+                ResolvedType::Pointer(_) => ResolvedType::Pointer(Box::new(elem_ty)),
+                ResolvedType::Slice(_) => ResolvedType::Slice(Box::new(elem_ty)),
+                ResolvedType::SliceMut(_) => ResolvedType::SliceMut(Box::new(elem_ty)),
+                ResolvedType::Named { name, .. }
+                    if (name == "Vec" || name == "VecMut") =>
+                {
+                    ResolvedType::Named {
+                        name: name.clone(),
+                        generics: vec![elem_ty],
+                    }
+                }
+                _ => ResolvedType::Array(Box::new(elem_ty)),
+            }
         };
 
         if elements.is_empty() {
             // Empty array: use expected element type or fresh variable
             let elem_type = expected_elem.unwrap_or_else(|| self.fresh_type_var());
-            return Ok(ResolvedType::Array(Box::new(elem_type)));
+            return Ok(wrap_result(elem_type));
         }
 
         // Check each element with expected type if available
@@ -174,8 +206,6 @@ impl TypeChecker {
                 })?;
         }
 
-        Ok(ResolvedType::Array(Box::new(
-            self.apply_substitutions(&first_type),
-        )))
+        Ok(wrap_result(self.apply_substitutions(&first_type)))
     }
 }

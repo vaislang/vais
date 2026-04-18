@@ -1,17 +1,17 @@
 # LIVING_SPEC/02_patterns/pattern_empty_vec.vais
-# Key concept: Option<Vec<T>>처럼 "있음/없음"을 명시적으로 표현.
-# NOTE: 빈 Vec 리터럴 `[]`와 `[1, 2, 3]`은 현재 추론이 Vec<T>로 맞지 않음.
-#       대안: Option<T>로 "비어있음"을 표현.
+# Key concept: Vec<T>가 비어있는지 .len() == 0으로 판별.
+# Phase 1.12: 타입 어노테이션이 있으면 `[]`, `[1,2,3]` 리터럴이 Vec<T>로 추론됨.
 
-F describe(opt: Option<i64>) -> i64 {
-    M opt {
-        None => 0,
-        Some(v) => v
+F describe(v: Vec<i64>) -> i64 {
+    I v.len() == 0 {
+        0
+    } EL {
+        v.len()
     }
 }
 
 F main() -> i64 {
-    a := describe(None)
-    b := describe(Some(42))
-    a + b
+    a: Vec<i64> := []
+    b: Vec<i64> := [1, 2, 3]
+    describe(a) + describe(b)
 }

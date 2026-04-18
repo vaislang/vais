@@ -76,6 +76,7 @@ iteration: 4
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
+  strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy-note: A안 채택 — Phase 2.10 fix 재시도하기 전에 **체계(LIVING_SPEC + COOKBOOK + CLAUDE.md 철칙)** 먼저 구축. 에이전트 작업 시 "과거 문법 추측 → regression" 루프를 근본 차단하는 게 목적. Phase 1.8 → 1.9 → 1.10 체인 후 2.10 재개.
   strategy iteration 1: sequential — #42 (#43, #44 blockedBy 체인). #42는 100+ 파일 생성 + regression floor 유지 필요 → impl-sonnet background.
 
@@ -265,7 +266,14 @@ progress: 9/18 (50%)
   - `compiler_syntax.rs`의 pattern_guard_if 테스트 ignored 해제 + passing
   - e2e 테스트 1개 추가 (guard 조건으로 분기 동작 검증)
   - integrity gate green
-- [ ] 1.12 빈 Vec/Array 리터럴 `[]` 타입 추론 (Opus direct) [blockedBy: 1.11]
+- [x] 1.12 빈 Vec/Array 리터럴 `[]` 타입 추론 (Opus direct) ✅ 2026-04-19
+  detail: Stmt::Let에서 `ty` annotation이 있으면 `value`를 bidirectional check (CheckMode::Check)로 타입 전파. `check_array_bidirectional`에 Vec<T>/Pointer<T>/Slice<T>/ConstArray<T>/Named{Vec,T} hint 모두 허용. 결과 타입도 expected shape 보존.
+  changes:
+    - crates/vais-types/src/checker_expr/stmts.rs — Let의 check_expr → check_expr_bidirectional when ty present
+    - crates/vais-types/src/inference/inference_modes.rs — check_array_bidirectional 확장 (Pointer/Slice/Vec/Named 수용 + wrap_result)
+    - docs/language/LIVING_SPEC/02_patterns/pattern_empty_vec.vais — 원래 의도 (Vec<i64> := []) 복원
+    - docs/language/COOKBOOK.md 항목 6 — "Phase 1.12 해결됨" 표기
+  verify: `a: Vec<i64> := []` + `b: Vec<i64> := [1,2,3]` OK. integrity gate green (176→177 cold, 무회귀).
   detail: `a: Vec<i64> := []` 가 현재 `*?0`으로 추론되는 문제 해결. context 타입에서 element 추론. `[1, 2, 3]`도 `Vec<i64>` 추론되도록.
   [완료 기준]:
   - pattern_empty_vec.vais 원본 버전 (Vec<i64> 리터럴) 빌드 OK

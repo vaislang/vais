@@ -26,7 +26,19 @@ impl TypeChecker {
                 is_mut,
                 ownership,
             } => {
-                let value_type = self.check_expr(value)?;
+                // Phase 1.12: when an explicit type annotation is present,
+                // propagate it as an expected type into the value expression
+                // so container literals like `[]` / `[1,2,3]` can be inferred
+                // as Vec<T>/Array<T>/etc. instead of decaying to Pointer(T).
+                let value_type = if let Some(ty_ann) = ty {
+                    let expected_hint = self.resolve_type(&ty_ann.node);
+                    self.check_expr_bidirectional(
+                        value,
+                        crate::CheckMode::Check(expected_hint),
+                    )?
+                } else {
+                    self.check_expr(value)?
+                };
                 let var_type = if let Some(ty) = ty {
                     let expected = self.resolve_type(&ty.node);
                     self.unify(&expected, &value_type)
