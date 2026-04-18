@@ -598,6 +598,33 @@ impl TypeChecker {
             }
         }
 
+        // Phase 246: built-in numeric methods (f32/f64).
+        if matches!(
+            &receiver_type,
+            ResolvedType::F32 | ResolvedType::F64 | ResolvedType::I32 | ResolvedType::I64
+        ) {
+            match method.node.as_str() {
+                "sqrt" | "abs" | "floor" | "ceil" | "round" | "ln" | "log2" | "log10"
+                | "exp" | "sin" | "cos" | "tan" => {
+                    if args.is_empty() {
+                        return Ok(receiver_type.clone());
+                    }
+                }
+                "pow" | "min" | "max" => {
+                    if args.len() == 1 {
+                        let _ = self.check_expr(&args[0]);
+                        return Ok(receiver_type.clone());
+                    }
+                }
+                "to_string" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Str);
+                    }
+                }
+                _ => {}
+            }
+        }
+
         // Built-in slice methods
         if let ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) = &receiver_type {
             match method.node.as_str() {
@@ -808,6 +835,18 @@ impl TypeChecker {
                     "to_vec" | "as_slice" => {
                         if args.is_empty() && name == "Vec" {
                             return Ok(receiver_type.clone());
+                        }
+                    }
+                    "iter_mut" => {
+                        // Return same type — iter_mut is identity at type level.
+                        if args.is_empty() {
+                            return Ok(receiver_type.clone());
+                        }
+                    }
+                    "as_ref" => {
+                        // Take ref to the same type.
+                        if args.is_empty() {
+                            return Ok(ResolvedType::Ref(Box::new(receiver_type.clone())));
                         }
                     }
                     _ => {}
