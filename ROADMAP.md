@@ -3,7 +3,22 @@
 
 > **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 219: Vec/HashMap built-in fallback dispatch)
+> **최종 업데이트**: 2026-04-18 (Phase 220: Vec/HashMap 추가 메서드 fallback)
+
+---
+
+## ⏸ 완료 — Phase 220: Vec/HashMap 추가 fallback (get/remove/clear/contains_key)
+completed_at: 2026-04-18
+
+mode: auto
+strategy: Phase 219 fallback 패턴 확장. is_empty/contains_key/get/get_mut/pop/remove/clear/truncate/clone/to_vec.
+
+### 결과
+- E004 59→57 (-2)
+- OK 85→86 (+1)
+- baseline green
+
+progress: 1/1 (100%)
 
 ---
 

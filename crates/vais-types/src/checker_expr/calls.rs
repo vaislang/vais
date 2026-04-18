@@ -618,18 +618,51 @@ impl TypeChecker {
         if let ResolvedType::Named { name, generics } = &receiver_type {
             if name == "Vec" || name == "HashMap" || name == "StrHashMap" {
                 match method.node.as_str() {
-                    "len" => {
+                    "len" | "size" | "capacity" => {
                         if args.is_empty() {
                             return Ok(ResolvedType::I64);
                         }
                     }
+                    "is_empty" | "contains_key" | "contains" => {
+                        if !args.is_empty() {
+                            for a in args.iter() {
+                                let _ = self.check_expr(a);
+                            }
+                        }
+                        return Ok(ResolvedType::Bool);
+                    }
                     "push" => {
                         // Vec push returns i64 in stdlib
                         if name == "Vec" && args.len() == 1 {
-                            // Just check arg, don't strictly unify
                             let _ = self.check_expr(&args[0]);
                             return Ok(ResolvedType::I64);
                         }
+                    }
+                    "pop" => {
+                        // Vec.pop returns Option<T>
+                        if name == "Vec" && args.is_empty() {
+                            return Ok(ResolvedType::Optional(Box::new(
+                                generics
+                                    .first()
+                                    .cloned()
+                                    .unwrap_or(ResolvedType::I64),
+                            )));
+                        }
+                    }
+                    "get" | "get_mut" => {
+                        // Vec.get(i) → Option<T>; HashMap.get(k) → Option<V>
+                        if !args.is_empty() {
+                            for a in args.iter() {
+                                let _ = self.check_expr(a);
+                            }
+                        }
+                        let elem = if name == "Vec" {
+                            generics.first().cloned()
+                        } else {
+                            generics.get(1).cloned()
+                        }
+                        .unwrap_or(ResolvedType::I64);
+                        return Ok(ResolvedType::Optional(Box::new(elem)));
                     }
                     "insert" | "set" => {
                         // HashMap insert/set returns V
@@ -640,6 +673,40 @@ impl TypeChecker {
                                 .get(1)
                                 .cloned()
                                 .unwrap_or(ResolvedType::I64));
+                        }
+                    }
+                    "remove" => {
+                        // HashMap.remove(k) → V (stdlib returns V)
+                        if name != "Vec" && !args.is_empty() {
+                            let _ = self.check_expr(&args[0]);
+                            return Ok(generics
+                                .get(1)
+                                .cloned()
+                                .unwrap_or(ResolvedType::I64));
+                        }
+                        // Vec.remove(i) → T
+                        if name == "Vec" && !args.is_empty() {
+                            let _ = self.check_expr(&args[0]);
+                            return Ok(generics
+                                .first()
+                                .cloned()
+                                .unwrap_or(ResolvedType::I64));
+                        }
+                    }
+                    "clear" | "truncate" => {
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok(ResolvedType::I64);
+                    }
+                    "clone" => {
+                        if args.is_empty() {
+                            return Ok(receiver_type.clone());
+                        }
+                    }
+                    "to_vec" | "as_slice" => {
+                        if args.is_empty() && name == "Vec" {
+                            return Ok(receiver_type.clone());
                         }
                     }
                     _ => {}
