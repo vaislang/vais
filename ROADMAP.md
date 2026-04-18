@@ -27,7 +27,11 @@ Phase 353까지의 패턴 관찰:
   detail: Phase 350/353 inline 패턴을 server/client 잔여 파일 (client/mod, client/types 등)에 적용.
   changes: lang/packages/vaisdb/src/planner/fulltext_plan.vais (detect_mode_from_text: `chars().filter(|c| *c == '"').count()` → `split("\"").len() - 1`; 1→0 errors; phase158 18/18 green)
   retry: 1 (첫 agent tool-budget 소진 후 bounded retry로 성공)
-- [ ] 355. fulltext 파서/ddl 사이트 대량 수정 (Opus direct)
+- [x] 355. fulltext 파서/ddl 사이트 대량 수정 (Opus direct) ✅ 2026-04-18 (partial)
+  changes: lang/packages/vaisdb/src/storage/page/allocator.vais (alloc_page/free_page 4/5-arg WAL stubs added) + src/fulltext/ddl.vais (3× DictionaryIndex.new page_size, 3× PostingStore.new 3-arg, FullTextMeta.new 1-arg + field assign)
+  result: ddl.vais 5 errors → 4 errors (alloc/free/Dictionary/Meta/PostingStore fixed; remaining: pin_page, PostingEntry.new, read_all_entries API drift — out of 355 scope, defer to 367-369 sweep)
+  caveat: file not yet OK, but infrastructure gain (vaisc installed version was stale Apr 10 → rebuilt before edits)
+  compiler_reinstall: cargo install --path crates/vaisc --force (executed before Phase 355)
   detail: fulltext/ddl.vais (alloc_page 4-arg → allocate_page 2-arg refactor 혹은 helper 추가), fulltext/mod.vais 연쇄
 - [ ] 356. sql parser bare variant prefix — parser_{ddl,dml,command,expr}.vais (per-file careful regex)
   detail: row.vais에서 성공한 SqlValue.Variant prefix 패턴 확장. BinaryOp/FloatLit/CreateIndex/Select 등.
@@ -72,10 +76,11 @@ Phase 353까지의 패턴 관찰:
 - **Span-less 우선순위**: patterns/module binding unify 경로에 span 부착이 선행되어야 후속 E001 cluster 접근 가능.
 
 mode: auto
-iteration: 1
+iteration: 2
 max_iterations: 30
 strategy: Phase 354 (closure inline cascading) → 355-357 (mass refactor) → 358-361 (Opus direct compiler deep work) → 362-365 (vaisdb-side major API) → 366-369 cluster sweep → 370 Tier 2 선언. 각 phase 실패/scope over 즉시 move on.
-  strategy: sequential (compiler phases share vais-types/codegen files, per-phase verification gate required) — iteration 1, Phase 354 first
+  strategy: sequential — iteration 2, Phase 355 (fulltext/ddl.vais alloc_page 4-arg → allocate_page 2-arg; Opus direct per ROADMAP)
+  opus_direct: 355 — ROADMAP 지정. Refactor touches multiple call sites with semantic decision (helper vs inline); single-pass design+impl.
 
 ---
 
