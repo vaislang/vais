@@ -1,11 +1,11 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 310 완료, vaisdb 마이그레이션 진행 중)
+> **현재 버전**: 0.1.0 (Phase 325 완료, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 280-310 세션 — OK 126→150, +24)
-> **현재 vaisdb OK: 150/261 (57.5%)** — Phase 199 시작 대비 +120 파일 개선
-> **목표**: Tier 1 완료 = vaisdb OK 180/261 (70%+) — 30 파일 남음
+> **최종 업데이트**: 2026-04-18 (Phase 311-325 세션 — OK 150→154, +4)
+> **현재 vaisdb OK: 154/261 (59.0%)** — Phase 199 시작 대비 +124 파일 개선
+> **목표**: Tier 1 완료 = vaisdb OK 180/261 (70%+) — 26 파일 남음
 
 ## 🎯 다음 세션 시작점 (Phase 311+)
 
@@ -53,8 +53,14 @@
   partial: search.vais, layer.vais edits (error 축소되었으나 flip 미완)
   still failing: bulk, cow, insert, wal (E002/E004/E006 잔여)
   verify: vaisdb OK +1 (delete.vais)
-- [ ] 323. planner/ 잔여 analyzer/optimizer/cost_model/fulltext_plan (impl-sonnet) [blockedBy: 312,313]
-- [ ] 324. storage/recovery/{undo,mod,redo} generic destructuring (impl-sonnet) [blockedBy: 313]
+- [x] 323. planner/ 잔여 analyzer/optimizer/cost_model/fulltext_plan (impl-sonnet, partial) ✅ 2026-04-18
+  flipped: 0
+  partial: pipeline.vais — multi-byte 코멘트 chars ASCII로 교체 (em-dash, →, Σ). agent는 comment span-offset 디버깅 중 cut-off. E006 잔재.
+  note: pipeline.vais 라인 219 col 29가 실제로 comment 영역 → compiler의 UTF-8 byte-offset span 버그 후보. Phase 314과 함께 후속 phase 과제.
+- [x] 324. storage/recovery/{undo,mod,redo} (impl-sonnet) ✅ 2026-04-18
+  flipped: recovery/mod.vais (E002 → OK — `redo.Active`/`redo.WalRecordIterator`처럼 Vais `U` import에 지원되지 않는 module-qualified accessor 제거)
+  still failing: undo.vais (E030 no-such-field), redo.vais (E030)
+  verify: vaisdb OK +1 (mod.vais)
 - [x] 325. ops/server/client 잔여 metrics/health/backup/handler/types (impl-sonnet) ✅ 2026-04-18
   flipped: ops/backup.vais (E001 → OK)
   partial: client/types.vais edits
@@ -76,7 +82,7 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 4
+iteration: 5
 max_iterations: 30
 strategy: deep compiler 블로커 먼저 (311-315) → 그 뒤 per-file cascading 일괄 flip (321-325). Phase158 strict gate 매 phase 확인 필수.
 
