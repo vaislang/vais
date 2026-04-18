@@ -970,6 +970,53 @@ impl TypeChecker {
             if method.node == "as_ref" && args.is_empty() {
                 return Ok(ResolvedType::Ref(Box::new(receiver_type.clone())));
             }
+            // Phase 271: ok_or / ok_or_else convert Option<T> → Result<T,E>.
+            // The fallback is permissive about the receiver type — codegen
+            // and stdlib's real Option impl override when present.
+            if (method.node == "ok_or" || method.node == "ok_or_else") && args.len() == 1 {
+                let _ = self.check_expr(&args[0]);
+                if let ResolvedType::Optional(inner) = &receiver_type {
+                    return Ok(ResolvedType::Result(
+                        inner.clone(),
+                        Box::new(ResolvedType::Str),
+                    ));
+                }
+                return Ok(ResolvedType::Result(
+                    Box::new(receiver_type.clone()),
+                    Box::new(ResolvedType::Str),
+                ));
+            }
+            // Phase 271: map / and_then / or_else identity at type level — but
+            // ONLY when receiver is Option/Result (so we don't shadow user-
+            // defined .map on iterators or Vec). Real signature: map<F>(f: F)
+            // would change inner type, but at the type-checker level we treat
+            // it as receiver-preserving.
+            if matches!(
+                method.node.as_str(),
+                "map" | "and_then" | "or_else" | "filter" | "filter_map"
+            ) && args.len() == 1
+                && matches!(
+                    &receiver_type,
+                    ResolvedType::Optional(_) | ResolvedType::Result(_, _)
+                )
+            {
+                let _ = self.check_expr(&args[0]);
+                return Ok(receiver_type.clone());
+            }
+            // Phase 271: unwrap_or / unwrap_or_default returns inner T.
+            if matches!(method.node.as_str(), "unwrap_or" | "unwrap_or_default")
+                && args.len() <= 1
+            {
+                for a in args.iter() {
+                    let _ = self.check_expr(a);
+                }
+                if let ResolvedType::Optional(inner) | ResolvedType::Result(inner, _) =
+                    &receiver_type
+                {
+                    return Ok((**inner).clone());
+                }
+                return Ok(receiver_type.clone());
+            }
             // Phase 226: generic `.clone()` on ANY Named type returns the same type.
             if method.node == "clone" && args.is_empty() {
                 return Ok(receiver_type.clone());
