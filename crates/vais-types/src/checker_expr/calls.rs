@@ -749,6 +749,22 @@ impl TypeChecker {
                         return Ok(ResolvedType::U32);
                     }
                 }
+                // Phase 350: f32/f64 math methods — powf, powi, sqrt, abs, etc.
+                // Return same numeric type (receiver).
+                "powf" | "powi" | "sqrt" | "abs" | "floor" | "ceil" | "round"
+                | "trunc" | "exp" | "exp2" | "ln" | "log2" | "log10"
+                | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" => {
+                    for a in args.iter() {
+                        let _ = self.check_expr(a);
+                    }
+                    return Ok(receiver_type.clone());
+                }
+                "is_nan" | "is_infinite" | "is_finite" | "is_normal" | "is_sign_positive"
+                | "is_sign_negative" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Bool);
+                    }
+                }
                 "to_string" => {
                     if args.is_empty() {
                         return Ok(ResolvedType::Str);
