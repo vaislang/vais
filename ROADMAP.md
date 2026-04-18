@@ -21,6 +21,15 @@
 ## ⏸ 완료 — Phase 237: **Str/str alias coercion** (E001 -9, OK 94→96)
 ## ⏸ 완료 — Phase 238: &Str ↔ &str ref coercion (E004 50→49)
 ## ⏸ 완료 — Phase 239: **&Vec<T> ↔ &[T] slice coercion** (OK 96→99 +3)
+## ⏸ 완료 — Phase 240: Vec<T> direct slice coercion (E001 -2)
+## ⏸ 완료 — Phase 241: str/Str method dispatch — is_empty/char_at (OK 99→101)
+## ⏸ 완료 — Phase 242: str.split/trim/parse_* builtins
+## ⏸ 완료 — Phase 243: ByteBuffer.get_u32_le/u64_le (E004 -4)
+## ⏸ 완료 — Phase 244: ByteBuffer.into_vec alias
+## ⏸ 완료 — Phase 245: ByteBuffer fallback dispatch (full)
+## ⏸ 완료 — Phase 246: iter_mut/as_ref/numeric methods (E004 -2)
+## ⏸ 완료 — Phase 247: **str.as_bytes returns Vec<u8>** (OK 100→101)
+## ⏸ 완료 — Phase 248: numeric.to_bits/from_bits/to_bytes (E004 -2)
 
 ---
 
