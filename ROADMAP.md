@@ -1,9 +1,108 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 198 부분완료 — 4/2 met, 2/2 deferred to 199)
+> **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 198: compiler+vais-web 작업 완료, vaisdb 대규모 마이그레이션은 Phase 199로. final report: docs/phase198/final_report.md)
+> **최종 업데이트**: 2026-04-18 (Phase 199 plan: vaisdb Full migration 전략 A 확정, Tier 1 mechanical patterns 먼저. Phase 199~203 연속 로드맵)
+
+---
+
+## ⏳ 대기 — Phase 199: vaisdb 기반 이주 (Tier 1 — Mechanical patterns)
+
+mode: pending
+max_iterations: 20
+iteration: 0
+strategy: Phase 198 Bucket 3/4 deferred 작업을 sub-pattern 단위로 잘게 쪼개서 재도전. Phase 198 교훈: sub-agent는 recon만 reliable, "analyze+fix 동시"는 cutoff. 그래서 Phase 199는 **(1) recon-haiku로 분류 → (2) Opus direct로 sub-pattern별 per-file fix** 구조. vaisdb는 /Users/sswoo/study/projects/vais/lang/packages/vaisdb (외부 git repo) — commit은 그쪽에 수행.
+
+**사용자 결정 (2026-04-18)**: 전략 A (Full migration). vaisdb를 현재 compiler로 빌드 가능하게 복구. Phase 199~203 연속 로드맵 예상.
+
+### 배경 — Phase 198이 남긴 상태
+
+- 67 distinct undefined symbols (Phase 198 B4 매핑 완료, docs/phase198/bucket4_stdlib_mapping.md)
+- 47 P001 parser errors, 최소 3 sub-pattern (match-arm comma, trait impl `X T for S`, 기타)
+- compiler 자체는 완전 green (179/179 examples, 2596/0/0 E2E, clippy 0/0)
+- Phase 195/196 회귀 없음 (Phase 198 B1 spot-check로 확인)
+
+### 목표 (Phase 199 Exit Criteria — Tier 1)
+
+1. **Recon-H 완료**: 47 P001을 정확히 sub-pattern 분류 (예상 3~5 그룹)
+2. **Mechanical-safe 수정 적용**: sub-pattern별 per-file fix. 각 파일 `vaisc check` gate.
+3. **해소 목표**: vaisdb P001 47 → ≤20 (30-40% 해소)
+4. **stdlib import 추가**: 4 PRESENT symbol (btree_insert partial, time_micros, etc.)
+5. **compiler baseline 유지**: 179/179 + 2596/0/0 + clippy 0/0 불변
+
+### 작업 (8개) — 다음 session에서 harness-init 후 생성
+
+- [ ] 1. **Recon-H: 47 P001 정확 분류** (research-haiku, read-only)
+  - 47 파일 각각 에러 라인 주변 5줄 샘플
+  - sub-pattern 식별 + 건수 집계
+  - 각 sub-pattern이 "mechanical-safe" vs "per-file judgment" 판정
+  - 산출물: docs/phase199/recon_h.md
+
+- [ ] 2. **B199-A1: Match-arm comma 누락 일괄** (Opus direct) [blockedBy: 1]
+  - 패턴: `Ok(x) => { ... } Err(e) => ...` (comma 누락)
+  - 각 파일 수정 후 `vaisc check` — 해소 확인
+  - 해소 추정: ~15 P001
+
+- [ ] 3. **B199-A2: Trait impl 문법 `X T for S` → `X S: T`** (Opus direct) [blockedBy: 1]
+  - per-file rewrite, `self` 파라미터 규칙 확인
+  - 해소 추정: ~10 P001
+
+- [ ] 4. **B199-A3: Global 문법 `G X := mut Y` 이주 (있으면)** (impl-sonnet) [blockedBy: 1]
+  - Phase 195에서 이미 compiler example 쪽은 migrate 완료. vaisdb에도 있으면 처리.
+  - 해소 추정: 0~5 P001
+
+- [ ] 5. **B199-A4: Line-continuation leading operator** (Opus direct) [blockedBy: 1]
+  - `"?client_id="     + config.client_id` 형태 (vais-server oauth.vais:140 등)
+  - 이전 줄 끝에 붙이거나 괄호로 묶기
+  - 해소 추정: ~2-5 P001
+
+- [ ] 6. **B199-B: C-style for-loop 변환** (Opus direct) [blockedBy: 1]
+  - `I i = 0; i < n; i = i + 1 { }` → `LF i:0..n { }` 또는 `LW i < n { body; i = i + 1 }`
+  - vais-server tests 7건 + vaisdb 일부
+  - per-file 판정 (bound 복잡도에 따라 `LF` vs `LW` 선택)
+  - 해소 추정: ~7-10 (vais-server tests + vaisdb 잔여)
+
+- [ ] 7. **B199-I1: 4 PRESENT symbol import 추가** (impl-sonnet) [blockedBy: 1]
+  - `time_micros` → `U std/time` 추가
+  - `btree_insert` 등은 vaisdb에 비슷한 이름 있어 판정 필요
+  - 해소 추정: 4 symbol × N 파일
+
+- [ ] 8. **B199-Gate: 재측정 + Phase 200 seed** (impl-sonnet) [blockedBy: 2,3,4,5,6,7]
+  - 전수 `vaisc check` 재실측
+  - Phase 199 Exit criteria 달성 확인
+  - 잔여를 domain별로 분류해서 Phase 200 계획 작성
+  - 산출물: docs/phase199/final_report.md
+
+### Phase 200~203 예상 로드맵
+
+- **Phase 200**: 60 STILL_MISSING의 domain별 처리
+  - DB/Storage 15 (B+ tree, LSN, tx visibility — vaisdb internal)
+  - SQL parsing 7
+  - Error types 8 (custom enum 추가)
+  - Serialization 8 (endian variants)
+  - Utilities 22 (method vs free fn refactor)
+- **Phase 201**: Struct field drift (E030 17건) + use-after-move (E022 2건)
+- **Phase 202**: Type mismatches (E001 14건 — `Str`/`str`, `RwLock<T>` 등)
+- **Phase 203**: Final gate — vaisdb 전체 재빌드, vais-server test 15/22+, 최종 검증
+
+### Phase 199 파일 영향
+
+- `/Users/sswoo/study/projects/vais/lang/packages/vaisdb/src/**/*.vais` — 수정 (외부 git repo)
+- `/Users/sswoo/study/projects/vais/lang/packages/vais-server/tests/**/*.vais` — B199-B에서 수정
+- `/Users/sswoo/study/projects/vais/compiler/docs/phase199/*.md` — recon + final report (이 repo)
+- compiler `crates/`, `std/`, `examples/` — **수정 금지**
+
+### 핵심 교훈 반영 체크리스트 (Phase 199 시작 시)
+
+- [ ] Sub-agent는 read-only recon만 (analyze+fix 동시 금지)
+- [ ] Opus direct로 per-file fix, 각 파일 `vaisc check` gate
+- [ ] Worktree isolation 사용 금지 (Phase 195 stale-branch 이슈)
+- [ ] 대량 sed 금지 — 개별 sub-pattern 파일씩 처리
+- [ ] Rename heuristic 맹신 금지 (Phase 198 B4에서 `fnv1a_hash` → `hash` rename 뷰 오판 회피했음)
+- [ ] vaisdb는 외부 repo — compiler repo에 commit 섞지 말 것
+
+progress: 0/8 (0%)
 
 ---
 
