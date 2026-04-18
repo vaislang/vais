@@ -393,7 +393,7 @@ X HashMap<K, V> {
     # Collect all keys into a flat array
     # Returns pointer to allocated array of keys (caller must free)
     # Sets count_out to number of keys
-    F keys(&self, count_out: i64) -> i64 {
+    F keys_raw(&self, count_out: i64) -> i64 {
         arr := malloc(self.size * 8)
         hashmap_collect_keys(self.buckets, self.cap, arr, 0, 0)
         store_i64(count_out, self.size)
@@ -403,7 +403,7 @@ X HashMap<K, V> {
     # Collect all values into a flat array
     # Returns pointer to allocated array of values (caller must free)
     # Sets count_out to number of values
-    F values(&self, count_out: i64) -> i64 {
+    F values_raw(&self, count_out: i64) -> i64 {
         arr := malloc(self.size * 8)
         hashmap_collect_values(self.buckets, self.cap, arr, 0, 0)
         store_i64(count_out, self.size)
