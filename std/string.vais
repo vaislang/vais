@@ -137,6 +137,11 @@ X String {
         self.len
     }
 
+    # Alias for push_char — vaisdb uses push_byte name. Phase 226.
+    F push_byte(&self, b: i64) -> i64 {
+        @.push_char(b)
+    }
+
     # Grow the string capacity (double it)
     F grow(&self) -> i64 {
         new_cap := self.cap * 2

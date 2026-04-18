@@ -723,6 +723,17 @@ impl TypeChecker {
                     _ => {}
                 }
             }
+            // Phase 226: generic `.to_string()` on ANY Named type returns Str.
+            // This is a permissive fallback — the real stdlib impl (if any)
+            // wins via earlier method lookup. Used by vaisdb for
+            // `query.to_string()`, `err.to_string()` etc.
+            if method.node == "to_string" && args.is_empty() {
+                return Ok(ResolvedType::Str);
+            }
+            // Phase 226: generic `.clone()` on ANY Named type returns the same type.
+            if method.node == "clone" && args.is_empty() {
+                return Ok(receiver_type.clone());
+            }
         }
 
         // Phase 24 Task 5: .iter() / .enumerate() builtin for iterable receivers
