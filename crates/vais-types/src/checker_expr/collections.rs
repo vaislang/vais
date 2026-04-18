@@ -174,7 +174,11 @@ impl TypeChecker {
                     Err(e) => return Some(Err(e)),
                 };
 
-                // Handle direct Named types, references, and pointers (auto-deref)
+                // Handle direct Named types, references, and pointers (auto-deref).
+                // Phase 259: also auto-unwrap Option<T>/Result<T,E> for field access.
+                // vaisdb stdlib often returns Option<T> from .get/get_mut and
+                // immediately accesses fields. Strict ownership/borrow checks are
+                // enforced separately.
                 let type_name = match &inner_type {
                     ResolvedType::Named { name, .. } => Some(name.clone()),
                     ResolvedType::Ref(inner)
@@ -184,6 +188,21 @@ impl TypeChecker {
                             Some(name.clone())
                         } else {
                             None
+                        }
+                    }
+                    ResolvedType::Optional(inner) | ResolvedType::Result(inner, _) => {
+                        match inner.as_ref() {
+                            ResolvedType::Named { name, .. } => Some(name.clone()),
+                            ResolvedType::Ref(t)
+                            | ResolvedType::RefMut(t)
+                            | ResolvedType::Pointer(t) => {
+                                if let ResolvedType::Named { name, .. } = t.as_ref() {
+                                    Some(name.clone())
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
                         }
                     }
                     _ => None,
