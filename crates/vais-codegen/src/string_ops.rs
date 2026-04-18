@@ -532,6 +532,61 @@ impl CodeGenerator {
                 self.fn_ctx.string_value_slot.insert(result.clone(), slot);
                 Ok((result, ir))
             }
+            "to_lowercase" | "to_lower" => {
+                let result = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = call {{ i8*, i64 }} @__vais_str_to_lower(i8* {})",
+                    result,
+                    recv_ptr
+                );
+                let raw_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                    raw_ptr,
+                    result
+                );
+                let (store_ir, slot) = self.track_alloc_with_slot(raw_ptr);
+                ir.push_str(&store_ir);
+                if let Some(frame) = self.fn_ctx.scope_str_stack.last_mut() {
+                    frame.push(slot.clone());
+                }
+                self.fn_ctx.string_value_slot.insert(result.clone(), slot);
+                Ok((result, ir))
+            }
+            "char_at" | "charAt" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Unsupported(format!(
+                        "builtin 'char_at' requires 1 argument, got {}",
+                        args.len()
+                    )));
+                }
+                let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
+                ir.push_str(&arg_ir);
+                // Runtime returns { i8*, i64 } single-char string; we return its
+                // first byte as i64 to match Str.char_at signature (i64).
+                let full = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = call {{ i8*, i64 }} @__vais_str_char_at(i8* {}, i64 {})",
+                    full,
+                    recv_ptr,
+                    arg_val
+                );
+                let raw_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                    raw_ptr,
+                    full
+                );
+                let byte_val = self.next_temp(counter);
+                write_ir!(ir, "  {} = load i8, i8* {}", byte_val, raw_ptr);
+                let result = self.next_temp(counter);
+                write_ir!(ir, "  {} = zext i8 {} to i64", result, byte_val);
+                Ok((result, ir))
+            }
             _ => Err(CodegenError::Unsupported(format!(
                 "string method '{}' not supported",
                 method_name
