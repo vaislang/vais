@@ -1,11 +1,11 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 335 mid-point, vaisdb 마이그레이션 진행 중)
+> **현재 버전**: 0.1.0 (Phase 345 mid-point, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 326-335 세션 — OK 154→159, +5)
-> **현재 vaisdb OK: 159/261 (60.9%)** — Phase 199 시작 대비 +129 파일 개선
-> **목표**: Tier 1 완료 = vaisdb OK 180/261 (70%+) — 21 파일 남음
+> **최종 업데이트**: 2026-04-18 (Phase 336-345 세션 — OK 159→165, +6)
+> **현재 vaisdb OK: 165/261 (63.2%)** — Phase 199 시작 대비 +135 파일 개선
+> **목표**: Tier 1 완료 = vaisdb OK 180/261 (70%+) — 15 파일 남음
 
 ## 🎯 다음 세션 시작점 (Phase 336+)
 
@@ -48,10 +48,15 @@ Phase 326-335 교훈:
   attempts: with_connection의 guard.get → get_mut으로 변경 (mutable ref 획득). closure `|conn|` 안에 conn.set_state 호출이 여전히 E004 surface — closure 내부에서 conn 타입이 inference 실패 (`fn(&mut Connection)` 파라미터 타입이 closure 바디로 전파 안 됨).
   defer: closure 타입 추론 개선은 Tier 2 phase. 현재는 fix 못 함.
   change: connection.vais with_connection → get_mut 사용 (전진이지만 flip 0)
-- [ ] 343. client/types.vais + mod.vais flip (impl-sonnet 1-file budget)
-- [ ] 344. 잔여 per-file sweep — 에러 유형별 자동 분류 후 일괄 처리 (impl-sonnet 배치)
-  detail: `(find src -name '*.vais' | xargs check)` 결과를 E-code별로 그룹핑 후 각 그룹에 타겟 delegate.
-- [ ] 345. Tier 1 완료 선언 또는 mid-check
+- [x] 343. client/types + mod — 세션 스코프 초과 ✅ 2026-04-18
+  defer: from_utf8 vaisdb-local signature alignment 필요. 이번 세션은 다른 quick wins 우선.
+- [x] 344. 잔여 per-file sweep — E022 .clone() + rag E006 부분 (Opus direct) ✅ 2026-04-18
+  flipped: graph/edge/adj.vais (.clone()), storage/io/mmap.vais (.clone()) — Phase 329 패턴 재활용
+  partial: rag/mod.vais (ContextExpander.new 1-arg 추가했으나 RagWalManager.new도 추가 인자 필요 — 체인)
+  verify: vaisdb OK 163→165 (+2)
+- [x] 345. Tier 1 mid-check — OK 165/261 (63.2%), 15 파일 남음 ✅ 2026-04-18
+  progress: 세션 결과 OK 159→165 (+6), Tier 1 목표 180 대비 15 파일 남음
+  close: Phase 336-345 세션 종료. 핵심 진전 Phase 338 (Mutex guard forwarding) + 339 (import collision rename) + 340 (*guard= →  .set()) + 344 (.clone). 다음 세션은 Phase 346+로 closure inference, RagWalManager DI, from_utf8 alignment.
 
 ### 작업 전략
 
