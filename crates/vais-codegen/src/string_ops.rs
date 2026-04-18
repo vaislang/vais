@@ -563,6 +563,84 @@ impl CodeGenerator {
                 write_ir!(ir, "  {} = zext i1 {} to i64", result, is_zero);
                 Ok((result, ir))
             }
+            "starts_with" | "startsWith" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Unsupported(format!(
+                        "builtin 'starts_with' requires 1 argument, got {}",
+                        args.len()
+                    )));
+                }
+                let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
+                ir.push_str(&arg_ir);
+                let arg_ptr = self.extract_str_ptr(&arg_val, counter, &mut ir);
+                // Uses strncmp(haystack, needle, strlen(needle)) == 0
+                let nlen = self.next_temp(counter);
+                write_ir!(ir, "  {} = call i64 @strlen(i8* {})", nlen, arg_ptr);
+                let cmp = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = call i32 @strncmp(i8* {}, i8* {}, i64 {})",
+                    cmp,
+                    recv_ptr,
+                    arg_ptr,
+                    nlen
+                );
+                let is_zero = self.next_temp(counter);
+                write_ir!(ir, "  {} = icmp eq i32 {}, 0", is_zero, cmp);
+                let result = self.next_temp(counter);
+                write_ir!(ir, "  {} = zext i1 {} to i64", result, is_zero);
+                Ok((result, ir))
+            }
+            "ends_with" | "endsWith" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Unsupported(format!(
+                        "builtin 'ends_with' requires 1 argument, got {}",
+                        args.len()
+                    )));
+                }
+                let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
+                ir.push_str(&arg_ir);
+                let arg_ptr = self.extract_str_ptr(&arg_val, counter, &mut ir);
+                // Compute haystack_len and needle_len, strncmp haystack+offset.
+                let hlen = self.extract_str_len(recv_val, counter, &mut ir);
+                let nlen = self.next_temp(counter);
+                write_ir!(ir, "  {} = call i64 @strlen(i8* {})", nlen, arg_ptr);
+                // If needle longer than haystack → false.
+                let too_long = self.next_temp(counter);
+                write_ir!(ir, "  {} = icmp ugt i64 {}, {}", too_long, nlen, hlen);
+                let offset = self.next_temp(counter);
+                write_ir!(ir, "  {} = sub i64 {}, {}", offset, hlen, nlen);
+                let tail_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr i8, i8* {}, i64 {}",
+                    tail_ptr,
+                    recv_ptr,
+                    offset
+                );
+                let cmp = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = call i32 @strncmp(i8* {}, i8* {}, i64 {})",
+                    cmp,
+                    tail_ptr,
+                    arg_ptr,
+                    nlen
+                );
+                let match_ok = self.next_temp(counter);
+                write_ir!(ir, "  {} = icmp eq i32 {}, 0", match_ok, cmp);
+                let ok_and_fits = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = select i1 {}, i1 false, i1 {}",
+                    ok_and_fits,
+                    too_long,
+                    match_ok
+                );
+                let result = self.next_temp(counter);
+                write_ir!(ir, "  {} = zext i1 {} to i64", result, ok_and_fits);
+                Ok((result, ir))
+            }
             "byte_at" => {
                 if args.is_empty() {
                     return Err(CodegenError::Unsupported(format!(
