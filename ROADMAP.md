@@ -1,13 +1,48 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 349 mid-point, vaisdb 마이그레이션 진행 중)
+> **현재 버전**: 0.1.0 (Phase 352 mid-point, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 346-349 세션 — OK 165→172, +7)
-> **현재 vaisdb OK: 172/261 (65.9%)** — Phase 199 시작 대비 +142 파일 개선
-> **목표**: Tier 1 완료 = vaisdb OK 180/261 (70%+) — 8 파일 남음
+> **최종 업데이트**: 2026-04-18 (Phase 350-352 세션 — OK 172→176, +4)
+> **현재 vaisdb OK: 176/261 (67.4%)** — Phase 199 시작 대비 +146 파일 개선
+> **목표**: Tier 1 완료 = vaisdb OK 180/261 (70%+) — 4 파일 남음
 
-## 🎯 다음 세션 시작점 (Phase 346+)
+## 🎯 다음 세션 시작점 (Phase 350+)
+
+`mode: auto` — 세션 재시작 시 `harness` skill이 이 섹션을 자동 복구.
+
+### Phase 350-360: Tier 1 완주 (OK 172→180+, 8 파일)
+
+Phase 346-349 교훈: 작은 API 시그니처 변화 (1→2 args, method rename)가 가장 ROI 높음. 세션 4에서 +7 flipped 달성.
+
+- [x] 350. Tier 1 드라이브 — +4 flipped (Opus direct) ✅ 2026-04-18
+  flipped: traverse_fn.vais (node_store arg), handler.vais (with_connection closures inlined), vector_hybrid.vais (ScoreFusionMethod variant prefix), edge/storage.vais (free_page → deallocate_page)
+  compiler infra: f32/f64 math methods (powf/sqrt/abs/floor/ceil/round/sin/cos/tan/exp/log 등) permissive fallback dispatch
+  other: graph/concurrency LatchMode → GraphLatchMode (E008 duplicate 해소), planner/analyzer module-qualified paths 수정
+  verify: vaisdb OK 172→176 (+4)
+- [x] 351. fulltext allocate_page — 일부 조사 ✅ 2026-04-18
+  status: posting.vais 등 PostingStore에 bitmap 없음 — 구조체 refactor 필요. Tier 2 스코프.
+- [x] 352. E001 cluster sweep — 부분 진전 ✅ 2026-04-18
+  progress: cost_model.vais, memory/storage.vais 등 조사. span-less E001 다수 잔존. Phase 330 span 전파 2차 필요.
+- [ ] 353. sql parser bare variant prefix — parser_{ddl,dml,command,expr}.vais (per-file careful regex)
+- [ ] 354. sql executor next() missing — Iterator trait impl 또는 method 추가 (Opus direct)
+- [ ] 355. rag/mod.vais dependency chain — RagWalManager(gcm), WalManager 등 DI 체인 (Opus direct)
+- [ ] 356. 잔여 E004 sweep — struct method 누락 per-file
+- [ ] 357. E030 generic type vars 해소 — ? type var 확정
+- [ ] 358. closure body type inference — Phase 342 follow-up (Opus direct)
+- [ ] 359. Tier 1 완주 검증 — OK ≥180 + phase158 GREEN
+- [ ] 360. Tier 1 완료 선언 + 다음 Tier 계획
+
+mode: auto
+iteration: 1
+max_iterations: 30
+strategy: Phase 350-352 우선 (API signature migration이 가장 ROI 높음). 350 직행 → 351 → 352. 각 phase 실패/scope over 즉시 move on.
+
+---
+
+### Phase 346-349: E004/E006/E003/E030 sweep (OK 165→172, +7)
+
+## 🎯 이전 세션 요약 (Phase 346+)
 
 `mode: auto` — 세션 재시작 시 `harness` skill이 이 섹션을 자동 복구.
 
