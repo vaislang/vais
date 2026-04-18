@@ -3,7 +3,24 @@
 
 > **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 215: stdlib aliases — HashMap.insert, Vec.clone/as_slice)
+> **최종 업데이트**: 2026-04-18 (Phase 216: &str method auto-deref)
+
+---
+
+## ⏸ 완료 — Phase 216: &str method auto-deref → 'name.len()' on &str works
+completed_at: 2026-04-18
+
+mode: auto
+strategy: vaisdb의 `name.len()` 같은 &str method 호출이 E004 'len not defined' — checker_expr/calls.rs의 str method dispatch가 Str만 매칭, &str/&mut str 미지원. 패턴 추가.
+
+### 변경
+- crates/vais-types/src/checker_expr/calls.rs: str_recv 조건에 Ref(Str)/RefMut(Str) 추가
+
+### 결과
+- E004 73→72 (1 감소)
+- OK 80→81
+
+progress: 1/1 (100%)
 
 ---
 

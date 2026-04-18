@@ -434,8 +434,15 @@ impl TypeChecker {
             return Ok(ret_type);
         }
 
-        // Built-in string methods
-        if matches!(receiver_type, ResolvedType::Str) {
+        // Built-in string methods. Accept both `str` and `&str` (auto-deref)
+        // since vaisdb passes string refs around extensively (Phase 215).
+        let str_recv = matches!(receiver_type, ResolvedType::Str)
+            || matches!(
+                &receiver_type,
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                    if matches!(inner.as_ref(), ResolvedType::Str)
+            );
+        if str_recv {
             match method.node.as_str() {
                 "len" => {
                     if !args.is_empty() {
