@@ -1,13 +1,59 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 345 mid-point, vaisdb 마이그레이션 진행 중)
+> **현재 버전**: 0.1.0 (Phase 349 mid-point, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 336-345 세션 — OK 159→165, +6)
-> **현재 vaisdb OK: 165/261 (63.2%)** — Phase 199 시작 대비 +135 파일 개선
-> **목표**: Tier 1 완료 = vaisdb OK 180/261 (70%+) — 15 파일 남음
+> **최종 업데이트**: 2026-04-18 (Phase 346-349 세션 — OK 165→172, +7)
+> **현재 vaisdb OK: 172/261 (65.9%)** — Phase 199 시작 대비 +142 파일 개선
+> **목표**: Tier 1 완료 = vaisdb OK 180/261 (70%+) — 8 파일 남음
 
-## 🎯 다음 세션 시작점 (Phase 336+)
+## 🎯 다음 세션 시작점 (Phase 346+)
+
+`mode: auto` — 세션 재시작 시 `harness` skill이 이 섹션을 자동 복구.
+
+### Phase 346-360: Tier 1 최종 스프린트 (OK 165→180 목표, 15 파일)
+
+Phase 336-345 교훈:
+- **Opus direct compiler work가 효과적**: Phase 338 (MutexGuard forwarding) 혼자 +2. 비슷한 패턴 확장 여지.
+- **E022 .clone() 스윕 이미 large portion 소진**: 남은 E022 2개도 해소됨.
+- **남은 에러 분포**: E001 (36), E004 (26), E006 (14), E003 (8), E030 (7), E002 (3), E008 (2)
+- **E004 많음**: 많은 경우 stdlib/vaisdb struct method 누락 또는 이름 변경 (getters/setters/forwards).
+- **Close quick wins first**: E006 단순 arg-count, E003 undefined type (import 누락) 등.
+
+- [x] 346. E004 분류 + .len()/.size()/.is_empty() 수정 (Opus direct) ✅ 2026-04-18
+  analysis: 26 파일 중 .len() 4개는 custom struct의 size()/is_empty() rename. .copy_from_slice 2개는 compiler Slice dispatch에 추가.
+  changes: vaisdb (writer.vais/pool.vais/layer.vais) + compiler slice dispatch 확장 (calls.rs)
+  verify: vaisdb OK 165→169 (+4: writer + pool + layer + rollback)
+- [x] 347. E006 cascading fix — pool.write_page 2→1 arg 마이그레이션 (Opus direct) ✅ 2026-04-18
+  changes: btree/{insert,merge,split,delete}.vais — pool.write_page(frame, buf) → pool.write_page(frame); fulltext/mod FullTextDDL.new 2-arg; hnsw/wal serialize(&mut buf) 패턴 교체
+  verify: vaisdb OK 169→170 (+1 merge.vais)
+- [x] 348. E003 undefined type — 부분 SqlValue prefix 교정 (Opus direct) ✅ 2026-04-18
+  flipped: sql/row.vais (bare IntVal/FloatVal 등 → SqlValue.Variant)
+  partial: parser_expr BinaryOp → Expr.BinaryOp (E003→E001 진전)
+  note: types.vais / expr_eval / explain bulk 시도는 pattern destructure 충돌로 regression (revert 완료)
+  verify: vaisdb OK 170→171 (+1)
+- [x] 349. E030 + E006 — undo.vais (Opus direct) ✅ 2026-04-18
+  changes: unpin_page(frame_id) → unpin_page(frame_id, true), get_frame → get_frame_mut
+  verify: vaisdb OK 171→172 (+1)
+- [ ] 350. closure body type inference — 다음 세션
+- [ ] 351+. Tier 1 마무리는 다음 세션 (남은 8 파일)
+
+### 작업 전략
+
+- **세션 초반 Opus direct 조사 (346)**: 나머지 에러 분포 파악 후 delegate vs direct 판단.
+- **small wins 추구**: E006 arg count, E003 missing import는 가장 저렴.
+- **budget cap**: 세션당 최대 5 phase 닫기 목표.
+
+mode: auto
+iteration: 1
+max_iterations: 30
+strategy: Phase 346 E004 분류 → 347-349 cascading 수정 → 350 closure inference → 351+ E001 cluster. Phase158 strict gate 매 phase 필수.
+
+---
+
+### Phase 336-345: 잔여 Tier 1 블로커 (OK 159→165, +6)
+
+## 🎯 이전 세션 요약 (Phase 336+)
 
 `mode: auto` — 세션 재시작 시 `harness` skill이 이 섹션을 자동 복구하여 이어서 진행.
 
