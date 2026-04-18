@@ -365,6 +365,11 @@ X ByteBuffer {
         result
     }
 
+    # Alias for to_vec — vaisdb uses into_vec name. Phase 244.
+    F into_vec(&self) -> Vec<u8> {
+        @.to_vec()
+    }
+
     # Clone the ByteBuffer (deep copy)
     F clone(&self) -> ByteBuffer {
         ByteBuffer.from_buf(&self)
