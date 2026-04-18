@@ -34,10 +34,9 @@
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 1
+iteration: 2
 max_iterations: 30
-  strategy: sequential (Phase 0.1 is foundational — design-impl inseparable, Opus direct)
-  opus_direct: 0.1 — COMPILER_STAGES.md defines the contract for all later phases; can't be delegated.
+  strategy: sequential — iteration 2, Phase 0.2 (integrity matrix skeleton; impl-sonnet background)
 
 ### Phase 0 — Baseline & Integrity Matrix
 
@@ -45,14 +44,16 @@ max_iterations: 30
   detail: `docs/COMPILER_STAGES.md` 작성. 6단계 정의 + 에러 코드 레지스트리 + 6-stage consolidated table + bash OK helpers + 10개 known bugs(B1-B10) 분류 및 target phase 매핑.
   changes: docs/COMPILER_STAGES.md (360 lines). Bash helper fns 실증 (tc/codegen/build/run 전부 expected exit code 일치).
   phase158: 18/18 green.
-- [ ] 2. Integrity test matrix 스켈레톤 (impl-sonnet) [blockedBy: 1]
-  detail: `crates/vaisc/tests/integrity/` 아래 3개 모듈 생성:
-    - `compiler_syntax.rs` — 문법 포인트별 smoke (현재 최소 30개 stub, Phase 1에서 200+ 확장)
-    - `compiler_stages.rs` — 각 stage gate (parse-only, tc-only, codegen-only, full-build)
-    - `ecosystem_health.rs` — std/*.vais 개별 빌드 + vaisdb src/*.vais 개별 빌드 (baseline 측정용)
-  완료 기준:
-  - cargo test -p vaisc --test integrity 실행 가능
-  - 각 테스트가 실패 시 어떤 파일의 어떤 단계가 실패했는지 출력
+- [x] 2. Integrity test matrix 스켈레톤 (impl-sonnet) ✅ 2026-04-19
+  detail: tests/integrity.rs (harness) + tests/integrity/{compiler_syntax.rs, compiler_stages.rs, ecosystem_health.rs}
+  changes: 4 files (~470 LOC). Rust helpers: ok_parse/ok_tc/ok_codegen/ok_build/ok_run/ok_codegen_pkg, unique_exe_path (parallel-safe). cargo_bin!("vaisc") 사용 → installed vaisc drift 회피. tempfile/walkdir dev-deps 이미 존재.
+  tests: 47 passed, 0 failed, 1 ignored. INTEGRITY stdout:
+    compiler_syntax total=30
+    compiler_stages total=14
+    std_files pass=37 fail=45 total=82
+    vaisdb_files pass=177 fail=84 total=261
+  fixes during gate: LF i in → LF i:, 병렬 exe race (per-path hashed exe name).
+  phase158: 18/18 green.
 - [ ] 3. Baseline 측정 및 ROADMAP 기록 (Opus direct) [blockedBy: 2]
   detail: matrix 전체 실행하여 baseline 숫자 획득. ROADMAP `## Baseline (YYYY-MM-DD)` 섹션에 고정.
   완료 기준:
