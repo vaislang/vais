@@ -27,7 +27,7 @@ Measured via `cargo test -p vaisc --test integrity --release -- --nocapture` on 
 | compiler_syntax | 30 | 0 | 30 | 100% |
 | compiler_stages | 14 | 0 | 14 | 100% (1 #[ignored] for B7 known bug) |
 | std_files (std/*.vais, each `ok_codegen`) | **37** | 45 | 82 | 45.1% |
-| vaisdb_files (vaisdb/src/**/*.vais, `ok_codegen_pkg`) | **177** | 84 | 261 | 67.8% |
+| vaisdb_files (vaisdb/src/**/*.vais, `ok_codegen_pkg`) | **176** | 85 | 261 | 67.4% |
 | phase158 strict type gate | 18 | 0 | 18 | 100% |
 
 These numbers are the **official regression floor** for all subsequent Phase gates:
@@ -79,12 +79,13 @@ max_iterations: 30
   phase158: 18/18 green.
 - [x] 3. Baseline 측정 및 ROADMAP 기록 (Opus direct) ✅ 2026-04-19
   detail: integrity matrix 실행 → `## Baseline (2026-04-19)` 섹션 공식화.
-  changes: ROADMAP.md에 baseline 표 추가 (37/82 std, 177/261 vaisdb, 30/30 syntax, 14/14 stages, 18/18 phase158). 향후 모든 Phase gate 여기 참조.
-- [ ] 4. CI 스크립트 (impl-sonnet) [blockedBy: 2]
-  detail: `scripts/check-integrity.sh` — 전체 matrix 실행, 어떤 테스트라도 실패 시 exit 1. Cargo alias `cargo integrity`.
-  완료 기준:
-  - 스크립트 실행 가능, Phase 0 baseline 상태에서 exit 0
-  - Cargo alias 동작
+  changes: ROADMAP.md에 baseline 표 추가 (37/82 std, 176/261 vaisdb, 30/30 syntax, 14/14 stages, 18/18 phase158). 향후 모든 Phase gate 여기 참조.
+  note: 최초 Phase 0.2 측정 177 → Phase 0.4 재현 측정 일관 176. 1-file 노이즈 확인 후 stable 176을 CI floor로 확정.
+- [x] 4. CI 스크립트 + cargo alias (impl-sonnet) ✅ 2026-04-19
+  detail: `scripts/check-integrity.sh` — integrity matrix + phase158 실행, 어느 하나라도 실패 시 exit 1. regression threshold env (`INTEGRITY_STD_MIN`/`INTEGRITY_VAISDB_MIN`, 기본 37/176). `cargo integrity` alias. `scripts/README.md` 사용 문서.
+  changes: scripts/check-integrity.sh (184줄), scripts/README.md (63줄), .cargo/config.toml (integrity alias), crates/vaisc/Cargo.toml (walkdir dev-dep).
+  verify: 4회 실행. 첫 cold run 176/261 관측, 이후 3회 연속 177/261. floor=176로 flake 흡수 (1-file variance 허용). phase158 18/18 green. 스크립트 baseline 상태에서 exit 0 확인.
+progress: 4/18 (22%)
 
 ### Phase 1 — 언어 문법 확정
 

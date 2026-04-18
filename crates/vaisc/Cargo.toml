@@ -61,5 +61,6 @@ semver = "1.0"
 
 [dev-dependencies]
 tempfile = "3.10"
+walkdir = "2"
 vais-bindgen = { path = "../vais-bindgen" }
 libc = "0.2"
