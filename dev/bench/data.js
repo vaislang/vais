@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775837169139,
+  "lastUpdate": 1776472452953,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -34871,6 +34871,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 795499,
             "range": "± 6150",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "ec888a32edc0a9e5ad1134f08cad1341a745be10",
+          "message": "docs(phase198): final report + Phase 199 seed — compiler GREEN, vaisdb migration deferred\n\nPhase 198 exit-criteria scorecard:\n- ✅ vais-web federation vitest uncaught error fixed (pnpm -r test\n  green across all 24 packages)\n- ✅ Phase 195/196-adjacent candidates (Str vs str, RwLock<T>,\n  M-on-Result) all judged source-side, no compiler regressions\n- ⛔ vaisdb pass rate unchanged at 86% fail (B3 parser migration\n  deferred — needs per-file judgment, single sub-agent can't cover\n  ≥3 distinct sub-patterns at once)\n- ⛔ vais-server tests 7/22 unchanged (bundled with B3)\n- ✅ compiler baseline held: 179/179 examples, 2596/0/0 E2E,\n  clippy 0/0\n\nShipped:\n- std/error.vais: shared VaisError struct for downstream consumers.\n- docs/phase198/{spot_check,bucket3_parser_migration,bucket4_stdlib_mapping,b4_quick_index,final_report}.md\n- vais-web (external repo): packages/federation/src/__tests__/fallback.test.ts\n\nKey insights for Phase 199 planning:\n- \"139 E004+E002\" was per-occurrence; 67 distinct symbols. 60 of\n  those are vaisdb-internal (B+ tree, LSN, tx visibility, etc.),\n  not stdlib concerns.\n- Rename heuristics bite back: Bucket 4 suggested `fnv1a_hash` →\n  `hash` which would have broken vaisdb (it has its own). Do NOT\n  apply mechanical sed without domain context.\n- Sub-agents reliably complete recon (B1 11 calls, B4 10 calls)\n  but fail on \"analyze + fix\" combos (B3 33 calls, 0 changes).\n  Phase 199 must split B3 into 4 narrow sub-buckets.\n\nSee docs/phase198/final_report.md for full scorecard, commit list,\nand Phase 199 plan seed.\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-18T09:26:36+09:00",
+          "tree_id": "4b14e32b52edef763b3d92dbcc5ab519566922c4",
+          "url": "https://github.com/vaislang/vais/commit/ec888a32edc0a9e5ad1134f08cad1341a745be10"
+        },
+        "date": 1776472452575,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 5052,
+            "range": "± 43",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 9510,
+            "range": "± 384",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 10915,
+            "range": "± 60",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 19282,
+            "range": "± 89",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 22346,
+            "range": "± 249",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 41841,
+            "range": "± 381",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 39802,
+            "range": "± 501",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 80261,
+            "range": "± 711",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 302828,
+            "range": "± 2285",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 465882,
+            "range": "± 2100",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 121618,
+            "range": "± 623",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 805833,
+            "range": "± 2003",
             "unit": "ns/iter"
           }
         ]
