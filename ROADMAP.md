@@ -94,7 +94,7 @@ progress: 4/18 (22%)
   changes: docs/LANGUAGE_SPEC.md (+181/-48, 총 2132줄). 99개 construct-level status 마커.
   verify: 모든 lexer 키워드 (`F/S/E/I/L/M/R/B/C/T/U/P/W/X/D/O/N/G/A/Y/EN/EL/LF/LW/mut/self/Self/true/false/await/yield/const/comptime/dyn/macro/as/pure/io/effect/unsafe/partial/linear/affine/move/where/Vec*f32/f64/i32/i64`) 모두 문서화. ✓/◐/✗/⊖ 4-tier 상태 체계. 제거된 `spawn/lazy/force` 별도 표로 기록하여 재도입 방지. CLAUDE.md 원칙과 일관.
   regression: integrity gate green (syntax=30 stages=14 std=37/82 vaisdb=177/261 phase158=18/18).
-progress: 8/18 (44%)
+progress: 9/18 (50%)
 - [x] 6. Parser 정합성 테스트 확장 (impl-sonnet + Opus fixup) ✅ 2026-04-19
   detail: compiler_syntax.rs 30 → 200 tests (186 active + 14 ignored). Sections 11-23 추가: modifiers, assignments, control flow expansion, match expansion, types, expressions, structs/impls, enums, traits, generics, imports/attributes, closures, misc/keywords, negatives. `ok_parse` helper를 `--show-ast` → `check` subcommand으로 교정 (기존 helper는 전체 pipeline을 돌려서 false negative 다수 발생). empty-file / whitespace-only는 valid empty module로 재정의.
   changes: crates/vaisc/tests/integrity/compiler_syntax.rs (+1775줄, 30→200 tests), crates/vaisc/tests/integrity.rs (ok_parse 교정), crates/vaisc/tests/integrity/ecosystem_health.rs (compiler_syntax 요약 total=200).
@@ -112,12 +112,11 @@ progress: 8/18 (44%)
   detail: docs/TYPE_SYSTEM.md (717줄) 작성. ResolvedType 30+ variants 열거, 82-row unification table (모든 match arm + coercion guard), type var allocation, coercion rules (CLAUDE.md §Type Conversion Rules와 일관), Named↔Optional/Result bridge (Phase 326), auto-deref, generic instantiation, known gaps (Phase 2.9/2.10/2.11), How to extend 가이드.
   changes: docs/TYPE_SYSTEM.md (+717줄, 신규). 107개 unification.rs:line 교차참조.
   verify: wc -l=717 ≥500. grep -c "unification.rs:"=107 ≥10. integrity gate green (syntax=200 stages=14 std=37/82 vaisdb=177/261 phase158=18/18).
-- [ ] 9. Cross-file impl dispatch 설계 & 구현 (Opus direct) [blockedBy: 8]
-  detail: 현재 `S Parser`가 parser.vais에 있고 `X Parser { F parse_select }`가 parser_select.vais에 있을 때, parser.vais 단독 빌드 시 parse_select가 안 보이는 문제. 결정: (a) circular import를 benign cycle로 허용 vs (b) `#[extend]` 어노테이션 도입 vs (c) 모든 impl을 한 파일로 통합. 결정 근거 포함 문서화.
-  완료 기준:
-  - 결정사항 TYPE_SYSTEM.md에 기록
-  - 구현 및 관련 테스트 추가
-  - 기존 `test_circular_import_detection` 업데이트 또는 의도 명시
+- [x] 9. Cross-file impl dispatch 설계 & 구현 (Opus direct) ✅ 2026-04-19
+  detail: 세 옵션 (a/b/c) 평가 → **옵션 (a) "co-location rule" 채택**. 선택 근거: selfhost/std/vaisdb 모두 같은 파일에 S+X 배치, 현재 broken 사례 없음. test_circular_import_detection 의도 명시 (load-bearing contract for option a).
+  changes: docs/TYPE_SYSTEM.md §9 "Phase 2.9" expanded (decision table + rationale + workaround), crates/vaisc/tests/e2e/modules_system.rs (+phase2_9_same_file_struct_and_impl_works 회귀 테스트).
+  verify: `cargo test -p vaisc --test e2e --release phase2_9_same_file_struct` ok 1/1, `cargo test -p vaisc --test e2e --release test_circular_import_detection` ok 1/1 (invariant 유지). Full gate green.
+  option (b) `#[extend]` / option (c) benign cycles: 기각. 필요 시 RFC 경로 재검토.
 - [ ] 10. Option<&T> / Ref pattern binding 정합성 (Opus direct) [blockedBy: 9]
   detail: `Some(r) => r.field` 케이스에서 r이 &T / T 중 어느 것으로 bind되는지 결정하고 통일. role.vais `get_role_id` 같은 케이스가 정상 동작하도록.
   완료 기준:

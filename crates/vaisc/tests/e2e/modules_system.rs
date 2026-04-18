@@ -2834,3 +2834,30 @@ F main() -> i64 {
     .unwrap();
     assert_eq!(result.exit_code, 1);
 }
+
+// ==================== Phase 2.9: Cross-file Impl Dispatch Invariant ====================
+//
+// Phase 2.9 decision (docs/TYPE_SYSTEM.md §9 "Cross-file Impl Dispatch"):
+// option (a) — keep impl blocks co-located with their type declaration.
+// This test documents the contract: same-file `S`+`X` compiles and runs.
+// test_circular_import_detection (above, line ~303) documents the opposite
+// invariant: cross-file cycles are rejected. Together they codify Phase 2.9.
+
+#[test]
+fn phase2_9_same_file_struct_and_impl_works() {
+    let source = r#"
+S Counter { val: i64, }
+
+X Counter {
+    F bump(self) -> Counter { Counter { val: self.val + 1 } }
+    F get(self) -> i64 { self.val }
+}
+
+F main() -> i64 {
+    c := Counter { val: 41 }
+    c2 := c.bump()
+    c2.get()
+}
+"#;
+    assert_exit_code(source, 42);
+}

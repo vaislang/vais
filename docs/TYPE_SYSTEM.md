@@ -594,17 +594,46 @@ These gaps are tracked as future work items. They do NOT represent bugs in
 the current system — they are intentional simplifications with known
 edge-case fallout.
 
-### Phase 2.9 — Cross-file Impl Dispatch
+### Phase 2.9 — Cross-file Impl Dispatch — **DECISION: Option (a) accepted**
 
-**Problem**: When a trait impl is defined in a different file from its usage,
-the `TypeChecker::trait_impls` vector may not contain the impl at the time
-of call-site checking (depends on module registration order).
+**Problem**: When a struct `S Parser { ... }` is in `parser.vais` and
+`X Parser { F parse_select(self) ... }` is in `parser_select.vais`,
+compiling `parser.vais` standalone does not see `parse_select` because
+module load order is source-file-driven.
 
-**Symptom**: Method calls on types that implement a trait in another module
-occasionally fall through to `E003: method not found`.
+**Decision (2026-04-19, Phase 2.9)**: Keep current behavior — the impl
+block and its type declaration must co-exist in the same compilation
+unit (either same file, or the importing file's transitive closure).
 
-**Planned fix**: Implement a two-pass trait resolution where all trait impls
-are registered before any method calls are resolved.
+Considered alternatives:
+
+| Option | Summary | Verdict |
+|--------|---------|---------|
+| (a) Status quo + consolidation guidance | Users split impls at their own risk; document co-location rule | **chosen** |
+| (b) Introduce `#[extend]` annotation | New attribute to signal "this impl block extends a type declared elsewhere"; TC delays resolution | rejected — new surface for little benefit given no current caller needs it |
+| (c) Allow benign circular imports | Detect A imports B imports A, but only error if the cycle has data-dependency, not just impl discovery | rejected — complicates `test_circular_import_detection` invariant and makes dependency graph ambiguous |
+
+**Rationale for (a)**:
+1. The selfhost compiler (50,000+ LOC) already co-locates impl blocks.
+2. std/ follows the same convention.
+3. No vaisdb file currently splits impls across files.
+4. `test_circular_import_detection` (crates/vaisc/tests/e2e/modules_system.rs:303)
+   codifies the invariant and currently passes.
+5. Option (b) would require a new AST node, codegen change, and TC two-pass
+   — too much work to solve a problem nobody has.
+
+**Workaround for users who hit this**: move the `X Type { … }` block into
+the same file as the `S Type { … }` declaration, or use a single file that
+`U`-imports both (the importing file's TC sees both declarations).
+
+**Future Phase**: if vais ecosystem expansion forces impl splits, revisit
+with RFC. Until then, document the co-location rule in CLAUDE.md and
+LANGUAGE_SPEC.md.
+
+**Test invariant**: `test_circular_import_detection` (modules_system.rs:303)
+asserts that `A imports B` + `B imports A` produces a `circular` / `cycle`
+error. This is the load-bearing contract of option (a) — breaking it would
+re-open the cross-file-impl can of worms. Do NOT weaken this test.
 
 ### Phase 2.10 — Option<&T> Pattern Binding
 
