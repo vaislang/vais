@@ -12,7 +12,10 @@
 ## ⏸ 완료 — Phase 228: ByteBuffer.write_f32_le/read_f32_le (OK 90→92)
 ## ⏸ 완료 — Phase 229: ByteBuffer.get_* aliases for read_* (E004 47→45)
 ## ⏸ 완료 — Phase 230: ByteBuffer.new(cap) → with_capacity (E006 16→14)
-## ⏸ 완료 — Phase 231: sanitizer str_byte_at (partial — Str.with_capacity 한계)
+## ⏸ 완료 — Phase 231: sanitizer str_byte_at (partial)
+## ⏸ 완료 — Phase 232: vaisdb Str.with_capacity → String (4 files)
+## ⏸ 완료 — Phase 233: ByteBuffer.new(cap) broader (OK 92→94)
+## ⏸ 완료 — Phase 234: ByteBuffer.write_u64_le/u32_le aliases
 
 ---
 
