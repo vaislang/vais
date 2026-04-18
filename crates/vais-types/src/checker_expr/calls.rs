@@ -964,6 +964,17 @@ impl TypeChecker {
             if method.node == "to_string" && args.is_empty() {
                 return Ok(ResolvedType::Str);
             }
+            // Phase 273: slice/Vec mutation operations — no result.
+            if matches!(
+                method.node.as_str(),
+                "copy_from_slice" | "clone_from_slice" | "fill" | "swap" | "rotate_left"
+                    | "rotate_right" | "sort" | "reverse"
+            ) {
+                for a in args.iter() {
+                    let _ = self.check_expr(a);
+                }
+                return Ok(ResolvedType::Unit);
+            }
             // Phase 269: generic `.as_ref()` on ANY type returns &T.
             // Option::as_ref, Vec::as_ref, Result::as_ref etc. all match
             // this pattern. Strict borrow-checking runs separately.
