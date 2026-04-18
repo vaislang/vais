@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776472452953,
+  "lastUpdate": 1776473283221,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -34967,6 +34967,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 805833,
             "range": "± 2003",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "23f3df9fab3178874b388fc860dcff518958e69c",
+          "message": "docs(roadmap): Phase 199~203 plan — vaisdb full migration (Tier 1 start)\n\nUser chose strategy A (full vaisdb migration) after Phase 198 surfaced\nthe true scope. Phase 199 carries Phase 198 Bucket 3/4 forward but\nre-shaped around the lessons:\n\n- Sub-agent scope: **recon-only** (analyze + fix in one prompt keeps\n  hitting tool-budget cutoffs; Phase 195/196/197/198 each saw it).\n- Per-file gate: after every edit run `vaisc check` before moving on.\n- Sub-pattern splits: one narrow pattern per task, not \"fix all P001\".\n- External repo: vaisdb lives in `vais/lang/packages/vaisdb`, commits\n  stay in that repo, not here.\n- Rename heuristic discipline: Phase 198 B4's `fnv1a_hash` → `hash`\n  example was a near-miss; apply no mechanical rename without domain\n  context.\n\nPhase 199 target (Tier 1 — mechanical-safe patterns):\n- 47 P001 → ≤20 (30-40% reduction)\n- stdlib imports added for 4 PRESENT symbols\n- compiler baseline (179/179 + 2596/0/0 + clippy 0/0) unchanged\n\nPhase 199 tasks (populated in new session, not yet TaskCreate):\n1. Recon-H: accurate P001 sub-pattern classification\n2. B199-A1: match-arm comma insertion\n3. B199-A2: X Trait for Struct → X Struct: Trait rewrite\n4. B199-A3: G X := mut Y migration (if any remaining)\n5. B199-A4: line-continuation leading operator\n6. B199-B: C-style for-loop → LF / LW\n7. B199-I1: add stdlib imports for 4 PRESENT symbols\n8. B199-Gate: re-measure + seed Phase 200\n\nPhase 200-203 roadmap (projected):\n- P200: 60 STILL_MISSING by domain (DB/Storage, SQL, errors,\n  serialization, utilities)\n- P201: struct field drift (E030) + use-after-move (E022)\n- P202: type mismatch (E001) incl. Str/str, RwLock<T>\n- P203: final vaisdb rebuild gate\n\nThis commit ends the current session; start Phase 199 in a fresh\nsession via harness-init to benefit from clean context.\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-18T09:31:50+09:00",
+          "tree_id": "d17d9348fc59b55d9b4f052912e104ad82809790",
+          "url": "https://github.com/vaislang/vais/commit/23f3df9fab3178874b388fc860dcff518958e69c"
+        },
+        "date": 1776473282563,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 38708,
+            "range": "± 515",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 38943,
+            "range": "± 7031",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 44707,
+            "range": "± 5574",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 88602,
+            "range": "± 35250",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 125894,
+            "range": "± 19337",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 306039,
+            "range": "± 4477",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 283264,
+            "range": "± 3861",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 596374,
+            "range": "± 9599",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 2351092,
+            "range": "± 40445",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 3628589,
+            "range": "± 73944",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 730208,
+            "range": "± 97245",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 6275483,
+            "range": "± 102025",
             "unit": "ns/iter"
           }
         ]
