@@ -155,11 +155,19 @@ impl TypeChecker {
         }
 
         // Otherwise, try to find it as an enum variant
+        // Phase 300b: auto-deref Ref/RefMut/Pointer so `M &node { Node.V { .. } }`
+        // still finds the enum Node.
+        let deref_ty = match expr_type {
+            ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Pointer(inner) => inner.as_ref(),
+            _ => expr_type,
+        };
         // Extract enum name and generics from expr_type
         if let ResolvedType::Named {
             name: enum_name,
             generics: concrete_generics,
-        } = expr_type
+        } = deref_ty
         {
             if let Some(enum_def) = self.enums.get(enum_name) {
                 if let Some(VariantFieldTypes::Struct(fields)) = enum_def.variants.get(pattern_name)
@@ -193,11 +201,19 @@ impl TypeChecker {
         pattern_name: &str,
         expr_type: &ResolvedType,
     ) -> Vec<ResolvedType> {
+        // Phase 300a/b: auto-deref Ref/RefMut/Pointer so `M &opt { Some(x) }`
+        // and Option/Result variant unwrapping work on references too.
+        let deref_ty = match expr_type {
+            ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Pointer(inner) => inner.as_ref(),
+            _ => expr_type,
+        };
         // Phase 300a: Option<T>/Result<T,E> are primitive variant types, not
         // Named enum defs — special-case Some/None/Ok/Err patterns so the
         // bound variable gets the proper inner type (avoids losing V through
         // HashMap.get_mut's Option<&mut V> return value).
-        match expr_type {
+        match deref_ty {
             ResolvedType::Optional(inner) => match pattern_name {
                 "Some" => return vec![(**inner).clone()],
                 "None" => return vec![],
@@ -214,7 +230,7 @@ impl TypeChecker {
         if let ResolvedType::Named {
             name: enum_name,
             generics: concrete_generics,
-        } = expr_type
+        } = deref_ty
         {
             if let Some(enum_def) = self.enums.get(enum_name) {
                 if let Some(variant_fields) = enum_def.variants.get(pattern_name) {

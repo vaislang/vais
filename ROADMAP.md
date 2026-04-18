@@ -62,7 +62,10 @@
   root cause: (1) scope.rs `get_tuple_variant_fields`는 `Optional/Result`를 Named로만 찾고 변형을 처리 못함 (Some/None/Ok/Err). (2) stdlib HashMap.get는 V 직접 반환인데 vaisdb는 Option<V> 기대 — struct-lookup이 builtin dispatch 덮어씀.
   changes: vais-types/scope.rs (Optional/Result variant destructuring 특수 처리), vais-types/checker_expr/calls.rs (HashMap/BTreeMap/IndexMap/StrHashMap.get은 struct lookup bypass → builtin Option<V> 반환)
   verify: phase158 18/18 GREEN, reproducer OK, vaisdb OK 134→136 (+2) + security/role/user/policy 에러 진전
-- [ ] 300b. **enum variant destructuring + Option.is_some** — `HybridPlanNode.VectorScan { alias, .. }`의 alias (Option<Str>)에 `.is_some()` 호출 시 '?'로 처리됨. 대상: planner/explain.vais 등.
+- [x] 300b. **enum variant struct-style destructuring 필드 타입 복구** (Opus direct) ✅ 2026-04-18
+  root cause: (1) parser가 `Enum.Variant { field, .. }`를 `Pattern::Variant`(tuple-style)로 저장 → 필드명 유실. (2) scope.rs의 variant field 조회는 `expr_type`이 `Ref(Named)` 일 때 못 찾음.
+  changes: vais-parser/expr/primary.rs (enum struct-style variant pattern → Pattern::Struct로 파싱), vais-types/scope.rs (get_struct_or_variant_fields + get_tuple_variant_fields 모두 Ref/RefMut/Pointer auto-deref)
+  verify: phase158 18/18 GREEN, reproducer OK, vaisdb OK 136→137 (+1)
 
 ### Phase 301-310: 두 경로 모두 필요 (장기, OK +10~15 예상)
 
@@ -88,10 +91,10 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 9
+iteration: 10
 max_iterations: 30
 strategy: single-error 파일부터 → cascading 해결 → 두-경로 통합. impl-sonnet 위임 가능한 단위로 쪼개서 병렬 진행.
-  strategy: Phase 300a — HashMap get_mut destructuring V 복구 (compiler). Sequential, Opus direct (진단 후 판단: impl-sonnet 위임 가능한 mechanical edit이면 delegate).
+  strategy: Phase 300b — enum variant struct-destructuring 필드 타입 복구 (compiler). Opus direct — 300a와 같은 scope.rs 문맥.
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone

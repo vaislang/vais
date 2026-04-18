@@ -864,21 +864,40 @@ impl Parser {
                                 fields,
                             }
                         } else if self.check(&Token::LBrace) {
+                            // Phase 300b: struct-style enum variant pattern
+                            //   `Enum.Variant { field1, field2: pat2, .. }`
+                            // Parse as Pattern::Struct with the variant name so the
+                            // type checker can recover field types (shared path with
+                            // get_struct_or_variant_fields which already looks up
+                            // enum variants by name).
                             self.advance_skip();
-                            let mut fields = Vec::new();
+                            let mut fields: Vec<(
+                                Spanned<String>,
+                                Option<Spanned<Pattern>>,
+                            )> = Vec::new();
                             while !self.check(&Token::RBrace) && !self.is_at_end() {
-                                // Support `..` rest pattern in variant struct patterns
+                                // Support `..` rest pattern
                                 if self.check(&Token::DotDot) {
                                     self.advance();
                                     break;
                                 }
-                                fields.push(self.parse_pattern()?);
-                                if !self.check(&Token::RBrace) && !self.check(&Token::DotDot) {
+                                let field_name = self.parse_ident()?;
+                                // Check for `: pattern`
+                                let field_pat = if self.check(&Token::Colon) {
+                                    self.advance_skip();
+                                    Some(self.parse_pattern()?)
+                                } else {
+                                    None // shorthand: `x` means `x: x`
+                                };
+                                fields.push((field_name, field_pat));
+                                if !self.check(&Token::RBrace)
+                                    && !self.check(&Token::DotDot)
+                                {
                                     self.expect_skip(&Token::Comma)?;
                                 }
                             }
                             self.expect_skip(&Token::RBrace)?;
-                            Pattern::Variant {
+                            Pattern::Struct {
                                 name: Spanned::new(variant_name, Span::new(start, start)),
                                 fields,
                             }
