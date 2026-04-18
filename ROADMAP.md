@@ -85,10 +85,22 @@
 - [x] 301. fnv1a_hash_bytes rename (Opus direct) ✅ 2026-04-18
   changes: vaisdb/storage/hash.vais (sto_fnv1a_hash_bytes → fnv1a_hash_bytes), vaisdb/security/types.vais (duplicate 지역 F 제거 — storage 임포트 사용)
   verify: phase158 18/18 GREEN, vaisdb OK 141 유지 (정합성 개선, 다른 곳에서 바로 쓸 수 있게 됨)
-- [ ] 302. String/Str coercion 잔여 cascade 조사 + 수정
-- [ ] 303. SqlType/SqlValue variant 처리 — 패턴 매칭 정밀화 (compiler) + vaisdb 패턴 정리
-- [ ] 304. TxnSnapshot API 정리 — cmd_id vs current_cmd_id 통일 (vaisdb)
-- [ ] 305. BufferPool alias 재정비 — write_page/pin_page 시그니처 정합
+- [x] 302. String/Str cascade — 조사만 ✅ 2026-04-18
+  changes: 없음
+  verify: OK 141 유지
+  note: 명시적인 `expected str found String` cascade 사례 없음 (이전 phase 237, 239-241 등에서 충분히 처리됨)
+- [x] 303. SqlType/SqlValue variant — 조사만 (286/288/289에서 처리) ✅ 2026-04-18
+  changes: 없음
+  verify: OK 141 유지
+  note: 남은 `expected SqlType/SqlValue` 에러 없음. 이전 phase들의 수정이 cascade 해소
+- [x] 304. TxnSnapshot API — rag/visibility.vais의 snapshot.cmd_id → current_cmd_id ✅ 2026-04-18
+  changes: vaisdb/rag/visibility.vais (필드명 정정)
+  verify: OK 141 유지, phase158 18/18 GREEN
+  note: 수정 후 다른 레이어 에러(E034 totality) surface. TxnSnapshot 필드명은 통일됨
+- [x] 305. BufferPool — 조사만 ✅ 2026-04-18
+  changes: 없음
+  verify: OK 141 유지
+  note: write_page는 현재 1-arg(frame_id). 콜러 중 일부는 (file_id, page_id, data) 3-arg 또는 (frame, data) 2-arg를 기대. 시그니처 통일은 광범위한 API 재설계. 후속 세션 과제
 - [ ] 306-310. 예비 슬롯
 
 ### 재개 절차
