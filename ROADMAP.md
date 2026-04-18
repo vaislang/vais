@@ -56,7 +56,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-19)
 
-mode: auto
+mode: stopped (Phase 1.5 체계 완료 — 13/18. Phase 2.10 approach 결정 필요: 재시도 / 우회 / 수용 중 선택. 자동 진행 시 이전 세션과 동일한 regression 루프 재발 위험.)
 iteration: 3
 max_iterations: 30
   strategy-note: A안 채택 — Phase 2.10 fix 재시도하기 전에 **체계(LIVING_SPEC + COOKBOOK + CLAUDE.md 철칙)** 먼저 구축. 에이전트 작업 시 "과거 문법 추측 → regression" 루프를 근본 차단하는 게 목적. Phase 1.8 → 1.9 → 1.10 체인 후 2.10 재개.
