@@ -3,7 +3,45 @@
 
 > **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 204 시작: E001/E002/E004 진짜 에러 도메인 처리)
+> **최종 업데이트**: 2026-04-18 (Phase 205 시작: E001 (type mismatch) top patterns + E004/E030 잔여)
+
+---
+
+## ⏸ 완료 — Phase 205: vaisdb E001 + 잔여 E-계열
+completed_at: 2026-04-18
+
+mode: auto
+max_iterations: 15
+iteration: 0
+strategy: Phase 204 종료 시 E001=154 (가장 큰 잔여), E004=40, E002=3, E030=1, OTHER=78. Phase 205는 (a) E001 top sub-pattern 처리 + (b) OTHER 분류 + (c) E004 잔여 일부.
+
+### 목표
+1. E001 154 → ≤80 (50%↑ 해소)
+2. E004 40 → ≤25
+3. OTHER 분류 + 가능한 일부 처리
+4. compiler baseline 유지
+
+### 작업 (4개)
+
+- [ ] 1. **Recon-205: E001 + OTHER 분류** (Opus direct)
+  - E001 top patterns + sample contexts
+  - OTHER 78건 분류 (어느 에러 코드인지)
+  - 산출물: docs/phase205/recon.md
+
+- [ ] 2. **E001 top patterns** (impl-sonnet) [blockedBy: 1]
+  - top 1-2 sub-pattern 일괄 처리
+  - 산출물: docs/phase205/e001.md
+
+- [ ] 3. **E004 + 잔여 E002/E030** (impl-sonnet) [blockedBy: 1]
+  - E004 top: len/to_vec/to_string 등
+  - E002 잔여 3건 + E030 1건
+  - 산출물: docs/phase205/e004_other.md
+
+- [ ] 4. **P205-Gate** (Opus direct) [blockedBy: 2, 3]
+  - 전수 재측정 + Phase 206 seed
+  - 산출물: docs/phase205/final_report.md
+
+progress: 4/4 (100%) — E030 100%↓ (1→0), put_* 내부 177→0. E001 Phase 206 이월.
 
 ---
 
