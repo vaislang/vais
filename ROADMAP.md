@@ -3,7 +3,29 @@
 
 > **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 212 시작: E004 14건 + OTHER 분류)
+> **최종 업데이트**: 2026-04-18 (Phase 213 시작: compiler E022 변수명 + E001 deep dive)
+
+---
+
+## ⏸ 완료 — Phase 213: imported_item_count fix → OK 11%→28%
+completed_at: 2026-04-18
+
+mode: auto
+max_iterations: 12
+iteration: 0
+strategy: Phase 212 종료. 잔여: E001=197 (큼), E022=17, E006=15, E004=14, E008=2. (a) compiler E022가 'init' 임시 변수명 표시 → 실제 변수명 표시로 개선, (b) E001 top patterns 다시 분류 + per-file fix.
+
+### 작업
+- [x] 1. **imported_item_count fix** ✅ 2026-04-18
+  changes: crates/vaisc/src/commands/simple.rs — set_imported_item_count 호출 (build/core.rs와 동일 패턴). ownership check에서 imported items skip.
+- [x] 2. **E001 자동 해소** ✅ (cascading)
+  changes: 197→72 (63%↓) 자동.
+- [x] 3. **OK 대폭 증가** ✅
+  changes: 30→78 OK files (160% 증가).
+- [x] 4. **P213-Gate** ✅
+  changes: docs/phase213/final_report.md.
+
+progress: 4/4 (100%) — **OK files 30→78 (160% 증가)** 🎯. E001 197→72, E022 17→2.
 
 ---
 

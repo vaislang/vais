@@ -249,6 +249,27 @@ pub(crate) fn cmd_check(
     // Type check merged AST (includes all imported struct/function definitions)
     let mut checker = TypeChecker::new();
     configure_type_checker(&mut checker);
+
+    // Tell the checker how many leading items came from imported modules so
+    // ownership/borrow checking can skip them. Without this, every transitive
+    // importer of std/vec saw spurious E022 from std/vec.fold's `acc := mut init`
+    // pattern (Phase 213). Mirrors what `commands/build/core.rs` already does.
+    {
+        let single_file_ast = parse(&source).unwrap_or_else(|_| vais_ast::Module {
+            items: vec![],
+            modules_map: None,
+        });
+        let original_non_use_count = single_file_ast
+            .items
+            .iter()
+            .filter(|item| !matches!(item.node, vais_ast::Item::Use(_)))
+            .count();
+        let imported_count = ast.items.len().saturating_sub(original_non_use_count);
+        if imported_count > 0 {
+            checker.set_imported_item_count(imported_count);
+        }
+    }
+
     if let Err(e) = checker.check_module(&ast) {
         return Err(error_formatter::format_type_error(&e, &source, input));
     }
