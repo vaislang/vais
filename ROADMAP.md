@@ -1,17 +1,20 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 198 진행 — 하위 패키지 regression 해소)
+> **현재 버전**: 0.1.0 (Phase 198 부분완료 — 4/2 met, 2/2 deferred to 199)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 198 auto 시작: 8 bucket — spot-check, federation fix, VaisError, parser 이주, stdlib audit, compiler fix if any, tail cleanup, re-audit gate)
+> **최종 업데이트**: 2026-04-18 (Phase 198: compiler+vais-web 작업 완료, vaisdb 대규모 마이그레이션은 Phase 199로. final report: docs/phase198/final_report.md)
 
 ---
 
-## 🟢 진행 — Phase 198: 하위 패키지 regression 해소
+## ⏸ 부분완료 — Phase 198: 하위 패키지 regression 해소
 
 mode: auto
 max_iterations: 20
-iteration: 0
+iteration: 4
+completed_at: 2026-04-18 (부분)
+  iter1 strategy: Task #30 (Bucket 1 spot-check, haiku read-only) + Task #31 (federation fix, sonnet, vais-web 독립). 둘은 완전 다른 디렉토리 (compiler vs vais-web/packages/federation). 병렬 background 안전. Worktree 안 씀 (Phase 195/196/197 교훈). Spot-check 결과로 Bucket 6 (compiler fix) 필요 여부 결정. ✅ 결과: Bucket 6 = noop (all source migration). commits 97c84987 + vais-web 외부 repo.
+  iter2 strategy: Tasks #32/33/34 unblocked. 모두 vaisdb 또는 vais-server 소스 수정 (compiler 안 건드림). 파일 영역: #32 = VaisError struct (stdlib 또는 callers), #33 = parser-syntax 이주 (vaisdb src + vais-server tests), #34 = stdlib function rename 매핑 + 적용 (vaisdb src + std/ 일부). 파일 overlap 약간 (vaisdb src/**)이지만 각 task가 다른 에러 코드에 집중 → 동일 파일 내 다른 라인 수정 가능성. sequential이 더 안전. #32 먼저 (영향 작고 명확) → #33 → #34 순서. 각 background.
 strategy: Phase 197 consolidated.md 기반으로 6 bucket. Bucket 1 (spot-check) 먼저 돌려서 compiler vs source 판정, 그 결과로 Bucket 2~6 파일 영향 범위 확정. 병렬 가능성 높음 (parser 수정과 stdlib audit는 다른 파일). **vaisdb 86% 실패**는 multi-phase 가능성 — Phase 198에서 가능한 만큼 해소 후 Phase 199 고려.
 
 ### 목표 (Exit Criteria)
