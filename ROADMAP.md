@@ -41,24 +41,39 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ---
 
-## Phases 개요
+## Phases 개요 (B안 — 전체 완성도 재편, 2026-04-19)
+
+> **B안 선언**: Phase 1.5 체계까지 13/18 완료 이후 "문법/컴파일러 100% 완성 후 다음 단계" 방침으로 ROADMAP 확장. 이전 18-Phase 구조는 범위를 과소평가했었음. 실제 갭을 반영하여 40+ Phase로 재편.
 
 | # | Phase | 목표 | Gate 지표 |
 |---|-------|------|----------|
-| 0 | Baseline & Integrity Matrix | 측정 기준 확정, test matrix 구축 | 모든 matrix 실행, baseline 숫자 commit |
-| 1 | 언어 문법 확정 | Spec 문서 + parser 정합성 테스트 200+ | spec과 parser 100% 일치 |
-| 2 | Type system 정합성 | Unification rules + cross-file impl + Option match | type system 테스트 100% |
-| 3 | Codegen 완결성 | Str/Vec/HashMap/Tuple feature matrix | TC pass ⇒ codegen pass (0 drop) |
-| 4 | stdlib 정비 | std/*.vais 개별 빌드 + 사용 예제 | std 파일 100% 빌드 |
-| 5 | Packages (vaisdb/vais-server/vais-web) | 각 패키지 top-level 빌드 + API drift 정리 | 각 패키지 정의된 entry 파일 빌드 OK |
+| 0 | Baseline & Integrity Matrix | 측정 기준 확정, test matrix 구축 | 모든 matrix 실행, baseline 숫자 commit — ✅ 완료 |
+| 1 | 언어 문법 확정 (초안) | LANGUAGE_SPEC + parser 200 tests | ✅ 완료 (187 pass + 14 ignored) |
+| 1.5 | Living Spec 체계 | LIVING_SPEC + COOKBOOK + CLAUDE.md 철칙 | ✅ 완료 (100 files + 22 items + 7 rules) |
+| 1.x | 문법 완성도 (14 ignored 해결 + 누락 production) | 파서/TC 14 ignored → 0, 추가 production 구현 | compiler_syntax 200/200 green, 신규 8-test 추가 |
+| 2.x | Type system 완성도 | Option 재포장, method inference, auto-deref, bridge 단일화 | 모든 reproducer 통과 + baseline 유지 |
+| 3.x | Codegen 완결성 | Str/Vec/HashMap/Tuple feature matrix + 미지원 TC 차단 | TC pass ⇒ codegen pass (0 drop) |
+| 4.x | 언어 기능 완성 | effect system, linear/affine, comptime/macro, dyn, yield, move closure 완성 | LANGUAGE_SPEC ◐ 마커 0개 |
+| 5.x | stdlib 100% | std/*.vais 37→82 + 사용 예제 + API 문서화 | std 82/82 빌드, LIVING_SPEC 통합 |
+| 6.x | vaisdb 100% | vaisdb/src 176→261 + API drift + e2e | vaisdb 261/261 빌드 |
+| 7.x | vais-server / vais-web 100% | 각 패키지 top-level 빌드 + API drift + smoke | 각 패키지 integrity gate 자체 green |
+| 8.x | 생태계 & 문서 | Getting Started, tutorial, samples | 외부 개발자가 Vais로 새 앱 만들 수 있음 |
+
+각 Phase X.y 는 이후 "Current Tasks" 섹션에서 상세화. **현재 마지막으로 완료된 작업은 1.10 (CLAUDE.md 철칙)**. 다음은 **Phase 1.11+**.
+
+### 완성도 정의 (Gate 기준)
+
+- **100% 완료**: 해당 Phase의 모든 task가 `[x]`로 체크, 관련 integrity gate (신규 포함) 통과, 이전 baseline 숫자 1-file regression도 없음.
+- **Gate 위반 시**: 즉시 전체 revert, 해당 Phase를 deferred 처리, 별도 세션에서 재분석.
+- **Phase 건너뜀 금지**: Phase N+1 시작 전 N이 100% 통과 필수. 병렬 작업은 같은 Phase 내에서만.
 
 ---
 
 ## Current Tasks (2026-04-19)
 
-mode: stopped (Phase 1.5 체계 완료 — 13/18. Phase 2.10 approach 결정 필요: 재시도 / 우회 / 수용 중 선택. 자동 진행 시 이전 세션과 동일한 regression 루프 재발 위험.)
+mode: stopped (B안 ROADMAP 재편 완료 — 40 Phase 구조로 확장. 다음 실행 단위는 Phase 1.11 Match guard. 실행 시작 전 사용자 확인 대기.)
 iteration: 3
-max_iterations: 30
+max_iterations: 60
   strategy-note: A안 채택 — Phase 2.10 fix 재시도하기 전에 **체계(LIVING_SPEC + COOKBOOK + CLAUDE.md 철칙)** 먼저 구축. 에이전트 작업 시 "과거 문법 추측 → regression" 루프를 근본 차단하는 게 목적. Phase 1.8 → 1.9 → 1.10 체인 후 2.10 재개.
   strategy iteration 1: sequential — #42 (#43, #44 blockedBy 체인). #42는 100+ 파일 생성 + regression floor 유지 필요 → impl-sonnet background.
 
@@ -232,7 +247,221 @@ progress: 9/18 (50%)
   - 각 패키지 상태 PACKAGE_STATUS.md에 기록
   - 빌드 가능한 entry는 integrity matrix에 추가
 
-progress: 0/18 (0%)
+### Phase 1.x — 문법 완성도 (B안 확장, 2026-04-19)
+
+> **목표**: Phase 1.6의 14 ignored 테스트 해결 + LANGUAGE_SPEC ◐ 마커가 표시하는 파서 갭 전부 메우기. 결과로 compiler_syntax 200/200 passing (0 ignored).
+
+- [ ] 1.11 Match guard `x if cond => ...` 구현 (Opus direct) [blockedBy: 1.10]
+  detail: 파서에서 match arm 패턴 뒤에 `if <expr>` guard 지원. AST `MatchArm.guard: Option<Expr>` 이미 있으면 파서 연결만. 없으면 추가.
+  [완료 기준]:
+  - `compiler_syntax.rs`의 pattern_guard_if 테스트 ignored 해제 + passing
+  - e2e 테스트 1개 추가 (guard 조건으로 분기 동작 검증)
+  - integrity gate green
+- [ ] 1.12 빈 Vec/Array 리터럴 `[]` 타입 추론 (Opus direct) [blockedBy: 1.11]
+  detail: `a: Vec<i64> := []` 가 현재 `*?0`으로 추론되는 문제 해결. context 타입에서 element 추론. `[1, 2, 3]`도 `Vec<i64>` 추론되도록.
+  [완료 기준]:
+  - pattern_empty_vec.vais 원본 버전 (Vec<i64> 리터럴) 빌드 OK
+  - LIVING_SPEC의 pattern_empty_vec.vais 우회 주석 제거 후 통과
+- [ ] 1.13 Top-level `const X: T = expr` production 추가 (impl-sonnet) [blockedBy: 1.12]
+  detail: 현재 top-level에 `const` 파서 지원 없음 (P001 Unexpected token). Parser에 `const` item production 추가. TC는 이미 `Const` variant 처리 가능한지 확인.
+  [완료 기준]:
+  - LIVING_SPEC const_compile_time.vais 원본 (const 사용) 통과
+  - e2e 1개 추가
+- [ ] 1.14 Break-with-value `B <expr>` 지원 (impl-sonnet) [blockedBy: 1.13]
+  detail: `result := L { I done { B 42 } }` 패턴. Parser + TC (loop-as-expression) 확인.
+  [완료 기준]:
+  - compiler_syntax B_break_value 테스트 추가 + passing
+  - LIVING_SPEC L_loop_break.vais 원본 (값 전달) 통과
+- [ ] 1.15 Function type `fn(T) -> U` 파라미터 표기 (Opus direct) [blockedBy: 1.14]
+  detail: `F apply<T>(val: T, f: fn(T) -> i64) -> i64` 같은 고계함수 파라미터 지원. Parser 타입 production 확장.
+  [완료 기준]:
+  - LIVING_SPEC generic_vec_usage.vais 원본 (fn param) 통과
+  - 고계함수 e2e 2개
+- [ ] 1.16 i65/i500 같은 bad primitive 엄격 거부 (impl-sonnet) [blockedBy: 1.15]
+  detail: 현재 `i65`는 generic ident로 취급되어 TC까지 흘러감. Parser에서 primitive 패턴 (`i8`/`i16`/`i32`/`i64`/`i128`/`u*`/`f32`/`f64`)만 허용하고 나머지 `iN` 식별자는 명확한 에러.
+  [완료 기준]:
+  - compiler_syntax syntax_neg_type_bad_primitive 테스트 ignored 해제 + passing
+- [ ] 1.17 Vec<>/empty generic 엄격 거부 (impl-sonnet) [blockedBy: 1.16]
+  detail: `Vec<>` 같은 empty generic 리스트는 parser에서 에러.
+  [완료 기준]:
+  - compiler_syntax syntax_neg_type_vec_empty_generic 테스트 ignored 해제 + passing
+- [ ] 1.18 `unsafe F` modifier codegen (impl-sonnet) [blockedBy: 1.17]
+  detail: 현재 `unsafe F ...` 파서 통과하지만 codegen pass-through가 불완전. 실제 코드 생성 경로 검증.
+  [완료 기준]:
+  - compiler_syntax syntax_mod_unsafe_fn 테스트 ignored 해제 + passing
+
+### Phase 2.x — Type system 완성도
+
+> **목표**: Phase 2.10 근본 해결 + 관련 2차 완성도 (method inference, auto-deref, bridge 단일화).
+
+- [ ] 2.10 Option/Result match-arm 재포장 근본 해결 (Opus direct, 4-지점 동시 수정) [blockedBy: 1.18]
+  detail: 이전 3회 시도 모두 regression. 근본 원인 재확인:
+    - calls.rs:55-87 — Some/Ok/Err constructor
+    - lookup.rs:71 — bare None/Ok/Err ident path
+    - unification.rs:231,247 — Generic no-op + Named↔Optional bridge
+    - checker_expr/control_flow.rs:282-354 — match arm unification
+  위 4개 지점의 fresh var 할당 규칙을 **한 번에** 정합화. 중간 커밋 금지.
+  [완료 기준]:
+  - phase2_10_option_rewrap_in_match_arm #[ignore] 해제, passing
+  - role.vais get_role_id 빌드 OK (vaisdb counter ≥ 177)
+  - 신규 reproducer 5+ 추가 (Option<Struct>/Result<T,E>/nested Option<Option<T>>)
+  - ./scripts/check-integrity.sh green (regression 0)
+- [ ] 2.11 HashMap/Vec/Str method inference 통합 (impl-sonnet) [blockedBy: 2.10]
+  detail: 현재 분산된 패치를 `crates/vais-types/src/builtins/method_returns.rs` 단일 테이블로 통합. Codegen 중복 제거.
+  [완료 기준]:
+  - 하나의 (method_name → (receiver, return_type)) 테이블
+  - 기존 테스트 전부 통과, integrity gate green
+- [ ] 2.12 Vec `.get()` / HashMap `.get()` auto-deref UX (Opus direct) [blockedBy: 2.11]
+  detail: 현재 `Some(n) => n > 0` 시 `n: &i64`로 산술 에러. 두 가지 중 선택:
+    (a) match binding 시 auto-deref 적용 (Rust 2018 match ergonomics)
+    (b) 비교/산술 연산자에서 `&T ↔ T` 자동 언래핑
+  결정 후 구현.
+  [완료 기준]:
+  - LIVING_SPEC vec_max.vais에서 `cur := *n` 주석 제거 후 통과
+  - 결정 TYPE_SYSTEM.md 기록
+- [ ] 2.13 Named↔Optional/Result bridge 리팩토링 (Opus direct) [blockedBy: 2.12]
+  detail: Phase 326 bridge(unification.rs:247)와 special.rs의 Option/Result 분기를 단일 규칙으로 통합. "Named("Option", [T]) ≡ Optional(T)" 를 항상 유지하는 normalization pass 추가 검토.
+  [완료 기준]:
+  - unification 테스트 전체 통과
+  - special.rs의 Option/Result 중복 코드 제거
+- [ ] 2.14 Generic instantiation 완전성 (impl-sonnet) [blockedBy: 2.13]
+  detail: nested generic (`Vec<Option<T>>`), where clause 복수, generic method receiver. TYPE_SYSTEM §8 "Known Gaps"의 method inference dispersion 해결.
+  [완료 기준]:
+  - 새 e2e 5+ (nested/where-multi/method), 모두 통과
+- [ ] 2.15 Move semantics / 참조 전달 규칙 문서화 + 에러 메시지 개선 (impl-sonnet) [blockedBy: 2.14]
+  detail: `E022: use after move` 발생 시 "consider passing by `&T`" 같은 구체적 제안 포함. 문서: TYPE_SYSTEM §8에 move/borrow 규칙 추가.
+  [완료 기준]:
+  - 에러 메시지에 suggestion 포함
+  - 문서 업데이트
+
+### Phase 3.x — Codegen 완결성 (기존 3.12~3.14 포함, 확장)
+
+> **목표**: "TC pass ⇒ codegen pass" 불변식 확립. Type system이 받아들인 건 코드 생성도 가능.
+
+- [ ] 3.12 Codegen feature matrix + 미지원 TC 차단 (Opus direct) [blockedBy: 2.15]
+  (이전 Phase 3.12 그대로)
+- [ ] 3.13 Runtime 함수 구현 (parse_f64, char_at 등, impl-sonnet) [blockedBy: 3.12]
+  (이전 Phase 3.13 그대로)
+- [ ] 3.14 Vec<Struct>[i].field= write (Opus direct) [blockedBy: 3.12]
+  (이전 Phase 3.14 그대로)
+- [ ] 3.15 SIMD vector 타입 codegen (impl-sonnet) [blockedBy: 3.14]
+  detail: Vec2f32/Vec4f32/... LLVM vector intrinsic 전체 연결. 산술/비교 op.
+  [완료 기준]:
+  - SIMD e2e 5+ (더하기/곱하기/shuffle)
+- [ ] 3.16 D (defer) scope-exit codegen (Opus direct) [blockedBy: 3.15]
+  detail: 현재 partial. scope exit 시 실행 순서 (역순) + return/break/continue 경로 모두 처리.
+  [완료 기준]:
+  - defer e2e 5+ (nested defer, early return, loop defer)
+- [ ] 3.17 unsafe 블록 codegen pass-through (impl-sonnet) [blockedBy: 3.16]
+  detail: Phase 1.18 완료 기준에 codegen 포함되어 있지만 별도 Phase로 분리. raw pointer deref, extern 호출 경로 검증.
+  [완료 기준]:
+  - unsafe e2e 3+
+
+### Phase 4.x — 언어 기능 완성 (LANGUAGE_SPEC ◐ 마커 해결)
+
+> **목표**: LANGUAGE_SPEC.md "Construct Status Matrix"의 ◐ (partial) 마커를 전부 ✓ (stable)로 승격.
+
+- [ ] 4.18 Effect system — pure/io/partial TC 활성화 (Opus direct) [blockedBy: 3.17]
+  detail: 현재 modifier는 파싱되지만 TC가 실제 effect 추론/검증 안 함. EffectInferrer 연결.
+  [완료 기준]:
+  - pure 함수 내부에서 io 호출 시 TC 에러
+  - partial 함수만 panic 허용 (div/0, Option unwrap)
+  - 관련 e2e 10+
+- [ ] 4.19 Linear / Affine 타입 실구현 (Opus direct) [blockedBy: 4.18]
+  detail: 현재 experimental, borrow checker 미연결. 기본 규칙만이라도 (linear = 정확히 1회 사용, affine = 최대 1회).
+  [완료 기준]:
+  - linear i64 값을 2회 사용 시 TC 에러
+  - affine i64 drop OK
+  - e2e 5+
+- [ ] 4.20 Comptime / Macro 완성 (Opus direct) [blockedBy: 4.19]
+  detail: `comptime { ... }` 블록 실제 compile-time 평가. `macro foo!(...)` 선언적 매크로 전개.
+  [완료 기준]:
+  - comptime 내부에서 상수 계산 후 값으로 치환
+  - macro 확장 후 TC 통과
+  - e2e 5+
+- [ ] 4.21 Dyn trait object 완성 (Opus direct) [blockedBy: 4.20]
+  detail: `dyn Trait` 객체 vtable codegen 완성. object safety 체크.
+  [완료 기준]:
+  - dyn trait 포인터로 동적 디스패치 e2e 3+
+- [ ] 4.22 Yield iterator 완성 (impl-sonnet) [blockedBy: 4.21]
+  detail: `yield expr`를 iterator/coroutine으로 변환.
+  [완료 기준]:
+  - yield 사용 iterator e2e 3+
+- [ ] 4.23 Move closure 완성 (impl-sonnet) [blockedBy: 4.22]
+  detail: `move |x| ...` capture 동작 완성 (move 대상 명확화, drop 시점).
+  [완료 기준]:
+  - move closure e2e 3+
+
+### Phase 5.x — stdlib 100%
+
+> **목표**: std/*.vais 82개 모두 `vaisc check` + `vaisc build` exit 0. 현재 baseline 37/82 → 82/82.
+
+- [ ] 5.24 std/*.vais 개별 빌드 batch fix (impl-sonnet, 필요 시 복수 agent 병렬) [blockedBy: 4.23]
+  detail: 82개 중 45개 실패. 실패 원인 분류 (codegen 갭 / type inference / stdlib drift). 각 파일 fix.
+  [완료 기준]:
+  - 82/82 build OK
+  - 신규 integrity test: std_files pass=82/82
+- [ ] 5.25 stdlib integrity test 100% gate 승격 (impl-sonnet) [blockedBy: 5.24]
+  detail: `test_std_files_codegen_ok`의 assertion을 `pass >= 82` (threshold 승격). check-integrity.sh에 `INTEGRITY_STD_MIN=82`.
+  [완료 기준]:
+  - 1-file regression 시 즉시 gate 실패
+- [ ] 5.26 stdlib API 문서화 (impl-sonnet) [blockedBy: 5.25]
+  detail: 각 std/*.vais에 대해 `docs/stdlib/<name>.md` — 공개 API, 예제, 주의사항.
+  [완료 기준]:
+  - std 80+ 모듈 모두 문서 존재
+  - LIVING_SPEC/04_stdlib의 예제와 cross-link
+
+### Phase 6.x — vaisdb 100%
+
+> **목표**: vaisdb/src 261개 모두 `vaisc build` exit 0. 현재 baseline 176/261 → 261/261.
+
+- [ ] 6.27 vaisdb files batch fix (impl-sonnet, 여러 agent 병렬) [blockedBy: 5.26]
+  detail: 85개 실패. Phase 1-5 작업 후에는 대부분 stdlib drift/API 변경 원인. 카테고리 (client/fulltext/graph/planner/...) 별 batch.
+  [완료 기준]:
+  - 261/261 build OK
+  - integrity test vaisdb pass=261/261
+- [ ] 6.28 vaisdb API drift 정리 (impl-sonnet) [blockedBy: 6.27]
+  detail: 외부 API 안정화. breaking change 방지 정책.
+  [완료 기준]:
+  - vaisdb 공개 API 문서 (`docs/vaisdb/API.md`)
+  - semver 버전 태그
+- [ ] 6.29 vaisdb e2e smoke test (impl-sonnet) [blockedBy: 6.28]
+  detail: 실제 DB 세션 시나리오 (create table / insert / select / update / delete) e2e.
+  [완료 기준]:
+  - 5+ e2e 시나리오, 모두 통과
+
+### Phase 7.x — vais-server / vais-web 100%
+
+> **목표**: 서버/웹 패키지 자체 integrity gate 자체가 green. 빌드 + 실행 + 기본 API 검증.
+
+- [ ] 7.30 vais-server 전체 빌드 + API smoke (impl-sonnet) [blockedBy: 6.29]
+  detail: `../lang/packages/vais-server/` 모든 파일 빌드, HTTP endpoint 기본 response.
+  [완료 기준]:
+  - 패키지 빌드 OK
+  - `curl localhost:PORT/health` 응답
+- [ ] 7.31 vais-web 전체 빌드 + 페이지 smoke (impl-sonnet) [blockedBy: 7.30]
+  detail: `../lang/packages/vais-web/` vaisx 템플릿 + 빌드, 샘플 페이지 serving.
+  [완료 기준]:
+  - 패키지 빌드 OK, 샘플 페이지 로드 OK
+
+### Phase 8.x — 생태계 & 문서
+
+> **목표**: 외부 개발자가 Vais로 새 앱을 처음부터 만들 수 있는 상태.
+
+- [ ] 8.32 Getting Started 가이드 (Opus direct) [blockedBy: 7.31]
+  detail: 설치 → hello world → struct/enum → 패키지 사용 → 간단한 앱. `docs/GETTING_STARTED.md`.
+  [완료 기준]:
+  - 가이드 800줄+, 모든 예제가 LIVING_SPEC에 포함
+- [ ] 8.33 Tutorial 시리즈 (impl-sonnet) [blockedBy: 8.32]
+  detail: "Vais로 TODO API 만들기", "Vais로 간단 DB 쿼리 만들기", "Vais로 웹 페이지 만들기" 3편.
+  [완료 기준]:
+  - 각 튜토리얼이 실행가능 repo example로 존재
+- [ ] 8.34 샘플 앱 저장소 (impl-sonnet) [blockedBy: 8.33]
+  detail: `examples/apps/` 하위에 CLI/서버/웹 각 3개씩 샘플.
+  [완료 기준]:
+  - 각 샘플이 ./scripts/build-example.sh로 빌드 OK
+
+progress: 13/40 (33%) — 1.5 체계까지 완료. 이후 27개 남음.
 
 ---
 
