@@ -7,36 +7,96 @@
 > **현재 vaisdb OK: 180/261 (68.97%)** — Phase 199 시작 대비 +150 파일 개선
 > **🎉 Tier 1 완료** — 다음 목표: Tier 2 = OK 210/261 (80%+)
 
-## 🎯 다음 세션 시작점 (Phase 350+)
+## 🎯 다음 세션 시작점 (Phase 354+) — Tier 2 드라이브
 
-`mode: auto` — 세션 재시작 시 `harness` skill이 이 섹션을 자동 복구.
+`mode: auto` — 세션 재시작 시 `harness` skill이 이 섹션을 자동 복구하여 이어서 진행.
 
-### Phase 350-360: Tier 1 완주 (OK 172→180+, 8 파일)
+### 🎉 Tier 1 완료 (2026-04-18): OK 180/261 (68.97%)
 
-Phase 346-349 교훈: 작은 API 시그니처 변화 (1→2 args, method rename)가 가장 ROI 높음. 세션 4에서 +7 flipped 달성.
+Phase 311-353 6세션 드라이브로 OK 150→180 (+30) 달성. Phase 199 시작(OK 30) 대비 +150 파일.
 
-- [x] 350. Tier 1 드라이브 — +4 flipped (Opus direct) ✅ 2026-04-18
-  flipped: traverse_fn.vais (node_store arg), handler.vais (with_connection closures inlined), vector_hybrid.vais (ScoreFusionMethod variant prefix), edge/storage.vais (free_page → deallocate_page)
-  compiler infra: f32/f64 math methods (powf/sqrt/abs/floor/ceil/round/sin/cos/tan/exp/log 등) permissive fallback dispatch
-  other: graph/concurrency LatchMode → GraphLatchMode (E008 duplicate 해소), planner/analyzer module-qualified paths 수정
-  verify: vaisdb OK 172→176 (+4)
-- [x] 351. fulltext allocate_page — 일부 조사 ✅ 2026-04-18
-  status: posting.vais 등 PostingStore에 bitmap 없음 — 구조체 refactor 필요. Tier 2 스코프.
-- [x] 352. E001 cluster sweep — 부분 진전 ✅ 2026-04-18
-  progress: cost_model.vais, memory/storage.vais 등 조사. span-less E001 다수 잔존. Phase 330 span 전파 2차 필요.
-- [ ] 353. sql parser bare variant prefix — parser_{ddl,dml,command,expr}.vais (per-file careful regex)
-- [ ] 354. sql executor next() missing — Iterator trait impl 또는 method 추가 (Opus direct)
-- [ ] 355. rag/mod.vais dependency chain — RagWalManager(gcm), WalManager 등 DI 체인 (Opus direct)
-- [ ] 356. 잔여 E004 sweep — struct method 누락 per-file
-- [ ] 357. E030 generic type vars 해소 — ? type var 확정
-- [ ] 358. closure body type inference — Phase 342 follow-up (Opus direct)
-- [ ] 359. Tier 1 완주 검증 — OK ≥180 + phase158 GREEN
-- [ ] 360. Tier 1 완료 선언 + 다음 Tier 계획
+### Phase 354-370: Tier 2 드라이브 (OK 180→210+, 목표 80%)
+
+Phase 353까지의 패턴 관찰:
+- **ROI 순위**: API signature rename > FFI ptr migration > inline closure workaround > deep compiler work
+- **남은 에러 분포** (세션 말 기준): E001 대부분, E004 다수, E006 잔여, E030/E022 산발
+- **구조적 블로커**: (a) closure body type inference, (b) UTF-8 span-offset, (c) pattern-binding Option<&V> inner unify, (d) span-less E001
+- **vaisdb-side 주요 잔여**: allocator API (bitmap DI), posting_store refactor, RagWalManager DI chain, TLS FFI
+
+- [ ] 354. 잔여 closure 패턴 inline 교체 (impl-sonnet, 1-file budget)
+  detail: Phase 350/353 inline 패턴을 server/client 잔여 파일 (client/mod, client/types 등)에 적용.
+- [ ] 355. fulltext 파서/ddl 사이트 대량 수정 (Opus direct)
+  detail: fulltext/ddl.vais (alloc_page 4-arg → allocate_page 2-arg refactor 혹은 helper 추가), fulltext/mod.vais 연쇄
+- [ ] 356. sql parser bare variant prefix — parser_{ddl,dml,command,expr}.vais (per-file careful regex)
+  detail: row.vais에서 성공한 SqlValue.Variant prefix 패턴 확장. BinaryOp/FloatLit/CreateIndex/Select 등.
+- [ ] 357. planner 파일 panic marker — total → partial 또는 ? unwrap 제거 (Opus direct)
+  detail: analyzer.vais, optimizer.vais E034 panic warn. `partial` 마커 추가 또는 `?` 대신 explicit handling.
+- [ ] 358. closure body type inference (Opus direct, Phase 342 follow-up)
+  detail: `|x|` closure 안에서 x 타입을 outer fn param annotation에서 전파. check_expr closure handling 확장.
+- [ ] 359. span-less E001 전파 (Opus direct, Phase 330 follow-up)
+  detail: patterns/module binding/expression unify 3곳에 `.with_span()` 부착. 16→10 목표.
+- [ ] 360. pattern-binding Option<&V> inner unify (Opus direct, Phase 336 follow-up)
+  detail: role.vais get_role_id 등 Some(r.field) wrap 문제. match arm pattern binding flow 재설계 조사.
+- [ ] 361. UTF-8 byte-offset span bug (Opus direct, Phase 337 follow-up)
+  detail: pipeline.vais:219 comment line 오표시. lexer span 또는 ariadne byte→char 변환 추적.
+- [ ] 362. rag/mod DI chain — RagWalManager(gcm), WalManager 등 (Opus direct)
+  detail: rag 엔진 초기화에서 DI chain 해소.
+- [ ] 363. allocator/bitmap API alignment — PostingStore 등 bitmap DI 추가 (Opus direct)
+  detail: fulltext/index/posting.vais, compaction.vais 등 bitmap 전달.
+- [ ] 364. TLS FFI alignment — std/file read_file 정의 또는 vaisdb-local wrapper (Opus direct)
+- [ ] 365. sql executor next() missing — Iterator impl 또는 method 추가
+- [ ] 366-369. 잔여 per-file sweep — 에러 유형별 클러스터링 후 타겟 delegate
+- [ ] 370. Tier 2 완료 선언 — OK ≥210/261 확인 + 요약 보고
+
+### 작업 전략
+
+1. **Opus direct 우선**: 358-361 (compiler deep blockers) — 각 phase 단일 작업 집중. 실패 시 즉시 move on.
+2. **impl-sonnet은 bounded refactor만**: 354, 355, 356 (1-file budget 10 tool).
+3. **성공 가드레일**: 매 phase 이후 phase158 18/18 + vaisdb OK 카운트 비교. 감소 시 revert.
+4. **Escape hatch**: 세션당 최대 5 phase 완료 목표.
+
+### 재개 절차
+
+1. `cd /Users/sswoo/study/projects/vais/compiler`
+2. `/harness` 실행 → 이 ROADMAP의 `mode: auto` 감지 → Phase 354부터 재개
+3. 각 phase 완료 시 `cargo test -p vaisc --test e2e --release phase158` (strict gate) + vaisdb OK 카운트 기록
+4. OK 210/261 도달 시 Tier 2 완료 선언
+
+### 핵심 원칙 (CLAUDE.md 연동)
+
+- **엄격 타입 규칙 유지**: Phase158 18/18 test 항상 GREEN. 암시적 bool↔i64 return coercion 금지.
+- **Lenient는 impl-method/operator 한정**: strict 보호 테스트가 커버하는 top-level F는 건드리지 않음.
+- **vaisdb-side vs compiler-side 판단**: 단일 파일만 영향 → vaisdb 수정, 여러 파일 영향 → compiler 완화.
+- **Span-less 우선순위**: patterns/module binding unify 경로에 span 부착이 선행되어야 후속 E001 cluster 접근 가능.
 
 mode: auto
-iteration: 1
+iteration: 0
 max_iterations: 30
-strategy: Phase 350-352 우선 (API signature migration이 가장 ROI 높음). 350 직행 → 351 → 352. 각 phase 실패/scope over 즉시 move on.
+strategy: Phase 354 (closure inline cascading) → 355-357 (mass refactor) → 358-361 (Opus direct compiler deep work) → 362-365 (vaisdb-side major API) → 366-369 cluster sweep → 370 Tier 2 선언. 각 phase 실패/scope over 즉시 move on.
+
+---
+
+### Phase 311-353 완료 (Tier 1 달성)
+
+| 세션 | Phase | Start OK | End OK | Δ |
+|------|-------|----------|--------|---|
+| 1 | 311-325 | 150 | 154 | +4 |
+| 2 | 326-335 | 154 | 159 | +5 |
+| 3 | 336-345 | 159 | 165 | +6 |
+| 4 | 346-349 | 165 | 172 | +7 |
+| 5 | 350-352 | 172 | 176 | +4 |
+| 6 | **353** | 176 | **180** | +4 |
+| **합계** | 43 phases | — | — | **+30** |
+
+주요 compiler 개선:
+- Phase 311/312: Vec.pop / HashMap.remove → Option<T> (bypass_struct_lookup 확장)
+- Phase 313: method-level generics on non-generic struct
+- Phase 314: fn return-type E001 span attachment
+- Phase 315: stdlib VaisError.code i64→str
+- Phase 326: HashMap/Vec .get → Option<&V> + Named{"Option"} ↔ Optional unify bridge
+- Phase 338: Mutex/RwLockGuard 투명 method forwarding
+- Phase 346: slice copy_from_slice/fill/swap 등 dispatch + f32/f64 math methods
+- Phase 353: .as_ptr()/.as_mut_ptr() generic dispatch, default_*/new_* Self fallback
 
 ---
 
