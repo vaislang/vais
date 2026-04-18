@@ -70,11 +70,21 @@ impl TypeChecker {
                         Some(Ok(ResolvedType::Bool))
                     }
                     BinOp::And | BinOp::Or => {
-                        if let Err(e) = self.unify(&left_type, &ResolvedType::Bool) {
-                            return Some(Err(e));
+                        // Phase 257: lenient && / || — accept Bool or integer truthy.
+                        let leniency = |t: &ResolvedType| -> bool {
+                            matches!(t, ResolvedType::Bool)
+                                || t.is_integer()
+                                || matches!(t, ResolvedType::Var(_) | ResolvedType::Unknown)
+                        };
+                        if !leniency(&left_type) {
+                            if let Err(e) = self.unify(&left_type, &ResolvedType::Bool) {
+                                return Some(Err(e));
+                            }
                         }
-                        if let Err(e) = self.unify(&right_type, &ResolvedType::Bool) {
-                            return Some(Err(e));
+                        if !leniency(&right_type) {
+                            if let Err(e) = self.unify(&right_type, &ResolvedType::Bool) {
+                                return Some(Err(e));
+                            }
                         }
                         Some(Ok(ResolvedType::Bool))
                     }
