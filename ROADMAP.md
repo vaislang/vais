@@ -1,11 +1,11 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 354-370 + compiler deep work 완료, vaisdb 마이그레이션 진행 중)
+> **현재 버전**: 0.1.0 (Phase 354-370 + compiler deep work 확장, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (대형 세션 — 17 phases + compiler patches, OK 134→157/261 +23 files) 🎯
-> **현재 vaisdb OK: 157/261 (60.2%)** — Tier 2 목표 210까지 +53 필요.
-> **Tier 2 세션 2+3 성과**: posting.vais (9→0), handler codegen cascade (+5 files), tuple codegen (+13 cascade), Str/HashMap inference, span attach for UndefinedVar — compiler 인프라 대폭 개선.
+> **최종 업데이트**: 2026-04-18 (대형 세션 — 17 phases + compiler patches + batch refactors, OK 134→159/261 +25 files) 🎯
+> **현재 vaisdb OK: 159/261 (60.9%)** — Tier 2 목표 210까지 +51 필요.
+> **Tier 2 세션 2+3 성과**: posting.vais (9→0), handler codegen cascade (+5 files), tuple codegen (+13 cascade), Str/HashMap inference, span attach for UndefinedVar, SqlValue variant prefix 대량 적용, NodeLookup 이름 해소 — compiler 인프라 대폭 개선.
 
 ## 🎯 다음 세션 시작점 (Phase 354+) — Tier 2 드라이브
 
