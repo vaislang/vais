@@ -408,6 +408,25 @@ impl TypeChecker {
                     generics[0].clone(),
                 ]));
             }
+            // Phase 280: HashMap<K,V> named form — iteration yields (K, V) tuples.
+            // vaisdb uses `HashMap<K,V>` type annotation (Named form) rather than
+            // the map literal `[K:V]` form, so we need to handle both.
+            ResolvedType::Named { name, generics }
+                if (name == "HashMap" || name == "BTreeMap" || name == "IndexMap")
+                    && generics.len() >= 2 =>
+            {
+                return Some(ResolvedType::Tuple(vec![
+                    generics[0].clone(),
+                    generics[1].clone(),
+                ]));
+            }
+            // Phase 280: Map(K,V) — [K:V] literal map form iteration yields (K, V) tuples.
+            ResolvedType::Map(key_type, val_type) => {
+                return Some(ResolvedType::Tuple(vec![
+                    (**key_type).clone(),
+                    (**val_type).clone(),
+                ]));
+            }
             _ => {}
         }
 

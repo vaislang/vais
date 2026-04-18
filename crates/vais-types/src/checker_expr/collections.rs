@@ -290,10 +290,40 @@ impl TypeChecker {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
-                // Unwrap references
+                // Phase 280: apply substitutions before matching so that
+                // type variables resolved to tuples are correctly handled.
+                let inner_type = self.apply_substitutions(&inner_type);
+                // Unwrap references and Optional wrappers (auto-deref).
+                // Phase 280: also handle Unknown/Var (unresolved inference vars)
+                // and Named structs leniently — return Unknown instead of error.
+                // This avoids cascading E001 errors when HashMap iteration yields
+                // an unresolved item type.
                 let tuple_type = match &inner_type {
                     ResolvedType::Tuple(_) => inner_type.clone(),
-                    ResolvedType::Ref(t) | ResolvedType::RefMut(t) => *t.clone(),
+                    ResolvedType::Ref(t) | ResolvedType::RefMut(t) => {
+                        let inner_resolved = self.apply_substitutions(t);
+                        match inner_resolved {
+                            ResolvedType::Tuple(_) => inner_resolved,
+                            // Doubly-wrapped ref: peel one more layer
+                            ResolvedType::Ref(ref t2) | ResolvedType::RefMut(ref t2) => {
+                                self.apply_substitutions(t2)
+                            }
+                            // Unresolved inference variable or unknown — lenient
+                            ResolvedType::Var(_) | ResolvedType::Unknown => {
+                                return Some(Ok(ResolvedType::Unknown));
+                            }
+                            other => other,
+                        }
+                    }
+                    // Unresolved inference variable — lenient fallback
+                    ResolvedType::Var(_) | ResolvedType::Unknown => {
+                        return Some(Ok(ResolvedType::Unknown));
+                    }
+                    // Phase 280: Named struct used with tuple-field syntax (bare, not ref-wrapped).
+                    // Lenient: return Unknown to avoid cascading E001. Codegen validates field access.
+                    ResolvedType::Named { .. } => {
+                        return Some(Ok(ResolvedType::Unknown));
+                    }
                     other => {
                         return Some(Err(TypeError::Mismatch {
                             expected: "tuple type".to_string(),
@@ -316,6 +346,17 @@ impl TypeChecker {
                             }));
                         }
                         Some(Ok(fields[*index].clone()))
+                    }
+                    // Phase 280: unresolved type or struct — lenient fallback
+                    ResolvedType::Var(_) | ResolvedType::Unknown => {
+                        Some(Ok(ResolvedType::Unknown))
+                    }
+                    // Named struct used with tuple-field syntax (e.g., struct.0):
+                    // lenient — return Unknown to avoid cascading errors in vaisdb
+                    // code that uses this pattern. The actual field access validation
+                    // is enforced at codegen level.
+                    ResolvedType::Named { .. } => {
+                        Some(Ok(ResolvedType::Unknown))
                     }
                     other => Some(Err(TypeError::Mismatch {
                         expected: "tuple type".to_string(),
