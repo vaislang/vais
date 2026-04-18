@@ -1,10 +1,10 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 265 완료, vaisdb 마이그레이션 진행 중)
+> **현재 버전**: 0.1.0 (Phase 272 완료, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 265: numeric.to_le_bytes + str.starts_with)
-> **현재 vaisdb OK: 118/261 (45.2%)** — Phase 199 시작 대비 +88 파일 개선
+> **최종 업데이트**: 2026-04-18 (Phase 272: str+ concat for Str/String/&str)
+> **현재 vaisdb OK: 121/261 (46.4%)** — Phase 199 시작 대비 +91 파일 개선
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone
@@ -47,6 +47,13 @@
 ## ⏸ 완료 — Phase 263: Option/Result auto-unwrap for method dispatch
 ## ⏸ 완료 — Phase 264: HashMap.keys/values fallback dispatch
 ## ⏸ 완료 — Phase 265: numeric.to_le_bytes + str.starts_with fallbacks (OK 117→118)
+## ⏸ 완료 — Phase 266: peel &&[T] for indexing (OK 118→119)
+## ⏸ 완료 — Phase 267: str_aliases includes "String" struct
+## ⏸ 완료 — Phase 268: **Box<T> ↔ T coercion** at unification
+## ⏸ 완료 — Phase 269: generic .as_ref() fallback
+## ⏸ 완료 — Phase 270: wrapping/saturating/checked arith + bit-counts (OK 119→120)
+## ⏸ 완료 — Phase 271: Option/Result combinators (ok_or/map/and_then/unwrap_or)
+## ⏸ 완료 — Phase 272: **str + (Str|String|&str) concat** (OK 119→121)
 
 ---
 
