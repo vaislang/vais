@@ -734,6 +734,96 @@ impl TypeChecker {
             if method.node == "clone" && args.is_empty() {
                 return Ok(receiver_type.clone());
             }
+            // Phase 236: Option<T>/Result<T,E> method fallback. vaisdb uses
+            // .unwrap(), .is_some(), .is_none(), .is_ok(), .is_err(), .ok()
+            // frequently — these need dispatch. Also handle primitive
+            // ResolvedType::Optional(T) and Result(T, E) directly.
+            match &receiver_type {
+                ResolvedType::Optional(inner) => {
+                    match method.node.as_str() {
+                        "unwrap" | "expect" => {
+                            for a in args.iter() {
+                                let _ = self.check_expr(a);
+                            }
+                            return Ok((**inner).clone());
+                        }
+                        "is_some" | "is_none" => {
+                            if args.is_empty() {
+                                return Ok(ResolvedType::Bool);
+                            }
+                        }
+                        "unwrap_or" => {
+                            if args.len() == 1 {
+                                let _ = self.check_expr(&args[0]);
+                                return Ok((**inner).clone());
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                ResolvedType::Result(ok_ty, _err_ty) => {
+                    match method.node.as_str() {
+                        "unwrap" | "expect" => {
+                            for a in args.iter() {
+                                let _ = self.check_expr(a);
+                            }
+                            return Ok((**ok_ty).clone());
+                        }
+                        "is_ok" | "is_err" => {
+                            if args.is_empty() {
+                                return Ok(ResolvedType::Bool);
+                            }
+                        }
+                        "ok" => {
+                            if args.is_empty() {
+                                return Ok(ResolvedType::Optional(Box::new(
+                                    (**ok_ty).clone(),
+                                )));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+
+            if let ResolvedType::Named { name, generics } = receiver_named.unwrap_or(&ResolvedType::Unit) {
+                if name == "Option" || name == "Result" {
+                    match method.node.as_str() {
+                        "unwrap" | "expect" => {
+                            for a in args.iter() {
+                                let _ = self.check_expr(a);
+                            }
+                            return Ok(generics
+                                .first()
+                                .cloned()
+                                .unwrap_or(ResolvedType::I64));
+                        }
+                        "is_some" | "is_none" | "is_ok" | "is_err" => {
+                            if args.is_empty() {
+                                return Ok(ResolvedType::Bool);
+                            }
+                        }
+                        "ok" => {
+                            if args.is_empty() && name == "Result" {
+                                let inner = generics.first().cloned().unwrap_or(ResolvedType::I64);
+                                return Ok(ResolvedType::Optional(Box::new(inner)));
+                            }
+                        }
+                        "unwrap_or" => {
+                            if args.len() == 1 {
+                                let _ = self.check_expr(&args[0]);
+                                return Ok(generics
+                                    .first()
+                                    .cloned()
+                                    .unwrap_or(ResolvedType::I64));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
             // Phase 235: String-specific fallback for common methods that
             // vaisdb calls on String receivers. Most return Str or I64 and
             // are safe permissive fallbacks when the real impl lookup fails
