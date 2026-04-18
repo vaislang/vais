@@ -18,6 +18,9 @@
 ## ⏸ 완료 — Phase 234: ByteBuffer.write_u64_le/u32_le aliases
 ## ⏸ 완료 — Phase 235: String/Str method fallback (E004 47→45)
 ## ⏸ 완료 — Phase 236: Option/Result method fallback (compiler infra)
+## ⏸ 완료 — Phase 237: **Str/str alias coercion** (E001 -9, OK 94→96)
+## ⏸ 완료 — Phase 238: &Str ↔ &str ref coercion (E004 50→49)
+## ⏸ 완료 — Phase 239: **&Vec<T> ↔ &[T] slice coercion** (OK 96→99 +3)
 
 ---
 
