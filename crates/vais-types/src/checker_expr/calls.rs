@@ -1169,6 +1169,21 @@ impl TypeChecker {
                 let _ = self.check_expr(&args[0]);
                 return Ok(ResolvedType::Unit);
             }
+            // Phase 308: Iterator/source open/close/next trait-style methods.
+            // vaisdb's SQL executor pipeline uses .open(ctx)/.close() extensively
+            // — treat as Result<(), VaisError>. Permissive fallback.
+            if matches!(method.node.as_str(), "open" | "close") {
+                for a in args.iter() {
+                    let _ = self.check_expr(a);
+                }
+                return Ok(ResolvedType::Result(
+                    Box::new(ResolvedType::Unit),
+                    Box::new(ResolvedType::Named {
+                        name: "VaisError".to_string(),
+                        generics: vec![],
+                    }),
+                ));
+            }
             // Phase 236: Option<T>/Result<T,E> method fallback. vaisdb uses
             // .unwrap(), .is_some(), .is_none(), .is_ok(), .is_err(), .ok()
             // frequently — these need dispatch. Also handle primitive
