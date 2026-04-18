@@ -41,7 +41,10 @@
 
 단일-에러 파일 우선. 각 phase에서 3-5개 파일씩 배치.
 
-- [ ] 286. security/ 단일 E002/E004 일괄 수정 (user, role, sanitizer, rls, policy, types — 6 파일)
+- [x] 286. security/ 단일 E002/E004 일괄 수정 (Opus direct, retry 2 후 직접 수정) ✅ 2026-04-18
+  changes: vaisdb/security/user.vais (err_auth_* imports), rls.vais (sanitizer.{contains_pattern, contains_pattern_ci} import), types.vais (fnv1a_hash_bytes import + buf.as_slice→as_bytes), sanitizer.vais (bytes := value.as_bytes, ErrorSeverity import)
+  verify: phase158 18/18 GREEN, rls/sanitizer/types OK, vaisdb OK 131→134 (+3)
+  note: policy/role/user 남음 — HashMap generic resolution (compiler 레벨 이슈로 보임)
 - [ ] 287. planner/ 필드명 불일치 일괄 (cache, analyzer, optimizer, types, explain — 5 파일)
 - [ ] 288. graph/integration 단일 E002 (sql_join, vector, 기타 — 4~5 파일)
 - [ ] 289. fulltext/ 필드/메서드 누락 정리 (concurrency, search/boolean — 3~4 파일)
@@ -74,10 +77,10 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 6
+iteration: 7
 max_iterations: 30
 strategy: single-error 파일부터 → cascading 해결 → 두-경로 통합. impl-sonnet 위임 가능한 단위로 쪼개서 병렬 진행.
-  strategy: Phase 285 — Tier 1 컴파일러 마무리 (span-less E001 분석 + strict gate 확인). research-haiku로 audit 후 필요 시 impl-sonnet 위임.
+  strategy: Phase 286 — security/ 6 파일 (user, role, sanitizer, rls, policy, types) vaisdb-side E002/E004 수정. Sequential, background=true. 단일 디렉토리 내 파일들이라 cross-ref 가능 → single agent이 6개 일괄.
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone
