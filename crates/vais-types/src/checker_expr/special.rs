@@ -67,7 +67,7 @@ impl TypeChecker {
                     _ => Some(Err(TypeError::Mismatch {
                         expected: "Result or Option type".to_string(),
                         found: inner_type.to_string(),
-                        span: Some(inner.span),
+                        span: Some(expr.span),
                     })),
                 }
             }
@@ -125,7 +125,7 @@ impl TypeChecker {
                     _ => Some(Err(TypeError::Mismatch {
                         expected: "Optional or Result".to_string(),
                         found: inner_type.to_string(),
-                        span: Some(inner.span),
+                        span: Some(expr.span),
                     })),
                 }
             }

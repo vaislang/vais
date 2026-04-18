@@ -646,6 +646,31 @@ F str_join_fill(split_result: i64, count: i64, delim: i64, idx: i64, buf: i64, p
 }
 
 # =====================================================
+# Primitive `str` byte access (free function API)
+# =====================================================
+
+# Return the byte at position `i` of primitive `str` `s`, or 0 if out of bounds.
+# Unlike `String.char_at`, this operates on the `str`/`&str` literal type
+# directly — useful for parsers and validators that avoid allocating a
+# `String` wrapper. Added in Phase 210 for vaisdb migration (previously
+# `s[i]` indexing on `&str` produced E001).
+F str_byte_at(s: str, i: i64) -> i64 {
+    len := str_len(s)
+    I i < 0 || i >= len {
+        0
+    } EL {
+        load_byte(s + i)
+    }
+}
+
+# Return the length of primitive `str` `s` in bytes.
+F str_len(s: str) -> i64 {
+    __strlen(s)
+}
+
+X F __strlen(s: str) -> i64
+
+# =====================================================
 # String to integer conversion (raw pointer API)
 # =====================================================
 

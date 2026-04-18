@@ -3,7 +3,31 @@
 
 > **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 209 시작: str indexing 34건 per-file fix)
+> **최종 업데이트**: 2026-04-18 (Phase 210 시작: `?` operator span attribution bug + str byte access 접근)
+
+---
+
+## ⏸ 완료 — Phase 210: stdlib str_byte_at 추가 + sample 적용
+completed_at: 2026-04-18
+
+mode: auto
+max_iterations: 10
+iteration: 0
+strategy: Phase 209 잔여의 핵심 2 이슈 공략:
+1. `?` operator 에러가 import line으로 attributed 되는 bug — multi-file SourceMap 필요하지만 우선 expr.span으로 override
+2. Vais primitive `&str`의 byte 접근 — stdlib에 `str_byte_at(s: str, i: i64) -> i64` 같은 free function 추가
+
+### 작업
+- [x] 1. **? operator span fix** ✅ 2026-04-18 (부분)
+  changes: checker_expr/special.rs Try/Unwrap에서 inner.span → expr.span. 그러나 실제 문제는 이 path 밖 — multi-file SourceMap 필요.
+- [x] 2. **stdlib str_byte_at 추가** ✅ 2026-04-18
+  changes: std/string.vais에 `F str_byte_at(s: str, i: i64) -> i64` + `str_len` + `X F __strlen` 추가.
+- [x] 3. **vaisdb str indexing sample** ✅ 2026-04-18
+  changes: src/sql/types.vais에 4 instance 변환 (vaisdb 6aad993). 42+ 추가 파일은 Phase 211 권고.
+- [x] 4. **P210-Gate** ✅ 2026-04-18
+  changes: docs/phase210/final_report.md.
+
+progress: 4/4 (100%) — stdlib str_byte_at + sample 적용. str indexing 전면 전환은 Phase 211로.
 
 ---
 
