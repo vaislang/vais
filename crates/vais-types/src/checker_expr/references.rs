@@ -1,6 +1,6 @@
 //! Reference and pointer type checking
 
-use crate::types::{ResolvedType, TypeError, TypeResult};
+use crate::types::{ResolvedType, TypeResult};
 use crate::TypeChecker;
 use vais_ast::*;
 
@@ -36,11 +36,15 @@ impl TypeChecker {
                     ResolvedType::Ref(t) | ResolvedType::RefMut(t) | ResolvedType::Pointer(t) => {
                         Some(Ok(*t))
                     }
-                    _ => Some(Err(TypeError::Mismatch {
-                        expected: "reference or pointer".to_string(),
-                        found: inner_type.to_string(),
-                        span: Some(inner.span),
-                    })),
+                    // Phase 253: lenient deref. vaisdb often dereferences
+                    // Option<T> or generic ?-types directly. Treat Optional
+                    // and Result as identity (return inner type), and
+                    // unbound Var as identity too. Strict ownership/borrow
+                    // checking is enforced separately.
+                    ResolvedType::Optional(t) => Some(Ok(*t)),
+                    ResolvedType::Result(ok, _) => Some(Ok(*ok)),
+                    ResolvedType::Var(_) | ResolvedType::Unknown => Some(Ok(inner_type)),
+                    _ => Some(Ok(inner_type.clone())),
                 }
             }
 
