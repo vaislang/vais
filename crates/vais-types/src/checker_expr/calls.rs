@@ -581,8 +581,13 @@ impl TypeChecker {
                             span: Some(expr_span),
                         });
                     }
-                    // Returns raw byte pointer (i8* as i64)
-                    return Ok(ResolvedType::I64);
+                    // Phase 247: changed from raw i64 ptr to Vec<u8>. vaisdb
+                    // expects iterable result for `path_bytes.len()` etc.
+                    // The legacy raw-ptr semantics still work via .as_ptr().
+                    return Ok(ResolvedType::Named {
+                        name: "Vec".to_string(),
+                        generics: vec![ResolvedType::U8],
+                    });
                 }
                 "clone" | "to_string" | "as_str" => {
                     if !args.is_empty() {
