@@ -88,15 +88,13 @@ X String {
     # returns a fresh Vec<u8>. vaisdb's chunking code only iterates so the
     # extra allocation is acceptable.
     F as_bytes(&self) -> Vec<u8> {
-        result := mut Vec.with_capacity(self.len)
+        result: Vec<u8> := Vec.with_capacity(self.len)
         i := mut 0
         L {
             I i >= self.len { B }
-            ptr := self.data + i
-            store_typed(result.data + i * result.elem_size, load_byte(ptr))
+            result.push(load_byte(self.data + i) as u8)
             i = i + 1
         }
-        result.len = self.len
         result
     }
 
