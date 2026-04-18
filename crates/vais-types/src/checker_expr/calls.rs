@@ -273,19 +273,37 @@ impl TypeChecker {
     ) -> TypeResult<ResolvedType> {
         let receiver_type = self.check_expr(receiver)?;
 
-        // Extract the inner type if receiver is a reference or pointer (auto-deref)
-        let (inner_type, receiver_generics) = match &receiver_type {
-            ResolvedType::Named { name, generics } => (name.clone(), generics.clone()),
-            ResolvedType::Ref(inner)
-            | ResolvedType::RefMut(inner)
-            | ResolvedType::Pointer(inner) => {
-                if let ResolvedType::Named { name, generics } = inner.as_ref() {
-                    (name.clone(), generics.clone())
-                } else {
-                    (String::new(), vec![])
+        // Extract the inner type if receiver is a reference or pointer (auto-deref).
+        // Phase 263: also auto-unwrap Option<T>/Result<T,E> to dispatch on T.
+        // Pattern: `M opt { Some(x) => x.method() }` where x retains Option type
+        // due to incomplete pattern-binding propagation.
+        let unwrap_named = |t: &ResolvedType| -> Option<(String, Vec<ResolvedType>)> {
+            match t {
+                ResolvedType::Named { name, generics } => {
+                    Some((name.clone(), generics.clone()))
                 }
+                ResolvedType::Ref(inner)
+                | ResolvedType::RefMut(inner)
+                | ResolvedType::Pointer(inner) => {
+                    if let ResolvedType::Named { name, generics } = inner.as_ref() {
+                        Some((name.clone(), generics.clone()))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
             }
-            _ => (String::new(), vec![]),
+        };
+        let (inner_type, receiver_generics) = match &receiver_type {
+            ResolvedType::Optional(inner) | ResolvedType::Result(inner, _) => unwrap_named(inner)
+                .or_else(|| match inner.as_ref() {
+                    ResolvedType::Ref(t)
+                    | ResolvedType::RefMut(t)
+                    | ResolvedType::Pointer(t) => unwrap_named(t),
+                    _ => None,
+                })
+                .unwrap_or((String::new(), vec![])),
+            _ => unwrap_named(&receiver_type).unwrap_or((String::new(), vec![])),
         };
 
         // First, try to find the method on the struct or enum itself
