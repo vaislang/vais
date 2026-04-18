@@ -25,8 +25,10 @@
   changes: crates/vais-types/src/checker_expr/calls.rs (bypass_struct_lookup 확장: HashMap/StrHashMap/BTreeMap/IndexMap `.remove`; builtin dispatch가 Option<V> 반환하도록 수정)
   verify: phase158 18/18 GREEN, minimal `map.remove("k").unwrap()` OK, no regression (vaisdb OK 150/261 유지)
   note: 321 cascading 시 security/user.vais 등 `.remove` 사용처 flip 예상
-- [ ] 313. Generic T vs concrete 추론 — static method 일반화 파라미터 추적 (Opus direct)
-  detail: shortest_path.vais `reverse_vec(&path)` — generic T가 u64로 instantiate되어야 하는데 안 됨. Phase 300a HashMap.get pattern destructure 고친 것과 유사 접근
+- [x] 313. Generic T vs concrete — method-level generics on non-generic struct (Opus direct) ✅ 2026-04-18
+  root cause: check_static_method_call은 struct-level generics (`struct_def.generics`)만 처리했음. `F reverse_vec<T>`처럼 method 자체의 `<T>`가 있을 때 `struct_def.generics.is_empty()` 분기로 빠져 unify(&mut Vec<T>, &Vec<u64>) → E001 "expected T, found u64".
+  changes: crates/vais-types/src/checker_expr/calls.rs (non-generic struct path: `!method_sig.generics.is_empty()`이면 fresh type var 기반 substitution map 생성 후 unify)
+  verify: phase158 18/18 GREEN, shortest_path.vais OK, vaisdb OK 150→151 (+1)
 - [ ] 314. span-less E001 진단 품질 개선 — error reporting에서 span 전파 누락 위치 찾기 (impl-sonnet)
   detail: 17 파일에서 `expected X, found Y` span 정보 없이 surface. 디버깅 난이도 감소 효과
 - [ ] 315. VaisError.new 2-arg vs 3-arg refactor — 컴파일러 3-arg 허용 또는 vaisdb 일괄 rename (Opus direct)

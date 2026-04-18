@@ -1556,7 +1556,32 @@ impl TypeChecker {
                     return Ok(resolved_return);
                 }
 
-                // Non-generic struct - original behavior
+                // Non-generic struct - original behavior.
+                // Phase 313: handle method-level generics (e.g. `F reverse_vec<T>`)
+                // on non-generic structs. Without this, calls like
+                // `ShortestPathFinder.reverse_vec(&path)` leave T unbound and
+                // unification of `&mut Vec<T>` against `&Vec<u64>` fails as
+                // "expected T, found u64".
+                if !method_sig.generics.is_empty() {
+                    let generic_substitutions: HashMap<String, ResolvedType> = method_sig
+                        .generics
+                        .iter()
+                        .map(|param| (param.clone(), self.fresh_type_var()))
+                        .collect();
+
+                    for (param_type, arg) in param_types.iter().zip(args) {
+                        let arg_type = self.check_expr(arg)?;
+                        let expected_type =
+                            self.substitute_generics(param_type, &generic_substitutions);
+                        self.unify(&expected_type, &arg_type)
+                            .map_err(|e| e.with_span(arg.span))?;
+                    }
+
+                    let return_type =
+                        self.substitute_generics(&method_sig.ret, &generic_substitutions);
+                    return Ok(self.apply_substitutions(&return_type));
+                }
+
                 for (param_type, arg) in param_types.iter().zip(args) {
                     let arg_type = self.check_expr(arg)?;
                     self.unify(param_type, &arg_type)
