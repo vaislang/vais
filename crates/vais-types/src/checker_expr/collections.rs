@@ -128,6 +128,12 @@ impl TypeChecker {
                                 span: Some(left.span),
                             }));
                         }
+                        // Phase 275: lenient bitwise — int op bool treated as
+                        // int op (bool as int). Common in vaisdb permission
+                        // mask building: `priv_mask | (flag ? BIT : 0)`.
+                        if matches!(right_type, ResolvedType::Bool) {
+                            return Some(Ok(left_type));
+                        }
                         if let Err(e) = self.unify(&left_type, &right_type) {
                             return Some(Err(e));
                         }
