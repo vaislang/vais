@@ -90,8 +90,9 @@ impl TypeChecker {
             return Ok(());
         }
 
-        // Phase 239: &Vec<T> ↔ &[T] slice coercion. vaisdb passes &Vec<u8>
-        // where &[u8] expected, and vice versa. Element types must unify.
+        // Phase 239+240: &Vec<T> ↔ &[T] ↔ Vec<T> ↔ [T] slice coercion.
+        // vaisdb passes &Vec<u8> where &[u8] expected, and Vec<u8> where
+        // &[u8]/[u8] expected. Element types must unify.
         let extract_slice_elem = |t: &ResolvedType| -> Option<ResolvedType> {
             match t {
                 ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
@@ -109,6 +110,11 @@ impl TypeChecker {
                 }
                 ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => {
                     Some((**elem).clone())
+                }
+                ResolvedType::Named { name, generics }
+                    if name == "Vec" && generics.len() == 1 =>
+                {
+                    Some(generics[0].clone())
                 }
                 _ => None,
             }
