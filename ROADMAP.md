@@ -33,8 +33,11 @@ Phase 353까지의 패턴 관찰:
   caveat: file not yet OK, but infrastructure gain (vaisc installed version was stale Apr 10 → rebuilt before edits)
   compiler_reinstall: cargo install --path crates/vaisc --force (executed before Phase 355)
   detail: fulltext/ddl.vais (alloc_page 4-arg → allocate_page 2-arg refactor 혹은 helper 추가), fulltext/mod.vais 연쇄
-- [ ] 356. sql parser bare variant prefix — parser_{ddl,dml,command,expr}.vais (per-file careful regex)
+- [x] 356. sql parser bare variant prefix — parser_{ddl,dml,command,expr}.vais (per-file careful regex) ✅ 2026-04-18 (partial)
   detail: row.vais에서 성공한 SqlValue.Variant prefix 패턴 확장. BinaryOp/FloatLit/CreateIndex/Select 등.
+  changes: lang/packages/vaisdb/src/sql/parser/parser_ddl.vais (15× bare variant → prefixed; Statement.CreateIndex/CreateTable, TokenKind.Not/Drop/Add, AlterAction.RenameColumn, PrivilegeKind.* 등)
+  result: parser_ddl.vais 6 errors → 4 errors. 잔여 4 = 다른 클래스 (undefined fns parse_create_user/parse_primary/parse_drop_user, TokenKind↔PrivilegeKind enum mismatch) — Phase 366+ sweep로 이동.
+  note: agent tool-budget 소진 후에도 diff 15줄 완결 (partial COMPLETE 판정)
 - [ ] 357. planner 파일 panic marker — total → partial 또는 ? unwrap 제거 (Opus direct)
   detail: analyzer.vais, optimizer.vais E034 panic warn. `partial` 마커 추가 또는 `?` 대신 explicit handling.
 - [ ] 358. closure body type inference (Opus direct, Phase 342 follow-up)
@@ -76,11 +79,10 @@ Phase 353까지의 패턴 관찰:
 - **Span-less 우선순위**: patterns/module binding unify 경로에 span 부착이 선행되어야 후속 E001 cluster 접근 가능.
 
 mode: auto
-iteration: 2
+iteration: 3
 max_iterations: 30
 strategy: Phase 354 (closure inline cascading) → 355-357 (mass refactor) → 358-361 (Opus direct compiler deep work) → 362-365 (vaisdb-side major API) → 366-369 cluster sweep → 370 Tier 2 선언. 각 phase 실패/scope over 즉시 move on.
-  strategy: sequential — iteration 2, Phase 355 (fulltext/ddl.vais alloc_page 4-arg → allocate_page 2-arg; Opus direct per ROADMAP)
-  opus_direct: 355 — ROADMAP 지정. Refactor touches multiple call sites with semantic decision (helper vs inline); single-pass design+impl.
+  strategy: sequential — iteration 3, Phase 356 (sql parser variant prefix; impl-sonnet, 1-file)
 
 ---
 
