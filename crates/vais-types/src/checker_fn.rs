@@ -149,7 +149,16 @@ impl TypeChecker {
         {
             // Skip unification — codegen will insert `ret i64 0`
         } else {
-            self.unify(&expected_ret, &body_type_deref)?;
+            // Phase 314: attach a span to body→return-type mismatches so E001
+            // always includes a source pointer.  Prefer the declared return-type
+            // span; fall back to the function-name span.
+            let ret_span = f
+                .ret_type
+                .as_ref()
+                .map(|t| t.span)
+                .unwrap_or(f.name.span);
+            self.unify(&expected_ret, &body_type_deref)
+                .map_err(|e| e.with_span(ret_span))?;
         }
 
         // Phase 193 R-1b: finalize method instantiations that were deferred
@@ -592,8 +601,16 @@ impl TypeChecker {
             // declared return is (). Codegen discards the value.
             matches!(expected_ret, ResolvedType::Unit);
         if !lenient_match {
+            // Phase 314: attach a span to body→return-type mismatches so E001
+            // always includes a source pointer.  Prefer the declared return-type
+            // span; fall back to the method-name span.
+            let ret_span = method
+                .ret_type
+                .as_ref()
+                .map(|t| t.span)
+                .unwrap_or(method.name.span);
             if let Err(e) = self.unify(&expected_ret, &body_type_deref) {
-                return Err(e);
+                return Err(e.with_span(ret_span));
             }
         }
 

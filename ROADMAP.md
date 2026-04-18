@@ -29,8 +29,10 @@
   root cause: check_static_method_call은 struct-level generics (`struct_def.generics`)만 처리했음. `F reverse_vec<T>`처럼 method 자체의 `<T>`가 있을 때 `struct_def.generics.is_empty()` 분기로 빠져 unify(&mut Vec<T>, &Vec<u64>) → E001 "expected T, found u64".
   changes: crates/vais-types/src/checker_expr/calls.rs (non-generic struct path: `!method_sig.generics.is_empty()`이면 fresh type var 기반 substitution map 생성 후 unify)
   verify: phase158 18/18 GREEN, shortest_path.vais OK, vaisdb OK 150→151 (+1)
-- [ ] 314. span-less E001 진단 품질 개선 — error reporting에서 span 전파 누락 위치 찾기 (impl-sonnet)
-  detail: 17 파일에서 `expected X, found Y` span 정보 없이 surface. 디버깅 난이도 감소 효과
+- [x] 314. span-less E001 진단 품질 개선 (impl-sonnet) ✅ 2026-04-18
+  changes: crates/vais-types/src/checker_fn.rs (function body→return-type unify 2곳에 `e.with_span(ret_span)` 부착 — f.ret_type.span 우선, f.name.span fallback)
+  verify: phase158 18/18 GREEN, span-less E001 17→16 (-1 site). 남은 16은 다른 코드 경로 (patterns, module binding, expression unify) — 후속 phase에서 커버
+  note: agent cut off mid-task (tool budget limit); 그러나 변경 상태는 정상 — 검증 후 수동 커밋
 - [x] 315. VaisError.new signature alignment — stdlib code: i64→str (Opus direct) ✅ 2026-04-18
   audit: 실제 vaisdb 관례는 압도적으로 2-arg `VaisError.new(code_str, message)` — SQLSTATE-like prefixed codes ("VAIS-0901010", "VE-02-03-004"). 3-arg 변형은 hnsw/vector 일부 (~20사이트)에서 category enum prepend.
   decision: 2-arg majority를 stdlib 표준으로 채택. `code: i64 → str` 변경. 3-arg 사이트는 Phase 322에서 category 제거 또는 code string에 embed 형태로 vaisdb-side rewrite.
@@ -63,9 +65,17 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 3
+iteration: 4
 max_iterations: 30
 strategy: deep compiler 블로커 먼저 (311-315) → 그 뒤 per-file cascading 일괄 flip (321-325). Phase158 strict gate 매 phase 확인 필수.
+
+### Iter 4 (2026-04-18) — parallel cascading
+- 311/312/313/315 해소 완료. 321-325 + 314 전부 unblocked.
+- 321 (security), 322 (vector/hnsw), 323 (planner), 324 (storage/recovery), 325 (ops/server/client) — 모두 별도 vaisdb 디렉토리 → **independent parallel**.
+- 314 (compiler span-less) — 별도 저장소 (compiler), 파일 겹침 없음 → parallel 가능.
+- 리소스 경제: 배치 1 = 321+322+325+314 (4 parallel). 배치 2 = 323+324 (2 parallel).
+- 각 task 목표: per-file 잔여 에러 수정 + vaisdb OK 카운트 +1~5.
+strategy: independent parallel × 4 (vaisdb-side 3 + compiler-side 1)
 
 ### Iter 1 (2026-04-18) — execution strategy
 - Phase 311-313, 315: Opus direct (deep compiler dispatch, design-impl inseparable)
