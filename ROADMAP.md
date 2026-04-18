@@ -22,7 +22,10 @@
 - [x] 282. E025 borrow-checker 완화 — Vec/HashMap `&mut` 후 재참조 허용 (rag_search, 여러 위치) (impl-sonnet) ✅ 2026-04-18
   changes: vais-types/ownership/ast_check.rs (Expr::Ref Ident 경로에서 inner use_var 제거; Call/MethodCall 종료 시 __ref_* transient borrow release)
   verify: phase158 18/18 GREEN, ownership lib 344 pass, rag_search/pipeline E025 제거, vaisdb OK 127→130 (+3)
-- [ ] 283. Result<T> implicit wrap — 함수 body 마지막이 T이고 리턴이 Result<T,E>면 Ok(T) 자동 wrap (impl-method만). 대상: graph/edge/adj, 여러 storage 위치
+- [x] 283. 원래 스코프 재해석 → diverging `L {}` loop → Never 타입 (impl-sonnet) ✅ 2026-04-18
+  changes: vais-types/checker_expr/control_flow.rs (bare pattern/iter-less L{} with no direct Break → ResolvedType::Never)
+  verify: phase158 18/18 GREEN, adj.vais + scan.vais E001 Result/Unit 제거, vaisdb OK 130 유지 (타 에러 surface)
+  note: "T → Ok(T)" 자동 wrap 시나리오 실제 미발견. if/match-trailing 케이스는 향후 phase
 - [ ] 284. `chars()`/`skip()` iterator fallback — str/Vec에서 identity 리턴하는 permissive fallback (iteration 체크는 codegen). 대상: fulltext/planner
 - [ ] 285. **Tier 1 컴파일러 마무리** — 남은 span-less E001 분석 + Phase158 strict 유지 확인
 
@@ -63,10 +66,10 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 3
+iteration: 4
 max_iterations: 30
 strategy: single-error 파일부터 → cascading 해결 → 두-경로 통합. impl-sonnet 위임 가능한 단위로 쪼개서 병렬 진행.
-  strategy: Phase 282 — E025 borrow-checker 완화 (Vec/HashMap &mut 후 재참조). Sequential, background=true. target: vais-types/ownership/* (borrow check). compiler 수정 → 후속 phase와 겹침 가능 → sequential.
+  strategy: Phase 283 — Result<T> implicit wrap (impl-method만). Sequential, background=true. target: vais-types/checker_fn.rs (body 마지막 타입 검사). 후속 compiler phase와 파일 겹침 가능 → sequential.
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone

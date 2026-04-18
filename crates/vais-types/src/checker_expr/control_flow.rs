@@ -4,6 +4,49 @@ use crate::types::{ResolvedType, TypeResult};
 use crate::TypeChecker;
 use vais_ast::*;
 
+/// Check whether a list of statements contains a `Break` statement that
+/// belongs to the *current* loop level (i.e. not inside a nested loop).
+/// Returns `true` if any such break exists, meaning the loop can exit normally.
+fn stmts_have_direct_break(stmts: &[Spanned<Stmt>]) -> bool {
+    stmts.iter().any(stmt_has_direct_break)
+}
+
+fn stmt_has_direct_break(stmt: &Spanned<Stmt>) -> bool {
+    match &stmt.node {
+        // A break at this level exits the enclosing loop
+        Stmt::Break(_) => true,
+        // Look into expression statements (if/match/block — but NOT nested loops)
+        Stmt::Expr(expr) => expr_has_direct_break(expr),
+        Stmt::Return(_) | Stmt::Let { .. } | Stmt::LetDestructure { .. }
+        | Stmt::Continue | Stmt::Defer(_) | Stmt::Error { .. } => false,
+    }
+}
+
+fn expr_has_direct_break(expr: &Spanned<Expr>) -> bool {
+    match &expr.node {
+        // Nested loops own their own breaks — do NOT descend into them
+        Expr::Loop { .. } | Expr::While { .. } => false,
+        // If/block/match: descend to find breaks for the current loop
+        Expr::If { then, else_, .. } => {
+            stmts_have_direct_break(then)
+                || else_.as_ref().map_or(false, ifelse_has_direct_break)
+        }
+        Expr::Block(stmts) => stmts_have_direct_break(stmts),
+        Expr::Match { arms, .. } => arms.iter().any(|arm| expr_has_direct_break(&arm.body)),
+        _ => false,
+    }
+}
+
+fn ifelse_has_direct_break(branch: &IfElse) -> bool {
+    match branch {
+        IfElse::Else(stmts) => stmts_have_direct_break(stmts),
+        IfElse::ElseIf(_, stmts, next) => {
+            stmts_have_direct_break(stmts)
+                || next.as_ref().map_or(false, |n| ifelse_has_direct_break(n))
+        }
+    }
+}
+
 impl TypeChecker {
     /// Check if-else branch
     pub(crate) fn check_if_else(&mut self, branch: &IfElse) -> TypeResult<ResolvedType> {
@@ -192,7 +235,19 @@ impl TypeChecker {
                 self.loop_depth -= 1;
                 self.pop_scope();
 
-                Some(Ok(ResolvedType::Unit))
+                // Phase 283: A bare infinite loop (`L {}` with no pattern/iter)
+                // that has no reachable `break` at this loop level is diverging —
+                // all exits are via `R` (return). Assign it the `Never` type so
+                // it unifies with any declared return type (e.g. Result<T,E>)
+                // without a spurious E001 "expected Result, found ()" error.
+                let loop_type = if pattern.is_none() && iter.is_none()
+                    && !stmts_have_direct_break(body)
+                {
+                    ResolvedType::Never
+                } else {
+                    ResolvedType::Unit
+                };
+                Some(Ok(loop_type))
             }
 
             Expr::While { condition, body } => {
