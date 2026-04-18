@@ -80,7 +80,7 @@ impl TypeChecker {
                         return Err(crate::types::TypeError::Mismatch {
                             expected: then_type.to_string(),
                             found: else_type.to_string(),
-                            span: None,
+                            span: Some(cond.span),
                         });
                     }
                     return Ok(ResolvedType::Unit);

@@ -417,7 +417,7 @@ impl TypeChecker {
             let arg_type = self.check_expr(arg)?;
             // Substitute generic parameters with type variables in the parameter type
             let expected_type = self.substitute_generics(param_type, &generic_substitutions);
-            self.unify(&expected_type, &arg_type)?;
+            self.unify(&expected_type, &arg_type).map_err(|e| e.with_span(arg.span))?;
         }
 
         // Apply substitutions to infer concrete generic types
