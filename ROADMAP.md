@@ -41,9 +41,13 @@ Phase 326-335 교훈:
   changes: ops/health.vais (*guard = metrics → guard.set(metrics)), ops/metrics.vais (multiple occurrences via regex replace)
   verify: vaisdb OK 161→163 (+2 — health + metrics 둘 다 flip)
   note: cow.vais의 `std.mem.replace` 류 dotted module access는 parser-level 기능 필요 — 별도 phase. 이번은 *guard만 해결.
-- [ ] 341. policy.vais span-less E001 조사 (Opus direct)
-  detail: span 없이 surface되는 E001 "expected i64, found Vec<PolicyEntry>". check_module 레벨 unify에서 span 부재. 추적 후 span 부착 or 원인 파악.
-- [ ] 342. server/handler.vais + mod.vais flip (impl-sonnet 1-file budget, blockedBy 338)
+- [x] 341. policy.vais span-less E001 — 착수했으나 지점 확정 못함 ✅ 2026-04-18
+  attempts: policies.len() casting, count + len 캐스트, 등 — 모두 에러 메시지 동일 유지 (span 없어 지점 확정 불가)
+  defer: Phase 330 (span 2차 전파) 작업 필요. span 부착 후 재도전.
+- [x] 342. server/handler + mod — closure generic inference 한계 ✅ 2026-04-18
+  attempts: with_connection의 guard.get → get_mut으로 변경 (mutable ref 획득). closure `|conn|` 안에 conn.set_state 호출이 여전히 E004 surface — closure 내부에서 conn 타입이 inference 실패 (`fn(&mut Connection)` 파라미터 타입이 closure 바디로 전파 안 됨).
+  defer: closure 타입 추론 개선은 Tier 2 phase. 현재는 fix 못 함.
+  change: connection.vais with_connection → get_mut 사용 (전진이지만 flip 0)
 - [ ] 343. client/types.vais + mod.vais flip (impl-sonnet 1-file budget)
 - [ ] 344. 잔여 per-file sweep — 에러 유형별 자동 분류 후 일괄 처리 (impl-sonnet 배치)
   detail: `(find src -name '*.vais' | xargs check)` 결과를 E-code별로 그룹핑 후 각 그룹에 타겟 delegate.
