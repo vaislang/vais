@@ -56,8 +56,8 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-19)
 
-mode: auto
-iteration: 3
+mode: stopped (Phase 2.10 requires user review — two fix attempts regressed baseline; deeper Named↔Optional bridge investigation needed before proceeding)
+iteration: 10
 max_iterations: 30
   strategy: parallel — iteration 3, #26 (trivial ROADMAP edit, direct) + #27 (CI script, impl-sonnet background); no file overlap.
 
