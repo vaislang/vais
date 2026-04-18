@@ -834,6 +834,33 @@ impl TypeChecker {
                         .unwrap_or(ResolvedType::I64);
                         return Ok(ResolvedType::Optional(Box::new(elem)));
                     }
+                    "keys" => {
+                        // Phase 264: HashMap.keys() / Vec — Vec<K> with no args.
+                        if args.is_empty() {
+                            let key_ty = if name == "Vec" {
+                                ResolvedType::I64
+                            } else {
+                                generics.first().cloned().unwrap_or(ResolvedType::I64)
+                            };
+                            return Ok(ResolvedType::Named {
+                                name: "Vec".to_string(),
+                                generics: vec![key_ty],
+                            });
+                        }
+                    }
+                    "values" => {
+                        if args.is_empty() {
+                            let val_ty = if name == "Vec" {
+                                generics.first().cloned().unwrap_or(ResolvedType::I64)
+                            } else {
+                                generics.get(1).cloned().unwrap_or(ResolvedType::I64)
+                            };
+                            return Ok(ResolvedType::Named {
+                                name: "Vec".to_string(),
+                                generics: vec![val_ty],
+                            });
+                        }
+                    }
                     "insert" | "set" => {
                         // HashMap insert/set returns V
                         if name != "Vec" && args.len() == 2 {
