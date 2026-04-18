@@ -101,6 +101,31 @@ X ErrorChain {
     }
 }
 
+# ===== VaisError =====
+# Single error value carrying a numeric code and a human-readable message.
+# Intended for consumers that want a simple code/message pair without having
+# to invent their own struct. Added 2026-04-18 (Phase 198 Bucket 2) after
+# `vais-server` and several downstream projects had diverged definitions.
+#
+# - `code`  : i64 error code (typically HTTP status or VAIS-* category)
+# - `message`: human-readable message string
+#
+# Projects that want richer error context (severity, detail, hint) can still
+# define their own types; VaisError is the shared baseline that stdlib-based
+# code can rely on.
+
+S VaisError {
+    code: i64,
+    message: str
+}
+
+X VaisError {
+    # Build a new error with the given code and message.
+    F new(code: i64, message: str) -> VaisError {
+        VaisError { code: code, message: message }
+    }
+}
+
 # ===== Typed Error Enum =====
 # Common application errors with specific variants (thiserror-style)
 
