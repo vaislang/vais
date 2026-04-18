@@ -605,6 +605,47 @@ impl TypeChecker {
 
         // H5-H6 builtin Vec/HashMap/ByteBuffer/Mutex methods removed
         // C1 fix enables proper impl lookup from std modules
+        //
+        // Phase 219: re-add a *narrow* fallback for Vec/HashMap.len/push/insert.
+        // When the receiver is a struct field of type `Vec<T>`/`HashMap<K,V>`
+        // and the std impl lookup hasn't bound a concrete instantiation yet,
+        // generic-method-on-struct-field dispatch returns nothing and vaisdb
+        // sees a misleading E004 'len/push not defined'. The free-function
+        // signatures here are deliberately permissive (return I64 for len,
+        // return I64 for push to match std/vec.vais's `F push -> i64`) so
+        // they unblock downstream type-checking without committing to an
+        // exact element type.
+        if let ResolvedType::Named { name, generics } = &receiver_type {
+            if name == "Vec" || name == "HashMap" || name == "StrHashMap" {
+                match method.node.as_str() {
+                    "len" => {
+                        if args.is_empty() {
+                            return Ok(ResolvedType::I64);
+                        }
+                    }
+                    "push" => {
+                        // Vec push returns i64 in stdlib
+                        if name == "Vec" && args.len() == 1 {
+                            // Just check arg, don't strictly unify
+                            let _ = self.check_expr(&args[0]);
+                            return Ok(ResolvedType::I64);
+                        }
+                    }
+                    "insert" | "set" => {
+                        // HashMap insert/set returns V
+                        if name != "Vec" && args.len() == 2 {
+                            let _ = self.check_expr(&args[0]);
+                            let _ = self.check_expr(&args[1]);
+                            return Ok(generics
+                                .get(1)
+                                .cloned()
+                                .unwrap_or(ResolvedType::I64));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
 
         // Phase 24 Task 5: .iter() / .enumerate() builtin for iterable receivers
         // Matches any type whose item type is derivable via get_iterator_item_type

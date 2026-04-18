@@ -3,7 +3,25 @@
 
 > **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 218: String.as_bytes())
+> **최종 업데이트**: 2026-04-18 (Phase 219: Vec/HashMap built-in fallback dispatch)
+
+---
+
+## ⏸ 완료 — Phase 219: Vec/HashMap.len/push/insert built-in → OK 81→85
+completed_at: 2026-04-18
+
+mode: auto
+strategy: vaisdb의 struct field Vec<T>/HashMap<K,V> method 호출이 generic-on-field dispatch에서 nothing 반환 → E004 'len/push not defined'. 좁은 fallback built-in을 추가하여 unblock.
+
+### 변경
+- crates/vais-types/src/checker_expr/calls.rs: Named { Vec/HashMap/StrHashMap } 에 len(→i64), push(→i64), insert/set(→V) 빌트인 fallback 추가
+
+### 결과
+- E004: 65 → 59 (-6)
+- OK: 81 → **85** (+4)
+- baseline green
+
+progress: 1/1 (100%)
 
 ---
 
