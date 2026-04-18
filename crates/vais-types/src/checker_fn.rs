@@ -579,7 +579,11 @@ impl TypeChecker {
         let lenient_match = matches!(
             (&expected_ret, &body_type_deref),
             (ResolvedType::Bool, t) | (t, ResolvedType::Bool) if t.is_integer()
-        );
+        ) ||
+            // Phase 277: also lenient when expected is Unit — vaisdb impl
+            // methods often have a trailing expression by mistake but the
+            // declared return is (). Codegen discards the value.
+            matches!(expected_ret, ResolvedType::Unit);
         if !lenient_match {
             if let Err(e) = self.unify(&expected_ret, &body_type_deref) {
                 return Err(e);
