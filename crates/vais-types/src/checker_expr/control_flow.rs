@@ -10,8 +10,16 @@ impl TypeChecker {
         match branch {
             IfElse::ElseIf(cond, then, else_) => {
                 let cond_type = self.check_expr(cond)?;
-                self.unify(&cond_type, &ResolvedType::Bool)
-                    .map_err(|e| e.with_span(cond.span))?;
+                // Phase 254: lenient cond — accept Bool or any integer (truthy 0/1).
+                // vaisdb stdlib uses i64-returning predicates (contains_key, is_empty,
+                // contains) and chains them directly into I/while.
+                if !matches!(cond_type, ResolvedType::Bool)
+                    && !cond_type.is_integer()
+                    && !matches!(cond_type, ResolvedType::Var(_) | ResolvedType::Unknown)
+                {
+                    self.unify(&cond_type, &ResolvedType::Bool)
+                        .map_err(|e| e.with_span(cond.span))?;
+                }
 
                 self.push_scope();
                 let then_type = self.check_block(then)?;
@@ -57,8 +65,14 @@ impl TypeChecker {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
-                if let Err(e) = self.unify(&cond_type, &ResolvedType::Bool) {
-                    return Some(Err(e));
+                // Phase 254: lenient cond — Bool or integer (truthy).
+                if !matches!(cond_type, ResolvedType::Bool)
+                    && !cond_type.is_integer()
+                    && !matches!(cond_type, ResolvedType::Var(_) | ResolvedType::Unknown)
+                {
+                    if let Err(e) = self.unify(&cond_type, &ResolvedType::Bool) {
+                        return Some(Err(e));
+                    }
                 }
 
                 let then_type = match self.check_expr(then) {
@@ -81,8 +95,14 @@ impl TypeChecker {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
-                if let Err(e) = self.unify(&cond_type, &ResolvedType::Bool) {
-                    return Some(Err(e));
+                // Phase 254: lenient cond — Bool or integer (truthy).
+                if !matches!(cond_type, ResolvedType::Bool)
+                    && !cond_type.is_integer()
+                    && !matches!(cond_type, ResolvedType::Var(_) | ResolvedType::Unknown)
+                {
+                    if let Err(e) = self.unify(&cond_type, &ResolvedType::Bool) {
+                        return Some(Err(e));
+                    }
                 }
 
                 self.push_scope();
@@ -181,8 +201,14 @@ impl TypeChecker {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
-                if let Err(e) = self.unify(&ResolvedType::Bool, &cond_type) {
-                    return Some(Err(e));
+                // Phase 254: lenient cond — Bool or integer (truthy).
+                if !matches!(cond_type, ResolvedType::Bool)
+                    && !cond_type.is_integer()
+                    && !matches!(cond_type, ResolvedType::Var(_) | ResolvedType::Unknown)
+                {
+                    if let Err(e) = self.unify(&ResolvedType::Bool, &cond_type) {
+                        return Some(Err(e));
+                    }
                 }
 
                 self.push_scope();
