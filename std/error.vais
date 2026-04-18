@@ -107,21 +107,23 @@ X ErrorChain {
 # to invent their own struct. Added 2026-04-18 (Phase 198 Bucket 2) after
 # `vais-server` and several downstream projects had diverged definitions.
 #
-# - `code`  : i64 error code (typically HTTP status or VAIS-* category)
+# - `code`  : str error code (SQLSTATE-style, e.g. "VAIS-0901010"); was i64
+#             until Phase 315 — changed to str to match vaisdb / downstream
+#             convention where codes carry structured prefixes.
 # - `message`: human-readable message string
 #
-# Projects that want richer error context (severity, detail, hint) can still
-# define their own types; VaisError is the shared baseline that stdlib-based
-# code can rely on.
+# Projects that want richer error context (severity, detail, hint, category)
+# can still define their own types or wrap VaisError; this is the shared
+# baseline that stdlib-based code can rely on.
 
 S VaisError {
-    code: i64,
+    code: str,
     message: str
 }
 
 X VaisError {
-    # Build a new error with the given code and message.
-    F new(code: i64, message: str) -> VaisError {
+    # Build a new error with the given SQLSTATE-style code and message.
+    F new(code: str, message: str) -> VaisError {
         VaisError { code: code, message: message }
     }
 }

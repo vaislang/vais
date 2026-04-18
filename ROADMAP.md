@@ -31,8 +31,12 @@
   verify: phase158 18/18 GREEN, shortest_path.vais OK, vaisdb OK 150→151 (+1)
 - [ ] 314. span-less E001 진단 품질 개선 — error reporting에서 span 전파 누락 위치 찾기 (impl-sonnet)
   detail: 17 파일에서 `expected X, found Y` span 정보 없이 surface. 디버깅 난이도 감소 효과
-- [ ] 315. VaisError.new 2-arg vs 3-arg refactor — 컴파일러 3-arg 허용 또는 vaisdb 일괄 rename (Opus direct)
-  detail: vaisdb 전역에서 `VaisError.new(category, code, msg)` 3-arg 호출하지만 실제 `F new(code, message)`는 2-arg. 영향: hnsw/delete, 기타 20+ 파일
+- [x] 315. VaisError.new signature alignment — stdlib code: i64→str (Opus direct) ✅ 2026-04-18
+  audit: 실제 vaisdb 관례는 압도적으로 2-arg `VaisError.new(code_str, message)` — SQLSTATE-like prefixed codes ("VAIS-0901010", "VE-02-03-004"). 3-arg 변형은 hnsw/vector 일부 (~20사이트)에서 category enum prepend.
+  decision: 2-arg majority를 stdlib 표준으로 채택. `code: i64 → str` 변경. 3-arg 사이트는 Phase 322에서 category 제거 또는 code string에 embed 형태로 vaisdb-side rewrite.
+  changes: compiler/std/error.vais (VaisError.code type i64→str, F new signature 업데이트)
+  verify: phase158 18/18 GREEN, sanitizer.vais (대표 2-arg 사이트) OK, graph/wal.vais는 별개 E004로 기존 실패. vaisdb OK 151/261 유지 (no regression).
+  note: graph/wal.vais만 i64 code 숫자 리터럴 사용 — cascading 시 벌크 rewrite 필요. 현재는 E004 선행이므로 영향 없음.
 
 ### Phase 321-330: vaisdb-side 누적 정리
 
@@ -59,7 +63,7 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 2
+iteration: 3
 max_iterations: 30
 strategy: deep compiler 블로커 먼저 (311-315) → 그 뒤 per-file cascading 일괄 flip (321-325). Phase158 strict gate 매 phase 확인 필수.
 
