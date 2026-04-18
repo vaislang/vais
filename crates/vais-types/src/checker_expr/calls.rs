@@ -652,6 +652,26 @@ impl TypeChecker {
                         return Ok(receiver_type.clone());
                     }
                 }
+                "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "wrapping_div"
+                | "wrapping_rem" | "saturating_add" | "saturating_sub" | "saturating_mul"
+                | "checked_add" | "checked_sub" | "checked_mul" | "checked_div" => {
+                    // Phase 270: overflow-safe integer arithmetic.
+                    // wrapping_*/saturating_* return same type; checked_* return Option<T>.
+                    if args.len() == 1 {
+                        let _ = self.check_expr(&args[0]);
+                        let m = method.node.as_str();
+                        if m.starts_with("checked_") {
+                            return Ok(ResolvedType::Optional(Box::new(receiver_type.clone())));
+                        }
+                        return Ok(receiver_type.clone());
+                    }
+                }
+                "count_ones" | "count_zeros" | "leading_zeros" | "trailing_zeros"
+                | "leading_ones" | "trailing_ones" | "swap_bytes" | "reverse_bits" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::U32);
+                    }
+                }
                 "to_string" => {
                     if args.is_empty() {
                         return Ok(ResolvedType::Str);
