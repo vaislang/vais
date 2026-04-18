@@ -1,10 +1,10 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 274 완료, vaisdb 마이그레이션 진행 중)
+> **현재 버전**: 0.1.0 (Phase 276 완료, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 274: ByteBuffer.get_string/put_string)
-> **현재 vaisdb OK: 122/261 (46.7%)** — Phase 199 시작 대비 +92 파일 개선
+> **최종 업데이트**: 2026-04-18 (Phase 276: Option<T> ↔ T coercion)
+> **현재 vaisdb OK: 123/261 (47.1%)** — Phase 199 시작 대비 +93 파일 개선
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone
@@ -56,6 +56,8 @@
 ## ⏸ 완료 — Phase 272: **str + (Str|String|&str) concat** (OK 119→121)
 ## ⏸ 완료 — Phase 273: slice mutation method fallbacks (copy_from_slice/fill/sort…)
 ## ⏸ 완료 — Phase 274: ByteBuffer.get_string/put_string fallbacks (OK 121→122)
+## ⏸ 완료 — Phase 275: lenient bitwise int op bool (OK 122→123)
+## ⏸ 완료 — Phase 276: bidirectional Option<T> ↔ T coercion
 
 ---
 
