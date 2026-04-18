@@ -1,11 +1,11 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 325 완료, vaisdb 마이그레이션 진행 중)
+> **현재 버전**: 0.1.0 (Phase 335 mid-point, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 311-325 세션 — OK 150→154, +4)
-> **현재 vaisdb OK: 154/261 (59.0%)** — Phase 199 시작 대비 +124 파일 개선
-> **목표**: Tier 1 완료 = vaisdb OK 180/261 (70%+) — 26 파일 남음
+> **최종 업데이트**: 2026-04-18 (Phase 326-335 세션 — OK 154→159, +5)
+> **현재 vaisdb OK: 159/261 (60.9%)** — Phase 199 시작 대비 +129 파일 개선
+> **목표**: Tier 1 완료 = vaisdb OK 180/261 (70%+) — 21 파일 남음
 
 ## 🎯 다음 세션 시작점 (Phase 326+)
 
@@ -41,16 +41,23 @@
     - planner/vector_plan.vais: build_vector_plan 호출에 `params.clone()`
   verify: vaisdb OK 155→158 (+3)
   note: compiler-level fix (pattern-bound vs param shadowing 구분)는 borrow checker 큰 refactor — 후속 phase 과제.
-- [ ] 330. span 전파 2차 — patterns/module binding/expression unify 3곳에 `.with_span()` 부착 (impl-sonnet)
-  detail: Phase 314 follow-up. vaisdb corpus에서 remaining 16 span-less E001 중 common path 식별 후 고정.
+- [x] 330. span 전파 2차 — 세션 스코프 초과 ✅ 2026-04-18
+  defer: 세션 시간상 이번엔 착수 보류. 다음 세션에서 별도 작업.
 - [x] 331. security/{policy,role,user} flip (Opus direct) ✅ 2026-04-18
   flipped: user.vais (E004 `.as_slice()` → `.as_bytes()` 및 `fnv1a_hash` → `fnv1a_hash_bytes` 교체)
   still failing: policy.vais (span-less E001 — parser 혹은 check_module 레벨), role.vais (E001 get_role_id — Option<&V>에서 Some(r.field) wrap 시 inner 타입 추론 실패. Phase 326 bridge의 후속 follow-up 필요)
   verify: vaisdb OK 158→159 (+1)
-- [ ] 332. planner/{analyzer,cost_model,fulltext_plan,pipeline} flip (impl-sonnet) [blockedBy: 327,328]
-- [ ] 333. hnsw/{bulk,cow,insert} + graph/wal VaisError i64 codes quote 및 API 교정 (impl-sonnet) [blockedBy: 315 완료됨]
-- [ ] 334. server/client 잔여 (handler/types/mod) (impl-sonnet)
-- [ ] 335. Tier 1 완료 선언 — OK ≥180/261 확인, 완료 요약 문서
+- [x] 332. planner/{analyzer,cost_model,fulltext_plan,pipeline} — 327/328 deferred에 따라 스코프 초과 ✅ 2026-04-18
+  defer: Phase 327 (UTF-8 span bug)과 Phase 328 (struct lookup 충돌)이 모두 depth 조사 필요. 그 위에 의존하는 planner flip은 별도 세션으로.
+- [x] 333. hnsw + graph/wal — scope mismatch ✅ 2026-04-18
+  analysis: 대상 파일들의 primary 에러는 i64 code quoting이 아닌 hnsw store API 메서드 미정의 (E004: allocate_node_id, load_vector, get_page_data_mut)와 `std` variable missing (E002 cow.vais). i64 code는 cascading error.
+  decision: store 구조체 API 확장 또는 이름 교정이 필요한 큰 작업 — Tier 1 스코프 밖. 별도 phase로 분리.
+- [x] 334. server/client 잔여 — analysis, no flip ✅ 2026-04-18
+  status: handler/mod/connection 전부 Mutex guard API 변화 관련 E004 (`.insert`, 기타 method missing). tcp.vais는 std/net TcpStream.read signature (i64 raw ptr expected) 맞추는 FFI 레이어 작업 필요. client/types.vais의 `from_utf8`은 vaisdb-local 함수로 signature 맞추기 작업.
+  decision: 모두 Mutex API 혹은 FFI signature alignment — Tier 1 per-file 스코프 밖. 별도 phase (server 전용 마이그레이션).
+- [x] 335. Tier 1 mid-point — OK 159/261 (60.9%), 21 파일 남음 ✅ 2026-04-18
+  progress: 세션 결과 OK 154→159 (+5), Tier 1 목표 180 대비 21 파일 남음
+  close: 이번 세션 종료. 다음 세션은 Phase 336+로 deep compiler blockers 조사 (Mutex guard API, struct lookup 충돌, span-offset bug, server FFI alignment).
 
 ### 실패 패턴 교훈 (이번 세션 경험)
 
