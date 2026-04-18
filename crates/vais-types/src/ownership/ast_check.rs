@@ -280,6 +280,9 @@ impl OwnershipChecker {
                     // Don't mark args as moved — function signatures determine ownership
                     // (args passed by &T or &mut T should not be moved)
                 }
+                // Phase 282: release transient `__ref_*` borrows after the call returns.
+                // Matches Rust's "borrow lifetime ends at call expression" semantics.
+                self.active_borrows.retain(|k, _| !k.starts_with("__ref_"));
                 Ok(())
             }
 
@@ -305,15 +308,22 @@ impl OwnershipChecker {
                     // Don't mark args as moved — method signatures determine ownership
                     // (args passed by &T or &mut T should not be moved)
                 }
+                // Phase 282: release transient `__ref_*` borrows after method call returns.
+                self.active_borrows.retain(|k, _| !k.starts_with("__ref_"));
                 Ok(())
             }
 
             Expr::Ref(inner) => {
-                // Immutable borrow
+                // Phase 282: borrowing an Ident never moves it.
+                // Do NOT recurse into check_expr_ownership(inner) for Ident,
+                // which would call use_var and mark non-Copy types as Moved.
+                // Just record the borrow and return.
                 if let Expr::Ident(name) = &inner.node {
                     let borrower = format!("__ref_{}", name);
                     self.borrow_var(&borrower, name, Some(expr.span))?;
+                    return Ok(());
                 }
+                // Non-Ident inner (e.g., &foo.field, &arr[0]): recurse as usual
                 self.check_expr_ownership(inner)?;
                 Ok(())
             }
