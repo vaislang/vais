@@ -555,6 +555,38 @@ impl CodeGenerator {
                 self.fn_ctx.string_value_slot.insert(result.clone(), slot);
                 Ok((result, ir))
             }
+            "is_empty" => {
+                let len = self.extract_str_len(recv_val, counter, &mut ir);
+                let is_zero = self.next_temp(counter);
+                write_ir!(ir, "  {} = icmp eq i64 {}, 0", is_zero, len);
+                let result = self.next_temp(counter);
+                write_ir!(ir, "  {} = zext i1 {} to i64", result, is_zero);
+                Ok((result, ir))
+            }
+            "byte_at" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Unsupported(format!(
+                        "builtin 'byte_at' requires 1 argument, got {}",
+                        args.len()
+                    )));
+                }
+                let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
+                ir.push_str(&arg_ir);
+                // Load single byte at offset — simple GEP + load.
+                let byte_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr i8, i8* {}, i64 {}",
+                    byte_ptr,
+                    recv_ptr,
+                    arg_val
+                );
+                let byte_val = self.next_temp(counter);
+                write_ir!(ir, "  {} = load i8, i8* {}", byte_val, byte_ptr);
+                let result = self.next_temp(counter);
+                write_ir!(ir, "  {} = zext i8 {} to i64", result, byte_val);
+                Ok((result, ir))
+            }
             "char_at" | "charAt" => {
                 if args.is_empty() {
                     return Err(CodegenError::Unsupported(format!(
