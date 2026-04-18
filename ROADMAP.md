@@ -65,7 +65,10 @@ Phase 353까지의 패턴 관찰:
     - fulltext/index/posting.vais: 8× get_page/get_page_mut → _by_id variants, 2× allocate_page(file_id) → alloc_page(file_id, txn_id, 0, gcm), 4× mark_dirty preserved, 1× free_page → free_page_simple
   result: posting.vais 9 errors → **0 errors (TC clean)** 🎉 — net +1 file OK
   strategy: add back-compat overloads on pool/allocator rather than rewrite callers
-- [ ] 364. TLS FFI alignment — std/file read_file 정의 또는 vaisdb-local wrapper (Opus direct)
+- [x] 364. TLS FFI alignment — std/file read_file 정의 또는 vaisdb-local wrapper (Opus direct) ✅ 2026-04-18 (partial)
+  changes: security/tls.vais import `std/file.{read_file, file_exists}` → `storage/file.{read_file, path_exists}` (vaisdb-local), 3× file_exists call sites → path_exists
+  result: tls.vais 4 errors → 3 errors. 잔여 3 = span-less `std not defined` (Phase 359 territory, 컴파일러 이슈)
+  note: storage/file.vais에 이미 path_exists 존재 발견 (file_exists 추가 불필요 — 중복 정의 에러로 파악됨)
 - [ ] 365. sql executor next() missing — Iterator impl 또는 method 추가
 - [ ] 366-369. 잔여 per-file sweep — 에러 유형별 클러스터링 후 타겟 delegate
 - [ ] 370. Tier 2 완료 선언 — OK ≥210/261 확인 + 요약 보고
@@ -92,10 +95,10 @@ Phase 353까지의 패턴 관찰:
 - **Span-less 우선순위**: patterns/module binding unify 경로에 span 부착이 선행되어야 후속 E001 cluster 접근 가능.
 
 mode: auto
-iteration: 6
+iteration: 7
 max_iterations: 30
 strategy: ROI-reorder (user-approved 2026-04-18). 362 → 363 → 364 → 365 → 366-369 per-file sweep → 358-361 deep compiler (last) → 370. 각 phase 실패/scope over 즉시 move on.
-  strategy: sequential — iteration 6, Phase 363 (allocator/bitmap API alignment — PostingStore bitmap DI)
+  strategy: sequential — iteration 7, Phase 364 (TLS FFI alignment — std/file read_file)
 
 ---
 
