@@ -15,8 +15,12 @@
 
 전 세션 추적 중 identified된 deep compiler 이슈들. per-file 수정으로는 해결 불가:
 
-- [ ] 311. Vec.pop().unwrap() dispatch 미도달 — check_method_call 내 receiver_type=Optional(T)일 때 1144 이전 exit 위치 추적 + 수정 (Opus direct)
-  detail: Vec.pop()은 Optional(T) 반환하지만 `.unwrap()`이 Optional 블록에 도달 전 어딘가 earlier return. security/role.vais:371, ops/profiling.vais 등 영향
+- [x] 311. Vec.pop().unwrap() dispatch 미도달 — 2-part fix (Opus direct) ✅ 2026-04-18
+  root cause 1: `Vec.pop` struct lookup hit stdlib's legacy `F pop -> T` signature, so receiver of `.unwrap()` was T (primitive), not Optional<T>. Fixed by extending bypass_struct_lookup to `(Vec, "pop")` (mirrors Phase 300a's HashMap.get pattern).
+  root cause 2: primitive Optional(T)/Result(T,E) method dispatch was nested INSIDE the `if let Some(Named)` guard (line 791-1340), so when receiver_type itself was the Optional/Result variant, the dispatch was unreachable — `.unwrap()` fell through to E004. Extracted the dispatch block out (new unconditional match on receiver_type).
+  changes: crates/vais-types/src/checker_expr/calls.rs (bypass_struct_lookup extended; primitive Optional/Result dispatch moved out of Named guard; added unwrap_or_default variant)
+  verify: phase158 18/18 GREEN, minimal `vec.pop().unwrap()` OK, role.vais advanced from E004 unwrap→E001 Option<&T> mismatch (expected progression; cascading flip blocked on 312).
+  vaisdb OK: 150/261 (unchanged at this phase — Phase 311 enables 321-322 cascading, measured jointly)
 - [ ] 312. HashMap.remove() 반환 타입 정합 — builtin dispatch bypass (Opus direct)
   detail: stdlib/hashmap.vais는 V 직접 반환 (legacy), vaisdb는 Option<V> 기대. Phase 300a가 .get() 고쳤듯 .remove()도 bypass 필요. 대상: security/user.vais, 기타 remove 사용처
 - [ ] 313. Generic T vs concrete 추론 — static method 일반화 파라미터 추적 (Opus direct)
@@ -51,9 +55,17 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 0
+iteration: 1
 max_iterations: 30
 strategy: deep compiler 블로커 먼저 (311-315) → 그 뒤 per-file cascading 일괄 flip (321-325). Phase158 strict gate 매 phase 확인 필수.
+
+### Iter 1 (2026-04-18) — execution strategy
+- Phase 311-313, 315: Opus direct (deep compiler dispatch, design-impl inseparable)
+- Phase 314: impl-sonnet (span 전파 누락 위치 탐색 — bounded refactor)
+- Phase 325: impl-sonnet (vaisdb per-file, cascading 의존 낮음)
+- Sequential: 컴파일러 core 수정은 서로 영향 가능성 높아 parallel 지양. 314, 325는 compiler 미수정이므로 311 이후 parallel 가능.
+- 첫 작업: Phase 311 (Vec.pop().unwrap() dispatch 미도달).
+opus_direct: 311 — check_method_call 내부 dispatch 흐름 설계/수정 inseparable, receiver_type=Optional(T) 분기 변경은 type checker 전체 불변식 이해 필요.
 
 ---
 

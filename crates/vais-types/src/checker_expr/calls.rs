@@ -310,11 +310,18 @@ impl TypeChecker {
         // (which returns V directly) and fall through to the builtin dispatch
         // that returns Option<V>. vaisdb code consistently expects Option<V>,
         // matching Rust semantics.
-        let bypass_struct_lookup = (inner_type == "HashMap"
+        //
+        // Phase 311: same treatment for Vec<T>.pop — stdlib `F pop -> T` is
+        // the legacy infallible variant (panic on empty); vaisdb uses
+        // `vec.pop().unwrap()` pervasively, expecting Option<T> like Rust.
+        // Without the bypass, stdlib's T-returning signature wins and
+        // `.unwrap()` dispatches on T (no such method → E004).
+        let bypass_struct_lookup = ((inner_type == "HashMap"
             || inner_type == "StrHashMap"
             || inner_type == "BTreeMap"
             || inner_type == "IndexMap")
-            && method.node == "get";
+            && method.node == "get")
+            || (inner_type == "Vec" && method.node == "pop");
 
         // First, try to find the method on the struct or enum itself
         if !inner_type.is_empty() && !bypass_struct_lookup {
@@ -1184,66 +1191,12 @@ impl TypeChecker {
                     }),
                 ));
             }
-            // Phase 236: Option<T>/Result<T,E> method fallback. vaisdb uses
-            // .unwrap(), .is_some(), .is_none(), .is_ok(), .is_err(), .ok()
-            // frequently — these need dispatch. Also handle primitive
-            // ResolvedType::Optional(T) and Result(T, E) directly.
-            match &receiver_type {
-                ResolvedType::Optional(inner) => {
-                    match method.node.as_str() {
-                        "unwrap" | "expect" => {
-                            for a in args.iter() {
-                                let _ = self.check_expr(a);
-                            }
-                            return Ok((**inner).clone());
-                        }
-                        "is_some" | "is_none" => {
-                            if args.is_empty() {
-                                return Ok(ResolvedType::Bool);
-                            }
-                        }
-                        "unwrap_or" => {
-                            if args.len() == 1 {
-                                let _ = self.check_expr(&args[0]);
-                                return Ok((**inner).clone());
-                            }
-                        }
-                        // Phase 290: Option<T>.cloned() on &Option<T> → Option<T>.
-                        // Identity at type level — we always have owned Optional
-                        // here, so just echo it back.
-                        "cloned" | "copied" => {
-                            if args.is_empty() {
-                                return Ok(receiver_type.clone());
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                ResolvedType::Result(ok_ty, _err_ty) => {
-                    match method.node.as_str() {
-                        "unwrap" | "expect" => {
-                            for a in args.iter() {
-                                let _ = self.check_expr(a);
-                            }
-                            return Ok((**ok_ty).clone());
-                        }
-                        "is_ok" | "is_err" => {
-                            if args.is_empty() {
-                                return Ok(ResolvedType::Bool);
-                            }
-                        }
-                        "ok" => {
-                            if args.is_empty() {
-                                return Ok(ResolvedType::Optional(Box::new(
-                                    (**ok_ty).clone(),
-                                )));
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                _ => {}
-            }
+            // Phase 236: Option<T>/Result<T,E> method fallback (Named-guarded legacy).
+            // Phase 311: moved primitive ResolvedType::Optional(T)/Result(T,E) dispatch
+            // OUT of this Named-guarded block (see below, right after the closing `}`),
+            // because the old location was unreachable when receiver_type itself was
+            // the enum variant (Optional/Result), not a Named wrapper — that's exactly
+            // the case for `vec.pop().unwrap()` (receiver=Optional<T>).
 
             if let ResolvedType::Named { name, generics } = receiver_named.unwrap_or(&ResolvedType::Unit) {
                 if name == "Option" || name == "Result" {
@@ -1329,6 +1282,69 @@ impl TypeChecker {
                     }
                 }
             }
+        }
+
+        // Phase 311: primitive Optional(T)/Result(T,E) method fallback — reachable
+        // regardless of receiver_named (which is None when receiver IS Optional/Result).
+        // This is the dispatch that makes `vec.pop().unwrap()` typecheck: pop() returns
+        // Optional<T>, and here we handle .unwrap()/.expect()/.is_some() etc. on that.
+        match &receiver_type {
+            ResolvedType::Optional(inner) => {
+                match method.node.as_str() {
+                    "unwrap" | "expect" => {
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok((**inner).clone());
+                    }
+                    "is_some" | "is_none" => {
+                        if args.is_empty() {
+                            return Ok(ResolvedType::Bool);
+                        }
+                    }
+                    "unwrap_or" | "unwrap_or_default" => {
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok((**inner).clone());
+                    }
+                    // Phase 290: Option<T>.cloned()/.copied() — identity.
+                    "cloned" | "copied" => {
+                        if args.is_empty() {
+                            return Ok(receiver_type.clone());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            ResolvedType::Result(ok_ty, _err_ty) => {
+                match method.node.as_str() {
+                    "unwrap" | "expect" => {
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok((**ok_ty).clone());
+                    }
+                    "is_ok" | "is_err" => {
+                        if args.is_empty() {
+                            return Ok(ResolvedType::Bool);
+                        }
+                    }
+                    "ok" => {
+                        if args.is_empty() {
+                            return Ok(ResolvedType::Optional(Box::new((**ok_ty).clone())));
+                        }
+                    }
+                    "unwrap_or" | "unwrap_or_default" => {
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok((**ok_ty).clone());
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
         }
 
         // Phase 24 Task 5: .iter() / .enumerate() builtin for iterable receivers
