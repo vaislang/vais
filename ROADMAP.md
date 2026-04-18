@@ -1,15 +1,65 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 279 완료, vaisdb 마이그레이션 진행 중)
+> **현재 버전**: 0.1.0 (Phase 310 완료, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 279: Box<T> ↔ Box degenerate coercion)
-> **현재 vaisdb OK: 126/261 (48.3%)** — Phase 199 시작 대비 +96 파일 개선
-> **목표**: Tier 1 완료 = vaisdb OK 180/261 (70%+)
+> **최종 업데이트**: 2026-04-18 (Phase 280-310 세션 — OK 126→150, +24)
+> **현재 vaisdb OK: 150/261 (57.5%)** — Phase 199 시작 대비 +120 파일 개선
+> **목표**: Tier 1 완료 = vaisdb OK 180/261 (70%+) — 30 파일 남음
 
-## 🎯 다음 세션 시작점 (Phase 280+)
+## 🎯 다음 세션 시작점 (Phase 311+)
 
 `mode: auto` — 세션 재시작 시 `harness` skill이 이 섹션을 자동 복구하여 이어서 진행.
+
+### Phase 311-320: 새 컴파일러 핵심 블로커 해소 (OK +10~15 예상)
+
+전 세션 추적 중 identified된 deep compiler 이슈들. per-file 수정으로는 해결 불가:
+
+- [ ] 311. Vec.pop().unwrap() dispatch 미도달 — check_method_call 내 receiver_type=Optional(T)일 때 1144 이전 exit 위치 추적 + 수정 (Opus direct)
+  detail: Vec.pop()은 Optional(T) 반환하지만 `.unwrap()`이 Optional 블록에 도달 전 어딘가 earlier return. security/role.vais:371, ops/profiling.vais 등 영향
+- [ ] 312. HashMap.remove() 반환 타입 정합 — builtin dispatch bypass (Opus direct)
+  detail: stdlib/hashmap.vais는 V 직접 반환 (legacy), vaisdb는 Option<V> 기대. Phase 300a가 .get() 고쳤듯 .remove()도 bypass 필요. 대상: security/user.vais, 기타 remove 사용처
+- [ ] 313. Generic T vs concrete 추론 — static method 일반화 파라미터 추적 (Opus direct)
+  detail: shortest_path.vais `reverse_vec(&path)` — generic T가 u64로 instantiate되어야 하는데 안 됨. Phase 300a HashMap.get pattern destructure 고친 것과 유사 접근
+- [ ] 314. span-less E001 진단 품질 개선 — error reporting에서 span 전파 누락 위치 찾기 (impl-sonnet)
+  detail: 17 파일에서 `expected X, found Y` span 정보 없이 surface. 디버깅 난이도 감소 효과
+- [ ] 315. VaisError.new 2-arg vs 3-arg refactor — 컴파일러 3-arg 허용 또는 vaisdb 일괄 rename (Opus direct)
+  detail: vaisdb 전역에서 `VaisError.new(category, code, msg)` 3-arg 호출하지만 실제 `F new(code, message)`는 2-arg. 영향: hnsw/delete, 기타 20+ 파일
+
+### Phase 321-330: vaisdb-side 누적 정리
+
+311-315 해소 이후 per-file cascading 일괄 flip 예상:
+
+- [ ] 321. security/ policy/role/user 3 파일 재시도 (impl-sonnet) [blockedBy: 311,312]
+- [ ] 322. vector/hnsw/ insert/search/bulk/delete/layer (impl-sonnet) [blockedBy: 311,315]
+- [ ] 323. planner/ 잔여 analyzer/optimizer/cost_model/fulltext_plan (impl-sonnet) [blockedBy: 312,313]
+- [ ] 324. storage/recovery/{undo,mod,redo} generic destructuring (impl-sonnet) [blockedBy: 313]
+- [ ] 325. ops/server/client 잔여 metrics/health/backup/handler/types (impl-sonnet)
+
+### 재개 절차
+
+1. `cd /Users/sswoo/study/projects/vais/compiler`
+2. `/harness` 실행 → 이 ROADMAP의 `mode: auto` 감지 → Phase 311부터 재개
+3. 각 phase 완료 시 `cargo test -p vaisc --test e2e --release phase158` (strict gate) + vaisdb OK 카운트 기록
+4. OK 180/261 도달 시 Tier 1 완료 선언
+
+### 핵심 원칙 (CLAUDE.md 연동)
+
+- **엄격 타입 규칙 유지**: Phase158 18/18 test 항상 GREEN. 암시적 bool↔i64 return coercion 금지 (check_function 경로).
+- **Lenient는 impl-method/operator 한정**: strict 보호 테스트가 커버하는 top-level F는 건드리지 않음.
+- **vaisdb-side vs compiler-side 판단**: 단일 파일만 영향 → vaisdb 수정, 여러 파일 영향 → compiler 완화.
+- **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
+
+mode: auto
+iteration: 0
+max_iterations: 30
+strategy: deep compiler 블로커 먼저 (311-315) → 그 뒤 per-file cascading 일괄 flip (321-325). Phase158 strict gate 매 phase 확인 필수.
+
+---
+
+## 📜 완료된 작업 (Phase 280-310, 2026-04-18 세션)
+
+**세션 결과: OK 126 → 150 (+24), phase158 18/18 GREEN 일관 유지**
 
 ### Phase 280-285: 남은 컴파일러 개선 (단기, OK +5 예상)
 
@@ -109,25 +159,9 @@
     - vaisdb: graph/types.vais (partial F set/get/remove), planner/explain.vais/rag/visibility.vais/storage/buffer/readahead.vais (partial F), graph/query/pattern.vais (tuple .0/.1), fulltext/visibility.vais (is_posting_visible_txn), storage/recovery/redo+truncation.vais (WalSegmentHeader.segment_filename), planner/pipeline.vais (type anno 정리), storage/txn/rollback.vais (unpin_page 2-arg)
   verify: phase158 18/18 GREEN 일관 유지, vaisdb OK 144→150 (+6)
 
-### 재개 절차
+---
 
-1. `cd /Users/sswoo/study/projects/vais/compiler`
-2. harness skill 자동 실행 → 이 ROADMAP의 `mode: auto` 감지 → Phase 280부터 재개
-3. 각 phase 완료 시 `cargo test -p vaisc --test e2e --release phase158` (strict gate) + vaisdb OK 카운트 기록
-4. OK 180/261 도달 시 Tier 1 완료 선언
-
-### 핵심 원칙 (CLAUDE.md 연동)
-
-- **엄격 타입 규칙 유지**: Phase158 18/18 test 항상 GREEN. 암시적 bool↔i64 return coercion 금지 (check_function 경로).
-- **Lenient는 impl-method/operator 한정**: strict 보호 테스트가 커버하는 top-level F는 건드리지 않음.
-- **vaisdb-side vs compiler-side 판단**: 단일 파일만 영향 → vaisdb 수정, 여러 파일 영향 → compiler 완화.
-- **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
-
-mode: auto
-iteration: 16
-max_iterations: 30
-strategy: single-error 파일부터 → cascading 해결 → 두-경로 통합. impl-sonnet 위임 가능한 단위로 쪼개서 병렬 진행.
-  strategy: Phase 292-295 — ops/server/client per-file. Opus direct.
+## ⏸ 이전 완료 작업 (Phase 225-279, 요약)
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone
