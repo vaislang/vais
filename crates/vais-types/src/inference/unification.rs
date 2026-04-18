@@ -111,6 +111,22 @@ impl TypeChecker {
             }
         }
 
+        // Phase 279: Box<T> ↔ Box (no generics) — degenerate form from incomplete
+        // inference. Treat as equal regardless of generics.
+        let is_raw_box = |t: &ResolvedType| -> bool {
+            matches!(t, ResolvedType::Named { name, generics }
+                if name == "Box" && generics.is_empty())
+        };
+        let is_boxed = |t: &ResolvedType| -> bool {
+            matches!(t, ResolvedType::Named { name, .. } if name == "Box")
+        };
+        if is_boxed(&expected) && is_raw_box(&found) {
+            return Ok(());
+        }
+        if is_boxed(&found) && is_raw_box(&expected) {
+            return Ok(());
+        }
+
         // Phase 268: Box<T> ↔ T coercion (both directions, at any ref depth).
         // vaisdb uses Box<T> for recursive types (Expr, SelectQuery) and
         // passes &Box<T> where &T is expected. Codegen already handles the
