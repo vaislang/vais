@@ -16,6 +16,8 @@
 ## ⏸ 완료 — Phase 232: vaisdb Str.with_capacity → String (4 files)
 ## ⏸ 완료 — Phase 233: ByteBuffer.new(cap) broader (OK 92→94)
 ## ⏸ 완료 — Phase 234: ByteBuffer.write_u64_le/u32_le aliases
+## ⏸ 완료 — Phase 235: String/Str method fallback (E004 47→45)
+## ⏸ 완료 — Phase 236: Option/Result method fallback (compiler infra)
 
 ---
 
