@@ -71,10 +71,15 @@ impl TypeChecker {
         // them unify in either direction. Without this, vaisdb's `Str` type
         // alias produces 'expected str, found Str' E001 in many call sites.
         // Phase 238: extend to also accept &Str ↔ &str.
+        // Phase 267: also include "String" (Vais owned-string struct in stdlib)
+        // — vaisdb returns String from .to_string()/.from() and passes to
+        // functions expecting str/Str. Distinct ABI but interchangeable in
+        // type checking; codegen handles the conversion.
         let str_aliases = |t: &ResolvedType| -> bool {
             matches!(t, ResolvedType::Str)
                 || matches!(t, ResolvedType::Named { name, generics }
-                    if (name == "Str" || name == "str") && generics.is_empty())
+                    if (name == "Str" || name == "str" || name == "String")
+                        && generics.is_empty())
         };
         if str_aliases(&expected) && str_aliases(&found) {
             return Ok(());
