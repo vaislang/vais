@@ -1153,6 +1153,14 @@ impl TypeChecker {
                     _ => {}
                 }
             }
+            // Phase 353: generic `.as_ptr()` on ANY Named type returns I64.
+            // Vec<u8>/buffers/etc all use this for FFI calls.
+            if method.node == "as_ptr" && args.is_empty() {
+                return Ok(ResolvedType::I64);
+            }
+            if method.node == "as_mut_ptr" && args.is_empty() {
+                return Ok(ResolvedType::I64);
+            }
             // Phase 226: generic `.to_string()` on ANY Named type returns Str.
             // This is a permissive fallback — the real stdlib impl (if any)
             // wins via earlier method lookup. Used by vaisdb for
