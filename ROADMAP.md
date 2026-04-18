@@ -57,8 +57,14 @@ Phase 353까지의 패턴 관찰:
   result: rag/mod.vais 7 → 5 errors. 잔여 5: RagWalManager.new() GCM plumbing (hard — engine lacks gcm field), hierarchy.build_for_document undefined, log_memory_write 2→6 arg, memories tuple mismatch, memory_store.remove undefined.
   blocker: RagWalManager requires &GroupCommitManager but RagEngine has no gcm field. Constructor-chain redesign needed — deferred.
   delegate failure: impl-sonnet agent hit RagWalManager rabbit hole, 0 edits landed. Switched to Opus direct for this phase.
-- [ ] 363. allocator/bitmap API alignment — PostingStore 등 bitmap DI 추가 (Opus direct)
+- [x] 363. allocator/bitmap API alignment — PostingStore 등 bitmap DI 추가 (Opus direct) ✅ 2026-04-18
   detail: fulltext/index/posting.vais, compaction.vais 등 bitmap 전달.
+  changes:
+    - storage/buffer/pool.vais: +get_page_by_id/get_page_mut_by_id (pin+read wrappers), +mark_dirty no-op
+    - storage/page/allocator.vais: +free_page_simple(page_id, file_id) 2-arg variant
+    - fulltext/index/posting.vais: 8× get_page/get_page_mut → _by_id variants, 2× allocate_page(file_id) → alloc_page(file_id, txn_id, 0, gcm), 4× mark_dirty preserved, 1× free_page → free_page_simple
+  result: posting.vais 9 errors → **0 errors (TC clean)** 🎉 — net +1 file OK
+  strategy: add back-compat overloads on pool/allocator rather than rewrite callers
 - [ ] 364. TLS FFI alignment — std/file read_file 정의 또는 vaisdb-local wrapper (Opus direct)
 - [ ] 365. sql executor next() missing — Iterator impl 또는 method 추가
 - [ ] 366-369. 잔여 per-file sweep — 에러 유형별 클러스터링 후 타겟 delegate
@@ -86,11 +92,10 @@ Phase 353까지의 패턴 관찰:
 - **Span-less 우선순위**: patterns/module binding unify 경로에 span 부착이 선행되어야 후속 E001 cluster 접근 가능.
 
 mode: auto
-iteration: 5
+iteration: 6
 max_iterations: 30
 strategy: ROI-reorder (user-approved 2026-04-18). 362 → 363 → 364 → 365 → 366-369 per-file sweep → 358-361 deep compiler (last) → 370. 각 phase 실패/scope over 즉시 move on.
-  strategy: sequential — iteration 5, Phase 362 (rag/mod DI chain — RagWalManager/WalManager 초기화)
-  reorder_rationale: ROADMAP 작업 전략 "ROI 순위: API signature rename > FFI ptr migration > inline closure workaround > deep compiler work" — 362-365 먼저 처리하고 358-361 deep compiler work 세션 말미에 실패 허용적으로 시도.
+  strategy: sequential — iteration 6, Phase 363 (allocator/bitmap API alignment — PostingStore bitmap DI)
 
 ---
 
