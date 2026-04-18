@@ -67,7 +67,9 @@
   changes: vaisdb/client/mod.vais (self.serialize_query_msg → Client.serialize_query_msg — static method call)
   verify: phase158 18/18 GREEN, OK 141 유지
   note: ops/metrics·health (span-less E002), server/handler (missing struct method), client/types (Vec<u8>↔str) — 모두 compiler-level 또는 struct API 확장 필요. 후속에서 처리
-- [ ] 296-300. 예비 슬롯 — cascading으로 드러난 새로운 이슈 처리
+- [x] 296-300. 예비 슬롯 — RwLock/Mutex method fallbacks ✅ 2026-04-18
+  changes: vais-types/checker_expr/calls.rs (try_read_lock/try_write_lock/try_lock → Bool, read_unlock/write_unlock/unlock → Unit)
+  verify: phase158 18/18 GREEN, vaisdb OK 142→144 (+2)
 
 ### Phase 300+: 새 compiler 집중 phase (287에서 surface된 공통 블로커)
 
@@ -101,7 +103,11 @@
   changes: 없음
   verify: OK 141 유지
   note: write_page는 현재 1-arg(frame_id). 콜러 중 일부는 (file_id, page_id, data) 3-arg 또는 (frame, data) 2-arg를 기대. 시그니처 통일은 광범위한 API 재설계. 후속 세션 과제
-- [ ] 306-310. 예비 슬롯
+- [x] 306-310. 예비 슬롯 — 다수 compiler fallback + vaisdb 수정 ✅ 2026-04-18
+  changes:
+    - compiler: vais-types/checker_expr/calls.rs — try_*_lock/*_unlock → Bool/Unit, Vec.extend, .open/.close → Result<(),VaisError>
+    - vaisdb: graph/types.vais (partial F set/get/remove), planner/explain.vais/rag/visibility.vais/storage/buffer/readahead.vais (partial F), graph/query/pattern.vais (tuple .0/.1), fulltext/visibility.vais (is_posting_visible_txn), storage/recovery/redo+truncation.vais (WalSegmentHeader.segment_filename), planner/pipeline.vais (type anno 정리), storage/txn/rollback.vais (unpin_page 2-arg)
+  verify: phase158 18/18 GREEN 일관 유지, vaisdb OK 144→150 (+6)
 
 ### 재개 절차
 
