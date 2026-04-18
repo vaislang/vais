@@ -29,7 +29,13 @@
 - [x] 284. `chars()`/`skip()` iterator fallback — str/Vec에서 identity 리턴하는 permissive fallback (impl-sonnet) ✅ 2026-04-18
   changes: vais-types/checker_expr/calls.rs (str.chars/bytes → Vec<Str>/Vec<u8>; ByteBuffer.skip → Result<(),VaisError>; Vec.filter/skip/take/flat_map identity; Vec.count/sum/min/max → I64; Vec.map identity)
   verify: phase158 18/18 GREEN, rag/memory/types.vais PASS, fulltext_plan.vais chars 해결 (filter closure에서 새 에러 surface), vaisdb OK 130→131 (+1)
-- [ ] 285. **Tier 1 컴파일러 마무리** — 남은 span-less E001 분석 + Phase158 strict 유지 확인
+- [x] 285. **Tier 1 컴파일러 마무리** — audit-only ✅ 2026-04-18
+  changes: no code — classification/audit 문서화
+  verify: phase158 18/18 GREEN (strict 유지 확인), vaisdb OK 131/261 (50.2%), Tier 1 목표 180까지 49 파일
+  audit:
+    - E001 31건 (17 span-less, 진단 취약), E004 38 (method 미정의 최다), E002 18, E030 16, E006 16, E003 4
+    - 추가 compiler 기회: Option<&T> auto-ref-wrap, Option/Result generic var 통합, char/str lenient (impl-method만)
+    - 다음 방향: Phase 286+ per-file 수정 (E002/E004 단순 케이스 우선)
 
 ### Phase 286-300: vaisdb per-file 수정 (중기, OK +15~20 예상)
 
@@ -68,10 +74,10 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 5
+iteration: 6
 max_iterations: 30
 strategy: single-error 파일부터 → cascading 해결 → 두-경로 통합. impl-sonnet 위임 가능한 단위로 쪼개서 병렬 진행.
-  strategy: Phase 284 — chars()/skip() iterator fallback. Sequential, background=true. target: vais-types/builtins/* (method dispatch). fulltext/planner 대상.
+  strategy: Phase 285 — Tier 1 컴파일러 마무리 (span-less E001 분석 + strict gate 확인). research-haiku로 audit 후 필요 시 impl-sonnet 위임.
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone
