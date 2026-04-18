@@ -69,7 +69,10 @@ Phase 353까지의 패턴 관찰:
   changes: security/tls.vais import `std/file.{read_file, file_exists}` → `storage/file.{read_file, path_exists}` (vaisdb-local), 3× file_exists call sites → path_exists
   result: tls.vais 4 errors → 3 errors. 잔여 3 = span-less `std not defined` (Phase 359 territory, 컴파일러 이슈)
   note: storage/file.vais에 이미 path_exists 존재 발견 (file_exists 추가 불필요 — 중복 정의 에러로 파악됨)
-- [ ] 365. sql executor next() missing — Iterator impl 또는 method 추가
+- [x] 365. sql executor next() missing — Iterator impl 또는 method 추가 ✅ 2026-04-18 (partial)
+  changes: sql/executor/mod.vais에 `W Executor { open/next/close }` trait 추가
+  result: subquery.vais 13 errors → 13 errors (unchanged count). Trait 추가만으로는 `Box<dyn Executor>` method dispatch 해결 안됨 — 컴파일러 레벨 제약.
+  note: trait 추가는 infrastructure 개선이지만 OK 개수에는 영향 없음. Phase 358 (deep compiler work)와 연결된 블로커.
 - [ ] 366-369. 잔여 per-file sweep — 에러 유형별 클러스터링 후 타겟 delegate
 - [ ] 370. Tier 2 완료 선언 — OK ≥210/261 확인 + 요약 보고
 
@@ -95,7 +98,7 @@ Phase 353까지의 패턴 관찰:
 - **Span-less 우선순위**: patterns/module binding unify 경로에 span 부착이 선행되어야 후속 E001 cluster 접근 가능.
 
 mode: auto
-iteration: 7
+iteration: 8
 max_iterations: 30
 strategy: ROI-reorder (user-approved 2026-04-18). 362 → 363 → 364 → 365 → 366-369 per-file sweep → 358-361 deep compiler (last) → 370. 각 phase 실패/scope over 즉시 move on.
   strategy: sequential — iteration 7, Phase 364 (TLS FFI alignment — std/file read_file)
