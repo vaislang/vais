@@ -15,8 +15,15 @@
 
 이번 세션 경험: impl-sonnet agent가 investigation loop에서 tool budget 초과 반복 → **Opus direct가 generic propagation / span-offset 종류 디버깅에 필요**. bounded single-file 수정만 impl-sonnet 위임.
 
-- [ ] 326. Option<&T> generic propagation — HashMap.get() 결과가 `Option<&V>` 구체화 안됨 (Opus direct)
-  detail: security/{policy,role,user}.vais 잔여 E001 "expected Option<&RoleInfo>, found RoleInfo?" — `&`-ref layer가 Optional 내부로 전파 실패. check_method_call 내 HashMap.get dispatch 또는 auto-ref coercion 경로 점검. Phase 311이 Optional primitive 경로를 고쳤듯 `&`-inner 경로도 유사 수정 필요.
+- [x] 326. Option<&T> generic propagation — HashMap.get → Option<&V> + Named↔Optional bridge (Opus direct) ✅ 2026-04-18
+  root causes:
+    1. HashMap.get/get_mut builtin dispatch returned Option<V> (owned). Rust semantics are Option<&V> / Option<&mut V> — caller signatures like `F get_role(...) -> Option<&RoleInfo>` fail to unify.
+    2. User-written `Option<T>` resolves to `Named{"Option",[T]}` (stdlib enum form); builtin dispatch + sugar `T?` produce `Optional(T)`. Two forms never unified.
+  changes:
+    - crates/vais-types/src/checker_expr/calls.rs: HashMap.get → Option<&V>, HashMap.get_mut → Option<&mut V>, Vec.get/get_mut same
+    - crates/vais-types/src/inference/unification.rs: 새 bridge arm — Named{"Option",[T]} ↔ Optional(T), Named{"Result",[T,E]} ↔ Result(T,E)
+  verify: phase158 18/18 GREEN, vaisdb OK 154→155 (+1). role.vais get_role() 에러 해소, 남은 error는 다른 패턴 (pattern binding과 Ref 레이어 상호작용).
+  note: resolve.rs 수준 normalization 시도는 vaisdb OK 154→51 대폭 regression (stdlib Result enum path와 충돌) — revert 후 unify bridge로 전환.
 - [ ] 327. UTF-8 byte-offset span bug — 코멘트의 multi-byte char가 이후 라인 span 오염 (Opus direct)
   detail: planner/pipeline.vais:219 에러가 comment 라인을 가리킴. logos/ariadne span이 char-offset 아닌 byte-offset 기반으로 섞여 vs CR/LF 또는 multi-byte 경계에서 어긋나는 케이스 추적. lexer or error reporter 수준 버그.
 - [ ] 328. E030 no-such-field cascading fix — storage/recovery/{undo,redo}, planner/{optimizer,types} (impl-sonnet, 1-file budget 10 tool)
@@ -115,7 +122,7 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 0
+iteration: 2
 max_iterations: 30
 strategy: Opus direct로 326 (Option<&T> propagation) + 327 (UTF-8 span bug) 먼저 해소 → 328-330 병렬 impl-sonnet sweeps (1-file budget 10 tool) → 331-334 vaisdb cascading → 335 Tier 1 완료 선언. Phase158 strict gate 매 phase 확인 필수.
 

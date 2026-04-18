@@ -235,6 +235,26 @@ impl TypeChecker {
                 self.unify(a_ok, b_ok)?;
                 self.unify(a_err, b_err)
             }
+            // Phase 326: bridge Named{"Option", [T]} ↔ Optional(T) and
+            // Named{"Result", [T, E]} ↔ Result(T, E). User-written `Option<T>`
+            // / `Result<T, E>` resolve to the Named form (stdlib enum path),
+            // while the sugar `T?` and builtin dispatches produce the
+            // Optional / Result variants. Without this bridge, the two
+            // representations are treated as distinct by unify even though
+            // they're semantically identical.
+            (ResolvedType::Named { name, generics }, ResolvedType::Optional(inner))
+            | (ResolvedType::Optional(inner), ResolvedType::Named { name, generics })
+                if name == "Option" && generics.len() == 1 =>
+            {
+                self.unify(&generics[0], inner)
+            }
+            (ResolvedType::Named { name, generics }, ResolvedType::Result(ok, err))
+            | (ResolvedType::Result(ok, err), ResolvedType::Named { name, generics })
+                if name == "Result" && generics.len() == 2 =>
+            {
+                self.unify(&generics[0], ok)?;
+                self.unify(&generics[1], err)
+            }
             (ResolvedType::Ref(a), ResolvedType::Ref(b)) => self.unify(a, b),
             (ResolvedType::RefMut(a), ResolvedType::RefMut(b)) => self.unify(a, b),
             (ResolvedType::Slice(a), ResolvedType::Slice(b)) => self.unify(a, b),

@@ -937,7 +937,11 @@ impl TypeChecker {
                         }
                     }
                     "get" | "get_mut" => {
-                        // Vec.get(i) → Option<T>; HashMap.get(k) → Option<V>
+                        // Phase 326: Vec.get(i) → Option<&T>; HashMap.get(k) → Option<&V>.
+                        // Rust semantics — previously returned Option<T> which
+                        // broke user-declared `Option<&V>` return types. vaisdb
+                        // code consistently treats the inner as a ref
+                        // (pattern-binds then reads fields via auto-deref).
                         if !args.is_empty() {
                             for a in args.iter() {
                                 let _ = self.check_expr(a);
@@ -949,7 +953,12 @@ impl TypeChecker {
                             generics.get(1).cloned()
                         }
                         .unwrap_or(ResolvedType::I64);
-                        return Ok(ResolvedType::Optional(Box::new(elem)));
+                        let ref_elem = if method.node == "get_mut" {
+                            ResolvedType::RefMut(Box::new(elem))
+                        } else {
+                            ResolvedType::Ref(Box::new(elem))
+                        };
+                        return Ok(ResolvedType::Optional(Box::new(ref_elem)));
                     }
                     "keys" => {
                         // Phase 264: HashMap.keys() / Vec — Vec<K> with no args.
