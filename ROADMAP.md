@@ -51,8 +51,12 @@ Phase 353까지의 패턴 관찰:
   detail: role.vais get_role_id 등 Some(r.field) wrap 문제. match arm pattern binding flow 재설계 조사.
 - [ ] 361. UTF-8 byte-offset span bug (Opus direct, Phase 337 follow-up)
   detail: pipeline.vais:219 comment line 오표시. lexer span 또는 ariadne byte→char 변환 추적.
-- [ ] 362. rag/mod DI chain — RagWalManager(gcm), WalManager 등 (Opus direct)
+- [x] 362. rag/mod DI chain — RagWalManager(gcm), WalManager 등 (Opus direct) ✅ 2026-04-18 (partial)
   detail: rag 엔진 초기화에서 DI chain 해소.
+  changes: rag/mod.vais 4 sites (chunk→chunk_document, chunk.text→chunk.chunk_text, log_doc_delete→log_document_delete(0,id), close_session 3-arg, insert→insert_entry) + memory/storage.vais 2 methods added (insert_entry, get_all)
+  result: rag/mod.vais 7 → 5 errors. 잔여 5: RagWalManager.new() GCM plumbing (hard — engine lacks gcm field), hierarchy.build_for_document undefined, log_memory_write 2→6 arg, memories tuple mismatch, memory_store.remove undefined.
+  blocker: RagWalManager requires &GroupCommitManager but RagEngine has no gcm field. Constructor-chain redesign needed — deferred.
+  delegate failure: impl-sonnet agent hit RagWalManager rabbit hole, 0 edits landed. Switched to Opus direct for this phase.
 - [ ] 363. allocator/bitmap API alignment — PostingStore 등 bitmap DI 추가 (Opus direct)
   detail: fulltext/index/posting.vais, compaction.vais 등 bitmap 전달.
 - [ ] 364. TLS FFI alignment — std/file read_file 정의 또는 vaisdb-local wrapper (Opus direct)
@@ -82,11 +86,11 @@ Phase 353까지의 패턴 관찰:
 - **Span-less 우선순위**: patterns/module binding unify 경로에 span 부착이 선행되어야 후속 E001 cluster 접근 가능.
 
 mode: auto
-iteration: 4
+iteration: 5
 max_iterations: 30
-strategy: Phase 354 (closure inline cascading) → 355-357 (mass refactor) → 358-361 (Opus direct compiler deep work) → 362-365 (vaisdb-side major API) → 366-369 cluster sweep → 370 Tier 2 선언. 각 phase 실패/scope over 즉시 move on.
-  strategy: sequential — iteration 4, Phase 357 (planner panic markers; Opus direct per ROADMAP)
-  opus_direct: 357 — panic semantics decision (add `partial` vs replace `?` unwrap); design-impl inseparable.
+strategy: ROI-reorder (user-approved 2026-04-18). 362 → 363 → 364 → 365 → 366-369 per-file sweep → 358-361 deep compiler (last) → 370. 각 phase 실패/scope over 즉시 move on.
+  strategy: sequential — iteration 5, Phase 362 (rag/mod DI chain — RagWalManager/WalManager 초기화)
+  reorder_rationale: ROADMAP 작업 전략 "ROI 순위: API signature rename > FFI ptr migration > inline closure workaround > deep compiler work" — 362-365 먼저 처리하고 358-361 deep compiler work 세션 말미에 실패 허용적으로 시도.
 
 ---
 
