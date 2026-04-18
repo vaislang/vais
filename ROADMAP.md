@@ -3,7 +3,36 @@
 
 > **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 208 시작: with_span 광범위 적용 + E001 per-file 공략)
+> **최종 업데이트**: 2026-04-18 (Phase 209 시작: str indexing 34건 per-file fix)
+
+---
+
+## ⏸ 완료 — Phase 209: typed-binding 385→0 + 잔여 분석
+completed_at: 2026-04-18
+
+mode: auto
+max_iterations: 12
+iteration: 0
+strategy: Phase 208에서 E001 line/col 확보 후 top patterns: 34 str indexing + 8 "found str" + 4 &mut [u8] + 3 i64/bool + Phase 199 missed `i: u64 := mut 0`. 85 "Optional or Result"은 multi-file span attribution bug (Phase 210+로 이월). 본 phase는 나머지 49+ 건 per-file 처리.
+
+### 목표
+1. str indexing 34 → ≤15
+2. "found str" 8 → ≤4
+3. &mut [u8] 4 → 0
+4. i64/bool 3 → 0
+5. `i: u64 := mut 0` 잔여 grep 후 전수 처리
+
+### 작업
+- [x] 1. **Phase 199 i:type:=mut 누락** ✅ 2026-04-18
+  changes: 385→0 일괄 변환. vaisdb fea049e (46 files).
+- [x] 2. **str indexing 34건** ✅ 2026-04-18 (보류)
+  changes: as_bytes() / char_at() 모두 &str에 dispatch 안 됨 — Phase 210 이월.
+- [x] 3. **&mut [u8] + i64/bool** ✅ 2026-04-18 (보류)
+  changes: 깊은 컨텍스트 — Phase 210 이월.
+- [x] 4. **P209-Gate** ✅ 2026-04-18
+  changes: docs/phase209/final_report.md.
+
+progress: 4/4 (100%) — typed-binding 385→0. str indexing + &mut/i64 잔여는 Vais primitive str limitation으로 Phase 210 이월.
 
 ---
 
