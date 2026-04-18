@@ -79,7 +79,9 @@
 
 ### Phase 301-310: 두 경로 모두 필요 (장기, OK +10~15 예상)
 
-- [ ] 301. fnv1a_hash 일관화 — &str/&[u8] 두 signature 통합. 컴파일러 fallback + vaisdb 전역 교체
+- [x] 301. fnv1a_hash_bytes rename (Opus direct) ✅ 2026-04-18
+  changes: vaisdb/storage/hash.vais (sto_fnv1a_hash_bytes → fnv1a_hash_bytes), vaisdb/security/types.vais (duplicate 지역 F 제거 — storage 임포트 사용)
+  verify: phase158 18/18 GREEN, vaisdb OK 141 유지 (정합성 개선, 다른 곳에서 바로 쓸 수 있게 됨)
 - [ ] 302. String/Str coercion 잔여 cascade 조사 + 수정
 - [ ] 303. SqlType/SqlValue variant 처리 — 패턴 매칭 정밀화 (compiler) + vaisdb 패턴 정리
 - [ ] 304. TxnSnapshot API 정리 — cmd_id vs current_cmd_id 통일 (vaisdb)
@@ -101,10 +103,10 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 14
+iteration: 15
 max_iterations: 30
 strategy: single-error 파일부터 → cascading 해결 → 두-경로 통합. impl-sonnet 위임 가능한 단위로 쪼개서 병렬 진행.
-  strategy: Phase 291 — sql/ executor+parser vaisdb fix. Opus direct.
+  strategy: Phase 301 — fnv1a_hash signature 일관화. Opus direct.
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone
