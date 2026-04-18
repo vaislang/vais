@@ -1144,6 +1144,25 @@ impl TypeChecker {
                 }
                 return Ok(receiver_type.clone());
             }
+            // Phase 306: generic lock ops fallback. vaisdb uses
+            // try_read_lock / try_write_lock / try_lock / read_unlock / write_unlock / unlock
+            // pervasively on lock-like types. Try-ops return Option<Guard>
+            // but callers use them as Bool in `I cond { }`. Unlock ops
+            // are void.
+            if matches!(
+                method.node.as_str(),
+                "try_read_lock" | "try_write_lock" | "try_lock"
+            ) && args.is_empty()
+            {
+                return Ok(ResolvedType::Bool);
+            }
+            if matches!(
+                method.node.as_str(),
+                "read_unlock" | "write_unlock" | "unlock"
+            ) && args.is_empty()
+            {
+                return Ok(ResolvedType::Unit);
+            }
             // Phase 236: Option<T>/Result<T,E> method fallback. vaisdb uses
             // .unwrap(), .is_some(), .is_none(), .is_ok(), .is_err(), .ok()
             // frequently — these need dispatch. Also handle primitive
