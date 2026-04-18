@@ -626,6 +626,19 @@ impl TypeChecker {
                         return Ok(ResolvedType::Str);
                     }
                 }
+                "to_bits" | "to_bytes" => {
+                    // f64.to_bits() → i64 bit pattern; numeric.to_bytes() → similar.
+                    if args.is_empty() {
+                        return Ok(ResolvedType::I64);
+                    }
+                }
+                "from_bits" => {
+                    // f64.from_bits(i64) → f64 (associated, but called as method).
+                    if args.len() == 1 {
+                        let _ = self.check_expr(&args[0]);
+                        return Ok(receiver_type.clone());
+                    }
+                }
                 _ => {}
             }
         }
