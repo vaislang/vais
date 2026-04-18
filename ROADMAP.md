@@ -3,7 +3,81 @@
 
 > **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 199 plan: vaisdb Full migration 전략 A 확정, Tier 1 mechanical patterns 먼저. Phase 199~203 연속 로드맵)
+> **최종 업데이트**: 2026-04-18 (Phase 200 시작: Phase 199 final_report.md의 P0 작업 우선 — C1 cascade + C5 LW destructure + C7 path-style)
+
+---
+
+## ⏳ 진행 중 — Phase 200: vaisdb P001 잔여 처리 (Tier 1 마무리)
+
+mode: auto
+max_iterations: 15
+iteration: 1
+  iter1 strategy: Task #9 Recon-200 only unblocked. Opus direct (Phase 199에서 haiku 2회 cutoff 학습). 6 tool budget으로 grep + bulk vaisc check 수행.
+strategy: Phase 199에서 47 → 28 (40% 해소). 잔여 28건은 final_report.md의 P0/P1/P2 분류 기반. **P0 우선** (cascading C1, LW destructure, path-style match arm) — 28 → ≤10 목표. Phase 199 교훈 반영: (a) recon은 Opus direct로 grep+vaisc check 직접, (b) batch fix는 5~7 파일/agent로 작게, (c) agent commit 신뢰 X — verify 후 직접 commit, (d) **cascading instance는 한 파일 내 전수 grep으로 재실측 필수**.
+
+### 배경 — Phase 199 잔여
+
+- vaisdb P001: 28 (Phase 199 종료 기준, docs/phase199/final_report.md)
+- 분류 (final_report.md):
+  - **P0** (mechanical 잔여, 12 파일): C1 cascade ~5, C5 LW destructure 5, C7 path-style 2
+  - **P1** (Vais grammar 결정 필요, 6 파일): Fn(T) 2, mut-in-pattern 2, vec! self 2
+  - **P2** (one-off, 10건): C8 struct field rebind 2, C16 unbalanced } 2, b'literal' 1, lifetime 1, 기타 4
+- Phase 198/199 교훈: vaisdb는 외부 git repo, compiler **무수정**
+
+### 목표 (Phase 200 Exit Criteria)
+
+1. **vaisdb P001: 28 → ≤10** (P0 작업으로 65% 추가 해소)
+2. **P1 grammar 결정 보류건 명확화**: Fn(T)/mut-in-pat/vec!-self 각각 "Vais 의도된 제약" vs "추가 grammar 필요" 판정. 결정 시 RFC 또는 issue 작성.
+3. **compiler baseline 유지**: 179/179, clippy 0/0, E2E 2596/0/0 불변
+4. **산출물**: docs/phase200/{recon, p0_results, p1_decisions, final_report}.md
+
+### 작업 (6개)
+
+- [x] 1. **Recon-200: 28 P001 cascading 전수 측정** (Opus direct) ✅ 2026-04-18
+  changes: docs/phase200/recon.md. 28 first-error → 54+ cascading 실측. **graph/wal.vais 단독 27 instance** (`LF x: type = 0` 패턴) 발견. P0 처리 순서 재정의: graph/wal 단일 fix가 가장 큰 가치. C1d/C8/C12/C13 등 P2 8건 추가 식별.
+
+- [ ] 2. **P0-A: C1 cascading 잔여** (impl-sonnet, 5~7 파일/batch) [blockedBy: 1]
+  - 같은 파일 내 추가 `LF i: u64 = 0`, `from_le_bytes`, `parse_*` 일괄
+  - ByteBuffer 활용 가이드 따라 처리 (필요 시 vaisdb storage/bytes.vais 헬퍼 추가)
+  - per-file `vaisc check` gate
+  - 해소 추정: ~5 P001
+
+- [ ] 3. **P0-B: C5 LW destructure** (Opus direct, per-file judgment) [blockedBy: 1]
+  - `LW key, _: &collection {}` 5 파일: security/{user,role,policy} + storage/recovery/{undo,truncation}
+  - 명시적 iterator pattern으로 재작성. 의미 보존 검증 필수
+  - 해소 추정: 5 P001
+
+- [ ] 4. **P0-C: C7 path-style match arm** (impl-sonnet) [blockedBy: 1]
+  - `sql/types.SqlValue.X` 2 파일: planner/{graph_plan, fulltext_plan}
+  - `U sql/types as t;` 추가 + match arm 짧은 이름으로 sed
+  - 해소 추정: 2 P001
+
+- [ ] 5. **P1-Decision: grammar 보류건 결정** (Opus direct, write-only) [blockedBy: 1]
+  - Fn(T) callable type, Some((mut x,..)) pattern mut, vec!(0u8; self.X) macro self
+  - 각각 (a) compiler grammar 추가, (b) Vais 의도된 제약, (c) 우회 패턴 결정
+  - 산출물: docs/phase200/p1_decisions.md (각 항목별 결정 근거 + 우회 패턴 또는 RFC seed)
+
+- [ ] 6. **Gate: 재측정 + Phase 201 seed** (impl-sonnet) [blockedBy: 2,3,4,5]
+  - 전수 vaisc check 재실측 (cascading 포함)
+  - Phase 200 Exit criteria 달성 확인
+  - 잔여 → Phase 201 분류 (struct field drift E030, use-after-move E022 등 도메인별)
+  - 산출물: docs/phase200/final_report.md
+
+### Phase 200 파일 영향
+
+- `/Users/sswoo/study/projects/vais/lang/packages/vaisdb/src/**/*.vais` — 수정 (외부 git repo)
+- `/Users/sswoo/study/projects/vais/compiler/docs/phase200/*.md` — 산출물 (이 repo)
+- compiler `crates/`, `std/`, `examples/` — **수정 금지** (P1-Decision에서 "grammar 추가" 결정 나면 그 작업은 별도 phase로 분리)
+
+### 핵심 교훈 (Phase 199에서 학습)
+
+- [ ] mid-scale recon은 Opus direct (haiku 2회 cutoff 경험)
+- [ ] sonnet batch는 5~7 파일 cap (13 batch에서 cutoff)
+- [ ] agent commit step verify 후 직접 처리 (A1 agent commit 누락 사례)
+- [ ] Cascading instance 첫 1건만 카운트하면 underestimate (Phase 199에서 47 → 28 처리했으나 "13 파일 처리"로는 19건 해소)
+- [ ] vaisdb 외부 repo, compiler repo와 commit 분리 엄수
+
+progress: 0/6 (0%)
 
 ---
 
