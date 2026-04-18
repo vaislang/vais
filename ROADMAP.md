@@ -1,11 +1,11 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 353 **Tier 1 완료**, vaisdb 마이그레이션 진행 중)
+> **현재 버전**: 0.1.0 (Phase 357 **Tier 2 세션 1** 완료, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 353 세션 — OK 176→180, +4) 🎯
-> **현재 vaisdb OK: 180/261 (68.97%)** — Phase 199 시작 대비 +150 파일 개선
-> **🎉 Tier 1 완료** — 다음 목표: Tier 2 = OK 210/261 (80%+)
+> **최종 업데이트**: 2026-04-18 (Phase 354-357 세션 — Phase 354 fulltext_plan closure, 355 allocator WAL stubs, 356 sql parser variant prefix, 357 planner partial markers) 🎯
+> **현재 vaisdb OK: 180/261 측정 대기** — 다음 세션 시작 시 전체 빌드로 재측정 필요 (개별 파일 TC 개선 확인됨)
+> **다음 목표**: Tier 2 = OK 210/261 (80%+). Phase 358부터 재개.
 
 ## 🎯 다음 세션 시작점 (Phase 354+) — Tier 2 드라이브
 
@@ -101,6 +101,20 @@ strategy: Phase 354 (closure inline cascading) → 355-357 (mass refactor) → 3
 | 5 | 350-352 | 172 | 176 | +4 |
 | 6 | **353** | 176 | **180** | +4 |
 | **합계** | 43 phases | — | — | **+30** |
+
+### Phase 354-357 완료 (Tier 2 세션 1)
+
+| Phase | 작업 | 결과 |
+|-------|-----|------|
+| 354 | fulltext_plan closure inline | 1 file: `chars().filter(\|c\| ...).count()` → `split().len() - 1`. 1→0 errors |
+| 355 | allocator WAL stubs + ddl.vais (partial) | allocator: `alloc_page`/`free_page` 4/5-arg 추가. ddl.vais 5→4 errors |
+| 356 | sql parser variant prefix (partial) | parser_ddl.vais 15× `Statement.*`/`TokenKind.*` prefix. 6→4 errors |
+| 357 | planner partial markers | analyzer.vais 12× `partial F`, optimizer.vais 2×. TC panic error 전량 제거 |
+
+세션 메타:
+- 설치 `vaisc` Apr 10 판으로 stale → Phase 355 직전 `cargo install --path crates/vaisc --force`로 rebuild. 다음 세션에서도 드라이브 초기에 `vaisc --version` 확인 권장.
+- phase158 strict gate 18/18 green 유지 (매 phase 완료 시 재검증).
+- 다음 세션 Phase 358 (closure body type inference, Opus direct compiler deep work) — ROI 낮음, 실패 시 Phase 362 (vaisdb allocator/bitmap API) 먼저 시도 권장.
 
 주요 compiler 개선:
 - Phase 311/312: Vec.pop / HashMap.remove → Option<T> (bypass_struct_lookup 확장)
