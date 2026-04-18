@@ -504,6 +504,13 @@ impl TypeChecker {
                         return Ok(ResolvedType::Str);
                     }
                 }
+                "starts_with" | "ends_with" | "contains" => {
+                    // Phase 265: str.starts_with("...") → Bool.
+                    if args.len() == 1 {
+                        let _ = self.check_expr(&args[0]);
+                        return Ok(ResolvedType::Bool);
+                    }
+                }
                 "parse_i64" | "parse_int" => {
                     if args.is_empty() {
                         return Ok(ResolvedType::Result(
@@ -654,6 +661,15 @@ impl TypeChecker {
                     // f64.to_bits() → i64 bit pattern; numeric.to_bytes() → similar.
                     if args.is_empty() {
                         return Ok(ResolvedType::I64);
+                    }
+                }
+                "to_le_bytes" | "to_be_bytes" | "to_ne_bytes" => {
+                    // Phase 265: numeric.to_le_bytes() → Vec<u8>.
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Named {
+                            name: "Vec".to_string(),
+                            generics: vec![ResolvedType::U8],
+                        });
                     }
                 }
                 "from_bits" => {
