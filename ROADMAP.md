@@ -3,7 +3,25 @@
 
 > **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 221: Vec/HashMap auto-deref one level)
+> **최종 업데이트**: 2026-04-18 (Phase 222: Vec.of_one/repeat helpers + vaisdb 적용)
+
+---
+
+## ⏸ 완료 — Phase 222: Vec.of_one/repeat → vec! 매크로 대체
+completed_at: 2026-04-18
+
+mode: auto
+strategy: vaisdb의 vec![x], vec![x; n] 매크로 호출이 E004. stdlib에 of_one/repeat 추가 + vaisdb 일괄 변환.
+
+### 변경
+- std/vec.vais: F of_one(value: T) -> Vec<T>, F repeat(value: T, count: i64) -> Vec<T>
+- vaisdb 7+ 파일: vec! → Vec.of_one/Vec.repeat (perl regex bulk)
+
+### 결과
+- E004 55→53, OK 87→88
+- baseline green
+
+progress: 1/1 (100%)
 
 ---
 

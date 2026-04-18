@@ -137,6 +137,27 @@ X Vec<T> {
         self.len
     }
 
+    # Construct a Vec containing a single element. Phase 222 helper for
+    # vaisdb migration off Rust `vec![x]` syntax.
+    F of_one(value: T) -> Vec<T> {
+        v := mut Vec.with_capacity(1)
+        v.push(value)
+        v
+    }
+
+    # Construct a Vec by repeating `value` `count` times. Phase 222 helper
+    # for vaisdb migration off Rust `vec![x; n]` syntax.
+    F repeat(value: T, count: i64) -> Vec<T> {
+        v := mut Vec.with_capacity(count)
+        i := mut 0
+        L {
+            I i >= count { B }
+            v.push(value)
+            i = i + 1
+        }
+        v
+    }
+
     # Get the capacity
     F capacity(&self) -> i64 {
         self.cap
