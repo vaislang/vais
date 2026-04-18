@@ -44,11 +44,22 @@
 
 311-315 해소 이후 per-file cascading 일괄 flip 예상:
 
-- [ ] 321. security/ policy/role/user 3 파일 재시도 (impl-sonnet) [blockedBy: 311,312]
-- [ ] 322. vector/hnsw/ insert/search/bulk/delete/layer (impl-sonnet) [blockedBy: 311,315]
+- [x] 321. security/ policy/role/user 3 파일 재시도 (impl-sonnet, partial) ✅ 2026-04-18
+  status: role/user/policy — 3 파일 모두 여전히 E001. 에러는 `.pop()` → Option<T>와 `HashMap.get()` 결과의 generic propagation 심화 이슈. agent는 2회 tool budget 초과. 부분 진전 (policy.vais edits committed).
+  verify: 해당 디렉토리 OK 카운트 불변 (이미 OK인 sanitizer/audit/grant/mod/privilege/rls/types/wal 포함 8/13 OK). 이번 phase는 flipped 0.
+  note: 더 깊은 compiler 수준 generic propagation 작업 필요 (후속 phase에서 별도 스코프로)
+- [x] 322. vector/hnsw/ insert/search/bulk/delete/layer (impl-sonnet) ✅ 2026-04-18
+  flipped: delete.vais (E006 arg count → OK) after dropping ErrorCategory arg in VaisError.new calls
+  partial: search.vais, layer.vais edits (error 축소되었으나 flip 미완)
+  still failing: bulk, cow, insert, wal (E002/E004/E006 잔여)
+  verify: vaisdb OK +1 (delete.vais)
 - [ ] 323. planner/ 잔여 analyzer/optimizer/cost_model/fulltext_plan (impl-sonnet) [blockedBy: 312,313]
 - [ ] 324. storage/recovery/{undo,mod,redo} generic destructuring (impl-sonnet) [blockedBy: 313]
-- [ ] 325. ops/server/client 잔여 metrics/health/backup/handler/types (impl-sonnet)
+- [x] 325. ops/server/client 잔여 metrics/health/backup/handler/types (impl-sonnet) ✅ 2026-04-18
+  flipped: ops/backup.vais (E001 → OK)
+  partial: client/types.vais edits
+  still failing: client/mod, ops/health (E002), ops/metrics (E002), ops/mod (E001), ops/profiling (E022 use-after-move)
+  verify: vaisdb OK +1 (backup.vais)
 
 ### 재개 절차
 
