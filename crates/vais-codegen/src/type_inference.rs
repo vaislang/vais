@@ -797,14 +797,15 @@ impl CodeGenerator {
                                 name: "Vec".to_string(),
                                 generics: vec![val_ty],
                             },
-                            "get" | "get_mut" => ResolvedType::Named {
-                                name: "Option".to_string(),
-                                generics: vec![ResolvedType::Ref(Box::new(val_ty))],
-                            },
-                            "insert" | "remove" => ResolvedType::Named {
-                                name: "Option".to_string(),
-                                generics: vec![val_ty],
-                            },
+                            "get" => ResolvedType::Optional(Box::new(
+                                ResolvedType::Ref(Box::new(val_ty)),
+                            )),
+                            "get_mut" => ResolvedType::Optional(Box::new(
+                                ResolvedType::RefMut(Box::new(val_ty)),
+                            )),
+                            "insert" | "remove" => {
+                                ResolvedType::Optional(Box::new(val_ty))
+                            }
                             "contains_key" | "is_empty" => ResolvedType::Bool,
                             "len" | "capacity" => ResolvedType::I64,
                             "clear" => ResolvedType::Unit,
