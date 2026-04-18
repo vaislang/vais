@@ -668,6 +668,55 @@ impl TypeChecker {
             _ => None,
         };
         if let Some(ResolvedType::Named { name, generics }) = receiver_named {
+            // ByteBuffer-specific built-in dispatch. Phase 245.
+            if name == "ByteBuffer" {
+                match method.node.as_str() {
+                    "len" | "position" | "remaining" | "capacity" => {
+                        if args.is_empty() {
+                            return Ok(ResolvedType::I64);
+                        }
+                    }
+                    "to_vec" | "into_vec" => {
+                        if args.is_empty() {
+                            return Ok(ResolvedType::Named {
+                                name: "Vec".to_string(),
+                                generics: vec![ResolvedType::U8],
+                            });
+                        }
+                    }
+                    "as_bytes" => {
+                        // Returns raw byte pointer (i64).
+                        if args.is_empty() {
+                            return Ok(ResolvedType::I64);
+                        }
+                    }
+                    "clone" => {
+                        if args.is_empty() {
+                            return Ok(receiver_type.clone());
+                        }
+                    }
+                    "write_u8" | "write_u16_le" | "write_u32_le" | "write_u64_le"
+                    | "write_i32_le" | "write_i64_le" | "write_f32_le" | "write_f64_le"
+                    | "write_bytes" | "write_str" | "write_varint" | "seek" | "rewind"
+                    | "ensure_capacity" | "clear" => {
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok(ResolvedType::I64);
+                    }
+                    "read_u8" | "read_u16_le" | "read_u32_le" | "read_u64_le"
+                    | "read_i32_le" | "read_i64_le" | "read_f32_le" | "read_f64_le"
+                    | "read_bytes" | "read_str" | "read_varint"
+                    | "get_u8" | "get_u16_le" | "get_u32_le" | "get_u64_le"
+                    | "get_i32_le" | "get_i64_le" | "get_f32_le" | "get_f64_le" => {
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok(ResolvedType::I64);
+                    }
+                    _ => {}
+                }
+            }
             if name == "Vec" || name == "HashMap" || name == "StrHashMap" {
                 match method.node.as_str() {
                     "len" | "size" | "capacity" => {
