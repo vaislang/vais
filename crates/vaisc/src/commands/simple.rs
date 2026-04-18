@@ -8,7 +8,7 @@ use crate::utils::{print_plugin_diagnostics, walkdir};
 use colored::Colorize;
 use std::collections::HashSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use vais_codegen::TargetTriple;
 use vais_lexer::tokenize;
@@ -135,6 +135,35 @@ fn cmd_run_jit(_input: &PathBuf, _verbose: bool) -> Result<(), String> {
     Err("vaisc was built without the `jit` feature; rebuild with `--features jit`".to_string())
 }
 
+/// Walk up from `start` looking for a Vais package source root.
+///
+/// Returns the directory that should be used as `source_root` for import
+/// resolution. Detection rules (in order):
+/// 1. The nearest ancestor that contains a `vais.toml` — and we return its
+///    `src/` subdirectory if it exists, otherwise the directory itself.
+/// 2. The nearest ancestor named `src` (so `pkg/src/foo/bar.vais` → `pkg/src`).
+///
+/// Returns `None` if no package root is detected; callers fall back to the
+/// input file's parent directory.
+fn find_package_source_root(start: &Path) -> Option<PathBuf> {
+    let mut cur: Option<&Path> = start.parent();
+    while let Some(dir) = cur {
+        if dir.join("vais.toml").is_file() {
+            let src = dir.join("src");
+            return Some(if src.is_dir() { src } else { dir.to_path_buf() });
+        }
+        cur = dir.parent();
+    }
+    let mut cur: Option<&Path> = start.parent();
+    while let Some(dir) = cur {
+        if dir.file_name().map(|n| n == "src").unwrap_or(false) {
+            return Some(dir.to_path_buf());
+        }
+        cur = dir.parent();
+    }
+    None
+}
+
 pub(crate) fn cmd_check(
     input: &PathBuf,
     verbose: bool,
@@ -160,7 +189,11 @@ pub(crate) fn cmd_check(
     query_db.set_cfg_values(std::collections::HashMap::new());
     let mut loaded_modules: HashSet<PathBuf> = HashSet::new();
     let mut loading_stack: Vec<PathBuf> = Vec::new();
-    let source_root = canonical_input.parent().map(|p| p.to_path_buf());
+    // Walk up from the input file looking for a package root (vais.toml or src/).
+    // If found, use that as source_root so imports like `U security/types` resolve
+    // package-relative instead of being limited to the input file's parent.
+    let source_root = find_package_source_root(&canonical_input)
+        .or_else(|| canonical_input.parent().map(|p| p.to_path_buf()));
     let merged = load_module_with_imports_internal(
         &canonical_input,
         &mut loaded_modules,
@@ -174,10 +207,15 @@ pub(crate) fn cmd_check(
     let ast = match merged {
         Ok(module) => module,
         Err(import_err) => {
-            // Fall back to single-file parse if import resolution fails
-            if verbose {
-                println!("{} import resolution: {}", "warning:".yellow().bold(), import_err);
-            }
+            // Fall back to single-file parse if import resolution fails.
+            // Emit a warning by default (not just on --verbose). Silent fallback
+            // previously led to misleading "undefined field / function" errors
+            // when the real problem was that stdlib couldn't be located.
+            eprintln!(
+                "{} import resolution failed, falling back to single-file parse:\n  {}\n  Hint: run from the compiler directory or set VAIS_STD_PATH to the stdlib.",
+                "warning:".yellow().bold(),
+                import_err
+            );
             let parsed = parse(&source)
                 .map_err(|e| error_formatter::format_parse_error(&e, &source, input))?;
             vais_ast::Module {

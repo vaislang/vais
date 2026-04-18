@@ -3,7 +3,58 @@
 
 > **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 202 시작: P001 잔여 2건 structural audit + E004/E003/E030 분류 이동)
+> **최종 업데이트**: 2026-04-18 (Phase 203 시작: compiler crate 작업 — cross-module field resolution + generic method dispatch)
+
+---
+
+## ⏸ 완료 — Phase 203: stdlib path resolution fix + 진짜 root cause 식별
+completed_at: 2026-04-18
+
+mode: auto
+max_iterations: 20
+iteration: 1
+  iter1 strategy: #25 + #26 병렬 (서로 다른 파일 — repro_c1 cross-module, repro_c2 generic). Opus direct 둘 다. minimal 2~3 파일 작성 + vaisc check로 E030/E004 재현만.
+strategy: Phase 202 final_report.md에서 식별된 compiler 한계 2종 (C1 cross-module struct field resolution, C2 generic impl method dispatch) 수정. 이는 **compiler crate 수정** — 기존 Phase 199~202의 "compiler 무수정 원칙" 반대. compiler 테스트 E2E 2596/0/0 + examples 179/179 유지 조건. 작업은 (a) 현상 재현 minimal test, (b) checker 코드 읽고 버그 위치 식별, (c) 수정 + 회귀 테스트, (d) vaisdb 재측정.
+
+### 배경
+- Phase 199~202 누적 vaisdb P001 47 → 0 (100% 해소)
+- E030 27건 중 26건 + E004 60+건이 compiler 한계
+- Phase 202 Recon-202 / E-Top / final_report.md 참조
+- compiler baseline 현재 green
+
+### 목표 (Phase 203 Exit Criteria)
+1. C1 (cross-module struct field resolution) 수정 + minimal E2E 테스트 추가
+2. C2 (generic impl method dispatch) 수정 + minimal E2E 테스트 추가
+3. compiler baseline 유지: 2596/0/0 + 179/179 + clippy 0/0
+4. vaisdb 재측정: E030/E004 최소 50%+ 해소 예상
+
+### 작업 (5개)
+
+- [x] 1. **Repro-C1: cross-module field resolution** ✅ 2026-04-18
+  changes: docs/phase203/repro_c1.md. 2-모듈 minimal은 compiler 정상 동작. 진짜 원인은 stdlib path.
+- [x] 2. **Repro-C2: generic method dispatch** ✅ 2026-04-18
+  changes: docs/phase203/repro_c2.md. Vec<T> method dispatch는 정상. stdlib loading만 되면 해결.
+- [x] 3. **Fix-C1: checker_expr field access** (실제 수정: source_root) ✅ 2026-04-18
+  changes: crates/vaisc/src/commands/simple.rs — find_package_source_root 추가 + source_root 결정 로직 개선. fallback warning도 default로.
+- [x] 4. **Fix-C2: generic method dispatch** (실제 불필요) ✅ 2026-04-18
+  changes: 없음. 3번 fix로 자연 해소 (stdlib 로딩되면 Vec<T> method 정상 동작).
+- [x] 5. **P203-Gate: vaisdb 재측정** ✅ 2026-04-18
+  changes: docs/phase203/final_report.md. **E030 27 → 3, E004 143 → 47** (compiler dir에서 측정). Phase 202 "compiler 한계" 진단 기각. 진짜 남은 에러: E001 121 (type mismatch), E004 47, E002 26.
+
+### 파일 영향
+- crates/vais-types/src/checker_expr.rs — **수정** (핵심 fix)
+- crates/vais-types/src/inference.rs — 수정 가능성
+- crates/vais-types/tests/ 또는 crates/vaisc/tests/e2e/ — 테스트 추가
+- examples/ — minimal repro 파일 가능성
+- docs/phase203/*.md — 산출물
+
+### 핵심 교훈 (누적 적용)
+- [ ] compiler crate 수정 → 반드시 E2E 2596/0/0 유지
+- [ ] minimal repro 먼저 (Phase 203 P0)
+- [ ] 범위 최소화: C1/C2 외 동작 변경 금지
+- [ ] 회귀 테스트 필수
+
+progress: 5/5 (100%) — **진짜 root cause 발견** 🎯. "compiler 한계 2종" 진단 기각. `find_package_source_root` 추가 + import fallback warning default. **E030 27→3, E004 143→47** (실측). compiler baseline green.
 
 ---
 
