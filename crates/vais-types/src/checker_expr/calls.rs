@@ -67,7 +67,8 @@ impl TypeChecker {
                                 if args.len() == field_types.len() {
                                     for (arg, expected_ty) in args.iter().zip(field_types.iter()) {
                                         let arg_ty = self.check_expr(arg)?;
-                                        self.unify(expected_ty, &arg_ty)?;
+                                        self.unify(expected_ty, &arg_ty)
+                                            .map_err(|e| e.with_span(arg.span))?;
                                     }
                                 }
                             }
@@ -194,7 +195,8 @@ impl TypeChecker {
                             None
                         };
                         if propagated.is_none() && !is_str_i64_coercion {
-                            self.unify(&sig.params[i].1, &arg_type)?;
+                            self.unify(&sig.params[i].1, &arg_type)
+                                .map_err(|e| e.with_span(arg.span))?;
                         }
                         // Check dependent type refinement for literal arguments
                         if let ResolvedType::Dependent {
@@ -344,7 +346,8 @@ impl TypeChecker {
                     } else {
                         self.substitute_generics(param_type, &generic_substitutions)
                     };
-                    self.unify(&expected_type, &arg_type)?;
+                    self.unify(&expected_type, &arg_type)
+                        .map_err(|e| e.with_span(arg.span))?;
                 }
 
                 // Substitute generics in return type
@@ -417,7 +420,8 @@ impl TypeChecker {
 
             for (param_type, arg) in param_types.iter().zip(args) {
                 let arg_type = self.check_expr(arg)?;
-                self.unify(param_type, &arg_type)?;
+                self.unify(param_type, &arg_type)
+                    .map_err(|e| e.with_span(arg.span))?;
             }
 
             // For async trait methods, wrap the return type in Future
@@ -452,7 +456,8 @@ impl TypeChecker {
                         });
                     }
                     let arg_type = self.check_expr(&args[0])?;
-                    self.unify(&ResolvedType::I64, &arg_type)?;
+                    self.unify(&ResolvedType::I64, &arg_type)
+                        .map_err(|e| e.with_span(args[0].span))?;
                     return Ok(ResolvedType::I64);
                 }
                 "contains" | "startsWith" | "endsWith" => {
@@ -464,7 +469,8 @@ impl TypeChecker {
                         });
                     }
                     let arg_type = self.check_expr(&args[0])?;
-                    self.unify(&ResolvedType::Str, &arg_type)?;
+                    self.unify(&ResolvedType::Str, &arg_type)
+                        .map_err(|e| e.with_span(args[0].span))?;
                     return Ok(ResolvedType::Bool);
                 }
                 "indexOf" => {
@@ -476,7 +482,8 @@ impl TypeChecker {
                         });
                     }
                     let arg_type = self.check_expr(&args[0])?;
-                    self.unify(&ResolvedType::Str, &arg_type)?;
+                    self.unify(&ResolvedType::Str, &arg_type)
+                        .map_err(|e| e.with_span(args[0].span))?;
                     return Ok(ResolvedType::I64);
                 }
                 "substring" => {
@@ -488,9 +495,11 @@ impl TypeChecker {
                         });
                     }
                     let start_type = self.check_expr(&args[0])?;
-                    self.unify(&ResolvedType::I64, &start_type)?;
+                    self.unify(&ResolvedType::I64, &start_type)
+                        .map_err(|e| e.with_span(args[0].span))?;
                     let end_type = self.check_expr(&args[1])?;
-                    self.unify(&ResolvedType::I64, &end_type)?;
+                    self.unify(&ResolvedType::I64, &end_type)
+                        .map_err(|e| e.with_span(args[1].span))?;
                     return Ok(ResolvedType::Str);
                 }
                 "isEmpty" => {
@@ -512,7 +521,8 @@ impl TypeChecker {
                         });
                     }
                     let arg_type = self.check_expr(&args[0])?;
-                    self.unify(&ResolvedType::Str, &arg_type)?;
+                    self.unify(&ResolvedType::Str, &arg_type)
+                        .map_err(|e| e.with_span(args[0].span))?;
                     return Ok(ResolvedType::Str);
                 }
                 "as_bytes" => {
@@ -684,7 +694,8 @@ impl TypeChecker {
                         let arg_type = self.check_expr(arg)?;
                         let expected_type =
                             self.substitute_generics(param_type, &generic_substitutions);
-                        self.unify(&expected_type, &arg_type)?;
+                        self.unify(&expected_type, &arg_type)
+                            .map_err(|e| e.with_span(arg.span))?;
                     }
 
                     // Substitute generics in return type
@@ -747,7 +758,8 @@ impl TypeChecker {
                 // Non-generic struct - original behavior
                 for (param_type, arg) in param_types.iter().zip(args) {
                     let arg_type = self.check_expr(arg)?;
-                    self.unify(param_type, &arg_type)?;
+                    self.unify(param_type, &arg_type)
+                        .map_err(|e| e.with_span(arg.span))?;
                 }
 
                 return Ok(method_sig.ret.clone());
