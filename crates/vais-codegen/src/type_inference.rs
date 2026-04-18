@@ -652,13 +652,34 @@ impl CodeGenerator {
                 if matches!(recv_type, ResolvedType::Str) {
                     return match method.node.as_str() {
                         "len" | "charAt" | "char_at" | "byte_at" | "indexOf" | "contains"
-                        | "startsWith" | "endsWith" | "isEmpty" | "is_empty" => ResolvedType::I64,
+                        | "startsWith" | "endsWith" | "isEmpty" | "is_empty"
+                        | "starts_with" | "ends_with" => ResolvedType::I64,
                         "substring" | "push_str" | "to_uppercase" | "to_lowercase" | "trim"
-                        | "clone" => ResolvedType::Str,
+                        | "to_string" | "clone" => ResolvedType::Str,
                         "as_bytes" | "into_bytes" => ResolvedType::Named {
                             name: "Vec".to_string(),
                             generics: vec![ResolvedType::U8],
                         },
+                        "split" | "lines" | "split_whitespace" => ResolvedType::Named {
+                            name: "Vec".to_string(),
+                            generics: vec![ResolvedType::Str],
+                        },
+                        "parse_i64" | "parse_u64" | "parse_i32" | "parse_u32" => {
+                            ResolvedType::Result(
+                                Box::new(ResolvedType::I64),
+                                Box::new(ResolvedType::Named {
+                                    name: "VaisError".to_string(),
+                                    generics: vec![],
+                                }),
+                            )
+                        }
+                        "parse_f64" | "parse_f32" => ResolvedType::Result(
+                            Box::new(ResolvedType::F64),
+                            Box::new(ResolvedType::Named {
+                                name: "VaisError".to_string(),
+                                generics: vec![],
+                            }),
+                        ),
                         _ => ResolvedType::I64,
                     };
                 }
