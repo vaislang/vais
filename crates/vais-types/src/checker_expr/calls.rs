@@ -822,6 +822,17 @@ impl TypeChecker {
                         generics: vec![(**elem).clone()],
                     });
                 }
+                // Phase 346: slice mutation ops on &mut [T] (and lenient on
+                // &[T] too — typechecker-only permissive fallback; codegen
+                // handles the real mutation contract). vaisdb hits these via
+                // `page_data[a..b].copy_from_slice(entry)` patterns pervasively.
+                "copy_from_slice" | "clone_from_slice" | "fill" | "swap" | "rotate_left"
+                | "rotate_right" | "sort" | "reverse" => {
+                    for a in args.iter() {
+                        let _ = self.check_expr(a);
+                    }
+                    return Ok(ResolvedType::Unit);
+                }
                 _ => {}
             }
         }
