@@ -18,6 +18,29 @@
 
 ---
 
+## Baseline (2026-04-19)
+
+Measured via `cargo test -p vaisc --test integrity --release -- --nocapture` on commit `e5c6ca79` (Phase 0.2 skeleton).
+
+| Category | Pass | Fail | Total | Pass rate |
+|----------|------|------|-------|-----------|
+| compiler_syntax | 30 | 0 | 30 | 100% |
+| compiler_stages | 14 | 0 | 14 | 100% (1 #[ignored] for B7 known bug) |
+| std_files (std/*.vais, each `ok_codegen`) | **37** | 45 | 82 | 45.1% |
+| vaisdb_files (vaisdb/src/**/*.vais, `ok_codegen_pkg`) | **177** | 84 | 261 | 67.8% |
+| phase158 strict type gate | 18 | 0 | 18 | 100% |
+
+These numbers are the **official regression floor** for all subsequent Phase gates:
+
+- **Phase 0-5 gates MUST NOT reduce any category's pass count below these baseline numbers.**
+- Phase 1-3 gates target keeping all numbers ≥ baseline while TYPE/CODEGEN work proceeds.
+- Phase 4 target: `std_files` → 82/82 (100%).
+- Phase 5 target: `vaisdb_files` ≥ baseline × 1.15 (~203/261) as a first checkpoint, with top-level build paths specifically certified.
+
+CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatically.
+
+---
+
 ## Phases 개요
 
 | # | Phase | 목표 | Gate 지표 |
@@ -34,9 +57,9 @@
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 2
+iteration: 3
 max_iterations: 30
-  strategy: sequential — iteration 2, Phase 0.2 (integrity matrix skeleton; impl-sonnet background)
+  strategy: parallel — iteration 3, #26 (trivial ROADMAP edit, direct) + #27 (CI script, impl-sonnet background); no file overlap.
 
 ### Phase 0 — Baseline & Integrity Matrix
 
@@ -54,11 +77,9 @@ max_iterations: 30
     vaisdb_files pass=177 fail=84 total=261
   fixes during gate: LF i in → LF i:, 병렬 exe race (per-path hashed exe name).
   phase158: 18/18 green.
-- [ ] 3. Baseline 측정 및 ROADMAP 기록 (Opus direct) [blockedBy: 2]
-  detail: matrix 전체 실행하여 baseline 숫자 획득. ROADMAP `## Baseline (YYYY-MM-DD)` 섹션에 고정.
-  완료 기준:
-  - compiler_syntax: N/M, compiler_stages: N/M, ecosystem_health std: N/M, vaisdb: N/M 전부 기록
-  - 모든 숫자가 실제 실행 결과와 일치
+- [x] 3. Baseline 측정 및 ROADMAP 기록 (Opus direct) ✅ 2026-04-19
+  detail: integrity matrix 실행 → `## Baseline (2026-04-19)` 섹션 공식화.
+  changes: ROADMAP.md에 baseline 표 추가 (37/82 std, 177/261 vaisdb, 30/30 syntax, 14/14 stages, 18/18 phase158). 향후 모든 Phase gate 여기 참조.
 - [ ] 4. CI 스크립트 (impl-sonnet) [blockedBy: 2]
   detail: `scripts/check-integrity.sh` — 전체 matrix 실행, 어떤 테스트라도 실패 시 exit 1. Cargo alias `cargo integrity`.
   완료 기준:
