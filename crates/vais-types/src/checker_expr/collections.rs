@@ -417,10 +417,15 @@ impl TypeChecker {
                     }
                     // Ref or RefMut to Vec<T> is also indexable
                     ResolvedType::Ref(ref inner) | ResolvedType::RefMut(ref inner) => {
+                        // Phase 266: peel one extra Ref layer (&&[T] → &[T]).
+                        let inner_peeled: &ResolvedType = match inner.as_ref() {
+                            ResolvedType::Ref(t) | ResolvedType::RefMut(t) => t.as_ref(),
+                            _ => inner.as_ref(),
+                        };
                         if let ResolvedType::Named {
                             ref name,
                             ref generics,
-                        } = **inner
+                        } = inner_peeled
                         {
                             if name == "Vec" && !generics.is_empty() {
                                 // Phase 262: &Vec<T>[range] → Slice<T>.
@@ -438,6 +443,22 @@ impl TypeChecker {
                                 }
                                 return Some(Ok(self.apply_substitutions(&generics[0])));
                             }
+                        }
+                        // Phase 266: &&[T] / &[T] indexing returns T.
+                        if let ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) =
+                            inner_peeled
+                        {
+                            if is_slice {
+                                return Some(Ok(ResolvedType::Slice(elem.clone())));
+                            }
+                            if !index_type.is_integer() {
+                                return Some(Err(TypeError::Mismatch {
+                                    expected: "integer".to_string(),
+                                    found: index_type.to_string(),
+                                    span: Some(index.span),
+                                }));
+                            }
+                            return Some(Ok((**elem).clone()));
                         }
                         // Phase 252: &str / &Str indexing returns I64 (byte).
                         if matches!(**inner, ResolvedType::Str)
