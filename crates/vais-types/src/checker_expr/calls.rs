@@ -558,19 +558,49 @@ impl TypeChecker {
         }
 
         // Built-in slice methods
-        if matches!(
-            &receiver_type,
-            ResolvedType::Slice(_) | ResolvedType::SliceMut(_)
-        ) && method.node.as_str() == "len"
-        {
-            if !args.is_empty() {
-                return Err(TypeError::ArgCount {
-                    expected: 0,
-                    got: args.len(),
-                    span: Some(expr_span),
-                });
+        if let ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) = &receiver_type {
+            match method.node.as_str() {
+                "len" => {
+                    if !args.is_empty() {
+                        return Err(TypeError::ArgCount {
+                            expected: 0,
+                            got: args.len(),
+                            span: Some(expr_span),
+                        });
+                    }
+                    return Ok(ResolvedType::I64);
+                }
+                // `slice.to_vec()` produces an owned Vec<T>. Phase 217 added
+                // for vaisdb migration (was E004 'to_vec not defined' on
+                // every &[u8] / &[T] receiver, ~10 sites).
+                "to_vec" => {
+                    if !args.is_empty() {
+                        return Err(TypeError::ArgCount {
+                            expected: 0,
+                            got: args.len(),
+                            span: Some(expr_span),
+                        });
+                    }
+                    return Ok(ResolvedType::Named {
+                        name: "Vec".to_string(),
+                        generics: vec![(**elem).clone()],
+                    });
+                }
+                "clone" => {
+                    if !args.is_empty() {
+                        return Err(TypeError::ArgCount {
+                            expected: 0,
+                            got: args.len(),
+                            span: Some(expr_span),
+                        });
+                    }
+                    return Ok(ResolvedType::Named {
+                        name: "Vec".to_string(),
+                        generics: vec![(**elem).clone()],
+                    });
+                }
+                _ => {}
             }
-            return Ok(ResolvedType::I64);
         }
 
         // H5-H6 builtin Vec/HashMap/ByteBuffer/Mutex methods removed
