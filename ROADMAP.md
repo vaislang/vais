@@ -12,7 +12,9 @@
 mode: auto
 max_iterations: 15
 iteration: 1
-  iter1 strategy: Task #9 Recon-200 only unblocked. Opus direct (Phase 199에서 haiku 2회 cutoff 학습). 6 tool budget으로 grep + bulk vaisc check 수행.
+  iter1 strategy: Task #9 Recon-200 only unblocked. Opus direct (Phase 199에서 haiku 2회 cutoff 학습). 6 tool budget으로 grep + bulk vaisc check 수행. ✅ recon.md. 핵심: graph/wal.vais 27 cascading.
+iteration: 2
+  iter2 strategy: 4 unblocked (#10/11/12/13). 파일 영향 100% 분리: #10=graph/wal+vector/quantize/mod+deletion_bitmap, #11=security 3+recovery 2, #12=planner 2, #13=docs only. Worktree 미사용 (Phase 195/198 lesson). impl-sonnet 3개 + Opus direct 1 (#13 docs). #11은 P0-B per-file judgment heavy → Opus direct. #10 graph/wal 27 cascade는 균일 패턴 → impl-sonnet single batch (5 파일 batch cap 위반이지만 모두 동일 라인 대체이므로 안전 — 실패 시 Opus). 병렬 background 4개.
 strategy: Phase 199에서 47 → 28 (40% 해소). 잔여 28건은 final_report.md의 P0/P1/P2 분류 기반. **P0 우선** (cascading C1, LW destructure, path-style match arm) — 28 → ≤10 목표. Phase 199 교훈 반영: (a) recon은 Opus direct로 grep+vaisc check 직접, (b) batch fix는 5~7 파일/agent로 작게, (c) agent commit 신뢰 X — verify 후 직접 commit, (d) **cascading instance는 한 파일 내 전수 grep으로 재실측 필수**.
 
 ### 배경 — Phase 199 잔여
@@ -36,26 +38,14 @@ strategy: Phase 199에서 47 → 28 (40% 해소). 잔여 28건은 final_report.m
 - [x] 1. **Recon-200: 28 P001 cascading 전수 측정** (Opus direct) ✅ 2026-04-18
   changes: docs/phase200/recon.md. 28 first-error → 54+ cascading 실측. **graph/wal.vais 단독 27 instance** (`LF x: type = 0` 패턴) 발견. P0 처리 순서 재정의: graph/wal 단일 fix가 가장 큰 가치. C1d/C8/C12/C13 등 P2 8건 추가 식별.
 
-- [ ] 2. **P0-A: C1 cascading 잔여** (impl-sonnet, 5~7 파일/batch) [blockedBy: 1]
-  - 같은 파일 내 추가 `LF i: u64 = 0`, `from_le_bytes`, `parse_*` 일괄
-  - ByteBuffer 활용 가이드 따라 처리 (필요 시 vaisdb storage/bytes.vais 헬퍼 추가)
-  - per-file `vaisc check` gate
-  - 해소 추정: ~5 P001
-
-- [ ] 3. **P0-B: C5 LW destructure** (Opus direct, per-file judgment) [blockedBy: 1]
-  - `LW key, _: &collection {}` 5 파일: security/{user,role,policy} + storage/recovery/{undo,truncation}
-  - 명시적 iterator pattern으로 재작성. 의미 보존 검증 필수
-  - 해소 추정: 5 P001
-
-- [ ] 4. **P0-C: C7 path-style match arm** (impl-sonnet) [blockedBy: 1]
-  - `sql/types.SqlValue.X` 2 파일: planner/{graph_plan, fulltext_plan}
-  - `U sql/types as t;` 추가 + match arm 짧은 이름으로 sed
-  - 해소 추정: 2 P001
-
-- [ ] 5. **P1-Decision: grammar 보류건 결정** (Opus direct, write-only) [blockedBy: 1]
-  - Fn(T) callable type, Some((mut x,..)) pattern mut, vec!(0u8; self.X) macro self
-  - 각각 (a) compiler grammar 추가, (b) Vais 의도된 제약, (c) 우회 패턴 결정
-  - 산출물: docs/phase200/p1_decisions.md (각 항목별 결정 근거 + 우회 패턴 또는 RFC seed)
+- [x] 2. **P0-A: C1 cascading 잔여** (impl-sonnet) ✅ 2026-04-18
+  changes: graph/wal.vais 27 instance + deletion_bitmap 3 from_le_bytes + vector/quantize/mod 1. vaisdb commit 0d10429. PROMISE: COMPLETE.
+- [x] 3. **P0-B: C5 LW destructure** (Opus direct) ✅ 2026-04-18
+  changes: security/{user,role,policy} + storage/recovery/{undo,truncation}. HashMap `.keys()` 또는 Vec index iteration. truncation.vais 추가 2개 LW cascade. undo.vais `Some(&x)` ref pattern 제거. vaisdb commit 3b1150d.
+- [x] 4. **P0-C: C7 path-style match arm** (impl-sonnet) ✅ 2026-04-18
+  changes: planner/{graph_plan, fulltext_plan}. `U sql/types.{SqlValue}` destructured import. vaisdb commit 5d29b3a. PROMISE: COMPLETE.
+- [x] 5. **P1-Decision: grammar 보류건 결정** (Opus direct) ✅ 2026-04-18
+  changes: docs/phase200/p1_decisions.md. 4 sub-pattern 모두 "(c) 우회 — Vais 의도된 제약" 결정 (trait dispatch, binding 분리, Vec.repeat 헬퍼, trait+generic). compiler grammar 변경 불필요.
 
 - [ ] 6. **Gate: 재측정 + Phase 201 seed** (impl-sonnet) [blockedBy: 2,3,4,5]
   - 전수 vaisc check 재실측 (cascading 포함)
