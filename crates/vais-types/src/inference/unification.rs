@@ -95,6 +95,49 @@ impl TypeChecker {
             return Ok(());
         }
 
+        // Phase 268: Box<T> ↔ T coercion (both directions, at any ref depth).
+        // vaisdb uses Box<T> for recursive types (Expr, SelectQuery) and
+        // passes &Box<T> where &T is expected. Codegen already handles the
+        // deref automatically.
+        let unbox = |t: &ResolvedType| -> Option<ResolvedType> {
+            if let ResolvedType::Named { name, generics } = t {
+                if name == "Box" && generics.len() == 1 {
+                    return Some(generics[0].clone());
+                }
+            }
+            None
+        };
+        if let Some(e_inner) = unbox(&expected) {
+            if self.unify(&e_inner, &found).is_ok() {
+                return Ok(());
+            }
+        }
+        if let Some(f_inner) = unbox(&found) {
+            if self.unify(&expected, &f_inner).is_ok() {
+                return Ok(());
+            }
+        }
+        // &Box<T> ↔ &T / &mut Box<T> ↔ &mut T
+        let unbox_ref = |t: &ResolvedType| -> Option<ResolvedType> {
+            match t {
+                ResolvedType::Ref(inner) => unbox(inner).map(|u| ResolvedType::Ref(Box::new(u))),
+                ResolvedType::RefMut(inner) => {
+                    unbox(inner).map(|u| ResolvedType::RefMut(Box::new(u)))
+                }
+                _ => None,
+            }
+        };
+        if let Some(e_inner) = unbox_ref(&expected) {
+            if self.unify(&e_inner, &found).is_ok() {
+                return Ok(());
+            }
+        }
+        if let Some(f_inner) = unbox_ref(&found) {
+            if self.unify(&expected, &f_inner).is_ok() {
+                return Ok(());
+            }
+        }
+
         // Phase 239+240: &Vec<T> ↔ &[T] ↔ Vec<T> ↔ [T] slice coercion.
         // vaisdb passes &Vec<u8> where &[u8] expected, and Vec<u8> where
         // &[u8]/[u8] expected. Element types must unify.
