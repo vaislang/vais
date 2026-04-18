@@ -56,6 +56,11 @@
 - [ ] 292-295. 남은 ops/, server/, client/ 파일들
 - [ ] 296-300. 예비 슬롯 — cascading으로 드러난 새로운 이슈 처리
 
+### Phase 300+: 새 compiler 집중 phase (287에서 surface된 공통 블로커)
+
+- [ ] 300a. **HashMap<K,V>.get_mut / get pattern destructuring V 복구** — `self.users.get_mut(&name)` 반환값이 `Option<&mut V>`인데 `Some(u) => u` 패턴에서 u의 타입이 '?'로 유실. 영향: security/user.vais, security/role.vais, security/policy.vais, planner/cache.vais, 기타 10+ 파일. compiler-side로 풀면 cascading 해소.
+- [ ] 300b. **enum variant destructuring + Option.is_some** — `HybridPlanNode.VectorScan { alias, .. }`의 alias (Option<Str>)에 `.is_some()` 호출 시 '?'로 처리됨. 대상: planner/explain.vais 등.
+
 ### Phase 301-310: 두 경로 모두 필요 (장기, OK +10~15 예상)
 
 - [ ] 301. fnv1a_hash 일관화 — &str/&[u8] 두 signature 통합. 컴파일러 fallback + vaisdb 전역 교체
