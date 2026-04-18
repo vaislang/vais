@@ -118,11 +118,21 @@ X RwLock<T> {
         RwLockReadGuard::new(&self)
     }
 
+    # Alias for read — vaisdb-style read_lock name. Phase 225.
+    F read_lock(&self) -> RwLockReadGuard<T> {
+        @.read()
+    }
+
     # Acquire a write lock
     F write(&self) -> RwLockWriteGuard<T> {
         __rwlock_write_lock(self.os_rwlock)
         self.writer = 1
         RwLockWriteGuard::new(&self)
+    }
+
+    # Alias for write — vaisdb-style write_lock name. Phase 225.
+    F write_lock(&self) -> RwLockWriteGuard<T> {
+        @.write()
     }
 
     # Try to acquire read lock
