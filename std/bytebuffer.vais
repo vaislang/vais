@@ -226,6 +226,16 @@ X ByteBuffer {
         @.read_i64_le()
     }
 
+    # Write f32 value (caller passes i32 bit pattern). Phase 228.
+    F write_f32_le(&self, bits: i64) -> i64 {
+        @.write_i32_le(bits)
+    }
+
+    # Read f32 value as i32 bit pattern. Phase 228.
+    F read_f32_le(&self) -> i64 {
+        @.read_i32_le()
+    }
+
     # Read a length-prefixed string
     # Format: [i32 length (LE)] [bytes]
     # Returns a new heap-allocated null-terminated string as i64 pointer
