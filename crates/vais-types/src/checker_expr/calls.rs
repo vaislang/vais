@@ -1721,10 +1721,12 @@ impl TypeChecker {
 
         // Fallback: for unknown types, if method returns Self type
         if method.node == "new"
+            || method.node.starts_with("new_")
             || method.node.starts_with("create")
             || method.node.starts_with("from")
             || method.node == "clone"
             || method.node == "default"
+            || method.node.starts_with("default_")
         {
             for arg in args {
                 let _ = self.check_expr(arg)?;
