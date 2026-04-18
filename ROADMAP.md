@@ -1,10 +1,10 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 254 완료, vaisdb 마이그레이션 진행 중)
+> **현재 버전**: 0.1.0 (Phase 261 완료, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 254: lenient cond accepts integer truthy)
-> **현재 vaisdb OK: 103/261 (39.5%)** — Phase 199 시작 대비 +73 파일 개선
+> **최종 업데이트**: 2026-04-18 (Phase 261: str_recv broadens Named Str/str)
+> **현재 vaisdb OK: 110/261 (42.1%)** — Phase 199 시작 대비 +80 파일 개선
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone
@@ -36,6 +36,13 @@
 ## ⏸ 완료 — Phase 252: **str/&str indexing returns I64** (OK 102→105 +3)
 ## ⏸ 완료 — Phase 253: lenient deref Optional/Result/Var (E001 -7)
 ## ⏸ 완료 — Phase 254: **lenient cond — I/while/ternary accept i64 truthy** (OK 101→103, E001 22→13)
+## ⏸ 완료 — Phase 255: lenient impl-method bool↔int return (strict F unaffected)
+## ⏸ 완료 — Phase 256: lenient `!x` accepts integer truthy (OK 103→104)
+## ⏸ 완료 — Phase 257: lenient `&&` / `||` operands (OK 104→105)
+## ⏸ 완료 — Phase 258: lenient `==` / `!=` for bool↔integer compare (E001 -2)
+## ⏸ 완료 — Phase 259: **Option/Result auto-unwrap for field access** (OK 105→109 +4)
+## ⏸ 완료 — Phase 260: numeric methods for all int widths (u32.min etc.) (OK 109→110)
+## ⏸ 완료 — Phase 261: str_recv broadens to Named Str/str
 
 ---
 
