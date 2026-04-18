@@ -835,6 +835,42 @@ impl CodeGenerator {
                     }
                 }
 
+                // Optional<T> method inference — must come before the cross-module
+                // function search, otherwise `.ok_or()` would fall through to the
+                // I64 fallback and codegen-level ? / field-access would misbehave.
+                if let ResolvedType::Optional(ref inner) = recv_type {
+                    return match method.node.as_str() {
+                        "is_some" | "is_none" => ResolvedType::Bool,
+                        "unwrap" => (**inner).clone(),
+                        "unwrap_or" | "unwrap_or_default" => (**inner).clone(),
+                        "unwrap_or_else" => (**inner).clone(),
+                        "ok_or" | "ok_or_else" => ResolvedType::Result(
+                            Box::new((**inner).clone()),
+                            Box::new(ResolvedType::Named {
+                                name: "VaisError".to_string(),
+                                generics: vec![],
+                            }),
+                        ),
+                        "as_ref" => ResolvedType::Optional(Box::new(
+                            ResolvedType::Ref(Box::new((**inner).clone())),
+                        )),
+                        "clone" => recv_type.clone(),
+                        _ => ResolvedType::I64,
+                    };
+                }
+                // Result<T,E> method inference
+                if let ResolvedType::Result(ref ok_ty, ref err_ty) = recv_type {
+                    return match method.node.as_str() {
+                        "is_ok" | "is_err" => ResolvedType::Bool,
+                        "unwrap" => (**ok_ty).clone(),
+                        "unwrap_err" => (**err_ty).clone(),
+                        "ok" => ResolvedType::Optional(Box::new((**ok_ty).clone())),
+                        "err" => ResolvedType::Optional(Box::new((**err_ty).clone())),
+                        "clone" => recv_type.clone(),
+                        _ => ResolvedType::I64,
+                    };
+                }
+
                 // clone on any type returns the same type
                 if method.node == "clone" {
                     return recv_type;
