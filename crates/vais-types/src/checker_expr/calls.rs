@@ -251,7 +251,8 @@ impl TypeChecker {
 
                 for (param_type, arg) in params.iter().zip(args) {
                     let arg_type = self.check_expr(arg)?;
-                    self.unify(param_type, &arg_type)?;
+                    self.unify(param_type, &arg_type)
+                        .map_err(|e| e.with_span(arg.span))?;
                 }
 
                 Ok(*ret)

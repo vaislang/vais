@@ -233,6 +233,19 @@ pub enum TypeError {
 }
 
 impl TypeError {
+    /// Attach a span to a span-less error variant (currently only Mismatch).
+    /// Useful when low-level helpers like `unify()` produce a Mismatch with
+    /// `span: None` and the caller (which has source location) wants to
+    /// surface it. Other variants are returned unchanged.
+    pub fn with_span(mut self, fallback: Span) -> Self {
+        if let TypeError::Mismatch { ref mut span, .. } = self {
+            if span.is_none() {
+                *span = Some(fallback);
+            }
+        }
+        self
+    }
+
     /// Get the span associated with this error, if available
     pub fn span(&self) -> Option<Span> {
         match self {

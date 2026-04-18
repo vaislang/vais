@@ -79,8 +79,19 @@ impl<'a> ErrorReporter<'a> {
                     message.red()
                 ));
             } else {
-                // Fallback if we can't extract context
-                output.push_str(&format!("  {} {}\n", "note:".cyan().bold(), message));
+                // Span exists but is outside the entry-file source — error is in
+                // an imported module (merged-AST span). Include the raw byte
+                // offset so users can `awk -v p=... 'NR-1{...}'` or similar to
+                // locate it; previously this case silently dropped to a bare
+                // `note:` and made E001/E022 in vaisdb un-debuggable.
+                output.push_str(&format!(
+                    "  {} {} {} byte offset {}..{} (in an imported module)\n",
+                    "note:".cyan().bold(),
+                    message,
+                    "@".cyan(),
+                    span.start,
+                    span.end
+                ));
             }
         } else {
             // No span information
