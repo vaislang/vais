@@ -117,10 +117,20 @@ progress: 9/18 (50%)
   changes: docs/TYPE_SYSTEM.md §9 "Phase 2.9" expanded (decision table + rationale + workaround), crates/vaisc/tests/e2e/modules_system.rs (+phase2_9_same_file_struct_and_impl_works 회귀 테스트).
   verify: `cargo test -p vaisc --test e2e --release phase2_9_same_file_struct` ok 1/1, `cargo test -p vaisc --test e2e --release test_circular_import_detection` ok 1/1 (invariant 유지). Full gate green.
   option (b) `#[extend]` / option (c) benign cycles: 기각. 필요 시 RFC 경로 재검토.
-- [ ] 10. Option<&T> / Ref pattern binding 정합성 (Opus direct) [blockedBy: 9]
-  detail: `Some(r) => r.field` 케이스에서 r이 &T / T 중 어느 것으로 bind되는지 결정하고 통일. role.vais `get_role_id` 같은 케이스가 정상 동작하도록.
-  완료 기준:
-  - 결정사항 문서화, reproducer 테스트 추가, 패스
+- [~] 10. Option match-arm constructor re-wrap 정합성 (Opus direct) 🚧 DEFERRED 2026-04-19
+  detail: 정확한 bug 범위 재정의 — 문제는 `Some(r) => r.field` binding이 아니라 **arm이 `Some(r.field)` 재포장할 때** 생기는 enum constructor의 fresh-var disconnect. role.vais `get_role_id`가 canonical example.
+  investigation: docs/TYPE_SYSTEM.md §9 "Phase 2.10"에 reproducer + root cause(calls.rs:55-87) 기록.
+  naive fix 결과:
+  - (a) 전체 enum에 substitute_generics → vaisdb -1 file regression
+  - (b) Option/Result 한정 scoped fix → vaisdb -2 file regression
+  → 기존 disconnected-fresh-var 동작은 load-bearing. 안전한 fix를 위해 Named↔Optional bridge (unification.rs:247) 함께 수정하거나 checker_expr/special.rs의 별도 경로 조사 필요.
+  changes: docs/TYPE_SYSTEM.md §9 확장 (+40줄 reproducer & 분석), crates/vaisc/tests/e2e/modules_system.rs (+phase2_10_option_rewrap_in_match_arm #[ignore] 회귀 테스트).
+  status: 완료 기준 "reproducer 테스트 패스" 미충족 → `[~]` 표기. 176/261 baseline은 **이 버그를 포함한 숫자**이므로 regression floor 위반 아님. Phase 2.10 해결 시 vaisdb OK 숫자 상승 기대.
+  next session: calls.rs 패스 + unification bridge 동시 분석 필요. 단독 수정 금지 — 반드시 baseline check로 검증.
+  완료 기준 (원본):
+  - 결정사항 문서화 ✓ (deferred decision 기록)
+  - reproducer 테스트 추가 ✓ (ignored)
+  - 패스 ✗ (regression-safe fix 미발견 → deferred)
 - [ ] 11. HashMap/Vec/Str method inference 정리 (impl-sonnet) [blockedBy: 10]
   detail: 현재 분산된 inference 패치들을 `crates/vais-types/src/builtins/method_returns.rs`로 통합. Codegen 측 중복 제거.
   완료 기준:

@@ -2861,3 +2861,29 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 42);
 }
+
+// ==================== Phase 2.10: Option Match-Arm Constructor Reproducer ====================
+//
+// Reproduces the bug documented in docs/TYPE_SYSTEM.md §9 "Phase 2.10".
+// Status: KNOWN FAILING. Ignored so CI stays green; un-ignore this test
+// when Phase 2.10 is actually fixed. See TYPE_SYSTEM.md for the root
+// cause analysis (enum variant constructor uses disconnected fresh
+// type vars in calls.rs:55-87).
+
+#[test]
+#[ignore = "Phase 2.10 known bug: Some(r.field) re-wrap inside M arm over Option<Struct> types wrongly to scrutinee inner type"]
+fn phase2_10_option_rewrap_in_match_arm() {
+    let source = r#"
+S Role { role_id: u64, }
+
+F simpler(opt: Option<Role>) -> Option<u64> {
+    M opt {
+        Some(r) => Some(r.role_id),
+        None => None,
+    }
+}
+
+F main() -> i64 { 0 }
+"#;
+    assert_exit_code(source, 0);
+}

@@ -635,19 +635,57 @@ asserts that `A imports B` + `B imports A` produces a `circular` / `cycle`
 error. This is the load-bearing contract of option (a) — breaking it would
 re-open the cross-file-impl can of worms. Do NOT weaken this test.
 
-### Phase 2.10 — Option<&T> Pattern Binding
+### Phase 2.10 — Option Match-Arm Constructor Re-wrapping (partially investigated)
 
-**Problem**: In match expressions with `Option<&T>` scrutinees, the pattern
-`Some(x)` binds `x` as type `&T`. When the inner reference is then used in
-a context expecting `T`, the auto-deref chain (§7.1) should handle it.
-However, for deeply nested references like `Option<&&T>`, the type checker
-currently emits false `E001: type mismatch` errors.
+**Reproducer** (confirmed 2026-04-19, baseline commit `dc0069f4`):
 
-**Symptom**: Pattern match on `Option<&&str>` with `Some(s)` producing
-`s: &&str` fails to unify with `str` contexts in 2+ deref levels.
+```vais
+S Role { role_id: u64, }
 
-**Planned fix**: Add a transitive auto-deref loop in unification, or emit
-a peeling substitution during pattern binding.
+F simpler(opt: Option<Role>) -> Option<u64> {
+    M opt {
+        Some(r) => Some(r.role_id),
+        None => None,
+    }
+}
+```
+
+**Error**: `E001: Type mismatch. expected u64, found Role`, pointed at
+the `Option<u64>` return type annotation.
+
+**Root cause** (from `crates/vais-types/src/checker_expr/calls.rs:55-87`):
+When the `Some(r.role_id)` constructor call is type-checked, the code
+unifies the argument type (`u64`) against the variant's field type —
+but that field type is still the raw generic placeholder `Generic("T")`
+from the enum definition. Then the constructor returns
+`ResolvedType::Named { name: "Option", generics: [fresh_type_var()] }`
+where the fresh var is **not** connected to the unification that just
+happened. So `Some(u64 arg)` yields `Option<?N>` with `?N` unconstrained,
+and downstream unification with the match-arm `None => None` (whose type
+comes from the scrutinee `Option<Role>`) binds `?N := Role`.
+
+**Naive fix attempted**: instantiate fresh vars first, substitute them
+into the variant's field types before unifying, use those same fresh
+vars as the return's generics. This **regressed vaisdb by 1 file** — so
+some existing code relies on the old disconnected-fresh-var behavior
+(possibly via the Named↔Optional bridge at `unification.rs:247`).
+
+**Status**: deferred. Requires a focused session with:
+1. Identify which vaisdb file regressed and why.
+2. Decide whether the fix should be in the constructor call (calls.rs)
+   or in the Named↔Optional bridge (unification.rs).
+3. Protect the fix with both the reproducer above AND the regressed
+   vaisdb case.
+
+**Also related** (deeper case — not yet reproduced):
+`Option<&T>` with `Some(r)` binds `r: &T`. For nested `Option<&&T>`
+the auto-deref may fail in 2+ deref levels. Separate from the core bug
+above; may or may not share a fix.
+
+**Role.vais get_role_id** — concrete impact:
+`vaisdb/src/security/role.vais:427` is the canonical example. Status:
+**currently fails codegen** per baseline measurement, already counted
+in the 176/261 floor.
 
 ### Phase 2.11 — Method Inference Dispersion
 
