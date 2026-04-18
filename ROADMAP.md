@@ -3,7 +3,21 @@
 
 > **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 217: slice.to_vec/clone builtins)
+> **최종 업데이트**: 2026-04-18 (Phase 218: String.as_bytes())
+
+---
+
+## ⏸ 완료 — Phase 218: String.as_bytes() → Vec<u8>
+completed_at: 2026-04-18
+
+mode: auto
+strategy: vaisdb의 content.as_bytes() (content: &Str) E004. std/string.vais에 as_bytes 추가.
+
+### 결과
+- E004 66→65 (-1)
+- baseline green
+
+progress: 1/1 (100%)
 
 ---
 

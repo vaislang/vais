@@ -83,6 +83,23 @@ X String {
         I self.len == 0 { 1 } EL { 0 }
     }
 
+    # Return underlying byte storage as a Vec<u8>. Phase 218.
+    # Note: Vais lacks zero-copy slice views over String storage, so this
+    # returns a fresh Vec<u8>. vaisdb's chunking code only iterates so the
+    # extra allocation is acceptable.
+    F as_bytes(&self) -> Vec<u8> {
+        result := mut Vec.with_capacity(self.len)
+        i := mut 0
+        L {
+            I i >= self.len { B }
+            ptr := self.data + i
+            store_typed(result.data + i * result.elem_size, load_byte(ptr))
+            i = i + 1
+        }
+        result.len = self.len
+        result
+    }
+
     # Get character at index (returns ASCII value)
     F char_at(&self, index: i64) -> i64 {
         I index < 0 || index >= self.len {
