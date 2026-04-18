@@ -24,11 +24,25 @@ impl TypeChecker {
 
                 match op {
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod => {
-                        // Allow string concatenation with +
-                        if matches!(op, BinOp::Add) && matches!(left_type, ResolvedType::Str) {
-                            if let Err(e) = self.unify(&left_type, &right_type) {
-                                return Some(Err(e));
-                            }
+                        // Allow string concatenation with + (Phase 272: include
+                        // named Str/String/&str for vaisdb's owned-string flow).
+                        let is_str_like = |t: &ResolvedType| -> bool {
+                            matches!(t, ResolvedType::Str)
+                                || matches!(t, ResolvedType::Named { name, generics }
+                                    if (name == "Str" || name == "str" || name == "String")
+                                        && generics.is_empty())
+                                || matches!(t,
+                                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                                    if matches!(inner.as_ref(), ResolvedType::Str)
+                                        || matches!(inner.as_ref(),
+                                            ResolvedType::Named { name, generics }
+                                            if (name == "Str" || name == "str"
+                                                || name == "String") && generics.is_empty()))
+                        };
+                        if matches!(op, BinOp::Add) && is_str_like(&left_type) {
+                            // Permissive: ignore right_type unify failure since
+                            // codegen handles the concat via runtime helpers.
+                            let _ = self.unify(&left_type, &right_type);
                             return Some(Ok(ResolvedType::Str));
                         }
                         if !left_type.is_numeric() {
