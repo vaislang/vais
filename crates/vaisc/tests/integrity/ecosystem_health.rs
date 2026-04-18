@@ -200,8 +200,8 @@ fn test_vaisdb_files_codegen_ok() {
 
 #[test]
 fn report_compiler_syntax_summary() {
-    // compiler_syntax.rs has 30 concrete tests.
-    // The exact pass/fail count is runtime-determined; emit a placeholder
-    // that Phase 0.3 will replace with actual measured numbers.
-    eprintln!("INTEGRITY compiler_syntax pass=? fail=? total=30");
+    // compiler_syntax.rs has 200 concrete tests after Phase 1.6
+    // (186 active + 14 ignored). Pass count is runtime-determined;
+    // emit the total so CI/regression gate can read it.
+    eprintln!("INTEGRITY compiler_syntax pass=? fail=? total=200");
 }

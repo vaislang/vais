@@ -104,10 +104,15 @@ mod integrity {
 
     /// Stage 2: Parse OK?
     ///
-    /// Runs `vaisc --show-ast <path>` and returns `true` if exit code is 0.
+    /// Runs `vaisc check <path>` and returns `true` if exit code is 0.
+    /// NOTE: `--show-ast` actually triggers full codegen in this compiler, so
+    /// it cannot be used for a pure parse check. `check` stops at type-check,
+    /// which is strictly stronger than parse-only but still skips codegen —
+    /// close enough to "stage 2 OK" for integrity tests. A true parse-only
+    /// gate is Phase 1.7 territory.
     pub fn ok_parse(path: &Path) -> bool {
         let vaisc = vaisc_path();
-        let output = Command::new(&vaisc).arg("--show-ast").arg(path).output();
+        let output = Command::new(&vaisc).arg("check").arg(path).output();
         match output {
             Err(e) => {
                 eprintln!(
