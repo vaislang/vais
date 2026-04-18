@@ -316,11 +316,16 @@ impl TypeChecker {
         // `vec.pop().unwrap()` pervasively, expecting Option<T> like Rust.
         // Without the bypass, stdlib's T-returning signature wins and
         // `.unwrap()` dispatches on T (no such method → E004).
-        let bypass_struct_lookup = ((inner_type == "HashMap"
+        //
+        // Phase 312: extend to HashMap/BTreeMap/IndexMap `.remove` — same
+        // legacy/Rust-semantics mismatch. stdlib returns V; vaisdb expects
+        // Option<V>. Builtin dispatch below returns Option<V> once bypassed.
+        let is_map_type = inner_type == "HashMap"
             || inner_type == "StrHashMap"
             || inner_type == "BTreeMap"
-            || inner_type == "IndexMap")
-            && method.node == "get")
+            || inner_type == "IndexMap";
+        let bypass_struct_lookup = (is_map_type && method.node == "get")
+            || (is_map_type && method.node == "remove")
             || (inner_type == "Vec" && method.node == "pop");
 
         // First, try to find the method on the struct or enum itself
@@ -985,13 +990,18 @@ impl TypeChecker {
                         }
                     }
                     "remove" => {
-                        // HashMap.remove(k) → V (stdlib returns V)
+                        // Phase 312: HashMap/BTreeMap/etc. .remove(k) → Option<V>
+                        // (Rust semantics). stdlib's legacy `F remove -> V`
+                        // signature is bypassed via bypass_struct_lookup so
+                        // this branch wins. vaisdb uses `.remove(k).unwrap()`
+                        // / pattern-match on the Option<V> return.
                         if name != "Vec" && !args.is_empty() {
                             let _ = self.check_expr(&args[0]);
-                            return Ok(generics
+                            let val_ty = generics
                                 .get(1)
                                 .cloned()
-                                .unwrap_or(ResolvedType::I64));
+                                .unwrap_or(ResolvedType::I64);
+                            return Ok(ResolvedType::Optional(Box::new(val_ty)));
                         }
                         // Vec.remove(i) → T
                         if name == "Vec" && !args.is_empty() {

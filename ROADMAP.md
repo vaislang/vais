@@ -21,8 +21,10 @@
   changes: crates/vais-types/src/checker_expr/calls.rs (bypass_struct_lookup extended; primitive Optional/Result dispatch moved out of Named guard; added unwrap_or_default variant)
   verify: phase158 18/18 GREEN, minimal `vec.pop().unwrap()` OK, role.vais advanced from E004 unwrap→E001 Option<&T> mismatch (expected progression; cascading flip blocked on 312).
   vaisdb OK: 150/261 (unchanged at this phase — Phase 311 enables 321-322 cascading, measured jointly)
-- [ ] 312. HashMap.remove() 반환 타입 정합 — builtin dispatch bypass (Opus direct)
-  detail: stdlib/hashmap.vais는 V 직접 반환 (legacy), vaisdb는 Option<V> 기대. Phase 300a가 .get() 고쳤듯 .remove()도 bypass 필요. 대상: security/user.vais, 기타 remove 사용처
+- [x] 312. HashMap.remove() 반환 타입 정합 — bypass + Option<V> (Opus direct) ✅ 2026-04-18
+  changes: crates/vais-types/src/checker_expr/calls.rs (bypass_struct_lookup 확장: HashMap/StrHashMap/BTreeMap/IndexMap `.remove`; builtin dispatch가 Option<V> 반환하도록 수정)
+  verify: phase158 18/18 GREEN, minimal `map.remove("k").unwrap()` OK, no regression (vaisdb OK 150/261 유지)
+  note: 321 cascading 시 security/user.vais 등 `.remove` 사용처 flip 예상
 - [ ] 313. Generic T vs concrete 추론 — static method 일반화 파라미터 추적 (Opus direct)
   detail: shortest_path.vais `reverse_vec(&path)` — generic T가 u64로 instantiate되어야 하는데 안 됨. Phase 300a HashMap.get pattern destructure 고친 것과 유사 접근
 - [ ] 314. span-less E001 진단 품질 개선 — error reporting에서 span 전파 누락 위치 찾기 (impl-sonnet)
@@ -55,7 +57,7 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 1
+iteration: 2
 max_iterations: 30
 strategy: deep compiler 블로커 먼저 (311-315) → 그 뒤 per-file cascading 일괄 flip (321-325). Phase158 strict gate 매 phase 확인 필수.
 
