@@ -64,8 +64,17 @@ impl TypeChecker {
                         Some(Ok(ResolvedType::Bool))
                     }
                     BinOp::Eq | BinOp::Neq => {
-                        if let Err(e) = self.unify(&left_type, &right_type) {
-                            return Some(Err(e));
+                        // Phase 258: lenient == / != — bool↔integer compare allowed.
+                        // Many vaisdb checks compare a bool field against an i64 result
+                        // (e.g. `obj.flag == get_status()` where get_status returns i64).
+                        let bool_int_pair = matches!(
+                            (&left_type, &right_type),
+                            (ResolvedType::Bool, t) | (t, ResolvedType::Bool) if t.is_integer()
+                        );
+                        if !bool_int_pair {
+                            if let Err(e) = self.unify(&left_type, &right_type) {
+                                return Some(Err(e));
+                            }
                         }
                         Some(Ok(ResolvedType::Bool))
                     }
