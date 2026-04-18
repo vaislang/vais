@@ -33,8 +33,14 @@
   changes: agent가 is_page_tracked 헬퍼 추출 (에러 라인 축소되었으나 flip 미완)
   verify: vaisdb OK 155 유지 (no regression)
   note: 심화 조사는 별도 phase (import 충돌 analyzer 필요)
-- [ ] 329. E022 use-after-move — ops/profiling.vais, planner/{graph_plan,vector_plan}.vais (impl-sonnet, 1-file budget 10 tool)
-  detail: `&value` 또는 `.clone()` 삽입 단순 수정. E025 패턴 유사.
+- [x] 329. E022 use-after-move — ops/profiling + planner/{graph_plan,vector_plan} (Opus direct) ✅ 2026-04-18
+  pattern: borrow checker가 파라미터 move 후 동일 이름의 pattern-bound 변수를 "moved value 재사용"으로 오인. `.clone()` 삽입으로 우회.
+  changes:
+    - ops/profiling.vais: `truncated_entry := mut entry` → `entry.clone()`
+    - planner/graph_plan.vais: build_graph_plan 호출에 `params.clone()`
+    - planner/vector_plan.vais: build_vector_plan 호출에 `params.clone()`
+  verify: vaisdb OK 155→158 (+3)
+  note: compiler-level fix (pattern-bound vs param shadowing 구분)는 borrow checker 큰 refactor — 후속 phase 과제.
 - [ ] 330. span 전파 2차 — patterns/module binding/expression unify 3곳에 `.with_span()` 부착 (impl-sonnet)
   detail: Phase 314 follow-up. vaisdb corpus에서 remaining 16 span-less E001 중 common path 식별 후 고정.
 - [ ] 331. security/{policy,role,user} flip (impl-sonnet) [blockedBy: 326]
@@ -127,7 +133,7 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 3
+iteration: 4
 max_iterations: 30
 strategy: Opus direct로 326 (Option<&T> propagation) + 327 (UTF-8 span bug) 먼저 해소 → 328-330 병렬 impl-sonnet sweeps (1-file budget 10 tool) → 331-334 vaisdb cascading → 335 Tier 1 완료 선언. Phase158 strict gate 매 phase 확인 필수.
 
