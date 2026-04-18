@@ -278,7 +278,14 @@ progress: 9/18 (50%)
   [완료 기준]:
   - pattern_empty_vec.vais 원본 버전 (Vec<i64> 리터럴) 빌드 OK
   - LIVING_SPEC의 pattern_empty_vec.vais 우회 주석 제거 후 통과
-- [ ] 1.13 Top-level `const X: T = expr` production 추가 (impl-sonnet) [blockedBy: 1.12]
+- [x] 1.13 Top-level `const X: T = expr` production (Opus direct) ✅ 2026-04-19
+  detail: parse_item이 `Token::Continue` (C keyword)만 Item::Const로 처리. `Token::Const` 브랜치 추가해서 `const` 키워드도 동일하게 처리.
+  changes:
+    - crates/vais-parser/src/item/mod.rs — Token::Const 브랜치
+    - crates/vaisc/tests/integrity/compiler_syntax.rs — syntax_misc_const ignore 해제
+    - docs/language/LIVING_SPEC/01_keywords/const_compile_time.vais — const 사용 원본 복원
+    - docs/language/COOKBOOK.md 항목 12 — "Phase 1.13 해결됨"
+  verify: `const MAX: i64 = 100` OK. integrity gate green.
   detail: 현재 top-level에 `const` 파서 지원 없음 (P001 Unexpected token). Parser에 `const` item production 추가. TC는 이미 `Const` variant 처리 가능한지 확인.
   [완료 기준]:
   - LIVING_SPEC const_compile_time.vais 원본 (const 사용) 통과

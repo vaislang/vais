@@ -1879,7 +1879,6 @@ F main() -> i64 { fib(7) }
 }
 
 #[test]
-#[ignore = "TC gap: top-level `const` declaration TC incomplete"]
 fn syntax_misc_const() {
     let src = "const MAX: i64 = 100\nF main() -> i64 { MAX }";
     let (_d, p) = write_tmp("misc_const.vais", src);

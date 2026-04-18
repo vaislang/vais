@@ -269,17 +269,20 @@ I cond { a } EL { b }
 
 ---
 
-## 12. Top-level `const`는 파서 미지원 — `G` 사용
+## 12. Top-level `const` — Phase 1.13 ✅ 해결됨
 
 ```vais
-# ❌ DON'T — 파서 오류: "Unexpected token" at `const`
+# ✅ DO — const 선언 (Phase 1.13부터)
 const MAX: i64 = 100
 
-# ✅ DO — G 글로벌로 대체
-G MAX: i64 = 100
+# ✅ DO — C 키워드도 동일 의미 (legacy)
+C MIN: i64 = 0
+
+# ✅ DO — 가변/불변 글로벌이 필요하면 G
+G counter: i64 = 0
 ```
 
-**왜 실패하는지**: `const` 키워드는 lexer에 있지만 top-level 선언에 대한 파서 production이 누락. Phase 1.10+에서 개선 대상. 현재는 `G`로 우회.
+**Phase 1.13 변경**: `parse_item`이 `Token::Const`도 `Item::Const`로 라우팅. 기존 `C`와 동일하게 동작.
 
 **참조**: `LIVING_SPEC/01_keywords/const_compile_time.vais`, `G_global.vais`
 

@@ -101,6 +101,10 @@ impl Parser {
             // C at top level is a constant definition, not continue
             self.advance_skip();
             Item::Const(self.parse_const_def(is_pub, attributes)?)
+        } else if self.check(&Token::Const) {
+            // Phase 1.13: `const X: T = expr` also accepted at top level.
+            self.advance_skip();
+            Item::Const(self.parse_const_def(is_pub, attributes)?)
         } else if self.check(&Token::Global) {
             self.advance_skip();
             Item::Global(self.parse_global_def(is_pub)?)
