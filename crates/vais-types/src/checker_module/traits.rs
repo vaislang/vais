@@ -51,6 +51,14 @@ impl TypeChecker {
         // Set current generics for proper type resolution
         let saved = self.set_generics(&all_generics);
 
+        // Phase 281: Add "Self" as an implicit generic parameter for impl blocks.
+        // This ensures `-> Self` return types resolve to Generic("Self") rather
+        // than Named { name: "Self" }, so the existing Generic(_) catch-all in
+        // unification.rs correctly unifies Self with the concrete struct type.
+        if !self.current_generics.contains(&"Self".to_string()) {
+            self.current_generics.push("Self".to_string());
+        }
+
         // If implementing a trait, validate the impl
         if let Some(trait_name) = &impl_block.trait_name {
             let trait_name_str = trait_name.node.clone();

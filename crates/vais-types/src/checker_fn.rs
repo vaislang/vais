@@ -503,6 +503,13 @@ impl TypeChecker {
         // Set current generic parameters (including struct-level generics)
         let saved = self.set_generics(&all_generics);
 
+        // Phase 281: Add "Self" as an implicit generic parameter for impl method bodies.
+        // This ensures `Self` return types and variable types resolve to Generic("Self")
+        // so the existing Generic(_) catch-all in unification.rs handles them correctly.
+        if !self.current_generics.contains(&"Self".to_string()) {
+            self.current_generics.push("Self".to_string());
+        }
+
         // Merge where clause bounds into current generic bounds
         self.merge_where_clause(&method.where_clause);
 

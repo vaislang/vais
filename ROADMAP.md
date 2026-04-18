@@ -16,7 +16,9 @@
 - [x] 280. tuple type 인식 확장 — `(T1, T2, T3)` in Option/Vec element 위치. 대상: graph/query/pattern, storage/recovery/{undo,mod} (E001 tuple) (impl-sonnet) ✅ 2026-04-18
   changes: vais-types/checker_expr/collections.rs (Named struct tuple-field lenient, Ref/Var/Unknown fallback), vais-types/lookup.rs (HashMap/BTreeMap/IndexMap Named + Map iteration → tuple)
   verify: phase158 18/18 GREEN, pattern.vais E001 tuple 제거, vaisdb OK 126/261 유지 (신규 E002 surface)
-- [ ] 281. Self ↔ struct_name lenient coercion — impl 블록 내 Self를 concrete 타입으로 확장. 대상: server/embedded (E001 "expected EmbeddedConfig, found Self")
+- [x] 281. Self ↔ struct_name lenient coercion — impl 블록 내 Self를 concrete 타입으로 확장. 대상: server/embedded (E001 "expected EmbeddedConfig, found Self") (impl-sonnet) ✅ 2026-04-18
+  changes: vais-types/checker_fn.rs, vais-types/checker_module/traits.rs (Self registered as implicit generic so existing Generic(_) unify handles it)
+  verify: phase158 18/18 GREEN, embedded.vais OK, vaisdb OK 126→127 (+1)
 - [ ] 282. E025 borrow-checker 완화 — Vec/HashMap `&mut` 후 재참조 허용 (rag_search, 여러 위치)
 - [ ] 283. Result<T> implicit wrap — 함수 body 마지막이 T이고 리턴이 Result<T,E>면 Ok(T) 자동 wrap (impl-method만). 대상: graph/edge/adj, 여러 storage 위치
 - [ ] 284. `chars()`/`skip()` iterator fallback — str/Vec에서 identity 리턴하는 permissive fallback (iteration 체크는 codegen). 대상: fulltext/planner
@@ -59,10 +61,10 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 1
+iteration: 2
 max_iterations: 30
 strategy: single-error 파일부터 → cascading 해결 → 두-경로 통합. impl-sonnet 위임 가능한 단위로 쪼개서 병렬 진행.
-  strategy: Phase 280 단독 시작 (compiler type-checker 수정). Sequential, background=true. target files: vais-types/src/*, vais-types/src/unification.rs 예상 → 후속 phase와 파일 겹침 가능 → sequential.
+  strategy: Phase 281 — Self ↔ struct_name lenient coercion. Sequential, background=true. target: vais-types/inference/unification.rs (Self 경로). 후속 compiler phase와 파일 겹침 → sequential.
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone
