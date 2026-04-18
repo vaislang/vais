@@ -120,8 +120,19 @@ impl TypeChecker {
                         Some(Ok(inner_type))
                     }
                     UnaryOp::Not => {
-                        if let Err(e) = self.unify(&inner_type, &ResolvedType::Bool) {
-                            return Some(Err(e));
+                        // Phase 256: lenient ! — accept Bool or integer (truthy 0/1).
+                        // vaisdb stdlib has many i64-returning predicates; the result
+                        // is still Bool semantically.
+                        if !matches!(inner_type, ResolvedType::Bool)
+                            && !inner_type.is_integer()
+                            && !matches!(
+                                inner_type,
+                                ResolvedType::Var(_) | ResolvedType::Unknown
+                            )
+                        {
+                            if let Err(e) = self.unify(&inner_type, &ResolvedType::Bool) {
+                                return Some(Err(e));
+                            }
                         }
                         Some(Ok(ResolvedType::Bool))
                     }
