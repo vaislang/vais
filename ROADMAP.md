@@ -52,7 +52,9 @@
 - [x] 288. graph/integration — sql_join + vector OK (Opus direct) ✅ 2026-04-18
   changes: vaisdb/graph/integration/{sql_join,vector}.vais (from_u64/u32/f32/string/bool/f64 → SqlValue.IntVal/FloatVal/StringVal/BoolVal; BigInt/Float → SqlType.Int/Float)
   verify: phase158 18/18 GREEN, vaisdb OK 137→139 (+2)
-- [ ] 289. fulltext/ 필드/메서드 누락 정리 (concurrency, search/boolean — 3~4 파일)
+- [x] 289. fulltext/ — search/phrase + integration/sql OK (Opus direct) ✅ 2026-04-18
+  changes: fulltext/search/phrase.vais (struct field newline 복구 — 줄바꿈 누락으로 comment가 다음 필드까지 잡아먹음), fulltext/integration/sql.vais (BigInt/Float/Text/Int/Bool 생성자 → SqlValue.IntVal/FloatVal/StringVal/BoolVal)
+  verify: phase158 18/18 GREEN, vaisdb OK 139→141 (+2)
 - [ ] 290. vector/ HNSW 구조적 문제 (insert, search, layer, bulk — 5+ 파일)
 - [ ] 291. sql/ executor/parser 경로 (executor/{subquery,mod}, parser/*, row — 5+ 파일)
 - [ ] 292-295. 남은 ops/, server/, client/ 파일들
@@ -93,10 +95,10 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 11
+iteration: 12
 max_iterations: 30
 strategy: single-error 파일부터 → cascading 해결 → 두-경로 통합. impl-sonnet 위임 가능한 단위로 쪼개서 병렬 진행.
-  strategy: Phase 288 — graph/integration vaisdb fix. Opus direct (286 교훈).
+  strategy: Phase 289 — fulltext/ concurrency + search/boolean vaisdb fix. Opus direct.
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone
