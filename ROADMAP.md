@@ -4,7 +4,7 @@
 > **현재 버전**: 0.1.0 (Phase 354-370 + Tier 2 extended compiler drive, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
 > **최종 업데이트**: 2026-04-19 (대형 세션 — 17 phases + 10+ compiler patches + 15+ vaisdb refactors, OK 134→174/261 +40 files) 🎯
-> **현재 vaisdb OK: 177/261 (67.8%)** — Tier 2 목표 210까지 +33 필요.
+> **현재 vaisdb OK: 176/261 (67.4%)** — Tier 2 목표 210까지 +34 필요.
 > **Tier 2 extended drive 성과**:
 >   - Codegen: tuple `.0`/`.1` (cascade +13), Str methods (is_empty/byte_at/char_at/trim/to_upper/to_lower/starts_with/ends_with), handler cascade (+5)
 >   - Type inference: Str method returns (split/lines/parse_*), HashMap/StringMap full method set, Optional/Result method set (ok_or/ok_or_else/unwrap/is_some/...), Optional(Ref(V)) uniform
