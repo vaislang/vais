@@ -454,6 +454,25 @@ impl TypeChecker {
                     }
                     return Ok(ResolvedType::I64);
                 }
+                "is_empty" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Bool);
+                    }
+                }
+                "as_bytes" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Named {
+                            name: "Vec".to_string(),
+                            generics: vec![ResolvedType::U8],
+                        });
+                    }
+                }
+                "char_at" | "byte_at" => {
+                    if args.len() == 1 {
+                        let _ = self.check_expr(&args[0]);
+                        return Ok(ResolvedType::I64);
+                    }
+                }
                 "charAt" => {
                     if args.len() != 1 {
                         return Err(TypeError::ArgCount {
