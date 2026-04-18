@@ -1163,6 +1163,12 @@ impl TypeChecker {
             {
                 return Ok(ResolvedType::Unit);
             }
+            // Phase 307: Vec.extend(other) — extends with another iterator/Vec.
+            // Returns Unit. Lenient on receiver.
+            if method.node == "extend" && args.len() == 1 {
+                let _ = self.check_expr(&args[0]);
+                return Ok(ResolvedType::Unit);
+            }
             // Phase 236: Option<T>/Result<T,E> method fallback. vaisdb uses
             // .unwrap(), .is_some(), .is_none(), .is_ok(), .is_err(), .ok()
             // frequently — these need dispatch. Also handle primitive
