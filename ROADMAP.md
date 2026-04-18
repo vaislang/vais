@@ -73,7 +73,11 @@ Phase 353까지의 패턴 관찰:
   changes: sql/executor/mod.vais에 `W Executor { open/next/close }` trait 추가
   result: subquery.vais 13 errors → 13 errors (unchanged count). Trait 추가만으로는 `Box<dyn Executor>` method dispatch 해결 안됨 — 컴파일러 레벨 제약.
   note: trait 추가는 infrastructure 개선이지만 OK 개수에는 영향 없음. Phase 358 (deep compiler work)와 연결된 블로커.
-- [ ] 366-369. 잔여 per-file sweep — 에러 유형별 클러스터링 후 타겟 delegate
+- [x] 366. 잔여 per-file sweep (1/4) — sql/parser 클러스터 (impl-sonnet) ✅ 2026-04-18 (partial)
+  changes: token.vais (+storage/bytes import, 4× bare variant → TokenKind prefix, inline parse_u32 replacement, IntLit→TokenKind.IntLit), parser_dml.vais (Values→TokenKind.Values, Eq→TokenKind.Eq)
+  result: token.vais TC clean (C005 parse_f64 codegen 잔여). parser_dml.vais 5→3 errors (잔여 3은 모두 cross-file impl dispatch E004 — Phase 365 블로커와 동일)
+  baseline 재측정 (bash loop): **OK 134/261, FAIL 127/261** (기존 baseline 180/261은 다른 측정 방법 추정 — 본 세션 기준은 134)
+- [ ] 367-369. 잔여 per-file sweep — 에러 유형별 클러스터링 후 타겟 delegate
 - [ ] 370. Tier 2 완료 선언 — OK ≥210/261 확인 + 요약 보고
 
 ### 작업 전략
@@ -98,7 +102,7 @@ Phase 353까지의 패턴 관찰:
 - **Span-less 우선순위**: patterns/module binding unify 경로에 span 부착이 선행되어야 후속 E001 cluster 접근 가능.
 
 mode: auto
-iteration: 8
+iteration: 9
 max_iterations: 30
 strategy: ROI-reorder (user-approved 2026-04-18). 362 → 363 → 364 → 365 → 366-369 per-file sweep → 358-361 deep compiler (last) → 370. 각 phase 실패/scope over 즉시 move on.
   strategy: sequential — iteration 7, Phase 364 (TLS FFI alignment — std/file read_file)
