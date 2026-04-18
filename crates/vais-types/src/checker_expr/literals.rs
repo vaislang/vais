@@ -1,6 +1,6 @@
 //! Literal and identifier expression checking
 
-use crate::types::{ResolvedType, TypeResult};
+use crate::types::{ResolvedType, TypeError, TypeResult};
 use crate::TypeChecker;
 use vais_ast::*;
 
@@ -38,7 +38,17 @@ impl TypeChecker {
                 }
                 // Mark variable as used for linear type tracking
                 self.mark_var_used(name);
-                Some(self.lookup_var_or_err(name))
+                // Attach span to UndefinedVar so error reporting can show file:line
+                Some(self.lookup_var_or_err(name).map_err(|e| match e {
+                    TypeError::UndefinedVar { name, span: None, suggestion } => {
+                        TypeError::UndefinedVar {
+                            name,
+                            span: Some(expr.span),
+                            suggestion,
+                        }
+                    }
+                    other => other,
+                }))
             }
             _ => None,
         }

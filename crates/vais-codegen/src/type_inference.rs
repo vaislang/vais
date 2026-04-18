@@ -651,9 +651,14 @@ impl CodeGenerator {
                 // Note: bool methods return i64 (0/1) at runtime, matching comparison ops
                 if matches!(recv_type, ResolvedType::Str) {
                     return match method.node.as_str() {
-                        "len" | "charAt" | "indexOf" | "contains" | "startsWith" | "endsWith"
-                        | "isEmpty" => ResolvedType::I64,
-                        "substring" | "push_str" => ResolvedType::Str,
+                        "len" | "charAt" | "char_at" | "byte_at" | "indexOf" | "contains"
+                        | "startsWith" | "endsWith" | "isEmpty" | "is_empty" => ResolvedType::I64,
+                        "substring" | "push_str" | "to_uppercase" | "to_lowercase" | "trim"
+                        | "clone" => ResolvedType::Str,
+                        "as_bytes" | "into_bytes" => ResolvedType::Named {
+                            name: "Vec".to_string(),
+                            generics: vec![ResolvedType::U8],
+                        },
                         _ => ResolvedType::I64,
                     };
                 }
