@@ -4,9 +4,69 @@
 
 Vais (Vibe AI Language for Systems) is an AI-optimized systems programming language with single-character keywords, LLVM backend, and full type inference. The compiler is written in Rust. Self-hosting compiler (bootstrap) achieved with 50,000+ lines.
 
-> **자주 틀리는 Vais 패턴은 `docs/language/COOKBOOK.md` 참조.**
-> 실측 레퍼런스 예제는 `docs/language/LIVING_SPEC/` 참조.
-> 키워드 등록은 `docs/language/LEXER_KEYWORDS.md` 참조.
+---
+
+## Vais 개발 철칙 (MUST READ)
+
+**이 섹션은 에이전트/기여자가 Vais 코드를 쓰기 전/수정하기 전에 반드시 읽어야 하는 강제 규칙이다.** Phase 2.10에서 두 차례 baseline regression이 발생한 뒤 제정. 위반 시 작업 즉시 중단.
+
+### 규칙 1 — 훈련 데이터의 Vais 지식을 사용하지 말 것
+
+모델의 pretraining에 포함된 Vais 관련 정보는 **구식이다**. `spawn`/`lazy`/`force` 같은 제거된 키워드가 "정상"으로 기억되어 있을 수 있고, 현재 파서/컴파일러가 거부하는 문법을 "옳다"고 주장할 수 있다. 저장소 밖 지식은 참조하지 말 것.
+
+### 규칙 2 — 새 Vais 문법을 쓰기 전 이 순서로 확인
+
+1. `docs/language/LIVING_SPEC/` — **실행 가능한 authoritative 예제**. 100+ `.vais` 파일이 `vaisc check`로 검증되어 있다.
+2. `docs/language/LEXER_KEYWORDS.md` — 현재 lexer가 인정하는 모든 키워드 목록.
+3. `docs/language/COOKBOOK.md` — 자주 틀리는 22개 패턴 + 해결법.
+4. `docs/LANGUAGE_SPEC.md` §"Construct Status Matrix" — 각 construct의 Parse/TC/Codegen/Run 지원 수준.
+
+이 4개 소스에 없는 문법은 **쓰지 말 것**. 지어내지 말 것.
+
+### 규칙 3 — 컴파일러 소스 수정 전 baseline 기록 의무
+
+`crates/vais-*` 의 Rust 코드를 수정하기 전:
+
+```bash
+./scripts/check-integrity.sh 2>&1 | tail -3
+# 출력 예: INTEGRITY OK: syntax=200 stages=14 std=37/82 vaisdb=176/261 phase158=18/18
+```
+
+이 숫자를 **baseline**으로 기록. 수정 후 같은 스크립트 실행.
+
+### 규칙 4 — Regression 1건이라도 발생 시 즉시 revert
+
+수정 후:
+
+```bash
+./scripts/check-integrity.sh 2>&1 | tail -3
+```
+
+- `INTEGRITY OK`이면 진행.
+- 숫자가 **1이라도** 감소했거나 `REGRESSION` 메시지가 나오면 **즉시 `git checkout`으로 수정 파일 revert**.
+- 되돌리고 나서 "왜 regression이 났는가"를 분석 → 분석 결과를 `ROADMAP.md`와 `docs/TYPE_SYSTEM.md`의 관련 Phase 섹션에 기록.
+- "부분적으로 맞는" 수정을 억지로 밀어붙이지 말 것. Phase 158 요요 패턴 (5회 coercion 추가/제거 반복) 재발 방지가 이 규칙의 동기.
+
+### 규칙 5 — 추측 금지. `vaisc check <file>` 실제 실행만 근거
+
+"이 문법은 작동할 것이다"라고 주장하기 전:
+
+```bash
+echo '<Vais code>' > /tmp/test.vais
+./target/release/vaisc check /tmp/test.vais
+```
+
+로 **실제 실행**. 출력을 근거로만 이야기. 주장-근거 불일치 시 주장을 폐기.
+
+### 규칙 6 — Removed keyword 재도입 절대 금지
+
+`docs/language/removed_keywords.md`에 기록된 키워드 (`spawn`, `lazy`, `force`, 기타)는 **어떤 예제, 테스트, 문서, PR에서도 재도입하지 않는다**. 재도입이 필요하다 판단되면 RFC 작성 + 사용자 승인 후에만 진행.
+
+### 규칙 7 — Opus direct 작업도 이 철칙 준수
+
+"Opus가 직접 수정하니 규칙 1~6을 건너뛴다"는 허용되지 않는다. Opus가 규칙 4번 violation을 세 번 반복한 세션이 있었다 (Phase 2.10 두 차례 + 추가 한 번). 규칙의 권위는 역할 불문.
+
+---
 
 ## GitHub & Links
 

@@ -57,7 +57,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 2
+iteration: 3
 max_iterations: 30
   strategy-note: A안 채택 — Phase 2.10 fix 재시도하기 전에 **체계(LIVING_SPEC + COOKBOOK + CLAUDE.md 철칙)** 먼저 구축. 에이전트 작업 시 "과거 문법 추측 → regression" 루프를 근본 차단하는 게 목적. Phase 1.8 → 1.9 → 1.10 체인 후 2.10 재개.
   strategy iteration 1: sequential — #42 (#43, #44 blockedBy 체인). #42는 100+ 파일 생성 + regression floor 유지 필요 → impl-sonnet background.
@@ -144,7 +144,10 @@ progress: 9/18 (50%)
   - 20개+ 항목, 각 항목에 ❌ 실패 코드 + ✅ 성공 코드 + "왜 실패하는지" 설명
   - LIVING_SPEC/ 관련 예제로 cross-link
   - CLAUDE.md에 "자주 틀리는 케이스는 COOKBOOK.md 참조" 한 줄 추가
-- [ ] 1.10. CLAUDE.md 개발 철칙 강화 (Opus direct) [blockedBy: 1.9]
+- [x] 1.10. CLAUDE.md 개발 철칙 강화 (Opus direct) ✅ 2026-04-19
+  detail: CLAUDE.md 상단 Overview 직후에 "Vais 개발 철칙 (MUST READ)" 섹션 추가 — 7개 강제 규칙. 훈련 데이터 지식 금지, LIVING_SPEC/LEXER_KEYWORDS/COOKBOOK/LANGUAGE_SPEC 참조 순서, baseline 기록 의무, 1-file regression 즉시 revert, vaisc check 실제 실행 근거만, removed keyword 재도입 금지, Opus direct도 준수.
+  changes: CLAUDE.md (~60줄 추가, 기존 "Type Conversion Rules" 섹션과 병립).
+  verify: integrity gate green (syntax=200 stages=14 std=37/82 vaisdb=176/261 phase158=18/18). CLAUDE.md 구조 보존.
   target: CLAUDE.md 상단에 "Vais 개발 철칙 (MUST READ)" 섹션 신규 추가
   content:
     1. 훈련 데이터 Vais는 구식 — 저장소 밖 지식 가정 금지
