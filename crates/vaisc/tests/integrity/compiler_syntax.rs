@@ -939,19 +939,19 @@ F main() -> i64 {
 }
 
 #[test]
-#[ignore = "parser-limit: match guard 'if' clause not supported"]
 fn syntax_match_guard() {
+    // Vais uses single-char `I` keyword for guard (not `if` identifier).
     let src = r#"
 F main() -> i64 {
     x := 5
     M x {
-        n if n > 0 => 1,
+        n I n > 0 => 1,
         _ => 0,
     }
 }
 "#;
     let (_d, p) = write_tmp("match_guard.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: match guard x if x > 0");
+    assert!(ok_parse(&p), "ok_parse failed: match guard x I x > 0");
 }
 
 #[test]

@@ -71,9 +71,11 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-19)
 
-mode: stopped (B안 ROADMAP 재편 완료 — 40 Phase 구조로 확장. 다음 실행 단위는 Phase 1.11 Match guard. 실행 시작 전 사용자 확인 대기.)
-iteration: 3
+mode: auto
+iteration: 4
 max_iterations: 60
+  strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
+  strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy-note: A안 채택 — Phase 2.10 fix 재시도하기 전에 **체계(LIVING_SPEC + COOKBOOK + CLAUDE.md 철칙)** 먼저 구축. 에이전트 작업 시 "과거 문법 추측 → regression" 루프를 근본 차단하는 게 목적. Phase 1.8 → 1.9 → 1.10 체인 후 2.10 재개.
   strategy iteration 1: sequential — #42 (#43, #44 blockedBy 체인). #42는 100+ 파일 생성 + regression floor 유지 필요 → impl-sonnet background.
 
@@ -251,7 +253,13 @@ progress: 9/18 (50%)
 
 > **목표**: Phase 1.6의 14 ignored 테스트 해결 + LANGUAGE_SPEC ◐ 마커가 표시하는 파서 갭 전부 메우기. 결과로 compiler_syntax 200/200 passing (0 ignored).
 
-- [ ] 1.11 Match guard `x if cond => ...` 구현 (Opus direct) [blockedBy: 1.10]
+- [x] 1.11 Match guard — `pattern I cond => body` (Opus direct) ✅ 2026-04-19
+  detail: **이미 파서에 구현되어 있었음** (primary.rs:707, `Token::If`로 체크). 문제는 `I` 키워드 vs `if` 식별자 혼동 — 테스트와 LIVING_SPEC에 `if`로 작성됨. 문법 수정.
+  changes:
+    - crates/vaisc/tests/integrity/compiler_syntax.rs — syntax_match_guard `if` → `I`, `#[ignore]` 해제
+    - docs/language/LIVING_SPEC/02_patterns/pattern_guard_if.vais — `I` guard 사용 버전으로 재작성
+    - docs/language/COOKBOOK.md 항목 13 — "`I`는 if keyword, `if`는 ident" 설명
+  verify: `cargo test syntax_match_guard` ok 1/1. integrity gate green.
   detail: 파서에서 match arm 패턴 뒤에 `if <expr>` guard 지원. AST `MatchArm.guard: Option<Expr>` 이미 있으면 파서 연결만. 없으면 추가.
   [완료 기준]:
   - `compiler_syntax.rs`의 pattern_guard_if 테스트 ignored 해제 + passing

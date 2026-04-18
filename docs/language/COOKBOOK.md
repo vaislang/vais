@@ -287,27 +287,29 @@ G MAX: i64 = 100
 
 ---
 
-## 13. Match arm guard `if`는 미지원 — `I/EL`로 대체
+## 13. Match arm guard — `pattern I cond => body` (Vais uses `I`, not `if`)
 
 ```vais
-# ❌ DON'T — 파서 오류: "expected =>"
+# ❌ DON'T — `if`는 식별자, 파서 오류
 M n {
     x if x < 0 => -1,
     0 => 0,
     _ => 1
 }
 
-# ✅ DO — match 바깥의 I/EL로 분기
+# ✅ DO — Vais는 single-char `I` 키워드로 guard
 F sign(n: i64) -> i64 {
-    I n < 0 { -1 }
-    EL I n == 0 { 0 }
-    EL { 1 }
+    M n {
+        x I x < 0 => -1,
+        0 => 0,
+        _ => 1
+    }
 }
 ```
 
-**왜 실패하는지**: 현재 파서는 match arm guard (`pattern if cond => ...`)를 지원하지 않음. Range/value 패턴은 충분 — 조건부 분기가 필요하면 바깥에서 처리.
+**왜 실패하는지**: Vais의 `I`는 if keyword. match guard는 `pattern I <cond> => body` 문법. `if`는 소문자 identifier로 취급되어 파서가 "expected =>" 에러.
 
-**참조**: `LIVING_SPEC/02_patterns/pattern_guard_if.vais`
+**참조**: `LIVING_SPEC/02_patterns/pattern_guard_if.vais`, Phase 1.11 ✅
 
 ---
 
