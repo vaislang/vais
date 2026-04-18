@@ -77,7 +77,14 @@ Phase 353까지의 패턴 관찰:
   changes: token.vais (+storage/bytes import, 4× bare variant → TokenKind prefix, inline parse_u32 replacement, IntLit→TokenKind.IntLit), parser_dml.vais (Values→TokenKind.Values, Eq→TokenKind.Eq)
   result: token.vais TC clean (C005 parse_f64 codegen 잔여). parser_dml.vais 5→3 errors (잔여 3은 모두 cross-file impl dispatch E004 — Phase 365 블로커와 동일)
   baseline 재측정 (bash loop): **OK 134/261, FAIL 127/261** (기존 baseline 180/261은 다른 측정 방법 추정 — 본 세션 기준은 134)
-- [ ] 367-369. 잔여 per-file sweep — 에러 유형별 클러스터링 후 타겟 delegate
+- [x] 367. 잔여 per-file sweep (2/4) — storage cluster (impl-sonnet, worktree) ✅ 2026-04-18 (partial)
+  changes: storage/page/bootstrap.vais (path_bytes string→byte-by-byte write, from_utf8().unwrap_or → M pattern)
+  result: bootstrap.vais 1 → 0 errors (TC clean, net +1 OK file). deadlock.vais 착수 시도했으나 tool budget 소진.
+- [x] 368. 잔여 per-file sweep (3/4) — handler.vais codegen cascade fix ✅ 2026-04-18
+  changes: server/handler.vais classify_sql_tag — `bytes := mut sql.as_bytes()` + `bytes[i]` subscript (C003 codegen bug) → `bytes: Vec<u8> := sql.as_bytes()` + `bytes.get(i as i64)` (borrow-safe)
+  result: handler.vais + tcp.vais + database.vais + bootstrap.vais + main.vais 전부 OK (TC+codegen clean). **OK measure 134/261 → 139/261 (+5 files)**.
+  note: 3-parallel agents (storage/rag/vector+graph worktrees) tool-budget 소진으로 bootstrap만 landing (Phase 367). Direct Opus가 handler cascade 식별해 한 번에 5 file unblock.
+- [ ] 369. 잔여 per-file sweep (4/4) — next single-error cluster (진행 중)
 - [ ] 370. Tier 2 완료 선언 — OK ≥210/261 확인 + 요약 보고
 
 ### 작업 전략
@@ -102,7 +109,8 @@ Phase 353까지의 패턴 관찰:
 - **Span-less 우선순위**: patterns/module binding unify 경로에 span 부착이 선행되어야 후속 E001 cluster 접근 가능.
 
 mode: auto
-iteration: 9
+iteration: 10
+  strategy_367_369: 3 parallel impl-sonnet agents in worktrees — 367=storage cluster, 368=rag cluster, 369=vector+graph cluster. Each: 20 tool budget, strict 2-file fix goal, must report PROMISE.
 max_iterations: 30
 strategy: ROI-reorder (user-approved 2026-04-18). 362 → 363 → 364 → 365 → 366-369 per-file sweep → 358-361 deep compiler (last) → 370. 각 phase 실패/scope over 즉시 move on.
   strategy: sequential — iteration 7, Phase 364 (TLS FFI alignment — std/file read_file)
