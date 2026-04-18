@@ -746,6 +746,19 @@ impl TypeChecker {
         // see lookup.rs get_iterator_item_type_inner for the binding. Codegen
         // (Task 6) recognizes these method calls in for-each loops and desugars
         // them to index-based iteration.
+        // Phase 227: generic `.len()` on any iterable receiver returns I64.
+        // Catches enum-pattern destructured Vec<T> fields (e.g. `VectorVal { v }`
+        // where v's generic param isn't propagated through the pattern), which
+        // otherwise show E004 'len not defined'. The Vec/HashMap fallback
+        // above already handles the common case; this is a safety net for
+        // anything else iterable.
+        if args.is_empty()
+            && method.node == "len"
+            && self.get_iterator_item_type(&receiver_type).is_some()
+        {
+            return Ok(ResolvedType::I64);
+        }
+
         if args.is_empty() && (method.node == "iter" || method.node == "enumerate") {
             if let Some(elem_ty) = self.get_iterator_item_type(&receiver_type) {
                 // Skip EnumerateIter here — if the receiver is already EnumerateIter<T>,
