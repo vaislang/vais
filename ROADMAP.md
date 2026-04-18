@@ -7,9 +7,42 @@
 > **현재 vaisdb OK: 154/261 (59.0%)** — Phase 199 시작 대비 +124 파일 개선
 > **목표**: Tier 1 완료 = vaisdb OK 180/261 (70%+) — 26 파일 남음
 
-## 🎯 다음 세션 시작점 (Phase 311+)
+## 🎯 다음 세션 시작점 (Phase 326+)
 
 `mode: auto` — 세션 재시작 시 `harness` skill이 이 섹션을 자동 복구하여 이어서 진행.
+
+### Phase 326-335: 남은 compiler 블로커 + Tier 1 마무리 (OK +15~20 예상, 목표 180/261)
+
+이번 세션 경험: impl-sonnet agent가 investigation loop에서 tool budget 초과 반복 → **Opus direct가 generic propagation / span-offset 종류 디버깅에 필요**. bounded single-file 수정만 impl-sonnet 위임.
+
+- [ ] 326. Option<&T> generic propagation — HashMap.get() 결과가 `Option<&V>` 구체화 안됨 (Opus direct)
+  detail: security/{policy,role,user}.vais 잔여 E001 "expected Option<&RoleInfo>, found RoleInfo?" — `&`-ref layer가 Optional 내부로 전파 실패. check_method_call 내 HashMap.get dispatch 또는 auto-ref coercion 경로 점검. Phase 311이 Optional primitive 경로를 고쳤듯 `&`-inner 경로도 유사 수정 필요.
+- [ ] 327. UTF-8 byte-offset span bug — 코멘트의 multi-byte char가 이후 라인 span 오염 (Opus direct)
+  detail: planner/pipeline.vais:219 에러가 comment 라인을 가리킴. logos/ariadne span이 char-offset 아닌 byte-offset 기반으로 섞여 vs CR/LF 또는 multi-byte 경계에서 어긋나는 케이스 추적. lexer or error reporter 수준 버그.
+- [ ] 328. E030 no-such-field cascading fix — storage/recovery/{undo,redo}, planner/{optimizer,types} (impl-sonnet, 1-file budget 10 tool)
+  detail: struct field rename 또는 missing field 추가 per-file 스윕. Opus가 pattern 먼저 확정 후 delegate.
+- [ ] 329. E022 use-after-move — ops/profiling.vais, planner/{graph_plan,vector_plan}.vais (impl-sonnet, 1-file budget 10 tool)
+  detail: `&value` 또는 `.clone()` 삽입 단순 수정. E025 패턴 유사.
+- [ ] 330. span 전파 2차 — patterns/module binding/expression unify 3곳에 `.with_span()` 부착 (impl-sonnet)
+  detail: Phase 314 follow-up. vaisdb corpus에서 remaining 16 span-less E001 중 common path 식별 후 고정.
+- [ ] 331. security/{policy,role,user} flip (impl-sonnet) [blockedBy: 326]
+  detail: Phase 321 재시도. 326 이후 cascading 예상.
+- [ ] 332. planner/{analyzer,cost_model,fulltext_plan,pipeline} flip (impl-sonnet) [blockedBy: 327,328]
+- [ ] 333. hnsw/{bulk,cow,insert} + graph/wal VaisError i64 codes quote 및 API 교정 (impl-sonnet) [blockedBy: 315 완료됨]
+- [ ] 334. server/client 잔여 (handler/types/mod) (impl-sonnet)
+- [ ] 335. Tier 1 완료 선언 — OK ≥180/261 확인, 완료 요약 문서
+
+### 실패 패턴 교훈 (이번 세션 경험)
+
+- **impl-sonnet tool budget**: 30~50 tool call로 cut-off. 수정 기준 명확하지 않은 investigation 작업은 Opus direct 또는 1-file budget 10 tool로 tight scope.
+- **foreground vs background SendMessage**: foreground 복귀 agent는 SendMessage 무효. 새 Agent로 재위임 필수.
+- **partial edit 가치**: cut-off 시 변경 파일 0개가 아니면 commit해서 후속 세션에서 재사용. 에러 축소 파일은 다음 스윕에서 flip 가능성.
+
+---
+
+### Phase 311-325 (완료된 작업, 2026-04-18 세션)
+
+**세션 결과: OK 150 → 154 (+4), phase158 18/18 GREEN 유지, 10개 커밋**
 
 ### Phase 311-320: 새 컴파일러 핵심 블로커 해소 (OK +10~15 예상)
 
@@ -70,7 +103,7 @@
 ### 재개 절차
 
 1. `cd /Users/sswoo/study/projects/vais/compiler`
-2. `/harness` 실행 → 이 ROADMAP의 `mode: auto` 감지 → Phase 311부터 재개
+2. `/harness` 실행 → 이 ROADMAP의 `mode: auto` 감지 → Phase 326부터 재개
 3. 각 phase 완료 시 `cargo test -p vaisc --test e2e --release phase158` (strict gate) + vaisdb OK 카운트 기록
 4. OK 180/261 도달 시 Tier 1 완료 선언
 
@@ -82,9 +115,9 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 5
+iteration: 0
 max_iterations: 30
-strategy: deep compiler 블로커 먼저 (311-315) → 그 뒤 per-file cascading 일괄 flip (321-325). Phase158 strict gate 매 phase 확인 필수.
+strategy: Opus direct로 326 (Option<&T> propagation) + 327 (UTF-8 span bug) 먼저 해소 → 328-330 병렬 impl-sonnet sweeps (1-file budget 10 tool) → 331-334 vaisdb cascading → 335 Tier 1 완료 선언. Phase158 strict gate 매 phase 확인 필수.
 
 ### Iter 4 (2026-04-18) — parallel cascading
 - 311/312/313/315 해소 완료. 321-325 + 314 전부 unblocked.
