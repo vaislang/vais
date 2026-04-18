@@ -45,7 +45,10 @@
   changes: vaisdb/security/user.vais (err_auth_* imports), rls.vais (sanitizer.{contains_pattern, contains_pattern_ci} import), types.vais (fnv1a_hash_bytes import + buf.as_slice→as_bytes), sanitizer.vais (bytes := value.as_bytes, ErrorSeverity import)
   verify: phase158 18/18 GREEN, rls/sanitizer/types OK, vaisdb OK 131→134 (+3)
   note: policy/role/user 남음 — HashMap generic resolution (compiler 레벨 이슈로 보임)
-- [ ] 287. planner/ 필드명 불일치 일괄 (cache, analyzer, optimizer, types, explain — 5 파일)
+- [x] 287. planner/ 필드명 불일치 일괄 — 부분 진전 (Opus direct) ✅ 2026-04-18
+  changes: vaisdb/planner/cache.vais (Str.push → push_byte), vector_plan.vais (BinOp import + 경로 제거)
+  verify: phase158 18/18 GREEN, vaisdb OK 134 유지 (에러 진전되었으나 cascading으로 flip 안됨)
+  note: 남은 errors는 HashMap<K,V> V generic 추적 / enum 변형 destructuring / Option builtin 대부분 compiler 레벨. 후속 phase에서 compiler-side로 처리 필요
 - [ ] 288. graph/integration 단일 E002 (sql_join, vector, 기타 — 4~5 파일)
 - [ ] 289. fulltext/ 필드/메서드 누락 정리 (concurrency, search/boolean — 3~4 파일)
 - [ ] 290. vector/ HNSW 구조적 문제 (insert, search, layer, bulk — 5+ 파일)
@@ -77,10 +80,11 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 7
+iteration: 8
 max_iterations: 30
 strategy: single-error 파일부터 → cascading 해결 → 두-경로 통합. impl-sonnet 위임 가능한 단위로 쪼개서 병렬 진행.
-  strategy: Phase 286 — security/ 6 파일 (user, role, sanitizer, rls, policy, types) vaisdb-side E002/E004 수정. Sequential, background=true. 단일 디렉토리 내 파일들이라 cross-ref 가능 → single agent이 6개 일괄.
+  strategy: Phase 287 — planner/ 5 파일 (cache, analyzer, optimizer, types, explain) vaisdb-side. Opus direct (286 교훈: vaisdb 수정은 worktree 없이 직접이 효율적).
+  opus_direct: Phase 287 — mechanical edits (import/name fixes). 286에서 delegate 2회 truncate 후 Opus direct 성공.
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone
