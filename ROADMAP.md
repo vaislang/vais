@@ -36,8 +36,11 @@ Phase 326-335 교훈:
   changes: vaisdb/src/storage/recovery/redo.vais (DirtyPageEntry → RedoDirtyPageEntry 이름 변경, 7 occurrences)
   verify: E030 해소, 새 에러 E006 on pool.write_page (별개 문제). vaisdb OK 161 유지 (redo.vais는 cascade 후속 에러로 아직 flip 안됨).
   note: compiler-level 충돌 감지는 별도 Tier 2 phase. 당장은 rename으로 conflict 회피.
-- [ ] 340. E002 undefined variable sweep — cow.vais `std` 변수, ops/{health,metrics} 등 (impl-sonnet 1-file budget 10 tool)
-  detail: 누락 import 추가. U 지시어 스캔해서 해당 파일의 import 누락 확인.
+- [x] 340. E002 undefined variable — `*guard =` 패턴 수정 (Opus direct) ✅ 2026-04-18
+  root cause: `*guard = metrics` (write-lock guard deref assignment) 패턴을 parser/typechecker가 잘못 해석해 `guard` 자체를 undefined variable로 surface. MutexGuard/RwLockWriteGuard에는 `.set()` method가 있음 (Phase 338 forwarding과는 별개).
+  changes: ops/health.vais (*guard = metrics → guard.set(metrics)), ops/metrics.vais (multiple occurrences via regex replace)
+  verify: vaisdb OK 161→163 (+2 — health + metrics 둘 다 flip)
+  note: cow.vais의 `std.mem.replace` 류 dotted module access는 parser-level 기능 필요 — 별도 phase. 이번은 *guard만 해결.
 - [ ] 341. policy.vais span-less E001 조사 (Opus direct)
   detail: span 없이 surface되는 E001 "expected i64, found Vec<PolicyEntry>". check_module 레벨 unify에서 span 부재. 추적 후 span 부착 or 원인 파악.
 - [ ] 342. server/handler.vais + mod.vais flip (impl-sonnet 1-file budget, blockedBy 338)
