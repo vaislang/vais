@@ -43,8 +43,10 @@
   note: compiler-level fix (pattern-bound vs param shadowing 구분)는 borrow checker 큰 refactor — 후속 phase 과제.
 - [ ] 330. span 전파 2차 — patterns/module binding/expression unify 3곳에 `.with_span()` 부착 (impl-sonnet)
   detail: Phase 314 follow-up. vaisdb corpus에서 remaining 16 span-less E001 중 common path 식별 후 고정.
-- [ ] 331. security/{policy,role,user} flip (impl-sonnet) [blockedBy: 326]
-  detail: Phase 321 재시도. 326 이후 cascading 예상.
+- [x] 331. security/{policy,role,user} flip (Opus direct) ✅ 2026-04-18
+  flipped: user.vais (E004 `.as_slice()` → `.as_bytes()` 및 `fnv1a_hash` → `fnv1a_hash_bytes` 교체)
+  still failing: policy.vais (span-less E001 — parser 혹은 check_module 레벨), role.vais (E001 get_role_id — Option<&V>에서 Some(r.field) wrap 시 inner 타입 추론 실패. Phase 326 bridge의 후속 follow-up 필요)
+  verify: vaisdb OK 158→159 (+1)
 - [ ] 332. planner/{analyzer,cost_model,fulltext_plan,pipeline} flip (impl-sonnet) [blockedBy: 327,328]
 - [ ] 333. hnsw/{bulk,cow,insert} + graph/wal VaisError i64 codes quote 및 API 교정 (impl-sonnet) [blockedBy: 315 완료됨]
 - [ ] 334. server/client 잔여 (handler/types/mod) (impl-sonnet)
