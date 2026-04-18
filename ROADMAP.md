@@ -23,8 +23,10 @@ Phase 353까지의 패턴 관찰:
 - **구조적 블로커**: (a) closure body type inference, (b) UTF-8 span-offset, (c) pattern-binding Option<&V> inner unify, (d) span-less E001
 - **vaisdb-side 주요 잔여**: allocator API (bitmap DI), posting_store refactor, RagWalManager DI chain, TLS FFI
 
-- [ ] 354. 잔여 closure 패턴 inline 교체 (impl-sonnet, 1-file budget)
+- [x] 354. 잔여 closure 패턴 inline 교체 (impl-sonnet, 1-file budget) ✅ 2026-04-18
   detail: Phase 350/353 inline 패턴을 server/client 잔여 파일 (client/mod, client/types 등)에 적용.
+  changes: lang/packages/vaisdb/src/planner/fulltext_plan.vais (detect_mode_from_text: `chars().filter(|c| *c == '"').count()` → `split("\"").len() - 1`; 1→0 errors; phase158 18/18 green)
+  retry: 1 (첫 agent tool-budget 소진 후 bounded retry로 성공)
 - [ ] 355. fulltext 파서/ddl 사이트 대량 수정 (Opus direct)
   detail: fulltext/ddl.vais (alloc_page 4-arg → allocate_page 2-arg refactor 혹은 helper 추가), fulltext/mod.vais 연쇄
 - [ ] 356. sql parser bare variant prefix — parser_{ddl,dml,command,expr}.vais (per-file careful regex)
@@ -70,9 +72,10 @@ Phase 353까지의 패턴 관찰:
 - **Span-less 우선순위**: patterns/module binding unify 경로에 span 부착이 선행되어야 후속 E001 cluster 접근 가능.
 
 mode: auto
-iteration: 0
+iteration: 1
 max_iterations: 30
 strategy: Phase 354 (closure inline cascading) → 355-357 (mass refactor) → 358-361 (Opus direct compiler deep work) → 362-365 (vaisdb-side major API) → 366-369 cluster sweep → 370 Tier 2 선언. 각 phase 실패/scope over 즉시 move on.
+  strategy: sequential (compiler phases share vais-types/codegen files, per-phase verification gate required) — iteration 1, Phase 354 first
 
 ---
 
