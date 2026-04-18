@@ -38,8 +38,11 @@ Phase 353까지의 패턴 관찰:
   changes: lang/packages/vaisdb/src/sql/parser/parser_ddl.vais (15× bare variant → prefixed; Statement.CreateIndex/CreateTable, TokenKind.Not/Drop/Add, AlterAction.RenameColumn, PrivilegeKind.* 등)
   result: parser_ddl.vais 6 errors → 4 errors. 잔여 4 = 다른 클래스 (undefined fns parse_create_user/parse_primary/parse_drop_user, TokenKind↔PrivilegeKind enum mismatch) — Phase 366+ sweep로 이동.
   note: agent tool-budget 소진 후에도 diff 15줄 완결 (partial COMPLETE 판정)
-- [ ] 357. planner 파일 panic marker — total → partial 또는 ? unwrap 제거 (Opus direct)
+- [x] 357. planner 파일 panic marker — total → partial 또는 ? unwrap 제거 (Opus direct) ✅ 2026-04-18
   detail: analyzer.vais, optimizer.vais E034 panic warn. `partial` 마커 추가 또는 `?` 대신 explicit handling.
+  changes: lang/packages/vaisdb/src/planner/analyzer.vais (12× `partial F` 추가: analyze_query/select_query/cte/set_op/select_item/table_ref/join_clause/expr/function_call, extract_vector_search_params/graph_traverse_params/fulltext_match_params) + optimizer.vais (2× partial: optimize_plan, recalculate_costs)
+  result: analyzer.vais TC clean (codegen C005 `to_uppercase` 미지원 잔여, TC scope 외); optimizer.vais E034 제거 (E022 use-after-move 잔여, 별도 이슈)
+  net: 2 files TC 상 panic 관련 오류 완전 제거
 - [ ] 358. closure body type inference (Opus direct, Phase 342 follow-up)
   detail: `|x|` closure 안에서 x 타입을 outer fn param annotation에서 전파. check_expr closure handling 확장.
 - [ ] 359. span-less E001 전파 (Opus direct, Phase 330 follow-up)
@@ -79,10 +82,11 @@ Phase 353까지의 패턴 관찰:
 - **Span-less 우선순위**: patterns/module binding unify 경로에 span 부착이 선행되어야 후속 E001 cluster 접근 가능.
 
 mode: auto
-iteration: 3
+iteration: 4
 max_iterations: 30
 strategy: Phase 354 (closure inline cascading) → 355-357 (mass refactor) → 358-361 (Opus direct compiler deep work) → 362-365 (vaisdb-side major API) → 366-369 cluster sweep → 370 Tier 2 선언. 각 phase 실패/scope over 즉시 move on.
-  strategy: sequential — iteration 3, Phase 356 (sql parser variant prefix; impl-sonnet, 1-file)
+  strategy: sequential — iteration 4, Phase 357 (planner panic markers; Opus direct per ROADMAP)
+  opus_direct: 357 — panic semantics decision (add `partial` vs replace `?` unwrap); design-impl inseparable.
 
 ---
 
