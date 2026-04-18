@@ -57,7 +57,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 1
+iteration: 2
 max_iterations: 30
   strategy-note: A안 채택 — Phase 2.10 fix 재시도하기 전에 **체계(LIVING_SPEC + COOKBOOK + CLAUDE.md 철칙)** 먼저 구축. 에이전트 작업 시 "과거 문법 추측 → regression" 루프를 근본 차단하는 게 목적. Phase 1.8 → 1.9 → 1.10 체인 후 2.10 재개.
   strategy iteration 1: sequential — #42 (#43, #44 blockedBy 체인). #42는 100+ 파일 생성 + regression floor 유지 필요 → impl-sonnet background.
@@ -125,7 +125,10 @@ progress: 9/18 (50%)
   - 모두 `vaisc check` exit 0 (regression floor 유지 필수)
   - `cargo test -p vaisc --test integrity --release` 기존 수치 불변
   - 신규 integrity test `test_living_spec_files_ok` 추가 — LIVING_SPEC/ 파일이 하나라도 실패 시 CI fail
-- [ ] 1.9. COOKBOOK.md 작성 (Opus direct) [blockedBy: 1.8]
+- [x] 1.9. COOKBOOK.md 작성 (Opus direct) ✅ 2026-04-19
+  detail: docs/language/COOKBOOK.md (506줄) — 실제 작업 중 발견된 22개 실수 패턴을 ❌/✅ 형식으로 정리. LIVING_SPEC 예제 cross-link.
+  changes: docs/language/COOKBOOK.md (신규), CLAUDE.md (상단에 COOKBOOK/LIVING_SPEC/LEXER_KEYWORDS 참조 링크 3줄 추가).
+  verify: 506 lines, 22 items. integrity gate green.
   target: docs/language/COOKBOOK.md 신규
   content: 자주 틀리는 케이스 20+ (에이전트 작업 기록 + 저장소 내 실제 버그 기반):
     - Option<T>.map 대신 Some(r.field) 재포장 (Phase 2.10 known bug)
