@@ -1,10 +1,65 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 278 완료, vaisdb 마이그레이션 진행 중)
+> **현재 버전**: 0.1.0 (Phase 279 완료, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 278: ByteBuffer.as_bytes → &[u8])
+> **최종 업데이트**: 2026-04-18 (Phase 279: Box<T> ↔ Box degenerate coercion)
 > **현재 vaisdb OK: 126/261 (48.3%)** — Phase 199 시작 대비 +96 파일 개선
+> **목표**: Tier 1 완료 = vaisdb OK 180/261 (70%+)
+
+## 🎯 다음 세션 시작점 (Phase 280+)
+
+`mode: auto` — 세션 재시작 시 `harness` skill이 이 섹션을 자동 복구하여 이어서 진행.
+
+### Phase 280-285: 남은 컴파일러 개선 (단기, OK +5 예상)
+
+- [ ] 280. tuple type 인식 확장 — `(T1, T2, T3)` in Option/Vec element 위치. 대상: graph/query/pattern, storage/recovery/{undo,mod} (E001 tuple)
+- [ ] 281. Self ↔ struct_name lenient coercion — impl 블록 내 Self를 concrete 타입으로 확장. 대상: server/embedded (E001 "expected EmbeddedConfig, found Self")
+- [ ] 282. E025 borrow-checker 완화 — Vec/HashMap `&mut` 후 재참조 허용 (rag_search, 여러 위치)
+- [ ] 283. Result<T> implicit wrap — 함수 body 마지막이 T이고 리턴이 Result<T,E>면 Ok(T) 자동 wrap (impl-method만). 대상: graph/edge/adj, 여러 storage 위치
+- [ ] 284. `chars()`/`skip()` iterator fallback — str/Vec에서 identity 리턴하는 permissive fallback (iteration 체크는 codegen). 대상: fulltext/planner
+- [ ] 285. **Tier 1 컴파일러 마무리** — 남은 span-less E001 분석 + Phase158 strict 유지 확인
+
+### Phase 286-300: vaisdb per-file 수정 (중기, OK +15~20 예상)
+
+단일-에러 파일 우선. 각 phase에서 3-5개 파일씩 배치.
+
+- [ ] 286. security/ 단일 E002/E004 일괄 수정 (user, role, sanitizer, rls, policy, types — 6 파일)
+- [ ] 287. planner/ 필드명 불일치 일괄 (cache, analyzer, optimizer, types, explain — 5 파일)
+- [ ] 288. graph/integration 단일 E002 (sql_join, vector, 기타 — 4~5 파일)
+- [ ] 289. fulltext/ 필드/메서드 누락 정리 (concurrency, search/boolean — 3~4 파일)
+- [ ] 290. vector/ HNSW 구조적 문제 (insert, search, layer, bulk — 5+ 파일)
+- [ ] 291. sql/ executor/parser 경로 (executor/{subquery,mod}, parser/*, row — 5+ 파일)
+- [ ] 292-295. 남은 ops/, server/, client/ 파일들
+- [ ] 296-300. 예비 슬롯 — cascading으로 드러난 새로운 이슈 처리
+
+### Phase 301-310: 두 경로 모두 필요 (장기, OK +10~15 예상)
+
+- [ ] 301. fnv1a_hash 일관화 — &str/&[u8] 두 signature 통합. 컴파일러 fallback + vaisdb 전역 교체
+- [ ] 302. String/Str coercion 잔여 cascade 조사 + 수정
+- [ ] 303. SqlType/SqlValue variant 처리 — 패턴 매칭 정밀화 (compiler) + vaisdb 패턴 정리
+- [ ] 304. TxnSnapshot API 정리 — cmd_id vs current_cmd_id 통일 (vaisdb)
+- [ ] 305. BufferPool alias 재정비 — write_page/pin_page 시그니처 정합
+- [ ] 306-310. 예비 슬롯
+
+### 재개 절차
+
+1. `cd /Users/sswoo/study/projects/vais/compiler`
+2. harness skill 자동 실행 → 이 ROADMAP의 `mode: auto` 감지 → Phase 280부터 재개
+3. 각 phase 완료 시 `cargo test -p vaisc --test e2e --release phase158` (strict gate) + vaisdb OK 카운트 기록
+4. OK 180/261 도달 시 Tier 1 완료 선언
+
+### 핵심 원칙 (CLAUDE.md 연동)
+
+- **엄격 타입 규칙 유지**: Phase158 18/18 test 항상 GREEN. 암시적 bool↔i64 return coercion 금지 (check_function 경로).
+- **Lenient는 impl-method/operator 한정**: strict 보호 테스트가 커버하는 top-level F는 건드리지 않음.
+- **vaisdb-side vs compiler-side 판단**: 단일 파일만 영향 → vaisdb 수정, 여러 파일 영향 → compiler 완화.
+- **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
+
+mode: auto
+iteration: 0
+max_iterations: 30
+strategy: single-error 파일부터 → cascading 해결 → 두-경로 통합. impl-sonnet 위임 가능한 단위로 쪼개서 병렬 진행.
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone
