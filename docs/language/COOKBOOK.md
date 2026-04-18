@@ -459,20 +459,25 @@ msg := "hello {name}"
 
 ---
 
-## 21. 함수 타입 `fn(T)->U` 표기법 (파라미터로 함수)
+## 21. 함수 타입 — `(T) -> U` 또는 `|T| -> U` (Phase 1.15 ✅)
 
 ```vais
-# ❌ DON'T — 과거 실수: `F(T) -> U` 대문자 F 오해
+# ❌ DON'T — `F` 대문자는 function declaration keyword, 타입 표기 아님
 F apply<T>(val: T, f: F(T) -> i64) -> i64 = f(val)
-# → 파서 오류: found LParen, expected ','
 
-# ✅ DO — 함수 타입은 현재 컴파일러에서 closure literal로 전달
-# 또는 제네릭 struct에 "래핑된 값"을 넘기는 우회
+# ✅ DO — 괄호 문법
+F apply<T>(val: T, f: (T) -> i64) -> i64 { f(val) }
+
+# ✅ DO — 파이프 문법 (클로저처럼)
+F apply2<T>(val: T, f: |T| -> i64) -> i64 { f(val) }
+
+F double(x: i64) -> i64 { x * 2 }
+F main() -> i64 { apply(5, double) }  # 10
 ```
 
-**왜 실패하는지**: 함수 타입을 명시하는 `fn(T)->U` 문법은 현재 파서에서 완전 지원 안 됨. 클로저는 `|x| x + 1` 로만 생성.
+**Phase 1.15 확인**: parser `parse_base_type`는 `(T1, T2) -> U`와 `|T1, T2| -> U` 둘 다 `Type::Fn`으로 파싱. `F` 대문자는 function declaration keyword라서 타입 위치에 올 수 없음.
 
-**참조**: `LIVING_SPEC/03_generics/generic_vec_usage.vais` (우회 패턴)
+**참조**: `LIVING_SPEC/03_generics/generic_higher_order.vais`
 
 ---
 

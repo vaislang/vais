@@ -303,11 +303,12 @@ progress: 9/18 (50%)
   [완료 기준]:
   - compiler_syntax B_break_value 테스트 추가 + passing
   - LIVING_SPEC L_loop_break.vais 원본 (값 전달) 통과
-- [ ] 1.15 Function type `fn(T) -> U` 파라미터 표기 (Opus direct) [blockedBy: 1.14]
-  detail: `F apply<T>(val: T, f: fn(T) -> i64) -> i64` 같은 고계함수 파라미터 지원. Parser 타입 production 확장.
-  [완료 기준]:
-  - LIVING_SPEC generic_vec_usage.vais 원본 (fn param) 통과
-  - 고계함수 e2e 2개
+- [x] 1.15 Function type `(T) -> U` 파라미터 표기 (Opus direct) ✅ 2026-04-19
+  detail: Vais는 `fn` keyword 없음 — 대신 `(T1, T2) -> U` 괄호 문법 + `|T1, T2| -> U` 파이프 문법 **이미 지원** (parse_base_type, types.rs:438-482). 기존 실수는 `F(T) -> U` 대문자 F(function decl keyword) 오용. 문서 정정 + 올바른 예제 추가.
+  changes:
+    - docs/language/LIVING_SPEC/03_generics/generic_higher_order.vais — (T) -> U 사용 신규 17줄
+    - docs/language/COOKBOOK.md 항목 21 — "(T) -> U 지원됨" 업데이트
+  verify: `F apply<T>(val: T, f: (T) -> i64) -> i64 { f(val) }` 통과. integrity gate green.
 - [ ] 1.16 i65/i500 같은 bad primitive 엄격 거부 (impl-sonnet) [blockedBy: 1.15]
   detail: 현재 `i65`는 generic ident로 취급되어 TC까지 흘러감. Parser에서 primitive 패턴 (`i8`/`i16`/`i32`/`i64`/`i128`/`u*`/`f32`/`f64`)만 허용하고 나머지 `iN` 식별자는 명확한 에러.
   [완료 기준]:

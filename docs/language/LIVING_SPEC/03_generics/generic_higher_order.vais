@@ -1,0 +1,13 @@
+# LIVING_SPEC/03_generics/generic_higher_order.vais
+# Key concept: 함수 타입 파라미터 — `f: (T) -> U` 형식.
+# Phase 1.15: `(T1, T2) -> R` 또는 `|T1, T2| -> R` 둘 다 지원.
+
+F apply<T>(val: T, f: (T) -> i64) -> i64 {
+    f(val)
+}
+
+F double(x: i64) -> i64 { x * 2 }
+
+F main() -> i64 {
+    apply(5, double)  # 10
+}
