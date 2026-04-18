@@ -236,6 +236,32 @@ X ByteBuffer {
         @.read_i32_le()
     }
 
+    # Aliases for read_* using `get_*` naming. Phase 229. vaisdb uses
+    # get_u8/get_u16_le/get_i32_le etc. naming convention.
+    F get_u8(&self) -> i64 {
+        @.read_u8()
+    }
+
+    F get_u16_le(&self) -> i64 {
+        @.read_u16_le()
+    }
+
+    F get_i32_le(&self) -> i64 {
+        @.read_i32_le()
+    }
+
+    F get_i64_le(&self) -> i64 {
+        @.read_i64_le()
+    }
+
+    F get_f32_le(&self) -> i64 {
+        @.read_i32_le()
+    }
+
+    F get_f64_le(&self) -> i64 {
+        @.read_f64_le()
+    }
+
     # Read a length-prefixed string
     # Format: [i32 length (LE)] [bytes]
     # Returns a new heap-allocated null-terminated string as i64 pointer
