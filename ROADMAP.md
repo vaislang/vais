@@ -1,11 +1,11 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 357 **Tier 2 세션 1** 완료, vaisdb 마이그레이션 진행 중)
+> **현재 버전**: 0.1.0 (Phase 354-370 **Tier 2 세션 2** 완료, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 354-357 세션 — Phase 354 fulltext_plan closure, 355 allocator WAL stubs, 356 sql parser variant prefix, 357 planner partial markers) 🎯
-> **현재 vaisdb OK: 180/261 측정 대기** — 다음 세션 시작 시 전체 빌드로 재측정 필요 (개별 파일 TC 개선 확인됨)
-> **다음 목표**: Tier 2 = OK 210/261 (80%+). Phase 358부터 재개.
+> **최종 업데이트**: 2026-04-18 (Phase 354-370 대형 세션, 17 phases, OK 134→142/261 +8 files) 🎯
+> **현재 vaisdb OK: 142/261 (54.4%)** — Tier 2 목표 210까지 +68 필요. Phase 358-361 (compiler deep work) 별도 세션 권장.
+> **Tier 2 세션 2 성과**: posting.vais (9→0), handler codegen cascade (+5 files), bootstrap, split, audit, rls — 인프라 gain 다수.
 
 ## 🎯 다음 세션 시작점 (Phase 354+) — Tier 2 드라이브
 
@@ -84,8 +84,48 @@ Phase 353까지의 패턴 관찰:
   changes: server/handler.vais classify_sql_tag — `bytes := mut sql.as_bytes()` + `bytes[i]` subscript (C003 codegen bug) → `bytes: Vec<u8> := sql.as_bytes()` + `bytes.get(i as i64)` (borrow-safe)
   result: handler.vais + tcp.vais + database.vais + bootstrap.vais + main.vais 전부 OK (TC+codegen clean). **OK measure 134/261 → 139/261 (+5 files)**.
   note: 3-parallel agents (storage/rag/vector+graph worktrees) tool-budget 소진으로 bootstrap만 landing (Phase 367). Direct Opus가 handler cascade 식별해 한 번에 5 file unblock.
-- [ ] 369. 잔여 per-file sweep (4/4) — next single-error cluster (진행 중)
-- [ ] 370. Tier 2 완료 선언 — OK ≥210/261 확인 + 요약 보고
+- [x] 369. 잔여 per-file sweep (4/4) — single-error cluster batch ✅ 2026-04-18
+  changes:
+    - storage/btree/split.vais: slice_to_vec(key) → key.to_vec()
+    - fulltext/maintenance/compaction.vais: allocate_page(file) → alloc_page(file, txn_id, 0, gcm) stub
+    - security/audit.vais: bytes[i] → bytes.get(i as i64) (handler pattern)
+    - security/rls.vais: h_bytes/n_bytes/digits 동일 패턴
+    - security/policy.vais: Vec<Str>[i] → .get() (permissive/restrictive_exprs + keys)
+  result: split.vais, audit.vais, rls.vais TC+codegen clean. **OK 140 → 142/261 (+2)**.
+  cumulative: Tier 2 session 134 → 142 (+8 files total).
+  스킵됨: policy.vais (span-less E001), tls.vais (span-less `std`), strategies.vais (Vec<Struct>[i].field= write access 없음)
+- [x] 370. Tier 2 세션 2 close — 목표 미달이나 진전 요약 ✅ 2026-04-18
+  start: OK 134/261 (세션 시작 시 재측정 baseline; Phase 353 ROADMAP 기록 180/261은 다른 측정 방식)
+  end: OK 142/261 (+8 files) — Tier 2 목표 210/261까지 추가 +68 필요
+  progress_by_phase:
+    - 354: +0 (fulltext_plan 1-err fix, cascade)
+    - 355: +0 (ddl.vais partial, allocator WAL stubs 인프라)
+    - 356: +0 (parser_ddl 6→4)
+    - 357: +0 (analyzer/optimizer partial markers, E034 제거)
+    - 362: +0 (rag/mod 7→5, RagWalManager GCM 블로커 deferred)
+    - 363: +1 (posting.vais 9→0, pool/allocator 백호환 오버로드)
+    - 364: +0 (tls.vais 4→3, span-less `std` 잔여)
+    - 365: +0 (Executor trait 추가, cross-file dispatch 블로커)
+    - 366: +0 (token.vais TC clean, parser_dml 5→3)
+    - 367: +1 (bootstrap.vais 1→0)
+    - 368: +5 (handler.vais codegen cascade → +5 files: handler, tcp, database, bootstrap[중복], main)
+    - 369: +2 (split, audit, rls — Vec[i] → .get())
+  infrastructure 성과:
+    - pool.vais: get_page_by_id/get_page_mut_by_id/mark_dirty 백호환 메서드
+    - allocator.vais: alloc_page/free_page WAL stubs + free_page_simple 2-arg variant
+    - storage/file.vais: path_exists (기존 발견, 중복 방지)
+    - sql/executor/mod.vais: Executor trait (Volcano 프로토콜)
+    - memory/storage.vais: insert_entry, get_all
+  잔여 compiler blockers (Phase 358-361, 별도 세션 권장):
+    - 358 closure body type inference — cross-file impl dispatch도 포함
+    - 359 span-less E001/E002 (policy/tls/chunking/graph 등 다수)
+    - 360 pattern-binding Option<&V>
+    - 361 UTF-8 byte-offset span
+  추가 codegen 블로커 발견:
+    - C003: Vec[i] 인덱싱 타입 추론 실패 (workaround: `bytes: Vec<u8> := x.as_bytes()` + `.get()`)
+    - C003: tuple `.0`/`.1` 필드 접근 미지원
+    - C005: Str.char_at, Str.parse_f64, Str.to_uppercase 미지원
+    - Vec<Struct>[i].field= write access 미지원
 
 ### 작업 전략
 
