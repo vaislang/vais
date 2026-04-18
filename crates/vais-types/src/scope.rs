@@ -193,6 +193,23 @@ impl TypeChecker {
         pattern_name: &str,
         expr_type: &ResolvedType,
     ) -> Vec<ResolvedType> {
+        // Phase 300a: Option<T>/Result<T,E> are primitive variant types, not
+        // Named enum defs — special-case Some/None/Ok/Err patterns so the
+        // bound variable gets the proper inner type (avoids losing V through
+        // HashMap.get_mut's Option<&mut V> return value).
+        match expr_type {
+            ResolvedType::Optional(inner) => match pattern_name {
+                "Some" => return vec![(**inner).clone()],
+                "None" => return vec![],
+                _ => {}
+            },
+            ResolvedType::Result(ok, err) => match pattern_name {
+                "Ok" => return vec![(**ok).clone()],
+                "Err" => return vec![(**err).clone()],
+                _ => {}
+            },
+            _ => {}
+        }
         // Extract enum name and generics from expr_type
         if let ResolvedType::Named {
             name: enum_name,

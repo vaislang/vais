@@ -58,7 +58,10 @@
 
 ### Phase 300+: 새 compiler 집중 phase (287에서 surface된 공통 블로커)
 
-- [ ] 300a. **HashMap<K,V>.get_mut / get pattern destructuring V 복구** — `self.users.get_mut(&name)` 반환값이 `Option<&mut V>`인데 `Some(u) => u` 패턴에서 u의 타입이 '?'로 유실. 영향: security/user.vais, security/role.vais, security/policy.vais, planner/cache.vais, 기타 10+ 파일. compiler-side로 풀면 cascading 해소.
+- [x] 300a. **HashMap<K,V>.get / get_mut destructuring V 복구** (Opus direct) ✅ 2026-04-18
+  root cause: (1) scope.rs `get_tuple_variant_fields`는 `Optional/Result`를 Named로만 찾고 변형을 처리 못함 (Some/None/Ok/Err). (2) stdlib HashMap.get는 V 직접 반환인데 vaisdb는 Option<V> 기대 — struct-lookup이 builtin dispatch 덮어씀.
+  changes: vais-types/scope.rs (Optional/Result variant destructuring 특수 처리), vais-types/checker_expr/calls.rs (HashMap/BTreeMap/IndexMap/StrHashMap.get은 struct lookup bypass → builtin Option<V> 반환)
+  verify: phase158 18/18 GREEN, reproducer OK, vaisdb OK 134→136 (+2) + security/role/user/policy 에러 진전
 - [ ] 300b. **enum variant destructuring + Option.is_some** — `HybridPlanNode.VectorScan { alias, .. }`의 alias (Option<Str>)에 `.is_some()` 호출 시 '?'로 처리됨. 대상: planner/explain.vais 등.
 
 ### Phase 301-310: 두 경로 모두 필요 (장기, OK +10~15 예상)
@@ -85,11 +88,10 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 8
+iteration: 9
 max_iterations: 30
 strategy: single-error 파일부터 → cascading 해결 → 두-경로 통합. impl-sonnet 위임 가능한 단위로 쪼개서 병렬 진행.
-  strategy: Phase 287 — planner/ 5 파일 (cache, analyzer, optimizer, types, explain) vaisdb-side. Opus direct (286 교훈: vaisdb 수정은 worktree 없이 직접이 효율적).
-  opus_direct: Phase 287 — mechanical edits (import/name fixes). 286에서 delegate 2회 truncate 후 Opus direct 성공.
+  strategy: Phase 300a — HashMap get_mut destructuring V 복구 (compiler). Sequential, Opus direct (진단 후 판단: impl-sonnet 위임 가능한 mechanical edit이면 delegate).
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone

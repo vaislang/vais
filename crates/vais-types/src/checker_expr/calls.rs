@@ -306,8 +306,18 @@ impl TypeChecker {
             _ => unwrap_named(&receiver_type).unwrap_or((String::new(), vec![])),
         };
 
+        // Phase 300a: for HashMap<K,V>.get — bypass the stdlib struct lookup
+        // (which returns V directly) and fall through to the builtin dispatch
+        // that returns Option<V>. vaisdb code consistently expects Option<V>,
+        // matching Rust semantics.
+        let bypass_struct_lookup = (inner_type == "HashMap"
+            || inner_type == "StrHashMap"
+            || inner_type == "BTreeMap"
+            || inner_type == "IndexMap")
+            && method.node == "get";
+
         // First, try to find the method on the struct or enum itself
-        if !inner_type.is_empty() {
+        if !inner_type.is_empty() && !bypass_struct_lookup {
             // Look up method in struct or enum
             let found_method = self
                 .structs
