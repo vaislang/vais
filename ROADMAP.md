@@ -59,7 +59,10 @@
   changes: vais-types/checker_expr/calls.rs (generic `.cloned()`/`.copied()` handler — Ref 언래핑 또는 identity)
   verify: phase158 18/18 GREEN, OK 141 유지 (vaisdb-side vector/ 이슈는 VaisError.new arg count, HNSW API 등 bigger refactor 필요 — 보류)
   note: .cloned() handler가 생겼으나 일부 path에서 여전히 dispatch 미도달 — 후속 진단 필요
-- [ ] 291. sql/ executor/parser 경로 (executor/{subquery,mod}, parser/*, row — 5+ 파일)
+- [x] 291. sql/ executor/parser — 조사만 (Opus direct) ✅ 2026-04-18
+  changes: 없음 (조사 후 revert)
+  verify: phase158 18/18 GREEN, OK 141 유지
+  note: sql/parser/token.vais 외 다수가 bare enum variant 사용 (TokenKind. 접두 없음) → 대규모 refactor 필요. 현재 scope 초과. 후속 phase에서 sweeping rename 또는 컴파일러 bare-variant 해석 확장 고려
 - [ ] 292-295. 남은 ops/, server/, client/ 파일들
 - [ ] 296-300. 예비 슬롯 — cascading으로 드러난 새로운 이슈 처리
 
@@ -98,10 +101,10 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 13
+iteration: 14
 max_iterations: 30
 strategy: single-error 파일부터 → cascading 해결 → 두-경로 통합. impl-sonnet 위임 가능한 단위로 쪼개서 병렬 진행.
-  strategy: Phase 290 — vector/ HNSW vaisdb fix. Opus direct.
+  strategy: Phase 291 — sql/ executor+parser vaisdb fix. Opus direct.
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone
