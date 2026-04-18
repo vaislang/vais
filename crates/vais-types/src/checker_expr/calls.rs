@@ -504,6 +504,22 @@ impl TypeChecker {
                         return Ok(ResolvedType::Str);
                     }
                 }
+                "chars" | "bytes" => {
+                    // Phase 284: str.chars() → Vec<Str> (single-char simplification),
+                    // str.bytes() → Vec<u8>. Unlocks iterator-chain patterns
+                    // like text.chars().filter(...).count() used in vaisdb fulltext.
+                    if args.is_empty() {
+                        let elem = if method.node == "bytes" {
+                            ResolvedType::U8
+                        } else {
+                            ResolvedType::Str // single-char str, permissive simplification
+                        };
+                        return Ok(ResolvedType::Named {
+                            name: "Vec".to_string(),
+                            generics: vec![elem],
+                        });
+                    }
+                }
                 "starts_with" | "ends_with" | "contains" => {
                     // Phase 265: str.starts_with("...") → Bool.
                     if args.len() == 1 {
@@ -828,6 +844,21 @@ impl TypeChecker {
                             return Ok(receiver_type.clone());
                         }
                     }
+                    "skip" => {
+                        // Phase 284: ByteBuffer.skip(n: I64) → Result<(), VaisError>.
+                        // Advances the read position by n bytes. Used as buf.skip(3)?
+                        // in vaisdb rag/memory/types.vais for padding alignment.
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok(ResolvedType::Result(
+                            Box::new(ResolvedType::Unit),
+                            Box::new(ResolvedType::Named {
+                                name: "VaisError".to_string(),
+                                generics: vec![],
+                            }),
+                        ));
+                    }
                     "write_u8" | "write_u16_le" | "write_u32_le" | "write_u64_le"
                     | "write_i32_le" | "write_i64_le" | "write_f32_le" | "write_f64_le"
                     | "write_bytes" | "write_str" | "write_varint" | "seek" | "rewind"
@@ -980,6 +1011,41 @@ impl TypeChecker {
                         // Take ref to the same type.
                         if args.is_empty() {
                             return Ok(ResolvedType::Ref(Box::new(receiver_type.clone())));
+                        }
+                    }
+                    "filter" | "skip" | "take" | "flat_map" => {
+                        // Phase 284: Vec iterator adapter methods return Vec<T> (identity
+                        // at type level — permissive for chaining like
+                        // text.chars().filter(...).count()). Only for Vec, not HashMap.
+                        if name == "Vec" {
+                            for a in args.iter() {
+                                let _ = self.check_expr(a);
+                            }
+                            return Ok(receiver_type.clone());
+                        }
+                    }
+                    "count" | "sum" | "product" | "min" | "max" => {
+                        // Phase 284: Vec iterator terminal methods returning I64.
+                        // count() on Vec<T> yields the number of elements;
+                        // used as the terminal in .chars().filter(...).count() chains.
+                        if name == "Vec" {
+                            for a in args.iter() {
+                                let _ = self.check_expr(a);
+                            }
+                            return Ok(ResolvedType::I64);
+                        }
+                    }
+                    "map" | "for_each" => {
+                        // Phase 284: Vec.map(|x| ...) → Vec<T> (permissive, identity on T).
+                        // Vec.for_each is Unit.
+                        if name == "Vec" && !args.is_empty() {
+                            for a in args.iter() {
+                                let _ = self.check_expr(a);
+                            }
+                            if method.node == "for_each" {
+                                return Ok(ResolvedType::Unit);
+                            }
+                            return Ok(receiver_type.clone());
                         }
                     }
                     _ => {}
