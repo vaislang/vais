@@ -603,11 +603,10 @@ impl TypeChecker {
             }
         }
 
-        // Phase 246: built-in numeric methods (f32/f64).
-        if matches!(
-            &receiver_type,
-            ResolvedType::F32 | ResolvedType::F64 | ResolvedType::I32 | ResolvedType::I64
-        ) {
+        // Phase 246: built-in numeric methods (f32/f64/integers).
+        // Phase 260: extended to all integer types so vaisdb's u32.min(u32),
+        // u64.min(u64), u8.abs() etc. resolve through the fallback.
+        if receiver_type.is_numeric() {
             match method.node.as_str() {
                 "sqrt" | "abs" | "floor" | "ceil" | "round" | "ln" | "log2" | "log10"
                 | "exp" | "sin" | "cos" | "tan" => {
