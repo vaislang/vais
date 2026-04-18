@@ -123,11 +123,8 @@ impl TypeChecker {
                             Some(Ok(ResolvedType::I64))
                         }
                     }
-                    _ => Some(Err(TypeError::Mismatch {
-                        expected: "Optional or Result".to_string(),
-                        found: inner_type.to_string(),
-                        span: Some(expr.span),
-                    })),
+                    // Phase 251: same lenient fallback as Try for ! (Unwrap).
+                    _ => Some(Ok(inner_type.clone())),
                 }
             }
 
