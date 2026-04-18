@@ -809,7 +809,16 @@ impl TypeChecker {
                         return Ok(ResolvedType::Unit);
                     }
                     "as_bytes" => {
-                        // Returns raw byte pointer (i64).
+                        // Phase 278: ByteBuffer.as_bytes() → &[u8] (was i64 raw
+                        // pointer). vaisdb's gcm.write_record takes &[u8]; the
+                        // raw-pointer variant is now `as_ptr()`.
+                        if args.is_empty() {
+                            return Ok(ResolvedType::Ref(Box::new(ResolvedType::Slice(
+                                Box::new(ResolvedType::U8),
+                            ))));
+                        }
+                    }
+                    "as_ptr" => {
                         if args.is_empty() {
                             return Ok(ResolvedType::I64);
                         }

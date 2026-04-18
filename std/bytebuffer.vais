@@ -349,8 +349,8 @@ X ByteBuffer {
         ByteBuffer { data: buf, len: other.len, cap: other.len, pos: 0 }
     }
 
-    # Get raw bytes as pointer + length pair (returns data pointer)
-    F as_bytes(&self) -> i64 {
+    # Get raw data pointer (for FFI). Use as_bytes for safe slice access.
+    F as_ptr(&self) -> i64 {
         self.data
     }
 
