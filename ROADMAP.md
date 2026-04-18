@@ -3,7 +3,21 @@
 
 > **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 220: Vec/HashMap 추가 메서드 fallback)
+> **최종 업데이트**: 2026-04-18 (Phase 221: Vec/HashMap auto-deref one level)
+
+---
+
+## ⏸ 완료 — Phase 221: Vec/HashMap fallback에 &Vec / &HashMap 자동 deref
+completed_at: 2026-04-18
+
+mode: auto
+strategy: Phase 219 fallback이 ResolvedType::Named만 매칭. &Vec<T> 같은 ref receiver는 미커버. 한 단계 deref 패턴 추가.
+
+### 결과
+- E004 57→55, OK 86→87
+- baseline green
+
+progress: 1/1 (100%)
 
 ---
 

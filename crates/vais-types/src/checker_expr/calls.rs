@@ -615,7 +615,18 @@ impl TypeChecker {
         // return I64 for push to match std/vec.vais's `F push -> i64`) so
         // they unblock downstream type-checking without committing to an
         // exact element type.
-        if let ResolvedType::Named { name, generics } = &receiver_type {
+        // Auto-deref one level for built-in Vec/HashMap dispatch.
+        let receiver_named = match &receiver_type {
+            ResolvedType::Named { .. } => Some(&receiver_type),
+            ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Pointer(inner) => match inner.as_ref() {
+                ResolvedType::Named { .. } => Some(inner.as_ref()),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(ResolvedType::Named { name, generics }) = receiver_named {
             if name == "Vec" || name == "HashMap" || name == "StrHashMap" {
                 match method.node.as_str() {
                     "len" | "size" | "capacity" => {
