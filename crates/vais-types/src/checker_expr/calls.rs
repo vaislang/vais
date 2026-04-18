@@ -944,6 +944,12 @@ impl TypeChecker {
             if method.node == "to_string" && args.is_empty() {
                 return Ok(ResolvedType::Str);
             }
+            // Phase 269: generic `.as_ref()` on ANY type returns &T.
+            // Option::as_ref, Vec::as_ref, Result::as_ref etc. all match
+            // this pattern. Strict borrow-checking runs separately.
+            if method.node == "as_ref" && args.is_empty() {
+                return Ok(ResolvedType::Ref(Box::new(receiver_type.clone())));
+            }
             // Phase 226: generic `.clone()` on ANY Named type returns the same type.
             if method.node == "clone" && args.is_empty() {
                 return Ok(receiver_type.clone());
