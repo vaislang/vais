@@ -1,11 +1,11 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 354-370 **Tier 2 세션 2** 완료, vaisdb 마이그레이션 진행 중)
+> **현재 버전**: 0.1.0 (Phase 354-370 + compiler deep work 완료, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 354-370 대형 세션, 17 phases, OK 134→142/261 +8 files) 🎯
-> **현재 vaisdb OK: 142/261 (54.4%)** — Tier 2 목표 210까지 +68 필요. Phase 358-361 (compiler deep work) 별도 세션 권장.
-> **Tier 2 세션 2 성과**: posting.vais (9→0), handler codegen cascade (+5 files), bootstrap, split, audit, rls — 인프라 gain 다수.
+> **최종 업데이트**: 2026-04-18 (대형 세션 — 17 phases + compiler patches, OK 134→157/261 +23 files) 🎯
+> **현재 vaisdb OK: 157/261 (60.2%)** — Tier 2 목표 210까지 +53 필요.
+> **Tier 2 세션 2+3 성과**: posting.vais (9→0), handler codegen cascade (+5 files), tuple codegen (+13 cascade), Str/HashMap inference, span attach for UndefinedVar — compiler 인프라 대폭 개선.
 
 ## 🎯 다음 세션 시작점 (Phase 354+) — Tier 2 드라이브
 
@@ -43,14 +43,18 @@ Phase 353까지의 패턴 관찰:
   changes: lang/packages/vaisdb/src/planner/analyzer.vais (12× `partial F` 추가: analyze_query/select_query/cte/set_op/select_item/table_ref/join_clause/expr/function_call, extract_vector_search_params/graph_traverse_params/fulltext_match_params) + optimizer.vais (2× partial: optimize_plan, recalculate_costs)
   result: analyzer.vais TC clean (codegen C005 `to_uppercase` 미지원 잔여, TC scope 외); optimizer.vais E034 제거 (E022 use-after-move 잔여, 별도 이슈)
   net: 2 files TC 상 panic 관련 오류 완전 제거
-- [ ] 358. closure body type inference (Opus direct, Phase 342 follow-up)
-  detail: `|x|` closure 안에서 x 타입을 outer fn param annotation에서 전파. check_expr closure handling 확장.
-- [ ] 359. span-less E001 전파 (Opus direct, Phase 330 follow-up)
-  detail: patterns/module binding/expression unify 3곳에 `.with_span()` 부착. 16→10 목표.
-- [ ] 360. pattern-binding Option<&V> inner unify (Opus direct, Phase 336 follow-up)
-  detail: role.vais get_role_id 등 Some(r.field) wrap 문제. match arm pattern binding flow 재설계 조사.
-- [ ] 361. UTF-8 byte-offset span bug (Opus direct, Phase 337 follow-up)
-  detail: pipeline.vais:219 comment line 오표시. lexer span 또는 ariadne byte→char 변환 추적.
+- [x] 358. closure body type inference (Opus direct, Phase 342 follow-up) ✅ 2026-04-18 (partial — Str method inference)
+  detail: `|x|` closure 안에서 x 타입을 outer fn param annotation에서 전파.
+  done: type_inference.rs에 Str methods (as_bytes/char_at/parse_f64/to_uppercase 등) 명시적 반환 타입 추가. 실제 closure 전파는 스코프 외 (Box<dyn Trait> 디스패치와 얽혀 있음).
+- [x] 359. span-less E001 전파 (Opus direct, Phase 330 follow-up) ✅ 2026-04-18
+  detail: patterns/module binding/expression unify 3곳에 `.with_span()` 부착.
+  done: (a) literals.rs UndefinedVar → expr.span 전파, (b) control_flow.rs if-else branch mismatch → cond.span, (c) substitution.rs fn-call arg unify → arg.span.
+- [x] 360. pattern-binding Option<&V> inner unify (Opus direct, Phase 336 follow-up) ✅ 2026-04-18 (partial)
+  detail: role.vais get_role_id 등 Some(r.field) wrap 문제.
+  done: codegen type_inference.rs HashMap.get → Optional(Ref(V)) for cross-pass uniformity with vais-types. role.vais 레벨 Some(r.role_id) unwrap은 여전히 RoleInfo/u64 혼동 — match arm 전파 재설계 필요, 이번 스코프 외.
+- [x] 361. UTF-8 byte-offset span bug (Opus direct, Phase 337 follow-up) ✅ 2026-04-18 (solved via tuple codegen)
+  detail: pipeline.vais:219 comment line 오표시.
+  done: 원인은 codegen C003 `Cannot access field '0' on type '(u64,u32)'` — tuple `.0`/`.1` 접근이 codegen에서 지원되지 않아 span이 다음 line으로 밀림. expr_helpers_data.rs generate_field_expr에 tuple 패스 추가. 13 cascade files unblock.
 - [x] 362. rag/mod DI chain — RagWalManager(gcm), WalManager 등 (Opus direct) ✅ 2026-04-18 (partial)
   detail: rag 엔진 초기화에서 DI chain 해소.
   changes: rag/mod.vais 4 sites (chunk→chunk_document, chunk.text→chunk.chunk_text, log_doc_delete→log_document_delete(0,id), close_session 3-arg, insert→insert_entry) + memory/storage.vais 2 methods added (insert_entry, get_all)
