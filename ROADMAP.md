@@ -7,9 +7,54 @@
 > **현재 vaisdb OK: 159/261 (60.9%)** — Phase 199 시작 대비 +129 파일 개선
 > **목표**: Tier 1 완료 = vaisdb OK 180/261 (70%+) — 21 파일 남음
 
-## 🎯 다음 세션 시작점 (Phase 326+)
+## 🎯 다음 세션 시작점 (Phase 336+)
 
 `mode: auto` — 세션 재시작 시 `harness` skill이 이 섹션을 자동 복구하여 이어서 진행.
+
+### Phase 336-345: 잔여 Tier 1 블로커 (OK 159→180 목표, 21 파일)
+
+Phase 326-335 교훈:
+- **pattern-binding + Option<&V>**: role.vais get_role_id 에러 `expected RoleInfo, found u64`는 Some(r.field) wrap 시 Option<&V> inner unify 문제. 336에서 조사.
+- **UTF-8 span offset**: pipeline.vais:219 comment에 표시되는 에러는 span 계산 bug. 337에서 lexer 레벨 조사.
+- **Mutex guard API**: server/connection 계열 `guard.insert(...)` 류 E004. 338에서 stdlib Mutex 확장 또는 permissive fallback.
+- **import collision**: redo.vais DirtyPageEntry struct lookup 실패. 339에서 module-level struct registry 조사.
+
+- [x] 336. pattern-binding Option<&V> — attempted, reverted ✅ 2026-04-18
+  attempt: enum constructor dispatch에 generic substitution map 추가 (Some(x) 타입 연결).
+  result: role.vais 에러 유지 + 다른 파일 OK 159→158 regression. 구조적으로 match arm 간 타입 통일 복잡성.
+  decision: 근본 해결은 match arm pattern binding flow 전체 재설계 필요 — Tier 2 스코프로 분리.
+  verify: revert 후 OK 159 회복, phase158 18/18 GREEN.
+- [x] 337. UTF-8 span 조사 — defer ✅ 2026-04-18
+  analysis: pipeline.vais에서 `.len()` 호출 모두 0-arg. E006 "expected 0, got 1"의 실제 원인 AST 노드는 comment span과 전혀 다른 위치. eprintln 디버깅이 필요하지만 span infra는 lexer/parser 전체 건드려야 함.
+  decision: Tier 1 스코프 밖 — Tier 2 compiler infra phase로 분리.
+- [x] 338. Mutex/RwLock guard transparent method forwarding (Opus direct) ✅ 2026-04-18
+  changes: crates/vais-types/src/checker_expr/calls.rs (MutexGuard/RwLockReadGuard/RwLockWriteGuard receiver 시 method + arity 둘 다 match 안 하면 inner T로 re-dispatch. effective_receiver_type도 교체해서 builtin dispatch block이 T 기준으로 동작)
+  verify: phase158 18/18 GREEN, server/connection.vais flipped OK, vaisdb OK 159→161 (+2 — connection + 아마 다른 파일도)
+  note: guard-forwarding pattern은 Arc/Rc 류 wrapper에도 확장 가능. 현재는 stdlib의 lock guards만 handle.
+- [ ] 339. module-level struct import collision (Opus direct)
+  detail: redo.vais의 DirtyPageEntry가 struct def는 있지만 field lookup 실패. imports 중 conflict 찾기 — check_module 레벨에서 struct 등록 시 동일 이름 처리 방식 조사. Debug print로 structs map에서 "DirtyPageEntry" 실제 field 확인.
+- [ ] 340. E002 undefined variable sweep — cow.vais `std` 변수, ops/{health,metrics} 등 (impl-sonnet 1-file budget 10 tool)
+  detail: 누락 import 추가. U 지시어 스캔해서 해당 파일의 import 누락 확인.
+- [ ] 341. policy.vais span-less E001 조사 (Opus direct)
+  detail: span 없이 surface되는 E001 "expected i64, found Vec<PolicyEntry>". check_module 레벨 unify에서 span 부재. 추적 후 span 부착 or 원인 파악.
+- [ ] 342. server/handler.vais + mod.vais flip (impl-sonnet 1-file budget, blockedBy 338)
+- [ ] 343. client/types.vais + mod.vais flip (impl-sonnet 1-file budget)
+- [ ] 344. 잔여 per-file sweep — 에러 유형별 자동 분류 후 일괄 처리 (impl-sonnet 배치)
+  detail: `(find src -name '*.vais' | xargs check)` 결과를 E-code별로 그룹핑 후 각 그룹에 타겟 delegate.
+- [ ] 345. Tier 1 완료 선언 또는 mid-check
+
+### 작업 전략
+
+1. **Opus direct 우선**: 336-339 (compiler deep blockers) — 각각 단일 phase로 집중. 에이전트 위임 회피 (과거 세션 investigation loop cut-off 반복).
+2. **성공 가드레일**: 매 phase 이후 phase158 18/18 + vaisdb OK 카운트 비교. 감소 시 revert.
+3. **Escape hatch**: 336/337/338/339 중 1개라도 저항하면 즉시 다음 phase로 이동. 세션당 최대 3개 phase 완료 기대.
+
+mode: auto
+iteration: 1
+max_iterations: 30
+strategy: Phase 336 (pattern unify) 먼저 → 337 (span) → 338 (Mutex) → 339 (import) 순차. 각 phase 실패/스코프초과 시 즉시 move on. Phase 340-343은 blockers 해소 후 cascading.
+
+---
 
 ### Phase 326-335: 남은 compiler 블로커 + Tier 1 마무리 (OK +15~20 예상, 목표 180/261)
 

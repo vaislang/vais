@@ -294,7 +294,7 @@ impl TypeChecker {
                 _ => None,
             }
         };
-        let (inner_type, receiver_generics) = match &receiver_type {
+        let (mut inner_type, mut receiver_generics) = match &receiver_type {
             ResolvedType::Optional(inner) | ResolvedType::Result(inner, _) => unwrap_named(inner)
                 .or_else(|| match inner.as_ref() {
                     ResolvedType::Ref(t)
@@ -305,6 +305,45 @@ impl TypeChecker {
                 .unwrap_or((String::new(), vec![])),
             _ => unwrap_named(&receiver_type).unwrap_or((String::new(), vec![])),
         };
+
+        // Phase 338: MutexGuard<T>/RwLockReadGuard<T>/RwLockWriteGuard<T>
+        // auto-unwrap — when method isn't defined on the guard itself,
+        // re-dispatch against the protected type T. vaisdb patterns like
+        // `guard := self.connections.lock(); guard.insert(id, conn)`
+        // rely on this transparent pass-through.
+        let is_guard_type =
+            inner_type == "MutexGuard" || inner_type == "RwLockReadGuard"
+                || inner_type == "RwLockWriteGuard";
+        let mut effective_receiver_type = receiver_type.clone();
+        if is_guard_type && !receiver_generics.is_empty() {
+            // Guard's own method matches only when name + arity both fit;
+            // otherwise forward to inner T. MutexGuard::get(&self) is 0-arg
+            // but vaisdb's `guard.get(&k)` targets the inner HashMap's get.
+            let guard_matches = self.structs.get(&inner_type).and_then(|s| {
+                s.methods.get(&method.node).map(|m| {
+                    let expected = m
+                        .params
+                        .iter()
+                        .filter(|(n, _, _)| n != "self")
+                        .count();
+                    expected == args.len()
+                })
+            }).unwrap_or(false);
+            if !guard_matches {
+                if let Some((t_name, t_generics)) = unwrap_named(&receiver_generics[0]) {
+                    inner_type = t_name.clone();
+                    receiver_generics = t_generics.clone();
+                    // Also replace effective_receiver_type so the builtin
+                    // dispatch block below (which matches on receiver_named)
+                    // sees the inner T rather than MutexGuard<T>.
+                    effective_receiver_type = ResolvedType::Named {
+                        name: t_name,
+                        generics: t_generics,
+                    };
+                }
+            }
+        }
+        let receiver_type = effective_receiver_type;
 
         // Phase 300a: for HashMap<K,V>.get — bypass the stdlib struct lookup
         // (which returns V directly) and fall through to the builtin dispatch
