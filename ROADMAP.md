@@ -7,14 +7,16 @@
 
 ---
 
-## ⏳ 진행 중 — Phase 200: vaisdb P001 잔여 처리 (Tier 1 마무리)
+## ⏸ 완료 — Phase 200: vaisdb P001 잔여 처리 (Tier 1 마무리)
+completed_at: 2026-04-18
 
 mode: auto
 max_iterations: 15
 iteration: 1
   iter1 strategy: Task #9 Recon-200 only unblocked. Opus direct (Phase 199에서 haiku 2회 cutoff 학습). 6 tool budget으로 grep + bulk vaisc check 수행. ✅ recon.md. 핵심: graph/wal.vais 27 cascading.
-iteration: 2
-  iter2 strategy: 4 unblocked (#10/11/12/13). 파일 영향 100% 분리: #10=graph/wal+vector/quantize/mod+deletion_bitmap, #11=security 3+recovery 2, #12=planner 2, #13=docs only. Worktree 미사용 (Phase 195/198 lesson). impl-sonnet 3개 + Opus direct 1 (#13 docs). #11은 P0-B per-file judgment heavy → Opus direct. #10 graph/wal 27 cascade는 균일 패턴 → impl-sonnet single batch (5 파일 batch cap 위반이지만 모두 동일 라인 대체이므로 안전 — 실패 시 Opus). 병렬 background 4개.
+iteration: 3
+  iter2 strategy: 4 unblocked (#10/11/12/13). 파일 영향 100% 분리. impl-sonnet 2 background (#10/#12) + Opus main-thread 2 (#11/#13). ✅ 28 → 20 P001 (8 해소). 예상 15 대비 저조하지만 Phase 199 cascading 교훈으로 P0-A graph/wal가 가장 큰 수익 (한 파일 fix).
+  iter3 strategy: Task #14 Gate. 전수 재측정 + Phase 201 seed 작성. impl-sonnet foreground (read-only + write, 짧음).
 strategy: Phase 199에서 47 → 28 (40% 해소). 잔여 28건은 final_report.md의 P0/P1/P2 분류 기반. **P0 우선** (cascading C1, LW destructure, path-style match arm) — 28 → ≤10 목표. Phase 199 교훈 반영: (a) recon은 Opus direct로 grep+vaisc check 직접, (b) batch fix는 5~7 파일/agent로 작게, (c) agent commit 신뢰 X — verify 후 직접 commit, (d) **cascading instance는 한 파일 내 전수 grep으로 재실측 필수**.
 
 ### 배경 — Phase 199 잔여
@@ -47,11 +49,8 @@ strategy: Phase 199에서 47 → 28 (40% 해소). 잔여 28건은 final_report.m
 - [x] 5. **P1-Decision: grammar 보류건 결정** (Opus direct) ✅ 2026-04-18
   changes: docs/phase200/p1_decisions.md. 4 sub-pattern 모두 "(c) 우회 — Vais 의도된 제약" 결정 (trait dispatch, binding 분리, Vec.repeat 헬퍼, trait+generic). compiler grammar 변경 불필요.
 
-- [ ] 6. **Gate: 재측정 + Phase 201 seed** (impl-sonnet) [blockedBy: 2,3,4,5]
-  - 전수 vaisc check 재실측 (cascading 포함)
-  - Phase 200 Exit criteria 달성 확인
-  - 잔여 → Phase 201 분류 (struct field drift E030, use-after-move E022 등 도메인별)
-  - 산출물: docs/phase200/final_report.md
+- [x] 6. **Gate: 재측정 + Phase 201 seed** (Opus direct) ✅ 2026-04-18
+  changes: docs/phase200/final_report.md. 28 → 20 P001 (unique file, 목표 ≤10 미달). Cascading 기준 54 → ~6 (89% 해소). Phase 201 seed: G1 grammar 우회 9건 (MetaUpdater trait 등), G2 mechanical 7건, G3 structural 4건.
 
 ### Phase 200 파일 영향
 
@@ -67,7 +66,7 @@ strategy: Phase 199에서 47 → 28 (40% 해소). 잔여 28건은 final_report.m
 - [ ] Cascading instance 첫 1건만 카운트하면 underestimate (Phase 199에서 47 → 28 처리했으나 "13 파일 처리"로는 19건 해소)
 - [ ] vaisdb 외부 repo, compiler repo와 commit 분리 엄수
 
-progress: 0/6 (0%)
+progress: 6/6 (100%) — vaisdb 28 → 20 P001 (unique file, 목표 ≤10 미달). Cascading 기준 54 → ~6 (89% 해소). final_report.md.
 
 ---
 
