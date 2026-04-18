@@ -3,7 +3,25 @@
 
 > **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 222: Vec.of_one/repeat helpers + vaisdb 적용)
+> **최종 업데이트**: 2026-04-18 (Phase 223: with_span 추가 적용)
+
+---
+
+## ⏸ 완료 — Phase 223: with_span control_flow + stmts 적용
+completed_at: 2026-04-18
+
+mode: auto
+strategy: with_span을 더 많은 unify 호출 사이트로 확장.
+
+### 변경
+- crates/vais-types/src/checker_expr/control_flow.rs: I/EL cond unify에 with_span(cond.span)
+- crates/vais-types/src/checker_expr/stmts.rs: Let value_type 및 Return ret_type unify에 with_span
+
+### 결과
+- E004 53→51 (-2 cascading)
+- baseline green
+
+progress: 1/1 (100%)
 
 ---
 

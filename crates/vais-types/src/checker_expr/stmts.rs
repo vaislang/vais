@@ -29,7 +29,8 @@ impl TypeChecker {
                 let value_type = self.check_expr(value)?;
                 let var_type = if let Some(ty) = ty {
                     let expected = self.resolve_type(&ty.node);
-                    self.unify(&expected, &value_type)?;
+                    self.unify(&expected, &value_type)
+                        .map_err(|e| e.with_span(value.span))?;
 
                     // Validate dependent type predicate at compile time for literal values
                     if let Type::Dependent {
@@ -110,6 +111,7 @@ impl TypeChecker {
             }
             Stmt::Expr(expr) => self.check_expr(expr),
             Stmt::Return(expr) => {
+                let ret_span = expr.as_ref().map(|e| e.span);
                 let ret_type = if let Some(expr) = expr {
                     self.check_expr(expr)?
                 } else {
@@ -126,7 +128,12 @@ impl TypeChecker {
                     } else {
                         ret_type.clone()
                     };
-                    self.unify(&expected, &ret_type_deref)?;
+                    let res = self.unify(&expected, &ret_type_deref);
+                    if let Some(s) = ret_span {
+                        res.map_err(|e| e.with_span(s))?;
+                    } else {
+                        res?;
+                    }
                 }
                 // Return has "Never" type because execution doesn't continue past it
                 Ok(ResolvedType::Never)

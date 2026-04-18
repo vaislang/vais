@@ -10,7 +10,8 @@ impl TypeChecker {
         match branch {
             IfElse::ElseIf(cond, then, else_) => {
                 let cond_type = self.check_expr(cond)?;
-                self.unify(&cond_type, &ResolvedType::Bool)?;
+                self.unify(&cond_type, &ResolvedType::Bool)
+                    .map_err(|e| e.with_span(cond.span))?;
 
                 self.push_scope();
                 let then_type = self.check_block(then)?;
