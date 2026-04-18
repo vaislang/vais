@@ -731,6 +731,55 @@ impl CodeGenerator {
             other => other,
         };
 
+        // Tuple field access: `.0`, `.1`, ... via integer field names.
+        // Tuples are laid out as anonymous structs; GEP by index.
+        if let ResolvedType::Tuple(ref elem_types) = resolved_type {
+            if let Ok(idx) = field.node.parse::<usize>() {
+                if idx < elem_types.len() {
+                    let elem_ty = &elem_types[idx];
+                    let elem_llvm = self.type_to_llvm(elem_ty);
+                    // Build the LLVM tuple type `{ t0, t1, ... }`
+                    let tuple_llvm = format!(
+                        "{{ {} }}",
+                        elem_types
+                            .iter()
+                            .map(|t| self.type_to_llvm(t))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                    // obj_val is an i64-erased tuple pointer; reinterpret and GEP.
+                    let tuple_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = inttoptr i64 {} to {}*",
+                        tuple_ptr,
+                        obj_val,
+                        tuple_llvm
+                    );
+                    let field_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 {}",
+                        field_ptr,
+                        tuple_llvm,
+                        tuple_llvm,
+                        tuple_ptr,
+                        idx
+                    );
+                    let result = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        result,
+                        elem_llvm,
+                        elem_llvm,
+                        field_ptr
+                    );
+                    return Ok((result, ir));
+                }
+            }
+        }
+
         if let ResolvedType::Named {
             name: orig_type_name,
             generics: type_generics,
