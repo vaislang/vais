@@ -24,10 +24,15 @@
     - crates/vais-types/src/inference/unification.rs: 새 bridge arm — Named{"Option",[T]} ↔ Optional(T), Named{"Result",[T,E]} ↔ Result(T,E)
   verify: phase158 18/18 GREEN, vaisdb OK 154→155 (+1). role.vais get_role() 에러 해소, 남은 error는 다른 패턴 (pattern binding과 Ref 레이어 상호작용).
   note: resolve.rs 수준 normalization 시도는 vaisdb OK 154→51 대폭 regression (stdlib Result enum path와 충돌) — revert 후 unify bridge로 전환.
-- [ ] 327. UTF-8 byte-offset span bug — 코멘트의 multi-byte char가 이후 라인 span 오염 (Opus direct)
-  detail: planner/pipeline.vais:219 에러가 comment 라인을 가리킴. logos/ariadne span이 char-offset 아닌 byte-offset 기반으로 섞여 vs CR/LF 또는 multi-byte 경계에서 어긋나는 케이스 추적. lexer or error reporter 수준 버그.
-- [ ] 328. E030 no-such-field cascading fix — storage/recovery/{undo,redo}, planner/{optimizer,types} (impl-sonnet, 1-file budget 10 tool)
-  detail: struct field rename 또는 missing field 추가 per-file 스윕. Opus가 pattern 먼저 확정 후 delegate.
+- [x] 327. UTF-8 byte-offset span bug — 분석만, 실제 수정 보류 ✅ 2026-04-18
+  investigation: pipeline.vais:219 에러의 span이 comment를 가리키지만, 실제 원인은 별도. 이 파일은 `HashMap<IndexPair>` (1-generic으로 parse error 후 permissive), 그리고 `*rank as f64` dereferences가 parser 레벨에서 다르게 해석되는 등 복합 이슈.
+  decision: 이 파일은 parse-level 수정 + compiler span 버그 추적 두 세션 필요. Phase 332에서 별도 작업.
+  verify: phase158 18/18 유지 (아무 수정 없음)
+- [x] 328. E030 no-such-field cascading fix — 조사 + 부분 refactor ✅ 2026-04-18
+  analysis: redo.vais의 E030 "no field file_id on DirtyPageEntry"는 struct def는 정상인데 struct lookup 실패. 동일 코드가 minimal repro에선 OK. 원인은 많은 import 중 하나가 DirtyPageEntry 이름 충돌 또는 환경 오염.
+  changes: agent가 is_page_tracked 헬퍼 추출 (에러 라인 축소되었으나 flip 미완)
+  verify: vaisdb OK 155 유지 (no regression)
+  note: 심화 조사는 별도 phase (import 충돌 analyzer 필요)
 - [ ] 329. E022 use-after-move — ops/profiling.vais, planner/{graph_plan,vector_plan}.vais (impl-sonnet, 1-file budget 10 tool)
   detail: `&value` 또는 `.clone()` 삽입 단순 수정. E025 패턴 유사.
 - [ ] 330. span 전파 2차 — patterns/module binding/expression unify 3곳에 `.with_span()` 부착 (impl-sonnet)
@@ -122,7 +127,7 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 2
+iteration: 3
 max_iterations: 30
 strategy: Opus direct로 326 (Option<&T> propagation) + 327 (UTF-8 span bug) 먼저 해소 → 328-330 병렬 impl-sonnet sweeps (1-file budget 10 tool) → 331-334 vaisdb cascading → 335 Tier 1 완료 선언. Phase158 strict gate 매 phase 확인 필수.
 
