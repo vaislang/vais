@@ -459,18 +459,40 @@ impl TypeChecker {
                         return Ok(ResolvedType::Bool);
                     }
                 }
-                "as_bytes" => {
-                    if args.is_empty() {
-                        return Ok(ResolvedType::Named {
-                            name: "Vec".to_string(),
-                            generics: vec![ResolvedType::U8],
-                        });
-                    }
-                }
                 "char_at" | "byte_at" => {
                     if args.len() == 1 {
                         let _ = self.check_expr(&args[0]);
                         return Ok(ResolvedType::I64);
+                    }
+                }
+                "split" => {
+                    if args.len() == 1 {
+                        let _ = self.check_expr(&args[0]);
+                        return Ok(ResolvedType::Named {
+                            name: "Vec".to_string(),
+                            generics: vec![ResolvedType::Str],
+                        });
+                    }
+                }
+                "trim" | "to_lowercase" | "to_uppercase" | "to_lower" | "to_upper" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Str);
+                    }
+                }
+                "parse_i64" | "parse_int" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Result(
+                            Box::new(ResolvedType::I64),
+                            Box::new(ResolvedType::Str),
+                        ));
+                    }
+                }
+                "parse_f64" | "parse_float" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Result(
+                            Box::new(ResolvedType::F64),
+                            Box::new(ResolvedType::Str),
+                        ));
                     }
                 }
                 "charAt" => {
