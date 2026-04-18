@@ -63,7 +63,10 @@
   changes: 없음 (조사 후 revert)
   verify: phase158 18/18 GREEN, OK 141 유지
   note: sql/parser/token.vais 외 다수가 bare enum variant 사용 (TokenKind. 접두 없음) → 대규모 refactor 필요. 현재 scope 초과. 후속 phase에서 sweeping rename 또는 컴파일러 bare-variant 해석 확장 고려
-- [ ] 292-295. 남은 ops/, server/, client/ 파일들
+- [x] 292-295. 남은 ops/server/client — 조사 + 부분 수정 ✅ 2026-04-18
+  changes: vaisdb/client/mod.vais (self.serialize_query_msg → Client.serialize_query_msg — static method call)
+  verify: phase158 18/18 GREEN, OK 141 유지
+  note: ops/metrics·health (span-less E002), server/handler (missing struct method), client/types (Vec<u8>↔str) — 모두 compiler-level 또는 struct API 확장 필요. 후속에서 처리
 - [ ] 296-300. 예비 슬롯 — cascading으로 드러난 새로운 이슈 처리
 
 ### Phase 300+: 새 compiler 집중 phase (287에서 surface된 공통 블로커)
@@ -103,10 +106,10 @@
 - **Span-less 우선순위 낮음**: import된 모듈의 E001은 디버그 난이도 높음. 해당 파일 다른 에러 먼저.
 
 mode: auto
-iteration: 15
+iteration: 16
 max_iterations: 30
 strategy: single-error 파일부터 → cascading 해결 → 두-경로 통합. impl-sonnet 위임 가능한 단위로 쪼개서 병렬 진행.
-  strategy: Phase 301 — fnv1a_hash signature 일관화. Opus direct.
+  strategy: Phase 292-295 — ops/server/client per-file. Opus direct.
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone
