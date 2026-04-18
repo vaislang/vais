@@ -95,6 +95,22 @@ impl TypeChecker {
             return Ok(());
         }
 
+        // Phase 276: Optional<T> ↔ T coercion (one direction only — accept
+        // bare T where Option<T> expected, NOT vice versa). This is a
+        // permissive coercion since vaisdb often unwraps and passes the
+        // inner directly. Pattern: f(opt.unwrap_or(default)) where param
+        // is Option<T>, or pass owned T into Option<T> param.
+        if let ResolvedType::Optional(e_inner) = &expected {
+            if self.unify(e_inner, &found).is_ok() {
+                return Ok(());
+            }
+        }
+        if let ResolvedType::Optional(f_inner) = &found {
+            if self.unify(&expected, f_inner).is_ok() {
+                return Ok(());
+            }
+        }
+
         // Phase 268: Box<T> ↔ T coercion (both directions, at any ref depth).
         // vaisdb uses Box<T> for recursive types (Expr, SelectQuery) and
         // passes &Box<T> where &T is expected. Codegen already handles the
