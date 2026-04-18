@@ -384,11 +384,36 @@ impl TypeChecker {
                                 return Some(Ok(self.apply_substitutions(&generics[0])));
                             }
                         }
+                        // Phase 252: &str / &Str indexing returns I64 (byte).
+                        if matches!(**inner, ResolvedType::Str)
+                            || matches!(&**inner, ResolvedType::Named { name, generics }
+                                if (name == "Str" || name == "str") && generics.is_empty())
+                        {
+                            if !index_type.is_integer() {
+                                return Some(Err(TypeError::Mismatch {
+                                    expected: "integer".to_string(),
+                                    found: index_type.to_string(),
+                                    span: Some(index.span),
+                                }));
+                            }
+                            return Some(Ok(ResolvedType::I64));
+                        }
                         Some(Err(TypeError::Mismatch {
                             expected: "indexable type".to_string(),
                             found: inner_type.to_string(),
                             span: Some(expr.span),
                         }))
+                    }
+                    // Phase 252: str / Str (primitive or alias) indexing.
+                    ResolvedType::Str => {
+                        if !index_type.is_integer() {
+                            return Some(Err(TypeError::Mismatch {
+                                expected: "integer".to_string(),
+                                found: index_type.to_string(),
+                                span: Some(index.span),
+                            }));
+                        }
+                        Some(Ok(ResolvedType::I64))
                     }
                     _ => Some(Err(TypeError::Mismatch {
                         expected: "indexable type".to_string(),
