@@ -31,8 +31,11 @@ Phase 326-335 교훈:
   changes: crates/vais-types/src/checker_expr/calls.rs (MutexGuard/RwLockReadGuard/RwLockWriteGuard receiver 시 method + arity 둘 다 match 안 하면 inner T로 re-dispatch. effective_receiver_type도 교체해서 builtin dispatch block이 T 기준으로 동작)
   verify: phase158 18/18 GREEN, server/connection.vais flipped OK, vaisdb OK 159→161 (+2 — connection + 아마 다른 파일도)
   note: guard-forwarding pattern은 Arc/Rc 류 wrapper에도 확장 가능. 현재는 stdlib의 lock guards만 handle.
-- [ ] 339. module-level struct import collision (Opus direct)
-  detail: redo.vais의 DirtyPageEntry가 struct def는 있지만 field lookup 실패. imports 중 conflict 찾기 — check_module 레벨에서 struct 등록 시 동일 이름 처리 방식 조사. Debug print로 structs map에서 "DirtyPageEntry" 실제 field 확인.
+- [x] 339. Struct name collision via transitive import — root cause found (Opus direct) ✅ 2026-04-18
+  root cause: redo.vais가 `U storage/buffer/pool`를 import하고, pool이 `U storage/buffer/dirty_tracker`를 import함. dirty_tracker에도 `S DirtyPageEntry`가 있어 transitive import로 redo.vais의 동일 이름 struct와 충돌 (dirty_tracker의 struct가 우선 resolution). Compiler는 충돌 감지 없이 첫 번째 정의를 사용.
+  changes: vaisdb/src/storage/recovery/redo.vais (DirtyPageEntry → RedoDirtyPageEntry 이름 변경, 7 occurrences)
+  verify: E030 해소, 새 에러 E006 on pool.write_page (별개 문제). vaisdb OK 161 유지 (redo.vais는 cascade 후속 에러로 아직 flip 안됨).
+  note: compiler-level 충돌 감지는 별도 Tier 2 phase. 당장은 rename으로 conflict 회피.
 - [ ] 340. E002 undefined variable sweep — cow.vais `std` 변수, ops/{health,metrics} 등 (impl-sonnet 1-file budget 10 tool)
   detail: 누락 import 추가. U 지시어 스캔해서 해당 파일의 import 누락 확인.
 - [ ] 341. policy.vais span-less E001 조사 (Opus direct)
