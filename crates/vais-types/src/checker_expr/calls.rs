@@ -789,6 +789,25 @@ impl TypeChecker {
                             });
                         }
                     }
+                    "get_string" | "read_string" => {
+                        // Phase 274: ByteBuffer.get_string(len?) → Result<Str, VaisError>.
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok(ResolvedType::Result(
+                            Box::new(ResolvedType::Str),
+                            Box::new(ResolvedType::Named {
+                                name: "VaisError".to_string(),
+                                generics: vec![],
+                            }),
+                        ));
+                    }
+                    "put_string" | "write_string" => {
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok(ResolvedType::Unit);
+                    }
                     "as_bytes" => {
                         // Returns raw byte pointer (i64).
                         if args.is_empty() {
