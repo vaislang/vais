@@ -1,15 +1,15 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 197 완료 — 하위 패키지 감사 완료, Phase 198 대기)
+> **현재 버전**: 0.1.0 (Phase 198 진행 — 하위 패키지 regression 해소)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 197 완료: vais-web Rust/vais-server main GREEN, vaisdb RED(86% fail). Phase 198 plan 승인됨 — auto 진행)
+> **최종 업데이트**: 2026-04-18 (Phase 198 auto 시작: 8 bucket — spot-check, federation fix, VaisError, parser 이주, stdlib audit, compiler fix if any, tail cleanup, re-audit gate)
 
 ---
 
-## ⏳ 대기 — Phase 198: 하위 패키지 regression 해소
+## 🟢 진행 — Phase 198: 하위 패키지 regression 해소
 
-mode: pending
+mode: auto
 max_iterations: 20
 iteration: 0
 strategy: Phase 197 consolidated.md 기반으로 6 bucket. Bucket 1 (spot-check) 먼저 돌려서 compiler vs source 판정, 그 결과로 Bucket 2~6 파일 영향 범위 확정. 병렬 가능성 높음 (parser 수정과 stdlib audit는 다른 파일). **vaisdb 86% 실패**는 multi-phase 가능성 — Phase 198에서 가능한 만큼 해소 후 Phase 199 고려.
