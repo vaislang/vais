@@ -1136,6 +1136,14 @@ impl TypeChecker {
             if method.node == "clone" && args.is_empty() {
                 return Ok(receiver_type.clone());
             }
+            // Phase 290: generic `.cloned()` / `.copied()` — iterator/Option/Ref
+            // semantics: identity at type level (with one-layer Ref unwrap).
+            if (method.node == "cloned" || method.node == "copied") && args.is_empty() {
+                if let ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) = &receiver_type {
+                    return Ok((**inner).clone());
+                }
+                return Ok(receiver_type.clone());
+            }
             // Phase 236: Option<T>/Result<T,E> method fallback. vaisdb uses
             // .unwrap(), .is_some(), .is_none(), .is_ok(), .is_err(), .ok()
             // frequently — these need dispatch. Also handle primitive
@@ -1158,6 +1166,14 @@ impl TypeChecker {
                             if args.len() == 1 {
                                 let _ = self.check_expr(&args[0]);
                                 return Ok((**inner).clone());
+                            }
+                        }
+                        // Phase 290: Option<T>.cloned() on &Option<T> → Option<T>.
+                        // Identity at type level — we always have owned Optional
+                        // here, so just echo it back.
+                        "cloned" | "copied" => {
+                            if args.is_empty() {
+                                return Ok(receiver_type.clone());
                             }
                         }
                         _ => {}
