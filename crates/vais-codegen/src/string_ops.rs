@@ -486,6 +486,52 @@ impl CodeGenerator {
                 write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, recv_ptr);
                 Ok((result, ir))
             }
+            "trim" => {
+                let result = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = call {{ i8*, i64 }} @__vais_str_trim(i8* {})",
+                    result,
+                    recv_ptr
+                );
+                let raw_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                    raw_ptr,
+                    result
+                );
+                let (store_ir, slot) = self.track_alloc_with_slot(raw_ptr);
+                ir.push_str(&store_ir);
+                if let Some(frame) = self.fn_ctx.scope_str_stack.last_mut() {
+                    frame.push(slot.clone());
+                }
+                self.fn_ctx.string_value_slot.insert(result.clone(), slot);
+                Ok((result, ir))
+            }
+            "to_uppercase" | "to_upper" => {
+                let result = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = call {{ i8*, i64 }} @__vais_str_to_upper(i8* {})",
+                    result,
+                    recv_ptr
+                );
+                let raw_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                    raw_ptr,
+                    result
+                );
+                let (store_ir, slot) = self.track_alloc_with_slot(raw_ptr);
+                ir.push_str(&store_ir);
+                if let Some(frame) = self.fn_ctx.scope_str_stack.last_mut() {
+                    frame.push(slot.clone());
+                }
+                self.fn_ctx.string_value_slot.insert(result.clone(), slot);
+                Ok((result, ir))
+            }
             _ => Err(CodegenError::Unsupported(format!(
                 "string method '{}' not supported",
                 method_name
