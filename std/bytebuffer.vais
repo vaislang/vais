@@ -238,6 +238,24 @@ X ByteBuffer {
 
     # Aliases for read_* using `get_*` naming. Phase 229. vaisdb uses
     # get_u8/get_u16_le/get_i32_le etc. naming convention.
+
+    # u64/u32 as i64 bit pattern. Phase 234.
+    F write_u64_le(&self, value: i64) -> i64 {
+        @.write_i64_le(value)
+    }
+
+    F read_u64_le(&self) -> i64 {
+        @.read_i64_le()
+    }
+
+    F write_u32_le(&self, value: i64) -> i64 {
+        @.write_i32_le(value)
+    }
+
+    F read_u32_le(&self) -> i64 {
+        @.read_i32_le()
+    }
+
     F get_u8(&self) -> i64 {
         @.read_u8()
     }
