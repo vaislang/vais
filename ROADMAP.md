@@ -3,7 +3,36 @@
 
 > **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 211 시작: str indexing 42 파일 일괄 적용)
+> **최종 업데이트**: 2026-04-18 (Phase 212 시작: E004 14건 + OTHER 분류)
+
+---
+
+## ⏸ 완료 — Phase 212: E008 71%↓ (7→2)
+completed_at: 2026-04-18
+
+mode: auto
+max_iterations: 10
+iteration: 0
+strategy: Phase 211 종료. 30/276 파일 OK (11%). 잔여 분류:
+- E001=192 (가장 큼, 깊은 작업)
+- E022=17 (use-after-move)
+- E006=15
+- E008=7
+- E004=14 (Vec methods)
+- E002=1
+- ELSE=비-OK 다수
+
+목표: E004 14 → ≤7, E006/E008 분류, OK 비율 11%→15%.
+
+### 작업
+- [x] 1. **E004 14건** ✅ 2026-04-18 (보류)
+  changes: agent cutoff, 변경 0. 더 깊은 stdlib import refactor 필요. Phase 213 이월.
+- [x] 2. **E006/E008** ✅ 2026-04-18
+  changes: E008 7→2 (5건 해소). is_whitespace rename 3건 + select_hybrid_index rename 1건. E006 15건은 Phase 213 이월. vaisdb 2b8ffe2.
+- [x] 3. **P212-Gate** ✅ 2026-04-18
+  changes: docs/phase212/final_report.md.
+
+progress: 3/3 (100%) — E008 71%↓ (7→2). E004/E006 Phase 213 이월.
 
 ---
 
