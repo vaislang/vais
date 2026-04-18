@@ -434,13 +434,20 @@ impl TypeChecker {
             return Ok(ret_type);
         }
 
-        // Built-in string methods. Accept both `str` and `&str` (auto-deref)
-        // since vaisdb passes string refs around extensively (Phase 215).
-        let str_recv = matches!(receiver_type, ResolvedType::Str)
+        // Built-in string methods. Accept str/&str/Str/&Str/&&str alike since
+        // vaisdb passes string refs around extensively (Phase 215, 261).
+        let is_str_like = |t: &ResolvedType| -> bool {
+            matches!(t, ResolvedType::Str)
+                || matches!(t, ResolvedType::Named { name, generics }
+                    if (name == "Str" || name == "str") && generics.is_empty())
+        };
+        let str_recv = is_str_like(&receiver_type)
             || matches!(
                 &receiver_type,
                 ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
-                    if matches!(inner.as_ref(), ResolvedType::Str)
+                    if is_str_like(inner.as_ref())
+                        || matches!(inner.as_ref(),
+                            ResolvedType::Ref(t) | ResolvedType::RefMut(t) if is_str_like(t))
             );
         if str_recv {
             match method.node.as_str() {
