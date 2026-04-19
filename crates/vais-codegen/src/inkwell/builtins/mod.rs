@@ -282,6 +282,40 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) -> 
     module.add_function("close", i32_type.fn_type(&[i32_type.into()], false), None);
     // remove(path) -> i32
     module.add_function("remove", i32_type.fn_type(&[i8_ptr.into()], false), None);
+    // mkdir(path, mode) -> i32
+    module.add_function(
+        "mkdir",
+        i32_type.fn_type(&[i8_ptr.into(), i32_type.into()], false),
+        None,
+    );
+    // rmdir(path) -> i32
+    module.add_function("rmdir", i32_type.fn_type(&[i8_ptr.into()], false), None);
+    // unlink(path) -> i32
+    module.add_function("unlink", i32_type.fn_type(&[i8_ptr.into()], false), None);
+    // rename(oldpath, newpath) -> i32
+    module.add_function(
+        "rename",
+        i32_type.fn_type(&[i8_ptr.into(), i8_ptr.into()], false),
+        None,
+    );
+    // chdir(path) -> i32
+    module.add_function("chdir", i32_type.fn_type(&[i8_ptr.into()], false), None);
+    // getcwd(buf, size) -> i8*
+    module.add_function(
+        "getcwd",
+        i8_ptr.fn_type(&[i8_ptr.into(), i64_type.into()], false),
+        None,
+    );
+    // opendir(path) -> DIR*
+    module.add_function(
+        "opendir",
+        i8_ptr.fn_type(&[i8_ptr.into()], false),
+        None,
+    );
+    // closedir(dir) -> i32
+    module.add_function("closedir", i32_type.fn_type(&[i8_ptr.into()], false), None);
+    // readdir(dir) -> dirent*
+    module.add_function("readdir", i8_ptr.fn_type(&[i8_ptr.into()], false), None);
     // flock(fd, operation) -> i32 (advisory file locking)
     module.add_function(
         "flock",

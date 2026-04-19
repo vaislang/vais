@@ -311,6 +311,115 @@ impl TypeChecker {
             },
         );
 
+        // mkdir: (path, mode) -> i64
+        self.functions.insert(
+            "mkdir".to_string(),
+            FunctionSig {
+                name: "mkdir".to_string(),
+                params: vec![
+                    ("path".to_string(), ResolvedType::Str, false),
+                    ("mode".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                ..Default::default()
+            },
+        );
+
+        // rmdir: (path) -> i64
+        self.functions.insert(
+            "rmdir".to_string(),
+            FunctionSig {
+                name: "rmdir".to_string(),
+                params: vec![("path".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I64,
+                ..Default::default()
+            },
+        );
+
+        // unlink: (path) -> i64
+        self.functions.insert(
+            "unlink".to_string(),
+            FunctionSig {
+                name: "unlink".to_string(),
+                params: vec![("path".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I64,
+                ..Default::default()
+            },
+        );
+
+        // rename: (oldpath, newpath) -> i64
+        self.functions.insert(
+            "rename".to_string(),
+            FunctionSig {
+                name: "rename".to_string(),
+                params: vec![
+                    ("oldpath".to_string(), ResolvedType::Str, false),
+                    ("newpath".to_string(), ResolvedType::Str, false),
+                ],
+                ret: ResolvedType::I64,
+                ..Default::default()
+            },
+        );
+
+        // chdir: (path) -> i64
+        self.functions.insert(
+            "chdir".to_string(),
+            FunctionSig {
+                name: "chdir".to_string(),
+                params: vec![("path".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I64,
+                ..Default::default()
+            },
+        );
+
+        // getcwd: (buf, size) -> i64 (returns pointer to buf or 0 on error)
+        self.functions.insert(
+            "getcwd".to_string(),
+            FunctionSig {
+                name: "getcwd".to_string(),
+                params: vec![
+                    ("buf".to_string(), ResolvedType::I64, false),
+                    ("size".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                ..Default::default()
+            },
+        );
+
+        // opendir: (path) -> i64 (DIR* as i64)
+        self.functions.insert(
+            "opendir".to_string(),
+            FunctionSig {
+                name: "opendir".to_string(),
+                params: vec![("path".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I64,
+                ..Default::default()
+            },
+        );
+
+        // closedir: (dir) -> i64
+        self.functions.insert(
+            "closedir".to_string(),
+            FunctionSig {
+                name: "closedir".to_string(),
+                params: vec![("dir".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                ..Default::default()
+            },
+        );
+
+        // readdir: (dir) -> i64 (dirent* as i64, or 0 on end)
+        self.functions.insert(
+            "readdir".to_string(),
+            FunctionSig {
+                name: "readdir".to_string(),
+                params: vec![("dir".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                ..Default::default()
+            },
+        );
+
+
         // flock: (fd, operation) -> i64 (advisory file locking)
         self.functions.insert(
             "flock".to_string(),
