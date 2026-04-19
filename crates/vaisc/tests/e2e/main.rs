@@ -11,6 +11,7 @@ mod helpers;
 mod adoption_types;
 mod advanced;
 mod phase2_14_generics;
+mod phase3_16_defer;
 mod phase3_17_unsafe;
 mod async_runtime;
 mod basics;

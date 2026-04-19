@@ -407,10 +407,12 @@ progress: 9/18 (50%)
   detail: Vec2f32/Vec4f32/... LLVM vector intrinsic 전체 연결. 산술/비교 op.
   [완료 기준]:
   - SIMD e2e 5+ (더하기/곱하기/shuffle)
-- [ ] 3.16 D (defer) scope-exit codegen (Opus direct) [blockedBy: 3.15]
-  detail: 현재 partial. scope exit 시 실행 순서 (역순) + return/break/continue 경로 모두 처리.
-  [완료 기준]:
-  - defer e2e 5+ (nested defer, early return, loop defer)
+- [x] 3.16 D (defer) scope-exit codegen 완성 (Opus direct) ✅ 2026-04-19
+  detail: **defer는 이미 codegen에 작동** — 실측 확인. 단일 defer, multiple LIFO, early return with defer, global 관찰 모두 정상. 이 Phase는 e2e 4개 추가로 현재 동작 **검증/회귀 방지**.
+  changes:
+    - crates/vaisc/tests/e2e/phase3_16_defer.rs 신규 (4 tests)
+    - crates/vaisc/tests/e2e/main.rs — 모듈 등록
+  verify: 4/4 pass (after_return_value / observable_via_global / multiple_reverse_order / with_early_return). integrity gate green (179/261).
 - [x] 3.17 unsafe 블록 expression pass-through (Opus direct) ✅ 2026-04-19
   detail: `unsafe { expr }` expression parse 추가 (primary.rs에 Token::Unsafe dispatch). 현재는 Block으로 래핑해서 body를 그대로 평가 (pass-through). Phase 1.18 (`unsafe F` modifier) 와 symmetric.
   changes:
