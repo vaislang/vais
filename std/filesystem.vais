@@ -171,12 +171,23 @@ F fs_list_dir_free(dir_result: i64) -> i64 {
     0
 }
 
-# Check if a path exists (file or directory)
-# Uses access() with F_OK (mode=0)
-# Returns 1 if exists, 0 if not
+# Check if a path exists (file or directory).
+# Probes via opendir (dir) then fopen (file) — avoids relying on libc
+# `access`, which cannot be registered as a builtin without shadowing
+# vaisdb code that uses `access` as an identifier.
+# Returns 1 if exists, 0 if not.
 F fs_exists(path: str) -> i64 {
-    r := access(path, 0)
-    I r == 0 { 1 } EL { 0 }
+    d := opendir(path)
+    I d != 0 {
+        closedir(d)
+        R 1
+    }
+    f := fopen(path, "r")
+    I f != 0 {
+        fclose(f)
+        R 1
+    }
+    0
 }
 
 # Check if path is a directory

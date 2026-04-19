@@ -298,6 +298,54 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) -> 
         i32_type.fn_type(&[i8_ptr.into(), i8_ptr.into()], false),
         None,
     );
+    // rename_file: wrapper for rename that returns i64 (matches TC sig
+    // which text-mode registers as `register_extern!("rename_file" => "rename")`).
+    // Inkwell per-module codegen doesn't have that alias, so std/filesystem.vais
+    // fails C002 "Undefined function: rename_file". Emit an inline wrapper.
+    {
+        let rename_fn = module
+            .get_function("rename")
+            .ok_or("ICE: rename must be declared before rename_file")?;
+        let fn_type = i64_type.fn_type(&[i8_ptr.into(), i8_ptr.into()], false);
+        let func = module.add_function("rename_file", fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(entry);
+        let old_p = func
+            .get_nth_param(0)
+            .ok_or("ICE: rename_file missing param")?;
+        let new_p = func
+            .get_nth_param(1)
+            .ok_or("ICE: rename_file missing param")?;
+        let call = builder
+            .build_call(rename_fn, &[old_p.into(), new_p.into()], "rename_call")
+            .map_err(|e| format!("ICE: rename_file: {e}"))?;
+        let rc = call
+            .try_as_basic_value()
+            .left()
+            .ok_or("ICE: rename returned void")?;
+        let rc_i64 = builder
+            .build_int_s_extend(rc.into_int_value(), i64_type, "rc_i64")
+            .map_err(|e| format!("ICE: rename_file: {e}"))?;
+        builder
+            .build_return(Some(&rc_i64))
+            .map_err(|e| format!("ICE: rename_file: {e}"))?;
+    }
+    // stat_size / stat_mtime stubs — text-mode uses `__stat_size` helper.
+    // Return -1 (error) until per-platform struct stat bindings land.
+    for name in ["stat_size", "stat_mtime"] {
+        let fn_type = i64_type.fn_type(&[i8_ptr.into()], false);
+        let func = module.add_function(name, fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(entry);
+        builder
+            .build_return(Some(&i64_type.const_int((-1i64) as u64, true)))
+            .map_err(|e| format!("ICE: {name}: {e}"))?;
+    }
+    // access(path, mode) -> i32. NOT added: vaisdb uses `access` as a local
+    // variable name (planner/cost_model.vais `LF stat: self.sql_stats`-style
+    // contexts would shadow). Callers should probe via opendir/fopen.
     // chdir(path) -> i32
     module.add_function("chdir", i32_type.fn_type(&[i8_ptr.into()], false), None);
     // getcwd(buf, size) -> i8*
