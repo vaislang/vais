@@ -175,6 +175,7 @@ Current known cases (as of 2026-04-19):
 | Complex `L { … B expr }` loop-as-expr with non-trivial type | phi-node generation incomplete | Phase 3.x |
 | `s.parse_i64()`, `s.parse_u64()`, `s.parse_i32()`, `s.parse_u32()` | TC knows return = `Result<iN, str>`; codegen `C002: Undefined function` | Phase 3.13 — runtime impl |
 | `s.parse_f64()`, `s.parse_f32()` | TC knows return; codegen missing | Phase 3.13 — runtime impl |
+| `Vec4f32::new(...)` / `Vec2i64::new(...)` (SIMD constructors) | Parser rejects SIMD type token as expression head (P001 "found Vec4f32, expected expression"). Lexer has tokens. | Phase 3.15 — parser constructor + LLVM vector intrinsics |
 
 ---
 

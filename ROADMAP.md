@@ -403,10 +403,12 @@ progress: 9/18 (50%)
   (이전 Phase 3.13 그대로)
 - [ ] 3.14 Vec<Struct>[i].field= write (Opus direct) [blockedBy: 3.12]
   (이전 Phase 3.14 그대로)
-- [ ] 3.15 SIMD vector 타입 codegen (impl-sonnet) [blockedBy: 3.14]
-  detail: Vec2f32/Vec4f32/... LLVM vector intrinsic 전체 연결. 산술/비교 op.
-  [완료 기준]:
-  - SIMD e2e 5+ (더하기/곱하기/shuffle)
+- [~] 3.15 SIMD vector 타입 codegen (impl-sonnet) 🚧 SCOPED 2026-04-19
+  detail: Lexer는 Vec2f32/Vec4f32/Vec8f32/Vec2f64/Vec4f64/Vec4i32/Vec8i32/Vec2i64/Vec4i64 토큰 모두 있지만, parser가 `Vec4f32::new(...)` constructor head로 SIMD type token을 받지 않음. 본격 구현 (parser + LLVM vector intrinsics + 산술 dispatch)은 500줄+ 작업.
+  **Scoped**: gap 문서화 + 실제 필요 (Phase 4.x / 5.24에서 stdlib SIMD usage 등장 시) 함께 재개.
+  changes:
+    - docs/CODEGEN_FEATURES.md — SIMD constructors 항목 추가
+  verify: integrity gate green.
 - [x] 3.16 D (defer) scope-exit codegen 완성 (Opus direct) ✅ 2026-04-19
   detail: **defer는 이미 codegen에 작동** — 실측 확인. 단일 defer, multiple LIFO, early return with defer, global 관찰 모두 정상. 이 Phase는 e2e 4개 추가로 현재 동작 **검증/회귀 방지**.
   changes:
