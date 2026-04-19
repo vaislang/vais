@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 6
+iteration: 7
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
@@ -80,6 +80,8 @@ max_iterations: 60
   strategy iteration 6 (2026-04-19): parallel × 3 worktree — Phase 6.27 vaisdb batch fix. 80 fail → 3 subtrees: sql (25) / storage+vector (25) / fulltext+rag+security+planner+graph+client (30). impl-sonnet agents 각각 worktree isolation. Target ≥203/261 (+23).
   iteration 6 결과: **ZERO commits**. 3 agents 모두 mid-investigation 지점에서 turn-cap truncation (no PROMISE signal). Worktrees empty-cleaned. Root cause: vaisdb 파일들이 cross-module API drift 포함 (pin_page arity 변경 + data_mut rename + PostingEntry.new arity 등 연쇄). 한 agent turn-cap으로 한 파일도 완결 못함.
   retry 전략 (iteration 7+): (a) 1 agent = 1 file; (b) smallest failing files 우선 (<100줄); (c) Opus foreground로 cross-file drift catalog 먼저 만들고 leaf fixes delegate. Task #74 pending 복귀.
+  iteration 7-11 결과: foreground 1-file 전략 +9 vaisdb (180→189). 성공 패턴: `U std/option` 누락 (latch, search_params), comment-swallowed 코드 (search.vais), 잘못된 type name (CondVar→Condvar), missing import (parser_dml), err fn arg (rag/memory/storage), ByteBuffer API arity (serializer), Option<T> annotation (btree/tree).
+  남은 72 파일의 지배적 blocker: **Vec<T>[i] use-after-move** (E022/C005) — `vec[j].field` 읽기조차 Vec 전체를 move하는 codegen gap. Phase 3.14 compiler 수정 없이는 개별 파일 수정 불가. Task #74 scope → 203은 compiler 작업 필요.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.
