@@ -336,16 +336,28 @@ impl CodeGenerator {
                             }
                         }
                     }
-                } else if self
-                    .resolve_enum_struct_variant_with_hint(struct_name, enum_hint_ref)
+                } else if {
+                    let requested: Vec<&str> =
+                        fields.iter().map(|(fn_, _)| fn_.node.as_str()).collect();
+                    self.resolve_enum_struct_variant_with_hint_and_fields(
+                        struct_name,
+                        enum_hint_ref,
+                        &requested,
+                    )
                     .is_some()
-                {
+                } {
                     // `struct_name` names an enum struct-variant (e.g. `Varchar { max_len }`
                     // used as short-form inside a `M` arm). Verify the enum's runtime tag
                     // matches and delegate any inner sub-pattern checks through the enum
                     // variant payload layout.
+                    let requested: Vec<&str> =
+                        fields.iter().map(|(fn_, _)| fn_.node.as_str()).collect();
                     let (enum_name, _variant_tag, variant_struct_fields) = self
-                        .resolve_enum_struct_variant_with_hint(struct_name, enum_hint_ref)
+                        .resolve_enum_struct_variant_with_hint_and_fields(
+                            struct_name,
+                            enum_hint_ref,
+                            &requested,
+                        )
                         .unwrap();
 
                     // Tag check
@@ -490,6 +502,21 @@ impl CodeGenerator {
         variant_name: &str,
         enum_hint: Option<&str>,
     ) -> Option<(String, i32, Vec<(String, ResolvedType)>)> {
+        self.resolve_enum_struct_variant_with_hint_and_fields(variant_name, enum_hint, &[])
+    }
+
+    /// Same as `resolve_enum_struct_variant_with_hint` but also considers the
+    /// expected field-name set. When two enums share a variant name (e.g. both
+    /// `TableRef.Subquery { query, alias }` and `Expr.Subquery { query }`),
+    /// prefer the one whose Struct fields are a superset of the requested
+    /// names. This disambiguates short-form Pattern::Struct on enum variants
+    /// without requiring explicit `EnumType.Variant` qualification everywhere.
+    pub(crate) fn resolve_enum_struct_variant_with_hint_and_fields(
+        &self,
+        variant_name: &str,
+        enum_hint: Option<&str>,
+        requested_fields: &[&str],
+    ) -> Option<(String, i32, Vec<(String, ResolvedType)>)> {
         use crate::types::EnumVariantFields;
         // First pass: if hint provided, look only within that enum.
         if let Some(hint) = enum_hint {
@@ -503,17 +530,31 @@ impl CodeGenerator {
                 }
             }
         }
-        // Fallback: scan all enums (original behavior).
+        // Fallback: scan all enums. Prefer variants whose fields cover the
+        // requested field-name set (exact or superset); fall back to the first
+        // match if no candidate covers all requested names.
+        let mut best: Option<(String, i32, Vec<(String, ResolvedType)>)> = None;
+        let mut first: Option<(String, i32, Vec<(String, ResolvedType)>)> = None;
         for enum_info in self.types.enums.values() {
             for (tag, variant) in enum_info.variants.iter().enumerate() {
                 if variant.name == variant_name {
                     if let EnumVariantFields::Struct(fields) = &variant.fields {
-                        return Some((enum_info.name.clone(), tag as i32, fields.clone()));
+                        if first.is_none() {
+                            first = Some((enum_info.name.clone(), tag as i32, fields.clone()));
+                        }
+                        if !requested_fields.is_empty() {
+                            let covers_all = requested_fields.iter().all(|rf| {
+                                fields.iter().any(|(n, _)| n == rf)
+                            });
+                            if covers_all && best.is_none() {
+                                best = Some((enum_info.name.clone(), tag as i32, fields.clone()));
+                            }
+                        }
                     }
                 }
             }
         }
-        None
+        best.or(first)
     }
 
     /// Check if a name is a unit enum variant (not a binding)
@@ -1196,9 +1237,15 @@ impl CodeGenerator {
                             }
                         }
                     }
-                } else if let Some((enum_name, _variant_tag, variant_struct_fields)) =
-                    self.resolve_enum_struct_variant_with_hint(struct_name, enum_hint_ref)
-                {
+                } else if let Some((enum_name, _variant_tag, variant_struct_fields)) = {
+                    let requested: Vec<&str> =
+                        fields.iter().map(|(fn_, _)| fn_.node.as_str()).collect();
+                    self.resolve_enum_struct_variant_with_hint_and_fields(
+                        struct_name,
+                        enum_hint_ref,
+                        &requested,
+                    )
+                } {
                     // `struct_name` is actually an enum struct-variant used in short form
                     // (e.g. `Varchar { max_len }` instead of `SqlType.Varchar { max_len }`).
                     // The enum layout is `%EnumName { i32 tag, { i64, i64, ... } payload }`,
