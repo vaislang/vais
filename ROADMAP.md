@@ -71,7 +71,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-19)
 
-mode: auto
+mode: stopped (iteration cap 59/60 — Task #83 Trait &dyn T vtable codegen needs dedicated session. 재개 방법: /clear 후 `/harness` 호출 → harness-init이 #83부터 복구. 새 세션에서 mode: auto로 전환.)
 iteration: 59
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
