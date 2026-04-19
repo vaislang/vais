@@ -153,6 +153,19 @@ impl TypeChecker {
                 if let Err(e) = self.unify(&target_type, &value_type) {
                     return Some(Err(e));
                 }
+                // Phase 6.27b iteration 28: if target is a local Ident whose
+                // type contains Never (from `mut None` / `mut Err(...)` init
+                // pattern — see lookup.rs Phase 2.10 Never-for-Unit logic),
+                // promote its scope binding to the assigned value's type.
+                // Use update_var_type to modify the scope that OWNS the var
+                // (not the innermost pushed scope, which would leak at pop).
+                // Without this, later `M target { Some(x) => x.field }` sees
+                // Option<Never> and binds `x: Never`, failing field access.
+                if let Expr::Ident(name) = &target.node {
+                    if type_contains_never(&target_type) && !type_contains_never(&value_type) {
+                        self.update_var_type(name, value_type);
+                    }
+                }
                 Some(Ok(ResolvedType::Unit))
             }
 
@@ -377,5 +390,32 @@ impl TypeChecker {
 
             _ => None,
         }
+    }
+}
+
+/// Check whether a ResolvedType contains ResolvedType::Never anywhere in its
+/// structure. Used by Expr::Assign to detect `mut None` / `mut Err(...)` init
+/// patterns that need scope-binding promotion after a concrete assignment.
+fn type_contains_never(ty: &ResolvedType) -> bool {
+    match ty {
+        ResolvedType::Never => true,
+        ResolvedType::Array(inner)
+        | ResolvedType::Optional(inner)
+        | ResolvedType::Pointer(inner)
+        | ResolvedType::Ref(inner)
+        | ResolvedType::RefMut(inner)
+        | ResolvedType::Slice(inner)
+        | ResolvedType::SliceMut(inner)
+        | ResolvedType::Range(inner)
+        | ResolvedType::Future(inner) => type_contains_never(inner),
+        ResolvedType::ConstArray { element, .. } => type_contains_never(element),
+        ResolvedType::Map(k, v) => type_contains_never(k) || type_contains_never(v),
+        ResolvedType::Result(ok, err) => type_contains_never(ok) || type_contains_never(err),
+        ResolvedType::Tuple(elems) => elems.iter().any(type_contains_never),
+        ResolvedType::Named { generics, .. } => generics.iter().any(type_contains_never),
+        ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
+            params.iter().any(type_contains_never) || type_contains_never(ret)
+        }
+        _ => false,
     }
 }

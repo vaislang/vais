@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 27
+iteration: 28
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
@@ -94,6 +94,8 @@ max_iterations: 60
   strategy iteration 27 (2026-04-19): sequential — Task #78 Phase 6.27b 계속. 현재 220/261. 이번 전략: impl-sonnet background에게 (d) structural mismatch + (g) VaisError str/u32 — 기계적 수정 가능한 파일들 위임. TableInfo.columns 누락 fix, HnswConfig 필드 alignment, vector/fulltext concurrency의 `code: u32` → `code: "VAIS-xxx"`. 예상 +3~5. Opus direct 영역 (trait dyn, HashMap iter)은 별도 iteration.
   iteration 27 결과: **0 net pass**. concurrency 파일 두 개 VaisError str 수정은 TC pass까지만 이동, `queue.push()` (Mutex lock 후 Vec 접근) 같은 깊은 Option-through-ref binding으로 codegen 단계에서 여전히 fail. vector/search.vais `table_meta.columns` 수정은 error_code(2,3,7,"msg") (4-arg, stdlib def는 1-arg) 같은 cascading API mismatch 때문에 revert. 컴파일러 `infer_expr_type` upgrade를 I64→Ref/RefMut/Optional/Result/Named{empty}로 확장 시도 → trigger 0회 (TC expr_types 자체가 I64 erase된 것으로 추정), revert. 남은 41 파일 다수가 개별 파일 패치로 풀리지 않는 구조적 문제 (trait dyn, Mutex<Vec> binding, Option 패턴 cross-ref, error_code arity drift).
   next_steps: (1) Opus direct compiler 작업 — TC가 실제 Mutex lock 반환 타입을 propagate하도록 수정하는 게 ~5 파일 해제. (2) vector/search.vais 류 `error_code(N,N,N,"msg")` 사용자 vaisdb 파일 일괄 refactor — stdlib error_code가 i64 받는다는 전제와 충돌. 별도 Phase 6.27c로 분리 고려.
+  strategy iteration 28 (2026-04-19): sequential — Task #78 Phase 6.27b 계속. 이번은 research-haiku 투입. 실제 TC `expr_types`가 실패하는 expressions에 어떤 타입을 담고 있는지 5 파일에 대해 실제 측정해서 정말 I64 erase된 건지, 아니면 다른 문제인지 명확히 한다. 이 진단 결과가 있어야 compiler fix가 효과적일 수 있음.
+  iteration 28 결과: **Never-type TC promotion 추가**. checker_expr/special.rs Expr::Assign에서 target이 Ident이고 타입이 Never를 포함하면 (`mut None` / `mut Err(...)` init 패턴) assigned value의 타입으로 scope를 promote. scope.rs에 `update_var_type` 헬퍼 추가 (innermost→outermost 탐색, 소유 스코프에서만 update). Phase 2.10의 `Never-for-Unit` 전략이 match arm union에는 필요하지만 let init에는 낭비 → assign 시점에 해소. sql/catalog/constraints.vais의 `pk_index := mut None; ... pk_index = Some(idx); M pk_index { Some(pk_idx) => pk_idx.columns }` 패턴이 `no field 'columns' on type '!'`에서 `Vec.join method missing`으로 진행. 4개 파일에서 후속 blocker 유형이 바뀜 (Never→Vec.join 없음, Never→T_mismatch, Never→E034 panic mark 필요). 순 pass count는 같음 (220/261) — 각 파일이 Never 이후 다른 blocker에 걸림. 하지만 근본 fix로 regression floor 안정화 + 미래 fix의 기반.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.

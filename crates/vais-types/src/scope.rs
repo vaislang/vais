@@ -72,6 +72,20 @@ impl TypeChecker {
         }
     }
 
+    /// Update an existing variable's type in whichever scope owns it.
+    /// Used by Expr::Assign when the prior binding contained Never (from
+    /// `mut None` / `mut Err(...)` init) and the assignment provides a
+    /// more concrete type.
+    pub(crate) fn update_var_type(&mut self, name: &str, ty: ResolvedType) -> bool {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(var_info) = scope.get_mut(name) {
+                var_info.ty = ty;
+                return true;
+            }
+        }
+        false
+    }
+
     /// Mark a variable as used (for linear type tracking)
     #[inline]
     pub(crate) fn mark_var_used(&mut self, name: &str) {
