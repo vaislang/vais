@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 50
+iteration: 51
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
@@ -118,6 +118,7 @@ max_iterations: 60
   iteration 48 (2026-04-20): HnswConfig에 dim/metric/quantization_strategy 필드 추가 + HnswMeta에 dim 필드 추가 (+ 생성자 3곳 + serialize는 불변 유지, deserialize 재구조). vector/mod.vais를 테스트해보니 `pin_layer` 등 추가 API drift로 full unblock 실패. vector/mod.vais 변경은 revert했지만 types.vais schema 추가는 유지 (미래 iteration 기반). 228→229 유지 (+0 net). std 82/82, phase158 18/18 유지.
   iteration 49 (2026-04-20): 0 net pass. parser_expr.vais `Ok(UnaryOp { op: Not, operand })`에서 UnaryOp 이름 shadowing 이슈 재탐색. `Expr.UnaryOp { op: UnaryOp.Not }` 쓰면 parser가 `UnaryOp.Not`을 `Expr.UnaryOp.Not` field chain으로 오해. 중간 변수 `not_op := UnaryOp.Not`도 같은 오류 — parser-level ambiguity로 bare `UnaryOp` identifier가 Expr enum 변형 이름과 충돌. 컴파일러 fix 필요.
   iteration 50 (2026-04-20): **구조적 fix**. checker_expr/collections.rs Expr::Field에서 `Ident(name).field`가 오는 경우 먼저 name이 enum 이름인지 확인 — 있고 field가 해당 enum의 variant이면 바로 enum variant-access로 resolve. Without this, lookup_var이 Expr enum에서 variant를 먼저 찾아 inner_type = Named{Expr}이 되고, 그 후 field `Not`은 Expr의 필드가 아니므로 E030. Observable: parser_expr.vais의 `UnaryOp.Not` 접근은 이제 성공 (변경 후 다음 blocker `self.parse_select()` cross-file에서 막힘 — 다른 이슈). 기존 passing std 82/82 + vaisdb 229 유지 — regression 없음. 미래 iteration이 이 fix를 기반으로 parser_expr.vais 전체를 resolved할 수 있음.
+  iteration 51 (2026-04-20): 0 net pass. parser_select.vais `self.match_token(Star)` → `TokenKind.Star` qualification으로 E001 넘어서니 `self.parse_expr()` cross-file Parser method resolution에서 막힘. 다른 ambigious token 이름은 모두 TokenKind/Expr 양쪽에 있어서 qualification 없이는 해결 안 됨. Cross-file extension 해결이 없으면 parser_* 파일들 단독 build 못함.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.
