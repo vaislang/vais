@@ -972,6 +972,7 @@ impl CodeGenerator {
                         let elem = &generics[0];
                         match elem {
                             ResolvedType::Named { .. } => Some(elem.clone()),
+                            ResolvedType::Tuple(_) => Some(elem.clone()),
                             ResolvedType::Generic(t) => {
                                 // Only use substitution if it resolves to a Named type
                                 self.generics.substitutions.get(t).and_then(|c| {
@@ -994,6 +995,52 @@ impl CodeGenerator {
                 None
             }
         });
+
+        // If fallback is a Tuple, route through the tuple field path above.
+        if let Some(ResolvedType::Tuple(ref elem_types)) = fallback_type {
+            if let Ok(idx) = field.node.parse::<usize>() {
+                if idx < elem_types.len() {
+                    let elem_ty = &elem_types[idx];
+                    let elem_llvm = self.type_to_llvm(elem_ty);
+                    let tuple_llvm = format!(
+                        "{{ {} }}",
+                        elem_types
+                            .iter()
+                            .map(|t| self.type_to_llvm(t))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                    let tuple_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = inttoptr i64 {} to {}*",
+                        tuple_ptr,
+                        obj_val,
+                        tuple_llvm
+                    );
+                    let field_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 {}",
+                        field_ptr,
+                        tuple_llvm,
+                        tuple_llvm,
+                        tuple_ptr,
+                        idx
+                    );
+                    let result = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        result,
+                        elem_llvm,
+                        elem_llvm,
+                        field_ptr
+                    );
+                    return Ok((result, ir));
+                }
+            }
+        }
 
         // If we still couldn't resolve, search all known structs for the field name
         let fallback_type = fallback_type.or_else(|| {
