@@ -172,11 +172,11 @@ X Generator {
     # Check if value can be shrunk further
     F can_shrink(&self, value: i64) -> i64 {
         M self.gen_type {
-            GEN_I64 | GEN_I64_RANGE => value != 0,
-            GEN_BOOL => value != 0,
+            GEN_I64 | GEN_I64_RANGE => I value != 0 { 1 } EL { 0 },
+            GEN_BOOL => I value != 0 { 1 } EL { 0 },
             GEN_F64 | GEN_F64_RANGE => {
                 f := i64_bits_to_f64(value)
-                f != 0.0
+                I f != 0.0 { 1 } EL { 0 }
             },
             _ => 0
         }
@@ -220,11 +220,11 @@ X PropertyResult {
     }
 
     F is_passed(&self) -> i64 {
-        self.status == PROP_PASSED
+        I self.status == PROP_PASSED { 1 } EL { 0 }
     }
 
     F is_failed(&self) -> i64 {
-        self.status == PROP_FAILED
+        I self.status == PROP_FAILED { 1 } EL { 0 }
     }
 }
 
@@ -307,7 +307,10 @@ F shrink_counterexample(gen: &Generator, test_fn: i64, initial: i64) -> ShrinkRe
     current := initial
     steps := 0
 
-    LW steps < MAX_SHRINK_ATTEMPTS && gen.can_shrink(current) {
+    # Guard: combine i64 check against MAX_SHRINK_ATTEMPTS with
+    # can_shrink() (i64) via nested I expression — mixing bool `<`
+    # with i64 `&&` is not accepted by TC.
+    LW (I steps < MAX_SHRINK_ATTEMPTS { gen.can_shrink(current) } EL { 0 }) != 0 {
         shrunk := gen.shrink(current)
 
         # Check if shrunk value still fails

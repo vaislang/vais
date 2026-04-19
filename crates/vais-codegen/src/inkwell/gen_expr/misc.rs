@@ -41,6 +41,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         "str_raw_ptr_from_i64",
                     )
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))
+            } else if field0.is_struct_value() {
+                // Nested struct — recurse. This happens when a struct's first
+                // field is itself a fat pointer `{ ptr, i64 }` (a `str` or
+                // slice field), or any wrapper type that stores its pointer
+                // at field 0.
+                self.extract_str_raw_ptr(field0)
             } else {
                 // Give a clearer error than the inkwell panic.
                 Err(CodegenError::InternalError(format!(

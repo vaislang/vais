@@ -8,6 +8,26 @@
 # - Request/Response builder pattern
 # - Query string parsing
 
+# Local Headers / Request struct stubs mirroring std/http.vais layout.
+# A full `U std/http` import would be ideal, but triggers an unrelated
+# bare-`None` codegen bug in Headers::get (tracked separately). These
+# local stubs keep layout compatible so __parse_request (extern) can
+# return Request and RequestCtx::from_raw can read the fields.
+S Headers {
+    items: i64,
+    count: i64,
+    capacity: i64
+}
+
+S Request {
+    method: i64,
+    path: str,
+    version: str,
+    headers: Headers,
+    body: i64,
+    body_len: i64
+}
+
 # ============================================
 # Constants
 # ============================================
