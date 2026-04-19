@@ -471,11 +471,10 @@ progress: 9/18 (50%)
   detail: `test_std_files_codegen_ok`의 assertion을 `pass >= 82` (threshold 승격). check-integrity.sh에 `INTEGRITY_STD_MIN=82`.
   [완료 기준]:
   - 1-file regression 시 즉시 gate 실패
-- [ ] 5.26 stdlib API 문서화 (impl-sonnet) [blockedBy: 5.25]
-  detail: 각 std/*.vais에 대해 `docs/stdlib/<name>.md` — 공개 API, 예제, 주의사항.
-  [완료 기준]:
-  - std 80+ 모듈 모두 문서 존재
-  - LIVING_SPEC/04_stdlib의 예제와 cross-link
+- [~] 5.26 stdlib API 문서화 (Opus direct) 🚧 SCOPED 2026-04-19
+  detail: docs/stdlib/README.md 신규 — 82-module status table (42/82 working). 각 실패 카테고리별 원인 링크 (compiler E022 move / runtime functions / legacy syntax). 본격 per-module API pages는 Phase 5.24/5.25 완료 후 (모든 모듈 build OK) 추가.
+  changes: docs/stdlib/README.md (신규 ~65줄)
+  완료 기준 (원본): 80+ 모듈 문서 존재 → 미충족 (README.md 1개만). 82/82 build OK 선행 필요.
 
 ### Phase 6.x — vaisdb 100%
 
