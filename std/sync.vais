@@ -1,6 +1,8 @@
 # Sync - Synchronization primitives for concurrent programming
 # Provides Mutex, RwLock, Condvar, Barrier, Channel, and atomics
 
+U std/option
+
 # ============================================
 # Mutex - Mutual Exclusion Lock
 # ============================================
