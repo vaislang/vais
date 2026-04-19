@@ -57,8 +57,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             } => self.generate_match(match_expr, arms),
 
             // Struct
-            Expr::StructLit { name, fields, .. } => {
-                self.generate_struct_literal(&name.node, fields)
+            Expr::StructLit { name, fields, enum_name } => {
+                if let Some(ref e_name) = enum_name {
+                    // Phase 6.27b: enum struct-variant construction
+                    // `Enum.Variant { field1: v1, field2: v2 }` — build payload struct,
+                    // heap-allocate, store pointer as i64 in enum.data.
+                    self.generate_enum_struct_variant(e_name, &name.node, fields)
+                } else {
+                    self.generate_struct_literal(&name.node, fields)
+                }
             }
             Expr::Field { expr: obj, field } => {
                 // Detect `EnumName.Variant` access — obj is Var(enum_name) matching

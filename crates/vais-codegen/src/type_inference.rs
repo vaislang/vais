@@ -225,7 +225,7 @@ impl CodeGenerator {
     }
 
     /// Infer type of expression (simple version for let statement).
-    /// Phase 3.15: run codegen-local inference first, then upgrade to TC's
+    /// Phase 3.15/6.27b: run codegen-local inference first, then upgrade to TC's
     /// type only when codegen returned I64 but TC has richer info.
     /// This preserves the behavior of existing passing files (codegen's own
     /// inference for Ref/RefMut/struct paths) while recovering element
@@ -241,9 +241,12 @@ impl CodeGenerator {
                 // codegen's local inference erased.
                 match tc_ty {
                     ResolvedType::Tuple(_) => return tc_ty.clone(),
-                    // Don't upgrade Named/Ref here — those have dedicated
-                    // fallbacks in expr_helpers_data.rs that depend on the
-                    // I64 signal to trigger struct-name recovery.
+                    // Vec<T>/HashMap<K,V>/etc. generic Named types — recover
+                    // the full type so Index expressions know the element type.
+                    // This unblocks `queue[i]` on Vec<u64>, Vec<Struct>, etc.
+                    ResolvedType::Named { generics, .. } if !generics.is_empty() => {
+                        return tc_ty.clone();
+                    }
                     _ => {}
                 }
             }

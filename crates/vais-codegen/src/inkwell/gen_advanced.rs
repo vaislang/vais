@@ -516,4 +516,126 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .build_extract_value(struct_val, field_idx, field)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))
     }
+
+    /// Phase 6.27b: generate `Enum.Variant { field1: v1, ... }` literal.
+    /// Builds the payload struct from provided fields, heap-allocates,
+    /// stores pointer as i64 in enum.data slot, constructs enum {tag, data}.
+    pub(super) fn generate_enum_struct_variant(
+        &mut self,
+        enum_name: &str,
+        variant_name: &str,
+        fields: &[(Spanned<String>, Spanned<Expr>)],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // Look up tag
+        let tag = *self
+            .enum_variants
+            .get(&(enum_name.to_string(), variant_name.to_string()))
+            .ok_or_else(|| {
+                CodegenError::UndefinedVar(format!(
+                    "Enum variant not found: {}.{}",
+                    enum_name, variant_name
+                ))
+            })?;
+
+        // Look up payload type and field name order
+        let payload_ty = *self
+            .enum_variant_multi_payload_types
+            .get(&(enum_name.to_string(), variant_name.to_string()))
+            .ok_or_else(|| {
+                CodegenError::UndefinedVar(format!(
+                    "Enum struct-variant payload type not found: {}.{}",
+                    enum_name, variant_name
+                ))
+            })?;
+        let field_names = self
+            .enum_variant_multi_payload_field_names
+            .get(&(enum_name.to_string(), variant_name.to_string()))
+            .cloned()
+            .ok_or_else(|| {
+                CodegenError::UndefinedVar(format!(
+                    "Enum struct-variant field names not found: {}.{}",
+                    enum_name, variant_name
+                ))
+            })?;
+
+        // Build payload struct value by filling fields in declaration order
+        let mut payload = payload_ty.get_undef();
+        for (idx, decl_name) in field_names.iter().enumerate() {
+            // Find the matching provided field expression
+            let (_, expr) = fields
+                .iter()
+                .find(|(n, _)| &n.node == decl_name)
+                .ok_or_else(|| {
+                    CodegenError::UndefinedVar(format!(
+                        "Missing field '{}' in {}.{} construction",
+                        decl_name, enum_name, variant_name
+                    ))
+                })?;
+            let val = self.generate_expr(&expr.node)?;
+            payload = self
+                .builder
+                .build_insert_value(payload, val, idx as u32, &format!("v_field_{}", idx))
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                .into_struct_value();
+        }
+
+        // Heap-allocate and store
+        let i64_ty = self.context.i64_type();
+        let i8_ptr_ty = self.context.i8_type().ptr_type(AddressSpace::default());
+        let target_data = inkwell::targets::TargetData::create(
+            &self.module.get_triple().as_str().to_string_lossy(),
+        );
+        let size_bytes = target_data.get_store_size(&payload_ty);
+        let malloc_fn = self.module.get_function("malloc").unwrap_or_else(|| {
+            let malloc_ty = i8_ptr_ty.fn_type(&[i64_ty.into()], false);
+            self.module.add_function("malloc", malloc_ty, None)
+        });
+        let size_val = i64_ty.const_int(size_bytes, false);
+        let raw_ptr = self
+            .builder
+            .build_call(malloc_fn, &[size_val.into()], "variant_struct_heap")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| CodegenError::LlvmError("malloc returned no value".to_string()))?
+            .into_pointer_value();
+        let typed_ptr = self
+            .builder
+            .build_bitcast(
+                raw_ptr,
+                payload_ty.ptr_type(AddressSpace::default()),
+                "variant_struct_typed",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_pointer_value();
+        self.builder
+            .build_store(typed_ptr, payload)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let data_as_i64 = self
+            .builder
+            .build_ptr_to_int(typed_ptr, i64_ty, "variant_struct_data_i64")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Build enum { tag, data }
+        let enum_ty = *self.generated_structs.get(enum_name).ok_or_else(|| {
+            CodegenError::UndefinedVar(format!("Enum type not generated: {}", enum_name))
+        })?;
+        let mut enum_val = enum_ty.get_undef();
+        enum_val = self
+            .builder
+            .build_insert_value(
+                enum_val,
+                self.context.i8_type().const_int(tag as u64, false),
+                0,
+                "enum_tag",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+        enum_val = self
+            .builder
+            .build_insert_value(enum_val, data_as_i64, 1, "enum_data")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+        Ok(enum_val.into())
+    }
 }

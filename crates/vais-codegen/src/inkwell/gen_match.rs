@@ -774,8 +774,66 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 Ok(result)
             }
             Pattern::Struct { name, fields } => {
-                // Struct pattern: check field patterns
+                // Struct pattern: check field patterns.
+                // Phase 6.27b: for enum struct-variant pattern (`Enum.Variant { a, b }`),
+                // check the enum tag first, then skip inner-field checks (which are
+                // just identifier bindings that match anything — the actual binding
+                // happens in generate_pattern_bindings).
                 let struct_name = &name.node;
+                let is_variant = self
+                    .enum_variants
+                    .iter()
+                    .any(|((_, v_name), _)| v_name == struct_name);
+                if is_variant {
+                    // Auto-deref pointer
+                    let enum_val: BasicValueEnum<'ctx> = if match_val.is_pointer_value() {
+                        let enum_name_opt = self
+                            .enum_variants
+                            .iter()
+                            .find(|((_, v_name), _)| v_name == struct_name)
+                            .map(|((e_name, _), _)| e_name.clone());
+                        if let Some(enum_name) = enum_name_opt {
+                            if let Some(enum_ty) = self.generated_structs.get(&enum_name).copied()
+                            {
+                                self.builder
+                                    .build_load(
+                                        enum_ty,
+                                        match_val.into_pointer_value(),
+                                        "enum_tag_deref",
+                                    )
+                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            } else {
+                                *match_val
+                            }
+                        } else {
+                            *match_val
+                        }
+                    } else {
+                        *match_val
+                    };
+                    let enum_struct = enum_val.into_struct_value();
+                    let tag_val = self
+                        .builder
+                        .build_extract_value(enum_struct, 0, "variant_struct_tag")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                        .into_int_value();
+                    let expected_tag = self.get_enum_variant_tag(struct_name);
+                    let result = self
+                        .builder
+                        .build_int_compare(
+                            IntPredicate::EQ,
+                            tag_val,
+                            self.context.i8_type().const_int(expected_tag as u64, false),
+                            "variant_struct_check",
+                        )
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    // Don't recurse into field patterns — they're bindings only.
+                    // If sub-field patterns with actual checks (e.g., literals) are ever
+                    // added, they'd need deref + payload extract similar to bindings.
+                    let _ = fields;
+                    return Ok(result);
+                }
+
                 let struct_val = match_val.into_struct_value();
                 let mut result = self.context.bool_type().const_int(1, false);
 
@@ -1038,10 +1096,127 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
             Pattern::Struct { name, fields } => {
                 let struct_name = &name.node;
-                let struct_val = match_val.into_struct_value();
+
+                // Phase 6.27b: detect enum-struct-variant pattern (`Enum.Variant { a, b }`).
+                // Parser emits Pattern::Struct for both true struct destructure and enum
+                // struct-variant destructure. If `struct_name` matches a known variant
+                // name AND match_val is the enum {tag, i64 data} layout, recover the
+                // payload struct from the i64 data slot before binding fields.
+                let is_variant = self
+                    .enum_variants
+                    .iter()
+                    .any(|((_, v_name), _)| v_name == struct_name);
+                let payload_struct_ty: Option<inkwell::types::StructType<'ctx>> = if is_variant {
+                    // Multi-field payload (struct-variant with >1 field) is stored via heap ptr.
+                    self.enum_variant_multi_payload_types
+                        .iter()
+                        .find(|((_, v_name), _)| v_name == struct_name)
+                        .map(|(_, ty)| *ty)
+                        .or_else(|| {
+                            // Single-field struct payload (struct-variant with 1 named field
+                            // whose type is a Named struct) uses enum_variant_struct_types.
+                            self.enum_variant_struct_types
+                                .iter()
+                                .find(|((_, v_name), _)| v_name == struct_name)
+                                .and_then(|(_, sname)| self.generated_structs.get(sname).copied())
+                        })
+                } else {
+                    None
+                };
+
+                // Auto-deref: if match_val is a pointer (e.g., &Enum), load first.
+                let resolved_match_val: BasicValueEnum<'ctx> = if match_val.is_pointer_value() {
+                    // Find enum type to load. If this is an enum variant pattern, match_val
+                    // points at the {i8 tag, i64 data} enum struct.
+                    if is_variant {
+                        // Find the enum type name by looking up the variant.
+                        let enum_name_opt = self
+                            .enum_variants
+                            .iter()
+                            .find(|((_, v_name), _)| v_name == struct_name)
+                            .map(|((e_name, _), _)| e_name.clone());
+                        if let Some(enum_name) = enum_name_opt {
+                            if let Some(enum_ty) =
+                                self.generated_structs.get(&enum_name).copied()
+                            {
+                                self.builder
+                                    .build_load(
+                                        enum_ty,
+                                        match_val.into_pointer_value(),
+                                        "enum_auto_deref",
+                                    )
+                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            } else {
+                                *match_val
+                            }
+                        } else {
+                            *match_val
+                        }
+                    } else if let Some(&struct_ty) = self.generated_structs.get(struct_name) {
+                        self.builder
+                            .build_load(
+                                struct_ty,
+                                match_val.into_pointer_value(),
+                                "struct_auto_deref",
+                            )
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    } else {
+                        *match_val
+                    }
+                } else {
+                    *match_val
+                };
+
+                let struct_val: inkwell::values::StructValue<'ctx> = if let Some(payload_ty) =
+                    payload_struct_ty
+                {
+                    // Extract enum.data (i64), inttoptr, load payload struct.
+                    let enum_struct = resolved_match_val.into_struct_value();
+                    let data_val = self
+                        .builder
+                        .build_extract_value(enum_struct, 1, "enum_struct_data")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    let data_i64 = data_val.into_int_value();
+                    let ptr_ty = payload_ty.ptr_type(AddressSpace::default());
+                    let heap_ptr = self
+                        .builder
+                        .build_int_to_ptr(data_i64, ptr_ty, "variant_struct_ptr")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    self.builder
+                        .build_load(payload_ty, heap_ptr, "variant_struct_load")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                        .into_struct_value()
+                } else {
+                    resolved_match_val.into_struct_value()
+                };
 
                 for (field_name, field_pat) in fields {
-                    let field_idx = self.get_field_index(struct_name, &field_name.node)?;
+                    // For enum struct variants, field index comes from the positional
+                    // order in the variant definition (stored at multi_payload construction).
+                    // For regular structs, use get_field_index by name.
+                    let field_idx = if payload_struct_ty.is_some() {
+                        // Find field index by name in the payload struct's field list.
+                        // enum_variant_multi_payload_field_names maps (enum, variant) → Vec<String>.
+                        self.enum_variant_multi_payload_field_names
+                            .iter()
+                            .find(|((_, v_name), _)| v_name == struct_name)
+                            .and_then(|(_, names)| {
+                                names
+                                    .iter()
+                                    .position(|n| n == &field_name.node)
+                                    .map(|i| i as u32)
+                            })
+                            .unwrap_or_else(|| {
+                                // Fallback: positional by pattern order
+                                fields
+                                    .iter()
+                                    .position(|(fn_, _)| fn_.node == field_name.node)
+                                    .map(|i| i as u32)
+                                    .unwrap_or(0)
+                            })
+                    } else {
+                        self.get_field_index(struct_name, &field_name.node)?
+                    };
                     let field_val = self
                         .builder
                         .build_extract_value(struct_val, field_idx, &field_name.node)

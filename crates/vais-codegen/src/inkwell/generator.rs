@@ -98,6 +98,13 @@ pub struct InkwellCodeGenerator<'ctx> {
     pub(super) enum_variant_multi_payload_types:
         HashMap<(String, String), inkwell::types::StructType<'ctx>>,
 
+    /// Enum struct-variant field names:
+    /// (enum_name, variant_name) -> Vec of field names in declaration order.
+    /// Used by Pattern::Struct binding to map named-field patterns
+    /// (`Enum.Variant { a, b }`) to positional indices in the payload struct.
+    pub(super) enum_variant_multi_payload_field_names:
+        HashMap<(String, String), Vec<String>>,
+
     /// Enum single-primitive variant payload LLVM type:
     /// (enum_name, variant_name) -> primitive BasicTypeEnum (f64, i32, ...) for
     /// variants whose sole payload is a non-struct primitive. The enum data
@@ -257,6 +264,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             enum_variant_struct_types: HashMap::new(),
             enum_variant_primitive_payload_types: HashMap::new(),
             enum_variant_multi_payload_types: HashMap::new(),
+            enum_variant_multi_payload_field_names: HashMap::new(),
             var_struct_types: HashMap::new(),
             var_resolved_types: HashMap::new(),
             struct_generic_params: HashMap::new(),

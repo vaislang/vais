@@ -224,6 +224,29 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     self.enum_variant_multi_payload_types
                         .insert((enum_name.clone(), variant.name.node.clone()), payload_ty);
                 }
+            } else if let ast::VariantFields::Struct(fields) = &variant.fields {
+                // Phase 6.27b: struct-variant (named fields) support.
+                // `EN E { Variant { f1: T1, f2: T2, ... } }` — build anonymous struct
+                // type packing all declared field types, and record the field name
+                // list so Pattern::Struct bindings can map named patterns to indices.
+                if !fields.is_empty() {
+                    let mut field_ll_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = Vec::new();
+                    let mut field_names: Vec<String> = Vec::new();
+                    for f in fields {
+                        let resolved = self.ast_type_to_resolved(&f.ty.node);
+                        field_ll_types.push(self.type_mapper.map_type(&resolved));
+                        field_names.push(f.name.node.clone());
+                    }
+                    let payload_ty = self.context.struct_type(&field_ll_types, false);
+                    self.enum_variant_multi_payload_types.insert(
+                        (enum_name.clone(), variant.name.node.clone()),
+                        payload_ty,
+                    );
+                    self.enum_variant_multi_payload_field_names.insert(
+                        (enum_name.clone(), variant.name.node.clone()),
+                        field_names,
+                    );
+                }
             }
         }
 
