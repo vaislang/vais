@@ -1698,6 +1698,84 @@ impl TypeChecker {
             }
         }
 
+        // Phase 6.27b: enum variant constructor as static method call:
+        // `EnumType.Variant(arg1, ...)` — check args against the variant's
+        // declared field types, substituting generics with fresh vars,
+        // and return Named{enum_name, [substituted generics]}.
+        if let Some(enum_def) = self.enums.get(&type_name.node).cloned() {
+            if let Some(variant_fields) = enum_def.variants.get(&method.node).cloned() {
+                use crate::types::VariantFieldTypes;
+                // Create fresh type vars for enum generic params, build substitution map
+                let mut generic_substitutions: HashMap<String, ResolvedType> = HashMap::new();
+                for param in &enum_def.generics {
+                    generic_substitutions.insert(param.clone(), self.fresh_type_var());
+                }
+                // Unify arg types against substituted variant field types; capture
+                // generic param → concrete type bindings for the return type.
+                match &variant_fields {
+                    VariantFieldTypes::Tuple(field_types) => {
+                        if args.len() != field_types.len() {
+                            return Err(TypeError::ArgCount {
+                                expected: field_types.len(),
+                                got: args.len(),
+                                span: Some(expr_span),
+                            });
+                        }
+                        for (param_type, arg) in field_types.iter().zip(args) {
+                            let arg_type = self.check_expr(arg)?;
+                            let expected_type =
+                                self.substitute_generics(param_type, &generic_substitutions);
+                            self.unify(&expected_type, &arg_type)
+                                .map_err(|e| e.with_span(arg.span))?;
+                        }
+                    }
+                    VariantFieldTypes::Unit => {
+                        if !args.is_empty() {
+                            return Err(TypeError::ArgCount {
+                                expected: 0,
+                                got: args.len(),
+                                span: Some(expr_span),
+                            });
+                        }
+                    }
+                    VariantFieldTypes::Struct(named_fields) => {
+                        // `Enum.Variant(positional args matching field order)` — rare;
+                        // struct variants usually use Enum.Variant { field: v } syntax
+                        // (handled elsewhere via Expr::StructLit with enum_name Some).
+                        if args.len() != named_fields.len() {
+                            return Err(TypeError::ArgCount {
+                                expected: named_fields.len(),
+                                got: args.len(),
+                                span: Some(expr_span),
+                            });
+                        }
+                        for ((_, param_type), arg) in named_fields.iter().zip(args) {
+                            let arg_type = self.check_expr(arg)?;
+                            let expected_type =
+                                self.substitute_generics(param_type, &generic_substitutions);
+                            self.unify(&expected_type, &arg_type)
+                                .map_err(|e| e.with_span(arg.span))?;
+                        }
+                    }
+                }
+                let resolved_generics: Vec<ResolvedType> = enum_def
+                    .generics
+                    .iter()
+                    .map(|g| {
+                        generic_substitutions
+                            .get(g)
+                            .cloned()
+                            .map(|t| self.apply_substitutions(&t))
+                            .unwrap_or(ResolvedType::Unknown)
+                    })
+                    .collect();
+                return Ok(ResolvedType::Named {
+                    name: type_name.node.clone(),
+                    generics: resolved_generics,
+                });
+            }
+        }
+
         // Built-in Vec static methods
         if type_name.node == "Vec" {
             match method.node.as_str() {
