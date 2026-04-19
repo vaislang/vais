@@ -515,8 +515,8 @@ fn syntax_mod_pure_fn() {
 }
 
 #[test]
-#[ignore = "Phase 4c: unsafe modifier codegen incomplete"]
 fn syntax_mod_unsafe_fn() {
+    // Phase 1.18: `unsafe F ...` top-level modifier accepted at parse.
     let src = "unsafe F raw(p: i64) -> i64 { p }\nF main() -> i64 { 0 }";
     let (_d, p) = write_tmp("mod_unsafe.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: unsafe F");

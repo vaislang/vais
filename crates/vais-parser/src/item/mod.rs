@@ -24,6 +24,15 @@ impl Parser {
             self.advance_skip();
         }
 
+        // Phase 1.18 — optional `unsafe` modifier on top-level functions.
+        // `unsafe F foo() ...` is accepted; the unsafe marker is recorded on
+        // the function (or silently consumed for now). Positions: before `F`,
+        // after `P partial` etc.
+        let _is_unsafe_item = self.check(&Token::Unsafe);
+        if _is_unsafe_item {
+            self.advance_skip();
+        }
+
         // Phase 4c.2 / Task #53 — optional `partial` modifier on top-level
         // functions. Accepted positions:
         //   partial F foo() ...        (sync partial function)

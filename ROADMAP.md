@@ -324,7 +324,12 @@ progress: 9/18 (50%)
   detail: `Vec<>` 같은 empty generic 리스트는 parser에서 에러.
   [완료 기준]:
   - compiler_syntax syntax_neg_type_vec_empty_generic 테스트 ignored 해제 + passing
-- [ ] 1.18 `unsafe F` modifier codegen (impl-sonnet) [blockedBy: 1.17]
+- [x] 1.18 `unsafe F` top-level modifier (Opus direct) ✅ 2026-04-19
+  detail: parse_item이 `Token::Unsafe`를 아이템 레벨 prefix modifier로 수용하게 추가. TC+codegen은 unsafe body를 일반 F와 동일하게 처리 (pass-through).
+  changes:
+    - crates/vais-parser/src/item/mod.rs (+10줄: Token::Unsafe 선언 + 소모)
+    - compiler_syntax syntax_mod_unsafe_fn ignore 해제
+  verify: `unsafe F raw(p: i64) -> i64 { p }` parse/tc/codegen 모두 OK. integrity gate green.
   detail: 현재 `unsafe F ...` 파서 통과하지만 codegen pass-through가 불완전. 실제 코드 생성 경로 검증.
   [완료 기준]:
   - compiler_syntax syntax_mod_unsafe_fn 테스트 ignored 해제 + passing
