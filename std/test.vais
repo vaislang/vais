@@ -811,7 +811,7 @@ X TestRunner {
             suite_ptr := __load_ptr(self.suites + i * 8)
             suite := suite_ptr as &TestSuite
 
-            result := mut suite.run()
+            result: TestSuiteResult := mut suite.run()
             I __strlen(self.filter) > 0 {
                 result = suite.run_filtered(self.filter)
             }

@@ -24,7 +24,7 @@ cd "${REPO_ROOT}"
 # ---------------------------------------------------------------------------
 # Baseline thresholds (override via env)
 # ---------------------------------------------------------------------------
-INTEGRITY_STD_MIN="${INTEGRITY_STD_MIN:-70}"
+INTEGRITY_STD_MIN="${INTEGRITY_STD_MIN:-73}"
 INTEGRITY_VAISDB_MIN="${INTEGRITY_VAISDB_MIN:-179}"
 
 # ---------------------------------------------------------------------------

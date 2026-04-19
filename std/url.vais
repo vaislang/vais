@@ -166,7 +166,7 @@ X Url {
 
 # Parse a URL string into URL structure
 # Returns Some(Url) on success, None on parse error
-F url_parse(s: String) -> Option {
+F url_parse(s: String) -> Option<Url> {
     I s.len == 0 {
         None
     } EL {
@@ -181,7 +181,7 @@ F url_parse(s: String) -> Option {
         } EL {
             # No scheme found
             url.drop()
-            B None
+            R None
         }
 
         # Find end of authority (before /, ?, or #)
@@ -201,7 +201,7 @@ F url_parse(s: String) -> Option {
 
         I result == 0 {
             url.drop()
-            B None
+            R None
         }
 
         pos = authority_end
@@ -287,7 +287,7 @@ F parse_authority(url: Url, authority: String) -> i64 {
 }
 
 # Parse URL from C string
-F url_parse_cstr(cstr: i64) -> Option {
+F url_parse_cstr(cstr: i64) -> Option<Url> {
     I cstr == 0 {
         None
     } EL {
@@ -309,8 +309,10 @@ F url_to_string(url: Url) -> i64 {
 }
 
 # Helper: Find substring in string, returns position or -1
-F find_substr(s: String, substr: i64, start: i64) -> i64 {
-    substr_len := strlen(substr)
+# Accepts `str` literal for substr.
+F find_substr(s: String, substr_lit: str, start: i64) -> i64 {
+    substr := str_to_ptr(substr_lit)
+    substr_len := strlen(substr_lit)
     I substr_len == 0 || start >= s.len {
         0 - 1
     } EL {
@@ -418,9 +420,10 @@ F string_to_i64(s: String) -> i64 {
     }
 }
 
-# Helper: Compare String with C string
-F str_eq_cstr(s: String, cstr: i64) -> i64 {
-    len := strlen(cstr)
+# Helper: Compare String with C string literal
+F str_eq_cstr(s: String, cstr_lit: str) -> i64 {
+    cstr := str_to_ptr(cstr_lit)
+    len := strlen(cstr_lit)
     I s.len != len {
         0
     } EL {

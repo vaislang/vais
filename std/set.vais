@@ -74,7 +74,7 @@ X Set {
     # Returns 1 if value was newly inserted, 0 if already existed
     F insert(&self, value: i64) -> i64 {
         # Check if value already exists
-        I @.contains(value) == 1 { B 0 }
+        I @.contains(value) == 1 { R 0 }
 
         idx := @.hash(value)
         entry_ptr := load_i64(self.buckets + idx * 8)
@@ -319,10 +319,10 @@ X Set {
     # Returns 1 if all elements in self are in other, 0 otherwise
     F is_subset(&self, other: Set) -> i64 {
         # Empty set is subset of any set
-        I self.size == 0 { B 1 }
+        I self.size == 0 { R 1 }
 
         # If self is larger, it cannot be a subset
-        I self.size > other.size { B 0 }
+        I self.size > other.size { R 0 }
 
         # Check if all elements in self exist in other
         i := 0
