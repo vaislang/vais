@@ -60,7 +60,31 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Expr::StructLit { name, fields, .. } => {
                 self.generate_struct_literal(&name.node, fields)
             }
-            Expr::Field { expr: obj, field } => self.generate_field_access(&obj.node, &field.node),
+            Expr::Field { expr: obj, field } => {
+                // Detect `EnumName.Variant` access — obj is Var(enum_name) matching
+                // some (enum_name, _) entry in enum_variants. Route to variant
+                // construction instead of struct field access (which would try to
+                // evaluate `EnumName` as a local value and fail with C001).
+                if let Expr::Ident(ref var_name) = obj.node {
+                    // Only route to variant construction if var_name is an enum
+                    // TYPE name (not a local/constant/global shadowing it) AND
+                    // the field name is a known variant of that enum.
+                    let shadowed = self.locals.contains_key(var_name)
+                        || self.constants.contains_key(var_name)
+                        || self.globals.contains_key(var_name);
+                    if !shadowed {
+                        let is_variant = self.enum_variants.iter().any(
+                            |((e_name, v_name), _)| {
+                                e_name == var_name && v_name == &field.node
+                            },
+                        );
+                        if is_variant {
+                            return self.generate_var(&field.node);
+                        }
+                    }
+                }
+                self.generate_field_access(&obj.node, &field.node)
+            }
             Expr::TupleFieldAccess { expr: obj, index } => {
                 self.generate_field_access(&obj.node, &index.to_string())
             }

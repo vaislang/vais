@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 7
+iteration: 16
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
@@ -84,6 +84,7 @@ max_iterations: 60
   남은 72 파일의 지배적 blocker: **Vec<T>[i] use-after-move** (E022/C005) — `vec[j].field` 읽기조차 Vec 전체를 move하는 codegen gap. Phase 3.14 compiler 수정 없이는 개별 파일 수정 불가. Task #74 scope → 203은 compiler 작업 필요.
   iteration 12-15 결과: **ownership compiler fix 완료** (Expr::Index no longer moves container) + fusion/runner annotation. vaisdb 189→192 (+3).
   diminishing returns 관찰: 남은 ~70 파일의 진짜 blocker는 **Vec generic 추론 실패** — `Vec.with_capacity(0)` 결과 element type이 ??fresh_var, 이후 push()로 제약되어도 codegen이 `Named{Vec, generics=[]}` 형태로 보고 element type을 i64로 fallback. expr_helpers_data.rs:432. 이걸 고치려면 TC level에서 Vec.new/with_capacity inference를 더 적극적으로 하거나 codegen이 variable-tracked element type을 lookup해야 함. 별도 compiler phase 필요.
+  iteration 16 (2026-04-19): compiler fix (enum Field access routing for `EnumName.Variant`) + 5 vaisdb single-file fixes (migration, scan, manager, explain 등). Vec<T> struct field concrete layout fix 유지. 196→198/261. parser_security 일부 qualification 적용 시도했으나 Option<bool> TC issue로 revert.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.
