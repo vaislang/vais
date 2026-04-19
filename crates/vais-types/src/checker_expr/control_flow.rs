@@ -22,6 +22,43 @@ fn stmt_has_direct_break(stmt: &Spanned<Stmt>) -> bool {
     }
 }
 
+/// Phase 6.27c.4: decide whether a match looks like a statement whose arms
+/// each trail a side-effect call whose result value is not consumed. This
+/// lets us widen arm types to Unit when they would otherwise fail to
+/// unify (e.g. `Vec.push` returns i64 while `HashMap.set` returns V).
+///
+/// Statement-like arms: the arm body is either a bare call / method-call
+/// / static-method-call expression, or a block whose last statement is
+/// such a call expression and whose last stmt is an expression (no tail
+/// value binding). Unit-typed bodies (empty blocks, `{}`) also qualify.
+fn arm_bodies_are_statement_like(arms: &[MatchArm]) -> bool {
+    arms.iter().all(|arm| expr_is_statement_like(&arm.body))
+}
+
+fn expr_is_statement_like(expr: &Spanned<Expr>) -> bool {
+    match &expr.node {
+        Expr::Call { .. } | Expr::MethodCall { .. } | Expr::StaticMethodCall { .. } => true,
+        Expr::Block(stmts) => {
+            // Empty block → Unit → safe
+            if stmts.is_empty() {
+                return true;
+            }
+            // Last stmt must be an Expr whose value is discarded (the
+            // parser produces Stmt::Expr for trailing exprs).
+            match &stmts.last().unwrap().node {
+                Stmt::Expr(inner) => expr_is_statement_like(inner),
+                // Return/Break/Continue never "produce" a value that
+                // must unify with siblings
+                Stmt::Return(_) | Stmt::Break(_) | Stmt::Continue => true,
+                _ => false,
+            }
+        }
+        // Unit literal — arm already returns ()
+        Expr::Unit => true,
+        _ => false,
+    }
+}
+
 fn expr_has_direct_break(expr: &Spanned<Expr>) -> bool {
     match &expr.node {
         // Nested loops own their own breaks — do NOT descend into them
@@ -425,6 +462,13 @@ impl TypeChecker {
                     if let Some(ref prev) = result_type {
                         if let Err(_e) = self.unify(prev, &arm_type) {
                             if *prev == ResolvedType::Unit || arm_type == ResolvedType::Unit {
+                                result_type = Some(ResolvedType::Unit);
+                            } else if arm_bodies_are_statement_like(arms) {
+                                // Phase 6.27c.4: statement-style match whose
+                                // arms each trail a side-effect call whose
+                                // return value nobody reads. Don't force
+                                // the arms to agree — widen to Unit so the
+                                // match itself types as a statement.
                                 result_type = Some(ResolvedType::Unit);
                             } else {
                                 return Some(Err(_e));
