@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 45
+iteration: 46
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
@@ -113,6 +113,7 @@ max_iterations: 60
   iteration 43 (2026-04-20): 0 net pass. storage/btree/insert.vais에 `parent_guard := mut None` → `parent_guard: Option<LatchGuard> := mut None` 명시 annotation 적용 → Never 문제 해소하고 `serialize_into` API drift까지 도달 → `write_to_page`로 교정 → `use after move` (E022)로 막힘 (separator가 NeedsSplit 패턴에서 move됨). 구조적 ownership 이슈라 세션 범위 초과, revert.
   iteration 44 (2026-04-20): 0 net pass. rag/context/window.vais `LW j < windows.len() as u32 { ... }` (line 274, nested LW 안쪽)에서 "expected numeric, found ()" TC flake 재탐색. `j := mut i + 1u32` annotation, `__win_len` 중간 변수 hoist 둘 다 시도 but 같은 error — `windows` 자체의 타입이 nested scope 안에서 TC가 ()로 resolve. `&Vec<ContextWindow>` 파라미터인데 scope leak 의심. 세션 범위 초과, revert.
   iteration 45 (2026-04-20): 0 net pass. fulltext/mod.vais: write_lock 0→1 arg 맞춤 + execute_search 8→7 arg + PhraseSearcher.new(0)→() + search_phrase 4→7 arg + PostingListCompactor.new 5→4 + compact_all 2→4 + concurrency_stats stub — TC pass까지 도달. fulltext/concurrency.vais: `std.thread.yield_now()` 스텁 제거 + Ordering 인자들 제거 → `queue.push(txn_id)` (MutexGuard<Vec<u64>>에서 push) 미해결 (MutexGuard Deref 미구현). 전체 revert. rag/context/window.vais는 `win_count` hoist도 `j < win_count`가 `()` erasure — nested scope TC 버그 확정.
+  iteration 46 (2026-04-20) **229 도달**: fulltext/search/boolean.vais — char 리터럴 비교를 바이트(u8)로 치환 (`as char` → `as u8`, `' '` → `32u8`, `'\t'` → `9u8` 등, 6 리터럴). + `substring` helper가 `from_utf8(&bytes).unwrap_or("")` 하던 것을 `s.substring(start, end)` stdlib method로 간소화 (str.substring은 str 반환). TC + codegen pass. vaisdb 228→229/261 (+1). floor 229 상향.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.
