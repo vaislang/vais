@@ -363,6 +363,20 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
+        // Phase 3.14 safety: if we got here with a StructValue (not a
+        // pointer), it means the expression resolved to a Vec/struct embedded
+        // in another struct field. The opaque `%Vec` representation can't be
+        // GEP'd directly. Emit a clear error instead of letting inkwell panic.
+        if arr_val.is_struct_value() {
+            return Err(CodegenError::TypeError(format!(
+                "Cannot index into struct-embedded Vec/container directly. \
+                 This happens with patterns like `obj.vec_field[i]` when the \
+                 Vec is stored by-value in a struct. Workaround: copy to a \
+                 local first — `v := obj.vec_field; x := v[i]`. \
+                 (Phase 3.14 — Vec struct-field ABI redesign pending.)"
+            )));
+        }
+
         // Regular array/pointer indexing — use inferred element type
         let arr_ptr = arr_val.into_pointer_value();
         let idx_int = idx_val.into_int_value();
