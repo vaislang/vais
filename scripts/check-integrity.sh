@@ -24,8 +24,8 @@ cd "${REPO_ROOT}"
 # ---------------------------------------------------------------------------
 # Baseline thresholds (override via env)
 # ---------------------------------------------------------------------------
-INTEGRITY_STD_MIN="${INTEGRITY_STD_MIN:-67}"
-INTEGRITY_VAISDB_MIN="${INTEGRITY_VAISDB_MIN:-178}"
+INTEGRITY_STD_MIN="${INTEGRITY_STD_MIN:-70}"
+INTEGRITY_VAISDB_MIN="${INTEGRITY_VAISDB_MIN:-179}"
 
 # ---------------------------------------------------------------------------
 # Ensure /tmp/vais-lib/std symlink exists
