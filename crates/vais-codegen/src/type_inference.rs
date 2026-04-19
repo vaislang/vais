@@ -245,6 +245,10 @@ impl CodeGenerator {
                 (ResolvedType::I64, ResolvedType::Tuple(_)) => true,
                 (ResolvedType::I64, ResolvedType::Named { generics, .. })
                     if !generics.is_empty() => true,
+                // Phase 6.27b+: local Unit but TC has concrete type.
+                // Happens when codegen-local infer returns Unit for method
+                // calls it can't resolve (cross-module, generic receivers).
+                (ResolvedType::Unit, tc) if !matches!(tc, ResolvedType::Unit) => true,
                 // local says Vec<I64> (generic erased) but TC says Vec<Tuple<..>>
                 (
                     ResolvedType::Named { name: l_name, generics: l_gen },
