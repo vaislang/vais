@@ -71,7 +71,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-19)
 
-mode: auto
+mode: stopped (Phase 6.27 Tier 2 complete at vaisdb=203/261. Tier 3 (261/261) needs Vec<Struct> field codegen work — deferred to next drive. Phase 6.28+ blockedBy 6.27 Tier 3.)
 iteration: 21
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
