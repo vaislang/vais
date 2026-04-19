@@ -231,10 +231,12 @@ progress: 9/18 (50%)
   changes:
     - docs/CODEGEN_FEATURES.md — Known TC-passes-but-codegen-fails에 parse_i64/f64 항목 추가
   verify: integrity gate green. 실제 구현은 Phase 5.24로 merge.
-- [ ] 14. Vec<Struct>[i].field= write 지원 (Opus direct) [blockedBy: 12]
-  detail: 현재 write-through-index 미지원. 구현하거나 TC에서 차단하고 `.get_mut`로 대체 유도. 결정 후 구현.
-  완료 기준:
-  - 결정 문서화, 해당 패턴 테스트 통과
+- [~] 14. Vec<Struct>[i].field = write 지원 (Opus direct) 🚧 SCOPED 2026-04-19
+  detail: 본격 구현(LLVM GEP double-level: index GEP + field GEP + store)은 LLVM 상세 작업이라 집중 세션 필요. 본 Phase는 (1) C005 에러 메시지에 구체적 workaround 포함, (2) COOKBOOK.md 항목 23 신규로 scope. 실제 LLVM 구현은 Phase 5.24/6.27 std/vaisdb 작업 중 필요 시 함께 진행.
+  changes:
+    - crates/vais-codegen/src/inkwell/gen_advanced.rs — "Complex field assignment" 에러에 workaround 내장 (`p := v[i]; p.field = expr; v[i] = p`)
+    - docs/language/COOKBOOK.md 항목 23 신규
+  verify: C005 에러가 이제 사용자에게 명확한 해결 방법 제시. integrity gate green.
 
 ### Phase 4 — stdlib 정비
 

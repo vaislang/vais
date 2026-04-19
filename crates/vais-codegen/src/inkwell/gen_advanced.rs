@@ -61,7 +61,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     }
                 }
                 Err(CodegenError::Unsupported(
-                    "Complex field assignment".to_string(),
+                    "Complex field assignment (e.g. `v[i].field = expr` on \
+                     Vec<Struct>) — Phase 3.14 codegen gap. Workaround: \
+                     read the element, modify, write back: \
+                     `p := v[i]; p.field = expr; v[i] = p`".to_string(),
                 ))
             }
             Expr::Index { expr: arr, index } => {
