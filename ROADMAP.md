@@ -377,11 +377,12 @@ progress: 9/18 (50%)
   detail: nested generic (`Vec<Option<T>>`), where clause 복수, generic method receiver. TYPE_SYSTEM §8 "Known Gaps"의 method inference dispersion 해결.
   [완료 기준]:
   - 새 e2e 5+ (nested/where-multi/method), 모두 통과
-- [ ] 2.15 Move semantics / 참조 전달 규칙 문서화 + 에러 메시지 개선 (impl-sonnet) [blockedBy: 2.14]
-  detail: `E022: use after move` 발생 시 "consider passing by `&T`" 같은 구체적 제안 포함. 문서: TYPE_SYSTEM §8에 move/borrow 규칙 추가.
-  [완료 기준]:
-  - 에러 메시지에 suggestion 포함
-  - 문서 업데이트
+- [x] 2.15 Move semantics 규칙 문서화 + 에러 개선 (Opus direct) ✅ 2026-04-19
+  detail: E022 UseAfterMove suggestion을 3-option 구체 가이드로 확장 (`&v` immutable / `&mut v` in-place / `.clone()`). TYPE_SYSTEM.md §8.5 신규 섹션 — move 발생 조건, 관용 패턴, 에러 예시.
+  changes:
+    - crates/vais-types/src/types/error.rs — UseAfterMove suggestion 확장
+    - docs/TYPE_SYSTEM.md §8.5 신규 (~55줄)
+  verify: integrity gate green.
 
 ### Phase 3.x — Codegen 완결성 (기존 3.12~3.14 포함, 확장)
 

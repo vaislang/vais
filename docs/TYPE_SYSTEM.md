@@ -588,6 +588,68 @@ Source: `crates/vais-types/src/inference/inference_modes.rs:74`
 
 ---
 
+## 8.5 Move / Borrow Semantics (Phase 2.15)
+
+Vais uses move-by-default semantics for value types (Struct, Vec, HashMap,
+String). Primitive types (`i64`, `f64`, `bool`, etc.) are `Copy` — never
+moved. Reference types (`&T`, `&mut T`) are non-owning and don't trigger
+moves.
+
+### When does a move happen?
+
+A move is recorded (adds to `moved_vars` set) when:
+
+1. **Pass by value to a function**: `f(vec)` moves `vec` into `f`. Use
+   `f(&vec)` (immutable borrow) or `f(&mut vec)` (mutable borrow) to avoid
+   the move.
+2. **Assignment to another variable**: `let y = x` moves `x` into `y` if
+   `x` is a non-Copy value type.
+3. **Returning a value**: `R expr` moves `expr` out of the current function.
+
+### When does a move NOT happen?
+
+- Reference parameter types (`&T`, `&mut T`) on the callee side — the
+  argument is borrowed, not moved.
+- Method receivers with `&self` / `&mut self`.
+- Copy types (primitives, small tuples of Copy types).
+
+### Error: E022 "use of moved value"
+
+When a moved variable is referenced again, the checker emits:
+
+```
+error: error[E022] Use of moved value: variable 'v' was moved
+  help: variable 'v' was moved and can no longer be used. Options:
+    (1) pass by reference `&v` if the callee only reads the value,
+    (2) pass `&mut v` for in-place modification,
+    (3) clone the value with `.clone()` before the move
+```
+
+### Idiomatic patterns
+
+Prefer `&T` parameters for read-only access:
+
+```vais
+F analyze(v: &Vec<i64>) -> i64 { v.len() }
+F sum(v: &Vec<i64>) -> i64 { /* ... */ }
+
+F main() -> i64 {
+    v: Vec<i64> = Vec::new()
+    v.push(1)
+    a := analyze(&v)  # borrow, v still usable
+    b := sum(&v)
+    a + b
+}
+```
+
+Use `&mut T` only when the callee modifies in place. Clone as a last
+resort — cloning a `Vec<T>` is O(n).
+
+Source: `crates/vais-types/src/types/error.rs:473` (E022 diagnostic),
+        `crates/vais-types/src/checker_expr/calls.rs:143+` (move detection).
+
+---
+
 ## 9. Known Gaps / TODO
 
 These gaps are tracked as future work items. They do NOT represent bugs in

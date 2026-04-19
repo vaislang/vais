@@ -471,7 +471,13 @@ impl TypeError {
                 Some("the reference must not outlive the data it refers to".to_string())
             }
             TypeError::UseAfterMove { var_name, .. } => {
-                Some(format!("variable '{}' was moved and can no longer be used; consider cloning it before the move", var_name))
+                Some(format!(
+                    "variable '{}' was moved and can no longer be used. Options: \
+                     (1) pass by reference `&{}` if the callee only reads the value, \
+                     (2) pass `&mut {}` for in-place modification, \
+                     (3) clone the value with `.clone()` before the move",
+                    var_name, var_name, var_name
+                ))
             }
             TypeError::UseAfterPartialMove { var_name, moved_fields, .. } => {
                 Some(format!("variable '{}' has partially moved fields {:?}; consider cloning before moving individual fields", var_name, moved_fields))
