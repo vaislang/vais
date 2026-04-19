@@ -877,6 +877,73 @@ impl TypeChecker {
                         generics: inferred_generics,
                     }))
                 } else {
+                    // Phase 6.27b iteration 52: fallback — name might be a
+                    // Struct variant of some enum (short-form). Find the
+                    // first enum whose Struct variant has this name AND
+                    // whose field set covers the literal's provided fields
+                    // (the covers-check avoids picking a same-named variant
+                    // in a different enum — see iter-35 disambiguation).
+                    let provided_field_names: std::collections::HashSet<String> =
+                        fields.iter().map(|(fn_, _)| fn_.node.clone()).collect();
+                    // Snapshot enum entries to avoid borrow issues during
+                    // subsequent check_expr/unify calls.
+                    let mut enum_snapshots: Vec<(
+                        String,
+                        Vec<String>,
+                        std::collections::HashMap<String, ResolvedType>,
+                    )> = Vec::new();
+                    {
+                        let mut enum_entries: Vec<_> = self.enums.iter().collect();
+                        enum_entries.sort_by(|(a, _), (b, _)| {
+                            let a_builtin = matches!(a.as_str(), "Option" | "Result");
+                            let b_builtin = matches!(b.as_str(), "Option" | "Result");
+                            a_builtin.cmp(&b_builtin).then_with(|| a.cmp(b))
+                        });
+                        for (enum_name_str, enum_def) in enum_entries {
+                            if let Some(variant_fields) = enum_def.variants.get(&name.node) {
+                                if let crate::types::VariantFieldTypes::Struct(expected_fields) =
+                                    variant_fields
+                                {
+                                    let covers_all = provided_field_names.iter().all(|pfn| {
+                                        expected_fields.contains_key(pfn.as_str())
+                                    });
+                                    if covers_all {
+                                        enum_snapshots.push((
+                                            enum_name_str.clone(),
+                                            enum_def.generics.clone(),
+                                            expected_fields.clone(),
+                                        ));
+                                        break; // prefer first sorted match
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if let Some((enum_name_str, enum_generics, expected_fields)) =
+                        enum_snapshots.into_iter().next()
+                    {
+                        // Type-check each provided field against expected
+                        for (field_name, value) in fields {
+                            let value_type = match self.check_expr(value) {
+                                Ok(t) => t,
+                                Err(e) => return Some(Err(e)),
+                            };
+                            if let Some(expected_type) = expected_fields.get(&field_name.node) {
+                                if let Err(e) = self.unify(expected_type, &value_type) {
+                                    return Some(Err(e));
+                                }
+                            }
+                        }
+                        let generics: Vec<ResolvedType> = enum_generics
+                            .iter()
+                            .map(|_| self.fresh_type_var())
+                            .collect();
+                        return Some(Ok(ResolvedType::Named {
+                            name: enum_name_str,
+                            generics,
+                        }));
+                    }
+
                     // Get all type names for suggestion
                     let mut type_candidates: Vec<&str> = Vec::new();
                     type_candidates.extend(self.structs.keys().map(|s| s.as_str()));
