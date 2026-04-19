@@ -158,19 +158,19 @@ X Reactor {
     }
 
     # Register interest in reading from a file descriptor
-    F register_read(&self, fd: i64, task_ptr: i64) -> i64 {
+    partial F register_read(&self, fd: i64, task_ptr: i64) -> i64 {
         kevent_register(self.backend_fd, fd, REACTOR_READ, REACTOR_ADD)
         self.add_source(REACTOR_READ, fd, task_ptr, 0)
     }
 
     # Register interest in writing to a file descriptor
-    F register_write(&self, fd: i64, task_ptr: i64) -> i64 {
+    partial F register_write(&self, fd: i64, task_ptr: i64) -> i64 {
         kevent_register(self.backend_fd, fd, REACTOR_WRITE, REACTOR_ADD)
         self.add_source(REACTOR_WRITE, fd, task_ptr, 0)
     }
 
     # Register a timer with delay in milliseconds
-    F register_timer(&self, timer_id: i64, delay_ms: i64, task_ptr: i64) -> i64 {
+    partial F register_timer(&self, timer_id: i64, delay_ms: i64, task_ptr: i64) -> i64 {
         deadline := time_now_ms() + delay_ms
         kevent_register(self.backend_fd, timer_id, REACTOR_TIMER, REACTOR_ADD)
 
@@ -187,13 +187,13 @@ X Reactor {
     }
 
     # Deregister an event source
-    F deregister(&self, fd: i64, filter: i64) -> i64 {
+    partial F deregister(&self, fd: i64, filter: i64) -> i64 {
         kevent_register(self.backend_fd, fd, filter, REACTOR_DELETE)
         self.remove_source(fd)
     }
 
     # Add an event source to the tracking list
-    F add_source(&self, source_type: i64, fd: i64, task_ptr: i64, deadline_ms: i64) -> i64 {
+    partial F add_source(&self, source_type: i64, fd: i64, task_ptr: i64, deadline_ms: i64) -> i64 {
         src_ptr := malloc(40)
         store_i64(src_ptr, source_type)
         store_i64(src_ptr + 8, fd)
@@ -214,7 +214,7 @@ X Reactor {
     }
 
     # Remove an event source by fd
-    F remove_source(&self, fd: i64) -> i64 {
+    partial F remove_source(&self, fd: i64) -> i64 {
         prev := 0
         current := self.sources_head
 
@@ -290,7 +290,7 @@ X Reactor {
 
     # Process all events from last poll, waking corresponding tasks
     # Returns number of tasks woken
-    F process_events(&self, n_events: i64) -> i64 {
+    partial F process_events(&self, n_events: i64) -> i64 {
         woken := 0
         i := 0
         LW i < n_events {
@@ -338,10 +338,10 @@ X Reactor {
 # Global Reactor instance
 # ============================================
 
-V __GLOBAL_REACTOR_INSTANCE: i64 = 0
+G __GLOBAL_REACTOR_INSTANCE: i64 = 0
 
 # Initialize global reactor
-F reactor_instance_init() -> i64 {
+partial F reactor_instance_init() -> i64 {
     LW __GLOBAL_REACTOR_INSTANCE == 0 {
         # Allocate Reactor on heap (9 fields * 8 bytes = 72 bytes)
         r_ptr := malloc(72)
@@ -374,7 +374,7 @@ F reactor_instance_init() -> i64 {
 }
 
 # Get global reactor instance
-F get_reactor_instance() -> i64 {
+partial F get_reactor_instance() -> i64 {
     LW __GLOBAL_REACTOR_INSTANCE == 0 {
         reactor_instance_init()
     }
@@ -386,49 +386,49 @@ F get_reactor_instance() -> i64 {
 # ============================================
 
 # Register a read interest on global reactor
-F reactor_register_read(fd: i64, task_ptr: i64) -> i64 {
+partial F reactor_register_read(fd: i64, task_ptr: i64) -> i64 {
     r := get_reactor_instance()
     r_ptr := r as *Reactor
     r_ptr.register_read(fd, task_ptr)
 }
 
 # Register a write interest on global reactor
-F reactor_register_write(fd: i64, task_ptr: i64) -> i64 {
+partial F reactor_register_write(fd: i64, task_ptr: i64) -> i64 {
     r := get_reactor_instance()
     r_ptr := r as *Reactor
     r_ptr.register_write(fd, task_ptr)
 }
 
 # Register a timer on global reactor
-F reactor_register_timer(timer_id: i64, delay_ms: i64, task_ptr: i64) -> i64 {
+partial F reactor_register_timer(timer_id: i64, delay_ms: i64, task_ptr: i64) -> i64 {
     r := get_reactor_instance()
     r_ptr := r as *Reactor
     r_ptr.register_timer(timer_id, delay_ms, task_ptr)
 }
 
 # Poll for events on global reactor
-F reactor_poll(timeout_ms: i64) -> i64 {
+partial F reactor_poll(timeout_ms: i64) -> i64 {
     r := get_reactor_instance()
     r_ptr := r as *Reactor
     r_ptr.poll(timeout_ms)
 }
 
 # Process events on global reactor
-F reactor_process_events(n_events: i64) -> i64 {
+partial F reactor_process_events(n_events: i64) -> i64 {
     r := get_reactor_instance()
     r_ptr := r as *Reactor
     r_ptr.process_events(n_events)
 }
 
 # Wake up global reactor
-F reactor_wake() -> i64 {
+partial F reactor_wake() -> i64 {
     r := get_reactor_instance()
     r_ptr := r as *Reactor
     r_ptr.wake()
 }
 
 # Cleanup global reactor
-F reactor_cleanup() -> i64 {
+partial F reactor_cleanup() -> i64 {
     r := get_reactor_instance()
     r_ptr := r as *Reactor
     r_ptr.cleanup()
@@ -437,7 +437,7 @@ F reactor_cleanup() -> i64 {
 }
 
 # Get current platform ID
-F reactor_get_platform() -> i64 {
+partial F reactor_get_platform() -> i64 {
     r := get_reactor_instance()
     r_ptr := r as *Reactor
     r_ptr.get_platform()
