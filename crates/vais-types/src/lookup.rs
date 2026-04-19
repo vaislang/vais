@@ -70,11 +70,29 @@ impl TypeChecker {
         // Check if it's an enum variant
         for (enum_name, enum_def) in &self.enums {
             if let Some(variant_fields) = enum_def.variants.get(name) {
-                // Create type variables for generic enum parameters
+                // Phase 2.10: for Unit variants of built-in Option/Result,
+                // use `Never` for the unconstrained generic slots. This lets
+                // the Unit arm (e.g. `None`) unify trivially with any
+                // concrete Option<T> from a sibling arm. Without this, None
+                // injects a fresh type var that later gets bound to the
+                // scrutinee's T, contaminating the arm result type when a
+                // sibling arm constructs `Some(x: U)` with a different U.
+                //
+                // Scope narrow: only applies when the Unit variant has no
+                // fields (None/Err-unit style) AND the enum is builtin
+                // Option or Result. User-defined enums retain fresh vars.
+                let use_never_for_unit = matches!(variant_fields, VariantFieldTypes::Unit)
+                    && matches!(enum_name.as_str(), "Option" | "Result");
                 let generics: Vec<ResolvedType> = enum_def
                     .generics
                     .iter()
-                    .map(|_| self.fresh_type_var())
+                    .map(|_| {
+                        if use_never_for_unit {
+                            ResolvedType::Never
+                        } else {
+                            self.fresh_type_var()
+                        }
+                    })
                     .collect();
 
                 // Build substitution map for generic parameters

@@ -27,7 +27,7 @@ Measured via `cargo test -p vaisc --test integrity --release -- --nocapture` on 
 | compiler_syntax | 30 | 0 | 30 | 100% |
 | compiler_stages | 14 | 0 | 14 | 100% (1 #[ignored] for B7 known bug) |
 | std_files (std/*.vais, each `ok_codegen`) | **37** | 45 | 82 | 45.1% |
-| vaisdb_files (vaisdb/src/**/*.vais, `ok_codegen_pkg`) | **176** | 85 | 261 | 67.4% |
+| vaisdb_files (vaisdb/src/**/*.vais, `ok_codegen_pkg`) | **179** | 82 | 261 | 68.6% (Phase 2.10 fix +3) |
 | phase158 strict type gate | 18 | 0 | 18 | 100% |
 
 These numbers are the **official regression floor** for all subsequent Phase gates:
@@ -77,6 +77,8 @@ max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
+  strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.
+  strategy iteration 7: Phase 2.10 Option 재포장 — 4-지점 동시 수정 시도. 이전 3회 실패 원인은 부분 수정 → 이번엔 full diff 먼저 작성 후 한 번에 적용 + baseline check.
   strategy-note: A안 채택 — Phase 2.10 fix 재시도하기 전에 **체계(LIVING_SPEC + COOKBOOK + CLAUDE.md 철칙)** 먼저 구축. 에이전트 작업 시 "과거 문법 추측 → regression" 루프를 근본 차단하는 게 목적. Phase 1.8 → 1.9 → 1.10 체인 후 2.10 재개.
   strategy iteration 1: sequential — #42 (#43, #44 blockedBy 체인). #42는 100+ 파일 생성 + regression floor 유지 필요 → impl-sonnet background.
 
@@ -191,20 +193,22 @@ progress: 9/18 (50%)
   changes: docs/TYPE_SYSTEM.md §9 "Phase 2.9" expanded (decision table + rationale + workaround), crates/vaisc/tests/e2e/modules_system.rs (+phase2_9_same_file_struct_and_impl_works 회귀 테스트).
   verify: `cargo test -p vaisc --test e2e --release phase2_9_same_file_struct` ok 1/1, `cargo test -p vaisc --test e2e --release test_circular_import_detection` ok 1/1 (invariant 유지). Full gate green.
   option (b) `#[extend]` / option (c) benign cycles: 기각. 필요 시 RFC 경로 재검토.
-- [~] 10. Option match-arm constructor re-wrap 정합성 (Opus direct) 🚧 DEFERRED 2026-04-19
-  detail: 정확한 bug 범위 재정의 — 문제는 `Some(r) => r.field` binding이 아니라 **arm이 `Some(r.field)` 재포장할 때** 생기는 enum constructor의 fresh-var disconnect. role.vais `get_role_id`가 canonical example.
-  investigation: docs/TYPE_SYSTEM.md §9 "Phase 2.10"에 reproducer + root cause(calls.rs:55-87) 기록.
-  naive fix 결과:
-  - (a) 전체 enum에 substitute_generics → vaisdb -1 file regression
-  - (b) Option/Result 한정 scoped fix → vaisdb -2 file regression
-  → 기존 disconnected-fresh-var 동작은 load-bearing. 안전한 fix를 위해 Named↔Optional bridge (unification.rs:247) 함께 수정하거나 checker_expr/special.rs의 별도 경로 조사 필요.
-  changes: docs/TYPE_SYSTEM.md §9 확장 (+40줄 reproducer & 분석), crates/vaisc/tests/e2e/modules_system.rs (+phase2_10_option_rewrap_in_match_arm #[ignore] 회귀 테스트).
-  status: 완료 기준 "reproducer 테스트 패스" 미충족 → `[~]` 표기. 176/261 baseline은 **이 버그를 포함한 숫자**이므로 regression floor 위반 아님. Phase 2.10 해결 시 vaisdb OK 숫자 상승 기대.
-  next session: calls.rs 패스 + unification bridge 동시 분석 필요. 단독 수정 금지 — 반드시 baseline check로 검증.
-  완료 기준 (원본):
-  - 결정사항 문서화 ✓ (deferred decision 기록)
-  - reproducer 테스트 추가 ✓ (ignored)
-  - 패스 ✗ (regression-safe fix 미발견 → deferred)
+- [x] 10. Option match-arm constructor re-wrap 정합성 (Opus direct) ✅ 2026-04-19
+  **근본 원인 발견**: 이전 3회 실패는 `calls.rs` 생성자 path만 고쳤기 때문. 실제 버그는 **`register_pattern_bindings`** (scope.rs:272)가 `Pattern::Ident("None")`을 **변수 바인딩**으로 처리해서 scrutinee의 `Option<Role>` 타입을 `None` 심볼에 박아버린 것. 그러면 `None => None` arm body가 `Option<Role>` 반환 → prev arm의 `Option<U64>`와 unify 시 U64 vs Role mismatch.
+  **진짜 수정** (3-지점):
+    1. scope.rs:272 `register_pattern_bindings` — `Pattern::Ident(n)`이 known enum variant name이면 **binding하지 않음** (variant pattern으로 처리).
+    2. lookup.rs:71 — Option/Result Unit variants (None)의 generic slots에 `Never` 사용 → sibling arm의 구체 타입이 승리.
+    3. calls.rs:63 — Option/Result 생성자에서 arg's 구체 타입을 param_bindings에 수집 → 반환 Named<Option, [T]>가 real arg type 보존.
+  changes:
+    - crates/vais-types/src/scope.rs — Pattern::Ident에 enum variant 체크 (~10줄)
+    - crates/vais-types/src/lookup.rs — Unit variant Option/Result → Never fresh slots (~8줄)
+    - crates/vais-types/src/checker_expr/calls.rs — scoped param_bindings for Option/Result (~20줄)
+    - crates/vaisc/tests/e2e/modules_system.rs — phase2_10_option_rewrap_in_match_arm ignore 해제 + TC-only check
+  verify:
+    - reproducer `phase2_10_option_rewrap_in_match_arm` passes (TC level)
+    - **vaisdb 176 → 179 (+3 files)** — regression floor 초과 + 개선
+    - integrity gate OK: syntax=200 stages=14 std=37/82 **vaisdb=179/261** phase158=18/18
+  codegen note: 복잡한 `F(opt: Option<Struct>) -> Option<Primitive>` 함수의 LLVM IR (typed parameter name)은 별도 codegen gap — Phase 3.x 작업.
 - [ ] 11. HashMap/Vec/Str method inference 정리 (impl-sonnet) [blockedBy: 10]
   detail: 현재 분산된 inference 패치들을 `crates/vais-types/src/builtins/method_returns.rs`로 통합. Codegen 측 중복 제거.
   완료 기준:

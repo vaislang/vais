@@ -61,6 +61,13 @@ impl TypeChecker {
                     .find(|(_, def)| def.variants.contains_key(func_name))
                     .map(|(name, def)| (name.clone(), def.clone()));
                 if let Some((enum_name, enum_def)) = found_enum {
+                    // Phase 2.10: capture concrete arg types for enum params
+                    // whose variant field is a bare Generic("T") so the
+                    // returned Named<enum, [...]> carries the arg's real type
+                    // instead of a disconnected fresh var. Scope: built-in
+                    // Option/Result only — user enums retain prior behavior.
+                    let scoped = matches!(enum_name.as_str(), "Option" | "Result");
+                    let mut param_bindings: HashMap<String, ResolvedType> = HashMap::new();
                     if let Some(variant_fields) = enum_def.variants.get(func_name) {
                         match variant_fields {
                             crate::types::VariantFieldTypes::Tuple(field_types) => {
@@ -69,6 +76,17 @@ impl TypeChecker {
                                         let arg_ty = self.check_expr(arg)?;
                                         self.unify(expected_ty, &arg_ty)
                                             .map_err(|e| e.with_span(arg.span))?;
+                                        if scoped {
+                                            if let ResolvedType::Generic(param_name) = expected_ty {
+                                                if enum_def.generics.iter().any(|g| g == param_name) {
+                                                    let resolved =
+                                                        self.apply_substitutions(&arg_ty);
+                                                    param_bindings
+                                                        .entry(param_name.clone())
+                                                        .or_insert(resolved);
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -81,7 +99,12 @@ impl TypeChecker {
                         generics: enum_def
                             .generics
                             .iter()
-                            .map(|_| self.fresh_type_var())
+                            .map(|g| {
+                                param_bindings
+                                    .get(g)
+                                    .cloned()
+                                    .unwrap_or_else(|| self.fresh_type_var())
+                            })
                             .collect(),
                     });
                 }

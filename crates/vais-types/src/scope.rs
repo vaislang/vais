@@ -270,6 +270,19 @@ impl TypeChecker {
         match &pattern.node {
             Pattern::Wildcard => Ok(()),
             Pattern::Ident(name) => {
+                // Phase 2.10: if the ident names a known enum variant (None,
+                // Some, Ok, Err, or any registered enum variant), treat it as
+                // a variant pattern — do NOT bind it as a fresh variable.
+                // Previously `None` in a match arm was bound as a variable
+                // with the scrutinee's type, which then leaked the scrutinee's
+                // T into sibling arms that construct `Some(v: U)` with U != T.
+                let is_variant_name = self
+                    .enums
+                    .values()
+                    .any(|def| def.variants.contains_key(name));
+                if is_variant_name {
+                    return Ok(());
+                }
                 // Bind the identifier to the matched expression's type
                 self.define_var(name, expr_type.clone(), false);
                 Ok(())
