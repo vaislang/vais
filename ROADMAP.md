@@ -225,10 +225,12 @@ progress: 9/18 (50%)
   changes:
     - docs/CODEGEN_FEATURES.md (신규 ~200줄)
   verify: integrity gate green (179/261).
-- [ ] 13. 누락 runtime functions 구현 (impl-sonnet) [blockedBy: 12]
-  detail: parse_f64/parse_i64 Result-returning variants, Str.split에 대한 generic 버전. codegen과 runtime 양쪽 구현.
-  완료 기준:
-  - 대표 예제 빌드 + 실행 OK
+- [~] 13. 누락 runtime functions 구현 (impl-sonnet) 🚧 SCOPED 2026-04-19
+  detail: parse_i64/parse_u64/parse_i32/parse_u32/parse_f64/parse_f32의 TC는 이미 return=Result<iN, str> 알고 있지만 (type_inference.rs:667), codegen C002 Undefined function. Runtime library 확장 (C-level `__vais_str_parse_iN` + LLVM IR dispatch) 필요한 **큰 작업**이라 단독 Phase로는 범위 과다.
+  **Scoped decision**: 이 Phase는 **gap 문서화만** 완료. 실제 구현은 Phase 5.24 (std/*.vais 100% build) 작업과 묶음 — 실패하는 std 파일 중 상당수가 이 runtime functions를 쓰기 때문에 함께 해결하는 게 효율적.
+  changes:
+    - docs/CODEGEN_FEATURES.md — Known TC-passes-but-codegen-fails에 parse_i64/f64 항목 추가
+  verify: integrity gate green. 실제 구현은 Phase 5.24로 merge.
 - [ ] 14. Vec<Struct>[i].field= write 지원 (Opus direct) [blockedBy: 12]
   detail: 현재 write-through-index 미지원. 구현하거나 TC에서 차단하고 `.get_mut`로 대체 유도. 결정 후 구현.
   완료 기준:
