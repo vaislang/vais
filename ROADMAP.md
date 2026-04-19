@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 28
+iteration: 29
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
@@ -96,6 +96,7 @@ max_iterations: 60
   next_steps: (1) Opus direct compiler 작업 — TC가 실제 Mutex lock 반환 타입을 propagate하도록 수정하는 게 ~5 파일 해제. (2) vector/search.vais 류 `error_code(N,N,N,"msg")` 사용자 vaisdb 파일 일괄 refactor — stdlib error_code가 i64 받는다는 전제와 충돌. 별도 Phase 6.27c로 분리 고려.
   strategy iteration 28 (2026-04-19): sequential — Task #78 Phase 6.27b 계속. 이번은 research-haiku 투입. 실제 TC `expr_types`가 실패하는 expressions에 어떤 타입을 담고 있는지 5 파일에 대해 실제 측정해서 정말 I64 erase된 건지, 아니면 다른 문제인지 명확히 한다. 이 진단 결과가 있어야 compiler fix가 효과적일 수 있음.
   iteration 28 결과: **Never-type TC promotion 추가**. checker_expr/special.rs Expr::Assign에서 target이 Ident이고 타입이 Never를 포함하면 (`mut None` / `mut Err(...)` init 패턴) assigned value의 타입으로 scope를 promote. scope.rs에 `update_var_type` 헬퍼 추가 (innermost→outermost 탐색, 소유 스코프에서만 update). Phase 2.10의 `Never-for-Unit` 전략이 match arm union에는 필요하지만 let init에는 낭비 → assign 시점에 해소. sql/catalog/constraints.vais의 `pk_index := mut None; ... pk_index = Some(idx); M pk_index { Some(pk_idx) => pk_idx.columns }` 패턴이 `no field 'columns' on type '!'`에서 `Vec.join method missing`으로 진행. 4개 파일에서 후속 blocker 유형이 바뀜 (Never→Vec.join 없음, Never→T_mismatch, Never→E034 panic mark 필요). 순 pass count는 같음 (220/261) — 각 파일이 Never 이후 다른 blocker에 걸림. 하지만 근본 fix로 regression floor 안정화 + 미래 fix의 기반.
+  iteration 29 (2026-04-19) **221 도달**: sql/executor/alter.vais의 5개 top-level function에 `partial` prefix 추가 (execute_alter_table/alter_add_column/alter_drop_column/alter_rename_column/alter_column_type, build_*_wal 4개 포함). `!` unwrap 있는 total function → E034 경고. partial 적용으로 TC + codegen 모두 통과. vaisdb 220→221/261 (+1). floor 221 상향. 다른 E034 파일 스캔 결과 — alter.vais만 해당. Next blocker 유형: (d.deletion_bitmap) VaisError struct literal의 `category` 필드 누락 fix 시도했으나 다른 `bool/u64` 오류로 우회 불가, revert.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.
