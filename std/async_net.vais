@@ -155,8 +155,8 @@ X AsyncTcpListener {
     }
 
     # Accept incoming connection (non-blocking)
-    F accept() -> AsyncTcpStream {
-        I is_listening == 0 {
+    F accept(&self) -> AsyncTcpStream {
+        I self.is_listening == 0 {
             R AsyncTcpStream {
                 fd: -1,
                 remote_host: "0.0.0.0",
@@ -169,7 +169,7 @@ X AsyncTcpListener {
         }
 
         client_addr := malloc(16)
-        client_fd := accept(fd, client_addr, SOCKADDR_IN_SIZE)
+        client_fd := accept(self.fd, client_addr, SOCKADDR_IN_SIZE)
 
         I client_fd < 0 {
             free(client_addr)
@@ -207,19 +207,19 @@ X AsyncTcpListener {
     }
 
     # Close listener
-    F close() -> i64 {
-        I is_listening == 0 {
+    F close(&self) -> i64 {
+        I self.is_listening == 0 {
             R 0
         }
 
-        result := close(fd)
-        is_listening := 0
+        result := close(self.fd)
+        self.is_listening = 0
         R result
     }
 
     # Get local port
-    F local_port() -> i64 {
-        R port
+    F local_port(&self) -> i64 {
+        R self.port
     }
 }
 
@@ -293,62 +293,62 @@ X AsyncTcpStream {
     }
 
     # Read data asynchronously (non-blocking)
-    F read(buf: i64, len: i64) -> i64 {
-        I is_connected == 0 {
+    F read(&self, buf: i64, len: i64) -> i64 {
+        I self.is_connected == 0 {
             R -1
         }
 
-        R recv(fd, buf, len, 0)
+        R recv(self.fd, buf, len, 0)
     }
 
     # Write data asynchronously (non-blocking)
-    F write(data: i64, len: i64) -> i64 {
-        I is_connected == 0 {
+    F write(&self, data: i64, len: i64) -> i64 {
+        I self.is_connected == 0 {
             R -1
         }
 
-        R send(fd, data, len, 0)
+        R send(self.fd, data, len, 0)
     }
 
     # Write string convenience function
-    F write_str(s: str) -> i64 {
-        I is_connected == 0 {
+    F write_str(&self, s: str) -> i64 {
+        I self.is_connected == 0 {
             R -1
         }
 
         len := strlen(s)
-        R send(fd, s, len, 0)
+        R send(self.fd, s, len, 0)
     }
 
     # Read all available data into internal buffer
-    F read_all() -> i64 {
-        I is_connected == 0 {
+    F read_all(&self) -> i64 {
+        I self.is_connected == 0 {
             R -1
         }
 
         total := 0
         L {
             # Check if we need to grow buffer
-            I read_buf_len >= read_buf_cap {
-                new_cap := read_buf_cap * 2
+            I self.read_buf_len >= self.read_buf_cap {
+                new_cap := self.read_buf_cap * 2
                 new_buf := malloc(new_cap)
-                I read_buf_len > 0 {
-                    memcpy(new_buf, read_buf, read_buf_len)
+                I self.read_buf_len > 0 {
+                    memcpy(new_buf, self.read_buf, self.read_buf_len)
                 }
-                free(read_buf)
-                read_buf := new_buf
-                read_buf_cap := new_cap
+                free(self.read_buf)
+                self.read_buf = new_buf
+                self.read_buf_cap = new_cap
             }
 
-            available := read_buf_cap - read_buf_len
-            n := recv(fd, read_buf + read_buf_len, available, 0)
+            available := self.read_buf_cap - self.read_buf_len
+            n := recv(self.fd, self.read_buf + self.read_buf_len, available, 0)
 
             I n > 0 {
-                read_buf_len := read_buf_len + n
-                total := total + n
+                self.read_buf_len = self.read_buf_len + n
+                total = total + n
             } EL I n == 0 {
                 # Connection closed
-                is_connected := 0
+                self.is_connected = 0
                 B
             } EL {
                 # Error or would block
@@ -360,32 +360,32 @@ X AsyncTcpStream {
     }
 
     # Close connection
-    F close() -> i64 {
-        I is_connected == 0 {
+    F close(&self) -> i64 {
+        I self.is_connected == 0 {
             R 0
         }
 
-        result := close(fd)
-        is_connected := 0
+        result := close(self.fd)
+        self.is_connected = 0
 
-        I read_buf != 0 {
-            free(read_buf)
-            read_buf := 0
-            read_buf_len := 0
-            read_buf_cap := 0
+        I self.read_buf != 0 {
+            free(self.read_buf)
+            self.read_buf = 0
+            self.read_buf_len = 0
+            self.read_buf_cap = 0
         }
 
         R result
     }
 
     # Check if connection is open
-    F is_open() -> i64 {
-        R is_connected
+    F is_open(&self) -> i64 {
+        R self.is_connected
     }
 
     # Set non-blocking mode
-    F set_nonblocking(flag: i64) -> i64 {
-        R set_fd_nonblocking(fd, flag)
+    F set_nonblocking(&self, flag: i64) -> i64 {
+        R set_fd_nonblocking(self.fd, flag)
     }
 }
 
@@ -435,8 +435,8 @@ X AsyncUdpSocket {
     }
 
     # Send datagram to destination
-    F send_to(data: i64, len: i64, host: str, port: i64) -> i64 {
-        I is_bound == 0 {
+    F send_to(&self, data: i64, len: i64, host: str, port: i64) -> i64 {
+        I self.is_bound == 0 {
             R -1
         }
 
@@ -445,45 +445,45 @@ X AsyncUdpSocket {
             R -1
         }
 
-        result := sendto(fd, data, len, 0, addr, SOCKADDR_IN_SIZE)
+        result := sendto(self.fd, data, len, 0, addr, SOCKADDR_IN_SIZE)
         free(addr)
 
         R result
     }
 
     # Receive datagram (source address simplified)
-    F recv_from(buf: i64, len: i64) -> i64 {
-        I is_bound == 0 {
+    F recv_from(&self, buf: i64, len: i64) -> i64 {
+        I self.is_bound == 0 {
             R -1
         }
 
         src_addr := malloc(16)
-        result := recvfrom(fd, buf, len, 0, src_addr, SOCKADDR_IN_SIZE)
+        result := recvfrom(self.fd, buf, len, 0, src_addr, SOCKADDR_IN_SIZE)
         free(src_addr)
 
         R result
     }
 
     # Close socket
-    F close() -> i64 {
-        I is_bound == 0 {
+    F close(&self) -> i64 {
+        I self.is_bound == 0 {
             R 0
         }
 
-        result := close(fd)
-        is_bound := 0
+        result := close(self.fd)
+        self.is_bound = 0
         R result
     }
 
     # Enable/disable broadcast
-    F set_broadcast(enable: i64) -> i64 {
-        I is_bound == 0 {
+    F set_broadcast(&self, enable: i64) -> i64 {
+        I self.is_bound == 0 {
             R -1
         }
 
         optval := malloc(8)
         store_i32(optval, I enable != 0 { 1 } EL { 0 })
-        result := setsockopt(fd, SOL_SOCKET, SO_BROADCAST, optval, 4)
+        result := setsockopt(self.fd, SOL_SOCKET, SO_BROADCAST, optval, 4)
         free(optval)
 
         R result

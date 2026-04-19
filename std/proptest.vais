@@ -390,8 +390,9 @@ partial F prop_assert(name: str, test_fn: i64, gen: Generator) -> i64 {
         print_i64(result.shrink_steps)
         puts_str(" shrinking steps\n")
 
-        # Panic
-        assert(0)
+        # Panic — use explicit bool condition since `assert` is a special
+        # AST form expecting bool, not a regular function call.
+        assert(false)
     }
 
     1
