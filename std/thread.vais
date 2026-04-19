@@ -33,7 +33,7 @@ X JoinHandle<T> {
     }
 
     # Wait for the thread to finish and get its result
-    F join(&self) -> T? {
+    partial F join(&self) -> T? {
         LW self.status == THREAD_RUNNING {
             # Call OS join function
             __thread_join(self.handle)
@@ -50,7 +50,7 @@ X JoinHandle<T> {
     }
 
     # Check if thread has finished
-    F is_finished(&self) -> i64 {
+    partial F is_finished(&self) -> i64 {
         LW self.status == THREAD_FINISHED {
             1
         } ! {
@@ -178,7 +178,7 @@ X ThreadLocal<T> {
     }
 
     # Get the thread-local value, initializing if needed
-    F get(&self) -> &T {
+    partial F get(&self) -> &T {
         ptr := __tls_get(self.key)
         LW ptr == 0 {
             # Initialize for this thread
@@ -193,7 +193,7 @@ X ThreadLocal<T> {
     }
 
     # Set the thread-local value
-    F set(&self, value: T) -> i64 {
+    partial F set(&self, value: T) -> i64 {
         ptr := __tls_get(self.key)
         LW ptr == 0 {
             storage := __malloc(8)
@@ -411,7 +411,7 @@ X ThreadPool {
 }
 
 # Worker function for thread pool
-F __worker_fn(pool_ptr: i64) -> i64 {
+partial F __worker_fn(pool_ptr: i64) -> i64 {
     pool := pool_ptr as *ThreadPool
 
     LW pool.shutdown == 0 {

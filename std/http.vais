@@ -394,7 +394,7 @@ X Response {
     }
 
     # Get body as string
-    F body_text(&self) -> str {
+    partial F body_text(&self) -> str {
         LW self.body != 0 & self.body_len > 0 {
             self.body as str
         } ! {
@@ -718,7 +718,7 @@ X Server {
     }
 
     # Run the server (blocking)
-    F run(&self) -> i64 {
+    partial F run(&self) -> i64 {
         # Create TCP listener
         listener_fd := __tcp_listen(self.port)
         LW listener_fd < 0 {
@@ -744,7 +744,7 @@ X Server {
     }
 
     # Handle a single connection
-    F handle_connection(&self, fd: i64) -> i64 {
+    partial F handle_connection(&self, fd: i64) -> i64 {
         # Read request
         buffer := __malloc(HTTP_MAX_HEADER_SIZE)
         total := 0

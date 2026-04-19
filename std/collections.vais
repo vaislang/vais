@@ -44,7 +44,7 @@ X LinkedList {
     }
 
     # Push to front
-    F push_front(&self, value: i64) -> i64 {
+    partial F push_front(&self, value: i64) -> i64 {
         node_ptr := malloc(24)  # 3 fields * 8 bytes
         store_i64(node_ptr, value)       # value
         store_i64(node_ptr + 8, 0)       # prev = null
@@ -64,7 +64,7 @@ X LinkedList {
     }
 
     # Push to back
-    F push_back(&self, value: i64) -> i64 {
+    partial F push_back(&self, value: i64) -> i64 {
         node_ptr := malloc(24)
         store_i64(node_ptr, value)
         store_i64(node_ptr + 8, self.tail)  # prev = current tail
@@ -82,7 +82,7 @@ X LinkedList {
     }
 
     # Pop from front (returns value, or 0 if empty)
-    F pop_front(&self) -> i64 {
+    partial F pop_front(&self) -> i64 {
         LW self.head == 0 {
             R 0
         }
@@ -103,7 +103,7 @@ X LinkedList {
     }
 
     # Pop from back (returns value, or 0 if empty)
-    F pop_back(&self) -> i64 {
+    partial F pop_back(&self) -> i64 {
         LW self.tail == 0 {
             R 0
         }

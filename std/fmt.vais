@@ -117,7 +117,7 @@ F itoa(value: i64) -> i64 {
 }
 
 # Convert i64 to hexadecimal string (lowercase)
-F itoa_hex(value: i64) -> i64 {
+partial F itoa_hex(value: i64) -> i64 {
     buf := malloc(19)  # 0x + 16 hex digits + null
     pos := 18
     store_i64(buf + pos, 0)
@@ -143,7 +143,7 @@ F itoa_hex(value: i64) -> i64 {
 }
 
 # Convert i64 to binary string
-F itoa_bin(value: i64) -> i64 {
+partial F itoa_bin(value: i64) -> i64 {
     buf := malloc(67)  # 64 bits + "0b" + null
     pos := 66
     store_i64(buf + pos, 0)
@@ -261,7 +261,7 @@ X FormatBuilder {
     }
 
     # Write a hex integer
-    F write_hex(&self, value: i64) -> i64 {
+    partial F write_hex(&self, value: i64) -> i64 {
         s := itoa_hex(value)
         self.write_str(s)
     }
@@ -299,7 +299,7 @@ X FormatBuilder {
     }
 
     # Write an integer with padding
-    F write_padded_int(&self, value: i64, width: i64, align: i64, pad_char: i64) -> i64 {
+    partial F write_padded_int(&self, value: i64, width: i64, align: i64, pad_char: i64) -> i64 {
         s := itoa(value)
         slen := strlen(s)
         padding := width - slen
@@ -396,12 +396,12 @@ F format_int(value: i64) -> i64 {
 }
 
 # Format an integer as hex
-F format_hex(value: i64) -> i64 {
+partial F format_hex(value: i64) -> i64 {
     itoa_hex(value)
 }
 
 # Format an integer as binary
-F format_bin(value: i64) -> i64 {
+partial F format_bin(value: i64) -> i64 {
     itoa_bin(value)
 }
 
