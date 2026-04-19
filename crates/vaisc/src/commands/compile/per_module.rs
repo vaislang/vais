@@ -47,7 +47,7 @@ pub(crate) fn compile_per_module(
     let effective_opt_level = if debug { 0 } else { opt_level };
     let resolved_functions = checker.get_all_functions_with_methods();
     let resolved_type_aliases = checker.get_type_aliases().clone();
-    let resolved_expr_types = checker.get_expr_types().clone();
+    let resolved_expr_types = checker.get_resolved_expr_types();
     let resolved_implicit_try_sites = checker.get_implicit_try_sites().clone();
     let instantiations = checker.get_generic_instantiations();
     let instantiations = &instantiations;

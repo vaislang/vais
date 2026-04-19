@@ -375,6 +375,18 @@ impl TypeChecker {
         &self.expr_types
     }
 
+    /// Phase 6.27b: return expression types with all type variables resolved
+    /// via the TC's final substitution map. This surfaces information that
+    /// was captured during check_expr but wasn't yet fully unified at that
+    /// point (e.g., `v := Vec.with_capacity(0)` gets Vec<Var(N)>, which
+    /// only becomes Vec<Tuple<..>> after a later `v.push(tuple)` unifies N).
+    pub fn get_resolved_expr_types(&self) -> HashMap<(usize, usize), ResolvedType> {
+        self.expr_types
+            .iter()
+            .map(|(k, v)| (*k, self.apply_substitutions(v)))
+            .collect()
+    }
+
     /// Get the set of argument spans that were auto-unwrapped by the
     /// implicit error propagation pass (Phase 4b.1 / #7).
     ///

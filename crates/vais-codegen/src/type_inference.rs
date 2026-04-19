@@ -234,21 +234,49 @@ impl CodeGenerator {
         let local = stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
             self.infer_expr_type_inner(expr)
         });
-        if matches!(local, ResolvedType::I64) {
-            let span_key = (expr.span.start, expr.span.end);
-            if let Some(tc_ty) = self.expr_types.get(&span_key) {
-                // Upgrade to TC type when it carries structural info that
-                // codegen's local inference erased.
-                match tc_ty {
-                    ResolvedType::Tuple(_) => return tc_ty.clone(),
-                    // Vec<T>/HashMap<K,V>/etc. generic Named types — recover
-                    // the full type so Index expressions know the element type.
-                    // This unblocks `queue[i]` on Vec<u64>, Vec<Struct>, etc.
-                    ResolvedType::Named { generics, .. } if !generics.is_empty() => {
-                        return tc_ty.clone();
-                    }
-                    _ => {}
+        // Phase 6.27b: upgrade from TC expr_types even when local gave Named{Vec,[I64]}
+        // (erased from Vec<Tuple> etc). TC's expr_types stores the actual post-unification
+        // type at the expression's span, which is more accurate than codegen-local
+        // inference through locals whose ty was frozen at declaration.
+        let span_key = (expr.span.start, expr.span.end);
+        if let Some(tc_ty) = self.expr_types.get(&span_key) {
+            // Only upgrade when TC has strictly more info than local.
+            let should_upgrade = match (&local, tc_ty) {
+                (ResolvedType::I64, ResolvedType::Tuple(_)) => true,
+                (ResolvedType::I64, ResolvedType::Named { generics, .. })
+                    if !generics.is_empty() => true,
+                // local says Vec<I64> (generic erased) but TC says Vec<Tuple<..>>
+                (
+                    ResolvedType::Named { name: l_name, generics: l_gen },
+                    ResolvedType::Named { name: r_name, generics: r_gen },
+                ) if l_name == r_name
+                    && l_gen.len() == r_gen.len()
+                    && l_gen.iter().all(|g| matches!(g, ResolvedType::I64))
+                    && r_gen.iter().any(|g| !matches!(g, ResolvedType::I64)) =>
+                {
+                    true
                 }
+                // local says Ref(Vec<I64>) but TC says Ref(Vec<Tuple>)
+                (ResolvedType::Ref(l_inner), ResolvedType::Ref(r_inner))
+                | (ResolvedType::RefMut(l_inner), ResolvedType::RefMut(r_inner)) => {
+                    match (l_inner.as_ref(), r_inner.as_ref()) {
+                        (
+                            ResolvedType::Named { name: l_n, generics: l_g },
+                            ResolvedType::Named { name: r_n, generics: r_g },
+                        ) if l_n == r_n
+                            && l_g.len() == r_g.len()
+                            && l_g.iter().all(|g| matches!(g, ResolvedType::I64))
+                            && r_g.iter().any(|g| !matches!(g, ResolvedType::I64)) =>
+                        {
+                            true
+                        }
+                        _ => false,
+                    }
+                }
+                _ => false,
+            };
+            if should_upgrade {
+                return tc_ty.clone();
             }
         }
         local
