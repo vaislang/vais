@@ -583,6 +583,15 @@ impl CodeGenerator {
     ) -> Vec<ResolvedType> {
         use crate::types::EnumVariantFields;
 
+        // Phase 6.27b iteration 33: deref Ref/RefMut so `M &opt { Some(x) => ... }`
+        // sees the inner enum type (Option/Result/user enum), not `Ref(Optional(..))`.
+        // Without this, the Named-with-generics branch below misses, and Some(x)
+        // binds `x: Generic("T")` instead of the concrete inner type.
+        let inner_match_type = match match_type {
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
+            other => other,
+        };
+
         // Look up the enum definition to find the variant's field types
         let enum_info = match self.types.enums.get(enum_name) {
             Some(info) => info,
@@ -603,15 +612,18 @@ impl CodeGenerator {
         };
 
         // Extract the concrete generic args from match_type (e.g., [Vec<u64>] from Option<Vec<u64>>)
-        let concrete_generics = match match_type {
-            ResolvedType::Named { generics, .. } if !generics.is_empty() => generics,
+        // Phase 300a-style: also handle primitive Optional(T)/Result(T,E) which
+        // aren't Named { generics } but carry the concrete inner type directly.
+        let extracted_generics: Vec<ResolvedType> = match inner_match_type {
+            ResolvedType::Named { generics, .. } if !generics.is_empty() => generics.clone(),
+            ResolvedType::Optional(inner) => vec![(**inner).clone()],
+            ResolvedType::Result(ok, err) => vec![(**ok).clone(), (**err).clone()],
             _ => {
                 // Non-generic enum: field types are already concrete, return them directly.
-                // This handles enums like `E QueryType { Select(str), Insert(str) }` where
-                // the field types (str) don't need any generic substitution.
                 return raw_field_types.into_iter().cloned().collect();
             }
         };
+        let concrete_generics = &extracted_generics;
 
         // Build a substitution map: collect unique generic param names from ALL variants
         // in declaration order, then map to concrete_generics by index.
