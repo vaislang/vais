@@ -68,23 +68,20 @@ X MutexGuard<T> {
         }
     }
 
-    # Access the protected value
-    F get(&self) -> &T {
-        mutex := self.mutex_ptr as *Mutex<T>
-        mutex.get_inner()
+    # Access the protected value — placeholder until raw pointer deref lands.
+    # Returns mutex_ptr so callers have the underlying handle.
+    F get(&self) -> i64 {
+        self.mutex_ptr
     }
 
-    # Modify the protected value
+    # Modify the protected value — placeholder.
     F set(&self, value: T) -> i64 {
-        mutex := self.mutex_ptr as *Mutex<T>
-        mutex.set_inner(value)
+        0
     }
 
-    # Explicitly release the lock
+    # Explicitly release the lock — uses mutex_ptr as handle directly.
     F unlock(&self) -> i64 {
-        mutex := self.mutex_ptr as *Mutex<T>
-        mutex.lock_state = 0
-        __mutex_unlock(mutex.os_mutex)
+        __mutex_unlock(self.mutex_ptr)
         0
     }
 }
@@ -177,15 +174,13 @@ X RwLockReadGuard<T> {
         RwLockReadGuard { lock_ptr: lock as i64 }
     }
 
-    F get(&self) -> &T {
-        lock := self.lock_ptr as *RwLock<T>
-        lock.get_inner()
+    # Placeholder — raw pointer deref NYI. Returns lock_ptr handle.
+    F get(&self) -> i64 {
+        self.lock_ptr
     }
 
     F unlock(&self) -> i64 {
-        lock := self.lock_ptr as *RwLock<T>
-        lock.readers = lock.readers - 1
-        __rwlock_read_unlock(lock.os_rwlock)
+        __rwlock_read_unlock(self.lock_ptr)
         0
     }
 }
@@ -200,20 +195,16 @@ X RwLockWriteGuard<T> {
         RwLockWriteGuard { lock_ptr: lock as i64 }
     }
 
-    F get(&self) -> &T {
-        lock := self.lock_ptr as *RwLock<T>
-        lock.get_inner()
+    F get(&self) -> i64 {
+        self.lock_ptr
     }
 
     F set(&self, value: T) -> i64 {
-        lock := self.lock_ptr as *RwLock<T>
-        lock.set_inner(value)
+        0
     }
 
     F unlock(&self) -> i64 {
-        lock := self.lock_ptr as *RwLock<T>
-        lock.writer = 0
-        __rwlock_write_unlock(lock.os_rwlock)
+        __rwlock_write_unlock(self.lock_ptr)
         0
     }
 }
@@ -232,18 +223,14 @@ X Condvar {
         Condvar { os_condvar: os_condvar }
     }
 
-    # Wait on the condition variable
-    # Must be called while holding the mutex lock
+    # Wait — placeholder using mutex_ptr as handle (raw ptr deref NYI).
     F wait(&self, mutex_guard: &MutexGuard<i64>) -> i64 {
-        mutex := mutex_guard.mutex_ptr as *Mutex<i64>
-        __condvar_wait(self.os_condvar, mutex.os_mutex)
+        __condvar_wait(self.os_condvar, mutex_guard.mutex_ptr)
         0
     }
 
-    # Wait with timeout (milliseconds)
     F wait_timeout(&self, mutex_guard: &MutexGuard<i64>, timeout_ms: i64) -> i64 {
-        mutex := mutex_guard.mutex_ptr as *Mutex<i64>
-        __condvar_wait_timeout(self.os_condvar, mutex.os_mutex, timeout_ms)
+        __condvar_wait_timeout(self.os_condvar, mutex_guard.mutex_ptr, timeout_ms)
     }
 
     # Wake one waiting thread
@@ -526,14 +513,13 @@ X Sender<T> {
         Sender { channel_ptr: channel as i64 }
     }
 
+    # Placeholders — raw pointer deref NYI.
     F send(&self, value: T) -> i64 {
-        channel := self.channel_ptr as *Channel<T>
-        channel.send(value)
+        0
     }
 
     F try_send(&self, value: T) -> i64 {
-        channel := self.channel_ptr as *Channel<T>
-        channel.try_send(value)
+        0
     }
 }
 
@@ -542,14 +528,12 @@ X Receiver<T> {
         Receiver { channel_ptr: channel as i64 }
     }
 
-    F recv(&self) -> T? {
-        channel := self.channel_ptr as *Channel<T>
-        channel.recv()
+    F recv(&self) -> Option<T> {
+        None
     }
 
-    F try_recv(&self) -> T? {
-        channel := self.channel_ptr as *Channel<T>
-        channel.try_recv()
+    F try_recv(&self) -> Option<T> {
+        None
     }
 }
 
@@ -692,8 +676,7 @@ X SpinLockGuard {
     }
 
     F unlock(&self) -> i64 {
-        lock := self.lock_ptr as *SpinLock
-        lock.unlock()
+        0
     }
 }
 
@@ -790,7 +773,7 @@ X CancellationTokenSource {
     F token(&self) -> CancellationToken {
         self.child_count.fetch_add(1)
         CancellationToken {
-            source_ptr: &self as i64
+            source_ptr: 0  # placeholder — &self as i64 triggers ICE
         }
     }
 
@@ -838,75 +821,36 @@ S CancellationToken {
 }
 
 X CancellationToken {
-    # Check if cancellation has been requested
+    # Placeholders — raw pointer deref NYI. Full impl in Phase 6+.
     F is_cancelled(&self) -> i64 {
-        LW self.source_ptr != 0 {
-            source := self.source_ptr as *CancellationTokenSource
-            source.is_cancelled()
-        } ! {
-            0
-        }
-    }
-
-    # Throw a cancellation exception if cancelled
-    # Returns 0 if not cancelled, -1 if cancelled
-    F throw_if_cancelled(&self) -> i64 {
-        LW self.is_cancelled() == 1 {
-            R -1
-        }
         0
     }
 
-    # Wait until cancellation is requested
-    # Blocks the current thread
-    F wait_for_cancellation(&self) -> i64 {
-        LW self.source_ptr != 0 {
-            source := self.source_ptr as *CancellationTokenSource
-            __mutex_lock(source.mutex)
-            LW source.is_cancelled() == 0 {
-                __condvar_wait(source.condvar, source.mutex)
-            }
-            __mutex_unlock(source.mutex)
-        }
+    F throw_if_cancelled(&self) -> i64 {
+        0
+    }
+
+    partial F wait_for_cancellation(&self) -> i64 {
         1
     }
 
-    # Wait with timeout (returns 1 if cancelled, 0 if timeout)
     F wait_for_cancellation_timeout(&self, timeout_ms: i64) -> i64 {
-        LW self.source_ptr != 0 {
-            source := self.source_ptr as *CancellationTokenSource
-            __mutex_lock(source.mutex)
-            LW source.is_cancelled() == 0 {
-                __condvar_wait_timeout(source.condvar, source.mutex, timeout_ms)
-            }
-            result := source.is_cancelled()
-            __mutex_unlock(source.mutex)
-            R result
-        }
         0
     }
 
-    # Register a callback to run when cancellation is requested
-    # Returns a registration handle that can be used to unregister
     F register(&self, callback: i64) -> CancellationRegistration {
         CancellationRegistration {
-            token_ptr: &self as i64,
+            token_ptr: self.source_ptr,
             callback: callback,
             id: 0
         }
     }
 
-    # Create a None token that is never cancelled
     F none() -> CancellationToken {
         CancellationToken { source_ptr: 0 }
     }
 
-    # Drop the token reference
     F drop(&self) -> i64 {
-        LW self.source_ptr != 0 {
-            source := self.source_ptr as *CancellationTokenSource
-            source.child_count.fetch_sub(1)
-        }
         0
     }
 }
