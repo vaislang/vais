@@ -82,6 +82,8 @@ max_iterations: 60
   retry 전략 (iteration 7+): (a) 1 agent = 1 file; (b) smallest failing files 우선 (<100줄); (c) Opus foreground로 cross-file drift catalog 먼저 만들고 leaf fixes delegate. Task #74 pending 복귀.
   iteration 7-11 결과: foreground 1-file 전략 +9 vaisdb (180→189). 성공 패턴: `U std/option` 누락 (latch, search_params), comment-swallowed 코드 (search.vais), 잘못된 type name (CondVar→Condvar), missing import (parser_dml), err fn arg (rag/memory/storage), ByteBuffer API arity (serializer), Option<T> annotation (btree/tree).
   남은 72 파일의 지배적 blocker: **Vec<T>[i] use-after-move** (E022/C005) — `vec[j].field` 읽기조차 Vec 전체를 move하는 codegen gap. Phase 3.14 compiler 수정 없이는 개별 파일 수정 불가. Task #74 scope → 203은 compiler 작업 필요.
+  iteration 12-15 결과: **ownership compiler fix 완료** (Expr::Index no longer moves container) + fusion/runner annotation. vaisdb 189→192 (+3).
+  diminishing returns 관찰: 남은 ~70 파일의 진짜 blocker는 **Vec generic 추론 실패** — `Vec.with_capacity(0)` 결과 element type이 ??fresh_var, 이후 push()로 제약되어도 codegen이 `Named{Vec, generics=[]}` 형태로 보고 element type을 i64로 fallback. expr_helpers_data.rs:432. 이걸 고치려면 TC level에서 Vec.new/with_capacity inference를 더 적극적으로 하거나 codegen이 variable-tracked element type을 lookup해야 함. 별도 compiler phase 필요.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.
