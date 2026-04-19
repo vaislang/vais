@@ -31,13 +31,30 @@ fn stmt_has_direct_break(stmt: &Spanned<Stmt>) -> bool {
 /// / static-method-call expression, or a block whose last statement is
 /// such a call expression and whose last stmt is an expression (no tail
 /// value binding). Unit-typed bodies (empty blocks, `{}`) also qualify.
-fn arm_bodies_are_statement_like(arms: &[MatchArm]) -> bool {
-    arms.iter().all(|arm| expr_is_statement_like(&arm.body))
+///
+/// Phase 6.27d.a: `self_method_name` is the *unqualified* name of the
+/// enclosing function/method. A call `x.<self_method_name>(...)` in arm
+/// position is recursive and participates in the return value — it is
+/// value-producing, NOT statement-like, even when its return type is
+/// non-Unit.
+fn arm_bodies_are_statement_like(arms: &[MatchArm], self_method_name: Option<&str>) -> bool {
+    arms.iter()
+        .all(|arm| expr_is_statement_like(&arm.body, self_method_name))
 }
 
-fn expr_is_statement_like(expr: &Spanned<Expr>) -> bool {
+fn expr_is_statement_like(expr: &Spanned<Expr>, self_method_name: Option<&str>) -> bool {
     match &expr.node {
-        Expr::Call { .. } | Expr::MethodCall { .. } | Expr::StaticMethodCall { .. } => true,
+        Expr::MethodCall { method, .. } => {
+            // Phase 6.27d.a: a recursive call to the enclosing method
+            // (same unqualified name) is value-producing.
+            if let Some(name) = self_method_name {
+                if method.node == name {
+                    return false;
+                }
+            }
+            true
+        }
+        Expr::Call { .. } | Expr::StaticMethodCall { .. } => true,
         Expr::Block(stmts) => {
             // Empty block → Unit → safe
             if stmts.is_empty() {
@@ -46,7 +63,7 @@ fn expr_is_statement_like(expr: &Spanned<Expr>) -> bool {
             // Last stmt must be an Expr whose value is discarded (the
             // parser produces Stmt::Expr for trailing exprs).
             match &stmts.last().unwrap().node {
-                Stmt::Expr(inner) => expr_is_statement_like(inner),
+                Stmt::Expr(inner) => expr_is_statement_like(inner, self_method_name),
                 // Return/Break/Continue never "produce" a value that
                 // must unify with siblings
                 Stmt::Return(_) | Stmt::Break(_) | Stmt::Continue => true,
@@ -463,15 +480,24 @@ impl TypeChecker {
                         if let Err(_e) = self.unify(prev, &arm_type) {
                             if *prev == ResolvedType::Unit || arm_type == ResolvedType::Unit {
                                 result_type = Some(ResolvedType::Unit);
-                            } else if arm_bodies_are_statement_like(arms) {
-                                // Phase 6.27c.4: statement-style match whose
-                                // arms each trail a side-effect call whose
-                                // return value nobody reads. Don't force
-                                // the arms to agree — widen to Unit so the
-                                // match itself types as a statement.
-                                result_type = Some(ResolvedType::Unit);
                             } else {
-                                return Some(Err(_e));
+                                // Phase 6.27d.a: recursive `x.<same_method>()`
+                                // calls in arm position are value-producing
+                                // and must not widen to Unit.
+                                let self_method_name = self
+                                    .current_fn_name
+                                    .as_deref()
+                                    .map(|s| s.rsplit("::").next().unwrap_or(s));
+                                if arm_bodies_are_statement_like(arms, self_method_name) {
+                                    // Phase 6.27c.4: statement-style match
+                                    // whose arms each trail a side-effect
+                                    // call whose return value nobody reads.
+                                    // Widen to Unit so the match itself
+                                    // types as a statement.
+                                    result_type = Some(ResolvedType::Unit);
+                                } else {
+                                    return Some(Err(_e));
+                                }
                             }
                         }
                     } else {

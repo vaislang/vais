@@ -69,11 +69,47 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ---
 
-## Current Tasks (2026-04-19)
+## Current Tasks (2026-04-20)
 
-mode: stopped (2026-04-20 세션 종료 — #1/#2 완료. 남은 #3~#9 chain은 vaisdb 261/261 선행이지만 5 compiler gap 미해결로 진행 불가. 다음 세션 권장 작업: Phase 6.27d 신설 — (a) recursive self-method match-arm을 statement-like widening에서 제외 (checker_expr/control_flow.rs `arm_bodies_are_statement_like` 개선), (b) pool.write_page 2→1 arg migration helper 추가 (stdlib에 `write_page_bytes(frame, data)` 또는 vaisdb 파일 일괄 재작성), (c) Box<dyn> peel 이후 `&?N` unresolved ref fix. 이 중 (a)가 가장 저위험/고수익.)
-iteration: 2
-max_iterations: 30
+mode: auto (Phase 6.27d 신설 — 이전 세션 종료 노트 기반 3 sub-task. 전체 자동 진행 승인 2026-04-20.)
+iteration: 1
+max_iterations: 6
+  strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.27d.a. Opus direct (TC boundary 설계+impl 일체). 좁은 범위 (control_flow.rs 2 함수 시그니처 thread 추가). Baseline std 82/82 vaisdb 234/261 phase158 18/18.
+
+### Phase 6.27d — residual vaisdb blockers (2026-04-20)
+
+Baseline: std 82/82, vaisdb 234/261, phase158 18/18 (측정 완료, 2026-04-20).
+
+- [x] 1. Phase 6.27d.a — recursive self-method-call을 statement-like widening에서 제외 (Opus direct) ✅ 2026-04-20
+  target: crates/vais-types/src/checker_expr/control_flow.rs (`arm_bodies_are_statement_like`/`expr_is_statement_like`), crates/vais-types/src/checker_expr/calls.rs (Box-peel)
+  detail: 두 부분 fix. (1) `expr_is_statement_like`이 enclosing 함수의 unqualified 이름을 받아, `x.<same_name>()` MethodCall은 value-producing으로 판정. `current_fn_name`에서 `rsplit("::")` 마지막 조각 추출. (2) `check_method_call` 초반에 Box<T> receiver + Box 자체에 해당 method 없으면 T로 peel. user-defined `S Box<T> { F get }` (syntax_generic_impl_method 테스트)은 Box 우선이라 영향 없음. planner/types.vais의 `F engine_type(self) -> EngineType { M self { ... input.engine_type() ... } }` (input: Box<HybridPlanNode>)가 이제 TC pass.
+  changes: crates/vais-types/src/checker_expr/control_flow.rs (arm_bodies_are_statement_like / expr_is_statement_like에 self_method_name 파라미터, caller에서 current_fn_name 언큐얼리파이 패스), crates/vais-types/src/checker_expr/calls.rs (Box<T> peel when Box has no matching method, ~20줄)
+  verify: ./scripts/check-integrity.sh → INTEGRITY OK: syntax=200 stages=14 std=82/82 vaisdb=235/261 phase158=18/18. syntax_generic_impl_method + test_living_spec_files_ok 모두 pass.
+  floor: 234 → 235 (check-integrity.sh INTEGRITY_VAISDB_MIN 업데이트 필요)
+  [완료 기준]:
+  - [x] planner/types.vais TC pass
+  - [x] std 82/82, phase158 18/18 유지
+  - [x] vaisdb ≥ 234 — 실측 235 (+1)
+- [ ] 2. Phase 6.27d.b — pool.write_page 2→1 arg migration helper (impl-sonnet) [blockedBy: 1]
+  target: stdlib buffer_pool.vais 또는 10 vaisdb files
+  detail: 46 occurrences/10 files. Option (a) 권장 — stdlib에 `write_page_bytes(pool, frame, data)` helper 추가, vaisdb call sites 이름 교체. Option (b) 전체 파일 재작성은 위험.
+  [완료 기준]:
+  - stdlib helper added 또는 file migration 완료
+  - std 82/82, phase158 18/18 유지
+  - vaisdb +3 이상 (target), stretch +10
+- [ ] 3. Phase 6.27d.c — Box<dyn T> peel 이후 `&?N` unresolved ref fix (Opus direct) [blockedBy: 1]
+  target: crates/vais-types/src/lookup.rs 또는 substitution 파이프라인
+  detail: Phase 6.27c.5에서 Box<dyn> peel 추가. sort_agg.vais가 E004를 넘었지만 `&?1391` unresolved struct ref로 막힘. TraitImpl dispatch 반환 타입의 Ref(Var(N)) substitution gap.
+  [완료 기준]:
+  - sort_agg.vais TC pass (또는 next blocker 명확히 진단)
+  - std 82/82, phase158 18/18 유지 (절대)
+  - vaisdb ≥ 234 (regression 0), 목표 +1
+
+progress: 0/3 (0%)
+
+### 이전 기록 보존
+
+
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
   iteration 5 결과: 🎉 **std 77 → 82/82 (100%) 달성**. 주요 compiler 수정 5건 (Inkwell codegen 4건 + 1 TC) + std 파일 수정 8건. vaisdb 180/181 안정. Phase 5.24/5.25 CLOSED. 다음 iteration → 6.27 (vaisdb 181 → 261).

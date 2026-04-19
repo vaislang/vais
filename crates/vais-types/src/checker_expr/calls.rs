@@ -391,6 +391,30 @@ impl TypeChecker {
             || (is_map_type && method.node == "remove")
             || (inner_type == "Vec" && method.node == "pop");
 
+        // Phase 6.27d.a: if receiver is Box<T> and Box itself has no matching
+        // method (Box is typically an opaque smart pointer with no user-defined
+        // methods), peel Box<T> to T so that `box_val.method()` dispatches to
+        // T's inherent impl. Preserves test `syntax_generic_impl_method` which
+        // declares a user `S Box<T>` with its own `F get`.
+        if inner_type == "Box" && receiver_generics.len() == 1 {
+            let box_has_method = self
+                .structs
+                .get("Box")
+                .map(|s| s.methods.contains_key(&method.node))
+                .unwrap_or(false)
+                || self
+                    .enums
+                    .get("Box")
+                    .map(|e| e.methods.contains_key(&method.node))
+                    .unwrap_or(false);
+            if !box_has_method {
+                if let ResolvedType::Named { name, generics } = &receiver_generics[0] {
+                    inner_type = name.clone();
+                    receiver_generics = generics.clone();
+                }
+            }
+        }
+
         // First, try to find the method on the struct or enum itself
         if !inner_type.is_empty() && !bypass_struct_lookup {
             // Look up method in struct or enum
