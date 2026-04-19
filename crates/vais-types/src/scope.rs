@@ -301,7 +301,7 @@ impl TypeChecker {
                 }
                 Ok(())
             }
-            Pattern::Struct { name, fields } => {
+            Pattern::Struct { name, fields, .. } => {
                 // For struct patterns, look up field types from the struct or enum variant
                 let field_types = self.get_struct_or_variant_fields(&name.node, expr_type);
 

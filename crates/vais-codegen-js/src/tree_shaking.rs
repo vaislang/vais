@@ -558,7 +558,7 @@ impl TreeShaker {
                     Self::collect_pattern_deps(&pat.node, deps);
                 }
             }
-            Pattern::Struct { name, fields } => {
+            Pattern::Struct { name, fields, .. } => {
                 deps.insert(name.node.clone());
                 for (_, pat_opt) in fields {
                     if let Some(pat) = pat_opt {

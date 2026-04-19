@@ -13,10 +13,12 @@ pub enum Pattern {
     Literal(Literal),
     /// Tuple pattern: `(a, b)`
     Tuple(Vec<Spanned<Pattern>>),
-    /// Struct pattern: `Point{x, y}`
+    /// Struct pattern: `Point{x, y}` or qualified enum variant `Enum.Variant{x, y}`.
+    /// `enum_name` is Some when the pattern was written with an enum qualifier.
     Struct {
         name: Spanned<String>,
         fields: Vec<(Spanned<String>, Option<Spanned<Pattern>>)>,
+        enum_name: Option<String>,
     },
     /// Enum variant pattern: `Some(x)`
     Variant {

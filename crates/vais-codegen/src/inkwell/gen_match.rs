@@ -773,7 +773,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
                 Ok(result)
             }
-            Pattern::Struct { name, fields } => {
+            Pattern::Struct { name, fields, .. } => {
                 // Struct pattern: check field patterns.
                 // Phase 6.27b: for enum struct-variant pattern (`Enum.Variant { a, b }`),
                 // check the enum tag first, then skip inner-field checks (which are
@@ -1094,7 +1094,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 }
                 Ok(())
             }
-            Pattern::Struct { name, fields } => {
+            Pattern::Struct { name, fields, .. } => {
                 let struct_name = &name.node;
 
                 // Phase 6.27b: detect enum-struct-variant pattern (`Enum.Variant { a, b }`).

@@ -111,7 +111,7 @@ impl ExhaustivenessChecker {
                     Self::hash_pattern(&p.node, hasher);
                 }
             }
-            Pattern::Struct { name, fields } => {
+            Pattern::Struct { name, fields, .. } => {
                 name.node.hash(hasher);
                 for (fname, fpat) in fields {
                     fname.node.hash(hasher);
@@ -331,7 +331,7 @@ impl ExhaustivenessChecker {
                 name: name.node.clone(),
                 fields: fields.iter().map(|p| self.pattern_to_space(p)).collect(),
             },
-            Pattern::Struct { name, fields } => PatternSpace::Constructor {
+            Pattern::Struct { name, fields, .. } => PatternSpace::Constructor {
                 name: name.node.clone(),
                 fields: fields
                     .iter()

@@ -919,6 +919,7 @@ impl Parser {
                             Pattern::Struct {
                                 name: Spanned::new(variant_name, Span::new(start, start)),
                                 fields,
+                                enum_name: Some(name.clone()),
                             }
                         } else {
                             // Simple qualified variant: `EnumType.Variant`
@@ -973,6 +974,7 @@ impl Parser {
                         Pattern::Struct {
                             name: Spanned::new(name, Span::new(start, start)),
                             fields,
+                            enum_name: None,
                         }
                     } else {
                         Pattern::Ident(name)

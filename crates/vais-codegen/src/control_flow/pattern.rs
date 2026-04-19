@@ -289,9 +289,10 @@ impl CodeGenerator {
 
                 Ok((result, ir))
             }
-            Pattern::Struct { name, fields } => {
+            Pattern::Struct { name, fields, enum_name: enum_hint } => {
                 // Struct pattern: always matches if type is correct, but we check field patterns
                 let struct_name = &name.node;
+                let enum_hint_ref = enum_hint.as_deref();
                 let mut ir = String::new();
                 let mut checks: Vec<String> = Vec::new();
 
@@ -335,13 +336,17 @@ impl CodeGenerator {
                             }
                         }
                     }
-                } else if self.resolve_enum_struct_variant(struct_name).is_some() {
+                } else if self
+                    .resolve_enum_struct_variant_with_hint(struct_name, enum_hint_ref)
+                    .is_some()
+                {
                     // `struct_name` names an enum struct-variant (e.g. `Varchar { max_len }`
                     // used as short-form inside a `M` arm). Verify the enum's runtime tag
                     // matches and delegate any inner sub-pattern checks through the enum
                     // variant payload layout.
-                    let (enum_name, _variant_tag, variant_struct_fields) =
-                        self.resolve_enum_struct_variant(struct_name).unwrap();
+                    let (enum_name, _variant_tag, variant_struct_fields) = self
+                        .resolve_enum_struct_variant_with_hint(struct_name, enum_hint_ref)
+                        .unwrap();
 
                     // Tag check
                     let tag_ptr = self.next_temp(counter);
@@ -474,7 +479,31 @@ impl CodeGenerator {
         &self,
         variant_name: &str,
     ) -> Option<(String, i32, Vec<(String, ResolvedType)>)> {
+        self.resolve_enum_struct_variant_with_hint(variant_name, None)
+    }
+
+    /// Phase 6.27b: disambiguation helper — prefer the enum matching `enum_hint`
+    /// when multiple enums contain a variant with the same name (e.g. both
+    /// `GrantType.Privileges` and `RevokeType.Privileges` exist).
+    pub(crate) fn resolve_enum_struct_variant_with_hint(
+        &self,
+        variant_name: &str,
+        enum_hint: Option<&str>,
+    ) -> Option<(String, i32, Vec<(String, ResolvedType)>)> {
         use crate::types::EnumVariantFields;
+        // First pass: if hint provided, look only within that enum.
+        if let Some(hint) = enum_hint {
+            if let Some(enum_info) = self.types.enums.get(hint) {
+                for (tag, variant) in enum_info.variants.iter().enumerate() {
+                    if variant.name == variant_name {
+                        if let EnumVariantFields::Struct(fields) = &variant.fields {
+                            return Some((enum_info.name.clone(), tag as i32, fields.clone()));
+                        }
+                    }
+                }
+            }
+        }
+        // Fallback: scan all enums (original behavior).
         for enum_info in self.types.enums.values() {
             for (tag, variant) in enum_info.variants.iter().enumerate() {
                 if variant.name == variant_name {
@@ -1102,9 +1131,10 @@ impl CodeGenerator {
 
                 Ok(ir)
             }
-            Pattern::Struct { name, fields } => {
+            Pattern::Struct { name, fields, enum_name: enum_hint } => {
                 // Bind fields from struct
                 let struct_name = &name.node;
+                let enum_hint_ref = enum_hint.as_deref();
                 let mut ir = String::new();
 
                 if let Some(struct_info) = self.types.structs.get(struct_name).cloned() {
@@ -1155,7 +1185,7 @@ impl CodeGenerator {
                         }
                     }
                 } else if let Some((enum_name, _variant_tag, variant_struct_fields)) =
-                    self.resolve_enum_struct_variant(struct_name)
+                    self.resolve_enum_struct_variant_with_hint(struct_name, enum_hint_ref)
                 {
                     // `struct_name` is actually an enum struct-variant used in short form
                     // (e.g. `Varchar { max_len }` instead of `SqlType.Varchar { max_len }`).
