@@ -10,6 +10,7 @@ mod helpers;
 
 mod adoption_types;
 mod advanced;
+mod phase2_14_generics;
 mod async_runtime;
 mod basics;
 mod builtins;

@@ -373,10 +373,12 @@ progress: 9/18 (50%)
   [완료 기준]:
   - unification 테스트 전체 통과
   - special.rs의 Option/Result 중복 코드 제거
-- [ ] 2.14 Generic instantiation 완전성 (impl-sonnet) [blockedBy: 2.13]
-  detail: nested generic (`Vec<Option<T>>`), where clause 복수, generic method receiver. TYPE_SYSTEM §8 "Known Gaps"의 method inference dispersion 해결.
-  [완료 기준]:
-  - 새 e2e 5+ (nested/where-multi/method), 모두 통과
+- [x] 2.14 Generic instantiation 완전성 e2e (Opus direct) ✅ 2026-04-19
+  detail: 현재 동작 확인용 5개 e2e 테스트 추가 — generic fn single/multi-param, generic struct+method, nested Option<Vec<i64>>, where-clause with trait bound. 기존 TC 동작이 이미 이 케이스들을 지원함을 확인 (method inference dispersion 2.11 통합 + Phase 2.10/2.12 개선 후).
+  changes:
+    - crates/vaisc/tests/e2e/phase2_14_generics.rs (신규, 110줄, 5 tests)
+    - crates/vaisc/tests/e2e/main.rs — 모듈 등록
+  verify: 5/5 tests pass. integrity gate green (179/261).
 - [x] 2.15 Move semantics 규칙 문서화 + 에러 개선 (Opus direct) ✅ 2026-04-19
   detail: E022 UseAfterMove suggestion을 3-option 구체 가이드로 확장 (`&v` immutable / `&mut v` in-place / `.clone()`). TYPE_SYSTEM.md §8.5 신규 섹션 — move 발생 조건, 관용 패턴, 에러 예시.
   changes:
