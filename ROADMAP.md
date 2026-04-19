@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 24
+iteration: 27
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
@@ -91,6 +91,9 @@ max_iterations: 60
   iteration 21 (2026-04-19) 🎯 **Phase 3.15 완료 + Phase 6.27 목표 달성**: compiler 근본 수정 성공. type_inference.rs에서 `infer_expr_type`이 local inference가 I64로 erase한 경우 TC의 `expr_types`를 참조하여 Tuple 정보 복원. `(resolved_expr_types.get(span) as Tuple) → 승격`. match_fn.vais도 병행 수정 (read_all_entries arity, BM25Scorer.new arity, PostingEntry 필드 누락 → 기본값, sort_by 클로저 → inline insertion sort). vaisdb 201→203/261 (+2, 목표 달성). std 82/82 유지. 플로어 199→202 상향.
   iteration 22-24 (2026-04-19) **Phase 6.27b Tier 3 drive**: 근본 수정 확장. (a) TC expr_types에 substitution 적용한 `get_resolved_expr_types()` 추가 → codegen이 Var(N) unresolved 대신 최종 resolved type 받음. (b) Pattern::Struct에 `enum_name: Option<String>` 필드 추가 + parser가 `EnumType.Variant { .. }` 때 채움 + codegen의 `resolve_enum_struct_variant_with_hint`로 GrantType.Privileges vs RevokeType.Privileges 같은 이름 겹침 disambiguation. (c) enum struct-variant 전체 지원 (declaration 필드 이름 저장, 생성 `generate_enum_struct_variant`, match binding 경로). (d) infer_expr_type이 local Vec<I64> vs TC Vec<Tuple>/Vec<Named>도 업그레이드. vaisdb 203→209/261 (+6). std 82/82, phase158 18/18 유지. 플로어 209 상향. 남은 52개: HashMap<K,V> arity, allocate_page 등 BufferPool 분리 drift, trait &dyn dispatch, char 리터럴 미지원, PlanNode 중복 정의.
   iteration 25-26 (2026-04-19) **Phase 6.27b 220 도달**: (a) codegen type_inference.rs에 `ResolvedType::Unit` local → non-Unit TC 업그레이드 규칙 추가. (b) `rag/wal.vais`의 `VaisError.WalCorruption(Str.from("msg"))` → `VaisError.new("VAIS-07xxxxx", "msg")` 일괄 변환 (13건, VaisError는 struct지 enum 아님). (c) `rag/wal.vais` + `graph/wal.vais`: `frame.get_page_data_mut()` → `pool.get_page_mut(frame)`, `pool.unpin_page(file_id, page_id, dirty)` → `pool.unpin_page(frame, dirty)` — redo.vais 패턴에 맞춤. (d) graph/wal.vais의 `VaisError.new(NUM, "msg")` → `VaisError.new("VAIS-{NUM}", "msg")` (24건, code field는 str). vaisdb 218→220/261 (+2, Tier 3 minimum 도달). floor 220 상향.
+  strategy iteration 27 (2026-04-19): sequential — Task #78 Phase 6.27b 계속. 현재 220/261. 이번 전략: impl-sonnet background에게 (d) structural mismatch + (g) VaisError str/u32 — 기계적 수정 가능한 파일들 위임. TableInfo.columns 누락 fix, HnswConfig 필드 alignment, vector/fulltext concurrency의 `code: u32` → `code: "VAIS-xxx"`. 예상 +3~5. Opus direct 영역 (trait dyn, HashMap iter)은 별도 iteration.
+  iteration 27 결과: **0 net pass**. concurrency 파일 두 개 VaisError str 수정은 TC pass까지만 이동, `queue.push()` (Mutex lock 후 Vec 접근) 같은 깊은 Option-through-ref binding으로 codegen 단계에서 여전히 fail. vector/search.vais `table_meta.columns` 수정은 error_code(2,3,7,"msg") (4-arg, stdlib def는 1-arg) 같은 cascading API mismatch 때문에 revert. 컴파일러 `infer_expr_type` upgrade를 I64→Ref/RefMut/Optional/Result/Named{empty}로 확장 시도 → trigger 0회 (TC expr_types 자체가 I64 erase된 것으로 추정), revert. 남은 41 파일 다수가 개별 파일 패치로 풀리지 않는 구조적 문제 (trait dyn, Mutex<Vec> binding, Option 패턴 cross-ref, error_code arity drift).
+  next_steps: (1) Opus direct compiler 작업 — TC가 실제 Mutex lock 반환 타입을 propagate하도록 수정하는 게 ~5 파일 해제. (2) vector/search.vais 류 `error_code(N,N,N,"msg")` 사용자 vaisdb 파일 일괄 refactor — stdlib error_code가 i64 받는다는 전제와 충돌. 별도 Phase 6.27c로 분리 고려.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.
@@ -504,6 +507,11 @@ progress: 9/18 (50%)
   [완료 기준] (Tier 2 완료, Tier 3 미완):
   - [x] Tier 2: 261×0.78 ≈ 203/261 달성
   - [ ] Tier 3: 261/261 build OK (Phase 6.27b 미래 작업)
+- [ ] 6.27b vaisdb Tier 3 drive — 220 → 261/261 (impl-sonnet + Opus compiler) [blockedBy: 6.27]
+  detail: 현재 220/261 (iteration 26 2026-04-19). 남은 41개 fails 지배 blocker: (a) trait &dyn dispatch — sql/executor/* `Box<dyn Executor>` (subquery/window/sort_agg/alter/dml/join/mod) ~10 파일, (b) HashMap iter binding codegen — storage/recovery/mod·undo·deadlock, rag/chunking/graph ~5 파일, (c) Option<T>.Some(x) ref-binding TC propagation — policy, constraints, btree/insert ~6 파일, (d) structural mismatch (TableInfo.columns 없음, HnswConfig.dim 없음) ~5 파일, (e) char literal 미지원 (boolean.vais), (f) cross-file X Parser method resolution — parser.vais/parser_select/parser_expr ~4 파일, (g) VaisError struct field str vs u32 sites — vector/fulltext concurrency.
+  [완료 기준]:
+  - vaisdb 261/261 codegen OK OR
+  - 남은 구조적 blocker가 각각 별도 Phase(7.x)로 분리되고 해당 Phase 링크됨
 - [ ] 6.28 vaisdb API drift 정리 (impl-sonnet) [blockedBy: 6.27]
   detail: 외부 API 안정화. breaking change 방지 정책.
   [완료 기준]:
