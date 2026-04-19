@@ -72,11 +72,14 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 5
+iteration: 6
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
   iteration 5 결과: 🎉 **std 77 → 82/82 (100%) 달성**. 주요 compiler 수정 5건 (Inkwell codegen 4건 + 1 TC) + std 파일 수정 8건. vaisdb 180/181 안정. Phase 5.24/5.25 CLOSED. 다음 iteration → 6.27 (vaisdb 181 → 261).
+  strategy iteration 6 (2026-04-19): parallel × 3 worktree — Phase 6.27 vaisdb batch fix. 80 fail → 3 subtrees: sql (25) / storage+vector (25) / fulltext+rag+security+planner+graph+client (30). impl-sonnet agents 각각 worktree isolation. Target ≥203/261 (+23).
+  iteration 6 결과: **ZERO commits**. 3 agents 모두 mid-investigation 지점에서 turn-cap truncation (no PROMISE signal). Worktrees empty-cleaned. Root cause: vaisdb 파일들이 cross-module API drift 포함 (pin_page arity 변경 + data_mut rename + PostingEntry.new arity 등 연쇄). 한 agent turn-cap으로 한 파일도 완결 못함.
+  retry 전략 (iteration 7+): (a) 1 agent = 1 file; (b) smallest failing files 우선 (<100줄); (c) Opus foreground로 cross-file drift catalog 먼저 만들고 leaf fixes delegate. Task #74 pending 복귀.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.
