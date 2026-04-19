@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 36
+iteration: 37
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
@@ -104,6 +104,7 @@ max_iterations: 60
   iteration 34 (2026-04-20) **224 도달**: codegen Never-promotion 미러 추가. expr_helpers_assign.rs `generate_assign_expr`에서 target이 Ident이고 local.ty가 Never-containing이거나 `Named{Option|Result, generics:[]}` (codegen-local infer의 bare None 표현)이면 RHS의 concrete infer_expr_type으로 local.ty를 promote. vais-types TC 측 promotion과 symmetric. + sql/catalog/constraints.vais 수정 (`pk_idx.columns.join(", ")` → `vec_join_str(&..., ", ")` 헬퍼 추가, `specified_columns.contains(&col.name)` → inline LF 루프, `trimmed[1..len-1]` → `trimmed.substring(1, len-1)`). vaisdb 222→224/261 (+2). floor 223 상향 (224는 순간 caching에 따라 ±1 oscillation). iteration 33의 TC-side fix + iteration 34의 codegen-side fix가 symmetric pair로 작동.
   iteration 35 (2026-04-20) **224 확정**: codegen Pattern::Struct enum-variant 동명 disambiguation 개선. control_flow/pattern.rs에 `resolve_enum_struct_variant_with_hint_and_fields` 추가 — 여러 enum에 같은 변형 이름이 있을 때 (예: `TableRef.Subquery { query, alias }` vs `Expr.Subquery { query }`), 요청된 필드 이름 집합을 모두 포함하는 enum을 우선 선택. 기존 fallback은 먼저 나온 enum을 선택해서 `alias` 같은 필드가 누락된 enum을 고를 수 있었음. sql/parser/prepared.vais의 `M table_ref { Subquery { query, alias } => ... }`가 이제 TableRef.Subquery로 제대로 resolve → `alias` 필드 binding 성공. vaisdb 224/261 stabilize (oscillation 해소). floor 224 확정.
   iteration 36 (2026-04-20) **226 도달**: storage/recovery/{mod,undo}.vais의 HashMap iter 패턴 수정. `LF item: &analysis.txn_table { entry := item.1 }` (HashMap iter가 item을 i64로 erase) → `.values()` / `.keys()` + `.get(&key)` 패턴으로 교체. undo.vais 추가 수정: `Some((header, payload))` tuple 파괴할당 (WalRecord은 struct) → `Some(record)`로 바꾸고 `record.header.lsn` 접근, `sort_by(|a,b| lsn_compare(b.1, a.1))` closure 튜플 필드 → inline insertion sort. vaisdb 224→226/261 (+2). floor 226 상향. recovery/mod.vais + recovery/undo.vais 모두 TC + codegen pass.
+  iteration 37 (2026-04-20): 0 net pass. deletion_bitmap.vais의 `!(1u64 << bit_offset)` → `~(...)` 수정으로 E001 벗어나 E004 `clog.is_aborted` (CommitLog→Clog)까지 도달, 그 뒤에 `buf.extend_from_slice` (Vec stdlib 미구현) 이 블록커 → revert. vector/mod.vais는 HnswConfig에 dim/metric/quantization_strategy 필드 누락 구조 문제 (3 call sites) — stdlib config struct 변경 필요, 이 iteration 범위 초과. sql/catalog/manager.vais에 `partial` 추가했으나 별개 TC 오류로 build까지 도달 못해 revert. 다른 deadlock, chunking/graph, executor/mod 등 TC에서 `Vec<u64> vs i64` 및 `TableInfo vs i64` 깊은 HashMap 반환 erasure 계열 — compiler fix (HashMap get의 value 타입 전파) 필요. 현 iteration에서 추가 기계적 fix 포화.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.
