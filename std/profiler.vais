@@ -49,9 +49,9 @@ X Timer {
 
     # Get elapsed time in nanoseconds
     F elapsed_ns(&self) -> i64 {
-        LW self.running == 1 {
+        I self.running == 1 {
             __time_now_ns() - self.start_ns
-        } ! {
+        } EL {
             self.end_ns - self.start_ns
         }
     }
@@ -131,9 +131,9 @@ X ProfileEntry {
 
     # Get average time per call
     F avg_time_ns(&self) -> i64 {
-        LW self.call_count > 0 {
+        I self.call_count > 0 {
             self.total_time_ns / self.call_count
-        } ! {
+        } EL {
             0
         }
     }
@@ -342,7 +342,7 @@ X Profiler {
             min_ns := __load_i64(self.entries + offset + 24)
             max_ns := __load_i64(self.entries + offset + 32)
 
-            avg_ns := LW calls > 0 { total_ns / calls } ! { 0 }
+            avg_ns := I calls > 0 { total_ns / calls } EL { 0 }
 
             __print_padded_str(name, 30)
             __print_padded_i64(calls, 10)

@@ -370,7 +370,7 @@ F prop_check(name: str, test_fn: i64, gen: Generator) -> PropertyResult {
 }
 
 # Assert a property holds, panic if not
-F prop_assert(name: str, test_fn: i64, gen: Generator) -> i64 {
+partial F prop_assert(name: str, test_fn: i64, gen: Generator) -> i64 {
     result := prop_check(name, test_fn, gen)
 
     I result.is_failed() {
@@ -402,7 +402,7 @@ F prop_assert(name: str, test_fn: i64, gen: Generator) -> i64 {
 F prop_idempotent(f: i64, x: i64) -> i64 {
     fx := call_test_fn(f, x)
     ffx := call_test_fn(f, fx)
-    fx == ffx
+    I fx == ffx { 1 } EL { 0 }
 }
 
 # Check commutativity: f(a, b) == f(b, a)

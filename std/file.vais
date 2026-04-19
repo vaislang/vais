@@ -162,7 +162,7 @@ X File {
 
     # Read a single byte, returns Option<i64>
     # None on EOF or error, Some(byte) on success
-    F read_byte_opt(&self) -> Option {
+    F read_byte_opt(&self) -> Option<i64> {
         I self.handle == 0 {
             None
         } EL {

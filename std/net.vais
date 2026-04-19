@@ -1220,7 +1220,7 @@ F is_valid_ip6(host: i64) -> i64 {
 }
 
 # Convert error code to string (returns static string pointer)
-F net_error_string(err: i64) -> i64 {
+F net_error_string(err: i64) -> str {
     I err == NET_ERR_NONE { "Success" }
     EL I err == NET_ERR_SOCKET { "Socket creation failed" }
     EL I err == NET_ERR_BIND { "Bind failed" }

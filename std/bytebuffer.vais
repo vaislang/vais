@@ -1,6 +1,8 @@
 # ByteBuffer - Growable byte buffer for binary serialization/deserialization
 # Essential for database page management, WAL records, and network protocols
 
+U std/vec
+
 S ByteBuffer {
     data: i64,      # Pointer to heap-allocated buffer
     len: i64,       # Current write position / bytes written
