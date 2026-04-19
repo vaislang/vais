@@ -65,6 +65,7 @@
 # Uses C standard library functions via extern
 # Updated to use Option<T> and Result<T, E> for error handling
 
+U std/option
 U std/result
 
 # Seek origin constants
