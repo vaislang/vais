@@ -36,8 +36,8 @@ F wasm_memory_grow(pages: i64) -> i64 {
 
 # Simple bump allocator for WASM heap
 # Global heap pointer (initialized to end of static data)
-C HEAP_START: i64 = 1048576  # 1MB offset for static data
-mut heap_ptr: i64 = HEAP_START
+const HEAP_START: i64 = 1048576  # 1MB offset for static data
+G heap_ptr: i64 = HEAP_START
 
 F wasm_heap_alloc(size: i64) -> i64 {
     # Align to 8-byte boundary

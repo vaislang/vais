@@ -181,7 +181,7 @@ X Runtime {
 }
 
 # Global runtime instance
-V __GLOBAL_RUNTIME: i64 = 0
+G __GLOBAL_RUNTIME: i64 = 0
 
 # Initialize global runtime
 F runtime_init() -> i64 {
@@ -710,7 +710,7 @@ X ReactorRuntime {
 # Global Reactor Runtime
 # ============================================
 
-V __GLOBAL_REACTOR: i64 = 0
+G __GLOBAL_REACTOR: i64 = 0
 
 # Initialize global reactor runtime
 F reactor_init() -> i64 {

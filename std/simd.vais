@@ -261,8 +261,8 @@ F simd_vec_dot_f32(a: SimdVec, b: SimdVec) -> i64 {
     LW i + 4 <= a.len {
         a_ptr := a.data + (i * 4)
         b_ptr := b.data + (i * 4)
-        partial := simd_dot_f32x4(a_ptr, b_ptr)
-        sum = sum + partial
+        partial_sum := simd_dot_f32x4(a_ptr, b_ptr)
+        sum = sum + partial_sum
         i = i + 4
     }
 

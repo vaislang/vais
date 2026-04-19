@@ -586,8 +586,8 @@ X FlameGraphBuilder {
 # Global Profiler Instance
 # ============================================
 
-V __GLOBAL_PROFILER: i64 = 0
-V __GLOBAL_MEM_PROFILER: i64 = 0
+G __GLOBAL_PROFILER: i64 = 0
+G __GLOBAL_MEM_PROFILER: i64 = 0
 
 # Initialize global profiler
 F profiler_init() -> i64 {
