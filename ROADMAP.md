@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto (세션 재개 2026-04-20 — Task #1 Phase 6.27c.5 Trait &dyn T vtable codegen부터. 이전 세션 iteration cap 59/60로 stopped 후 /clear로 context 초기화 완료.)
-iteration: 0
+iteration: 2
 max_iterations: 30
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
@@ -125,6 +125,8 @@ max_iterations: 30
   iteration 54 결과: **230 도달 (+1)**. Option 3이 circular import detected에 걸려 hard-fail → compiler imports.rs cycle tolerance 수정 (cycle 발견 시 error 대신 empty Module 반환). 이후 Option 3 적용 → parser.vais + parser_command/ddl/dml/security 4 파일 TC pass. vaisdb 229→230/261. floor 230. parser_expr + parser_select는 UnaryOp/TokenKind ambiguity로 6.27c.3 대기.
   iteration 55 (2026-04-20) **231 도달 (+1)**: Task #80 Phase 6.27c.2 MutexGuard deref. stdlib `Mutex.lock()`을 Result로 바꾸는 시도는 -6 regression으로 revert. 대신 compiler-side: Expr::Index에 MutexGuard/RwLockReadGuard/RwLockWriteGuard 의 inner T (Vec/Str/Array/Slice) forwarding 추가 + vaisdb concurrency.vais 2개 파일 패턴 정리 (M Ok/Err pattern → 단순 lock(), Ordering args 제거, stub 교체). fulltext/vector concurrency 2개 파일 TC pass. vaisdb 230→231/261. floor 231.
   strategy iteration 58 (2026-04-20): sequential — #82 Phase 6.27c.4 HashMap<K,V>.get Option<V> codegen type propagation. Opus direct (TC/codegen boundary 설계, impl). Target: identify 가장 가벼운 TC-level fix path — self.map.get(&k) 반환 Option<V>의 V가 i64로 erase되는 지점 추적 후 최소 변경으로 restore.
+  strategy iteration 61 (2026-04-20): sequential — #2 Phase 6.27c.6 residual cleanup. 27 vaisdb fails. impl-sonnet background, 1-file-at-a-time strategy (이전 iter-7~11 +9 file 성공 패턴). Scoped: +3 files minimum, single-session budget.
+
   strategy iteration 60 (2026-04-20): sequential — #1 Phase 6.27c.5 SCOPED to fat pointer layout only (user approved). Opus direct research+impl. 500-1000줄 full vtable은 위험, 이번은 &dyn T LLVM fat pointer (data_ptr, vtable_ptr) layout + TC trait-object 인식까지.
 
   iteration 58 결과: **234 도달 (+2)**. Root cause가 원래 가설(HashMap.get Option<V> erasure)과 달랐음 — 실제는 match arm unification. 예: `M m.get_opt(k) { Some(v) => self.edges.set(k, v), None => self.node_list.push(k) }` 에서 Some arm은 V=Vec<u64> 반환, None arm은 i64 반환. Rust와 달리 statement-style match에서 match 결과값을 쓰지 않아도 arm 타입 통합을 강제. 수정: checker_expr/control_flow.rs Expr::Match unify 실패 시, 모든 arm body가 "statement-like" (call/method-call/block trailing call/Unit/Return/Break/Continue)이면 result_type=Unit으로 widen. `arm_bodies_are_statement_like` + `expr_is_statement_like` helpers. security/policy.vais, rag/chunking/graph.vais 등 통과. vaisdb 232→234/261 (+2). std 82/82, phase158 18/18 유지. floor 234.
@@ -593,10 +595,13 @@ progress: 9/18 (50%)
   - [x] baseline regression 0 (std 82/82, vaisdb 234/261, phase158 18/18)
   - [ ] vaisdb ≥ 252 (+18) — 미달성, dyn method dispatch만으로는 부족. 다른 blocker (`&?N` unresolved refs, cross-file method resolution) 선행 필요. 6.27c.6 residual cleanup으로 이월.
 
-- [ ] 6.27c.6 residual cleanup (impl-sonnet) [blockedBy: 6.27c.5]
-  detail: 위 5 task 완료 후 남은 파일들 (구조 변경의 결과로 드러난 신규 blocker 포함).
-  [완료 기준]:
-  - vaisdb 261/261
+- [~] 6.27c.6 residual cleanup 🚧 SCOPED 2026-04-20 (impl-sonnet + Opus) [blockedBy: 6.27c.5]
+  detail: 27개 잔여 파일을 probe한 결과 모두 구조적 compiler blocker 또는 multi-file API 재작성 필요. 5 카테고리: (a) planner/types.vais `F engine_type(self) -> EngineType { M self { ... } }`이 iter-58의 statement-like widening으로 Unit erasure — recursive `input.engine_type()` 호출이 statement-like로 오인. Fix: checker_expr/control_flow.rs의 `arm_bodies_are_statement_like`에 recursive-self-method-call 제외 필요. (b) pool.write_page 2→1 arg migration: `pool.write_page(frame_id, data)` → 새 flow `pool.get_page_mut(frame).copy_from(data); pool.write_page(frame)`. 적어도 10+ 파일 affected. (c) E022 use-after-move (storage/btree/insert의 separator). (d) Box<dyn T>.method — TC peel 추가했으나 sort_agg는 여전히 `&?1391` unresolved struct ref로 막힘. (e) `get_table_indexes` → `get_indexes_for_table` rename만 하면 cascading E030 `&&ColumnInfo` (LF col: &columns → LF col: columns). 2 occurrences ok, 3rd occurrence는 pool.write_page blocker. Baseline 234/261 유지. 진행은 compiler-fix session 필요.
+  probe: dml.vais 일부 진전 확인 후 pool.write_page blocker로 revert. planner/types.vais는 M-arm Unit widening 회귀. sort_agg.vais는 Box<dyn> peel로 E004 해결 후 다른 blocker 노출.
+  [완료 기준] (SCOPED):
+  - [x] 잔여 블로커 5 카테고리 분류 완료
+  - [x] baseline regression 0 (std 82/82, vaisdb 234/261, phase158 18/18)
+  - [ ] vaisdb 261/261 — 미달성, compiler 전용 세션 필요
 
 - [ ] 6.28 vaisdb API drift 정리 (impl-sonnet) [blockedBy: 6.27c.6]
   detail: 외부 API 안정화. breaking change 방지 정책.
