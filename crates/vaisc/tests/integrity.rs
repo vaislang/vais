@@ -174,6 +174,12 @@ mod integrity {
     /// Runs `vaisc build <path> --emit-ir -o /tmp/__ok.ll --force-rebuild`.
     pub fn ok_codegen(path: &Path) -> bool {
         let vaisc = vaisc_path();
+        // Phase 5.24: provide VAIS_STD_PATH + VAIS_DEP_PATHS so std files
+        // that import other std modules (hashmap -> option/hash/stringmap)
+        // can resolve. Without these the test reports spurious "outside
+        // allowed directories" / "Cannot find Vais standard library"
+        // failures even when the file builds OK interactively.
+        let std_path = "/tmp/vais-lib/std";
         let output = Command::new(&vaisc)
             .arg("build")
             .arg(path)
@@ -181,6 +187,8 @@ mod integrity {
             .arg("-o")
             .arg("/tmp/__ok.ll")
             .arg("--force-rebuild")
+            .env("VAIS_STD_PATH", std_path)
+            .env("VAIS_DEP_PATHS", std_path)
             .output();
         match output {
             Err(e) => {
