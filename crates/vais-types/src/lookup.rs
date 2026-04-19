@@ -68,7 +68,19 @@ impl TypeChecker {
         }
 
         // Check if it's an enum variant
-        for (enum_name, enum_def) in &self.enums {
+        // Phase 6.27b iteration 42: iterate enums in deterministic order
+        // (HashMap iter is non-deterministic, causing flakes when two enums
+        // share a Unit variant name like `None` in `Option` and
+        // user-defined `QuantizationStrategy`). Sort by name and prefer
+        // user-defined enums over builtins when variant name matches.
+        let mut enum_entries: Vec<_> = self.enums.iter().collect();
+        enum_entries.sort_by(|(a, _), (b, _)| {
+            let a_builtin = matches!(a.as_str(), "Option" | "Result");
+            let b_builtin = matches!(b.as_str(), "Option" | "Result");
+            // Non-builtin first, then alphabetical
+            a_builtin.cmp(&b_builtin).then_with(|| a.cmp(b))
+        });
+        for (enum_name, enum_def) in enum_entries {
             if let Some(variant_fields) = enum_def.variants.get(name) {
                 // Phase 2.10: for Unit variants of built-in Option/Result,
                 // use `Never` for the unconstrained generic slots. This lets
