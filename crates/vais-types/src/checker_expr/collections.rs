@@ -607,6 +607,61 @@ impl TypeChecker {
                         }
                         Some(Ok(ResolvedType::I64))
                     }
+                    // Phase 6.27c.2: MutexGuard<T>/RwLockReadGuard<T>/RwLockWriteGuard<T>
+                    // forward indexing to inner T — parallel to the Phase 338
+                    // method-call forwarding in calls.rs. Needed for vaisdb
+                    // concurrency code: `queue[0]` where queue is
+                    // MutexGuard<Vec<u64>>.
+                    ResolvedType::Named {
+                        ref name,
+                        ref generics,
+                    } if matches!(name.as_str(), "MutexGuard" | "RwLockReadGuard" | "RwLockWriteGuard")
+                        && !generics.is_empty() =>
+                    {
+                        let inner = generics[0].clone();
+                        // Delegate to Vec<T> / ConstArray / Slice / Str branches
+                        // by pattern-matching on the inner type.
+                        match inner {
+                            ResolvedType::Named {
+                                ref name,
+                                ref generics,
+                            } if name == "Vec" && !generics.is_empty() => {
+                                if !index_type.is_integer() {
+                                    return Some(Err(TypeError::Mismatch {
+                                        expected: "integer".to_string(),
+                                        found: index_type.to_string(),
+                                        span: Some(index.span),
+                                    }));
+                                }
+                                Some(Ok(self.apply_substitutions(&generics[0])))
+                            }
+                            ResolvedType::Str => {
+                                if !index_type.is_integer() {
+                                    return Some(Err(TypeError::Mismatch {
+                                        expected: "integer".to_string(),
+                                        found: index_type.to_string(),
+                                        span: Some(index.span),
+                                    }));
+                                }
+                                Some(Ok(ResolvedType::I64))
+                            }
+                            ResolvedType::Array(elem) | ResolvedType::Slice(elem) => {
+                                if !index_type.is_integer() {
+                                    return Some(Err(TypeError::Mismatch {
+                                        expected: "integer".to_string(),
+                                        found: index_type.to_string(),
+                                        span: Some(index.span),
+                                    }));
+                                }
+                                Some(Ok(*elem))
+                            }
+                            _ => Some(Err(TypeError::Mismatch {
+                                expected: "indexable type".to_string(),
+                                found: inner_type.to_string(),
+                                span: Some(expr.span),
+                            })),
+                        }
+                    }
                     _ => Some(Err(TypeError::Mismatch {
                         expected: "indexable type".to_string(),
                         found: inner_type.to_string(),

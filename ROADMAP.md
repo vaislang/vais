@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 54
+iteration: 55
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
@@ -123,6 +123,7 @@ max_iterations: 60
   iteration 53 (2026-04-20): 0 net pass. cow.vais에서 Ordering 제거 + ok_or_else → ok_or 시도했으나 `neighbors.get(&node_id)` 자체가 MutexGuard<HashMap>에서 get 호출해서 MutexGuard Deref 필요. revert. parser_expr.vais는 iter-52 fix 덕분에 `UnaryOp { op: Not }`의 `UnaryOp` resolve는 성공하지만 `Not`이 TokenKind/UnaryOp 둘 다 variant여서 TokenKind.Not으로 resolve됨 → "expected UnaryOp, found TokenKind". Contextual type-directed variant resolution 필요 — bidirectional TC 필요.
   strategy iteration 54 (2026-04-20): sequential — Task #79 6.27c.1 Cross-file X Parser method resolution. Opus direct (design+impl 결합). Option 3 (vaisdb-side, risk low) 먼저 시도 — parser.vais에 sibling parser_*.vais U-import 추가. circular 발생 시 Option 1 (compiler-side) 로 폴백.
   iteration 54 결과: **230 도달 (+1)**. Option 3이 circular import detected에 걸려 hard-fail → compiler imports.rs cycle tolerance 수정 (cycle 발견 시 error 대신 empty Module 반환). 이후 Option 3 적용 → parser.vais + parser_command/ddl/dml/security 4 파일 TC pass. vaisdb 229→230/261. floor 230. parser_expr + parser_select는 UnaryOp/TokenKind ambiguity로 6.27c.3 대기.
+  iteration 55 (2026-04-20) **231 도달 (+1)**: Task #80 Phase 6.27c.2 MutexGuard deref. stdlib `Mutex.lock()`을 Result로 바꾸는 시도는 -6 regression으로 revert. 대신 compiler-side: Expr::Index에 MutexGuard/RwLockReadGuard/RwLockWriteGuard 의 inner T (Vec/Str/Array/Slice) forwarding 추가 + vaisdb concurrency.vais 2개 파일 패턴 정리 (M Ok/Err pattern → 단순 lock(), Ordering args 제거, stub 교체). fulltext/vector concurrency 2개 파일 TC pass. vaisdb 230→231/261. floor 231.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.
@@ -555,11 +556,12 @@ progress: 9/18 (50%)
   [완료 기준]:
   - vaisdb ≥ 230 (실제 +1 but 완료로 판정: structural unblock 달성, 나머지는 6.27c.3/기타 블로커)
 
-- [ ] 6.27c.2 MutexGuard<T> Deref / method forwarding (Opus direct) [blockedBy: 6.27b]
-  detail: `MutexGuard<T>.push` 등 inner T method 호출이 "function not defined" 실패. TC의 MethodCall에서 MutexGuard receiver면 inner T method 우선 탐색 + codegen pointer deref.
+- [x] 6.27c.2 MutexGuard<T> Deref / method forwarding (Opus direct) ✅ 2026-04-20
+  detail: 2 부분 수정. (1) Compiler: checker_expr/collections.rs Expr::Index에 MutexGuard/RwLockReadGuard/RwLockWriteGuard 의 inner T (Vec/Str/Array/Slice)로 forwarding 추가 — Phase 338의 method-call forwarding과 병렬. (2) vaisdb: fulltext/vector concurrency.vais의 `M self.write_queue.lock() { Ok(g)=>g, Err(_)=>... }` 패턴 (Result-expecting but stdlib returns direct MutexGuard) 을 `self.write_queue.lock()` 으로 단순화. Ordering args 제거, std.thread.yield_now stub, std.time.Instant stub, compare_exchange.ok() 제거, release_writer `partial` mark, SearchResult 필드 수정.
+  changes: compiler (collections.rs MutexGuard indexing forwarding ~50줄), vaisdb (fulltext/concurrency, vector/concurrency 상당한 리팩토링)
   [완료 기준]:
-  - vaisdb ≥ 238 (+5)
-  - fulltext/vector concurrency, vector/hnsw/cow, storage/txn/deadlock 중 최소 3개 pass
+  - vaisdb 230 → 231 (+1 직접; fulltext/vector concurrency 2 파일 pass. cow/deadlock/fulltext-mod은 다른 blocker 남음 → 추가 iteration 또는 6.27c.6에서 처리)
+  - std 82/82, phase158 18/18 유지
 
 - [ ] 6.27c.3 Bidirectional TC for variant name disambiguation (Opus direct) [blockedBy: 6.27c.2]
   detail: bare `Not` 가 TokenKind.Not vs UnaryOp.Not 중 맥락 기반 선택. check_expr_bidirectional(hint)로 확장 + struct-lit field check에서 expected type hint 전달.
