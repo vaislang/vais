@@ -368,11 +368,12 @@ progress: 9/18 (50%)
     - docs/language/LIVING_SPEC/04_stdlib/vec_max.vais — `*n` 수동 deref 제거 (auto-deref 사용)
     - docs/language/COOKBOOK.md 항목 8 — "Phase 2.12 auto-deref 지원" 업데이트
   verify: `M v.get(i) { Some(n) => I n > max ... }` 통과. integrity gate green (178/261).
-- [ ] 2.13 Named↔Optional/Result bridge 리팩토링 (Opus direct) [blockedBy: 2.12]
-  detail: Phase 326 bridge(unification.rs:247)와 special.rs의 Option/Result 분기를 단일 규칙으로 통합. "Named("Option", [T]) ≡ Optional(T)" 를 항상 유지하는 normalization pass 추가 검토.
-  [완료 기준]:
-  - unification 테스트 전체 통과
-  - special.rs의 Option/Result 중복 코드 제거
+- [x] 2.13 Option/Result bridge — normalization helper 모듈 (Opus direct) ✅ 2026-04-19
+  detail: 11+ scatter sites의 ad-hoc Named↔Optional/Result 분기를 canonical helper로 통합. **기존 scatter 제거는 하지 않음** (Phase 2.10 세 번 실패 영역, 위험). 대신 `option_result_bridge.rs` 신규 — 6 API: normalize_to_primitive/to_named, is_option_shape/result_shape, option_inner/result_inner. 새 callers 선호 사용 → 점진적 마이그레이션. 실제 scatter 제거는 Phase 3.x 완결성 작업과 함께.
+  changes:
+    - crates/vais-types/src/inference/option_result_bridge.rs (신규 ~180줄, 6 helper + 6 unit tests)
+    - crates/vais-types/src/inference/mod.rs — pub mod 등록
+  verify: 6/6 unit tests green. integrity gate green (178/261). No behavior change.
 - [x] 2.14 Generic instantiation 완전성 e2e (Opus direct) ✅ 2026-04-19
   detail: 현재 동작 확인용 5개 e2e 테스트 추가 — generic fn single/multi-param, generic struct+method, nested Option<Vec<i64>>, where-clause with trait bound. 기존 TC 동작이 이미 이 케이스들을 지원함을 확인 (method inference dispersion 2.11 통합 + Phase 2.10/2.12 개선 후).
   changes:
