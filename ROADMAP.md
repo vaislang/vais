@@ -453,11 +453,20 @@ progress: 9/18 (50%)
 
 > **목표**: std/*.vais 82개 모두 `vaisc check` + `vaisc build` exit 0. 현재 baseline 37/82 → 82/82.
 
-- [ ] 5.24 std/*.vais 개별 빌드 batch fix (impl-sonnet, 필요 시 복수 agent 병렬) [blockedBy: 4.23]
-  detail: 82개 중 45개 실패. 실패 원인 분류 (codegen 갭 / type inference / stdlib drift). 각 파일 fix.
-  [완료 기준]:
-  - 82/82 build OK
-  - 신규 integrity test: std_files pass=82/82
+- [~] 5.24 std/*.vais 개별 빌드 batch fix (impl-sonnet) 🚧 PARTIAL 2026-04-19
+  detail: std 37 → 41 (+4 files). 해결:
+    - collections.vais: E034 methods → `partial F` (pop_front/back, push_front/back)
+    - fmt.vais, http.vais: agent batch E034 fix
+    - simd.vais: `partial` 변수를 `partial_sum`으로 rename (키워드 conflict)
+    - wasm.vais: top-level `mut heap_ptr` → `G heap_ptr`, `C` → `const`
+    - runtime.vais, profiler.vais: `V __GLOBAL_X` → `G __GLOBAL_X` (일부 여전히 다른 에러)
+  남은 41 파일: 다양한 error class (E022/E002/C002/E001/P001 복합, ICE 포함). 많은 파일이 **compiler 버그를 노출** (예: sync.vais fix 시 ICE, memory.vais의 old-C-style for loop 문법, async_io.vais의 `@` 파라미터 등). 본격 82/82는 compiler 자체 버그 수정 필요.
+  Floor raised 37 → 41 (check-integrity.sh INTEGRITY_STD_MIN).
+  **완료 기준 (원본)**: 82/82 build OK → 미충족. 현재 **41/82** (50%).
+  next sessions:
+    (a) compiler ICE 버그 수정 (sync.vais 쪽 type inference)
+    (b) memory.vais 같은 legacy-syntax 파일 전체 재작성
+    (c) parse_iN/fN runtime 구현 (Phase 3.13 merge)
 - [ ] 5.25 stdlib integrity test 100% gate 승격 (impl-sonnet) [blockedBy: 5.24]
   detail: `test_std_files_codegen_ok`의 assertion을 `pass >= 82` (threshold 승격). check-integrity.sh에 `INTEGRITY_STD_MIN=82`.
   [완료 기준]:
