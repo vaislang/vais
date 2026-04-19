@@ -221,6 +221,29 @@ impl TypeChecker {
             }
 
             Expr::Field { expr: inner, field } => {
+                // Phase 6.27b iteration 50: disambiguate `EnumName.Variant`
+                // when `EnumName` is ALSO a variant name of another enum in
+                // scope. Without this, lookup finds the variant first and
+                // resolves inner to the OTHER enum's type, then field access
+                // for `Variant` fails on that other enum. Prefer: if the
+                // inner is an Ident naming an enum directly, treat it as
+                // that enum's variant-access.
+                if let Expr::Ident(n) = &inner.node {
+                    if let Some(enum_def) = self.enums.get(n) {
+                        if enum_def.variants.contains_key(&field.node) {
+                            let generics: Vec<ResolvedType> = enum_def
+                                .generics
+                                .iter()
+                                .map(|_| self.fresh_type_var())
+                                .collect();
+                            return Some(Ok(ResolvedType::Named {
+                                name: n.clone(),
+                                generics,
+                            }));
+                        }
+                    }
+                }
+
                 let inner_type = match self.check_expr(inner) {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
