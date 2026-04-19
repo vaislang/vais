@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 43
+iteration: 44
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
@@ -110,7 +110,8 @@ max_iterations: 60
   iteration 40 (2026-04-20) **228 도달**: vector/quantize/mod.vais `code := mut data.to_vec()` → 바이트 단위 `Vec.with_capacity(data.len())` + seed + clear + for-loop push 패턴 (stdlib `&[u8].to_vec()` 미구현). + Never-promotion 덕분에 `Option.Some(q) => { code := mut Vec.with_capacity(...); ... }`의 q 바인딩이 concrete 타입으로 유지됨. TC + codegen pass. vaisdb 227→228/261 (+1). floor 228 상향.
   iteration 41 (2026-04-20): 0 net pass + flake 관찰. BufferPool에 `write_page_bytes(file_id, page_id, &data)` 3-arg helper 추가했으나 graph/mod/vector/mod/dml 파일 write_page 3-arg 호출을 rewrite해도 각자 다른 추가 blocker (GraphMeta.deserialize arity, HnswConfig.dim 누락, get_table_indexes rename cascade)로 막힘 → revert. 중요: vaisdb 228 <-> 227 oscillation 발견 — quantize/mod.vais 단독 빌드는 clean하지만 integrity test runner 순서/캐시에 따라 flake. Floor를 안전하게 227로 낮춤 (iteration 40의 +1은 여전히 유효하나 재현 불안정).
   iteration 42 (2026-04-20) **228 확정 (flake 해결)**: lookup.rs의 enum variant 조회에서 `self.enums` HashMap 반복이 비결정적이어서 `None` 이름이 Option과 QuantizationStrategy 둘 다에 있을 때 무작위로 선택 → `selected_strategy = None` 같은 문장이 Option(Never) 아니면 QuantizationStrategy로 가서 TC flake. Fix: enum iteration을 `(builtin, name)` 기준 정렬 (builtin 이후, 알파벳 순). 결과적으로 non-builtin이 먼저 매칭되어 user enum의 Unit variant 우선. 5회 `vaisc check` 반복 → 일관적으로 OK. Floor 228로 복원, stable. 이 fix는 과거 및 미래 이슈의 non-determinism 근원 해소.
-  iteration 43 (2026-04-20): 0 net pass. storage/btree/insert.vais에 `parent_guard := mut None` → `parent_guard: Option<LatchGuard> := mut None` 명시 annotation 적용 → Never 문제 해소하고 `serialize_into` API drift까지 도달 → `write_to_page`로 교정 → `use after move` (E022)로 막힘 (separator가 NeedsSplit 패턴에서 move됨). 구조적 ownership 이슈라 세션 범위 초과, revert. 이 파일은 Vec<u8> move semantic fix가 필요.
+  iteration 43 (2026-04-20): 0 net pass. storage/btree/insert.vais에 `parent_guard := mut None` → `parent_guard: Option<LatchGuard> := mut None` 명시 annotation 적용 → Never 문제 해소하고 `serialize_into` API drift까지 도달 → `write_to_page`로 교정 → `use after move` (E022)로 막힘 (separator가 NeedsSplit 패턴에서 move됨). 구조적 ownership 이슈라 세션 범위 초과, revert.
+  iteration 44 (2026-04-20): 0 net pass. rag/context/window.vais `LW j < windows.len() as u32 { ... }` (line 274, nested LW 안쪽)에서 "expected numeric, found ()" TC flake 재탐색. `j := mut i + 1u32` annotation, `__win_len` 중간 변수 hoist 둘 다 시도 but 같은 error — `windows` 자체의 타입이 nested scope 안에서 TC가 ()로 resolve. `&Vec<ContextWindow>` 파라미터인데 scope leak 의심. 세션 범위 초과, revert.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.
