@@ -42,7 +42,7 @@ X PriorityQueue {
 
     # Peek at the minimum element using Option type
     # Returns Some(value) if not empty, None if empty
-    F peek_opt(&self) -> Option {
+    F peek_opt(&self) -> Option<i64> {
         I self.size == 0 {
             None
         } EL {
@@ -98,7 +98,7 @@ X PriorityQueue {
 
     # Pop the minimum element using Option type
     # Returns Some(value) if not empty, None if empty
-    F pop_opt(&self) -> Option {
+    F pop_opt(&self) -> Option<i64> {
         I self.size == 0 {
             None
         } EL I self.size == 1 {
