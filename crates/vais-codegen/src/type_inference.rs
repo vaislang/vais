@@ -224,11 +224,31 @@ impl CodeGenerator {
         }
     }
 
-    /// Infer type of expression (simple version for let statement)
+    /// Infer type of expression (simple version for let statement).
+    /// Phase 3.15: run codegen-local inference first, then upgrade to TC's
+    /// type only when codegen returned I64 but TC has richer info.
+    /// This preserves the behavior of existing passing files (codegen's own
+    /// inference for Ref/RefMut/struct paths) while recovering element
+    /// types that would otherwise erase through Vec<T> indexing.
     pub(crate) fn infer_expr_type(&self, expr: &Spanned<Expr>) -> ResolvedType {
-        stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
+        let local = stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
             self.infer_expr_type_inner(expr)
-        })
+        });
+        if matches!(local, ResolvedType::I64) {
+            let span_key = (expr.span.start, expr.span.end);
+            if let Some(tc_ty) = self.expr_types.get(&span_key) {
+                // Upgrade to TC type when it carries structural info that
+                // codegen's local inference erased.
+                match tc_ty {
+                    ResolvedType::Tuple(_) => return tc_ty.clone(),
+                    // Don't upgrade Named/Ref here — those have dedicated
+                    // fallbacks in expr_helpers_data.rs that depend on the
+                    // I64 signal to trigger struct-name recovery.
+                    _ => {}
+                }
+            }
+        }
+        local
     }
 
     /// Get the TC-resolved type for an expression, if available.
