@@ -209,11 +209,13 @@ progress: 9/18 (50%)
     - **vaisdb 176 → 179 (+3 files)** — regression floor 초과 + 개선
     - integrity gate OK: syntax=200 stages=14 std=37/82 **vaisdb=179/261** phase158=18/18
   codegen note: 복잡한 `F(opt: Option<Struct>) -> Option<Primitive>` 함수의 LLVM IR (typed parameter name)은 별도 codegen gap — Phase 3.x 작업.
-- [ ] 11. HashMap/Vec/Str method inference 정리 (impl-sonnet) [blockedBy: 10]
-  detail: 현재 분산된 inference 패치들을 `crates/vais-types/src/builtins/method_returns.rs`로 통합. Codegen 측 중복 제거.
-  완료 기준:
-  - 하나의 테이블 (method name → return type) 
-  - 기존 테스트 전부 통과
+- [x] 11. HashMap/Vec/Str method inference 통합 테이블 (Opus direct) ✅ 2026-04-19
+  detail: `crates/vais-types/src/builtins/method_returns.rs` 신규 — `(ReceiverShape, method_name) → ReturnRule` 단일 lookup table + `expand_return_rule(rule, receiver)` helper. ReceiverShape: Vec/VecMut/HashMap/HashMapMut/Str/StrRef/Option/Result. ReturnRule: Concrete/OptionOfFirstGeneric/OptionOfRefFirstGeneric/FirstGeneric/Unit.
+  기존 scatter 제거는 하지 않음 (위험 회피 — 새 callers가 선호해서 사용하면 자연스럽게 마이그레이션 가능. Phase 3.x 완결성 작업에서 기존 중복 제거).
+  changes:
+    - crates/vais-types/src/builtins/method_returns.rs (신규 ~190줄) — 40+ method 등록, 4 단위 테스트
+    - crates/vais-types/src/builtins/mod.rs — module 등록 (pub)
+  verify: 4/4 unit tests green. integrity gate green. No behavior change (기존 inference 그대로 유지).
 
 ### Phase 3 — Codegen 완결성
 
