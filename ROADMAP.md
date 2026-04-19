@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 30
+iteration: 31
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
@@ -98,6 +98,7 @@ max_iterations: 60
   iteration 28 결과: **Never-type TC promotion 추가**. checker_expr/special.rs Expr::Assign에서 target이 Ident이고 타입이 Never를 포함하면 (`mut None` / `mut Err(...)` init 패턴) assigned value의 타입으로 scope를 promote. scope.rs에 `update_var_type` 헬퍼 추가 (innermost→outermost 탐색, 소유 스코프에서만 update). Phase 2.10의 `Never-for-Unit` 전략이 match arm union에는 필요하지만 let init에는 낭비 → assign 시점에 해소. sql/catalog/constraints.vais의 `pk_index := mut None; ... pk_index = Some(idx); M pk_index { Some(pk_idx) => pk_idx.columns }` 패턴이 `no field 'columns' on type '!'`에서 `Vec.join method missing`으로 진행. 4개 파일에서 후속 blocker 유형이 바뀜 (Never→Vec.join 없음, Never→T_mismatch, Never→E034 panic mark 필요). 순 pass count는 같음 (220/261) — 각 파일이 Never 이후 다른 blocker에 걸림. 하지만 근본 fix로 regression floor 안정화 + 미래 fix의 기반.
   iteration 29 (2026-04-19) **221 도달**: sql/executor/alter.vais의 5개 top-level function에 `partial` prefix 추가 (execute_alter_table/alter_add_column/alter_drop_column/alter_rename_column/alter_column_type, build_*_wal 4개 포함). `!` unwrap 있는 total function → E034 경고. partial 적용으로 TC + codegen 모두 통과. vaisdb 220→221/261 (+1). floor 221 상향. 다른 E034 파일 스캔 결과 — alter.vais만 해당. Next blocker 유형: (d.deletion_bitmap) VaisError struct literal의 `category` 필드 누락 fix 시도했으나 다른 `bool/u64` 오류로 우회 불가, revert.
   iteration 30 (2026-04-20): 0 net pass. vector/hnsw/cow.vais — `std.sync.Ordering.Acquire` arg를 load/store/fetch_*/compare_exchange에서 제거 (정규식 기반 일괄 수정) → E006 해결, `ok_or_else(|| ...)` not defined로 막힘. ok_or(...)로 바꿔도 receiver가 MutexGuard라 `get().ok_or()` 자체가 없음 → revert. sql/executor/dml.vais — get_table_indexes→get_indexes_for_table 이름 교정 + Vec<&ColumnInfo> 이중참조 루프 수정 + write_page arity 수정했으나 Tuple.to_bytes() not defined로 cascade → revert. sql/executor/{join,mod,subquery,window,sort_agg} 및 storage/btree/insert, security/role 모두 trait dyn dispatch, HashMap Mutex-guarded 접근, no-location TC 오류로 막힘. 남은 40건 중 단일 기계적 fix로 풀리는 파일 포화.
+  iteration 31 (2026-04-20) **222 도달**: security/role.vais — `role_exists(-> bool)`가 `self.roles.contains_key(role_name)` 반환 (i64 실체). HashMap.contains_key/Vec.contains는 i64를 반환하지만 함수 signature가 bool → bool/i64 mismatch. `!= 0` suffix 추가로 i64→bool 변환. `has_direct_parent`도 동일. + `!visited.contains_key()` → `visited.contains_key() == 0`로 4곳 변환 (I 조건에서 i64 truthy 변환). vaisdb 221→222/261 (+1). floor 222 상향. 다른 실패 파일의 bool return은 signature 체크로만 잡히는데, sql/executor/{window,sort_agg,join}는 trait dyn dispatch 막혀 있어 단위 fix 불가.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.
