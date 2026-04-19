@@ -16,6 +16,28 @@ impl CodeGenerator {
         value: &Spanned<Expr>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
+        // Phase 6.27b iteration 34: codegen-side mirror of TC's Never-promotion on
+        // Expr::Assign. If the target local's type contains Never (from `mut None`
+        // init) and the RHS has a concrete wrapper type, update the local's
+        // recorded type so later field access through `Some(x) => x.field` sees
+        // the promoted type rather than Optional(Named{Option, generics=[]}).
+        if let Expr::Ident(name) = &target.node {
+            let has_never = self
+                .fn_ctx
+                .locals
+                .get(name)
+                .map(|l| type_contains_never(&l.ty) || generics_all_empty_enum(&l.ty))
+                .unwrap_or(false);
+            if has_never {
+                let value_ty = self.infer_expr_type(value);
+                if !type_contains_never(&value_ty) && !generics_all_empty_enum(&value_ty) {
+                    if let Some(local) = self.fn_ctx.locals.get_mut(name) {
+                        local.ty = value_ty;
+                    }
+                }
+            }
+        }
+
         let (val, val_ir) = self.generate_expr(value, counter)?;
         let mut ir = val_ir;
 
@@ -601,4 +623,43 @@ impl CodeGenerator {
 
         Ok((result, ir))
     }
+}
+
+/// Check whether a ResolvedType contains ResolvedType::Never anywhere.
+/// Mirror of vais-types checker_expr/special.rs `type_contains_never`.
+fn type_contains_never(ty: &ResolvedType) -> bool {
+    match ty {
+        ResolvedType::Never => true,
+        ResolvedType::Array(inner)
+        | ResolvedType::Optional(inner)
+        | ResolvedType::Pointer(inner)
+        | ResolvedType::Ref(inner)
+        | ResolvedType::RefMut(inner)
+        | ResolvedType::Slice(inner)
+        | ResolvedType::SliceMut(inner)
+        | ResolvedType::Range(inner)
+        | ResolvedType::Future(inner) => type_contains_never(inner),
+        ResolvedType::ConstArray { element, .. } => type_contains_never(element),
+        ResolvedType::Map(k, v) => type_contains_never(k) || type_contains_never(v),
+        ResolvedType::Result(ok, err) => type_contains_never(ok) || type_contains_never(err),
+        ResolvedType::Tuple(elems) => elems.iter().any(type_contains_never),
+        ResolvedType::Named { generics, .. } => generics.iter().any(type_contains_never),
+        ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
+            params.iter().any(type_contains_never) || type_contains_never(ret)
+        }
+        _ => false,
+    }
+}
+
+/// Detect the `Named { name: "Option"|"Result", generics: [] }` pattern that
+/// codegen-local `infer_expr_type` emits for bare `None` / `Err(...)` idents.
+/// This is functionally equivalent to `Optional(Never)` but erased one level,
+/// so we must promote its scope binding when a concrete wrapper arrives.
+fn generics_all_empty_enum(ty: &ResolvedType) -> bool {
+    if let ResolvedType::Named { name, generics } = ty {
+        if generics.is_empty() && matches!(name.as_str(), "Option" | "Result") {
+            return true;
+        }
+    }
+    false
 }
