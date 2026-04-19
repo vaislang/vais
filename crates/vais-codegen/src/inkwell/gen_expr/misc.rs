@@ -20,11 +20,34 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Ok(val.into_pointer_value())
         } else if val.is_struct_value() {
             let struct_val = val.into_struct_value();
-            let ptr = self
+            let field0 = self
                 .builder
                 .build_extract_value(struct_val, 0, "str_raw_ptr")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            Ok(ptr.into_pointer_value())
+            // Field 0 might be a pointer (normal str) OR an i64 (struct where
+            // first field happens to be an i64 pointer stored as integer).
+            // Handle both — cast i64 → ptr when needed.
+            if field0.is_pointer_value() {
+                Ok(field0.into_pointer_value())
+            } else if field0.is_int_value() {
+                let i8_ptr_type = self
+                    .context
+                    .i8_type()
+                    .ptr_type(inkwell::AddressSpace::default());
+                self.builder
+                    .build_int_to_ptr(
+                        field0.into_int_value(),
+                        i8_ptr_type,
+                        "str_raw_ptr_from_i64",
+                    )
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))
+            } else {
+                // Give a clearer error than the inkwell panic.
+                Err(CodegenError::InternalError(format!(
+                    "extract_str_raw_ptr: struct field 0 is neither pointer nor int: {:?}",
+                    field0
+                )))
+            }
         } else {
             // Fallback: inttoptr
             let i8_ptr_type = self
