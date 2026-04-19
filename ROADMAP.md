@@ -71,7 +71,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-19)
 
-mode: auto (세션 재개 2026-04-20 — Task #1 Phase 6.27c.5 Trait &dyn T vtable codegen부터. 이전 세션 iteration cap 59/60로 stopped 후 /clear로 context 초기화 완료.)
+mode: stopped (2026-04-20 세션 종료 — #1/#2 완료. 남은 #3~#9 chain은 vaisdb 261/261 선행이지만 5 compiler gap 미해결로 진행 불가. 다음 세션 권장 작업: Phase 6.27d 신설 — (a) recursive self-method match-arm을 statement-like widening에서 제외 (checker_expr/control_flow.rs `arm_bodies_are_statement_like` 개선), (b) pool.write_page 2→1 arg migration helper 추가 (stdlib에 `write_page_bytes(frame, data)` 또는 vaisdb 파일 일괄 재작성), (c) Box<dyn> peel 이후 `&?N` unresolved ref fix. 이 중 (a)가 가장 저위험/고수익.)
 iteration: 2
 max_iterations: 30
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
