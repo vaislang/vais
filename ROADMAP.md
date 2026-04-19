@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 47
+iteration: 48
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
@@ -115,6 +115,7 @@ max_iterations: 60
   iteration 45 (2026-04-20): 0 net pass. fulltext/mod.vais: write_lock 0→1 arg 맞춤 + execute_search 8→7 arg + PhraseSearcher.new(0)→() + search_phrase 4→7 arg + PostingListCompactor.new 5→4 + compact_all 2→4 + concurrency_stats stub — TC pass까지 도달. fulltext/concurrency.vais: `std.thread.yield_now()` 스텁 제거 + Ordering 인자들 제거 → `queue.push(txn_id)` (MutexGuard<Vec<u64>>에서 push) 미해결 (MutexGuard Deref 미구현). 전체 revert. rag/context/window.vais는 `win_count` hoist도 `j < win_count`가 `()` erasure — nested scope TC 버그 확정.
   iteration 46 (2026-04-20) **229 도달**: fulltext/search/boolean.vais — char 리터럴 비교를 바이트(u8)로 치환 (`as char` → `as u8`, `' '` → `32u8`, `'\t'` → `9u8` 등, 6 리터럴). + `substring` helper가 `from_utf8(&bytes).unwrap_or("")` 하던 것을 `s.substring(start, end)` stdlib method로 간소화 (str.substring은 str 반환). TC + codegen pass. vaisdb 228→229/261 (+1). floor 229 상향.
   iteration 47 (2026-04-20): 0 net pass. deadlock.vais `self.edges.get_opt(&waiter)` → contains_key + 로컬 copy + re-insert 패턴으로 재작성 시도했으나 `I self.edges.contains_key(&waiter) != 0 { ... }`가 `expected Vec<u64>, found i64`로 막힘 — HashMap 사용 블록 전체가 이미 Vec<u64> 반환 함수 기반에서 TC 오염. 구조적 함수 스코프 TC 이슈. revert. 다른 char 리터럴 사용 실패 파일 없음 (deletion_bitmap 스캔). rag/mod, fulltext/mod 모두 MutexGuard/arity 깊은 블로커. 수익 없음.
+  iteration 48 (2026-04-20): HnswConfig에 dim/metric/quantization_strategy 필드 추가 + HnswMeta에 dim 필드 추가 (+ 생성자 3곳 + serialize는 불변 유지, deserialize 재구조). vector/mod.vais를 테스트해보니 `pin_layer` 등 추가 API drift로 full unblock 실패. vector/mod.vais 변경은 revert했지만 types.vais schema 추가는 유지 (미래 iteration 기반). 228→229 유지 (+0 net). std 82/82, phase158 18/18 유지.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.
