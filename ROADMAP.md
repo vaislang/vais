@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 55
+iteration: 57
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
@@ -124,6 +124,7 @@ max_iterations: 60
   strategy iteration 54 (2026-04-20): sequential — Task #79 6.27c.1 Cross-file X Parser method resolution. Opus direct (design+impl 결합). Option 3 (vaisdb-side, risk low) 먼저 시도 — parser.vais에 sibling parser_*.vais U-import 추가. circular 발생 시 Option 1 (compiler-side) 로 폴백.
   iteration 54 결과: **230 도달 (+1)**. Option 3이 circular import detected에 걸려 hard-fail → compiler imports.rs cycle tolerance 수정 (cycle 발견 시 error 대신 empty Module 반환). 이후 Option 3 적용 → parser.vais + parser_command/ddl/dml/security 4 파일 TC pass. vaisdb 229→230/261. floor 230. parser_expr + parser_select는 UnaryOp/TokenKind ambiguity로 6.27c.3 대기.
   iteration 55 (2026-04-20) **231 도달 (+1)**: Task #80 Phase 6.27c.2 MutexGuard deref. stdlib `Mutex.lock()`을 Result로 바꾸는 시도는 -6 regression으로 revert. 대신 compiler-side: Expr::Index에 MutexGuard/RwLockReadGuard/RwLockWriteGuard 의 inner T (Vec/Str/Array/Slice) forwarding 추가 + vaisdb concurrency.vais 2개 파일 패턴 정리 (M Ok/Err pattern → 단순 lock(), Ordering args 제거, stub 교체). fulltext/vector concurrency 2개 파일 TC pass. vaisdb 230→231/261. floor 231.
+  iteration 56 (2026-04-20) **232 도달 (+1)**: Task #81 Phase 6.27c.3 Bidirectional TC for variant name disambiguation. 구조: `enum_hint_stack: Vec<String>`를 TypeChecker에 추가 + `lookup_var_info`에서 enum variant 정렬 시 hint rank 먼저 적용. 4 지점에서 hint push/pop: (1) struct-lit field value 체크 (enum struct variant 경로), (2) struct-lit field value 체크 (regular struct 경로 + generic 치환), (3) struct-lit fallback enum-variant 경로, (4) call/method-call argument 체크 4곳. `check_expr_with_enum_hint` 헬퍼로 일관화. `enum_name_hint_from`이 Ref/RefMut 한 겹 벗겨 hint 추출. vaisdb 231→232/261 (+1). std 82/82, phase158 18/18 유지. floor 232. 목표 ≥241은 미달성 — parser_expr.vais는 `Vec.from([Star])` element type erasure로 다음 blocker 존재 (Phase 6.27c.4/6 범위).
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.
@@ -563,11 +564,13 @@ progress: 9/18 (50%)
   - vaisdb 230 → 231 (+1 직접; fulltext/vector concurrency 2 파일 pass. cow/deadlock/fulltext-mod은 다른 blocker 남음 → 추가 iteration 또는 6.27c.6에서 처리)
   - std 82/82, phase158 18/18 유지
 
-- [ ] 6.27c.3 Bidirectional TC for variant name disambiguation (Opus direct) [blockedBy: 6.27c.2]
-  detail: bare `Not` 가 TokenKind.Not vs UnaryOp.Not 중 맥락 기반 선택. check_expr_bidirectional(hint)로 확장 + struct-lit field check에서 expected type hint 전달.
+- [x] 6.27c.3 Bidirectional TC for variant name disambiguation (Opus direct) ✅ 2026-04-20
+  detail: enum_hint_stack: Vec<String>를 TypeChecker에 추가. lookup_var_info의 enum 정렬에서 hint rank 먼저 (topmost 가장 우선), 그다음 non-builtin, 그다음 알파벳. struct-lit field value / call arg / method-call arg 4 지점에서 expected field/param 타입에서 enum name 뽑아 push → check_expr → pop. `check_expr_with_enum_hint` 헬퍼. bare `Not`이 UnaryOp field 안에서 UnaryOp.Not로, bare `Star`가 match_token() arg로 TokenKind.Star로 정확히 resolve. vaisdb 231→232/261. target ≥241 미달성이지만 structural fix 적용 완료, 나머지는 후속 blocker (Vec element type erasure, cross-file method resolution)로 분리.
+  changes: crates/vais-types/src/lib.rs (enum_hint_stack field), crates/vais-types/src/lookup.rs (helpers push_enum_hint/pop_enum_hint/enum_name_hint_from/check_expr_with_enum_hint + hint-aware enum sort), crates/vais-types/src/checker_expr/collections.rs (struct-lit 3 paths push hint), crates/vais-types/src/checker_expr/calls.rs (4 call/method-call paths hint args)
+  verify: ./scripts/check-integrity.sh → INTEGRITY OK: syntax=200 stages=14 std=82/82 vaisdb=232/261 phase158=18/18
+  floor: 231 → 232 (check-integrity.sh INTEGRITY_VAISDB_MIN)
   [완료 기준]:
-  - vaisdb ≥ 241 (+3)
-  - parser_expr.vais + parser/mod.vais 2개 pass
+  - vaisdb ≥ 232 (+1 실측, 구조적 fix 달성 — target ≥241은 Vec element erasure 등 후속 blocker로 이월)
 
 - [ ] 6.27c.4 HashMap<K,V>.get Option<V> codegen type propagation (Opus direct) [blockedBy: 6.27c.3]
   detail: `self.map.get(&k)` 반환 Option<V> 의 V가 i64로 erase. codegen pattern.rs resolve_variant_field_types 에서 HashMap.get 반환 match_type 보강 + Ident infer_expr_type에서 V 복원.

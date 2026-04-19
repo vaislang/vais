@@ -275,7 +275,8 @@ impl TypeChecker {
                 }
 
                 for (param_type, arg) in params.iter().zip(args) {
-                    let arg_type = self.check_expr(arg)?;
+                    // Phase 6.27c.3: hint enum for bare-variant args.
+                    let arg_type = self.check_expr_with_enum_hint(arg, param_type)?;
                     self.unify(param_type, &arg_type)
                         .map_err(|e| e.with_span(arg.span))?;
                 }
@@ -441,13 +442,14 @@ impl TypeChecker {
                 }
 
                 // Check arguments with substituted parameter types
+                // (Phase 6.27c.3: push enum hint for bare-variant args)
                 for (param_type, arg) in param_types.iter().zip(args) {
-                    let arg_type = self.check_expr(arg)?;
                     let expected_type = if generic_substitutions.is_empty() {
                         param_type.clone()
                     } else {
                         self.substitute_generics(param_type, &generic_substitutions)
                     };
+                    let arg_type = self.check_expr_with_enum_hint(arg, &expected_type)?;
                     self.unify(&expected_type, &arg_type)
                         .map_err(|e| e.with_span(arg.span))?;
                 }
@@ -521,7 +523,7 @@ impl TypeChecker {
             }
 
             for (param_type, arg) in param_types.iter().zip(args) {
-                let arg_type = self.check_expr(arg)?;
+                let arg_type = self.check_expr_with_enum_hint(arg, param_type)?;
                 self.unify(param_type, &arg_type)
                     .map_err(|e| e.with_span(arg.span))?;
             }
@@ -1598,9 +1600,9 @@ impl TypeChecker {
 
                     // Substitute generics in parameter types and check arguments
                     for (param_type, arg) in param_types.iter().zip(args) {
-                        let arg_type = self.check_expr(arg)?;
                         let expected_type =
                             self.substitute_generics(param_type, &generic_substitutions);
+                        let arg_type = self.check_expr_with_enum_hint(arg, &expected_type)?;
                         self.unify(&expected_type, &arg_type)
                             .map_err(|e| e.with_span(arg.span))?;
                     }
@@ -1676,9 +1678,9 @@ impl TypeChecker {
                         .collect();
 
                     for (param_type, arg) in param_types.iter().zip(args) {
-                        let arg_type = self.check_expr(arg)?;
                         let expected_type =
                             self.substitute_generics(param_type, &generic_substitutions);
+                        let arg_type = self.check_expr_with_enum_hint(arg, &expected_type)?;
                         self.unify(&expected_type, &arg_type)
                             .map_err(|e| e.with_span(arg.span))?;
                     }

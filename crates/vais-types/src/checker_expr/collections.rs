@@ -777,16 +777,28 @@ impl TypeChecker {
                             if let crate::types::VariantFieldTypes::Struct(expected_fields) =
                                 variant_fields
                             {
-                                // Check each provided field
+                                // Check each provided field (Phase 6.27c.3:
+                                // push enum hint for the field type so bare
+                                // variants resolve to the right enum).
                                 for (field_name, value) in fields {
-                                    let value_type = match self.check_expr(value) {
+                                    let expected_ty_opt = expected_fields
+                                        .get(&field_name.node)
+                                        .cloned();
+                                    let hint =
+                                        expected_ty_opt.as_ref().and_then(Self::enum_name_hint_from);
+                                    if let Some(ref h) = hint {
+                                        self.push_enum_hint(h.clone());
+                                    }
+                                    let value_type_res = self.check_expr(value);
+                                    if hint.is_some() {
+                                        self.pop_enum_hint();
+                                    }
+                                    let value_type = match value_type_res {
                                         Ok(t) => t,
                                         Err(e) => return Some(Err(e)),
                                     };
-                                    if let Some(expected_type) =
-                                        expected_fields.get(&field_name.node)
-                                    {
-                                        if let Err(e) = self.unify(expected_type, &value_type) {
+                                    if let Some(expected_type) = expected_ty_opt {
+                                        if let Err(e) = self.unify(&expected_type, &value_type) {
                                             return Some(Err(e));
                                         }
                                     }
@@ -816,20 +828,32 @@ impl TypeChecker {
 
                     // Check each field and unify with expected type
                     for (field_name, value) in fields {
-                        let value_type = match self.check_expr(value) {
+                        // Phase 6.27c.3: if we can see the expected field
+                        // type, push its enum name so bare-variant idents
+                        // inside the value resolve to that enum first.
+                        let pre_subst = struct_def.fields.get(&field_name.node).cloned();
+                        let expected_ty_subst = pre_subst.as_ref().map(|et| {
+                            self.substitute_generics(et, &generic_substitutions)
+                        });
+                        let hint = expected_ty_subst
+                            .as_ref()
+                            .and_then(Self::enum_name_hint_from);
+                        if let Some(ref h) = hint {
+                            self.push_enum_hint(h.clone());
+                        }
+                        let value_type_res = self.check_expr(value);
+                        if hint.is_some() {
+                            self.pop_enum_hint();
+                        }
+                        let value_type = match value_type_res {
                             Ok(t) => t,
                             Err(e) => return Some(Err(e)),
                         };
-                        if let Some(expected_type) =
-                            struct_def.fields.get(&field_name.node).cloned()
-                        {
-                            // Substitute generic parameters with type variables
-                            let expected_type =
-                                self.substitute_generics(&expected_type, &generic_substitutions);
+                        if let Some(expected_type) = expected_ty_subst {
                             if let Err(e) = self.unify(&expected_type, &value_type) {
                                 return Some(Err(e));
                             }
-                        } else {
+                        } else if pre_subst.is_none() {
                             let suggestion = types::find_similar_name(
                                 &field_name.node,
                                 struct_def.fields.keys().map(|s| s.as_str()),
@@ -978,13 +1002,27 @@ impl TypeChecker {
                         enum_snapshots.into_iter().next()
                     {
                         // Type-check each provided field against expected
+                        // (Phase 6.27c.3: propagate enum hint like above).
                         for (field_name, value) in fields {
-                            let value_type = match self.check_expr(value) {
+                            let expected_ty_opt = expected_fields
+                                .get(&field_name.node)
+                                .cloned();
+                            let hint = expected_ty_opt
+                                .as_ref()
+                                .and_then(Self::enum_name_hint_from);
+                            if let Some(ref h) = hint {
+                                self.push_enum_hint(h.clone());
+                            }
+                            let value_type_res = self.check_expr(value);
+                            if hint.is_some() {
+                                self.pop_enum_hint();
+                            }
+                            let value_type = match value_type_res {
                                 Ok(t) => t,
                                 Err(e) => return Some(Err(e)),
                             };
-                            if let Some(expected_type) = expected_fields.get(&field_name.node) {
-                                if let Err(e) = self.unify(expected_type, &value_type) {
+                            if let Some(expected_type) = expected_ty_opt {
+                                if let Err(e) = self.unify(&expected_type, &value_type) {
                                     return Some(Err(e));
                                 }
                             }

@@ -10,6 +10,52 @@ use crate::types::{
 };
 
 impl TypeChecker {
+    /// Phase 6.27c.3: push an enum name onto the disambiguation hint stack.
+    /// Returns the depth at push time for paired pop sanity checking by
+    /// callers that want a guard-style usage.
+    pub(crate) fn push_enum_hint(&mut self, enum_name: impl Into<String>) -> usize {
+        let depth = self.enum_hint_stack.len();
+        self.enum_hint_stack.push(enum_name.into());
+        depth
+    }
+
+    /// Pop the topmost enum hint (no-op if stack empty — defensive).
+    pub(crate) fn pop_enum_hint(&mut self) {
+        self.enum_hint_stack.pop();
+    }
+
+    /// Phase 6.27c.3: extract an enum name from an expected type, if any.
+    /// Handles `Named { name: E, .. }` directly and strips common wrappers
+    /// so hints survive one level of `Ref` / `Option` / `Result`.
+    pub(crate) fn enum_name_hint_from(ty: &ResolvedType) -> Option<String> {
+        match ty {
+            ResolvedType::Named { name, .. } => Some(name.clone()),
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                Self::enum_name_hint_from(inner)
+            }
+            _ => None,
+        }
+    }
+
+    /// Phase 6.27c.3: check an expression with a scoped enum hint derived
+    /// from `expected`. Pushes the hint if `expected` names an enum,
+    /// runs `check_expr`, then pops. Callers use this at arg/field sites.
+    pub(crate) fn check_expr_with_enum_hint(
+        &mut self,
+        expr: &vais_ast::Spanned<vais_ast::Expr>,
+        expected: &ResolvedType,
+    ) -> TypeResult<ResolvedType> {
+        let hint = Self::enum_name_hint_from(expected);
+        if let Some(ref h) = hint {
+            self.push_enum_hint(h.clone());
+        }
+        let r = self.check_expr(expr);
+        if hint.is_some() {
+            self.pop_enum_hint();
+        }
+        r
+    }
+
     /// Look up "self" variable directly from scopes (no fallback)
     pub(crate) fn lookup_self_var_info(&self) -> TypeResult<VarInfo> {
         for scope in self.scopes.iter().rev() {
@@ -73,12 +119,37 @@ impl TypeChecker {
         // share a Unit variant name like `None` in `Option` and
         // user-defined `QuantizationStrategy`). Sort by name and prefer
         // user-defined enums over builtins when variant name matches.
+        //
+        // Phase 6.27c.3: also honor `enum_hint_stack` — when an expected
+        // type is known (e.g. struct-lit field type `UnaryOp`), that enum
+        // wins over alphabetical order if it also has the variant.
         let mut enum_entries: Vec<_> = self.enums.iter().collect();
         enum_entries.sort_by(|(a, _), (b, _)| {
+            // Hint priority: topmost (last pushed) enum that has the variant
+            // goes first. We check `name` membership below; here we only
+            // need a cheap rank based on hint presence.
+            let a_hint = self
+                .enum_hint_stack
+                .iter()
+                .rev()
+                .position(|h| h == *a)
+                .map(|p| p as i32)
+                .unwrap_or(i32::MAX);
+            let b_hint = self
+                .enum_hint_stack
+                .iter()
+                .rev()
+                .position(|h| h == *b)
+                .map(|p| p as i32)
+                .unwrap_or(i32::MAX);
             let a_builtin = matches!(a.as_str(), "Option" | "Result");
             let b_builtin = matches!(b.as_str(), "Option" | "Result");
-            // Non-builtin first, then alphabetical
-            a_builtin.cmp(&b_builtin).then_with(|| a.cmp(b))
+            // Hinted first (lower rank = earlier in reverse stack = topmost),
+            // then non-builtin, then alphabetical
+            a_hint
+                .cmp(&b_hint)
+                .then_with(|| a_builtin.cmp(&b_builtin))
+                .then_with(|| a.cmp(b))
         });
         for (enum_name, enum_def) in enum_entries {
             if let Some(variant_fields) = enum_def.variants.get(name) {

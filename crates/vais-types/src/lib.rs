@@ -198,6 +198,14 @@ pub struct TypeChecker {
     /// concrete types (e.g., `Vec.with_capacity(n)` inside `fn -> Vec<i64>`).
     /// Entries: (struct_name, method_name, type_args-possibly-with-vars).
     pub(crate) pending_method_instantiations: Vec<(String, String, Vec<ResolvedType>)>,
+
+    /// Phase 6.27c.3: enum name hint stack for bare-variant disambiguation.
+    /// When an Ident matches a variant in multiple enums (e.g. `Not` lives in
+    /// both `TokenKind` and `UnaryOp`), the topmost hint whose enum contains
+    /// the variant wins over alphabetical sort. Pushed by callers that know
+    /// the expected type (e.g. struct-lit field checks, fn arg checks) and
+    /// popped before the next unrelated expression is checked.
+    pub(crate) enum_hint_stack: Vec<String>,
 }
 
 impl TypeChecker {
@@ -240,6 +248,7 @@ impl TypeChecker {
             moved_vars: HashSet::new(),
             expr_types: HashMap::new(),
             pending_method_instantiations: Vec::new(),
+            enum_hint_stack: Vec::new(),
         };
         checker.register_builtins();
         checker
