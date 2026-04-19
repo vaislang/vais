@@ -309,11 +309,18 @@ progress: 9/18 (50%)
     - docs/language/LIVING_SPEC/03_generics/generic_higher_order.vais — (T) -> U 사용 신규 17줄
     - docs/language/COOKBOOK.md 항목 21 — "(T) -> U 지원됨" 업데이트
   verify: `F apply<T>(val: T, f: (T) -> i64) -> i64 { f(val) }` 통과. integrity gate green.
-- [ ] 1.16 i65/i500 같은 bad primitive 엄격 거부 (impl-sonnet) [blockedBy: 1.15]
+- [x] 1.16 bad primitive (i65/u500/f128) 엄격 거부 (Opus direct) ✅ 2026-04-19
   detail: 현재 `i65`는 generic ident로 취급되어 TC까지 흘러감. Parser에서 primitive 패턴 (`i8`/`i16`/`i32`/`i64`/`i128`/`u*`/`f32`/`f64`)만 허용하고 나머지 `iN` 식별자는 명확한 에러.
   [완료 기준]:
   - compiler_syntax syntax_neg_type_bad_primitive 테스트 ignored 해제 + passing
-- [ ] 1.17 Vec<>/empty generic 엄격 거부 (impl-sonnet) [blockedBy: 1.16]
+- [x] 1.17 Vec<>/empty generic 엄격 거부 (Opus direct) ✅ 2026-04-19
+  detail (1.16+1.17): parser의 Type::Named 파싱에 2개 check 추가.
+    - `is_primitive_lookalike_but_invalid(name)`: `i65`/`u500`/`f128` 같은 primitive-lookalike 거부.
+    - `Vec<` 뒤 바로 `>` 오면 empty generic 에러.
+  changes:
+    - crates/vais-parser/src/types.rs — 16줄 helper fn + 2 parser branches
+    - compiler_syntax syntax_neg_type_bad_primitive / syntax_neg_type_vec_empty_generic ignore 해제
+  verify: `i65`, `Vec<>` 둘 다 명확한 에러. integrity gate green.
   detail: `Vec<>` 같은 empty generic 리스트는 parser에서 에러.
   [완료 기준]:
   - compiler_syntax syntax_neg_type_vec_empty_generic 테스트 ignored 해제 + passing

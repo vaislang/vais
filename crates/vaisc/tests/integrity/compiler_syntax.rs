@@ -1109,16 +1109,16 @@ fn syntax_type_dyn_trait() {
 }
 
 #[test]
-#[ignore = "Phase 1.7: Vec<> empty generic currently accepted by parser; stricter gate pending"]
 fn syntax_neg_type_vec_empty_generic() {
+    // Phase 1.17: Vec<> empty generic list is now rejected at parse.
     let src = "F takes_vec(v: Vec<>) -> i64 { 0 }\nF main() -> i64 { 0 }";
     let (_d, p) = write_tmp("neg_vec_empty.vais", src);
     assert!(!ok_parse(&p), "should not parse: Vec<> with empty type arg");
 }
 
 #[test]
-#[ignore = "Phase 1.7: i65 accepted as generic ident, not flagged as bad primitive"]
 fn syntax_neg_type_bad_primitive() {
+    // Phase 1.16: i65 (primitive-lookalike but invalid) rejected at parse.
     let src = "F takes_bad(x: i65) -> i64 { 0 }\nF main() -> i64 { 0 }";
     let (_d, p) = write_tmp("neg_bad_prim.vais", src);
     assert!(!ok_parse(&p), "should not parse: i65 bad primitive");
