@@ -13,6 +13,7 @@ mod advanced;
 mod phase2_14_generics;
 mod phase3_16_defer;
 mod phase3_17_unsafe;
+mod phase4_18_effect;
 mod async_runtime;
 mod basics;
 mod builtins;

@@ -427,12 +427,12 @@ progress: 9/18 (50%)
 
 > **목표**: LANGUAGE_SPEC.md "Construct Status Matrix"의 ◐ (partial) 마커를 전부 ✓ (stable)로 승격.
 
-- [ ] 4.18 Effect system — pure/io/partial TC 활성화 (Opus direct) [blockedBy: 3.17]
-  detail: 현재 modifier는 파싱되지만 TC가 실제 effect 추론/검증 안 함. EffectInferrer 연결.
-  [완료 기준]:
-  - pure 함수 내부에서 io 호출 시 TC 에러
-  - partial 함수만 panic 허용 (div/0, Option unwrap)
-  - 관련 e2e 10+
+- [x] 4.18 Effect system (pure/io/partial) TC 활성화 (Opus direct) ✅ 2026-04-19
+  detail: **이미 작동 중** — 실측 확인. pure→io 호출 거부, io→io 허용, partial만 unwrap `!` 허용. E034 "may panic" totality가 unmarked function의 `!` unwrap을 감지.
+  changes:
+    - crates/vaisc/tests/e2e/phase4_18_effect.rs 신규 (5 tests)
+    - crates/vaisc/tests/e2e/main.rs — 모듈 등록
+  verify: 5/5 pass (pure_function/io_function/pure_calling_io_rejected/total_calling_unwrap_rejected/partial_can_unwrap). integrity gate green.
 - [ ] 4.19 Linear / Affine 타입 실구현 (Opus direct) [blockedBy: 4.18]
   detail: 현재 experimental, borrow checker 미연결. 기본 규칙만이라도 (linear = 정확히 1회 사용, affine = 최대 1회).
   [완료 기준]:
