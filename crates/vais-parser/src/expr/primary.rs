@@ -485,6 +485,25 @@ impl Parser {
                     Span::new(start, end),
                 ));
             }
+            Token::Unsafe => {
+                // Phase 3.17: unsafe block expression: unsafe { expr }.
+                // Current semantics: pass-through — the body is evaluated
+                // exactly like a regular block. The unsafe marker is
+                // consumed for future borrow-checker / effect-system
+                // integration but does not change codegen today.
+                // (This matches the item-level `unsafe F` in Phase 1.18.)
+                self.expect_skip(&Token::LBrace)?;
+                let body = self.parse_expr()?;
+                self.expect_skip(&Token::RBrace)?;
+                // Wrap in a Block to keep the block-expression shape.
+                let end = self.prev_span().end;
+                return Ok(Spanned::new(
+                    Expr::Block(vec![
+                        Spanned::new(vais_ast::Stmt::Expr(Box::new(body)), Span::new(start, end)),
+                    ]),
+                    Span::new(start, end),
+                ));
+            }
             _ => {
                 return Err(ParseError::UnexpectedToken {
                     found: tok.token,

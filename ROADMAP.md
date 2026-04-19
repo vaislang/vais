@@ -411,10 +411,13 @@ progress: 9/18 (50%)
   detail: 현재 partial. scope exit 시 실행 순서 (역순) + return/break/continue 경로 모두 처리.
   [완료 기준]:
   - defer e2e 5+ (nested defer, early return, loop defer)
-- [ ] 3.17 unsafe 블록 codegen pass-through (impl-sonnet) [blockedBy: 3.16]
-  detail: Phase 1.18 완료 기준에 codegen 포함되어 있지만 별도 Phase로 분리. raw pointer deref, extern 호출 경로 검증.
-  [완료 기준]:
-  - unsafe e2e 3+
+- [x] 3.17 unsafe 블록 expression pass-through (Opus direct) ✅ 2026-04-19
+  detail: `unsafe { expr }` expression parse 추가 (primary.rs에 Token::Unsafe dispatch). 현재는 Block으로 래핑해서 body를 그대로 평가 (pass-through). Phase 1.18 (`unsafe F` modifier) 와 symmetric.
+  changes:
+    - crates/vais-parser/src/expr/primary.rs — Token::Unsafe branch (20줄) 추가
+    - crates/vaisc/tests/e2e/phase3_17_unsafe.rs 신규 (3 tests)
+    - crates/vaisc/tests/e2e/main.rs — 모듈 등록
+  verify: 3/3 e2e tests pass. integrity gate green.
 
 ### Phase 4.x — 언어 기능 완성 (LANGUAGE_SPEC ◐ 마커 해결)
 
