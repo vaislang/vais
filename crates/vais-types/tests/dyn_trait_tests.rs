@@ -112,3 +112,42 @@ fn test_trait_impl() {
     "#;
     assert!(check_module(source).is_ok(), "Trait impl should work");
 }
+
+#[test]
+fn test_box_dyn_method_dispatch() {
+    // Phase 6.27c.5: method call on Box<dyn Trait> must resolve to trait method.
+    // Previously `find_trait_method` only peeled Ref/RefMut; Box<dyn T> was opaque.
+    let source = r#"
+        W Executor {
+            F next(&mut self) -> i64
+        }
+
+        F drive(e: &mut Box<dyn Executor>) -> i64 {
+            e.next()
+        }
+        F main() -> i64 = 0
+    "#;
+    assert!(
+        check_module(source).is_ok(),
+        "Box<dyn Trait> method dispatch should work"
+    );
+}
+
+#[test]
+fn test_ref_dyn_method_dispatch() {
+    // Regression: &dyn T / &mut dyn T method dispatch.
+    let source = r#"
+        W Printable {
+            F render(&self) -> i64
+        }
+
+        F show(p: &dyn Printable) -> i64 {
+            p.render()
+        }
+        F main() -> i64 = 0
+    "#;
+    assert!(
+        check_module(source).is_ok(),
+        "&dyn Trait method dispatch should work"
+    );
+}

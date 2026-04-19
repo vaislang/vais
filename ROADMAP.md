@@ -71,9 +71,9 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-19)
 
-mode: stopped (iteration cap 59/60 — Task #83 Trait &dyn T vtable codegen needs dedicated session. 재개 방법: /clear 후 `/harness` 호출 → harness-init이 #83부터 복구. 새 세션에서 mode: auto로 전환.)
-iteration: 59
-max_iterations: 60
+mode: auto (세션 재개 2026-04-20 — Task #1 Phase 6.27c.5 Trait &dyn T vtable codegen부터. 이전 세션 iteration cap 59/60로 stopped 후 /clear로 context 초기화 완료.)
+iteration: 0
+max_iterations: 30
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
   iteration 5 결과: 🎉 **std 77 → 82/82 (100%) 달성**. 주요 compiler 수정 5건 (Inkwell codegen 4건 + 1 TC) + std 파일 수정 8건. vaisdb 180/181 안정. Phase 5.24/5.25 CLOSED. 다음 iteration → 6.27 (vaisdb 181 → 261).
@@ -125,6 +125,8 @@ max_iterations: 60
   iteration 54 결과: **230 도달 (+1)**. Option 3이 circular import detected에 걸려 hard-fail → compiler imports.rs cycle tolerance 수정 (cycle 발견 시 error 대신 empty Module 반환). 이후 Option 3 적용 → parser.vais + parser_command/ddl/dml/security 4 파일 TC pass. vaisdb 229→230/261. floor 230. parser_expr + parser_select는 UnaryOp/TokenKind ambiguity로 6.27c.3 대기.
   iteration 55 (2026-04-20) **231 도달 (+1)**: Task #80 Phase 6.27c.2 MutexGuard deref. stdlib `Mutex.lock()`을 Result로 바꾸는 시도는 -6 regression으로 revert. 대신 compiler-side: Expr::Index에 MutexGuard/RwLockReadGuard/RwLockWriteGuard 의 inner T (Vec/Str/Array/Slice) forwarding 추가 + vaisdb concurrency.vais 2개 파일 패턴 정리 (M Ok/Err pattern → 단순 lock(), Ordering args 제거, stub 교체). fulltext/vector concurrency 2개 파일 TC pass. vaisdb 230→231/261. floor 231.
   strategy iteration 58 (2026-04-20): sequential — #82 Phase 6.27c.4 HashMap<K,V>.get Option<V> codegen type propagation. Opus direct (TC/codegen boundary 설계, impl). Target: identify 가장 가벼운 TC-level fix path — self.map.get(&k) 반환 Option<V>의 V가 i64로 erase되는 지점 추적 후 최소 변경으로 restore.
+  strategy iteration 60 (2026-04-20): sequential — #1 Phase 6.27c.5 SCOPED to fat pointer layout only (user approved). Opus direct research+impl. 500-1000줄 full vtable은 위험, 이번은 &dyn T LLVM fat pointer (data_ptr, vtable_ptr) layout + TC trait-object 인식까지.
+
   iteration 58 결과: **234 도달 (+2)**. Root cause가 원래 가설(HashMap.get Option<V> erasure)과 달랐음 — 실제는 match arm unification. 예: `M m.get_opt(k) { Some(v) => self.edges.set(k, v), None => self.node_list.push(k) }` 에서 Some arm은 V=Vec<u64> 반환, None arm은 i64 반환. Rust와 달리 statement-style match에서 match 결과값을 쓰지 않아도 arm 타입 통합을 강제. 수정: checker_expr/control_flow.rs Expr::Match unify 실패 시, 모든 arm body가 "statement-like" (call/method-call/block trailing call/Unit/Return/Break/Continue)이면 result_type=Unit으로 widen. `arm_bodies_are_statement_like` + `expr_is_statement_like` helpers. security/policy.vais, rag/chunking/graph.vais 등 통과. vaisdb 232→234/261 (+2). std 82/82, phase158 18/18 유지. floor 234.
   iteration 56 (2026-04-20) **232 도달 (+1)**: Task #81 Phase 6.27c.3 Bidirectional TC for variant name disambiguation. 구조: `enum_hint_stack: Vec<String>`를 TypeChecker에 추가 + `lookup_var_info`에서 enum variant 정렬 시 hint rank 먼저 적용. 4 지점에서 hint push/pop: (1) struct-lit field value 체크 (enum struct variant 경로), (2) struct-lit field value 체크 (regular struct 경로 + generic 치환), (3) struct-lit fallback enum-variant 경로, (4) call/method-call argument 체크 4곳. `check_expr_with_enum_hint` 헬퍼로 일관화. `enum_name_hint_from`이 Ref/RefMut 한 겹 벗겨 hint 추출. vaisdb 231→232/261 (+1). std 82/82, phase158 18/18 유지. floor 232. 목표 ≥241은 미달성 — parser_expr.vais는 `Vec.from([Star])` element type erasure로 다음 blocker 존재 (Phase 6.27c.4/6 범위).
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
@@ -582,11 +584,14 @@ progress: 9/18 (50%)
   [완료 기준]:
   - vaisdb ≥ 234 (+2 실측, 구조적 fix 적용 — target ≥246은 sql/executor의 dyn dispatch blocker로 인한 후속 iteration 과제)
 
-- [ ] 6.27c.5 Trait &dyn T dispatch (vtable codegen) (Opus direct) [blockedBy: 6.27c.4]
-  detail: 가장 큰 feature. fat pointer layout + vtable 생성 + method index lookup. sql/executor (subquery/window/sort_agg/join/dml) + vector/hnsw (bulk/delete/insert/wal) unblock.
-  [완료 기준]:
-  - vaisdb ≥ 252 (+6)
-  - 6 파일 중 최소 3개 pass
+- [~] 6.27c.5 Trait &dyn T dispatch (vtable codegen) 🚧 SCOPED 2026-04-20 (Opus direct) [blockedBy: 6.27c.4]
+  detail: Full vtable codegen (500-1000줄)은 한 세션에 위험. SCOPED to fat-pointer-layout + method-dispatch-through-Box. lookup.rs의 find_trait_method이 `Ref(DynTrait)` / `RefMut(DynTrait)`만 peel했는데, vaisdb는 `Box<dyn Executor>` / `&mut Box<dyn T>`를 많이 씀 → peel_to_dyn 재귀 헬퍼 추가 (Ref/RefMut/Box<1-generic> 재귀). sort_agg.vais의 `self.input.next()` (input: Box<dyn Executor>)가 E004에서 벗어나 다음 blocker (`&?1391` unresolved struct ref)로 이동. LLVM fat pointer layout은 이미 inkwell/types.rs:327 + helpers.rs:292 (16 bytes)에 있어서 추가 작업 불필요. full vtable dispatch (vtable 생성 + method index lookup)은 후속 sub-task.
+  changes: crates/vais-types/src/lookup.rs (find_trait_method에 peel_to_dyn 재귀, Ref/RefMut/Box<T> 통과), crates/vais-types/tests/dyn_trait_tests.rs (test_box_dyn_method_dispatch + test_ref_dyn_method_dispatch)
+  verify: cargo test -p vais-types --test dyn_trait_tests → 8 passed. ./scripts/check-integrity.sh → INTEGRITY OK: syntax=200 stages=14 std=82/82 vaisdb=234/261 phase158=18/18 (regression 0, 기존 floor 유지)
+  [완료 기준] (부분):
+  - [x] TC method dispatch: Box<dyn T> peel 구현 완료
+  - [x] baseline regression 0 (std 82/82, vaisdb 234/261, phase158 18/18)
+  - [ ] vaisdb ≥ 252 (+18) — 미달성, dyn method dispatch만으로는 부족. 다른 blocker (`&?N` unresolved refs, cross-file method resolution) 선행 필요. 6.27c.6 residual cleanup으로 이월.
 
 - [ ] 6.27c.6 residual cleanup (impl-sonnet) [blockedBy: 6.27c.5]
   detail: 위 5 task 완료 후 남은 파일들 (구조 변경의 결과로 드러난 신규 blocker 포함).

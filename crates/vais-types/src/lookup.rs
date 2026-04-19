@@ -387,18 +387,20 @@ impl TypeChecker {
         receiver_type: &ResolvedType,
         method_name: &str,
     ) -> Option<TraitMethodSig> {
-        // Handle dyn Trait types - look up method directly in trait definition
-        let dyn_trait = match receiver_type {
-            ResolvedType::DynTrait { trait_name, .. } => Some(trait_name.clone()),
-            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
-                if let ResolvedType::DynTrait { trait_name, .. } = inner.as_ref() {
-                    Some(trait_name.clone())
-                } else {
-                    None
+        // Handle dyn Trait types - look up method directly in trait definition.
+        // Peel Ref/RefMut and Box<...> wrappers before checking DynTrait, so that
+        // `&dyn T`, `&mut dyn T`, `Box<dyn T>`, `&mut Box<dyn T>`, etc. all dispatch.
+        fn peel_to_dyn(t: &ResolvedType) -> Option<String> {
+            match t {
+                ResolvedType::DynTrait { trait_name, .. } => Some(trait_name.clone()),
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => peel_to_dyn(inner),
+                ResolvedType::Named { name, generics } if name == "Box" && generics.len() == 1 => {
+                    peel_to_dyn(&generics[0])
                 }
+                _ => None,
             }
-            _ => None,
-        };
+        }
+        let dyn_trait = peel_to_dyn(receiver_type);
         if let Some(trait_name) = dyn_trait {
             let mut visited = std::collections::HashSet::new();
             return self.find_method_in_trait_with_supers(&trait_name, method_name, &mut visited);
