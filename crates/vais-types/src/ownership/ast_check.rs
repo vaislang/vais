@@ -522,7 +522,26 @@ impl OwnershipChecker {
                 expr: object,
                 index,
             } => {
-                self.check_expr_ownership(object)?;
+                // Indexed access v[i] reads through the container — it should
+                // NOT move the container. Treat the object side like a method
+                // receiver: verify it isn't already moved, but don't mark it
+                // as moved. Previously `v[i].field` moved `v`, blocking any
+                // subsequent use and surfacing as E022 across the vaisdb tree.
+                if let Expr::Ident(name) = &object.node {
+                    if let Some(info) = self.lookup_var(name) {
+                        if let OwnershipState::Moved { moved_at, .. } = &info.state {
+                            let err = TypeError::UseAfterMove {
+                                var_name: name.clone(),
+                                moved_at: *moved_at,
+                                use_at: Some(object.span),
+                            };
+                            return self.report_error(err);
+                        }
+                    }
+                } else {
+                    // Non-ident object (nested expr) — recurse normally.
+                    self.check_expr_ownership(object)?;
+                }
                 self.check_expr_ownership(index)?;
                 Ok(())
             }
