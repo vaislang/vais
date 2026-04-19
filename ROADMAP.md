@@ -534,12 +534,55 @@ progress: 9/18 (50%)
   [완료 기준] (Tier 2 완료, Tier 3 미완):
   - [x] Tier 2: 261×0.78 ≈ 203/261 달성
   - [ ] Tier 3: 261/261 build OK (Phase 6.27b 미래 작업)
-- [ ] 6.27b vaisdb Tier 3 drive — 220 → 261/261 (impl-sonnet + Opus compiler) [blockedBy: 6.27]
-  detail: 현재 220/261 (iteration 26 2026-04-19). 남은 41개 fails 지배 blocker: (a) trait &dyn dispatch — sql/executor/* `Box<dyn Executor>` (subquery/window/sort_agg/alter/dml/join/mod) ~10 파일, (b) HashMap iter binding codegen — storage/recovery/mod·undo·deadlock, rag/chunking/graph ~5 파일, (c) Option<T>.Some(x) ref-binding TC propagation — policy, constraints, btree/insert ~6 파일, (d) structural mismatch (TableInfo.columns 없음, HnswConfig.dim 없음) ~5 파일, (e) char literal 미지원 (boolean.vais), (f) cross-file X Parser method resolution — parser.vais/parser_select/parser_expr ~4 파일, (g) VaisError struct field str vs u32 sites — vector/fulltext concurrency.
+- [~] 6.27b vaisdb Tier 3 drive 중간 완료 — 220 → 229/261 (floor) [blockedBy: 6.27] SCOPED 2026-04-20
+  detail: iteration 22-53 (31 iterations). 기계적 per-file 수정 + 구조적 compiler fix 6건 (Phase 3.15 expr_types upgrade, enum struct-variant, Never-promotion TC+codegen symmetric pair, deterministic enum iteration, enum-name vs variant-name shadow resolution for Field + StructLit). 포화 도달 — 남은 32 fails는 모두 5 종류 구조적 compiler 과제 (MutexGuard Deref / Bidirectional TC / Cross-file X / HashMap V erasure / trait dyn dispatch) 필요. 상세: `docs/phase6_27c_plan.md`.
+  changes: compiler (vais-types checker_expr/special.rs Never-promotion, lookup.rs deterministic enum sort, collections.rs enum-variant Field + StructLit fallbacks; vais-codegen type_inference.rs Unit→non-Unit + Vec<I64>→Vec<Tuple> upgrade, expr_helpers_assign.rs Never-promotion mirror, control_flow/pattern.rs variant resolve hint+deref) + vaisdb (rag/wal, graph/wal, security/role, fulltext/index/deletion_bitmap, fulltext/search/boolean, vector/quantize/mod, sql/executor/alter, sql/catalog/constraints, storage/recovery/{mod,undo}, vector/concurrency, fulltext/concurrency, vector/hnsw/types HnswConfig+HnswMeta schema 확장). 228→229/261 stable.
+  [완료 기준] (부분 완료):
+  - [x] 6.27b의 기계적 수정 가능한 파일은 모두 소진 (229/261)
+  - [x] 남은 구조적 blocker 5 카테고리 식별 완료 → Phase 6.27c로 분리
+
+- [ ] 6.27c Phase 6.27c 구조적 compiler 과제 (Opus direct, 개별 task 독립) [blockedBy: 6.27b]
+  detail: 상세 계획 `docs/phase6_27c_plan.md`. 5 task 독립 실행. 우선순위 C.1 (Cross-file X Parser, 빠른 회수) → C.2 (MutexGuard Deref) → C.3 (Bidirectional TC) → C.4 (HashMap V) → C.5 (trait dyn dispatch, 가장 큰 feature). 각 task는 baseline regression 발생 시 즉시 revert.
   [완료 기준]:
-  - vaisdb 261/261 codegen OK OR
-  - 남은 구조적 blocker가 각각 별도 Phase(7.x)로 분리되고 해당 Phase 링크됨
-- [ ] 6.28 vaisdb API drift 정리 (impl-sonnet) [blockedBy: 6.27]
+  - vaisdb 229/261 → 261/261
+  - std 82/82, phase158 18/18 유지
+
+- [ ] 6.27c.1 Cross-file X Parser method resolution (Opus direct, vaisdb or compiler) [blockedBy: 6.27b]
+  detail: sql/parser/{parser,parser_expr,parser_select,mod}.vais 단독 빌드가 각자 다른 X Parser 메소드를 참조. 권장 Option 3 — parser.vais가 sibling parser_*.vais를 U import (circular 검증).
+  [완료 기준]:
+  - vaisdb ≥ 233 (+4)
+  - std/phase158 유지
+
+- [ ] 6.27c.2 MutexGuard<T> Deref / method forwarding (Opus direct) [blockedBy: 6.27b]
+  detail: `MutexGuard<T>.push` 등 inner T method 호출이 "function not defined" 실패. TC의 MethodCall에서 MutexGuard receiver면 inner T method 우선 탐색 + codegen pointer deref.
+  [완료 기준]:
+  - vaisdb ≥ 238 (+5)
+  - fulltext/vector concurrency, vector/hnsw/cow, storage/txn/deadlock 중 최소 3개 pass
+
+- [ ] 6.27c.3 Bidirectional TC for variant name disambiguation (Opus direct) [blockedBy: 6.27c.2]
+  detail: bare `Not` 가 TokenKind.Not vs UnaryOp.Not 중 맥락 기반 선택. check_expr_bidirectional(hint)로 확장 + struct-lit field check에서 expected type hint 전달.
+  [완료 기준]:
+  - vaisdb ≥ 241 (+3)
+  - parser_expr.vais + parser/mod.vais 2개 pass
+
+- [ ] 6.27c.4 HashMap<K,V>.get Option<V> codegen type propagation (Opus direct) [blockedBy: 6.27c.3]
+  detail: `self.map.get(&k)` 반환 Option<V> 의 V가 i64로 erase. codegen pattern.rs resolve_variant_field_types 에서 HashMap.get 반환 match_type 보강 + Ident infer_expr_type에서 V 복원.
+  [완료 기준]:
+  - vaisdb ≥ 246 (+5)
+  - sql/executor/mod, sql/catalog/manager, security/policy, rag/chunking/graph, storage/txn/deadlock 중 최소 3개 pass
+
+- [ ] 6.27c.5 Trait &dyn T dispatch (vtable codegen) (Opus direct) [blockedBy: 6.27c.4]
+  detail: 가장 큰 feature. fat pointer layout + vtable 생성 + method index lookup. sql/executor (subquery/window/sort_agg/join/dml) + vector/hnsw (bulk/delete/insert/wal) unblock.
+  [완료 기준]:
+  - vaisdb ≥ 252 (+6)
+  - 6 파일 중 최소 3개 pass
+
+- [ ] 6.27c.6 residual cleanup (impl-sonnet) [blockedBy: 6.27c.5]
+  detail: 위 5 task 완료 후 남은 파일들 (구조 변경의 결과로 드러난 신규 blocker 포함).
+  [완료 기준]:
+  - vaisdb 261/261
+
+- [ ] 6.28 vaisdb API drift 정리 (impl-sonnet) [blockedBy: 6.27c.6]
   detail: 외부 API 안정화. breaking change 방지 정책.
   [완료 기준]:
   - vaisdb 공개 API 문서 (`docs/vaisdb/API.md`)
