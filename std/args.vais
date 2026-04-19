@@ -307,11 +307,11 @@ X ArgParser {
         # Print program name and description
         puts_ptr(self.name)
         puts_ptr(self.description)
-        puts_ptr("")
+        puts("")
 
         # Print usage
-        puts_ptr("Usage:")
-        puts_ptr("  ")
+        puts("Usage:")
+        puts("  ")
         puts_ptr(self.name)
 
         # Print options
@@ -323,20 +323,20 @@ X ArgParser {
             long_name := load_i64(spec_ptr + 8)
 
             I kind == ARG_FLAG || kind == ARG_OPTION {
-                puts_ptr(" [--")
+                puts(" [--")
                 puts_ptr(long_name)
                 I kind == ARG_OPTION {
-                    puts_ptr(" <value>");
+                    puts(" <value>");
                     0
                 } EL {
                     0
                 };
-                puts_ptr("]");
+                puts("]");
                 0
             } EL I kind == ARG_POSITIONAL {
-                puts_ptr(" <")
+                puts(" <")
                 puts_ptr(long_name)
-                puts_ptr(">")
+                puts(">")
                 0
             } EL {
                 0
@@ -344,11 +344,11 @@ X ArgParser {
 
             i = i + 1
         }
-        puts_ptr("")
-        puts_ptr("")
+        puts("")
+        puts("")
 
         # Print detailed help
-        puts_ptr("Options:")
+        puts("Options:")
         i = 0
         L {
             I i >= self.spec_count { B }
@@ -360,25 +360,25 @@ X ArgParser {
                 short_name := load_i64(spec_ptr + 16)
                 help_text := load_i64(spec_ptr + 24)
 
-                puts_ptr("  ")
+                puts("  ")
                 I short_name != 0 {
-                    puts_ptr("-")
+                    puts("-")
                     # Print single char
                     buf := malloc(2)
                     store_byte(buf, short_name)
                     store_byte(buf + 1, 0)
                     puts_ptr(buf)
                     free(buf)
-                    puts_ptr(", ");
+                    puts(", ");
                     0
                 } EL {
                     0
                 };
-                puts_ptr("--")
+                puts("--")
                 puts_ptr(long_name)
-                puts_ptr("  ")
+                puts("  ")
                 puts_ptr(help_text)
-                puts_ptr("")
+                puts("")
                 0
             } EL {
                 0

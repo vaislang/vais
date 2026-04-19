@@ -81,12 +81,12 @@ F base64_encode_url(data: i64, len: i64) -> String {
 }
 
 # Encode a C string to Base64
-F base64_encode_str(str: i64) -> String {
-    I str == 0 {
+F base64_encode_str(s_ptr: i64) -> String {
+    I s_ptr == 0 {
         String.with_capacity(0)
     } EL {
-        len := strlen(str)
-        base64_encode(str, len)
+        len := strlen(s_ptr)
+        base64_encode(s_ptr, len)
     }
 }
 
@@ -119,7 +119,7 @@ F base64_decode_char(c: i64) -> i64 {
 # Decode Base64 string to binary data
 # encoded: Base64 encoded string
 # Returns Vec<u8> containing decoded bytes
-F base64_decode(encoded: String) -> Vec {
+F base64_decode(encoded: String) -> Vec<i64> {
     I encoded.len == 0 {
         Vec.with_capacity(0)
     } EL {
@@ -203,7 +203,7 @@ F base64_decode_str(encoded: String) -> i64 {
 }
 
 # Decode Base64 C string to binary data
-F base64_decode_cstr(cstr: i64) -> Vec {
+F base64_decode_cstr(cstr: i64) -> Vec<i64> {
     I cstr == 0 {
         Vec.with_capacity(0)
     } EL {
@@ -276,7 +276,7 @@ F base64_encoded_len(data_len: i64) -> i64 {
 }
 
 # Encode Vec<u8> to Base64 string
-F base64_encode_vec(vec: Vec) -> String {
+F base64_encode_vec(vec: Vec<i64>) -> String {
     I vec.len == 0 {
         String.with_capacity(0)
     } EL {

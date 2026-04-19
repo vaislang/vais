@@ -496,7 +496,22 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Lookup field index by name
         let field_idx = self.get_field_index(&struct_name, field)?;
 
-        let struct_val = obj_val.into_struct_value();
+        // Auto-deref: when obj is a pointer (e.g. &Struct from `&self`),
+        // load the pointee before extracting. Without this, inkwell panics
+        // with "expected StructValue, found PointerValue" at field access
+        // for every method that accesses `self.field` on a reference.
+        let struct_val = if obj_val.is_pointer_value() {
+            if let Some(struct_type) = self.generated_structs.get(&struct_name).copied() {
+                self.builder
+                    .build_load(struct_type, obj_val.into_pointer_value(), "auto_deref")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value()
+            } else {
+                obj_val.into_struct_value()
+            }
+        } else {
+            obj_val.into_struct_value()
+        };
         self.builder
             .build_extract_value(struct_val, field_idx, field)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))

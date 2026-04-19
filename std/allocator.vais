@@ -264,7 +264,7 @@ S FreeBlock {
 }
 
 # Header size: 16 bytes (size + next)
-HEADER_SIZE := 16
+G HEADER_SIZE: i64 = 16
 
 # A general-purpose free list allocator
 S FreeListAllocator {

@@ -614,7 +614,7 @@ X TestSuiteResult {
 # ============================================
 
 # Assert that a condition is true
-F assert(condition: i64) -> i64 {
+partial F assert(condition: i64) -> i64 {
     LW condition == 0 {
         __panic("Assertion failed")
     }
@@ -622,7 +622,7 @@ F assert(condition: i64) -> i64 {
 }
 
 # Assert that a condition is true with message
-F assert_msg(condition: i64, message: str) -> i64 {
+partial F assert_msg(condition: i64, message: str) -> i64 {
     LW condition == 0 {
         __panic(message)
     }
@@ -630,7 +630,7 @@ F assert_msg(condition: i64, message: str) -> i64 {
 }
 
 # Assert two values are equal
-F assert_eq(actual: i64, expected: i64) -> i64 {
+partial F assert_eq(actual: i64, expected: i64) -> i64 {
     LW actual != expected {
         __panic_with_values("Assertion failed: values not equal", actual, expected)
     }
@@ -638,15 +638,15 @@ F assert_eq(actual: i64, expected: i64) -> i64 {
 }
 
 # Assert two strings are equal (uses strcmp instead of pointer comparison)
-F assert_eq_str(actual: str, expected: str) -> i64 {
+partial F assert_eq_str(actual: str, expected: str) -> i64 {
     LW __str_eq(actual, expected) == 0 {
-        __panic_str_mismatch("Assertion failed: strings not equal", actual, expected)
+        __panic_str_mismatch(actual, expected)
     }
     0
 }
 
 # Assert two values are not equal
-F assert_ne(actual: i64, expected: i64) -> i64 {
+partial F assert_ne(actual: i64, expected: i64) -> i64 {
     LW actual == expected {
         __panic_with_value("Assertion failed: values should not be equal", actual)
     }
@@ -654,7 +654,7 @@ F assert_ne(actual: i64, expected: i64) -> i64 {
 }
 
 # Assert value is greater than
-F assert_gt(actual: i64, expected: i64) -> i64 {
+partial F assert_gt(actual: i64, expected: i64) -> i64 {
     LW actual <= expected {
         __panic_with_values("Assertion failed: expected greater than", actual, expected)
     }
@@ -662,7 +662,7 @@ F assert_gt(actual: i64, expected: i64) -> i64 {
 }
 
 # Assert value is less than
-F assert_lt(actual: i64, expected: i64) -> i64 {
+partial F assert_lt(actual: i64, expected: i64) -> i64 {
     LW actual >= expected {
         __panic_with_values("Assertion failed: expected less than", actual, expected)
     }
@@ -670,7 +670,7 @@ F assert_lt(actual: i64, expected: i64) -> i64 {
 }
 
 # Assert value is greater than or equal
-F assert_ge(actual: i64, expected: i64) -> i64 {
+partial F assert_ge(actual: i64, expected: i64) -> i64 {
     LW actual < expected {
         __panic_with_values("Assertion failed: expected greater or equal", actual, expected)
     }
@@ -678,7 +678,7 @@ F assert_ge(actual: i64, expected: i64) -> i64 {
 }
 
 # Assert value is less than or equal
-F assert_le(actual: i64, expected: i64) -> i64 {
+partial F assert_le(actual: i64, expected: i64) -> i64 {
     LW actual > expected {
         __panic_with_values("Assertion failed: expected less or equal", actual, expected)
     }
@@ -686,7 +686,7 @@ F assert_le(actual: i64, expected: i64) -> i64 {
 }
 
 # Assert value is true (non-zero)
-F assert_true(value: i64) -> i64 {
+partial F assert_true(value: i64) -> i64 {
     LW value == 0 {
         __panic("Assertion failed: expected true")
     }
@@ -694,7 +694,7 @@ F assert_true(value: i64) -> i64 {
 }
 
 # Assert value is false (zero)
-F assert_false(value: i64) -> i64 {
+partial F assert_false(value: i64) -> i64 {
     LW value != 0 {
         __panic("Assertion failed: expected false")
     }
@@ -702,7 +702,7 @@ F assert_false(value: i64) -> i64 {
 }
 
 # Assert strings are equal
-F assert_str_eq(actual: str, expected: str) -> i64 {
+partial F assert_str_eq(actual: str, expected: str) -> i64 {
     LW __str_eq(actual, expected) == 0 {
         __panic_str_mismatch(actual, expected)
     }
@@ -710,7 +710,7 @@ F assert_str_eq(actual: str, expected: str) -> i64 {
 }
 
 # Assert value is within range [min, max]
-F assert_in_range(value: i64, min: i64, max: i64) -> i64 {
+partial F assert_in_range(value: i64, min: i64, max: i64) -> i64 {
     LW value < min | value > max {
         __panic("Assertion failed: value not in range")
     }
@@ -718,7 +718,7 @@ F assert_in_range(value: i64, min: i64, max: i64) -> i64 {
 }
 
 # Assert pointer is not null
-F assert_not_null(ptr: i64) -> i64 {
+partial F assert_not_null(ptr: i64) -> i64 {
     LW ptr == 0 {
         __panic("Assertion failed: pointer is null")
     }
@@ -726,7 +726,7 @@ F assert_not_null(ptr: i64) -> i64 {
 }
 
 # Assert with approximate equality for floats
-F assert_approx(actual: f64, expected: f64, epsilon: f64) -> i64 {
+partial F assert_approx(actual: f64, expected: f64, epsilon: f64) -> i64 {
     diff := I actual > expected { actual - expected } EL { expected - actual }
     LW diff > epsilon {
         __panic("Assertion failed: values not approximately equal")
