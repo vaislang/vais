@@ -219,6 +219,20 @@ impl<'ctx> TypeMapper<'ctx> {
                 if let Some(st) = self.struct_types.get(name.as_str()) {
                     (*st).into()
                 } else {
+                    // Phase 3.14: Vec<T> embedded in a struct field must have a
+                    // concrete LLVM layout (not opaque), otherwise indexing
+                    // `obj.vec_field[i]` gets a struct-value with count_fields()=0
+                    // and codegen ICEs. Return the canonical Vec<T> 4-field
+                    // layout: { data: i64, len: i64, cap: i64, elem_size: i64 }.
+                    // HashMap gets a similar fallback. Other Named types keep
+                    // opaque (they should be declared via gen_declaration).
+                    if name == "Vec" || name == "HashMap" {
+                        let i64t = self.context.i64_type();
+                        let n_fields = if name == "Vec" { 4 } else { 5 };
+                        let fields: Vec<_> =
+                            (0..n_fields).map(|_| i64t.into()).collect();
+                        return self.context.struct_type(&fields, false).into();
+                    }
                     // Return opaque struct placeholder
                     self.context.opaque_struct_type(name).into()
                 }

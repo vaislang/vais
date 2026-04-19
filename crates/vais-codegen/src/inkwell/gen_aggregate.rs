@@ -189,6 +189,56 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Looks up the variable's resolved type from `var_resolved_types` and extracts
     /// the inner element type for Slice/SliceMut/Array/Vec<T>. Falls back to i64 if unknown.
     fn infer_element_llvm_type(&self, arr_expr: &Expr) -> inkwell::types::BasicTypeEnum<'ctx> {
+        // Phase 3.14: handle struct-field Vec<T> via type-name string parse.
+        if let Expr::Field { expr: object, field } = arr_expr {
+            if let Expr::Ident(parent_name) = &object.node {
+                let parent_struct = match self.var_resolved_types.get(parent_name) {
+                    Some(vais_types::ResolvedType::Named { name, .. }) => Some(name.clone()),
+                    Some(vais_types::ResolvedType::Ref(inner))
+                    | Some(vais_types::ResolvedType::RefMut(inner)) => {
+                        if let vais_types::ResolvedType::Named { name, .. } = inner.as_ref() {
+                            Some(name.clone())
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                };
+                if let Some(ps) = parent_struct {
+                    if let Some(fields) = self.struct_field_type_names.get(&ps) {
+                        for (fname, ftype) in fields {
+                            if fname == &field.node {
+                                // Parse "Vec<Column>" / "Vec<u64>" style
+                                if let Some(start) = ftype.find('<') {
+                                    if ftype.ends_with('>') && ftype.starts_with("Vec<") {
+                                        let inner_name = &ftype[start + 1..ftype.len() - 1];
+                                        let inner_ty = match inner_name {
+                                            "i8" => vais_types::ResolvedType::I8,
+                                            "i16" => vais_types::ResolvedType::I16,
+                                            "i32" => vais_types::ResolvedType::I32,
+                                            "i64" => vais_types::ResolvedType::I64,
+                                            "u8" => vais_types::ResolvedType::U8,
+                                            "u16" => vais_types::ResolvedType::U16,
+                                            "u32" => vais_types::ResolvedType::U32,
+                                            "u64" => vais_types::ResolvedType::U64,
+                                            "f32" => vais_types::ResolvedType::F32,
+                                            "f64" => vais_types::ResolvedType::F64,
+                                            "bool" => vais_types::ResolvedType::Bool,
+                                            "str" => vais_types::ResolvedType::Str,
+                                            other => vais_types::ResolvedType::Named {
+                                                name: other.to_string(),
+                                                generics: vec![],
+                                            },
+                                        };
+                                        return self.type_mapper.map_type(&inner_ty);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if let Expr::Ident(name) = arr_expr {
             match self.var_resolved_types.get(name) {
                 Some(
@@ -213,16 +263,51 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     /// Check if an expression resolves to a Vec type (Named { name: "Vec", ... }).
+    /// Phase 3.14: also handles Expr::Field for struct-embedded Vec<T> by
+    /// looking up the parent struct's field type via struct_field_type_names
+    /// and parsing the type string.
     fn is_vec_expr(&self, arr_expr: &Expr) -> bool {
-        if let Expr::Ident(name) = arr_expr {
-            if let Some(vais_types::ResolvedType::Named {
-                name: type_name, ..
-            }) = self.var_resolved_types.get(name)
-            {
-                return type_name == "Vec";
+        match arr_expr {
+            Expr::Ident(name) => {
+                if let Some(vais_types::ResolvedType::Named {
+                    name: type_name, ..
+                }) = self.var_resolved_types.get(name)
+                {
+                    return type_name == "Vec";
+                }
+                false
             }
+            Expr::Field { expr: object, field } => {
+                // Resolve parent struct name from the object's type
+                let parent_struct = if let Expr::Ident(parent_name) = &object.node {
+                    match self.var_resolved_types.get(parent_name) {
+                        Some(vais_types::ResolvedType::Named { name, .. }) => name.clone(),
+                        Some(vais_types::ResolvedType::Ref(inner))
+                        | Some(vais_types::ResolvedType::RefMut(inner)) => {
+                            if let vais_types::ResolvedType::Named { name, .. } = inner.as_ref() {
+                                name.clone()
+                            } else {
+                                return false;
+                            }
+                        }
+                        _ => return false,
+                    }
+                } else {
+                    return false;
+                };
+                let fields = match self.struct_field_type_names.get(&parent_struct) {
+                    Some(f) => f,
+                    None => return false,
+                };
+                for (fname, ftype) in fields {
+                    if fname == &field.node {
+                        return ftype.starts_with("Vec<") || ftype == "Vec";
+                    }
+                }
+                false
+            }
+            _ => false,
         }
-        false
     }
 
     pub(super) fn generate_index(
@@ -363,17 +448,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
-        // Phase 3.14 safety: if we got here with a StructValue (not a
-        // pointer), it means the expression resolved to a Vec/struct embedded
-        // in another struct field. The opaque `%Vec` representation can't be
-        // GEP'd directly. Emit a clear error instead of letting inkwell panic.
+        // Phase 3.14 safety: clean error for struct values that didn't match
+        // any prior arm (Vec 4-field or Slice 2-field). Without this the
+        // into_pointer_value() call below panics in inkwell.
         if arr_val.is_struct_value() {
             return Err(CodegenError::TypeError(format!(
-                "Cannot index into struct-embedded Vec/container directly. \
-                 This happens with patterns like `obj.vec_field[i]` when the \
-                 Vec is stored by-value in a struct. Workaround: copy to a \
-                 local first — `v := obj.vec_field; x := v[i]`. \
-                 (Phase 3.14 — Vec struct-field ABI redesign pending.)"
+                "Cannot index into this struct value directly at codegen. \
+                 If this is `obj.vec_field[i]` with a struct-embedded Vec, \
+                 the type lookup may have failed. Workaround: copy to a \
+                 local first — `v := obj.vec_field; x := v[i]`."
             )));
         }
 
