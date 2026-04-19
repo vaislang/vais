@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-19)
 
 mode: auto
-iteration: 19
+iteration: 20
 max_iterations: 60
   strategy-note: B안 40-Phase 구조. 문법 완성도 → 컴파일러 → stdlib → vaisdb → server/web → 생태계 순. 각 Phase 100% 완료 + regression 0.
   strategy iteration 5 (2026-04-19): sequential — Task #73 Phase 5.24 완성 드라이브. impl-sonnet에게 5 std 파일 조사 위임. async_io/async_net는 legacy syntax (@param, missing &self) — 근본 수정 필요. filesystem은 「rename_file → rename」 단일 수정이 vaisdb TC regression 유발 — Opus RCA 필요. http_server Request import, proptest bool/i64 — 작은 단위.
@@ -87,6 +87,7 @@ max_iterations: 60
   iteration 16 (2026-04-19): compiler fix (enum Field access routing for `EnumName.Variant`) + 5 vaisdb single-file fixes (migration, scan, manager, explain 등). Vec<T> struct field concrete layout fix 유지. 196→198/261. parser_security 일부 qualification 적용 시도했으나 Option<bool> TC issue로 revert.
   iteration 17-18 (2026-04-19): token.vais 전면 TokenKind.Xxx 정규화 (107+ keyword arms bulk-edited) → 단독 통과. parser_expr의 match_token/check/expect 핵심 케이스 + Ok(Exists/Subquery) 정규화. parser_select/parser_security 부분 qualification. vaisdb 198→201/261 (+3). token.vais + parser_dml.vais 신규 통과. 남은 차단: `X Parser` cross-file method resolution (parse_expr/parse_select).
   iteration 19 (2026-04-19): expr_helpers_data.rs에 Vec<Tuple<..>>[i].N 지원 추가 (fallback_type Tuple 경로). 디버그로 확인한 결과: **TC가 Vec<Tuple<...>> 을 Vec<I64>로 erase** (type_inference.rs 어딘가). 즉, codegen이 Tuple 정보를 받지 못함. 근본 fix는 TC level (type_inference.rs). 현 상태 유지: 201/261 stable, tuple 경로는 미래 TC fix와 함께 동작하게 대기.
+  iteration 20 (2026-04-19): 남은 1-error 파일 14개 탐색. 지배적 blocker 3그룹: (a) Vec<Primitive>[i] / Vec<Tuple>[i] codegen 오류 (security/role.vais의 queue[qi] 등, 10+ 파일 해당), (b) `Option<T> None` 변수의 TC 불완전 추론 (parser_command, parser_ddl, parser_security 등), (c) cross-module API drift (API 이름 변경, arity 변경). 현 iteration에서 수정 가능한 저-과일 없음. **남은 진전은 TC level Vec element type propagation fix (iteration 19 follow-up) 또는 광범위한 API unification이 필요**.
   strategy iteration 4: sequential — #45 Phase 1.11 Match guard. Parser 수정 필요 (AST MatchArm.guard 연결).
   strategy iteration 5: sequential — #46 Phase 1.12 빈 Vec 리터럴 타입 추론. Opus direct 조사 필요 (checker_expr/literals.rs 추적).
   strategy iteration 6: Phase 1.11~1.18 연속 완료 (7개 Phase, 모두 작은 단위). 21/40.
