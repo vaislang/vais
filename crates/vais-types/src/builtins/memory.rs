@@ -143,6 +143,77 @@ impl TypeChecker {
             },
         );
 
+        // load/store i8/i16/i32 — mirror codegen builtins (value widened to i64)
+        for name in ["load_i8", "load_i16", "load_i32"] {
+            self.functions.insert(
+                name.to_string(),
+                FunctionSig {
+                    name: name.to_string(),
+                    params: vec![("ptr".to_string(), ResolvedType::I64, false)],
+                    ret: ResolvedType::I64,
+                    ..Default::default()
+                },
+            );
+        }
+        for name in ["store_i8", "store_i16", "store_i32"] {
+            self.functions.insert(
+                name.to_string(),
+                FunctionSig {
+                    name: name.to_string(),
+                    params: vec![
+                        ("ptr".to_string(), ResolvedType::I64, false),
+                        ("val".to_string(), ResolvedType::I64, false),
+                    ],
+                    ret: ResolvedType::Unit,
+                    ..Default::default()
+                },
+            );
+        }
+
+        // load/store f32/f64
+        self.functions.insert(
+            "load_f64".to_string(),
+            FunctionSig {
+                name: "load_f64".to_string(),
+                params: vec![("ptr".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::F64,
+                ..Default::default()
+            },
+        );
+        self.functions.insert(
+            "store_f64".to_string(),
+            FunctionSig {
+                name: "store_f64".to_string(),
+                params: vec![
+                    ("ptr".to_string(), ResolvedType::I64, false),
+                    ("val".to_string(), ResolvedType::F64, false),
+                ],
+                ret: ResolvedType::Unit,
+                ..Default::default()
+            },
+        );
+        self.functions.insert(
+            "load_f32".to_string(),
+            FunctionSig {
+                name: "load_f32".to_string(),
+                params: vec![("ptr".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::F64,
+                ..Default::default()
+            },
+        );
+        self.functions.insert(
+            "store_f32".to_string(),
+            FunctionSig {
+                name: "store_f32".to_string(),
+                params: vec![
+                    ("ptr".to_string(), ResolvedType::I64, false),
+                    ("val".to_string(), ResolvedType::F64, false),
+                ],
+                ret: ResolvedType::Unit,
+                ..Default::default()
+            },
+        );
+
         // swap: (ptr, idx1, idx2) -> () — swap two i64 elements in array
         self.functions.insert(
             "swap".to_string(),

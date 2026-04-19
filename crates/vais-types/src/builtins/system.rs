@@ -64,6 +64,111 @@ impl TypeChecker {
                 vec![("signum".to_string(), ResolvedType::I32, false)],
                 ResolvedType::I32,
             ),
+            // === Async / platform runtime helpers (mirror codegen platform builtins) ===
+            (
+                "usleep",
+                vec![("usec".to_string(), ResolvedType::I64, false)],
+                ResolvedType::I32,
+            ),
+            ("sched_yield", vec![], ResolvedType::I32),
+            (
+                "call_poll",
+                vec![
+                    ("poll_fn".to_string(), ResolvedType::I64, false),
+                    ("future_ptr".to_string(), ResolvedType::I64, false),
+                ],
+                ResolvedType::I64,
+            ),
+            (
+                "extract_poll_status",
+                vec![("poll_result".to_string(), ResolvedType::I64, false)],
+                ResolvedType::I64,
+            ),
+            (
+                "extract_poll_value",
+                vec![("poll_result".to_string(), ResolvedType::I64, false)],
+                ResolvedType::I64,
+            ),
+            ("time_now_ms", vec![], ResolvedType::I64),
+            ("async_platform", vec![], ResolvedType::I64),
+            (
+                "close",
+                vec![("fd".to_string(), ResolvedType::I64, false)],
+                ResolvedType::I64,
+            ),
+            (
+                "pipe",
+                vec![("fds_buf".to_string(), ResolvedType::I64, false)],
+                ResolvedType::I64,
+            ),
+            (
+                "write_byte",
+                vec![
+                    ("fd".to_string(), ResolvedType::I64, false),
+                    ("value".to_string(), ResolvedType::I64, false),
+                ],
+                ResolvedType::I64,
+            ),
+            (
+                "read_byte",
+                vec![("fd".to_string(), ResolvedType::I64, false)],
+                ResolvedType::I64,
+            ),
+            (
+                "epoll_set_timer_ms",
+                vec![
+                    ("kq".to_string(), ResolvedType::I64, false),
+                    ("timer_id".to_string(), ResolvedType::I64, false),
+                    ("delay_ms".to_string(), ResolvedType::I64, false),
+                ],
+                ResolvedType::I64,
+            ),
+            (
+                "iocp_set_timer_ms",
+                vec![
+                    ("kq".to_string(), ResolvedType::I64, false),
+                    ("timer_id".to_string(), ResolvedType::I64, false),
+                    ("delay_ms".to_string(), ResolvedType::I64, false),
+                ],
+                ResolvedType::I64,
+            ),
+            ("kqueue", vec![], ResolvedType::I64),
+            (
+                "kevent_register",
+                vec![
+                    ("kq".to_string(), ResolvedType::I64, false),
+                    ("fd".to_string(), ResolvedType::I64, false),
+                    ("filter".to_string(), ResolvedType::I64, false),
+                    ("flags".to_string(), ResolvedType::I64, false),
+                ],
+                ResolvedType::I64,
+            ),
+            (
+                "kevent_wait",
+                vec![
+                    ("kq".to_string(), ResolvedType::I64, false),
+                    ("events_buf".to_string(), ResolvedType::I64, false),
+                    ("max_events".to_string(), ResolvedType::I64, false),
+                    ("timeout_ms".to_string(), ResolvedType::I64, false),
+                ],
+                ResolvedType::I64,
+            ),
+            (
+                "kevent_get_fd",
+                vec![
+                    ("events_buf".to_string(), ResolvedType::I64, false),
+                    ("index".to_string(), ResolvedType::I64, false),
+                ],
+                ResolvedType::I64,
+            ),
+            (
+                "kevent_get_filter",
+                vec![
+                    ("events_buf".to_string(), ResolvedType::I64, false),
+                    ("index".to_string(), ResolvedType::I64, false),
+                ],
+                ResolvedType::I64,
+            ),
         ];
         for (name, params, ret) in sys_fns {
             self.functions.insert(

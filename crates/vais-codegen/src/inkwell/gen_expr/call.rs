@@ -131,6 +131,43 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             return Ok(self.unit_value());
         }
+        // slice_data_ptr(slice) -> i64: extract raw data pointer from fat-pointer slice
+        if fn_name == "slice_data_ptr" && args.len() == 1 {
+            let arg_val = self.generate_expr(&args[0].node)?;
+            let i64_ty = self.context.i64_type();
+            let ptr_i64 = if arg_val.is_struct_value() {
+                let sv = arg_val.into_struct_value();
+                if sv.get_type().count_fields() >= 1 {
+                    let data_ptr = self
+                        .builder
+                        .build_extract_value(sv, 0, "slice_data_ptr_raw")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    if data_ptr.is_pointer_value() {
+                        self.builder
+                            .build_ptr_to_int(
+                                data_ptr.into_pointer_value(),
+                                i64_ty,
+                                "slice_data_ptr_i64",
+                            )
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    } else {
+                        i64_ty.const_int(0, false)
+                    }
+                } else {
+                    i64_ty.const_int(0, false)
+                }
+            } else if arg_val.is_pointer_value() {
+                self.builder
+                    .build_ptr_to_int(arg_val.into_pointer_value(), i64_ty, "ptr_i64")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            } else if arg_val.is_int_value() {
+                arg_val.into_int_value()
+            } else {
+                i64_ty.const_int(0, false)
+            };
+            return Ok(ptr_i64.into());
+        }
+
         match fn_name.as_str() {
             "println" => return self.generate_println_call(args),
             "print" => return self.generate_print_call(args),

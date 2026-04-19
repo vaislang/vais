@@ -612,6 +612,361 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) -> 
     );
     module.add_function("regfree", void_type.fn_type(&[i8_ptr.into()], false), None);
 
+    // ===== Runtime intrinsic helpers (mirror text-mode function_gen/runtime.rs) =====
+    declare_runtime_intrinsics(context, module)?;
+
+    Ok(())
+}
+
+/// Runtime intrinsic helpers (callable from user code as `time_now_ms`, `load_i8`, etc.).
+///
+/// The Inkwell codegen path emits inline bodies here; the text-mode
+/// function_gen/runtime.rs path emits equivalent bodies as raw IR. Keep both in
+/// sync when adding new intrinsics.
+fn declare_runtime_intrinsics<'ctx>(
+    context: &'ctx Context,
+    module: &Module<'ctx>,
+) -> Result<(), String> {
+    let i8_ptr = context.i8_type().ptr_type(AddressSpace::default());
+    let i16_ptr = context.i16_type().ptr_type(AddressSpace::default());
+    let i32_ptr = context.i32_type().ptr_type(AddressSpace::default());
+    let i32_type = context.i32_type();
+    let i64_type = context.i64_type();
+    let unit_type = i64_type; // Unit -> i64 (ignored return) for LLVM compat
+    let void_type = context.void_type();
+
+    // Helper to emit `declare`-only (no body, external runtime must provide)
+    // We instead emit inline bodies for everything listed in RUNTIME_INTRINSIC_NAMES.
+
+    // --- load_i8 / load_i16 / load_i32 (all return i64, signed-extend from narrow) ---
+    for (name, bits) in [("load_i8", 8), ("load_i16", 16), ("load_i32", 32)] {
+        let fn_type = i64_type.fn_type(&[i64_type.into()], false);
+        let func = module.add_function(name, fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(entry);
+        let ptr_i64 = func
+            .get_nth_param(0)
+            .ok_or("ICE: runtime intrinsic missing param")?
+            .into_int_value();
+        let narrow_ptr_ty = match bits {
+            8 => i8_ptr,
+            16 => i16_ptr,
+            32 => i32_ptr,
+            _ => unreachable!(),
+        };
+        let narrow_ty = match bits {
+            8 => context.i8_type(),
+            16 => context.i16_type(),
+            32 => context.i32_type(),
+            _ => unreachable!(),
+        };
+        let ptr = builder
+            .build_int_to_ptr(ptr_i64, narrow_ptr_ty, "narrow_ptr")
+            .map_err(|e| format!("ICE: {e}"))?;
+        let loaded = builder
+            .build_load(narrow_ty, ptr, "narrow_val")
+            .map_err(|e| format!("ICE: {e}"))?;
+        let widened = builder
+            .build_int_s_extend(loaded.into_int_value(), i64_type, "wide_val")
+            .map_err(|e| format!("ICE: {e}"))?;
+        builder
+            .build_return(Some(&widened))
+            .map_err(|e| format!("ICE: {e}"))?;
+    }
+
+    // --- store_i8 / store_i16 / store_i32 (truncate i64 -> narrow, return unit-as-i64) ---
+    for (name, bits) in [("store_i8", 8), ("store_i16", 16), ("store_i32", 32)] {
+        let fn_type = unit_type.fn_type(&[i64_type.into(), i64_type.into()], false);
+        let func = module.add_function(name, fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(entry);
+        let ptr_i64 = func
+            .get_nth_param(0)
+            .ok_or("ICE: runtime intrinsic missing param")?
+            .into_int_value();
+        let val_i64 = func
+            .get_nth_param(1)
+            .ok_or("ICE: runtime intrinsic missing param")?
+            .into_int_value();
+        let narrow_ptr_ty = match bits {
+            8 => i8_ptr,
+            16 => i16_ptr,
+            32 => i32_ptr,
+            _ => unreachable!(),
+        };
+        let narrow_ty = match bits {
+            8 => context.i8_type(),
+            16 => context.i16_type(),
+            32 => context.i32_type(),
+            _ => unreachable!(),
+        };
+        let ptr = builder
+            .build_int_to_ptr(ptr_i64, narrow_ptr_ty, "narrow_ptr")
+            .map_err(|e| format!("ICE: {e}"))?;
+        let narrow_val = builder
+            .build_int_truncate(val_i64, narrow_ty, "narrow_val")
+            .map_err(|e| format!("ICE: {e}"))?;
+        builder
+            .build_store(ptr, narrow_val)
+            .map_err(|e| format!("ICE: {e}"))?;
+        builder
+            .build_return(Some(&i64_type.const_int(0, false)))
+            .map_err(|e| format!("ICE: {e}"))?;
+    }
+
+    // --- time_now_ms: call gettimeofday, return seconds*1000 + usec/1000 ---
+    // struct timeval { long tv_sec; long tv_usec; } — on 64-bit systems, both i64
+    {
+        let timeval_ty = context.struct_type(&[i64_type.into(), i64_type.into()], false);
+        let timeval_ptr_ty = timeval_ty.ptr_type(AddressSpace::default());
+
+        // declare i32 @gettimeofday(timeval*, i8*)
+        let gettime_ty =
+            i32_type.fn_type(&[timeval_ptr_ty.into(), i8_ptr.into()], false);
+        let gettime_fn = module
+            .get_function("gettimeofday")
+            .unwrap_or_else(|| module.add_function("gettimeofday", gettime_ty, None));
+
+        let fn_type = i64_type.fn_type(&[], false);
+        let func = module.add_function("time_now_ms", fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(entry);
+        let tv_alloca = builder
+            .build_alloca(timeval_ty, "tv")
+            .map_err(|e| format!("ICE: {e}"))?;
+        let null_tz = i8_ptr.const_null();
+        builder
+            .build_call(gettime_fn, &[tv_alloca.into(), null_tz.into()], "gtd")
+            .map_err(|e| format!("ICE: {e}"))?;
+        let sec_ptr = builder
+            .build_struct_gep(timeval_ty, tv_alloca, 0, "sec_ptr")
+            .map_err(|e| format!("ICE: {e}"))?;
+        let usec_ptr = builder
+            .build_struct_gep(timeval_ty, tv_alloca, 1, "usec_ptr")
+            .map_err(|e| format!("ICE: {e}"))?;
+        let sec = builder
+            .build_load(i64_type, sec_ptr, "sec")
+            .map_err(|e| format!("ICE: {e}"))?
+            .into_int_value();
+        let usec = builder
+            .build_load(i64_type, usec_ptr, "usec")
+            .map_err(|e| format!("ICE: {e}"))?
+            .into_int_value();
+        let sec_ms = builder
+            .build_int_mul(sec, i64_type.const_int(1000, false), "sec_ms")
+            .map_err(|e| format!("ICE: {e}"))?;
+        let usec_ms = builder
+            .build_int_signed_div(usec, i64_type.const_int(1000, false), "usec_ms")
+            .map_err(|e| format!("ICE: {e}"))?;
+        let total = builder
+            .build_int_add(sec_ms, usec_ms, "total")
+            .map_err(|e| format!("ICE: {e}"))?;
+        builder
+            .build_return(Some(&total))
+            .map_err(|e| format!("ICE: {e}"))?;
+    }
+
+    // --- call_poll: indirect call through function pointer (i64 poll_fn, i64 future_ptr) -> i64 ---
+    {
+        let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
+        let func = module.add_function("call_poll", fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(entry);
+        let poll_fn_i64 = func
+            .get_nth_param(0)
+            .ok_or("ICE: call_poll missing param")?
+            .into_int_value();
+        let future_ptr = func
+            .get_nth_param(1)
+            .ok_or("ICE: call_poll missing param")?
+            .into_int_value();
+        // Cast i64 -> function pointer: i64 (*)(i64)
+        let poll_fn_sig = i64_type.fn_type(&[i64_type.into()], false);
+        let poll_fn_ptr_ty = poll_fn_sig.ptr_type(AddressSpace::default());
+        let poll_fn_ptr = builder
+            .build_int_to_ptr(poll_fn_i64, poll_fn_ptr_ty, "poll_fn_ptr")
+            .map_err(|e| format!("ICE: {e}"))?;
+        let call = builder
+            .build_indirect_call(poll_fn_sig, poll_fn_ptr, &[future_ptr.into()], "poll_call")
+            .map_err(|e| format!("ICE: {e}"))?;
+        let result = call
+            .try_as_basic_value()
+            .left()
+            .ok_or("ICE: call_poll returned void")?;
+        builder
+            .build_return(Some(&result))
+            .map_err(|e| format!("ICE: {e}"))?;
+    }
+
+    // --- extract_poll_status: result & 1 (low bit = status: 0=Pending, 1=Ready) ---
+    // --- extract_poll_value: result >> 1 (shift off status bit) ---
+    for (name, is_value) in [("extract_poll_status", false), ("extract_poll_value", true)] {
+        let fn_type = i64_type.fn_type(&[i64_type.into()], false);
+        let func = module.add_function(name, fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(entry);
+        let arg = func
+            .get_nth_param(0)
+            .ok_or("ICE: extract_poll_* missing param")?
+            .into_int_value();
+        let result = if is_value {
+            builder
+                .build_right_shift(arg, i64_type.const_int(1, false), true, "val")
+                .map_err(|e| format!("ICE: {e}"))?
+        } else {
+            builder
+                .build_and(arg, i64_type.const_int(1, false), "status")
+                .map_err(|e| format!("ICE: {e}"))?
+        };
+        builder
+            .build_return(Some(&result))
+            .map_err(|e| format!("ICE: {e}"))?;
+    }
+
+    // --- async_platform: return platform ID (1=macOS, 2=Linux, 3=Windows) ---
+    {
+        let fn_type = i64_type.fn_type(&[], false);
+        let func = module.add_function("async_platform", fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(entry);
+        let platform_id = if cfg!(target_os = "macos") {
+            1
+        } else if cfg!(target_os = "linux") {
+            2
+        } else if cfg!(target_os = "windows") {
+            3
+        } else {
+            0
+        };
+        builder
+            .build_return(Some(&i64_type.const_int(platform_id, false)))
+            .map_err(|e| format!("ICE: {e}"))?;
+    }
+
+    // --- write_byte(fd, val) -> i64: write single byte via write() syscall ---
+    {
+        let write_fn = module
+            .get_function("write")
+            .ok_or("ICE: write must be declared")?;
+        let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
+        let func = module.add_function("write_byte", fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(entry);
+        let fd_i64 = func
+            .get_nth_param(0)
+            .ok_or("ICE: write_byte missing param")?
+            .into_int_value();
+        let val_i64 = func
+            .get_nth_param(1)
+            .ok_or("ICE: write_byte missing param")?
+            .into_int_value();
+        let fd_i32 = builder
+            .build_int_truncate(fd_i64, i32_type, "fd")
+            .map_err(|e| format!("ICE: {e}"))?;
+        let val_i8 = builder
+            .build_int_truncate(val_i64, context.i8_type(), "byte")
+            .map_err(|e| format!("ICE: {e}"))?;
+        let buf = builder
+            .build_alloca(context.i8_type(), "buf")
+            .map_err(|e| format!("ICE: {e}"))?;
+        builder
+            .build_store(buf, val_i8)
+            .map_err(|e| format!("ICE: {e}"))?;
+        let call = builder
+            .build_call(
+                write_fn,
+                &[fd_i32.into(), buf.into(), i64_type.const_int(1, false).into()],
+                "w",
+            )
+            .map_err(|e| format!("ICE: {e}"))?;
+        let result = call
+            .try_as_basic_value()
+            .left()
+            .ok_or("ICE: write returned void")?;
+        builder
+            .build_return(Some(&result))
+            .map_err(|e| format!("ICE: {e}"))?;
+    }
+
+    // --- read_byte(fd) -> i64: read single byte via read() syscall ---
+    {
+        let read_fn = module
+            .get_function("read")
+            .ok_or("ICE: read must be declared")?;
+        let fn_type = i64_type.fn_type(&[i64_type.into()], false);
+        let func = module.add_function("read_byte", fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(entry);
+        let fd_i64 = func
+            .get_nth_param(0)
+            .ok_or("ICE: read_byte missing param")?
+            .into_int_value();
+        let fd_i32 = builder
+            .build_int_truncate(fd_i64, i32_type, "fd")
+            .map_err(|e| format!("ICE: {e}"))?;
+        let buf = builder
+            .build_alloca(context.i8_type(), "buf")
+            .map_err(|e| format!("ICE: {e}"))?;
+        builder
+            .build_call(
+                read_fn,
+                &[fd_i32.into(), buf.into(), i64_type.const_int(1, false).into()],
+                "r",
+            )
+            .map_err(|e| format!("ICE: {e}"))?;
+        let byte = builder
+            .build_load(context.i8_type(), buf, "byte")
+            .map_err(|e| format!("ICE: {e}"))?
+            .into_int_value();
+        let widened = builder
+            .build_int_s_extend(byte, i64_type, "wide")
+            .map_err(|e| format!("ICE: {e}"))?;
+        builder
+            .build_return(Some(&widened))
+            .map_err(|e| format!("ICE: {e}"))?;
+    }
+
+    // --- epoll_set_timer_ms / iocp_set_timer_ms / kevent_* : stub returns 0 ---
+    // These are platform-specific reactor hooks; the production runtime
+    // provides full implementations. For Inkwell builds we emit stubs so the
+    // module links — callers that require these to fire must use the text IR
+    // backend or link against a full runtime library.
+    for name in [
+        "epoll_set_timer_ms",
+        "iocp_set_timer_ms",
+        "kevent_register",
+        "kevent_wait",
+        "kevent_get_fd",
+        "kevent_get_filter",
+    ] {
+        let nparams = match name {
+            "kevent_register" | "kevent_wait" => 4,
+            "kevent_get_fd" | "kevent_get_filter" => 2,
+            "epoll_set_timer_ms" | "iocp_set_timer_ms" => 3,
+            _ => 0,
+        };
+        let param_tys: Vec<_> = (0..nparams).map(|_| i64_type.into()).collect();
+        let fn_type = i64_type.fn_type(&param_tys, false);
+        let func = module.add_function(name, fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(entry);
+        builder
+            .build_return(Some(&i64_type.const_int(0, false)))
+            .map_err(|e| format!("ICE: {e}"))?;
+    }
+
+    // Suppress unused warning for void_type
+    let _ = void_type;
+
     Ok(())
 }
 

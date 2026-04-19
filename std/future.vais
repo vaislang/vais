@@ -116,7 +116,7 @@ X Context {
         Context { waker_ptr: 0, runtime_ptr: runtime_ptr }
     }
 
-    F wake(&self) -> i64 {
+    partial F wake(&self) -> i64 {
         # Wake up the task associated with this context
         LW self.waker_ptr != 0 {
             # Call waker function

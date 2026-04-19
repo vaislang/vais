@@ -226,7 +226,7 @@ F i64_to_f64(x: i64) -> f64 {
         multiplier := 1.0
         LW remaining > 0 {
             digit := remaining % 10
-            result = result + (digit * multiplier)
+            result = result + ((digit as f64) * multiplier)
             multiplier = multiplier * 10.0
             remaining = remaining / 10
         }
@@ -248,7 +248,7 @@ F random_f64_simple() -> f64 {
 # Requires std/time.vais to be imported
 F random_init() -> i64 {
     # Get current time as seed
-    seed := time_now()
+    seed := time_now_ms()
     random_seed(seed)
 }
 

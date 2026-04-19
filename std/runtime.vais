@@ -117,7 +117,7 @@ X Runtime {
     }
 
     # Run the scheduler until all tasks complete
-    F run(&self) -> i64 {
+    partial F run(&self) -> i64 {
         # Keep polling until no pending tasks
         LW self.task_count > 0 {
             made_progress := 0
@@ -220,7 +220,7 @@ F block_on(future_ptr: i64, poll_fn: i64) -> i64 {
 }
 
 # Run all spawned tasks to completion
-F run_all() -> i64 {
+partial F run_all() -> i64 {
     rt := get_runtime()
     rt_ptr := rt as *Runtime
     rt_ptr.run()
@@ -324,32 +324,32 @@ X EventLoop {
     }
 
     # Register interest in a file descriptor for reading
-    F register_read(&self, fd: i64, task_ptr: i64) -> i64 {
+    partial F register_read(&self, fd: i64, task_ptr: i64) -> i64 {
         kevent_register(self.kq, fd, EVFILT_READ, EV_ADD)
         self.add_source(SOURCE_FD_READ, fd, task_ptr, 0)
     }
 
     # Register interest in a file descriptor for writing
-    F register_write(&self, fd: i64, task_ptr: i64) -> i64 {
+    partial F register_write(&self, fd: i64, task_ptr: i64) -> i64 {
         kevent_register(self.kq, fd, EVFILT_WRITE, EV_ADD)
         self.add_source(SOURCE_FD_WRITE, fd, task_ptr, 0)
     }
 
     # Register a timer (deadline in milliseconds from now)
-    F register_timer(&self, timer_id: i64, delay_ms: i64, task_ptr: i64) -> i64 {
+    partial F register_timer(&self, timer_id: i64, delay_ms: i64, task_ptr: i64) -> i64 {
         deadline := time_now_ms() + delay_ms
         kevent_register(self.kq, timer_id, EVFILT_TIMER, EV_ADD)
         self.add_source(SOURCE_TIMER, timer_id, task_ptr, deadline)
     }
 
     # Deregister an event source by fd
-    F deregister(&self, fd: i64, filter: i64) -> i64 {
+    partial F deregister(&self, fd: i64, filter: i64) -> i64 {
         kevent_register(self.kq, fd, filter, EV_DELETE)
         self.remove_source(fd)
     }
 
     # Add an event source to the linked list
-    F add_source(&self, source_type: i64, fd: i64, task_ptr: i64, deadline_ms: i64) -> i64 {
+    partial F add_source(&self, source_type: i64, fd: i64, task_ptr: i64, deadline_ms: i64) -> i64 {
         # Allocate EventSource (5 fields * 8 bytes = 40 bytes)
         src_ptr := malloc(40)
         store_i64(src_ptr, source_type)
@@ -371,7 +371,7 @@ X EventLoop {
     }
 
     # Remove an event source by fd
-    F remove_source(&self, fd: i64) -> i64 {
+    partial F remove_source(&self, fd: i64) -> i64 {
         prev := 0
         current := self.sources_head
 
@@ -568,7 +568,7 @@ X ReactorRuntime {
     }
 
     # Run all tasks to completion using event-driven scheduling
-    F run(&self) -> i64 {
+    partial F run(&self) -> i64 {
         el := self.event_loop as *EventLoop
 
         LW self.task_count > 0 {
@@ -773,7 +773,7 @@ F reactor_block_on(future_ptr: i64, poll_fn: i64) -> i64 {
 }
 
 # Run all spawned tasks on the reactor
-F reactor_run() -> i64 {
+partial F reactor_run() -> i64 {
     rt := get_reactor()
     rt_ptr := rt as *ReactorRuntime
     rt_ptr.run()
@@ -908,7 +908,7 @@ X TaskGroup {
 
     # Run all tasks in the group to completion
     # Returns 0 on success, 1 if any task failed
-    F run(&self) -> i64 {
+    partial F run(&self) -> i64 {
         has_error := 0
 
         LW self.completed_count < self.task_count {
@@ -1092,7 +1092,7 @@ X ScopedTask {
     }
 
     # Run all tasks and cleanup - guaranteed to not leak tasks
-    F run_and_cleanup(&self) -> i64 {
+    partial F run_and_cleanup(&self) -> i64 {
         group_ptr := self.group as *TaskGroup
         result := group_ptr.run()
 

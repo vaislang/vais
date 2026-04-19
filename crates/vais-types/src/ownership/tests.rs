@@ -770,10 +770,13 @@ mod tests {
 
     #[test]
     fn test_result_not_copy_if_err_not_copy() {
+        // Phase 5.24: Named user types default to Copy (value-oriented semantics).
+        // To exercise the "inner not Copy" path, use a known heap-allocated
+        // Named (String/Vec/HashMap) or an explicit Linear/Affine wrapper.
         assert!(!OwnershipChecker::is_copy_type(&ResolvedType::Result(
             Box::new(ResolvedType::I64),
             Box::new(ResolvedType::Named {
-                name: "Error".to_string(),
+                name: "String".to_string(),
                 generics: vec![]
             }),
         )));
