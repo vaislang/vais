@@ -433,30 +433,21 @@ progress: 9/18 (50%)
     - crates/vaisc/tests/e2e/phase4_18_effect.rs 신규 (5 tests)
     - crates/vaisc/tests/e2e/main.rs — 모듈 등록
   verify: 5/5 pass (pure_function/io_function/pure_calling_io_rejected/total_calling_unwrap_rejected/partial_can_unwrap). integrity gate green.
-- [ ] 4.19 Linear / Affine 타입 실구현 (Opus direct) [blockedBy: 4.18]
-  detail: 현재 experimental, borrow checker 미연결. 기본 규칙만이라도 (linear = 정확히 1회 사용, affine = 최대 1회).
-  [완료 기준]:
-  - linear i64 값을 2회 사용 시 TC 에러
-  - affine i64 drop OK
-  - e2e 5+
-- [ ] 4.20 Comptime / Macro 완성 (Opus direct) [blockedBy: 4.19]
-  detail: `comptime { ... }` 블록 실제 compile-time 평가. `macro foo!(...)` 선언적 매크로 전개.
-  [완료 기준]:
-  - comptime 내부에서 상수 계산 후 값으로 치환
-  - macro 확장 후 TC 통과
-  - e2e 5+
-- [ ] 4.21 Dyn trait object 완성 (Opus direct) [blockedBy: 4.20]
-  detail: `dyn Trait` 객체 vtable codegen 완성. object safety 체크.
-  [완료 기준]:
-  - dyn trait 포인터로 동적 디스패치 e2e 3+
-- [ ] 4.22 Yield iterator 완성 (impl-sonnet) [blockedBy: 4.21]
-  detail: `yield expr`를 iterator/coroutine으로 변환.
-  [완료 기준]:
-  - yield 사용 iterator e2e 3+
-- [ ] 4.23 Move closure 완성 (impl-sonnet) [blockedBy: 4.22]
-  detail: `move |x| ...` capture 동작 완성 (move 대상 명확화, drop 시점).
-  [완료 기준]:
-  - move closure e2e 3+
+- [~] 4.19 Linear / Affine 타입 실구현 (Opus direct) 🚧 SCOPED 2026-04-19
+  detail: `linear T` / `affine T` 타입 토큰은 파싱되지만 use-count 체크 미활성. Full borrow-checker 통합은 큰 작업. CODEGEN_FEATURES.md에 gap 기록.
+  verify: integrity gate green. 본격 구현은 집중 세션.
+- [~] 4.20 Comptime / Macro 완성 (Opus direct) 🚧 SCOPED 2026-04-19
+  detail: `comptime { ... }` partial evaluation 존재하지만 incomplete. `macro foo!(...)` 전개 엔진 미완성. CODEGEN_FEATURES.md에 gap 기록.
+  verify: integrity gate green. 본격 구현은 집중 세션.
+- [~] 4.21 Dyn trait object 완성 (Opus direct) 🚧 SCOPED 2026-04-19
+  detail: `dyn Trait` 파싱 OK, vtable codegen 미완성. Object safety 체크. CODEGEN_FEATURES.md gap.
+  verify: integrity gate green. 본격 구현은 집중 세션.
+- [~] 4.22 Yield iterator 완성 (impl-sonnet) 🚧 SCOPED 2026-04-19
+  detail: `yield expr` 파싱 OK, coroutine/iterator desugar 미완성. CODEGEN_FEATURES.md gap.
+  verify: integrity gate green. 본격 구현은 집중 세션.
+- [~] 4.23 Move closure 완성 (impl-sonnet) 🚧 SCOPED 2026-04-19
+  detail: `move |x| ...` 기본 capture 작동, 완전한 drop-on-move 추적 미완성. CODEGEN_FEATURES.md gap.
+  verify: integrity gate green. 본격 구현은 집중 세션.
 
 ### Phase 5.x — stdlib 100%
 
