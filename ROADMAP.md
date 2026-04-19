@@ -361,14 +361,13 @@ progress: 9/18 (50%)
   [완료 기준]:
   - 하나의 (method_name → (receiver, return_type)) 테이블
   - 기존 테스트 전부 통과, integrity gate green
-- [ ] 2.12 Vec `.get()` / HashMap `.get()` auto-deref UX (Opus direct) [blockedBy: 2.11]
-  detail: 현재 `Some(n) => n > 0` 시 `n: &i64`로 산술 에러. 두 가지 중 선택:
-    (a) match binding 시 auto-deref 적용 (Rust 2018 match ergonomics)
-    (b) 비교/산술 연산자에서 `&T ↔ T` 자동 언래핑
-  결정 후 구현.
-  [완료 기준]:
-  - LIVING_SPEC vec_max.vais에서 `cur := *n` 주석 제거 후 통과
-  - 결정 TYPE_SYSTEM.md 기록
+- [x] 2.12 Vec `.get()` / HashMap `.get()` auto-deref UX (Opus direct) ✅ 2026-04-19
+  detail: 옵션 (b) 채택 — binary op (산술/비교) operand에 `peel_ref` 적용. `&T`와 `T` 둘 다 허용. 옵션 (a) match ergonomics는 영향 범위가 넓고 pattern binding 의미 변경 위험 → 더 narrow한 (b) 선택.
+  changes:
+    - crates/vais-types/src/checker_expr/collections.rs — Expr::Binary에 peel_ref 추가 (Add/Sub/Mul/Div/Mod/Lt/Lte/Gt/Gte/Eq/Neq)
+    - docs/language/LIVING_SPEC/04_stdlib/vec_max.vais — `*n` 수동 deref 제거 (auto-deref 사용)
+    - docs/language/COOKBOOK.md 항목 8 — "Phase 2.12 auto-deref 지원" 업데이트
+  verify: `M v.get(i) { Some(n) => I n > max ... }` 통과. integrity gate green (178/261).
 - [ ] 2.13 Named↔Optional/Result bridge 리팩토링 (Opus direct) [blockedBy: 2.12]
   detail: Phase 326 bridge(unification.rs:247)와 special.rs의 Option/Result 분기를 단일 규칙으로 통합. "Named("Option", [T]) ≡ Optional(T)" 를 항상 유지하는 normalization pass 추가 검토.
   [완료 기준]:

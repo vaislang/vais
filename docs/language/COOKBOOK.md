@@ -182,19 +182,19 @@ M v.get(0) {
 
 ---
 
-## 8. Vec `.get(i)`는 `Option<&T>` — deref 필요
+## 8. Vec `.get(i)` — `Option<&T>` + 자동 deref (Phase 2.12 ✅)
 
 ```vais
 v: Vec<i64> = Vec::new()
 v.push(5)
 
-# ❌ DON'T — `n`은 &i64, 정수 비교에 `expected numeric, found &i64`
+# ✅ DO — Phase 2.12부터 산술/비교 연산 context에서 auto-deref
 M v.get(0) {
     Some(n) => I n > 0 { 1 } EL { 0 },
     None => 0
 }
 
-# ✅ DO — 명시적 deref
+# ✅ DO — 명시적 deref도 여전히 유효
 M v.get(0) {
     Some(n) => {
         cur := *n
@@ -204,7 +204,7 @@ M v.get(0) {
 }
 ```
 
-**왜 실패하는지**: Vec의 `.get()`은 `&T` 반환 (데이터 복사 방지). 산술/비교 연산 전에 `*n`으로 역참조.
+**Phase 2.12 변경**: Binary op (산술/비교)에서 `&T`와 `T` 둘 다 허용 (자동 `peel_ref` in `Expr::Binary`). Vec.get()/HashMap.get()이 `Option<&T>` 반환하는 현실에서 UX 개선.
 
 **참조**: `LIVING_SPEC/04_stdlib/vec_max.vais`
 

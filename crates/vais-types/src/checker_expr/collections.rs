@@ -13,14 +13,46 @@ impl TypeChecker {
     ) -> Option<TypeResult<ResolvedType>> {
         match &expr.node {
             Expr::Binary { op, left, right } => {
-                let left_type = match self.check_expr(left) {
+                let left_type_raw = match self.check_expr(left) {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
-                let right_type = match self.check_expr(right) {
+                let right_type_raw = match self.check_expr(right) {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
+
+                // Phase 2.12: auto-deref &T → T for arithmetic/comparison
+                // operands. Vec.get(i)/HashMap.get(k) return Option<&T>; after
+                // `Some(n) => ...`, `n` is `&T`. Rather than forcing users to
+                // write `*n`, strip the outer Ref in binary-op contexts.
+                // Mut refs and nested refs both handled.
+                fn peel_ref(t: &ResolvedType) -> ResolvedType {
+                    match t {
+                        ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                            peel_ref(inner)
+                        }
+                        _ => t.clone(),
+                    }
+                }
+                let (left_type, right_type) = match op {
+                    BinOp::Add
+                    | BinOp::Sub
+                    | BinOp::Mul
+                    | BinOp::Div
+                    | BinOp::Mod
+                    | BinOp::Lt
+                    | BinOp::Lte
+                    | BinOp::Gt
+                    | BinOp::Gte
+                    | BinOp::Eq
+                    | BinOp::Neq => (peel_ref(&left_type_raw), peel_ref(&right_type_raw)),
+                    _ => (left_type_raw.clone(), right_type_raw.clone()),
+                };
+                // Keep raw versions available for paths that actually need them
+                // (string concat sees through Ref in is_str_like).
+                let _ = &left_type_raw;
+                let _ = &right_type_raw;
 
                 match op {
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod => {
