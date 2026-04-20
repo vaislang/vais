@@ -71,7 +71,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-20)
 
-mode: stopped (2026-04-20 세션 종료 — Phase 6.27d + 6.27e 모두 완료. vaisdb 234 → 236/261, floor 236. 구조적 compiler fix 4건 커밋. 남은 21 파일은 dyn trait dispatch + codegen struct-field + cascading API drift로 blocked — 단일 세션 범위 초과. 다음 세션 권장: Phase 6.27f — dyn trait vtable codegen OR HnswStore API 대규모 refactor 중 택1. 그 이전에 codegen 쪽의 `items` 필드 누락 같은 C003 버그들을 먼저 수집해 분류 필요 (ROADMAP의 vector/hnsw/insert.vais MinHeap.items 경우).)
+mode: stopped (2026-04-20 세션 종료 — Phase 6.27d/e/f 완료. vaisdb 234 → 236/261, floor 236. 구조적 compiler fix 5건 커밋 (recursive-self arm widening exclusion + Box peel, HashMap K/V unification, HashSet builtin, Ref/RefMut(Generic) trait-method peel, HashMap.values_mut builtin). 남은 20 파일은 모두 구조적 blocker: ok_or_else MutexGuard Deref (cow), E022 use-after-move (btree/insert), error_code(N,N,N,"msg") 4-arg → VaisError.new 파일 전체 rewrite 필요 (search/executor), dyn trait dispatch (delete/wal/hnsw/insert), codegen C003 `items` 필드 (hnsw/insert의 MinHeap). 단일-라인 fix로는 더 이상 진전 불가. 다음 세션은 (1) codegen C003 Struct-literal field resolution 수정 또는 (2) MutexGuard Deref forwarding 또는 (3) error_code → VaisError.new 대규모 refactor 중 한 방향만 집중.)
 iteration: 3
 max_iterations: 6
   strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.27d.a. Opus direct (TC boundary 설계+impl 일체). 좁은 범위 (control_flow.rs 2 함수 시그니처 thread 추가). Baseline std 82/82 vaisdb 234/261 phase158 18/18.
