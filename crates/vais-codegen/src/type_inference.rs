@@ -28,6 +28,36 @@ use crate::CodeGenerator;
 use vais_ast::{BinOp, Expr, Spanned, Stmt};
 use vais_types::ResolvedType;
 
+/// Phase 6.30.2: recursive check for unresolved inference variables inside a
+/// ResolvedType. TC sometimes stores expr_types containing Var(n) when the
+/// type is unified later without rewriting the stored entry. Treat these as
+/// less-informative than the codegen-local inference and skip the upgrade.
+fn contains_unresolved_var(ty: &ResolvedType) -> bool {
+    match ty {
+        ResolvedType::Var(_) => true,
+        ResolvedType::Array(inner)
+        | ResolvedType::Optional(inner)
+        | ResolvedType::Pointer(inner)
+        | ResolvedType::Ref(inner)
+        | ResolvedType::RefMut(inner)
+        | ResolvedType::Slice(inner)
+        | ResolvedType::SliceMut(inner)
+        | ResolvedType::Range(inner)
+        | ResolvedType::Future(inner) => contains_unresolved_var(inner),
+        ResolvedType::ConstArray { element, .. } => contains_unresolved_var(element),
+        ResolvedType::Map(k, v) => contains_unresolved_var(k) || contains_unresolved_var(v),
+        ResolvedType::Result(ok, err) => {
+            contains_unresolved_var(ok) || contains_unresolved_var(err)
+        }
+        ResolvedType::Tuple(items) => items.iter().any(contains_unresolved_var),
+        ResolvedType::Named { generics, .. } => generics.iter().any(contains_unresolved_var),
+        ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
+            params.iter().any(contains_unresolved_var) || contains_unresolved_var(ret)
+        }
+        _ => false,
+    }
+}
+
 impl CodeGenerator {
     /// Infer type of a statement block (for if-else phi nodes)
     #[inline]
@@ -240,6 +270,15 @@ impl CodeGenerator {
         // inference through locals whose ty was frozen at declaration.
         let span_key = (expr.span.start, expr.span.end);
         if let Some(tc_ty) = self.expr_types.get(&span_key) {
+            // Phase 6.30.2: skip upgrade when tc_ty carries unresolved inference
+            // vars (TC can leave Var(n) in expr_types when later unification is
+            // not propagated back). The local codegen inference — which walks
+            // through concrete function return types — is strictly more useful
+            // than a Var. Otherwise alloca types freeze to the base name and
+            // produce IR type mismatches vs the mangled call-site result.
+            if contains_unresolved_var(tc_ty) {
+                return local;
+            }
             // Only upgrade when TC has strictly more info than local.
             let should_upgrade = match (&local, tc_ty) {
                 (ResolvedType::I64, ResolvedType::Tuple(_)) => true,

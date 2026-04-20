@@ -71,10 +71,11 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-20)
 
-mode: auto (Phase 6.30 — Codegen Monomorphization Pipeline Rewrite. Phase 6.29.2 DEFERRED root cause: user-defined generic struct Vec<T> 의 generate_specialized_struct_type 이 module_gen/instantiations.rs flush 에서 호출되지 않아 generated_structs["Vec$i64"] 가 비어있는데 method 쪽 return type 은 mangled 로 emit → LLVM IR 에서 `store %Vec %t0, %Vec* %v.1` (t0 = %Vec$i64) type mismatch. e2e 10+ 건 이 근본 원인. 5 sub-task 순차.)
-iteration: 1
+mode: auto (Phase 6.30 — Codegen Monomorphization Pipeline Rewrite. Phase 6.30.1 확정 root cause: TC expr_types 에 unresolved Var(n) 가 남아 codegen infer_expr_type 의 upgrade rule 을 통해 let alloca 타입을 base %Vec 으로 고착. 실제 문제는 codegen mono 가 아니라 TC expr_types → codegen 경로의 Var leak. 5 sub-task 순차.)
+iteration: 2
 max_iterations: 10
-  strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.30.1 repro + 5-step trace. Opus direct (research-heavy: 3-path instrumentation + flush pipeline analysis, design intent 유실 방지). Baseline std=82/82 vaisdb=237/261 phase158=18/18. Diff 0 목표 (debug prints 조사 후 revert).
+  strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.30.1 repro + 5-step trace. Opus direct (research-heavy: 3-path instrumentation + flush pipeline analysis, design intent 유실 방지). Baseline std=82/82 vaisdb=237/261 phase158=18/18. Diff 0 (debug prints 조사 후 revert). ✅ 완료 — scenario D 확정.
+  strategy iteration 2 (2026-04-20): sequential — #2 Phase 6.30.2 infer_expr_type Var-guard. Opus direct (4 upgrade branches careful analysis, CLAUDE.md rule 3/4 필수). File overlap 없음 but 핵심 TC/codegen interop 면 regression risk 최대 — Opus 직접 수정.
 
 ### Phase 6.30 — Codegen Monomorphization Pipeline Rewrite (2026-04-21, post-6.29)
 
@@ -111,17 +112,19 @@ max_iterations: 10
   - [x] std 82/82, phase158 18/18, vaisdb 237 유지
   - [x] e2e 2614 (pass ≥ 2613)
 
-- [ ] 2. Phase 6.30.2 — infer_expr_type TC-upgrade leak fix (Opus direct)
-  target (updated): crates/vais-codegen/src/type_inference.rs:233-287 infer_expr_type [blockedBy: 1]
-  approach (updated — 6.30.1 scenario D): **Option A 우선** — upgrade rule 에 tc_ty Var-containment 가드 추가.
-    - 조건: rule 적용 전 `contains_var(tc_ty)` 체크. true 면 upgrade skip (local 유지).
-    - 재귀적 Var 탐지: Named{generics}, Ref/RefMut, Tuple, Slice, Vec, Optional 등 inner types 모두 검사.
-    - 기대: `Named{Vec, [Var(1)]}` tc_ty 는 less-concrete → skip → local `Named{Vec, [I64]}` 유지 → type_to_llvm mangled hit → `%Vec$i64` alloca.
-  fallback (Option A가 cascade regression 발생 시): Option B — TC side 에서 check_module 종료 후 expr_types 전체를 apply_substitutions 로 final resolve.
+- [x] 2. Phase 6.30.2 — infer_expr_type TC-upgrade leak fix (Opus direct) ✅ 2026-04-20
+  approach: Option A 채택 — upgrade rule 진입 전 `contains_unresolved_var(tc_ty)` 체크, true 면 upgrade skip (local 유지).
+  changes: crates/vais-codegen/src/type_inference.rs (+contains_unresolved_var helper 26줄 + 7줄 guard in infer_expr_type). 모든 ResolvedType variant 재귀 탐지 (Array/Optional/Ref/RefMut/Pointer/Slice/SliceMut/Range/Future, ConstArray, Map/Result, Tuple, Named{generics}, Fn/FnPtr{params,ret}).
+  verify:
+    - e2e: **2622/0/1 pass** (baseline 2613/10/1) — **+9 pass, -10 fail, 0 regression**. 10 타겟 fail 중 9건 해제 + unrelated 1건도 자동 pass (pre-fix 불안정했던 것).
+    - integration_tests: **147/147** (baseline 146/1 fail — 사실 147/0 다고 나옴, `test_circular_import_tolerated` 도 정상. phase254 drift 재확정).
+    - vais-types: 355 pass / 1 pre-existing fail (phase156::test_try_on_non_result_errors — git stash 로 pre-change 에도 fail 확인, regression 아님).
+    - integrity: std=82/82 vaisdb=237/261 phase158=18/18 (regression 0).
+  root cause rationale: TC 의 expr_types map 은 check_module 중에 unification 완료 후 재쓰기되지 않음. 따라서 `Named{Vec, [Var(1)]}` 같은 stale tc_ty 가 남고, 기존 upgrade rule 은 local `Named{Vec, [I64]}` 를 "less info" 로 오판하여 덮어씀. 가드는 Var 가 섞인 tc_ty 는 upgrade 의미가 없다는 정확한 조건.
   [완료 기준]:
-  - 최소 repro (phase166_vec_to_slice_arg_coercion) clang 통과
-  - 최소 3 e2e 통과 (타겟 10 중)
-  - std 82/82, phase158 18/18, vaisdb ≥ 237
+  - [x] 최소 repro (phase166_vec_to_slice_arg_coercion) clang 통과
+  - [x] 최소 3 e2e 통과 (9/10 달성, 남은 1건은 e2e_str_as_bytes ignored → Phase 6.30.4 에서 ignore 해제 검증)
+  - [x] std 82/82, phase158 18/18, vaisdb ≥ 237
 
 - [ ] 3. Phase 6.30.3 — type_to_llvm fallback 정합 (Opus direct, careful) [blockedBy: 2]
   target: crates/vais-codegen/src/types/conversion.rs:163-192
@@ -145,7 +148,7 @@ max_iterations: 10
   - vaisdb ≥ 238 (최소 +1 기대, 실제 cascade 는 더 클 수도 있음)
   - 만약 +0 이면 남은 blocker 분류하여 Phase 6.31 생성
 
-progress: 1/5 (20%)
+progress: 2/5 (40%)
 
 ### Phase 6.29 — Compiler Completeness Drive II ✅ 완료 (2026-04-20, commit `0a5bcc1c`)
 
