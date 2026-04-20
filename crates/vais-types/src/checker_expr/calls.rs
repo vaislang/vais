@@ -1271,11 +1271,25 @@ impl TypeChecker {
             // and stdlib's real Option impl override when present.
             if (method.node == "ok_or" || method.node == "ok_or_else") && args.len() == 1 {
                 let _ = self.check_expr(&args[0]);
+                // Phase 6.27g: also handle Named{"Option", [T]} form — the
+                // resolver sometimes produces Named rather than Optional for
+                // Option types coming out of method returns (e.g.
+                // `catalog.get_table() -> Option<&TableInfo>`), which made
+                // the fallback wrap Result<Option<T>, Str>, breaking
+                // `.ok_or(...)?.field` patterns downstream.
                 if let ResolvedType::Optional(inner) = &receiver_type {
                     return Ok(ResolvedType::Result(
                         inner.clone(),
                         Box::new(ResolvedType::Str),
                     ));
+                }
+                if let ResolvedType::Named { name, generics } = &receiver_type {
+                    if name == "Option" && generics.len() == 1 {
+                        return Ok(ResolvedType::Result(
+                            Box::new(generics[0].clone()),
+                            Box::new(ResolvedType::Str),
+                        ));
+                    }
                 }
                 return Ok(ResolvedType::Result(
                     Box::new(receiver_type.clone()),
