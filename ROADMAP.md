@@ -71,7 +71,26 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-20)
 
-mode: stopped (2026-04-20 세션 종료 — Phase 6.27d/e/f 완료. vaisdb 234 → 236/261, floor 236. 구조적 compiler fix 5건 커밋 (recursive-self arm widening exclusion + Box peel, HashMap K/V unification, HashSet builtin, Ref/RefMut(Generic) trait-method peel, HashMap.values_mut builtin). 남은 20 파일은 모두 구조적 blocker: ok_or_else MutexGuard Deref (cow), E022 use-after-move (btree/insert), error_code(N,N,N,"msg") 4-arg → VaisError.new 파일 전체 rewrite 필요 (search/executor), dyn trait dispatch (delete/wal/hnsw/insert), codegen C003 `items` 필드 (hnsw/insert의 MinHeap). 단일-라인 fix로는 더 이상 진전 불가. 다음 세션은 (1) codegen C003 Struct-literal field resolution 수정 또는 (2) MutexGuard Deref forwarding 또는 (3) error_code → VaisError.new 대규모 refactor 중 한 방향만 집중.)
+mode: auto (2026-04-20 Phase 6.27g 추가 — search.vais error_code rewrite 선택.)
+iteration: 4
+max_iterations: 6
+
+### Phase 6.27g — search.vais error_code → VaisError.new rewrite (2026-04-20)
+
+- [x] 7. Phase 6.27g — search.vais error_code rewrite + ok_or Named<Option> fix (impl-sonnet + Opus) ✅ 2026-04-20
+  detail: 두 부분 fix. (1) vaisdb/search.vais에 23개 `error_code(E,C,N,"msg")` → `VaisError.new("VAIS-EECCNNN","msg")` 기계적 치환 (impl-sonnet background). (2) 이후 TC가 line 68 `table_meta.table_id`에서 E030 "no field on type 'Option'" 발생 — root cause는 resolver가 `catalog.get_table()` 반환인 `Option<&TableInfo>`를 `Named{"Option",[Ref(TableInfo)]}` 형태로 만드는데 ok_or 빌트인이 `Optional(T)` arm만 처리하고 `Named<Option>` fallback으로 `Result<Named<Option>,Str>` 잘못 반환. Fix: calls.rs ok_or/ok_or_else에 Named{"Option",[T]} arm 추가 (Opus direct). search.vais는 line 76 (table_meta.columns) schema drift로 이동 — 별개.
+  changes: vaisdb/src/vector/search.vais (d0c4341 — 23 sites), compiler crates/vais-types/src/checker_expr/calls.rs (c136d7ba — ok_or Named arm)
+  verify: ./scripts/check-integrity.sh → INTEGRITY OK std=82/82 vaisdb=236/261 phase158=18/18. `vaisc check` 기준 passing 236→239 (+3 TC only; codegen 미통과).
+  [완료 기준]:
+  - [x] 23 error_code sites rewritten cleanly
+  - [x] ok_or Named<Option> 구조적 fix
+  - [x] std 82/82, phase158 18/18 유지
+  - [ ] vaisdb +1 net — 미달성 (search.vais는 여전히 table_meta.columns + ef_search scope 등 다중 cascade blocker 남음)
+progress: 1/1 (100%)
+
+### Phase 6.27f session closed (stopped note 교체) — vaisdb 234 → 236/261 (+2)
+
+이전 세션 종료 내용 (보존): vaisdb 234 → 236/261, floor 236. 구조적 compiler fix 5건 커밋 (recursive-self arm widening exclusion + Box peel, HashMap K/V unification, HashSet builtin, Ref/RefMut(Generic) trait-method peel, HashMap.values_mut builtin). 남은 20 파일은 모두 구조적 blocker: ok_or_else MutexGuard Deref (cow), E022 use-after-move (btree/insert), error_code(N,N,N,"msg") 4-arg → VaisError.new 파일 전체 rewrite 필요 (search/executor), dyn trait dispatch (delete/wal/hnsw/insert), codegen C003 `items` 필드 (hnsw/insert의 MinHeap). 단일-라인 fix로는 더 이상 진전 불가. 다음 세션은 (1) codegen C003 Struct-literal field resolution 수정 또는 (2) MutexGuard Deref forwarding 또는 (3) error_code → VaisError.new 대규모 refactor 중 한 방향만 집중.)
 iteration: 3
 max_iterations: 6
   strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.27d.a. Opus direct (TC boundary 설계+impl 일체). 좁은 범위 (control_flow.rs 2 함수 시그니처 thread 추가). Baseline std 82/82 vaisdb 234/261 phase158 18/18.
