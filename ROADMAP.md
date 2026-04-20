@@ -74,6 +74,10 @@ max_iterations: 20
   opus_direct: A.2 — 측정 + 판정 루프. impl-sonnet 위임 시 "build 성공 vs codegen gap" 구분을 놓칠 리스크.
   strategy iteration 3: A.3 단독 (cross-file X impl 2 파일 재현 → LANGUAGE_SPEC vs CODEGEN_FEATURES 일치화).
   opus_direct: A.3 — 실측 결과가 2 문서의 어느 쪽을 정답으로 세울지 판정 루프. 2 파일, 소규모.
+  strategy iteration 4: B.1 단독. 1단계 research (CODEGEN_FEATURES 전수 조사 + TC✓/codegen✗ 후보 목록) → 2단계 판정 (TC error 로 거부할 construct 선정) → 3단계 구현. 각 단계 Opus direct.
+  opus_direct: B.1 — 매트릭스 조사 결과가 어떤 construct 를 거부 대상으로 삼을지 판정과 직결. 위임 시 의도 분리 불가.
+  strategy iteration 4 note (2026-04-21): B.1 재정의. 실측 결과 "TC-pass/codegen-fail" 4개 중 (1)(2)(4)는 B.4/B.2 스코프 이미 포함, (3)은 독립 버그 아니라 Option/Result lowering 하나의 뿌리. B.1 → "Optional/Result lowering 근본 수정" 으로 변경 (사용자 승인). Explore agent 진단 완료: call.rs:183-246의 하드코딩 i64 가 원인. 구현은 /clear 후 새 세션.
+  context_checkpoint: B.1 research 단계 완료. 구현은 다음 세션에서 fresh context 로 시작. 본 세션 3 iteration (A.1/A.2/A.3) + B.1 research = 문서 동기화 + 진단 완료. 컴파일러 코드 수정 0.
 
 ### Phase A — 문서 동기화 (Opus direct, 먼저 실행)
 
@@ -134,18 +138,66 @@ max_iterations: 20
 
 > **배경**: Survey 결과 실제로 구현 필요한 항목은 Phase 3.12 / 3.13 / 3.14 + comptime eval + defer edge case, 총 5개. 순차 진행. 각각 regression gate 준수.
 
-- [ ] B.1 — Phase 3.12 "TC pass ⇒ codegen pass" 불변식 확립 (Opus direct) [blockedBy: A.3]
-  target: crates/vais-types/src/checker_expr/* — 미지원 construct 에 대해 TC error 로 명시적 거부
+- [ ] B.1 — **Optional/Result lowering 근본 수정** (Opus direct) [blockedBy: A.3]
+  **재정의 (2026-04-21)**: 원래 "TC pass ⇒ codegen pass 불변식 확립" 이었으나 research 결과
+  silent drop 실제 케이스가 대부분 **하나의 뿌리** — Option/Result 의 lowering gap — 에서 기인
+  한다고 확인. TC 거부 막기보다 뿌리 수정이 근본 해결.
+
+  실측 증거 (A.1 + B.1 research 단계):
+    - `F f(opt: Option<Struct>) -> Option<Primitive>` + match-arm 재포장: C004 "Aggregate extract index out of range" (A.1 3건)
+    - `L { ... B Some(42) }` loop-break-값이 `Option<i64>`: C004 동일 증상
+    - `EN Status { OK, Failed(i64) }` 커스텀 enum 은 동일 구조에서 **정상 동작** → Optional-family 전용 lowering 경로에 gap.
+    - Vec<Struct>[i].field = (B.4) 는 별개 root cause (index-assign). B.4 는 유지.
+
+  target: crates/vais-codegen/src/inkwell/ — Option/Result 가 (a) 함수 파라미터,
+    (b) 함수 반환, (c) 변수 바인딩, (d) match-arm 재포장, (e) loop-break-값, (f) 저장/로드
+    의 **모든 경로**에서 일관된 LLVM aggregate 레이아웃으로 lowering.
+
   approach:
-    1. CODEGEN_FEATURES.md 매트릭스 전수 조사 (Parse/TC/Codegen/Run 4 컬럼)
-    2. "TC ✓ / Codegen ✗" 인 construct 전수 목록 작성
-    3. 각각에 대해 TC side 에서 E-code 로 거부 (silent drop 금지)
-    4. 관련 e2e 테스트는 `#[ignore = "Phase X"]` 로 업데이트
-  scope limitation: Phase 4.19~4.23 중 A.2 에서 ✓ 승격된 것은 제외. 남은 진짜 미완 construct 만 거부.
+    1. research-haiku 로 현재 Optional lowering 경로 진단 — 어느 위치 에서 "fat pointer" vs
+       "aggregate struct" 불일치가 발생하는가?
+    2. 진단 리포트 받은 뒤 Opus direct 로 수정 범위 결정 (단일 함수 / 모듈 단위 / 여러 파일).
+    3. CLAUDE.md rule 3/4 엄수: 수정 전 baseline 기록, 수정 후 regression 1건 발생 시 즉시 revert.
+    4. 각 단계마다 A.1 의 3개 LIVING_SPEC 파일 (phase2_10_*.vais) 로 build + run 검증.
+    5. 성공 시 추가로 loop-break-Option 재현 케이스를 e2e 테스트로 추가.
+
+  **Research 완료 (2026-04-21, 본 세션 iteration 4)**:
+    Explore agent 진단 결과 근본 원인 확정:
+    - `Option<T>` 의 type-level lowering 은 `{ i8, %T }` 로 정확 (conversion.rs:338-346).
+    - 그러나 `Some()`/`Ok()`/`Err()` 생성자가 payload field 를 **하드코딩 `i64`** 로 설정
+      (`crates/vais-codegen/src/inkwell/gen_expr/call.rs:183-246`). `self.coerce_to_i64(v)?`
+      로 모든 payload 를 i64 로 강제 coerce. 구조체/Optional/Vec 등 aggregate payload 에서
+      type-system 기대 (`{ i8, %Role }`) vs 실제 IR (`{ i8, i64 }`) 불일치 → LLVM verifier
+      C004 "Aggregate extract index out of range".
+    - `ResolvedType::Optional(Box<T>)` vs `Named("Option", [T])` 이중 표현이 coexist
+      (crates/vais-types/src/inference/option_result_bridge.rs). 둘 다 `type_to_llvm` 에서는
+      같은 `{ i8, T }` 로 resolve 되지만 constructor 에서 T 를 읽지 않음.
+
+  **수정 범위 (다음 세션에서 진행)**:
+    1. `crates/vais-codegen/src/inkwell/gen_expr/call.rs:183-246`
+       — `Some`/`Ok`/`Err` 생성자가 expected-type (Option<T>/Result<T,E>) 을 context 에서
+         읽어 `{ i8, %T }` 를 동적으로 빌드. `coerce_to_i64` fallback 제거.
+    2. `crates/vais-codegen/src/inkwell/generator.rs`
+       — 현재 expression 의 expected type 을 query 할 수 있는 helper 추가
+         (TC 의 `expected_types` map 을 codegen 이 참조하거나 call-site 에서 전달).
+    3. `crates/vais-codegen/src/inkwell/gen_match.rs:915-1095`
+       — `Pattern::Variant` 의 field extraction 이 실제 struct layout 에 맞도록 index/type 결정
+         (현재도 i64 고정 가정이 있다면 수정).
+
+  **다음 세션 준비물 (/clear 후 복원 시)**:
+    - ROADMAP.md 의 본 B.1 섹션 (이 블록) 을 읽고 시작.
+    - 실측 reproducer: `docs/language/LIVING_SPEC/02_patterns/phase2_10_option_struct_rewrap.vais`
+      (+ result_te, nested_option 2건). 현재 TC ✓ / Build ✗ C004. 수정 후 Build ✓ 목표.
+    - Baseline: syntax=200, stages=14, std=82/82, vaisdb=237/261, phase158=18/18 (본 iteration 시작 시 실측).
+    - CLAUDE.md rule 3/4 규칙 엄수.
+
   [완료 기준]:
-    - CODEGEN_FEATURES.md 완결 매트릭스 (49 construct 전부)
-    - 미지원 construct TC error 로 거부 (최소 E-code 하나 per 카테고리)
-    - 기존 pass 테스트 0 regression
+    - A.1 reproducer 3건 (Option<Struct>/Result<T,E>/nested Option) 모두 TC + Codegen + Run ✓
+    - loop-break 의 Option<i64>/Option<Struct> 케이스도 Codegen + Run ✓
+    - docs/CODEGEN_FEATURES.md L171/L173 및 L175 해당 행 업데이트 (resolved 표시)
+    - baseline 유지: syntax=200, std=82/82, vaisdb≥237/261, phase158=18/18
+    - vaisdb cascade 측정 (+N 기대, 의무는 아님)
+    - (선택) 새 e2e 테스트 2+ 추가 — loop-break-Option, Option<Struct> param round-trip
 
 - [ ] B.2 — Phase 3.13 runtime 함수 구현 (impl-sonnet) [blockedBy: B.1]
   target: crates/vais-codegen/src/function_gen/runtime.rs + string_ops.rs + builtins dispatch
