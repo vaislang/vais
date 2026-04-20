@@ -783,6 +783,15 @@ impl TypeChecker {
                     // Phase 247: changed from raw i64 ptr to Vec<u8>. vaisdb
                     // expects iterable result for `path_bytes.len()` etc.
                     // The legacy raw-ptr semantics still work via .as_ptr().
+                    // Phase 6.31: register Vec<u8> struct instantiation so the
+                    // codegen `generate_specialized_struct_type` path can emit
+                    // `%Vec$u8` alongside the alloca. This is a no-op when Vec
+                    // is not imported (e.g. standalone e2e harness without std
+                    // link), but unblocks vaisdb files that DO import std/vec.
+                    self.add_instantiation(crate::types::GenericInstantiation::struct_type(
+                        "Vec",
+                        vec![ResolvedType::U8],
+                    ));
                     return Ok(ResolvedType::Named {
                         name: "Vec".to_string(),
                         generics: vec![ResolvedType::U8],

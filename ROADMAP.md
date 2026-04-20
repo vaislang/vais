@@ -71,9 +71,9 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-20)
 
-mode: auto (Phase 6.30 — Codegen Monomorphization Pipeline Rewrite. Phase 6.30.1 확정 root cause: TC expr_types 에 unresolved Var(n) 가 남아 codegen infer_expr_type 의 upgrade rule 을 통해 let alloca 타입을 base %Vec 으로 고착. 실제 문제는 codegen mono 가 아니라 TC expr_types → codegen 경로의 Var leak. 5 sub-task 순차.)
-iteration: 5
-max_iterations: 10
+mode: auto (Phase 6.31 — Builtin-return Struct Instantiation. Phase 6.30 완료 후 남은 e2e_str_as_bytes 1 ignored. str.as_bytes() 같은 stdlib builtin 이 Vec<T> 반환 시 TC 가 Struct instantiation 을 등록 안 함 → codegen 이 %Vec$u8 alloca 지만 struct def 미방출 (unsized). (a) TC dispatch 에서 builtin 반환 타입 Struct inst 등록 OR (b) codegen synthetic struct inst 생성 (module_gen/instantiations.rs:382+ synthesize 로직 확장). 1 task.)
+iteration: 1
+max_iterations: 5
   strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.30.1 repro + 5-step trace. Opus direct (research-heavy: 3-path instrumentation + flush pipeline analysis, design intent 유실 방지). Baseline std=82/82 vaisdb=237/261 phase158=18/18. Diff 0 (debug prints 조사 후 revert). ✅ 완료 — scenario D 확정.
   strategy iteration 2 (2026-04-20): sequential — #2 Phase 6.30.2 infer_expr_type Var-guard. Opus direct (4 upgrade branches careful analysis, CLAUDE.md rule 3/4 필수). File overlap 없음 but 핵심 TC/codegen interop 면 regression risk 최대 — Opus 직접 수정. ✅ 2622/0/1 e2e (+9 pass).
   strategy iteration 3 (2026-04-20): sequential — #3 Phase 6.30.3 type_to_llvm fallback hardening. Opus direct (fallback 제거 후 미래 regression 방어 설계 판단). 1 파일 소규모 변경, 6.30.2 의 cascade 결과 확인. ✅
@@ -162,13 +162,19 @@ max_iterations: 10
   - [x] integration_tests 146+/146 유지 (147 실제)
   - [x] std 82/82, phase158 18/18, vaisdb ≥ 237
 
-- [ ] 6. Phase 6.31 — builtin-return struct instantiation (new, split from 6.30.4) [blockedBy: 4]
-  target: crates/vais-types/src/checker_expr/calls.rs (builtin dispatch — as_bytes/etc.) OR crates/vais-codegen/src/module_gen/instantiations.rs:382+ (synthetic struct inst from function return types).
-  rationale: `s.as_bytes() -> Vec<u8>` 같은 stdlib 내장 method 가 generic struct instance 를 반환하는데, 이 struct 의 Struct instantiation 이 어느 pipeline 에서도 등록되지 않음. 6.29.2 deferred 목록에서 e2e_str_as_bytes 1건 해제 필요. vaisdb 에도 동일 패턴 (as_bytes 류 사용 파일) 가 cascade 가능.
+- [~] 6. Phase 6.31 — builtin-return struct instantiation (Opus direct) ✅ partial 2026-04-20
+  changes: crates/vais-types/src/checker_expr/calls.rs (+5줄). `as_bytes` builtin dispatcher 에서 `ResolvedType::Named{Vec, [U8]}` 반환 직전에 `add_instantiation(GenericInstantiation::struct_type("Vec", vec![U8]))` 호출 추가. 이로써 TC 가 Vec<u8> Struct instantiation 을 registry 에 등록 → codegen `generate_module_with_instantiations` 가 (stdlib Vec struct_def 가 있는 경우) `%Vec$u8 = type {…}` 을 emit.
+  crates/vaisc/tests/e2e/phase134_string.rs (comment 업데이트): e2e 의 `compile_to_ir` 가 single-file parse 라서 stdlib 안 import → codegen 이 struct_defs["Vec"] 없어서 여전히 `alloca %Vec$u8` with no type. 따라서 e2e_str_as_bytes 는 **ignore 유지** — 진짜 blocker 는 e2e 하네스 인프라 (stdlib link).
+  verify:
+    - e2e: 2622/0/1 유지 (baseline, 0 regression)
+    - vaisdb: 237/261 (+0, 기대했던 cascade 는 대부분의 vaisdb as_bytes 사용이 ByteBuffer.as_bytes() → &[u8] 로 다른 builtin path 이거나 stdlib vec import 있는 쪽은 이미 pass 상태)
+    - integrity OK: std=82/82 phase158=18/18
+    - integration_tests 147/147
+  결론: TC side fix 는 정답 (Vec<u8> instantiation 이 이제 정확히 registry 에 들어감 — vaisdb 에서 stdlib 통해 cascade 가능한 잠재 버그 미리 차단). e2e 하네스 한계로 specific test 는 여전히 ignored — 단, 새 ignore 주석에 완전한 구조적 원인과 2 가지 fix 경로 명시. **"partial" 마크**: TC work 완료, e2e 해제는 harness work 필요로 추후 phase.
   [완료 기준]:
-  - e2e_str_as_bytes ignore 제거 후 pass
-  - std 82/82, phase158 18/18, vaisdb ≥ 237
-  - (가능하면 cascade 로 vaisdb +N)
+  - [~] e2e_str_as_bytes: TC instantiation 은 해결, 하지만 e2e harness single-file parse 한계로 pass 불가. ignore 유지 + 정확한 원인 문서화.
+  - [x] std 82/82, phase158 18/18, vaisdb ≥ 237 (0 regression)
+  - [x] 후속 phase 분리 보장 (6.32 e2e-with-stdlib harness 개선, 필요시 생성)
 
 - [x] 5. Phase 6.30.5 — vaisdb 재측정 + cascade 분류 (Opus direct, measurement only) ✅ 2026-04-20
   measurement: `cargo test -p vaisc --test integrity --release -- --nocapture | grep INTEGRITY`:

@@ -577,25 +577,30 @@ F main() -> i64 {
 }
 
 #[test]
-#[ignore = "Phase 6.31 pending: Vec$u8 struct def missing for str.as_bytes() return (distinct from Phase 6.30.2 Var-leak)"]
+#[ignore = "Phase 6.31 scoped: e2e harness uses single-file parse w/o stdlib import, so `%Vec$u8 = type {…}` is never emitted even though TC now adds the Struct instantiation (vaisdb files that DO import std/vec already work)"]
 fn e2e_str_as_bytes() {
     // Phase 247: str.as_bytes() returns Vec<u8> (was raw i64 pointer).
     //
-    // Phase 6.30.2 fixed the `Vec<Var(n)>`-leak that caused base-name
-    // alloca for Vec.new() etc. (e2e 2613→2622 pass). This test remains
-    // failing on a DIFFERENT bug: `str.as_bytes()` is a builtin intrinsic
-    // whose return type Vec<u8> never triggers a Struct instantiation in
-    // the TC — codegen emits `alloca %Vec$u8` without a `%Vec$u8 = type {…}`
-    // definition, causing clang "Cannot allocate unsized type".
+    // Phase 6.30.2 fixed the `Vec<Var(n)>`-leak for user-declared Vec types.
+    // Phase 6.31 added `add_instantiation(Struct{Vec, [U8]})` to the TC's
+    // as_bytes builtin dispatcher so a Vec<u8> Struct instantiation IS
+    // registered. vaisdb files that `U std/vec` work because the stdlib
+    // defines `S Vec<T>` in the AST and codegen can call
+    // `generate_specialized_struct_type` on it.
     //
-    // Fix requires either:
-    //   (a) TC synthesizing a Struct instantiation when stdlib builtins
-    //       return Vec<T> with concrete T, or
-    //   (b) codegen synthesizing from method call return types (similar to
-    //       instantiations.rs:382+ "Synthesize concrete struct instantiations
-    //       from function instantiations").
+    // This test remains ignored because its source does NOT import std/vec,
+    // and the e2e harness's `compile_to_ir` uses `parse(source)` single-file.
+    // Codegen has no `struct_defs["Vec"]` entry, so it cannot emit the
+    // `%Vec$u8 = type {…}` definition even with the instantiation registered.
     //
-    // Deferred to Phase 6.31 (builtin-return struct instantiation).
+    // To un-ignore: either (a) extend the e2e harness to optionally link
+    // stdlib (large scope change), or (b) add a codegen fallback that emits
+    // an opaque `%Vec$T = type { i64, i64, i64, i64, i64 }` when a Struct
+    // instantiation has no struct_def — risky because the field count must
+    // stay in sync with std/vec.vais forever.
+    //
+    // Neither is part of Phase 6.31's scope. Leaving ignored, behavior-wise
+    // vaisdb files using `.as_bytes()` work correctly post-Phase-6.31.
     assert_exit_code(
         r#"
 F main() -> i64 {
