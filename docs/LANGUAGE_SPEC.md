@@ -228,7 +228,7 @@ This table enumerates every top-level or statement-level construct the parser ac
 | Enum decl (`EN`) | `EN Color { Red, Green(i64) }` | ✓ | ✓ | ✓ | ✓ |
 | Enum decl (`E`) | `E Color { … }` | ✓ | ✓ | ✓ | ✓ (legacy) |
 | Trait decl | `W Eq { F eq(a:Self,b:Self)->bool }` | ✓ | ✓ | ✓ | ✓ |
-| Impl block | `X Foo: MyTrait { … }` | ✓ | ✓ | ◐ cross-file dispatch: Phase 2.9 | ✓ |
+| Impl block | `X Foo: MyTrait { … }` | ✓ | ✓ | ✓ (same-file). Cross-file `X`/`S` split intentionally **disallowed** — Phase 2.9 decision (a), TYPE_SYSTEM.md §Phase 2.9. Workaround: co-locate `X` with `S`. | ✓ |
 | Type alias | `T Id = i64` | ✓ | ✓ | ✓ | ✓ |
 | Use import | `U std::io` | ✓ | ✓ | ✓ | ✓ |
 | Extern block | `N "C" { F malloc(s:i64)->*u8 }` | ✓ | ✓ | ✓ | ✓ |

@@ -72,6 +72,8 @@ max_iterations: 20
   opus_direct: A.1 — 측정 근거 → 매트릭스 판정이 분리 불가능한 evaluator 루프
   strategy iteration 2: A.2 순차 (A.3 가 A.2 결과에 blockedBy). 5 construct 각각 최소 재현 → 매트릭스 판정.
   opus_direct: A.2 — 측정 + 판정 루프. impl-sonnet 위임 시 "build 성공 vs codegen gap" 구분을 놓칠 리스크.
+  strategy iteration 3: A.3 단독 (cross-file X impl 2 파일 재현 → LANGUAGE_SPEC vs CODEGEN_FEATURES 일치화).
+  opus_direct: A.3 — 실측 결과가 2 문서의 어느 쪽을 정답으로 세울지 판정 루프. 2 파일, 소규모.
 
 ### Phase A — 문서 동기화 (Opus direct, 먼저 실행)
 
@@ -114,14 +116,19 @@ max_iterations: 20
     - Comptime: Parse ◐ (function-body ✓ / const-init ✗ B.3), TC ✓, Codegen ✓, Run ✓
   baseline 유지: syntax=200, stages=14, std=82/82, vaisdb=237/261, phase158=18/18.
 
-- [ ] A.3 — Cross-file impl split 불일치 해결 [blockedBy: A.2]
-  target: LANGUAGE_SPEC.md L231 "Impl block Codegen ◐ cross-file dispatch: Phase 2.9" vs CODEGEN_FEATURES.md L93 "✗" 일치화
-  approach:
-    1. 현재 cross-file X impl 이 실제로 작동하는지 재현 (파일 A 에 `S Foo`, 파일 B 에 `X Foo: Trait`)
-    2. 결과에 따라 양쪽 문서 중 정확한 쪽 확정
-  [완료 기준]:
-    - 두 문서 일치
-    - 실측 근거 주석 추가
+- [x] A.3 — Cross-file impl split 불일치 해결 ✅ 2026-04-21
+  실측: cross-file X impl 분리 재현 (`/tmp/a3/shape_def.vais` + `shape_impl.vais`)
+    → `U shape_def::Square` 후 `X Square: Shape { F area(self) { self.side * ... } }`
+    는 E030 "No such field 'side' on Square" 로 TC 실패. Cross-file split 은 실제로 작동
+    **하지 않음**. TYPE_SYSTEM.md §Phase 2.9 decision (a) 와 일치.
+  정답: CODEGEN_FEATURES.md L93 `✗` 가 맞음. LANGUAGE_SPEC.md L231 의 `◐ cross-file
+    dispatch: Phase 2.9` 는 "진행 중" 뉘앙스로 오인 소지 → **명시적 disallowed** 로 갱신.
+  changes:
+    - docs/LANGUAGE_SPEC.md L231 Impl block row: "✓ (same-file). Cross-file `X`/`S`
+      split intentionally **disallowed** — Phase 2.9 decision (a), TYPE_SYSTEM.md §Phase 2.9.
+      Workaround: co-locate `X` with `S`."
+    - CODEGEN_FEATURES.md L93 기존 `✗` + "Phase 2.9 decision (a)" 주석 유지 (변경 없음).
+  baseline 유지: syntax=200 std=82/82 vaisdb=237/261 phase158=18/18.
 
 ### Phase B — 실제 미완 구현 (Opus direct / impl-sonnet)
 
