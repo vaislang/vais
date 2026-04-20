@@ -72,12 +72,13 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-20)
 
 mode: auto (Phase 6.30 — Codegen Monomorphization Pipeline Rewrite. Phase 6.30.1 확정 root cause: TC expr_types 에 unresolved Var(n) 가 남아 codegen infer_expr_type 의 upgrade rule 을 통해 let alloca 타입을 base %Vec 으로 고착. 실제 문제는 codegen mono 가 아니라 TC expr_types → codegen 경로의 Var leak. 5 sub-task 순차.)
-iteration: 4
+iteration: 5
 max_iterations: 10
   strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.30.1 repro + 5-step trace. Opus direct (research-heavy: 3-path instrumentation + flush pipeline analysis, design intent 유실 방지). Baseline std=82/82 vaisdb=237/261 phase158=18/18. Diff 0 (debug prints 조사 후 revert). ✅ 완료 — scenario D 확정.
   strategy iteration 2 (2026-04-20): sequential — #2 Phase 6.30.2 infer_expr_type Var-guard. Opus direct (4 upgrade branches careful analysis, CLAUDE.md rule 3/4 필수). File overlap 없음 but 핵심 TC/codegen interop 면 regression risk 최대 — Opus 직접 수정. ✅ 2622/0/1 e2e (+9 pass).
   strategy iteration 3 (2026-04-20): sequential — #3 Phase 6.30.3 type_to_llvm fallback hardening. Opus direct (fallback 제거 후 미래 regression 방어 설계 판단). 1 파일 소규모 변경, 6.30.2 의 cascade 결과 확인. ✅
-  strategy iteration 4 (2026-04-20): direct delegate fast-path — #4 Phase 6.30.4 e2e_str_as_bytes #[ignore] 제거 + 실행 확인. Opus direct (1파일, <10줄, 단순).
+  strategy iteration 4 (2026-04-20): direct delegate fast-path — #4 Phase 6.30.4 e2e_str_as_bytes #[ignore] 제거 + 실행 확인. Opus direct (1파일, <10줄, 단순). ✅ as_bytes 는 다른 버그 → Phase 6.31 분리.
+  strategy iteration 5 (2026-04-20): measurement only — #5 Phase 6.30.5 vaisdb cascade 재측정. Opus direct (no code change, 결과 해석 + 6.31 스코프 조정).
 
 ### Phase 6.30 — Codegen Monomorphization Pipeline Rewrite (2026-04-21, post-6.29)
 
@@ -169,13 +170,29 @@ max_iterations: 10
   - std 82/82, phase158 18/18, vaisdb ≥ 237
   - (가능하면 cascade 로 vaisdb +N)
 
-- [ ] 5. Phase 6.30.5 — vaisdb 재측정 + cascade 진전 확인 (Opus direct) [blockedBy: 4]
-  target: 6.30 fix 가 vaisdb 의 `Vec<u8>` / generic struct 소비 파일들에 cascade 했는지 확인. `test_vaisdb_files_codegen_ok` 재측정.
+- [x] 5. Phase 6.30.5 — vaisdb 재측정 + cascade 분류 (Opus direct, measurement only) ✅ 2026-04-20
+  measurement: `cargo test -p vaisc --test integrity --release -- --nocapture | grep INTEGRITY`:
+    - vaisdb_files pass=237 fail=24 total=261 — **baseline 237/261 유지, cascade +0**.
+    - std_files 82/82, living_spec 101/101, phase158 18/18, compiler_syntax 200/200, compiler_stages 14/14.
+  cascade 분석 (24 failures 분류):
+    - **TC-stage 13건** (codegen 미도달, 6.30 범위 밖):
+      - E004 Undefined function: 9건 (storage/btree/insert, vector/hnsw/{delete,insert,wal}, 등) — stdlib API drift (메서드 signature 변경 후 call site 미동기화)
+      - E001 Type mismatch: 3건 (storage/txn/deadlock, vector/hnsw/{bulk,cow}) — signature drift
+      - E006 Wrong argument count: 1건 (rag/mod, fulltext/mod) — RwLock.write_lock() arg 수 drift
+    - **Codegen-stage 11건** (실제 codegen 실패):
+      - C003 "Cannot index into type 'i64'" 류: Vec<T> field access 에서 T 가 erase 돼 i64 로 읽히는 **separate erasure bug**. 6.30.2 의 let-stmt Var-leak 와 경로 다름.
+      - 샘플 확인: vector/search.vais:77 `&table_meta.columns[coli]` — columns 가 Vec<Column> 인데 indexing 시 i64 로 erase.
+  결론: Phase 6.30 scope 달성 (Var-leak + fallback hardening + 10 e2e 해제). vaisdb cascade 가 +0 인 이유는 **vaisdb 의 remaining 24 failures 가 전부 다른 bucket** 이기 때문. 6.30 은 let-stmt 의 Vec mono 경로를 고쳤지만 vaisdb 는 (a) stdlib API drift, (b) 다른 codegen erasure 버그에 막혀 있음.
+  **follow-up phases** (Phase 6.31 은 별도 task 로 생성됨):
+    - Phase 6.31: str.as_bytes() builtin-return struct instantiation (1 e2e ignored 해제 대상)
+    - Phase 6.32 (미생성, 추후): vaisdb stdlib API drift 13건 일괄 동기화 (E001/E004/E006)
+    - Phase 6.33 (미생성, 추후): Vec<T> field-access erasure (C003 류 11건)
   [완료 기준]:
-  - vaisdb ≥ 238 (최소 +1 기대, 실제 cascade 는 더 클 수도 있음)
-  - 만약 +0 이면 남은 blocker 분류하여 Phase 6.31 생성
+  - [x] vaisdb 재측정 + 결과 기록 (237/261, baseline 유지)
+  - [x] +0 cascade 의 원인 분석 (3 bucket 분류)
+  - [x] 남은 blocker Phase 로 분류 (6.31 생성, 6.32/6.33 제안)
 
-progress: 4/5 base + 0/1 added (67% of 6)
+progress: 5/5 base + 0/1 follow-up (Phase 6.30 main scope 100%, 6.31 deferred)
 
 ### Phase 6.29 — Compiler Completeness Drive II ✅ 완료 (2026-04-20, commit `0a5bcc1c`)
 
