@@ -72,10 +72,16 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-20)
 
 mode: auto (Phase 6.28 신설 — 컴파일러 근본 완성도 드라이브. 5 sub-task 순차 진행, 근거는 "사용자 체감 blast radius" 기준 우선순위. 사용자 승인 2026-04-20 `/clear` 후 이어갈 예정.)
-iteration: 1
+iteration: 3
 max_iterations: 10
   strategy-note: Phase 6.27 시리즈에서 vaisdb 90.4%(236/261) 도달. 남은 실패의 대다수는 **compiler gap** 이 root cause. Phase 6.28은 vaisdb fix 아닌 **TC/codegen 자체의 structural bug를 순차로** 해결. 각 task는 최소 repro + e2e regression test + integrity gate 통과 의무. 순서는 "blast radius" 크기 큰 순.
   strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.28.1 nested scope method-return erasure fix. Opus direct (TC scope 설계+impl 일체, CLAUDE.md 규칙 1~7 전부 적용 요구됨). Baseline std=82/82 vaisdb=236/261 phase158=18/18 syntax=200 stages=14. 순차 이유: 5 tasks all Opus direct, all touch TC/codegen core — file overlap 잠재 + ownership (task 5)은 cascade 리스크로 병렬 금지.
+  iteration 1 결과: **237 도달 (+1)**. 원래 가설("nested scope method-return erasure")은 **틀렸음** — 실제는 parser bug (block-terminated expr `*` binop mis-parse). parse_factor에 early-return 가드 추가. window.vais direct pass. commit 2af47cf1.
+  strategy iteration 2 (2026-04-20): sequential — #2 Phase 6.28.2 codegen struct-literal field resolution. Opus direct (codegen core, struct registration 파이프라인 설계 결정 수반). 신뢰 이슈 — TC pass/codegen fail은 사용자 혼란 가장 큼.
+  iteration 2 결과: **SCOPED**. vaisdb 전체에 C003 "Unknown field" 0건 — Phase 6.28.1 / 선행 세션이 간접 해결했음. 변경 없이 진행.
+  strategy iteration 3 (2026-04-20): sequential — #3 Phase 6.28.3 MutexGuard method-call forwarding. Opus direct (is_guard_type block extension, cow.vais + 유사 파일 unblock 기대).
+  iteration 3 결과: **reframe**. MutexGuard forwarding 은 이미 정상 — 진짜 버그는 `Optional(Ref(V)).ok_or_else(...)` 가 Phase 311 에 미등록. 24 줄 추가로 fix. vaisdb net 0 (cow.vais 다음 blocker 가 있음) but 구조적 win — 앞으로 ok_or_else 체인 전반이 뚫림.
+  strategy iteration 4 (2026-04-20): sequential — #4 Phase 6.28.4 Box<dyn T> method return-type associated substitution. Opus direct (lookup.rs + substitution 파이프라인).
 
 ### Phase 6.28 — 컴파일러 근본 완성도 드라이브 (2026-04-20)
 
@@ -108,41 +114,25 @@ max_iterations: 10
   - [x] e2e 보호 테스트 (phase6_28_parser.rs, 4 tests)
   **Note**: 처음 시도한 "parse_stmt 에서 parse_primary 직접 호출" 방식은 std 의 `LW ... { } ! { }` (partial unwrap) 레거시 파싱을 깨뜨려 std 82→75 regression 냈음 → 즉시 revert (CLAUDE.md 규칙 4 준수). 두 번째 시도(parse_factor 가드)가 성공. 교훈: AST 변환의 범위를 최소화하고 기존 dialect 보존 확인 필수.
 
-- [ ] 2. Phase 6.28.2 — codegen struct-literal field resolution (TC/codegen 불일치) (Opus direct)
-  blast_radius: 크다. 사용자 신뢰 측면에서 치명적 (TC는 OK인데 codegen에서 필드 없다고 함).
-  target: crates/vais-codegen/src/inkwell/generator.rs (struct literal 생성 경로) 또는 crates/vais-codegen/src/control_flow/pattern.rs 의 field resolve
-  repro 후보: hnsw/insert.vais 의 MinHeap struct-literal 생성 지점 (line 92)
-  symptom: `MinHeap { items: Vec.with_capacity(0) }` — TC pass, codegen `C003 Type error: Unknown field 'items' in struct 'MinHeap'`
-  investigation:
-    1. 최소 repro 작성 (단일 파일로 MinHeap-style struct + impl + literal)
-    2. codegen이 struct `MinHeap` 을 어떤 lookup 경로로 가져오는지 (self.structs vs self.enums vs 어딘가 다른 캐시) 확인
-    3. TC 가 등록한 struct metadata 와 codegen 이 읽는 source 가 일치하는지 비교
-  fix candidates:
-    - (a) generic struct 를 codegen 이 register 하는 stage 가 누락
-    - (b) import path 따라 struct 이름 prefix 가 달라 lookup 실패
-    - (c) `generics: vec![]` 형태로 erase 된 사본이 먼저 등록돼 실제 def 를 가림
-  [완료 기준]:
-  - 최소 repro 가 TC pass + codegen pass
-  - hnsw/insert.vais 가 C003 이후 다른 blocker 로 진전 (full pass 아니어도 OK)
-  - std 82/82, phase158 18/18, vaisdb ≥ 236
+- [~] 2. Phase 6.28.2 — codegen struct-literal field resolution 🚧 SCOPED 2026-04-20 (premise gone)
+  investigation: Phase 6.28.1 완료 후 전체 vaisdb codegen 스캔 (`test_vaisdb_files_codegen_ok` stderr) → **C003 "Unknown field" 에러 0건**. hnsw/insert.vais 의 MinHeap struct-literal (line 91 `MinHeap { items: Vec.with_capacity(0) }`) 도 직접 실행 시 C003 재현 안됨. 24 vaisdb 실패는 모두 TC 단계 (E001 / E004 / E006) — codegen까지 도달하지 못함. ROADMAP에 명시된 전제("TC pass + codegen C003")가 더 이상 유효하지 않음 — 최근 세션에서 간접적으로 고쳐졌거나, 측정 방식이 바뀐 듯.
+  [완료 기준] (SCOPED):
+  - [x] 전제 검증 — vaisdb 전체에 C003 0건 확인
+  - [x] baseline regression 0 (변경 없음으로 자연 만족)
+  - [ ] 실제 codegen struct-literal 수정 — 재현되는 repro 없어서 미적용. 만약 미래에 C003 "Unknown field" 재등장 시 별도 phase 로 부활.
 
-- [ ] 3. Phase 6.28.3 — MutexGuard method-call forwarding (Opus direct)
-  blast_radius: 중간. cow.vais + concurrency 류 파일.
-  target: crates/vais-types/src/checker_expr/calls.rs — 기존 `is_guard_type` 블록 (Index forwarding은 이미 Phase 6.27c.2에서 구현됨, method-call 연장)
-  repro:
-    ```vais
-    F main() {
-        m := Mutex.new(HashMap.new());
-        guard := m.lock();
-        guard.insert(1, "a");            # 이건 현재 작동 (is_guard_type 블록)
-        x := guard.get(&1).ok_or_else(|| "err");  # 이건 실패 — ok_or_else on guard
-    }
-    ```
-  detail: 현 is_guard_type 로직이 `guard.insert` 같은 HashMap inherent method 는 forward 하지만, `guard.get().ok_or_else()` 체인에서 `.get()` 반환값이 MutexGuard 로 남거나 Option 이 Named 형태라 ok_or_else 와 interaction 실패.
+- [x] 3. Phase 6.28.3 — ok_or/ok_or_else on literal `Optional(T)` receiver (Opus direct) ✅ 2026-04-20
+  **Reframing**: 원래 ROADMAP 가설은 "MutexGuard method-call forwarding". 실제 조사 결과 is_guard_type (Phase 338) + HashMap builtin 은 이미 `guard.get(&k)` 를 정확히 `Optional(Ref(V))` 로 반환 중. 진짜 버그는 그 다음 단계 — **`ok_or_else` 가 literal `Optional(T)` 에 디스패치되지 못함**.
+  root cause: calls.rs 의 Phase 271 fallback (ok_or/ok_or_else → Result) 은 `if let Some(ResolvedType::Named{..}) = receiver_named` 블록 **안에** 있음 (라인 939-1486 범위). receiver 가 `Optional(Ref(V))` 일 때 receiver_named 는 None → Phase 271 영역 진입 못함. Phase 311 Optional fallback (라인 1492-) 은 unwrap/is_some/unwrap_or/cloned/copied 만 처리하고 ok_or/ok_or_else 누락.
+  trace: DBG 로 `[DBG mcall-entry] method=ok_or_else receiver_type=Optional(Ref(Named{"V",[]}))` → struct lookup skip (V is_empty=false but no `V` struct) → trait lookup None → receiver_named=None 으로 Phase 271 block 통째로 skip → Phase 311 match 에 ok_or/ok_or_else 케이스 없음 → UndefinedFunction fallback 에서 E004.
+  fix: Phase 311 `ResolvedType::Optional(inner)` arm 에 ok_or/ok_or_else 케이스 추가 → `Result(inner, Str)` 반환. 부수적으로 map/and_then/or_else/filter/filter_map 도 추가 (Named-receiver 경로 미러링, Optional 체이닝 버그 예방).
+  changes: crates/vais-types/src/checker_expr/calls.rs (+24 줄, Phase 311 Optional arm 에 ok_or/ok_or_else + map/etc. identity).
+  verify: min repro `/tmp/guard_ok_or.vais` (Mutex<HashMap<u64,V>>.lock()!.get(&k).ok_or_else(...)) → ok_or_else E004 해소, 이후 blocker 로 진전. `./scripts/check-integrity.sh` → INTEGRITY OK std=82/82 vaisdb=237/261 phase158=18/18 (no regression, no new pass — cow.vais 여전히 E006/E001 다른 blocker 에 막힘). e2e `phase6_28_parser.rs` 에 2 테스트 추가 (`e2e_phase6_28_ok_or_else_on_optional`, `e2e_phase6_28_ok_or_on_optional`, `partial F main` 필요).
   [완료 기준]:
-  - cow.vais 에서 ok_or_else 에러 해결 (다른 blocker 로 이동 OK)
-  - 최소 repro 가 통과
-  - std 82/82, phase158 18/18, vaisdb ≥ 236
+  - [x] 최소 repro (Mutex<HashMap>.lock().get(&k).ok_or_else(...)) 가 ok_or_else E004 지나쳐 다른 blocker 로 진전
+  - [x] std 82/82, phase158 18/18, vaisdb ≥ 237 유지
+  - [x] e2e 보호 테스트 (ok_or_on_optional, ok_or_else_on_optional)
+  - [ ] cow.vais 직접 pass — 미달성 (E006 Ordering.load 등 누락된 std.sync API 가 앞을 막음, 별도 phase 필요)
 
 - [ ] 4. Phase 6.28.4 — Box<dyn T> method return-type associated substitution (Opus direct)
   blast_radius: 중간 (trait-heavy 파일들).
@@ -163,7 +153,7 @@ max_iterations: 10
   - 기존 passing 파일 1건도 regress 없음 (특히 ownership e2e 테스트)
   - std 82/82, phase158 18/18, vaisdb ≥ 236
 
-progress: 1/5 (20%)  — floor updated: vaisdb 236 → 237 (INTEGRITY_VAISDB_MIN 갱신 필요)
+progress: 3/5 (60%)  — #1 real fix (+1), #2 SCOPED, #3 reframe+fix (structural, net 0)
 
 ### Phase 6.27g — search.vais error_code → VaisError.new rewrite (2026-04-20, 직전 세션 완료)
 

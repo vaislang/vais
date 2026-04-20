@@ -62,6 +62,40 @@ F main() -> i64 {
     );
 }
 
+/// Phase 6.28.3: `.ok_or_else(...)` on a literal `Optional(T)` receiver.
+/// Prior to the fix, the Phase 271 fallback was inside the `receiver_named=
+/// Some(Named)` block and never fired for bare Optional. Chains like
+/// `guard.get(&k).ok_or_else(|| err)` failed with E004 "function 'ok_or_else'
+/// is not defined". Fix added handling under Phase 311's Optional arm.
+#[test]
+fn e2e_phase6_28_ok_or_else_on_optional() {
+    // Use an explicit Optional(...) via Vec.pop() which returns Option<T>.
+    assert_compiles(
+        r#"
+partial F main() -> i64 {
+    v := mut Vec.new();
+    v.push(42i64);
+    result := v.pop().ok_or_else(|| "empty".to_string())!;
+    result
+}
+"#,
+    );
+}
+
+#[test]
+fn e2e_phase6_28_ok_or_on_optional() {
+    assert_compiles(
+        r#"
+partial F main() -> i64 {
+    v := mut Vec.new();
+    v.push(7i64);
+    result := v.pop().ok_or("none".to_string())!;
+    result
+}
+"#,
+    );
+}
+
 #[test]
 fn e2e_phase6_28_nested_lw_windows_pattern() {
     // Real vaisdb window.vais shape: nested LW with inner deref-assign on a

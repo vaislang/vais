@@ -1502,6 +1502,32 @@ impl TypeChecker {
                             return Ok(receiver_type.clone());
                         }
                     }
+                    // Phase 6.28.3: ok_or / ok_or_else on a literal Optional(T)
+                    // receiver. The older Phase 271 fallback is inside the
+                    // `receiver_named = Some(Named)` block and never fires when
+                    // the receiver IS Optional/Result itself (receiver_named is
+                    // None in that case). Needed for chains like
+                    // `guard.get(&k).ok_or_else(|| err)` where `guard.get(&k)`
+                    // goes through MutexGuard → HashMap builtin dispatch and
+                    // returns `Optional(Ref(V))` directly.
+                    "ok_or" | "ok_or_else" => {
+                        if args.len() == 1 {
+                            let _ = self.check_expr(&args[0]);
+                            return Ok(ResolvedType::Result(
+                                inner.clone(),
+                                Box::new(ResolvedType::Str),
+                            ));
+                        }
+                    }
+                    // Phase 6.28.3: Option<T>.map/and_then/or_else/filter/filter_map
+                    // identity at type level. Mirror the Named-receiver fallback
+                    // in Phase 271 so chaining on bare Optional works.
+                    "map" | "and_then" | "or_else" | "filter" | "filter_map" => {
+                        if args.len() == 1 {
+                            let _ = self.check_expr(&args[0]);
+                            return Ok(receiver_type.clone());
+                        }
+                    }
                     _ => {}
                 }
             }
