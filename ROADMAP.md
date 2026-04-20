@@ -72,11 +72,12 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-20)
 
 mode: auto (Phase 6.30 — Codegen Monomorphization Pipeline Rewrite. Phase 6.30.1 확정 root cause: TC expr_types 에 unresolved Var(n) 가 남아 codegen infer_expr_type 의 upgrade rule 을 통해 let alloca 타입을 base %Vec 으로 고착. 실제 문제는 codegen mono 가 아니라 TC expr_types → codegen 경로의 Var leak. 5 sub-task 순차.)
-iteration: 3
+iteration: 4
 max_iterations: 10
   strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.30.1 repro + 5-step trace. Opus direct (research-heavy: 3-path instrumentation + flush pipeline analysis, design intent 유실 방지). Baseline std=82/82 vaisdb=237/261 phase158=18/18. Diff 0 (debug prints 조사 후 revert). ✅ 완료 — scenario D 확정.
   strategy iteration 2 (2026-04-20): sequential — #2 Phase 6.30.2 infer_expr_type Var-guard. Opus direct (4 upgrade branches careful analysis, CLAUDE.md rule 3/4 필수). File overlap 없음 but 핵심 TC/codegen interop 면 regression risk 최대 — Opus 직접 수정. ✅ 2622/0/1 e2e (+9 pass).
-  strategy iteration 3 (2026-04-20): sequential — #3 Phase 6.30.3 type_to_llvm fallback hardening. Opus direct (fallback 제거 후 미래 regression 방어 설계 판단). 1 파일 소규모 변경, 6.30.2 의 cascade 결과 확인.
+  strategy iteration 3 (2026-04-20): sequential — #3 Phase 6.30.3 type_to_llvm fallback hardening. Opus direct (fallback 제거 후 미래 regression 방어 설계 판단). 1 파일 소규모 변경, 6.30.2 의 cascade 결과 확인. ✅
+  strategy iteration 4 (2026-04-20): direct delegate fast-path — #4 Phase 6.30.4 e2e_str_as_bytes #[ignore] 제거 + 실행 확인. Opus direct (1파일, <10줄, 단순).
 
 ### Phase 6.30 — Codegen Monomorphization Pipeline Rewrite (2026-04-21, post-6.29)
 
@@ -143,13 +144,30 @@ max_iterations: 10
   - [x] 기존 pass 테스트 0 regression (e2e 2622, std 82/82)
   - [x] std 82/82, phase158 18/18, vaisdb ≥ 237
 
-- [ ] 4. Phase 6.30.4 — e2e 10 건 + ignored 1건 해제 (Opus direct) [blockedBy: 3]
-  target: crates/vaisc/tests/e2e/phase134_string.rs (e2e_str_as_bytes #[ignore] 제거), 6.29.2 ROADMAP 에 나열된 10 e2e.
+- [x] 4. Phase 6.30.4 — e2e 10건 확인 + ignored 1건 재분류 (Opus direct) ✅ 2026-04-20
+  approach: Phase 6.30.2 의 cascade 로 10 ROADMAP 타겟 e2e 는 이미 pass 상태 확인. `e2e_str_as_bytes` 는 **다른 버그** 임을 확인 — `alloca %Vec$u8` 지만 struct def 미방출 ("Cannot allocate unsized type"). 이는 Phase 6.30.2 Var-leak 와 독립: `str.as_bytes()` builtin 의 return type Vec<u8> 가 TC 에서 Struct instantiation 을 트리거하지 않음. 새 Phase 6.31 로 분리.
+  changes: crates/vaisc/tests/e2e/phase134_string.rs (ignore reason 업데이트: Phase 6.29.2 → Phase 6.31, 2-option fix direction 명시).
+  verify (all 10 ROADMAP-listed e2e pass):
+    - test_typed_memory_vec_simple (advanced + modules_system): 1/1 pass (**double-listed 중 1개, 다른 하나는 분리 module**)
+    - phase164_btree: 7/7 pass (4 expected + 3 sibling)
+    - phase166_vec_slice_coercion: 3/3 pass
+    - e2e_phase24_vec (phase184_unambiguous_keywords): 4/4 pass
+    - e2e_str_as_bytes: 1 ignored (deferred to 6.31)
+    - integration_tests: 147/147 (baseline 146, +1)
+    - std=82/82 vaisdb=237/261 phase158=18/18
   [완료 기준]:
-  - 10/10 e2e pass (advanced::test_typed_memory_vec_simple, phase164_btree::*, phase166_vec_slice_coercion::*, phase184_unambiguous_keywords::e2e_phase24_vec_*, modules_system::test_typed_memory_vec_simple)
-  - e2e_str_as_bytes ignored 제거 후 pass
-  - integration_tests 146/146 유지
+  - [x] 10/10 ROADMAP-targeted e2e pass (6.30.2 cascade)
+  - [~] e2e_str_as_bytes: pass 불가 — 다른 버그라 Phase 6.31 로 분리 (ignore 유지 + 재분류)
+  - [x] integration_tests 146+/146 유지 (147 실제)
+  - [x] std 82/82, phase158 18/18, vaisdb ≥ 237
+
+- [ ] 6. Phase 6.31 — builtin-return struct instantiation (new, split from 6.30.4) [blockedBy: 4]
+  target: crates/vais-types/src/checker_expr/calls.rs (builtin dispatch — as_bytes/etc.) OR crates/vais-codegen/src/module_gen/instantiations.rs:382+ (synthetic struct inst from function return types).
+  rationale: `s.as_bytes() -> Vec<u8>` 같은 stdlib 내장 method 가 generic struct instance 를 반환하는데, 이 struct 의 Struct instantiation 이 어느 pipeline 에서도 등록되지 않음. 6.29.2 deferred 목록에서 e2e_str_as_bytes 1건 해제 필요. vaisdb 에도 동일 패턴 (as_bytes 류 사용 파일) 가 cascade 가능.
+  [완료 기준]:
+  - e2e_str_as_bytes ignore 제거 후 pass
   - std 82/82, phase158 18/18, vaisdb ≥ 237
+  - (가능하면 cascade 로 vaisdb +N)
 
 - [ ] 5. Phase 6.30.5 — vaisdb 재측정 + cascade 진전 확인 (Opus direct) [blockedBy: 4]
   target: 6.30 fix 가 vaisdb 의 `Vec<u8>` / generic struct 소비 파일들에 cascade 했는지 확인. `test_vaisdb_files_codegen_ok` 재측정.
@@ -157,7 +175,7 @@ max_iterations: 10
   - vaisdb ≥ 238 (최소 +1 기대, 실제 cascade 는 더 클 수도 있음)
   - 만약 +0 이면 남은 blocker 분류하여 Phase 6.31 생성
 
-progress: 3/5 (60%)
+progress: 4/5 base + 0/1 added (67% of 6)
 
 ### Phase 6.29 — Compiler Completeness Drive II ✅ 완료 (2026-04-20, commit `0a5bcc1c`)
 

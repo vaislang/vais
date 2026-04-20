@@ -577,14 +577,25 @@ F main() -> i64 {
 }
 
 #[test]
-#[ignore = "Phase 6.29.2 deferred: %Vec$u8 unsized type until generic mono pipeline fixed"]
+#[ignore = "Phase 6.31 pending: Vec$u8 struct def missing for str.as_bytes() return (distinct from Phase 6.30.2 Var-leak)"]
 fn e2e_str_as_bytes() {
     // Phase 247: str.as_bytes() returns Vec<u8> (was raw i64 pointer).
-    // Currently blocked on Phase 6.29.2 (DEFERRED) — codegen emits
-    // `alloca %Vec$u8` but specialized struct type `%Vec$u8` is never
-    // generated because generate_specialized_struct_type doesn't get
-    // called for user-derived Vec<u8> instantiations from str.as_bytes().
-    // Once Phase 6.30 (codegen mono pipeline) lands, un-ignore this.
+    //
+    // Phase 6.30.2 fixed the `Vec<Var(n)>`-leak that caused base-name
+    // alloca for Vec.new() etc. (e2e 2613→2622 pass). This test remains
+    // failing on a DIFFERENT bug: `str.as_bytes()` is a builtin intrinsic
+    // whose return type Vec<u8> never triggers a Struct instantiation in
+    // the TC — codegen emits `alloca %Vec$u8` without a `%Vec$u8 = type {…}`
+    // definition, causing clang "Cannot allocate unsized type".
+    //
+    // Fix requires either:
+    //   (a) TC synthesizing a Struct instantiation when stdlib builtins
+    //       return Vec<T> with concrete T, or
+    //   (b) codegen synthesizing from method call return types (similar to
+    //       instantiations.rs:382+ "Synthesize concrete struct instantiations
+    //       from function instantiations").
+    //
+    // Deferred to Phase 6.31 (builtin-return struct instantiation).
     assert_exit_code(
         r#"
 F main() -> i64 {
