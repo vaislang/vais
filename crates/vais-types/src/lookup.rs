@@ -407,8 +407,29 @@ impl TypeChecker {
         }
 
         // Handle generic types with bounds from where clauses
-        if let ResolvedType::Generic(type_param) = receiver_type {
-            if let Some(bounds) = self.current_generic_bounds.get(type_param) {
+        // Phase 6.27e.b: peel Ref/RefMut so `store: &mut S` where `S: NodeStore`
+        // dispatches to the trait's methods. Also accept `Named{name, []}`
+        // when `name` matches a currently-bound generic parameter — the
+        // resolve pipeline sometimes produces Named for type params that
+        // haven't been recognised as Generic yet.
+        fn as_generic_name(
+            t: &ResolvedType,
+            bounds: &std::collections::HashMap<String, Vec<String>>,
+        ) -> Option<String> {
+            match t {
+                ResolvedType::Generic(name) => Some(name.clone()),
+                ResolvedType::Named { name, generics } if generics.is_empty() && bounds.contains_key(name) => {
+                    Some(name.clone())
+                }
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                    as_generic_name(inner, bounds)
+                }
+                _ => None,
+            }
+        }
+        let peeled_generic = as_generic_name(receiver_type, &self.current_generic_bounds);
+        if let Some(type_param) = peeled_generic {
+            if let Some(bounds) = self.current_generic_bounds.get(&type_param) {
                 for bound_trait in bounds {
                     let mut visited = std::collections::HashSet::new();
                     if let Some(method_sig) = self.find_method_in_trait_with_supers(
