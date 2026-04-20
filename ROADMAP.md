@@ -134,6 +134,17 @@ progress: 3/3 (100%) — structural wins + 명확한 진단, 직접 vaisdb count
 
 progress: 2/2 (100%)
 
+### Phase 6.27f — atomic Ordering args + residual mop-up (2026-04-20)
+
+- [x] 6. Phase 6.27f — values_mut builtin + residual 1-line exploration (Opus direct) ✅ 2026-04-20
+  detail: HashMap.values_mut() 빌트인 추가 (HashMap.values와 union). window.vais가 E004(values_mut undefined) → E001(sort_key[j].compare) 진행. 다른 후보들 시도 — cow.vais Ordering 제거 시도 (ok_or_else cascade로 revert), btree/insert.vais parent_guard annotation + serialize_into→write_to_page (E022 use-after-move cascade로 revert), vector/search.vais error_code 4-arg → VaisError.new 시도 (다른 E030로 이동, revert). 결론: 남은 20 파일 모두 다중 layered blocker, 1-line fix로 해제 불가.
+  changes: crates/vais-types/src/checker_expr/calls.rs (values_mut → Vec<V> with apply_substitutions, +6줄)
+  verify: ./scripts/check-integrity.sh → INTEGRITY OK std=82/82 vaisdb=236/261 phase158=18/18
+  [완료 기준]:
+  - [x] std 82/82, phase158 18/18 유지
+  - [x] vaisdb ≥ 236 (regression 0, window.vais 부분 진행)
+  - [ ] vaisdb +1 net — 미달성. 남은 blocker들은 구조적 — ok_or_else/MutexGuard Deref, E022 use-after-move, error_code arity-4 → VaisError.new 파일 전체 rewrite.
+
 ### 이전 기록 보존
 
 

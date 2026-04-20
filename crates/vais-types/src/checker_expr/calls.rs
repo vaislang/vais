@@ -1099,16 +1099,20 @@ impl TypeChecker {
                             });
                         }
                     }
-                    "values" => {
+                    "values" | "values_mut" => {
+                        // Phase 6.27f: HashMap.values()/values_mut() → Vec<V>
+                        // (element types stay bare V; for `LF x: map.values_mut()`
+                        // the iteration will auto-bind &mut V downstream).
                         if args.is_empty() {
                             let val_ty = if name == "Vec" {
                                 generics.first().cloned().unwrap_or(ResolvedType::I64)
                             } else {
                                 generics.get(1).cloned().unwrap_or(ResolvedType::I64)
                             };
+                            let resolved_val = self.apply_substitutions(&val_ty);
                             return Ok(ResolvedType::Named {
                                 name: "Vec".to_string(),
-                                generics: vec![val_ty],
+                                generics: vec![resolved_val],
                             });
                         }
                     }
