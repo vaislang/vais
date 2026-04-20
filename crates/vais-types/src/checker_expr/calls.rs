@@ -442,13 +442,54 @@ impl TypeChecker {
                     .map(|(_, t, _)| t.clone())
                     .collect();
 
-                if param_types.len() != args.len() {
+                // Phase 6.29.5: permissive trailing-arg tolerance for atomic
+                // operations. vaisdb mirrors Rust's std::sync::atomic API with
+                // a trailing `Ordering` argument (e.g.
+                // `counter.load(Ordering::Acquire)`) while stdlib's AtomicI64
+                // signature is 0-arg. The memory-ordering argument has no
+                // effect on emitted IR (codegen uses SeqCst uniformly), so
+                // silently dropping extras keeps both dialects compiling.
+                // Scope: only AtomicI64/AtomicBool/AtomicI32/AtomicU32 methods.
+                let is_atomic_recv = matches!(
+                    inner_type.as_str(),
+                    "AtomicI64" | "AtomicI32" | "AtomicU32" | "AtomicU64" | "AtomicBool"
+                );
+                let atomic_permissive = is_atomic_recv
+                    && args.len() > param_types.len()
+                    && matches!(
+                        method.node.as_str(),
+                        "load"
+                            | "store"
+                            | "swap"
+                            | "fetch_add"
+                            | "fetch_sub"
+                            | "fetch_and"
+                            | "fetch_or"
+                            | "fetch_xor"
+                            | "compare_exchange"
+                            | "compare_exchange_weak"
+                    );
+
+                if !atomic_permissive && param_types.len() != args.len() {
                     return Err(TypeError::ArgCount {
                         expected: param_types.len(),
                         got: args.len(),
                         span: Some(expr_span),
                     });
                 }
+
+                // For atomic permissive case, still type-check extra args
+                // (mostly to catch obvious undefined-var errors inside the
+                // Ordering::X path access), but don't unify them with a
+                // parameter slot — they're dropped.
+                if atomic_permissive {
+                    for extra_arg in &args[param_types.len()..] {
+                        let _ = self.check_expr(extra_arg);
+                    }
+                }
+                // Truncate args iterator below so we only unify the declared
+                // parameters.
+                let effective_args: &[_] = &args[..param_types.len().min(args.len())];
 
                 // Build substitution map from type's generic params to receiver's concrete types
                 let mut generic_substitutions: HashMap<String, ResolvedType> = found_generics
@@ -467,7 +508,7 @@ impl TypeChecker {
 
                 // Check arguments with substituted parameter types
                 // (Phase 6.27c.3: push enum hint for bare-variant args)
-                for (param_type, arg) in param_types.iter().zip(args) {
+                for (param_type, arg) in param_types.iter().zip(effective_args) {
                     let expected_type = if generic_substitutions.is_empty() {
                         param_type.clone()
                     } else {

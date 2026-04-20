@@ -503,9 +503,14 @@ F f() -> i64 = add(1, "two")
 }
 
 #[test]
-fn test_if_condition_non_bool_error() {
+fn test_if_condition_lenient_integer_truthy() {
+    // Phase 254: `I`/`LW` conditions accept integer truthy alongside Bool.
+    // This is scoped to predicate position and does not conflict with
+    // Phase 158's bool↔i64 prohibition in value context.
+    // Mirror of crates/vais-types/src/tests.rs::test_if_condition_lenient_integer_truthy.
+    // Renamed from test_if_condition_non_bool_error (pre-254 expectation).
     let source = "F f() -> i64 = I 42 { 1 } E { 0 }";
-    assert!(fails_to_compile(source));
+    assert!(compiles(source));
 }
 
 // ==================== Complex Programs ====================

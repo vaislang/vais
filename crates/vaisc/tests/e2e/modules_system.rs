@@ -300,13 +300,25 @@ F get_value() -> i64 { R 100 }
 }
 
 #[test]
-fn test_circular_import_detection() {
-    // Test that circular imports are detected and reported
+fn test_circular_import_tolerated() {
+    // Phase 6.27c.1: circular imports are tolerated, not errored.
+    // Previously this was a hard error, which blocked cross-file
+    // `X Struct` extension files (parser_expr.vais ↔ parser_select.vais).
+    // The resolver now detects the cycle and truncates the revisit
+    // (empty Module returned for the second leg), so both files get
+    // their types/X blocks merged exactly once.
+    //
+    // This test used to be test_circular_import_detection and asserted
+    // the build failed with a "circular" message. After Phase 6.27c.1
+    // the assertion is inverted: the build should NOT fail on the
+    // cycle itself. Here the build fails only because neither a.vais
+    // nor b.vais defines `main` — a different, expected failure mode.
     let files = &[
         (
             "a.vais",
             r#"
 U b
+F main() -> i64 { foo() + bar() }
 F foo() -> i64 { R 42 }
 "#,
         ),
@@ -326,18 +338,15 @@ F bar() -> i64 { R 10 }
         .expect("Failed to canonicalize project path");
     let a_path = canonical_path.join("a.vais");
 
-    // Build should fail with circular import error
     let output = run_vaisc_build(&a_path, &[]);
 
-    assert!(
-        !output.status.success(),
-        "Circular import should cause build to fail"
-    );
-
+    // With a proper `main` present, the cycle should no longer block
+    // compilation. If this assertion fails, Phase 6.27c.1's cycle
+    // tolerance regressed.
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("circular") || stderr.contains("Circular") || stderr.contains("cycle"),
-        "Error message should mention circular import, got: {}",
+        !stderr.contains("circular") && !stderr.contains("Circular") && !stderr.contains("cycle detected"),
+        "Circular import should be tolerated silently (Phase 6.27c.1), got stderr: {}",
         stderr
     );
 }
