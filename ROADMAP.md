@@ -72,10 +72,11 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-20)
 
 mode: auto (Phase 6.30 — Codegen Monomorphization Pipeline Rewrite. Phase 6.30.1 확정 root cause: TC expr_types 에 unresolved Var(n) 가 남아 codegen infer_expr_type 의 upgrade rule 을 통해 let alloca 타입을 base %Vec 으로 고착. 실제 문제는 codegen mono 가 아니라 TC expr_types → codegen 경로의 Var leak. 5 sub-task 순차.)
-iteration: 2
+iteration: 3
 max_iterations: 10
   strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.30.1 repro + 5-step trace. Opus direct (research-heavy: 3-path instrumentation + flush pipeline analysis, design intent 유실 방지). Baseline std=82/82 vaisdb=237/261 phase158=18/18. Diff 0 (debug prints 조사 후 revert). ✅ 완료 — scenario D 확정.
-  strategy iteration 2 (2026-04-20): sequential — #2 Phase 6.30.2 infer_expr_type Var-guard. Opus direct (4 upgrade branches careful analysis, CLAUDE.md rule 3/4 필수). File overlap 없음 but 핵심 TC/codegen interop 면 regression risk 최대 — Opus 직접 수정.
+  strategy iteration 2 (2026-04-20): sequential — #2 Phase 6.30.2 infer_expr_type Var-guard. Opus direct (4 upgrade branches careful analysis, CLAUDE.md rule 3/4 필수). File overlap 없음 but 핵심 TC/codegen interop 면 regression risk 최대 — Opus 직접 수정. ✅ 2622/0/1 e2e (+9 pass).
+  strategy iteration 3 (2026-04-20): sequential — #3 Phase 6.30.3 type_to_llvm fallback hardening. Opus direct (fallback 제거 후 미래 regression 방어 설계 판단). 1 파일 소규모 변경, 6.30.2 의 cascade 결과 확인.
 
 ### Phase 6.30 — Codegen Monomorphization Pipeline Rewrite (2026-04-21, post-6.29)
 
@@ -126,13 +127,21 @@ max_iterations: 10
   - [x] 최소 3 e2e 통과 (9/10 달성, 남은 1건은 e2e_str_as_bytes ignored → Phase 6.30.4 에서 ignore 해제 검증)
   - [x] std 82/82, phase158 18/18, vaisdb ≥ 237
 
-- [ ] 3. Phase 6.30.3 — type_to_llvm fallback 정합 (Opus direct, careful) [blockedBy: 2]
-  target: crates/vais-codegen/src/types/conversion.rs:163-192
-  detail: 현재 fallback 이 "mangled 없으면 base name" 으로 가는데, 이 fallback 이 6.30.2 fix 이후에도 남아 있으면 미래 regression 씨앗. 6.30.2 가 generated_structs 를 채우게 됐다면 fallback 을 에러로 전환 (혹은 debug-assert) 하여 같은 버그 재발 방지.
+- [x] 3. Phase 6.30.3 — type_to_llvm fallback 정합 (Opus direct, careful) ✅ 2026-04-20
+  approach: struct 와 enum/union fallback 을 **분리**. enum/union 은 i64-uniform 이라 base name 이 정당; struct 는 layout 이 T 따라 달라지므로 base name 으로 가는 것은 설계상 bug candidate.
+  changes: crates/vais-codegen/src/types/conversion.rs (+14줄):
+    - line 177-179: `enums || unions` 조건으로 분리 (structs 제거)
+    - 새 `structs.contains_key(name)` branch: `#[cfg(debug_assertions)]` eprintln! 경고 + base name 반환. "concrete generic struct {name} → base %{name} (mangled %{mangled} not registered)".
+    - line 188-192 non-concrete fallback 에 Phase 6.30.2 상호참조 주석 추가.
+  rationale: release 에서는 경고 침묵 (perf cost 0), debug/test 에서는 6.30 류 버그 재발 시 즉시 가시화. `panic!`/`debug_assert` 는 과도 — 오히려 legit 한 edge case (e.g. extern generic struct) 막음.
+  verify:
+    - 최소 repro pass: phase166 3/3 + phase164 4/4 (위에서 확인)
+    - e2e: **2622/0/1** (baseline 유지, 0 regression).
+    - integrity: std=82/82 vaisdb=237/261 phase158=18/18 (0 regression).
   [완료 기준]:
-  - fallback hardening (eprintln! warning OR debug_assert) 적용
-  - 기존 pass 테스트 0 regression
-  - std 82/82, phase158 18/18, vaisdb ≥ 237
+  - [x] fallback hardening (eprintln! debug-only warning) 적용
+  - [x] 기존 pass 테스트 0 regression (e2e 2622, std 82/82)
+  - [x] std 82/82, phase158 18/18, vaisdb ≥ 237
 
 - [ ] 4. Phase 6.30.4 — e2e 10 건 + ignored 1건 해제 (Opus direct) [blockedBy: 3]
   target: crates/vaisc/tests/e2e/phase134_string.rs (e2e_str_as_bytes #[ignore] 제거), 6.29.2 ROADMAP 에 나열된 10 e2e.
@@ -148,7 +157,7 @@ max_iterations: 10
   - vaisdb ≥ 238 (최소 +1 기대, 실제 cascade 는 더 클 수도 있음)
   - 만약 +0 이면 남은 blocker 분류하여 Phase 6.31 생성
 
-progress: 2/5 (40%)
+progress: 3/5 (60%)
 
 ### Phase 6.29 — Compiler Completeness Drive II ✅ 완료 (2026-04-20, commit `0a5bcc1c`)
 

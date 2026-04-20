@@ -175,11 +175,24 @@ impl CodeGenerator {
                         {
                             format!("%{}", mangled)
                         } else if self.types.enums.contains_key(name)
-                            || self.types.structs.contains_key(name)
                             || self.types.unions.contains_key(name)
                         {
-                            // Base type exists but no specialization — use base name.
-                            // This is correct for enums/unions where layout is type-independent.
+                            // Enums/unions use i64-uniform layout — base name is safe.
+                            format!("%{}", name)
+                        } else if self.types.structs.contains_key(name) {
+                            // Phase 6.30.3: a concrete generic struct instantiation reached
+                            // type_to_llvm but its monomorphized type was not registered.
+                            // Before Phase 6.30.2 this path silently emitted `%Vec` while the
+                            // call site returned `%Vec$i64`, producing an LLVM type mismatch.
+                            // Emit a one-time debug warning so future drift in the
+                            // TC→codegen instantiation pipeline surfaces immediately.
+                            #[cfg(debug_assertions)]
+                            eprintln!(
+                                "[WARN codegen] type_to_llvm: concrete generic struct \
+                                 {} -> base %{} (mangled %{} not registered). \
+                                 This may cause IR type mismatches. See Phase 6.30.",
+                                name, name, mangled
+                            );
                             format!("%{}", name)
                         } else {
                             // External or not-yet-generated specialization
@@ -188,6 +201,9 @@ impl CodeGenerator {
                     } else {
                         // For generic types with unresolved parameters, use base struct name.
                         // Layout is i64-uniform when type args can't be resolved.
+                        // Phase 6.30.2: Var-containing tc_ty is now guarded upstream in
+                        // infer_expr_type, so this path should only see Generic(_) from
+                        // generic function bodies — layout-uniform with i64 erasure.
                         format!("%{}", name)
                     }
                 } else if let Some(subst) = self.get_generic_substitution(name) {
