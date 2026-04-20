@@ -245,13 +245,20 @@ fn test_logical_op_on_non_bool() {
 }
 
 #[test]
-fn test_if_condition_non_bool() {
+fn test_if_condition_lenient_integer_truthy() {
     let source = "F f()->i64=I 42{1}E{0}";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
-    // bool↔i64 implicit coercion is FORBIDDEN (CLAUDE.md Phase 158 rule).
-    // Integer literal as if-condition must be a type error.
-    assert!(checker.check_module(&module).is_err());
+    // Phase 254: lenient `I`/`LW` conditions — integer truthy is accepted
+    // alongside Bool. This diverges from Phase 158's bool↔i64 prohibition,
+    // which applies to *value contexts* (let, return, etc.), not condition
+    // position. vaisdb has pervasive `I x != 0 { }` and `I count { }` usage
+    // that predates the strict rule; Phase 254 was a deliberate relaxation
+    // scoped to control-flow predicate slots only.
+    //
+    // A program like `F f() -> i64 = 42 == true` still fails (Phase 158).
+    // Renamed from test_if_condition_non_bool (pre-254 expectation).
+    assert!(checker.check_module(&module).is_ok());
 }
 
 #[test]

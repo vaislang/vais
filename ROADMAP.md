@@ -71,9 +71,10 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-20)
 
-mode: auto (Phase 6.28 신설 — 컴파일러 근본 완성도 드라이브. 5 sub-task 순차 진행, 근거는 "사용자 체감 blast radius" 기준 우선순위. 사용자 승인 2026-04-20 `/clear` 후 이어갈 예정.)
-iteration: 5
+mode: auto (Phase 6.29 — Compiler Completeness Drive II. Phase 6.28 완료 후 문법/컴파일러 완성도 실측에서 발견된 pre-existing 실패들을 root-cause 단위로 해결. 5 sub-task 순차 진행.)
+iteration: 1
 max_iterations: 10
+  strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.29.1 vais-types ownership unit 8 failures. Opus direct (ownership semantics 설계+impl 일체). Baseline std=82/82 vaisdb=237/261 phase158=18/18 syntax=200 stages=14.
   strategy-note: Phase 6.27 시리즈에서 vaisdb 90.4%(236/261) 도달. 남은 실패의 대다수는 **compiler gap** 이 root cause. Phase 6.28은 vaisdb fix 아닌 **TC/codegen 자체의 structural bug를 순차로** 해결. 각 task는 최소 repro + e2e regression test + integrity gate 통과 의무. 순서는 "blast radius" 크기 큰 순.
   strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.28.1 nested scope method-return erasure fix. Opus direct (TC scope 설계+impl 일체, CLAUDE.md 규칙 1~7 전부 적용 요구됨). Baseline std=82/82 vaisdb=236/261 phase158=18/18 syntax=200 stages=14. 순차 이유: 5 tasks all Opus direct, all touch TC/codegen core — file overlap 잠재 + ownership (task 5)은 cascade 리스크로 병렬 금지.
   iteration 1 결과: **237 도달 (+1)**. 원래 가설("nested scope method-return erasure")은 **틀렸음** — 실제는 parser bug (block-terminated expr `*` binop mis-parse). parse_factor에 early-return 가드 추가. window.vais direct pass. commit 2af47cf1.
@@ -86,7 +87,70 @@ max_iterations: 10
   strategy iteration 5 (2026-04-20): sequential — #5 Phase 6.28.5 E022 use-after-move on enum variant binding. Opus direct, careful (ownership/move_track.rs, false-negative 위험 최고).
   iteration 5 결과: **reframe+fix**. 버그는 enum variant 바인딩 특화가 아니라 **Stmt::Let double-visit** — check_expr_ownership 이 이미 use_var 로 move 마크를 찍는데, 그 직후 같은 value 에 check_move_from_expr 을 또 호출해 방금 찍힌 Moved 상태를 UseAfterMove 로 오진. Stmt::Let/LetDestructure/Return(Some) 의 redundant 호출 제거. btree/insert.vais 291 해소. ownership unit tests pre-existing 8 failures 변동 없음 (regression 0).
 
-### Phase 6.28 — 컴파일러 근본 완성도 드라이브 (2026-04-20)
+### Phase 6.29 — Compiler Completeness Drive II (2026-04-20, post-6.28 실측)
+
+> **배경**: Phase 6.28 완료 후 전체 test suite 실측:
+>   - 문법/파서: vais-parser 868/0/2, compiler_syntax 200/200, compiler_stages 14/14 → **완성**
+>   - 컴파일러: std 82/82 (100%), phase158 18/18, vaisdb 237/261 (90.8%)
+>   - Pre-existing 실패 (Phase 6.28 이전부터 존재, regression 아님 — commit 6da3209d 에서도 재현 확인):
+>     - vais-types unit: 347 pass / 8 fail (ownership collecting-mode semantics)
+>     - vaisc e2e: 2613 pass / 10 fail (generic monomorphization IR mismatch, .enumerate() chain, str.as_bytes, &[u8] coercion, circular import)
+>     - vaisc integration: 146 pass / 1 fail (test_if_condition_non_bool_error, Phase 254 lenient cond)
+>     - vaisdb: 24 fail (std.sync Ordering arity, dyn trait dispatch, HashSet builtin 등)
+>
+> **Baseline**: std=82/82 vaisdb=237/261 phase158=18/18 syntax=200 stages=14. 모든 task 는 이 floor 유지 필수.
+> **전제 검증 원칙**: Phase 6.28 교훈 적용 — 각 task 시작 시 repro 로 전제 확인, 재현 안 되면 즉시 SCOPED 마크.
+
+- [x] 1. Phase 6.29.1 — vais-types ownership unit 8 failures 복구 (Opus direct) ✅ 2026-04-20
+  root cause (test drift, 코드는 정상):
+    - 7건: ownership/tests.rs 의 `"MyStruct"`/`"Buffer"`/`"Data"`/`"A"`/`"X"` Named 타입이 pre-Phase 5.24 시점엔 non-Copy 로 분류됐지만, copy_check.rs Phase 5.24 에서 user Named structs 를 Copy-by-default 로 변경 (Vec/HashMap/String 만 예외). 테스트는 pre-5.24 기대값 유지 → 테스트 drift.
+    - 1건 (test_if_condition_non_bool): Phase 254 lenient cond (if/while 조건 position 에 integer truthy 허용) 도입 후 테스트의 "is_err" 기대가 stale. Phase 158 bool↔i64 금지는 value context 한정이라 control-flow predicate slot 과 충돌 없음.
+  fix: 코드 변경 없이 **테스트 현행화만** (CLAUDE.md 규칙 5: 실제 실행 근거 우선).
+    - 7건: Named 을 `ResolvedType::Linear(Box::new(Named{...}))` 로 래핑 (documented escape hatch)
+    - 1건: `test_if_condition_non_bool` → `test_if_condition_lenient_integer_truthy` 로 rename + assertion invert + 주석에 근거 기록
+  changes: crates/vais-types/src/ownership/tests.rs (7 tests wrapped with Linear), crates/vais-types/src/tests.rs (1 test inverted + renamed)
+  verify:
+    - cargo test -p vais-types --release → **355/355 pass** (was 347/355, +8)
+    - ./scripts/check-integrity.sh → INTEGRITY OK std=82/82 vaisdb=237/261 phase158=18/18 (regression 0)
+  [완료 기준]:
+  - [x] vais-types 355/355 pass
+  - [x] drift 판정 근거 명시 (Phase 5.24 copy_check, Phase 254 lenient cond)
+  - [x] std/phase158/vaisdb floor 유지
+
+- [ ] 2. Phase 6.29.2 — generic monomorphization IR type consistency (Opus direct)
+  blast_radius: 크다. 5~6 e2e 한 번에 뚫릴 가능성.
+  target: crates/vais-codegen/src (struct mangling / Vec<T> IR emission)
+  symptom: `'%t0' defined with type '%"Vec$i64"' but expected '%Vec'` — generic struct 가 monomorphized name (`Vec$i64`) 과 base name (`Vec`) 을 혼용
+  failing tests: advanced::test_typed_memory_vec_simple, phase164_btree::e2e_phase164_basic_vec_to_slice_coercion, phase166_vec_slice_coercion::*, phase184_unambiguous_keywords::e2e_phase24_vec_* (enumerate/iter chains)
+  [완료 기준]:
+  - 위 e2e 중 최소 3건 이상 pass
+  - std 82/82, phase158 18/18, vaisdb ≥ 237
+
+- [ ] 3. Phase 6.29.3 — str.as_bytes / &[u8] coercion / circular import (impl-sonnet 검토, Opus direct 경향)
+  blast_radius: 작음 (3~4 e2e 해결 기대).
+  failing tests: phase134_string::e2e_str_as_bytes, modules_system::test_circular_import_detection
+  [완료 기준]:
+  - 위 테스트 3건 pass
+  - std 82/82, phase158 18/18, vaisdb ≥ 237
+
+- [ ] 4. Phase 6.29.4 — test_if_condition_non_bool_error drift 해결 (Opus direct, judgment call)
+  target: crates/vaisc/tests/integration_tests.rs::test_if_condition_non_bool_error
+  symptom: Phase 254 lenient cond (integer truthy) 도입 후 이 테스트는 에러 기대하지만 현재는 pass. 의도적 변경이면 테스트 업데이트, 의도 아니면 엄격 모드 분기.
+  [완료 기준]:
+  - 테스트-구현 drift 명시 해결 (update or 엄격모드 추가)
+  - std 82/82, phase158 18/18, vaisdb ≥ 237
+
+- [ ] 5. Phase 6.29.5 — vaisdb 24 실패 error-pattern 분류 후 구조적 fix 1건 (Opus direct)
+  blast_radius: 크다 (vaisdb pass rate 직접 상승).
+  approach: 각 24 파일의 primary error 를 수집 → 3 그룹 이상으로 묶어 그 중 blast radius 큰 것 하나만 이 phase 에서 fix, 나머지는 Phase 6.30 로.
+  후보 그룹: (a) std.sync Ordering.load/store/fetch_* arity (cow.vais 다수 사이트), (b) dyn trait dispatch (delete/wal/hnsw), (c) NodeStore trait bound mismatch (bulk)
+  [완료 기준]:
+  - 선택된 그룹의 structural fix → vaisdb +1 이상 혹은 cascade 진전
+  - std 82/82, phase158 18/18, vaisdb ≥ 237
+
+progress: 1/5 (20%)  — #1 test drift resolved (vais-types 355/355)
+
+### Phase 6.28 — 컴파일러 근본 완성도 드라이브 (2026-04-20) ✅ 완료 (2026-04-20)
 
 > **배경**: Phase 6.27 사이클 결과, vaisdb의 남은 25 실패 파일 중 ~20개가 compiler TC/codegen의 structural gap에 막혀 있음을 확인. "lexer/parser/phase158/stdlib는 100% green, vaisdb만 90%" 상태. 완성도 원칙(아래 단계 완료 후 위 단계)을 지키려면 vaisdb를 100%로 만들기 전에 compiler의 남은 구멍을 먼저 메꿔야 함. 각 task는 독립적 근본 fix — 서로 blockedBy 없음 (순차만).
 >
