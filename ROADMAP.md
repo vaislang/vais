@@ -72,9 +72,10 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-20)
 
 mode: auto (Phase 6.28 신설 — 컴파일러 근본 완성도 드라이브. 5 sub-task 순차 진행, 근거는 "사용자 체감 blast radius" 기준 우선순위. 사용자 승인 2026-04-20 `/clear` 후 이어갈 예정.)
-iteration: 0
+iteration: 1
 max_iterations: 10
   strategy-note: Phase 6.27 시리즈에서 vaisdb 90.4%(236/261) 도달. 남은 실패의 대다수는 **compiler gap** 이 root cause. Phase 6.28은 vaisdb fix 아닌 **TC/codegen 자체의 structural bug를 순차로** 해결. 각 task는 최소 repro + e2e regression test + integrity gate 통과 의무. 순서는 "blast radius" 크기 큰 순.
+  strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.28.1 nested scope method-return erasure fix. Opus direct (TC scope 설계+impl 일체, CLAUDE.md 규칙 1~7 전부 적용 요구됨). Baseline std=82/82 vaisdb=236/261 phase158=18/18 syntax=200 stages=14. 순차 이유: 5 tasks all Opus direct, all touch TC/codegen core — file overlap 잠재 + ownership (task 5)은 cascade 리스크로 병렬 금지.
 
 ### Phase 6.28 — 컴파일러 근본 완성도 드라이브 (2026-04-20)
 
@@ -82,38 +83,30 @@ max_iterations: 10
 >
 > **Baseline (2026-04-20 세션 말미)**: std=82/82 vaisdb=236/261 phase158=18/18 syntax=200 stages=14. 모든 Phase 6.28 task는 이 floor 유지 필수.
 
-- [ ] 1. Phase 6.28.1 — nested scope method-return erasure fix (Opus direct)
-  blast_radius: 최대. `LW j < windows.len()` 같은 loop 안에서 메서드 반환이 `()` 로 erase → 파일당 1~여러 지점에서 터짐.
-  target: crates/vais-types/src/checker_expr/control_flow.rs (`check_while`/`check_for`의 scope push/pop), 필요 시 scope.rs
-  repro:
-    ```vais
-    # /tmp/nested_erasure.vais
-    F main() {
-        xs := Vec.with_capacity(3);
-        xs.push(1); xs.push(2); xs.push(3);
-        i := mut 0;
-        LW i < xs.len() as i64 {
-            j := mut i + 1;
-            LW j < xs.len() as i64 {  # ← 여기서 xs.len() 이 () 로 erase 됨
-                j += 1;
-            }
-            i += 1;
-        }
-    }
+- [x] 1. Phase 6.28.1 — parser: block-terminated expr + `*` binop bug (Opus direct) ✅ 2026-04-20
+  **Reframing**: 원래 ROADMAP의 "nested scope method-return erasure" 가설은 **틀렸음**. 실제는 **파서 버그**였다.
+  root cause: `LW cond { body } <newline> *used.get_mut(i) = v` 가 precedence climbing 때문에 `(LW{}) * used.get_mut(i) = v` 로 파싱 → Expr::Binary(Mul, While, MethodCall) + Expr::Assign 되고, 이후 Lt/BinOp 타입 체크 단계에서 LW 결과(Unit) 를 Mul 좌변으로 보면서 "expected numeric, found ()" E001을 **LW span**에 올림. "nested scope method-return erasure" 증상은 이 mis-parse의 2차 표면.
+  evidence (디버그 출력, `check_collection_expr` 에 eprintln 삽입):
     ```
-  investigation:
-    1. repro 파일로 `./target/release/vaisc check` → error 확인 + `[DBG]` print 추가해 nested loop entry/exit 시 scope 상태 dump
-    2. TC가 outer scope의 `xs` 바인딩을 inner scope 진입 시 제대로 lookup 하는지 검증
-    3. 또는 `xs.len()` 반환 타입이 inner scope에서 re-evaluate 될 때 어디서 I64 → Unit 으로 망가지는지 stage 추적
-  fix candidates:
-    - (a) scope-local type cache가 nested loop entry에서 flush 되면서 outer binding 잃음
-    - (b) apply_substitutions 가 inner scope 의 fresh var 를 outer var 로 착각
-    - (c) method-call dispatch 가 nested-scope 에서 receiver를 `()` 로 보는 경로
+    [DBG BinOp] op=Mul left_raw=Unit right_raw=Optional(RefMut(Var(2))) expr_span=Span{66,109}
+    ```
+  minimal repro (17 lines, `/tmp/minimal_bug_l.vais`): ids_a:=mut Vec.new(); ids_a.push(1u64); LW 0 < ids_a.len() {}; *ids_a.get_mut(0) = 99u64;
+  confirm: 세미콜론으로 분리(`LW cond {};`) 하거나 LW-deref 순서 바꾸면 repro 사라짐. `LW`, `I`, `M`, `LF`, `{...}` block expression 전부 동일 버그.
+  fix: crates/vais-parser/src/expr/mod.rs 에 `is_block_terminated_expr` 헬퍼 추가 (`matches!` If/Loop/While/Match/Block). crates/vais-parser/src/expr/precedence.rs 의 `parse_factor` 에서 `parse_unary()` 직후 LHS가 block-terminated 면 즉시 return → `*`가 Mul 로 소비되지 않고 다음 Stmt의 Deref 로 남도록. Rust 와 같은 규칙.
+  scope of fix: parse_factor 한 지점에만 가드 추가 (17줄 — mod.rs 헬퍼 17줄 + precedence.rs 가드 7줄). 다른 binary 레벨(+/-, <, ==, etc.) 은 block-terminated 가 LHS 로 오는 현실 케이스가 없어 생략 — 생기면 같은 패턴 복제.
+  changes:
+    - crates/vais-parser/src/expr/mod.rs (+17 줄, pub(crate) fn is_block_terminated_expr)
+    - crates/vais-parser/src/expr/precedence.rs (+7 줄, parse_factor early return on block LHS)
+    - crates/vaisc/tests/e2e/phase6_28_parser.rs (신규 4 tests: lw/if/match/nested_windows 각각 정상 파스 + 통과)
+    - crates/vaisc/tests/e2e/main.rs (+1 mod)
+  verify: `./scripts/check-integrity.sh` → INTEGRITY OK std=82/82 vaisdb=**237**/261 phase158=18/18 syntax=200 stages=14. `cargo test -p vaisc --test e2e --release phase6_28` → 4/4 pass. `cargo test -p vais-parser --release` → 모든 기존 test pass (regression 0). window.vais 직접 통과 (vaisdb 236 → 237 +1).
   [완료 기준]:
-  - 최소 repro 통과
-  - window.vais + 관련 2~3 파일의 해당 지점 TC 진행 (cascade blocker로 이동하는 경우도 OK)
-  - std 82/82, phase158 18/18 유지, vaisdb ≥ 236
-  - e2e 보호 테스트 (crates/vaisc/tests/e2e/phase6_28_*.rs) 추가
+  - [x] 최소 repro 통과 (`/tmp/minimal_bug_l.vais`)
+  - [x] window.vais 가 해당 지점에서 통과 (vaisdb +1 → 237)
+  - [x] std 82/82, phase158 18/18 유지
+  - [x] vaisdb ≥ 236 — 실측 237 (+1, window.vais unblock)
+  - [x] e2e 보호 테스트 (phase6_28_parser.rs, 4 tests)
+  **Note**: 처음 시도한 "parse_stmt 에서 parse_primary 직접 호출" 방식은 std 의 `LW ... { } ! { }` (partial unwrap) 레거시 파싱을 깨뜨려 std 82→75 regression 냈음 → 즉시 revert (CLAUDE.md 규칙 4 준수). 두 번째 시도(parse_factor 가드)가 성공. 교훈: AST 변환의 범위를 최소화하고 기존 dialect 보존 확인 필수.
 
 - [ ] 2. Phase 6.28.2 — codegen struct-literal field resolution (TC/codegen 불일치) (Opus direct)
   blast_radius: 크다. 사용자 신뢰 측면에서 치명적 (TC는 OK인데 codegen에서 필드 없다고 함).
@@ -170,7 +163,7 @@ max_iterations: 10
   - 기존 passing 파일 1건도 regress 없음 (특히 ownership e2e 테스트)
   - std 82/82, phase158 18/18, vaisdb ≥ 236
 
-progress: 0/5 (0%)
+progress: 1/5 (20%)  — floor updated: vaisdb 236 → 237 (INTEGRITY_VAISDB_MIN 갱신 필요)
 
 ### Phase 6.27g — search.vais error_code → VaisError.new rewrite (2026-04-20, 직전 세션 완료)
 

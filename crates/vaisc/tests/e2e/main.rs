@@ -62,6 +62,7 @@ mod phase147_per_module;
 mod phase148_safety;
 mod phase158_type_strict;
 mod phase164_btree;
+mod phase6_28_parser;
 mod phase166_vec_slice_coercion;
 mod phase169_vaisdb;
 mod phase182_vec_generic_types;
