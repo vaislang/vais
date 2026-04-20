@@ -71,11 +71,108 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-20)
 
-mode: auto (2026-04-20 Phase 6.27g 추가 — search.vais error_code rewrite 선택.)
-iteration: 4
-max_iterations: 6
+mode: auto (Phase 6.28 신설 — 컴파일러 근본 완성도 드라이브. 5 sub-task 순차 진행, 근거는 "사용자 체감 blast radius" 기준 우선순위. 사용자 승인 2026-04-20 `/clear` 후 이어갈 예정.)
+iteration: 0
+max_iterations: 10
+  strategy-note: Phase 6.27 시리즈에서 vaisdb 90.4%(236/261) 도달. 남은 실패의 대다수는 **compiler gap** 이 root cause. Phase 6.28은 vaisdb fix 아닌 **TC/codegen 자체의 structural bug를 순차로** 해결. 각 task는 최소 repro + e2e regression test + integrity gate 통과 의무. 순서는 "blast radius" 크기 큰 순.
 
-### Phase 6.27g — search.vais error_code → VaisError.new rewrite (2026-04-20)
+### Phase 6.28 — 컴파일러 근본 완성도 드라이브 (2026-04-20)
+
+> **배경**: Phase 6.27 사이클 결과, vaisdb의 남은 25 실패 파일 중 ~20개가 compiler TC/codegen의 structural gap에 막혀 있음을 확인. "lexer/parser/phase158/stdlib는 100% green, vaisdb만 90%" 상태. 완성도 원칙(아래 단계 완료 후 위 단계)을 지키려면 vaisdb를 100%로 만들기 전에 compiler의 남은 구멍을 먼저 메꿔야 함. 각 task는 독립적 근본 fix — 서로 blockedBy 없음 (순차만).
+>
+> **Baseline (2026-04-20 세션 말미)**: std=82/82 vaisdb=236/261 phase158=18/18 syntax=200 stages=14. 모든 Phase 6.28 task는 이 floor 유지 필수.
+
+- [ ] 1. Phase 6.28.1 — nested scope method-return erasure fix (Opus direct)
+  blast_radius: 최대. `LW j < windows.len()` 같은 loop 안에서 메서드 반환이 `()` 로 erase → 파일당 1~여러 지점에서 터짐.
+  target: crates/vais-types/src/checker_expr/control_flow.rs (`check_while`/`check_for`의 scope push/pop), 필요 시 scope.rs
+  repro:
+    ```vais
+    # /tmp/nested_erasure.vais
+    F main() {
+        xs := Vec.with_capacity(3);
+        xs.push(1); xs.push(2); xs.push(3);
+        i := mut 0;
+        LW i < xs.len() as i64 {
+            j := mut i + 1;
+            LW j < xs.len() as i64 {  # ← 여기서 xs.len() 이 () 로 erase 됨
+                j += 1;
+            }
+            i += 1;
+        }
+    }
+    ```
+  investigation:
+    1. repro 파일로 `./target/release/vaisc check` → error 확인 + `[DBG]` print 추가해 nested loop entry/exit 시 scope 상태 dump
+    2. TC가 outer scope의 `xs` 바인딩을 inner scope 진입 시 제대로 lookup 하는지 검증
+    3. 또는 `xs.len()` 반환 타입이 inner scope에서 re-evaluate 될 때 어디서 I64 → Unit 으로 망가지는지 stage 추적
+  fix candidates:
+    - (a) scope-local type cache가 nested loop entry에서 flush 되면서 outer binding 잃음
+    - (b) apply_substitutions 가 inner scope 의 fresh var 를 outer var 로 착각
+    - (c) method-call dispatch 가 nested-scope 에서 receiver를 `()` 로 보는 경로
+  [완료 기준]:
+  - 최소 repro 통과
+  - window.vais + 관련 2~3 파일의 해당 지점 TC 진행 (cascade blocker로 이동하는 경우도 OK)
+  - std 82/82, phase158 18/18 유지, vaisdb ≥ 236
+  - e2e 보호 테스트 (crates/vaisc/tests/e2e/phase6_28_*.rs) 추가
+
+- [ ] 2. Phase 6.28.2 — codegen struct-literal field resolution (TC/codegen 불일치) (Opus direct)
+  blast_radius: 크다. 사용자 신뢰 측면에서 치명적 (TC는 OK인데 codegen에서 필드 없다고 함).
+  target: crates/vais-codegen/src/inkwell/generator.rs (struct literal 생성 경로) 또는 crates/vais-codegen/src/control_flow/pattern.rs 의 field resolve
+  repro 후보: hnsw/insert.vais 의 MinHeap struct-literal 생성 지점 (line 92)
+  symptom: `MinHeap { items: Vec.with_capacity(0) }` — TC pass, codegen `C003 Type error: Unknown field 'items' in struct 'MinHeap'`
+  investigation:
+    1. 최소 repro 작성 (단일 파일로 MinHeap-style struct + impl + literal)
+    2. codegen이 struct `MinHeap` 을 어떤 lookup 경로로 가져오는지 (self.structs vs self.enums vs 어딘가 다른 캐시) 확인
+    3. TC 가 등록한 struct metadata 와 codegen 이 읽는 source 가 일치하는지 비교
+  fix candidates:
+    - (a) generic struct 를 codegen 이 register 하는 stage 가 누락
+    - (b) import path 따라 struct 이름 prefix 가 달라 lookup 실패
+    - (c) `generics: vec![]` 형태로 erase 된 사본이 먼저 등록돼 실제 def 를 가림
+  [완료 기준]:
+  - 최소 repro 가 TC pass + codegen pass
+  - hnsw/insert.vais 가 C003 이후 다른 blocker 로 진전 (full pass 아니어도 OK)
+  - std 82/82, phase158 18/18, vaisdb ≥ 236
+
+- [ ] 3. Phase 6.28.3 — MutexGuard method-call forwarding (Opus direct)
+  blast_radius: 중간. cow.vais + concurrency 류 파일.
+  target: crates/vais-types/src/checker_expr/calls.rs — 기존 `is_guard_type` 블록 (Index forwarding은 이미 Phase 6.27c.2에서 구현됨, method-call 연장)
+  repro:
+    ```vais
+    F main() {
+        m := Mutex.new(HashMap.new());
+        guard := m.lock();
+        guard.insert(1, "a");            # 이건 현재 작동 (is_guard_type 블록)
+        x := guard.get(&1).ok_or_else(|| "err");  # 이건 실패 — ok_or_else on guard
+    }
+    ```
+  detail: 현 is_guard_type 로직이 `guard.insert` 같은 HashMap inherent method 는 forward 하지만, `guard.get().ok_or_else()` 체인에서 `.get()` 반환값이 MutexGuard 로 남거나 Option 이 Named 형태라 ok_or_else 와 interaction 실패.
+  [완료 기준]:
+  - cow.vais 에서 ok_or_else 에러 해결 (다른 blocker 로 이동 OK)
+  - 최소 repro 가 통과
+  - std 82/82, phase158 18/18, vaisdb ≥ 236
+
+- [ ] 4. Phase 6.28.4 — Box<dyn T> method return-type associated substitution (Opus direct)
+  blast_radius: 중간 (trait-heavy 파일들).
+  target: crates/vais-types/src/lookup.rs 및 dispatch site
+  detail: Phase 6.27c.5에서 Box<dyn T> peel 은 구현됐지만, 반환 타입이 associated type 또는 Ref(Var(N)) 인 경우 substitution 이 완료되지 않아 downstream 에서 `&?N` unresolved ref 발생 (sort_agg.vais 류).
+  repro: sort_agg.vais 일부 + 최소 trait-object dispatch 파일
+  [완료 기준]:
+  - sort_agg.vais 가 `&?N` 이후 blocker 로 진전
+  - std 82/82, phase158 18/18, vaisdb ≥ 236
+
+- [ ] 5. Phase 6.28.5 — E022 use-after-move on enum variant binding (Opus direct, careful)
+  blast_radius: 작음 (btree/insert.vais 및 유사 NeedsSplit 패턴 파일).
+  caution: ownership 판정 로직은 false-negative (놓침) 위험이 제일 큼. 기존 passing 파일이 미래에 깨질 리스크.
+  target: crates/vais-types/src/checker_expr/ownership/... (move_track.rs 계열)
+  detail: `M split_result { NeedsSplit(separator, new_page_id) => propagate_split(separator, ...) }` 패턴에서 separator 가 한 번 쓰였는데 이후 use-after-move 로 잘못 탐지.
+  [완료 기준]:
+  - btree/insert.vais 가 line 291 blocker 해결
+  - 기존 passing 파일 1건도 regress 없음 (특히 ownership e2e 테스트)
+  - std 82/82, phase158 18/18, vaisdb ≥ 236
+
+progress: 0/5 (0%)
+
+### Phase 6.27g — search.vais error_code → VaisError.new rewrite (2026-04-20, 직전 세션 완료)
 
 - [x] 7. Phase 6.27g — search.vais error_code rewrite + ok_or Named<Option> fix (impl-sonnet + Opus) ✅ 2026-04-20
   detail: 두 부분 fix. (1) vaisdb/search.vais에 23개 `error_code(E,C,N,"msg")` → `VaisError.new("VAIS-EECCNNN","msg")` 기계적 치환 (impl-sonnet background). (2) 이후 TC가 line 68 `table_meta.table_id`에서 E030 "no field on type 'Option'" 발생 — root cause는 resolver가 `catalog.get_table()` 반환인 `Option<&TableInfo>`를 `Named{"Option",[Ref(TableInfo)]}` 형태로 만드는데 ok_or 빌트인이 `Optional(T)` arm만 처리하고 `Named<Option>` fallback으로 `Result<Named<Option>,Str>` 잘못 반환. Fix: calls.rs ok_or/ok_or_else에 Named{"Option",[T]} arm 추가 (Opus direct). search.vais는 line 76 (table_meta.columns) schema drift로 이동 — 별개.
