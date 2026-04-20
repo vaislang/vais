@@ -171,10 +171,10 @@ Source of truth for every entry below is `crates/vais-lexer/src/lib.rs`.
 | `Self` | Self type (inside `X`/`W`) | ✓ |
 | `true`, `false` | Boolean literals | ✓ |
 | `await` | Long-form of `Y` (both accepted) | ✓ |
-| `yield` | Iterator/coroutine yield | ◐ |
+| `yield` | Iterator/coroutine yield | ✓ (simplified) / ◐ full coroutine desugar Phase 4.22 SCOPED |
 | `const` | Compile-time constant binding | ✓ |
-| `comptime` | Compile-time expression/block | ◐ |
-| `dyn` | Dynamic dispatch trait object | ◐ |
+| `comptime` | Compile-time expression/block | ◐ (function-body ✓ / const-init ✗ Phase B.3) |
+| `dyn` | Dynamic dispatch trait object | ✓ (basic) / ◐ full vtable Phase 4.21 SCOPED |
 | `macro` | Declarative macro definition | ◐ |
 | `as` | Type cast (`x as i64`) | ✓ |
 | `pure` | Pure function modifier (effect system) | ◐ Phase 4c |
@@ -182,9 +182,9 @@ Source of truth for every entry below is `crates/vais-lexer/src/lib.rs`.
 | `effect` | Effect declaration | ⊖ |
 | `unsafe` | Unsafe block/function modifier | ◐ |
 | `partial` | Partial-function (may panic) modifier | ◐ Phase 4c |
-| `linear` | Linear type annotation (must-use) | ◐ experimental |
-| `affine` | Affine type annotation (at-most-once) | ◐ experimental |
-| `move` | Move capture in closure | ◐ |
+| `linear` | Linear type annotation (must-use) | ✓ (annotation) / ◐ use-count enforcement Phase 4.19 SCOPED |
+| `affine` | Affine type annotation (at-most-once) | ✓ (annotation) / ◐ use-count enforcement Phase 4.19 SCOPED |
+| `move` | Move capture in closure | ✓ (capture+invoke) / ◐ drop-on-move tracking Phase 4.23 SCOPED |
 | `where` | Generic where-clause | ✓ |
 
 ### Primitive Type Keywords
@@ -251,7 +251,7 @@ This table enumerates every top-level or statement-level construct the parser ac
 | Pipe (`\|>`) | `x \|> f \|> g` | ✓ | ✓ | ✓ | ✓ |
 | Self-recursion `@` | `F fact(n:i64)->i64 = I n<=1 { 1 } EL { n * @(n-1) }` | ✓ | ✓ | ✓ | ✓ |
 | Closure | `\|x\| x * 2`, `\|x,y\| { x + y }` | ✓ | ✓ | ✓ | ✓ |
-| Move closure | `move \|x\| x + captured` | ✓ | ◐ | ◐ | partial |
+| Move closure | `move \|x\| x + captured` | ✓ | ✓ | ✓ | ✓ (drop-on-move tracking: Phase 4.23 SCOPED) |
 | Generics | `F id<T>(x:T)->T = x` | ✓ | ✓ | ✓ monomorphized | ✓ |
 | Where clause | `F f<T>(x:T)->T where T: Eq` | ✓ | ✓ | ✓ | ✓ |
 | Try operator `?` | `expr?` on Result/Option | ✓ | ✓ | ✓ | ✓ |
@@ -262,11 +262,11 @@ This table enumerates every top-level or statement-level construct the parser ac
 | `Vec<Struct>[i].field =` write | `v[i].x = 5` | ✓ | ✓ | ◐ Phase 3.14 | ◐ |
 | Attribute `#[…]` | `#[cfg(target_os="linux")]` | ✓ | limited | limited | limited |
 | Unsafe block | `unsafe { … }` | ✓ | ◐ | ✓ (trivial pass-through) | ✓ |
-| Comptime block | `comptime { … }` | ✓ | ◐ | ◐ | partial |
+| Comptime block | `comptime { … }` | ◐ (function-body ✓ / const-init ✗ Phase B.3) | ✓ | ✓ | ✓ (integer arith) |
 | Macro definition | `macro name!(…) { … }` | ✓ | ◐ | ◐ | experimental |
-| Dyn trait object | `dyn MyTrait` | ✓ | ◐ | ◐ | experimental |
-| Linear/affine types | `linear T`, `affine T` | ✓ | ◐ | ◐ | experimental |
-| Yield (iterator) | `yield x` | ✓ | ◐ | ◐ | experimental |
+| Dyn trait object | `dyn MyTrait` | ✓ | ✓ | ✓ | ✓ (basic dispatch; full vtable: Phase 4.21 SCOPED) |
+| Linear/affine types | `linear T`, `affine T` | ✓ | ✓ | ✓ | ✓ (annotation + lowering; use-count enforcement: Phase 4.19 SCOPED) |
+| Yield (iterator) | `yield x` | ✓ | ✓ | ✓ | ✓ (simplified semantics; coroutine desugar: Phase 4.22 SCOPED) |
 
 **Gate rule**: every `◐` entry has a planned Phase in `ROADMAP.md`. Moving a `◐` to `✓` requires a compiler_syntax or e2e test that currently fails, passes after the change, and stays green in Phase-0 regression floor.
 

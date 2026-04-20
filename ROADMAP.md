@@ -66,10 +66,12 @@ Commit `cde15d44` 기준 `./scripts/check-integrity.sh`:
 ## Current Tasks (2026-04-20)
 
 mode: auto (문법 + 컴파일러 100% drive)
-iteration: 1
+iteration: 2
 max_iterations: 20
   strategy: A.1 단독 시작 (A.1/A.2만 unblocked, A.1은 측정+문서, A.2는 5 construct 독립 측정) → sequential
   opus_direct: A.1 — 측정 근거 → 매트릭스 판정이 분리 불가능한 evaluator 루프
+  strategy iteration 2: A.2 순차 (A.3 가 A.2 결과에 blockedBy). 5 construct 각각 최소 재현 → 매트릭스 판정.
+  opus_direct: A.2 — 측정 + 판정 루프. impl-sonnet 위임 시 "build 성공 vs codegen gap" 구분을 놓칠 리스크.
 
 ### Phase A — 문서 동기화 (Opus direct, 먼저 실행)
 
@@ -95,17 +97,22 @@ max_iterations: 20
     lowering 작업과 지근 거리. B.4 내부 혹은 별도 B.6 으로 `Option<Struct>` 파라미터 lowering 을
     다루면 vaisdb cascade 가능성 있음. B.1 의 "TC ✓/codegen ✗" 매트릭스 전수 조사에서 재확인.
 
-- [ ] A.2 — Phase 4.19~4.23 SCOPED 재평가: 실측 작동 확인 + 매트릭스 정정
-  target: linear T, comptime {}, dyn Trait, yield expr, move closure 각각 최소 재현
-  approach: 각 construct 의 최소 재현 (3~5줄) 작성 → `vaisc check` + `vaisc build` 실행 → 작동하는 항목은 매트릭스 `◐ → ✓` 승격
-  특별 케이스:
-    - **comptime {}**: Survey D 에 의하면 `const N: i64 = comptime { 5 + 3 }` 은 parse error. 이 건 ◐ 유지 + Phase B.3 으로 이월.
-    - 나머지 4개 (linear, dyn, yield, move closure): Survey B 가 build 성공 확인 → ✓ 승격 후보
-  [완료 기준]:
-    - 각 construct 별 최소 재현 파일 `docs/language/LIVING_SPEC/` 에 추가 (없으면)
-    - LANGUAGE_SPEC.md 매트릭스 업데이트
-    - LIVING_SPEC 101 → N+ 유지
-    - baseline 유지
+- [x] A.2 — Phase 4.19~4.23 SCOPED 재평가: 실측 작동 확인 + 매트릭스 정정 ✅ 2026-04-21
+  실측 (Opus direct, `vaisc check` + `vaisc build` + run):
+    - linear/affine: Parse ✓ / TC ✓ / Codegen ✓ / Run ✓ — use-count 강제만 Phase 4.19 SCOPED.
+    - comptime (function-body `F f()->T = comptime { ... }`): Parse ✓ / TC ✓ / Codegen ✓ / Run ✓ (integer/conditional).
+      * const-initializer `const N:i64 = comptime {...}` 은 여전히 Parse error → Phase B.3 대상 (확인).
+    - dyn Trait: Parse ✓ / TC ✓ / Codegen ✓ / Run ✓ (basic method dispatch. full vtable 은 Phase 4.21 SCOPED).
+    - yield: Parse ✓ / TC ✓ / Codegen ✓ / Run ✓ — simplified semantics (full coroutine desugar Phase 4.22 SCOPED).
+    - move closure: Parse ✓ / TC ✓ / Codegen ✓ / Run ✓ — drop-on-move tracking Phase 4.23 SCOPED.
+  신규 reproducer 5 건 `docs/language/LIVING_SPEC/01_keywords/` 추가:
+    linear_affine_annotation.vais, comptime_function_body.vais, dyn_trait_param.vais,
+    yield_in_loop.vais, move_closure_capture.vais. 모두 TC pass.
+  LIVING_SPEC 104 → **109**, 모두 pass.
+  LANGUAGE_SPEC.md 매트릭스 (L254/265/267-269) + keyword status 테이블 (L174-177, L185-187) 동기화:
+    - Move closure / Dyn / Yield / Linear / Affine: ◐◐ → ✓✓ with SCOPED note
+    - Comptime: Parse ◐ (function-body ✓ / const-init ✗ B.3), TC ✓, Codegen ✓, Run ✓
+  baseline 유지: syntax=200, stages=14, std=82/82, vaisdb=237/261, phase158=18/18.
 
 - [ ] A.3 — Cross-file impl split 불일치 해결 [blockedBy: A.2]
   target: LANGUAGE_SPEC.md L231 "Impl block Codegen ◐ cross-file dispatch: Phase 2.9" vs CODEGEN_FEATURES.md L93 "✗" 일치화
