@@ -71,7 +71,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-20)
 
-mode: auto (Phase 6.27d 신설 — 이전 세션 종료 노트 기반 3 sub-task. 전체 자동 진행 승인 2026-04-20.)
+mode: stopped (2026-04-20 세션 종료 — Phase 6.27d + 6.27e 모두 완료. vaisdb 234 → 236/261, floor 236. 구조적 compiler fix 4건 커밋. 남은 21 파일은 dyn trait dispatch + codegen struct-field + cascading API drift로 blocked — 단일 세션 범위 초과. 다음 세션 권장: Phase 6.27f — dyn trait vtable codegen OR HnswStore API 대규모 refactor 중 택1. 그 이전에 codegen 쪽의 `items` 필드 누락 같은 C003 버그들을 먼저 수집해 분류 필요 (ROADMAP의 vector/hnsw/insert.vais MinHeap.items 경우).)
 iteration: 3
 max_iterations: 6
   strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.27d.a. Opus direct (TC boundary 설계+impl 일체). 좁은 범위 (control_flow.rs 2 함수 시그니처 thread 추가). Baseline std 82/82 vaisdb 234/261 phase158 18/18.
