@@ -71,19 +71,70 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-20)
 
-mode: auto (Phase 6.29 — Compiler Completeness Drive II. Phase 6.28 완료 후 문법/컴파일러 완성도 실측에서 발견된 pre-existing 실패들을 root-cause 단위로 해결. 5 sub-task 순차 진행.)
-iteration: 2
+mode: auto (Phase 6.30 — Codegen Monomorphization Pipeline Rewrite. Phase 6.29.2 DEFERRED root cause: user-defined generic struct Vec<T> 의 generate_specialized_struct_type 이 module_gen/instantiations.rs flush 에서 호출되지 않아 generated_structs["Vec$i64"] 가 비어있는데 method 쪽 return type 은 mangled 로 emit → LLVM IR 에서 `store %Vec %t0, %Vec* %v.1` (t0 = %Vec$i64) type mismatch. e2e 10+ 건 이 근본 원인. 5 sub-task 순차.)
+iteration: 0
 max_iterations: 10
-  strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.29.1 vais-types ownership unit 8 failures. Opus direct (ownership semantics 설계+impl 일체). Baseline std=82/82 vaisdb=237/261 phase158=18/18 syntax=200 stages=14.
-  iteration 1 결과: **test drift 해결**. 코드 변경 0, 테스트 8건 현행화. vais-types 347 → 355 (+8). commit 4798e3f1.
-  strategy iteration 2 (2026-04-20): sequential — #2 Phase 6.29.2 generic monomorphization IR type consistency. Opus direct (codegen struct mangling 설계+impl). blast radius 큼 (5~6 e2e 한 번에).
-  iteration 2 결과: **DEFERRED to Phase 6.30**. root cause 분석 완료 — user-defined Vec<T> generate_specialized_struct_type 미호출로 generated_structs["Vec$i64"] 가 비어있는데 method 쪽은 mangled emit. codegen mono 파이프라인 전반 재정비 필요 (1 iteration 범위 초과). baseline regression 0.
-  strategy iteration 3 (2026-04-20): sequential — #3 Phase 6.29.3 str.as_bytes / circular import.
-  iteration 3 결과: **drift 해결**. circular import test rename+invert (Phase 6.27c.1 근거), as_bytes ignore (6.29.2 blocker).
-  strategy iteration 4 (2026-04-20): sequential — #4 Phase 6.29.4 test_if_condition_non_bool_error (integration_tests).
-  iteration 4 결과: **drift 해결** (6.29.1 과 같은 Phase 254 근거).
-  strategy iteration 5 (2026-04-20): sequential — #5 Phase 6.29.5 vaisdb 24 분류 + atomic Ordering.
-  iteration 5 결과: 24 실패 5그룹 분류, atomic Ordering permissive dispatch (45줄). cow.vais E006 7사이트 해소.
+
+### Phase 6.30 — Codegen Monomorphization Pipeline Rewrite (2026-04-21, post-6.29)
+
+> **배경**: Phase 6.29.2 에서 root cause 완전 분석 완료. 10 e2e 실패 (`%Vec$i64` vs `%Vec` IR type mismatch) + e2e_str_as_bytes (ignored) + std.as_bytes 이용 vaisdb 파일 다수가 **같은 버그**. pipeline 재정비로 일괄 해제 기대.
+>
+> **Baseline (Phase 6.29 commit `0a5bcc1c` 기준)**: std=82/82 vaisdb=237/261 phase158=18/18 syntax=200 stages=14 vais-types=355/355 parser=868/870 e2e=2613 pass/10 fail/1 ignored. 모든 task 는 이 floor 유지 필수.
+>
+> **Core 가설**: 메서드 monomorphization 이 생성되는 모든 시점에 대응되는 struct monomorphization 도 `generated_structs` 에 등록되고 `generate_specialized_struct_type` 이 호출되어야 한다. 현재 flow 에서 어딘가 둘이 분리돼 있다.
+
+- [ ] 1. Phase 6.30.1 — 현상 확정 repro + trace (Opus direct, research-heavy)
+  target: 재현 파일 생성 (최소 single-file: `S Vec<T>{...} X Vec<T>{F new()->Vec<T>{...}} F main(){v:=Vec.new(); v.push(1);}`). add_instantiation / generate_specialized_struct_type / type_to_llvm 경로에 DBG 삽입하여 Struct instantiation 이 (a) TC 에서 add 되는지, (b) codegen module_gen flush 에 도달하는지, (c) generate_specialized_struct_type 이 호출되는지 단계별 확인. Diff 0 (debug print 만, 조사 후 revert).
+  [완료 기준]:
+  - 5-step trace 결과 문서화 (어느 단계에서 struct inst 가 drop 되는지 명시)
+  - std 82/82, phase158 18/18, vaisdb ≥ 237 유지
+  - e2e 2613 pass 유지
+
+- [ ] 2. Phase 6.30.2 — struct instantiation 누락 지점 fix (Opus direct)
+  target: crates/vais-types/src/checker_expr/calls.rs + checker_fn.rs pending flush, OR crates/vais-codegen/src/module_gen/instantiations.rs flush 순서 [blockedBy: 1]
+  approach: 6.30.1 결과에 따라 분기. 예상 시나리오 A = TC 에서 Struct inst 누락 → add_instantiation 호출 추가. 시나리오 B = codegen flush 에서 generate_specialized_struct_type 조건 miss → 조건 확장. 시나리오 C = instantiation 은 있는데 InstantiationKind::Struct 필터에 안 잡힘 → kind 추가/통합.
+  [완료 기준]:
+  - 최소 repro 가 clang 통과
+  - 최소 3 e2e 통과 (타겟 10 중)
+  - std 82/82, phase158 18/18, vaisdb ≥ 237
+
+- [ ] 3. Phase 6.30.3 — type_to_llvm fallback 정합 (Opus direct, careful) [blockedBy: 2]
+  target: crates/vais-codegen/src/types/conversion.rs:163-192
+  detail: 현재 fallback 이 "mangled 없으면 base name" 으로 가는데, 이 fallback 이 6.30.2 fix 이후에도 남아 있으면 미래 regression 씨앗. 6.30.2 가 generated_structs 를 채우게 됐다면 fallback 을 에러로 전환 (혹은 debug-assert) 하여 같은 버그 재발 방지.
+  [완료 기준]:
+  - fallback hardening (eprintln! warning OR debug_assert) 적용
+  - 기존 pass 테스트 0 regression
+  - std 82/82, phase158 18/18, vaisdb ≥ 237
+
+- [ ] 4. Phase 6.30.4 — e2e 10 건 + ignored 1건 해제 (Opus direct) [blockedBy: 3]
+  target: crates/vaisc/tests/e2e/phase134_string.rs (e2e_str_as_bytes #[ignore] 제거), 6.29.2 ROADMAP 에 나열된 10 e2e.
+  [완료 기준]:
+  - 10/10 e2e pass (advanced::test_typed_memory_vec_simple, phase164_btree::*, phase166_vec_slice_coercion::*, phase184_unambiguous_keywords::e2e_phase24_vec_*, modules_system::test_typed_memory_vec_simple)
+  - e2e_str_as_bytes ignored 제거 후 pass
+  - integration_tests 146/146 유지
+  - std 82/82, phase158 18/18, vaisdb ≥ 237
+
+- [ ] 5. Phase 6.30.5 — vaisdb 재측정 + cascade 진전 확인 (Opus direct) [blockedBy: 4]
+  target: 6.30 fix 가 vaisdb 의 `Vec<u8>` / generic struct 소비 파일들에 cascade 했는지 확인. `test_vaisdb_files_codegen_ok` 재측정.
+  [완료 기준]:
+  - vaisdb ≥ 238 (최소 +1 기대, 실제 cascade 는 더 클 수도 있음)
+  - 만약 +0 이면 남은 blocker 분류하여 Phase 6.31 생성
+
+progress: 0/5 (0%)
+
+### Phase 6.29 — Compiler Completeness Drive II ✅ 완료 (2026-04-20, commit `0a5bcc1c`)
+
+> 실측 결과 요약: parser 868/870, compiler_syntax 200/200, stages 14/14, vais-types **355/355 (+8)**, std 82/82, phase158 18/18, vaisdb 237/261, e2e 2613/2623 (1 추가 intentional ignore). 5 subtasks: 1개 실제 fix (atomic Ordering permissive), 3개 test drift (Phase 5.24/247/254/6.27c.1 근거), 1개 DEFERRED → Phase 6.30.
+>
+> iteration 결과 간략:
+>   - 6.29.1: test drift 해결, vais-types 347→355.
+>   - 6.29.2: DEFERRED to Phase 6.30 (codegen mono pipeline).
+>   - 6.29.3: circular import drift + as_bytes ignore.
+>   - 6.29.4: if-cond drift (Phase 254 lenient cond).
+>   - 6.29.5: atomic Ordering permissive dispatch.
+
+### Phase 6.28 closure note
+
   strategy-note: Phase 6.27 시리즈에서 vaisdb 90.4%(236/261) 도달. 남은 실패의 대다수는 **compiler gap** 이 root cause. Phase 6.28은 vaisdb fix 아닌 **TC/codegen 자체의 structural bug를 순차로** 해결. 각 task는 최소 repro + e2e regression test + integrity gate 통과 의무. 순서는 "blast radius" 크기 큰 순.
   strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.28.1 nested scope method-return erasure fix. Opus direct (TC scope 설계+impl 일체, CLAUDE.md 규칙 1~7 전부 적용 요구됨). Baseline std=82/82 vaisdb=236/261 phase158=18/18 syntax=200 stages=14. 순차 이유: 5 tasks all Opus direct, all touch TC/codegen core — file overlap 잠재 + ownership (task 5)은 cascade 리스크로 병렬 금지.
   iteration 1 결과: **237 도달 (+1)**. 원래 가설("nested scope method-return erasure")은 **틀렸음** — 실제는 parser bug (block-terminated expr `*` binop mis-parse). parse_factor에 early-return 가드 추가. window.vais direct pass. commit 2af47cf1.
@@ -96,7 +147,7 @@ max_iterations: 10
   strategy iteration 5 (2026-04-20): sequential — #5 Phase 6.28.5 E022 use-after-move on enum variant binding. Opus direct, careful (ownership/move_track.rs, false-negative 위험 최고).
   iteration 5 결과: **reframe+fix**. 버그는 enum variant 바인딩 특화가 아니라 **Stmt::Let double-visit** — check_expr_ownership 이 이미 use_var 로 move 마크를 찍는데, 그 직후 같은 value 에 check_move_from_expr 을 또 호출해 방금 찍힌 Moved 상태를 UseAfterMove 로 오진. Stmt::Let/LetDestructure/Return(Some) 의 redundant 호출 제거. btree/insert.vais 291 해소. ownership unit tests pre-existing 8 failures 변동 없음 (regression 0).
 
-### Phase 6.29 — Compiler Completeness Drive II (2026-04-20, post-6.28 실측)
+### Phase 6.29 — detail log (2026-04-20, post-6.28 실측)
 
 > **배경**: Phase 6.28 완료 후 전체 test suite 실측:
 >   - 문법/파서: vais-parser 868/0/2, compiler_syntax 200/200, compiler_stages 14/14 → **완성**
