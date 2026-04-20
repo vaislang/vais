@@ -136,6 +136,11 @@ S HashSet<T> {
 }
 
 X HashSet<T> {
+    # Create a new HashSet with the default capacity (16 buckets)
+    F new() -> HashSet<T> {
+        HashSet.with_capacity(16)
+    }
+
     # Create a new HashSet with given capacity
     F with_capacity(capacity: i64) -> HashSet<T> {
         cap := I capacity < 8 { 8 } EL { capacity }

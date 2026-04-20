@@ -1871,6 +1871,25 @@ impl TypeChecker {
             }
         }
 
+        // Phase 6.27e.a: Built-in HashSet static methods — mirror HashMap.
+        // Without this, HashSet.new()/with_capacity fall through to the
+        // generic "new-like method" fallback which returns a HashSet with
+        // EMPTY generics, making all subsequent methods fail type check.
+        if type_name.node == "HashSet" {
+            match method.node.as_str() {
+                "new" | "with_capacity" => {
+                    for arg in args {
+                        let _ = self.check_expr(arg)?;
+                    }
+                    return Ok(ResolvedType::Named {
+                        name: "HashSet".to_string(),
+                        generics: vec![self.fresh_type_var()],
+                    });
+                }
+                _ => {}
+            }
+        }
+
         // Built-in Mutex static methods
         if type_name.node == "Mutex" && method.node == "new" {
             for arg in args {

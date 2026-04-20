@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-20)
 
 mode: auto (Phase 6.27d 신설 — 이전 세션 종료 노트 기반 3 sub-task. 전체 자동 진행 승인 2026-04-20.)
-iteration: 2
+iteration: 3
 max_iterations: 6
   strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.27d.a. Opus direct (TC boundary 설계+impl 일체). 좁은 범위 (control_flow.rs 2 함수 시그니처 thread 추가). Baseline std 82/82 vaisdb 234/261 phase158 18/18.
   iteration 1 결과: **235 도달 (+1)**. 두 부분 fix (statement-like widening에서 recursive-self-method 제외 + Box<T> method peel). syntax_generic_impl_method 리그레션 발생 → Box-peel을 "Box 자체에 method 없을 때만"으로 한정 → 해결. floor 234→235.
@@ -108,6 +108,27 @@ Baseline: std 82/82, vaisdb 234/261, phase158 18/18 (측정 완료, 2026-04-20).
   - [x] vaisdb ≥ 234 (235 유지, cascade blockers 때문에 직접 +1은 미달성. 미래 cascade unblock 때 자동 +N)
 
 progress: 3/3 (100%) — structural wins + 명확한 진단, 직접 vaisdb count는 +1 (floor 235로 상향)
+
+### Phase 6.27e — low-hanging vaisdb cleanup (2026-04-20)
+
+> **배경**: Phase 6.27d.c scan에서 남은 26 파일 분석 — HashSet.new() 미구현 (8+ call sites), 일부 API drift, 몇 개 arity mismatch. 구조적 compiler fix 없이 stdlib 1줄 추가 + single-file fixes로 진행 가능한 범위.
+
+- [x] 4. Phase 6.27e.a — HashSet.new() stdlib + builtin + vaisdb imports (Opus direct) ✅ 2026-04-20
+  detail: 세 부분 수정. (1) std/hashset.vais에 `F new() -> HashSet<T> { HashSet.with_capacity(16) }` 추가. (2) compiler calls.rs에 HashSet static builtin 추가 (HashMap mirror) — 기본 generic-아닌 fallback이 `HashSet<>` empty generics 반환하던 문제 해결, 이제 `HashSet<Var(N)>` 반환. (3) 3개 vaisdb 파일 (sort_agg, subquery, hnsw/insert)에 `U std/hashset` 누락 import 추가. subquery.vais가 직접 통과 (+1); sort_agg는 다른 E001 blocker로 이동; hnsw/insert는 load_vector API drift로 이동.
+  changes: std/hashset.vais (+4줄 F new), crates/vais-types/src/checker_expr/calls.rs (+16줄 HashSet static builtin), vaisdb 3 파일 U std/hashset 추가.
+  verify: ./scripts/check-integrity.sh → INTEGRITY OK std=82/82 vaisdb=236/261 phase158=18/18. floor 235→236.
+  [완료 기준]:
+  - [x] std 82/82, phase158 18/18 유지
+  - [x] vaisdb ≥ 235 (실측 236 +1, subquery.vais unblock)
+- [ ] 5. Phase 6.27e.b — 잔여 single-file API drift scan & fix (impl-sonnet background) [blockedBy: 4]
+  target: btree/insert.vais (pg.release), hnsw/bulk.vais (allocate_node_id), window.vais (values_mut), subquery.vais 등
+  detail: 1-file-at-a-time 패턴 (iter 7-11 성공 패턴). 각 파일마다 단일 fix → `vaisc check` → 통과 시 integrity → regress 시 revert. 최소 +1, stretch +3.
+  [완료 기준]:
+  - std 82/82, phase158 18/18 유지
+  - vaisdb +1 이상 beyond 6.27e.a
+  - INTEGRITY_VAISDB_MIN 업데이트
+
+progress: 0/2 (0%)
 
 ### 이전 기록 보존
 
