@@ -66,23 +66,34 @@ Commit `cde15d44` 기준 `./scripts/check-integrity.sh`:
 ## Current Tasks (2026-04-20)
 
 mode: auto (문법 + 컴파일러 100% drive)
-iteration: 0
+iteration: 1
 max_iterations: 20
+  strategy: A.1 단독 시작 (A.1/A.2만 unblocked, A.1은 측정+문서, A.2는 5 construct 독립 측정) → sequential
+  opus_direct: A.1 — 측정 근거 → 매트릭스 판정이 분리 불가능한 evaluator 루프
 
 ### Phase A — 문서 동기화 (Opus direct, 먼저 실행)
 
 > **배경**: Survey B/D 에서 "실제 작동하는데 ROADMAP/매트릭스는 미완으로 표시" 된 항목 다수 발견. 코드 수정 없이 문서만 정정하면 완성도가 실제로 올라감. 이 Phase 는 baseline 유지 + 문서-실측 일치만 확인.
 
-- [ ] A.1 — Phase 2.10 Option match-arm 재포장: 실측 작동 확인 + 문서 업데이트
-  target: 실측 재현 + LANGUAGE_SPEC.md + ROADMAP-archive Phase 2.10 closure 기록
-  approach:
-    1. phase2_10 reproducer 3~5개 실행 (Option<Struct>, Result<T,E>, nested Option<Option<T>>)
-    2. 모두 TC + codegen + run OK 확인
-    3. 기존 phase2_10_option_rewrap_in_match_arm 테스트가 `#[ignore]` 면 해제
-  [완료 기준]:
-    - reproducer 3+ pass
-    - LANGUAGE_SPEC 업데이트 (관련 ◐ → ✓ 있으면)
-    - baseline 유지
+- [x] A.1 — Phase 2.10 Option match-arm 재포장: 실측 작동 확인 + 문서 업데이트 ✅ 2026-04-21
+  실측 결과 (Opus direct):
+    - 기존 e2e `phase2_10_option_rewrap_in_match_arm` (TC-only assertion): ✓ passing (이미 #[ignore] 해제된 상태)
+    - 신규 reproducer 3 건 작성, LIVING_SPEC 에 TC-only 로 추가:
+      * `docs/language/LIVING_SPEC/02_patterns/phase2_10_option_struct_rewrap.vais`
+      * `docs/language/LIVING_SPEC/02_patterns/phase2_10_result_te_rewrap.vais`
+      * `docs/language/LIVING_SPEC/02_patterns/phase2_10_nested_option_flatten.vais`
+      → 세 건 모두 `vaisc check` ✓. LIVING_SPEC 101 → **104** 유지, 모두 pass.
+    - 세 건 `vaisc build` 는 C004 `LLVM error: Aggregate extract index out of range` 실패.
+      → Phase 2.10 closure 는 **TC-level 만**. Codegen 은 CODEGEN_FEATURES.md L171 의
+        `F f(opt: Option<Struct>) -> Option<Primitive>` Phase 3.14/3.15 gap 로 귀결.
+        Survey B 의 "실제 작동" 주장은 TC 한정. **이 결론은 사용자 AskUserQuestion 으로 승인.**
+  문서 동기화:
+    - CODEGEN_FEATURES.md L173: "Resolved Phase 2.10" → "**TC resolved** Phase 2.10. Codegen 은 L171 Phase 3.14/3.15 gap" 로 정정.
+    - LANGUAGE_SPEC.md: Phase 2.10 matrix 엔트리 없음 — 업데이트 불필요.
+  baseline 유지: syntax=200, stages=14, std=82/82, vaisdb=237/261, phase158=18/18 (check-integrity.sh 재실행 OK).
+  카스케이드 메모 (Phase B 로 이월): 이 codegen gap 은 B.4 (Phase 3.14 Vec<Struct>[i].field=) 의
+    lowering 작업과 지근 거리. B.4 내부 혹은 별도 B.6 으로 `Option<Struct>` 파라미터 lowering 을
+    다루면 vaisdb cascade 가능성 있음. B.1 의 "TC ✓/codegen ✗" 매트릭스 전수 조사에서 재확인.
 
 - [ ] A.2 — Phase 4.19~4.23 SCOPED 재평가: 실측 작동 확인 + 매트릭스 정정
   target: linear T, comptime {}, dyn Trait, yield expr, move closure 각각 최소 재현

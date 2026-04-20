@@ -1,0 +1,26 @@
+# LIVING_SPEC/02_patterns/phase2_10_result_te_rewrap.vais
+# Key concept: Phase 2.10 TC reproducer — Result<T,E>의 `Ok(f.field)` /
+# `Err(e)` 재포장이 TC 레벨에서 통과함.
+#
+# Status:
+#   - TC(`vaisc check`): ✓ 통과
+#   - Codegen(`vaisc build`): ✗ C004 "Aggregate extract index out of range"
+#     → Option<Struct> 재포장과 동일한 Phase 3.14/3.15 codegen gap.
+
+S Foo { n: i64, }
+
+F extract(r: Result<Foo, str>) -> Result<i64, str> {
+    M r {
+        Ok(f) => Ok(f.n),
+        Err(e) => Err(e),
+    }
+}
+
+F main() -> i64 {
+    f := Foo { n: 7 }
+    r: Result<Foo, str> := Ok(f)
+    M extract(r) {
+        Ok(v) => v,
+        Err(_) => -1,
+    }
+}
