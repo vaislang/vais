@@ -196,11 +196,15 @@ impl OwnershipChecker {
                 is_mut,
                 ownership,
             } => {
-                // Check the value expression
+                // Check the value expression. For non-Copy top-level Idents
+                // (e.g. `y := x` where x is Vec<u8>), check_expr_ownership
+                // already marks `x` as Moved via use_var (see Expr::Ident arm).
+                // Phase 6.28.5: previously this was followed by a redundant
+                // `check_move_from_expr(value)` which re-visited the same
+                // Ident and saw the Moved state we just set, triggering a
+                // spurious "use-after-move" E022 on the *first* use. The
+                // redundant call is removed; use_var handles the move.
                 self.check_expr_ownership(value)?;
-
-                // Determine if this is a move or copy from the value
-                self.check_move_from_expr(value)?;
 
                 // Register the new variable
                 let var_ty = if let Some(ty) = ty {
@@ -233,14 +237,18 @@ impl OwnershipChecker {
                 Ok(())
             }
             Stmt::LetDestructure { value, .. } => {
+                // Phase 6.28.5: see Stmt::Let — check_expr_ownership already
+                // marks top-level Idents as Moved via use_var; the separate
+                // check_move_from_expr call was redundant and caused spurious
+                // E022 on first-use of non-Copy values.
                 self.check_expr_ownership(value)?;
-                self.check_move_from_expr(value)?;
                 Ok(())
             }
             Stmt::Expr(expr) => self.check_expr_ownership(expr),
             Stmt::Return(Some(expr)) => {
+                // Phase 6.28.5: see Stmt::Let — check_expr_ownership already
+                // handles moves via use_var; drop the redundant call.
                 self.check_expr_ownership(expr)?;
-                self.check_move_from_expr(expr)?;
                 // Check for returning references to locals
                 if self.function_returns_ref {
                     self.check_return_ref(expr, Some(stmt.span))?;

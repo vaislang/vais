@@ -72,7 +72,7 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-20)
 
 mode: auto (Phase 6.28 신설 — 컴파일러 근본 완성도 드라이브. 5 sub-task 순차 진행, 근거는 "사용자 체감 blast radius" 기준 우선순위. 사용자 승인 2026-04-20 `/clear` 후 이어갈 예정.)
-iteration: 3
+iteration: 5
 max_iterations: 10
   strategy-note: Phase 6.27 시리즈에서 vaisdb 90.4%(236/261) 도달. 남은 실패의 대다수는 **compiler gap** 이 root cause. Phase 6.28은 vaisdb fix 아닌 **TC/codegen 자체의 structural bug를 순차로** 해결. 각 task는 최소 repro + e2e regression test + integrity gate 통과 의무. 순서는 "blast radius" 크기 큰 순.
   strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.28.1 nested scope method-return erasure fix. Opus direct (TC scope 설계+impl 일체, CLAUDE.md 규칙 1~7 전부 적용 요구됨). Baseline std=82/82 vaisdb=236/261 phase158=18/18 syntax=200 stages=14. 순차 이유: 5 tasks all Opus direct, all touch TC/codegen core — file overlap 잠재 + ownership (task 5)은 cascade 리스크로 병렬 금지.
@@ -82,6 +82,9 @@ max_iterations: 10
   strategy iteration 3 (2026-04-20): sequential — #3 Phase 6.28.3 MutexGuard method-call forwarding. Opus direct (is_guard_type block extension, cow.vais + 유사 파일 unblock 기대).
   iteration 3 결과: **reframe**. MutexGuard forwarding 은 이미 정상 — 진짜 버그는 `Optional(Ref(V)).ok_or_else(...)` 가 Phase 311 에 미등록. 24 줄 추가로 fix. vaisdb net 0 (cow.vais 다음 blocker 가 있음) but 구조적 win — 앞으로 ok_or_else 체인 전반이 뚫림.
   strategy iteration 4 (2026-04-20): sequential — #4 Phase 6.28.4 Box<dyn T> method return-type associated substitution. Opus direct (lookup.rs + substitution 파이프라인).
+  iteration 4 결과: **SCOPED**. vaisdb 에 `&?N` / Ref(Var) 에러 0건 — 선행 세션에서 간접 해결. 변경 없이 진행.
+  strategy iteration 5 (2026-04-20): sequential — #5 Phase 6.28.5 E022 use-after-move on enum variant binding. Opus direct, careful (ownership/move_track.rs, false-negative 위험 최고).
+  iteration 5 결과: **reframe+fix**. 버그는 enum variant 바인딩 특화가 아니라 **Stmt::Let double-visit** — check_expr_ownership 이 이미 use_var 로 move 마크를 찍는데, 그 직후 같은 value 에 check_move_from_expr 을 또 호출해 방금 찍힌 Moved 상태를 UseAfterMove 로 오진. Stmt::Let/LetDestructure/Return(Some) 의 redundant 호출 제거. btree/insert.vais 291 해소. ownership unit tests pre-existing 8 failures 변동 없음 (regression 0).
 
 ### Phase 6.28 — 컴파일러 근본 완성도 드라이브 (2026-04-20)
 
@@ -134,26 +137,35 @@ max_iterations: 10
   - [x] e2e 보호 테스트 (ok_or_on_optional, ok_or_else_on_optional)
   - [ ] cow.vais 직접 pass — 미달성 (E006 Ordering.load 등 누락된 std.sync API 가 앞을 막음, 별도 phase 필요)
 
-- [ ] 4. Phase 6.28.4 — Box<dyn T> method return-type associated substitution (Opus direct)
-  blast_radius: 중간 (trait-heavy 파일들).
-  target: crates/vais-types/src/lookup.rs 및 dispatch site
-  detail: Phase 6.27c.5에서 Box<dyn T> peel 은 구현됐지만, 반환 타입이 associated type 또는 Ref(Var(N)) 인 경우 substitution 이 완료되지 않아 downstream 에서 `&?N` unresolved ref 발생 (sort_agg.vais 류).
-  repro: sort_agg.vais 일부 + 최소 trait-object dispatch 파일
-  [완료 기준]:
-  - sort_agg.vais 가 `&?N` 이후 blocker 로 진전
-  - std 82/82, phase158 18/18, vaisdb ≥ 236
+- [~] 4. Phase 6.28.4 — Box<dyn T> method return-type associated substitution 🚧 SCOPED 2026-04-20 (premise gone)
+  investigation: vaisdb 전체 codegen 스캔 → **`&?N` / `Ref(Var(N))` / 미해결 Var 에러 0건**. sort_agg.vais 는 지금 E001 `*sum = result.0` (Option<SqlValue> → numeric) + return type mismatch 로 실패 (ROADMAP 가설의 `&?N` 과 무관). 다른 trait-heavy 파일들 (delete/wal/bulk) 은 E004 undefined function 또는 generic bound mismatch. 원래 가설은 선행 세션에서 이미 간접적으로 고쳐졌거나 재현 경로가 바뀐 듯.
+  [완료 기준] (SCOPED):
+  - [x] 전제 검증 — vaisdb 에 Ref(Var)/&?N 에러 0건 확인
+  - [x] baseline regression 0
+  - [ ] Box<dyn T> 실제 fix 적용 — 재현되는 repro 없어서 미적용. 미래에 `&?N` 재등장 시 부활.
 
-- [ ] 5. Phase 6.28.5 — E022 use-after-move on enum variant binding (Opus direct, careful)
-  blast_radius: 작음 (btree/insert.vais 및 유사 NeedsSplit 패턴 파일).
-  caution: ownership 판정 로직은 false-negative (놓침) 위험이 제일 큼. 기존 passing 파일이 미래에 깨질 리스크.
-  target: crates/vais-types/src/checker_expr/ownership/... (move_track.rs 계열)
-  detail: `M split_result { NeedsSplit(separator, new_page_id) => propagate_split(separator, ...) }` 패턴에서 separator 가 한 번 쓰였는데 이후 use-after-move 로 잘못 탐지.
+- [x] 5. Phase 6.28.5 — E022 spurious on first-use of non-Copy in `y := mut x` (Opus direct) ✅ 2026-04-20
+  **Reframing**: ROADMAP 가설은 "enum variant binding 이후 use-after-move 오검". 실제는 더 일반적 — **Stmt::Let 에서 중복 방문**. 패턴 바인딩과 무관하게 발생.
+  root cause: `crates/vais-types/src/ownership/ast_check.rs` 의 Stmt::Let 처리에서 두 번 방문:
+    1. `self.check_expr_ownership(value)` → Expr::Ident arm → `use_var(x)` → 비-Copy 면 x 를 Moved 로 마크
+    2. 바로 다음 `self.check_move_from_expr(value)` → 같은 Ident 을 다시 방문 → 방금 마크한 Moved 상태를 보고 UseAfterMove 에러
+  증상: `y := mut x` 의 **첫 사용**에 E022, 에러 span 이 "moved here" 와 "use after" 가 같은 위치 (signature of double-visit). btree/insert.vais line 291 `current_sep := mut separator` 가 대표 사례.
+  fix: Stmt::Let / Stmt::LetDestructure / Stmt::Return(Some) 에서 중복 `check_move_from_expr(value)` 호출 제거. `check_expr_ownership` 가 이미 Ident 방문 시 `use_var` 로 move 를 기록하므로 추가 호출 불필요. 비-Ident value 에는 check_move_from_expr 이 어차피 no-op 이라 영향 없음.
+  changes: crates/vais-types/src/ownership/ast_check.rs (-3 redundant calls + 주석, net −3줄 기능성 / +12줄 설명).
+  verify:
+    - 최소 repro `/tmp/e022_min.vais` (F test(x: Vec<u8>) { y := mut x; y.len(); }) → OK No errors found
+    - 더 큰 repro `/tmp/e022_repro.vais` (NeedsSplit enum + propagate) → OK
+    - `btree/insert.vais` 에 E022 사라짐 (다른 E004 blocker 로 진전)
+    - `./scripts/check-integrity.sh` → INTEGRITY OK std=82/82 vaisdb=237/261 phase158=18/18
+    - `cargo test -p vaisc --test e2e --release phase6_28` → 8/8 pass (E022 첫사용 + NeedsSplit 변종 2 테스트 추가)
+    - `cargo test -p vais-types --release` → 347 pass / 8 fail (미수정 fail 이 **pre-existing**, 변경 전 측정에서도 동일 8 fail — regression 0)
   [완료 기준]:
-  - btree/insert.vais 가 line 291 blocker 해결
-  - 기존 passing 파일 1건도 regress 없음 (특히 ownership e2e 테스트)
-  - std 82/82, phase158 18/18, vaisdb ≥ 236
+  - [x] btree/insert.vais line 291 E022 해소
+  - [x] 기존 ownership e2e 테스트 regress 0건 (사전/사후 동일 347 pass / 8 fail)
+  - [x] std 82/82, phase158 18/18, vaisdb ≥ 237 유지
+  - [x] e2e 보호 테스트 (first_use_of_noncopy_param, enum_variant_binding_threaded)
 
-progress: 3/5 (60%)  — #1 real fix (+1), #2 SCOPED, #3 reframe+fix (structural, net 0)
+progress: 5/5 (100%)  — #1 real fix (+1), #2 SCOPED, #3 reframe+fix, #4 SCOPED, #5 real fix (structural, false-positive E022 제거)
 
 ### Phase 6.27g — search.vais error_code → VaisError.new rewrite (2026-04-20, 직전 세션 완료)
 

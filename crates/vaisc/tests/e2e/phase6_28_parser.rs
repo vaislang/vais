@@ -96,6 +96,60 @@ partial F main() -> i64 {
     );
 }
 
+/// Phase 6.28.5: first-use of a non-Copy function parameter must not
+/// report E022. Pre-fix, Stmt::Let called both check_expr_ownership
+/// (which via Expr::Ident use_var marked the source as Moved) AND
+/// check_move_from_expr (which re-visited the same Ident and saw the
+/// Moved state we just set, triggering a false-positive E022 on the
+/// FIRST use).
+#[test]
+fn e2e_phase6_28_first_use_of_noncopy_param() {
+    assert_compiles(
+        r#"
+F test(x: Vec<u8>) -> i64 {
+    y := mut x;
+    y.len() as i64
+}
+
+F main() -> i64 {
+    v: Vec<u8> = Vec.new();
+    test(v)
+}
+"#,
+    );
+}
+
+/// Phase 6.28.5: NeedsSplit-style enum variant binding threaded through
+/// a chain: `M res { NeedsSplit(sep, id) => propagate(sep, ...) }`. The
+/// parameter `sep` in the receiving function must first-use cleanly.
+#[test]
+fn e2e_phase6_28_enum_variant_binding_threaded() {
+    assert_compiles(
+        r#"
+E SplitResult {
+    Done,
+    NeedsSplit(Vec<u8>, u32),
+}
+
+partial F propagate(sep: Vec<u8>, id: u32) -> i64 {
+    current_sep := mut sep;
+    current_sep.len() as i64
+}
+
+partial F handle(r: SplitResult) -> i64 {
+    M r {
+        Done => 0i64,
+        NeedsSplit(sep, id) => propagate(sep, id),
+    }
+}
+
+partial F main() -> i64 {
+    handle(NeedsSplit(Vec.new(), 5u32))
+}
+"#,
+    );
+}
+
 #[test]
 fn e2e_phase6_28_nested_lw_windows_pattern() {
     // Real vaisdb window.vais shape: nested LW with inner deref-assign on a
