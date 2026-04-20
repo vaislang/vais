@@ -72,8 +72,9 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 ## Current Tasks (2026-04-20)
 
 mode: auto (Phase 6.30 — Codegen Monomorphization Pipeline Rewrite. Phase 6.29.2 DEFERRED root cause: user-defined generic struct Vec<T> 의 generate_specialized_struct_type 이 module_gen/instantiations.rs flush 에서 호출되지 않아 generated_structs["Vec$i64"] 가 비어있는데 method 쪽 return type 은 mangled 로 emit → LLVM IR 에서 `store %Vec %t0, %Vec* %v.1` (t0 = %Vec$i64) type mismatch. e2e 10+ 건 이 근본 원인. 5 sub-task 순차.)
-iteration: 0
+iteration: 1
 max_iterations: 10
+  strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.30.1 repro + 5-step trace. Opus direct (research-heavy: 3-path instrumentation + flush pipeline analysis, design intent 유실 방지). Baseline std=82/82 vaisdb=237/261 phase158=18/18. Diff 0 목표 (debug prints 조사 후 revert).
 
 ### Phase 6.30 — Codegen Monomorphization Pipeline Rewrite (2026-04-21, post-6.29)
 
@@ -83,18 +84,42 @@ max_iterations: 10
 >
 > **Core 가설**: 메서드 monomorphization 이 생성되는 모든 시점에 대응되는 struct monomorphization 도 `generated_structs` 에 등록되고 `generate_specialized_struct_type` 이 호출되어야 한다. 현재 flow 에서 어딘가 둘이 분리돼 있다.
 
-- [ ] 1. Phase 6.30.1 — 현상 확정 repro + trace (Opus direct, research-heavy)
-  target: 재현 파일 생성 (최소 single-file: `S Vec<T>{...} X Vec<T>{F new()->Vec<T>{...}} F main(){v:=Vec.new(); v.push(1);}`). add_instantiation / generate_specialized_struct_type / type_to_llvm 경로에 DBG 삽입하여 Struct instantiation 이 (a) TC 에서 add 되는지, (b) codegen module_gen flush 에 도달하는지, (c) generate_specialized_struct_type 이 호출되는지 단계별 확인. Diff 0 (debug print 만, 조사 후 revert).
+- [x] 1. Phase 6.30.1 — 현상 확정 repro + trace (Opus direct, research-heavy) ✅ 2026-04-20
+  repro: crates/vaisc/tests/e2e/phase166_vec_slice_coercion.rs::e2e_phase166_vec_to_slice_arg_coercion (S Vec<T>{data,len} + X Vec<T>{F new()->Vec<T>} + sum_slice(&[i64]) + F main{v:=Vec.new(); sum_slice(&v)}).
+  IR symptom: `%v.1 = alloca %Vec` (base) but `%t0 = call %Vec$i64 @Vec_new$i64()` (specialized) → `store %Vec %t0, %Vec* %v.1` 타입 불일치.
+  5-step trace 결과 (모든 가설 기각, 실제 root cause 확정):
+    1. TC instantiations: `Struct{Vec, [I64]}` + `Method{new on Vec, [I64]}` 정상 등록 (module_gen/instantiations.rs DBG).
+    2. struct_defs: `["Vec"]` present.
+    3. generate_specialized_struct_type: `Vec$i64` GENERATED (generics.rs DBG).
+    4. type_to_llvm(Vec, [I64]): `%Vec$i64` mangled hit (conversion.rs line 173 DBG).
+    5. **그러나** let_stmt_visitor 에서 `v := Vec.new()` 의 `resolved_ty = Named{Vec, generics: [Var(1)]}` — I64 아닌 **type inference variable**. 그래서 type_to_llvm 은 line 189 "not all_concrete" branch 로 가서 base `%Vec` 반환.
+  root cause 지점: crates/vais-codegen/src/type_inference.rs:233-287 `infer_expr_type` 의 **TC expr_types upgrade rule** (line 252-262).
+    - span (190,199) `Vec.new()` 에서: local inference = `Named{Vec, [I64]}` (CORRECT), TC expr_types = `Named{Vec, [Var(1)]}` (STALE).
+    - upgrade rule: `(local all-I64, tc any-non-I64) => true` → local 의 정확한 I64 를 TC 의 **less-concrete** Var(1) 로 덮어씀. 이 bug 가 alloca type 결정 시점에 Vec<Var(1)> 를 resolved_ty 로 고착.
+    - TC 자체도 문제: `sum_slice(&v)` 의 coercion 후 Var(1) <- I64 unification 이 일어나지만 expr_types 에 저장된 타입은 재쓰기되지 않음. 이것은 2차 원인.
+  두 fix option:
+    - **Option A (codegen-local, 간단)**: infer_expr_type upgrade rule 에 tc_ty 에 Var 가 포함되면 upgrade 생략 조건 추가. Diff ~5줄.
+    - **Option B (TC-side, 근본)**: check_module 종료 후 expr_types map 전체를 `apply_substitutions` 로 재쓰기. Diff ~20줄이지만 cascade 효과 큼 (다른 Var 고착 버그도 해결 가능).
+  시나리오: ROADMAP 의 A/B/C 는 모두 **miss** — 가설이 "struct mono 가 누락" 이었지만 실제는 "struct mono 는 정상인데 let stmt 에서 엉뚱한 Var(1) 타입이 alloca 를 %Vec 으로 결정". 시나리오 **D** 를 추가: TC expr_types 의 unresolved Var 가 codegen 에 leak.
+  instrumentation: instantiations.rs / generics.rs / conversion.rs / stmt_visitor.rs / stmt.rs / type_inference.rs / helpers.rs 에 eprintln!("[DBG 6.30.1] ...") 삽입 후 전부 revert. Diff == ROADMAP.md만.
+  verify:
+    - ./scripts/check-integrity.sh → INTEGRITY OK std=82/82 vaisdb=237/261 phase158=18/18 (regression 0)
+    - cargo test -p vaisc --test e2e --release → 2614/8/1 (baseline 2613/10/1 — regression 0, 실제로 2건 덜 fail)
+    - cargo test -p vais-types --release → 1건 pre-existing fail (phase156::test_try_on_non_result_errors) — git stash 로 pre-change 재현 확인, Phase 6.30.1 regression 아님
   [완료 기준]:
-  - 5-step trace 결과 문서화 (어느 단계에서 struct inst 가 drop 되는지 명시)
-  - std 82/82, phase158 18/18, vaisdb ≥ 237 유지
-  - e2e 2613 pass 유지
+  - [x] 5-step trace 결과 문서화 (실제 drop 지점: infer_expr_type TC-upgrade rule)
+  - [x] std 82/82, phase158 18/18, vaisdb 237 유지
+  - [x] e2e 2614 (pass ≥ 2613)
 
-- [ ] 2. Phase 6.30.2 — struct instantiation 누락 지점 fix (Opus direct)
-  target: crates/vais-types/src/checker_expr/calls.rs + checker_fn.rs pending flush, OR crates/vais-codegen/src/module_gen/instantiations.rs flush 순서 [blockedBy: 1]
-  approach: 6.30.1 결과에 따라 분기. 예상 시나리오 A = TC 에서 Struct inst 누락 → add_instantiation 호출 추가. 시나리오 B = codegen flush 에서 generate_specialized_struct_type 조건 miss → 조건 확장. 시나리오 C = instantiation 은 있는데 InstantiationKind::Struct 필터에 안 잡힘 → kind 추가/통합.
+- [ ] 2. Phase 6.30.2 — infer_expr_type TC-upgrade leak fix (Opus direct)
+  target (updated): crates/vais-codegen/src/type_inference.rs:233-287 infer_expr_type [blockedBy: 1]
+  approach (updated — 6.30.1 scenario D): **Option A 우선** — upgrade rule 에 tc_ty Var-containment 가드 추가.
+    - 조건: rule 적용 전 `contains_var(tc_ty)` 체크. true 면 upgrade skip (local 유지).
+    - 재귀적 Var 탐지: Named{generics}, Ref/RefMut, Tuple, Slice, Vec, Optional 등 inner types 모두 검사.
+    - 기대: `Named{Vec, [Var(1)]}` tc_ty 는 less-concrete → skip → local `Named{Vec, [I64]}` 유지 → type_to_llvm mangled hit → `%Vec$i64` alloca.
+  fallback (Option A가 cascade regression 발생 시): Option B — TC side 에서 check_module 종료 후 expr_types 전체를 apply_substitutions 로 final resolve.
   [완료 기준]:
-  - 최소 repro 가 clang 통과
+  - 최소 repro (phase166_vec_to_slice_arg_coercion) clang 통과
   - 최소 3 e2e 통과 (타겟 10 중)
   - std 82/82, phase158 18/18, vaisdb ≥ 237
 
@@ -120,7 +145,7 @@ max_iterations: 10
   - vaisdb ≥ 238 (최소 +1 기대, 실제 cascade 는 더 클 수도 있음)
   - 만약 +0 이면 남은 blocker 분류하여 Phase 6.31 생성
 
-progress: 0/5 (0%)
+progress: 1/5 (20%)
 
 ### Phase 6.29 — Compiler Completeness Drive II ✅ 완료 (2026-04-20, commit `0a5bcc1c`)
 
