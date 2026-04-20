@@ -71,79 +71,85 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-20)
 
-mode: auto (Phase 6.32 + 6.33 — vaisdb 24 failures 정리. Phase 6.30.5 에서 분류 완료된 2개 bucket 순차 처리. 6.32 = TC-drift 13건 (stdlib API 동기화), 6.33 = codegen Vec<T> field-access erasure 11건. 각각 별도 sub-task 로 분할.)
+mode: auto (Phase 2.x/3.x 미완 drive — ROADMAP 원칙 "문법 → 컴파일러 → stdlib → vaisdb" 복귀. Phase 1.x 완료, Phase 2.x 에 2.10/2.11 남음, Phase 3.x 에 3.12/3.13/3.14 남음. 총 5 task. 6.32/6.33 (vaisdb cleanup) 보류 — compiler 완성 후 재측정.)
 iteration: 0
 max_iterations: 15
-  strategy iteration 1 (2026-04-20): sequential — #1 Phase 6.30.1 repro + 5-step trace. Opus direct (research-heavy: 3-path instrumentation + flush pipeline analysis, design intent 유실 방지). Baseline std=82/82 vaisdb=237/261 phase158=18/18. Diff 0 (debug prints 조사 후 revert). ✅ 완료 — scenario D 확정.
-  strategy iteration 2 (2026-04-20): sequential — #2 Phase 6.30.2 infer_expr_type Var-guard. Opus direct (4 upgrade branches careful analysis, CLAUDE.md rule 3/4 필수). File overlap 없음 but 핵심 TC/codegen interop 면 regression risk 최대 — Opus 직접 수정. ✅ 2622/0/1 e2e (+9 pass).
-  strategy iteration 3 (2026-04-20): sequential — #3 Phase 6.30.3 type_to_llvm fallback hardening. Opus direct (fallback 제거 후 미래 regression 방어 설계 판단). 1 파일 소규모 변경, 6.30.2 의 cascade 결과 확인. ✅
-  strategy iteration 4 (2026-04-20): direct delegate fast-path — #4 Phase 6.30.4 e2e_str_as_bytes #[ignore] 제거 + 실행 확인. Opus direct (1파일, <10줄, 단순). ✅ as_bytes 는 다른 버그 → Phase 6.31 분리.
-  strategy iteration 5 (2026-04-20): measurement only — #5 Phase 6.30.5 vaisdb cascade 재측정. Opus direct (no code change, 결과 해석 + 6.31 스코프 조정).
 
-### Phase 6.32 — vaisdb stdlib API drift sync (2026-04-21)
+### Phase 2.x/3.x drive — 컴파일러 완성도 복귀 (2026-04-20)
 
-> **배경**: Phase 6.30.5 에서 vaisdb 24 failures 중 **13건을 TC-stage drift** 로 분류. stdlib method signature 변경 후 vaisdb call-site 가 동기화되지 않은 상태. E001/E004/E006 에러 출력으로 codegen 에 도달조차 못 함.
+> **배경**: Phase 6.30/6.31 완료 후 사용자 확인 — ROADMAP 원칙 "문법 → 컴파일러 → stdlib → vaisdb" 를 따라 vaisdb (Phase 6.x) 추가 작업 전에 **컴파일러 미완 phase 먼저 해결**. Phase 1.x 는 전부 완료 (1.11~1.18 모두 ✅). 남은 open task:
+> - Phase 2.x: 2.10 (Option/Result match-arm 재포장), 2.11 (method inference 통합)
+> - Phase 3.x: 3.12 (codegen feature matrix + 미지원 TC 차단), 3.13 (runtime functions), 3.14 (Vec<Struct>[i].field= write)
 >
-> **Baseline (2026-04-20 Phase 6.31 후 commit `8f1c8550`)**: std=82/82 vaisdb=237/261 phase158=18/18 e2e=2622/0/1 integration=147/147. 모든 task 이 floor 유지 필수.
+> **Baseline (2026-04-20 Phase 6.31 후 commit `8f1c8550`)**: std=82/82 vaisdb=237/261 phase158=18/18 e2e=2622/0/1 integration=147/147 vais-types=355 pass/1 pre-existing fail parser=868/2 pre-existing fail. 모든 task 이 floor 유지 필수.
 >
-> **Scope**: 13 파일의 TC 에러를 해결. **compiler 코드는 수정 금지** — vaisdb side fix 만 허용 (CLAUDE.md rule 3/4 준수). compiler 측 변경이 필요하다고 판명되면 sub-task 별로 일시 중단하고 보고.
+> **중요**: Phase 2.10 은 이전에 3회 regression → Phase 6.30 류 전제 (CLAUDE.md rule 3/4 엄수). "한 번에 4 지점 동시 수정, 중간 커밋 금지" 원칙.
 >
-> **분류된 13 파일** (stage=codegen 표시지만 실제로는 TC):
->   - E004 Undefined function (9건): storage/btree/insert.vais, vector/hnsw/{delete,insert,wal}.vais, sql/executor/join.vais, sql/parser/mod.vais, sql/parser/parser_expr.vais, 그리고 추가 확인 필요
->   - E001 Type mismatch (3건): storage/txn/deadlock.vais, vector/hnsw/bulk.vais, vector/hnsw/cow.vais
->   - E006 Wrong argument count (1건): rag/mod.vais (RwLock.write_lock() arity)
+> **Deferred (이 drive 에서 제외)**:
+> - Phase 4.x 19~23 (linear/affine, comptime/macro, dyn, yield, move closure): SCOPED — 각 500줄+ 집중 세션 필요. 별도 phase 로 진행.
+> - Phase 6.32/6.33 (vaisdb cleanup): 컴파일러 완성 후 재측정. 이 drive 의 2.10/2.11/3.12/3.14 cascade 효과가 vaisdb 에 자동 반영될 가능성 있음.
 
-- [ ] 1. Phase 6.32.1 — 13 failing 파일 전체 TC 에러 수집 (research-haiku, read-only)
-  target: 각 파일 별 정확한 stdlib API vs call-site 불일치 항목 문서화. 병렬 분석 가능.
-  approach: `VAIS_DEP_PATHS=... VAIS_STD_PATH=... vaisc check <file>` 을 13 파일 모두에 대해 실행, 에러 메시지 수집, stdlib 의 해당 method signature 확인 (`grep -r "F <name>" /Users/sswoo/study/projects/vais/compiler/std/`).
-  output: `/tmp/phase_6_32_1_survey.md` 에 파일별 (에러 위치, 기대 signature, 실제 call) 표 작성.
+- [ ] 1. Phase 2.10 — Option/Result match-arm 재포장 근본 해결 (Opus direct, 4-지점 동시 수정)
+  target: 4 파일 동시 수정
+    - crates/vais-types/src/checker_expr/calls.rs:55-87 (Some/Ok/Err constructor)
+    - crates/vais-types/src/lookup.rs:71 (bare None/Ok/Err ident path)
+    - crates/vais-types/src/inference/unification.rs:231,247 (Generic no-op + Named↔Optional bridge)
+    - crates/vais-types/src/checker_expr/control_flow.rs:282-354 (match arm unification)
+  approach: fresh var 할당 규칙을 4 지점 모두 일관되게 정합화. 이전 3회 실패 원인: 지점별 개별 수정으로 다른 지점이 drift. Phase 2.13 의 option_result_bridge.rs helper 를 적극 활용하되, 기존 scatter 제거는 하지 않음 (위험).
+  approach detail (CLAUDE.md rule 3/4 엄수):
+    1. baseline 기록 (./scripts/check-integrity.sh)
+    2. 4 지점 모두 1 패치로 수정 (중간 커밋 금지, 중간 테스트 실행 OK)
+    3. 전체 integrity + vais-types + e2e 테스트 실행
+    4. regression 1건이라도 있으면 즉시 `git checkout` revert
   [완료 기준]:
-  - 13/13 파일 에러 상세 기록
-  - 각 에러별 수정 방향 명시 (call-site 변경 / 타입 annotation / stdlib method 이름 변경 등)
-  - compiler 수정 필요 항목 있으면 **별도 표시**
+  - phase2_10_option_rewrap_in_match_arm #[ignore] 해제, passing
+  - role.vais get_role_id 빌드 OK
+  - 신규 reproducer 5+ 추가 (Option<Struct>/Result<T,E>/nested Option<Option<T>>)
+  - ./scripts/check-integrity.sh green (std=82/82 vaisdb≥237 phase158=18/18 regression 0)
+  - e2e 2622/0/1 유지
+  - vais-types 355/1 유지 (1 pre-existing fail 제외)
 
-- [ ] 2. Phase 6.32.2 — E006 Wrong argument count 1건 수정 (impl-sonnet) [blockedBy: 1]
-  target: /Users/sswoo/study/projects/vais/lang/packages/vaisdb/src/rag/mod.vais (+ 유사 패턴 파일)
-  approach: 6.32.1 결과 활용. RwLock.write_lock() 호출 arity 동기화.
-  [완료 기준]: rag/mod.vais 가 vaisdb integrity test 에서 pass. vaisdb ≥ 238.
+- [ ] 2. Phase 2.11 — HashMap/Vec/Str method inference 통합 (impl-sonnet) [blockedBy: 1]
+  target: 신규 crates/vais-types/src/builtins/method_returns.rs (단일 테이블) + 분산된 call-site 통합
+  approach: 현재 `checker_expr/calls.rs` 의 여러 개별 match arm (Str/Vec/HashMap builtins) 을 단일 테이블로 추출. 기존 behavior 보존.
+  constraints: code refactor 목적이라 behavior change 0 — 기존 테스트 전부 통과가 가드.
+  [완료 기준]:
+  - 단일 테이블 `(method_name → (receiver, return_type))` 구현
+  - 기존 pass 테스트 전부 통과 (e2e 2622, integrity green)
+  - 분산 패치 제거 (calls.rs 에서 inline dispatch 줄 수 감소)
 
-- [ ] 3. Phase 6.32.3 — E001 Type mismatch 3건 수정 (impl-sonnet) [blockedBy: 1]
-  target: vector/hnsw/{bulk,cow}.vais, storage/txn/deadlock.vais
-  approach: 6.32.1 에서 정확한 mismatch 위치 확인 후 call-site 타입 정합화.
-  [완료 기준]: 3/3 파일 pass. vaisdb ≥ 6.32.2 baseline + 3.
+- [ ] 3. Phase 3.12 — Codegen feature matrix + 미지원 TC 차단 (Opus direct) [blockedBy: 2]
+  target: docs/CODEGEN_FEATURES.md (매트릭스 정식화) + crates/vais-types/src/checker_expr/* (미지원 TC 거부)
+  approach: "TC pass ⇒ codegen pass" 불변식 확립. 현재는 TC 가 받아들인 것 중 일부 (SIMD 4.19, linear 4.19, comptime 4.20 등) 가 codegen 에서 silent drop. 이 drive 에선:
+    1. CODEGEN_FEATURES.md 에 현재 지원/미지원 construct 전수 조사
+    2. 미지원 construct 는 TC 에서 명시적 E-code 로 거부 (silent drop 금지)
+    3. 4.19~4.23 SCOPED feature 는 "TC error: feature not yet implemented, tracked in Phase 4.x" 로 blocking
+  approach detail:
+    - 미지원 feature 를 TC 거부하면 기존에 "parse OK, TC OK, codegen silent skip" 이던 테스트들이 TC error 로 변함 → 이 테스트들은 `#[ignore = "Phase 4.x"]` 로 마크
+  [완료 기준]:
+  - CODEGEN_FEATURES.md 매트릭스 완결 (Parse/TC/Codegen/Run 4 컬럼 × construct)
+  - TC 에서 SCOPED feature 5개 (4.19~4.23) 명시적 거부
+  - 관련 e2e 테스트 `#[ignore = "Phase 4.x"]` 표시 (이미 SCOPED 인 feature 는 fail 예상되므로)
+  - integrity green, baseline 유지
 
-- [ ] 4. Phase 6.32.4 — E004 Undefined function 9건 수정 (impl-sonnet) [blockedBy: 1]
-  target: storage/btree/insert.vais, vector/hnsw/{delete,insert,wal}.vais, sql/executor/join.vais, sql/parser/{mod,parser_expr}.vais, 그리고 6.32.1 에서 확정된 나머지.
-  approach: method rename / signature drift / 누락 import 등 case-by-case. 일부는 stdlib 에 method 추가가 필요할 수 있음 — 그 경우 compiler side 변경이 아니라 stdlib/ side 추가는 OK (단, CLAUDE.md rule 4 regression gate 준수).
-  [완료 기준]: 9/9 파일 pass. vaisdb ≥ 6.32.3 baseline + 9. 최종 vaisdb ≥ 250.
+- [ ] 4. Phase 3.13 — Runtime 함수 구현 (impl-sonnet) [blockedBy: 3]
+  target: crates/vais-codegen/src/function_gen/runtime.rs (또는 신규 builtin fn)
+  approach: `parse_f64`, `char_at`, 기타 missing runtime intrinsic 구현. 메모리 파일에 기록된 vaisdb workaround "char_at/parse_f64 are C005 unsupported" 해소.
+  [완료 기준]:
+  - parse_f64, char_at 양쪽 모두 codegen → clang link 통과
+  - e2e 테스트 각 기능별 2+ 추가
+  - std 82/82 유지
+  - vaisdb cascade 측정 (미 규정, +N 기대)
 
-- [ ] 5. Phase 6.32.5 — 전체 vaisdb 재측정 + 6.33 범위 확정 (Opus direct, measurement) [blockedBy: 4]
-  target: integrity rerun, 남은 11건 (codegen-stage) 중 실제 C003 Vec erasure 인 것 vs 새로 노출된 버그 분류.
-  [완료 기준]: vaisdb 숫자 확정 + 6.33 sub-task 세분화.
+- [ ] 5. Phase 3.14 — Vec<Struct>[i].field= write (Opus direct) [blockedBy: 3]
+  target: crates/vais-codegen/src/ (index-assign path, Vec<Struct> 특수 처리)
+  approach: 현재 `vec[i].field = value` 는 Vec<Struct> 에서 dst pointer 를 제대로 계산하지 못 함 (메모리 파일 "Vec[i] C003 → annotate Vec<u8>" workaround 와 관련). index + field GEP 체인 구현.
+  [완료 기준]:
+  - `Vec<Struct>[i].field = value` e2e 테스트 3+ pass
+  - integrity green
+  - vaisdb C003 에러 중 이 패턴 해당하는 파일 cascade 측정
 
 progress: 0/5 (0%)
-
-### Phase 6.33 — Vec<T> field-access erasure in codegen (2026-04-21, blocked by 6.32)
-
-> **배경**: Phase 6.30.5 에서 vaisdb 24 failures 중 **11건을 codegen-stage** 로 분류. 대표 샘플: `vector/search.vais:77 &table_meta.columns[coli]` 에서 `columns: Vec<Column>` 이 i64 로 erase 되어 indexing 실패 (C003 "Cannot index into type 'i64'"). Phase 6.30.2 의 let-stmt Var-leak 와는 다른 경로 — struct field access 시점의 Vec<T> 타입 erasure.
->
-> **전제**: Phase 6.32 완료 후 남은 codegen-stage blocker 만 이 Phase 에서 처리. 6.32 에서 13 → ? 로 줄어들면서 실제 숫자가 변경될 수 있으므로 6.32.5 에서 재측정 후 sub-task 확정.
->
-> **Baseline (Phase 6.32 완료 후 측정 예정)**: vaisdb 목표 ≥ 250.
-
-- [ ] 6. Phase 6.33.1 — field-access erasure repro + trace (Opus direct, research-heavy) [blockedBy: Phase 6.32.5]
-  target: 최소 repro 만들고 codegen 경로 추적. Phase 6.30.1 과 유사한 DBG 접근법.
-  가설: struct field type 은 struct_def 에서 가져오는데, generic struct 의 field type (e.g., `data: Vec<T>`) 를 substitution 없이 그대로 사용해서 T 가 erase 되는 지점이 있음.
-  [완료 기준]: trace 결과 문서화 + 2~3 fix 시나리오 제시
-
-- [ ] 7. Phase 6.33.2 — field-type substitution fix (Opus direct) [blockedBy: 6]
-  target: 6.33.1 에서 확정된 파일/함수
-  [완료 기준]: 최소 repro pass + 5+ vaisdb 파일 cascade
-
-- [ ] 8. Phase 6.33.3 — vaisdb 최종 재측정 + cleanup (Opus direct, measurement) [blockedBy: 7]
-  [완료 기준]: vaisdb ≥ 255 목표. 남은 blocker 있으면 Phase 6.34+ 로 이관.
-
-progress: 0/3 (0%)
 
 ### Phase 6.30 — Codegen Monomorphization Pipeline Rewrite (2026-04-21, post-6.29)
 
