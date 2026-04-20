@@ -1062,10 +1062,20 @@ impl TypeChecker {
                                 let _ = self.check_expr(a);
                             }
                         }
+                        // Phase 6.27d.c: apply substitutions to the receiver's
+                        // generic slots so that V (or T) resolves when prior
+                        // `insert`/`push` calls unified a fresh type var with
+                        // a concrete type. Without this, HashMap<?k, ?v> where
+                        // ?v was unified with AggGroup via insert still
+                        // reports raw ?v here → `&?N` downstream E030.
+                        let resolved_generics: Vec<ResolvedType> = generics
+                            .iter()
+                            .map(|t| self.apply_substitutions(t))
+                            .collect();
                         let elem = if name == "Vec" {
-                            generics.first().cloned()
+                            resolved_generics.first().cloned()
                         } else {
-                            generics.get(1).cloned()
+                            resolved_generics.get(1).cloned()
                         }
                         .unwrap_or(ResolvedType::I64);
                         let ref_elem = if method.node == "get_mut" {
@@ -1105,8 +1115,26 @@ impl TypeChecker {
                     "insert" | "set" => {
                         // HashMap insert/set returns V
                         if name != "Vec" && args.len() == 2 {
-                            let _ = self.check_expr(&args[0]);
-                            let _ = self.check_expr(&args[1]);
+                            let arg_k = self.check_expr(&args[0]).ok();
+                            let arg_v = self.check_expr(&args[1]).ok();
+                            // Phase 6.27d.c: unify the receiver's K/V slots
+                            // with the call args so subsequent `.get()` can
+                            // resolve V (and K) to concrete types. vaisdb
+                            // patterns like
+                            //   m := mut HashMap.with_capacity(16)
+                            //   m.insert(1, AggGroup.new())
+                            //   item := m.get(&1)!
+                            // depend on this.
+                            if let (Some(k_slot), Some(k_actual)) =
+                                (generics.first().cloned(), arg_k)
+                            {
+                                let _ = self.unify(&k_slot, &k_actual);
+                            }
+                            if let (Some(v_slot), Some(v_actual)) =
+                                (generics.get(1).cloned(), arg_v)
+                            {
+                                let _ = self.unify(&v_slot, &v_actual);
+                            }
                             return Ok(generics
                                 .get(1)
                                 .cloned()
