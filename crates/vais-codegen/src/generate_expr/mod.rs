@@ -193,7 +193,13 @@ impl CodeGenerator {
                 type_name,
                 method,
                 args,
-            } => self.generate_static_method_call_expr(type_name, method, args, counter),
+            } => self.generate_static_method_call_expr(
+                type_name,
+                method,
+                args,
+                Some(expr.span),
+                counter,
+            ),
 
             // Spread: ..expr (handled within array generation; standalone generates inner)
             Expr::Spread(inner) => self.generate_expr(inner, counter),

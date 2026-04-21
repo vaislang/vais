@@ -241,8 +241,18 @@ impl CodeGenerator {
                 let arg_types: Vec<ResolvedType> =
                     args.iter().map(|a| self.infer_expr_type(a)).collect();
 
-                // Find the matching instantiation based on argument types
-                let mangled = self.resolve_generic_call(name, &arg_types, instantiations_list);
+                // Phase 16 A2.5: supply TC-known call-site return type as a hint
+                // so generic parameters that only appear in the return type
+                // (e.g. `Vec.with_capacity(cap: i64) -> Vec<T>`) don't collapse
+                // to the I64 default.
+                let call_span = (span.start, span.end);
+                let expected_ret = self.expr_types.get(&call_span).cloned();
+                let mangled = self.resolve_generic_call_with_hint(
+                    name,
+                    &arg_types,
+                    instantiations_list,
+                    expected_ret.as_ref(),
+                );
                 (mangled, false)
             } else if self.types.functions.contains_key(name) {
                 (name.clone(), false)

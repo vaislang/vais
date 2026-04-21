@@ -969,8 +969,14 @@ impl CodeGenerator {
         type_name: &Spanned<String>,
         method: &Spanned<String>,
         args: &[Spanned<Expr>],
+        call_span: Option<vais_ast::Span>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
+        // Phase 16 A2.5: when we know the overall call expression's span, read
+        // the TC-resolved return type so generic parameters that only appear
+        // in the return type can be inferred via resolve_generic_call_with_hint.
+        let expected_ret = call_span
+            .and_then(|s| self.expr_types.get(&(s.start, s.end)).cloned());
         // Check if this is actually an enum variant constructor (EnumType.Variant(...))
         // e.g., Shape.Rect(10, 20) or Option.Some(42). Must be handled before the
         // static-method dispatch because there is no `EnumType_Variant` function to call.
@@ -1006,7 +1012,12 @@ impl CodeGenerator {
         {
             let arg_types: Vec<ResolvedType> =
                 args.iter().map(|a| self.infer_expr_type(a)).collect();
-            let resolved = self.resolve_generic_call(&base_method_name, &arg_types, &inst_list);
+            let resolved = self.resolve_generic_call_with_hint(
+                &base_method_name,
+                &arg_types,
+                &inst_list,
+                expected_ret.as_ref(),
+            );
             if self.types.functions.contains_key(&resolved) {
                 resolved
             } else {

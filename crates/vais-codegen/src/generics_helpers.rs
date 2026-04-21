@@ -78,6 +78,47 @@ impl CodeGenerator {
         arg_types: &[ResolvedType],
         instantiations_list: &[(Vec<ResolvedType>, String)],
     ) -> String {
+        self.resolve_generic_call_with_hint(base_name, arg_types, instantiations_list, None)
+    }
+
+    /// Phase 16 A2.5: resolve_generic_call with an optional expected return
+    /// type hint. Functions whose generic parameter only appears in the return
+    /// type (e.g. `Vec.with_capacity(cap: i64) -> Vec<T>`) cannot be inferred
+    /// from argument types alone, which would previously fall back to the
+    /// `I64` default and pick the wrong monomorphization. When the caller
+    /// knows the desired return type (for example a struct field store target
+    /// or a `let` binding with an annotated type), it should flow that
+    /// information in through `expected_ret` so we can unify against the
+    /// declared return pattern and recover the missing type argument.
+    pub(crate) fn resolve_generic_call_with_hint(
+        &self,
+        base_name: &str,
+        arg_types: &[ResolvedType],
+        instantiations_list: &[(Vec<ResolvedType>, String)],
+        expected_ret: Option<&ResolvedType>,
+    ) -> String {
+        // Phase 16 A2.5: if we have a direct return-type hint and the
+        // template's generics map one-to-one onto the return type's generic
+        // positions (true for simple container constructors like
+        // `Vec.with_capacity(cap: i64) -> Vec<T>`), pick the instantiation
+        // whose type args match the return-type generics directly. This
+        // bypasses the I64 fallback in the argument-only inference path.
+        if let Some(ret_ty) = expected_ret {
+            if let ResolvedType::Named {
+                generics: ret_generics,
+                ..
+            } = ret_ty
+            {
+                if !ret_generics.is_empty() {
+                    for (inst_types, mangled) in instantiations_list {
+                        if inst_types == ret_generics {
+                            return mangled.clone();
+                        }
+                    }
+                }
+            }
+        }
+
         // If only one instantiation exists, check if it has generic type args.
         // If so, apply current substitutions to derive the concrete mangled name.
         if instantiations_list.len() == 1 {
@@ -123,6 +164,15 @@ impl CodeGenerator {
                         &mut inferred,
                     );
                 }
+            }
+
+            // Phase 16 A2.5: if the caller supplied an expected return type,
+            // unify it against the template's declared return pattern to
+            // recover generic params that don't appear in any parameter
+            // (e.g. `Vec.with_capacity(cap: i64) -> Vec<T>`).
+            if let (Some(ret_ty), Some(ret_ast)) = (expected_ret, template.ret_type.as_ref()) {
+                let ret_pattern = self.ast_type_to_resolved(&ret_ast.node);
+                self.infer_type_args(&ret_pattern, ret_ty, &type_params, &mut inferred);
             }
 
             // Build type_args vector in order of generic params
