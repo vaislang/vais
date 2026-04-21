@@ -68,6 +68,53 @@ impl CodeGenerator {
         // Handle string operations
         let left_type = self.infer_expr_type(left);
         if matches!(left_type, ResolvedType::Str) {
+            // `str + int` is pointer-arithmetic, not string concatenation.
+            // load_byte(s + i) / similar low-level helpers rely on this form.
+            let right_type_for_strop = self.infer_expr_type(right);
+            let right_is_int = self.get_integer_bits(&right_type_for_strop) > 0
+                && !matches!(right_type_for_strop, ResolvedType::Str | ResolvedType::Bool);
+            if matches!(op, BinOp::Add | BinOp::Sub) && right_is_int {
+                // Extract raw i8* from left fat pointer, ptrtoint to i64, then add/sub.
+                let ptr_tmp = self.next_temp(counter);
+                let i64_tmp = self.next_temp(counter);
+                let result = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                    ptr_tmp,
+                    left_val
+                );
+                write_ir!(ir, "  {} = ptrtoint i8* {} to i64", i64_tmp, ptr_tmp);
+                let op_str = match op {
+                    BinOp::Add => "add",
+                    BinOp::Sub => "sub",
+                    _ => unreachable!(),
+                };
+                // Right operand may be narrower than i64; widen if so.
+                let rbits = self.get_integer_bits(&right_type_for_strop);
+                let right_use = if rbits < 64 {
+                    let widened = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = sext i{} {} to i64",
+                        widened,
+                        rbits,
+                        right_val
+                    );
+                    widened
+                } else {
+                    right_val.clone()
+                };
+                write_ir!(
+                    ir,
+                    "  {} = {} i64 {}, {}",
+                    result,
+                    op_str,
+                    i64_tmp,
+                    right_use
+                );
+                return Ok((result, ir));
+            }
             return self.generate_string_binary_op(op, &left_val, &right_val, ir, counter);
         }
 
