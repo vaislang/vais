@@ -200,6 +200,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Recognized sources: `var_resolved_types` (for `Expr::Ident`) and
     /// `resolved_function_sigs` (for `Expr::Call` of a named function).
     fn resolve_match_scrutinee_type(&self, expr: &Expr) -> Option<vais_types::ResolvedType> {
+        use vais_types::ResolvedType as R;
         match expr {
             Expr::Ident(name) => self.var_resolved_types.get(name).cloned(),
             Expr::Call { func, .. } => {
@@ -211,6 +212,21 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     None
                 }
             }
+            // B.2: known str builtin methods — `s.parse_*()` / `s.char_at(i)`
+            // — have fixed return types. Teach the scrutinee resolver so that
+            // `M s.parse_f64() { Ok(v) => ... }` knows v is f64 without
+            // requiring an intermediate `let r: Result<f64, str> := ...`.
+            Expr::MethodCall { method, .. } => match method.node.as_str() {
+                "parse_i64" | "parse_int" => {
+                    Some(R::Result(Box::new(R::I64), Box::new(R::Str)))
+                }
+                "parse_i32" => Some(R::Result(Box::new(R::I32), Box::new(R::Str))),
+                "parse_u64" => Some(R::Result(Box::new(R::U64), Box::new(R::Str))),
+                "parse_u32" => Some(R::Result(Box::new(R::U32), Box::new(R::Str))),
+                "parse_f64" => Some(R::Result(Box::new(R::F64), Box::new(R::Str))),
+                "parse_f32" => Some(R::Result(Box::new(R::F32), Box::new(R::Str))),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -223,6 +239,35 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Result, tuple). Returns None for primitive payloads (the existing
     /// primitive-decoding path handles those) or when the scrutinee type
     /// was not resolved.
+    /// B.2 companion: recover the LLVM primitive payload type for Option/Result
+    /// variants when the payload is a non-aggregate (int, float, ptr). Returns
+    /// None for struct/aggregate payloads (those go through
+    /// `option_result_payload_struct_type`) and when the scrutinee type is
+    /// unresolved.
+    fn option_result_payload_primitive_type(
+        &self,
+        variant_name: &str,
+    ) -> Option<inkwell::types::BasicTypeEnum<'ctx>> {
+        let ty = self.match_scrutinee_type_stack.last()?;
+        use vais_types::ResolvedType as R;
+        let payload_ty = match (ty, variant_name) {
+            (R::Optional(inner), "Some") => inner.as_ref(),
+            (R::Result(ok, _), "Ok") => ok.as_ref(),
+            (R::Result(_, err), "Err") => err.as_ref(),
+            _ => return None,
+        };
+        // Only interested in primitives — the struct-aware branch catches
+        // Named/Optional/Result/Tuple first (see call site order).
+        match payload_ty {
+            R::I8 | R::I16 | R::I32 | R::I64 | R::I128
+            | R::U8 | R::U16 | R::U32 | R::U64 | R::U128
+            | R::F32 | R::F64 | R::Bool | R::Str => {
+                Some(self.type_mapper.map_type(payload_ty))
+            }
+            _ => None,
+        }
+    }
+
     fn option_result_payload_struct_type(
         &self,
         variant_name: &str,
@@ -1130,11 +1175,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         // widened). Recover the declared primitive type if we
                         // have it recorded so the bound identifier has the
                         // right LLVM type downstream.
+                        // B.2: fall back to scrutinee-based recovery for
+                        // Option<f64> / Result<i64, _> etc. where
+                        // `enum_variant_primitive_payload_types` has no entry
+                        // (built-in Option/Result bypasses the user-enum
+                        // registration step).
                         let primitive_ty: Option<inkwell::types::BasicTypeEnum<'ctx>> = self
                             .enum_variant_primitive_payload_types
                             .iter()
                             .find(|((_, v_name), _)| v_name == &name.node)
-                            .map(|(_, ty)| *ty);
+                            .map(|(_, ty)| *ty)
+                            .or_else(|| self.option_result_payload_primitive_type(&name.node));
                         if let Some(decl_ty) = primitive_ty {
                             let data_i64 = data_val.into_int_value();
                             let decoded: BasicValueEnum<'ctx> = if decl_ty.is_float_type() {

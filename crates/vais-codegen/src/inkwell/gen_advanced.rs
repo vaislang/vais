@@ -60,6 +60,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         return Ok(val);
                     }
                 }
+                // B.4: handle `v[i].field = val` when obj is an Expr::Index
+                // on a Vec<Struct> receiver. Strategy: compute the element
+                // byte-pointer exactly like generate_index's Vec path, bitcast
+                // to the struct pointer type, then build_struct_gep to the
+                // field and store. Mirrors the read path to keep byte-offset
+                // math consistent (idx * elem_size, not LLVM's typed GEP).
+                if let Expr::Index { expr: arr, index } = &obj.node {
+                    if let Some(result) =
+                        self.try_generate_vec_struct_field_assign(arr, index, &struct_name, field_idx, val)?
+                    {
+                        return Ok(result);
+                    }
+                }
                 Err(CodegenError::Unsupported(
                     "Complex field assignment (e.g. `v[i].field = expr` on \
                      Vec<Struct>) — Phase 3.14 codegen gap. Workaround: \
@@ -637,5 +650,106 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
             .into_struct_value();
         Ok(enum_val.into())
+    }
+
+    /// B.4: `v[i].field = val` write-through for `Vec<Struct>`. Returns
+    /// `Ok(Some(val))` on a successful write, `Ok(None)` if the receiver is
+    /// not a Vec<Struct> and the caller should fall back to the existing
+    /// unsupported error. Mirrors the byte-offset math from `generate_index`
+    /// (idx * elem_size) to stay consistent with the read path — we must not
+    /// use LLVM's typed GEP here because Vec's data slot is an `i64` raw
+    /// pointer whose typed element layout is only known to Vais, not LLVM.
+    pub(super) fn try_generate_vec_struct_field_assign(
+        &mut self,
+        arr: &Spanned<Expr>,
+        index: &Spanned<Expr>,
+        struct_name: &str,
+        field_idx: u32,
+        val: BasicValueEnum<'ctx>,
+    ) -> CodegenResult<Option<BasicValueEnum<'ctx>>> {
+        // Only handle Vec receivers. If `arr` is not a Vec expression (e.g.
+        // a raw slice), the write-through math below would be wrong — return
+        // None so the caller surfaces the existing Unsupported error.
+        if !self.is_vec_expr(&arr.node) {
+            return Ok(None);
+        }
+
+        let arr_val = self.generate_expr(&arr.node)?;
+        if !arr_val.is_struct_value() {
+            return Ok(None);
+        }
+        let struct_val = arr_val.into_struct_value();
+        let vec_type = struct_val.get_type();
+        if vec_type.count_fields() < 4 {
+            return Ok(None);
+        }
+
+        // Resolve the element's LLVM struct type from struct_name so the
+        // bitcast lands on the right layout and `build_struct_gep` picks the
+        // correct field offset.
+        let elem_struct_ty = self
+            .generated_structs
+            .get(struct_name)
+            .copied()
+            .ok_or_else(|| {
+                CodegenError::UndefinedVar(format!(
+                    "Vec element struct `{}` not registered at codegen",
+                    struct_name
+                ))
+            })?;
+
+        let idx_val = self.generate_expr(&index.node)?;
+        let idx_int = idx_val.into_int_value();
+
+        let data_i64 = self
+            .builder
+            .build_extract_value(struct_val, 0, "vec_data_w")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        let i8_ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
+        let data_ptr = self
+            .builder
+            .build_int_to_ptr(data_i64, i8_ptr_type, "vec_data_ptr_w")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let elem_size = self
+            .builder
+            .build_extract_value(struct_val, 3, "vec_elem_size_w")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        let byte_offset = self
+            .builder
+            .build_int_mul(idx_int, elem_size, "byte_offset_w")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        // SAFETY: runtime index from user code — bounds checking is the user's
+        // responsibility (matches the read path).
+        let elem_ptr_i8 = unsafe {
+            self.builder
+                .build_gep(
+                    self.context.i8_type(),
+                    data_ptr,
+                    &[byte_offset],
+                    "vec_elem_ptr_w",
+                )
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        };
+        // Bitcast the byte-pointer to the element struct pointer, then GEP
+        // into the field.
+        let elem_ptr_typed = self
+            .builder
+            .build_bitcast(
+                elem_ptr_i8,
+                elem_struct_ty.ptr_type(AddressSpace::default()),
+                "vec_elem_ptr_typed",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_pointer_value();
+        let field_ptr = self
+            .builder
+            .build_struct_gep(elem_struct_ty, elem_ptr_typed, field_idx, "vec_field_ptr")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder
+            .build_store(field_ptr, val)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        Ok(Some(val))
     }
 }

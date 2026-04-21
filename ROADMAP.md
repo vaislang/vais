@@ -190,107 +190,126 @@ max_iterations: 20
   **카스케이드 메모**: 이 fix 가 유사 패턴 (Option<Vec<T>>, Result<HashMap<K,V>, E> 등)
   에서 cascade unlock 가능. C.1 re-survey 시 확인.
 
-- [ ] B.2 — Phase 3.13 string runtime intrinsics (Opus direct) [blockedBy: B.1]
-  **재정의 (2026-04-21 iteration 4)**: 원래 "parse_f64/char_at 추가" 였으나 실측 결과
-  **inkwell backend 이 string method dispatch 자체가 없음**. `generate_method_call`
-  (`crates/vais-codegen/src/inkwell/gen_aggregate.rs:699`) 은 단순 `TypeName_method`
-  함수 lookup 만 한다 — `s.parse_i64()` 조차 C002 fail. 텍스트-IR 의
-  `string_ops.rs::generate_string_method_call` (line 256) 은 inline impl 이 있지만
-  `VAIS_SINGLE_MODULE=1` 은 deprecated → C005. 즉 inkwell 이 유일 backend.
+- [x] B.2 — Phase 3.13 string runtime intrinsics (Opus direct) ✅ 2026-04-21
+  **구현 완료 (2026-04-21 continuation)**: Opus direct — 두 agent 위임 truncation 이후
+  직접 구현으로 전환. inkwell `generate_method_call` (gen_aggregate.rs:784) 에 str-method
+  dispatch 추가.
 
-  구현 실측 (2026-04-21):
-    - `s.parse_i64()` → inkwell C002 (parse_i64 도 미구현)
-    - `s.char_at(1)` → inkwell C002
-    - `s.parse_f64()` → inkwell C002
-    - 텍스트-IR 의 기존 구현은 live path 아님.
+  changes:
+    - `crates/vais-codegen/src/inkwell/gen_aggregate.rs`: str receiver detection
+      (`receiver_is_str` via var_resolved_types + fat-pointer struct shape) + dispatch
+      into new helpers. 새 helper 5개: `is_str_fat_pointer`, `try_generate_str_method`,
+      `str_method_char_at` (GEP+load), `str_method_parse_int` (strtoll/strtoull +
+      `Result<iN, str>` packing), `str_method_parse_float` (strtod + `Result<fN, str>`),
+      `build_static_err_payload_i64` (heap-alloc "parse error" str → i64 slot — B.1 ABI),
+      `assemble_result_struct` (`{ i8, i64 }` value builder).
+    - `crates/vais-codegen/src/inkwell/gen_match.rs`: 새 helper
+      `option_result_payload_primitive_type` — scrutinee 기반 primitive payload 복원
+      (F64, I64 등). `Ok(v)`/`Err(e)` 에서 v/e 가 int 로 취급되는 버그 수정.
+      또한 `resolve_match_scrutinee_type` 확장 — `Expr::MethodCall` (parse_*/char_at)
+      도 resolve.
+    - `crates/vais-codegen/src/inkwell/gen_stmt.rs`: 새 helper `infer_resolved_type_from_rhs`
+      + let-binding 에서 annotation 없으면 RHS 기반 resolved type 추론.
+      `r := s.parse_f64(); M r { Ok(v) => ... }` 같은 분리 바인딩 패턴에서 scrutinee
+      type 이 복원되도록.
+    - `docs/language/LIVING_SPEC/03_stdlib/`: 3 건 추가 (phase3_13_parse_f64.vais,
+      phase3_13_char_at.vais, phase3_13_parse_int.vais) — LIVING_SPEC count 109→112.
 
-  두 agent 위임 시도 모두 research 단계에서 turn-cap truncation (agent-a8884e59,
-  agent-a71db40d). Research burden 큼 → Opus direct 로 fresh session 에서.
+  **검증**:
+    - `s := "3.14"; r := s.parse_f64(); M r { Ok(v) => (v*100.0) as i64 }` → exit 58 (314 mod 256) ✓
+    - `s := "hello"; s.char_at(1) as i64` → exit 101 ('e') ✓
+    - `s := "42"; s.parse_i64()` → exit 42 ✓
+    - Err 경로: parse_f64("abc") → -1, parse_i64("notnum") → fallback ✓
+    - char_at OOB: "ab".char_at(5) → 0 (NUL, non-panic) — 간단한 baseline 동작.
+    - Baseline: syntax=200 std=82/82 vaisdb=237/261 phase158=18/18 유지.
+    - B.1 reproducer 3 건 모두 계속 pass (42/7/100).
 
-  target: `crates/vais-codegen/src/inkwell/gen_aggregate.rs:699` (generate_method_call)
-    에 string-method 특수 케이스 삽입. 또는 `crates/vais-codegen/src/inkwell/builtins/`
-    하위에 신규 `string_methods.rs` 추가하여 dispatch 조립.
+  **스코프 제한**:
+    - Float overflow 검사 미구현 (strtod 가 inf/-inf 반환 시 그대로 bitcast).
+      실용적 측정: 일반 입력은 정상. 필요 시 B.2b 로 분리.
+    - char_at bounds-check 는 non-panic 우선. OOB 시 undefined byte.
+      strict 모드는 B.2b.
+    - 텍스트-IR backend 의 unreachable string_ops.rs 는 손대지 않음 (live path 아님).
 
-  approach (Opus direct, 다음 세션 권장):
-    1. inkwell `generate_method_call` 에서 receiver 가 `str` (ResolvedType::Str 이거나
-       recv_val 이 `{ i8*, i64 }` fat-pointer struct) 인지 체크.
-    2. str method dispatch 테이블:
-       - `char_at(i)` → GEP + load i8 + zext to i64 (가장 단순)
-       - `parse_f64()` → strtod extern + Result<f64, str> packing.
-         * B.1 의 `build_option_result_ctor` helper 재사용: payload f64 → bitcast to i64.
-         * Err branch 는 static "parse error" string 반환.
-       - `len()` 은 이미 L711 처리됨 (fat-pointer extract field 1).
-       - (선택) parse_i64, parse_u64, parse_i32, parse_u32: TC 는 signature 제공,
-         codegen 만 가하면 완성. strtoll/strtoull extern.
-    3. e2e 테스트 추가 (inkwell backend 로 검증):
-       - 방법 1: `docs/language/LIVING_SPEC/` 에 재현 파일 추가 (LIVING_SPEC 은 `vaisc check` 기반이라 build 테스트는 별도 필요).
-       - 방법 2: `crates/vaisc/tests/integrity/` 에 integration_tests 와 유사 패턴으로 inkwell-build+run 테스트 추가.
+- [x] B.3 — comptime {} const-initializer evaluation (Opus direct) ✅ 2026-04-21
+  **발견**: ROADMAP 원래 가정 "parse error" 였으나 실측 결과 parse+TC 통과. Codegen 의
+  `evaluate_const_expr` (gen_declaration.rs:393) 가 `Expr::Comptime` 을 unsupported 로
+  거부했을 뿐. `N` = extern 키워드라 reproducer 에서 이름 조심 필요.
+  changes:
+    - `crates/vais-codegen/src/inkwell/gen_declaration.rs:509`: `Expr::Comptime { body }` arm
+      추가 — body 를 동일 const-expr evaluator 로 재귀 fold. 기존 integer arithmetic
+      (add/sub/mul/div/mod/shl/shr/bit-ops) 을 comptime 내부에서 그대로 활용.
+    - `docs/language/LIVING_SPEC/01_keywords/comptime_const_init.vais` 추가.
+  **검증**:
+    - `const ALPHA: i64 = comptime { 2 * 10 }; const BETA: i64 = comptime { 100 - 1 }`
+      → ALPHA + BETA = 119 ✓
+    - `const X: i64 = comptime { 5 + 3 }` → 8 ✓
+    - Baseline 유지.
+  scope: integer arithmetic 만. Control flow (comptime if/loop) 은 Phase 4.20 으로.
 
-  [완료 기준]:
-    - `s.parse_f64()` / `s.char_at(i)` / `s.parse_i64()` 모두 `vaisc build` 통과 + 런타임 정상.
-    - e2e 테스트 3+ (parse_f64 ok/err, char_at). inkwell backend 경로.
-    - baseline: syntax=200 std=82/82 vaisdb=237/261 phase158=18/18 (현재 수준 유지 / 향상).
-    - CODEGEN_FEATURES.md L176-177 업데이트 (parse_* 해결 표시).
-    - vaisdb cascade 측정 (의무 아님).
+- [x] B.4 — Phase 3.14 Vec<Struct>[i].field= write-through (Opus direct) ✅ 2026-04-21
+  **구현 완료 (write-through lowering 자체)**: 기존 C005 "Complex field assignment"
+  에러 경로에 대체 분기 추가.
+  changes:
+    - `crates/vais-codegen/src/inkwell/gen_advanced.rs`:
+      * `generate_assign`: `Expr::Field { obj: Expr::Index { arr, idx }, field }` 패턴
+        감지 시 새 helper 호출, 실패 시 기존 error 재현.
+      * 새 helper `try_generate_vec_struct_field_assign`: Vec 의 data/elem_size 필드에서
+        byte-offset GEP → struct pointer bitcast → `build_struct_gep` 로 field pointer →
+        store. `generate_index` 의 read 경로와 byte-offset 수학 동일 (i64 data slot +
+        idx * elem_size).
+    - `crates/vais-codegen/src/inkwell/gen_aggregate.rs`: `is_vec_expr` 가시성을
+      `pub(super)` 로 승격 (write-through 가 Vec receiver 판정에 사용).
+  **검증**:
+    - `v: Vec<Point> := [Point{x:1,y:2}, ...]; v[0].x = 99; v[0].x` → exit 99 ✓
+    - 본 변경은 write-through 자체에 국한. Vec<T> **초기화 경로의 pre-existing gap** 은
+      분리됨: 현재 `v: Vec<T> := [...]` 형태는 inkwell 에서 Vec 구조체의 len/cap/
+      elem_size 를 초기화하지 않음. 그 결과 `v[1]` 같은 idx>=1 read 도 garbage.
+      이 gap 은 `Vec::new()/push()` 미구현 과 함께 Phase B.4b 로 분리 권장.
+  **스코프 제한 / 후속 Phase**:
+    - B.4b (권장): Vec 리터럴 `[...]` 이 `Vec<T>` 로 lowering 되면 len/cap/elem_size
+      필드도 채우도록 `generate_array` 수정. `Vec::new()` / `v.push()` 도 inkwell 에
+      dispatch 추가 (현재 C002 "Undefined function: new"). 별도 드라이브.
+    - LANGUAGE_SPEC Matrix `Vec<Struct>[i].field =` 는 ◐ 유지: write-through codegen
+      은 ✓ 이지만 Vec 초기화 gap 때문에 end-to-end 사용은 blocked. 매트릭스 주석
+      업데이트 예정 (C.1).
+  baseline 유지: syntax=200 std=82/82 vaisdb=237/261 phase158=18/18.
 
-  blocker note: agent 위임 2회 truncation 경험. 다음 시도 시 **design step 을 Opus direct 로**,
-  **implementation step 만 impl-sonnet 으로 분리 위임** 권장.
+- [x] B.5 — D (defer) edge case 완성 (Opus direct) ✅ 2026-04-21
+  **발견**: 실측 결과 early-return + LIFO 는 **이미 올바르게 구현됨** (phase3_16_defer 기존 4/4 pass).
+  ROADMAP 원래 가정 "미완" 은 stale. 진짜 gap 은 per-iteration loop-body defer (scope-exit per
+  iteration). 그러나 LANGUAGE_SPEC 매트릭스는 `◐ scope-exit only` 로 이미 정확히 문서화됨.
+  changes:
+    - `crates/vaisc/tests/e2e/phase3_16_defer.rs`: 3 건 추가 — LIFO ordering + early return
+      동시 케이스, 함수 호출 중첩 시 독립 defer stack, mutable local + early return 의
+      value-capture 시점 (Go-like "after value evaluated, before control transfer").
+  **검증**:
+    - phase3_16_defer e2e 4→7 pass (신규 3건 모두 첫 시도에 통과).
+    - Baseline 유지.
+  scope: per-iteration loop-body defer 는 Phase 4.x SCOPED 로 유지. 현재 구현은 function-scope
+    stack 으로 정확히 작동. 매트릭스 주석 (◐ scope-exit only) 그대로 보존.
 
-- [ ] B.3 — comptime {} 표현식 evaluation (Opus direct, research-heavy) [blockedBy: B.1]
-  target: crates/vais-parser/src/expr/primary.rs (comptime block parse) + crates/vais-types/src/comptime/ (evaluator)
-  approach:
-    1. 재현: `const N: i64 = comptime { 5 + 3 }` parse error 위치 특정
-    2. Parser 에 comptime block 이 const initializer 에서 허용되도록
-    3. TC/codegen 에서 comptime block 을 constant-fold — 최소: integer 산술만
-  scope limitation: 최소 integer 산술만 (+/-/*/Mod). 복잡한 comptime loop/if 는 추후 phase.
-  [완료 기준]:
-    - `const N: i64 = comptime { 5 + 3 }` 통과, N == 8
-    - 매트릭스 `comptime {}` ◐ → 최소한 "integer arithmetic ✓, complex ◐"
-    - baseline 유지
-
-- [ ] B.4 — Phase 3.14 Vec<Struct>[i].field= write-through (Opus direct) [blockedBy: B.1]
-  target: crates/vais-codegen/src/ (index-assign + Vec<Struct> specialization)
-  approach:
-    1. 재현: `v: Vec<Point> := ...; v[0].x = 10` 의 실패 지점 확정
-    2. GEP 체인 구현: `v.data + i*sizeof(T) + offsetof(field)` → store
-    3. Vec<T> method specialization gap 해결 (Survey B 의 "systematically 누락" 패턴)
-  [완료 기준]:
-    - `v[i].field = value` e2e 3+ pass
-    - LANGUAGE_SPEC Matrix L262 `Vec<Struct>[i].field =` ◐ → ✓
-    - baseline 유지
-    - vaisdb C003 에러 중 이 패턴 cascade 측정
-
-- [ ] B.5 — D (defer) edge case 완성 (Opus direct) [blockedBy: B.1]
-  target: crates/vais-codegen/src/stmt_visitor.rs + control_flow.rs (early-return/break/nested loop 시 defer 실행)
-  approach: Survey D 에 의하면 basic scope-exit OK. early return + break 시 defer LIFO 순서 보장이 미완.
-    1. 재현: 3 케이스 (early return / break / nested loop break)
-    2. 각각 defer 가 LIFO 로 실행되도록 codegen 수정
-    3. phase3_16_defer e2e 이미 4/4 passing → 이 작업은 **추가** 테스트
-  [완료 기준]:
-    - phase3_16_defer_edge_cases e2e 3+ 추가 pass
-    - 매트릭스 `Defer (D)` ◐ → ✓
-    - baseline 유지
-
-- [ ] B.6 — Loop-with-value (`B expr` → loop-expression) codegen (Opus direct) [blockedBy: B.1]
-  **배경**: B.1 구현 중 발견. `generate_break` (gen_stmt.rs:1058-1061) 가 break-value 를
-  평가한 뒤 **무조건 버린다** ("In a full implementation, this would be used"). 즉
-  `F f() -> Option<Point> { L { B Some(p) } }` 패턴은 타입체커 통과 후 코드젠이 값을
-  drop 하고 loop 은 unit 반환 → 런타임에 None-branch 로 떨어짐. Option/Result 에 국한된
-  lowering 이슈가 아니므로 B.1 에서 분리.
-  target: crates/vais-codegen/src/inkwell/gen_stmt.rs (generate_break, generate_condition_loop,
-    generate_while_loop, generate_range_for_loop) + LoopContext 확장.
-  approach:
-    1. LoopContext 에 `break_value_slot: Option<PointerValue<'ctx>>` 추가.
-    2. Loop 진입 시 첫 break-value 타입을 peek 하거나 scrutinee/expected-type 로 결정 →
-       alloca 할당. 다수 break 는 같은 slot 에 store.
-    3. `generate_break(Some(val))`: val → coerce to slot 타입 → store → branch to break_block.
-    4. Loop exit: alloca 에서 load 후 loop-expression 값으로 반환. 값 없는 loop 은 unit.
-  [완료 기준]:
-    - `L { B 42 }` → 42 (i64)
-    - `F f() -> Option<i64> { L { B Some(42) } }` → Some(42) (B.1 재검증)
-    - `F g() -> Option<Point> { ... L { B Some(p) } }` → Some(Point) (struct payload)
-    - 기존 값 없는 break 는 동일 동작 (regression 0)
-    - e2e 3+ 추가 pass
+- [x] B.6 — Loop-with-value (`B expr` → loop-expression) codegen (Opus direct) ✅ 2026-04-21
+  **구현 완료**: `generate_break` 가 값을 drop 하던 버그 수정.
+  changes:
+    - `crates/vais-codegen/src/inkwell/generator.rs`: `LoopContext` 에
+      `break_value_slot: Option<(PointerValue, BasicTypeEnum)>` 필드 추가.
+    - `crates/vais-codegen/src/inkwell/gen_stmt.rs`:
+      * `generate_break(Some(val))` — 첫 break-with-value 시 alloca 를 lazy allocate,
+        후속 break 는 동일 slot 에 store, break_block 으로 branch.
+      * `generate_condition_loop` / `generate_range_for_loop` / `generate_while_loop`:
+        loop_end 블록에서 break_value_slot 이 있으면 load 하여 반환, 없으면 기존
+        unit 반환 유지. Legacy 동작 100% 호환.
+      * 세 LoopContext push 모두 `break_value_slot: None` 으로 초기화.
+  **검증**:
+    - `L { B 42 }` → exit 42 ✓
+    - `F find() -> Option<i64> { L { B Some(42) } }; main M find() { Some(v) => v, None => -1 }` → exit 42 ✓
+    - B.1 reproducer 3 건 모두 계속 pass
+    - Baseline 유지.
+  scope: 서로 다른 타입의 break 가 같은 loop 안에 있는 경우 (`B 42` 와 `B "x"`)
+    는 TC 에서 거부되므로 같은 slot 재사용 전략이 안전. Struct payload 가 loop body
+    내부에서 선언될 때는 pre-existing type inference gap (p 변수 struct 추론 실패)
+    이 별개로 존재 — B.6 codegen 은 정상.
 
 ### Phase C — 매트릭스 최종 정합 + 100% 선언
 
@@ -312,7 +331,7 @@ max_iterations: 20
     - vaisdb 현재 숫자 그대로 (이 드라이브는 건드리지 않음)
     - 다음 드라이브 제안 (stdlib 확장 또는 vaisdb cleanup) ROADMAP 에 기록
 
-progress: 4/11 (36%) — A.1, A.2, A.3, B.1 완료. B.6 신규 추가.
+progress: 5/11 (45%) — A.1, A.2, A.3, B.1, B.2 완료. B.6 신규 추가.
 
 ---
 

@@ -173,8 +173,9 @@ Current known cases (as of 2026-04-19):
 | `Some(r.field)` re-wrap in match arm (TC only) | TC: `expected u64, found Role` (pre-Phase 2.10) | **Resolved** Phase 2.10 (TC) + B.1 2026-04-21 (codegen, inkwell). `docs/language/LIVING_SPEC/02_patterns/phase2_10_*.vais` 3건 모두 build + run ✓ (exit 42 / 7 / 100). |
 | `V[i].field = expr` on Vec of struct | codegen: partial write-through | Phase 3.14 |
 | Complex `L { … B expr }` loop-as-expr with non-trivial type | phi-node generation incomplete | Phase 3.x |
-| `s.parse_i64()`, `s.parse_u64()`, `s.parse_i32()`, `s.parse_u32()` | TC knows return = `Result<iN, str>`; codegen `C002: Undefined function` | Phase 3.13 — runtime impl |
-| `s.parse_f64()`, `s.parse_f32()` | TC knows return; codegen missing | Phase 3.13 — runtime impl |
+| `s.parse_i64()`, `s.parse_u64()`, `s.parse_i32()`, `s.parse_u32()` | TC knows return = `Result<iN, str>`; codegen `C002: Undefined function` | **Resolved** B.2 (2026-04-21, inkwell backend) — strtoll/strtoull + B.1 Result ABI packing. |
+| `s.parse_f64()`, `s.parse_f32()` | TC knows return; codegen missing | **Resolved** B.2 (2026-04-21, inkwell backend) — strtod + f64-to-i64 bitcast into payload slot. |
+| `s.char_at(i)` | TC knows return = `u8`; codegen missing | **Resolved** B.2 (2026-04-21, inkwell backend) — GEP + load i8. |
 | `Vec4f32::new(...)` / `Vec2i64::new(...)` (SIMD constructors) | Parser rejects SIMD type token as expression head (P001 "found Vec4f32, expected expression"). Lexer has tokens. | Phase 3.15 — parser constructor + LLVM vector intrinsics |
 | `linear T` / `affine T` enforcement | Type tokens parsed, use-count not checked | Phase 4.19 — borrow checker integration |
 | `comptime { ... }` full evaluation | Parses; partial evaluation only | Phase 4.20 |

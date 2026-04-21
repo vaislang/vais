@@ -1,0 +1,6 @@
+# LIVING_SPEC/03_stdlib/phase3_13_parse_int.vais
+# Key concept: Phase 3.13 / B.2 — `s.parse_i64()` returns `Result<i64, str>`.
+
+F main() -> i64 {
+    M "42".parse_i64() { Ok(v) => v, Err(_) => -1 }
+}

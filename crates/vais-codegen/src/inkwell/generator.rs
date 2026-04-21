@@ -26,6 +26,15 @@ pub(super) struct LoopContext<'ctx> {
     /// `scope_str_stack.len()` at loop entry. Frames at indices ≥ this depth
     /// are loop-internal and must be freed on break/continue (Phase 191 #6).
     pub(super) scope_str_depth: usize,
+    /// B.6: Slot for `B value` propagation. Lazily allocated on the first
+    /// break-with-value encountered during loop body codegen. When present,
+    /// each `B expr` stores its value here before branching to `break_block`,
+    /// and the loop-end reads from it as the loop expression's value.
+    /// None means the loop produces unit — matches legacy behavior.
+    pub(super) break_value_slot: Option<(
+        inkwell::values::PointerValue<'ctx>,
+        inkwell::types::BasicTypeEnum<'ctx>,
+    )>,
 }
 
 /// LLVM code generator using inkwell.

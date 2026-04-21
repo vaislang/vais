@@ -162,6 +162,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if let Some(t) = ty.as_ref() {
                     let resolved = self.ast_type_to_resolved(&t.node);
                     self.var_resolved_types.insert(name.node.clone(), resolved);
+                } else if let Some(resolved) =
+                    self.infer_resolved_type_from_rhs(&value.node)
+                {
+                    // B.2: when there's no explicit annotation, try to recover
+                    // the resolved type from the RHS expression. Currently
+                    // handles known str builtins (`s.parse_*()`, `s.char_at()`)
+                    // and named function calls whose signatures we know.
+                    // This lets `r := s.parse_f64(); M r { Ok(v) => ... }`
+                    // propagate the Result<f64, str> type to the match
+                    // scrutinee resolver so `v` decodes as f64 instead of i64.
+                    self.var_resolved_types.insert(name.node.clone(), resolved);
                 }
 
                 let var_type = if let Some(t) = ty.as_ref() {
@@ -531,6 +542,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             break_block: loop_end,
             continue_block: loop_inc,
             scope_str_depth: self.scope_str_stack.len(),
+            break_value_slot: None,
         });
 
         // Branch to condition check
@@ -612,9 +624,18 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // End block
         self.builder.position_at_end(loop_end);
-        self.loop_stack.pop();
-
-        // For loops return unit
+        // B.6: honor break-with-value even in range-for loops (e.g., early
+        // `B found` inside `L i : 0..n { ... }`).
+        let popped = self.loop_stack.pop();
+        if let Some(ctx) = popped {
+            if let Some((slot, ty)) = ctx.break_value_slot {
+                let loaded = self
+                    .builder
+                    .build_load(ty, slot, "loop_break_value_load")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                return Ok(loaded);
+            }
+        }
         Ok(self.unit_value())
     }
 
@@ -640,6 +661,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             break_block: loop_end,
             continue_block: loop_start,
             scope_str_depth: self.scope_str_stack.len(),
+            break_value_slot: None,
         });
 
         // Allocate an alloca to cache the iterator value when both a pattern and an
@@ -755,9 +777,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Loop end
         self.builder.position_at_end(loop_end);
-        self.loop_stack.pop();
-
-        // Loops return unit by default
+        // B.6: pop the loop context AFTER reading its break_value_slot so we
+        // can emit the post-loop value load. Loops with no break-with-value
+        // fall back to unit.
+        let popped = self.loop_stack.pop();
+        if let Some(ctx) = popped {
+            if let Some((slot, ty)) = ctx.break_value_slot {
+                let loaded = self
+                    .builder
+                    .build_load(ty, slot, "loop_break_value_load")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                return Ok(loaded);
+            }
+        }
         Ok(self.unit_value())
     }
 
@@ -785,6 +817,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             break_block: loop_end,
             continue_block: loop_cond,
             scope_str_depth: self.scope_str_stack.len(),
+            break_value_slot: None,
         });
 
         // Branch to condition check
@@ -838,9 +871,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Loop end
         self.builder.position_at_end(loop_end);
-        self.loop_stack.pop();
-
-        // While loops return unit
+        // B.6: honor break-with-value in while loops too.
+        let popped = self.loop_stack.pop();
+        if let Some(ctx) = popped {
+            if let Some((slot, ty)) = ctx.break_value_slot {
+                let loaded = self
+                    .builder
+                    .build_load(ty, slot, "loop_break_value_load")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                return Ok(loaded);
+            }
+        }
         Ok(self.unit_value())
     }
 
@@ -1054,10 +1095,39 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             (ctx.break_block, ctx.scope_str_depth)
         };
 
-        // Generate value if present (for loop with value)
+        // B.6: propagate `B value` through a per-loop alloca. The slot is
+        // lazy-allocated on first break-with-value; subsequent breaks reuse
+        // it. The loop-end block loads from the slot to produce the loop
+        // expression's value. Without a value, we preserve the legacy
+        // unit-returning semantics.
         if let Some(val_expr) = value {
-            let _val = self.generate_expr(val_expr)?;
-            // In a full implementation, this would be used for loop-with-value
+            let val = self.generate_expr(val_expr)?;
+            let val_type = val.get_type();
+
+            // Lazy-allocate the slot at the current loop context. Must happen
+            // AFTER value generation so we have a concrete type to alloca.
+            let slot = {
+                let ctx = self
+                    .loop_stack
+                    .last()
+                    .expect("loop_stack verified non-empty above");
+                if let Some((slot_ptr, _)) = ctx.break_value_slot {
+                    slot_ptr
+                } else {
+                    // Allocate in the entry block so mem2reg can promote it.
+                    let alloca = self
+                        .builder
+                        .build_alloca(val_type, "loop_break_value")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    // Record for later breaks and for the loop-end load.
+                    let idx = self.loop_stack.len() - 1;
+                    self.loop_stack[idx].break_value_slot = Some((alloca, val_type));
+                    alloca
+                }
+            };
+            self.builder
+                .build_store(slot, val)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
         }
 
         self.emit_loop_scope_cleanup(loop_depth)?;
@@ -1109,6 +1179,47 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.scope_str_stack[idx].clear();
         }
         Ok(())
+    }
+
+    /// B.2: best-effort recovery of a `let` RHS's resolved type when the user
+    /// did not write an annotation. Used by the `let` statement to populate
+    /// `var_resolved_types` so later match expressions can look up the type
+    /// via the scrutinee-type stack (see gen_match.rs).
+    /// Currently covers:
+    ///   - known str builtin methods (parse_*, char_at) via fixed signatures
+    ///   - named function calls whose signature we already tracked in
+    ///     `resolved_function_sigs`
+    /// Returns None when the type cannot be inferred — callers must leave
+    /// `var_resolved_types` alone in that case.
+    pub(super) fn infer_resolved_type_from_rhs(
+        &self,
+        rhs: &Expr,
+    ) -> Option<vais_types::ResolvedType> {
+        use vais_types::ResolvedType as R;
+        match rhs {
+            Expr::MethodCall { method, .. } => match method.node.as_str() {
+                "parse_i64" | "parse_int" => {
+                    Some(R::Result(Box::new(R::I64), Box::new(R::Str)))
+                }
+                "parse_i32" => Some(R::Result(Box::new(R::I32), Box::new(R::Str))),
+                "parse_u64" => Some(R::Result(Box::new(R::U64), Box::new(R::Str))),
+                "parse_u32" => Some(R::Result(Box::new(R::U32), Box::new(R::Str))),
+                "parse_f64" => Some(R::Result(Box::new(R::F64), Box::new(R::Str))),
+                "parse_f32" => Some(R::Result(Box::new(R::F32), Box::new(R::Str))),
+                "char_at" | "charAt" => Some(R::U8),
+                _ => None,
+            },
+            Expr::Call { func, .. } => {
+                if let Expr::Ident(fn_name) = &func.node {
+                    self.resolved_function_sigs
+                        .get(fn_name.as_str())
+                        .map(|sig| sig.ret.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
     }
 
     // ========== Array/Tuple/Index ==========

@@ -506,6 +506,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 };
                 Ok(result.into())
             }
+            // B.3: `const N: T = comptime { expr }` — treat the comptime block
+            // as a transparent constant-folding marker. The body must itself be
+            // a const-expressible expression (integer arithmetic, float
+            // literal, bool literal, unary, nested comptime). This unblocks the
+            // idiomatic "compile-time computed constant" pattern without
+            // requiring a full comptime evaluator.
+            Expr::Comptime { body } => self.evaluate_const_expr(&body.node),
             _ => Err(CodegenError::Unsupported(format!("Const expr: {:?}", expr))),
         }
     }

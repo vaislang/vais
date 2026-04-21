@@ -1,0 +1,16 @@
+# LIVING_SPEC/01_keywords/comptime_const_init.vais
+# Key concept: B.3 — `const NAME: T = comptime { expr }` supported via
+# const-expression folder. Integer arithmetic covered; complex control flow
+# inside comptime block is still a Phase 4.20 followup.
+#
+# Status:
+#   - Parse: ✓
+#   - TC: ✓
+#   - Codegen + Run: ✓
+
+const ALPHA: i64 = comptime { 2 * 10 }
+const BETA: i64 = comptime { 100 - 1 }
+
+F main() -> i64 {
+    ALPHA + BETA
+}

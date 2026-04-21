@@ -266,7 +266,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Phase 3.14: also handles Expr::Field for struct-embedded Vec<T> by
     /// looking up the parent struct's field type via struct_field_type_names
     /// and parsing the type string.
-    fn is_vec_expr(&self, arr_expr: &Expr) -> bool {
+    pub(super) fn is_vec_expr(&self, arr_expr: &Expr) -> bool {
         match arr_expr {
             Expr::Ident(name) => {
                 if let Some(vais_types::ResolvedType::Named {
@@ -777,6 +777,30 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Also generate the receiver value as fallback (for non-method calls or unknown receivers)
         let receiver_val = self.generate_expr(receiver)?;
 
+        // B.2: str method dispatch (inkwell backend). Receiver types covered:
+        //   - `ResolvedType::Str` via `var_resolved_types` (for Ident receivers)
+        //   - LLVM { i8*, i64 } fat pointer at the value level (all other cases —
+        //     string literals, function returns, etc.)
+        // Methods dispatched inline (no TypeName_method lookup):
+        //   - char_at(i) → i8 at ptr+i, zext to i64
+        //   - parse_f64() / parse_f32() → strtod/strtof + Result<f{64,32}, str>
+        //   - parse_i64() / parse_i32() → strtoll + Result<i{64,32}, str>
+        //   - parse_u64() / parse_u32() → strtoull + Result<u{64,32}, str>
+        // The text-IR backend has (now unreachable) inline copies in string_ops.rs;
+        // this is the live path for `vaisc build` which defaults to inkwell.
+        let receiver_is_str = match receiver {
+            Expr::Ident(name) => matches!(
+                self.var_resolved_types.get(name),
+                Some(vais_types::ResolvedType::Str)
+            ),
+            _ => false,
+        } || Self::is_str_fat_pointer(&receiver_val);
+        if receiver_is_str {
+            if let Some(result) = self.try_generate_str_method(&receiver_val, method, args)? {
+                return Ok(result);
+            }
+        }
+
         // Try qualified name: TypeName_method
         let qualified_name = struct_name.as_ref().map(|sn| format!("{}_{}", sn, method));
 
@@ -1149,5 +1173,423 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
             _ => {}
         }
+    }
+
+    // ========== B.2: str method dispatch (inkwell backend) ==========
+
+    /// Detect a value that looks like the str fat-pointer ABI `{ i8*, i64 }`.
+    /// Used as a fallback when var_resolved_types doesn't classify the receiver
+    /// as Str (e.g., string literals, function returns, complex expressions).
+    fn is_str_fat_pointer(v: &BasicValueEnum<'_>) -> bool {
+        if !v.is_struct_value() {
+            return false;
+        }
+        let st = v.into_struct_value().get_type();
+        if st.count_fields() != 2 {
+            return false;
+        }
+        let f0 = st.get_field_type_at_index(0);
+        let f1 = st.get_field_type_at_index(1);
+        matches!(f0, Some(t) if t.is_pointer_type())
+            && matches!(f1, Some(t) if t.is_int_type() && t.into_int_type().get_bit_width() == 64)
+    }
+
+    /// Try to lower `<str>.method(args)` for a known builtin method. Returns
+    /// `Ok(Some(value))` on a hit, `Ok(None)` if `method` is not a recognized
+    /// str builtin (caller falls back to TypeName_method lookup).
+    fn try_generate_str_method(
+        &mut self,
+        recv: &BasicValueEnum<'ctx>,
+        method: &str,
+        args: &[Spanned<Expr>],
+    ) -> CodegenResult<Option<BasicValueEnum<'ctx>>> {
+        match method {
+            "char_at" | "charAt" => Ok(Some(self.str_method_char_at(recv, args)?)),
+            "parse_i64" | "parse_int" => {
+                Ok(Some(self.str_method_parse_int(recv, /*signed=*/ true, /*bits=*/ 64)?))
+            }
+            "parse_i32" => Ok(Some(self.str_method_parse_int(recv, true, 32)?)),
+            "parse_u64" => Ok(Some(self.str_method_parse_int(recv, false, 64)?)),
+            "parse_u32" => Ok(Some(self.str_method_parse_int(recv, false, 32)?)),
+            "parse_f64" => Ok(Some(self.str_method_parse_float(recv, /*bits=*/ 64)?)),
+            "parse_f32" => Ok(Some(self.str_method_parse_float(recv, 32)?)),
+            _ => Ok(None),
+        }
+    }
+
+    /// `s.char_at(i) -> u8` (typed as u8 by TC; we return as i8 — promotion to
+    /// i64 in `as` casts is handled by the cast layer).
+    fn str_method_char_at(
+        &mut self,
+        recv: &BasicValueEnum<'ctx>,
+        args: &[Spanned<Expr>],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        if args.is_empty() {
+            return Err(CodegenError::Unsupported(
+                "char_at requires 1 argument".to_string(),
+            ));
+        }
+        let raw_ptr = self.extract_str_raw_ptr(*recv)?;
+        let idx_val = self.generate_expr(&args[0].node)?;
+        let idx_i64 = self.coerce_to_i64(idx_val)?;
+        let i8_ty = self.context.i8_type();
+        let elem_ptr = unsafe {
+            self.builder
+                .build_in_bounds_gep(i8_ty, raw_ptr, &[idx_i64], "char_at_ptr")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        };
+        let byte = self
+            .builder
+            .build_load(i8_ty, elem_ptr, "char_at_byte")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        Ok(byte)
+    }
+
+    /// `s.parse_iN()` / `s.parse_uN()` → `Result<iN/uN, str>` via strtoll/strtoull.
+    /// Success criterion: end pointer landed past the start AND points at NUL
+    /// (full string consumed). Otherwise return `Err("parse error")`.
+    fn str_method_parse_int(
+        &mut self,
+        recv: &BasicValueEnum<'ctx>,
+        signed: bool,
+        bits: u32,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        use inkwell::AddressSpace;
+        let i8_ty = self.context.i8_type();
+        let i32_ty = self.context.i32_type();
+        let i64_ty = self.context.i64_type();
+        let i8_ptr_ty = i8_ty.ptr_type(AddressSpace::default());
+        let i8_ptr_ptr_ty = i8_ptr_ty.ptr_type(AddressSpace::default());
+
+        // Declare extern long long strtoll(const char*, char**, int)
+        // or unsigned long long strtoull(...).
+        let extern_name = if signed { "strtoll" } else { "strtoull" };
+        let strto_fn = self.module.get_function(extern_name).unwrap_or_else(|| {
+            let fn_ty = i64_ty.fn_type(
+                &[i8_ptr_ty.into(), i8_ptr_ptr_ty.into(), i32_ty.into()],
+                false,
+            );
+            self.module.add_function(extern_name, fn_ty, None)
+        });
+
+        let raw_ptr = self.extract_str_raw_ptr(*recv)?;
+        let endptr_alloca = self
+            .builder
+            .build_alloca(i8_ptr_ty, "parse_endptr")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let base = i32_ty.const_int(10, false);
+        let parsed_full = self
+            .builder
+            .build_call(
+                strto_fn,
+                &[raw_ptr.into(), endptr_alloca.into(), base.into()],
+                "parse_int_call",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| CodegenError::LlvmError("strtoll returned no value".into()))?
+            .into_int_value();
+
+        // Truncate / extend to requested bit width if not 64.
+        let parsed = if bits == 64 {
+            parsed_full
+        } else {
+            let target_ty = self.context.custom_width_int_type(bits);
+            self.builder
+                .build_int_truncate(parsed_full, target_ty, "parse_int_trunc")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        };
+
+        // Success check: endptr > raw_ptr AND *endptr == 0 (NUL terminator —
+        // caller must trust the str is NUL-terminated, which all Vais string
+        // literals are).
+        let endptr_loaded = self
+            .builder
+            .build_load(i8_ptr_ty, endptr_alloca, "parse_endptr_loaded")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_pointer_value();
+        let end_int = self
+            .builder
+            .build_ptr_to_int(endptr_loaded, i64_ty, "parse_end_int")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let raw_int = self
+            .builder
+            .build_ptr_to_int(raw_ptr, i64_ty, "parse_raw_int")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let advanced = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::UGT,
+                end_int,
+                raw_int,
+                "parse_advanced",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let last_byte = self
+            .builder
+            .build_load(i8_ty, endptr_loaded, "parse_last_byte")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        let consumed_all = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::EQ,
+                last_byte,
+                i8_ty.const_int(0, false),
+                "parse_consumed_all",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let success = self
+            .builder
+            .build_and(advanced, consumed_all, "parse_success")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Pack payload as i64 for the Result { i8 tag, i64 payload } ABI (B.1).
+        let payload_ok = if bits == 64 {
+            parsed
+        } else {
+            // Zero/sign-extend back to i64 for the payload slot.
+            if signed {
+                self.builder
+                    .build_int_s_extend(parsed, i64_ty, "parse_ok_sext")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            } else {
+                self.builder
+                    .build_int_z_extend(parsed, i64_ty, "parse_ok_zext")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            }
+        };
+        let err_payload_i64 = self.build_static_err_payload_i64("parse error")?;
+        let chosen_payload = self
+            .builder
+            .build_select(success, payload_ok, err_payload_i64, "parse_payload")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        // Tag: success → 0 (Ok), failure → 1 (Err).
+        let tag = self
+            .builder
+            .build_select(
+                success,
+                i8_ty.const_int(0, false),
+                i8_ty.const_int(1, false),
+                "parse_tag",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        self.assemble_result_struct(tag, chosen_payload)
+    }
+
+    /// `s.parse_fN()` → `Result<fN, str>` via strtod/strtof.
+    /// Success criterion mirrors parse_int: full string consumed.
+    fn str_method_parse_float(
+        &mut self,
+        recv: &BasicValueEnum<'ctx>,
+        bits: u32,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        use inkwell::AddressSpace;
+        let i8_ty = self.context.i8_type();
+        let i64_ty = self.context.i64_type();
+        let f64_ty = self.context.f64_type();
+        let f32_ty = self.context.f32_type();
+        let i8_ptr_ty = i8_ty.ptr_type(AddressSpace::default());
+        let i8_ptr_ptr_ty = i8_ptr_ty.ptr_type(AddressSpace::default());
+
+        let raw_ptr = self.extract_str_raw_ptr(*recv)?;
+        let endptr_alloca = self
+            .builder
+            .build_alloca(i8_ptr_ty, "parse_endptr")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Always go through strtod (returns f64), then convert. f32 path uses
+        // fptrunc — bounds-clamp via float comparison would over-engineer the
+        // simple case; tolerate inf/-inf for now.
+        let strtod_fn = self.module.get_function("strtod").unwrap_or_else(|| {
+            let fn_ty = f64_ty.fn_type(&[i8_ptr_ty.into(), i8_ptr_ptr_ty.into()], false);
+            self.module.add_function("strtod", fn_ty, None)
+        });
+        let parsed_f64 = self
+            .builder
+            .build_call(strtod_fn, &[raw_ptr.into(), endptr_alloca.into()], "parse_f_call")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| CodegenError::LlvmError("strtod returned no value".into()))?
+            .into_float_value();
+
+        // Success: endptr advanced + landed on NUL.
+        let endptr_loaded = self
+            .builder
+            .build_load(i8_ptr_ty, endptr_alloca, "parse_endptr_loaded")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_pointer_value();
+        let end_int = self
+            .builder
+            .build_ptr_to_int(endptr_loaded, i64_ty, "parse_end_int")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let raw_int = self
+            .builder
+            .build_ptr_to_int(raw_ptr, i64_ty, "parse_raw_int")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let advanced = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::UGT,
+                end_int,
+                raw_int,
+                "parse_advanced",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let last_byte = self
+            .builder
+            .build_load(i8_ty, endptr_loaded, "parse_last_byte")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        let consumed_all = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::EQ,
+                last_byte,
+                i8_ty.const_int(0, false),
+                "parse_consumed_all",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let success = self
+            .builder
+            .build_and(advanced, consumed_all, "parse_success")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Pack payload as i64. f64 → bitcast i64. f32 → fptrunc → bitcast i32 → zext i64.
+        let payload_ok = if bits == 64 {
+            self.builder
+                .build_bitcast(parsed_f64, i64_ty, "parse_ok_f64_bits")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                .into_int_value()
+        } else {
+            let parsed_f32 = self
+                .builder
+                .build_float_trunc(parsed_f64, f32_ty, "parse_f32_trunc")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            let bits_i32 = self
+                .builder
+                .build_bitcast(parsed_f32, self.context.i32_type(), "parse_ok_f32_bits")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                .into_int_value();
+            self.builder
+                .build_int_z_extend(bits_i32, i64_ty, "parse_ok_f32_to_i64")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        };
+        let err_payload_i64 = self.build_static_err_payload_i64("parse error")?;
+        let chosen_payload = self
+            .builder
+            .build_select(success, payload_ok, err_payload_i64, "parse_payload")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        let tag = self
+            .builder
+            .build_select(
+                success,
+                i8_ty.const_int(0, false),
+                i8_ty.const_int(1, false),
+                "parse_tag",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        self.assemble_result_struct(tag, chosen_payload)
+    }
+
+    /// Pack a static `str` constant (always "parse error" today) into the
+    /// Result-payload i64 slot. The Err branch uses this when parsing fails.
+    /// Layout: heap-alloc'd `{ i8*, i64 }` fat pointer, ptrtoint to i64.
+    /// Heap allocation matches B.1's >8B struct path so the match-arm decoder
+    /// recovers the str via int_to_ptr+load.
+    fn build_static_err_payload_i64(
+        &mut self,
+        msg: &str,
+    ) -> CodegenResult<inkwell::values::IntValue<'ctx>> {
+        use inkwell::AddressSpace;
+        let i8_ty = self.context.i8_type();
+        let i64_ty = self.context.i64_type();
+        let i8_ptr_ty = i8_ty.ptr_type(AddressSpace::default());
+
+        // Build a global string constant for the message, then assemble a fat
+        // pointer struct on the heap.
+        let str_global = self
+            .builder
+            .build_global_string_ptr(msg, "parse_err_msg")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .as_pointer_value();
+        let len = i64_ty.const_int(msg.len() as u64, false);
+        let fat_ty = self
+            .context
+            .struct_type(&[i8_ptr_ty.into(), i64_ty.into()], false);
+        let mut fat_undef = fat_ty.get_undef();
+        fat_undef = self
+            .builder
+            .build_insert_value(fat_undef, str_global, 0, "parse_err_fat_p")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+        fat_undef = self
+            .builder
+            .build_insert_value(fat_undef, len, 1, "parse_err_fat_l")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+
+        // Heap-allocate via malloc(16) and store, then ptrtoint to i64. Matches
+        // B.1's >8B struct payload path; gen_match.rs's payload decoder will
+        // int_to_ptr + load symmetrically.
+        let malloc_fn = self.module.get_function("malloc").unwrap_or_else(|| {
+            let malloc_ty = i8_ptr_ty.fn_type(&[i64_ty.into()], false);
+            self.module.add_function("malloc", malloc_ty, None)
+        });
+        let size = i64_ty.const_int(16, false);
+        let heap_ptr = self
+            .builder
+            .build_call(malloc_fn, &[size.into()], "parse_err_heap")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .try_as_basic_value()
+            .left()
+            .unwrap()
+            .into_pointer_value();
+        let typed_ptr = self
+            .builder
+            .build_bitcast(
+                heap_ptr,
+                fat_ty.ptr_type(AddressSpace::default()),
+                "parse_err_heap_typed",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_pointer_value();
+        self.builder
+            .build_store(typed_ptr, fat_undef)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder
+            .build_ptr_to_int(heap_ptr, i64_ty, "parse_err_payload")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))
+    }
+
+    /// Assemble the Result `{ i8 tag, i64 payload }` value used by B.1's ABI.
+    fn assemble_result_struct(
+        &mut self,
+        tag: inkwell::values::IntValue<'ctx>,
+        payload: inkwell::values::IntValue<'ctx>,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        let i8_ty = self.context.i8_type();
+        let i64_ty = self.context.i64_type();
+        let result_ty = self
+            .context
+            .struct_type(&[i8_ty.into(), i64_ty.into()], false);
+        let mut val = result_ty.get_undef();
+        val = self
+            .builder
+            .build_insert_value(val, tag, 0, "result_tag")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+        val = self
+            .builder
+            .build_insert_value(val, payload, 1, "result_payload")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+        Ok(val.into())
     }
 }

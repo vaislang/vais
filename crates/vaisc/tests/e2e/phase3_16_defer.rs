@@ -80,3 +80,80 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 42);
 }
+
+// ================ B.5: edge-case tests for existing defer behavior ================
+//
+// Vais semantics (per LANGUAGE_SPEC "Defer block (runs on scope exit)"):
+//   - Defer runs AFTER return value is evaluated but BEFORE control transfers.
+//   - Multiple defers run in LIFO order.
+//   - Defers added before an early `R` path still fire.
+//   - Nested function calls have independent defer stacks.
+//   - Defers inside loop bodies run at function exit (current impl — function-scoped
+//     stack), not per-iteration. Per-iteration is a Phase 4.x followup.
+
+#[test]
+fn defer_lifo_ordering_with_early_return() {
+    // Three defers, one of which mutates OBSERVED via LIFO — the FIRST-registered
+    // defer (OBSERVED=1) runs LAST, so OBSERVED ends at 1.
+    let source = r#"
+G OBSERVED: i64 = 0
+
+F compute() -> i64 {
+    D { OBSERVED = 1 }
+    D { OBSERVED = 2 }
+    D { OBSERVED = 3 }
+    I true { R 7 }
+    0
+}
+
+F main() -> i64 {
+    _r := compute()
+    OBSERVED
+}
+"#;
+    assert_exit_code(source, 1);
+}
+
+#[test]
+fn defer_nested_function_calls_independent_stacks() {
+    // Defer stacks per function: compute() sets OBS=10 after finishing;
+    // main's own defer overwrites OBS=20 after main's body runs.
+    let source = r#"
+G OBS: i64 = 0
+
+F compute() -> i64 {
+    D { OBS = 10 }
+    5
+}
+
+F main() -> i64 {
+    _r := compute()
+    x := OBS
+    D { OBS = 20 }
+    x
+}
+"#;
+    // compute() returns → OBS=10. x=10 captured. main defers fire on return →
+    // OBS=20, but main returns x=10. The test observes main's return value.
+    assert_exit_code(source, 10);
+}
+
+#[test]
+fn defer_mutable_local_with_early_return() {
+    // Defer runs after return value captured — mutation of local `x` via
+    // defer is not visible to caller, matching Go's behavior.
+    let source = r#"
+F compute(early: bool) -> i64 {
+    x := mut 100
+    D { x = 0 }
+    I early { R x }
+    x * 2
+}
+
+F main() -> i64 {
+    compute(true)
+}
+"#;
+    // early=true → R x returns 100 (defer hasn't run yet at value evaluation).
+    assert_exit_code(source, 100);
+}
