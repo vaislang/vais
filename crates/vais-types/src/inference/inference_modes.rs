@@ -54,7 +54,15 @@ impl TypeChecker {
                                 _ => e,
                             }
                         })?;
-                        Ok(inferred)
+                        // After unification, the inferred type's type variables
+                        // have been constrained. Re-apply substitutions and
+                        // refresh expr_types so codegen's call-site hint can use
+                        // the resolved concrete type (e.g. `Vec<u64>` rather
+                        // than `Vec<Var>`).
+                        let resolved = self.apply_substitutions(&inferred);
+                        let span_key = (expr.span.start, expr.span.end);
+                        self.expr_types.insert(span_key, resolved.clone());
+                        Ok(resolved)
                     }
                 }
             }
