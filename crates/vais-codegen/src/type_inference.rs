@@ -249,6 +249,18 @@ impl CodeGenerator {
                             return !matches!(fty, ResolvedType::Named { .. });
                         }
                     }
+                    // Enum namespace access (`EnumName.Variant`) is lowered to an
+                    // alloca of the enum type, so generate_expr returns a pointer.
+                    if let Some(enum_info) = self
+                        .types
+                        .enums
+                        .get(struct_name.as_str())
+                        .or_else(|| self.types.enums.get(name.as_str()))
+                    {
+                        if enum_info.variants.iter().any(|v| v.name == field.node) {
+                            return false;
+                        }
+                    }
                 }
                 true
             }

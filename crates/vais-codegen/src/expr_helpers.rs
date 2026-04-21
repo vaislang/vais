@@ -405,7 +405,31 @@ impl CodeGenerator {
         };
         match op {
             UnaryOp::Neg => {
-                write_ir!(ir, "  {} = sub {} 0, {}{}", tmp, int_llvm, val, dbg_info);
+                // Float negation must use fsub with a matching-width 0.0 constant.
+                // `sub iN 0, <float>` is invalid IR.
+                match &expr_type {
+                    ResolvedType::F32 => {
+                        write_ir!(
+                            ir,
+                            "  {} = fsub float 0.000000e+00, {}{}",
+                            tmp,
+                            val,
+                            dbg_info
+                        );
+                    }
+                    ResolvedType::F64 => {
+                        write_ir!(
+                            ir,
+                            "  {} = fsub double 0.000000e+00, {}{}",
+                            tmp,
+                            val,
+                            dbg_info
+                        );
+                    }
+                    _ => {
+                        write_ir!(ir, "  {} = sub {} 0, {}{}", tmp, int_llvm, val, dbg_info);
+                    }
+                }
             }
             UnaryOp::Not => {
                 // Logical NOT: convert to i1 via icmp ne, then xor to flip
