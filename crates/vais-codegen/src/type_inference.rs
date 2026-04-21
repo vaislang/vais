@@ -28,6 +28,35 @@ use crate::CodeGenerator;
 use vais_ast::{BinOp, Expr, Spanned, Stmt};
 use vais_types::ResolvedType;
 
+/// Phase 16 A2: Reject TC → local type upgrades whose node shape can't possibly
+/// produce `ty`. Span is (start, end) byte-offset-only with no file_id, so in
+/// cross-module builds different source files can collide on the same span key
+/// and TC's stored type for one file bleeds into another. A small fast check
+/// on the AST node itself is enough to catch the bleed — an Int literal can
+/// never carry a Vec<f32> type, and a Float literal can never carry a Named
+/// struct type — without having to thread file identity through every span key.
+/// Unknown / composite shapes fall through to `true` so this guard never
+/// rejects a legitimate upgrade.
+fn expr_shape_matches_type(node: &Expr, ty: &ResolvedType) -> bool {
+    use ResolvedType as R;
+    match node {
+        Expr::Int(_) => matches!(
+            ty,
+            R::I8 | R::I16 | R::I32 | R::I64 | R::I128
+                | R::U8 | R::U16 | R::U32 | R::U64 | R::U128
+                | R::F32 | R::F64
+                | R::Bool
+        ),
+        Expr::Float(_) => matches!(ty, R::F32 | R::F64),
+        Expr::Bool(_) => matches!(ty, R::Bool | R::I64),
+        Expr::String(_) | Expr::StringInterp(_) => {
+            matches!(ty, R::Str)
+                || matches!(ty, R::Ref(inner) if matches!(inner.as_ref(), R::Str))
+        }
+        _ => true,
+    }
+}
+
 /// Phase 6.30.2: recursive check for unresolved inference variables inside a
 /// ResolvedType. TC sometimes stores expr_types containing Var(n) when the
 /// type is unified later without rewriting the stored entry. Treat these as
@@ -277,6 +306,16 @@ impl CodeGenerator {
             // than a Var. Otherwise alloca types freeze to the base name and
             // produce IR type mismatches vs the mangled call-site result.
             if contains_unresolved_var(tc_ty) {
+                return local;
+            }
+            // Phase 16 A2: Span is (start, end) byte-offset-only with no file_id,
+            // so in cross-module builds different files can share the same span
+            // key and TC's stored type for one file bleeds into another. Refuse
+            // to upgrade when the node shape of `expr` cannot possibly match
+            // `tc_ty`. Without this guard, an Int literal whose span collides
+            // with a Vec<f32> literal elsewhere gets promoted to Vec<f32>, which
+            // then poisons the enclosing `let` alloca.
+            if !expr_shape_matches_type(&expr.node, tc_ty) {
                 return local;
             }
             // Only upgrade when TC has strictly more info than local.
