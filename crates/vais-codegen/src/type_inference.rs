@@ -629,7 +629,22 @@ impl CodeGenerator {
                 ResolvedType::RefMut(inner) => *inner,
                 _ => ResolvedType::I64,
             },
-            Expr::StructLit { name, fields, .. } => {
+            Expr::StructLit {
+                name,
+                fields,
+                enum_name,
+            } => {
+                // Enum struct variant literal: `EnumName.Variant { ... }`.
+                // The whole expression produces a value of the enum type, not of
+                // a standalone struct named after the variant.
+                if let Some(en) = enum_name {
+                    if self.types.enums.contains_key(en) {
+                        return ResolvedType::Named {
+                            name: en.clone(),
+                            generics: vec![],
+                        };
+                    }
+                }
                 // First try to get the struct from non-generic structs
                 if let Some(struct_info) = self.types.structs.get(&name.node) {
                     // Collect generic parameters from struct fields
@@ -1113,6 +1128,19 @@ impl CodeGenerator {
                                 if field_name == &field.node {
                                     return field_type.clone();
                                 }
+                            }
+                        }
+                    }
+                    // Enum namespace access: `EnumName.Variant` — if `struct_name`
+                    // is an enum and `field.node` is one of its variants, the whole
+                    // expression produces a value of the enum type.
+                    for candidate in &names_to_try {
+                        if let Some(enum_info) = self.types.enums.get(*candidate) {
+                            if enum_info.variants.iter().any(|v| v.name == field.node) {
+                                return ResolvedType::Named {
+                                    name: enum_info.name.clone(),
+                                    generics: vec![],
+                                };
                             }
                         }
                     }
