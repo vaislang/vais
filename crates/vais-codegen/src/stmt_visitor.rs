@@ -292,9 +292,60 @@ impl CodeGenerator {
             let mut ir = val_ir;
             let llvm_ty = self.type_to_llvm(&resolved_ty);
 
-            // For struct literals and enum variant constructors, the value is already an alloca'd pointer.
-            // Single-pointer pattern: alloca %T, then load+store from the source pointer.
-            if is_struct_lit || is_enum_variant_call || is_unit_variant {
+            // D.2: Vec<T> literal lowering. `v: Vec<T> := [a, b, c]` previously
+            // emitted `store %Vec$T <array_ptr>` where the RHS is a pointer, not
+            // a 5-field Vec struct — clang rejected with "Cannot allocate unsized
+            // type" / type mismatch. Build the full struct `{ data, len, cap,
+            // elem_size, owned }` via per-field GEP+store so indexing reads
+            // (which rely on elem_size at field 3) resolve correctly.
+            // std/vec.vais `S Vec<T>` is the source of truth for field order.
+            // Fixed-cap: cap == len (dynamic realloc is out of D.2 scope).
+            let is_vec_array_lit = matches!(
+                &resolved_ty,
+                ResolvedType::Named { name, generics } if name == "Vec" && generics.len() == 1
+            ) && matches!(&value.node, Expr::Array(_));
+            if is_vec_array_lit {
+                let (elem_resolved, elem_count) = match (&resolved_ty, &value.node) {
+                    (
+                        ResolvedType::Named { generics, .. },
+                        Expr::Array(elems),
+                    ) => (generics[0].clone(), elems.len()),
+                    _ => unreachable!("guarded by is_vec_array_lit"),
+                };
+                let elem_size = self.compute_sizeof(&elem_resolved);
+                self.emit_entry_alloca(&format!("%{}", llvm_name), &llvm_ty);
+                // data = ptrtoint(array_ptr)
+                let data_as_i64 = self.next_temp(counter);
+                let elem_llvm_ty = self.type_to_llvm(&elem_resolved);
+                write_ir!(
+                    ir,
+                    "  {} = ptrtoint {}* {} to i64",
+                    data_as_i64,
+                    elem_llvm_ty,
+                    val
+                );
+                // GEP+store each of the 5 Vec fields: data, len, cap, elem_size, owned
+                let fields = [
+                    (0usize, data_as_i64.clone()),
+                    (1, elem_count.to_string()),
+                    (2, elem_count.to_string()),
+                    (3, elem_size.to_string()),
+                    (4, "0".to_string()),
+                ];
+                for (idx, value_str) in &fields {
+                    let field_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* %{}, i32 0, i32 {}",
+                        field_ptr,
+                        llvm_ty,
+                        llvm_ty,
+                        llvm_name,
+                        idx
+                    );
+                    write_ir!(ir, "  store i64 {}, i64* {}", value_str, field_ptr);
+                }
+            } else if is_struct_lit || is_enum_variant_call || is_unit_variant {
                 self.emit_entry_alloca(&format!("%{}", llvm_name), &llvm_ty);
                 // Load the struct value from the source pointer and store into our alloca
                 let loaded = self.next_temp(counter);

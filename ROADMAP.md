@@ -51,10 +51,10 @@ Commit `e1697c14` 기준 `./scripts/check-integrity.sh`:
 ## Current Tasks (2026-04-21)
 
 mode: auto
-iteration: 1
+iteration: 2
 max_iterations: 15
-strategy: 1 task unblocked, measurement-only → sequential
-opus_direct: D.1 measurement+classification — design-analysis-judgment inseparable (CLAUDE.md rule 5: evidence-driven, no delegation of analysis)
+strategy: user redirected D.2 to text-backend — sequential
+opus_direct: D.2 codegen-design inseparable — text-backend IR is string-template emission, Vec struct synthesis must be hand-written. Per CLAUDE.md rule 4 regression floor, every increment checked with check-integrity.sh.
 
 ### Phase D — Post-compiler follow-up
 
@@ -84,10 +84,41 @@ opus_direct: D.1 measurement+classification — design-analysis-judgment insepar
     - compiler baseline 감소 0건
   blocker: D.3 선택이 D.1 결과에 의존 (blocks D.3).
 
-- [ ] D.2 — Vec<T> literal lowering + Vec::new/push inkwell dispatch (Opus direct)
+- [x] D.2 — Vec<T> literal lowering (text backend) (Opus direct) ✅ 2026-04-21
+      changes:
+        crates/vais-codegen/src/stmt_visitor.rs (Vec<T>:=Array special case, 5-field struct synthesis)
+        docs/language/LIVING_SPEC/04_stdlib/vec_literal_init.vais (reproducer #1)
+        docs/language/LIVING_SPEC/04_stdlib/vec_literal_sum.vais (reproducer #2)
+        docs/language/LIVING_SPEC/04_stdlib/vec_literal_u8.vais (reproducer #3 — elem_size=1)
+        docs/LANGUAGE_SPEC.md (Matrix L262 updated with scalar-fix + remaining gaps)
+      result:
+        - `v: Vec<i64> := [10,20,30]; R v[1]` → 20 (was garbage/clang error)
+        - `R v[0]+v[1]+v[2]` → 60 (all-element stride correct)
+        - `Vec<u8> := [...]; R v[1] as i64` → 2 (elem_size=1 byte works)
+        - LIVING_SPEC 112→115 (+3 reproducers all pass `vaisc check`)
+        - compiler baseline unchanged: syntax=200, stages=14, std=82/82,
+          vaisdb=237/261, phase158=18/18 (0 regressions per CLAUDE.md rule 4)
+      scope deltas vs. original ROADMAP D.2:
+        - **Vec<Struct> literal with Point{...} inside**: blocked by pre-existing
+          struct-in-array-literal bug (`store %Point <ptr>` in generate_array_expr),
+          NOT a D.2 regression. Filed for D.3 or separate drive.
+        - **Vec::new()**: absent from std/vec.vais — orthogonal stdlib gap.
+          `Vec.with_capacity(n) + push` is the working path and was already functional.
+        - **inkwell wiring**: original ROADMAP premise was inkwell-backend, but
+          `vaisc run` / `vaisc build` default is text backend. User redirect
+          2026-04-21 realigned D.2 to text backend; inkwell path untouched.
   **배경**: B.4 (2026-04-21 직전 드라이브) 가 `v[i].field = x` write-through 를 구현했지만
   Vec 리터럴 `v: Vec<T> := [...]` 가 data slot 만 채우고 len/cap/elem_size 를 초기화
   하지 않아 `v[1]` 가 garbage. 또한 `Vec::new()` / `v.push(x)` 는 inkwell 에서 C002.
+  **scope finding (2026-04-21)**: 드라이브 시작 시 ROADMAP 은 "inkwell path" 를 가정했지만
+  실측 결과 **vaisc 기본 backend = text-based** (`CodeGenerator` in `stmt.rs`) 이며,
+  `vaisc run` / `vaisc build` (no `--inkwell`) 는 text 를 사용. inkwell 패치만으로는
+  repro (`v: Vec<i64> := [10,20,30]; v[1]` returning garbage with `Cannot allocate unsized`
+  clang error) 를 해결하지 못함. 근본 fix 는 `crates/vais-codegen/src/stmt.rs` 의
+  text-backend `Stmt::Let` 브랜치 (line 185+ Named 브랜치) 에서 Vec 리터럴을
+  `{data, len, cap, elem_size}` 로 synthesize 해야 함. text IR emission 은 string-template
+  기반이라 LLVM struct-construction 을 텍스트로 수동 생성하는 패치가 필요 — inkwell 과
+  재사용 불가. **user 재조정 필요**.
   target:
     - `crates/vais-codegen/src/inkwell/gen_aggregate.rs::generate_array` (Vec 리터럴)
     - `crates/vais-codegen/src/inkwell/gen_expr/call.rs` 또는 신규 `builtins/vec_methods.rs`
@@ -137,7 +168,7 @@ opus_direct: D.1 measurement+classification — design-analysis-judgment insepar
       etc.)
     - baseline 유지
 
-progress: 1/4 (25%)
+progress: 2/4 (50%)
 
 ---
 

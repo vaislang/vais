@@ -259,7 +259,7 @@ This table enumerates every top-level or statement-level construct the parser ac
 | Range `..` / `..=` | `0..10`, `0..=9` | ✓ | ✓ | ✓ | ✓ |
 | Tuple literal | `(1, "hi", true)` | ✓ | ✓ | ✓ | ✓ |
 | Array/Vec indexing | `v[i]`, `v[i] = x` | ✓ | ✓ | ✓ | ✓ |
-| `Vec<Struct>[i].field =` write | `v[i].x = 5` | ✓ | ✓ | ✓ (B.4 write-through 2026-04-21) | ◐ (end-to-end gated on Vec<T> literal lowering gap — Vec::new/push not wired in inkwell; Phase B.4b) |
+| `Vec<Struct>[i].field =` write | `v[i].x = 5` | ✓ | ✓ | ✓ (B.4 write-through 2026-04-21) | ◐ (scalar-Vec literal lowering fixed 2026-04-21 D.2 — `v: Vec<i64> := [...]; v[1]` now OK. End-to-end `Vec<Struct>` literal still gated on struct-in-array-literal bug; `Vec.with_capacity(n) + push` is the working path) |
 | Attribute `#[…]` | `#[cfg(target_os="linux")]` | ✓ | limited | limited | limited |
 | Unsafe block | `unsafe { … }` | ✓ | ◐ | ✓ (trivial pass-through) | ✓ |
 | Comptime block | `comptime { … }` | ✓ (function-body + const-init both work since B.3 2026-04-21) | ✓ | ✓ | ✓ (integer arith; complex control flow inside comptime is Phase 4.20) |

@@ -1,0 +1,10 @@
+# LIVING_SPEC/04_stdlib/vec_literal_u8.vais
+# Key concept: Vec<u8> 리터럴은 elem_size=1 byte 로 올바르게 초기화.
+# 정수와 다른 stride 를 가진 원소 타입이 작동함을 검증.
+
+U std/vec
+
+F main() -> i64 {
+    v: Vec<u8> := [1 as u8, 2 as u8, 3 as u8]
+    R v[1] as i64
+}

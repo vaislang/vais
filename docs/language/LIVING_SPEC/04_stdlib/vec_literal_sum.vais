@@ -1,0 +1,10 @@
+# LIVING_SPEC/04_stdlib/vec_literal_sum.vais
+# Key concept: 전체 원소 합산. 모든 인덱스가 올바른 stride (elem_size)
+# 로 읽힘을 검증. D.2 Vec literal lowering 이후.
+
+U std/vec
+
+F main() -> i64 {
+    v: Vec<i64> := [10, 20, 30]
+    R v[0] + v[1] + v[2]
+}

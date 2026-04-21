@@ -1,0 +1,11 @@
+# LIVING_SPEC/04_stdlib/vec_literal_init.vais
+# Key concept: `v: Vec<T> := [a, b, c]` 는 data/len/cap/elem_size/owned
+# 5개 필드를 모두 초기화한다. 이전에는 data slot 만 array ptr 로 채워져서
+# v[1] 이 garbage 를 읽었다. D.2 (2026-04-21) 에서 수정됨.
+
+U std/vec
+
+F main() -> i64 {
+    v: Vec<i64> := [10, 20, 30]
+    R v[1]
+}
