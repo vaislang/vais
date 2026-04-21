@@ -51,12 +51,20 @@ Commit `e1697c14` 기준 `./scripts/check-integrity.sh`:
 ## Current Tasks (2026-04-21)
 
 mode: auto
-iteration: 0
+iteration: 1
 max_iterations: 15
+strategy: 1 task unblocked, measurement-only → sequential
+opus_direct: D.1 measurement+classification — design-analysis-judgment inseparable (CLAUDE.md rule 5: evidence-driven, no delegation of analysis)
 
 ### Phase D — Post-compiler follow-up
 
-- [ ] D.1 — vaisdb cascade 측정 + blocker 분류 (Opus direct, measurement)
+- [x] D.1 — vaisdb cascade 측정 + blocker 분류 (Opus direct) ✅ 2026-04-21
+      result: vaisdb=237/261 unchanged. 24 failures classified →
+        (a) 1 compiler gap (vector/search.vais C003) cascades to 4 files
+        (b) 16 vaisdb code bugs (66.7%) — cannot be compiler-fixed
+        (c) 4 files E034 panic-analysis / generic-bound edge
+      survey: docs/vaisdb-cascade-survey.md
+      D.3 steer: fixing (a) yields +4 files high leverage. (b)/(c) out-of-drive.
   target: 현재 vaisdb 237/261 의 남은 24개 failure 를 실측 분류.
   approach:
     1. 직전 드라이브 fix 들이 반영된 현 바이너리로 `./scripts/check-integrity.sh` 의
@@ -129,7 +137,7 @@ max_iterations: 15
       etc.)
     - baseline 유지
 
-progress: 0/4 (0%)
+progress: 1/4 (25%)
 
 ---
 
