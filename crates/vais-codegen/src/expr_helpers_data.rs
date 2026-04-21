@@ -49,6 +49,14 @@ impl CodeGenerator {
         };
         let arr_ty = format!("[{}  x {}]", len, elem_ty);
 
+        // F.1: when the element type is a named struct (`%Point`), Expr::StructLit
+        // returns a pointer-to-struct (e.g., `%t1 = alloca %Point`). Storing the
+        // pointer directly into the array slot emits `store %Point <ptr>` — a
+        // type mismatch. Detect this case and load the struct value first.
+        let elem_is_named_struct = elem_ty.starts_with('%')
+            && !elem_ty.contains('{')
+            && !elem_ty.contains('[');
+
         let arr_ptr = self.next_temp(counter);
         write_ir!(ir, "  {} = alloca {}", arr_ptr, arr_ty);
 
@@ -66,7 +74,22 @@ impl CodeGenerator {
                 arr_ptr,
                 i
             );
-            write_ir!(ir, "  store {} {}, {}* {}", elem_ty, val, elem_ty, elem_ptr);
+            let store_val = if elem_is_named_struct {
+                // Load struct value from the StructLit's alloca pointer first.
+                let loaded = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = load {}, {}* {}",
+                    loaded,
+                    elem_ty,
+                    elem_ty,
+                    val
+                );
+                loaded
+            } else {
+                val
+            };
+            write_ir!(ir, "  store {} {}, {}* {}", elem_ty, store_val, elem_ty, elem_ptr);
         }
 
         let result = self.next_temp(counter);

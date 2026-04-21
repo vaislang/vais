@@ -259,7 +259,7 @@ This table enumerates every top-level or statement-level construct the parser ac
 | Range `..` / `..=` | `0..10`, `0..=9` | ✓ | ✓ | ✓ | ✓ |
 | Tuple literal | `(1, "hi", true)` | ✓ | ✓ | ✓ | ✓ |
 | Array/Vec indexing | `v[i]`, `v[i] = x` | ✓ | ✓ | ✓ | ✓ |
-| `Vec<Struct>[i].field =` write | `v[i].x = 5` | ✓ | ✓ | ✓ (B.4 write-through 2026-04-21) | ◐ (scalar-Vec literal lowering fixed 2026-04-21 D.2 — `v: Vec<i64> := [...]; v[1]` now OK. End-to-end `Vec<Struct>` literal still gated on struct-in-array-literal bug; `Vec.with_capacity(n) + push` is the working path) |
+| `Vec<Struct>[i].field =` write | `v[i].x = 5` | ✓ | ✓ | ✓ (B.4 write-through 2026-04-21) | ◐ (D.2 scalar-Vec literal + F.1 struct-in-array-literal 2026-04-21: `Vec<Point> := [Point{...}, ...]` 이제 read 정상 `v[0].x+v[1].x` = 4. 남은 gap: literal-init 후 `v[0].x = 99` write-through 는 B.4 memcpy-to-temp 경로라 적용 안 됨 — Vec<Struct> 원소 memcpy 경로를 GEP 로 변경 필요) |
 | Attribute `#[…]` | `#[cfg(target_os="linux")]` | ✓ | limited | limited | limited |
 | Unsafe block | `unsafe { … }` | ✓ | ◐ | ✓ (trivial pass-through) | ✓ |
 | Comptime block | `comptime { … }` | ✓ (function-body + const-init both work since B.3 2026-04-21) | ✓ | ✓ | ✓ (integer arith; complex control flow inside comptime is Phase 4.20) |
