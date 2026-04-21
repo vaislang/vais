@@ -173,7 +173,7 @@ Source of truth for every entry below is `crates/vais-lexer/src/lib.rs`.
 | `await` | Long-form of `Y` (both accepted) | ✓ |
 | `yield` | Iterator/coroutine yield | ✓ (simplified) / ◐ full coroutine desugar Phase 4.22 SCOPED |
 | `const` | Compile-time constant binding | ✓ |
-| `comptime` | Compile-time expression/block | ◐ (function-body ✓ / const-init ✗ Phase B.3) |
+| `comptime` | Compile-time expression/block | ✓ (function-body + const-init since B.3 2026-04-21; complex control flow inside comptime Phase 4.20) |
 | `dyn` | Dynamic dispatch trait object | ✓ (basic) / ◐ full vtable Phase 4.21 SCOPED |
 | `macro` | Declarative macro definition | ◐ |
 | `as` | Type cast (`x as i64`) | ✓ |
@@ -259,10 +259,10 @@ This table enumerates every top-level or statement-level construct the parser ac
 | Range `..` / `..=` | `0..10`, `0..=9` | ✓ | ✓ | ✓ | ✓ |
 | Tuple literal | `(1, "hi", true)` | ✓ | ✓ | ✓ | ✓ |
 | Array/Vec indexing | `v[i]`, `v[i] = x` | ✓ | ✓ | ✓ | ✓ |
-| `Vec<Struct>[i].field =` write | `v[i].x = 5` | ✓ | ✓ | ◐ Phase 3.14 | ◐ |
+| `Vec<Struct>[i].field =` write | `v[i].x = 5` | ✓ | ✓ | ✓ (B.4 write-through 2026-04-21) | ◐ (end-to-end gated on Vec<T> literal lowering gap — Vec::new/push not wired in inkwell; Phase B.4b) |
 | Attribute `#[…]` | `#[cfg(target_os="linux")]` | ✓ | limited | limited | limited |
 | Unsafe block | `unsafe { … }` | ✓ | ◐ | ✓ (trivial pass-through) | ✓ |
-| Comptime block | `comptime { … }` | ◐ (function-body ✓ / const-init ✗ Phase B.3) | ✓ | ✓ | ✓ (integer arith) |
+| Comptime block | `comptime { … }` | ✓ (function-body + const-init both work since B.3 2026-04-21) | ✓ | ✓ | ✓ (integer arith; complex control flow inside comptime is Phase 4.20) |
 | Macro definition | `macro name!(…) { … }` | ✓ | ◐ | ◐ | experimental |
 | Dyn trait object | `dyn MyTrait` | ✓ | ✓ | ✓ | ✓ (basic dispatch; full vtable: Phase 4.21 SCOPED) |
 | Linear/affine types | `linear T`, `affine T` | ✓ | ✓ | ✓ | ✓ (annotation + lowering; use-count enforcement: Phase 4.19 SCOPED) |

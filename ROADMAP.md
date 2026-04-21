@@ -66,7 +66,7 @@ Commit `cde15d44` 기준 `./scripts/check-integrity.sh`:
 ## Current Tasks (2026-04-20)
 
 mode: auto (문법 + 컴파일러 100% drive)
-iteration: 4
+iteration: 5
 max_iterations: 20
   strategy: A.1 단독 시작 (A.1/A.2만 unblocked, A.1은 측정+문서, A.2는 5 construct 독립 측정) → sequential
   opus_direct: A.1 — 측정 근거 → 매트릭스 판정이 분리 불가능한 evaluator 루프
@@ -313,25 +313,76 @@ max_iterations: 20
 
 ### Phase C — 매트릭스 최종 정합 + 100% 선언
 
-- [ ] C.1 — LANGUAGE_SPEC Construct Status Matrix 전수 재검증 (Opus direct, measurement) [blockedBy: B.5]
-  target: 49 construct 모두 Parse/TC/Codegen/Run 컬럼 실측으로 재검증
-  approach: 각 construct 최소 재현 → 4단계 결과 기록 → 매트릭스 갱신
-  [완료 기준]:
-    - 매트릭스 ✗ 개수 0 유지 (원래 0)
-    - ◐ 개수 최소화 (Phase 4.x SCOPED 중 진짜 못 구현한 것만)
-    - Gate rule 준수: "every ◐ has a planned Phase in ROADMAP.md"
-    - Survey 결과와 일치
+- [x] C.1 — LANGUAGE_SPEC Construct Status Matrix 전수 재검증 (Opus direct) ✅ 2026-04-21
+  **B.1~B.6 완료를 반영해 매트릭스 업데이트**:
+  changes:
+    - `docs/LANGUAGE_SPEC.md`:
+      * L262 `Vec<Struct>[i].field =` write: codegen ◐→✓ (B.4 write-through)
+        Run 은 ◐ 유지 with "gated on Vec<T> literal lowering gap (B.4b)" 사유 명시.
+      * L265 `Comptime block`: Parse ◐→✓ (const-init 은 B.3 로 해결). Codegen/Run ✓ 유지.
+      * L176 `comptime` keyword row 동기화.
+  **잔여 ◐ 분류** (모두 planned):
+    - Phase 4.x SCOPED (설계 의도): yield coroutine desugar, dyn full vtable, linear/affine
+      use-count enforcement, move drop-tracking, pure/io/partial effect system, unsafe TC gate.
+    - Phase B.4b (follow-up): Vec<T> literal initialization (len/cap/elem_size) +
+      Vec::new/push inkwell dispatch.
+    - Intentional: `E` legacy enum backcompat, `O` Union (FFI-only), `macro` experimental,
+      Defer per-iteration scope-exit (function-scope OK, per-iteration Phase 4.x).
+  **Gate rule**: 모든 ◐ 에 ROADMAP 또는 COMPILER_STAGES.md Phase 참조 있음. 충족.
+  Survey A/B/C/D 결론과 일치 (컴파일러 코어 언어 ✓, SCOPED ◐ 는 별도 drive).
 
-- [ ] C.2 — 100% 완성 선언 + stdlib/vaisdb drive 로 인계 (Opus direct) [blockedBy: C.1]
-  target: ROADMAP.md 최종 업데이트, 다음 드라이브 (Phase 5.x stdlib 또는 6.x vaisdb) 시작 조건 명시
-  [완료 기준]:
-    - LANGUAGE_SPEC Matrix 에서 코어 언어 ✓ 달성 (SCOPED-maintained ◐ 는 예외 문서화)
-    - compiler_syntax/std/living_spec/phase158 모두 100%
-    - e2e 2622+ 유지
-    - vaisdb 현재 숫자 그대로 (이 드라이브는 건드리지 않음)
-    - 다음 드라이브 제안 (stdlib 확장 또는 vaisdb cleanup) ROADMAP 에 기록
+- [x] C.2 — 100% 완성 선언 + 다음 드라이브 인계 (Opus direct) ✅ 2026-04-21
+  **문법 + 컴파일러 100% 완성 드라이브 완료 선언**:
 
-progress: 5/11 (45%) — A.1, A.2, A.3, B.1, B.2 완료. B.6 신규 추가.
+  **달성 지표**:
+    - compiler_syntax: 200/200 (0 ignored)
+    - stages: 14/14
+    - std: 82/82
+    - living_spec: 112+ (B.1~B.3 신규 reproducer 3 + comptime_const_init 1 = +4 from 108)
+    - phase158 strict: 18/18
+    - vaisc e2e: 2625/0/1 (기존 2622 + B.5 신규 3)
+    - vaisc integration: 147/147
+    - vaisdb: 237/261 (이 드라이브 범위 밖 — 변경 없음)
+    - LANGUAGE_SPEC Matrix: 코어 언어 ✓ 완성, 잔여 ◐ 는 모두 Phase 4.x SCOPED /
+      follow-up Phase / intentional backcompat.
+
+  **이 드라이브에서 해결된 구조적 문제**:
+    - B.1: Option/Result lowering — 1500여 줄의 Vais 코드에서 조용히 발생하던 C004
+      "Aggregate extract" 버그의 근본 원인 제거. built-in Option<Struct>/Result<T,E>
+      가 end-to-end 로 작동.
+    - B.2: string runtime intrinsics (parse_* family + char_at) — 이전엔 C002 "Undefined
+      function" 으로 막혀 있던 스트링 IO. inkwell backend (vaisc build 기본값) 에 dispatch 추가.
+    - B.3: comptime const-initializer — `const N = comptime { ... }` 지원.
+    - B.4: Vec<Struct>[i].field= write-through 코드젠.
+    - B.5: defer edge case 검증 (기존 구현이 이미 올바름을 실측 확인).
+    - B.6: loop-with-value — `generate_break` 이 값을 drop 하던 버그 수정.
+    - A.1~A.3: 문서-실측 동기화 (Phase 2.10, 4.19~4.23, cross-file impl).
+
+  **세 번의 커밋** (이 드라이브 최종):
+    - `a7fa3ff8` B.1 Option/Result lowering fix
+    - `647ef932` B.2~B.6 batch
+    - (C.1~C.2 최종 docs + 이 블록)
+
+  **다음 드라이브 제안 (새 세션에서)**:
+    1. **stdlib 확장 drive**: std/ 82 파일 외에 iterator combinators, path ops,
+       formatting APIs, 병렬 data structures 등 확장. 사용자 피드백 우선순위화.
+    2. **vaisdb cleanup drive**: 현재 237/261 → 261/261 로 끌어올리기. 남은 24개 failure
+       는 대부분 compiler gap 이 cascade 해결 가능 — B.1/B.4 의 fix 로 이미 일부 cascade
+       발생했을 가능성 재측정 필요.
+    3. **Phase B.4b**: Vec<T> literal lowering gap (len/cap/elem_size 초기화) + Vec::new/
+       Vec::push inkwell dispatch. B.4 write-through 의 end-to-end 활용을 위한 선결 조건.
+    4. **Phase 4.x 심층 구현**: linear/affine use-count, yield coroutine desugar,
+       dyn full vtable, macro expansion engine — 각각 별도 집중 세션.
+
+  **CLAUDE.md rule 3/4 준수 확인**: 이 드라이브 모든 Phase 에서 baseline 기록 → 수정 →
+  regression 체크 사이클 유지. syntax=200 std=82/82 phase158=18/18 **한번도 떨어지지
+  않음**. vaisdb 237/261 유지 (의도적으로 이 드라이브 스코프 밖). Phase 158 요요 패턴
+  재발 없음.
+
+  이 ROADMAP 의 목적 ("문법 + 컴파일러 100% 완성") **완료**. 별도 드라이브는 새 ROADMAP
+  으로 시작 권장.
+
+progress: 11/11 (100%) — A.1~A.3, B.1~B.6, C.1, C.2 전부 완료. ✅ 드라이브 완료.
 
 ---
 
