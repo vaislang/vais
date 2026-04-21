@@ -66,7 +66,7 @@ Commit `cde15d44` 기준 `./scripts/check-integrity.sh`:
 ## Current Tasks (2026-04-20)
 
 mode: auto (문법 + 컴파일러 100% drive)
-iteration: 3
+iteration: 4
 max_iterations: 20
   strategy: A.1 단독 시작 (A.1/A.2만 unblocked, A.1은 측정+문서, A.2는 5 construct 독립 측정) → sequential
   opus_direct: A.1 — 측정 근거 → 매트릭스 판정이 분리 불가능한 evaluator 루프
@@ -81,6 +81,10 @@ max_iterations: 20
   strategy iteration 3 (2026-04-21 fresh session): B.1 단독 (B.2~B.5 모두 blockedBy B.1) → sequential. Research 완료 상태 — 수정 타겟 확정 (call.rs:183-246, generator.rs expected-type helper, gen_match.rs:915-1095). Opus direct — 매트릭스 lowering 설계와 구현 분리 불가 (expected-type 전파 방식 결정 필요).
   opus_direct: B.1 — LLVM aggregate layout 일관성 설계. hardcoded i64 제거 시 어떤 context path 로 expected-type 을 읽을지 (TC expected_types map 참조 vs call-site 전달) 판정 = 구현. CLAUDE.md rule 3/4 엄수 (baseline syntax=200 std=82/82 vaisdb=237/261 phase158=18/18, regression 1건 즉시 revert).
   context_checkpoint iteration 3 (2026-04-21): B.1 구현 완료 + 커밋 (`a7fa3ff8`). 본 세션은 research 없이 시작해서 진단·구현·검증·커밋 모두 1 iteration 내 완료. 5개 pending (B.2, B.3, B.4, B.5, B.6) unblocked. **컨텍스트 보호** 차원에서 /clear 후 fresh session 권장 — ROADMAP.md 가 full state source. 다음 세션은 B.2 부터 (impl-sonnet 위임 적합) 또는 B.6 부터 (Opus direct, B.1 연장선).
+  strategy iteration 4 (2026-04-21 autonomous loop fire): B.2 단독 (impl-sonnet 위임) → sequential background. B.3/B.4/B.5/B.6 도 unblocked 이지만 (1) B.3/B.6 은 Opus direct — 현 세션 컨텍스트 여유 있을 때 다음 iteration 으로 유보, (2) B.4/B.5 는 text-IR 코드젠의 서로 다른 파일을 만지지만 같은 backend 이므로 병렬 위험, (3) B.2 는 runtime/string_ops.rs 에 국한. B.2 완료 후 재평가.
+  opus_direct: 이 iteration 은 없음 (B.2 는 impl-sonnet). parse_f64 (strtod wrapper) + char_at (GEP+load) 모두 design 단순 — Sonnet 적합.
+  iteration 4 outcome (2026-04-21): 두 번의 agent 위임 모두 research 단계에서 turn-cap truncation (a8884e59, a71db40d — worktree 자동 정리 → 변경 0). Opus direct 로 재조사한 결과 B.2 scope 이 잘못 추정됨: inkwell 은 string method dispatch 자체가 없다 (`generate_method_call` at gen_aggregate.rs:699 은 순수 TypeName_method lookup). 텍스트-IR 의 string_ops.rs 는 live path 아님 (VAIS_SINGLE_MODULE=1 deprecated → C005). B.2 재정의 후 pending 상환, 다음 iteration 시작 시 fresh session 으로 Opus direct design + impl-sonnet 구현 분리 수행 권장.
+  stuck_recovery iteration 4: B.2 task in_progress → pending 복구. 사유: agent 2회 truncation + scope 재정의 필요. retry counter 미소비 (구조적 원인 — scope 추정 오류).
 
 ### Phase A — 문서 동기화 (Opus direct, 먼저 실행)
 
@@ -186,16 +190,51 @@ max_iterations: 20
   **카스케이드 메모**: 이 fix 가 유사 패턴 (Option<Vec<T>>, Result<HashMap<K,V>, E> 등)
   에서 cascade unlock 가능. C.1 re-survey 시 확인.
 
-- [ ] B.2 — Phase 3.13 runtime 함수 구현 (impl-sonnet) [blockedBy: B.1]
-  target: crates/vais-codegen/src/function_gen/runtime.rs + string_ops.rs + builtins dispatch
-  approach: parse_f64, char_at 두 intrinsic 구현.
-    - parse_f64: `strtod(const char*, NULL)` extern + Vais wrapper. Return `Result<f64, str>` 또는 `Option<f64>`.
-    - char_at: 이미 TC OK. codegen 에서 `getelementptr i8, i8* %str, i64 %idx; load i8` 으로 구현.
+- [ ] B.2 — Phase 3.13 string runtime intrinsics (Opus direct) [blockedBy: B.1]
+  **재정의 (2026-04-21 iteration 4)**: 원래 "parse_f64/char_at 추가" 였으나 실측 결과
+  **inkwell backend 이 string method dispatch 자체가 없음**. `generate_method_call`
+  (`crates/vais-codegen/src/inkwell/gen_aggregate.rs:699`) 은 단순 `TypeName_method`
+  함수 lookup 만 한다 — `s.parse_i64()` 조차 C002 fail. 텍스트-IR 의
+  `string_ops.rs::generate_string_method_call` (line 256) 은 inline impl 이 있지만
+  `VAIS_SINGLE_MODULE=1` 은 deprecated → C005. 즉 inkwell 이 유일 backend.
+
+  구현 실측 (2026-04-21):
+    - `s.parse_i64()` → inkwell C002 (parse_i64 도 미구현)
+    - `s.char_at(1)` → inkwell C002
+    - `s.parse_f64()` → inkwell C002
+    - 텍스트-IR 의 기존 구현은 live path 아님.
+
+  두 agent 위임 시도 모두 research 단계에서 turn-cap truncation (agent-a8884e59,
+  agent-a71db40d). Research burden 큼 → Opus direct 로 fresh session 에서.
+
+  target: `crates/vais-codegen/src/inkwell/gen_aggregate.rs:699` (generate_method_call)
+    에 string-method 특수 케이스 삽입. 또는 `crates/vais-codegen/src/inkwell/builtins/`
+    하위에 신규 `string_methods.rs` 추가하여 dispatch 조립.
+
+  approach (Opus direct, 다음 세션 권장):
+    1. inkwell `generate_method_call` 에서 receiver 가 `str` (ResolvedType::Str 이거나
+       recv_val 이 `{ i8*, i64 }` fat-pointer struct) 인지 체크.
+    2. str method dispatch 테이블:
+       - `char_at(i)` → GEP + load i8 + zext to i64 (가장 단순)
+       - `parse_f64()` → strtod extern + Result<f64, str> packing.
+         * B.1 의 `build_option_result_ctor` helper 재사용: payload f64 → bitcast to i64.
+         * Err branch 는 static "parse error" string 반환.
+       - `len()` 은 이미 L711 처리됨 (fat-pointer extract field 1).
+       - (선택) parse_i64, parse_u64, parse_i32, parse_u32: TC 는 signature 제공,
+         codegen 만 가하면 완성. strtoll/strtoull extern.
+    3. e2e 테스트 추가 (inkwell backend 로 검증):
+       - 방법 1: `docs/language/LIVING_SPEC/` 에 재현 파일 추가 (LIVING_SPEC 은 `vaisc check` 기반이라 build 테스트는 별도 필요).
+       - 방법 2: `crates/vaisc/tests/integrity/` 에 integration_tests 와 유사 패턴으로 inkwell-build+run 테스트 추가.
+
   [완료 기준]:
-    - 각각 e2e 테스트 2+ (정상 + edge case)
-    - std 82/82 유지, e2e 2624+ (기존 2622 + 신규 2)
-    - baseline regression 0
-    - vaisdb cascade 측정 (+N 기대, 의무는 아님)
+    - `s.parse_f64()` / `s.char_at(i)` / `s.parse_i64()` 모두 `vaisc build` 통과 + 런타임 정상.
+    - e2e 테스트 3+ (parse_f64 ok/err, char_at). inkwell backend 경로.
+    - baseline: syntax=200 std=82/82 vaisdb=237/261 phase158=18/18 (현재 수준 유지 / 향상).
+    - CODEGEN_FEATURES.md L176-177 업데이트 (parse_* 해결 표시).
+    - vaisdb cascade 측정 (의무 아님).
+
+  blocker note: agent 위임 2회 truncation 경험. 다음 시도 시 **design step 을 Opus direct 로**,
+  **implementation step 만 impl-sonnet 으로 분리 위임** 권장.
 
 - [ ] B.3 — comptime {} 표현식 evaluation (Opus direct, research-heavy) [blockedBy: B.1]
   target: crates/vais-parser/src/expr/primary.rs (comptime block parse) + crates/vais-types/src/comptime/ (evaluator)
