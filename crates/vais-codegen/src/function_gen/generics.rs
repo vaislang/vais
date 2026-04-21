@@ -117,13 +117,6 @@ impl CodeGenerator {
         Ok(())
     }
 
-    /// Maximum monomorphization depth to prevent infinite recursive instantiation.
-    ///
-    /// This guards against patterns like `F foo<T>() -> Wrapper<Wrapper<T>>` which
-    /// could trigger unbounded instantiation chains. The type checker normally
-    /// prevents these, but this is a safety net at the codegen level.
-    const MAX_MONOMORPHIZATION_DEPTH: usize = 64;
-
     /// Generate a specialized function from a generic function template
     pub(crate) fn generate_specialized_function(
         &mut self,
@@ -228,23 +221,15 @@ impl CodeGenerator {
             return Ok(String::new());
         }
 
-        // Guard against infinite recursive monomorphization.
-        // Count how many specializations have been generated for this base function
-        // name. If it exceeds the limit, it's likely an unbounded instantiation chain.
-        let specialization_count = self
-            .generics
-            .generated_functions
-            .keys()
-            .filter(|k| k.starts_with(&inst.base_name))
-            .count();
-        if specialization_count >= Self::MAX_MONOMORPHIZATION_DEPTH {
-            return Err(crate::CodegenError::RecursionLimitExceeded(format!(
-                "Monomorphization depth limit ({}) exceeded for generic function '{}'. \
-                 This may indicate infinite recursive type instantiation.",
-                Self::MAX_MONOMORPHIZATION_DEPTH,
-                inst.base_name
-            )));
-        }
+        // Infinite recursion is already guarded by `enter_type_recursion` (called via
+        // `generate_specialized_function` wrapper) which tracks the actual active
+        // specialization chain depth against MAX_TYPE_RECURSION_DEPTH. A previous
+        // guard counted total distinct specializations per base_name (e.g., every
+        // distinct `Vec<T>` instantiation), which incorrectly failed on legitimate
+        // polymorphic usage once the codebase instantiated a generic like `Vec_push`
+        // with more than 64 different concrete types — normal for a standard
+        // container used across many call sites. Removed in favor of the depth-based
+        // guard, which correctly detects unbounded chains like `F foo<T>() -> Wrapper<Wrapper<T>>`.
 
         self.generics
             .generated_functions
