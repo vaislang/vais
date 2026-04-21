@@ -51,10 +51,10 @@ Commit `e1697c14` 기준 `./scripts/check-integrity.sh`:
 ## Current Tasks (2026-04-21)
 
 mode: auto
-iteration: 2
+iteration: 3
 max_iterations: 15
-strategy: user redirected D.2 to text-backend — sequential
-opus_direct: D.2 codegen-design inseparable — text-backend IR is string-template emission, Vec struct synthesis must be hand-written. Per CLAUDE.md rule 4 regression floor, every increment checked with check-integrity.sh.
+strategy: D.3 = TBD from D.1 findings, now definable — sequential
+opus_direct: D.3 definition requires judgment + scope decision from D.1 survey bucket analysis (a/b/c classification with 66.7% in bucket b, 16.7% in bucket a cascade root), cannot be delegated
 
 ### Phase D — Post-compiler follow-up
 
@@ -148,14 +148,19 @@ opus_direct: D.2 codegen-design inseparable — text-backend IR is string-templa
     Vec-관련이면 D.2 가 첫 우선순위 후보였음을 실측으로 확인; 아니면 D.2 는 그대로 두고
     D.3 을 다른 타깃으로).
 
-- [ ] D.3 — TBD from D.1 findings (모델 TBD) [blockedBy: D.1, D.2]
-  **이 작업은 D.1 측정 결과로 정의됨**. D.1 완료 후 이 블록을 채운다.
-  후보 (D.1 결과에 따라 선택):
-    (α) vaisdb 에 남은 (b) "vaisdb 자체 버그" 가 많으면 → vaisdb 코드 cleanup drive 로
-        이 ROADMAP 스코프 밖으로 이관. D.3 는 "이 드라이브 완료 선언" 으로 축소.
-    (β) vaisdb 에 남은 (a) "compiler gap" 중 공통 패턴이 있으면 → 그 패턴을 묶어
-        D.3 로 만듬 (예: HashMap<K, V> 메서드 dispatch, Slice write-back, 등).
-    (γ) 남은 것이 전부 (c) SCOPED 의존이면 → D.3 는 "SCOPED 범위 외 문서 업데이트" 만.
+- [x] D.3 — 드라이브 scope 종료 per option (α) (Opus direct) ✅ 2026-04-21
+      changes:
+        docs/vaisdb-cascade-survey.md (§3.1/§4/§5/§6 re-classification:
+          originally-counted 1 compiler gap is actually bucket b →
+          new totals: (a)=0, (b)=20 files, (c)=4 overlap; out-of-drive
+          next-drive candidates listed)
+      result:
+        - Confirmed: D.1's (a) candidate (vector/search.vais C003) is
+          `S TableInfo` missing `columns` field → bucket (b).
+        - Net compiler-gap leverage on vaisdb for this drive: 0.
+        - D.2 Vec literal fix stands — separate win, not vaisdb-triggered.
+        - Drive closes cleanly: no compiler regressions, vaisdb=237/261 throughout.
+      blockedBy: D.1, D.2 (both completed)
 
 ### Phase E — 드라이브 완료
 
@@ -168,7 +173,7 @@ opus_direct: D.2 codegen-design inseparable — text-backend IR is string-templa
       etc.)
     - baseline 유지
 
-progress: 2/4 (50%)
+progress: 3/4 (75%)
 
 ---
 

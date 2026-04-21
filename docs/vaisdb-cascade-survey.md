@@ -58,17 +58,22 @@ Each file classified into:
   doesn't support yet — trait objects with generic bounds, total-function
   panic-analysis, etc.)
 
-### 3.1 (a) Compiler gap — 1 file (root cause of 3 cascade failures)
+### 3.1 (a) Compiler gap — **0 files** (revised 2026-04-21 D.3)
 
-| # | File | Error |
-|---|------|-------|
-| 1 | `vector/search.vais` | `error[C003] Type error ... Cannot index into type 'i64'` at line 77:40. The `table_meta.columns[coli]` expression — `table_meta` comes from `get_table_by_id` whose return type the type-checker accepts but whose codegen-time resolution falls back to `i64` scalar. Three other files (`planner/mod`, `vector/concurrency`, `vector/filter`) import `search.vais` and inherit this codegen error. |
+Originally D.1 classified `vector/search.vais:77` (`table_meta.columns[coli]` →
+C003 "Cannot index into type 'i64'") as a compiler gap. **D.3 re-check shows
+this is actually bucket (b)**: `S TableInfo` (defined in
+`sql/catalog/schema.vais:52`) has **no `columns` field** — only
+`column_count: u16`. The vaisdb code accesses a non-existent field; TC
+falls back to `i64` for the unknown field; codegen rejects indexing i64.
 
-**Cascade impact**: fixing `vector/search.vais`'s root codegen bug would
-auto-unblock `planner/mod`, `vector/concurrency`, `vector/filter` → +4 files
-(237 → 241).
+This is identical-shape to other bucket (b) bugs (accessing a method or
+field that doesn't exist on the receiving type). The cascade (planner/mod,
+vector/concurrency, vector/filter) is a vaisdb-side cascade, not a
+compiler cascade.
 
-**(a) total: 1 root gap, 4 affected files (16.7%)**
+**(a) total (revised): 0 compiler gaps, 0 files. Previously counted 4 files
+now belong to (b).**
 
 ### 3.2 (b) vaisdb code bugs — 16 files
 
@@ -102,7 +107,10 @@ the vaisdb code must be corrected.
 - Constructor arg-count (`.new()`): 6+ sites
 - Misc undefined methods: ~15 sites
 
-**(b) total: 16 files (66.7%). No compiler fix can close these.**
+**(b) total (revised 2026-04-21 D.3): 20 files (83.3%).**
+Originally 16. The 4 previously-cascaded files from §3.1 (`vector/search`,
+`planner/mod`, `vector/concurrency`, `vector/filter`) join (b) because the
+root cause is a missing-field vaisdb bug. No compiler fix closes them.
 
 ### 3.3 (c) SCOPED Phase 4.x dependency — 4 files
 
@@ -125,18 +133,9 @@ compiler fix.
 
 ### (a) Compiler gap — 3 representatives
 
-**a.1** `vector/search.vais:77`
-```vais
-LW coli < table_meta.columns.len() {
-    col := &table_meta.columns[coli]   # <-- C003: Cannot index into type 'i64'
-```
-`get_table_by_id` → `TableInfo` → codegen loses the `columns: Vec<Col>` field
-type, treats `table_meta.columns` as `i64`. Likely a **method-return-type
-inheritance at codegen time** problem in Named type resolution.
-
-**a.2** `planner/mod.vais`, **a.3** `vector/concurrency.vais`, **a.4** `vector/filter.vais`
-All three **cascade from a.1**: they import vector/search.vais and
-inherit its codegen error. Fix a.1 → all four unblock.
+(Section obsolete — see §3.1 revision 2026-04-21 D.3. No compiler-gap
+representatives exist; what was a.1 is actually `S TableInfo` missing a
+`columns` field — a vaisdb code bug, not a codegen type-resolution bug.)
 
 ### (b) vaisdb code bugs — 3 representatives
 
@@ -194,36 +193,47 @@ ErrorCode.from_u32(ERR_COW_INVALID_LAYER),   # expected str, found ErrorCode
 ```
 Actually a vaisdb code bug — should wrap in `.message()` or similar.
 
-## 5. Classification summary
+## 5. Classification summary (revised 2026-04-21 D.3)
 
 | Class | Count | % | Net file delta if fixed |
 |-------|-------|---|-------------------------|
-| (a) Compiler gap | 1 root (4 files cascade) | 16.7% | +4 |
-| (b) vaisdb code bugs | 16 files | 66.7% | +16 (requires vaisdb edits) |
-| (c) SCOPED / purity | 4 files (overlap) | 16.7% | +4 (requires `partial` annotations) |
+| (a) Compiler gap | **0 files** | **0%** | 0 (original candidate re-classified) |
+| (b) vaisdb code bugs | **20 files** | **83.3%** | +20 (requires vaisdb edits) |
+| (c) SCOPED / purity | 4 files (overlap with b) | 16.7% | +4 (requires `partial` annotations or Phase 4.x work) |
 
-**Unique file count: 24 (no double-counting between b/c — E034 files categorised under (c)).**
+**Unique file count: 24.**
 
-## 6. Decision guidance for D.3
+The re-check for the originally-classified compiler gap
+(`vector/search.vais:77:40`) showed the `columns` field simply does not
+exist on `S TableInfo`. That puts the file squarely in bucket (b) and
+carries the three cascade files with it. The survey no longer proposes
+any compiler-fix leverage on vaisdb from within this drive.
 
-**Observation**: Vec-literal lowering (D.2) is **not** the largest vaisdb
-blocker. Only 2 of 24 failures are plausibly Vec-literal-related
-(`sql/parser/mod`, `sql/parser/parser_expr` with bare `Vec`). D.2 remains
-justified independently because:
+During D.2 a separate compiler gap was observed — struct-in-array-literal
+(`[Point{...}, Point{...}]` emits a pointer into a struct slot) — but
+**no vaisdb file uses that pattern** (zero leverage for this drive).
+The gap is real and will surface when stdlib or user code starts using it;
+filed for a future drive.
 
-1. CLAUDE.md rule 5: `v: Vec<T> := [...]` literally fails with
-   `Cannot allocate unsized type` (confirmed via `/tmp/vec_test.vais`
-   during this survey).
-2. D.2 unblocks `Vec<Struct>[i].field =` write-through (B.4 finished but
-   literal lowering gap remained, per ROADMAP §드라이브 목적).
+## 6. Decision guidance for D.3 — finalized
 
-**D.3 recommendation (α)**: The dominant failure bucket is (b) vaisdb code
-bugs (66.7%). Fixing compiler further yields diminishing returns here. D.3
-should therefore be:
-- **Narrow scope**: the **one** compiler gap in (a) — `vector/search.vais`
-  codegen-time Named type resolution — which cascades to 4 files. This is
-  a high-leverage compiler fix.
-- **OR**: declare D.3 as "out-of-drive-scope: vaisdb cleanup" and close
-  the drive after D.2.
+**Option (α) selected**: D.3 becomes a scope-documentation task rather than
+a compiler fix. Rationale:
 
-Baseline preservation floor: **vaisdb ≥ 237/261** throughout remaining tasks.
+1. The largest bucket (b = 83.3%) is out-of-compiler-scope.
+2. The original (a) candidate turned out to be (b) on closer inspection.
+3. No other compiler-gap cluster surfaced in D.1's measurement.
+4. D.2's Vec-literal fix is shipped and preserved baseline.
+5. Drive-close with clear hand-off to next drive is more honest than
+   spending iterations chasing diminishing returns.
+
+**Out-of-drive items** (for E.1 to surface as next-drive candidates):
+- vaisdb cleanup pass (20 files, bucket b) — separate repository, separate drive.
+- Phase 4.x panic/purity analysis (4 files, bucket c).
+- Struct-in-array-literal text-backend fix (`generate_array_expr` for Named
+  element types) — complements D.2 when vaisdb or stdlib starts using
+  `Vec<Struct> := [Struct{...}, ...]`.
+- `Vec::new()` definition in std/vec (currently only `with_capacity`).
+
+Baseline preservation floor held throughout D.1→D.3: **vaisdb = 237/261**,
+**syntax = 200**, **stages = 14**, **std = 82/82**, **phase158 = 18/18**.
