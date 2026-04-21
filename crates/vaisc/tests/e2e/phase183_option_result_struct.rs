@@ -243,3 +243,15 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 42);
 }
+
+// ==================== B.1 note: Built-in Option<Struct> / Result<Struct, E> ====================
+//
+// B.1 (2026-04-21) fixed built-in Option/Result lowering for struct payloads
+// in the **inkwell backend** (the default `vaisc build` path). The text-IR
+// backend used by these e2e helpers has an independent implementation (see
+// `vais-codegen/src/type_inference.rs:460-495` — monomorphization via
+// `Option$T`). Fixing the text-IR backend is out of scope for B.1.
+//
+// Regression coverage for the inkwell backend lives in
+// `docs/language/LIVING_SPEC/02_patterns/phase2_10_*_rewrap.vais` — those
+// reproducers are exercised directly via `vaisc build` (inkwell default).

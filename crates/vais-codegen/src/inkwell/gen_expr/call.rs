@@ -1,6 +1,6 @@
 //! Function call generation.
 
-use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum};
+use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, IntValue};
 use inkwell::AddressSpace;
 
 use vais_ast::{Expr, Spanned};
@@ -179,105 +179,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             "load_byte" => return self.generate_load_byte(args),
             "store_f64" => return self.generate_store_f64(args),
             "load_f64" => return self.generate_load_f64(args),
-            // Option constructors: Some(val) -> { i8 tag=1, i64 data=val }
-            "Some" => {
-                let enum_type = self.context.struct_type(
-                    &[
-                        self.context.i8_type().into(),
-                        self.context.i64_type().into(),
-                    ],
-                    false,
-                );
-                let data_val = if args.is_empty() {
-                    self.context.i64_type().const_int(0, false)
-                } else {
-                    let v = self.generate_expr(&args[0].node)?;
-                    self.coerce_to_i64(v)?
-                };
-                let mut val = enum_type.get_undef();
-                val = self
-                    .builder
-                    .build_insert_value(
-                        val,
-                        self.context.i8_type().const_int(1, false),
-                        0,
-                        "some_tag",
-                    )
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                    .into_struct_value();
-                val = self
-                    .builder
-                    .build_insert_value(val, data_val, 1, "some_data")
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                    .into_struct_value();
-                return Ok(val.into());
-            }
-            // Result constructors: Ok(val) -> { i8 tag=0, i64 data=val }
-            "Ok" => {
-                let enum_type = self.context.struct_type(
-                    &[
-                        self.context.i8_type().into(),
-                        self.context.i64_type().into(),
-                    ],
-                    false,
-                );
-                let data_val = if args.is_empty() {
-                    self.context.i64_type().const_int(0, false)
-                } else {
-                    let v = self.generate_expr(&args[0].node)?;
-                    self.coerce_to_i64(v)?
-                };
-                let mut val = enum_type.get_undef();
-                val = self
-                    .builder
-                    .build_insert_value(
-                        val,
-                        self.context.i8_type().const_int(0, false),
-                        0,
-                        "ok_tag",
-                    )
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                    .into_struct_value();
-                val = self
-                    .builder
-                    .build_insert_value(val, data_val, 1, "ok_data")
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                    .into_struct_value();
-                return Ok(val.into());
-            }
-            // Err(val) -> { i8 tag=1, i64 data=val }
-            "Err" => {
-                let enum_type = self.context.struct_type(
-                    &[
-                        self.context.i8_type().into(),
-                        self.context.i64_type().into(),
-                    ],
-                    false,
-                );
-                let data_val = if args.is_empty() {
-                    self.context.i64_type().const_int(0, false)
-                } else {
-                    let v = self.generate_expr(&args[0].node)?;
-                    self.coerce_to_i64(v)?
-                };
-                let mut val = enum_type.get_undef();
-                val = self
-                    .builder
-                    .build_insert_value(
-                        val,
-                        self.context.i8_type().const_int(1, false),
-                        0,
-                        "err_tag",
-                    )
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                    .into_struct_value();
-                val = self
-                    .builder
-                    .build_insert_value(val, data_val, 1, "err_data")
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                    .into_struct_value();
-                return Ok(val.into());
-            }
+            // Option/Result constructors. ABI: { i8 tag, i64 payload }.
+            // Tag: Some=1, None=0, Ok=0, Err=1.
+            // Payload: struct args are packed (≤8B via stack-alloca bitcast,
+            // >8B via malloc+store+ptrtoint). Primitives go through
+            // coerce_to_i64 (int widen, float bitcast, ptr ptrtoint).
+            // B.1 fix: previously ignored struct args (coerce_to_i64 returned
+            // const 0), causing silent data-loss and C004 at extract time once
+            // the declared Option<T>/Result<T,E> type went through types.rs.
+            "Some" => return self.build_option_result_ctor(1, args, "some"),
+            "Ok" => return self.build_option_result_ctor(0, args, "ok"),
+            "Err" => return self.build_option_result_ctor(1, args, "err"),
             "puts_ptr" => {
                 // puts_ptr(i64) -> i32: convert i64 to ptr then call puts
                 if args.is_empty() {
@@ -851,5 +763,130 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .try_as_basic_value()
             .left()
             .unwrap_or_else(|| i64_type.const_int(0, false).into()))
+    }
+
+    /// Build an `Option<T>` / `Result<T,E>` struct value `{ i8 tag, i64 payload }`.
+    /// Tag: caller passes numeric tag. Some=1, None=0, Ok=0, Err=1.
+    /// Payload: struct args packed — ≤8B via stack-alloca bitcast, >8B via
+    /// malloc+store+ptrtoint. Primitives go through `coerce_to_i64`.
+    /// Empty args slot (None() style, though nullary None normally an Ident):
+    /// payload=0. This helper is the single-source constructor for Some/Ok/Err;
+    /// match-arm extraction decodes the payload symmetrically in gen_match.rs.
+    pub(crate) fn build_option_result_ctor(
+        &mut self,
+        tag: u64,
+        args: &[Spanned<Expr>],
+        prefix: &str,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        let i64_ty = self.context.i64_type();
+        let i8_ty = self.context.i8_type();
+        let enum_type = self
+            .context
+            .struct_type(&[i8_ty.into(), i64_ty.into()], false);
+
+        let data_val: IntValue<'ctx> = if args.is_empty() {
+            i64_ty.const_int(0, false)
+        } else {
+            let v = self.generate_expr(&args[0].node)?;
+            self.pack_enum_payload_i64(v)?
+        };
+
+        let tag_name = format!("{}_tag", prefix);
+        let data_name = format!("{}_data", prefix);
+
+        let mut val = enum_type.get_undef();
+        val = self
+            .builder
+            .build_insert_value(val, i8_ty.const_int(tag, false), 0, &tag_name)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+        val = self
+            .builder
+            .build_insert_value(val, data_val, 1, &data_name)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+        Ok(val.into())
+    }
+
+    /// Pack an arbitrary BasicValueEnum into an i64 suitable for the enum
+    /// payload slot. Mirrors the user-enum packing path (lines handling
+    /// `enum_variant_multi_payload_types` / small-struct bitcast):
+    ///   - IntValue → widened/truncated to i64
+    ///   - FloatValue → bitcast to i64
+    ///   - PointerValue → ptrtoint to i64
+    ///   - StructValue ≤8B → stack alloca + bitcast-load as i64
+    ///   - StructValue >8B → malloc + store + ptrtoint to i64
+    /// The match-arm decoder inverts this based on the declared payload type.
+    pub(crate) fn pack_enum_payload_i64(
+        &mut self,
+        v: BasicValueEnum<'ctx>,
+    ) -> CodegenResult<IntValue<'ctx>> {
+        use inkwell::AddressSpace;
+        let i64_ty = self.context.i64_type();
+        if v.is_struct_value() {
+            let struct_val = v.into_struct_value();
+            let struct_ty = struct_val.get_type();
+            let target_data = inkwell::targets::TargetData::create(
+                &self.module.get_triple().as_str().to_string_lossy(),
+            );
+            let size_bytes = target_data.get_store_size(&struct_ty);
+            if size_bytes > 8 {
+                // Heap-allocate: malloc(size) → store struct → ptrtoint to i64.
+                let i8_ptr_ty = self.context.i8_type().ptr_type(AddressSpace::default());
+                let malloc_fn = self.module.get_function("malloc").unwrap_or_else(|| {
+                    let malloc_ty = i8_ptr_ty.fn_type(&[i64_ty.into()], false);
+                    self.module.add_function("malloc", malloc_ty, None)
+                });
+                let size_val = i64_ty.const_int(size_bytes, false);
+                let heap_ptr = self
+                    .builder
+                    .build_call(malloc_fn, &[size_val.into()], "opt_heap")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap()
+                    .into_pointer_value();
+                let typed_ptr = self
+                    .builder
+                    .build_bitcast(
+                        heap_ptr,
+                        struct_ty.ptr_type(AddressSpace::default()),
+                        "opt_heap_typed",
+                    )
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_pointer_value();
+                self.builder
+                    .build_store(typed_ptr, struct_val)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.builder
+                    .build_ptr_to_int(heap_ptr, i64_ty, "opt_data_as_i64")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))
+            } else {
+                // Small struct (≤8B): bitcast via stack alloca to i64.
+                let tmp_alloca = self
+                    .builder
+                    .build_alloca(struct_ty, "opt_small_tmp")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.builder
+                    .build_store(tmp_alloca, struct_val)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                let i64_ptr = self
+                    .builder
+                    .build_bitcast(
+                        tmp_alloca,
+                        i64_ty.ptr_type(AddressSpace::default()),
+                        "opt_small_as_i64p",
+                    )
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_pointer_value();
+                Ok(self
+                    .builder
+                    .build_load(i64_ty, i64_ptr, "opt_small_as_i64")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_int_value())
+            }
+        } else {
+            self.coerce_to_i64(v)
+        }
     }
 }

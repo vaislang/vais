@@ -92,6 +92,20 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 "f64" => ResolvedType::F64,
                 "bool" => ResolvedType::Bool,
                 "str" => ResolvedType::Str,
+                // B.1: `Option<T>` and `Result<T, E>` written as named-generic
+                // AST must resolve to the dedicated ResolvedType variants so
+                // `map_type` lowers them to the { i8 tag, i64 payload } ABI
+                // (types.rs Optional/Result arms). Otherwise they slip through
+                // the generic Named branch and become `%Option = type opaque`,
+                // causing `ret %Option zeroinitializer` / C004 Aggregate errors
+                // at match-arm extract time.
+                "Option" if generics.len() == 1 => ResolvedType::Optional(Box::new(
+                    self.ast_type_to_resolved(&generics[0].node),
+                )),
+                "Result" if generics.len() == 2 => ResolvedType::Result(
+                    Box::new(self.ast_type_to_resolved(&generics[0].node)),
+                    Box::new(self.ast_type_to_resolved(&generics[1].node)),
+                ),
                 _ => {
                     // Single uppercase letter is likely a generic type parameter
                     if name.len() == 1 && name.chars().next().is_some_and(|c| c.is_uppercase()) {

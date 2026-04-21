@@ -283,21 +283,32 @@ impl<'ctx> TypeMapper<'ctx> {
                 self.context.struct_type(&elem_types, false).into()
             }
             ResolvedType::Optional(inner) => {
-                // Option<T> is { tag: i8, value: T }
-                let inner_llvm = self.map_type(inner);
+                // Option<T> ABI: { tag: i8, payload: i64 }.
+                // The payload slot always holds i64 regardless of T — struct payloads
+                // are packed via bitcast (≤8B) or heap pointer (>8B) at construction
+                // time, and unpacked symmetrically at match-arm extraction.
+                // This matches gen_types.rs {try/unwrap} convention and the user-enum
+                // ABI (call.rs user-enum branch, gen_match.rs variant decode).
+                // B.1: previously lowered as { i8, %T } which conflicted with the
+                // i64-payload constructor path and caused C004 "Aggregate extract
+                // index out of range" at return/extract time.
+                let _inner_llvm = self.map_type(inner);
                 let tag_type = self.context.i8_type();
+                let i64_type = self.context.i64_type();
                 self.context
-                    .struct_type(&[tag_type.into(), inner_llvm], false)
+                    .struct_type(&[tag_type.into(), i64_type.into()], false)
                     .into()
             }
             ResolvedType::Result(ok, err) => {
-                // Result<T, E> is { tag: i8, value: max(T, E) }
-                let ok_llvm = self.map_type(ok);
+                // Result<T, E> ABI: { tag: i8, payload: i64 }. Same reasoning as
+                // Optional above — single i64 slot for both Ok(T) and Err(E), with
+                // payload packed/unpacked via bitcast-or-heap convention.
+                let _ok_llvm = self.map_type(ok);
                 let _err_llvm = self.map_type(err);
                 let tag_type = self.context.i8_type();
-                // Use ok type as payload (largest variant strategy handled by enum layout)
+                let i64_type = self.context.i64_type();
                 self.context
-                    .struct_type(&[tag_type.into(), ok_llvm], false)
+                    .struct_type(&[tag_type.into(), i64_type.into()], false)
                     .into()
             }
             ResolvedType::Map(key, value) => {

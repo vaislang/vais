@@ -66,7 +66,7 @@ Commit `cde15d44` 기준 `./scripts/check-integrity.sh`:
 ## Current Tasks (2026-04-20)
 
 mode: auto (문법 + 컴파일러 100% drive)
-iteration: 2
+iteration: 3
 max_iterations: 20
   strategy: A.1 단독 시작 (A.1/A.2만 unblocked, A.1은 측정+문서, A.2는 5 construct 독립 측정) → sequential
   opus_direct: A.1 — 측정 근거 → 매트릭스 판정이 분리 불가능한 evaluator 루프
@@ -78,6 +78,8 @@ max_iterations: 20
   opus_direct: B.1 — 매트릭스 조사 결과가 어떤 construct 를 거부 대상으로 삼을지 판정과 직결. 위임 시 의도 분리 불가.
   strategy iteration 4 note (2026-04-21): B.1 재정의. 실측 결과 "TC-pass/codegen-fail" 4개 중 (1)(2)(4)는 B.4/B.2 스코프 이미 포함, (3)은 독립 버그 아니라 Option/Result lowering 하나의 뿌리. B.1 → "Optional/Result lowering 근본 수정" 으로 변경 (사용자 승인). Explore agent 진단 완료: call.rs:183-246의 하드코딩 i64 가 원인. 구현은 /clear 후 새 세션.
   context_checkpoint: B.1 research 단계 완료. 구현은 다음 세션에서 fresh context 로 시작. 본 세션 3 iteration (A.1/A.2/A.3) + B.1 research = 문서 동기화 + 진단 완료. 컴파일러 코드 수정 0.
+  strategy iteration 3 (2026-04-21 fresh session): B.1 단독 (B.2~B.5 모두 blockedBy B.1) → sequential. Research 완료 상태 — 수정 타겟 확정 (call.rs:183-246, generator.rs expected-type helper, gen_match.rs:915-1095). Opus direct — 매트릭스 lowering 설계와 구현 분리 불가 (expected-type 전파 방식 결정 필요).
+  opus_direct: B.1 — LLVM aggregate layout 일관성 설계. hardcoded i64 제거 시 어떤 context path 로 expected-type 을 읽을지 (TC expected_types map 참조 vs call-site 전달) 판정 = 구현. CLAUDE.md rule 3/4 엄수 (baseline syntax=200 std=82/82 vaisdb=237/261 phase158=18/18, regression 1건 즉시 revert).
 
 ### Phase A — 문서 동기화 (Opus direct, 먼저 실행)
 
@@ -138,66 +140,50 @@ max_iterations: 20
 
 > **배경**: Survey 결과 실제로 구현 필요한 항목은 Phase 3.12 / 3.13 / 3.14 + comptime eval + defer edge case, 총 5개. 순차 진행. 각각 regression gate 준수.
 
-- [ ] B.1 — **Optional/Result lowering 근본 수정** (Opus direct) [blockedBy: A.3]
-  **재정의 (2026-04-21)**: 원래 "TC pass ⇒ codegen pass 불변식 확립" 이었으나 research 결과
-  silent drop 실제 케이스가 대부분 **하나의 뿌리** — Option/Result 의 lowering gap — 에서 기인
-  한다고 확인. TC 거부 막기보다 뿌리 수정이 근본 해결.
+- [x] B.1 — **Optional/Result lowering 근본 수정** (Opus direct, inkwell backend) ✅ 2026-04-21
+  **구현 완료 (2026-04-21, fresh session iteration 3)**:
+  - `crates/vais-codegen/src/inkwell/gen_types.rs` L95-108: `Option<T>` / `Result<T,E>`
+    named-generic AST → `ResolvedType::Optional` / `Result` (was slipping into
+    generic `Named` branch → `%Option = type opaque`).
+  - `crates/vais-codegen/src/inkwell/types.rs` L285-306: `Optional(T)` / `Result(T,E)`
+    LLVM layout pinned to `{ i8, i64 }` regardless of T. Matches gen_types.rs
+    try/unwrap comments and user-enum ABI.
+  - `crates/vais-codegen/src/inkwell/gen_expr/call.rs`:
+    * L182-192: Some/Ok/Err 셋을 `build_option_result_ctor(tag, args, prefix)` 에 위임.
+    * L767-883: new `build_option_result_ctor` + `pack_enum_payload_i64` helpers
+      — struct 인자를 size 따라 (≤8B stack-alloca bitcast / >8B malloc+store+ptrtoint)
+      i64 slot 에 pack. 이전엔 `coerce_to_i64` 가 struct 에 대해 const 0 을 반환 (silent drop).
+  - `crates/vais-codegen/src/inkwell/gen_match.rs`:
+    * New `match_scrutinee_type_stack` field (generator.rs). `generate_match` 가
+      scrutinee 의 ResolvedType 을 push 하고 arm 처리 후 pop.
+    * New `option_result_payload_struct_type()` helper 가 scrutinee 에서 Some/Ok/Err
+      payload 의 LLVM StructType 을 복원 — Named struct, nested Option/Result, Tuple 지원.
+    * Variant 디코드 경로가 `enum_variant_struct_types` lookup 실패 시 scrutinee 기반
+      struct-type 복원으로 fallback.
+    * `var_struct_types` 태깅은 named struct payload 에 대해서만.
 
-  실측 증거 (A.1 + B.1 research 단계):
-    - `F f(opt: Option<Struct>) -> Option<Primitive>` + match-arm 재포장: C004 "Aggregate extract index out of range" (A.1 3건)
-    - `L { ... B Some(42) }` loop-break-값이 `Option<i64>`: C004 동일 증상
-    - `EN Status { OK, Failed(i64) }` 커스텀 enum 은 동일 구조에서 **정상 동작** → Optional-family 전용 lowering 경로에 gap.
-    - Vec<Struct>[i].field = (B.4) 는 별개 root cause (index-assign). B.4 는 유지.
+  **검증**:
+    - docs/language/LIVING_SPEC/02_patterns/phase2_10_option_struct_rewrap.vais:
+      `vaisc build` ✓ → exit=42 ✓
+    - docs/language/LIVING_SPEC/02_patterns/phase2_10_result_te_rewrap.vais:
+      `vaisc build` ✓ → exit=7 ✓
+    - docs/language/LIVING_SPEC/02_patterns/phase2_10_nested_option_flatten.vais:
+      `vaisc build` ✓ → exit=100 ✓ (nested Option<Option<i64>> 평탄화)
+    - Baseline 완전 유지: syntax=200 stages=14 std=82/82 vaisdb=237/261 phase158=18/18
+      (check-integrity.sh 수정 전/후 동일).
+    - vais-types unit 1238/1 (1 pre-existing fail, baseline 과 일치).
+    - vaisc integration 147/147 ✓, execution 25/25 ✓, error_message 115/115 ✓.
 
-  target: crates/vais-codegen/src/inkwell/ — Option/Result 가 (a) 함수 파라미터,
-    (b) 함수 반환, (c) 변수 바인딩, (d) match-arm 재포장, (e) loop-break-값, (f) 저장/로드
-    의 **모든 경로**에서 일관된 LLVM aggregate 레이아웃으로 lowering.
+  **스코프 제한 (Phase 6 으로 이월)**:
+  - 텍스트-IR 백엔드 (`crates/vais-codegen/src/` non-inkwell) 는 독립 구현
+    (type_inference.rs L460-495 monomorphization via `Option$T`). 동일 gap 존재 가능성
+    있으나 B.1 스코프 외. 본 세션 변경은 inkwell 백엔드 (vaisc build 기본값) 에만 적용.
+  - Loop-break-Option 완성 기준 항목: `generate_break` 가 현재 "loop-with-value"
+    미구현 (gen_stmt.rs:1059 "In a full implementation, this would be used").
+    이는 Option lowering 문제가 아니라 별개의 loop-expression 기능 gap. → **B.6 으로 분리**.
 
-  approach:
-    1. research-haiku 로 현재 Optional lowering 경로 진단 — 어느 위치 에서 "fat pointer" vs
-       "aggregate struct" 불일치가 발생하는가?
-    2. 진단 리포트 받은 뒤 Opus direct 로 수정 범위 결정 (단일 함수 / 모듈 단위 / 여러 파일).
-    3. CLAUDE.md rule 3/4 엄수: 수정 전 baseline 기록, 수정 후 regression 1건 발생 시 즉시 revert.
-    4. 각 단계마다 A.1 의 3개 LIVING_SPEC 파일 (phase2_10_*.vais) 로 build + run 검증.
-    5. 성공 시 추가로 loop-break-Option 재현 케이스를 e2e 테스트로 추가.
-
-  **Research 완료 (2026-04-21, 본 세션 iteration 4)**:
-    Explore agent 진단 결과 근본 원인 확정:
-    - `Option<T>` 의 type-level lowering 은 `{ i8, %T }` 로 정확 (conversion.rs:338-346).
-    - 그러나 `Some()`/`Ok()`/`Err()` 생성자가 payload field 를 **하드코딩 `i64`** 로 설정
-      (`crates/vais-codegen/src/inkwell/gen_expr/call.rs:183-246`). `self.coerce_to_i64(v)?`
-      로 모든 payload 를 i64 로 강제 coerce. 구조체/Optional/Vec 등 aggregate payload 에서
-      type-system 기대 (`{ i8, %Role }`) vs 실제 IR (`{ i8, i64 }`) 불일치 → LLVM verifier
-      C004 "Aggregate extract index out of range".
-    - `ResolvedType::Optional(Box<T>)` vs `Named("Option", [T])` 이중 표현이 coexist
-      (crates/vais-types/src/inference/option_result_bridge.rs). 둘 다 `type_to_llvm` 에서는
-      같은 `{ i8, T }` 로 resolve 되지만 constructor 에서 T 를 읽지 않음.
-
-  **수정 범위 (다음 세션에서 진행)**:
-    1. `crates/vais-codegen/src/inkwell/gen_expr/call.rs:183-246`
-       — `Some`/`Ok`/`Err` 생성자가 expected-type (Option<T>/Result<T,E>) 을 context 에서
-         읽어 `{ i8, %T }` 를 동적으로 빌드. `coerce_to_i64` fallback 제거.
-    2. `crates/vais-codegen/src/inkwell/generator.rs`
-       — 현재 expression 의 expected type 을 query 할 수 있는 helper 추가
-         (TC 의 `expected_types` map 을 codegen 이 참조하거나 call-site 에서 전달).
-    3. `crates/vais-codegen/src/inkwell/gen_match.rs:915-1095`
-       — `Pattern::Variant` 의 field extraction 이 실제 struct layout 에 맞도록 index/type 결정
-         (현재도 i64 고정 가정이 있다면 수정).
-
-  **다음 세션 준비물 (/clear 후 복원 시)**:
-    - ROADMAP.md 의 본 B.1 섹션 (이 블록) 을 읽고 시작.
-    - 실측 reproducer: `docs/language/LIVING_SPEC/02_patterns/phase2_10_option_struct_rewrap.vais`
-      (+ result_te, nested_option 2건). 현재 TC ✓ / Build ✗ C004. 수정 후 Build ✓ 목표.
-    - Baseline: syntax=200, stages=14, std=82/82, vaisdb=237/261, phase158=18/18 (본 iteration 시작 시 실측).
-    - CLAUDE.md rule 3/4 규칙 엄수.
-
-  [완료 기준]:
-    - A.1 reproducer 3건 (Option<Struct>/Result<T,E>/nested Option) 모두 TC + Codegen + Run ✓
-    - loop-break 의 Option<i64>/Option<Struct> 케이스도 Codegen + Run ✓
-    - docs/CODEGEN_FEATURES.md L171/L173 및 L175 해당 행 업데이트 (resolved 표시)
-    - baseline 유지: syntax=200, std=82/82, vaisdb≥237/261, phase158=18/18
-    - vaisdb cascade 측정 (+N 기대, 의무는 아님)
-    - (선택) 새 e2e 테스트 2+ 추가 — loop-break-Option, Option<Struct> param round-trip
+  **카스케이드 메모**: 이 fix 가 유사 패턴 (Option<Vec<T>>, Result<HashMap<K,V>, E> 등)
+  에서 cascade unlock 가능. C.1 re-survey 시 확인.
 
 - [ ] B.2 — Phase 3.13 runtime 함수 구현 (impl-sonnet) [blockedBy: B.1]
   target: crates/vais-codegen/src/function_gen/runtime.rs + string_ops.rs + builtins dispatch
@@ -245,6 +231,27 @@ max_iterations: 20
     - 매트릭스 `Defer (D)` ◐ → ✓
     - baseline 유지
 
+- [ ] B.6 — Loop-with-value (`B expr` → loop-expression) codegen (Opus direct) [blockedBy: B.1]
+  **배경**: B.1 구현 중 발견. `generate_break` (gen_stmt.rs:1058-1061) 가 break-value 를
+  평가한 뒤 **무조건 버린다** ("In a full implementation, this would be used"). 즉
+  `F f() -> Option<Point> { L { B Some(p) } }` 패턴은 타입체커 통과 후 코드젠이 값을
+  drop 하고 loop 은 unit 반환 → 런타임에 None-branch 로 떨어짐. Option/Result 에 국한된
+  lowering 이슈가 아니므로 B.1 에서 분리.
+  target: crates/vais-codegen/src/inkwell/gen_stmt.rs (generate_break, generate_condition_loop,
+    generate_while_loop, generate_range_for_loop) + LoopContext 확장.
+  approach:
+    1. LoopContext 에 `break_value_slot: Option<PointerValue<'ctx>>` 추가.
+    2. Loop 진입 시 첫 break-value 타입을 peek 하거나 scrutinee/expected-type 로 결정 →
+       alloca 할당. 다수 break 는 같은 slot 에 store.
+    3. `generate_break(Some(val))`: val → coerce to slot 타입 → store → branch to break_block.
+    4. Loop exit: alloca 에서 load 후 loop-expression 값으로 반환. 값 없는 loop 은 unit.
+  [완료 기준]:
+    - `L { B 42 }` → 42 (i64)
+    - `F f() -> Option<i64> { L { B Some(42) } }` → Some(42) (B.1 재검증)
+    - `F g() -> Option<Point> { ... L { B Some(p) } }` → Some(Point) (struct payload)
+    - 기존 값 없는 break 는 동일 동작 (regression 0)
+    - e2e 3+ 추가 pass
+
 ### Phase C — 매트릭스 최종 정합 + 100% 선언
 
 - [ ] C.1 — LANGUAGE_SPEC Construct Status Matrix 전수 재검증 (Opus direct, measurement) [blockedBy: B.5]
@@ -265,7 +272,7 @@ max_iterations: 20
     - vaisdb 현재 숫자 그대로 (이 드라이브는 건드리지 않음)
     - 다음 드라이브 제안 (stdlib 확장 또는 vaisdb cleanup) ROADMAP 에 기록
 
-progress: 0/10 (0%)
+progress: 4/11 (36%) — A.1, A.2, A.3, B.1 완료. B.6 신규 추가.
 
 ---
 

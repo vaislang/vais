@@ -168,9 +168,9 @@ Current known cases (as of 2026-04-19):
 
 | Trigger | Symptom | Target phase |
 |---------|---------|--------------|
-| `F f(opt: Option<Struct>) -> Option<Primitive>` with naked Option param | LLVM IR: `invalid type for function argument %Option$Role %opt` | Phase 3.14 / 3.15 — struct-named Optional param lowering |
+| `F f(opt: Option<Struct>) -> Option<Primitive>` with naked Option param | LLVM IR: `invalid type for function argument %Option$Role %opt` | **Resolved** B.1 (2026-04-21, inkwell backend) — `Option`/`Result` named-generic AST routes to `ResolvedType::Optional`/`Result` and lowers to `{i8, i64}`; struct payload packed via bitcast/heap at constructor. Text-IR backend still uses `Option$T` monomorphization — see ROADMAP B.1 scope note. |
 | `[]` / `[1,2,3]` literal without type hint | TC: `expected Vec<i64>, found *?0` (pre-Phase 1.12) | **Resolved** Phase 1.12 |
-| `Some(r.field)` re-wrap in match arm (TC only) | TC: `expected u64, found Role` (pre-Phase 2.10) | **TC resolved** Phase 2.10. Codegen of `Option<Struct> -> Option<T>` 함수는 위 L171 Phase 3.14/3.15 lowering gap 로 귀결 — A.1 (2026-04-21) 실측, `docs/language/LIVING_SPEC/02_patterns/phase2_10_*.vais` 3건 모두 C004 "Aggregate extract index out of range" |
+| `Some(r.field)` re-wrap in match arm (TC only) | TC: `expected u64, found Role` (pre-Phase 2.10) | **Resolved** Phase 2.10 (TC) + B.1 2026-04-21 (codegen, inkwell). `docs/language/LIVING_SPEC/02_patterns/phase2_10_*.vais` 3건 모두 build + run ✓ (exit 42 / 7 / 100). |
 | `V[i].field = expr` on Vec of struct | codegen: partial write-through | Phase 3.14 |
 | Complex `L { … B expr }` loop-as-expr with non-trivial type | phi-node generation incomplete | Phase 3.x |
 | `s.parse_i64()`, `s.parse_u64()`, `s.parse_i32()`, `s.parse_u32()` | TC knows return = `Result<iN, str>`; codegen `C002: Undefined function` | Phase 3.13 — runtime impl |

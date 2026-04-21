@@ -211,6 +211,15 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Each call-site arg whose span is in this set is wrapped in `Expr::Try`
     /// before codegen, reusing the existing Try handling.
     pub(super) implicit_try_sites: HashSet<(usize, usize)>,
+
+    /// B.1: The resolved type of the scrutinee of the currently-generating
+    /// `match` expression. Used by `generate_pattern_bindings` (Pattern::Variant)
+    /// to recover the struct-payload type for Option<Struct> / Result<Struct,_>
+    /// when `enum_variant_struct_types` has no entry (those maps are only
+    /// populated for user-defined enums via gen_declaration). Push/pop in
+    /// `generate_match` around arm generation; stack-shaped so nested matches
+    /// work.
+    pub(super) match_scrutinee_type_stack: Vec<vais_types::ResolvedType>,
 }
 
 /// Tail Call Optimization state for loop-based tail recursion elimination.
@@ -285,6 +294,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             resolved_function_sigs: HashMap::new(),
             type_aliases: HashMap::new(),
             implicit_try_sites: HashSet::new(),
+            match_scrutinee_type_stack: Vec::new(),
         };
 
         // Declare built-in functions

@@ -194,7 +194,100 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     // ========== Match Expression ==========
 
+    /// B.1: Resolve the static type of a match scrutinee if we can determine
+    /// it cheaply — only used to inform struct-payload decoding for Option /
+    /// Result variants. Best-effort: returns None if the type is not known.
+    /// Recognized sources: `var_resolved_types` (for `Expr::Ident`) and
+    /// `resolved_function_sigs` (for `Expr::Call` of a named function).
+    fn resolve_match_scrutinee_type(&self, expr: &Expr) -> Option<vais_types::ResolvedType> {
+        match expr {
+            Expr::Ident(name) => self.var_resolved_types.get(name).cloned(),
+            Expr::Call { func, .. } => {
+                if let Expr::Ident(fn_name) = &func.node {
+                    self.resolved_function_sigs
+                        .get(fn_name.as_str())
+                        .map(|sig| sig.ret.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// B.1: When decoding a `Pattern::Variant` whose struct-payload mapping
+    /// is not registered in `enum_variant_struct_types` (Option/Result
+    /// variants skip that registration), recover the payload's LLVM type
+    /// from the current match scrutinee's resolved type. Returns a
+    /// `StructType` for any aggregate payload (named struct, nested Option,
+    /// Result, tuple). Returns None for primitive payloads (the existing
+    /// primitive-decoding path handles those) or when the scrutinee type
+    /// was not resolved.
+    fn option_result_payload_struct_type(
+        &self,
+        variant_name: &str,
+    ) -> Option<(Option<String>, inkwell::types::StructType<'ctx>)> {
+        let ty = self.match_scrutinee_type_stack.last()?;
+        use vais_types::ResolvedType as R;
+        let payload_ty = match (ty, variant_name) {
+            (R::Optional(inner), "Some") => inner.as_ref(),
+            (R::Result(ok, _), "Ok") => ok.as_ref(),
+            (R::Result(_, err), "Err") => err.as_ref(),
+            _ => return None,
+        };
+        // Strip Ref/RefMut/Pointer wrappers before inspecting the pointee —
+        // reference payloads should be bound as pointers, which the primitive
+        // decoder handles. Return None for those.
+        let mut cur = payload_ty;
+        loop {
+            match cur {
+                R::Ref(inner) | R::RefMut(inner) | R::Pointer(inner) => cur = inner.as_ref(),
+                _ => break,
+            }
+        }
+        match cur {
+            R::Named { name, .. } => self
+                .generated_structs
+                .get(name.as_str())
+                .copied()
+                .map(|t| (Some(name.clone()), t)),
+            // Nested Option<Option<T>> / Result<Option<T>, _> / tuples all
+            // lower to LLVM struct types via type_mapper. Look them up to
+            // recover the struct layout for decoding.
+            R::Optional(_) | R::Result(_, _) | R::Tuple(_) => {
+                let llvm = self.type_mapper.map_type(cur);
+                if llvm.is_struct_type() {
+                    Some((None, llvm.into_struct_type()))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
     pub(super) fn generate_match(
+        &mut self,
+        match_expr: &Spanned<Expr>,
+        arms: &[MatchArm],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // B.1: resolve the scrutinee's static type and push onto the scrutinee
+        // stack so `generate_pattern_bindings` can recover struct-payload
+        // information for Option<Struct> / Result<Struct, _> patterns. Popped
+        // at every exit via the inner closure pattern below.
+        let scrutinee_ty = self.resolve_match_scrutinee_type(&match_expr.node);
+        let pushed_scrutinee = scrutinee_ty.is_some();
+        if let Some(ty) = scrutinee_ty {
+            self.match_scrutinee_type_stack.push(ty);
+        }
+        let result = self.generate_match_inner(match_expr, arms);
+        if pushed_scrutinee {
+            self.match_scrutinee_type_stack.pop();
+        }
+        result
+    }
+
+    fn generate_match_inner(
         &mut self,
         match_expr: &Spanned<Expr>,
         arms: &[MatchArm],
@@ -932,12 +1025,48 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .iter()
                     .find(|((_, v_name), _)| v_name == &name.node)
                     .map(|(_, s)| s.clone());
+                // B.1: resolve the payload LLVM struct type directly for
+                // Option/Result variants (which are not registered in
+                // `enum_variant_struct_types`). Prefer this over
+                // `variant_struct_name` so nested `Option<Option<_>>` payloads
+                // (which have no Named struct) are also decoded correctly.
+                // Returns (optional-struct-name, struct-type) — the name is
+                // Some only for named-struct payloads, used to tag
+                // `var_struct_types` so downstream field access resolves.
+                let variant_struct_ty_direct: Option<(
+                    Option<String>,
+                    inkwell::types::StructType<'ctx>,
+                )> = self.option_result_payload_struct_type(&name.node);
 
                 if fields.len() <= 1 {
                     // Single-field (or no-field) variant: bind directly.
                     if let Some(first_field) = fields.first() {
-                        if let Some(ref struct_name) = variant_struct_name {
-                            if let Some(&struct_ty) = self.generated_structs.get(struct_name) {
+                        // Resolve payload struct type. Priority:
+                        //   1. B.1 direct struct-type from scrutinee (handles
+                        //      nested Option/Result, named-struct payloads).
+                        //   2. Legacy: variant_struct_name → generated_structs
+                        //      (user-defined enums).
+                        let resolved_payload_ty: Option<(
+                            Option<String>,
+                            inkwell::types::StructType<'ctx>,
+                        )> = variant_struct_ty_direct.clone().or_else(|| {
+                            variant_struct_name.as_ref().and_then(|sn| {
+                                self.generated_structs
+                                    .get(sn)
+                                    .copied()
+                                    .map(|t| (Some(sn.clone()), t))
+                            })
+                        });
+                        if let Some((struct_name_opt, struct_ty)) = resolved_payload_ty {
+                            // B.1: was `if let Some(struct_name) ...` with an
+                            // inner `generated_structs.get(struct_name)`; now
+                            // we pass the struct type directly so the legacy
+                            // branch (user-defined enums) still works while
+                            // Option/Result paths supply a synthesized type.
+                            let _ = &struct_name_opt; // retained for the
+                                                     // var_struct_types tag
+                                                     // below when available.
+                            {
                                 // data_val is an i64 holding either the bitcast struct
                                 // (if ≤8B) or a heap pointer (if >8B). Determine which
                                 // based on the struct's store size.
@@ -982,7 +1111,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                 // Bind the loaded struct value, then record its type name
                                 // so downstream field access can resolve the struct.
                                 self.generate_pattern_bindings(first_field, &loaded_struct)?;
-                                if let Pattern::Ident(ident_name) = &first_field.node {
+                                if let (Pattern::Ident(ident_name), Some(struct_name)) =
+                                    (&first_field.node, struct_name_opt.as_ref())
+                                {
+                                    // Only tag var_struct_types when we have a
+                                    // named struct (legacy path / named-struct
+                                    // payload). For synthesized Option/Result
+                                    // struct types we leave it untagged.
                                     self.var_struct_types
                                         .insert(ident_name.clone(), struct_name.clone());
                                 }
