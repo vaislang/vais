@@ -80,6 +80,7 @@ max_iterations: 20
   context_checkpoint: B.1 research 단계 완료. 구현은 다음 세션에서 fresh context 로 시작. 본 세션 3 iteration (A.1/A.2/A.3) + B.1 research = 문서 동기화 + 진단 완료. 컴파일러 코드 수정 0.
   strategy iteration 3 (2026-04-21 fresh session): B.1 단독 (B.2~B.5 모두 blockedBy B.1) → sequential. Research 완료 상태 — 수정 타겟 확정 (call.rs:183-246, generator.rs expected-type helper, gen_match.rs:915-1095). Opus direct — 매트릭스 lowering 설계와 구현 분리 불가 (expected-type 전파 방식 결정 필요).
   opus_direct: B.1 — LLVM aggregate layout 일관성 설계. hardcoded i64 제거 시 어떤 context path 로 expected-type 을 읽을지 (TC expected_types map 참조 vs call-site 전달) 판정 = 구현. CLAUDE.md rule 3/4 엄수 (baseline syntax=200 std=82/82 vaisdb=237/261 phase158=18/18, regression 1건 즉시 revert).
+  context_checkpoint iteration 3 (2026-04-21): B.1 구현 완료 + 커밋 (`a7fa3ff8`). 본 세션은 research 없이 시작해서 진단·구현·검증·커밋 모두 1 iteration 내 완료. 5개 pending (B.2, B.3, B.4, B.5, B.6) unblocked. **컨텍스트 보호** 차원에서 /clear 후 fresh session 권장 — ROADMAP.md 가 full state source. 다음 세션은 B.2 부터 (impl-sonnet 위임 적합) 또는 B.6 부터 (Opus direct, B.1 연장선).
 
 ### Phase A — 문서 동기화 (Opus direct, 먼저 실행)
 
