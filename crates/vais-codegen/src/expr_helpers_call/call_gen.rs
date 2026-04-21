@@ -229,6 +229,26 @@ impl CodeGenerator {
                         cast_ptr
                     );
                 }
+            } else if effective_ty == "double" || effective_ty == "float" {
+                // Float payloads must be bitcast-stored so the raw i64 slot receives
+                // a valid integer bit pattern. A bare `store i64 1.0e+00, i64*` is
+                // invalid IR.
+                let cast_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = bitcast i64* {} to {}*",
+                    cast_ptr,
+                    payload_field_ptr,
+                    effective_ty
+                );
+                write_ir!(
+                    ir,
+                    "  store {} {}, {}* {}",
+                    effective_ty,
+                    arg_val,
+                    effective_ty,
+                    cast_ptr
+                );
             } else {
                 // Replace "void" with 0 for Unit/() values in enum payloads
                 let store_val = if arg_val == "void" { "0" } else { arg_val };

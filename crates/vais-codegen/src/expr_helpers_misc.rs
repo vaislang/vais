@@ -694,6 +694,42 @@ impl CodeGenerator {
 
         if let Some(ref unwrap_ty) = unwrap_type {
             let unwrap_llvm = self.type_to_llvm(unwrap_ty);
+            // Payload slot is i64; if the real Ok type is narrower, truncate so
+            // later consumers see a value matching the advertised type. Without
+            // this, callers assume `sext i32 <v> to i64` while the slot load
+            // actually produced an i64, which clang rejects.
+            let narrow_bits = match unwrap_llvm.as_str() {
+                "i32" => Some(32u32),
+                "i16" => Some(16),
+                "i8" => Some(8),
+                "i1" => Some(1),
+                _ => None,
+            };
+            if let Some(bits) = narrow_bits {
+                let trunc_tmp = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = trunc i64 {} to i{}",
+                    trunc_tmp,
+                    value,
+                    bits
+                );
+                self.fn_ctx.register_temp_type(&trunc_tmp, unwrap_ty.clone());
+                return Ok((trunc_tmp, ir));
+            }
+            // For floats, bitcast the i64 slot to the matching width.
+            if unwrap_llvm == "double" || unwrap_llvm == "float" {
+                let fval = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = bitcast i64 {} to {}",
+                    fval,
+                    value,
+                    unwrap_llvm
+                );
+                self.fn_ctx.register_temp_type(&fval, unwrap_ty.clone());
+                return Ok((fval, ir));
+            }
             let needs_cast = unwrap_llvm != "i64"
                 && unwrap_llvm != "i32"
                 && unwrap_llvm != "i16"

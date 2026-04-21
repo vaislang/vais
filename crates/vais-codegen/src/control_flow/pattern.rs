@@ -1272,15 +1272,54 @@ impl CodeGenerator {
                         );
 
                         // Payload slots are stored as i64 in the enum layout. For simple
-                        // integer / bool / pointer fields we can load directly as i64 and
-                        // let downstream uses truncate; for compound types we follow the
-                        // same bitcast/heap-pointer conventions used by the Pattern::Variant
-                        // binding path. Here we default to the simple i64 load — enum
-                        // struct-variants with large compound field types are uncommon and
-                        // currently only affect `Varchar { max_len: u32 }` / `Vector { dim:
-                        // u32 }` style variants in vaisdb, which fit in an i64.
+                        // integer / bool / pointer fields we load directly as i64 and let
+                        // downstream uses truncate. For float fields we must load the
+                        // matching-width float so assertions like `assert_approx(v, ...)`
+                        // receive a `double` and not an `i64` bit pattern.
                         let field_val = self.next_temp(counter);
-                        write_ir!(ir, "  {} = load i64, i64* {}", field_val, payload_ptr);
+                        match &field_ty {
+                            crate::ResolvedType::F64 => {
+                                let float_ptr = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = bitcast i64* {} to double*",
+                                    float_ptr,
+                                    payload_ptr
+                                );
+                                write_ir!(
+                                    ir,
+                                    "  {} = load double, double* {}",
+                                    field_val,
+                                    float_ptr
+                                );
+                            }
+                            crate::ResolvedType::F32 => {
+                                let float_ptr = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = bitcast i64* {} to float*",
+                                    float_ptr,
+                                    payload_ptr
+                                );
+                                write_ir!(
+                                    ir,
+                                    "  {} = load float, float* {}",
+                                    field_val,
+                                    float_ptr
+                                );
+                            }
+                            crate::ResolvedType::Bool => {
+                                // Bool payloads are stored in an i64 slot; load i64 then
+                                // truncate to i1 so the bound value matches Bool codegen
+                                // conventions (used by `br i1`, logical ops, etc.).
+                                let raw = self.next_temp(counter);
+                                write_ir!(ir, "  {} = load i64, i64* {}", raw, payload_ptr);
+                                write_ir!(ir, "  {} = trunc i64 {} to i1", field_val, raw);
+                            }
+                            _ => {
+                                write_ir!(ir, "  {} = load i64, i64* {}", field_val, payload_ptr);
+                            }
+                        }
 
                         if let Some(pat) = field_pat {
                             let bind_ir =
