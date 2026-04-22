@@ -433,9 +433,24 @@ impl CodeGenerator {
                 _ => "i64".to_string(),
             };
 
+            // Substitute "void" placeholders with a phi-type-appropriate default
+            // (null for pointer types, 0 otherwise). Placing a literal `void` in
+            // a phi incoming is invalid LLVM IR.
+            let void_substitute = if phi_type.ends_with('*') {
+                "null"
+            } else if phi_type == "{ i8*, i64 }" {
+                "{ i8* null, i64 0 }"
+            } else if phi_type == "double" || phi_type == "float" {
+                "0.0"
+            } else {
+                "0"
+            };
             let phi_args: Vec<String> = arm_values
                 .iter()
-                .map(|(val, label)| format!("[ {}, %{} ]", val, label))
+                .map(|(val, label)| {
+                    let safe = if val == "void" { void_substitute } else { val.as_str() };
+                    format!("[ {}, %{} ]", safe, label)
+                })
                 .collect();
             write_ir!(
                 ir,

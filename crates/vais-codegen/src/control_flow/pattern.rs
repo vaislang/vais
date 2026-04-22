@@ -90,7 +90,7 @@ impl CodeGenerator {
                 }
                 Literal::Float(f) => {
                     let result = self.next_temp(counter);
-                    let ir = format!("  {} = fcmp oeq double {}, {:e}\n", result, match_val, f);
+                    let ir = format!("  {} = fcmp oeq double {}, {:.6e}\n", result, match_val, f);
                     Ok((result, ir))
                 }
                 Literal::String(s) => {
@@ -423,9 +423,53 @@ impl CodeGenerator {
                                     field_idx
                                 );
                                 let field_val = self.next_temp(counter);
-                                write_ir!(ir, "  {} = load i64, i64* {}", field_val, payload_ptr);
-                                let (check, check_ir) =
-                                    self.generate_pattern_check(pat, &field_val, counter)?;
+                                let field_ty = &variant_struct_fields[field_idx].1;
+                                match field_ty {
+                                    ResolvedType::F64 => {
+                                        let fp = self.next_temp(counter);
+                                        write_ir!(
+                                            ir,
+                                            "  {} = bitcast i64* {} to double*",
+                                            fp,
+                                            payload_ptr
+                                        );
+                                        write_ir!(
+                                            ir,
+                                            "  {} = load double, double* {}",
+                                            field_val,
+                                            fp
+                                        );
+                                    }
+                                    ResolvedType::F32 => {
+                                        let fp = self.next_temp(counter);
+                                        write_ir!(
+                                            ir,
+                                            "  {} = bitcast i64* {} to float*",
+                                            fp,
+                                            payload_ptr
+                                        );
+                                        write_ir!(
+                                            ir,
+                                            "  {} = load float, float* {}",
+                                            field_val,
+                                            fp
+                                        );
+                                    }
+                                    _ => {
+                                        write_ir!(
+                                            ir,
+                                            "  {} = load i64, i64* {}",
+                                            field_val,
+                                            payload_ptr
+                                        );
+                                    }
+                                }
+                                let (check, check_ir) = self.generate_pattern_check_typed(
+                                    pat,
+                                    &field_val,
+                                    counter,
+                                    field_ty,
+                                )?;
                                 ir.push_str(&check_ir);
                                 checks.push(check);
                             }
@@ -1261,9 +1305,15 @@ impl CodeGenerator {
                             );
 
                             if let Some(pat) = field_pat {
-                                // Bind to pattern
-                                let bind_ir =
-                                    self.generate_pattern_bindings(pat, &field_val, counter)?;
+                                // Bind to pattern — pass field's actual type so
+                                // Ident-pattern bindings register the correct
+                                // LocalVar type (e.g., F64 for `FloatVal { v: a }`).
+                                let bind_ir = self.generate_pattern_bindings_typed(
+                                    pat,
+                                    &field_val,
+                                    counter,
+                                    field_ty,
+                                )?;
                                 ir.push_str(&bind_ir);
                             } else {
                                 // Bind to field name directly using SSA style
@@ -1419,8 +1469,12 @@ impl CodeGenerator {
                         }
 
                         if let Some(pat) = field_pat {
-                            let bind_ir =
-                                self.generate_pattern_bindings(pat, &field_val, counter)?;
+                            let bind_ir = self.generate_pattern_bindings_typed(
+                                pat,
+                                &field_val,
+                                counter,
+                                &field_ty,
+                            )?;
                             ir.push_str(&bind_ir);
                         } else {
                             self.fn_ctx.locals.insert(
