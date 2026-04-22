@@ -413,8 +413,32 @@ impl CodeGenerator {
                         // main() with implicit i64 return and Unit body: auto-return 0
                         write_ir!(ir, "  ret i64 0{}", ret_dbg);
                     } else if matches!(ret_type, ResolvedType::Named { .. }) {
+                        // Phase D: override is_block_result_value when the
+                        // last expression is a stdlib enum variant call
+                        // (Ok/Err/Some/None). Non-main modules may lack
+                        // the enum in self.types.enums, so the default
+                        // classifier flags it as a value — but the
+                        // constructor emits `alloca %BaseEnum` and returns
+                        // the pointer.
+                        let last_is_stdlib_variant = stmts
+                            .last()
+                            .and_then(|s| match &s.node {
+                                vais_ast::Stmt::Expr(expr) => Some(expr),
+                                _ => None,
+                            })
+                            .map(|expr| matches!(&expr.node,
+                                vais_ast::Expr::Call { func, .. }
+                                    if matches!(&func.node,
+                                        vais_ast::Expr::Ident(n)
+                                            if matches!(
+                                                n.as_str(),
+                                                "Ok" | "Err" | "Some" | "None"
+                                            )
+                                    )
+                            ))
+                            .unwrap_or(false);
                         // Check if the result is already a value (from phi node) or a pointer (from struct lit)
-                        if self.is_block_result_value(stmts) {
+                        if !last_is_stdlib_variant && self.is_block_result_value(stmts) {
                             // Value — check if type name matches return type.
                             // Generic calls may return %Vec while function declares %Vec$i64.
                             let val_llvm = self.llvm_type_of(&value);
@@ -458,7 +482,31 @@ impl CodeGenerator {
                                 write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                             }
                         } else {
-                            // Pointer (e.g., from struct literal) - load then return
+                            // Pointer (e.g., from struct literal) - load then return.
+                            //
+                            // Phase D: the source pointer may be a base
+                            // generic type (`%Result*`) while ret_llvm is
+                            // specialized (`%Result$i64_VaisError`). Both
+                            // share layout; bitcast the pointer first so
+                            // the `load` type matches.
+                            let val_llvm = self.llvm_type_of(&value);
+                            let src_ptr = if val_llvm.starts_with('%')
+                                && val_llvm != ret_llvm
+                                && !val_llvm.ends_with('*')
+                            {
+                                let cast = self.next_temp(&mut counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = bitcast {}* {} to {}*",
+                                    cast,
+                                    val_llvm,
+                                    value,
+                                    ret_llvm
+                                );
+                                cast
+                            } else {
+                                value.clone()
+                            };
                             let loaded = format!("%ret.{}", counter);
                             write_ir!(
                                 ir,
@@ -466,7 +514,7 @@ impl CodeGenerator {
                                 loaded,
                                 ret_llvm,
                                 ret_llvm,
-                                value,
+                                src_ptr,
                                 ret_dbg
                             );
                             write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
@@ -831,7 +879,31 @@ impl CodeGenerator {
                             // Value (e.g., from if-else phi node) - return directly
                             write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                         } else {
-                            // Pointer (e.g., from struct literal) - load then return
+                            // Pointer (e.g., from struct literal) - load then return.
+                            //
+                            // Phase D: the source pointer may be a base
+                            // generic type (`%Result*`) while ret_llvm is
+                            // specialized (`%Result$i64_VaisError`). Both
+                            // share layout; bitcast the pointer first so
+                            // the `load` type matches.
+                            let val_llvm = self.llvm_type_of(&value);
+                            let src_ptr = if val_llvm.starts_with('%')
+                                && val_llvm != ret_llvm
+                                && !val_llvm.ends_with('*')
+                            {
+                                let cast = self.next_temp(&mut counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = bitcast {}* {} to {}*",
+                                    cast,
+                                    val_llvm,
+                                    value,
+                                    ret_llvm
+                                );
+                                cast
+                            } else {
+                                value.clone()
+                            };
                             let loaded = format!("%ret.{}", counter);
                             write_ir!(
                                 ir,
@@ -839,7 +911,7 @@ impl CodeGenerator {
                                 loaded,
                                 ret_llvm,
                                 ret_llvm,
-                                value,
+                                src_ptr,
                                 ret_dbg
                             );
                             write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);

@@ -90,9 +90,7 @@ impl CodeGenerator {
             //
             // Phase B5: also prefer the registered SSA type when the caller-side
             // inferred type is an unspecialized generic container (e.g., `%Vec`
-            // when `Vec.new()` was call-site specialized to `%Vec$f32`). This
-            // keeps the heap-alloc bitcast and store type-consistent with the
-            // actual call return type.
+            // when `Vec.new()` was call-site specialized to `%Vec$f32`).
             let (effective_ty, effective_size) = if matches!(&arg_type, ResolvedType::I64) {
                 if let Some(temp_ty) = self.fn_ctx.temp_var_types.get(arg_val) {
                     let ty = self.type_to_llvm(temp_ty);

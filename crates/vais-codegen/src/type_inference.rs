@@ -177,6 +177,16 @@ impl CodeGenerator {
                     if self.get_tuple_variant_info(name).is_some() {
                         return false;
                     }
+                    // Phase D: stdlib enum variants (Ok/Err/Some/None) may
+                    // not be registered in self.types.enums in every
+                    // module subset (e.g., a non-main module doesn't
+                    // always import Result's enum body). They still lower
+                    // to `alloca %BaseEnum` constructors which return a
+                    // pointer — mark them as non-value so the caller
+                    // loads the aggregate.
+                    if matches!(name.as_str(), "Ok" | "Err" | "Some" | "None") {
+                        return false;
+                    }
                     // Struct tuple literals (e.g., Point(40, 2)) return pointers
                     let resolved = self.resolve_struct_name(name);
                     if self.types.structs.contains_key(&resolved)

@@ -416,8 +416,7 @@ impl CodeGenerator {
                     // `%Vec$SqlValue` vs base `%Vec` when the let target has
                     // no generic annotation). The two structs share layout, so
                     // bitcast the alloca pointer to the value's struct type
-                    // and store. This keeps the alloca slot usable for both
-                    // consumers expecting the base and the specialized type.
+                    // and store.
                     let bc = self.next_temp(counter);
                     write_ir!(
                         ir,
@@ -645,16 +644,85 @@ impl CodeGenerator {
                 .unwrap_or(ResolvedType::I64);
             let llvm_ty = self.type_to_llvm(&ret_type);
 
-            // For struct types, may need to load from pointer
-            let ret_val =
-                if matches!(ret_type, ResolvedType::Named { .. }) && !self.is_expr_value(expr) {
+            // For struct types, may need to load from pointer.
+            //
+            // Phase D: detect the case where `val` is an alloca pointer
+            // (common for Err/Ok enum constructors) and the function's
+            // declared return type is a Named struct/enum. Load from the
+            // alloca, bitcasting through a compatible pointer first if the
+            // specialized return type differs from the base type the
+            // constructor produced (e.g. `%Result*` → `%Result$i64_VaisError*`).
+            let ret_val = if matches!(ret_type, ResolvedType::Named { .. }) {
+                let val_ty = self.llvm_type_of(&val);
+                let val_is_ptr = val_ty.ends_with('*');
+                let expected_ptr_ty = format!("{}*", llvm_ty);
+                let is_value_expr = self.is_expr_value(expr);
+                // Phase D: for cross-module builds the outer enum variant
+                // (e.g. `Err` → `Result`) may not be present in this
+                // module's `self.types.enums` registry, causing
+                // `is_expr_value(Err(...))` to fall through to `true`.
+                // Structurally recognize `Expr::Call { func: Ident(name) }`
+                // where `name` is a known stdlib enum variant (Ok/Err/
+                // Some/None).
+                let is_stdlib_variant = matches!(&expr.node,
+                    Expr::Call { func, .. }
+                        if matches!(&func.node,
+                            Expr::Ident(n) if matches!(n.as_str(), "Ok" | "Err" | "Some" | "None")
+                        )
+                );
+                let needs_load = val_is_ptr || !is_value_expr || is_stdlib_variant;
+                if needs_load {
+                    // Determine actual pointer LLVM type of `val`. If
+                    // val_ty doesn't look like a pointer but the expr
+                    // constructor returned an alloca, treat val as a
+                    // `%<base>*` and bitcast to the specialized form.
+                    let base_ptr_ty = if val_is_ptr {
+                        val_ty.clone()
+                    } else {
+                        // Construct base alloca pointer type from the enum
+                        // base name. For `Result`/`Option`/`Box` generics
+                        // this is `%Result*` etc; for concrete Named
+                        // types it's `%{name}*`.
+                        let base_name = match &ret_type {
+                            ResolvedType::Named { name, .. } => {
+                                name.split('$').next().unwrap_or(name).to_string()
+                            }
+                            _ => llvm_ty.trim_start_matches('%').to_string(),
+                        };
+                        format!("%{}*", base_name)
+                    };
+                    let src_ptr = if base_ptr_ty != expected_ptr_ty {
+                        let cast = format!("%ret.cast.{}", counter);
+                        *counter += 1;
+                        write_ir!(
+                            ir,
+                            "  {} = bitcast {} {} to {}*",
+                            cast,
+                            base_ptr_ty,
+                            val,
+                            llvm_ty
+                        );
+                        cast
+                    } else {
+                        val.clone()
+                    };
                     let loaded = format!("%ret.{}", counter);
                     *counter += 1;
-                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded,
+                        llvm_ty,
+                        llvm_ty,
+                        src_ptr
+                    );
                     loaded
                 } else {
                     val
-                };
+                }
+            } else {
+                val
+            };
 
             // Coerce return value to match declared function return type
             let mut coerced = false;
