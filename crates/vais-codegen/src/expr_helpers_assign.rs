@@ -222,35 +222,83 @@ impl CodeGenerator {
 
             // Infer element type for correct GEP + store
             let arr_ty = self.infer_expr_type(arr_expr);
-            let (elem_llvm_ty, is_fat_ptr) = match &arr_ty {
-                ResolvedType::Pointer(elem) => (self.type_to_llvm(elem), false),
-                ResolvedType::Array(elem) => (self.type_to_llvm(elem), false),
+            // Strip Ref/RefMut — Vec indexed assign on a &Vec receiver still
+            // uses the underlying Vec element type.
+            let arr_ty_inner = match &arr_ty {
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
+                other => other,
+            };
+            enum AccessKind {
+                /// Pointer math on a raw `T*` (array / pointer / typed slice
+                /// with fat-pointer extraction).
+                Direct,
+                /// Fat-pointer slice `{ i8*, i64 }` — extract data, bitcast.
+                FatSlice,
+                /// Vec<T> — load data pointer from the first field of the
+                /// Vec struct, then GEP/store through that pointer.
+                VecData,
+            }
+            let (elem_llvm_ty, access) = match arr_ty_inner {
+                ResolvedType::Pointer(elem) => (self.type_to_llvm(elem), AccessKind::Direct),
+                ResolvedType::Array(elem) => (self.type_to_llvm(elem), AccessKind::Direct),
                 ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => {
-                    (self.type_to_llvm(elem), true)
+                    (self.type_to_llvm(elem), AccessKind::FatSlice)
                 }
-                _ => ("i64".to_string(), false),
+                ResolvedType::Named { name, generics }
+                    if name == "Vec" && !generics.is_empty() =>
+                {
+                    (self.type_to_llvm(&generics[0]), AccessKind::VecData)
+                }
+                _ => ("i64".to_string(), AccessKind::Direct),
             };
 
-            // For fat pointer slices { i8*, i64 }, extract data pointer and bitcast
-            let base_ptr = if is_fat_ptr {
-                let data_ptr = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
-                    data_ptr,
-                    arr_val
-                );
-                let typed_ptr = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = bitcast i8* {} to {}*",
-                    typed_ptr,
-                    data_ptr,
-                    elem_llvm_ty
-                );
-                typed_ptr
-            } else {
-                arr_val.clone()
+            // Build the pointer we will GEP through.
+            let base_ptr = match access {
+                AccessKind::FatSlice => {
+                    let data_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                        data_ptr,
+                        arr_val
+                    );
+                    let typed_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = bitcast i8* {} to {}*",
+                        typed_ptr,
+                        data_ptr,
+                        elem_llvm_ty
+                    );
+                    typed_ptr
+                }
+                AccessKind::VecData => {
+                    // Vec layout is `{ i64, i64, i64, i64, i64 }` where field 0
+                    // is the data pointer stored as an i64. Load it, then
+                    // inttoptr to a typed T* for the GEP/store.
+                    let vec_llvm_ty = self.type_to_llvm(arr_ty_inner);
+                    let data_slot = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
+                        data_slot,
+                        vec_llvm_ty,
+                        vec_llvm_ty,
+                        arr_val
+                    );
+                    let data_i64 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_slot);
+                    let typed_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = inttoptr i64 {} to {}*",
+                        typed_ptr,
+                        data_i64,
+                        elem_llvm_ty
+                    );
+                    typed_ptr
+                }
+                AccessKind::Direct => arr_val.clone(),
             };
 
             let elem_ptr = self.next_temp(counter);
@@ -512,14 +560,50 @@ impl CodeGenerator {
             _ => return Err(CodegenError::Unsupported(format!("compound {:?}", op))),
         };
 
+        // Determine the target's native integer width so the arithmetic is
+        // performed in that width (e.g. `size: u32` += 8 uses `add i32`).
+        let target_ty = self.infer_expr_type(target);
+        let target_bits = self.get_integer_bits(&target_ty);
+        let op_ty = if target_bits > 0 {
+            format!("i{}", target_bits)
+        } else {
+            "i64".to_string()
+        };
+
+        // Coerce both operands to the target integer width.
+        let coerce = |val: &str, bits: u32, cg: &mut Self, ir: &mut String, counter: &mut usize| -> String {
+            if bits == target_bits || target_bits == 0 {
+                val.to_string()
+            } else if bits > target_bits {
+                let t = cg.next_temp(counter);
+                write_ir!(ir, "  {} = trunc i{} {} to i{}", t, bits, val, target_bits);
+                t
+            } else {
+                let t = cg.next_temp(counter);
+                write_ir!(ir, "  {} = sext i{} {} to i{}", t, bits, val, target_bits);
+                t
+            }
+        };
+        let current_bits = self.llvm_type_of(&current_val)
+            .strip_prefix('i')
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(64);
+        let rhs_bits = self.llvm_type_of(&rhs_val)
+            .strip_prefix('i')
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(64);
+        let current_coerced = coerce(&current_val, current_bits, self, &mut ir, counter);
+        let rhs_coerced = coerce(&rhs_val, rhs_bits, self, &mut ir, counter);
+
         let result = self.next_temp(counter);
         write_ir!(
             ir,
-            "  {} = {} i64 {}, {}",
+            "  {} = {} {} {}, {}",
             result,
             op_str,
-            current_val,
-            rhs_val
+            op_ty,
+            current_coerced,
+            rhs_coerced
         );
 
         if let Expr::Ident(name) = &target.node {

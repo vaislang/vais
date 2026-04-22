@@ -661,6 +661,45 @@ impl CodeGenerator {
             idx_val
         );
 
+        // Slice/Array indexing of a struct element: follow the Vec<struct>
+        // convention and return an alloca pointer rather than the loaded
+        // struct value, so downstream field access / method dispatch can
+        // work through a typed `%T*`.
+        if elem_llvm_ty.starts_with('%') && elem_llvm_ty != "{ i8*, i64 }" {
+            let alloca = self.next_temp(counter);
+            self.emit_entry_alloca(&alloca, &elem_llvm_ty);
+            let loaded = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = load {}, {}* {}",
+                loaded,
+                elem_llvm_ty,
+                elem_llvm_ty,
+                elem_ptr
+            );
+            write_ir!(
+                ir,
+                "  store {} {}, {}* {}",
+                elem_llvm_ty,
+                loaded,
+                elem_llvm_ty,
+                alloca
+            );
+            if let Some(ref resolved) = elem_resolved_ty {
+                self.fn_ctx.register_temp_type(&alloca, resolved.clone());
+            } else {
+                let name = elem_llvm_ty.trim_start_matches('%');
+                self.fn_ctx.register_temp_type(
+                    &alloca,
+                    vais_types::ResolvedType::Named {
+                        name: name.to_string(),
+                        generics: vec![],
+                    },
+                );
+            }
+            return Ok((alloca, ir));
+        }
+
         let result = self.next_temp(counter);
         write_ir!(
             ir,
@@ -678,22 +717,6 @@ impl CodeGenerator {
             // Override with precise Str type for fat pointer elements
             self.fn_ctx
                 .register_temp_type(&result, vais_types::ResolvedType::Str);
-        } else if elem_llvm_ty.starts_with('%') {
-            // Bug 1 fix: Named struct type — use full ResolvedType from elem_resolved_ty when
-            // available so that generics (e.g., Cell<bool> → Cell$bool) are preserved.
-            // Hardcoding generics: vec![] would make specialized structs unfindable downstream.
-            if let Some(ref resolved) = elem_resolved_ty {
-                self.fn_ctx.register_temp_type(&result, resolved.clone());
-            } else {
-                let name = elem_llvm_ty.trim_start_matches('%');
-                self.fn_ctx.register_temp_type(
-                    &result,
-                    vais_types::ResolvedType::Named {
-                        name: name.to_string(),
-                        generics: vec![],
-                    },
-                );
-            }
         }
 
         Ok((result, ir))

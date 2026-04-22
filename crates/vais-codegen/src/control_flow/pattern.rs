@@ -1316,6 +1316,65 @@ impl CodeGenerator {
                                 write_ir!(ir, "  {} = load i64, i64* {}", raw, payload_ptr);
                                 write_ir!(ir, "  {} = trunc i64 {} to i1", field_val, raw);
                             }
+                            crate::ResolvedType::I32
+                            | crate::ResolvedType::U32
+                            | crate::ResolvedType::I16
+                            | crate::ResolvedType::U16
+                            | crate::ResolvedType::I8
+                            | crate::ResolvedType::U8 => {
+                                // Narrow int payloads still live in an i64 slot — load
+                                // the slot and truncate to the declared field width so
+                                // call-site ABIs receive the correct narrow integer.
+                                let narrow_ty = self.type_to_llvm(&field_ty);
+                                let raw = self.next_temp(counter);
+                                write_ir!(ir, "  {} = load i64, i64* {}", raw, payload_ptr);
+                                write_ir!(
+                                    ir,
+                                    "  {} = trunc i64 {} to {}",
+                                    field_val,
+                                    raw,
+                                    narrow_ty
+                                );
+                            }
+                            crate::ResolvedType::Str => {
+                                // Str payloads (> 8 bytes) are heap-allocated in the
+                                // enum variant constructor and stored as an i64 pointer
+                                // in the payload slot. To recover the { i8*, i64 } fat
+                                // pointer, load the slot, inttoptr to the fat-pointer
+                                // type, and load through it.
+                                let raw = self.next_temp(counter);
+                                write_ir!(ir, "  {} = load i64, i64* {}", raw, payload_ptr);
+                                let typed = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = inttoptr i64 {} to {{ i8*, i64 }}*",
+                                    typed,
+                                    raw
+                                );
+                                write_ir!(
+                                    ir,
+                                    "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* {}",
+                                    field_val,
+                                    typed
+                                );
+                            }
+                            crate::ResolvedType::Named { .. } => {
+                                // Named payloads (Vec<T>, user structs, nested enums)
+                                // are likewise heap-allocated when > 8 bytes. Return an
+                                // i64→%T* converted pointer so downstream method calls
+                                // / field access see a typed pointer instead of a raw
+                                // i64 slot value.
+                                let llvm_ty = self.type_to_llvm(&field_ty);
+                                let raw = self.next_temp(counter);
+                                write_ir!(ir, "  {} = load i64, i64* {}", raw, payload_ptr);
+                                write_ir!(
+                                    ir,
+                                    "  {} = inttoptr i64 {} to {}*",
+                                    field_val,
+                                    raw,
+                                    llvm_ty
+                                );
+                            }
                             _ => {
                                 write_ir!(ir, "  {} = load i64, i64* {}", field_val, payload_ptr);
                             }

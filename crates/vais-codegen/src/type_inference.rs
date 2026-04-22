@@ -264,6 +264,33 @@ impl CodeGenerator {
                 }
                 true
             }
+            // Vec/Array/Slice indexing whose element type is Named (struct/enum)
+            // returns a pointer from an alloca+memcpy (see expr_helpers_data.rs).
+            // Non-Named elements return an SSA value.
+            Expr::Index { expr: inner, index } => {
+                if matches!(index.node, Expr::Range { .. }) {
+                    return true;
+                }
+                let inner_ty = self.infer_expr_type(inner);
+                let outer = match &inner_ty {
+                    ResolvedType::Ref(i) | ResolvedType::RefMut(i) => i.as_ref(),
+                    other => other,
+                };
+                let elem_ty = match outer {
+                    ResolvedType::Pointer(e) | ResolvedType::Array(e) => Some(e.as_ref()),
+                    ResolvedType::Slice(e) | ResolvedType::SliceMut(e) => Some(e.as_ref()),
+                    ResolvedType::Named { name, generics }
+                        if name == "Vec" && !generics.is_empty() =>
+                    {
+                        Some(&generics[0])
+                    }
+                    _ => None,
+                };
+                if let Some(ty) = elem_ty {
+                    return !matches!(ty, ResolvedType::Named { .. });
+                }
+                true
+            }
             _ => true,
         }
     }
@@ -1324,8 +1351,15 @@ impl CodeGenerator {
                 // Block returns the type of its last expression
                 self.infer_block_type(stmts)
             }
-            Expr::Assign { value, .. } | Expr::AssignOp { value, .. } => {
-                // Assignment returns the assigned value's type
+            Expr::Assign { target, value, .. } | Expr::AssignOp { target, value, .. } => {
+                // Compound assignments like `x += 1` produce a value whose
+                // type matches the *target* (the stored-into variable), not
+                // the literal right-hand side. Fall back to the RHS type
+                // only if the target is unknown.
+                let target_ty = self.infer_expr_type(target);
+                if !matches!(target_ty, ResolvedType::I64) {
+                    return target_ty;
+                }
                 self.infer_expr_type(value)
             }
             _ => ResolvedType::I64, // Default fallback for remaining expressions

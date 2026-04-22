@@ -418,7 +418,11 @@ impl CodeGenerator {
                     format!("{}*", inner_ty)
                 }
                 ResolvedType::F64 => "double".to_string(),
+                ResolvedType::F32 => "float".to_string(),
                 ResolvedType::Bool => "i64".to_string(), // Bool is zext'd to i64 in codegen
+                ResolvedType::I8 | ResolvedType::U8 => "i8".to_string(),
+                ResolvedType::I16 | ResolvedType::U16 => "i16".to_string(),
+                ResolvedType::I32 | ResolvedType::U32 => "i32".to_string(),
                 _ => "i64".to_string(),
             };
 
