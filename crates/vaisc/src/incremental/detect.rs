@@ -802,7 +802,7 @@ mod tests {
     use vais_ast::{Expr, Function, FunctionBody, Item, Ownership, Param, Span, Spanned, Type};
 
     fn make_span() -> Span {
-        Span { start: 0, end: 0 }
+        Span { file_id: 0, start: 0, end: 0 }
     }
 
     fn make_spanned<T>(node: T) -> Spanned<T> {

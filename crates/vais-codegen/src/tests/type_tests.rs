@@ -345,7 +345,7 @@ fn test_ast_type_recursion_limit() {
     for _ in 0..50 {
         nested = Type::Pointer(Box::new(vais_ast::Spanned::new(
             nested,
-            Span { start: 0, end: 0 },
+            Span { file_id: 0, start: 0, end: 0 },
         )));
     }
 
@@ -364,7 +364,7 @@ fn test_ast_type_recursion_limit() {
     for _ in 0..150 {
         extremely_nested = Type::Pointer(Box::new(vais_ast::Spanned::new(
             extremely_nested,
-            Span { start: 0, end: 0 },
+            Span { file_id: 0, start: 0, end: 0 },
         )));
     }
 

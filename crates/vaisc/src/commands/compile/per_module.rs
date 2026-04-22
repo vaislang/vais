@@ -2,6 +2,21 @@
 
 use super::*;
 
+/// Phase 17.H1: FNV-1a 32 hash of a module path for use as codegen
+/// `current_file_id`. Must match the corresponding function in
+/// `build::parallel` and `build::core` so the TC-stamped
+/// `expr_types` entries line up with codegen's lookup.
+fn phase17_fnv1a_file_id_compile(path: &Path) -> u32 {
+    const FNV_OFFSET: u32 = 0x811c_9dc5;
+    const FNV_PRIME: u32 = 0x0100_0193;
+    let mut hash = FNV_OFFSET;
+    for byte in path.to_string_lossy().as_bytes() {
+        hash ^= *byte as u32;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    if hash == 0 { 1 } else { hash }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn compile_per_module(
     final_ast: &vais_ast::Module,
@@ -86,6 +101,10 @@ pub(crate) fn compile_per_module(
             codegen.set_type_aliases(resolved_type_aliases.clone());
             codegen.set_expr_types(resolved_expr_types.clone());
             codegen.set_implicit_try_sites(resolved_implicit_try_sites.clone());
+            // Phase 17.H1: set per-module file_id identical to the one TC
+            // used, so expr_types lookups find the entries stored under
+            // this module's namespaced key.
+            codegen.set_current_file_id(phase17_fnv1a_file_id_compile(module_path));
             codegen.set_string_prefix(&module_stem);
 
             if gc {

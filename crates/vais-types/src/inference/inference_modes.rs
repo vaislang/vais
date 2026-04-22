@@ -74,7 +74,13 @@ impl TypeChecker {
                         if Self::has_concrete_container_generics(&resolved)
                             && !Self::has_concrete_container_generics(&inferred)
                         {
-                            let span_key = (expr.span.start, expr.span.end);
+                            // Phase 17.H1: same file_id fallback as check_expr.
+                            let file_id = if expr.span.file_id != 0 {
+                                expr.span.file_id
+                            } else {
+                                self.current_file_id
+                            };
+                            let span_key = (file_id, expr.span.start, expr.span.end);
                             self.expr_types.insert(span_key, resolved.clone());
                             return Ok(resolved);
                         }

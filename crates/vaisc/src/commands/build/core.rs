@@ -9,6 +9,19 @@ use crate::error_formatter;
 use crate::imports::{load_module_with_imports_internal, load_module_with_imports_parallel};
 use crate::incremental;
 use crate::utils::{print_plugin_diagnostics, print_suggested_fixes};
+
+/// Phase 17.H1: FNV-1a 32 hash of a source path for use as TC file_id.
+/// Non-zero — 0 is reserved for synthetic spans.
+fn phase17_fnv1a_file_id(s: &str) -> u32 {
+    const FNV_OFFSET: u32 = 0x811c_9dc5;
+    const FNV_PRIME: u32 = 0x0100_0193;
+    let mut hash = FNV_OFFSET;
+    for byte in s.as_bytes() {
+        hash ^= *byte as u32;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    if hash == 0 { 1 } else { hash }
+}
 use colored::Colorize;
 use std::collections::HashSet;
 use std::fs;
@@ -651,6 +664,9 @@ fn run_type_check(
     if !tc_skipped {
         // Calculate imported item count so ownership checker can skip imported items
         let input_canonical = input.canonicalize().unwrap_or_else(|_| input.to_path_buf());
+        // Phase 17.H1: stamp a non-zero file_id so single-module builds
+        // also avoid the 0-vs-0 collision hazard.
+        checker.set_current_file_id(phase17_fnv1a_file_id(&input_canonical.to_string_lossy()));
         if let Ok(original_ast) = query_db.parse(&input_canonical) {
             let original_non_use_count = original_ast
                 .items

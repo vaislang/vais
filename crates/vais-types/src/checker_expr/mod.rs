@@ -19,7 +19,15 @@ impl TypeChecker {
         let result = self.check_expr_inner(expr);
         // Store the resolved type in expr_types for codegen to reference later
         if let Ok(ref ty) = result {
-            let span_key = (expr.span.start, expr.span.end);
+            // Phase 17.H1: stamp file_id — prefer the span's own id, fall
+            // back to TypeChecker's current_file_id when the parser didn't
+            // set it (file_id == 0).
+            let file_id = if expr.span.file_id != 0 {
+                expr.span.file_id
+            } else {
+                self.current_file_id
+            };
+            let span_key = (file_id, expr.span.start, expr.span.end);
             self.expr_types.insert(span_key, ty.clone());
         }
         result

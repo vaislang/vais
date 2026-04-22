@@ -10,6 +10,23 @@ use std::path::{Path, PathBuf};
 use vais_codegen::TargetTriple;
 use vais_types::TypeChecker;
 
+/// Phase 17.H1: derive a stable, non-zero per-path `file_id` via FNV-1a 32.
+///
+/// Non-zero is required — `file_id == 0` is the "synthetic / unknown"
+/// sentinel in [`vais_ast::Span`]. Collision risk across a single build
+/// is vanishingly small with 2^32 space and tens of modules; the
+/// per-build uniqueness is all TC's `expr_types` needs.
+fn phase17_file_id_for_path(path: &Path) -> u32 {
+    const FNV_OFFSET: u32 = 0x811c_9dc5;
+    const FNV_PRIME: u32 = 0x0100_0193;
+    let mut hash = FNV_OFFSET;
+    for byte in path.to_string_lossy().as_bytes() {
+        hash ^= *byte as u32;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    if hash == 0 { 1 } else { hash }
+}
+
 /// Run parallel type checking across multiple modules.
 ///
 /// Returns (final_checker, error_messages) where error_messages is empty on success.
@@ -41,6 +58,12 @@ pub(crate) fn run_parallel_type_check(
             let mut module_checker = TypeChecker::new();
             configure_type_checker(&mut module_checker);
             module_checker.multi_error_mode = true;
+
+            // Phase 17.H1: assign a stable per-path file id (non-zero) so
+            // expr_types keys get namespaced by module. FNV-1a 32-bit hash
+            // of the canonical path string; clamp to non-zero.
+            let file_id = phase17_file_id_for_path(module_path);
+            module_checker.set_current_file_id(file_id);
 
             // Get items for this module
             if let Some(item_indices) = modules_map.get(module_path) {
@@ -157,6 +180,9 @@ pub(crate) fn run_per_module_emit_ir(
             codegen.set_type_aliases(resolved_type_aliases.clone());
             codegen.set_expr_types(resolved_expr_types.clone());
             codegen.set_implicit_try_sites(resolved_implicit_try_sites.clone());
+            // Phase 17.H1: set per-module file_id identical to TC's, so
+            // expr_types lookups in the emit-IR path also resolve.
+            codegen.set_current_file_id(phase17_file_id_for_path(module_path));
             codegen.set_string_prefix(&module_stem);
 
             if gc {

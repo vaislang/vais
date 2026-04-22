@@ -1014,8 +1014,22 @@ impl CodeGenerator {
         // Phase 16 A2.5: when we know the overall call expression's span, read
         // the TC-resolved return type so generic parameters that only appear
         // in the return type can be inferred via resolve_generic_call_with_hint.
-        let expected_ret = call_span
-            .and_then(|s| self.expr_types.get(&(s.start, s.end)).cloned());
+        let expected_ret = call_span.and_then(|s| {
+            let file_id = if s.file_id != 0 { s.file_id } else { self.current_file_id };
+            if let Some(ty) = self.expr_types.get(&(file_id, s.start, s.end)).cloned() {
+                return Some(ty);
+            }
+            // Phase 17.H1 fallback: serial TC path uses a single file_id.
+            // Match (start, end) only if unique.
+            let mut iter = self.expr_types.iter()
+                .filter(|((_, st, en), _)| *st == s.start && *en == s.end);
+            let first = iter.next();
+            let second = iter.next();
+            match (first, second) {
+                (Some((_, ty)), None) => Some(ty.clone()),
+                _ => None,
+            }
+        });
         // Check if this is actually an enum variant constructor (EnumType.Variant(...))
         // e.g., Shape.Rect(10, 20) or Option.Some(42). Must be handled before the
         // static-method dispatch because there is no `EnumType_Variant` function to call.

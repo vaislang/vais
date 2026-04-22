@@ -96,6 +96,12 @@ pub use types::{
 /// checker.check_module(&module).unwrap();
 /// ```
 pub struct TypeChecker {
+    // Phase 17.H1: file identity used to namespace expr_types keys across
+    // modules. Set via `set_current_file_id` before check_module; used to
+    // stamp every `expr_types.insert` with the active module's id even
+    // when the parser-produced span still has file_id=0.
+    pub(crate) current_file_id: u32,
+
     // Type environment
     pub(crate) structs: HashMap<String, StructDef>,
     pub(crate) enums: HashMap<String, EnumDef>,
@@ -190,7 +196,14 @@ pub struct TypeChecker {
 
     /// Expression types from type checking, keyed by expression span.
     /// Used by codegen to get accurate types instead of re-inferring.
-    pub(crate) expr_types: HashMap<(usize, usize), ResolvedType>,
+    ///
+    /// Phase 17.H1: key is `(file_id, start, end)` — including `file_id`
+    /// prevents span collisions between expressions in different source
+    /// files. Prior to this, two expressions sharing the same byte range
+    /// in different modules could poison each other's stored types
+    /// (observed as "body_size (I64) silently becomes Vec<u8>" in
+    /// vaisdb's cross-module builds).
+    pub(crate) expr_types: HashMap<(u32, usize, usize), ResolvedType>,
 
     /// Pending method instantiations accumulated while checking a function body
     /// when type args still contain fresh type variables. Drained at end of
@@ -212,6 +225,7 @@ impl TypeChecker {
     /// Creates a new type checker with built-in types and functions registered.
     pub fn new() -> Self {
         let mut checker = Self {
+            current_file_id: 0,
             structs: HashMap::with_capacity(32),
             enums: HashMap::with_capacity(16),
             unions: HashMap::new(),
@@ -379,9 +393,19 @@ impl TypeChecker {
     }
 
     /// Get expression types recorded during type checking (for passing to codegen).
-    /// Keyed by (span.start, span.end) tuples.
-    pub fn get_expr_types(&self) -> &HashMap<(usize, usize), ResolvedType> {
+    /// Keyed by `(file_id, span.start, span.end)` triples (Phase 17.H1).
+    pub fn get_expr_types(&self) -> &HashMap<(u32, usize, usize), ResolvedType> {
         &self.expr_types
+    }
+
+    /// Phase 17.H1: set the file identifier used when `check_expr` stamps
+    /// its span key into `expr_types`. The driver should call this before
+    /// `check_module` for each module being typechecked, passing a distinct
+    /// id per source file (typically derived from the canonical source
+    /// path). A stable mapping across runs is not required; only
+    /// uniqueness within a single check session is.
+    pub fn set_current_file_id(&mut self, file_id: u32) {
+        self.current_file_id = file_id;
     }
 
     /// Phase 6.27b: return expression types with all type variables resolved
@@ -389,7 +413,7 @@ impl TypeChecker {
     /// was captured during check_expr but wasn't yet fully unified at that
     /// point (e.g., `v := Vec.with_capacity(0)` gets Vec<Var(N)>, which
     /// only becomes Vec<Tuple<..>> after a later `v.push(tuple)` unifies N).
-    pub fn get_resolved_expr_types(&self) -> HashMap<(usize, usize), ResolvedType> {
+    pub fn get_resolved_expr_types(&self) -> HashMap<(u32, usize, usize), ResolvedType> {
         self.expr_types
             .iter()
             .map(|(k, v)| (*k, self.apply_substitutions(v)))
@@ -455,6 +479,13 @@ impl TypeChecker {
         self.globals.extend(other.globals);
         self.warnings.extend(other.warnings);
         self.collected_errors.extend(other.collected_errors);
+
+        // Phase 17.H1: merge per-module expr_types so codegen can look up
+        // TC-resolved types via `(file_id, start, end)` keys. Each source
+        // module stamped its entries with a distinct `file_id`, so keys
+        // cannot collide between modules.
+        self.expr_types.extend(other.expr_types);
+        self.implicit_try_sites.extend(other.implicit_try_sites);
 
         for inst in other.generic_instantiations {
             self.add_instantiation(inst);

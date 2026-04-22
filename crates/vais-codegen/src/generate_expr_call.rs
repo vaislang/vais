@@ -245,8 +245,20 @@ impl CodeGenerator {
                 // so generic parameters that only appear in the return type
                 // (e.g. `Vec.with_capacity(cap: i64) -> Vec<T>`) don't collapse
                 // to the I64 default.
-                let call_span = (span.start, span.end);
-                let expected_ret = self.expr_types.get(&call_span).cloned();
+                let file_id = if span.file_id != 0 { span.file_id } else { self.current_file_id };
+                let call_span = (file_id, span.start, span.end);
+                let expected_ret = self.expr_types.get(&call_span).cloned().or_else(|| {
+                    // Phase 17.H1 fallback: serial TC path uses a single file_id.
+                    // Match (start, end) only if unique.
+                    let mut iter = self.expr_types.iter()
+                        .filter(|((_, s, e), _)| *s == span.start && *e == span.end);
+                    let first = iter.next();
+                    let second = iter.next();
+                    match (first, second) {
+                        (Some((_, ty)), None) => Some(ty.clone()),
+                        _ => None,
+                    }
+                });
                 let mangled = self.resolve_generic_call_with_hint(
                     name,
                     &arg_types,

@@ -212,7 +212,7 @@ fn test_lint_diagnostic_display() {
         level: LintLevel::Warning,
         category: LintCategory::DeadCode,
         message: "function 'foo' is never called".to_string(),
-        span: Span { start: 0, end: 10 },
+        span: Span { file_id: 0, start: 0, end: 10 },
         suggestion: Some("Remove or prefix with '_'".to_string()),
     };
     let display = format!("{}", diag);

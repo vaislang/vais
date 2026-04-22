@@ -125,6 +125,7 @@ impl CodeGenerator {
             ref_constants: Vec::new(),
             ref_constant_counter: 0,
             expr_types: HashMap::new(),
+            current_file_id: 0,
             implicit_try_sites: std::collections::HashSet::new(),
         };
 
@@ -210,8 +211,23 @@ impl CodeGenerator {
     /// Set expression types from the type checker.
     /// These are used by `infer_expr_type` to look up TC-resolved types before
     /// falling back to the legacy heuristic inference.
-    pub fn set_expr_types(&mut self, types: HashMap<(usize, usize), vais_types::ResolvedType>) {
+    ///
+    /// Phase 17.H1: key type is `(file_id, start, end)` to prevent
+    /// cross-module span collisions.
+    pub fn set_expr_types(
+        &mut self,
+        types: HashMap<(u32, usize, usize), vais_types::ResolvedType>,
+    ) {
         self.expr_types = types;
+    }
+
+    /// Phase 17.H1: set the current module's file id used as the lookup
+    /// fallback in `expr_types.get((file_id_or_current, start, end))`.
+    /// Callers should set this to match the id the TC used for the same
+    /// module before `set_expr_types`. A value of 0 is the sentinel for
+    /// "no file id known" and preserves the pre-H1 lookup behavior.
+    pub fn set_current_file_id(&mut self, file_id: u32) {
+        self.current_file_id = file_id;
     }
 
     /// Set the implicit-try argument spans collected by the type checker

@@ -6,6 +6,19 @@ use std::path::Path;
 use vais_codegen::{CodeGenerator, TargetTriple};
 use vais_types::TypeChecker;
 
+/// Phase 17.H1: FNV-1a 32 hash of a source path for codegen file_id.
+/// Matches the TC-side helpers in `build::core` and `build::parallel`.
+fn phase17_fnv1a_file_id_backend(path: &Path) -> u32 {
+    const FNV_OFFSET: u32 = 0x811c_9dc5;
+    const FNV_PRIME: u32 = 0x0100_0193;
+    let mut hash = FNV_OFFSET;
+    for byte in path.to_string_lossy().as_bytes() {
+        hash ^= *byte as u32;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    if hash == 0 { 1 } else { hash }
+}
+
 /// Text-based IR code generation (default backend).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn generate_with_text_backend(
@@ -58,6 +71,11 @@ pub(crate) fn generate_with_text_backend(
     codegen.set_type_aliases(checker.get_type_aliases().clone());
     codegen.set_expr_types(checker.get_resolved_expr_types());
     codegen.set_implicit_try_sites(checker.get_implicit_try_sites().clone());
+    // Phase 17.H1: match the TC's file_id for this module so expr_types
+    // lookups find entries stored under the stamped key. FNV-1a 32 of the
+    // canonical input path, kept in sync with build::core::phase17_fnv1a_file_id
+    // and build::parallel::phase17_file_id_for_path.
+    codegen.set_current_file_id(phase17_fnv1a_file_id_backend(input));
 
     // Enable multi-error mode for graceful degradation:
     // collect codegen errors instead of stopping at the first one.

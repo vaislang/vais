@@ -346,8 +346,37 @@ impl CodeGenerator {
         // (erased from Vec<Tuple> etc). TC's expr_types stores the actual post-unification
         // type at the expression's span, which is more accurate than codegen-local
         // inference through locals whose ty was frozen at declaration.
-        let span_key = (expr.span.start, expr.span.end);
-        if let Some(tc_ty) = self.expr_types.get(&span_key) {
+        // Phase 17.H1: look up with span's file_id, falling back to
+        // codegen's current_file_id when the span is unstamped (0). TC
+        // stamped expr_types keys with either the span's own file_id or
+        // its own current_file_id under the identical rule, so the two
+        // sides stay consistent.
+        let file_id = if expr.span.file_id != 0 {
+            expr.span.file_id
+        } else {
+            self.current_file_id
+        };
+        let span_key = (file_id, expr.span.start, expr.span.end);
+        // Phase 17.H1 fallback: when serial TC ran, all expr_types were
+        // stamped with the driver's single current_file_id while codegen
+        // walks modules with distinct per-module file_ids. In that case
+        // the exact (file_id, start, end) key won't match, but a unique
+        // (*, start, end) entry often exists. Only promote when exactly
+        // one such entry matches, to avoid cross-module span-bleed.
+        let fallback_tc_ty = if !self.expr_types.contains_key(&span_key) {
+            let mut iter = self.expr_types.iter()
+                .filter(|((_, s, e), _)| *s == expr.span.start && *e == expr.span.end);
+            let first = iter.next();
+            let second = iter.next();
+            match (first, second) {
+                (Some((_, ty)), None) => Some(ty.clone()),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        if let Some(tc_ty_owned) = self.expr_types.get(&span_key).cloned().or(fallback_tc_ty) {
+            let tc_ty = &tc_ty_owned;
             // Phase 6.30.2: skip upgrade when tc_ty carries unresolved inference
             // vars (TC can leave Var(n) in expr_types when later unification is
             // not propagated back). The local codegen inference — which walks
@@ -464,8 +493,25 @@ impl CodeGenerator {
     /// Use for targeted lookups where TC accuracy is critical (e.g., generic type resolution).
     #[allow(dead_code)]
     pub(crate) fn tc_expr_type(&self, expr: &Spanned<Expr>) -> Option<&ResolvedType> {
-        let span_key = (expr.span.start, expr.span.end);
-        self.expr_types.get(&span_key)
+        let file_id = if expr.span.file_id != 0 {
+            expr.span.file_id
+        } else {
+            self.current_file_id
+        };
+        let span_key = (file_id, expr.span.start, expr.span.end);
+        if let Some(ty) = self.expr_types.get(&span_key) {
+            return Some(ty);
+        }
+        // Phase 17.H1 fallback: serial TC path stores under a single file_id.
+        // Match (start, end) only if unique, otherwise bail out.
+        let mut iter = self.expr_types.iter()
+            .filter(|((_, s, e), _)| *s == expr.span.start && *e == expr.span.end);
+        let first = iter.next();
+        let second = iter.next();
+        match (first, second) {
+            (Some((_, ty)), None) => Some(ty),
+            _ => None,
+        }
     }
 
     #[inline(never)]
