@@ -78,19 +78,46 @@ impl CodeGenerator {
             }
             Pattern::Literal(lit) => match lit {
                 Literal::Int(n) => {
+                    // Use the match value's actual integer width when known,
+                    // so matching an i32 payload against a literal uses
+                    // `icmp eq i32` instead of i64 (mismatch under clang).
+                    let match_ty = match match_type {
+                        ResolvedType::I8 | ResolvedType::U8 => "i8",
+                        ResolvedType::I16 | ResolvedType::U16 => "i16",
+                        ResolvedType::I32 | ResolvedType::U32 => "i32",
+                        ResolvedType::Bool => "i1",
+                        _ => "i64",
+                    };
                     let result = self.next_temp(counter);
-                    let ir = format!("  {} = icmp eq i64 {}, {}\n", result, match_val, n);
+                    let ir = format!(
+                        "  {} = icmp eq {} {}, {}\n",
+                        result, match_ty, match_val, n
+                    );
                     Ok((result, ir))
                 }
                 Literal::Bool(b) => {
                     let lit_val = if *b { "1" } else { "0" };
+                    let match_ty = match match_type {
+                        ResolvedType::Bool => "i1",
+                        _ => "i64",
+                    };
                     let result = self.next_temp(counter);
-                    let ir = format!("  {} = icmp eq i64 {}, {}\n", result, match_val, lit_val);
+                    let ir = format!(
+                        "  {} = icmp eq {} {}, {}\n",
+                        result, match_ty, match_val, lit_val
+                    );
                     Ok((result, ir))
                 }
                 Literal::Float(f) => {
+                    let float_ty = match match_type {
+                        ResolvedType::F32 => "float",
+                        _ => "double",
+                    };
                     let result = self.next_temp(counter);
-                    let ir = format!("  {} = fcmp oeq double {}, {:.6e}\n", result, match_val, f);
+                    let ir = format!(
+                        "  {} = fcmp oeq {} {}, {:.6e}\n",
+                        result, float_ty, match_val, f
+                    );
                     Ok((result, ir))
                 }
                 Literal::String(s) => {
@@ -453,6 +480,36 @@ impl CodeGenerator {
                                             "  {} = load float, float* {}",
                                             field_val,
                                             fp
+                                        );
+                                    }
+                                    ResolvedType::Bool => {
+                                        let raw = self.next_temp(counter);
+                                        write_ir!(
+                                            ir,
+                                            "  {} = load i64, i64* {}",
+                                            raw,
+                                            payload_ptr
+                                        );
+                                        write_ir!(
+                                            ir,
+                                            "  {} = trunc i64 {} to i1",
+                                            field_val,
+                                            raw
+                                        );
+                                    }
+                                    ResolvedType::I32 | ResolvedType::U32 => {
+                                        let raw = self.next_temp(counter);
+                                        write_ir!(
+                                            ir,
+                                            "  {} = load i64, i64* {}",
+                                            raw,
+                                            payload_ptr
+                                        );
+                                        write_ir!(
+                                            ir,
+                                            "  {} = trunc i64 {} to i32",
+                                            field_val,
+                                            raw
                                         );
                                     }
                                     _ => {
@@ -1139,6 +1196,52 @@ impl CodeGenerator {
                                 let bool_val = self.next_temp(counter);
                                 write_ir!(ir, "  {} = trunc i64 {} to i1", bool_val, raw_val);
                                 bool_val
+                            } else if matches!(
+                                llvm_field_ty.as_str(),
+                                "i8" | "i16" | "i32"
+                            ) {
+                                // Narrow int: trunc from the i64 payload slot.
+                                let narrowed = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = trunc i64 {} to {}",
+                                    narrowed,
+                                    raw_val,
+                                    llvm_field_ty
+                                );
+                                narrowed
+                            } else if llvm_field_ty == "double" {
+                                let fp = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = bitcast i64* {} to double*",
+                                    fp,
+                                    payload_ptr
+                                );
+                                let fv = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load double, double* {}",
+                                    fv,
+                                    fp
+                                );
+                                fv
+                            } else if llvm_field_ty == "float" {
+                                let fp = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = bitcast i64* {} to float*",
+                                    fp,
+                                    payload_ptr
+                                );
+                                let fv = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load float, float* {}",
+                                    fv,
+                                    fp
+                                );
+                                fv
                             } else {
                                 raw_val
                             };
