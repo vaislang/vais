@@ -408,6 +408,33 @@ impl CodeGenerator {
                         src_ptr,
                         sizeof
                     );
+                } else if val_llvm_ty.starts_with('%')
+                    && llvm_ty.starts_with('%')
+                    && val_llvm_ty != llvm_ty
+                {
+                    // Phase B5: layout-compatible struct type mismatch (e.g.
+                    // `%Vec$SqlValue` vs base `%Vec` when the let target has
+                    // no generic annotation). The two structs share layout, so
+                    // bitcast the alloca pointer to the value's struct type
+                    // and store. This keeps the alloca slot usable for both
+                    // consumers expecting the base and the specialized type.
+                    let bc = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = bitcast {}* %{} to {}*",
+                        bc,
+                        llvm_ty,
+                        llvm_name,
+                        val_llvm_ty
+                    );
+                    write_ir!(
+                        ir,
+                        "  store {} {}, {}* {}",
+                        val_llvm_ty,
+                        actual_val,
+                        val_llvm_ty,
+                        bc
+                    );
                 } else {
                     write_ir!(
                         ir,

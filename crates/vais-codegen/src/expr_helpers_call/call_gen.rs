@@ -87,12 +87,39 @@ impl CodeGenerator {
             let type_size = self.compute_sizeof(&arg_type);
             // Check temp_var_types for more accurate type info when infer_expr_type returns I64.
             // This handles Vec<str>[i] → {i8*, i64} which infer_expr_type can't resolve.
+            //
+            // Phase B5: also prefer the registered SSA type when the caller-side
+            // inferred type is an unspecialized generic container (e.g., `%Vec`
+            // when `Vec.new()` was call-site specialized to `%Vec$f32`). This
+            // keeps the heap-alloc bitcast and store type-consistent with the
+            // actual call return type.
             let (effective_ty, effective_size) = if matches!(&arg_type, ResolvedType::I64) {
                 if let Some(temp_ty) = self.fn_ctx.temp_var_types.get(arg_val) {
                     let ty = self.type_to_llvm(temp_ty);
                     let sz = self.compute_sizeof(temp_ty);
                     if sz > 8 {
                         (ty, sz)
+                    } else {
+                        (llvm_ty.clone(), type_size)
+                    }
+                } else {
+                    (llvm_ty.clone(), type_size)
+                }
+            } else if llvm_ty.starts_with('%') && !llvm_ty.contains('$') {
+                // Base generic type (e.g., "%Vec") — check if the SSA value
+                // is already specialized ("%Vec$f32") and use that.
+                if let Some(reg_ty) = self.llvm_type_of_checked(arg_val) {
+                    if reg_ty.starts_with('%')
+                        && reg_ty.contains('$')
+                        && reg_ty.starts_with(&llvm_ty[..])
+                    {
+                        let sz = self
+                            .fn_ctx
+                            .temp_var_types
+                            .get(arg_val)
+                            .map(|t| self.compute_sizeof(t))
+                            .unwrap_or(type_size);
+                        (reg_ty, sz)
                     } else {
                         (llvm_ty.clone(), type_size)
                     }

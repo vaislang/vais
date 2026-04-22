@@ -132,6 +132,13 @@ X Vec<T> {
         Vec { data: data, len: 0, cap: capacity, elem_size: elem_sz, owned: 0 }
     }
 
+    # Shorthand for `Vec.with_capacity(0)`. Present so idiomatic
+    # `v: Vec<T> := mut Vec.new()` compiles without requiring users to
+    # pick an initial capacity. The first push will reallocate.
+    F new() -> Vec<T> {
+        Vec.with_capacity(0)
+    }
+
     # Get the number of elements
     F len(&self) -> i64 {
         self.len
