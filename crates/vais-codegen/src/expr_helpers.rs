@@ -93,8 +93,20 @@ impl CodeGenerator {
         let mut ir = left_ir;
         ir.push_str(&right_ir);
 
-        // Handle string operations
-        let left_type = self.infer_expr_type(left);
+        // Handle string operations. Unwrap Ref/RefMut on the LHS because
+        // `&str` and `str` share the same fat-pointer LLVM layout and the
+        // string helpers (concat, strcmp, str_contains, ...) operate on
+        // the data pointer either way. Without this, comparisons like
+        // `s == "..."` where `s: &str` fall through to i64 compare.
+        let left_type_raw = self.infer_expr_type(left);
+        let left_type = match &left_type_raw {
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                if matches!(inner.as_ref(), ResolvedType::Str) =>
+            {
+                ResolvedType::Str
+            }
+            _ => left_type_raw,
+        };
         if matches!(left_type, ResolvedType::Str) {
             // `str + int` is pointer-arithmetic, not string concatenation.
             // load_byte(s + i) / similar low-level helpers rely on this form.

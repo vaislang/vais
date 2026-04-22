@@ -960,6 +960,19 @@ impl CodeGenerator {
                         "%{} = type {{ i32, {{ i64 }} }}\n",
                         mangled
                     ));
+                } else if base == "Vec" {
+                    // std::Vec<T> struct: 5 i64 fields (data, len, cap,
+                    // elem_size, owned). All specializations share layout.
+                    forward_decls.push_str(&format!(
+                        "%{} = type {{ i64, i64, i64, i64, i64 }}\n",
+                        mangled
+                    ));
+                } else if base == "HashMap" {
+                    // std::HashMap: 8 i64 fields (rough layout).
+                    forward_decls.push_str(&format!(
+                        "%{} = type {{ i64, i64, i64, i64, i64, i64, i64, i64 }}\n",
+                        mangled
+                    ));
                 } else if base == "Box" {
                     // std::Box<T> is a heap-wrapper struct with a single
                     // i64 payload (the boxed pointer). Specializations
