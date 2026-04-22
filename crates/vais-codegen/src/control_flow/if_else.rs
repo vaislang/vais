@@ -25,6 +25,19 @@ impl CodeGenerator {
 
                 // Infer the type of the then block for phi node
                 let then_type = self.infer_block_type(then_stmts);
+                // Detect terminating else branches (e.g. `R Err(...)` / early
+                // return) so we don't fall back to I64 when only the then arm
+                // actually reaches the merge.
+                let else_is_terminating = else_branch
+                    .as_ref()
+                    .map(|eb| match eb.as_ref() {
+                        IfElse::Else(stmts) => matches!(
+                            stmts.last().map(|s| &s.node),
+                            Some(vais_ast::Stmt::Return(_))
+                        ),
+                        IfElse::ElseIf(..) => false,
+                    })
+                    .unwrap_or(false);
                 let else_type_resolved = if let Some(eb) = else_branch {
                     match eb.as_ref() {
                         IfElse::Else(stmts) => self.infer_block_type(stmts),
@@ -33,7 +46,12 @@ impl CodeGenerator {
                 } else {
                     vais_types::ResolvedType::I64
                 };
-                let block_type = if self.type_to_llvm(&then_type) != self.type_to_llvm(&else_type_resolved) {
+                let block_type = if else_is_terminating {
+                    // Else terminates → phi has a single incoming from the
+                    // then branch; keep its type so F64/narrow ints aren't
+                    // widened to I64.
+                    then_type.clone()
+                } else if self.type_to_llvm(&then_type) != self.type_to_llvm(&else_type_resolved) {
                     vais_types::ResolvedType::I64
                 } else {
                     then_type
@@ -222,6 +240,44 @@ impl CodeGenerator {
                 let phi_is_struct = llvm_type.starts_with('{') || llvm_type.starts_with('%');
                 let then_actual_ty = self.llvm_type_of(&then_val_for_phi);
                 let else_actual_ty = self.llvm_type_of(&else_val_for_phi);
+                // If one incoming is a float/double and the phi type was
+                // inferred as an integer (common when one branch reaches the
+                // merge through a nested if-else whose block_type fell back
+                // to I64), widen the phi to match. Coerce the integer
+                // incoming via `sitofp` so both entries share the type.
+                let then_is_float = matches!(then_actual_ty.as_str(), "float" | "double");
+                let else_is_float = matches!(else_actual_ty.as_str(), "float" | "double");
+                let integer_phi = llvm_type.starts_with('i') && !llvm_type.starts_with("i8*");
+                let (llvm_type, then_val_for_phi, else_val_for_phi) = if integer_phi
+                    && (then_is_float || else_is_float)
+                    && !then_from_label.is_empty()
+                    && !else_from_label.is_empty()
+                {
+                    let target = if then_actual_ty == "double" || else_actual_ty == "double" {
+                        "double"
+                    } else {
+                        "float"
+                    };
+                    let coerce = |val: String, actual: &str, ir: &mut String, counter: &mut usize, cg: &mut Self| -> String {
+                        if actual == target {
+                            val
+                        } else if actual.starts_with('i') {
+                            let tmp = cg.next_temp(counter);
+                            write_ir!(ir, "  {} = sitofp {} {} to {}", tmp, actual, val, target);
+                            tmp
+                        } else {
+                            val
+                        }
+                    };
+                    let then_new = coerce(then_val_for_phi, &then_actual_ty, &mut ir, counter, self);
+                    let else_new = coerce(else_val_for_phi, &else_actual_ty, &mut ir, counter, self);
+                    (target.to_string(), then_new, else_new)
+                } else {
+                    (llvm_type, then_val_for_phi, else_val_for_phi)
+                };
+                let then_actual_ty = self.llvm_type_of(&then_val_for_phi);
+                let else_actual_ty = self.llvm_type_of(&else_val_for_phi);
+                let phi_is_struct = llvm_type.starts_with('{') || llvm_type.starts_with('%');
                 let phi_type_mismatch = if phi_is_struct {
                     (!then_from_label.is_empty() && then_actual_ty.starts_with('i') && !then_val_for_phi.starts_with("zeroinitializer"))
                         || (!else_from_label.is_empty() && else_actual_ty.starts_with('i') && else_val_for_phi != "0")
