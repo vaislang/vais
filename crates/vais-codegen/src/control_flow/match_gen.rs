@@ -309,13 +309,9 @@ impl CodeGenerator {
                         let coerced = self.next_temp(counter);
                         write_ir!(ir, "  {} = zext i1 {} to i64", coerced, body_val);
                         body_val = coerced;
-                        // If the function returns a Named (struct/enum)
-                        // pointer AND arm_body_type was resolved to that Named
-                        // (see the top-of-merge logic), cast the i64 to a
-                        // pointer so the phi incoming matches. Don't apply
-                        // narrow-int trunc here based on return type alone —
-                        // the match may be used as a statement binding an i64
-                        // local that is unrelated to the function return.
+                        // Coerce to arm_body_type if it's a Named pointer or
+                        // narrow int — the phi incoming must match the phi's
+                        // declared type.
                         if matches!(&arm_body_type, ResolvedType::Named { .. }) {
                             let llvm_ty = self.type_to_llvm(&arm_body_type);
                             let casted = self.next_temp(counter);
@@ -327,6 +323,25 @@ impl CodeGenerator {
                                 llvm_ty
                             );
                             body_val = casted;
+                        } else if matches!(
+                            &arm_body_type,
+                            ResolvedType::I32
+                                | ResolvedType::U32
+                                | ResolvedType::I16
+                                | ResolvedType::U16
+                                | ResolvedType::I8
+                                | ResolvedType::U8
+                        ) {
+                            let target = self.type_to_llvm(&arm_body_type);
+                            let narrowed = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = trunc i64 {} to {}",
+                                narrowed,
+                                body_val,
+                                target
+                            );
+                            body_val = narrowed;
                         }
                     } else if matches!(
                         arm_body_type,
