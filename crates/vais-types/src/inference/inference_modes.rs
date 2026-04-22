@@ -54,6 +54,30 @@ impl TypeChecker {
                                 _ => e,
                             }
                         })?;
+                        // Phase A3 (narrow refresh): after unification, if
+                        // the inferred type contains a generic container
+                        // whose type arguments just became concrete, refresh
+                        // the expr_types entry. This lets codegen's
+                        // resolve_generic_call_with_hint pick the right
+                        // monomorphization for things like
+                        // `vec := mut Vec.with_capacity(n)` — without the
+                        // refresh, expr_types holds `Vec<Var>` and codegen
+                        // falls back to an arbitrary instantiation.
+                        //
+                        // We deliberately skip refresh for non-container
+                        // types to limit cross-module span bleed risk
+                        // (the refresh broke test_types in session 3 when
+                        // applied unconditionally — this narrower trigger
+                        // only updates spans whose wrong/unresolved generic
+                        // parameter was the actual cause of the bug).
+                        let resolved = self.apply_substitutions(&inferred);
+                        if Self::has_concrete_container_generics(&resolved)
+                            && !Self::has_concrete_container_generics(&inferred)
+                        {
+                            let span_key = (expr.span.start, expr.span.end);
+                            self.expr_types.insert(span_key, resolved.clone());
+                            return Ok(resolved);
+                        }
                         Ok(inferred)
                     }
                 }
@@ -207,5 +231,44 @@ impl TypeChecker {
         }
 
         Ok(wrap_result(self.apply_substitutions(&first_type)))
+    }
+
+    /// True when `ty` is a Named container (Vec/HashMap/Option/Result/Box/…)
+    /// whose generic arguments are all fully concrete (no `Var`, no
+    /// `Generic(_)`). Used by the bidirectional refresh to limit expr_types
+    /// updates to the cases where the wrong generic instantiation is the
+    /// actual source of downstream codegen bugs.
+    fn has_concrete_container_generics(ty: &ResolvedType) -> bool {
+        fn is_container(name: &str) -> bool {
+            matches!(
+                name,
+                "Vec" | "HashMap" | "HashSet" | "BTreeMap" | "Option" | "Result" | "Box"
+            )
+        }
+        fn is_concrete(t: &ResolvedType) -> bool {
+            !matches!(t, ResolvedType::Var(_) | ResolvedType::Generic(_))
+                && match t {
+                    ResolvedType::Named { generics, .. } => generics.iter().all(is_concrete),
+                    ResolvedType::Tuple(items) => items.iter().all(is_concrete),
+                    ResolvedType::Array(inner)
+                    | ResolvedType::Pointer(inner)
+                    | ResolvedType::Ref(inner)
+                    | ResolvedType::RefMut(inner)
+                    | ResolvedType::Slice(inner)
+                    | ResolvedType::SliceMut(inner)
+                    | ResolvedType::Optional(inner)
+                    | ResolvedType::Range(inner)
+                    | ResolvedType::Future(inner) => is_concrete(inner),
+                    ResolvedType::Map(k, v) => is_concrete(k) && is_concrete(v),
+                    ResolvedType::Result(ok, err) => is_concrete(ok) && is_concrete(err),
+                    _ => true,
+                }
+        }
+        match ty {
+            ResolvedType::Named { name, generics } if is_container(name) => {
+                !generics.is_empty() && generics.iter().all(is_concrete)
+            }
+            _ => false,
+        }
     }
 }
