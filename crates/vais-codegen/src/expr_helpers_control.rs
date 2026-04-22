@@ -125,10 +125,19 @@ impl CodeGenerator {
         // since the if/else is used as a statement and the result is unused.
         // Exception: when the else branch early-returns, only the then branch
         // reaches the merge, so keep its type instead of widening to i64.
+        //
+        // Phase B2 continuation: when one side is float/double and the other
+        // is integer, prefer the float type (the int side will be coerced via
+        // sitofp in the arm block before branching). Same logic the nested
+        // ElseIf handler uses.
         let phi_type = if else_is_terminating {
             then_type.clone()
         } else if self.type_to_llvm(&then_type) != self.type_to_llvm(&else_type) {
-            ResolvedType::I64
+            match (&then_type, &else_type) {
+                (ResolvedType::F64, _) | (_, ResolvedType::F64) => ResolvedType::F64,
+                (ResolvedType::F32, _) | (_, ResolvedType::F32) => ResolvedType::F32,
+                _ => ResolvedType::I64,
+            }
         } else {
             then_type
         };
@@ -178,6 +187,22 @@ impl CodeGenerator {
                 } else {
                     write_ir!(ir, "  {} = fptrunc double {} to float", tmp, coerced);
                 }
+                tmp
+            } else if actual_after.starts_with('i')
+                && !actual_after.contains('*')
+                && (phi_llvm == "float" || phi_llvm == "double")
+            {
+                // Int → float for mixed-type phi (B2 extension): coerce arm
+                // value to float in the arm block before branching to merge.
+                let tmp = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = sitofp {} {} to {}",
+                    tmp,
+                    actual_after,
+                    coerced,
+                    phi_llvm
+                );
                 tmp
             } else {
                 coerced
@@ -247,6 +272,21 @@ impl CodeGenerator {
                     } else {
                         write_ir!(ir, "  {} = fptrunc double {} to float", tmp, coerced);
                     }
+                    tmp
+                } else if actual_after.starts_with('i')
+                    && !actual_after.contains('*')
+                    && (phi_llvm == "float" || phi_llvm == "double")
+                {
+                    // Int → float for mixed-type phi (B2 extension).
+                    let tmp = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = sitofp {} {} to {}",
+                        tmp,
+                        actual_after,
+                        coerced,
+                        phi_llvm
+                    );
                     tmp
                 } else {
                     coerced
