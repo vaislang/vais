@@ -367,6 +367,52 @@ impl CodeGenerator {
             if !expr_shape_matches_type(&expr.node, tc_ty) {
                 return local;
             }
+            // Phase E: for an Ident, trust the codegen-local binding when it
+            // carries a concrete *narrow* primitive type (not plain I64,
+            // which is the default erased type that TC often refines).
+            // This catches the cross-module span bleed case where
+            // body_size (locally U64) was being promoted to Vec<u8>
+            // because a span-colliding expression elsewhere had that type.
+            if let Expr::Ident(name) = &expr.node {
+                if let Some(local_var) = self.fn_ctx.locals.get(name) {
+                    let is_narrow_primitive = matches!(
+                        local_var.ty,
+                        ResolvedType::I8
+                            | ResolvedType::I16
+                            | ResolvedType::I32
+                            | ResolvedType::I128
+                            | ResolvedType::U8
+                            | ResolvedType::U16
+                            | ResolvedType::U32
+                            | ResolvedType::U64
+                            | ResolvedType::U128
+                            | ResolvedType::F32
+                            | ResolvedType::F64
+                            | ResolvedType::Bool
+                            | ResolvedType::Str
+                    );
+                    if is_narrow_primitive {
+                        return local_var.ty.clone();
+                    }
+                    // Phase E: local I64 + TC Named/Vec (generic container)
+                    // is almost always span-bleed from another module. Trust
+                    // local unless TC refines to a tuple/named type that
+                    // matches the local's semantic (rare — TC usually agrees
+                    // on tuple shape when it's legitimate).
+                    //
+                    // Guard: block upgrade from I64 → Named{Vec,..} when the
+                    // local's declared type is I64 — a legitimate Vec<T>
+                    // binding would have been stored as Named{Vec,..} from
+                    // the start, not I64.
+                    if matches!(local_var.ty, ResolvedType::I64) {
+                        if let ResolvedType::Named { name: tn, .. } = tc_ty {
+                            if matches!(tn.as_str(), "Vec" | "HashMap" | "Option" | "Result" | "Box") {
+                                return local_var.ty.clone();
+                            }
+                        }
+                    }
+                }
+            }
             // Only upgrade when TC has strictly more info than local.
             let should_upgrade = match (&local, tc_ty) {
                 (ResolvedType::I64, ResolvedType::Tuple(_)) => true,

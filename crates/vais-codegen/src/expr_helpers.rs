@@ -507,14 +507,32 @@ impl CodeGenerator {
         ty: &Spanned<Type>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
+        // Infer the source type BEFORE generate_expr so registry pollution
+        // from earlier expressions doesn't mask the true source width.
+        let src_type_static = self.infer_expr_type(expr);
         let (val, val_ir) = self.generate_expr(expr, counter)?;
         let mut ir = val_ir;
 
         let target_type = self.ast_type_to_resolved(&ty.node);
         let llvm_type = self.type_to_llvm(&target_type);
 
-        // Check source type for str→i64 cast: extract data pointer from fat pointer
-        let src_llvm_ty = self.llvm_type_of(&val);
+        // Check source type for str→i64 cast: extract data pointer from fat pointer.
+        //
+        // Phase E: prefer the statically-inferred source type over
+        // llvm_type_of(&val). The latter reads temp_var_types which can be
+        // polluted by catch-all registrations that run on outer
+        // expressions. For an explicit `as` cast, the user's intent is
+        // clear from the AST and shouldn't be overridden by an
+        // accidentally-registered Vec<T> or similar.
+        let static_src_llvm = self.type_to_llvm(&src_type_static);
+        let src_llvm_ty = if static_src_llvm.starts_with('i')
+            || static_src_llvm == "float"
+            || static_src_llvm == "double"
+        {
+            static_src_llvm.clone()
+        } else {
+            self.llvm_type_of(&val)
+        };
         if src_llvm_ty == "{ i8*, i64 }" && llvm_type == "i64" {
             // str → i64: extract the data pointer (field 0) and ptrtoint
             let ptr_val = self.next_temp(counter);
