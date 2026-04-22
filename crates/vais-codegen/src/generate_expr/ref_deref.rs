@@ -250,7 +250,12 @@ impl CodeGenerator {
             ResolvedType::Pointer(inner) => self.type_to_llvm(inner),
             ResolvedType::Ref(inner) => self.type_to_llvm(inner),
             ResolvedType::RefMut(inner) => self.type_to_llvm(inner),
-            _ => "i64".to_string(),
+            // Phase B5: `*v` where `v` is not a reference / pointer is a
+            // no-op dereference (the source already has the value). Falling
+            // back to `load i64` produces bogus IR like
+            // `load i64, i64* %v_as_double` that clang rejects. Return the
+            // value directly and let downstream consumers see the real type.
+            _ => return Ok((ptr_val, ir)),
         };
 
         let result = self.next_temp(counter);
