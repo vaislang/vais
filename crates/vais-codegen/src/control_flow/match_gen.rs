@@ -449,10 +449,27 @@ impl CodeGenerator {
                 }
 
                 // Use actual current block (may differ from arm_body_label if body
-                // inserted intermediate labels, e.g., division-by-zero guard)
-                let actual_block = self.fn_ctx.current_block.clone();
-                arm_values.push((body_val, actual_block));
-                write_ir!(ir, "  br label %{}", merge_label);
+                // inserted intermediate labels, e.g., division-by-zero guard).
+                //
+                // Phase B5: if the arm body terminates the current block
+                // (ret / unreachable), do not add a phi incoming from it and
+                // skip the fallthrough `br` — emitting `br` after `ret` leaves
+                // an unreachable block whose phi entry in the merge mismatches
+                // the actual predecessor set.
+                let body_tail = body_ir.trim_end();
+                let arm_terminated = body_tail.ends_with("unreachable")
+                    || body_tail.ends_with(" ret void")
+                    || body_tail.contains("  ret ")
+                        && body_tail
+                            .rsplit('\n')
+                            .next()
+                            .map(|l| l.trim_start().starts_with("ret "))
+                            .unwrap_or(false);
+                if !arm_terminated {
+                    let actual_block = self.fn_ctx.current_block.clone();
+                    arm_values.push((body_val, actual_block));
+                    write_ir!(ir, "  br label %{}", merge_label);
+                }
 
                 current_label = next_label;
             }
