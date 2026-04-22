@@ -1211,16 +1211,18 @@ impl CodeGenerator {
             arg_vals.push(format!("{} {}", arg_llvm_ty, val));
         }
 
-        let ret_type = fn_info
+        let ret_resolved: Option<ResolvedType> = fn_info
             .as_ref()
-            .map(|info| self.type_to_llvm(&info.signature.ret))
+            .map(|info| info.signature.ret.clone())
             .or_else(|| {
-                // Fallback: check resolved_function_sigs from type checker
                 self.types
                     .resolved_function_sigs
                     .get(&full_method_name)
-                    .map(|sig| self.type_to_llvm(&sig.ret))
-            })
+                    .map(|sig| sig.ret.clone())
+            });
+        let ret_type = ret_resolved
+            .as_ref()
+            .map(|ty| self.type_to_llvm(ty))
             .unwrap_or_else(|| "i64".to_string());
 
         if ret_type == "void" {
@@ -1241,6 +1243,16 @@ impl CodeGenerator {
                 full_method_name,
                 arg_vals.join(", ")
             );
+            // Phase B4: register the temp with the ACTUAL emitted return
+            // type (from signature), not the caller-inferred type. This
+            // stops the generate_expr catch-all from registering a Named
+            // type on an SSA temp whose emission used `i64` fallback.
+            if let Some(resolved) = ret_resolved {
+                self.fn_ctx.register_temp_type(&tmp, resolved);
+            } else {
+                self.fn_ctx
+                    .register_temp_type(&tmp, ResolvedType::I64);
+            }
             Ok((tmp, ir))
         }
     }
