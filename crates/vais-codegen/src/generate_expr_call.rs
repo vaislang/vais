@@ -378,15 +378,62 @@ impl CodeGenerator {
             }
 
             let inferred_ty = self.infer_expr_type(arg_for_gen);
+            let mut did_vec_to_slice = false;
             let arg_ty = if let Some(ref ty) = param_ty {
                 if matches!(ty, ResolvedType::Generic(_)) {
                     self.type_to_llvm(&inferred_ty)
                 } else if Self::is_vec_to_slice_coercion(ty, &inferred_ty) {
-                    // Vec<T> → Slice(T) coercion: use inferred type for LLVM IR type tag.
-                    // The param expects a slice fat pointer { ptr, i64 } but the arg is a
-                    // Vec (same layout { i64, i64 }). Using the inferred type avoids a
-                    // type mismatch in cross-module codegen where typed pointers are used.
-                    self.type_to_llvm(&inferred_ty)
+                    // Vec<T> → Slice(T) coercion: materialize a real
+                    // `{ i8*, i64 }` fat pointer by extracting Vec's data
+                    // (field 0, i64 as pointer-int) and len (field 1). The
+                    // val is a `%Vec*` or `%Vec$T*` pointer.
+                    let vec_ptr_ty = self.llvm_type_of(&val);
+                    let vec_struct_ty = vec_ptr_ty
+                        .strip_suffix('*')
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "%Vec".to_string());
+                    let data_gep = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
+                        data_gep,
+                        vec_struct_ty,
+                        vec_struct_ty,
+                        val
+                    );
+                    let data_i64 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_gep);
+                    let data_i8 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_i8, data_i64);
+                    let len_gep = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 1",
+                        len_gep,
+                        vec_struct_ty,
+                        vec_struct_ty,
+                        val
+                    );
+                    let len_val = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i64, i64* {}", len_val, len_gep);
+                    let fat1 = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+                        fat1,
+                        data_i8
+                    );
+                    let fat2 = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
+                        fat2,
+                        fat1,
+                        len_val
+                    );
+                    val = fat2;
+                    did_vec_to_slice = true;
+                    "{ i8*, i64 }".to_string()
                 } else {
                     self.type_to_llvm(ty)
                 }
@@ -395,7 +442,15 @@ impl CodeGenerator {
                 self.type_to_llvm(&inferred_ty)
             };
 
-            // Integer width coercion: if param expects i32 but expr produces i64, trunc
+            // Short-circuit: the Vec→slice coercion above already produced the
+            // final `{ i8*, i64 }` value in `val`. Skip every downstream
+            // coercion so they don't reinterpret the fat pointer as an i64 etc.
+            if did_vec_to_slice {
+                arg_vals.push(format!("{} {}", arg_ty, val));
+                continue;
+            }
+
+            // Integer width coercion: if param expects i32 but expr produces i64, trunc.
             if let Some(ref pt) = param_ty {
                 let src_bits = self.get_integer_bits(&inferred_ty);
                 let dst_bits = self.get_integer_bits(pt);
