@@ -470,12 +470,62 @@ impl CodeGenerator {
 
         // Err branch: early return
         write_ir!(ir, "{}:", err_label);
-        write_ir!(
-            ir,
-            "  ret {} {}  ; early return on Err\n",
-            llvm_type,
-            inner_val
-        );
+        // Phase D: if the inner Result's LLVM type differs from the
+        // enclosing function's return type (e.g. `Result<i64, VaisError>`
+        // propagated out of a function returning `Result<PageHeader,
+        // VaisError>`), bitcast-transport the value through an alloca.
+        // Both sides share the erased `{ i32, { i64 } }` layout, so a
+        // pointer reinterpret + load preserves the semantic value. Without
+        // this the `ret` emits a type mismatch against the function sig.
+        let ret_llvm = self
+            .fn_ctx
+            .current_return_type
+            .as_ref()
+            .map(|t| self.type_to_llvm(t))
+            .unwrap_or_else(|| llvm_type.clone());
+        if ret_llvm != llvm_type && ret_llvm.starts_with('%') && llvm_type.starts_with('%') {
+            let spill = self.next_temp(counter);
+            write_ir!(ir, "  {} = alloca {}", spill, llvm_type);
+            write_ir!(
+                ir,
+                "  store {} {}, {}* {}",
+                llvm_type,
+                inner_val,
+                llvm_type,
+                spill
+            );
+            let cast = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = bitcast {}* {} to {}*",
+                cast,
+                llvm_type,
+                spill,
+                ret_llvm
+            );
+            let loaded = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = load {}, {}* {}",
+                loaded,
+                ret_llvm,
+                ret_llvm,
+                cast
+            );
+            write_ir!(
+                ir,
+                "  ret {} {}  ; early return on Err (layout-compatible cast)\n",
+                ret_llvm,
+                loaded
+            );
+        } else {
+            write_ir!(
+                ir,
+                "  ret {} {}  ; early return on Err\n",
+                llvm_type,
+                inner_val
+            );
+        }
 
         // Ok branch: extract payload value
         write_ir!(ir, "{}:", ok_label);

@@ -594,6 +594,13 @@ impl CodeGenerator {
             }
         }
 
+        // Phase D: placeholder for specialized-generic type forward decls.
+        // The actual scan runs at the end of subset emission (see below)
+        // because function *bodies* (emitted later) also reference
+        // specializations that extern signatures alone don't cover.
+        const PHASE_D_MARKER: &str = "; __PHASE_D_FORWARD_DECLS__\n";
+        ir.push_str(PHASE_D_MARKER);
+
         // Generate function bodies only for this module's items
         let mut body_ir = String::new();
 
@@ -878,6 +885,80 @@ impl CodeGenerator {
         {
             ir.push_str("\n; WASM import/export metadata\n");
             ir.push_str(&self.generate_wasm_metadata());
+        }
+
+        // Phase D: scan the fully-assembled IR for references to specialized
+        // generic types (names containing `$`, e.g. `%Result$f64_VaisError`,
+        // `%Vec$SqlValue`). For any specialization not already declared in
+        // this module, emit a forward type declaration with the erased
+        // enum / base-struct layout. Replaces the PHASE_D_MARKER placeholder
+        // so the declarations appear above any use sites.
+        {
+            use std::collections::BTreeSet;
+            let mut referenced: BTreeSet<String> = BTreeSet::new();
+            for token in ir.split(|c: char| {
+                !(c.is_ascii_alphanumeric() || c == '_' || c == '$' || c == '%')
+            }) {
+                if let Some(rest) = token.strip_prefix('%') {
+                    if rest.is_empty() {
+                        continue;
+                    }
+                    if !rest
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+                    {
+                        continue;
+                    }
+                    // Track specialized generics (contain `$`) and bare
+                    // generic-enum bases that the body may alloca/GEP on.
+                    if rest.contains('$')
+                        || matches!(rest, "Result" | "Option" | "Box")
+                    {
+                        referenced.insert(rest.to_string());
+                    }
+                }
+            }
+            let mut forward_decls = String::new();
+            for mangled in &referenced {
+                let already = format!("%{} = type", mangled);
+                let already_quoted = format!("%\"{}\" = type", mangled);
+                if ir.contains(&already) || ir.contains(&already_quoted) {
+                    continue;
+                }
+                let base = mangled.split('$').next().unwrap_or(mangled);
+                if self.types.enums.contains_key(base) {
+                    forward_decls.push_str(&format!(
+                        "%{} = type {{ i32, {{ i64 }} }}\n",
+                        mangled
+                    ));
+                } else if let Some(info) = self.types.structs.get(base) {
+                    let fields: Vec<String> = info
+                        .fields
+                        .iter()
+                        .map(|(_, ty)| self.type_to_llvm(ty))
+                        .collect();
+                    forward_decls.push_str(&format!(
+                        "%{} = type {{ {} }}\n",
+                        mangled,
+                        fields.join(", ")
+                    ));
+                } else if matches!(base, "Result" | "Option" | "Box") {
+                    // Generic stdlib enums: erased layout.
+                    forward_decls.push_str(&format!(
+                        "%{} = type {{ i32, {{ i64 }} }}\n",
+                        mangled
+                    ));
+                }
+            }
+            let replacement = if forward_decls.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "\n; Phase D: forward declarations for cross-module specialized types\n{}",
+                    forward_decls
+                )
+            };
+            ir = ir.replacen(PHASE_D_MARKER, &replacement, 1);
         }
 
         Ok(ir)
