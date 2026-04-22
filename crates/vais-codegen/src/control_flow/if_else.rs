@@ -46,17 +46,31 @@ impl CodeGenerator {
                 } else {
                     vais_types::ResolvedType::I64
                 };
-                let block_type = if else_is_terminating {
+                let mut block_type = if else_is_terminating {
                     // Else terminates → phi has a single incoming from the
                     // then branch; keep its type so F64/narrow ints aren't
                     // widened to I64.
                     then_type.clone()
                 } else if self.type_to_llvm(&then_type) != self.type_to_llvm(&else_type_resolved) {
-                    vais_types::ResolvedType::I64
+                    // Type mismatch — prefer the wider/more informative type.
+                    // Float ↔ anything: use float (caller must coerce the
+                    // integer side in its arm block before branching).
+                    let picked = match (&then_type, &else_type_resolved) {
+                        (vais_types::ResolvedType::F64, _)
+                        | (_, vais_types::ResolvedType::F64) => {
+                            Some(vais_types::ResolvedType::F64)
+                        }
+                        (vais_types::ResolvedType::F32, _)
+                        | (_, vais_types::ResolvedType::F32) => {
+                            Some(vais_types::ResolvedType::F32)
+                        }
+                        _ => None,
+                    };
+                    picked.unwrap_or(vais_types::ResolvedType::I64)
                 } else {
                     then_type
                 };
-                let llvm_type = self.type_to_llvm(&block_type);
+                let mut llvm_type = self.type_to_llvm(&block_type);
 
                 // Check each branch independently for struct pointer vs value
                 let is_named_phi = matches!(&block_type, ResolvedType::Named { .. });
@@ -119,6 +133,25 @@ impl CodeGenerator {
                             write_ir!(ir, "  {} = fptrunc double {} to float", tmp, coerced);
                         }
                         tmp
+                    } else if actual_after.starts_with('i')
+                        && !actual_after.contains('*')
+                        && (llvm_type == "double" || llvm_type == "float")
+                    {
+                        // Int → float coercion for the phi: happens when the
+                        // phi type was picked as a float (block_type mismatch
+                        // resolver) but this arm produced an integer value.
+                        // `sitofp` is placed here in the arm block before
+                        // `br merge`, satisfying the PHI top-of-block rule.
+                        let tmp = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = sitofp {} {} to {}",
+                            tmp,
+                            actual_after,
+                            coerced,
+                            llvm_type
+                        );
+                        tmp
                     } else {
                         coerced
                     }
@@ -145,6 +178,40 @@ impl CodeGenerator {
                         ("0".to_string(), String::new(), false, String::new())
                     };
                 ir.push_str(&else_ir);
+
+                // Post-else phi type refinement: if the else branch's actual
+                // emitted value (e.g., a nested if-else phi that resolved to
+                // double) is a float while the phi type was picked as an
+                // integer, widen the phi to the float type. The then branch's
+                // value was already coerced above (via then_val_for_phi) —
+                // since that coercion looks for int→float and emits sitofp in
+                // the then-block when llvm_type is float, we need to fixup
+                // the then-block too if we're upgrading now.
+                if !else_terminated && has_else {
+                    if let Some(else_actual) = self.llvm_type_of_checked(&else_val) {
+                        let is_float = matches!(else_actual.as_str(), "float" | "double");
+                        let phi_is_int =
+                            llvm_type.starts_with('i') && !llvm_type.starts_with("i8*");
+                        if is_float && phi_is_int {
+                            block_type = match else_actual.as_str() {
+                                "double" => vais_types::ResolvedType::F64,
+                                "float" => vais_types::ResolvedType::F32,
+                                _ => block_type,
+                            };
+                            llvm_type = else_actual;
+                            // NOTE: then_val_for_phi above was computed with
+                            // the old (int) llvm_type and may already be an
+                            // integer. We can't retroactively coerce it in
+                            // the then-block because we've already emitted
+                            // `br local_merge`. This upgrade therefore only
+                            // helps when the then branch *also* produced a
+                            // float (compatible) or terminated early. Pure
+                            // int/float if-else pairs will still mismatch —
+                            // those need block_type resolution at entry time
+                            // (out of B2 scope).
+                        }
+                    }
+                }
 
                 // For struct results, load the value before branch if it's a pointer
                 // But if else_val comes from a nested if-else (indicated by non-empty nested_last_block),
@@ -195,6 +262,22 @@ impl CodeGenerator {
                         } else {
                             write_ir!(ir, "  {} = fptrunc double {} to float", tmp, coerced);
                         }
+                        tmp
+                    } else if actual_after.starts_with('i')
+                        && !actual_after.contains('*')
+                        && (llvm_type == "double" || llvm_type == "float")
+                    {
+                        // Arm-block int → float coercion, dominance-safe
+                        // (emitted before `br merge`, not in merge block).
+                        let tmp = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = sitofp {} {} to {}",
+                            tmp,
+                            actual_after,
+                            coerced,
+                            llvm_type
+                        );
                         tmp
                     } else {
                         coerced
