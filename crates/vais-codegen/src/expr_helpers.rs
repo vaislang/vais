@@ -563,18 +563,21 @@ impl CodeGenerator {
             return Ok((result, ir));
         }
 
-        // Integer width coercion: only apply when source type is reliably known
-        // (not fallback i64). The "everything-is-i64" body convention means that
-        // i64→i32 truncation would break downstream code that expects i64 values.
-        // Only widen (i8/i16/i32 → i64) from known types, not narrow.
+        // Integer width coercion.
+        //
+        // Phase E: explicit `as` cast is a user directive — always honor
+        // trunc/sext for int→int width mismatches rather than gating on
+        // `has_known_type`. The previous guard protected against an
+        // unregistered `%tN` falsely reporting i64 and then being
+        // truncated; but in an `as` cast the target width is a pure user
+        // statement of intent and the source width is either registered
+        // (temps produced by the current generator, which now tracks
+        // types more thoroughly after the A1 SSA registry work) or a
+        // fallback i64 that is actually the alloca-load width in
+        // practice. Unconditional coercion fixes `body_size as u32`
+        // returning i64 without trunc.
         {
-            let has_known_type = self.fn_ctx.get_temp_type(&val).is_some()
-                || self
-                    .fn_ctx
-                    .locals
-                    .contains_key(val.strip_prefix('%').unwrap_or(&val));
-            if has_known_type
-                && src_llvm_ty.starts_with('i')
+            if src_llvm_ty.starts_with('i')
                 && llvm_type.starts_with('i')
                 && src_llvm_ty != llvm_type
             {
