@@ -229,6 +229,12 @@ impl CodeGenerator {
                 )?;
                 ir.push_str(&check_ir);
 
+                // Phase B5: snapshot outer-scope locals so arm-local pattern
+                // bindings don't leak beyond this arm. Shadowed outer names
+                // are reverted to their pre-arm value after body generation.
+                let pre_arm_locals: std::collections::HashMap<String, crate::types::LocalVar> =
+                    self.fn_ctx.locals.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+
                 // Handle guard - need to bind variables first so guard can use them
                 if let Some(guard) = &arm.guard {
                     let guard_bind = self.next_label("match.guard.bind");
@@ -297,6 +303,19 @@ impl CodeGenerator {
 
                 let (mut body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
                 ir.push_str(&body_ir);
+
+                // Phase B5: restore pre-arm locals. Any binding present only
+                // after the arm is a pattern binding; drop it. Any binding
+                // present before is reverted to the pre-arm value (handles
+                // outer-name shadowing). Other fn_ctx state untouched.
+                let pre_arm_keys: std::collections::HashSet<&String> =
+                    pre_arm_locals.keys().collect();
+                self.fn_ctx
+                    .locals
+                    .retain(|k, _| pre_arm_keys.contains(k));
+                for (k, v) in &pre_arm_locals {
+                    self.fn_ctx.locals.insert(k.clone(), v.clone());
+                }
 
                 // Coerce arm values to match the phi type.
                 // Skip if the body_val is a placeholder (void/ret arms).
