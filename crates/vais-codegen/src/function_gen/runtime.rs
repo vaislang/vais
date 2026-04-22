@@ -54,6 +54,23 @@ pub(crate) const RUNTIME_INTRINSIC_NAMES: &[&str] = &[
     "__stat_mtime",
     "__wasm_strlen",
     "__wasi_puts",
+    // Phase C1 additions
+    "__time_now_ns",
+    "__malloc",
+    "__free",
+    "__memcpy",
+    "__strlen",
+    "__load_ptr",
+    "__store_ptr",
+    "__print_str",
+    "__print_i64",
+    "__str_eq",
+    "__str_contains",
+    "__panic_with_value",
+    "__panic_with_values",
+    "__panic_str_mismatch",
+    "__call_fn",
+    "__try_call_fn",
 ];
 
 /// Check whether a function name is a runtime intrinsic whose body is emitted
@@ -312,6 +329,161 @@ impl CodeGenerator {
         ir.push_str("  %ms_usec = sdiv i64 %usec, 1000\n");
         ir.push_str("  %ms = add i64 %ms_sec, %ms_usec\n");
         ir.push_str("  ret i64 %ms\n");
+        ir.push_str("}\n");
+
+        // === Phase C1: runtime helpers referenced by std ===
+
+        // __time_now_ns: current time in nanoseconds via gettimeofday
+        ir.push_str("\n; Runtime: current time in nanoseconds\n");
+        ir.push_str("define i64 @__time_now_ns() {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %tv = alloca [16 x i8], align 8\n");
+        ir.push_str("  %tvptr = bitcast [16 x i8]* %tv to i8*\n");
+        ir.push_str("  %0 = call i32 @gettimeofday(i8* %tvptr, i8* null)\n");
+        ir.push_str("  %secptr = bitcast [16 x i8]* %tv to i64*\n");
+        ir.push_str("  %sec = load i64, i64* %secptr\n");
+        ir.push_str("  %usecptr = getelementptr inbounds [16 x i8], [16 x i8]* %tv, i64 0, i64 8\n");
+        ir.push_str("  %usecptr64 = bitcast i8* %usecptr to i64*\n");
+        ir.push_str("  %usec = load i64, i64* %usecptr64\n");
+        ir.push_str("  %ns_sec = mul i64 %sec, 1000000000\n");
+        ir.push_str("  %ns_usec = mul i64 %usec, 1000\n");
+        ir.push_str("  %ns = add i64 %ns_sec, %ns_usec\n");
+        ir.push_str("  ret i64 %ns\n");
+        ir.push_str("}\n");
+
+        // __malloc: pointer-as-i64 wrapper for libc malloc
+        ir.push_str("\n; Runtime: malloc wrapper (i64-ptr)\n");
+        ir.push_str("define i64 @__malloc(i64 %size) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %p = call i8* @malloc(i64 %size)\n");
+        ir.push_str("  %pi = ptrtoint i8* %p to i64\n");
+        ir.push_str("  ret i64 %pi\n");
+        ir.push_str("}\n");
+
+        // __free: pointer-as-i64 wrapper for libc free
+        ir.push_str("\n; Runtime: free wrapper (i64-ptr)\n");
+        ir.push_str("define i64 @__free(i64 %ptr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %p = inttoptr i64 %ptr to i8*\n");
+        ir.push_str("  call void @free(i8* %p)\n");
+        ir.push_str("  ret i64 0\n");
+        ir.push_str("}\n");
+
+        // __memcpy: pointer-as-i64 wrapper for llvm.memcpy intrinsic
+        // (libc memcpy may already be declared with a conflicting signature).
+        ir.push_str("\n; Runtime: memcpy wrapper (i64-ptr, via intrinsic)\n");
+        ir.push_str("declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i1)\n");
+        ir.push_str("define i64 @__memcpy(i64 %dst, i64 %src, i64 %n) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %d = inttoptr i64 %dst to i8*\n");
+        ir.push_str("  %s = inttoptr i64 %src to i8*\n");
+        ir.push_str("  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %d, i8* %s, i64 %n, i1 false)\n");
+        ir.push_str("  ret i64 %dst\n");
+        ir.push_str("}\n");
+
+        // __strlen: pointer-accepting strlen (explicit variant)
+        ir.push_str("\n; Runtime: strlen wrapper\n");
+        ir.push_str("define i64 @__strlen(i8* %p) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %r = call i64 @strlen(i8* %p)\n");
+        ir.push_str("  ret i64 %r\n");
+        ir.push_str("}\n");
+
+        // __load_ptr / __store_ptr: i64-addressed word load/store (aliases of i64 variants)
+        ir.push_str("\n; Runtime: load/store pointer word (i64-addr)\n");
+        ir.push_str("define i64 @__load_ptr(i64 %addr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %p = inttoptr i64 %addr to i64*\n");
+        ir.push_str("  %v = load i64, i64* %p\n");
+        ir.push_str("  ret i64 %v\n");
+        ir.push_str("}\n");
+        ir.push_str("define i64 @__store_ptr(i64 %addr, i64 %val) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %p = inttoptr i64 %addr to i64*\n");
+        ir.push_str("  store i64 %val, i64* %p\n");
+        ir.push_str("  ret i64 0\n");
+        ir.push_str("}\n");
+
+        // __print_str / __print_i64: libc-backed print helpers
+        ir.push_str("\n; Runtime: print helpers\n");
+        ir.push_str("@.__fmt_str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"\n");
+        ir.push_str("@.__fmt_i64 = private unnamed_addr constant [6 x i8] c\"%lld\\0A\\00\"\n");
+        ir.push_str("define i64 @__print_str(i8* %s) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %fmt = getelementptr inbounds [4 x i8], [4 x i8]* @.__fmt_str, i64 0, i64 0\n");
+        ir.push_str("  %r = call i32 (i8*, ...) @printf(i8* %fmt, i8* %s)\n");
+        ir.push_str("  ret i64 0\n");
+        ir.push_str("}\n");
+        ir.push_str("define i64 @__print_i64(i64 %n) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %fmt = getelementptr inbounds [6 x i8], [6 x i8]* @.__fmt_i64, i64 0, i64 0\n");
+        ir.push_str("  %r = call i32 (i8*, ...) @printf(i8* %fmt, i64 %n)\n");
+        ir.push_str("  ret i64 0\n");
+        ir.push_str("}\n");
+
+        // __str_eq: strcmp == 0
+        ir.push_str("\n; Runtime: string equality / contains\n");
+        ir.push_str("declare i8* @strstr(i8*, i8*)\n");
+        ir.push_str("define i64 @__str_eq(i8* %a, i8* %b) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %r = call i32 @strcmp(i8* %a, i8* %b)\n");
+        ir.push_str("  %eq = icmp eq i32 %r, 0\n");
+        ir.push_str("  %z = zext i1 %eq to i64\n");
+        ir.push_str("  ret i64 %z\n");
+        ir.push_str("}\n");
+
+        // __str_contains: strstr != null
+        ir.push_str("define i64 @__str_contains(i8* %hay, i8* %needle) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %r = call i8* @strstr(i8* %hay, i8* %needle)\n");
+        ir.push_str("  %nn = icmp ne i8* %r, null\n");
+        ir.push_str("  %z = zext i1 %nn to i64\n");
+        ir.push_str("  ret i64 %z\n");
+        ir.push_str("}\n");
+
+        // Panic helpers — print a message and abort
+        ir.push_str("\n; Runtime: panic helpers\n");
+        ir.push_str("@.__panic_v_fmt = private unnamed_addr constant [10 x i8] c\"%s: %lld\\0A\\00\"\n");
+        ir.push_str("@.__panic_v2_fmt = private unnamed_addr constant [16 x i8] c\"%s: %lld, %lld\\0A\\00\"\n");
+        ir.push_str("@.__panic_s2_fmt = private unnamed_addr constant [14 x i8] c\"%s: %s vs %s\\0A\\00\"\n");
+        ir.push_str("define i64 @__panic_with_value(i8* %msg, i64 %val) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %fmt = getelementptr inbounds [10 x i8], [10 x i8]* @.__panic_v_fmt, i64 0, i64 0\n");
+        ir.push_str("  call i32 (i8*, ...) @printf(i8* %fmt, i8* %msg, i64 %val)\n");
+        ir.push_str("  call void @abort()\n");
+        ir.push_str("  unreachable\n");
+        ir.push_str("}\n");
+        ir.push_str("define i64 @__panic_with_values(i8* %msg, i64 %a, i64 %b) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %fmt = getelementptr inbounds [16 x i8], [16 x i8]* @.__panic_v2_fmt, i64 0, i64 0\n");
+        ir.push_str("  call i32 (i8*, ...) @printf(i8* %fmt, i8* %msg, i64 %a, i64 %b)\n");
+        ir.push_str("  call void @abort()\n");
+        ir.push_str("  unreachable\n");
+        ir.push_str("}\n");
+        ir.push_str("@.__panic_sm_lbl = private unnamed_addr constant [13 x i8] c\"str mismatch\\00\"\n");
+        ir.push_str("define i64 @__panic_str_mismatch(i8* %a, i8* %b) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %fmt = getelementptr inbounds [14 x i8], [14 x i8]* @.__panic_s2_fmt, i64 0, i64 0\n");
+        ir.push_str("  %msg = getelementptr inbounds [13 x i8], [13 x i8]* @.__panic_sm_lbl, i64 0, i64 0\n");
+        ir.push_str("  call i32 (i8*, ...) @printf(i8* %fmt, i8* %msg, i8* %a, i8* %b)\n");
+        ir.push_str("  call void @abort()\n");
+        ir.push_str("  unreachable\n");
+        ir.push_str("}\n");
+
+        // __call_fn / __try_call_fn: invoke a function pointer stored as i64
+        // Without setjmp/longjmp, __try_call_fn is a plain call that aborts on panic.
+        ir.push_str("\n; Runtime: call-fn helpers\n");
+        ir.push_str("define i64 @__call_fn(i64 %fn) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %fp = inttoptr i64 %fn to i64 ()*\n");
+        ir.push_str("  %r = call i64 %fp()\n");
+        ir.push_str("  ret i64 %r\n");
+        ir.push_str("}\n");
+        ir.push_str("define i64 @__try_call_fn(i64 %fn, i64 %arg) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %fp = inttoptr i64 %fn to i64 (i64)*\n");
+        ir.push_str("  %r = call i64 %fp(i64 %arg)\n");
+        ir.push_str("  ret i64 %r\n");
         ir.push_str("}\n");
 
         // === macOS-only: kqueue helpers ===
