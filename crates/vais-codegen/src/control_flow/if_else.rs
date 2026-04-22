@@ -236,45 +236,11 @@ impl CodeGenerator {
                 // (phi nodes cannot have void type in LLVM IR)
                 let is_void_type = matches!(block_type, ResolvedType::Unit);
 
-                // Check for struct/non-struct type mismatch
-                let phi_is_struct = llvm_type.starts_with('{') || llvm_type.starts_with('%');
-                let then_actual_ty = self.llvm_type_of(&then_val_for_phi);
-                let else_actual_ty = self.llvm_type_of(&else_val_for_phi);
-                // If one incoming is a float/double and the phi type was
-                // inferred as an integer (common when one branch reaches the
-                // merge through a nested if-else whose block_type fell back
-                // to I64), widen the phi to match. Coerce the integer
-                // incoming via `sitofp` so both entries share the type.
-                let then_is_float = matches!(then_actual_ty.as_str(), "float" | "double");
-                let else_is_float = matches!(else_actual_ty.as_str(), "float" | "double");
-                let integer_phi = llvm_type.starts_with('i') && !llvm_type.starts_with("i8*");
-                let (llvm_type, then_val_for_phi, else_val_for_phi) = if integer_phi
-                    && (then_is_float || else_is_float)
-                    && !then_from_label.is_empty()
-                    && !else_from_label.is_empty()
-                {
-                    let target = if then_actual_ty == "double" || else_actual_ty == "double" {
-                        "double"
-                    } else {
-                        "float"
-                    };
-                    let coerce = |val: String, actual: &str, ir: &mut String, counter: &mut usize, cg: &mut Self| -> String {
-                        if actual == target {
-                            val
-                        } else if actual.starts_with('i') {
-                            let tmp = cg.next_temp(counter);
-                            write_ir!(ir, "  {} = sitofp {} {} to {}", tmp, actual, val, target);
-                            tmp
-                        } else {
-                            val
-                        }
-                    };
-                    let then_new = coerce(then_val_for_phi, &then_actual_ty, &mut ir, counter, self);
-                    let else_new = coerce(else_val_for_phi, &else_actual_ty, &mut ir, counter, self);
-                    (target.to_string(), then_new, else_new)
-                } else {
-                    (llvm_type, then_val_for_phi, else_val_for_phi)
-                };
+                // Note: the previous float-widening LUB pass was removed.
+                // Emitting `sitofp` in the merge block before the phi node
+                // violates LLVM's "PHI nodes must be grouped at top of basic
+                // block" rule. Float/integer mismatches must be handled by
+                // arm-block coercion (pre-br) or deferred to the consumer.
                 let then_actual_ty = self.llvm_type_of(&then_val_for_phi);
                 let else_actual_ty = self.llvm_type_of(&else_val_for_phi);
                 let phi_is_struct = llvm_type.starts_with('{') || llvm_type.starts_with('%');

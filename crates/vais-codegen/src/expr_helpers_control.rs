@@ -276,41 +276,12 @@ impl CodeGenerator {
         // Only flag mismatches between fundamentally incompatible types (e.g., { i8*, i64 } vs i64).
         // We cannot rely on llvm_type_of for accurate SSA type tracking, so only check
         // when the phi type is a struct but a branch value is clearly an integer, or vice versa.
-        let then_actual_ty0 = self.llvm_type_of(&then_val_for_phi);
-        let else_actual_ty0 = self.llvm_type_of(&else_val_for_phi);
-        // If one incoming is a float/double and the phi was inferred as an
-        // integer (e.g., because a nested if-else collapsed to I64), widen
-        // the phi to match and coerce the integer side via `sitofp`.
-        let then_is_float0 = matches!(then_actual_ty0.as_str(), "float" | "double");
-        let else_is_float0 = matches!(else_actual_ty0.as_str(), "float" | "double");
-        let integer_phi = phi_llvm.starts_with('i') && !phi_llvm.starts_with("i8*");
-        let (phi_llvm, then_val_for_phi, else_val_for_phi) = if integer_phi
-            && (then_is_float0 || else_is_float0)
-            && !then_from_label.is_empty()
-            && !else_from_label.is_empty()
-        {
-            let target = if then_actual_ty0 == "double" || else_actual_ty0 == "double" {
-                "double"
-            } else {
-                "float"
-            };
-            let mut coerce_side = |val: String, actual: &str, ir: &mut String, counter: &mut usize| -> String {
-                if actual == target {
-                    val
-                } else if actual.starts_with('i') {
-                    let tmp = self.next_temp(counter);
-                    write_ir!(ir, "  {} = sitofp {} {} to {}", tmp, actual, val, target);
-                    tmp
-                } else {
-                    val
-                }
-            };
-            let then_new = coerce_side(then_val_for_phi, &then_actual_ty0, &mut ir, counter);
-            let else_new = coerce_side(else_val_for_phi, &else_actual_ty0, &mut ir, counter);
-            (target.to_string(), then_new, else_new)
-        } else {
-            (phi_llvm, then_val_for_phi, else_val_for_phi)
-        };
+        // Note: the previous float-widening LUB pass was removed because it
+        // emitted `sitofp` instructions in the merge block *before* the phi
+        // node, violating LLVM's "PHI nodes must be grouped at top of basic
+        // block" rule. The coercion must live in each arm block (before
+        // `br merge`), not here. Float/integer mismatches are deferred to
+        // the caller that consumes the phi result.
         let phi_is_struct = phi_llvm.starts_with('{') || phi_llvm.starts_with('%');
         let then_actual_ty = self.llvm_type_of(&then_val_for_phi);
         let else_actual_ty = self.llvm_type_of(&else_val_for_phi);
