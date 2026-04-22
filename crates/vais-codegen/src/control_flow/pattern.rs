@@ -29,27 +29,6 @@ impl CodeGenerator {
                         .get_enum_name_for_variant(name)
                         .unwrap_or_else(|| "Unknown".to_string());
 
-                    // If `match_val` is a struct value (e.g., tuple
-                    // destructure extracted `%SqlType` rather than
-                    // `%SqlType*`), spill to an alloca so we can GEP to the
-                    // discriminant.
-                    let match_actual_ty = self.llvm_type_of(match_val);
-                    let tag_source = if match_actual_ty == format!("%{}", enum_name) {
-                        let spill = self.next_temp(counter);
-                        self.emit_entry_alloca(&spill, &format!("%{}", enum_name));
-                        write_ir!(
-                            ir,
-                            "  store %{} {}, %{}* {}",
-                            enum_name,
-                            match_val,
-                            enum_name,
-                            spill
-                        );
-                        spill
-                    } else {
-                        match_val.to_string()
-                    };
-
                     // Get the tag from the enum value (first field at index 0)
                     let tag_ptr = self.next_temp(counter);
                     write_ir!(
@@ -58,7 +37,7 @@ impl CodeGenerator {
                         tag_ptr,
                         enum_name,
                         enum_name,
-                        tag_source
+                        match_val
                     );
 
                     let tag_val = self.next_temp(counter);
@@ -250,8 +229,28 @@ impl CodeGenerator {
 
                     // Recurse with the element's actual type.
                     let elem_ty = elem_types.get(i).cloned().unwrap_or(ResolvedType::I64);
+                    // For struct/enum tuple elements the sub-patterns GEP
+                    // through a `%T*`. `extractvalue` produced a struct
+                    // value, so spill it to an alloca so downstream checks
+                    // receive a pointer.
+                    let elem_to_pass = if matches!(&elem_ty, ResolvedType::Named { .. }) {
+                        let elem_llvm_ty = &llvm_elem_strs[i];
+                        let spill = self.next_temp(counter);
+                        self.emit_entry_alloca(&spill, elem_llvm_ty);
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* {}",
+                            elem_llvm_ty,
+                            elem,
+                            elem_llvm_ty,
+                            spill
+                        );
+                        spill
+                    } else {
+                        elem.clone()
+                    };
                     let (check, check_ir) =
-                        self.generate_pattern_check_typed(pat, &elem, counter, &elem_ty)?;
+                        self.generate_pattern_check_typed(pat, &elem_to_pass, counter, &elem_ty)?;
                     ir.push_str(&check_ir);
                     checks.push(check);
                 }
@@ -281,25 +280,6 @@ impl CodeGenerator {
                     .get_enum_name_for_variant(variant_name)
                     .unwrap_or_else(|| "Unknown".to_string());
 
-                // Spill struct-valued match_val (e.g., from a tuple
-                // destructure) to an alloca so we can GEP for the tag.
-                let match_actual_ty = self.llvm_type_of(match_val);
-                let tag_source = if match_actual_ty == format!("%{}", enum_name) {
-                    let spill = self.next_temp(counter);
-                    self.emit_entry_alloca(&spill, &format!("%{}", enum_name));
-                    write_ir!(
-                        ir,
-                        "  store %{} {}, %{}* {}",
-                        enum_name,
-                        match_val,
-                        enum_name,
-                        spill
-                    );
-                    spill
-                } else {
-                    match_val.to_string()
-                };
-
                 // Get the tag from the enum value (first field at index 0)
                 let tag_ptr = self.next_temp(counter);
                 write_ir!(
@@ -308,7 +288,7 @@ impl CodeGenerator {
                     tag_ptr,
                     enum_name,
                     enum_name,
-                    tag_source
+                    match_val
                 );
 
                 let tag_val = self.next_temp(counter);
@@ -930,8 +910,26 @@ impl CodeGenerator {
                     // Recurse with the element's actual type so nested tuple bindings
                     // also generate correct extractvalue instructions.
                     let elem_ty = elem_types.get(i).cloned().unwrap_or(ResolvedType::I64);
+                    // Struct/enum elements require a pointer for GEP-based
+                    // binding — spill the struct value to an alloca.
+                    let elem_to_pass = if matches!(&elem_ty, ResolvedType::Named { .. }) {
+                        let elem_llvm_ty = &llvm_elem_strs[i];
+                        let spill = self.next_temp(counter);
+                        self.emit_entry_alloca(&spill, elem_llvm_ty);
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* {}",
+                            elem_llvm_ty,
+                            elem,
+                            elem_llvm_ty,
+                            spill
+                        );
+                        spill
+                    } else {
+                        elem.clone()
+                    };
                     let bind_ir =
-                        self.generate_pattern_bindings_typed(pat, &elem, counter, &elem_ty)?;
+                        self.generate_pattern_bindings_typed(pat, &elem_to_pass, counter, &elem_ty)?;
                     ir.push_str(&bind_ir);
                 }
 

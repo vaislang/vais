@@ -251,8 +251,34 @@ impl CodeGenerator {
                 );
             } else {
                 // Replace "void" with 0 for Unit/() values in enum payloads
-                let store_val = if arg_val == "void" { "0" } else { arg_val };
-                write_ir!(ir, "  store i64 {}, i64* {}", store_val, payload_field_ptr);
+                let store_val_str = if arg_val == "void" {
+                    "0".to_string()
+                } else {
+                    arg_val.to_string()
+                };
+                // Widen narrow integer payloads (i8/i16/i32) to i64 so they
+                // fit the enum's i64 slot.
+                let actual_ty = if arg_val == "void" {
+                    "i64".to_string()
+                } else {
+                    self.llvm_type_of(arg_val)
+                };
+                let final_val = if actual_ty != "i64"
+                    && matches!(actual_ty.as_str(), "i1" | "i8" | "i16" | "i32")
+                {
+                    let widened = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = zext {} {} to i64",
+                        widened,
+                        actual_ty,
+                        store_val_str
+                    );
+                    widened
+                } else {
+                    store_val_str
+                };
+                write_ir!(ir, "  store i64 {}, i64* {}", final_val, payload_field_ptr);
             }
         }
 
