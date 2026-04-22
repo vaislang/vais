@@ -577,6 +577,33 @@ impl CodeGenerator {
 
         write_ir!(ir, "{}:", loop_end);
 
-        Ok((slice_ptr, ir))
+        // Phase E.7: wrap the raw i64* + length into a slice fat pointer
+        // `{ i8*, i64 }`. Callers that expected a plain pointer should be
+        // updated; returning a fat pointer is correct for the `&[T]` /
+        // slice-producing semantic of this helper.
+        let data_i8 = self.next_temp(counter);
+        write_ir!(
+            ir,
+            "  {} = bitcast i64* {} to i8*",
+            data_i8,
+            slice_ptr
+        );
+        let fat1 = self.next_temp(counter);
+        write_ir!(
+            ir,
+            "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+            fat1,
+            data_i8
+        );
+        let fat2 = self.next_temp(counter);
+        write_ir!(
+            ir,
+            "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
+            fat2,
+            fat1,
+            length
+        );
+
+        Ok((fat2, ir))
     }
 }

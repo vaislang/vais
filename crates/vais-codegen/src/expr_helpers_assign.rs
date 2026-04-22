@@ -353,6 +353,11 @@ impl CodeGenerator {
                     "  {} = load {}, {}* %{}\n",
                     tmp, llvm_ty, llvm_ty, local.llvm_name
                 );
+                // Phase E.6: register the load result's type so downstream
+                // passes (coerce, phi, cast) see the correct width instead
+                // of falling back to i64. This is the single biggest source
+                // of "i64 vs <N-bit>" mismatches across vaisdb tests.
+                self.fn_ctx.register_temp_type(&tmp, local.ty.clone());
                 Ok((tmp, ir))
             }
         } else if name == "self" {
@@ -401,6 +406,8 @@ impl CodeGenerator {
             let llvm_ty = self.type_to_llvm(&global_info._ty);
             let tmp = self.next_temp(counter);
             let ir = format!("  {} = load {}, {}* @{}\n", tmp, llvm_ty, llvm_ty, name);
+            // Phase E.6: register load result type (see alloca-local comment).
+            self.fn_ctx.register_temp_type(&tmp, global_info._ty.clone());
             Ok((tmp, ir))
         } else if let Some(fn_info) = self.types.functions.get(name).cloned() {
             // Function reference used as a value — convert function pointer to i64
