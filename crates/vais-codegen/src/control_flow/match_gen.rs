@@ -267,6 +267,23 @@ impl CodeGenerator {
                         let coerced = self.next_temp(counter);
                         write_ir!(ir, "  {} = zext i1 {} to i64", coerced, body_val);
                         body_val = coerced;
+                        // If the function returns a Named (struct/enum)
+                        // pointer, the phi will be %T*. Coerce the i64 to
+                        // that pointer so the phi incoming type matches.
+                        if let Some(ret_ty) = &self.fn_ctx.current_return_type {
+                            if matches!(ret_ty, ResolvedType::Named { .. }) {
+                                let llvm_ty = self.type_to_llvm(ret_ty);
+                                let casted = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = inttoptr i64 {} to {}*",
+                                    casted,
+                                    body_val,
+                                    llvm_ty
+                                );
+                                body_val = casted;
+                            }
+                        }
                     } else if matches!(arm_inferred, ResolvedType::Named { .. }) {
                         // Named type (struct/enum): phi uses pointer type (%T*).
                         // If this arm body produced a value (e.g., function return),
@@ -445,6 +462,12 @@ impl CodeGenerator {
             } else {
                 "0"
             };
+
+            // "void" arm values are replaced with a phi-type appropriate
+            // default, but no other coercion is performed here — the coercion
+            // would need to live in the arm's block (for dominance), not in
+            // the merge block. Arm-body coercion already handled during
+            // generate_expr of each arm above.
             let phi_args: Vec<String> = arm_values
                 .iter()
                 .map(|(val, label)| {
