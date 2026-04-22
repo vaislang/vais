@@ -559,8 +559,36 @@ impl CodeGenerator {
             // (which is actually a pointer from alloca) to a generic function
             // that uses i64 erasure.
             if arg_ty == "i64" {
+                // Phase B3: when the argument is a plain Ident bound to an
+                // i64-typed local (parameter or SSA), skip ptrtoint regardless
+                // of what llvm_type_of returns. A stale SSA type registry
+                // entry from a prior specialized instance can mis-tag the
+                // parameter as `%Struct*`, producing `ptrtoint %Struct* %p`
+                // where `%p` is really i64. Trust the local type first.
+                let skip_ptrtoint = if let Expr::Ident(ident_name) = &arg_for_gen.node {
+                    self.fn_ctx
+                        .locals
+                        .get(ident_name.as_str())
+                        .map(|l| matches!(
+                            l.ty,
+                            ResolvedType::I64
+                                | ResolvedType::I32
+                                | ResolvedType::I16
+                                | ResolvedType::I8
+                                | ResolvedType::U64
+                                | ResolvedType::U32
+                                | ResolvedType::U16
+                                | ResolvedType::U8
+                                | ResolvedType::Bool
+                        ))
+                        .unwrap_or(false)
+                } else {
+                    false
+                };
                 let val_ty = self.llvm_type_of(&val);
-                if val_ty.starts_with('%') && val_ty.ends_with('*') {
+                if skip_ptrtoint {
+                    // Value is already i64 — no coercion needed.
+                } else if val_ty.starts_with('%') && val_ty.ends_with('*') {
                     // Explicitly pointer-typed → ptrtoint
                     let tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = ptrtoint {} {} to i64", tmp, val_ty, val);
@@ -573,7 +601,8 @@ impl CodeGenerator {
                     val = tmp;
                 } else if val_ty == "i64" {
                     // llvm_type_of returned fallback i64 — check the inferred expression type
-                    // to detect Named/struct types that are actually pointers
+                    // to detect Named/struct types that are actually pointers.
+                    // The Ident-local-is-i64 check already bypassed us above.
                     let inferred = self.infer_expr_type(arg_for_gen);
                     if matches!(inferred, ResolvedType::Named { .. }) {
                         let struct_llvm = self.type_to_llvm(&inferred);
