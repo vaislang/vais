@@ -712,6 +712,10 @@ impl CodeGenerator {
                         write_ir!(ir, "  store i64 {}, i64* {}", new_cap, cap_ptr);
                         write_ir!(ir, "  br label %{}", lbl_done);
                         write_ir!(ir, "{}:", lbl_done);
+                        // Subsequent IR emission belongs to lbl_done — keep
+                        // current_block accurate so enclosing phi nodes read
+                        // the correct predecessor.
+                        self.fn_ctx.current_block = lbl_done;
                     }
                 }
             }

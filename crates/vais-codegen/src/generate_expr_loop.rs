@@ -121,6 +121,7 @@ impl CodeGenerator {
         write_ir!(ir, "  br label %{}", loop_cond);
 
         write_ir!(ir, "{}:", loop_end);
+        self.fn_ctx.current_block.clone_from(&loop_end);
         self.fn_ctx.loop_stack.pop();
 
         Ok(("0".to_string(), ir))

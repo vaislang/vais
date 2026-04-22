@@ -148,13 +148,16 @@ impl CodeGenerator {
 
             // Generate default arm
             write_ir!(ir, "{}:", default_label);
+            self.fn_ctx.current_block = default_label.clone();
             if let Some(arm) = default_arm {
                 let (body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
                 ir.push_str(&body_ir);
-                arm_values.push((body_val, default_label.clone()));
+                // Body may have introduced new basic blocks — the branch to
+                // merge originates from whichever block is current now.
+                arm_values.push((body_val, self.fn_ctx.current_block.clone()));
             } else {
                 // No default arm - unreachable or return 0
-                arm_values.push(("0".to_string(), default_label.clone()));
+                arm_values.push(("0".to_string(), self.fn_ctx.current_block.clone()));
             }
             write_ir!(ir, "  br label %{}", merge_label);
         } else {
@@ -358,6 +361,10 @@ impl CodeGenerator {
 
         // Merge block with phi node
         write_ir!(ir, "{}:", merge_label);
+        // Subsequent emission (phi, and whatever the caller appends) lives in
+        // the merge block — track that so nested match phi predecessors are
+        // recorded correctly.
+        self.fn_ctx.current_block = merge_label.clone();
 
         if arm_values.is_empty() {
             Ok(("0".to_string(), ir))
