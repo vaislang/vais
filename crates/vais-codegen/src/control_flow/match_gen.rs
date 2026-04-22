@@ -385,6 +385,27 @@ impl CodeGenerator {
                                 target
                             );
                             body_val = narrowed;
+                        } else if actual == "i1" && target != "i1" {
+                            // i1 → wider int (e.g., bool-typed pattern binding
+                            // flowing into i32-typed phi from `order_by_compare`
+                            // style match arms). zext preserves 0/1.
+                            let widened = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = zext i1 {} to {}",
+                                widened,
+                                body_val,
+                                target
+                            );
+                            body_val = widened;
+                        } else if actual.starts_with('i')
+                            && target.starts_with('i')
+                            && actual != target
+                        {
+                            // General int-width mismatch (e.g., i8 → i32 for
+                            // pattern-bound narrow locals). Use trunc/sext.
+                            body_val =
+                                self.coerce_int_width(&body_val, &actual, &target, counter, &mut ir);
                         }
                     } else if matches!(arm_inferred, ResolvedType::Named { .. }) {
                         // Named type (struct/enum): phi uses pointer type (%T*).
