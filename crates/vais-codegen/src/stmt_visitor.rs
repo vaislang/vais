@@ -259,12 +259,22 @@ impl CodeGenerator {
             && !matches!(resolved_ty, ResolvedType::Named { .. })
             && is_simple_type;
 
+        // Detect array literal RHS so we can tag the LocalVar with a
+        // compile-time-known element count (consumed by `&arr` coercion to
+        // `&[T]` slice fat pointer).
+        let array_len: Option<u64> = match &value.node {
+            Expr::Array(elems) => Some(elems.len() as u64),
+            _ => None,
+        };
+
         if use_ssa {
             // SSA style: directly alias the value, no alloca needed
             // This significantly reduces stack usage
-            self.fn_ctx
-                .locals
-                .insert(name.node.clone(), LocalVar::ssa(resolved_ty.clone(), val));
+            let mut local = LocalVar::ssa(resolved_ty.clone(), val);
+            if let Some(n) = array_len {
+                local = local.with_array_length(n);
+            }
+            self.fn_ctx.locals.insert(name.node.clone(), local);
             // If this was a lambda with captures, register the closure info
             if let Some(closure_info) = self.lambdas.last_lambda_info.take() {
                 self.lambdas
@@ -449,9 +459,11 @@ impl CodeGenerator {
             let is_named = matches!(resolved_ty, ResolvedType::Named { .. });
 
             // Insert local var AFTER generating IR to avoid borrow conflicts
-            self.fn_ctx
-                .locals
-                .insert(name.node.clone(), LocalVar::alloca(resolved_ty, llvm_name));
+            let mut local = LocalVar::alloca(resolved_ty, llvm_name);
+            if let Some(n) = array_len {
+                local = local.with_array_length(n);
+            }
+            self.fn_ctx.locals.insert(name.node.clone(), local);
 
             // Register in current scope for block-scoped drop (if inside a scope block)
             if is_named {

@@ -141,13 +141,22 @@ impl CodeGenerator {
                     && !matches!(resolved_ty, ResolvedType::Named { .. })
                     && is_simple_type;
 
+                // Detect array literal RHS so we can tag the LocalVar with a
+                // compile-time-known element count (consumed by `&arr`
+                // coercion to `&[T]` slice fat pointer).
+                let array_len: Option<u64> = match &value.node {
+                    Expr::Array(elems) => Some(elems.len() as u64),
+                    _ => None,
+                };
+
                 if use_ssa {
                     // SSA style: directly alias the value, no alloca needed
                     // The llvm_name will refer to the computed value directly
-                    self.fn_ctx.locals.insert(
-                        name.node.clone(),
-                        LocalVar::ssa(resolved_ty.clone(), val.clone()),
-                    );
+                    let mut local = LocalVar::ssa(resolved_ty.clone(), val.clone());
+                    if let Some(n) = array_len {
+                        local = local.with_array_length(n);
+                    }
+                    self.fn_ctx.locals.insert(name.node.clone(), local);
                     // No additional IR needed - we just register the mapping
                 } else {
                     // Traditional alloca style.
@@ -157,15 +166,17 @@ impl CodeGenerator {
                         is_struct_lit || is_enum_variant_call || is_unit_variant
                         || matches!(resolved_ty, ResolvedType::Named { .. });
                     if needs_double_ptr {
-                        self.fn_ctx.locals.insert(
-                            name.node.clone(),
-                            LocalVar::alloca_double_ptr(resolved_ty.clone(), llvm_name.clone()),
-                        );
+                        let mut local = LocalVar::alloca_double_ptr(resolved_ty.clone(), llvm_name.clone());
+                        if let Some(n) = array_len {
+                            local = local.with_array_length(n);
+                        }
+                        self.fn_ctx.locals.insert(name.node.clone(), local);
                     } else {
-                        self.fn_ctx.locals.insert(
-                            name.node.clone(),
-                            LocalVar::alloca(resolved_ty.clone(), llvm_name.clone()),
-                        );
+                        let mut local = LocalVar::alloca(resolved_ty.clone(), llvm_name.clone());
+                        if let Some(n) = array_len {
+                            local = local.with_array_length(n);
+                        }
+                        self.fn_ctx.locals.insert(name.node.clone(), local);
                     }
 
                     // For struct literals and enum variant constructors, the value is already an alloca'd pointer

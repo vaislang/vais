@@ -26,6 +26,12 @@ impl CodeGenerator {
         // For simple references, just return the address
         if let Expr::Ident(name) = &inner.node {
             if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
+                // If the local was initialized from an array literal with a
+                // compile-time-known length, build a `{ i8*, i64 }` slice fat
+                // pointer so calls into `fn(x: &[T])` receive the expected ABI.
+                if let Some(len) = local.array_length {
+                    return self.generate_ref_array_local_slice(&local, len, counter);
+                }
                 if local.is_alloca() {
                     // Alloca variables already have an address.
                     return Ok((format!("%{}", local.llvm_name), String::new()));
@@ -90,6 +96,76 @@ impl CodeGenerator {
             arr_ty,
             arr_ptr
         );
+
+        // Bitcast to i8*
+        let data_i8 = self.next_temp(counter);
+        write_ir!(
+            ir,
+            "  {} = bitcast {}* {} to i8*",
+            data_i8,
+            elem_ty,
+            data_ptr
+        );
+
+        // Build fat pointer: { i8*, i64 }
+        let fat1 = self.next_temp(counter);
+        write_ir!(
+            ir,
+            "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+            fat1,
+            data_i8
+        );
+        let fat2 = self.next_temp(counter);
+        write_ir!(
+            ir,
+            "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
+            fat2,
+            fat1,
+            len
+        );
+
+        Ok((fat2, ir))
+    }
+
+    /// Build a `{ i8*, i64 }` slice fat pointer from an array-typed local.
+    ///
+    /// The local was initialized from an array literal (`x := [a, b, c]`) so
+    /// the alloca stores a pointer-to-element-0 (`T**`) or the SSA value IS
+    /// the pointer (`T*`). We load the data pointer (if needed), bitcast to
+    /// `i8*`, and combine with the compile-time-known length.
+    #[inline(never)]
+    pub(crate) fn generate_ref_array_local_slice(
+        &mut self,
+        local: &crate::types::LocalVar,
+        len: u64,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let mut ir = String::new();
+
+        // Resolve element LLVM type. ResolvedType::Array(T) -> type_to_llvm gives "T*",
+        // so strip one pointer level to get the element type.
+        let arr_llvm = self.type_to_llvm(&local.ty);
+        let elem_ty = arr_llvm
+            .strip_suffix('*')
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "i64".to_string());
+
+        // Load the data pointer. For an alloca storing `T*`, the alloca itself
+        // is `T**` so we load once to get `T*`. SSA values already hold `T*`.
+        let data_ptr = if local.is_alloca() {
+            let loaded = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = load {}*, {}** %{}",
+                loaded,
+                elem_ty,
+                elem_ty,
+                local.llvm_name
+            );
+            loaded
+        } else {
+            format!("%{}", local.llvm_name)
+        };
 
         // Bitcast to i8*
         let data_i8 = self.next_temp(counter);

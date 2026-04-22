@@ -175,6 +175,11 @@ pub(crate) struct LocalVar {
     /// load before passing to drop/shallow-free. False for direct struct allocas
     /// (`%Type*`) where the alloca IS the struct pointer.
     pub is_double_ptr: bool,
+    /// For array-literal locals (`x := [a, b, c]`), the compile-time known
+    /// element count. Used by `&x` coercion to build a `{ i8*, i64 }` slice
+    /// fat pointer when the target parameter expects `&[T]`.
+    /// `None` for non-array locals (default).
+    pub array_length: Option<u64>,
 }
 
 impl LocalVar {
@@ -185,6 +190,7 @@ impl LocalVar {
             kind: LocalVarKind::Param,
             llvm_name: llvm_name.into(),
             is_double_ptr: false,
+            array_length: None,
         }
     }
 
@@ -195,6 +201,7 @@ impl LocalVar {
             kind: LocalVarKind::Ssa,
             llvm_name: llvm_name.into(),
             is_double_ptr: false,
+            array_length: None,
         }
     }
 
@@ -205,6 +212,7 @@ impl LocalVar {
             kind: LocalVarKind::Alloca,
             llvm_name: llvm_name.into(),
             is_double_ptr: false,
+            array_length: None,
         }
     }
 
@@ -215,7 +223,15 @@ impl LocalVar {
             kind: LocalVarKind::Alloca,
             llvm_name: llvm_name.into(),
             is_double_ptr: true,
+            array_length: None,
         }
+    }
+
+    /// Tag a LocalVar with a compile-time known array length (e.g., from an
+    /// `[a, b, c]` literal init) so `&x` can build a slice fat pointer.
+    pub fn with_array_length(mut self, length: u64) -> Self {
+        self.array_length = Some(length);
+        self
     }
 
     /// Returns true if this is a function parameter

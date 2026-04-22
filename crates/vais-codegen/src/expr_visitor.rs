@@ -374,6 +374,12 @@ impl ExprVisitor for CodeGenerator {
     fn visit_ref(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
         if let Expr::Ident(name) = &inner.node {
             if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
+                // If the local was initialized from an array literal with a
+                // compile-time-known length, build a `{ i8*, i64 }` slice fat
+                // pointer so calls into `fn(x: &[T])` receive the expected ABI.
+                if let Some(len) = local.array_length {
+                    return self.generate_ref_array_local_slice(&local, len, counter);
+                }
                 if local.is_alloca() {
                     // Alloca variables already have an address
                     return Ok((format!("%{}", local.llvm_name), String::new()));

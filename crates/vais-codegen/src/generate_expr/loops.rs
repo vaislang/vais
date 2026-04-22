@@ -219,10 +219,22 @@ impl CodeGenerator {
         let elem_llvm_ty = self.type_to_llvm(&elem_resolved);
 
         // Determine if the collection is a slice (fat pointer { i8*, i64 })
+        // Phase B1: `&arr` on an array-typed local with compile-time-known
+        // length is now coerced to `{ i8*, i64 }` by generate_ref_expr. The
+        // static type is still `Ref(Array)`, so detect the runtime slice
+        // shape by inspecting whether the collection expr is such a ref.
+        let ref_to_array_local = matches!(
+            &iter_expr.node,
+            Expr::Ref(inner) if matches!(
+                &inner.node,
+                Expr::Ident(name) if self.fn_ctx.locals.get(name.as_str())
+                    .and_then(|l| l.array_length).is_some()
+            )
+        );
         let is_slice = matches!(
             inner_type,
             ResolvedType::Slice(_) | ResolvedType::SliceMut(_)
-        );
+        ) || ref_to_array_local;
 
         // Determine if the collection is a Vec<T>
         let is_vec = matches!(

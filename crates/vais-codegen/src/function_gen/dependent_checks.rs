@@ -109,6 +109,7 @@ impl CodeGenerator {
                     kind: param_local.kind,
                     llvm_name: param_local.llvm_name.clone(),
                     is_double_ptr: param_local.is_double_ptr,
+                    array_length: param_local.array_length,
                 };
                 self.fn_ctx.locals.insert(var_name.clone(), temp_local);
 
