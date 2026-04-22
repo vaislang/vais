@@ -444,6 +444,37 @@ impl CodeGenerator {
                     let conv_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = fptrunc double {} to float", conv_tmp, val);
                     val = conv_tmp;
+                } else if (dst_is_float || dst_is_double)
+                    && matches!(
+                        inferred_ty,
+                        ResolvedType::I8
+                            | ResolvedType::I16
+                            | ResolvedType::I32
+                            | ResolvedType::I64
+                            | ResolvedType::U8
+                            | ResolvedType::U16
+                            | ResolvedType::U32
+                            | ResolvedType::U64
+                    )
+                {
+                    // Integer value passed where a float param is expected
+                    // (e.g., bare integer literal `2` into `Vec<f32>::push`).
+                    let src_bits = self.get_integer_bits(&inferred_ty);
+                    let src_ty = if src_bits > 0 {
+                        format!("i{}", src_bits)
+                    } else {
+                        "i64".to_string()
+                    };
+                    let conv_tmp = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = sitofp {} {} to {}",
+                        conv_tmp,
+                        src_ty,
+                        val,
+                        arg_llvm_ty
+                    );
+                    val = conv_tmp;
                 }
             }
 

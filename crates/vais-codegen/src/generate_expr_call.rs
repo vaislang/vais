@@ -554,6 +554,31 @@ impl CodeGenerator {
                 }
             }
 
+            // Convert str fat pointer { i8*, i64 } to i64 (data pointer) when
+            // parameter expects i64 but arg is str. Common for generic assert_eq
+            // style helpers that take i64 but the test source passes string
+            // literals or string-typed bindings.
+            if let Some(ref param_type) = param_ty {
+                if matches!(param_type, ResolvedType::I64) {
+                    let actual_ty = self.infer_expr_type(arg_for_gen);
+                    if matches!(actual_ty, ResolvedType::Str) {
+                        let val_ty = self.llvm_type_of(&val);
+                        if val_ty == "{ i8*, i64 }" {
+                            let data = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                                data,
+                                val
+                            );
+                            let as_i64 = self.next_temp(counter);
+                            write_ir!(ir, "  {} = ptrtoint i8* {} to i64", as_i64, data);
+                            val = as_i64;
+                        }
+                    }
+                }
+            }
+
             // Coerce struct pointer → i64 when the callee parameter is i64.
             // This happens when a function body passes a struct-typed local
             // (which is actually a pointer from alloca) to a generic function

@@ -148,7 +148,7 @@ impl CodeGenerator {
         if actual_ty == target_ty {
             return val.to_string();
         }
-        // Only handle float<->double coercions
+        // Handle float<->double and int→float coercions.
         match (actual_ty, target_ty) {
             ("float", "double") => {
                 let tmp = self.next_temp(counter);
@@ -158,6 +158,16 @@ impl CodeGenerator {
             ("double", "float") => {
                 let tmp = self.next_temp(counter);
                 write_ir!(ir, "  {} = fptrunc double {} to float", tmp, val);
+                tmp
+            }
+            (src, dst) if (dst == "float" || dst == "double") && src.starts_with('i') => {
+                // Integer value passed where a float param is expected. This
+                // happens for bare integer literals (e.g. `2` passed into a
+                // `f32` Vec) where codegen preserves the i-type. sitofp both
+                // SSA temps and literal constants — LLVM accepts the same
+                // syntax for either.
+                let tmp = self.next_temp(counter);
+                write_ir!(ir, "  {} = sitofp {} {} to {}", tmp, src, val, dst);
                 tmp
             }
             _ => {
