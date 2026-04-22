@@ -56,6 +56,48 @@ impl CodeGenerator {
         let mut arm_labels: Vec<String> = Vec::with_capacity(arms.len());
         let mut arm_values: Vec<(String, String)> = Vec::with_capacity(arms.len()); // (value, label)
 
+        // Pre-compute the phi type (shared by both switch and fallback paths)
+        // so per-arm coercion can use it before branching to merge, and the
+        // later merge-block logic doesn't re-derive a different value.
+        let arm_body_type: ResolvedType = if !arms.is_empty() {
+            let first_arm_ty = self.infer_expr_type(&arms[0].body);
+            if matches!(first_arm_ty, ResolvedType::Named { .. }) {
+                first_arm_ty
+            } else {
+                let named_from_arms = arms.iter().skip(1).find_map(|arm| {
+                    let ty = self.infer_expr_type(&arm.body);
+                    if matches!(ty, ResolvedType::Named { .. }) {
+                        Some(ty)
+                    } else {
+                        None
+                    }
+                });
+                named_from_arms.unwrap_or_else(|| {
+                    if let Some(ret_ty) = &self.fn_ctx.current_return_type {
+                        let ret_informative = matches!(
+                            ret_ty,
+                            ResolvedType::Named { .. }
+                                | ResolvedType::I8
+                                | ResolvedType::U8
+                                | ResolvedType::I16
+                                | ResolvedType::U16
+                                | ResolvedType::I32
+                                | ResolvedType::U32
+                                | ResolvedType::F32
+                                | ResolvedType::F64
+                        );
+                        let first_is_i64 = matches!(first_arm_ty, ResolvedType::I64);
+                        if ret_informative && first_is_i64 {
+                            return ret_ty.clone();
+                        }
+                    }
+                    first_arm_ty
+                })
+            }
+        } else {
+            ResolvedType::I64
+        };
+
         // Check if all arms are simple integer literals (can use switch)
         let all_int_literals = arms.iter().all(|arm| {
             matches!(
@@ -268,21 +310,47 @@ impl CodeGenerator {
                         write_ir!(ir, "  {} = zext i1 {} to i64", coerced, body_val);
                         body_val = coerced;
                         // If the function returns a Named (struct/enum)
-                        // pointer, the phi will be %T*. Coerce the i64 to
-                        // that pointer so the phi incoming type matches.
-                        if let Some(ret_ty) = &self.fn_ctx.current_return_type {
-                            if matches!(ret_ty, ResolvedType::Named { .. }) {
-                                let llvm_ty = self.type_to_llvm(ret_ty);
-                                let casted = self.next_temp(counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = inttoptr i64 {} to {}*",
-                                    casted,
-                                    body_val,
-                                    llvm_ty
-                                );
-                                body_val = casted;
-                            }
+                        // pointer AND arm_body_type was resolved to that Named
+                        // (see the top-of-merge logic), cast the i64 to a
+                        // pointer so the phi incoming matches. Don't apply
+                        // narrow-int trunc here based on return type alone —
+                        // the match may be used as a statement binding an i64
+                        // local that is unrelated to the function return.
+                        if matches!(&arm_body_type, ResolvedType::Named { .. }) {
+                            let llvm_ty = self.type_to_llvm(&arm_body_type);
+                            let casted = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = inttoptr i64 {} to {}*",
+                                casted,
+                                body_val,
+                                llvm_ty
+                            );
+                            body_val = casted;
+                        }
+                    } else if matches!(
+                        arm_body_type,
+                        ResolvedType::I32
+                            | ResolvedType::U32
+                            | ResolvedType::I16
+                            | ResolvedType::U16
+                            | ResolvedType::I8
+                            | ResolvedType::U8
+                    ) {
+                        // arm_body_type (phi type) is narrow int — trunc the
+                        // arm's (possibly i64-wide) value to match.
+                        let actual = self.llvm_type_of(&body_val);
+                        let target = self.type_to_llvm(&arm_body_type);
+                        if actual == "i64" && target != "i64" {
+                            let narrowed = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = trunc i64 {} to {}",
+                                narrowed,
+                                body_val,
+                                target
+                            );
+                            body_val = narrowed;
                         }
                     } else if matches!(arm_inferred, ResolvedType::Named { .. }) {
                         // Named type (struct/enum): phi uses pointer type (%T*).
@@ -386,36 +454,8 @@ impl CodeGenerator {
         if arm_values.is_empty() {
             Ok(("0".to_string(), ir))
         } else {
-            // Determine phi node type from arm body expressions.
-            // Try the first arm, but if it's a generic i64 and another arm or the
-            // function return type is a Named type (struct/enum), prefer that.
-            let arm_body_type = if !arms.is_empty() {
-                let first_arm_ty = self.infer_expr_type(&arms[0].body);
-                if matches!(first_arm_ty, ResolvedType::Named { .. }) {
-                    first_arm_ty
-                } else {
-                    // Check other arms for Named types (e.g., enum construction)
-                    let named_from_arms = arms.iter().skip(1).find_map(|arm| {
-                        let ty = self.infer_expr_type(&arm.body);
-                        if matches!(ty, ResolvedType::Named { .. }) {
-                            Some(ty)
-                        } else {
-                            None
-                        }
-                    });
-                    // Also check function return type as fallback
-                    named_from_arms.unwrap_or_else(|| {
-                        if let Some(ret_ty) = &self.fn_ctx.current_return_type {
-                            if matches!(ret_ty, ResolvedType::Named { .. }) {
-                                return ret_ty.clone();
-                            }
-                        }
-                        first_arm_ty
-                    })
-                }
-            } else {
-                ResolvedType::I64
-            };
+            // Phi node type was already determined above (needed for per-arm
+            // coercion before branching to merge).
 
             // Check if all arms produce void/Unit — phi void is invalid in LLVM IR.
             // Use a placeholder add instruction instead, same pattern as if_else.rs.
@@ -499,11 +539,15 @@ impl CodeGenerator {
 
                 Ok((loaded, ir))
             } else {
-                // Register the actual phi IR type (i64 for Bool/small ints) so
-                // downstream coercion uses the correct source type.
+                // Register the actual phi IR type so downstream coercion
+                // uses the correct source type instead of the default i64
+                // fallback in llvm_type_of.
                 if matches!(arm_body_type, ResolvedType::Bool) {
                     self.fn_ctx
                         .register_temp_type(&phi_result, ResolvedType::I64);
+                } else if !matches!(arm_body_type, ResolvedType::I64) {
+                    self.fn_ctx
+                        .register_temp_type(&phi_result, arm_body_type.clone());
                 }
                 // Str PHI ownership merge (Phase 191 #9, mirrors if-expr at
                 // expr_helpers_control.rs:344-371). If any arm value owns a

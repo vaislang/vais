@@ -275,6 +275,19 @@ impl CodeGenerator {
                         store_val_str
                     );
                     widened
+                } else if actual_ty.ends_with('*') {
+                    // Pointer payload (e.g., `Some(x)` where x is a struct
+                    // returned as %T* from clone()/method call) — ptrtoint
+                    // to fit the i64 payload slot.
+                    let casted = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = ptrtoint {} {} to i64",
+                        casted,
+                        actual_ty,
+                        store_val_str
+                    );
+                    casted
                 } else {
                     store_val_str
                 };
