@@ -562,6 +562,13 @@ impl CodeGenerator {
 
         let final_value = if let Some(ref try_ty) = try_unwrap_type {
             let try_llvm = self.type_to_llvm(try_ty);
+            // Phase E: `Result<(), E>` / `Option<()>` — Unit payload has
+            // no value to load. Skip the bitcast/load and return a stable
+            // placeholder ("void") so downstream code treats this as a
+            // statement-expression with no value.
+            if try_llvm == "void" {
+                return Ok(("void".to_string(), ir));
+            }
             let needs_cast = try_llvm != "i64"
                 && try_llvm != "i32"
                 && try_llvm != "i16"

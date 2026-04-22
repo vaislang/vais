@@ -40,6 +40,27 @@ pub(crate) fn format_llvm_float(n: f64) -> String {
     }
 }
 
+/// Format an f64 value as a valid LLVM IR floating-point constant,
+/// choosing between decimal and the IEEE-754 hex bit-pattern form based
+/// on the target LLVM type (`float` or `double`). For `float`, LLVM
+/// only accepts decimals that round-trip exactly through single
+/// precision (e.g. `1.0e-8` fails); emit the double-bit hex form,
+/// which LLVM interprets as "round this double to float" and is always
+/// accepted.
+#[allow(dead_code)]
+pub(crate) fn format_llvm_float_typed(n: f64, target_llvm: &str) -> String {
+    if target_llvm == "float" && n.is_finite() {
+        // Quick check: does the value round-trip through f32 → f64?
+        let as_f32 = n as f32;
+        let round_tripped = as_f32 as f64;
+        if round_tripped != n {
+            let bits = n.to_bits();
+            return format!("0x{:016X}", bits);
+        }
+    }
+    format_llvm_float(n)
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct LoopLabels {
     pub continue_label: String,

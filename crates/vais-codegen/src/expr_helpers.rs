@@ -8,6 +8,34 @@ use crate::{CodeGenerator, CodegenError, CodegenResult};
 use vais_ast::{BinOp, Expr, Span, Spanned, Type, UnaryOp};
 use vais_types::ResolvedType;
 
+/// Phase E: if `val` looks like a decimal float literal (contains '.' or
+/// 'e' or 'E' and starts with a digit / minus), parse it, round to f32,
+/// expand back to f64 bit pattern, and emit as 0x-prefixed hex. LLVM
+/// requires that a `float` constant's double bit pattern round-trip
+/// exactly to f32 — the simplest way to guarantee this is to go
+/// f64 → f32 → f64 before emitting.
+fn normalize_float_literal_for_float(val: &str) -> String {
+    let first = val.chars().next().unwrap_or(' ');
+    let is_number_like = first.is_ascii_digit() || first == '-' || first == '+';
+    let looks_like_float = is_number_like
+        && (val.contains('.') || val.contains('e') || val.contains('E'))
+        && !val.starts_with("0x");
+    if !looks_like_float {
+        return val.to_string();
+    }
+    match val.parse::<f64>() {
+        Ok(n) if n.is_finite() => {
+            // Round to f32 first, then expand back to f64 to get a bit
+            // pattern LLVM will accept for `float` context.
+            let as_f32 = n as f32;
+            let round_tripped = as_f32 as f64;
+            let bits = round_tripped.to_bits();
+            format!("0x{:016X}", bits)
+        }
+        _ => val.to_string(),
+    }
+}
+
 impl CodeGenerator {
     #[inline(never)]
     pub(crate) fn generate_unit_enum_variant(
@@ -223,6 +251,14 @@ impl CodeGenerator {
                     float_llvm = "float";
                 } else {
                     float_llvm = "double";
+                }
+
+                // Phase E: convert decimal float literal constants to
+                // IEEE-754 hex form when target is `float`. LLVM rejects
+                // decimal forms that don't round-trip exactly through f32.
+                if float_llvm == "float" {
+                    actual_left = normalize_float_literal_for_float(&actual_left);
+                    actual_right = normalize_float_literal_for_float(&actual_right);
                 }
 
                 write_ir!(
