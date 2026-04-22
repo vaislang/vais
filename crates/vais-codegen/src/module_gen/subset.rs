@@ -493,14 +493,26 @@ impl CodeGenerator {
         }
 
         // Generate non-specialized struct types (skip already-emitted specialized generics)
+        // Phase E: dedup across structs/enums — cross-module codegen can see
+        // the same name defined as both a struct and an enum in different
+        // modules. Emit the first definition we encounter and skip later
+        // collisions.
+        let mut emitted_type_names: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
         for (name, info) in &self.types.structs {
             if self.generics.generated_structs.contains_key(name) {
+                continue;
+            }
+            if !emitted_type_names.insert(name.clone()) {
                 continue;
             }
             ir.push_str(&self.generate_struct_type(name, info));
             ir.push('\n');
         }
         for (name, info) in &self.types.enums {
+            if !emitted_type_names.insert(name.clone()) {
+                continue;
+            }
             ir.push_str(&self.generate_enum_type(name, info));
             ir.push('\n');
         }
@@ -508,6 +520,13 @@ impl CodeGenerator {
             ir.push_str(&self.generate_union_type(name, info));
             ir.push('\n');
         }
+
+        // Phase D: placeholder for specialized-generic type forward decls.
+        // MUST be placed BEFORE extern declares so that any `%Foo$Bar`
+        // referenced in a signature has its type on record. The actual
+        // scan + substitution happens at end of subset emission.
+        const PHASE_D_MARKER: &str = "; __PHASE_D_FORWARD_DECLS__\n";
+        ir.push_str(PHASE_D_MARKER);
 
         // Generate extern declarations for ALL extern functions (is_extern = true)
         // Builtin helpers (is_extern = false) are handled separately below.
@@ -593,13 +612,6 @@ impl CodeGenerator {
                 declared_fns.insert(name.clone());
             }
         }
-
-        // Phase D: placeholder for specialized-generic type forward decls.
-        // The actual scan runs at the end of subset emission (see below)
-        // because function *bodies* (emitted later) also reference
-        // specializations that extern signatures alone don't cover.
-        const PHASE_D_MARKER: &str = "; __PHASE_D_FORWARD_DECLS__\n";
-        ir.push_str(PHASE_D_MARKER);
 
         // Generate function bodies only for this module's items
         let mut body_ir = String::new();
@@ -912,7 +924,7 @@ impl CodeGenerator {
                     // Track specialized generics (contain `$`) and bare
                     // generic-enum bases that the body may alloca/GEP on.
                     if rest.contains('$')
-                        || matches!(rest, "Result" | "Option" | "Box")
+                        || matches!(rest, "Result" | "Option")
                     {
                         referenced.insert(rest.to_string());
                     }
@@ -942,10 +954,18 @@ impl CodeGenerator {
                         mangled,
                         fields.join(", ")
                     ));
-                } else if matches!(base, "Result" | "Option" | "Box") {
+                } else if matches!(base, "Result" | "Option") {
                     // Generic stdlib enums: erased layout.
                     forward_decls.push_str(&format!(
                         "%{} = type {{ i32, {{ i64 }} }}\n",
+                        mangled
+                    ));
+                } else if base == "Box" {
+                    // std::Box<T> is a heap-wrapper struct with a single
+                    // i64 payload (the boxed pointer). Specializations
+                    // share the same layout.
+                    forward_decls.push_str(&format!(
+                        "%{} = type {{ i64 }}\n",
                         mangled
                     ));
                 }
