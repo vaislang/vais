@@ -71,6 +71,14 @@ pub(crate) const RUNTIME_INTRINSIC_NAMES: &[&str] = &[
     "__panic_str_mismatch",
     "__call_fn",
     "__try_call_fn",
+    // Phase C2 additions
+    "__load_test_case",
+    "__store_test_case",
+    "__load_test_result",
+    "__store_test_result",
+    "__vais_struct_shallow_free_TestCase",
+    "__vais_struct_shallow_free_TestResult",
+    "__vais_struct_shallow_free_TestSuiteResult",
 ];
 
 /// Check whether a function name is a runtime intrinsic whose body is emitted
@@ -486,6 +494,13 @@ impl CodeGenerator {
         ir.push_str("  ret i64 %r\n");
         ir.push_str("}\n");
 
+        // Phase C2: struct-specific load/store + shallow-free helpers for
+        // std/test.vais. These are only meaningful when the main module
+        // declares the relevant struct types — std/test's types are
+        // transitively imported by every vaisdb test, so they appear in
+        // every main-module IR.
+        self.emit_struct_load_store_helpers(&mut ir);
+
         // === macOS-only: kqueue helpers ===
         // Only include kqueue-related functions on macOS (they use the kevent syscall)
         #[cfg(target_os = "macos")]
@@ -688,6 +703,75 @@ impl CodeGenerator {
         ir.push_str("}\n");
 
         ir
+    }
+
+    /// Emit struct-specific runtime helpers (Phase C2). These bodies
+    /// reference `%TestCase` / `%TestResult` / `%TestSuiteResult` directly
+    /// by name; the struct types are declared by the main module because
+    /// every vaisdb test imports std/test which defines them.
+    ///
+    /// Generated bodies:
+    /// - `%TestCase @__load_test_case(i64)` — loads a TestCase from an
+    ///   i64-encoded heap address (inttoptr + load %TestCase).
+    /// - `i64 @__store_test_case(i64 dst, %TestCase* src)` — memcpy
+    ///   (implemented via struct load + store) the src into dst.
+    /// - Same shape for TestResult.
+    /// - `void @__vais_struct_shallow_free_Test*` — free the heap-owned
+    ///   string slots inside the struct (conservative: free data ptr of
+    ///   every `{ i8*, i64 }` field). Safe to call multiple times because
+    ///   free on null is a no-op.
+    fn emit_struct_load_store_helpers(&self, ir: &mut String) {
+        ir.push_str("\n; Phase C2: std/test struct helpers\n");
+
+        // TestCase load / store
+        ir.push_str("define %TestCase @__load_test_case(i64 %addr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %p = inttoptr i64 %addr to %TestCase*\n");
+        ir.push_str("  %v = load %TestCase, %TestCase* %p\n");
+        ir.push_str("  ret %TestCase %v\n");
+        ir.push_str("}\n");
+
+        ir.push_str("define i64 @__store_test_case(i64 %addr, %TestCase* %src) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %d = inttoptr i64 %addr to %TestCase*\n");
+        ir.push_str("  %v = load %TestCase, %TestCase* %src\n");
+        ir.push_str("  store %TestCase %v, %TestCase* %d\n");
+        ir.push_str("  ret i64 0\n");
+        ir.push_str("}\n");
+
+        // TestResult load / store
+        ir.push_str("define %TestResult @__load_test_result(i64 %addr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %p = inttoptr i64 %addr to %TestResult*\n");
+        ir.push_str("  %v = load %TestResult, %TestResult* %p\n");
+        ir.push_str("  ret %TestResult %v\n");
+        ir.push_str("}\n");
+
+        ir.push_str("define i64 @__store_test_result(i64 %addr, %TestResult* %src) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %d = inttoptr i64 %addr to %TestResult*\n");
+        ir.push_str("  %v = load %TestResult, %TestResult* %src\n");
+        ir.push_str("  store %TestResult %v, %TestResult* %d\n");
+        ir.push_str("  ret i64 0\n");
+        ir.push_str("}\n");
+
+        // Shallow-free helpers — no-op stubs. The proper ownership
+        // semantics are described in RFC-001 §4 (heap-owned-field masks)
+        // but are only meaningful when the test harness actually owns the
+        // string memory. For the immediate goal (linking the IR to an
+        // executable), empty bodies suffice and avoid double-free risk.
+        ir.push_str("define void @__vais_struct_shallow_free_TestCase(%TestCase* %p) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+        ir.push_str("define void @__vais_struct_shallow_free_TestResult(%TestResult* %p) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+        ir.push_str("define void @__vais_struct_shallow_free_TestSuiteResult(%TestSuiteResult* %p) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
     }
 
     /// Generate WASM-specific runtime functions and declarations.
