@@ -29,6 +29,27 @@ impl CodeGenerator {
                         .get_enum_name_for_variant(name)
                         .unwrap_or_else(|| "Unknown".to_string());
 
+                    // If `match_val` is a struct value (e.g., tuple
+                    // destructure extracted `%SqlType` rather than
+                    // `%SqlType*`), spill to an alloca so we can GEP to the
+                    // discriminant.
+                    let match_actual_ty = self.llvm_type_of(match_val);
+                    let tag_source = if match_actual_ty == format!("%{}", enum_name) {
+                        let spill = self.next_temp(counter);
+                        self.emit_entry_alloca(&spill, &format!("%{}", enum_name));
+                        write_ir!(
+                            ir,
+                            "  store %{} {}, %{}* {}",
+                            enum_name,
+                            match_val,
+                            enum_name,
+                            spill
+                        );
+                        spill
+                    } else {
+                        match_val.to_string()
+                    };
+
                     // Get the tag from the enum value (first field at index 0)
                     let tag_ptr = self.next_temp(counter);
                     write_ir!(
@@ -37,7 +58,7 @@ impl CodeGenerator {
                         tag_ptr,
                         enum_name,
                         enum_name,
-                        match_val
+                        tag_source
                     );
 
                     let tag_val = self.next_temp(counter);
@@ -260,6 +281,25 @@ impl CodeGenerator {
                     .get_enum_name_for_variant(variant_name)
                     .unwrap_or_else(|| "Unknown".to_string());
 
+                // Spill struct-valued match_val (e.g., from a tuple
+                // destructure) to an alloca so we can GEP for the tag.
+                let match_actual_ty = self.llvm_type_of(match_val);
+                let tag_source = if match_actual_ty == format!("%{}", enum_name) {
+                    let spill = self.next_temp(counter);
+                    self.emit_entry_alloca(&spill, &format!("%{}", enum_name));
+                    write_ir!(
+                        ir,
+                        "  store %{} {}, %{}* {}",
+                        enum_name,
+                        match_val,
+                        enum_name,
+                        spill
+                    );
+                    spill
+                } else {
+                    match_val.to_string()
+                };
+
                 // Get the tag from the enum value (first field at index 0)
                 let tag_ptr = self.next_temp(counter);
                 write_ir!(
@@ -268,7 +308,7 @@ impl CodeGenerator {
                     tag_ptr,
                     enum_name,
                     enum_name,
-                    match_val
+                    tag_source
                 );
 
                 let tag_val = self.next_temp(counter);

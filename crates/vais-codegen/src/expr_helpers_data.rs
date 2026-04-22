@@ -143,7 +143,36 @@ impl CodeGenerator {
                 i
             );
             let elem_ty = &elem_llvm_types[i];
-            write_ir!(ir, "  store {} {}, {}* {}", elem_ty, val, elem_ty, elem_ptr);
+            // When the element is a Named (struct/enum) value but `val` is a
+            // pointer (e.g., `self` param lowered as `%T*`, struct local,
+            // field-access GEP), load the struct through that pointer so the
+            // following `store` gets a value of `elem_ty`, not `elem_ty*`.
+            let store_val = if matches!(
+                &elem_resolved_types[i],
+                ResolvedType::Named { .. }
+            ) && !self.is_expr_value(elem)
+            {
+                let loaded = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = load {}, {}* {}",
+                    loaded,
+                    elem_ty,
+                    elem_ty,
+                    val
+                );
+                loaded
+            } else {
+                val
+            };
+            write_ir!(
+                ir,
+                "  store {} {}, {}* {}",
+                elem_ty,
+                store_val,
+                elem_ty,
+                elem_ptr
+            );
         }
 
         let result = self.next_temp(counter);
