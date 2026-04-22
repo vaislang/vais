@@ -53,14 +53,47 @@ impl CodeGenerator {
     }
 
     pub(crate) fn generate_extern_decl(&self, info: &FunctionInfo) -> String {
+        // Phase E: filter out Unit (`void`) parameters. LLVM only permits
+        // `void` as a function return type, not as a parameter type.
+        // Generic specializations like `RwLock_new$unit` erase their `T`
+        // parameter to Unit → previous emission produced
+        // `declare %RwLock$unit @RwLock_new$unit(void)` which clang rejected
+        // with "void type only allowed for function results".
+        //
+        // Also resolve `Self` in param / return positions: method extern
+        // decls reach here with `Named("Self")` which otherwise prints as
+        // `%Self` (undefined in cross-module IR). Parse the struct name
+        // from the mangled function name (format: "<Struct>_<method>"
+        // or "<Struct>_<method>$<args>") and rewrite Self → Struct.
+        let self_struct: Option<String> = {
+            let name = &info.signature.name;
+            let base = name.split('$').next().unwrap_or(name);
+            base.split_once('_')
+                .map(|(s, _)| s.to_string())
+                .filter(|s| self.types.structs.contains_key(s) || self.types.enums.contains_key(s))
+        };
+        let resolve_self = |ty: &ResolvedType| -> ResolvedType {
+            if let (ResolvedType::Named { name, generics }, Some(struct_name)) =
+                (ty, self_struct.as_ref())
+            {
+                if name == "Self" {
+                    return ResolvedType::Named {
+                        name: struct_name.clone(),
+                        generics: generics.clone(),
+                    };
+                }
+            }
+            ty.clone()
+        };
         let params: Vec<_> = info
             .signature
             .params
             .iter()
-            .map(|(_, ty, _)| self.type_to_llvm_extern(ty))
+            .filter(|(_, ty, _)| !matches!(ty, ResolvedType::Unit))
+            .map(|(_, ty, _)| self.type_to_llvm_extern(&resolve_self(ty)))
             .collect();
 
-        let ret = self.type_to_llvm_extern(&info.signature.ret);
+        let ret = self.type_to_llvm_extern(&resolve_self(&info.signature.ret));
 
         // Special handling for C memory functions: declare with C ABI types
         // to match call-site IR (which uses i8* for pointers).

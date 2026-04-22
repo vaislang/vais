@@ -852,6 +852,12 @@ impl CodeGenerator {
                 }
             }
 
+            // Phase E: skip Unit ("void") arguments — callee signature now
+            // elides Unit parameters, so passing `void void` at the call
+            // site would desync the arg count and is rejected by clang.
+            if arg_ty == "void" {
+                continue;
+            }
             arg_vals.push(format!("{} {}", arg_ty, val));
         }
 

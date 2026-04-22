@@ -600,6 +600,10 @@ impl CodeGenerator {
                 }
             }
 
+            // Phase E: skip Unit args (see generate_expr_call.rs).
+            if arg_llvm_ty == "void" {
+                continue;
+            }
             arg_vals.push(format!("{} {}", arg_llvm_ty, val));
         }
 
@@ -1256,6 +1260,10 @@ impl CodeGenerator {
                 val = loaded;
             }
 
+            // Phase E: skip Unit args (see generate_expr_call.rs).
+            if arg_llvm_ty == "void" {
+                continue;
+            }
             arg_vals.push(format!("{} {}", arg_llvm_ty, val));
         }
 
