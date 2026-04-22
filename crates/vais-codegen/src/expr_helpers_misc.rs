@@ -638,7 +638,23 @@ impl CodeGenerator {
                     loaded
                 }
             } else {
-                value
+                // Phase 17.H3.2: primitive payload path. The extractvalue
+                // slot is the Result's declared payload type (often the
+                // erased i64), but `try_llvm` is the narrower primitive
+                // (i8/i16/i32/i1). Truncate when widths mismatch so the
+                // downstream store / assign receives the right type.
+                let actual = self.llvm_type_of(&value);
+                if actual != try_llvm
+                    && actual.starts_with('i')
+                    && try_llvm.starts_with('i')
+                    && Self::int_type_width(&actual) > 0
+                    && Self::int_type_width(&try_llvm) > 0
+                {
+                    let coerced = self.coerce_int_width(&value, &actual, &try_llvm, counter, &mut ir);
+                    coerced
+                } else {
+                    value
+                }
             }
         } else {
             value
