@@ -3,6 +3,48 @@
 use crate::CodeGenerator;
 
 impl CodeGenerator {
+    /// Look up the LLVM type string for an IR value, **only** returning a type
+    /// when we have reliable evidence. Returns `None` for unregistered SSA
+    /// temporaries — callers can then decide whether to skip coercion instead
+    /// of trusting a default that may be wrong.
+    ///
+    /// Known-type evidence:
+    /// 1. `temp_var_types` — temporaries registered during `generate_expr`
+    /// 2. `locals` — named local variables (alloca/ssa/param)
+    /// 3. Numeric literals (`42`, `-3`) — integer by construction
+    /// 4. Float literals (`1.0e+00`) — detected by `.` or scientific notation
+    /// 5. `null` — pointer by construction
+    ///
+    /// Prefer this over `llvm_type_of` when a wrong guess would produce invalid
+    /// IR (e.g., spurious `inttoptr` on a value that was already a pointer).
+    pub(crate) fn llvm_type_of_checked(&self, val: &str) -> Option<String> {
+        // 1. Check temporaries first (most common for generate_expr results)
+        if let Some(ty) = self.fn_ctx.get_temp_type(val) {
+            return Some(self.type_to_llvm(ty));
+        }
+        // 2. Check local variables (strip leading '%' if present for lookup)
+        let local_name = val.strip_prefix('%').unwrap_or(val);
+        if let Some(local) = self.fn_ctx.locals.get(local_name) {
+            return Some(self.type_to_llvm(&local.ty));
+        }
+        // 3. Literal forms we can type by inspection
+        if val == "null" {
+            return None; // ambiguous pointer type — caller infers from context
+        }
+        if let Some(first) = val.chars().next() {
+            if first.is_ascii_digit() || first == '-' {
+                // Float literal? contains '.' or 'e' (but not plain minus)
+                let looks_like_float = val.contains('.')
+                    || (val.len() > 1 && (val.contains('e') || val.contains('E')));
+                if looks_like_float {
+                    return Some("double".to_string());
+                }
+                return Some("i64".to_string());
+            }
+        }
+        None
+    }
+
     /// Look up the LLVM type string for an IR value (temporary or local variable).
     ///
     /// Resolution order:
@@ -13,18 +55,11 @@ impl CodeGenerator {
     /// This is the primary entry point for downstream passes (store, binary op,
     /// icmp, call) that need to know the LLVM type of an operand produced by an
     /// earlier instruction.
+    ///
+    /// NOTE: prefer `llvm_type_of_checked` when a wrong answer would produce
+    /// invalid IR — the "i64" fallback here can mislead pointer/float paths.
     pub(crate) fn llvm_type_of(&self, val: &str) -> String {
-        // 1. Check temporaries first (most common for generate_expr results)
-        if let Some(ty) = self.fn_ctx.get_temp_type(val) {
-            return self.type_to_llvm(ty);
-        }
-        // 2. Check local variables (strip leading '%' if present for lookup)
-        let local_name = val.strip_prefix('%').unwrap_or(val);
-        if let Some(local) = self.fn_ctx.locals.get(local_name) {
-            return self.type_to_llvm(&local.ty);
-        }
-        // 3. Legacy fallback — assume i64 (generic erasure default)
-        String::from("i64")
+        self.llvm_type_of_checked(val).unwrap_or_else(|| String::from("i64"))
     }
 
     /// Coerce an IR value to a target integer LLVM type, emitting sext/trunc if needed.
