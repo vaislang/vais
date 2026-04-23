@@ -307,13 +307,33 @@ impl CodeGenerator {
                     ResolvedType::Bool => "i1",
                     _ => "i64",
                 };
-                // Coerce operands to the comparison width if they differ
+                // Phase 17.H4.10: ptrtoint pointer operands first. When
+                // registers hold `%T*` (e.g., field-access GEP results),
+                // `coerce_int_width` is a no-op and leaves operands as
+                // ptr while icmp is emitted as `icmp eq i64 ptr, ptr`,
+                // which LLVM rejects. Only trigger when `llvm_type_of`
+                // explicitly returns a pointer-ending string — this is
+                // reliable after H4.10's GEP-register upgrade.
                 let actual_left_ty = self.llvm_type_of(&left_val);
                 let actual_right_ty = self.llvm_type_of(&right_val);
+                let (left_norm, left_norm_ty) = if actual_left_ty.ends_with('*') {
+                    let t = self.next_temp(counter);
+                    write_ir!(ir, "  {} = ptrtoint {} {} to i64", t, actual_left_ty, left_val);
+                    (t, "i64".to_string())
+                } else {
+                    (left_val.clone(), actual_left_ty)
+                };
+                let (right_norm, right_norm_ty) = if actual_right_ty.ends_with('*') {
+                    let t = self.next_temp(counter);
+                    write_ir!(ir, "  {} = ptrtoint {} {} to i64", t, actual_right_ty, right_val);
+                    (t, "i64".to_string())
+                } else {
+                    (right_val.clone(), actual_right_ty)
+                };
                 let coerced_left =
-                    self.coerce_int_width(&left_val, &actual_left_ty, cmp_llvm, counter, &mut ir);
+                    self.coerce_int_width(&left_norm, &left_norm_ty, cmp_llvm, counter, &mut ir);
                 let coerced_right =
-                    self.coerce_int_width(&right_val, &actual_right_ty, cmp_llvm, counter, &mut ir);
+                    self.coerce_int_width(&right_norm, &right_norm_ty, cmp_llvm, counter, &mut ir);
                 write_ir!(
                     ir,
                     "  {} = {} {} {}, {}{}",

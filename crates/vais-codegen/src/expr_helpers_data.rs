@@ -948,6 +948,14 @@ impl CodeGenerator {
                 // For struct-typed fields, return the pointer directly
                 // (the caller or next field access will GEP into it)
                 if matches!(field_ty, ResolvedType::Named { .. }) {
+                    // Phase 17.H4.10: register field_ptr as Pointer(field_ty)
+                    // so llvm_type_of returns `%T*` for this SSA register.
+                    // Downstream icmp / arg coerce paths can now detect
+                    // the pointer and emit proper ptrtoint/bitcast.
+                    self.fn_ctx.register_temp_type(
+                        &field_ptr,
+                        ResolvedType::Pointer(Box::new(field_ty.clone())),
+                    );
                     return Ok((field_ptr, ir));
                 }
 
