@@ -576,6 +576,10 @@ impl CodeGenerator {
         write_ir!(ir, "  br label %{}", loop_start);
 
         write_ir!(ir, "{}:", loop_end);
+        // Phase 17.H4.12: update current_block so downstream phi/br logic
+        // captures `slice_end` as the actual predecessor (not an earlier
+        // block set before the slice-copy loop emitted).
+        self.fn_ctx.current_block.clone_from(&loop_end);
 
         // Phase E.7: wrap the raw i64* + length into a slice fat pointer
         // `{ i8*, i64 }`. Callers that expected a plain pointer should be
