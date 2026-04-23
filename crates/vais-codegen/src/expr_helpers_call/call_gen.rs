@@ -40,6 +40,16 @@ impl CodeGenerator {
 
         let enum_ptr = self.next_temp(counter);
         write_ir!(ir, "  {} = alloca %{}", enum_ptr, enum_name);
+        // Phase 17.H4.8c: register enum_ptr as Pointer(Named) so downstream
+        // `llvm_type_of` returns `%<enum>*` — this lets consumers detect
+        // a ptr-to-enum register and load before storing by value.
+        self.fn_ctx.register_temp_type(
+            &enum_ptr,
+            vais_types::ResolvedType::Pointer(Box::new(vais_types::ResolvedType::Named {
+                name: enum_name.to_string(),
+                generics: vec![],
+            })),
+        );
 
         let tag_ptr = self.next_temp(counter);
         write_ir!(

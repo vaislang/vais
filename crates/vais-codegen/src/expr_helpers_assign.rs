@@ -105,8 +105,21 @@ impl CodeGenerator {
                         let llvm_ty = self.type_to_llvm(&local.ty);
                         // Coerce value width to match local variable type
                         let actual_val_ty = self.llvm_type_of(&val);
-                        let coerced_val =
-                            self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir);
+                        // Phase 17.H4.8b: if the local's type is Named (struct/enum)
+                        // and the rhs `val` is actually a pointer to that struct
+                        // (e.g., Some(x) → alloca %Option + stores, yielding %tN
+                        // of type %Option*), load before storing so we store a
+                        // value, not a pointer-as-value.
+                        let needs_load = matches!(local.ty, ResolvedType::Named { .. })
+                            && val.starts_with('%')
+                            && actual_val_ty == format!("{}*", llvm_ty);
+                        let coerced_val = if needs_load {
+                            let loaded = self.next_temp(counter);
+                            write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
+                            loaded
+                        } else {
+                            self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir)
+                        };
                         // Store the value into the alloca.
                         write_ir!(
                             ir,
