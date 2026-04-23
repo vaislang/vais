@@ -109,6 +109,36 @@ impl CodeGenerator {
             );
             return Ok((elem_ptr, ir));
         }
+        // Phase 17.H4.7: `&<call>(...)` when the callee returns a named
+        // struct value. The value lives in an SSA register; to take its
+        // address, spill to a stack alloca and return the pointer.
+        // Without this, we'd return the struct value as-is and a
+        // receiving function expecting `%T*` would crash clang.
+        if matches!(
+            &inner.node,
+            Expr::Call { .. } | Expr::MethodCall { .. } | Expr::StaticMethodCall { .. }
+        ) {
+            let inferred = self.infer_expr_type(inner);
+            if matches!(inferred, ResolvedType::Named { .. }) {
+                let llvm_ty = self.type_to_llvm(&inferred);
+                // Only spill when the call actually returns a value type
+                // (not a pointer / unit / primitive). We check that the
+                // LLVM rendering starts with `%` (struct type ref).
+                if llvm_ty.starts_with('%') {
+                    let (val, val_ir) = self.generate_expr(inner, counter)?;
+                    let mut ir = val_ir;
+                    let slot = self.next_temp(counter);
+                    self.emit_entry_alloca(&slot, &llvm_ty);
+                    use std::fmt::Write;
+                    let _ = writeln!(
+                        ir,
+                        "  store {} {}, {}* {}",
+                        llvm_ty, val, llvm_ty, slot
+                    );
+                    return Ok((slot, ir));
+                }
+            }
+        }
         // For complex expressions, evaluate and return
         self.generate_expr(inner, counter)
     }
