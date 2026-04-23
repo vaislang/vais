@@ -399,9 +399,27 @@ impl CodeGenerator {
                 self.type_to_llvm(&inferred_ty)
             };
 
-            // Integer width coercion: coerce to match arg_llvm_ty
+            // Integer width coercion: coerce to match arg_llvm_ty.
+            // Phase 17.H4.4: prefer the **actual** LLVM type of `val`
+            // (i.e., what the previous instruction emitted) over the
+            // inferred type. Codegen's generic-erasure inference often
+            // returns I64 for values that were actually loaded as i8/i16
+            // (e.g., `bytes[i]` from a Vec<u8>), and using I64 as src
+            // bits made the coerce a no-op even though LLVM saw i8.
             {
-                let src_bits = self.get_integer_bits(&inferred_ty);
+                let src_bits_from_val = {
+                    let actual = self.llvm_type_of(&val);
+                    if let Some(rest) = actual.strip_prefix('i') {
+                        rest.parse::<u32>().unwrap_or(0)
+                    } else {
+                        0
+                    }
+                };
+                let src_bits = if src_bits_from_val > 0 {
+                    src_bits_from_val
+                } else {
+                    self.get_integer_bits(&inferred_ty)
+                };
                 // Parse dst_bits from arg_llvm_ty (e.g., "i64" -> 64)
                 let dst_bits = if let Some(rest) = arg_llvm_ty.strip_prefix('i') {
                     rest.parse::<u32>().unwrap_or(0)
