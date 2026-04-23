@@ -159,6 +159,11 @@ pub(crate) fn run_per_module_emit_ir(
     }
     let instantiations = &instantiations;
 
+    // Phase 17.H4.14: preload stdlib generic struct templates so emit-IR
+    // path also gets Vec/HashMap/Option/Result specialization.
+    let stdlib_templates =
+        crate::commands::compile::per_module::phase17_load_stdlib_generic_templates_pub();
+
     let codegen_start = std::time::Instant::now();
 
     // Generate IR for each module (parallel with rayon)
@@ -184,6 +189,15 @@ pub(crate) fn run_per_module_emit_ir(
             // expr_types lookups in the emit-IR path also resolve.
             codegen.set_current_file_id(phase17_file_id_for_path(module_path));
             codegen.set_string_prefix(&module_stem);
+            // Phase 17.H4.14: seed stdlib generic templates (same as full
+            // compile path) for consistent specialization behavior.
+            codegen.inject_generic_struct_templates(
+                stdlib_templates
+                    .iter()
+                    .cloned()
+                    .map(std::rc::Rc::new)
+                    .collect(),
+            );
 
             if gc {
                 codegen.enable_gc();

@@ -18,7 +18,7 @@ use vais_types::TypeChecker;
 // Submodules
 mod native;
 mod parallel;
-mod per_module;
+pub(crate) mod per_module;
 mod pipeline;
 mod wasm;
 

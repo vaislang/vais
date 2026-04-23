@@ -22,6 +22,10 @@ fn phase17_fnv1a_file_id_compile(path: &Path) -> u32 {
 /// are injected into each per-module CodeGenerator's generics.struct_defs
 /// so method specialization (Vec_new$T, etc.) works even when the user
 /// didn't explicitly `U std/vec`.
+pub(crate) fn phase17_load_stdlib_generic_templates_pub() -> Vec<vais_ast::Struct> {
+    phase17_load_stdlib_generic_templates()
+}
+
 fn phase17_load_stdlib_generic_templates() -> Vec<vais_ast::Struct> {
     let Some(std_path) = crate::imports::get_std_path() else {
         return Vec::new();
