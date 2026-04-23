@@ -123,6 +123,14 @@ F vec_insertion_sort_inner(data: i64, elem_size: i64, j: i64, key: i64) -> i64 {
 }
 
 X Vec<T> {
+    # Create a new empty Vec (capacity 0)
+    F new() -> Vec<T> {
+        es := type_size()
+        elem_sz := I es <= 0 { 8 } EL { es }
+        data := malloc(0)
+        Vec { data: data, len: 0, cap: 0, elem_size: elem_sz, owned: 0 }
+    }
+
     # Create a new empty Vec with given capacity
     F with_capacity(capacity: i64) -> Vec<T> {
         es := type_size()  # Returns sizeof(T) — resolved at monomorphization
