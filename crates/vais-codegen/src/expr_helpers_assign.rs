@@ -175,7 +175,18 @@ impl CodeGenerator {
                                     && local.is_ssa()
                                     && matches!(local.ty, ResolvedType::Named { .. })
                             });
-                            if is_ssa_named_ptr {
+                            // Phase 17.H4.8: also load when the rhs is an
+                            // alloca'd struct literal. A struct literal
+                            // emits `%tN = alloca %T; store fields @ %tN`,
+                            // so `val = %tN` is a pointer, not a value.
+                            // Registered temp type tells us whether this
+                            // SSA name is actually the named struct type.
+                            let is_alloca_named_ptr =
+                                self.fn_ctx
+                                    .get_temp_type(&val)
+                                    .is_some_and(|t| matches!(t, ResolvedType::Named { .. }))
+                                    || actual_val_ty == format!("{}*", llvm_ty);
+                            if is_ssa_named_ptr || is_alloca_named_ptr {
                                 let loaded = self.next_temp(counter);
                                 write_ir!(
                                     ir,
