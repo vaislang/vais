@@ -256,6 +256,16 @@ X Vec<T> {
         0
     }
 
+    # Shorten the vector to at most `new_len` elements.
+    # If `new_len` is >= current len, does nothing. The underlying
+    # allocation (capacity) is not changed — only the logical length.
+    F truncate(&self, new_len: i64) -> i64 {
+        I new_len < self.len {
+            self.len = new_len
+        }
+        0
+    }
+
     # Free memory
     F drop(&self) -> i64 {
         free(self.data)
