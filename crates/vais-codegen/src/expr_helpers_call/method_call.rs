@@ -9,6 +9,7 @@ impl CodeGenerator {
         receiver: &Spanned<Expr>,
         method: &Spanned<String>,
         args: &[Spanned<Expr>],
+        call_span: Option<vais_ast::Span>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
         let (recv_val, recv_ir, recv_type) = if matches!(&receiver.node, Expr::SelfCall) {
@@ -677,7 +678,34 @@ impl CodeGenerator {
                         backend: String::from("text"),
                     });
                 }
-                ("i64".to_string(), ResolvedType::I64)
+                // Phase 17.H4 iter 20: TC expr_types fallback. When no
+                // FunctionInfo / resolved_function_sigs / trait impl is
+                // registered, consult the call expression's span in TC's
+                // expr_types map. For vaisdb `buf.to_vec()`, `x.to_bytes()`,
+                // etc. where the method isn't in any registry, TC often
+                // stamped the call with the correct ResolvedType from
+                // surrounding context (`Vec<u64>`, `Vec<u8>`). Emit that
+                // instead of the `i64` default so downstream `store
+                // %Vec$T %t` typechecks at clang link.
+                let tc_fallback = call_span.and_then(|s| {
+                    let file_id = if s.file_id != 0 { s.file_id } else { self.current_file_id };
+                    self.expr_types.get(&(file_id, s.start, s.end)).cloned()
+                        .or_else(|| {
+                            let mut iter = self.expr_types.iter()
+                                .filter(|((_, ss, ee), _)| *ss == s.start && *ee == s.end);
+                            let first = iter.next();
+                            let second = iter.next();
+                            match (first, second) {
+                                (Some((_, ty)), None) => Some(ty.clone()),
+                                _ => None,
+                            }
+                        })
+                }).filter(|ty| !matches!(ty, ResolvedType::Var(_)));
+                if let Some(ty) = tc_fallback {
+                    (self.type_to_llvm(&ty), ty)
+                } else {
+                    ("i64".to_string(), ResolvedType::I64)
+                }
             }
         };
 
@@ -1388,6 +1416,22 @@ impl CodeGenerator {
                     .resolved_function_sigs
                     .get(&full_method_name)
                     .map(|sig| sig.ret.clone())
+            })
+            .or_else(|| {
+                // Phase 17.H4 iter 20: TC expr_types fallback when the static
+                // method has no registered signature (vaisdb calls like
+                // `Str.new()`, `Foo.bar()` where Foo is not a real struct or
+                // the method is unregistered). Without this, codegen emits
+                // `call i64 @Foo_bar()` then use sites hitting
+                // `store %Expected %t, %Expected* %slot` fail at link.
+                // `expected_ret` is already resolved from call_span above.
+                expected_ret.clone().and_then(|ty| {
+                    if matches!(&ty, ResolvedType::Var(_)) {
+                        None
+                    } else {
+                        Some(ty)
+                    }
+                })
             });
         let ret_type = ret_resolved
             .as_ref()

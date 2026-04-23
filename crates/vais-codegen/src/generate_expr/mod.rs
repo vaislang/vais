@@ -186,7 +186,7 @@ impl CodeGenerator {
                 receiver,
                 method,
                 args,
-            } => self.generate_method_call_expr(receiver, method, args, counter),
+            } => self.generate_method_call_expr(receiver, method, args, Some(expr.span), counter),
 
             // Static method call: Type.method(args)
             Expr::StaticMethodCall {

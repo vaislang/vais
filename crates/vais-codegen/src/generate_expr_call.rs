@@ -926,6 +926,43 @@ impl CodeGenerator {
                     .get(&fn_name)
                     .map(|sig| self.type_to_llvm(&sig.ret))
             })
+            .or_else(|| {
+                // Phase 17.H4 iter 20: TC expr_types fallback for fully
+                // unregistered calls. When neither `fn_info` nor
+                // `resolved_function_sigs` know the call, the TC's
+                // `expr_types` map stamped at the call's span often carries
+                // the correctly-inferred ResolvedType (e.g., `Vec<u64>` for
+                // `to_vec()`, `Str` for `Str.new()`). Without this, codegen
+                // defaulted to `i64` and downstream `store %Vec$u64 %t`
+                // failed at clang link. Use the span's file_id (or the
+                // codegen's current_file_id when span is unstamped) to
+                // avoid cross-module bleed, mirroring infer_expr_type.
+                let file_id = if span.file_id != 0 {
+                    span.file_id
+                } else {
+                    self.current_file_id
+                };
+                let span_key = (file_id, span.start, span.end);
+                let tc_ty_opt = self.expr_types.get(&span_key).cloned().or_else(|| {
+                    // Fallback: serial TC stamped all exprs with the driver's
+                    // single file_id; try unique (start, end) match.
+                    let mut iter = self.expr_types.iter()
+                        .filter(|((_, s, e), _)| *s == span.start && *e == span.end);
+                    let first = iter.next();
+                    let second = iter.next();
+                    match (first, second) {
+                        (Some((_, ty)), None) => Some(ty.clone()),
+                        _ => None,
+                    }
+                });
+                tc_ty_opt.and_then(|tc_ty| {
+                    // Reject unresolved Var(_) to avoid "i64" regression via type_to_llvm Generic fallback.
+                    if matches!(&tc_ty, ResolvedType::Var(_)) {
+                        return None;
+                    }
+                    Some(self.type_to_llvm(&tc_ty))
+                })
+            })
             .unwrap_or_else(|| "i64".to_string());
 
         let actual_fn_name = fn_info

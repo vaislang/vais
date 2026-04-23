@@ -358,7 +358,7 @@ impl ExprVisitor for CodeGenerator {
         args: &[Spanned<Expr>],
         counter: &mut usize,
     ) -> GenResult {
-        self.generate_method_call_expr(receiver, method, args, counter)
+        self.generate_method_call_expr(receiver, method, args, None, counter)
     }
 
     fn visit_static_method_call(
