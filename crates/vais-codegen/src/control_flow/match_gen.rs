@@ -324,7 +324,17 @@ impl CodeGenerator {
                     && !body_ir.trim_end().ends_with("unreachable")
                 {
                     let arm_inferred = self.infer_expr_type(&arm.body);
-                    if matches!(arm_inferred, ResolvedType::Bool) {
+                    // Phase 17.H4.5: don't zext i1 when body_val is a Unit
+                    // placeholder (`add i64 0, 0`). The arm might have been
+                    // inferred as Bool at the TC level but this specific
+                    // code path fell through to the placeholder (e.g., an
+                    // early `ret` in one branch and no value in the other).
+                    // llvm_type_of returns "i64" for the placeholder, so
+                    // we can detect and skip the zext.
+                    let body_actual_llvm = self.llvm_type_of(&body_val);
+                    let looks_like_placeholder = body_actual_llvm == "i64"
+                        && body_ir.trim_end().ends_with("void/Unit placeholder");
+                    if matches!(arm_inferred, ResolvedType::Bool) && !looks_like_placeholder {
                         let coerced = self.next_temp(counter);
                         write_ir!(ir, "  {} = zext i1 {} to i64", coerced, body_val);
                         body_val = coerced;
