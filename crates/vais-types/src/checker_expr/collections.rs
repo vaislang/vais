@@ -841,7 +841,18 @@ impl TypeChecker {
                         if let Some(ref h) = hint {
                             self.push_enum_hint(h.clone());
                         }
+                        // Phase 17.H4.15: push the full expected field type
+                        // so zero-arg generic static methods like
+                        // `Vec.new()` can unify their fresh type vars with
+                        // the field's concrete type args before stamping.
+                        let pushed_expected = expected_ty_subst.is_some();
+                        if let Some(ref et) = expected_ty_subst {
+                            self.push_expected_type(et.clone());
+                        }
                         let value_type_res = self.check_expr(value);
+                        if pushed_expected {
+                            self.pop_expected_type();
+                        }
                         if hint.is_some() {
                             self.pop_enum_hint();
                         }

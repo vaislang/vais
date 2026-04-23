@@ -56,6 +56,21 @@ impl TypeChecker {
         r
     }
 
+    /// Phase 17.H4.15: push an expected-type hint onto the stack.
+    pub(crate) fn push_expected_type(&mut self, ty: ResolvedType) {
+        self.expected_type_stack.push(ty);
+    }
+
+    /// Phase 17.H4.15: pop the topmost expected-type hint.
+    pub(crate) fn pop_expected_type(&mut self) {
+        self.expected_type_stack.pop();
+    }
+
+    /// Phase 17.H4.15: peek the topmost expected-type hint (cloned).
+    pub(crate) fn current_expected_type(&self) -> Option<ResolvedType> {
+        self.expected_type_stack.last().cloned()
+    }
+
     /// Look up "self" variable directly from scopes (no fallback)
     pub(crate) fn lookup_self_var_info(&self) -> TypeResult<VarInfo> {
         for scope in self.scopes.iter().rev() {

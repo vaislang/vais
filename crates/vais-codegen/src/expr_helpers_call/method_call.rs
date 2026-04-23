@@ -1075,12 +1075,53 @@ impl CodeGenerator {
         // Prefer specialized versions over the base generic method so that the
         // call signature matches the type inference (which also resolves to the
         // specialized return type).
-        let full_method_name = if let Some(inst_list) = self
-            .generics
-            .fn_instantiations
-            .get(&base_method_name)
-            .cloned()
+        // Phase 17.H4.15: when expected_ret has concrete generic args and
+        // zero-arg call (e.g. Vec.new() with a known target Vec<T>), only
+        // accept a specialization whose type args match EXACTLY. Otherwise
+        // fall through so branch C can generate on-demand. Without this,
+        // resolve_generic_call_with_hint's "last resort: first instantiation"
+        // fallback picks an unrelated specialization (e.g. Vec_new$MigrationRecord
+        // when the target was actually Vec<i64>).
+        let expected_has_concrete_generics = matches!(
+            &expected_ret,
+            Some(ResolvedType::Named { generics, .. }) if !generics.is_empty()
+                && generics.iter().all(|g| !matches!(g,
+                    ResolvedType::Generic(_) | ResolvedType::Var(_)))
+        );
+        let expect_zero_arg_container =
+            args.is_empty() && expected_has_concrete_generics;
+        let expected_inst_types: Option<Vec<ResolvedType>> =
+            if expect_zero_arg_container {
+                match &expected_ret {
+                    Some(ResolvedType::Named { generics, .. }) => Some(generics.clone()),
+                    _ => None,
+                }
+            } else {
+                None
+            };
+
+        // Zero-arg + concrete expected: if the exact match is NOT present in
+        // fn_instantiations, skip branches A+B so branch C can try to
+        // generate the specialization on demand.
+        let skip_ab_for_expected = if let Some(expected_types) = &expected_inst_types {
+            let inst_list_opt = self.generics.fn_instantiations.get(&base_method_name);
+            match inst_list_opt {
+                Some(inst_list) => !inst_list.iter().any(|(types, _)| types == expected_types),
+                None => true,
+            }
+        } else {
+            false
+        };
+
+        let full_method_name = if !skip_ab_for_expected
+            && self.generics.fn_instantiations.contains_key(&base_method_name)
         {
+            let inst_list = self
+                .generics
+                .fn_instantiations
+                .get(&base_method_name)
+                .cloned()
+                .unwrap();
             let arg_types: Vec<ResolvedType> =
                 args.iter().map(|a| self.infer_expr_type(a)).collect();
             let resolved = self.resolve_generic_call_with_hint(
@@ -1094,7 +1135,8 @@ impl CodeGenerator {
             } else {
                 base_method_name.clone()
             }
-        } else if self.types.functions.contains_key(&base_method_name)
+        } else if !skip_ab_for_expected
+            && self.types.functions.contains_key(&base_method_name)
             && !(base_method_name == "Vec_new" && args.is_empty()
                 && matches!(&expected_ret, Some(ResolvedType::Named { generics, .. }) if !generics.is_empty()))
         {
@@ -1108,13 +1150,17 @@ impl CodeGenerator {
         } else if self.generics.struct_defs.contains_key(&type_name.node)
             && args.is_empty()
             && matches!(&expected_ret, Some(ResolvedType::Named { generics, .. }) if !generics.is_empty()
-                && generics.iter().any(|g| !matches!(g,
-                    ResolvedType::I64 | ResolvedType::Generic(_) | ResolvedType::Var(_))))
+                && generics.iter().all(|g| !matches!(g,
+                    ResolvedType::Generic(_) | ResolvedType::Var(_))))
         {
-            // Phase 17.H4.11: zero-arg generic static methods (Vec.new(),
+            // Phase 17.H4.11 (+ H4.15): zero-arg generic static methods (Vec.new(),
             // HashMap.new(), Option.None()) cannot infer T from args. Use
             // the TC-resolved expected return type's generic args as the
-            // concrete T vector.
+            // concrete T vector. H4.15: drop the I64 exclusion — I64 is a
+            // valid concrete element type (e.g., Vec<i64>), and the new
+            // struct-literal / expected-type hint path in TC now provides
+            // a trustworthy concrete hint rather than the legacy "I64 means
+            // unresolved fallback" sentinel.
             let type_args: Vec<ResolvedType> = match &expected_ret {
                 Some(ResolvedType::Named { generics, .. }) => generics.clone(),
                 _ => vec![],

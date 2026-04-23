@@ -1753,6 +1753,24 @@ impl TypeChecker {
                             .map_err(|e| e.with_span(arg.span))?;
                     }
 
+                    // Phase 17.H4.15: when zero-arg (or otherwise insufficient
+                    // arg info) generic static methods like `Vec.new()` are
+                    // called in a context with a known expected type (e.g.
+                    // struct-literal field whose type is `Vec<MigrationRecord>`),
+                    // unify the method's generic return type with the caller's
+                    // expected type. This binds the fresh type vars so the
+                    // stamped `expr_types` entry holds concrete generics —
+                    // codegen can then route to `Vec_new$MigrationRecord`
+                    // instead of the unmangled generic base symbol.
+                    if let Some(expected_call_ty) = self.current_expected_type() {
+                        let return_subst =
+                            self.substitute_generics(&method_sig.ret, &generic_substitutions);
+                        // Unify is permissive: on mismatch we swallow the
+                        // error — the top-level unify at the call site will
+                        // surface any real conflict with a better span.
+                        let _ = self.unify(&return_subst, &expected_call_ty);
+                    }
+
                     // Substitute generics in return type
                     let return_type =
                         self.substitute_generics(&method_sig.ret, &generic_substitutions);
@@ -1924,26 +1942,87 @@ impl TypeChecker {
             }
         }
 
+        // Phase 17.H4.15: for zero-arg builtin generic constructors
+        // (Vec.new / HashMap.new / HashSet.new / ...), unify the fresh
+        // generic type vars with the caller's expected type if one is
+        // available. This binds the vars so the stamped `expr_types` entry
+        // carries concrete generics — codegen can then route to the
+        // specialized symbol (e.g. `Vec_new$MigrationRecord`) instead of
+        // the unmangled generic base. Callers that know the expected type
+        // push it via `push_expected_type` before `check_expr`; see
+        // `checker_expr/collections.rs` struct-literal field loop.
+        fn make_and_bind<F>(
+            checker: &mut TypeChecker,
+            container_name: &str,
+            n_type_vars: usize,
+            make_ret: F,
+        ) -> ResolvedType
+        where
+            F: Fn(&[ResolvedType]) -> ResolvedType,
+        {
+            let fresh: Vec<ResolvedType> =
+                (0..n_type_vars).map(|_| checker.fresh_type_var()).collect();
+            let ret = make_ret(&fresh);
+            if let Some(expected) = checker.current_expected_type() {
+                if let ResolvedType::Named {
+                    name: exp_name,
+                    generics: exp_generics,
+                } = &expected
+                {
+                    if exp_name == container_name && exp_generics.len() == fresh.len() {
+                        for (var, concrete) in fresh.iter().zip(exp_generics.iter()) {
+                            let _ = checker.unify(var, concrete);
+                        }
+                        // Record method + struct instantiation so codegen's
+                        // specialization lookup (by mangled name) finds the
+                        // symbol even when no prior call site in the same
+                        // module has registered it.
+                        let resolved_generics: Vec<ResolvedType> = exp_generics
+                            .iter()
+                            .map(|g| checker.apply_substitutions(g))
+                            .collect();
+                        let all_concrete = resolved_generics.iter().all(|t| {
+                            !matches!(t, ResolvedType::Var(_) | ResolvedType::Generic(_))
+                        });
+                        if all_concrete {
+                            let inst = GenericInstantiation::struct_type(
+                                container_name,
+                                resolved_generics.clone(),
+                            );
+                            checker.add_instantiation(inst);
+                            let method_inst = GenericInstantiation::method(
+                                container_name,
+                                "new",
+                                resolved_generics,
+                            );
+                            checker.add_instantiation(method_inst);
+                        }
+                    }
+                }
+            }
+            ret
+        }
+
         // Built-in Vec static methods
         if type_name.node == "Vec" {
             match method.node.as_str() {
                 "new" => {
-                    let elem_type = self.fresh_type_var();
-                    return Ok(ResolvedType::Named {
+                    let ret = make_and_bind(self, "Vec", 1, |fresh| ResolvedType::Named {
                         name: "Vec".to_string(),
-                        generics: vec![elem_type],
+                        generics: fresh.to_vec(),
                     });
+                    return Ok(ret);
                 }
                 "with_capacity" => {
                     if args.len() == 1 {
                         let arg_type = self.check_expr(&args[0])?;
                         let _ = self.unify(&ResolvedType::I64, &arg_type);
                     }
-                    let elem_type = self.fresh_type_var();
-                    return Ok(ResolvedType::Named {
+                    let ret = make_and_bind(self, "Vec", 1, |fresh| ResolvedType::Named {
                         name: "Vec".to_string(),
-                        generics: vec![elem_type],
+                        generics: fresh.to_vec(),
                     });
+                    return Ok(ret);
                 }
                 _ => {}
             }
@@ -1956,10 +2035,11 @@ impl TypeChecker {
                     for arg in args {
                         let _ = self.check_expr(arg)?;
                     }
-                    return Ok(ResolvedType::Named {
+                    let ret = make_and_bind(self, "HashMap", 2, |fresh| ResolvedType::Named {
                         name: "HashMap".to_string(),
-                        generics: vec![self.fresh_type_var(), self.fresh_type_var()],
+                        generics: fresh.to_vec(),
                     });
+                    return Ok(ret);
                 }
                 _ => {}
             }
@@ -1975,10 +2055,11 @@ impl TypeChecker {
                     for arg in args {
                         let _ = self.check_expr(arg)?;
                     }
-                    return Ok(ResolvedType::Named {
+                    let ret = make_and_bind(self, "HashSet", 1, |fresh| ResolvedType::Named {
                         name: "HashSet".to_string(),
-                        generics: vec![self.fresh_type_var()],
+                        generics: fresh.to_vec(),
                     });
+                    return Ok(ret);
                 }
                 _ => {}
             }

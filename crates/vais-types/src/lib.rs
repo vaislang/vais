@@ -219,6 +219,16 @@ pub struct TypeChecker {
     /// the expected type (e.g. struct-lit field checks, fn arg checks) and
     /// popped before the next unrelated expression is checked.
     pub(crate) enum_hint_stack: Vec<String>,
+
+    /// Phase 17.H4.15: expected-type hint stack. When a caller knows the
+    /// full expected type of a child expression (e.g. struct-literal field
+    /// `applied_versions: Vec.new()` where the field type is
+    /// `Vec<MigrationRecord>`), it pushes that type before recursing into
+    /// `check_expr`. Zero-arg generic static methods like `Vec.new()` then
+    /// unify their fresh generic type vars with the hint, so the call's
+    /// stamped `expr_types` entry carries a fully-resolved generic — codegen
+    /// can then route to the specialized `Vec_new$MigrationRecord`.
+    pub(crate) expected_type_stack: Vec<ResolvedType>,
 }
 
 impl TypeChecker {
@@ -263,6 +273,7 @@ impl TypeChecker {
             expr_types: HashMap::new(),
             pending_method_instantiations: Vec::new(),
             enum_hint_stack: Vec::new(),
+            expected_type_stack: Vec::new(),
         };
         checker.register_builtins();
         checker
