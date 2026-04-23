@@ -208,6 +208,23 @@ impl CodeGenerator {
         self.types.type_aliases = aliases;
     }
 
+    /// Phase 17.H4.14: inject generic struct AST templates from stdlib (or
+    /// any other module not reachable via the module's own import closure).
+    /// Driver calls this with pre-parsed `S Vec<T>`, `S HashMap<K, V>`,
+    /// etc. so `try_generate_vec_specialization` can find method bodies
+    /// for on-demand monomorphization when the user didn't write `U std/vec`
+    /// explicitly (e.g., vaisdb relies on auto-availability of Vec).
+    pub fn inject_generic_struct_templates(&mut self, structs: Vec<std::rc::Rc<vais_ast::Struct>>) {
+        for s in structs {
+            if !s.generics.is_empty() {
+                self.generics
+                    .struct_defs
+                    .entry(s.name.node.clone())
+                    .or_insert(s);
+            }
+        }
+    }
+
     /// Set expression types from the type checker.
     /// These are used by `infer_expr_type` to look up TC-resolved types before
     /// falling back to the legacy heuristic inference.

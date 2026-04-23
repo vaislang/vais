@@ -17,6 +17,54 @@ fn phase17_fnv1a_file_id_compile(path: &Path) -> u32 {
     if hash == 0 { 1 } else { hash }
 }
 
+/// Phase 17.H4.14: load generic struct templates (Vec, HashMap, Option,
+/// Result) from stdlib. Parsed once per build; the resulting Rc<Struct>s
+/// are injected into each per-module CodeGenerator's generics.struct_defs
+/// so method specialization (Vec_new$T, etc.) works even when the user
+/// didn't explicitly `U std/vec`.
+fn phase17_load_stdlib_generic_templates() -> Vec<vais_ast::Struct> {
+    let Some(std_path) = crate::imports::get_std_path() else {
+        return Vec::new();
+    };
+    let files = ["vec.vais", "option.vais", "hashmap.vais", "result.vais"];
+    let mut structs_by_name: std::collections::HashMap<String, vais_ast::Struct> =
+        std::collections::HashMap::new();
+    let mut impls_by_type: std::collections::HashMap<String, Vec<vais_ast::Spanned<vais_ast::Function>>> =
+        std::collections::HashMap::new();
+    for file in &files {
+        let path = std_path.join(file);
+        let Ok(source) = std::fs::read_to_string(&path) else { continue };
+        let Ok(module) = vais_parser::parse(&source) else { continue };
+        for item in module.items {
+            match item.node {
+                vais_ast::Item::Struct(s) if !s.generics.is_empty() => {
+                    structs_by_name.insert(s.name.node.clone(), s);
+                }
+                vais_ast::Item::Impl(imp) => {
+                    if let vais_ast::Type::Named { name, .. } = &imp.target_type.node {
+                        impls_by_type
+                            .entry(name.clone())
+                            .or_default()
+                            .extend(imp.methods.into_iter());
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    // Attach impl methods to corresponding struct templates
+    for (name, methods) in impls_by_type {
+        if let Some(s) = structs_by_name.get_mut(&name) {
+            for m in methods {
+                if !s.methods.iter().any(|em| em.node.name.node == m.node.name.node) {
+                    s.methods.push(m);
+                }
+            }
+        }
+    }
+    structs_by_name.into_values().collect()
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn compile_per_module(
     final_ast: &vais_ast::Module,
@@ -67,6 +115,13 @@ pub(crate) fn compile_per_module(
     let instantiations = checker.get_generic_instantiations();
     let instantiations = &instantiations;
 
+    // Phase 17.H4.14: pre-parse stdlib generic struct templates (Vec,
+    // HashMap, Option, Result) so each per-module CodeGenerator has
+    // their method templates available for on-demand monomorphization.
+    // Without this, modules that use `Vec.new()` but don't import
+    // `std/vec` emit unmangled `@Vec_new` calls that clang rejects.
+    let stdlib_templates = phase17_load_stdlib_generic_templates();
+
     // Phase 1: Generate IR for all modules (parallelized with rayon by default).
     //
     // Set VAIS_PARALLEL_CODEGEN=0 to force sequential codegen. This is useful for
@@ -101,6 +156,17 @@ pub(crate) fn compile_per_module(
             codegen.set_type_aliases(resolved_type_aliases.clone());
             codegen.set_expr_types(resolved_expr_types.clone());
             codegen.set_implicit_try_sites(resolved_implicit_try_sites.clone());
+            // Phase 17.H4.14: seed generic struct templates before subset
+            // iterates final_ast items, so Vec/HashMap/Option/Result
+            // specializations can fire when the user didn't explicitly
+            // import std/vec etc.
+            codegen.inject_generic_struct_templates(
+                stdlib_templates
+                    .iter()
+                    .cloned()
+                    .map(std::rc::Rc::new)
+                    .collect(),
+            );
             // Phase 17.H1: set per-module file_id identical to the one TC
             // used, so expr_types lookups find the entries stored under
             // this module's namespaced key.
