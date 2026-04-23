@@ -1094,9 +1094,44 @@ impl CodeGenerator {
             } else {
                 base_method_name.clone()
             }
-        } else if self.types.functions.contains_key(&base_method_name) {
-            // Already found directly — use as-is
+        } else if self.types.functions.contains_key(&base_method_name)
+            && !(base_method_name == "Vec_new" && args.is_empty()
+                && matches!(&expected_ret, Some(ResolvedType::Named { generics, .. }) if !generics.is_empty()))
+        {
+            // Already found directly — use as-is.
+            // Phase 17.H4.11: but skip this shortcut for `Vec.new()` when
+            // we know T from expected_ret — prefer specialization so the
+            // return type matches struct field layout. Without this override
+            // the base generic (signature returns i64) wins and subsequent
+            // store-into-struct-field fails.
             base_method_name.clone()
+        } else if self.generics.struct_defs.contains_key(&type_name.node)
+            && args.is_empty()
+            && matches!(&expected_ret, Some(ResolvedType::Named { generics, .. }) if !generics.is_empty()
+                && generics.iter().any(|g| !matches!(g,
+                    ResolvedType::I64 | ResolvedType::Generic(_) | ResolvedType::Var(_))))
+        {
+            // Phase 17.H4.11: zero-arg generic static methods (Vec.new(),
+            // HashMap.new(), Option.None()) cannot infer T from args. Use
+            // the TC-resolved expected return type's generic args as the
+            // concrete T vector.
+            let type_args: Vec<ResolvedType> = match &expected_ret {
+                Some(ResolvedType::Named { generics, .. }) => generics.clone(),
+                _ => vec![],
+            };
+            let mangled = vais_types::mangle_name(&base_method_name, &type_args);
+            if self.types.functions.contains_key(&mangled) {
+                mangled
+            } else if let Some(spec) = self.try_generate_vec_specialization(
+                &type_name.node,
+                &method.node,
+                &type_args,
+                counter,
+            ) {
+                spec
+            } else {
+                base_method_name.clone()
+            }
         } else if self.generics.struct_defs.contains_key(&type_name.node) && !args.is_empty() {
             // Infer type args from arguments for generic struct static methods
             let arg_types: Vec<ResolvedType> =
