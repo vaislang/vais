@@ -319,6 +319,18 @@ impl CodeGenerator {
             return Ok((val, ir));
         }
 
+        // Phase 17.H4 iter 18: for types whose LLVM lowering IS the fat
+        // pointer value (`&str`, `&[T]`), the Vais `&x` is semantically a
+        // reference but the LLVM ABI matches the **value** of x. Spilling
+        // to an alloca and returning the alloca address produces
+        // `{ptr, i64}*` where call sites expect `{ptr, i64}` value,
+        // causing clang link errors
+        // (`'%t0' defined with type 'ptr' but expected '{ ptr, i64 }'`).
+        // Return the value directly to keep caller/callee ABI aligned.
+        if matches!(&local.ty, ResolvedType::Str | ResolvedType::Slice(_) | ResolvedType::SliceMut(_)) {
+            return Ok((val, ir));
+        }
+
         let tmp_alloca = self.next_temp(counter);
         self.emit_entry_alloca(&tmp_alloca, &llvm_ty);
         write_ir!(

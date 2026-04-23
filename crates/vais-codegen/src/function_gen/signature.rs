@@ -85,15 +85,31 @@ impl CodeGenerator {
             }
             ty.clone()
         };
+        // Phase 17.H4 iter 18: `type_to_llvm_extern` lowers `&str` → `i8*`
+        // for C ABI compatibility. That is correct for true extern C
+        // functions (malloc, free, fopen …), but wrong for **cross-module
+        // Vais function declares** which must preserve the fat pointer
+        // `{ i8*, i64 }` ABI that call sites emit via `type_to_llvm`.
+        // Mismatch caused `declare i64 @fnv1a_hash(i8*)` vs
+        // `call i64 @fnv1a_hash({ i8*, i64 } %t0)` — clang link error
+        // `'%t0' defined with type 'ptr' but expected '{ ptr, i64 }'`.
+        // Use native ABI for non-extern (Vais-owned) functions.
+        let lower = |ty: &ResolvedType| -> String {
+            if info.is_extern {
+                self.type_to_llvm_extern(ty)
+            } else {
+                self.type_to_llvm(ty)
+            }
+        };
         let params: Vec<_> = info
             .signature
             .params
             .iter()
             .filter(|(_, ty, _)| !matches!(ty, ResolvedType::Unit))
-            .map(|(_, ty, _)| self.type_to_llvm_extern(&resolve_self(ty)))
+            .map(|(_, ty, _)| lower(&resolve_self(ty)))
             .collect();
 
-        let ret = self.type_to_llvm_extern(&resolve_self(&info.signature.ret));
+        let ret = lower(&resolve_self(&info.signature.ret));
 
         // Special handling for C memory functions: declare with C ABI types
         // to match call-site IR (which uses i8* for pointers).
