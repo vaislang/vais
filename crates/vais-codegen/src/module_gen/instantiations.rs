@@ -56,6 +56,25 @@ impl CodeGenerator {
                     for method in &impl_block.methods {
                         self.register_method(&type_name, &method.node)?;
                     }
+                    // Phase 17.H4.13: propagate impl methods to struct_defs
+                    // for generic monomorphization. Without this,
+                    // try_generate_vec_specialization finds the Vec struct
+                    // template (registered from `S Vec<T>`) but the methods
+                    // (`F new`, `F push`, ...) defined in `X Vec<T> { ... }`
+                    // impl blocks aren't attached — so specialization fails
+                    // and codegen falls back to unmangled `@Vec_new`.
+                    if let Some(struct_def) = self.generics.struct_defs.get_mut(&type_name) {
+                        let struct_mut = std::rc::Rc::make_mut(struct_def);
+                        for method in &impl_block.methods {
+                            if !struct_mut
+                                .methods
+                                .iter()
+                                .any(|m| m.node.name.node == method.node.name.node)
+                            {
+                                struct_mut.methods.push(method.clone());
+                            }
+                        }
+                    }
                     // Register trait impl for vtable generation
                     if let Some(ref trait_name) = impl_block.trait_name {
                         let mut method_impls = HashMap::new();
