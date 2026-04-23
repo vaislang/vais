@@ -41,6 +41,68 @@ impl CodeGenerator {
                 }
             }
         }
+        // Phase 17.H4.6: `&arr[i]` should produce the element address, not
+        // the loaded value. The default path delegates to `generate_expr`
+        // which loads the element via `load i8, i8* %ptr`, then the caller
+        // tries to ptrtoint the loaded byte — invalid IR. Emit a GEP-only
+        // path here for slice / Vec indexing.
+        if let Expr::Index { expr: inner_arr, index } = &inner.node {
+            let arr_ty = self.infer_expr_type(inner_arr);
+            // Only intercept when we can produce a raw element pointer.
+            // Str indexing uses the slice's i8* base directly.
+            let (elem_llvm, base_ptr_ir, base_ptr_val) = match &arr_ty {
+                ResolvedType::Slice(elem)
+                | ResolvedType::SliceMut(elem) => {
+                    let (slice_val, slice_ir) = self.generate_expr(inner_arr, counter)?;
+                    let base = self.next_temp(counter);
+                    let ir = format!(
+                        "{}  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                        slice_ir, base, slice_val
+                    );
+                    (self.type_to_llvm(elem), ir, base)
+                }
+                ResolvedType::Ref(inner_t) | ResolvedType::RefMut(inner_t) => {
+                    match inner_t.as_ref() {
+                        ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => {
+                            let (slice_val, slice_ir) = self.generate_expr(inner_arr, counter)?;
+                            let base = self.next_temp(counter);
+                            let ir = format!(
+                                "{}  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                                slice_ir, base, slice_val
+                            );
+                            (self.type_to_llvm(elem), ir, base)
+                        }
+                        _ => return self.generate_expr(inner, counter),
+                    }
+                }
+                ResolvedType::Str => {
+                    // &s[i] — slice fat pointer base + GEP i8
+                    let (slice_val, slice_ir) = self.generate_expr(inner_arr, counter)?;
+                    let base = self.next_temp(counter);
+                    let ir = format!(
+                        "{}  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                        slice_ir, base, slice_val
+                    );
+                    ("i8".to_string(), ir, base)
+                }
+                _ => return self.generate_expr(inner, counter),
+            };
+            let (idx_val, idx_ir) = self.generate_expr(index, counter)?;
+            let mut ir = base_ptr_ir;
+            ir.push_str(&idx_ir);
+            let elem_ptr = self.next_temp(counter);
+            use std::fmt::Write;
+            let _ = writeln!(
+                ir,
+                "  {} = getelementptr {}, {}* {}, i64 {}",
+                elem_ptr,
+                elem_llvm,
+                elem_llvm,
+                base_ptr_val,
+                idx_val
+            );
+            return Ok((elem_ptr, ir));
+        }
         // For complex expressions, evaluate and return
         self.generate_expr(inner, counter)
     }
