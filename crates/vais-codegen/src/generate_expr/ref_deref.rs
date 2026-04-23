@@ -46,7 +46,13 @@ impl CodeGenerator {
         // which loads the element via `load i8, i8* %ptr`, then the caller
         // tries to ptrtoint the loaded byte — invalid IR. Emit a GEP-only
         // path here for slice / Vec indexing.
+        //
+        // Skip when the index is a Range — `&arr[a..b]` is a sub-slice,
+        // not an element address; generate_expr handles Range correctly.
         if let Expr::Index { expr: inner_arr, index } = &inner.node {
+            if matches!(index.node, Expr::Range { .. }) {
+                return self.generate_expr(inner, counter);
+            }
             let arr_ty = self.infer_expr_type(inner_arr);
             // Only intercept when we can produce a raw element pointer.
             // Str indexing uses the slice's i8* base directly.
