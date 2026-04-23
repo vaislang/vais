@@ -235,7 +235,7 @@ jobs:
             });
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
           path: |
@@ -317,7 +317,7 @@ jobs:
           ./measure_compile_time.sh
 
       - name: Upload compile time data
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: compile-time-data
           path: compile-times.txt
