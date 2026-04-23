@@ -1066,6 +1066,21 @@ impl CodeGenerator {
                         .unwrap_or(ResolvedType::I64);
 
                     let llvm_field_ty = self.type_to_llvm(&field_type);
+                    // Phase 17.H4.2: Unit-typed enum payload field has no
+                    // loadable value. Skip the bitcast/load entirely and
+                    // bind the field pattern against a placeholder so the
+                    // match arm's `bind_ir` stays structurally correct.
+                    if llvm_field_ty == "void" {
+                        let placeholder = "i8 0".to_string();
+                        let bind_ir = self.generate_pattern_bindings_typed(
+                            field_pat,
+                            &placeholder,
+                            counter,
+                            &field_type,
+                        )?;
+                        ir.push_str(&bind_ir);
+                        continue;
+                    }
                     // Check if the field type is compound (not a simple integer/bool/pointer).
                     // Compound types were stored via bitcast/heap-alloc into the i64 payload slot.
                     let is_compound_field = llvm_field_ty != "i64"

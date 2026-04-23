@@ -767,6 +767,12 @@ impl CodeGenerator {
 
         if let Some(ref unwrap_ty) = unwrap_type {
             let unwrap_llvm = self.type_to_llvm(unwrap_ty);
+            // Phase 17.H4.2: Unit payload — no value to load. Mirror the
+            // Try (?) operator's void-skip behavior. Return "void" so the
+            // downstream code sees a statement-expression with no value.
+            if unwrap_llvm == "void" {
+                return Ok(("void".to_string(), ir));
+            }
             // Payload slot is i64; if the real Ok type is narrower, truncate so
             // later consumers see a value matching the advertised type. Without
             // this, callers assume `sext i32 <v> to i64` while the slot load
