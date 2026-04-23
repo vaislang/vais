@@ -33,10 +33,10 @@ X Mutex<T> {
     # Try to acquire the lock without blocking
     partial F try_lock(&self) -> MutexGuard<T>? {
         result := __mutex_try_lock(self.os_mutex)
-        LW result == 1 {
+        I result == 1 {
             self.lock_state = 1
             Some(MutexGuard::new(&self))
-        } ! {
+        } EL {
             None
         }
     }
@@ -137,10 +137,10 @@ X RwLock<T> {
     # Try to acquire read lock
     partial F try_read(&self) -> RwLockReadGuard<T>? {
         result := __rwlock_try_read_lock(self.os_rwlock)
-        LW result == 1 {
+        I result == 1 {
             self.readers = self.readers + 1
             Some(RwLockReadGuard::new(&self))
-        } ! {
+        } EL {
             None
         }
     }
@@ -148,10 +148,10 @@ X RwLock<T> {
     # Try to acquire write lock
     partial F try_write(&self) -> RwLockWriteGuard<T>? {
         result := __rwlock_try_write_lock(self.os_rwlock)
-        LW result == 1 {
+        I result == 1 {
             self.writer = 1
             Some(RwLockWriteGuard::new(&self))
-        } ! {
+        } EL {
             None
         }
     }
@@ -295,9 +295,9 @@ X Once {
 
     # Call the function exactly once
     partial F call_once(&self, fn_ptr: i64) -> i64 {
-        LW self.state == 2 {
+        I self.state == 2 {
             0  # Already completed
-        } ! {
+        } EL {
             __once_call(self.os_once, fn_ptr)
             self.state = 2
             0
@@ -338,10 +338,10 @@ X Semaphore {
     # Try to acquire without blocking
     partial F try_acquire(&self) -> i64 {
         result := __semaphore_try_wait(self.os_semaphore)
-        LW result == 1 {
+        I result == 1 {
             self.permits = self.permits - 1
             1
-        } ! {
+        } EL {
             0
         }
     }
@@ -656,9 +656,9 @@ X SpinLock {
     }
 
     F try_lock(&self) -> SpinLockGuard? {
-        LW self.locked.compare_exchange(0, 1) == 0 {
+        I self.locked.compare_exchange(0, 1) == 0 {
             Some(SpinLockGuard::new(&self))
-        } ! {
+        } EL {
             None
         }
     }
