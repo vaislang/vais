@@ -174,6 +174,16 @@ impl CodeGenerator {
                 let field_ty = &effective_fields[field_idx].1;
                 let llvm_ty = self.type_to_llvm(field_ty);
 
+                // Phase 17.H4: Unit-typed fields have no storable value —
+                // LLVM forbids `store void` and `void*`. When the field's
+                // type erases to void (generic specialization with T=()),
+                // drop the store entirely and leave a zero byte marker
+                // instead (the parameter was coerced to i8 upstream).
+                if llvm_ty == "void" {
+                    write_ir!(ir, "  store i8 0, i8* {}", field_ptr);
+                    continue;
+                }
+
                 // For struct-typed fields, val might be a pointer that needs to be loaded
                 let val_to_store = if matches!(field_ty, ResolvedType::Named { .. })
                     && !self.is_expr_value(field_expr)
