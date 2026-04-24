@@ -313,6 +313,7 @@ impl CodeGenerator {
                     );
                     let data_i64 = self.next_temp(counter);
                     write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_slot);
+                    self.fn_ctx.record_emitted_type(&data_i64, "i64");
                     let typed_ptr = self.next_temp(counter);
                     write_ir!(
                         ir,
