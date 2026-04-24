@@ -474,6 +474,7 @@ impl CodeGenerator {
             self.fn_ctx.record_emitted_type(&data_ptr, "i8*");
             let typed_ptr = self.next_temp(counter);
             write_ir!(ir, "  {} = bitcast i8* {} to i64*", typed_ptr, data_ptr);
+            self.fn_ctx.record_emitted_type(&typed_ptr, "i64*");
             typed_ptr
         } else if is_vec_source {
             // Vec<T>: extract data pointer from Vec struct field 0 (data)
@@ -517,6 +518,7 @@ impl CodeGenerator {
 
         let slice_ptr = self.next_temp(counter);
         write_ir!(ir, "  {} = bitcast i8* {} to i64*", slice_ptr, raw_ptr);
+        self.fn_ctx.record_emitted_type(&slice_ptr, "i64*");
 
         // Copy elements using a loop
         let loop_idx_ptr = self.next_temp(counter);
