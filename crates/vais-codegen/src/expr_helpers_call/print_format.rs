@@ -491,6 +491,7 @@ impl CodeGenerator {
             fmt_len,
             fmt_name
         );
+        self.fn_ctx.record_emitted_type(&fmt_ptr, "i8*");
         let i32_result = self.next_temp(counter);
         write_ir!(
             ir,
@@ -531,6 +532,7 @@ impl CodeGenerator {
             fmt_len,
             fmt_name
         );
+        self.fn_ctx.record_emitted_type(&fmt_ptr, "i8*");
         let i32_result = self.next_temp(counter);
         write_ir!(
             ir,

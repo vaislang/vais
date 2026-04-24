@@ -138,6 +138,7 @@ impl CodeGenerator {
                         str_len,
                         const_name
                     );
+                    self.fn_ctx.record_emitted_type(&str_ptr, "i8*");
 
                     // Call strcmp: int strcmp(const char* s1, const char* s2)
                     // Returns 0 if strings are equal

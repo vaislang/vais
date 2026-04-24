@@ -83,6 +83,7 @@ impl CodeGenerator {
                         array_name,
                         i
                     );
+                    self.fn_ctx.record_emitted_type(&elem_ptr, "i64*");
                     write_ir!(ir, "  store i64 {}, i64* {}", elem_val, elem_ptr);
                 }
 
