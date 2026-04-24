@@ -161,6 +161,7 @@ impl CodeGenerator {
                     heap_ptr,
                     effective_ty
                 );
+                self.fn_ctx.record_emitted_type(&typed_ptr, &format!("{}*", effective_ty));
                 if !self.is_expr_value(arg_expr) {
                     let loaded = self.next_temp(counter);
                     write_ir!(
