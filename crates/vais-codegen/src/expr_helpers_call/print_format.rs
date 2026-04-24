@@ -443,6 +443,7 @@ impl CodeGenerator {
 
         let buf_ptr = self.next_temp(counter);
         write_ir!(ir, "  {} = call i8* @malloc(i64 {})", buf_ptr, buf_size);
+        self.fn_ctx.record_emitted_type(&buf_ptr, "i8*");
         // Track allocation for automatic cleanup at scope exit
         ir.push_str(&self.track_alloc(buf_ptr.clone()));
 

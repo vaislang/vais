@@ -277,6 +277,7 @@ impl CodeGenerator {
                                 new_buf,
                                 alloc_sz
                             );
+                            self.fn_ctx.record_emitted_type(&new_buf, "i8*");
                             write_ir!(
                                 capture_ir,
                                 "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",

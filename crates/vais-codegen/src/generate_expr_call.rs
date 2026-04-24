@@ -1115,6 +1115,7 @@ impl CodeGenerator {
                 arg_vals.join(", "),
                 dbg_info
             );
+            self.fn_ctx.record_emitted_type(&ptr_tmp, "i8*");
             let result = self.next_temp(counter);
             write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, ptr_tmp);
             self.fn_ctx.record_emitted_type(&result, "i64");

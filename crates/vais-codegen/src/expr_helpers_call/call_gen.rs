@@ -152,6 +152,7 @@ impl CodeGenerator {
                     heap_ptr,
                     effective_size
                 );
+                self.fn_ctx.record_emitted_type(&heap_ptr, "i8*");
                 let typed_ptr = self.next_temp(counter);
                 write_ir!(
                     ir,

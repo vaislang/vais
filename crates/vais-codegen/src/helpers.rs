@@ -509,6 +509,7 @@ impl CodeGenerator {
 
         let raw_ptr = self.next_temp(counter);
         write_ir!(ir, "  {} = call i8* @malloc(i64 {})", raw_ptr, byte_size);
+        self.fn_ctx.record_emitted_type(&raw_ptr, "i8*");
         // Track allocation for automatic cleanup at scope exit
         ir.push_str(&self.track_alloc(raw_ptr.clone()));
 
