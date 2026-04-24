@@ -609,6 +609,7 @@ impl CodeGenerator {
             fat1,
             data_i8
         );
+        self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
         let fat2 = self.next_temp(counter);
         write_ir!(
             ir,
@@ -617,6 +618,7 @@ impl CodeGenerator {
             fat1,
             length
         );
+        self.fn_ctx.record_emitted_type(&fat2, "{ i8*, i64 }");
 
         Ok((fat2, ir))
     }

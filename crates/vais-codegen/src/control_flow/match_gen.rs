@@ -606,6 +606,7 @@ impl CodeGenerator {
                 phi_type,
                 phi_args.join(", ")
             );
+            self.fn_ctx.record_emitted_type(&phi_result, &phi_type);
 
             // For Named types (enum/struct), the phi gives us a pointer.
             // Load the value so it can be used directly (e.g., as a return value).
