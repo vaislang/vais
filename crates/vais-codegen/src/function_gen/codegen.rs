@@ -571,6 +571,7 @@ impl CodeGenerator {
                                     fat1,
                                     data_i8
                                 );
+                                self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
                                 let fat2 = self.next_temp(&mut counter);
                                 write_ir!(
                                     ir,
@@ -578,6 +579,7 @@ impl CodeGenerator {
                                     fat2,
                                     fat1
                                 );
+                                self.fn_ctx.record_emitted_type(&fat2, "{ i8*, i64 }");
                                 write_ir!(ir, "  ret {{ i8*, i64 }} {}{}", fat2, ret_dbg);
                             } else {
                                 write_ir!(ir, "  ret {} zeroinitializer{}", ret_llvm, ret_dbg);

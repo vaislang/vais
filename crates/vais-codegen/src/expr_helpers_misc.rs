@@ -296,6 +296,7 @@ impl CodeGenerator {
                                 fat0,
                                 new_buf
                             );
+                            self.fn_ctx.record_emitted_type(&fat0, "{ i8*, i64 }");
                             let fat1 = format!("%__cap_fat1_{}", id);
                             write_ir!(
                                 capture_ir,
@@ -304,6 +305,7 @@ impl CodeGenerator {
                                 fat0,
                                 len
                             );
+                            self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
                             fat1
                         } else {
                             val

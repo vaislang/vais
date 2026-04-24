@@ -1344,12 +1344,14 @@ impl CodeGenerator {
                         "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
                         fat1, data_i8
                     );
+                    self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
                     let fat2 = self.next_temp(counter);
                     write_ir!(
                         ir,
                         "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
                         fat2, fat1, len_val
                     );
+                    self.fn_ctx.record_emitted_type(&fat2, "{ i8*, i64 }");
                     val = fat2;
                     did_vec_to_slice = true;
                     "{ i8*, i64 }".to_string()
