@@ -1200,6 +1200,7 @@ impl CodeGenerator {
             "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
             data_ptr, vec_ty, vec_ty, vec_ptr
         );
+        self.fn_ctx.record_emitted_type(&data_ptr, "i64*");
         let data_i = format!("%__ved_di_{}", id);
         write_ir!(ir, "  {} = load i64, i64* {}", data_i, data_ptr);
         self.fn_ctx.record_emitted_type(&data_i, "i64");
@@ -1209,6 +1210,7 @@ impl CodeGenerator {
             "  {} = getelementptr {}, {}* {}, i32 0, i32 1",
             len_ptr, vec_ty, vec_ty, vec_ptr
         );
+        self.fn_ctx.record_emitted_type(&len_ptr, "i64*");
         let len_v = format!("%__ved_len_{}", id);
         write_ir!(ir, "  {} = load i64, i64* {}", len_v, len_ptr);
         self.fn_ctx.record_emitted_type(&len_v, "i64");
@@ -1218,6 +1220,7 @@ impl CodeGenerator {
             "  {} = getelementptr {}, {}* {}, i32 0, i32 3",
             es_ptr, vec_ty, vec_ty, vec_ptr
         );
+        self.fn_ctx.record_emitted_type(&es_ptr, "i64*");
         let es_v = format!("%__ved_es_{}", id);
         write_ir!(ir, "  {} = load i64, i64* {}", es_v, es_ptr);
         self.fn_ctx.record_emitted_type(&es_v, "i64");

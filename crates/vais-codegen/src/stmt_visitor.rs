@@ -353,6 +353,7 @@ impl CodeGenerator {
                         llvm_name,
                         idx
                     );
+                    self.fn_ctx.record_emitted_type(&field_ptr, "i64*");
                     write_ir!(ir, "  store i64 {}, i64* {}", value_str, field_ptr);
                 }
             } else if is_struct_lit || is_enum_variant_call || is_unit_variant {
