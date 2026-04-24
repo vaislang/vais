@@ -484,6 +484,7 @@ impl CodeGenerator {
                     } else {
                         write_ir!(ir, "  {} = sext {} {} to {}", conv_tmp, src_ty, val, dst_ty);
                     }
+                    self.fn_ctx.record_emitted_type(&conv_tmp, &dst_ty);
                     val = conv_tmp;
                 }
                 // Float coercion: fptrunc double→float or fpext float→double
@@ -740,6 +741,7 @@ impl CodeGenerator {
                 if val_ty != "i1" && val_ty.starts_with('i') {
                     let tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = icmp ne {} {}, 0", tmp, val_ty, val);
+                    self.fn_ctx.record_emitted_type(&tmp, "i1");
                     val = tmp;
                 }
             }
@@ -761,6 +763,7 @@ impl CodeGenerator {
                     if val_ty == "i1" && arg_ty != "i1" && arg_ty.starts_with('i') {
                         let tmp = self.next_temp(counter);
                         write_ir!(ir, "  {} = zext i1 {} to {}", tmp, val, arg_ty);
+                        self.fn_ctx.record_emitted_type(&tmp, &arg_ty);
                         val = tmp;
                     } else if val_ty != arg_ty
                         && val_ty.starts_with('i')
@@ -773,10 +776,12 @@ impl CodeGenerator {
                         if val_bits > arg_bits {
                             let tmp = self.next_temp(counter);
                             write_ir!(ir, "  {} = trunc {} {} to {}", tmp, val_ty, val, arg_ty);
+                            self.fn_ctx.record_emitted_type(&tmp, &arg_ty);
                             val = tmp;
                         } else if val_bits < arg_bits {
                             let tmp = self.next_temp(counter);
                             write_ir!(ir, "  {} = sext {} {} to {}", tmp, val_ty, val, arg_ty);
+                            self.fn_ctx.record_emitted_type(&tmp, &arg_ty);
                             val = tmp;
                         }
                     }
@@ -1203,9 +1208,11 @@ impl CodeGenerator {
                 ptr_tmp,
                 dbg_info
             );
+            self.fn_ctx.record_emitted_type(&i32_result, "i32");
             // Convert i32 result to i64 for consistency
             let result = self.next_temp(counter);
             write_ir!(ir, "  {} = sext i32 {} to i64", result, i32_result);
+            self.fn_ctx.record_emitted_type(&result, "i64");
             self.fn_ctx
                 .register_temp_type(&result, vais_types::ResolvedType::I64);
             Ok((result, ir))
@@ -1304,6 +1311,7 @@ impl CodeGenerator {
             }
             let tmp = self.next_temp(counter);
             write_ir!(ir, "  {} = sext i32 {} to i64", tmp, i32_tmp);
+            self.fn_ctx.record_emitted_type(&tmp, "i64");
             // Register as I64 since the sext converts i32→i64.
             // Without this, generate_expr_inner's catch-all registers the
             // semantic return type (I32/U32), causing downstream coercion
@@ -1409,10 +1417,13 @@ impl CodeGenerator {
                 if is_specialized {
                     // Return i8 directly in specialized context
                     write_ir!(ir, "  {} = load i8, i8* {}", result, tmp1);
+                    self.fn_ctx.record_emitted_type(&result, "i8");
                 } else {
                     let tmp2 = self.next_temp(counter);
                     write_ir!(ir, "  {} = load i8, i8* {}", tmp2, tmp1);
+                    self.fn_ctx.record_emitted_type(&tmp2, "i8");
                     write_ir!(ir, "  {} = zext i8 {} to i64", result, tmp2);
+                    self.fn_ctx.record_emitted_type(&result, "i64");
                 }
             }
             2 => {
@@ -1420,10 +1431,13 @@ impl CodeGenerator {
                 write_ir!(ir, "  {} = inttoptr i64 {} to i16*", tmp1, ptr_val);
                 if is_specialized {
                     write_ir!(ir, "  {} = load i16, i16* {}", result, tmp1);
+                    self.fn_ctx.record_emitted_type(&result, "i16");
                 } else {
                     let tmp2 = self.next_temp(counter);
                     write_ir!(ir, "  {} = load i16, i16* {}", tmp2, tmp1);
+                    self.fn_ctx.record_emitted_type(&tmp2, "i16");
                     write_ir!(ir, "  {} = zext i16 {} to i64", result, tmp2);
+                    self.fn_ctx.record_emitted_type(&result, "i64");
                 }
             }
             4 if matches!(resolved_t, ResolvedType::F32) => {
@@ -1445,10 +1459,13 @@ impl CodeGenerator {
                 write_ir!(ir, "  {} = inttoptr i64 {} to i32*", tmp1, ptr_val);
                 if is_specialized {
                     write_ir!(ir, "  {} = load i32, i32* {}", result, tmp1);
+                    self.fn_ctx.record_emitted_type(&result, "i32");
                 } else {
                     let tmp2 = self.next_temp(counter);
                     write_ir!(ir, "  {} = load i32, i32* {}", tmp2, tmp1);
+                    self.fn_ctx.record_emitted_type(&tmp2, "i32");
                     write_ir!(ir, "  {} = zext i32 {} to i64", result, tmp2);
+                    self.fn_ctx.record_emitted_type(&result, "i64");
                 }
             }
             _ if matches!(resolved_t, ResolvedType::F64) => {
@@ -1585,6 +1602,7 @@ impl CodeGenerator {
                 } else {
                     let tmp2 = self.next_temp(counter);
                     write_ir!(ir, "  {} = trunc i64 {} to i8", tmp2, val_val);
+                    self.fn_ctx.record_emitted_type(&tmp2, "i8");
                     write_ir!(ir, "  store i8 {}, i8* {}", tmp2, tmp1);
                 }
             }
@@ -1596,6 +1614,7 @@ impl CodeGenerator {
                 } else {
                     let tmp2 = self.next_temp(counter);
                     write_ir!(ir, "  {} = trunc i64 {} to i16", tmp2, val_val);
+                    self.fn_ctx.record_emitted_type(&tmp2, "i16");
                     write_ir!(ir, "  store i16 {}, i16* {}", tmp2, tmp1);
                 }
             }
@@ -1621,6 +1640,7 @@ impl CodeGenerator {
                 } else {
                     let tmp2 = self.next_temp(counter);
                     write_ir!(ir, "  {} = trunc i64 {} to i32", tmp2, val_val);
+                    self.fn_ctx.record_emitted_type(&tmp2, "i32");
                     write_ir!(ir, "  store i32 {}, i32* {}", tmp2, tmp1);
                 }
             }
