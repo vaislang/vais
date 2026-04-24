@@ -492,6 +492,7 @@ impl CodeGenerator {
                                             raw,
                                             payload_ptr
                                         );
+                                        self.fn_ctx.record_emitted_type(&raw, "i64");
                                         write_ir!(
                                             ir,
                                             "  {} = trunc i64 {} to i1",
@@ -507,6 +508,7 @@ impl CodeGenerator {
                                             raw,
                                             payload_ptr
                                         );
+                                        self.fn_ctx.record_emitted_type(&raw, "i64");
                                         write_ir!(
                                             ir,
                                             "  {} = trunc i64 {} to i32",
@@ -1118,6 +1120,7 @@ impl CodeGenerator {
                             // Load the i64, convert to typed pointer, then load value.
                             let raw_i64 = self.next_temp(counter);
                             write_ir!(ir, "  {} = load i64, i64* {}", raw_i64, payload_ptr);
+                            self.fn_ctx.record_emitted_type(&raw_i64, "i64");
                             let typed_ptr = self.next_temp(counter);
                             write_ir!(
                                 ir,
@@ -1208,6 +1211,7 @@ impl CodeGenerator {
                             // Simple type (i64, i32, pointer, etc.): load directly
                             let raw_val = self.next_temp(counter);
                             write_ir!(ir, "  {} = load i64, i64* {}", raw_val, payload_ptr);
+                            self.fn_ctx.record_emitted_type(&raw_val, "i64");
                             let field_val = if llvm_field_ty == "i1" {
                                 // Bool field: payload slot is i64, but binding needs i1 for branch instructions
                                 let bool_val = self.next_temp(counter);
@@ -1524,6 +1528,7 @@ impl CodeGenerator {
                                 // conventions (used by `br i1`, logical ops, etc.).
                                 let raw = self.next_temp(counter);
                                 write_ir!(ir, "  {} = load i64, i64* {}", raw, payload_ptr);
+                                self.fn_ctx.record_emitted_type(&raw, "i64");
                                 write_ir!(ir, "  {} = trunc i64 {} to i1", field_val, raw);
                                 self.fn_ctx.record_emitted_type(&field_val, "i1");
                             }
@@ -1539,6 +1544,7 @@ impl CodeGenerator {
                                 let narrow_ty = self.type_to_llvm(&field_ty);
                                 let raw = self.next_temp(counter);
                                 write_ir!(ir, "  {} = load i64, i64* {}", raw, payload_ptr);
+                                self.fn_ctx.record_emitted_type(&raw, "i64");
                                 write_ir!(
                                     ir,
                                     "  {} = trunc i64 {} to {}",
@@ -1555,6 +1561,7 @@ impl CodeGenerator {
                                 // type, and load through it.
                                 let raw = self.next_temp(counter);
                                 write_ir!(ir, "  {} = load i64, i64* {}", raw, payload_ptr);
+                                self.fn_ctx.record_emitted_type(&raw, "i64");
                                 let typed = self.next_temp(counter);
                                 write_ir!(
                                     ir,
@@ -1578,6 +1585,7 @@ impl CodeGenerator {
                                 let llvm_ty = self.type_to_llvm(&field_ty);
                                 let raw = self.next_temp(counter);
                                 write_ir!(ir, "  {} = load i64, i64* {}", raw, payload_ptr);
+                                self.fn_ctx.record_emitted_type(&raw, "i64");
                                 write_ir!(
                                     ir,
                                     "  {} = inttoptr i64 {} to {}*",
