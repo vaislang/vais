@@ -131,6 +131,7 @@ impl CodeGenerator {
             range_type,
             start_val
         );
+        self.fn_ctx.record_emitted_type(&t1, range_type);
         let t2 = self.next_temp(counter);
         write_ir!(
             ir,
@@ -140,6 +141,7 @@ impl CodeGenerator {
             t1,
             end_val
         );
+        self.fn_ctx.record_emitted_type(&t2, range_type);
         let t3 = self.next_temp(counter);
         write_ir!(
             ir,
@@ -149,6 +151,7 @@ impl CodeGenerator {
             t2,
             incl_val
         );
+        self.fn_ctx.record_emitted_type(&t3, range_type);
 
         Ok((t3, ir))
     }
