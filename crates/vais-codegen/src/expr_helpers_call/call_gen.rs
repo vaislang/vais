@@ -223,6 +223,7 @@ impl CodeGenerator {
                 }
                 let ptr_i64 = self.next_temp(counter);
                 write_ir!(ir, "  {} = ptrtoint i8* {} to i64", ptr_i64, heap_ptr);
+                self.fn_ctx.record_emitted_type(&ptr_i64, "i64");
                 write_ir!(ir, "  store i64 {}, i64* {}", ptr_i64, payload_field_ptr);
             } else if needs_cast && arg_val.starts_with('%') {
                 // Small struct (≤ 8 bytes): bitcast payload slot and store directly

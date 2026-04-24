@@ -484,6 +484,7 @@ impl CodeGenerator {
                 // as_bytes returns the raw pointer as i64 (ptrtoint for C interop)
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, recv_ptr);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
             "trim" => {

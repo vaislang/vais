@@ -125,6 +125,7 @@ impl CodeGenerator {
                     left_val
                 );
                 write_ir!(ir, "  {} = ptrtoint i8* {} to i64", i64_tmp, ptr_tmp);
+                self.fn_ctx.record_emitted_type(&i64_tmp, "i64");
                 let op_str = match op {
                     BinOp::Add => "add",
                     BinOp::Sub => "sub",
@@ -319,6 +320,7 @@ impl CodeGenerator {
                 let (left_norm, left_norm_ty) = if actual_left_ty.ends_with('*') {
                     let t = self.next_temp(counter);
                     write_ir!(ir, "  {} = ptrtoint {} {} to i64", t, actual_left_ty, left_val);
+                    self.fn_ctx.record_emitted_type(&t, "i64");
                     (t, "i64".to_string())
                 } else {
                     (left_val.clone(), actual_left_ty)
@@ -326,6 +328,7 @@ impl CodeGenerator {
                 let (right_norm, right_norm_ty) = if actual_right_ty.ends_with('*') {
                     let t = self.next_temp(counter);
                     write_ir!(ir, "  {} = ptrtoint {} {} to i64", t, actual_right_ty, right_val);
+                    self.fn_ctx.record_emitted_type(&t, "i64");
                     (t, "i64".to_string())
                 } else {
                     (right_val.clone(), actual_right_ty)
@@ -607,6 +610,7 @@ impl CodeGenerator {
             let result = self.next_temp(counter);
             write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr_val, val);
             write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, ptr_val);
+            self.fn_ctx.record_emitted_type(&result, "i64");
             return Ok((result, ir));
         }
 
@@ -636,6 +640,7 @@ impl CodeGenerator {
             let result = self.next_temp(counter);
             if src_llvm_ty.ends_with('*') {
                 write_ir!(ir, "  {} = ptrtoint {} {} to i64", result, src_llvm_ty, val);
+                self.fn_ctx.record_emitted_type(&result, "i64");
             } else {
                 // Named struct type — the SSA value is actually a pointer (from alloca)
                 write_ir!(
@@ -645,6 +650,7 @@ impl CodeGenerator {
                     src_llvm_ty,
                     val
                 );
+                self.fn_ctx.record_emitted_type(&result, "i64");
             }
             return Ok((result, ir));
         }

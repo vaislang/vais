@@ -586,6 +586,7 @@ impl CodeGenerator {
                     let struct_llvm = self.type_to_llvm(&inferred);
                     let tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = ptrtoint {}* {} to i64", tmp, struct_llvm, val);
+                    self.fn_ctx.record_emitted_type(&tmp, "i64");
                     val = tmp;
                 }
             }

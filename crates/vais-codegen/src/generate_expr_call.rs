@@ -85,6 +85,7 @@ impl CodeGenerator {
                 let raw_ptr = self.extract_str_ptr(&str_val, counter, &mut ir);
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, raw_ptr);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 return Ok((result, ir));
             }
 
@@ -184,6 +185,7 @@ impl CodeGenerator {
                 // Convert ptr to i64 for __swap(i64, i64, i64) signature
                 let ptr_i64 = self.next_temp(counter);
                 write_ir!(ir, "  {} = ptrtoint ptr {} to i64", ptr_i64, ptr_val);
+                self.fn_ctx.record_emitted_type(&ptr_i64, "i64");
 
                 let dbg_info = self.debug_info.dbg_ref_from_span(span);
                 write_ir!(
@@ -640,6 +642,7 @@ impl CodeGenerator {
                             );
                             let as_i64 = self.next_temp(counter);
                             write_ir!(ir, "  {} = ptrtoint i8* {} to i64", as_i64, data);
+                            self.fn_ctx.record_emitted_type(&as_i64, "i64");
                             val = as_i64;
                         }
                     }
@@ -684,12 +687,14 @@ impl CodeGenerator {
                     // Explicitly pointer-typed → ptrtoint
                     let tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = ptrtoint {} {} to i64", tmp, val_ty, val);
+                    self.fn_ctx.record_emitted_type(&tmp, "i64");
                     val = tmp;
                 } else if val_ty.starts_with('%') && !val_ty.ends_with('*') && val_ty != "i64" {
                     // Named struct type from local — the SSA value is actually a
                     // pointer (from alloca pattern at function entry). Treat as ptr.
                     let tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = ptrtoint {}* {} to i64", tmp, val_ty, val);
+                    self.fn_ctx.record_emitted_type(&tmp, "i64");
                     val = tmp;
                 } else if val_ty == "i64" {
                     // Phase 17.H4 iter 21: the AST shape of `arg_for_gen` rules
@@ -717,6 +722,7 @@ impl CodeGenerator {
                             let struct_llvm = self.type_to_llvm(&inferred);
                             let tmp = self.next_temp(counter);
                             write_ir!(ir, "  {} = ptrtoint {}* {} to i64", tmp, struct_llvm, val);
+                            self.fn_ctx.record_emitted_type(&tmp, "i64");
                             val = tmp;
                         }
                     }
@@ -828,6 +834,7 @@ impl CodeGenerator {
                     );
                     let data_i64 = self.next_temp(counter);
                     write_ir!(ir, "  {} = ptrtoint i8* {} to i64", data_i64, data_ptr);
+                    self.fn_ctx.record_emitted_type(&data_i64, "i64");
                     // Extract length from slice
                     let len = self.next_temp(counter);
                     write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 1", len, val);
@@ -1101,6 +1108,7 @@ impl CodeGenerator {
             );
             let result = self.next_temp(counter);
             write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, ptr_tmp);
+            self.fn_ctx.record_emitted_type(&result, "i64");
             Ok((result, ir))
         } else if fn_name == "free" {
             // Special handling for free: handle str fat pointer, i8*, or i64
@@ -1138,6 +1146,7 @@ impl CodeGenerator {
             // Convert result back to i64
             let result_i64 = self.next_temp(counter);
             write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result_i64, result);
+            self.fn_ctx.record_emitted_type(&result_i64, "i64");
             Ok((result_i64, ir))
         } else if fn_name == "slice_data_ptr" {
             // Extract the data pointer from a slice fat pointer {i8*, i64}
@@ -1156,6 +1165,7 @@ impl CodeGenerator {
                 );
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, ptr_tmp);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             } else {
                 // Fallback: treat the argument as already an i64 pointer
