@@ -113,6 +113,7 @@ impl CodeGenerator {
                 // Compute length with strlen and build fat pointer
                 let len = self.next_temp(counter);
                 write_ir!(ir, "  {} = call i64 @strlen(i8* {})", len, raw_ptr);
+                self.fn_ctx.record_emitted_type(&len, "i64");
                 let result = self.build_str_fat_ptr(&raw_ptr, &len, counter, &mut ir);
                 return Ok((result, ir));
             }
@@ -622,6 +623,7 @@ impl CodeGenerator {
                         write_ir!(ir, "  {} = inttoptr i64 {} to i8*", raw_ptr, val);
                         let len = self.next_temp(counter);
                         write_ir!(ir, "  {} = call i64 @strlen(i8* {})", len, raw_ptr);
+                        self.fn_ctx.record_emitted_type(&len, "i64");
                         val = self.build_str_fat_ptr(&raw_ptr, &len, counter, &mut ir);
                     }
                 }
@@ -1199,6 +1201,7 @@ impl CodeGenerator {
                 ptr_tmp,
                 dbg_info
             );
+            self.fn_ctx.record_emitted_type(&result, "i64");
             Ok((result, ir))
         } else if fn_name == "puts_ptr" {
             // Special handling for puts_ptr: handle str fat pointer, i8*, or i64
@@ -1385,6 +1388,7 @@ impl CodeGenerator {
                 {
                     let len = self.next_temp(counter);
                     write_ir!(ir, "  {} = call i64 @strlen(i8* {})", len, tmp);
+                    self.fn_ctx.record_emitted_type(&len, "i64");
                     let fat_ptr = self.build_str_fat_ptr(&tmp, &len, counter, &mut ir);
                     return Ok((fat_ptr, ir));
                 }

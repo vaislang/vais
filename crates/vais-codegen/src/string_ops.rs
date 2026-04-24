@@ -594,6 +594,7 @@ impl CodeGenerator {
                 // Uses strncmp(haystack, needle, strlen(needle)) == 0
                 let nlen = self.next_temp(counter);
                 write_ir!(ir, "  {} = call i64 @strlen(i8* {})", nlen, arg_ptr);
+                self.fn_ctx.record_emitted_type(&nlen, "i64");
                 let cmp = self.next_temp(counter);
                 write_ir!(
                     ir,
@@ -625,6 +626,7 @@ impl CodeGenerator {
                 let hlen = self.extract_str_len(recv_val, counter, &mut ir);
                 let nlen = self.next_temp(counter);
                 write_ir!(ir, "  {} = call i64 @strlen(i8* {})", nlen, arg_ptr);
+                self.fn_ctx.record_emitted_type(&nlen, "i64");
                 // If needle longer than haystack → false.
                 let too_long = self.next_temp(counter);
                 write_ir!(ir, "  {} = icmp ugt i64 {}, {}", too_long, nlen, hlen);
