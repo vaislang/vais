@@ -215,6 +215,7 @@ impl CodeGenerator {
                         {
                             let tmp = self.next_temp(counter);
                             write_ir!(ir, "  {} = zext i8 {} to i64", tmp, coerced_val);
+                            self.fn_ctx.record_emitted_type(&tmp, "i64");
                             tmp
                         } else {
                             coerced_val

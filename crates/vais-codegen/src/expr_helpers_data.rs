@@ -503,6 +503,7 @@ impl CodeGenerator {
             if idx_llvm != "i64" && (idx_llvm == "i8" || idx_llvm == "i16" || idx_llvm == "i32") {
                 let ext = self.next_temp(counter);
                 write_ir!(ir, "  {} = sext {} {} to i64", ext, idx_llvm, idx_val);
+                self.fn_ctx.record_emitted_type(&ext, "i64");
                 ext
             } else {
                 idx_val

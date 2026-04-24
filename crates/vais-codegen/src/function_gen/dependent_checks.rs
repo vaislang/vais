@@ -133,6 +133,7 @@ impl CodeGenerator {
                 let cond_i1 = format!("%dep_cond_i1_{}", *counter);
                 *counter += 1;
                 write_ir!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, pred_value);
+                self.fn_ctx.record_emitted_type(&cond_i1, "i1");
 
                 // Branch based on predicate result
                 write_ir!(

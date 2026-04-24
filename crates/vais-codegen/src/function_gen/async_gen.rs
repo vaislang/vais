@@ -233,6 +233,7 @@ impl CodeGenerator {
         } else if ret_llvm == "i1" {
             let trunc = format!("%body_trunc.{}", counter);
             write_ir!(ir, "  {} = trunc i64 {} to i1", trunc, body_result.0);
+            self.fn_ctx.record_emitted_type(&trunc, "i1");
             trunc
         } else {
             body_result.0.clone()

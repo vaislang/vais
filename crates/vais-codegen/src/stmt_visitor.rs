@@ -573,6 +573,7 @@ impl CodeGenerator {
                 let ret_val = if poll_ctx.ret_llvm == "i1" {
                     let trunc = self.next_temp(counter);
                     write_ir!(ir, "  {} = trunc i64 {} to i1", trunc, val);
+                    self.fn_ctx.record_emitted_type(&trunc, "i1");
                     trunc
                 } else {
                     val

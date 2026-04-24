@@ -528,6 +528,7 @@ impl CodeGenerator {
 
         let cmp = self.next_temp(counter);
         write_ir!(ir, "  {} = icmp slt i64 {}, {}", cmp, loop_idx, length);
+        self.fn_ctx.record_emitted_type(&cmp, "i1");
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}",

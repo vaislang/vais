@@ -267,6 +267,7 @@ impl CodeGenerator {
                     // Guard value is i64 (0 or 1), convert to i1 for branch
                     let guard_bool = self.next_temp(counter);
                     write_ir!(ir, "  {} = icmp ne i64 {}, 0", guard_bool, guard_val);
+                    self.fn_ctx.record_emitted_type(&guard_bool, "i1");
                     write_ir!(
                         ir,
                         "  br i1 {}, label %{}, label %{}",
@@ -337,6 +338,7 @@ impl CodeGenerator {
                     if matches!(arm_inferred, ResolvedType::Bool) && !looks_like_placeholder {
                         let coerced = self.next_temp(counter);
                         write_ir!(ir, "  {} = zext i1 {} to i64", coerced, body_val);
+                        self.fn_ctx.record_emitted_type(&coerced, "i64");
                         body_val = coerced;
                         // Coerce to arm_body_type if it's a Named pointer or
                         // narrow int — the phi incoming must match the phi's

@@ -766,6 +766,7 @@ impl CodeGenerator {
                         write_ir!(ir, "  store i64 {}, i64* {}", elem_size, es_ptr);
                         let needs_adjust = self.next_temp(counter);
                         write_ir!(ir, "  {} = icmp eq i64 {}, 8", needs_adjust, old_es);
+                        self.fn_ctx.record_emitted_type(&needs_adjust, "i1");
                         let lbl_adjust = format!("vec_es_adjust.{}", counter);
                         let lbl_done = format!("vec_es_done.{}", counter);
                         *counter += 1;

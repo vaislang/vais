@@ -144,6 +144,7 @@ impl CodeGenerator {
 
         let is_ready = self.next_temp(counter);
         write_ir!(ir, "  {} = icmp eq i64 {}, 1", is_ready, status);
+        self.fn_ctx.record_emitted_type(&is_ready, "i1");
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}\n",
@@ -460,6 +461,7 @@ impl CodeGenerator {
         let merge_label = self.next_label("try_merge");
 
         write_ir!(ir, "  {} = icmp ne {} {}, 0", is_err, tag_type, tag);
+        self.fn_ctx.record_emitted_type(&is_err, "i1");
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}\n",
@@ -713,6 +715,7 @@ impl CodeGenerator {
         let ok_label = self.next_label("unwrap_ok");
 
         write_ir!(ir, "  {} = icmp ne {} {}, 0", is_err, tag_type, tag);
+        self.fn_ctx.record_emitted_type(&is_err, "i1");
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}\n",
