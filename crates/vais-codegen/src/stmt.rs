@@ -790,6 +790,7 @@ impl CodeGenerator {
             let after = format!("__sd_af_{}_{}", block_id, slot_idx);
 
             write_ir!(ir, "  {} = load i8*, i8** {}", loaded, slot_name);
+            self.fn_ctx.record_emitted_type(&loaded, "i8*");
             write_ir!(ir, "  {} = icmp eq i8* {}, null", is_null, loaded);
             self.fn_ctx.record_emitted_type(&is_null, "i1");
             write_ir!(ir, "  br i1 {}, label %{}, label %{}", is_null, after, do_free);
@@ -1003,6 +1004,7 @@ impl CodeGenerator {
             self.fn_ctx.label_counter += 1;
             let loaded = format!("%__fr_{}", id);
             write_ir!(ir, "  {} = load i8*, i8** {}", loaded, slot_name);
+            self.fn_ctx.record_emitted_type(&loaded, "i8*");
             let is_null = format!("%__fr_nn_{}", id);
             write_ir!(ir, "  {} = icmp eq i8* {}, null", is_null, loaded);
             self.fn_ctx.record_emitted_type(&is_null, "i1");

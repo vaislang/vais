@@ -468,6 +468,7 @@ impl CodeGenerator {
                                             field_val,
                                             fp
                                         );
+                                        self.fn_ctx.record_emitted_type(&field_val, "double");
                                     }
                                     ResolvedType::F32 => {
                                         let fp = self.next_temp(counter);
@@ -1247,6 +1248,7 @@ impl CodeGenerator {
                                     fv,
                                     fp
                                 );
+                                self.fn_ctx.record_emitted_type(&fv, "double");
                                 fv
                             } else if llvm_field_ty == "float" {
                                 let fp = self.next_temp(counter);
@@ -1506,6 +1508,7 @@ impl CodeGenerator {
                                     field_val,
                                     float_ptr
                                 );
+                                self.fn_ctx.record_emitted_type(&field_val, "double");
                             }
                             crate::ResolvedType::F32 => {
                                 let float_ptr = self.next_temp(counter);

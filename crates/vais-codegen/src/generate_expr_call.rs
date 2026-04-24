@@ -561,6 +561,7 @@ impl CodeGenerator {
                                     concrete_name,
                                     val
                                 );
+                                self.fn_ctx.record_emitted_type(&struct_ptr, &format!("%{}*", concrete_name));
                                 // Cast data pointer to i8*
                                 let data_ptr = self.next_temp(counter);
                                 write_ir!(
@@ -1477,9 +1478,11 @@ impl CodeGenerator {
                 if is_specialized {
                     // Return double directly in specialized context
                     write_ir!(ir, "  {} = load double, double* {}", result, tmp1);
+                    self.fn_ctx.record_emitted_type(&result, "double");
                 } else {
                     let tmp2 = self.next_temp(counter);
                     write_ir!(ir, "  {} = load double, double* {}", tmp2, tmp1);
+                    self.fn_ctx.record_emitted_type(&tmp2, "double");
                     write_ir!(ir, "  {} = bitcast double {} to i64", result, tmp2);
                 }
             }
