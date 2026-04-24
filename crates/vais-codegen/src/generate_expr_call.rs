@@ -692,15 +692,33 @@ impl CodeGenerator {
                     write_ir!(ir, "  {} = ptrtoint {}* {} to i64", tmp, val_ty, val);
                     val = tmp;
                 } else if val_ty == "i64" {
-                    // llvm_type_of returned fallback i64 — check the inferred expression type
-                    // to detect Named/struct types that are actually pointers.
-                    // The Ident-local-is-i64 check already bypassed us above.
-                    let inferred = self.infer_expr_type(arg_for_gen);
-                    if matches!(inferred, ResolvedType::Named { .. }) {
-                        let struct_llvm = self.type_to_llvm(&inferred);
-                        let tmp = self.next_temp(counter);
-                        write_ir!(ir, "  {} = ptrtoint {}* {} to i64", tmp, struct_llvm, val);
-                        val = tmp;
+                    // Phase 17.H4 iter 21: the AST shape of `arg_for_gen` rules
+                    // out struct values for arithmetic/comparison/boolean
+                    // forms — their LLVM result is scalar by construction.
+                    // Skip the TC-inferred Named→ptrtoint upgrade in those
+                    // cases. A cross-module span collision can otherwise make
+                    // `infer_expr_type` return Vec<u8> for an `i64 add`,
+                    // producing invalid `ptrtoint %Vec$u8* %t` IR.
+                    let scalar_shape = matches!(
+                        &arg_for_gen.node,
+                        Expr::Binary { .. }
+                            | Expr::Unary { .. }
+                            | Expr::Int(_)
+                            | Expr::Float(_)
+                            | Expr::Bool(_)
+                            | Expr::Cast { .. }
+                    );
+                    if !scalar_shape {
+                        // llvm_type_of returned fallback i64 — check the inferred
+                        // expression type to detect Named/struct types that are
+                        // actually pointers.
+                        let inferred = self.infer_expr_type(arg_for_gen);
+                        if matches!(inferred, ResolvedType::Named { .. }) {
+                            let struct_llvm = self.type_to_llvm(&inferred);
+                            let tmp = self.next_temp(counter);
+                            write_ir!(ir, "  {} = ptrtoint {}* {} to i64", tmp, struct_llvm, val);
+                            val = tmp;
+                        }
                     }
                 }
             }
