@@ -302,6 +302,7 @@ impl CodeGenerator {
                         let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
                         let t0 = self.next_temp(counter);
                         write_ir!(ir, "  {} = insertvalue {} undef, i64 1, 0", t0, poll_ret_ty);
+                        self.fn_ctx.record_emitted_type(&t0, &poll_ret_ty);
                         let t1 = self.next_temp(counter);
                         write_ir!(
                             ir,
@@ -312,6 +313,7 @@ impl CodeGenerator {
                             poll_ctx.ret_llvm,
                             ret_val
                         );
+                        self.fn_ctx.record_emitted_type(&t1, &poll_ret_ty);
                         // Set state to -1 (completed)
                         ir.push_str("  store i64 -1, i64* %state_field\n");
                         write_ir!(ir, "  ret {} {}", poll_ret_ty, t1);
@@ -328,6 +330,7 @@ impl CodeGenerator {
                         let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
                         let t0 = self.next_temp(counter);
                         write_ir!(ir, "  {} = insertvalue {} undef, i64 1, 0", t0, poll_ret_ty);
+                        self.fn_ctx.record_emitted_type(&t0, &poll_ret_ty);
                         ir.push_str("  store i64 -1, i64* %state_field\n");
                         write_ir!(ir, "  ret {} {}", poll_ret_ty, t0);
                         return Ok(("void".to_string(), ir));
@@ -498,6 +501,7 @@ impl CodeGenerator {
                                 "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
                                 zinit
                             );
+                            self.fn_ctx.record_emitted_type(&zinit, "{ i8*, i64 }");
                             zinit
                         } else if val_ty != ret_type
                             && val_ty == "i64"
