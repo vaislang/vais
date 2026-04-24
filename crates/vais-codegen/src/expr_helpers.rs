@@ -175,6 +175,7 @@ impl CodeGenerator {
                 let tmp = self.next_temp(counter);
                 let left_llvm = self.type_to_llvm(&left_type);
                 write_ir!(ir, "  {} = icmp ne {} {}, 0", tmp, left_llvm, left_val);
+                self.fn_ctx.record_emitted_type(&tmp, "i1");
                 tmp
             };
             let right_type = self.infer_expr_type(right);
@@ -184,6 +185,7 @@ impl CodeGenerator {
                 let tmp = self.next_temp(counter);
                 let right_llvm = self.type_to_llvm(&right_type);
                 write_ir!(ir, "  {} = icmp ne {} {}, 0", tmp, right_llvm, right_val);
+                self.fn_ctx.record_emitted_type(&tmp, "i1");
                 tmp
             };
 
@@ -213,6 +215,7 @@ impl CodeGenerator {
             // Extend back to i64 for consistency
             let result = self.next_temp(counter);
             write_ir!(ir, "  {} = zext i1 {} to i64", result, result_bool);
+            self.fn_ctx.record_emitted_type(&result, "i64");
             Ok((result, ir))
         } else if is_comparison {
             // Comparison returns i1, extend to i64
@@ -352,6 +355,7 @@ impl CodeGenerator {
             // Extend i1 to i64
             let result = self.next_temp(counter);
             write_ir!(ir, "  {} = zext i1 {} to i64", result, cmp_tmp);
+            self.fn_ctx.record_emitted_type(&result, "i64");
             Ok((result, ir))
         } else {
             // Arithmetic and bitwise operations
@@ -557,6 +561,7 @@ impl CodeGenerator {
                 } else {
                     let to_bool = self.next_temp(counter);
                     write_ir!(ir, "  {} = icmp ne {} {}, 0", to_bool, val_ty, val);
+                    self.fn_ctx.record_emitted_type(&to_bool, "i1");
                     to_bool
                 };
                 // xor i1 produces i1 — keep as i1 and let callers zext if needed

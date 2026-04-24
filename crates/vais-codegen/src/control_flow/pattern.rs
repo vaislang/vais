@@ -153,6 +153,7 @@ impl CodeGenerator {
                     // Check if strcmp returned 0 (equal)
                     let result = self.next_temp(counter);
                     write_ir!(ir, "  {} = icmp eq i32 {}, 0", result, cmp_result);
+                    self.fn_ctx.record_emitted_type(&result, "i1");
 
                     Ok((result, ir))
                 }
@@ -169,6 +170,7 @@ impl CodeGenerator {
                     if let Pattern::Literal(Literal::Int(n)) = &start_pat.node {
                         let tmp = self.next_temp(counter);
                         write_ir!(ir, "  {} = icmp sge i64 {}, {}", tmp, match_val, n);
+                        self.fn_ctx.record_emitted_type(&tmp, "i1");
                         tmp
                     } else {
                         "1".to_string()
@@ -1210,6 +1212,7 @@ impl CodeGenerator {
                                 // Bool field: payload slot is i64, but binding needs i1 for branch instructions
                                 let bool_val = self.next_temp(counter);
                                 write_ir!(ir, "  {} = trunc i64 {} to i1", bool_val, raw_val);
+                                self.fn_ctx.record_emitted_type(&bool_val, "i1");
                                 bool_val
                             } else if matches!(
                                 llvm_field_ty.as_str(),
@@ -1367,6 +1370,7 @@ impl CodeGenerator {
                                 // Bool field: extracted payload is i64, but binding needs i1 for branch instructions
                                 let bool_val = self.next_temp(counter);
                                 write_ir!(ir, "  {} = trunc i64 {} to i1", bool_val, payload_val);
+                                self.fn_ctx.record_emitted_type(&bool_val, "i1");
                                 bool_val
                             } else {
                                 payload_val.clone()
@@ -1521,6 +1525,7 @@ impl CodeGenerator {
                                 let raw = self.next_temp(counter);
                                 write_ir!(ir, "  {} = load i64, i64* {}", raw, payload_ptr);
                                 write_ir!(ir, "  {} = trunc i64 {} to i1", field_val, raw);
+                                self.fn_ctx.record_emitted_type(&field_val, "i1");
                             }
                             crate::ResolvedType::I32
                             | crate::ResolvedType::U32

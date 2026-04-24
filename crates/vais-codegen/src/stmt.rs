@@ -292,6 +292,7 @@ impl CodeGenerator {
                         let ret_val = if poll_ctx.ret_llvm == "i1" {
                             let trunc = self.next_temp(counter);
                             write_ir!(ir, "  {} = trunc i64 {} to i1", trunc, val);
+                            self.fn_ctx.record_emitted_type(&trunc, "i1");
                             trunc
                         } else {
                             val.clone()
@@ -790,6 +791,7 @@ impl CodeGenerator {
 
             write_ir!(ir, "  {} = load i8*, i8** {}", loaded, slot_name);
             write_ir!(ir, "  {} = icmp eq i8* {}, null", is_null, loaded);
+            self.fn_ctx.record_emitted_type(&is_null, "i1");
             write_ir!(ir, "  br i1 {}, label %{}, label %{}", is_null, after, do_free);
             write_ir!(ir, "{}:", do_free);
             write_ir!(ir, "  call void @free(i8* {})", loaded);
@@ -1003,6 +1005,7 @@ impl CodeGenerator {
             write_ir!(ir, "  {} = load i8*, i8** {}", loaded, slot_name);
             let is_null = format!("%__fr_nn_{}", id);
             write_ir!(ir, "  {} = icmp eq i8* {}, null", is_null, loaded);
+            self.fn_ctx.record_emitted_type(&is_null, "i1");
             let do_free = format!("__fr_do_{}", id);
             let after = format!("__fr_after_{}", id);
             write_ir!(
@@ -1216,6 +1219,7 @@ impl CodeGenerator {
 
         let skip_cmp = format!("%__ved_skip_{}", id);
         write_ir!(ir, "  {} = icmp sle i64 {}, 0", skip_cmp, len_v);
+        self.fn_ctx.record_emitted_type(&skip_cmp, "i1");
         let lbl_init = format!("__ved_init_{}", id);
         let lbl_head = format!("__ved_head_{}", id);
         let lbl_body = format!("__ved_body_{}", id);
@@ -1237,6 +1241,7 @@ impl CodeGenerator {
         );
         let done_cmp = format!("%__ved_done_{}", id);
         write_ir!(ir, "  {} = icmp sge i64 {} , {}", done_cmp, i_phi, len_v);
+        self.fn_ctx.record_emitted_type(&done_cmp, "i1");
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}",
