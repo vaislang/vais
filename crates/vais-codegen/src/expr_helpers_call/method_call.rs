@@ -763,6 +763,7 @@ impl CodeGenerator {
                         // Read old elem_size; only adjust capacity if still default (8)
                         let old_es = self.next_temp(counter);
                         write_ir!(ir, "  {} = load i64, i64* {}", old_es, es_ptr);
+                        self.fn_ctx.record_emitted_type(&old_es, "i64");
                         write_ir!(ir, "  store i64 {}, i64* {}", elem_size, es_ptr);
                         let needs_adjust = self.next_temp(counter);
                         write_ir!(ir, "  {} = icmp eq i64 {}, 8", needs_adjust, old_es);
@@ -788,6 +789,7 @@ impl CodeGenerator {
                         );
                         let old_cap = self.next_temp(counter);
                         write_ir!(ir, "  {} = load i64, i64* {}", old_cap, cap_ptr);
+                        self.fn_ctx.record_emitted_type(&old_cap, "i64");
                         let bytes = self.next_temp(counter);
                         write_ir!(ir, "  {} = mul i64 {}, 8", bytes, old_cap);
                         let new_cap = self.next_temp(counter);
@@ -857,6 +859,7 @@ impl CodeGenerator {
                     );
                     let cur_len = self.next_temp(counter);
                     write_ir!(ir, "  {} = load i64, i64* {}", cur_len, len_ptr);
+                    self.fn_ctx.record_emitted_type(&cur_len, "i64");
                     let idx = cur_len.clone();
                     let need_plus_one = self.next_temp(counter);
                     write_ir!(ir, "  {} = add i64 {}, 1", need_plus_one, idx);
@@ -1323,6 +1326,7 @@ impl CodeGenerator {
                     );
                     let data_i64 = self.next_temp(counter);
                     write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_gep);
+                    self.fn_ctx.record_emitted_type(&data_i64, "i64");
                     let data_i8 = self.next_temp(counter);
                     write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_i8, data_i64);
                     let len_gep = self.next_temp(counter);
@@ -1333,6 +1337,7 @@ impl CodeGenerator {
                     );
                     let len_val = self.next_temp(counter);
                     write_ir!(ir, "  {} = load i64, i64* {}", len_val, len_gep);
+                    self.fn_ctx.record_emitted_type(&len_val, "i64");
                     let fat1 = self.next_temp(counter);
                     write_ir!(
                         ir,
