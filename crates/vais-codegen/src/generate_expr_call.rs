@@ -417,6 +417,7 @@ impl CodeGenerator {
                     );
                     let data_i64 = self.next_temp(counter);
                     write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_gep);
+                    self.fn_ctx.record_emitted_type(&data_i64, "i64");
                     let data_i8 = self.next_temp(counter);
                     write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_i8, data_i64);
                     let len_gep = self.next_temp(counter);
@@ -430,6 +431,7 @@ impl CodeGenerator {
                     );
                     let len_val = self.next_temp(counter);
                     write_ir!(ir, "  {} = load i64, i64* {}", len_val, len_gep);
+                    self.fn_ctx.record_emitted_type(&len_val, "i64");
                     let fat1 = self.next_temp(counter);
                     write_ir!(
                         ir,
@@ -1074,6 +1076,7 @@ impl CodeGenerator {
                     .unwrap_or_else(|| fn_name.clone());
                 let tmp = self.next_temp(counter);
                 write_ir!(ir, "  {} = load i64, i64* %{}", tmp, llvm_var_name);
+                self.fn_ctx.record_emitted_type(&tmp, "i64");
                 tmp
             };
 
@@ -1547,6 +1550,7 @@ impl CodeGenerator {
                     let tmp1 = self.next_temp(counter);
                     write_ir!(ir, "  {} = inttoptr i64 {} to i64*", tmp1, ptr_val);
                     write_ir!(ir, "  {} = load i64, i64* {}", result, tmp1);
+                    self.fn_ctx.record_emitted_type(&result, "i64");
                 }
             }
         }
