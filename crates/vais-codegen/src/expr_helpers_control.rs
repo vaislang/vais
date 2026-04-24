@@ -345,6 +345,7 @@ impl CodeGenerator {
                     "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
                     result
                 );
+                self.fn_ctx.record_emitted_type(&result, "{ i8*, i64 }");
                 // Register as Str so downstream code doesn't override with wrong type
                 self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::Str);
             } else {
@@ -370,6 +371,7 @@ impl CodeGenerator {
                     "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
                     zinit
                 );
+                self.fn_ctx.record_emitted_type(&zinit, "{ i8*, i64 }");
                 zinit
             } else if then_is_void {
                 "0".to_string()
@@ -383,6 +385,7 @@ impl CodeGenerator {
                     "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
                     zinit
                 );
+                self.fn_ctx.record_emitted_type(&zinit, "{ i8*, i64 }");
                 zinit
             } else if else_is_void {
                 "0".to_string()
@@ -464,6 +467,7 @@ impl CodeGenerator {
                     "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
                     result
                 );
+                self.fn_ctx.record_emitted_type(&result, "{ i8*, i64 }");
                 self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::Str);
             } else {
                 ir.push_str(&crate::helpers::void_placeholder_ir(&result));
