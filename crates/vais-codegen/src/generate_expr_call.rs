@@ -1450,10 +1450,12 @@ impl CodeGenerator {
                 if is_specialized {
                     // Return float directly in specialized context
                     write_ir!(ir, "  {} = load float, float* {}", result, tmp1);
+                    self.fn_ctx.record_emitted_type(&result, "float");
                 } else {
                     let tmp2 = self.next_temp(counter);
                     let tmp3 = self.next_temp(counter);
                     write_ir!(ir, "  {} = load float, float* {}", tmp2, tmp1);
+                    self.fn_ctx.record_emitted_type(&tmp2, "float");
                     write_ir!(ir, "  {} = fpext float {} to double", tmp3, tmp2);
                     write_ir!(ir, "  {} = bitcast double {} to i64", result, tmp3);
                 }

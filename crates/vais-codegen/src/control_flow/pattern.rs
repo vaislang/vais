@@ -484,6 +484,7 @@ impl CodeGenerator {
                                             field_val,
                                             fp
                                         );
+                                        self.fn_ctx.record_emitted_type(&field_val, "float");
                                     }
                                     ResolvedType::Bool => {
                                         let raw = self.next_temp(counter);
@@ -1265,6 +1266,7 @@ impl CodeGenerator {
                                     fv,
                                     fp
                                 );
+                                self.fn_ctx.record_emitted_type(&fv, "float");
                                 fv
                             } else {
                                 raw_val
@@ -1524,6 +1526,7 @@ impl CodeGenerator {
                                     field_val,
                                     float_ptr
                                 );
+                                self.fn_ctx.record_emitted_type(&field_val, "float");
                             }
                             crate::ResolvedType::Bool => {
                                 // Bool payloads are stored in an i64 slot; load i64 then
@@ -1578,6 +1581,7 @@ impl CodeGenerator {
                                     field_val,
                                     typed
                                 );
+                                self.fn_ctx.record_emitted_type(&field_val, "{ i8*, i64 }");
                             }
                             crate::ResolvedType::Named { .. } => {
                                 // Named payloads (Vec<T>, user structs, nested enums)
