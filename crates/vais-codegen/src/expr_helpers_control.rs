@@ -70,6 +70,7 @@ impl CodeGenerator {
             else_val,
             else_actual
         );
+        self.fn_ctx.record_emitted_type(&result, &phi_llvm);
 
         Ok((result, ir))
     }
@@ -398,6 +399,7 @@ impl CodeGenerator {
                 else_safe,
                 else_from_label
             );
+            self.fn_ctx.record_emitted_type(&result, &phi_llvm);
             // Register the phi result type so a parent expression seeing
             // this if-expression's value gets the correct struct/enum type.
             self.fn_ctx.register_temp_type(&result, phi_type.clone());
@@ -439,6 +441,7 @@ impl CodeGenerator {
                 safe,
                 then_from_label
             );
+            self.fn_ctx.record_emitted_type(&result, &phi_llvm);
             self.fn_ctx.register_temp_type(&result, phi_type.clone());
         } else if !else_from_label.is_empty() {
             let safe = if else_val_for_phi == "void" { "0".to_string() } else { else_val_for_phi.clone() };
@@ -450,6 +453,7 @@ impl CodeGenerator {
                 safe,
                 else_from_label
             );
+            self.fn_ctx.record_emitted_type(&result, &phi_llvm);
             self.fn_ctx.register_temp_type(&result, phi_type.clone());
         } else {
             // Both branches terminated (e.g., both have explicit return).

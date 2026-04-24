@@ -1247,6 +1247,7 @@ impl CodeGenerator {
             "  {} = phi i64 [ 0, %{} ], [ %__ved_inext_{}, %{} ]",
             i_phi, lbl_init, id, lbl_cont
         );
+        self.fn_ctx.record_emitted_type(&i_phi, "i64");
         let done_cmp = format!("%__ved_done_{}", id);
         write_ir!(ir, "  {} = icmp sge i64 {} , {}", done_cmp, i_phi, len_v);
         self.fn_ctx.record_emitted_type(&done_cmp, "i1");

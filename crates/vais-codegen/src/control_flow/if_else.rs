@@ -366,6 +366,7 @@ impl CodeGenerator {
                         else_safe,
                         else_from_label
                     );
+                    self.fn_ctx.record_emitted_type(&result, &llvm_type);
                     // Register the phi result type so a parent if-else (which
                     // sees this nested merge as its else_val) can detect it
                     // as the correct struct/enum type rather than the i64
@@ -411,6 +412,7 @@ impl CodeGenerator {
                         safe,
                         then_from_label
                     );
+                    self.fn_ctx.record_emitted_type(&result, &llvm_type);
                     self.fn_ctx.register_temp_type(&result, block_type.clone());
                 } else if !else_from_label.is_empty() {
                     let safe = if else_val_for_phi == "void" { "0".to_string() } else { else_val_for_phi.clone() };
@@ -422,6 +424,7 @@ impl CodeGenerator {
                         safe,
                         else_from_label
                     );
+                    self.fn_ctx.record_emitted_type(&result, &llvm_type);
                     self.fn_ctx.register_temp_type(&result, block_type.clone());
                 } else {
                     // Unreachable merge block — add terminator
