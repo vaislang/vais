@@ -114,6 +114,7 @@ impl CodeGenerator {
         write_ir!(ir, "  {} = load i8*, i8** {}", prev, slot);
         let is_null = format!("%__ifr_n_{}", tick);
         write_ir!(ir, "  {} = icmp eq i8* {}, null", is_null, prev);
+        self.fn_ctx.record_emitted_type(&is_null, "i1");
         let do_free = format!("__ifr_f_{}", tick);
         let after = format!("__ifr_a_{}", tick);
         write_ir!(
@@ -194,8 +195,10 @@ impl CodeGenerator {
                 );
                 let eq_result = self.next_temp(counter);
                 write_ir!(ir, "  {} = icmp eq i32 {}, 0", eq_result, cmp_result);
+                self.fn_ctx.record_emitted_type(&eq_result, "i1");
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = zext i1 {} to i64", result, eq_result);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
             BinOp::Neq => {
@@ -209,8 +212,10 @@ impl CodeGenerator {
                 );
                 let neq_result = self.next_temp(counter);
                 write_ir!(ir, "  {} = icmp ne i32 {}, 0", neq_result, cmp_result);
+                self.fn_ctx.record_emitted_type(&neq_result, "i1");
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = zext i1 {} to i64", result, neq_result);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
             BinOp::Lt => {
@@ -224,8 +229,10 @@ impl CodeGenerator {
                 );
                 let lt_result = self.next_temp(counter);
                 write_ir!(ir, "  {} = icmp slt i32 {}, 0", lt_result, cmp_result);
+                self.fn_ctx.record_emitted_type(&lt_result, "i1");
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = zext i1 {} to i64", result, lt_result);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
             BinOp::Gt => {
@@ -239,8 +246,10 @@ impl CodeGenerator {
                 );
                 let gt_result = self.next_temp(counter);
                 write_ir!(ir, "  {} = icmp sgt i32 {}, 0", gt_result, cmp_result);
+                self.fn_ctx.record_emitted_type(&gt_result, "i1");
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = zext i1 {} to i64", result, gt_result);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
             _ => Err(CodegenError::Unsupported(format!(
@@ -293,8 +302,10 @@ impl CodeGenerator {
                 );
                 let byte = self.next_temp(counter);
                 write_ir!(ir, "  {} = load i8, i8* {}", byte, ptr);
+                self.fn_ctx.record_emitted_type(&byte, "i8");
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = zext i8 {} to i64", result, byte);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
             "contains" => {
@@ -318,8 +329,10 @@ impl CodeGenerator {
                 );
                 let is_null = self.next_temp(counter);
                 write_ir!(ir, "  {} = icmp ne i8* {}, null", is_null, strstr_result);
+                self.fn_ctx.record_emitted_type(&is_null, "i1");
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = zext i1 {} to i64", result, is_null);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
             "indexOf" => {
@@ -433,8 +446,10 @@ impl CodeGenerator {
                 let len = self.extract_str_len(recv_val, counter, &mut ir);
                 let is_zero = self.next_temp(counter);
                 write_ir!(ir, "  {} = icmp eq i64 {}, 0", is_zero, len);
+                self.fn_ctx.record_emitted_type(&is_zero, "i1");
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = zext i1 {} to i64", result, is_zero);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
             "push_str" => {
@@ -560,8 +575,10 @@ impl CodeGenerator {
                 let len = self.extract_str_len(recv_val, counter, &mut ir);
                 let is_zero = self.next_temp(counter);
                 write_ir!(ir, "  {} = icmp eq i64 {}, 0", is_zero, len);
+                self.fn_ctx.record_emitted_type(&is_zero, "i1");
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = zext i1 {} to i64", result, is_zero);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
             "starts_with" | "startsWith" => {
@@ -588,8 +605,10 @@ impl CodeGenerator {
                 );
                 let is_zero = self.next_temp(counter);
                 write_ir!(ir, "  {} = icmp eq i32 {}, 0", is_zero, cmp);
+                self.fn_ctx.record_emitted_type(&is_zero, "i1");
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = zext i1 {} to i64", result, is_zero);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
             "ends_with" | "endsWith" => {
@@ -609,6 +628,7 @@ impl CodeGenerator {
                 // If needle longer than haystack → false.
                 let too_long = self.next_temp(counter);
                 write_ir!(ir, "  {} = icmp ugt i64 {}, {}", too_long, nlen, hlen);
+                self.fn_ctx.record_emitted_type(&too_long, "i1");
                 let offset = self.next_temp(counter);
                 write_ir!(ir, "  {} = sub i64 {}, {}", offset, hlen, nlen);
                 let tail_ptr = self.next_temp(counter);
@@ -630,6 +650,7 @@ impl CodeGenerator {
                 );
                 let match_ok = self.next_temp(counter);
                 write_ir!(ir, "  {} = icmp eq i32 {}, 0", match_ok, cmp);
+                self.fn_ctx.record_emitted_type(&match_ok, "i1");
                 let ok_and_fits = self.next_temp(counter);
                 write_ir!(
                     ir,
@@ -638,8 +659,10 @@ impl CodeGenerator {
                     too_long,
                     match_ok
                 );
+                self.fn_ctx.record_emitted_type(&ok_and_fits, "i1");
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = zext i1 {} to i64", result, ok_and_fits);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
             "byte_at" => {
@@ -662,8 +685,10 @@ impl CodeGenerator {
                 );
                 let byte_val = self.next_temp(counter);
                 write_ir!(ir, "  {} = load i8, i8* {}", byte_val, byte_ptr);
+                self.fn_ctx.record_emitted_type(&byte_val, "i8");
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = zext i8 {} to i64", result, byte_val);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
             "char_at" | "charAt" => {
@@ -694,8 +719,10 @@ impl CodeGenerator {
                 );
                 let byte_val = self.next_temp(counter);
                 write_ir!(ir, "  {} = load i8, i8* {}", byte_val, raw_ptr);
+                self.fn_ctx.record_emitted_type(&byte_val, "i8");
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = zext i8 {} to i64", result, byte_val);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
             _ => Err(CodegenError::Unsupported(format!(
