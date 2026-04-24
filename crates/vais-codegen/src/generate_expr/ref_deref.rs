@@ -207,6 +207,7 @@ impl CodeGenerator {
             elem_ty,
             data_ptr
         );
+        self.fn_ctx.record_emitted_type(&data_i8, "i8*");
 
         // Build fat pointer: { i8*, i64 }
         let fat1 = self.next_temp(counter);
@@ -279,6 +280,7 @@ impl CodeGenerator {
             elem_ty,
             data_ptr
         );
+        self.fn_ctx.record_emitted_type(&data_i8, "i8*");
 
         // Build fat pointer: { i8*, i64 }
         let fat1 = self.next_temp(counter);

@@ -401,6 +401,7 @@ impl CodeGenerator {
                         llvm_ty,
                         llvm_name
                     );
+                    self.fn_ctx.record_emitted_type(&dst_ptr, "i8*");
                     write_ir!(ir, "  {} = inttoptr i64 {} to i8*", src_ptr, actual_val);
                     write_ir!(
                         ir,

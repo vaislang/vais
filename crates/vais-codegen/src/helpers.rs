@@ -602,6 +602,7 @@ impl CodeGenerator {
             data_i8,
             slice_ptr
         );
+        self.fn_ctx.record_emitted_type(&data_i8, "i8*");
         let fat1 = self.next_temp(counter);
         write_ir!(
             ir,
