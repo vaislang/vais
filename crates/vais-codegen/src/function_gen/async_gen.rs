@@ -129,6 +129,7 @@ impl CodeGenerator {
         self.fn_ctx.current_function = Some(format!("{}__poll", func_name));
         self.fn_ctx.locals.clear();
         self.fn_ctx.temp_var_types.clear();
+        self.fn_ctx.actual_llvm_type.clear();
         self.fn_ctx.label_counter = 0;
         self.fn_ctx.loop_stack.clear();
         self.fn_ctx.future_poll_fns.clear();

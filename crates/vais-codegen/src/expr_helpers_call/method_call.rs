@@ -1692,6 +1692,7 @@ impl CodeGenerator {
                 std::mem::take(&mut self.fn_ctx.var_string_slots_multi);
             let saved_phi_extra_slots = std::mem::take(&mut self.fn_ctx.phi_extra_slots);
             let saved_temp_var_types = std::mem::take(&mut self.fn_ctx.temp_var_types);
+            let saved_actual_llvm_type = std::mem::take(&mut self.fn_ctx.actual_llvm_type);
             let saved_scope_stack = std::mem::take(&mut self.fn_ctx.scope_stack);
             let saved_scope_str_stack = std::mem::take(&mut self.fn_ctx.scope_str_stack);
             let saved_scope_drop_label_counter = self.fn_ctx.scope_drop_label_counter;
@@ -1717,6 +1718,7 @@ impl CodeGenerator {
             self.fn_ctx.var_string_slots_multi = saved_var_string_slots_multi;
             self.fn_ctx.phi_extra_slots = saved_phi_extra_slots;
             self.fn_ctx.temp_var_types = saved_temp_var_types;
+            self.fn_ctx.actual_llvm_type = saved_actual_llvm_type;
             self.fn_ctx.scope_stack = saved_scope_stack;
             self.fn_ctx.scope_str_stack = saved_scope_str_stack;
             self.fn_ctx.scope_drop_label_counter = saved_scope_drop_label_counter;

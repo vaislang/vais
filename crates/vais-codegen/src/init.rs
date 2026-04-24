@@ -68,6 +68,7 @@ impl CodeGenerator {
                 var_string_slots_multi: HashMap::new(),
                 phi_extra_slots: HashMap::new(),
                 temp_var_types: HashMap::with_capacity(64),
+                actual_llvm_type: HashMap::with_capacity(64),
                 scope_stack: Vec::with_capacity(8),
                 scope_str_stack: Vec::with_capacity(8),
                 scope_drop_label_counter: 0,

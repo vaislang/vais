@@ -34,6 +34,7 @@ impl CodeGenerator {
         self.fn_ctx.future_poll_fns.clear();
         self.fn_ctx.async_poll_context = None;
         self.fn_ctx.temp_var_types.clear();
+        self.fn_ctx.actual_llvm_type.clear();
         self.fn_ctx.scope_stack.clear();
         self.fn_ctx.entry_allocas.clear();
         // Don't clear pending_specialized_ir — accumulate across functions

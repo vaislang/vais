@@ -8,21 +8,28 @@ impl CodeGenerator {
     /// temporaries — callers can then decide whether to skip coercion instead
     /// of trusting a default that may be wrong.
     ///
-    /// Known-type evidence:
-    /// 1. `temp_var_types` — temporaries registered during `generate_expr`
-    /// 2. `locals` — named local variables (alloca/ssa/param)
-    /// 3. Numeric literals (`42`, `-3`) — integer by construction
-    /// 4. Float literals (`1.0e+00`) — detected by `.` or scientific notation
-    /// 5. `null` — pointer by construction
+    /// Known-type evidence (resolution order, highest fidelity first):
+    /// 1. `actual_llvm_type` — ground-truth recorded at emission time (Phase 17.H4
+    ///    iter 26+ refactor; see compiler/docs/refactor/llvm-ground-truth.md)
+    /// 2. `temp_var_types` — ResolvedType registered during `generate_expr`,
+    ///    projected via `type_to_llvm` (legacy, may disagree with emission)
+    /// 3. `locals` — named local variables (alloca/ssa/param)
+    /// 4. Numeric literals (`42`, `-3`) — integer by construction
+    /// 5. Float literals (`1.0e+00`) — detected by `.` or scientific notation
+    /// 6. `null` — pointer by construction
     ///
     /// Prefer this over `llvm_type_of` when a wrong guess would produce invalid
     /// IR (e.g., spurious `inttoptr` on a value that was already a pointer).
     pub(crate) fn llvm_type_of_checked(&self, val: &str) -> Option<String> {
-        // 1. Check temporaries first (most common for generate_expr results)
+        // 1. Ground-truth (recorded at emission time) wins over all other tracks.
+        if let Some(actual) = self.fn_ctx.get_emitted_type(val) {
+            return Some(actual.to_string());
+        }
+        // 2. Legacy: ResolvedType → type_to_llvm projection.
         if let Some(ty) = self.fn_ctx.get_temp_type(val) {
             return Some(self.type_to_llvm(ty));
         }
-        // 2. Check local variables (strip leading '%' if present for lookup)
+        // 3. Check local variables (strip leading '%' if present for lookup)
         let local_name = val.strip_prefix('%').unwrap_or(val);
         if let Some(local) = self.fn_ctx.locals.get(local_name) {
             return Some(self.type_to_llvm(&local.ty));
