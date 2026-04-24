@@ -1200,6 +1200,7 @@ impl CodeGenerator {
         );
         let data_i = format!("%__ved_di_{}", id);
         write_ir!(ir, "  {} = load i64, i64* {}", data_i, data_ptr);
+        self.fn_ctx.record_emitted_type(&data_i, "i64");
         let len_ptr = format!("%__ved_lp_{}", id);
         write_ir!(
             ir,
@@ -1208,6 +1209,7 @@ impl CodeGenerator {
         );
         let len_v = format!("%__ved_len_{}", id);
         write_ir!(ir, "  {} = load i64, i64* {}", len_v, len_ptr);
+        self.fn_ctx.record_emitted_type(&len_v, "i64");
         let es_ptr = format!("%__ved_esp_{}", id);
         write_ir!(
             ir,
@@ -1216,6 +1218,7 @@ impl CodeGenerator {
         );
         let es_v = format!("%__ved_es_{}", id);
         write_ir!(ir, "  {} = load i64, i64* {}", es_v, es_ptr);
+        self.fn_ctx.record_emitted_type(&es_v, "i64");
 
         let skip_cmp = format!("%__ved_skip_{}", id);
         write_ir!(ir, "  {} = icmp sle i64 {}, 0", skip_cmp, len_v);

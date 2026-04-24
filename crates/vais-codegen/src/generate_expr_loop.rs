@@ -87,6 +87,7 @@ impl CodeGenerator {
         write_ir!(ir, "{}:", loop_cond);
         let current_val = self.next_temp(counter);
         write_ir!(ir, "  {} = load i64, i64* {}", current_val, counter_var);
+        self.fn_ctx.record_emitted_type(&current_val, "i64");
 
         let cmp_pred = if inclusive { "sle" } else { "slt" };
         let cond_result = self.next_temp(counter);
@@ -111,6 +112,7 @@ impl CodeGenerator {
         if let Some((_, llvm_name)) = &pattern_var {
             let bind_val = self.next_temp(counter);
             write_ir!(ir, "  {} = load i64, i64* {}", bind_val, counter_var);
+            self.fn_ctx.record_emitted_type(&bind_val, "i64");
             write_ir!(ir, "  store i64 {}, i64* {}", bind_val, llvm_name);
         }
 
@@ -124,6 +126,7 @@ impl CodeGenerator {
         write_ir!(ir, "{}:", loop_inc);
         let inc_load = self.next_temp(counter);
         write_ir!(ir, "  {} = load i64, i64* {}", inc_load, counter_var);
+        self.fn_ctx.record_emitted_type(&inc_load, "i64");
         let inc_result = self.next_temp(counter);
         write_ir!(ir, "  {} = add i64 {}, 1", inc_result, inc_load);
         write_ir!(ir, "  store i64 {}, i64* {}", inc_result, counter_var);
