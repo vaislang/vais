@@ -439,6 +439,7 @@ impl CodeGenerator {
                     len_ptr,
                     arr_val
                 );
+                self.fn_ctx.record_emitted_type(&len_ptr, "i64*");
                 let length = self.next_temp(counter);
                 write_ir!(ir, "  {} = load i64, i64* {}", length, len_ptr);
                 self.fn_ctx.record_emitted_type(&length, "i64");
@@ -481,6 +482,7 @@ impl CodeGenerator {
                 data_field,
                 arr_val
             );
+            self.fn_ctx.record_emitted_type(&data_field, "i64*");
             let data_i64 = self.next_temp(counter);
             write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_field);
             self.fn_ctx.record_emitted_type(&data_i64, "i64");
