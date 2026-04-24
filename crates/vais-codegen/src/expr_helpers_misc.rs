@@ -203,12 +203,13 @@ impl CodeGenerator {
                         let llvm_ty = self.type_to_llvm(&ty);
                         let spill_name = format!("__refcap_{}", cap_name);
                         let spill_ptr = format!("%{}", spill_name);
-                        write_ir!(capture_ir, "  {} = alloca {}", spill_ptr, llvm_ty);
                         let val = if local.is_param() {
                             format!("%{}", local.llvm_name)
                         } else {
                             local.llvm_name.clone()
                         };
+                        write_ir!(capture_ir, "  {} = alloca {}", spill_ptr, llvm_ty);
+                        self.fn_ctx.record_emitted_type(&spill_ptr, &format!("{}*", llvm_ty));
                         write_ir!(
                             capture_ir,
                             "  store {} {}, {}* {}",
@@ -488,6 +489,7 @@ impl CodeGenerator {
         if ret_llvm != llvm_type && ret_llvm.starts_with('%') && llvm_type.starts_with('%') {
             let spill = self.next_temp(counter);
             write_ir!(ir, "  {} = alloca {}", spill, llvm_type);
+            self.fn_ctx.record_emitted_type(&spill, &format!("{}*", llvm_type));
             write_ir!(
                 ir,
                 "  store {} {}, {}* {}",

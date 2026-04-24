@@ -168,6 +168,7 @@ impl CodeGenerator {
                 let param_ptr_name = format!("__{}_ptr", p.name.node);
                 let param_ptr = format!("%{}", param_ptr_name);
                 write_ir!(ir, "  {} = alloca {}", param_ptr, llvm_ty);
+                self.fn_ctx.record_emitted_type(&param_ptr, &format!("{}*", llvm_ty));
                 write_ir!(
                     ir,
                     "  store {} %{}, {}* {}",
@@ -797,6 +798,7 @@ impl CodeGenerator {
                 let param_ptr_name = format!("__{}_ptr", p.name.node);
                 let param_ptr = format!("%{}", param_ptr_name);
                 write_ir!(ir, "  {} = alloca {}", param_ptr, llvm_ty);
+                self.fn_ctx.record_emitted_type(&param_ptr, &format!("{}*", llvm_ty));
                 write_ir!(
                     ir,
                     "  store {} %{}, {}* {}",

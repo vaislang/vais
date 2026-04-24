@@ -400,6 +400,7 @@ impl ExprVisitor for CodeGenerator {
                     ir.push_str(&val_ir);
                     let tmp_alloca = self.next_temp(counter);
                     write_ir!(ir, "  {} = alloca {}", tmp_alloca, llvm_ty);
+                    self.fn_ctx.record_emitted_type(&tmp_alloca, &format!("{}*", llvm_ty));
                     write_ir!(
                         ir,
                         "  store {} {}, {}* {}",
@@ -553,6 +554,7 @@ impl ExprVisitor for CodeGenerator {
 
                 // For now, assume i64 elements (we'd need better type inference for mixed types)
                 write_ir!(ir, "  {} = alloca [{} x i64]", array_name, len);
+                self.fn_ctx.record_emitted_type(&array_name, &format!("[{} x i64]*", len));
 
                 for (i, elem_val) in elements.iter().enumerate() {
                     let elem_ptr = self.next_temp(counter);

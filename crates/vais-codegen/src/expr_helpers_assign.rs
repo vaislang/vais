@@ -78,6 +78,7 @@ impl CodeGenerator {
                                 llvm_ty,
                                 alloca_name
                             ));
+                            self.fn_ctx.record_emitted_type(&format!("%{}", alloca_name), &format!("{}*", llvm_ty));
                         } else {
                             // Fallback: alloca only; the reassignment store covers the
                             // reachable paths (legacy behavior). Non-immediate SSA values

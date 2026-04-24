@@ -1490,6 +1490,7 @@ impl CodeGenerator {
                     // In specialized context, return the alloca pointer directly
                     // so downstream code can use GEP for field access.
                     write_ir!(ir, "  {} = alloca {}", result, llvm_ty);
+                    self.fn_ctx.record_emitted_type(&result, &format!("{}*", llvm_ty));
                     let dst_ptr = self.next_temp(counter);
                     write_ir!(ir, "  {} = bitcast {}* {} to i8*", dst_ptr, llvm_ty, result);
                     let src_ptr = self.next_temp(counter);
@@ -1508,6 +1509,7 @@ impl CodeGenerator {
                     // so callers see an i64 value.
                     let alloca_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = alloca {}", alloca_tmp, llvm_ty);
+                    self.fn_ctx.record_emitted_type(&alloca_tmp, &format!("{}*", llvm_ty));
                     let dst_ptr = self.next_temp(counter);
                     write_ir!(
                         ir,
