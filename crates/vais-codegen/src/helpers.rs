@@ -441,6 +441,7 @@ impl CodeGenerator {
                 );
                 let length = self.next_temp(counter);
                 write_ir!(ir, "  {} = load i64, i64* {}", length, len_ptr);
+                self.fn_ctx.record_emitted_type(&length, "i64");
                 length
             } else if let ResolvedType::ConstArray { size, .. } = &arr_type {
                 // ConstArray has a known compile-time size; use it as i64 literal
@@ -482,6 +483,7 @@ impl CodeGenerator {
             );
             let data_i64 = self.next_temp(counter);
             write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_field);
+            self.fn_ctx.record_emitted_type(&data_i64, "i64");
             let data_ptr = self.next_temp(counter);
             write_ir!(ir, "  {} = inttoptr i64 {} to i64*", data_ptr, data_i64);
             data_ptr
@@ -525,6 +527,7 @@ impl CodeGenerator {
 
         let loop_idx = self.next_temp(counter);
         write_ir!(ir, "  {} = load i64, i64* {}", loop_idx, loop_idx_ptr);
+        self.fn_ctx.record_emitted_type(&loop_idx, "i64");
 
         let cmp = self.next_temp(counter);
         write_ir!(ir, "  {} = icmp slt i64 {}, {}", cmp, loop_idx, length);
@@ -556,6 +559,7 @@ impl CodeGenerator {
         // Load source element
         let elem = self.next_temp(counter);
         write_ir!(ir, "  {} = load i64, i64* {}", elem, src_ptr);
+        self.fn_ctx.record_emitted_type(&elem, "i64");
 
         // Get destination element pointer
         let dst_ptr = self.next_temp(counter);
