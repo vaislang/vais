@@ -107,6 +107,7 @@ impl CodeGenerator {
                 base_ptr_val,
                 idx_val
             );
+            self.fn_ctx.record_emitted_type(&elem_ptr, &format!("{}*", elem_llvm));
             return Ok((elem_ptr, ir));
         }
         // Phase 17.H4.7: `&<call>(...)` when the callee returns a named
@@ -181,6 +182,7 @@ impl CodeGenerator {
                 arr_ptr,
                 i
             );
+            self.fn_ctx.record_emitted_type(&elem_ptr, &format!("{}*", elem_ty));
             write_ir!(ir, "  store {} {}, {}* {}", elem_ty, val, elem_ty, elem_ptr);
         }
 
@@ -194,6 +196,7 @@ impl CodeGenerator {
             arr_ty,
             arr_ptr
         );
+        self.fn_ctx.record_emitted_type(&data_ptr, &format!("{}*", elem_ty));
 
         // Bitcast to i8*
         let data_i8 = self.next_temp(counter);
