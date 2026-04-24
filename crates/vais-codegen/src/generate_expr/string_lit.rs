@@ -33,6 +33,8 @@ impl CodeGenerator {
             "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0\n  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1\n",
             t0, gep, t1, t0, str_len
         );
+        self.fn_ctx.record_emitted_type(&t0, "{ i8*, i64 }");
+        self.fn_ctx.record_emitted_type(&t1, "{ i8*, i64 }");
         Ok((t1, ir))
     }
 

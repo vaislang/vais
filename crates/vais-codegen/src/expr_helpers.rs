@@ -631,12 +631,14 @@ impl CodeGenerator {
                 fat1,
                 ptr_val
             );
+            self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
             write_ir!(
                 ir,
                 "  {} = insertvalue {{ i8*, i64 }} {}, i64 0, 1",
                 result,
                 fat1
             );
+            self.fn_ctx.record_emitted_type(&result, "{ i8*, i64 }");
             return Ok((result, ir));
         }
 
