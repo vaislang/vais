@@ -141,6 +141,7 @@ impl CodeGenerator {
             poll_ret_ty,
             poll_result
         );
+        self.fn_ctx.record_emitted_type(&status, "i64");
 
         let is_ready = self.next_temp(counter);
         write_ir!(ir, "  {} = icmp eq i64 {}, 1", is_ready, status);
@@ -167,6 +168,7 @@ impl CodeGenerator {
             poll_ret_ty,
             poll_result
         );
+        self.fn_ctx.record_emitted_type(&result, &inner_ret_llvm);
 
         Ok((result, ir))
     }
@@ -261,6 +263,7 @@ impl CodeGenerator {
                                 ptr,
                                 val
                             );
+                            self.fn_ctx.record_emitted_type(&ptr, "i8*");
                             let len = format!("%__cap_len_{}", id);
                             write_ir!(
                                 capture_ir,
@@ -268,6 +271,7 @@ impl CodeGenerator {
                                 len,
                                 val
                             );
+                            self.fn_ctx.record_emitted_type(&len, "i64");
                             let alloc_sz = format!("%__cap_sz_{}", id);
                             write_ir!(capture_ir, "  {} = add i64 {}, 1", alloc_sz, len);
                             let new_buf = format!("%__cap_buf_{}", id);
