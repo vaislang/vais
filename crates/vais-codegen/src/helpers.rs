@@ -428,6 +428,7 @@ impl CodeGenerator {
                     length,
                     arr_val
                 );
+                self.fn_ctx.record_emitted_type(&length, "i64");
                 length
             } else if is_vec_source {
                 // Vec<T>: extract length from Vec struct field 1 (len)
@@ -470,6 +471,7 @@ impl CodeGenerator {
                 data_ptr,
                 arr_val
             );
+            self.fn_ctx.record_emitted_type(&data_ptr, "i8*");
             let typed_ptr = self.next_temp(counter);
             write_ir!(ir, "  {} = bitcast i8* {} to i64*", typed_ptr, data_ptr);
             typed_ptr
