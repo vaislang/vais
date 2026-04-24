@@ -178,6 +178,7 @@ impl CodeGenerator {
                     let ir_type = self.type_to_llvm(&arg_types[i]);
                     let ext_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = sext {} {} to i32", ext_tmp, ir_type, val);
+                    self.fn_ctx.record_emitted_type(&ext_tmp, "i32");
                     printf_args.push(format!("i32 {}", ext_tmp));
                 }
                 ResolvedType::U8 | ResolvedType::U16 => {
@@ -185,6 +186,7 @@ impl CodeGenerator {
                     let ir_type = self.type_to_llvm(&arg_types[i]);
                     let ext_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = zext {} {} to i32", ext_tmp, ir_type, val);
+                    self.fn_ctx.record_emitted_type(&ext_tmp, "i32");
                     printf_args.push(format!("i32 {}", ext_tmp));
                 }
                 ResolvedType::I32 | ResolvedType::U32 => {
@@ -195,6 +197,7 @@ impl CodeGenerator {
                     // i1 → zext to i64 for vararg ABI
                     let ext_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = zext i1 {} to i64", ext_tmp, val);
+                    self.fn_ctx.record_emitted_type(&ext_tmp, "i64");
                     printf_args.push(format!("i64 {}", ext_tmp));
                 }
                 ResolvedType::F32 => {
@@ -362,6 +365,7 @@ impl CodeGenerator {
                     let ir_type = self.type_to_llvm(&arg_types[i]);
                     let ext_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = sext {} {} to i32", ext_tmp, ir_type, val);
+                    self.fn_ctx.record_emitted_type(&ext_tmp, "i32");
                     arg_vals.push(format!("i32 {}", ext_tmp));
                 }
                 ResolvedType::U8 | ResolvedType::U16 => {
@@ -369,6 +373,7 @@ impl CodeGenerator {
                     let ir_type = self.type_to_llvm(&arg_types[i]);
                     let ext_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = zext {} {} to i32", ext_tmp, ir_type, val);
+                    self.fn_ctx.record_emitted_type(&ext_tmp, "i32");
                     arg_vals.push(format!("i32 {}", ext_tmp));
                 }
                 ResolvedType::I32 | ResolvedType::U32 => {
@@ -379,6 +384,7 @@ impl CodeGenerator {
                     // i1 → zext to i64 for vararg ABI
                     let ext_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = zext i1 {} to i64", ext_tmp, val);
+                    self.fn_ctx.record_emitted_type(&ext_tmp, "i64");
                     arg_vals.push(format!("i64 {}", ext_tmp));
                 }
                 ResolvedType::F32 => {
@@ -429,6 +435,7 @@ impl CodeGenerator {
         // Convert i32 length to i64
         let len_i64 = self.next_temp(counter);
         write_ir!(ir, "  {} = sext i32 {} to i64", len_i64, len_i32);
+        self.fn_ctx.record_emitted_type(&len_i64, "i64");
 
         // Step 2: malloc(len + 1)
         let buf_size = self.next_temp(counter);
@@ -492,8 +499,10 @@ impl CodeGenerator {
             fmt_ptr,
             arg_val
         );
+        self.fn_ctx.record_emitted_type(&i32_result, "i32");
         let result = self.next_temp(counter);
         write_ir!(ir, "  {} = sext i32 {} to i64", result, i32_result);
+        self.fn_ctx.record_emitted_type(&result, "i64");
         Ok((result, ir))
     }
 
@@ -530,8 +539,10 @@ impl CodeGenerator {
             fmt_ptr,
             arg_val
         );
+        self.fn_ctx.record_emitted_type(&i32_result, "i32");
         let result = self.next_temp(counter);
         write_ir!(ir, "  {} = sext i32 {} to i64", result, i32_result);
+        self.fn_ctx.record_emitted_type(&result, "i64");
         Ok((result, ir))
     }
 }
