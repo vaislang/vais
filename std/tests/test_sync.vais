@@ -1,12 +1,7 @@
-# XFAIL: Mutex<T>::lock returns MutexGuard<T>, but the compiler emits
-# `ret %MutexGuard$i64 %t4` where %t4 has type %MutexGuard (the unspecialized
-# struct), causing a type-mismatch link error. The Mutex/MutexGuard generic
-# specialization isn't kept consistent across return-type slot and the value
-# being returned. Tracked as a Phase 0 codegen bug; restore as test_sync.vais
-# once the generic-struct return-type lowering is fixed.
-#
 # Stdlib self-test: sync primitives single-threaded smoke test
 # (Multi-thread tests would require thread spawning — covered separately.)
+# Regression coverage for bugs C4 (MutexGuard<T> specialization) and
+# C9 (Optional<UserStruct> layout at fn return).
 U std/sync
 
 F main() -> i64 {

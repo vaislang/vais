@@ -49,7 +49,7 @@ Run yourself:
 cd compiler/examples/hello_world_v2 && make check
 ```
 
-## Stdlib Self-Tests — `compiler/std/tests/` (5/5)
+## Stdlib Self-Tests — `compiler/std/tests/` (7/7) — ZERO XFAIL
 
 | Test | Module | Assertions | Status |
 |------|--------|-----------:|--------|
@@ -59,7 +59,7 @@ cd compiler/examples/hello_world_v2 && make check
 | `test_bytebuffer.vais` | std/bytebuffer | 21 | ✅ |
 | `test_string.vais` | std/string + helpers | 28 | ✅ |
 | `test_hashmap.vais` | std/hashmap StrHashMap | 16 | ✅ |
-| `xfail_sync_mutexguard_specialization.vais` | std/sync Mutex | — | ⚠️ XFAIL (compiler bug C4) |
+| `test_sync.vais` | std/sync (AtomicI64/Bool, Mutex, MutexGuard) | 17 | ✅ |
 
 Run yourself:
 ```bash
@@ -92,8 +92,8 @@ cd compiler/std/tests && bash run.sh
 | C1 ✅ | ~~`B <value>` (break-with-value) emits invalid IR~~ FIXED in inkwell/gen_stmt.rs::generate_break: hoist the `loop_break_value` alloca into the function entry block before recording it on the loop ctx, so it dominates every break site (which may be inside `I`/`M` arms) AND the loop-end load. Also added a parallel fix to the IR-string fallback in generate_expr/loops.rs (pre-scan body for `B <value>`, alloca + zero-init before loop entry, load at loop end). Regression test: `tests/lang/02_control_flow/break_with_value.vais`. | — | — | break_with_value.vais |
 | C2 ✅ | ~~`:= <int>` immutable bindings reassigned via `=` silently miscompile~~ FIXED in checker_expr/special.rs — TC now emits `ImmutableAssign` (E009) on Expr::Assign / Expr::AssignOp when target is a non-mut Ident binding. Regression test: `tests/lang/02_control_flow/mut_reassign.vais`. | — | — | mut_reassign.vais |
 | C3 ✅ | ~~StrHashMap<i64> generic specialization duplicate symbol cross-module~~ FIXED in function_gen/generics.rs by emitting specialized definitions with `linkonce_odr` linkage. Standard C++-template-instantiation discipline — equivalent monomorphizations from multiple consumer modules merge at link time. Promoted xfail_hashmap_strhashmap.vais → test_hashmap.vais. | — | — | test_hashmap.vais |
-| C4 partial | Specialized generic body's call to another generic's static method now correctly resolves to the inner specialization. `MutexGuard::new(&self)` inside `Mutex_lock$i64` mangles to `MutexGuard_new$i64` (was bare `MutexGuard_new`). Two changes in `expr_helpers_call/method_call.rs`: (1) substitute `expected_ret` using current spec context; (2) when struct has generics + spec context active + concrete expected_ret, prefer expected_ret's generics over arg-type inference. STILL XFAIL — std/sync exercises a deeper unrelated bug C9. | — | — | xfail_sync_mutexguard_specialization.vais |
-| C9 partial | ~~`?` postfix type fell to ResolvedType::Unknown → i64 in signature~~ FIXED in `types/conversion.rs::ast_type_to_resolved_impl`: `Type::Optional` → `ResolvedType::Optional`, `Type::Result` → `ResolvedType::Result(_, i64)`. Function signatures now match their declared return type. STILL latent: when the function body returns `Some(<user_struct>)`, the `Some(...)` constructor uses the global `%Option = {i32, {i64}}` layout instead of `{i8, %Struct}`. That deeper "specialized Optional layout per call site" issue is what still blocks C4. | use named `Option<T>` instead of `T?` (which now also works) | — | partial in conversion.rs |
+| C4 ✅ | ~~Specialized generic body's call to another generic's static method~~ FIXED via two changes: (1) `expr_helpers_call/method_call.rs` substitute `expected_ret` using current spec context, and prefer expected_ret's generics over arg-type inference when struct has generics + spec context active. `MutexGuard::new(&self)` inside `Mutex_lock$i64` now mangles to `MutexGuard_new$i64`. (2) C9 layout fix below unblocks the remaining link mismatch. Promoted `xfail_sync_mutexguard_specialization.vais` → `test_sync.vais` covering AtomicI64/Bool, Mutex<i64>, MutexGuard<i64> end-to-end. | — | — | test_sync.vais |
+| C9 ✅ | ~~`?` postfix type fell to ResolvedType::Unknown → i64 in signature~~ AND ~~`Some(<user_struct>)` constructor uses global `%Option={i32,{i64}}` layout, mismatching declared `{i8,%T}` return slot~~ — both FIXED. Part 1: `types/conversion.rs::ast_type_to_resolved_impl`: `Type::Optional` → `ResolvedType::Optional`, `Type::Result` → `ResolvedType::Result(_, i64)`. Part 2: `function_gen/codegen.rs` (3 ret paths — Expr/Block in `generate_function`, Block in `generate_method_with_span`) detects universal `%Option`/`%Result` body value flowing into a specialized `{ i8, %T }` ret slot and emits alloca + store + bitcast + load to reinterpret the layout. The two layouts share an i64-word payload, so the reinterpret is sound for ≤8B inline payloads (covers user-struct cases that fit; >8B paths heap-allocate via existing ptrtoint logic). | — | — | test_sync.vais |
 | C18 ✅ | ~~match arm `On =>` (unit variant ident) was alloca'd as a fresh local in codegen~~ FIXED in `inkwell/gen_match.rs::generate_pattern_bindings`: Pattern::Ident now skips binding if the name is a known unit-variant (matches TC's logic). Test: `tests/lang/05_enum/enum_two_units.vais` exercises `flip(t) -> Toggle` with enum constructors as match arm bodies. | — | — | enum_two_units.vais |
 | C10 ✅ | ~~match arm guards not recognized~~ NOT A BUG — vais uses single-char `I` keyword for guards (`pattern I expr => body`); spelled-out `if` is just an ident. Test was using wrong syntax. Updated `tests/lang/03_match/match_guard.vais` to use `I` and the test passes. | — | — | match_guard.vais |
 | C11 | trait default methods not dispatched on impls that don't override. Codegen looks up the per-impl method table without falling back to trait's default. | `W T { F a() {default body} } X S: T {} let s: S; s.a()` → "Undefined function: S_a" | implement every method explicitly per-impl | `tests/lang/09_traits/trait_default.vais` |
@@ -107,6 +107,7 @@ cd compiler/std/tests && bash run.sh
 | C6 ✅ | ~~struct field of fixed-size array `[T; N]` triggers ICE on read~~ FIXED in `inkwell/gen_aggregate.rs::generate_index` (handle ArrayValue by spilling to alloca + GEP) AND `inkwell/gen_advanced.rs::generate_struct_literal` (load array through pointer when field type is array). Two distinct codegen paths needed updating because `generate_array` returns the alloca pointer, not the array value. Test: `tests/lang/04_struct/struct_array_field.vais`. | — | — | struct_array_field.vais |
 | C7 ✅ | ~~match arms with nested variant patterns produce invalid phi/wrong arm dispatch~~ FIXED in `inkwell/gen_match.rs` — two-part fix: (1) `push_inner_scrutinee_for_variant` threads the inner Option/Result type onto the scrutinee stack while recursing into nested patterns so payload-decoding lookups resolve correctly; (2) `Pattern::Variant` pattern-check now AND-s the inner pattern's check when any field is itself a Variant/Literal/Range, so sibling arms like `Some(Some(v))` and `Some(None)` no longer collapse to the same outer-tag check. Test: `tests/lang/03_match/match_nested_enum.vais`. | — | — | match_nested_enum.vais |
 | C8 ✅ | ~~`bool as i64` returns 255~~ FIXED in `inkwell/gen_expr/misc.rs`: when widening i1 → wider int, use `zext` (zero-extend) instead of `sext`. Sign-extending i1 1 produces all-1s; zext gives 1 as expected. Regression test: `tests/lang/01_primitives/bool_short_circuit.vais` (11 assertions exercise `bool as i64`). | — | — | bool_short_circuit.vais |
+| C19 (parser) | `&self.x as i64` parses as `&((self.x) as i64)` instead of `(&self.x) as i64` (`as` binds tighter than `&` — opposite of Rust). Codegen sees `Ref(Cast(Field, i64))` and the inner cast loads the field's value first, so the `&` then takes the address of the loaded value (wrong address). Codegen now emits a proper field-address GEP for the `Ref(Field(...))` shape, which is correct for cases like `f(&self.x)` or `(&self.x) as i64`. Parser precedence is left as-is for now to avoid regressing the existing test suite. Workaround: parenthesize — `(&self.x) as i64`. | parenthesize the `&` form | std/sync.vais updated to use `(&self.value) as i64` | test_sync.vais |
 
 ### Phase 17 Wave 1-4a discovered bugs (prior sessions)
 
@@ -130,7 +131,7 @@ should — see TODO):
 
 - **Phase 0.A**: surface area audit + workspace pruning ✅ — default-members reduced from 28 to 13 (7 core + 6 auxiliary). Experimental crates remain in `members` so `cargo build -p <name>` still works, but `cargo build` / `cargo test` no longer compile them by default. CRATE_AUDIT.md is the source of truth for tier definitions.
 - **Phase 0.B**: conformance suite — 54 tests landed, target 300+
-- **Phase 0.C**: stdlib self-tests — 5 tests landed (1 XFAIL each for hashmap, sync)
+- **Phase 0.C**: stdlib self-tests — 7/7 ✅ (zero XFAIL)
 - **Phase 0.D**: hello world examples — 12/12 ✅
 - **Phase 0.F**: CI policy (doc landed, CI not wired)
 

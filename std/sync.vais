@@ -561,47 +561,47 @@ X AtomicI64 {
 
     # Load atomically
     F load(&self) -> i64 {
-        __atomic_load_i64(&self.value as i64)
+        __atomic_load_i64((&self.value) as i64)
     }
 
     # Store atomically
     F store(&self, value: i64) -> i64 {
-        __atomic_store_i64(&self.value as i64, value)
+        __atomic_store_i64((&self.value) as i64, value)
     }
 
     # Swap and return old value
     F swap(&self, value: i64) -> i64 {
-        __atomic_exchange_i64(&self.value as i64, value)
+        __atomic_exchange_i64((&self.value) as i64, value)
     }
 
     # Compare and swap
     F compare_exchange(&self, expected: i64, new_value: i64) -> i64 {
-        __atomic_compare_exchange_i64(&self.value as i64, expected, new_value)
+        __atomic_compare_exchange_i64((&self.value) as i64, expected, new_value)
     }
 
     # Fetch and add
     F fetch_add(&self, value: i64) -> i64 {
-        __atomic_fetch_add_i64(&self.value as i64, value)
+        __atomic_fetch_add_i64((&self.value) as i64, value)
     }
 
     # Fetch and subtract
     F fetch_sub(&self, value: i64) -> i64 {
-        __atomic_fetch_sub_i64(&self.value as i64, value)
+        __atomic_fetch_sub_i64((&self.value) as i64, value)
     }
 
     # Fetch and AND
     F fetch_and(&self, value: i64) -> i64 {
-        __atomic_fetch_and_i64(&self.value as i64, value)
+        __atomic_fetch_and_i64((&self.value) as i64, value)
     }
 
     # Fetch and OR
     F fetch_or(&self, value: i64) -> i64 {
-        __atomic_fetch_or_i64(&self.value as i64, value)
+        __atomic_fetch_or_i64((&self.value) as i64, value)
     }
 
     # Fetch and XOR
     F fetch_xor(&self, value: i64) -> i64 {
-        __atomic_fetch_xor_i64(&self.value as i64, value)
+        __atomic_fetch_xor_i64((&self.value) as i64, value)
     }
 }
 
@@ -615,19 +615,19 @@ X AtomicBool {
     }
 
     F load(&self) -> i64 {
-        __atomic_load_i64(&self.value as i64)
+        __atomic_load_i64((&self.value) as i64)
     }
 
     F store(&self, value: i64) -> i64 {
-        __atomic_store_i64(&self.value as i64, value)
+        __atomic_store_i64((&self.value) as i64, value)
     }
 
     F swap(&self, value: i64) -> i64 {
-        __atomic_exchange_i64(&self.value as i64, value)
+        __atomic_exchange_i64((&self.value) as i64, value)
     }
 
     F compare_exchange(&self, expected: i64, new_value: i64) -> i64 {
-        __atomic_compare_exchange_i64(&self.value as i64, expected, new_value)
+        __atomic_compare_exchange_i64((&self.value) as i64, expected, new_value)
     }
 }
 
