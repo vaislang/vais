@@ -1,0 +1,15 @@
+# Hello World #4: Option<T> + match expression
+F find_factor(n: i64) -> Option<i64> {
+    I n % 2 == 0 { R Some(2) }
+    I n % 3 == 0 { R Some(3) }
+    I n % 5 == 0 { R Some(5) }
+    None
+}
+
+F main() -> i64 {
+    result: i64 := M find_factor(15) {
+        Some(f) => f,    # 15 % 3 == 0 → returns Some(3)
+        None    => 0,
+    }
+    R result    # exit 3
+}

@@ -1,0 +1,19 @@
+# Hello World #3: struct definition + method
+S Point {
+    x: i64,
+    y: i64,
+}
+
+X Point {
+    F manhattan(self) -> i64 {
+        I self.x < 0 {
+            R -self.x + self.y
+        }
+        self.x + self.y
+    }
+}
+
+F main() -> i64 {
+    p: Point := Point { x: 3, y: 4 }
+    R p.manhattan()    # exit code 7
+}

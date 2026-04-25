@@ -1,0 +1,15 @@
+# CHECKS: match against string literals (strcmp-based)
+F classify(s: str) -> i64 {
+    M s {
+        "yes" => 1,
+        "no"  => 0,
+        _     => -1,
+    }
+}
+
+F main() -> i64 {
+    I classify("yes") != 1  { R 1 }
+    I classify("no")  != 0  { R 2 }
+    I classify("abc") != -1 { R 3 }
+    R 0
+}

@@ -1,0 +1,13 @@
+# CHECKS: recursive fibonacci computation (integration test)
+F fib(n: i64) -> i64 {
+    I n < 2 { R n }
+    fib(n - 1) + fib(n - 2)
+}
+
+F main() -> i64 {
+    I fib(0)  != 0  { R 1 }
+    I fib(1)  != 1  { R 2 }
+    I fib(10) != 55 { R 3 }
+    I fib(15) != 610 { R 4 }
+    R 0
+}

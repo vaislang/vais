@@ -1,0 +1,17 @@
+# CHECKS: iterative factorial
+F factorial(n: i64) -> i64 {
+    result: i64 := mut 1
+    i: i64 := mut 1
+    LW i <= n {
+        result = result * i
+        i = i + 1
+    }
+    result
+}
+
+F main() -> i64 {
+    I factorial(0) != 1   { R 1 }
+    I factorial(5) != 120 { R 2 }
+    I factorial(7) != 5040{ R 3 }
+    R 0
+}

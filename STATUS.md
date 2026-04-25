@@ -8,18 +8,31 @@
 
 | Category | Tests | Passing | Status |
 |----------|-------|---------|--------|
-| 01_primitives | 5 | 5/5 | ✅ |
-| 02_control_flow | 4 | 4/4 | ✅ |
-| 03_match | 2 | 2/2 | ✅ |
-| 04_struct | 3 | 3/3 | ✅ |
-| 05_enum | 2 | 2/2 | ✅ |
-| 06_generic | 1 | 1/1 | ✅ |
+| 01_primitives | 8 | 8/8 | ✅ |
+| 02_control_flow | 6 | 6/6 | ✅ |
+| 03_match | 4 | 4/4 | ✅ |
+| 04_struct | 5 | 5/5 | ✅ |
+| 05_enum | 3 | 3/3 | ✅ |
+| 06_generic | 2 | 2/2 | ✅ |
 | 07_collections | 1 | 0/1 | ⚠️ link fail |
 | 08_strings | 0 | — | not yet |
 | 09_traits | 0 | — | not yet |
 | 10_ffi | 0 | — | not yet |
-| 99_integration | 0 | — | not yet |
-| **Total** | **18** | **17/18 (94%)** | |
+| 99_integration | 2 | 2/2 | ✅ |
+| **Total** | **31** | **30/31 (97%)** | |
+
+### Hello world examples
+
+`examples/hello_world_v2/` — user-facing demos.
+
+| File | Demonstrates | Exit | Status |
+|------|--------------|-----:|--------|
+| `01_hello.vais` | minimum program | 0 | ✅ |
+| `02_arithmetic.vais` | int arithmetic | 5 | ✅ |
+| `03_struct.vais` | struct + method | 7 | ✅ |
+| `04_option.vais` | Option<T> + match | 3 | ✅ |
+| `05_recursion.vais` | recursive fibonacci | 21 | ✅ |
+| **Total** | | | **5/5 (100%)** |
 
 Run yourself:
 ```bash

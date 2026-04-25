@@ -1,0 +1,9 @@
+# Hello World #5: recursive computation (fibonacci)
+F fib(n: i64) -> i64 {
+    I n < 2 { R n }
+    fib(n - 1) + fib(n - 2)
+}
+
+F main() -> i64 {
+    R fib(8)    # exit 21
+}
