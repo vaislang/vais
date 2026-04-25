@@ -66,7 +66,15 @@ impl CodeGenerator {
     /// NOTE: prefer `llvm_type_of_checked` when a wrong answer would produce
     /// invalid IR — the "i64" fallback here can mislead pointer/float paths.
     pub(crate) fn llvm_type_of(&self, val: &str) -> String {
-        self.llvm_type_of_checked(val).unwrap_or_else(|| String::from("i64"))
+        self.llvm_type_of_checked(val).unwrap_or_else(|| {
+            // Wave 4a probe: report missing ground-truth registrations to stderr
+            // so callers/iterations can extend coverage. Falls back to "i64" for
+            // graceful degradation — does NOT panic.
+            if std::env::var("VAIS_GROUND_TRUTH_PROBE").is_ok() {
+                eprintln!("[ground-truth-miss] {}", val);
+            }
+            String::from("i64")
+        })
     }
 
     /// Coerce an IR value to a target integer LLVM type, emitting sext/trunc if needed.
