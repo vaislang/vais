@@ -581,13 +581,31 @@ impl CodeGenerator {
 
             // Coerce struct pointer → i64 when arg_ty is i64 but value is a Named type
             if arg_llvm_ty == "i64" {
-                let inferred = self.infer_expr_type(arg);
-                if matches!(inferred, ResolvedType::Named { .. }) {
-                    let struct_llvm = self.type_to_llvm(&inferred);
-                    let tmp = self.next_temp(counter);
-                    write_ir!(ir, "  {} = ptrtoint {}* {} to i64", tmp, struct_llvm, val);
-                    self.fn_ctx.record_emitted_type(&tmp, "i64");
-                    val = tmp;
+                // Same scalar-shape guard as `generate_expr_call.rs` —
+                // if the AST is a Binary/Unary/literal/Cast, the LLVM
+                // result is scalar by construction. A cross-module span
+                // collision can otherwise make `infer_expr_type` return
+                // `Named { Vec<u8> }` for an `i64 add`, producing
+                // invalid `ptrtoint %Vec$u8* %t to i64` IR (vaisdb
+                // bytebuffer.vais hit this in `__store_byte(data + off + 1, …)`).
+                let scalar_shape = matches!(
+                    &arg.node,
+                    Expr::Binary { .. }
+                        | Expr::Unary { .. }
+                        | Expr::Int(_)
+                        | Expr::Float(_)
+                        | Expr::Bool(_)
+                        | Expr::Cast { .. }
+                );
+                if !scalar_shape {
+                    let inferred = self.infer_expr_type(arg);
+                    if matches!(inferred, ResolvedType::Named { .. }) {
+                        let struct_llvm = self.type_to_llvm(&inferred);
+                        let tmp = self.next_temp(counter);
+                        write_ir!(ir, "  {} = ptrtoint {}* {} to i64", tmp, struct_llvm, val);
+                        self.fn_ctx.record_emitted_type(&tmp, "i64");
+                        val = tmp;
+                    }
                 }
             }
 

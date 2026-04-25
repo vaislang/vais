@@ -707,8 +707,28 @@ impl CodeGenerator {
                     false
                 };
                 let val_ty = self.llvm_type_of(&val);
+                // Same scalar-shape guard as the named-inferred path below
+                // (line ~750). When the AST is a Binary/Unary/literal/Cast,
+                // the LLVM result is i64-scalar by construction, regardless
+                // of what `llvm_type_of` reports. A polluted SSA registry
+                // entry that mis-tags an `add` result as `%Vec$u8` would
+                // otherwise emit `ptrtoint %Vec$u8* %addresult` against an
+                // actual i64 SSA — invalid IR. (Hit by vaisdb bytebuffer's
+                // `__store_byte(buf + offset + 1, …)` chain.)
+                let scalar_shape_for_ptr = matches!(
+                    &arg_for_gen.node,
+                    Expr::Binary { .. }
+                        | Expr::Unary { .. }
+                        | Expr::Int(_)
+                        | Expr::Float(_)
+                        | Expr::Bool(_)
+                        | Expr::Cast { .. }
+                );
                 if skip_ptrtoint {
                     // Value is already i64 — no coercion needed.
+                } else if scalar_shape_for_ptr {
+                    // Scalar-by-construction expression result. Trust i64
+                    // and skip ptrtoint regardless of registry mis-tagging.
                 } else if val_ty.starts_with('%') && val_ty.ends_with('*') {
                     // Explicitly pointer-typed → ptrtoint
                     let tmp = self.next_temp(counter);
