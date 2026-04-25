@@ -442,9 +442,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                     .into_struct_value();
             }
-        } else if let Some(struct_field_names) = self.struct_fields.get(name) {
+        } else if let Some(struct_field_names_owned) = self.struct_fields.get(name).cloned() {
             // Reorder fields to match struct definition order
-            for (i, def_field_name) in struct_field_names.iter().enumerate() {
+            for (i, def_field_name) in struct_field_names_owned.iter().enumerate() {
                 let val = field_name_values
                     .iter()
                     .find(|(n, _)| n == def_field_name)
@@ -457,9 +457,33 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             self.context.i64_type().const_int(0, false).into()
                         }
                     });
+                // Phase 0 bug C6 fix: when the field's declared type is an
+                // array and the value arrived as a pointer (because
+                // `generate_array` returns the alloca pointer, not the array
+                // value), load through the pointer so insertvalue sees the
+                // array. Without this, `S P { c: [i64;3] }` triggers
+                // "insertvalue operand type 'ptr' instead of '[3 x i64]'".
+                let coerced_val = if let Some(field_type) =
+                    struct_type.get_field_type_at_index(i as u32)
+                {
+                    if field_type.is_array_type() && val.is_pointer_value() {
+                        self.builder
+                            .build_load(field_type, val.into_pointer_value(), "array_field_load")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    } else {
+                        val
+                    }
+                } else {
+                    val
+                };
                 struct_val = self
                     .builder
-                    .build_insert_value(struct_val, val, i as u32, &format!("field_{}", i))
+                    .build_insert_value(
+                        struct_val,
+                        coerced_val,
+                        i as u32,
+                        &format!("field_{}", i),
+                    )
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                     .into_struct_value();
             }

@@ -1,8 +1,12 @@
-# XFAIL: struct field of fixed-size array `[i64; 3]` triggers ICE — codegen
-# tries to convert ArrayValue to PointerValue when accessing the field via
-# extractvalue. Tracked as Phase 0 finding C6.
-#
 # CHECKS: struct field that is itself a fixed-size array.
+# REGRESSION for bug C6: prior fix had two parts in inkwell:
+# (1) `generate_index` now spills an ArrayValue to a tmp alloca before GEP'ing,
+#     so `p.coords[i]` (where coords arrives as `[3 x i64]` from extractvalue)
+#     no longer panics with "expected PointerValue".
+# (2) `generate_struct_literal` now loads the array value when the field type
+#     is an array and the supplied value is a pointer (`generate_array`
+#     returns the alloca pointer), so `Point3D { coords: [10,20,30] }` no
+#     longer fails IR verification with "ptr instead of [3 x i64]".
 S Point3D {
     coords: [i64; 3]
 }

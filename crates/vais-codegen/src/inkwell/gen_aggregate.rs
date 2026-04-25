@@ -460,6 +460,33 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             )));
         }
 
+        // Phase 0 bug C6 fix: a fixed-size array value (e.g. extracted from
+        // a struct field via `extractvalue %T %p, 0`) arrives as an
+        // ArrayValue, not a PointerValue. Spill to an alloca so we can GEP
+        // through it. This handles `S P { c: [i64;3] } let p := P{...}; p.c[i]`.
+        if arr_val.is_array_value() {
+            let array_val = arr_val.into_array_value();
+            let array_ty = array_val.get_type();
+            let tmp = self
+                .builder
+                .build_alloca(array_ty, "array_tmp")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.builder
+                .build_store(tmp, array_val)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            let idx_int = idx_val.into_int_value();
+            let zero = self.context.i64_type().const_zero();
+            let elem_ptr = unsafe {
+                self.builder
+                    .build_gep(array_ty, tmp, &[zero, idx_int], "array_elem_ptr")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            };
+            return self
+                .builder
+                .build_load(inferred_elem_type, elem_ptr, "array_elem")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()));
+        }
+
         // Regular array/pointer indexing — use inferred element type
         let arr_ptr = arr_val.into_pointer_value();
         let idx_int = idx_val.into_int_value();

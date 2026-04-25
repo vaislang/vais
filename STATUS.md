@@ -11,7 +11,7 @@
 | 01_primitives | 14 | 14/14 | ✅ |
 | 02_control_flow | 14 | 14/14 | ✅ |
 | 03_match | 7 | 7/7 | ✅ |
-| 04_struct | 9 | 8/8 + 1 xfail | ✅ |
+| 04_struct | 9 | 9/9 | ✅ |
 | 05_enum | 6 | 6/6 | ✅ |
 | 06_generic | 7 | 7/7 | ✅ |
 | 07_collections | 3 | 3/3 | ✅ |
@@ -19,7 +19,7 @@
 | 09_traits | 0 | — | not yet |
 | 10_ffi | 0 | — | not yet |
 | 99_integration | 9 | 9/9 | ✅ |
-| **Total** | **72** | **72/72 (100%) + 1 xfail** | 🎉 |
+| **Total** | **73** | **73/73 (100%)** | 🎉 |
 
 Run yourself:
 ```bash
@@ -94,7 +94,7 @@ cd compiler/std/tests && bash run.sh
 | C3 ✅ | ~~StrHashMap<i64> generic specialization duplicate symbol cross-module~~ FIXED in function_gen/generics.rs by emitting specialized definitions with `linkonce_odr` linkage. Standard C++-template-instantiation discipline — equivalent monomorphizations from multiple consumer modules merge at link time. Promoted xfail_hashmap_strhashmap.vais → test_hashmap.vais. | — | — | test_hashmap.vais |
 | C4 | `Mutex<T>::lock` returns `MutexGuard` (unspecialized) instead of `MutexGuard$T` | calling `.lock()` on a `Mutex<i64>` | none — link fails on type mismatch | `xfail_sync_mutexguard_specialization.vais` |
 | C5 ✅ | ~~`String.with_capacity(n)` segfaults when `n < 16`~~ FIXED in std/string.vais: `new_cap := self.cap * 2` is now `:= mut`. Root cause: codegen alloca'd `new_cap` but skipped the initial store; only the `< 16` branch wrote to it, leaving the else branch reading uninitialized memory → `malloc(garbage)` crash. Underlying codegen bug remains (separate finding: alloca without initial store when binding is later reassigned). | — | — | test_string.vais cap=4 |
-| C6 | struct field of fixed-size array `[T; N]` triggers ICE on read — codegen tries to convert ArrayValue to PointerValue. | `S P { c: [i64;3] } let p := P{...}; p.c[0]` | use `Vec<T>` or store array as separate vars | `tests/lang/04_struct/struct_array_field.vais` |
+| C6 ✅ | ~~struct field of fixed-size array `[T; N]` triggers ICE on read~~ FIXED in `inkwell/gen_aggregate.rs::generate_index` (handle ArrayValue by spilling to alloca + GEP) AND `inkwell/gen_advanced.rs::generate_struct_literal` (load array through pointer when field type is array). Two distinct codegen paths needed updating because `generate_array` returns the alloca pointer, not the array value. Test: `tests/lang/04_struct/struct_array_field.vais`. | — | — | struct_array_field.vais |
 | C7 ✅ | ~~match arms with nested variant patterns produce invalid phi/wrong arm dispatch~~ FIXED in `inkwell/gen_match.rs` — two-part fix: (1) `push_inner_scrutinee_for_variant` threads the inner Option/Result type onto the scrutinee stack while recursing into nested patterns so payload-decoding lookups resolve correctly; (2) `Pattern::Variant` pattern-check now AND-s the inner pattern's check when any field is itself a Variant/Literal/Range, so sibling arms like `Some(Some(v))` and `Some(None)` no longer collapse to the same outer-tag check. Test: `tests/lang/03_match/match_nested_enum.vais`. | — | — | match_nested_enum.vais |
 | C8 ✅ | ~~`bool as i64` returns 255~~ FIXED in `inkwell/gen_expr/misc.rs`: when widening i1 → wider int, use `zext` (zero-extend) instead of `sext`. Sign-extending i1 1 produces all-1s; zext gives 1 as expected. Regression test: `tests/lang/01_primitives/bool_short_circuit.vais` (11 assertions exercise `bool as i64`). | — | — | bool_short_circuit.vais |
 
