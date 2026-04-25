@@ -1,0 +1,16 @@
+# CHECKS: Vec<i64> + LF iteration over indices
+U std/vec.{vec_new};
+
+F main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    LF i: 1..=5 {
+        v.push(i * i)
+    }
+    # 1 + 4 + 9 + 16 + 25 = 55
+    sum: i64 := mut 0
+    LF i: 0..v.len() {
+        sum = sum + v[i]
+    }
+    I sum != 55 { R 1 }
+    R 0
+}

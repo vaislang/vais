@@ -1,0 +1,57 @@
+# Stdlib self-test: ByteBuffer write/read round-trips
+U std/bytebuffer
+
+F main() -> i64 {
+    buf: ByteBuffer := mut ByteBuffer.with_capacity(64)
+    I buf.len() != 0 { R 1 }
+    I buf.position() != 0 { R 2 }
+    I buf.capacity() < 16 { R 3 }
+
+    # write three bytes, then i32, then i64
+    buf.write_u8(0x41)
+    buf.write_u8(0x42)
+    buf.write_u8(0x43)
+    I buf.len() != 3 { R 4 }
+
+    buf.write_i32_le(0x12345678)
+    I buf.len() != 7 { R 5 }
+
+    buf.write_i64_le(0x0123456789ABCDEF)
+    I buf.len() != 15 { R 6 }
+
+    # rewind and read back
+    buf.rewind()
+    I buf.position() != 0 { R 7 }
+
+    I buf.read_u8() != 0x41 { R 8 }
+    I buf.read_u8() != 0x42 { R 9 }
+    I buf.read_u8() != 0x43 { R 10 }
+    I buf.position() != 3 { R 11 }
+
+    I buf.read_i32_le() != 0x12345678 { R 12 }
+    I buf.position() != 7 { R 13 }
+
+    I buf.read_i64_le() != 0x0123456789ABCDEF { R 14 }
+    I buf.position() != 15 { R 15 }
+
+    # remaining should be 0 after reading everything
+    I buf.remaining() != 0 { R 16 }
+
+    # ensure_capacity grows buffer
+    big: ByteBuffer := mut ByteBuffer.with_capacity(16)
+    LF i: 0..200 {
+        big.write_u8(i & 0xFF)
+    }
+    I big.len() != 200 { R 17 }
+    I big.capacity() < 200 { R 18 }
+
+    # spot-check round trip on grown buffer
+    big.rewind()
+    I big.read_u8() != 0 { R 19 }
+    big.seek(100)
+    I big.read_u8() != 100 { R 20 }
+    big.seek(199)
+    I big.read_u8() != 199 { R 21 }
+
+    R 0
+}

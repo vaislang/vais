@@ -1,0 +1,22 @@
+# CHECKS: count primes up to N (basic Sieve-style trial division)
+F is_prime(n: i64) -> bool {
+    I n < 2 { R false }
+    I n < 4 { R true }
+    I n % 2 == 0 { R false }
+    d: i64 := mut 3
+    LW d * d <= n {
+        I n % d == 0 { R false }
+        d = d + 2
+    }
+    true
+}
+
+F main() -> i64 {
+    count: i64 := mut 0
+    LF n: 2..=20 {
+        I is_prime(n) { count = count + 1 }
+    }
+    # primes ≤ 20: 2,3,5,7,11,13,17,19 → 8
+    I count != 8 { R 1 }
+    R 0
+}

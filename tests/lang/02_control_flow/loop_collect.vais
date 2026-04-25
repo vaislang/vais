@@ -1,0 +1,16 @@
+# CHECKS: while loop with B (break) collecting values
+F find_first_multiple(n: i64, m: i64) -> i64 {
+    i: i64 := mut 1
+    LW true {
+        I i % m == 0 && i > n { R i }
+        I i > 1000 { B }
+        i = i + 1
+    }
+    -1
+}
+
+F main() -> i64 {
+    I find_first_multiple(10, 7) != 14 { R 1 }
+    I find_first_multiple(0, 3)  != 3  { R 2 }
+    R 0
+}

@@ -1,0 +1,65 @@
+# XFAIL: Mutex<T>::lock returns MutexGuard<T>, but the compiler emits
+# `ret %MutexGuard$i64 %t4` where %t4 has type %MutexGuard (the unspecialized
+# struct), causing a type-mismatch link error. The Mutex/MutexGuard generic
+# specialization isn't kept consistent across return-type slot and the value
+# being returned. Tracked as a Phase 0 codegen bug; restore as test_sync.vais
+# once the generic-struct return-type lowering is fixed.
+#
+# Stdlib self-test: sync primitives single-threaded smoke test
+# (Multi-thread tests would require thread spawning — covered separately.)
+U std/sync
+
+F main() -> i64 {
+    # AtomicI64
+    a: AtomicI64 := mut AtomicI64.new(0)
+    I a.load() != 0 { R 1 }
+
+    a.store(42)
+    I a.load() != 42 { R 2 }
+
+    old: i64 := a.swap(100)
+    I old != 42 { R 3 }
+    I a.load() != 100 { R 4 }
+
+    # fetch_add returns prior value
+    prev: i64 := a.fetch_add(5)
+    I prev != 100 { R 5 }
+    I a.load() != 105 { R 6 }
+
+    # fetch_sub returns prior value
+    prev2: i64 := a.fetch_sub(10)
+    I prev2 != 105 { R 7 }
+    I a.load() != 95 { R 8 }
+
+    # fetch_or
+    a.store(0x0F)
+    a.fetch_or(0xF0)
+    I a.load() != 0xFF { R 9 }
+
+    # fetch_and
+    a.fetch_and(0x0F)
+    I a.load() != 0x0F { R 10 }
+
+    # fetch_xor
+    a.store(0xFF)
+    a.fetch_xor(0x0F)
+    I a.load() != 0xF0 { R 11 }
+
+    # AtomicBool
+    b: AtomicBool := mut AtomicBool.new(0)
+    I b.load() != 0 { R 12 }
+    b.store(1)
+    I b.load() != 1 { R 13 }
+    bo: i64 := b.swap(0)
+    I bo != 1 { R 14 }
+    I b.load() != 0 { R 15 }
+
+    # Mutex (single-threaded: just exercise lock/unlock without contention)
+    m: Mutex<i64> := mut Mutex.new(7)
+    I m.is_locked() != 0 { R 16 }
+    g: MutexGuard<i64> := mut m.lock()
+    I m.is_locked() != 1 { R 17 }
+    g.unlock()
+
+    R 0
+}

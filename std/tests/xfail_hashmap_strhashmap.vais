@@ -1,0 +1,55 @@
+# XFAIL: StrHashMap<i64> generic specialization duplicate-symbol cross-module link bug.
+# When this file imports `std/hashmap`, the compiler emits `StrHashMap_hash$i64`
+# in both the test module and the stdlib module, producing duplicate-symbol
+# at link time. Tracked as a Phase 0 compiler bug; restore as test_hashmap.vais
+# once cross-module generic specialization dedup is fixed.
+#
+# Stdlib self-test: StrHashMap<i64> basic operations
+U std/hashmap
+
+F main() -> i64 {
+    m: StrHashMap<i64> := mut StrHashMap.with_capacity(16)
+    I m.len() != 0 { R 1 }
+    I m.is_empty() != 1 { R 2 }
+
+    # set + get
+    m.set("alpha", 1)
+    m.set("beta", 2)
+    m.set("gamma", 3)
+    I m.len() != 3 { R 3 }
+    I m.is_empty() != 0 { R 4 }
+
+    I m.get("alpha") != 1 { R 5 }
+    I m.get("beta") != 2 { R 6 }
+    I m.get("gamma") != 3 { R 7 }
+
+    # contains
+    I m.contains("alpha") != 1 { R 8 }
+    I m.contains("missing") != 0 { R 9 }
+
+    # update existing
+    m.set("alpha", 100)
+    I m.get("alpha") != 100 { R 10 }
+    # update should not increase size
+    I m.len() != 3 { R 11 }
+
+    # many inserts to trigger rehash
+    big: StrHashMap<i64> := mut StrHashMap.with_capacity(8)
+    big.set("k0", 0)
+    big.set("k1", 1)
+    big.set("k2", 2)
+    big.set("k3", 3)
+    big.set("k4", 4)
+    big.set("k5", 5)
+    big.set("k6", 6)
+    big.set("k7", 7)
+    big.set("k8", 8)
+    big.set("k9", 9)
+    I big.len() != 10 { R 12 }
+    I big.get("k0") != 0 { R 13 }
+    I big.get("k5") != 5 { R 14 }
+    I big.get("k9") != 9 { R 15 }
+    I big.contains("k7") != 1 { R 16 }
+
+    R 0
+}

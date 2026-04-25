@@ -268,7 +268,7 @@ F str_substring(s: String, start: i64, end: i64) -> String {
 
 # Helper: Check if string contains character
 F str_contains_char(s: String, c: i64) -> i64 {
-    i := 0
+    i := mut 0
     L {
         I i >= s.len {
             R 0
@@ -283,20 +283,14 @@ F str_contains_char(s: String, c: i64) -> i64 {
 
 # Helper: Compare two strings
 F str_eq(a: String, b: String) -> i64 {
-    I a.len != b.len {
-        0
-    } EL {
-        i := 0
-        L {
-            I i >= a.len {
-                B 1
-            }
-            I a.char_at(i) != b.char_at(i) {
-                B 0
-            }
-            i = i + 1
-        }
+    I a.len != b.len { R 0 }
+    i := mut 0
+    L {
+        I i >= a.len { R 1 }
+        I a.char_at(i) != b.char_at(i) { R 0 }
+        i = i + 1
     }
+    1
 }
 
 # =====================================================
@@ -742,7 +736,7 @@ F str_from_int(n: i64) -> i64 {
     digit_count := str_from_int_digits(tmp, val, 0)
 
     # Write to buf
-    pos := 0
+    pos := mut 0
     I is_neg == 1 {
         store_byte(buf, 45)   # '-'
         pos = 1
@@ -783,7 +777,7 @@ F str_slice(s: i64, start: i64, end: i64) -> i64 {
     len := strlen(s)
     # Clamp bounds
     s_start := I start < 0 { 0 } EL { start }
-    s_end := I end > len { len } EL { end }
+    s_end := mut (I end > len { len } EL { end })
     I s_start > s_end { s_end = s_start }
     new_len := s_end - s_start
     I new_len <= 0 {
@@ -807,8 +801,8 @@ F str_to_f64(s: i64) -> f64 {
     len := strlen(s)
     I len <= 0 { R 0.0 }
     # Detect sign
-    is_neg := 0
-    idx := 0
+    is_neg := mut 0
+    idx := mut 0
     first := load_byte(s)
     I first == 45 {
         is_neg = 1

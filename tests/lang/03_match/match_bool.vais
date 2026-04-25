@@ -1,0 +1,13 @@
+# CHECKS: match against bool
+F to_int(b: bool) -> i64 {
+    M b {
+        true  => 1,
+        false => 0,
+    }
+}
+
+F main() -> i64 {
+    I to_int(true)  != 1 { R 1 }
+    I to_int(false) != 0 { R 2 }
+    R 0
+}

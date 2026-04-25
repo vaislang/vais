@@ -3,11 +3,13 @@ VAISC ?= $(HOME)/.cargo/bin/vaisc
 RUNTIME_C := ../../selfhost/runtime.c
 SYNC_C := ../../std/sync_runtime.c
 TMPDIR := /tmp
+export VAIS_DEP_PATHS := /tmp/vais-lib/std
+export VAIS_STD_PATH := /tmp/vais-lib/std
 
 .PHONY: check clean
 
 check:
-	@for f in 0*.vais; do \
+	@for f in [0-9]*.vais; do \
 	  base=$$(basename $$f .vais); \
 	  $(VAISC) build $$f --emit-ir -o $(TMPDIR)/$$base.ll --force-rebuild >/dev/null 2>&1 || \
 	    { echo "FAIL compile: $$base"; exit 1; }; \

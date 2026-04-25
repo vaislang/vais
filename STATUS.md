@@ -1,6 +1,6 @@
 # Vais Compiler Status
 
-> Last updated: 2026-04-25 (Phase 0 kickoff)
+> Last updated: 2026-04-25 (Phase 0.C stdlib self-test green)
 
 ## Conformance Test Results
 
@@ -8,34 +8,25 @@
 
 | Category | Tests | Passing | Status |
 |----------|-------|---------|--------|
-| 01_primitives | 9 | 9/9 | ✅ |
+| 01_primitives | 11 | 11/11 | ✅ |
 | 02_control_flow | 9 | 9/9 | ✅ |
-| 03_match | 5 | 5/5 | ✅ |
-| 04_struct | 6 | 6/6 | ✅ |
-| 05_enum | 4 | 4/4 | ✅ |
-| 06_generic | 4 | 4/4 | ✅ |
-| 07_collections | 1 | 1/1 | ✅ |
+| 03_match | 6 | 6/6 | ✅ |
+| 04_struct | 7 | 7/7 | ✅ |
+| 05_enum | 5 | 5/5 | ✅ |
+| 06_generic | 5 | 5/5 | ✅ |
+| 07_collections | 2 | 2/2 | ✅ |
 | 08_strings | 2 | 2/2 | ✅ |
 | 09_traits | 0 | — | not yet |
 | 10_ffi | 0 | — | not yet |
-| 99_integration | 4 | 4/4 | ✅ |
-| **Total** | **44** | **44/44 (100%)** | 🎉 |
+| 99_integration | 6 | 6/6 | ✅ |
+| **Total** | **54** | **54/54 (100%)** | 🎉 |
 
-### Hello world examples — `examples/hello_world_v2/` (7/7 — 100%)
+Run yourself:
+```bash
+cd compiler/tests/lang && bash run_lang_tests.sh
+```
 
-| File | Demonstrates | Exit |
-|------|--------------|-----:|
-| `01_hello.vais` | minimum program | 0 |
-| `02_arithmetic.vais` | int arithmetic | 5 |
-| `03_struct.vais` | struct + method | 7 |
-| `04_option.vais` | Option<T> + match | 3 |
-| `05_recursion.vais` | recursive fibonacci | 21 |
-| `06_loop.vais` | while loop accumulator | 28 |
-| `07_generic.vais` | generic max function | 15 |
-
-### Hello world examples
-
-`examples/hello_world_v2/` — user-facing demos.
+## Hello World Examples — `examples/hello_world_v2/` (12/12)
 
 | File | Demonstrates | Exit | Status |
 |------|--------------|-----:|--------|
@@ -44,11 +35,35 @@
 | `03_struct.vais` | struct + method | 7 | ✅ |
 | `04_option.vais` | Option<T> + match | 3 | ✅ |
 | `05_recursion.vais` | recursive fibonacci | 21 | ✅ |
-| **Total** | | | **5/5 (100%)** |
+| `06_loop.vais` | while accumulator | 28 | ✅ |
+| `07_generic.vais` | generic max | 15 | ✅ |
+| `08_match.vais` | match on int | 3 | ✅ |
+| `09_result.vais` | Result + match | 5 | ✅ |
+| `10_vec.vais` | Vec push/index | 15 | ✅ |
+| `11_nested_struct.vais` | nested struct | 20 | ✅ |
+| `12_combo.vais` | generic + Vec + recursion | 33 | ✅ |
+| **Total** | | | **12/12 (100%)** |
 
 Run yourself:
 ```bash
-cd compiler/tests/lang && ./run_lang_tests.sh
+cd compiler/examples/hello_world_v2 && make check
+```
+
+## Stdlib Self-Tests — `compiler/std/tests/` (5/5)
+
+| Test | Module | Assertions | Status |
+|------|--------|-----------:|--------|
+| `test_vec.vais` | std/vec | 10 | ✅ |
+| `test_option.vais` | builtin Option<T> + std/option methods | 9 | ✅ |
+| `test_result.vais` | builtin Result<T,E> | 5 | ✅ |
+| `test_bytebuffer.vais` | std/bytebuffer | 21 | ✅ |
+| `test_string.vais` | std/string + helpers | 28 | ✅ |
+| `xfail_hashmap_strhashmap.vais` | std/hashmap StrHashMap | — | ⚠️ XFAIL (compiler bug) |
+| `xfail_sync_mutexguard_specialization.vais` | std/sync Mutex | — | ⚠️ XFAIL (compiler bug) |
+
+Run yourself:
+```bash
+cd compiler/std/tests && bash run.sh
 ```
 
 ## Stability Tiers
@@ -70,18 +85,17 @@ cd compiler/tests/lang && ./run_lang_tests.sh
 
 ## Known Issues
 
-### 07_collections/vec_basic — link failure
-- **What**: `Vec<i64>` push + indexing test compiles to IR but fails at clang link stage.
-- **Symptom**: undefined symbol or type-mismatch link error.
-- **Reason**: stdlib `Vec` requires multi-module specialization that the
-  current vaisc driver doesn't fully wire for standalone test files.
-- **Workaround**: vaisdb-style multi-module builds work; standalone
-  single-file Vec usage doesn't.
-- **Fix path**: Phase 0.B continued — extend test runner to detect and
-  bundle stdlib dependencies, OR add a `vec_new` mono-typed shim to core
-  stdlib.
+### Phase 0.C-discovered compiler bugs
 
-### Phase 17 Wave 1-4a discovered bugs (this session)
+| # | Bug | Trigger | Workaround | Test |
+|---|-----|---------|------------|------|
+| C1 | `B <value>` (break-with-value) lowered as constant 0 in phi | `L { I cond { B 1 } I cond2 { B 0 } i = i + 1 }` returns wrong values | rewrite as `R <value>` outside the loop | std/string `str_eq` patched in this session |
+| C2 | `:= <int>` immutable bindings reassigned via `=` silently miscompile (load → const 0) instead of compile error | `i := 0; ...; i = i + 1` (without `mut`) | use `:= mut <int>` always | std/string `str_eq`/`str_contains_char`/`str_to_f64` patched |
+| C3 | StrHashMap<i64> generic specialization duplicate symbol cross-module | `U std/hashmap; m: StrHashMap<i64> := ...` | none — link fails | `xfail_hashmap_strhashmap.vais` |
+| C4 | `Mutex<T>::lock` returns `MutexGuard` (unspecialized) instead of `MutexGuard$T` | calling `.lock()` on a `Mutex<i64>` | none — link fails on type mismatch | `xfail_sync_mutexguard_specialization.vais` |
+| C5 | `String.with_capacity(n)` segfaults when `n < 16` | `String.with_capacity(4); s.push_char(...)` triggers `grow()` from cap < 16 | use `with_capacity >= 16` | documented in `test_string.vais` comment |
+
+### Phase 17 Wave 1-4a discovered bugs (prior sessions)
 
 These bugs were fixed in commits `7c3aed52`, `72616dc2`, `039df2f7`,
 `32d1ed83`, `5a11bcf0` during Phase 17 Wave 4a probe and Phase 0
@@ -95,16 +109,17 @@ should — see TODO):
 | 4-byte Named struct narrow store | TODO `tests/lang/04_struct/struct_4_bytes_in_vec.vais` | pending |
 | match arm phi narrow-int width | TODO `tests/lang/03_match/match_phi_narrow_int.vais` | pending |
 | Specialized enum match (`%Unknown`) | TODO `tests/lang/05_enum/result_specialized_match.vais` | pending |
-| Enum payload of >8B struct | TODO `tests/lang/05_enum/enum_struct_payload.vais` | pending |
+| Enum payload of >8B struct | `tests/lang/05_enum/enum_struct_payload.vais` | ✅ landed |
 | Vec→slice auto-coercion | TODO `tests/lang/07_collections/vec_to_slice.vais` | pending |
 | `slice.to_vec()` builtin | (stdlib gap, not lang feature) | n/a |
 
 ## Active Work
 
-- **Phase 0.A**: surface area audit (in progress)
-- **Phase 0.B**: conformance suite — 13 tests landed, target 300+
-- **Phase 0.C**: stdlib self-tests (not started)
-- **Phase 0.D**: hello world examples (not started)
+- **Phase 0.A**: surface area audit (in progress, doc landed)
+- **Phase 0.B**: conformance suite — 54 tests landed, target 300+
+- **Phase 0.C**: stdlib self-tests — 5 tests landed (1 XFAIL each for hashmap, sync)
+- **Phase 0.D**: hello world examples — 12/12 ✅
+- **Phase 0.F**: CI policy (doc landed, CI not wired)
 
 See `compiler/docs/PHASE_0_LANGUAGE_STABILIZATION.md` for full roadmap.
 

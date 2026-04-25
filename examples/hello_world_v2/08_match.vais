@@ -1,0 +1,14 @@
+# Hello World #8: match expression on integer
+F grade(score: i64) -> i64 {
+    M score {
+        90..=100 => 4,    # A
+        80..=89  => 3,    # B
+        70..=79  => 2,    # C
+        60..=69  => 1,    # D
+        _        => 0,    # F
+    }
+}
+
+F main() -> i64 {
+    R grade(85)    # exit 3 (B)
+}
