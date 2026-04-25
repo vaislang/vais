@@ -1,0 +1,24 @@
+# CHECKS: early return from deeply nested control flow.
+F process(n: i64) -> i64 {
+    I n < 0 { R 0 - 1 }
+    I n == 0 { R 0 }
+
+    LF i: 1..=10 {
+        I i * i > n {
+            I i == 1 { R 1 }
+            R i - 1
+        }
+    }
+    10
+}
+
+F main() -> i64 {
+    I process(0 - 5) != 0 - 1 { R 1 }
+    I process(0) != 0 { R 2 }
+    I process(1) != 1 { R 3 }
+    I process(8) != 2 { R 4 }    # 3² = 9 > 8 → 2
+    I process(15) != 3 { R 5 }   # 4² = 16 > 15 → 3
+    I process(99) != 9 { R 6 }   # 10² = 100 > 99 → 9
+    I process(100) != 10 { R 7 } # never exits early; loop completes
+    R 0
+}

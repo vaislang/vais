@@ -1,0 +1,12 @@
+# CHECKS: bool unary not (!).
+F main() -> i64 {
+    a: bool := true
+    b: bool := false
+
+    I (!a as i64) != 0 { R 1 }
+    I (!b as i64) != 1 { R 2 }
+    I (!!a as i64) != 1 { R 3 }
+    I (!(1 == 1) as i64) != 0 { R 4 }
+    I (!(1 == 2) as i64) != 1 { R 5 }
+    R 0
+}

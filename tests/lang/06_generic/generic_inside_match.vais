@@ -1,0 +1,19 @@
+# CHECKS: generic fn called from inside a match arm.
+F id<T>(x: T) -> T { x }
+
+F dispatch(n: i64) -> i64 {
+    M n {
+        0 => id(100),
+        1 => id(200) + id(300),
+        2 => id(id(id(50))),
+        _ => 0
+    }
+}
+
+F main() -> i64 {
+    I dispatch(0) != 100 { R 1 }
+    I dispatch(1) != 500 { R 2 }
+    I dispatch(2) != 50 { R 3 }
+    I dispatch(99) != 0 { R 4 }
+    R 0
+}

@@ -1,0 +1,25 @@
+# CHECKS: match inside a function called from match arms.
+F sub_classify(n: i64) -> i64 {
+    M n {
+        0 => 100,
+        1 => 200,
+        _ => 0
+    }
+}
+
+F top_classify(n: i64) -> i64 {
+    M n {
+        0 => sub_classify(0),
+        1 => sub_classify(1),
+        2 => sub_classify(0) + sub_classify(1),
+        _ => 0 - 1
+    }
+}
+
+F main() -> i64 {
+    I top_classify(0) != 100 { R 1 }
+    I top_classify(1) != 200 { R 2 }
+    I top_classify(2) != 300 { R 3 }
+    I top_classify(99) != 0 - 1 { R 4 }
+    R 0
+}

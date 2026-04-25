@@ -1,0 +1,36 @@
+# CHECKS: partition Vec<i64> into "less than pivot" count.
+U std/vec.{vec_new};
+
+F count_less_than(v: &Vec<i64>, pivot: i64) -> i64 {
+    count: i64 := mut 0
+    LF i: 0..v.len() {
+        I v[i] < pivot { count = count + 1 }
+    }
+    count
+}
+
+F main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    v.push(5)
+    v.push(3)
+    v.push(8)
+    v.push(1)
+    v.push(9)
+    v.push(2)
+    v.push(7)
+    v.push(4)
+    v.push(6)
+
+    # < 5: 3, 1, 2, 4 → 4 elements
+    I count_less_than(&v, 5) != 4 { R 1 }
+
+    # < 1: nothing
+    I count_less_than(&v, 1) != 0 { R 2 }
+
+    # < 100: all 9
+    I count_less_than(&v, 100) != 9 { R 3 }
+
+    # < 5+1=6: 5,3,1,2,4 → 5
+    I count_less_than(&v, 6) != 5 { R 4 }
+    R 0
+}
