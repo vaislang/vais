@@ -85,6 +85,7 @@ impl CodeGenerator {
             + llvm_size(&ret_llvm)
             + params.iter().map(|(_, ty)| llvm_size(&self.type_to_llvm(ty))).sum::<usize>();
         write_ir!(ir, "  %state_ptr = call i64 @malloc(i64 {})", struct_size);
+        self.fn_ctx.record_emitted_type("%state_ptr", "i64");
         write_ir!(
             ir,
             "  %state = inttoptr i64 %state_ptr to %{}*",

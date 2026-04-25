@@ -132,6 +132,7 @@ impl CodeGenerator {
             poll_func,
             future_ptr
         );
+        self.fn_ctx.record_emitted_type(&poll_result, &poll_ret_ty);
 
         let status = self.next_temp(counter);
         write_ir!(
@@ -1099,6 +1100,7 @@ impl CodeGenerator {
                 vec_ty,
                 arg_vals[0]
             );
+            self.fn_ctx.record_emitted_type(&result, &elem_ty);
         } else {
             write_ir!(
                 ir,
@@ -1109,6 +1111,7 @@ impl CodeGenerator {
                 vec_ty,
                 arg_vals[0]
             );
+            self.fn_ctx.record_emitted_type(&result, &elem_ty);
         }
 
         Ok((result, ir))
