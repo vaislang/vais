@@ -93,7 +93,7 @@ cd compiler/std/tests && bash run.sh
 | C2 ✅ | ~~`:= <int>` immutable bindings reassigned via `=` silently miscompile~~ FIXED in checker_expr/special.rs — TC now emits `ImmutableAssign` (E009) on Expr::Assign / Expr::AssignOp when target is a non-mut Ident binding. Regression test: `tests/lang/02_control_flow/mut_reassign.vais`. | — | — | mut_reassign.vais |
 | C3 | StrHashMap<i64> generic specialization duplicate symbol cross-module | `U std/hashmap; m: StrHashMap<i64> := ...` | none — link fails | `xfail_hashmap_strhashmap.vais` |
 | C4 | `Mutex<T>::lock` returns `MutexGuard` (unspecialized) instead of `MutexGuard$T` | calling `.lock()` on a `Mutex<i64>` | none — link fails on type mismatch | `xfail_sync_mutexguard_specialization.vais` |
-| C5 | `String.with_capacity(n)` segfaults when `n < 16` | `String.with_capacity(4); s.push_char(...)` triggers `grow()` from cap < 16 | use `with_capacity >= 16` | documented in `test_string.vais` comment |
+| C5 ✅ | ~~`String.with_capacity(n)` segfaults when `n < 16`~~ FIXED in std/string.vais: `new_cap := self.cap * 2` is now `:= mut`. Root cause: codegen alloca'd `new_cap` but skipped the initial store; only the `< 16` branch wrote to it, leaving the else branch reading uninitialized memory → `malloc(garbage)` crash. Underlying codegen bug remains (separate finding: alloca without initial store when binding is later reassigned). | — | — | test_string.vais cap=4 |
 
 ### Phase 17 Wave 1-4a discovered bugs (prior sessions)
 

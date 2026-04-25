@@ -142,7 +142,7 @@ X String {
 
     # Grow the string capacity (double it)
     F grow(&self) -> i64 {
-        new_cap := self.cap * 2
+        new_cap := mut self.cap * 2
         I new_cap < 16 {
             new_cap = 16
         }
@@ -248,6 +248,8 @@ F str_concat(a: String, b: String) -> String {
 
 # Helper: Get substring
 F str_substring(s: String, start: i64, end: i64) -> String {
+    start := mut start
+    end := mut end
     I start < 0 {
         start = 0
     }

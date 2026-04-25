@@ -31,9 +31,10 @@ F main() -> i64 {
     is_none: i64 := M co2 { Some(_) => 0, None => 1 }
     I is_none != 1 { R 11 }
 
-    # grow path: push beyond capacity (start at 16, grow to 32, 64)
-    # NOTE: starting capacity < 16 segfaults — std/string.grow bug, tracked as Phase 0 finding
-    big: String := mut String.with_capacity(16)
+    # grow path: push beyond capacity. Start at small cap to exercise grow().
+    # Bug C5 (String.grow with cap < 16 segfault) was fixed by adding `mut`
+    # to the `new_cap := self.cap * 2` binding.
+    big: String := mut String.with_capacity(4)
     LF i: 0..50 {
         big.push_char(65 + (i % 26))
     }
