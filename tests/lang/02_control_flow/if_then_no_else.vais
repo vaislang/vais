@@ -1,0 +1,14 @@
+# CHECKS: if-then with no else, just a side effect.
+F main() -> i64 {
+    sum: i64 := mut 0
+    LF i: 0..10 {
+        I (i & 1) == 0 { sum = sum + i }
+    }
+    # 0+2+4+6+8 = 20
+    I sum != 20 { R 1 }
+
+    flag: i64 := mut 0
+    I sum > 0 { flag = 1 }
+    I flag != 1 { R 2 }
+    R 0
+}

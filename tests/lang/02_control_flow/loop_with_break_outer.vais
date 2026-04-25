@@ -1,0 +1,12 @@
+# CHECKS: outer loop terminates when inner block sets a flag and breaks.
+F main() -> i64 {
+    n: i64 := mut 0 - 5
+    found: i64 := mut 0
+    L {
+        I n >= 0 { found = n * 2 B }
+        n = n + 1
+    }
+    I found != 0 { R 1 }   # n reaches 0 → found = 0
+    I n != 0 { R 2 }
+    R 0
+}

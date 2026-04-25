@@ -1,0 +1,38 @@
+# XFAIL: `Vec<Color> := mut vec_new()` fails TC — vec_new() returns Vec<i64> by
+# default and the unifier can't promote it to Vec<Color> from the annotation.
+# Tracked as Phase 0 finding C16. Workaround: explicit type annotation on
+# vec_new doesn't help because the call site is monomorphized eagerly.
+#
+# CHECKS: Vec<EnumType> push and iteration.
+U std/vec.{vec_new};
+
+EN Color {
+    Red,
+    Green,
+    Blue
+}
+
+F color_code(c: Color) -> i64 {
+    M c {
+        Red => 1,
+        Green => 2,
+        Blue => 3
+    }
+}
+
+F main() -> i64 {
+    v: Vec<Color> := mut vec_new()
+    v.push(Red)
+    v.push(Green)
+    v.push(Blue)
+    v.push(Red)
+    I v.len() != 4 { R 1 }
+
+    sum: i64 := mut 0
+    LF i: 0..v.len() {
+        sum = sum + color_code(v[i])
+    }
+    # 1+2+3+1 = 7
+    I sum != 7 { R 2 }
+    R 0
+}

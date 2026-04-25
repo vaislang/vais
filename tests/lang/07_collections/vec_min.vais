@@ -1,0 +1,28 @@
+# CHECKS: find min value in Vec<i64>.
+U std/vec.{vec_new};
+
+F vec_min(v: &Vec<i64>) -> i64 {
+    I v.len() == 0 { R 0 }
+    best: i64 := mut v[0]
+    LF i: 1..v.len() {
+        I v[i] < best { best = v[i] }
+    }
+    best
+}
+
+F main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    v.push(3)
+    v.push(1)
+    v.push(7)
+    v.push(2)
+    v.push(5)
+    I vec_min(&v) != 1 { R 1 }
+
+    n: Vec<i64> := mut vec_new()
+    n.push(0 - 5)
+    n.push(0 - 3)
+    n.push(0 - 10)
+    I vec_min(&n) != 0 - 10 { R 2 }
+    R 0
+}

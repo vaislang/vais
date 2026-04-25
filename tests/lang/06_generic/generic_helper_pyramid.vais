@@ -1,0 +1,19 @@
+# XFAIL: pyramid of generic helpers (`id<T>`/`twice<T>`/`triple<T>`) — link
+# fails with undefined `_id`, `_twice` references. Cascade specialization
+# generates `id$i64`/`twice$i64`/`triple$i64` for the i64 path but also
+# emits unspecialized `id`/`twice` references inside `twice$T`/`triple$T`
+# fallbacks (the un-instantiated specs from the Phase 0 fallback path).
+# Tracked as Phase 0 finding C17.
+#
+# CHECKS: pyramid of generic-fn instantiations sharing a base.
+F id<T>(x: T) -> T { x }
+F twice<T>(x: T) -> T { id(id(x)) }
+F triple<T>(x: T) -> T { id(twice(x)) }
+
+F main() -> i64 {
+    I id(1) != 1 { R 1 }
+    I twice(2) != 2 { R 2 }
+    I triple(3) != 3 { R 3 }
+    I triple(triple(triple(7))) != 7 { R 4 }
+    R 0
+}

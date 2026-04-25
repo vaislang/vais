@@ -1,0 +1,29 @@
+# CHECKS: brute-force two-sum problem.
+U std/vec.{vec_new};
+
+F two_sum(v: &Vec<i64>, target: i64) -> i64 {
+    LF i: 0..v.len() {
+        LF j: i + 1..v.len() {
+            I v[i] + v[j] == target { R i * 100 + j }
+        }
+    }
+    0 - 1
+}
+
+F main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    v.push(2)
+    v.push(7)
+    v.push(11)
+    v.push(15)
+
+    # 2 + 7 = 9 → indices 0,1 → 1
+    I two_sum(&v, 9) != 1 { R 1 }
+    # 2 + 15 = 17 → 0,3 → 3
+    I two_sum(&v, 17) != 3 { R 2 }
+    # 7 + 11 = 18 → 1,2 → 102
+    I two_sum(&v, 18) != 102 { R 3 }
+    # not found
+    I two_sum(&v, 100) != 0 - 1 { R 4 }
+    R 0
+}
