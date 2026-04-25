@@ -50,14 +50,29 @@ impl CodeGenerator {
         if !self.ref_constants.is_empty() {
             ir.push('\n');
         }
+        // Note: `abort()` is also declared by `function_gen/runtime.rs`
+        // alongside the `__panic_with_value` helper. To avoid LLVM
+        // "invalid redefinition" verifier errors when both `needs_*` flags
+        // and the standard runtime helpers are emitted in the same module,
+        // we declare `abort` here only when the runtime helpers are
+        // suppressed (currently the WASM-unknown target).
+        let abort_declared_by_runtime = !matches!(
+            self.target,
+            TargetTriple::Wasm32Unknown
+        );
         if self.needs_unwrap_panic {
             ir.push_str("@.unwrap_panic_msg = private unnamed_addr constant [22 x i8] c\"unwrap failed: panic!\\00\"\n");
-            ir.push_str("declare void @abort()\n\n");
-        } else if self.needs_bounds_check {
+            if !abort_declared_by_runtime {
+                ir.push_str("declare void @abort()\n\n");
+            }
+        } else if self.needs_bounds_check && !abort_declared_by_runtime {
             // Bounds check uses abort() for OOB access
             ir.push_str("declare void @abort()\n\n");
         }
-        if self.needs_llvm_memcpy {
+        // Same dedup story for `llvm.memcpy.p0i8.p0i8.i64` — declared by
+        // runtime helpers next to `__memcpy`. Re-declare here only when
+        // those helpers are not emitted.
+        if self.needs_llvm_memcpy && !abort_declared_by_runtime {
             ir.push_str("declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i1)\n\n");
         }
     }

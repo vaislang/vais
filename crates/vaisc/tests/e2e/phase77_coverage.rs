@@ -237,7 +237,7 @@ fn e2e_p77_nested_ternary() {
         r#"
         F main() -> i64 {
             x := 10
-            r := x > 20 ? 3 : 0
+            r := mut x > 20 ? 3 : 0
             I r == 0 {
                 r = x > 5 ? 2 : 1
             }

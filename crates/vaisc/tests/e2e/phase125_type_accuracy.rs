@@ -15,7 +15,7 @@ fn e2e_p125_void_if_no_else() {
     // If without else produces void — should not crash
     let source = r#"
 F main() -> i64 {
-    x := 10
+    x := mut 10
     I x > 5 {
         x = 20
     }

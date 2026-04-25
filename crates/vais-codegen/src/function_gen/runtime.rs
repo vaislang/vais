@@ -958,7 +958,10 @@ impl CodeGenerator {
         ir.push_str("; LLVM WASM intrinsics\n");
         ir.push_str("declare i32 @llvm.wasm.memory.size.i32(i32)\n");
         ir.push_str("declare i32 @llvm.wasm.memory.grow.i32(i32, i32)\n");
-        ir.push_str("declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i1)\n\n");
+        // Note: `llvm.memcpy.p0i8.p0i8.i64` is already declared by
+        // `generate_helper_functions` (next to `__memcpy`). Re-declaring it
+        // here triggered LLVM "invalid redefinition" verifier errors when
+        // the WASM target is selected alongside the standard helpers.
 
         // _start entry point that calls main
         ir.push_str("; _start entry point (calls main)\n");

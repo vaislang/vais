@@ -131,7 +131,7 @@ A F compute(x: i64) -> i64 {
 }
 
 F main() -> i64 {
-    result := compute(21).await
+    result := mut compute(21).await
     println("result = {}", result)
     0
 }

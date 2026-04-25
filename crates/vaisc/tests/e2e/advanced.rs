@@ -48,10 +48,10 @@ F classify(n: i64) -> i64 {
 }
 
 F main() -> i64 {
-    a := classify(200)
-    b := classify(75)
-    c := classify(25)
-    d := classify(0)
+    a := mut classify(200)
+    b := mut classify(75)
+    c := mut classify(25)
+    d := mut classify(0)
     # a=3, b=2, c=1, d=0 → sum=6
     a + b + c + d
 }
@@ -97,8 +97,8 @@ F mul(a: i64, b: i64) -> i64 { a * b }
 F square(n: i64) -> i64 { mul(n, n) }
 
 F main() -> i64 {
-    a := add(3, 4)
-    b := square(3)
+    a := mut add(3, 4)
+    b := mut square(3)
     # a=7, b=9 → 7+9=16
     add(a, b)
 }
@@ -831,7 +831,7 @@ S ByteBuffer {
 }
 X ByteBuffer {
     F with_capacity(c: i64) -> ByteBuffer {
-        cap := I c < 16 { 16 } E { c }
+        cap := mut I c < 16 { 16 } E { c }
         d := malloc(cap)
         ByteBuffer { data: d, len: 0, cap: cap, pos: 0 }
     }
@@ -939,7 +939,7 @@ S ByteBuffer {
 }
 X ByteBuffer {
     F with_capacity(c: i64) -> ByteBuffer {
-        cap := I c < 16 { 16 } E { c }
+        cap := mut I c < 16 { 16 } E { c }
         d := malloc(cap)
         ByteBuffer { data: d, len: 0, cap: cap, pos: 0 }
     }

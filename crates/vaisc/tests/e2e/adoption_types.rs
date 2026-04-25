@@ -195,7 +195,7 @@ fn test_float_printf_binop() {
     let source = r#"
 F main() -> i64 {
     x := 3.14
-    result := x + 1.0
+    result := mut x + 1.0
     printf("result = %f\n", result)
     0
 }

@@ -2250,9 +2250,9 @@ F main() -> i64 {
     tail = tail + 1
 
     # Drain 2
-    v1 := load_i64(buf + (head % cap) * 8)
+    v1 := mut load_i64(buf + (head % cap) * 8)
     head = head + 1
-    v2 := load_i64(buf + (head % cap) * 8)
+    v2 := mut load_i64(buf + (head % cap) * 8)
     head = head + 1
 
     # Wraparound: add 2 more (tail=3,4 -> slots 0,1)
@@ -2262,11 +2262,11 @@ F main() -> i64 {
     tail = tail + 1
 
     # Read remaining 3 items (3, 4, 5)
-    v3 := load_i64(buf + (head % cap) * 8)
+    v3 := mut load_i64(buf + (head % cap) * 8)
     head = head + 1
-    v4 := load_i64(buf + (head % cap) * 8)
+    v4 := mut load_i64(buf + (head % cap) * 8)
     head = head + 1
-    v5 := load_i64(buf + (head % cap) * 8)
+    v5 := mut load_i64(buf + (head % cap) * 8)
     head = head + 1
 
     free(buf)
@@ -2829,11 +2829,11 @@ F main() -> i64 {
     # Test equal strings
     s1 := str_to_ptr("output")
     s2 := str_to_ptr("output")
-    eq1 := str_eq(s1, s2)
+    eq1 := mut str_eq(s1, s2)
 
     # Test different strings
     s3 := str_to_ptr("verbose")
-    eq2 := str_eq(s1, s3)
+    eq2 := mut str_eq(s1, s3)
 
     # Should be: eq1=1, eq2=0
     I eq1 == 1 && eq2 == 0 { 1 } E { 0 }

@@ -14,12 +14,12 @@
 | 04_struct | 33 | 33/33 | ✅ |
 | 05_enum | 27 | 27/27 | ✅ |
 | 06_generic | 28 | 28/28 | ✅ |
-| 07_collections | 21 | 21/21 | ✅ |
+| 07_collections | 22 | 22/22 | ✅ |
 | 08_strings | 11 | 11/11 | ✅ |
 | 09_traits | 4 | 4/4 | ✅ |
 | 10_ffi | 3 | 3/3 | ✅ |
 | 99_integration | 68 | 68/68 | ✅ |
-| **Total** | **310** | **310/310 (100%) — ALL GREEN, ZERO XFAIL** | 🎉 |
+| **Total** | **311** | **311/311 (100%) — ALL GREEN, ZERO XFAIL** | 🎉 |
 
 Run yourself:
 ```bash
@@ -78,13 +78,22 @@ The `vais-codegen` crate currently houses two parallel lowering paths:
   stdlib self-tests, hello world examples, and bootstrap_tests all exercise.
   All four green: lang 310/310, stdlib 7/7, hello 12/12, bootstrap 17/17.
 - **Text-IR** (used by `crates/vaisc/tests/e2e/`) — older string-based
-  emit path. As of 2026-04-25, ~176 / 2625 e2e tests fail (predates the
-  Phase 0 commit series; verified by running pre-C12 commit). Most
-  failures cluster on `strstr`/`strncmp` runtime decl duplication, str
-  comparison, format/HTTP/atomics. **Tracked as separate cleanup work,
-  not blocking v1.0** — the text-IR backend will be retired in favour of
-  inkwell once the remaining few features (rare async patterns) are
-  ported. Until then, do not ship code that relies on text-IR-only
+  emit path. As of 2026-04-26, **19 / 2625 e2e tests fail** (down from
+  176 after dedup of strstr/abort/llvm.memcpy duplicate declarations
+  and a 130-binding `:= mut` patch across e2e test source files for
+  C2-strict bindings). Remaining failures cluster on:
+    * `phase109_bounds_check::slice_*` (5) — slice fat-pointer ABI
+      mismatch in let-binding `s := arr[0..N]` indexing path.
+    * `async_runtime::e2e_http_*` (8) — URL parsing depending on the
+      slice ABI gap above plus a few str helpers.
+    * `phase76_pilot::e2e_p76_pilot_*` (3) — large json2toml/REST
+      pilot programs that hit the same slice ABI gap.
+    * `concurrency::e2e_sync_atomics`, `e2e_thread_sleep_yield` (2),
+      `phase158_type_strict::e2e_phase158_strict_explicit_cast_bool_to_i64` (1).
+  **All 19 are text-IR-only**; the inkwell backend (which is what
+  `vaisc build` uses) handles the same patterns correctly — covered by
+  the lang/stdlib suites above. Text-IR backend will be retired in
+  favour of inkwell. Do not ship code that relies on text-IR-only
   codepaths.
 
 ### Auxiliary (best-effort)
@@ -140,7 +149,7 @@ should — see TODO):
 | match arm phi narrow-int width | `tests/lang/03_match/match_phi_narrow_int.vais` | ✅ landed |
 | Specialized enum match (`%Unknown`) | `tests/lang/05_enum/result_specialized_match.vais` | ✅ landed |
 | Enum payload of >8B struct | `tests/lang/05_enum/enum_struct_payload.vais` | ✅ landed |
-| Vec→slice auto-coercion | TODO `tests/lang/07_collections/vec_to_slice.vais` | pending (codegen gap, separate work) |
+| Vec→slice via explicit `&v[0..v.len()]` | `tests/lang/07_collections/vec_to_slice.vais` | ✅ landed (implicit coercion `f(v)` without `&` remains a separate enhancement) |
 | `slice.to_vec()` builtin | (stdlib gap, not lang feature) | n/a |
 
 ## Active Work

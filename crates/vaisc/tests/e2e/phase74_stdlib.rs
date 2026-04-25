@@ -50,7 +50,7 @@ F main() -> i64 {
     s := str_to_ptr("  hello  ")
     trimmed := str_trim(s, 9)
     # Check length by counting bytes
-    result := 0
+    result := mut 0
     I load_byte(trimmed) == 104 { result = result + 1 }     # 'h'
     I load_byte(trimmed + 1) == 101 { result = result + 1 } # 'e'
     I load_byte(trimmed + 2) == 108 { result = result + 1 } # 'l'
@@ -86,7 +86,7 @@ F main() -> i64 {
     s := str_to_ptr("hello")
     upper := str_to_upper(s, 5)
     # "HELLO" = 72, 69, 76, 76, 79
-    result := 0
+    result := mut 0
     I load_byte(upper) == 72 { result = result + 1 }
     I load_byte(upper + 1) == 69 { result = result + 1 }
     I load_byte(upper + 2) == 76 { result = result + 1 }
@@ -121,7 +121,7 @@ F main() -> i64 {
     s := str_to_ptr("WORLD")
     lower := str_to_lower(s, 5)
     # "world" = 119, 111, 114, 108, 100
-    result := 0
+    result := mut 0
     I load_byte(lower) == 119 { result = result + 1 }
     I load_byte(lower + 1) == 111 { result = result + 1 }
     I load_byte(lower + 2) == 114 { result = result + 1 }
@@ -300,7 +300,7 @@ F str_from_int(n: i64) -> i64 {
     val := I n < 0 { 0 - n } E { n }
     tmp := malloc(24)
     digit_count := str_from_int_digits(tmp, val, 0)
-    pos := 0
+    pos := mut 0
     I is_neg == 1 {
         store_byte(buf, 45)
         pos = 1
@@ -313,7 +313,7 @@ F str_from_int(n: i64) -> i64 {
 F main() -> i64 {
     # Convert 42 to string, check "42"
     s := str_from_int(42)
-    result := 0
+    result := mut 0
     I load_byte(s) == 52 { result = result + 1 }     # '4'
     I load_byte(s + 1) == 50 { result = result + 1 }  # '2'
     I load_byte(s + 2) == 0 { result = result + 1 }   # null
@@ -425,7 +425,7 @@ F main() -> i64 {
     store_i64(p + 16, 2)
     # Skip '-'
     toml_advance(p)
-    val := toml_parse_digits(p, 0)
+    val := mut toml_parse_digits(p, 0)
     free(p)
     # Return 100 - val = 95
     100 - val
@@ -458,7 +458,7 @@ F main() -> i64 {
     c1 := toml_advance(p)
     c2 := toml_advance(p)
     c3 := toml_advance(p)
-    result := 0
+    result := mut 0
     I c0 == 116 { result = result + 1 }
     I c1 == 114 { result = result + 1 }
     I c2 == 117 { result = result + 1 }
@@ -513,11 +513,11 @@ F main() -> i64 {
     store_i64(p + 8, 0)
     store_i64(p + 16, 11)
 
-    key_len := parse_bare_key_len(p, 0)   # 4 ("port")
+    key_len := mut parse_bare_key_len(p, 0)   # 4 ("port")
     toml_skip_ws(p)
     toml_advance(p)    # '='
     toml_skip_ws(p)
-    val := toml_parse_digits(p, 0)   # 8080
+    val := mut toml_parse_digits(p, 0)   # 8080
     free(p)
 
     # key_len=4, val=8080
@@ -717,7 +717,7 @@ F table_set(tbl: i64, key: i64, key_len: i64, value: i64) -> i64 {
     entry_ptr := load_i64(buckets + h * 8)
     store_i64(new_entry + 24, entry_ptr)
     store_i64(buckets + h * 8, new_entry)
-    size := load_i64(tbl + 8) + 1
+    size := mut load_i64(tbl + 8) + 1
     store_i64(tbl + 8, size)
     1
 }
@@ -748,14 +748,14 @@ F main() -> i64 {
     k2 := str_to_ptr("score")
     table_set(tbl, k2, 5, 99)
     # Get "age"
-    age := table_get(tbl, k1, 3)
+    age := mut table_get(tbl, k1, 3)
     # Get "score"
-    score := table_get(tbl, k2, 5)
+    score := mut table_get(tbl, k2, 5)
     # Get missing key
     k3 := str_to_ptr("missing")
-    missing := table_get(tbl, k3, 7)
+    missing := mut table_get(tbl, k3, 7)
     # size
-    size := load_i64(tbl + 8)
+    size := mut load_i64(tbl + 8)
     # age=25, score=99, missing=0, size=2
     age + score / 10 + missing + size  # 25 + 9 + 0 + 2 = 36
 }
@@ -929,7 +929,7 @@ F main() -> i64 {
     result_bs := I backslash == 92 { 92 } E { backslash }
 
     # Check: \n=10, \t=9, \\=92
-    r := 0
+    r := mut 0
     I result_n == 10 { r = r + 1 }
     I result_t == 9 { r = r + 1 }
     I result_bs == 92 { r = r + 1 }

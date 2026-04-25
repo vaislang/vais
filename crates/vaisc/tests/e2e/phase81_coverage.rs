@@ -1182,7 +1182,7 @@ F with_x(b: Builder, val: i64) -> Builder { Builder { x: val, y: b.y, z: b.z } }
 F with_y(b: Builder, val: i64) -> Builder { Builder { x: b.x, y: val, z: b.z } }
 F with_z(b: Builder, val: i64) -> Builder { Builder { x: b.x, y: b.y, z: val } }
 F main() -> i64 {
-    b := new_builder()
+    b := mut new_builder()
     b = with_x(b, 10)
     b = with_y(b, 20)
     b = with_z(b, 12)
@@ -1330,7 +1330,7 @@ F peek(s: Stack) -> i64 {
 }
 
 F main() -> i64 {
-    s := new_stack()
+    s := mut new_stack()
     s = push(s, 10)
     s = push(s, 20)
     s = push(s, 42)

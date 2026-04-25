@@ -973,16 +973,16 @@ S OwnedString { data: i64, len: i64, cap: i64 }
 
 X OwnedString {
     F with_capacity(capacity: i64) -> OwnedString {
-        cap := I capacity < 16 { 16 } E { capacity }
-        data := malloc(cap)
+        cap := mut I capacity < 16 { 16 } E { capacity }
+        data := mut malloc(cap)
         store_byte(data, 0)
         OwnedString { data: data, len: 0, cap: cap }
     }
     F from_cstr(s: str) -> OwnedString {
         p := str_to_ptr(s)
-        len := strlen(s)
-        cap := len + 16
-        data := malloc(cap)
+        len := mut strlen(s)
+        cap := mut len + 16
+        data := mut malloc(cap)
         memcpy(data, p, len + 1)
         OwnedString { data: data, len: len, cap: cap }
     }
@@ -1097,7 +1097,7 @@ F ptr_str_eq_rec(a: i64, b: i64, i: i64) -> i64 {
 }
 F ptr_str_dup(p: i64) -> i64 {
     I p == 0 { R 0 }
-    len := str_len_raw(p, 0)
+    len := mut str_len_raw(p, 0)
     buf := malloc(len + 1)
     memcpy(buf, p, len + 1)
     buf
@@ -1116,7 +1116,7 @@ F init_buckets(buckets: i64, i: i64, cap: i64) -> i64 {
 S StringMap { buckets: i64, size: i64, cap: i64 }
 X StringMap {
     F with_capacity(capacity: i64) -> StringMap {
-        cap := I capacity < 8 { 8 } E { capacity }
+        cap := mut I capacity < 8 { 8 } E { capacity }
         buckets := malloc(cap * 8)
         init_buckets(buckets, 0, cap)
         StringMap { buckets: buckets, size: 0, cap: cap }
@@ -1184,8 +1184,8 @@ X StringMap {
 S OwnedString { data: i64, len: i64, cap: i64 }
 X OwnedString {
     F with_capacity(capacity: i64) -> OwnedString {
-        cap := I capacity < 16 { 16 } E { capacity }
-        data := malloc(cap)
+        cap := mut I capacity < 16 { 16 } E { capacity }
+        data := mut malloc(cap)
         store_byte(data, 0)
         OwnedString { data: data, len: 0, cap: cap }
     }
@@ -1436,8 +1436,8 @@ S ByteBuffer { data: i64, len: i64, cap: i64, pos: i64 }
 
 X ByteBuffer {
     F with_capacity(capacity: i64) -> ByteBuffer {
-        cap := I capacity < 16 { 16 } E { capacity }
-        data := malloc(cap)
+        cap := mut I capacity < 16 { 16 } E { capacity }
+        data := mut malloc(cap)
         ByteBuffer { data: data, len: 0, cap: cap, pos: 0 }
     }
     F ensure_capacity(&self, needed: i64) -> i64 {
@@ -1547,8 +1547,8 @@ S ByteBuffer { data: i64, len: i64, cap: i64, pos: i64 }
 
 X ByteBuffer {
     F with_capacity(capacity: i64) -> ByteBuffer {
-        cap := I capacity < 16 { 16 } E { capacity }
-        data := malloc(cap)
+        cap := mut I capacity < 16 { 16 } E { capacity }
+        data := mut malloc(cap)
         ByteBuffer { data: data, len: 0, cap: cap, pos: 0 }
     }
     F ensure_capacity(&self, needed: i64) -> i64 {
@@ -1678,8 +1678,8 @@ S ByteBuffer { data: i64, len: i64, cap: i64, pos: i64 }
 
 X ByteBuffer {
     F with_capacity(capacity: i64) -> ByteBuffer {
-        cap := I capacity < 16 { 16 } E { capacity }
-        data := malloc(cap)
+        cap := mut I capacity < 16 { 16 } E { capacity }
+        data := mut malloc(cap)
         ByteBuffer { data: data, len: 0, cap: cap, pos: 0 }
     }
     F ensure_capacity(&self, needed: i64) -> i64 {

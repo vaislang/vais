@@ -33,7 +33,7 @@ F main() -> i64 {
     mp_buf_write(buf, 192)
     data := load_i64(buf)
     len := load_i64(buf + 8)
-    result := 0
+    result := mut 0
     I len == 1 { result = result + 1 }
     I load_byte(data) == 192 { result = result + 1 }
     free(data)
@@ -73,7 +73,7 @@ F main() -> i64 {
     mp_encode_bool(buf, 1)
     data := load_i64(buf)
     len := load_i64(buf + 8)
-    result := 0
+    result := mut 0
     I len == 2 { result = result + 1 }
     I load_byte(data) == 194 { result = result + 1 }     # false
     I load_byte(data + 1) == 195 { result = result + 1 } # true
@@ -120,7 +120,7 @@ F main() -> i64 {
     mp_encode_int(buf, 127)
     data := load_i64(buf)
     len := load_i64(buf + 8)
-    result := 0
+    result := mut 0
     I len == 3 { result = result + 1 }
     I load_byte(data) == 0 { result = result + 1 }       # 0
     I load_byte(data + 1) == 42 { result = result + 1 }  # 42
@@ -164,7 +164,7 @@ F main() -> i64 {
     mp_encode_int(buf, 0 - 32)  # -32 -> 0xe0 (224)
     data := load_i64(buf)
     len := load_i64(buf + 8)
-    result := 0
+    result := mut 0
     I len == 3 { result = result + 1 }
     I load_byte(data) == 255 { result = result + 1 }      # -1
     I load_byte(data + 1) == 246 { result = result + 1 }  # -10
@@ -209,7 +209,7 @@ F main() -> i64 {
     mp_encode_int(buf, 200)
     data := load_i64(buf)
     len := load_i64(buf + 8)
-    result := 0
+    result := mut 0
     I len == 2 { result = result + 1 }
     I load_byte(data) == 204 { result = result + 1 }     # 0xcc prefix
     I load_byte(data + 1) == 200 { result = result + 1 } # value
@@ -259,7 +259,7 @@ F main() -> i64 {
     mp_encode_str(buf, s, 2)
     data := load_i64(buf)
     len := load_i64(buf + 8)
-    result := 0
+    result := mut 0
     I len == 3 { result = result + 1 }
     I load_byte(data) == 162 { result = result + 1 }    # 0xa0 + 2
     I load_byte(data + 1) == 72 { result = result + 1 } # 'H'
@@ -302,7 +302,7 @@ F main() -> i64 {
     mp_buf_write(buf, 3)
     data := load_i64(buf)
     len := load_i64(buf + 8)
-    result := 0
+    result := mut 0
     I len == 4 { result = result + 1 }
     I load_byte(data) == 147 { result = result + 1 }     # fixarray(3)
     I load_byte(data + 1) == 1 { result = result + 1 }
@@ -327,7 +327,7 @@ F main() -> i64 {
 
     # Decode: read byte, check range 0x00-0x7f
     b := load_byte(data)
-    result := 0
+    result := mut 0
     I b <= 127 {
         # It's a positive fixint, value = b
         I b == 42 { result = result + 10 }
@@ -348,7 +348,7 @@ F main() -> i64 {
     store_byte(data, 246)  # 0xf6 = -10 in negative fixint
 
     b := load_byte(data)
-    result := 0
+    result := mut 0
     I b >= 224 {
         # Negative fixint: value = b - 256
         val := b - 256
@@ -404,7 +404,7 @@ F main() -> i64 {
 
     data := load_i64(buf)
 
-    result := 0
+    result := mut 0
     v1 := mp_decode(data, 0)
     I v1 == 42 { result = result + 1 }
 
@@ -454,7 +454,7 @@ F main() -> i64 {
 
     data := load_i64(buf)
     len := load_i64(buf + 8)
-    result := 0
+    result := mut 0
     I len == 4 { result = result + 1 }
     I load_byte(data) == 129 { result = result + 1 }     # fixmap(1)
     I load_byte(data + 1) == 161 { result = result + 1 } # fixstr(1)
@@ -506,7 +506,7 @@ F main() -> i64 {
     pb_encode_varint(buf, 127)
     data := load_i64(buf)
     len := load_i64(buf + 8)
-    result := 0
+    result := mut 0
     I len == 3 { result = result + 1 }
     I load_byte(data) == 1 { result = result + 1 }
     I load_byte(data + 1) == 42 { result = result + 1 }
@@ -556,7 +556,7 @@ F main() -> i64 {
     pb_encode_varint(buf, 300)
     data := load_i64(buf)
     len := load_i64(buf + 8)
-    result := 0
+    result := mut 0
     I len == 2 { result = result + 1 }
     I load_byte(data) == 172 { result = result + 1 }    # 0xAC
     I load_byte(data + 1) == 2 { result = result + 1 }  # 0x02
@@ -642,7 +642,7 @@ F main() -> i64 {
 
     data := load_i64(buf)
 
-    result := 0
+    result := mut 0
     # Decode value 0 at pos 0
     v0 := pb_decode_varint_rec(data, 0, 0, 0)
     I v0 == 0 { result = result + 1 }
@@ -685,7 +685,7 @@ F pb_zigzag_decode(n: i64) -> i64 {
     E { 0 - half - 1 }
 }
 F main() -> i64 {
-    result := 0
+    result := mut 0
     # Encode tests
     I pb_zigzag_encode(0) == 0 { result = result + 1 }
     I pb_zigzag_encode(0 - 1) == 1 { result = result + 1 }
@@ -721,7 +721,7 @@ F pb_tag_wire_type(tag: i64) -> i64 {
     tag & 7
 }
 F main() -> i64 {
-    result := 0
+    result := mut 0
     # field 1, varint
     t1 := pb_make_tag(1, 0)
     I t1 == 8 { result = result + 1 }
@@ -780,14 +780,14 @@ F pb_encode_varint(buf: i64, value: i64) -> i64 {
 F main() -> i64 {
     buf := pb_buf_new()
     # tag for field 1, wire type 0
-    tag := (1 << 3) | 0
+    tag := mut (1 << 3) | 0
     pb_encode_varint(buf, tag)
     # value 150
     pb_encode_varint(buf, 150)
 
     data := load_i64(buf)
     len := load_i64(buf + 8)
-    result := 0
+    result := mut 0
     I len == 3 { result = result + 1 }
     I load_byte(data) == 8 { result = result + 1 }       # tag = 8
     I load_byte(data + 1) == 150 { result = result + 1 } # 150 & 127 | 128 = 150 (since 150 = 10010110, & 127 = 0010110 = 22, | 128 = 150)
@@ -842,7 +842,7 @@ F pb_encode_varint(buf: i64, value: i64) -> i64 {
 F main() -> i64 {
     buf := pb_buf_new()
     # tag for field 2, wire type 2 (length-delimited)
-    tag := (2 << 3) | 2
+    tag := mut (2 << 3) | 2
     pb_encode_varint(buf, tag)
     # string "testing" has length 7
     s := str_to_ptr("testing")
@@ -852,7 +852,7 @@ F main() -> i64 {
 
     data := load_i64(buf)
     len := load_i64(buf + 8)
-    result := 0
+    result := mut 0
     I len == 9 { result = result + 1 }     # 1 (tag) + 1 (len) + 7 (data)
     I load_byte(data) == 18 { result = result + 1 }     # tag = 18
     I load_byte(data + 1) == 7 { result = result + 1 }  # length = 7
@@ -906,14 +906,14 @@ F pb_write_fixed32(buf: i64, value: i64) -> i64 {
 F main() -> i64 {
     buf := pb_buf_new()
     # tag for field 3, wire type 5
-    tag := (3 << 3) | 5
+    tag := mut (3 << 3) | 5
     pb_encode_varint(buf, tag)
     # value 0x04030201 = 67305985
     pb_write_fixed32(buf, 67305985)
 
     data := load_i64(buf)
     len := load_i64(buf + 8)
-    result := 0
+    result := mut 0
     I len == 5 { result = result + 1 }
     I load_byte(data) == 29 { result = result + 1 }     # tag = (3<<3)|5 = 29
     I load_byte(data + 1) == 1 { result = result + 1 }  # LE byte 0
@@ -958,7 +958,7 @@ F main() -> i64 {
     pos_ptr := malloc(8)
     store_i64(pos_ptr, 0)
 
-    result := 0
+    result := mut 0
 
     # Read field 1 tag
     tag1 := pb_decode_varint_rec(msg, pos_ptr, 0, 0)
@@ -1050,7 +1050,7 @@ F main() -> i64 {
     pdata := load_i64(parent)
     plen := load_i64(parent + 8)
 
-    result := 0
+    result := mut 0
     # Parent should be: tag(26) + len(2) + [tag(8), value(42)]
     I plen == 4 { result = result + 1 }
     I load_byte(pdata) == 26 { result = result + 1 }     # parent tag
@@ -1079,7 +1079,7 @@ fn e2e_p80_msgpack_vs_json_size() {
 F main() -> i64 {
     # Manually construct msgpack for {"a":1,"b":2,"c":3}
     buf := malloc(256)
-    pos := 0
+    pos := mut 0
 
     # fixmap with 3 entries
     store_byte(buf + pos, 131)  # 0x83
@@ -1108,7 +1108,7 @@ F main() -> i64 {
     json_size := 19
     msgpack_size := pos
 
-    result := 0
+    result := mut 0
     I msgpack_size == 10 { result = result + 1 }
     I msgpack_size < json_size { result = result + 1 }
 
@@ -1162,7 +1162,7 @@ F main() -> i64 {
     pb_len := load_i64(buf + 8)
     json_len := 25  # {"field1":42,"field2":300}
 
-    result := 0
+    result := mut 0
     I pb_len == 5 { result = result + 1 }
     I pb_len < json_len { result = result + 1 }
 

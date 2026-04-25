@@ -39,7 +39,7 @@ F main() -> i64 {
     store_i64(v + 16, 0) # extra = 0
     tag := load_i64(v)
     data := load_i64(v + 8)
-    result := 0
+    result := mut 0
     I tag == 2 { result = result + 1 }
     I data == 42 { result = result + 1 }
     free(v)
@@ -106,7 +106,7 @@ F buf_push_byte(b: i64, c: i64) -> i64 {
 
 F main() -> i64 {
     b := buf_new()
-    result := 0
+    result := mut 0
     I buf_len(b) == 0 { result = result + 1 }
     I buf_cap(b) == 16 { result = result + 1 }
 
@@ -217,7 +217,7 @@ F obj_get(obj: i64, key: i64, key_len: i64) -> i64 {
 
 F main() -> i64 {
     obj := obj_new()
-    result := 0
+    result := mut 0
 
     # Set key "age" = 42
     obj_set(obj, str_to_ptr("age"), 3, 42)
@@ -285,7 +285,7 @@ F i64_to_str(n: i64) -> i64 {
 }
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
 
     # Test 0
     s0 := i64_to_str(0)
@@ -353,7 +353,7 @@ F arr_get(a: i64, idx: i64) -> i64 { load_i64(load_i64(a) + idx * 8) }
 
 F main() -> i64 {
     a := arr_new()
-    result := 0
+    result := mut 0
 
     I arr_len(a) == 0 { result = result + 1 }
 
@@ -398,7 +398,7 @@ F needs_quoting_rec(key: i64, len: i64, idx: i64) -> i64 {
 }
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
 
     # "name" should not need quoting (bare key)
     I needs_quoting(str_to_ptr("name"), 4) == 0 { result = result + 1 }
@@ -432,7 +432,7 @@ F process_entry(entry: i64, count: i64) -> i64 {
 }
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     I process_entry(0, 5) == 5 { result = result + 1 }
     I process_entry(10, 3) == 13 { result = result + 1 }
     I process_entry(0, 0) == 0 { result = result + 1 }

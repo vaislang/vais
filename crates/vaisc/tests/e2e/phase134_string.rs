@@ -241,7 +241,7 @@ fn e2e_p134_str_compare_chained() {
         r#"
 F main() -> i64 {
     x := "alpha"
-    result := 0
+    result := mut 0
     I x == "alpha" { result = 42 }
     result
 }

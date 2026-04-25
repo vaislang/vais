@@ -68,7 +68,7 @@ F main() -> i64 {
     store_byte(text + 4, 121)
     store_byte(text + 5, 0)
 
-    result := 0
+    result := mut 0
     # Score 1: pattern successfully compiled (nodes created)
     result = result + 1
     # Score 2: match found at position 1
@@ -161,7 +161,7 @@ F main() -> i64 {
     store_byte(t2 + 2, 99)
     store_byte(t2 + 3, 0)
 
-    result := 0
+    result := mut 0
     I match_here(a_node, t1, 0, 3) == 1 { result = result + 1 }
     I match_here(a_node, t2, 0, 3) == 1 { result = result + 1 }
 
@@ -190,7 +190,7 @@ F match_here(regex: i64, text: i64, pos: i64, tlen: i64) -> i64 {
         I pos >= tlen { R 0 }
         ch := load_i64(regex + 8)
         I load_byte(text + pos) == ch {
-            next := load_i64(regex + 24)
+            next := mut load_i64(regex + 24)
             R match_here(next, text, pos + 1, tlen)
         }
         R 0
@@ -260,7 +260,7 @@ F main() -> i64 {
     store_byte(t2 + 3, 99)
     store_byte(t2 + 4, 0)
 
-    result := 0
+    result := mut 0
     I match_here(a_node, t1, 0, 2) == 1 { result = result + 1 }
     I match_here(a_node, t2, 0, 4) == 1 { result = result + 1 }
 
@@ -358,7 +358,7 @@ F main() -> i64 {
     store_byte(t2 + 1, 99)
     store_byte(t2 + 2, 0)
 
-    result := 0
+    result := mut 0
     I match_here(a_node, t1, 0, 3) == 1 { result = result + 1 }
     I match_here(a_node, t2, 0, 2) == 0 { result = result + 1 }
 
@@ -453,7 +453,7 @@ F main() -> i64 {
     store_byte(t2 + 2, 99)
     store_byte(t2 + 3, 0)
 
-    result := 0
+    result := mut 0
     I match_here(a_node, t1, 0, 2) == 1 { result = result + 1 }
     I match_here(a_node, t2, 0, 3) == 1 { result = result + 1 }
 
@@ -539,7 +539,7 @@ F main() -> i64 {
     store_byte(t2, 100)
     store_byte(t2 + 1, 0)
 
-    result := 0
+    result := mut 0
     I match_here(cls_node, t1, 0, 1) == 1 { result = result + 1 }
     I match_here(cls_node, t2, 0, 1) == 0 { result = result + 1 }
 
@@ -623,7 +623,7 @@ F main() -> i64 {
     store_byte(t2, 97)
     store_byte(t2 + 1, 0)
 
-    result := 0
+    result := mut 0
     I match_here(neg_node, t1, 0, 1) == 1 { result = result + 1 }
     I match_here(neg_node, t2, 0, 1) == 0 { result = result + 1 }
 
@@ -716,7 +716,7 @@ F main() -> i64 {
     store_byte(t2 + 3, 99)
     store_byte(t2 + 4, 0)
 
-    result := 0
+    result := mut 0
     # "abcdef" matches at start
     I match_anchored_start(a_node, t1, 6) == 1 { result = result + 1 }
     # "xabc" does NOT match at start (starts with 'x')
@@ -806,7 +806,7 @@ F main() -> i64 {
     store_byte(t2 + 3, 120)
     store_byte(t2 + 4, 0)
 
-    result := 0
+    result := mut 0
     I match_anchor_end(a_node, t1, 4) == 1 { result = result + 1 }
     I match_anchor_end(a_node, t2, 4) == 0 { result = result + 1 }
 
@@ -833,8 +833,8 @@ F match_here(regex: i64, text: i64, pos: i64, tlen: i64) -> i64 {
     I rtype == 0 { R 1 }
     I rtype == 3 {
         I pos >= tlen { R 0 }
-        lo := load_i64(regex + 8)
-        hi := load_i64(regex + 16)
+        lo := mut load_i64(regex + 8)
+        hi := mut load_i64(regex + 16)
         next := load_i64(regex + 24)
         c := load_byte(text + pos)
         I c >= lo && c <= hi {
@@ -878,7 +878,7 @@ F main() -> i64 {
     store_byte(t2, 53)
     store_byte(t2 + 1, 0)
 
-    result := 0
+    result := mut 0
     I match_here(rng, t1, 0, 1) == 1 { result = result + 1 }
     I match_here(rng, t2, 0, 1) == 0 { result = result + 1 }
 
@@ -951,7 +951,7 @@ F main() -> i64 {
     store_byte(t2 + 2, 98)
     store_byte(t2 + 3, 0)
 
-    result := 0
+    result := mut 0
     I match_here(a_node, t1, 0, 3) == 1 { result = result + 1 }
     I match_here(a_node, t2, 0, 3) == 0 { result = result + 1 }
 
@@ -1062,7 +1062,7 @@ F main() -> i64 {
     store_byte(t2 + 4, 111)
     store_byte(t2 + 5, 0)
 
-    result := 0
+    result := mut 0
     # Anchored start+end: try from pos 0 only, require reach end
     I match_here_end(uc_range, t1, 0, 5) == 1 { result = result + 1 }
     I match_here_end(uc_range, t2, 0, 5) == 0 { result = result + 1 }
@@ -1146,7 +1146,7 @@ F main() -> i64 {
     store_byte(text + 5, 51)
     store_byte(text + 6, 0)
 
-    result := 0
+    result := mut 0
     I match_search(digit_plus, text, 6) == 1 { result = result + 1 }
 
     free(text)
@@ -1208,7 +1208,7 @@ F main() -> i64 {
     empty := malloc(1)
     store_byte(empty, 0)
 
-    result := 0
+    result := mut 0
     # a* matches empty string (zero a's) -> success
     I match_here(star_a, empty, 0, 0) == 1 { result = result + 1 }
 
@@ -1281,7 +1281,7 @@ F main() -> i64 {
     store_byte(text + 2, 99)
     store_byte(text + 3, 0)
 
-    result := 0
+    result := mut 0
     # xyz should NOT be found in abc
     I match_search(x_node, text, 3) == 0 { result = result + 1 }
 
@@ -1307,7 +1307,7 @@ F http_is_success(code: i64) -> i64 {
 }
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     I http_is_success(200) == 1 { result = result + 1 }
     I http_is_success(201) == 1 { result = result + 1 }
     I http_is_success(299) == 1 { result = result + 1 }
@@ -1328,7 +1328,7 @@ F http_is_redirect(code: i64) -> i64 {
 }
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     I http_is_redirect(301) == 1 { result = result + 1 }
     I http_is_redirect(302) == 1 { result = result + 1 }
     I http_is_redirect(200) == 0 { result = result }
@@ -1348,7 +1348,7 @@ F http_is_client_error(code: i64) -> i64 {
 }
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     I http_is_client_error(400) == 1 { result = result + 1 }
     I http_is_client_error(404) == 1 { result = result + 1 }
     I http_is_client_error(499) == 1 { result = result }
@@ -1369,7 +1369,7 @@ F http_is_server_error(code: i64) -> i64 {
 }
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     I http_is_server_error(500) == 1 { result = result + 1 }
     I http_is_server_error(503) == 1 { result = result + 1 }
     I http_is_server_error(499) == 0 { result = result }
@@ -1392,7 +1392,7 @@ F hex_digit_value(c: i64) -> i64 {
 }
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     I hex_digit_value(48) == 0 { result = result + 1 }   # '0'
     I hex_digit_value(57) == 9 { result = result + 1 }   # '9'
     I hex_digit_value(97) == 10 { result = result + 1 }  # 'a'
@@ -1415,7 +1415,7 @@ F hex_nibble(v: i64) -> i64 {
 }
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     I hex_nibble(0) == 48 { result = result + 1 }   # '0'
     I hex_nibble(9) == 57 { result = result + 1 }   # '9'
     I hex_nibble(10) == 65 { result = result + 1 }  # 'A'
@@ -1469,7 +1469,7 @@ F main() -> i64 {
     # Encode 'a' (97) -> passes through as 'a'
     pos = url_encode_char(buf, pos, 97)
 
-    result := 0
+    result := mut 0
     # Space encodes to 3 chars: '%', '2', '0'
     I load_byte(buf) == 37 { result = result + 1 }   # '%'
     I load_byte(buf + 1) == 50 { result = result }   # '2'
@@ -1520,7 +1520,7 @@ F main() -> i64 {
 
     sz := parse_chunk_size(buf, 4)
 
-    result := 0
+    result := mut 0
     I sz == 26 { result = result + 1 }  # 0x1a = 26
 
     free(buf)
@@ -1540,7 +1540,7 @@ C CLIENT_PUT: i64 = 3
 C CLIENT_DELETE: i64 = 4
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     I CLIENT_GET == 1 { result = result + 1 }
     I CLIENT_POST == 2 { result = result + 1 }
     I CLIENT_PUT == 3 { result = result + 1 }
@@ -1613,7 +1613,7 @@ F main() -> i64 {
     store_byte(buf + pos, 0)
 
     # Expected length: 3+1+3+1+2+1+2 = 13
-    result := 0
+    result := mut 0
     I pos == 13 { result = result + 1 }
     # Verify '=' at position 3
     I load_byte(buf + 3) == 61 { result = result + 1 }
@@ -1649,7 +1649,7 @@ F sqlite_result_code(code: i64) -> i64 {
 }
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     # SQLITE_OK = 0 -> tag 0
     I sqlite_result_code(0) == 0 { result = result + 1 }
     # SQLITE_ERROR = 1 -> tag 1
@@ -1671,7 +1671,7 @@ F sqlite_is_ok(code: i64) -> i64 {
 }
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     I sqlite_is_ok(0) == 1 { result = result + 1 }
     I sqlite_is_ok(1) == 0 { result = result + 1 }
     result
@@ -1692,7 +1692,7 @@ F sqlite_has_row(code: i64) -> i64 {
 }
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     I sqlite_has_row(100) == 1 { result = result + 1 }
     I sqlite_has_row(101) == 0 { result = result + 1 }
     result
@@ -1713,7 +1713,7 @@ F sqlite_is_done(code: i64) -> i64 {
 }
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     I sqlite_is_done(101) == 1 { result = result + 1 }
     I sqlite_is_done(100) == 0 { result = result + 1 }
     result
@@ -1732,7 +1732,7 @@ C SQLITE_ROW: i64 = 100
 C SQLITE_DONE: i64 = 101
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     I SQLITE_OK == 0 { result = result + 1 }
     I SQLITE_ERROR == 1 { result = result + 1 }
     I SQLITE_ROW == 100 { result = result + 1 }
@@ -1754,7 +1754,7 @@ C SQLITE_BLOB: i64 = 4
 C SQLITE_NULL: i64 = 5
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     I SQLITE_INTEGER == 1 { result = result + 1 }
     I SQLITE_FLOAT == 2 { result = result + 1 }
     I SQLITE_TEXT == 3 { result = result + 1 }
@@ -1775,7 +1775,7 @@ C SQLITE_LOCKED: i64 = 6
 C SQLITE_READONLY: i64 = 8
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     I SQLITE_BUSY == 5 { result = result + 1 }
     I SQLITE_LOCKED == 6 { result = result + 1 }
     I SQLITE_READONLY == 8 { result = result + 1 }
@@ -1801,7 +1801,7 @@ F sqlite_classify_code(code: i64) -> i64 {
 }
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     # An invalid code like 999 should return tag 7 (unknown)
     I sqlite_classify_code(999) == 7 { result = result + 1 }
     result
@@ -1837,7 +1837,7 @@ F sqlite_is_terminal(code: i64) -> i64 {
 }
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     # OK is terminal but not a row
     I sqlite_is_ok(0) == 1 && sqlite_has_row(0) == 0 { result = result + 1 }
     # DONE is terminal and not a row
@@ -1858,7 +1858,7 @@ C SQLITE_CONSTRAINT: i64 = 19
 C SQLITE_MISMATCH: i64 = 20
 
 F main() -> i64 {
-    result := 0
+    result := mut 0
     I SQLITE_CONSTRAINT == 19 { result = result + 1 }
     I SQLITE_MISMATCH == 20 { result = result + 1 }
     result

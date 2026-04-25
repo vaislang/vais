@@ -95,7 +95,7 @@ fn error_assign_to_immutable_without_mut() {
     assert_exit_code(
         r#"
 F main() -> i64 {
-    x := 5
+    x := mut 5
     x = 10
     R x
 }

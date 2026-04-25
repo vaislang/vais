@@ -424,7 +424,7 @@ F main() -> i64 {
     printf("after store 10: %lld\n", v1)
 
     # Fetch add 5
-    old := __atomic_fetch_add_i64(ptr, 5)
+    old := mut __atomic_fetch_add_i64(ptr, 5)
     v2 := __atomic_load_i64(ptr)
     printf("after fetch_add 5: old=%lld new=%lld\n", old, v2)
 
@@ -587,10 +587,10 @@ F main() -> i64 {
 
     # Test basic operations by converting results to validation
     # sum should be ~5.14, diff ~1.14
-    sum_ok := I sum > 5.0 { I sum < 6.0 { 1 } E { 0 } } E { 0 }
-    diff_ok := I diff > 1.0 { I diff < 2.0 { 1 } E { 0 } } E { 0 }
-    prod_ok := I prod > 6.0 { I prod < 7.0 { 1 } E { 0 } } E { 0 }
-    quot_ok := I quot > 1.5 { I quot < 1.6 { 1 } E { 0 } } E { 0 }
+    sum_ok := mut I sum > 5.0 { I sum < 6.0 { 1 } E { 0 } } E { 0 }
+    diff_ok := mut I diff > 1.0 { I diff < 2.0 { 1 } E { 0 } } E { 0 }
+    prod_ok := mut I prod > 6.0 { I prod < 7.0 { 1 } E { 0 } } E { 0 }
+    quot_ok := mut I quot > 1.5 { I quot < 1.6 { 1 } E { 0 } } E { 0 }
 
     printf("sum_ok=%lld diff_ok=%lld prod_ok=%lld quot_ok=%lld\n", sum_ok, diff_ok, prod_ok, quot_ok)
 

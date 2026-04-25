@@ -863,12 +863,14 @@ impl CodeGenerator {
     }
 
     /// Generate extern declarations for string runtime functions (only new ones not in builtins)
+    /// Note: `strstr` is also declared by `function_gen/runtime.rs` (next to
+    /// the `__str_contains` definition that uses it). Skipping the duplicate
+    /// here avoids the LLVM "invalid redefinition" verifier error that
+    /// previously made 67 e2e tests fail.
     #[inline(never)]
     pub(crate) fn generate_string_extern_declarations(&self) -> String {
         let mut ir = String::with_capacity(256);
         ir.push_str("\n; String runtime extern declarations\n");
-        // strstr is new (not in builtins.rs)
-        ir.push_str("declare i8* @strstr(i8*, i8*)\n");
         ir.push_str("declare i32 @snprintf(i8*, i64, i8*, ...)\n");
         ir
     }
