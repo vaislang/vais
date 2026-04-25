@@ -1,0 +1,31 @@
+# CHECKS: pairwise sum of two Vec<i64>.
+U std/vec.{vec_new};
+
+F zip_sum(a: &Vec<i64>, b: &Vec<i64>) -> Vec<i64> {
+    out: Vec<i64> := mut vec_new()
+    I a.len() == b.len() {
+        LF i: 0..a.len() {
+            out.push(a[i] + b[i])
+        }
+    }
+    out
+}
+
+F main() -> i64 {
+    a: Vec<i64> := mut vec_new()
+    a.push(1)
+    a.push(2)
+    a.push(3)
+
+    b: Vec<i64> := mut vec_new()
+    b.push(10)
+    b.push(20)
+    b.push(30)
+
+    s: Vec<i64> := zip_sum(&a, &b)
+    I s.len() != 3 { R 1 }
+    I s[0] != 11 { R 2 }
+    I s[1] != 22 { R 3 }
+    I s[2] != 33 { R 4 }
+    R 0
+}

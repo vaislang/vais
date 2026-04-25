@@ -1,0 +1,22 @@
+# CHECKS: enum match with both unit + payload variants and `_` default.
+EN Sample {
+    None,
+    Single(i64),
+    Multiple(i64, i64)
+}
+
+F describe(s: Sample) -> i64 {
+    M s {
+        None => 0,
+        Single(x) => x,
+        Multiple(a, b) => a + b
+    }
+}
+
+F main() -> i64 {
+    I describe(None) != 0 { R 1 }
+    I describe(Single(42)) != 42 { R 2 }
+    I describe(Multiple(10, 20)) != 30 { R 3 }
+    I describe(Multiple(0 - 5, 5)) != 0 { R 4 }
+    R 0
+}

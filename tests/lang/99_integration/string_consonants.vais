@@ -1,0 +1,39 @@
+# CHECKS: count consonants (letters that aren't a/e/i/o/u, ignoring case).
+F is_vowel(c: i64) -> i64 {
+    I c == 65 || c == 69 || c == 73 || c == 79 || c == 85 { R 1 }
+    I c == 97 || c == 101 || c == 105 || c == 111 || c == 117 { R 1 }
+    0
+}
+
+F is_letter(c: i64) -> i64 {
+    I c >= 65 && c <= 90 { R 1 }
+    I c >= 97 && c <= 122 { R 1 }
+    0
+}
+
+F count_consonants(p: i64, n: i64) -> i64 {
+    count: i64 := mut 0
+    LF i: 0..n {
+        c: i64 := load_byte(p + i)
+        I is_letter(c) == 1 && is_vowel(c) == 0 {
+            count = count + 1
+        }
+    }
+    count
+}
+
+F main() -> i64 {
+    p1: i64 := str_to_ptr("hello world")
+    # h, l, l, w, r, l, d → 7
+    I count_consonants(p1, strlen(p1)) != 7 { R 1 }
+
+    p2: i64 := str_to_ptr("aeiou")
+    I count_consonants(p2, strlen(p2)) != 0 { R 2 }
+
+    p3: i64 := str_to_ptr("xyz")
+    I count_consonants(p3, strlen(p3)) != 3 { R 3 }
+
+    p4: i64 := str_to_ptr("123")
+    I count_consonants(p4, strlen(p4)) != 0 { R 4 }
+    R 0
+}

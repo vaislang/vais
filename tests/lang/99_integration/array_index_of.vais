@@ -1,0 +1,28 @@
+# CHECKS: linear search returning first matching index.
+U std/vec.{vec_new};
+
+F index_of(v: &Vec<i64>, target: i64) -> i64 {
+    LF i: 0..v.len() {
+        I v[i] == target { R i }
+    }
+    0 - 1
+}
+
+F main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    v.push(10)
+    v.push(20)
+    v.push(30)
+    v.push(20)
+    v.push(40)
+
+    I index_of(&v, 10) != 0 { R 1 }
+    I index_of(&v, 20) != 1 { R 2 }   # first occurrence
+    I index_of(&v, 30) != 2 { R 3 }
+    I index_of(&v, 40) != 4 { R 4 }
+    I index_of(&v, 99) != 0 - 1 { R 5 }
+
+    e: Vec<i64> := mut vec_new()
+    I index_of(&e, 0) != 0 - 1 { R 6 }
+    R 0
+}

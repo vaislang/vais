@@ -1,0 +1,32 @@
+# CHECKS: swap two fields of a struct in-place.
+S Box {
+    a: i64,
+    b: i64
+}
+
+X Box {
+    F new(a: i64, b: i64) -> Box { Box { a: a, b: b } }
+    F swap(&self) {
+        tmp: i64 := self.a
+        self.a = self.b
+        self.b = tmp
+    }
+    F sum(&self) -> i64 { self.a + self.b }
+    F diff(&self) -> i64 { self.a - self.b }
+}
+
+F main() -> i64 {
+    b: Box := mut Box.new(10, 20)
+    I b.a != 10 { R 1 }
+    I b.diff() != 0 - 10 { R 2 }
+
+    b.swap()
+    I b.a != 20 { R 3 }
+    I b.b != 10 { R 4 }
+    I b.diff() != 10 { R 5 }
+    I b.sum() != 30 { R 6 }
+
+    b.swap()
+    I b.a != 10 { R 7 }
+    R 0
+}
