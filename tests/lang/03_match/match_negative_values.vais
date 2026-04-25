@@ -1,0 +1,23 @@
+# CHECKS: match arm guards distinguish negative ranges (since literal `-100`
+# isn't a valid pattern — match patterns are restricted to atoms).
+F sign_class(n: i64) -> i64 {
+    M n {
+        x I x == 0 - 100 => 1,
+        x I x == 0 - 50  => 2,
+        0       => 3,
+        50      => 4,
+        100     => 5,
+        _       => 0
+    }
+}
+
+F main() -> i64 {
+    I sign_class(0 - 100) != 1 { R 1 }
+    I sign_class(0 - 50)  != 2 { R 2 }
+    I sign_class(0)       != 3 { R 3 }
+    I sign_class(50)      != 4 { R 4 }
+    I sign_class(100)     != 5 { R 5 }
+    I sign_class(7)       != 0 { R 6 }
+    I sign_class(0 - 1)   != 0 { R 7 }
+    R 0
+}

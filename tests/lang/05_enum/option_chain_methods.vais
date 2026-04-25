@@ -1,0 +1,30 @@
+# CHECKS: Option<i64> chain with bind-style transforms via match.
+F double_if_some(o: Option<i64>) -> Option<i64> {
+    M o {
+        Some(v) => Some(v * 2),
+        None    => None
+    }
+}
+
+F add_if_some(o: Option<i64>, addend: i64) -> Option<i64> {
+    M o {
+        Some(v) => Some(v + addend),
+        None    => None
+    }
+}
+
+F main() -> i64 {
+    a: Option<i64> := Some(5)
+    b: Option<i64> := double_if_some(a)
+    c: Option<i64> := add_if_some(b, 100)
+    cv: i64 := M c { Some(v) => v, None => 0 }
+    # 5 → 10 → 110
+    I cv != 110 { R 1 }
+
+    none_o: Option<i64> := None
+    d: Option<i64> := double_if_some(none_o)
+    e: Option<i64> := add_if_some(d, 100)
+    is_none: i64 := M e { Some(_) => 0, None => 1 }
+    I is_none != 1 { R 2 }
+    R 0
+}

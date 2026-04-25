@@ -1,0 +1,18 @@
+# CHECKS: generic fn calling another generic fn.
+F identity<T>(x: T) -> T {
+    x
+}
+
+F double_it<T>(x: T) -> T {
+    identity(x)   # generic call inside generic
+}
+
+F main() -> i64 {
+    a: i64 := identity(42)
+    I a != 42 { R 1 }
+    b: i64 := double_it(7)
+    I b != 7 { R 2 }
+    c: i64 := identity(identity(identity(99)))
+    I c != 99 { R 3 }
+    R 0
+}

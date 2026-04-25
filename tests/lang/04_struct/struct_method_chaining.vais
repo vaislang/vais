@@ -1,0 +1,26 @@
+# CHECKS: chain of method calls on a struct (each returns a new instance).
+S Builder {
+    val: i64
+}
+
+X Builder {
+    F new() -> Builder { Builder { val: 0 } }
+    F add(&self, x: i64) -> Builder { Builder { val: self.val + x } }
+    F mul(&self, x: i64) -> Builder { Builder { val: self.val * x } }
+    F get(&self) -> i64 { self.val }
+}
+
+F main() -> i64 {
+    a: Builder := Builder.new()
+    I a.get() != 0 { R 1 }
+
+    b: Builder := a.add(5)
+    I b.get() != 5 { R 2 }
+
+    c: Builder := b.mul(3)
+    I c.get() != 15 { R 3 }
+
+    d: Builder := c.add(2)
+    I d.get() != 17 { R 4 }
+    R 0
+}

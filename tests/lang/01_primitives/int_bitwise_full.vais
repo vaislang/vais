@@ -1,0 +1,26 @@
+# CHECKS: i64 bitwise AND, OR, XOR, NOT (via XOR with -1).
+F main() -> i64 {
+    a: i64 := 0xF0F0
+    b: i64 := 0x0F0F
+
+    # AND
+    I (a & b) != 0 { R 1 }
+    # OR
+    I (a | b) != 0xFFFF { R 2 }
+    # XOR
+    I (a ^ b) != 0xFFFF { R 3 }
+    # XOR-self = 0
+    I (a ^ a) != 0 { R 4 }
+
+    # specific bit ops
+    x: i64 := 13      # 0b1101
+    y: i64 := 11      # 0b1011
+    I (x & y) != 9    { R 5 }   # 0b1001
+    I (x | y) != 15   { R 6 }   # 0b1111
+    I (x ^ y) != 6    { R 7 }   # 0b0110
+
+    # shift
+    I (1 << 32) != 4294967296 { R 8 }
+    I ((0 - 1) >> 1) != 0 - 1 { R 9 }   # arithmetic shift on negative
+    R 0
+}
