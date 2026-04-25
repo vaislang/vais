@@ -273,6 +273,16 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         for func in &extern_block.functions {
             let fn_name = &func.name.node;
 
+            // Bug C12 fix: if a function with this name was already declared
+            // (e.g., a libm/runtime intrinsic auto-emitted by an earlier pass),
+            // reuse it instead of calling `module.add_function` a second time.
+            // LLVM would otherwise rename the duplicate to `<name>.1`, and
+            // call sites would emit references to the missing renamed symbol.
+            if let Some(existing) = self.module.get_function(fn_name) {
+                self.functions.insert(fn_name.clone(), existing);
+                continue;
+            }
+
             // Build parameter types
             let param_types: Vec<BasicMetadataTypeEnum> = func
                 .params
