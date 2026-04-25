@@ -1,0 +1,37 @@
+# CHECKS: sieve of Eratosthenes using Vec<i64> as bool array.
+U std/vec.{vec_new};
+
+F count_primes_below(n: i64) -> i64 {
+    is_composite: Vec<i64> := mut vec_new()
+    LF i: 0..n {
+        is_composite.push(0)
+    }
+
+    i: i64 := mut 2
+    LW i * i < n {
+        I is_composite[i] == 0 {
+            j: i64 := mut i * i
+            LW j < n {
+                is_composite[j] = 1
+                j = j + i
+            }
+        }
+        i = i + 1
+    }
+
+    count: i64 := mut 0
+    LF k: 2..n {
+        I is_composite[k] == 0 { count = count + 1 }
+    }
+    count
+}
+
+F main() -> i64 {
+    # primes below 10: 2, 3, 5, 7 → 4
+    I count_primes_below(10) != 4 { R 1 }
+    # primes below 20: 2,3,5,7,11,13,17,19 → 8
+    I count_primes_below(20) != 8 { R 2 }
+    # primes below 100: 25
+    I count_primes_below(100) != 25 { R 3 }
+    R 0
+}

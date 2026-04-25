@@ -1,0 +1,26 @@
+# CHECKS: iterate over a str's bytes via load_byte.
+F count_letter(p: i64, len: i64, target: i64) -> i64 {
+    count: i64 := mut 0
+    LF i: 0..len {
+        I load_byte(p + i) == target { count = count + 1 }
+    }
+    count
+}
+
+F main() -> i64 {
+    p: i64 := str_to_ptr("hello world")
+    n: i64 := strlen(p)
+    # 'l' = 108, three times in "hello world"
+    I count_letter(p, n, 108) != 3 { R 1 }
+    # 'o' = 111, twice
+    I count_letter(p, n, 111) != 2 { R 2 }
+    # ' ' = 32, once
+    I count_letter(p, n, 32) != 1 { R 3 }
+    # 'z' = 122, never
+    I count_letter(p, n, 122) != 0 { R 4 }
+
+    # empty string
+    p2: i64 := str_to_ptr("")
+    I count_letter(p2, strlen(p2), 65) != 0 { R 5 }
+    R 0
+}

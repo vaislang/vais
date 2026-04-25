@@ -1,0 +1,29 @@
+# CHECKS: hand-rolled string equality via byte comparison.
+F str_eq(a: i64, an: i64, b: i64, bn: i64) -> i64 {
+    I an != bn { R 0 }
+    LF i: 0..an {
+        I load_byte(a + i) != load_byte(b + i) { R 0 }
+    }
+    1
+}
+
+F main() -> i64 {
+    a: i64 := str_to_ptr("hello")
+    an: i64 := strlen(a)
+    b: i64 := str_to_ptr("hello")
+    bn: i64 := strlen(b)
+    I str_eq(a, an, b, bn) != 1 { R 1 }
+
+    c: i64 := str_to_ptr("world")
+    cn: i64 := strlen(c)
+    I str_eq(a, an, c, cn) != 0 { R 2 }
+
+    # different lengths
+    d: i64 := str_to_ptr("hi")
+    I str_eq(a, an, d, strlen(d)) != 0 { R 3 }
+
+    # both empty
+    e: i64 := str_to_ptr("")
+    I str_eq(e, 0, e, 0) != 1 { R 4 }
+    R 0
+}

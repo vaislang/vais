@@ -1,0 +1,17 @@
+# CHECKS: match arms with parenthesized expression bodies (multi-step but no let).
+F process(n: i64) -> i64 {
+    M n {
+        0 => 100 + 1,
+        1 => 200 + 50,
+        2 => (300 - 5) * 2,
+        _ => 0
+    }
+}
+
+F main() -> i64 {
+    I process(0) != 101 { R 1 }
+    I process(1) != 250 { R 2 }
+    I process(2) != 590 { R 3 }
+    I process(99) != 0 { R 4 }
+    R 0
+}

@@ -1,0 +1,38 @@
+# CHECKS: Result manual combinator chain (and_then equivalent).
+F divide(a: i64, b: i64) -> Result<i64, i64> {
+    I b == 0 { R Err(1) }
+    Ok(a / b)
+}
+
+F sub_one(a: i64) -> Result<i64, i64> {
+    I a == 0 { R Err(2) }
+    Ok(a - 1)
+}
+
+F chain(a: i64, b: i64) -> Result<i64, i64> {
+    r1: Result<i64, i64> := divide(a, b)
+    M r1 {
+        Ok(v)  => sub_one(v),
+        Err(e) => Err(e)
+    }
+}
+
+F main() -> i64 {
+    # 20/4 = 5 - 1 = 4
+    r1: Result<i64, i64> := chain(20, 4)
+    v1: i64 := M r1 { Ok(v) => v, Err(_) => 0 - 1 }
+    I v1 != 4 { R 1 }
+
+    # divide by 0 → Err(1)
+    r2: Result<i64, i64> := chain(10, 0)
+    e2: i64 := M r2 { Ok(_) => 0, Err(e) => e }
+    I e2 != 1 { R 2 }
+
+    # 1/1 = 1, sub_one → Err(2)
+    r3: Result<i64, i64> := chain(1, 1)
+    # wait, 1-1 = 0, but check sub_one(1): a==0? no, a==1, so Ok(0). So r3 is Ok(0).
+    # actually chain divides first: 1/1=1, then sub_one(1)=Ok(0)
+    v3: i64 := M r3 { Ok(v) => v, Err(_) => 0 - 1 }
+    I v3 != 0 { R 3 }
+    R 0
+}
