@@ -1,0 +1,35 @@
+# CHECKS: build a Vec<i64> of running maxima.
+U std/vec.{vec_new};
+
+F build_running_max(v: &Vec<i64>) -> Vec<i64> {
+    out: Vec<i64> := mut vec_new()
+    I v.len() != 0 {
+        cur: i64 := mut v[0]
+        out.push(cur)
+        LF i: 1..v.len() {
+            I v[i] > cur { cur = v[i] }
+            out.push(cur)
+        }
+    }
+    out
+}
+
+F main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    v.push(3)
+    v.push(1)
+    v.push(5)
+    v.push(2)
+    v.push(7)
+    v.push(4)
+
+    rm: Vec<i64> := build_running_max(&v)
+    I rm.len() != 6 { R 1 }
+    I rm[0] != 3 { R 2 }
+    I rm[1] != 3 { R 3 }
+    I rm[2] != 5 { R 4 }
+    I rm[3] != 5 { R 5 }
+    I rm[4] != 7 { R 6 }
+    I rm[5] != 7 { R 7 }
+    R 0
+}

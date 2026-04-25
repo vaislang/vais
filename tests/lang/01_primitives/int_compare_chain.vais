@@ -1,0 +1,18 @@
+# CHECKS: chained comparisons via &&.
+F main() -> i64 {
+    a: i64 := 5
+    # 0 <= a < 10
+    I 0 <= a && a < 10 {} EL { R 1 }
+    # negation
+    I !(a < 0 || a >= 10) {} EL { R 2 }
+
+    b: i64 := 100
+    I b > 50 && b < 200 {} EL { R 3 }
+
+    # complex
+    x: i64 := 7
+    y: i64 := 12
+    I x < y && x + y < 100 {} EL { R 4 }
+    I x > 0 && y > 0 && x + y > 10 {} EL { R 5 }
+    R 0
+}

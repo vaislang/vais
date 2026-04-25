@@ -1,0 +1,24 @@
+# CHECKS: nested match expressions.
+F outer(a: i64, b: i64) -> i64 {
+    M a {
+        0 => M b {
+            0 => 1,
+            _ => 2
+        },
+        1 => M b {
+            0 => 3,
+            _ => 4
+        },
+        _ => 5
+    }
+}
+
+F main() -> i64 {
+    I outer(0, 0) != 1 { R 1 }
+    I outer(0, 5) != 2 { R 2 }
+    I outer(1, 0) != 3 { R 3 }
+    I outer(1, 99) != 4 { R 4 }
+    I outer(7, 0) != 5 { R 5 }
+    I outer(7, 7) != 5 { R 6 }
+    R 0
+}

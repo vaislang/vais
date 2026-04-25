@@ -1,0 +1,31 @@
+# CHECKS: simple generic Container<T> with set/get patterns.
+S Container<T> {
+    items: T,
+    count: i64
+}
+
+X Container<T> {
+    F new(initial: T) -> Container<T> {
+        Container { items: initial, count: 0 }
+    }
+    F count(&self) -> i64 { self.count }
+    F bump(&self) {
+        self.count = self.count + 1
+    }
+}
+
+F main() -> i64 {
+    c: Container<i64> := mut Container.new(0)
+    I c.count() != 0 { R 1 }
+
+    c.bump()
+    c.bump()
+    c.bump()
+    I c.count() != 3 { R 2 }
+
+    LF i: 0..10 {
+        c.bump()
+    }
+    I c.count() != 13 { R 3 }
+    R 0
+}

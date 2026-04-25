@@ -1,0 +1,42 @@
+# CHECKS: dot product of two Vec<i64>.
+U std/vec.{vec_new};
+
+F dot(a: &Vec<i64>, b: &Vec<i64>) -> i64 {
+    I a.len() != b.len() { R 0 - 1 }
+    s: i64 := mut 0
+    LF i: 0..a.len() {
+        s = s + a[i] * b[i]
+    }
+    s
+}
+
+F main() -> i64 {
+    a: Vec<i64> := mut vec_new()
+    a.push(1)
+    a.push(2)
+    a.push(3)
+    a.push(4)
+
+    b: Vec<i64> := mut vec_new()
+    b.push(5)
+    b.push(6)
+    b.push(7)
+    b.push(8)
+    # 1*5 + 2*6 + 3*7 + 4*8 = 5+12+21+32 = 70
+    I dot(&a, &b) != 70 { R 1 }
+
+    # different lengths
+    c: Vec<i64> := mut vec_new()
+    c.push(1)
+    c.push(2)
+    I dot(&a, &c) != 0 - 1 { R 2 }
+
+    # zero vector
+    z: Vec<i64> := mut vec_new()
+    z.push(0)
+    z.push(0)
+    z.push(0)
+    z.push(0)
+    I dot(&a, &z) != 0 { R 3 }
+    R 0
+}
