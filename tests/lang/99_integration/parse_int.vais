@@ -1,0 +1,37 @@
+# CHECKS: parse a sequence of i64 digits into an integer using bytes.
+F digit_to_i64(c: i64) -> i64 {
+    I c < 48 { R 0 - 1 }   # '0' = 48
+    I c > 57 { R 0 - 1 }   # '9' = 57
+    c - 48
+}
+
+F parse_digits(p: i64, len: i64) -> i64 {
+    acc: i64 := mut 0
+    i: i64 := mut 0
+    L {
+        I i >= len { B acc }
+        c: i64 := load_byte(p + i)
+        d: i64 := digit_to_i64(c)
+        I d < 0 { B 0 - 1 }
+        acc = acc * 10 + d
+        i = i + 1
+    }
+}
+
+F main() -> i64 {
+    # "123" — parse each char
+    p: i64 := str_to_ptr("123")
+    n: i64 := strlen(p)
+    I parse_digits(p, n) != 123 { R 1 }
+
+    p2: i64 := str_to_ptr("0")
+    I parse_digits(p2, strlen(p2)) != 0 { R 2 }
+
+    p3: i64 := str_to_ptr("9999")
+    I parse_digits(p3, strlen(p3)) != 9999 { R 3 }
+
+    # invalid char in middle
+    p4: i64 := str_to_ptr("1a2")
+    I parse_digits(p4, strlen(p4)) != 0 - 1 { R 4 }
+    R 0
+}

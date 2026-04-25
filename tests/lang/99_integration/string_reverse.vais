@@ -1,0 +1,25 @@
+# CHECKS: bit-level reverse of an i64 — no string ops, but exercises shifts + |.
+F bit_reverse_8(byte: i64) -> i64 {
+    out: i64 := mut 0
+    LF i: 0..8 {
+        bit: i64 := (byte >> i) & 1
+        out = out | (bit << (7 - i))
+    }
+    out
+}
+
+F main() -> i64 {
+    # 0b00000001 → 0b10000000 = 128
+    I bit_reverse_8(1) != 128 { R 1 }
+    # 0b10000000 → 0b00000001 = 1
+    I bit_reverse_8(128) != 1 { R 2 }
+    # 0b11110000 (240) → 0b00001111 (15)
+    I bit_reverse_8(240) != 15 { R 3 }
+    # palindrome 0b10011001 (153) → itself
+    I bit_reverse_8(153) != 153 { R 4 }
+    # 0b00000000 → 0
+    I bit_reverse_8(0) != 0 { R 5 }
+    # 0b11111111 → itself
+    I bit_reverse_8(255) != 255 { R 6 }
+    R 0
+}

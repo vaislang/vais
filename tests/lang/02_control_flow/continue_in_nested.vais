@@ -1,0 +1,13 @@
+# CHECKS: `C` (continue) skips to next iteration of innermost loop only.
+F main() -> i64 {
+    sum: i64 := mut 0
+    LF i: 0..5 {
+        LF j: 0..10 {
+            I (j & 1) == 0 { C }   # skip even
+            sum = sum + j           # add 1, 3, 5, 7, 9
+        }
+    }
+    # Each outer iter adds 1+3+5+7+9 = 25; 5 iters total = 125
+    I sum != 125 { R 1 }
+    R 0
+}
