@@ -1081,6 +1081,19 @@ impl CodeGenerator {
                 _ => None,
             }
         });
+        // Phase 0 bug C4 fix: when this call is inside a specialized generic
+        // function body (e.g. inside `Mutex_lock$i64`), TC stamped the call's
+        // return type with the original generic params (e.g. `MutexGuard<T>`).
+        // Substitute those params using the current spec context so the
+        // mangled-name lookup below picks the right specialization
+        // (`MutexGuard_new$i64` instead of bare `MutexGuard_new`).
+        let expected_ret = expected_ret.map(|ty| {
+            if self.generics.substitutions.is_empty() {
+                ty
+            } else {
+                vais_types::substitute_type(&ty, &self.generics.substitutions)
+            }
+        });
         // Check if this is actually an enum variant constructor (EnumType.Variant(...))
         // e.g., Shape.Rect(10, 20) or Option.Some(42). Must be handled before the
         // static-method dispatch because there is no `EnumType_Variant` function to call.
@@ -1172,6 +1185,22 @@ impl CodeGenerator {
             && self.types.functions.contains_key(&base_method_name)
             && !(base_method_name == "Vec_new" && args.is_empty()
                 && matches!(&expected_ret, Some(ResolvedType::Named { generics, .. }) if !generics.is_empty()))
+            // Phase 0 bug C4 fix (part 2): when this call is inside a
+            // specialized generic body (substitutions non-empty), don't take
+            // the bare-base-name shortcut if the type carries generics — try
+            // to specialize on demand using either expected_ret or struct's
+            // type params. Without this skip, calls like `MutexGuard::new(&self)`
+            // inside `Mutex_lock$i64` resolve to bare `MutexGuard_new` (which
+            // returns the unspecialized `%MutexGuard`) and fail link with a
+            // type mismatch against the specialized return slot.
+            && !(self.generics.struct_defs.contains_key(&type_name.node)
+                 && !self.generics.substitutions.is_empty()
+                 && matches!(
+                     &expected_ret,
+                     Some(ResolvedType::Named { generics, .. }) if !generics.is_empty()
+                         && generics.iter().all(|g| !matches!(g,
+                             ResolvedType::Generic(_) | ResolvedType::Var(_)))
+                 ))
         {
             // Already found directly — use as-is.
             // Phase 17.H4.11: but skip this shortcut for `Vec.new()` when
@@ -1212,6 +1241,21 @@ impl CodeGenerator {
                 base_method_name.clone()
             }
         } else if self.generics.struct_defs.contains_key(&type_name.node) && !args.is_empty() {
+            // Phase 0 bug C4 fix (part 3): when expected_ret carries concrete
+            // generics (e.g. `MutexGuard<i64>`), trust those over arg-type
+            // inference. Argument types like `&Mutex<i64>` for `MutexGuard.new`
+            // would otherwise mangle to `MutexGuard_new$ref_Mutex_i64` which
+            // doesn't match the spec key the rest of codegen expects.
+            let expected_concrete: Option<Vec<ResolvedType>> = match &expected_ret {
+                Some(ResolvedType::Named { generics, .. }) if !generics.is_empty()
+                    && generics.iter().all(|g| !matches!(g,
+                        ResolvedType::Generic(_) | ResolvedType::Var(_))) =>
+                {
+                    Some(generics.clone())
+                }
+                _ => None,
+            };
+
             // Infer type args from arguments for generic struct static methods
             let arg_types: Vec<ResolvedType> =
                 args.iter().map(|a| self.infer_expr_type(a)).collect();
@@ -1224,7 +1268,21 @@ impl CodeGenerator {
                     )
                 })
                 .collect();
-            if !informative_args.is_empty() {
+            if let Some(concrete_args) = expected_concrete {
+                let mangled = vais_types::mangle_name(&base_method_name, &concrete_args);
+                if self.types.functions.contains_key(&mangled) {
+                    mangled
+                } else if let Some(spec) = self.try_generate_vec_specialization(
+                    &type_name.node,
+                    &method.node,
+                    &concrete_args,
+                    counter,
+                ) {
+                    spec
+                } else {
+                    base_method_name.clone()
+                }
+            } else if !informative_args.is_empty() {
                 let struct_def = self.generics.struct_defs.get(&type_name.node).cloned();
                 let n_generic_params = struct_def
                     .as_ref()
