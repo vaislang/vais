@@ -69,6 +69,13 @@ pub(crate) struct LoopLabels {
     /// are loop-internal and must be freed on break/continue to prevent leaks
     /// of mid-iteration concat/push_str buffers (Phase 191 #6).
     pub scope_str_depth: usize,
+    /// Phase 0 bug C1: when `B <value>` (break-with-value) is used, this
+    /// holds `(slot_name, llvm_ty)` for an alloca emitted in the function's
+    /// entry block. `generate_break_stmt` stores the break value into this
+    /// slot before branching. After the loop end label, the loop expression
+    /// loads from this slot to yield the break value. None for plain `B`
+    /// loops where the loop is used in statement position.
+    pub break_value_slot: Option<(String, String)>,
 }
 
 #[derive(Debug, Clone)]

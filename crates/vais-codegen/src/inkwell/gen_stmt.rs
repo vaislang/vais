@@ -1114,11 +1114,42 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if let Some((slot_ptr, _)) = ctx.break_value_slot {
                     slot_ptr
                 } else {
-                    // Allocate in the entry block so mem2reg can promote it.
+                    // Phase 0 bug C1 fix: hoist the alloca into the entry
+                    // block so it dominates every break site (which may be
+                    // inside `I`/`M` arms inside the loop body) AND the loop
+                    // end load. Just calling build_alloca emits at the
+                    // current insertion point — usually inside a `then` block
+                    // where the break sits — which produces invalid IR
+                    // ("Instruction does not dominate all uses") when the
+                    // break value is later read at loop end. The hoist also
+                    // lets mem2reg promote the slot to SSA in optimized
+                    // builds.
+                    let current_block = self
+                        .builder
+                        .get_insert_block()
+                        .ok_or_else(|| {
+                            CodegenError::LlvmError(
+                                "no insert block when allocating loop break slot".to_string(),
+                            )
+                        })?;
+                    let entry_block = current_block
+                        .get_parent()
+                        .and_then(|f| f.get_first_basic_block())
+                        .ok_or_else(|| {
+                            CodegenError::LlvmError(
+                                "no entry block for loop break slot".to_string(),
+                            )
+                        })?;
+                    if let Some(term) = entry_block.get_terminator() {
+                        self.builder.position_before(&term);
+                    } else {
+                        self.builder.position_at_end(entry_block);
+                    }
                     let alloca = self
                         .builder
                         .build_alloca(val_type, "loop_break_value")
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    self.builder.position_at_end(current_block);
                     // Record for later breaks and for the loop-end load.
                     let idx = self.loop_stack.len() - 1;
                     self.loop_stack[idx].break_value_slot = Some((alloca, val_type));

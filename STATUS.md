@@ -9,7 +9,7 @@
 | Category | Tests | Passing | Status |
 |----------|-------|---------|--------|
 | 01_primitives | 11 | 11/11 | ✅ |
-| 02_control_flow | 10 | 10/10 | ✅ |
+| 02_control_flow | 11 | 11/11 | ✅ |
 | 03_match | 6 | 6/6 | ✅ |
 | 04_struct | 7 | 7/7 | ✅ |
 | 05_enum | 5 | 5/5 | ✅ |
@@ -19,7 +19,7 @@
 | 09_traits | 0 | — | not yet |
 | 10_ffi | 0 | — | not yet |
 | 99_integration | 6 | 6/6 | ✅ |
-| **Total** | **55** | **55/55 (100%)** | 🎉 |
+| **Total** | **56** | **56/56 (100%)** | 🎉 |
 
 Run yourself:
 ```bash
@@ -89,7 +89,7 @@ cd compiler/std/tests && bash run.sh
 
 | # | Bug | Trigger | Workaround | Test |
 |---|-----|---------|------------|------|
-| C1 | `B <value>` (break-with-value) lowered as constant 0 in phi | `L { I cond { B 1 } I cond2 { B 0 } i = i + 1 }` returns wrong values | rewrite as `R <value>` outside the loop | std/string `str_eq` patched in this session |
+| C1 ✅ | ~~`B <value>` (break-with-value) emits invalid IR~~ FIXED in inkwell/gen_stmt.rs::generate_break: hoist the `loop_break_value` alloca into the function entry block before recording it on the loop ctx, so it dominates every break site (which may be inside `I`/`M` arms) AND the loop-end load. Also added a parallel fix to the IR-string fallback in generate_expr/loops.rs (pre-scan body for `B <value>`, alloca + zero-init before loop entry, load at loop end). Regression test: `tests/lang/02_control_flow/break_with_value.vais`. | — | — | break_with_value.vais |
 | C2 ✅ | ~~`:= <int>` immutable bindings reassigned via `=` silently miscompile~~ FIXED in checker_expr/special.rs — TC now emits `ImmutableAssign` (E009) on Expr::Assign / Expr::AssignOp when target is a non-mut Ident binding. Regression test: `tests/lang/02_control_flow/mut_reassign.vais`. | — | — | mut_reassign.vais |
 | C3 | StrHashMap<i64> generic specialization duplicate symbol cross-module | `U std/hashmap; m: StrHashMap<i64> := ...` | none — link fails | `xfail_hashmap_strhashmap.vais` |
 | C4 | `Mutex<T>::lock` returns `MutexGuard` (unspecialized) instead of `MutexGuard$T` | calling `.lock()` on a `Mutex<i64>` | none — link fails on type mismatch | `xfail_sync_mutexguard_specialization.vais` |

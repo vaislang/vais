@@ -503,6 +503,7 @@ impl CodeGenerator {
             continue_label: loop_start.to_string(),
             break_label: loop_end.to_string(),
             scope_str_depth: self.fn_ctx.scope_str_stack.len(),
+            break_value_slot: None,
         });
 
         let mut ir = String::new();
@@ -565,6 +566,7 @@ impl CodeGenerator {
             continue_label: loop_start.to_string(),
             break_label: loop_end.to_string(),
             scope_str_depth: self.fn_ctx.scope_str_stack.len(),
+            break_value_slot: None,
         });
 
         let mut ir = String::new();

@@ -1,10 +1,9 @@
-# XFAIL: B <value> (break-with-value) emits invalid IR — alloca for the loop
-# break value doesn't dominate all uses across basic blocks. Tracked as bug C1
-# in STATUS.md. stdlib str_eq was rewritten to avoid this pattern as a
-# workaround. Restore as a real test once the loop-break-value codegen path
-# emits the alloca in the entry block.
-#
-# CHECKS: B <value> (break-with-value) propagates the value via phi correctly.
+# CHECKS: B <value> (break-with-value) propagates the value via the loop's
+# expression value correctly. Bug C1 was that the codegen emitted the slot
+# alloca at the break site instead of the function entry block, so the
+# subsequent load at loop end didn't dominate. Fixed by hoisting the alloca
+# in inkwell/gen_stmt.rs::generate_break (and the IR-string fallback in
+# generate_expr/loops.rs).
 F first_match(target: i64) -> i64 {
     i := mut 0
     L {

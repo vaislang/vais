@@ -519,10 +519,18 @@ impl CodeGenerator {
             // Clone to avoid borrow conflict with generate_expr
             let break_label = labels.break_label.clone();
             let loop_depth = labels.scope_str_depth;
+            let break_value_slot = labels.break_value_slot.clone();
             let mut ir = String::new();
             if let Some(expr) = value {
                 let (val, expr_ir) = self.generate_expr(expr, counter)?;
                 ir.push_str(&expr_ir);
+                // Phase 0 bug C1 fix: if the enclosing loop allocated a
+                // break-value slot, store the value into it before branching
+                // to loop_end. The loop's expression value will load from the
+                // slot after the loop end label.
+                if let Some((slot, llvm_ty)) = &break_value_slot {
+                    write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, val, llvm_ty, slot);
+                }
                 ir.push_str(&self.generate_loop_scope_cleanup(loop_depth));
                 write_ir!(ir, "  br label %{}", break_label);
                 Ok((val, ir))

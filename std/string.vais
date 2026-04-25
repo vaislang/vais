@@ -285,14 +285,16 @@ F str_contains_char(s: String, c: i64) -> i64 {
 
 # Helper: Compare two strings
 F str_eq(a: String, b: String) -> i64 {
-    I a.len != b.len { R 0 }
-    i := mut 0
-    L {
-        I i >= a.len { R 1 }
-        I a.char_at(i) != b.char_at(i) { R 0 }
-        i = i + 1
+    I a.len != b.len {
+        0
+    } EL {
+        i := mut 0
+        L {
+            I i >= a.len { B 1 }
+            I a.char_at(i) != b.char_at(i) { B 0 }
+            i = i + 1
+        }
     }
-    1
 }
 
 # =====================================================
