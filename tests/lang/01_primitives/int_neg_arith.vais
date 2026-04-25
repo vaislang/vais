@@ -1,0 +1,13 @@
+# CHECKS: arithmetic operations on negative i64 values.
+F main() -> i64 {
+    a: i64 := 0 - 100
+    b: i64 := 0 - 50
+
+    I a + b != 0 - 150 { R 1 }
+    I a - b != 0 - 50 { R 2 }
+    I a * 2 != 0 - 200 { R 3 }
+    I a / 4 != 0 - 25 { R 4 }
+    I a * b != 5000 { R 5 }
+    I (a + b) * (0 - 1) != 150 { R 6 }
+    R 0
+}

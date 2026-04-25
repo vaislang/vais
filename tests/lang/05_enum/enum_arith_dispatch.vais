@@ -1,0 +1,29 @@
+# CHECKS: enum dispatch with arithmetic in arm bodies.
+EN Calc {
+    Add,
+    Sub,
+    Mul,
+    Div
+}
+
+F apply(op: Calc, a: i64, b: i64) -> i64 {
+    M op {
+        Add => a + b,
+        Sub => a - b,
+        Mul => a * b,
+        Div => a / b
+    }
+}
+
+F main() -> i64 {
+    I apply(Add, 10, 3) != 13 { R 1 }
+    I apply(Sub, 10, 3) != 7 { R 2 }
+    I apply(Mul, 10, 3) != 30 { R 3 }
+    I apply(Div, 10, 3) != 3 { R 4 }
+
+    # negative
+    I apply(Add, 0 - 5, 3) != 0 - 2 { R 5 }
+    I apply(Mul, 0 - 5, 0 - 3) != 15 { R 6 }
+    I apply(Div, 100, 4) != 25 { R 7 }
+    R 0
+}
