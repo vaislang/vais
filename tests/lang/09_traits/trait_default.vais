@@ -1,0 +1,36 @@
+# XFAIL: trait default methods not dispatched on impl. The trait's `doubled()`
+# default is defined, but calling `p.doubled()` on an impl that doesn't
+# override fails with "Undefined function: Plain_doubled" — codegen looks
+# up the per-impl method table without falling back to the trait's default.
+# Tracked as Phase 0 finding C11.
+#
+# CHECKS: trait method with default implementation, optionally overridden.
+W Counter {
+    F base(&self) -> i64
+    F doubled(&self) -> i64 {
+        self.base() * 2
+    }
+}
+
+S Plain { x: i64 }
+S Tripler { x: i64 }
+
+X Plain: Counter {
+    F base(&self) -> i64 { self.x }
+    # use default doubled()
+}
+
+X Tripler: Counter {
+    F base(&self) -> i64 { self.x }
+    F doubled(&self) -> i64 { self.base() * 3 }   # override
+}
+
+F main() -> i64 {
+    p: Plain := Plain { x: 7 }
+    t: Tripler := Tripler { x: 7 }
+    I p.base() != 7 { R 1 }
+    I p.doubled() != 14 { R 2 }
+    I t.base() != 7 { R 3 }
+    I t.doubled() != 21 { R 4 }
+    R 0
+}

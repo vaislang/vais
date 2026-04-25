@@ -1,0 +1,14 @@
+# CHECKS: builtin math functions (sqrt, fabs) — these are pre-declared by
+# the compiler so user code can call them without an explicit `X F` decl.
+F main() -> i64 {
+    # sqrt(25.0) = 5.0
+    I (sqrt(25.0) as i64) != 5 { R 1 }
+    I (sqrt(100.0) as i64) != 10 { R 2 }
+    I (sqrt(0.0) as i64) != 0 { R 3 }
+
+    # fabs(-3.5) = 3.5 → as i64 = 3
+    I (fabs(0.0 - 3.5) as i64) != 3 { R 4 }
+    I (fabs(7.2) as i64) != 7 { R 5 }
+    I (fabs(0.0) as i64) != 0 { R 6 }
+    R 0
+}

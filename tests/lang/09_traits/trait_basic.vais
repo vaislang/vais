@@ -1,0 +1,23 @@
+# CHECKS: trait definition + impl + dispatch via concrete type.
+W Greeter {
+    F greet(&self) -> i64
+}
+
+S English { id: i64 }
+S Korean { id: i64 }
+
+X English: Greeter {
+    F greet(&self) -> i64 { 1 }
+}
+
+X Korean: Greeter {
+    F greet(&self) -> i64 { 2 }
+}
+
+F main() -> i64 {
+    e: English := English { id: 100 }
+    k: Korean := Korean { id: 200 }
+    I e.greet() != 1 { R 1 }
+    I k.greet() != 2 { R 2 }
+    R 0
+}
