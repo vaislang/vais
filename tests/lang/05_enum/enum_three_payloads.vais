@@ -1,0 +1,26 @@
+# CHECKS: enum where each payload variant is i64.
+EN Op {
+    Add(i64),
+    Mul(i64),
+    Sub(i64)
+}
+
+F apply(state: i64, op: Op) -> i64 {
+    M op {
+        Add(x) => state + x,
+        Mul(x) => state * x,
+        Sub(x) => state - x
+    }
+}
+
+F main() -> i64 {
+    I apply(10, Add(5)) != 15 { R 1 }
+    I apply(10, Mul(3)) != 30 { R 2 }
+    I apply(10, Sub(4)) != 6 { R 3 }
+
+    # chain
+    s: i64 := apply(apply(apply(0, Add(10)), Mul(3)), Sub(7))
+    # 0 → 10 → 30 → 23
+    I s != 23 { R 4 }
+    R 0
+}

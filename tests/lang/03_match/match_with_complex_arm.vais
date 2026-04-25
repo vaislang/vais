@@ -1,0 +1,21 @@
+# CHECKS: match arms with arithmetic expressions in body.
+F transform(n: i64) -> i64 {
+    M n {
+        0 => 100,
+        1 => 100 + 50,
+        2 => 200 * 2,
+        3 => (300 + 10) - 5,
+        x I x > 100 => x * 2,
+        _ => 0 - 1
+    }
+}
+
+F main() -> i64 {
+    I transform(0) != 100 { R 1 }
+    I transform(1) != 150 { R 2 }
+    I transform(2) != 400 { R 3 }
+    I transform(3) != 305 { R 4 }
+    I transform(200) != 400 { R 5 }
+    I transform(50) != 0 - 1 { R 6 }
+    R 0
+}

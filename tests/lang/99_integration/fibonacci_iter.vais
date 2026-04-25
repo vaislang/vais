@@ -1,0 +1,23 @@
+# CHECKS: iterative fibonacci with closed table.
+F fib(n: i64) -> i64 {
+    I n <= 1 { R n }
+    a: i64 := mut 0
+    b: i64 := mut 1
+    LF i: 2..=n {
+        next: i64 := a + b
+        a = b
+        b = next
+    }
+    b
+}
+
+F main() -> i64 {
+    I fib(0) != 0 { R 1 }
+    I fib(1) != 1 { R 2 }
+    I fib(2) != 1 { R 3 }
+    I fib(3) != 2 { R 4 }
+    I fib(10) != 55 { R 5 }
+    I fib(20) != 6765 { R 6 }
+    I fib(30) != 832040 { R 7 }
+    R 0
+}

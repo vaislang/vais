@@ -55,8 +55,12 @@ for category in [0-9][0-9]_*/; do
     log="$work_dir/${base}.log"
 
     # Clean global emit area so previous runs don't leak into this test.
-    rm -f /tmp/${base}*.ll 2>/dev/null
-    # Step 1: compile (vaisc emits to /tmp/<base>*.ll based on -o basename)
+    # Use exact-match + `_<module>` pattern to avoid bleed between
+    # similarly-prefixed names (e.g. `gc` vs `gcd`, `generic_chain` vs
+    # `generic_chain_two`). vaisc emits `<base>.ll` for the main module
+    # and `<base>_<modname>.ll` for each imported module.
+    rm -f /tmp/${base}.ll /tmp/${base}_*.ll 2>/dev/null
+    # Step 1: compile
     ll_out="/tmp/${base}.ll"
     if ! "$VAISC" build "$test_file" --emit-ir -o "$ll_out" --force-rebuild >"$log" 2>&1; then
       printf "%-60s FAIL (compile)\n" "$test_file"
@@ -66,8 +70,8 @@ for category in [0-9][0-9]_*/; do
       continue
     fi
 
-    # Step 2: link (vaisc may emit multiple .ll files with the basename prefix)
-    ll_files=$(ls /tmp/${base}*.ll 2>/dev/null)
+    # Step 2: link — gather <base>.ll + <base>_*.ll only.
+    ll_files=$(ls /tmp/${base}.ll /tmp/${base}_*.ll 2>/dev/null)
     if [ -z "$ll_files" ]; then ll_files="$ll_out"; fi
     if ! clang -O0 -o "$bin_out" $ll_files "$RUNTIME_O" "$SYNC_O" -lm >>"$log" 2>&1; then
       printf "%-60s FAIL (link)\n" "$test_file"
