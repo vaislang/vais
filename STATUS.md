@@ -9,7 +9,7 @@
 | Category | Tests | Passing | Status |
 |----------|-------|---------|--------|
 | 01_primitives | 11 | 11/11 | ✅ |
-| 02_control_flow | 9 | 9/9 | ✅ |
+| 02_control_flow | 10 | 10/10 | ✅ |
 | 03_match | 6 | 6/6 | ✅ |
 | 04_struct | 7 | 7/7 | ✅ |
 | 05_enum | 5 | 5/5 | ✅ |
@@ -19,7 +19,7 @@
 | 09_traits | 0 | — | not yet |
 | 10_ffi | 0 | — | not yet |
 | 99_integration | 6 | 6/6 | ✅ |
-| **Total** | **54** | **54/54 (100%)** | 🎉 |
+| **Total** | **55** | **55/55 (100%)** | 🎉 |
 
 Run yourself:
 ```bash
@@ -90,7 +90,7 @@ cd compiler/std/tests && bash run.sh
 | # | Bug | Trigger | Workaround | Test |
 |---|-----|---------|------------|------|
 | C1 | `B <value>` (break-with-value) lowered as constant 0 in phi | `L { I cond { B 1 } I cond2 { B 0 } i = i + 1 }` returns wrong values | rewrite as `R <value>` outside the loop | std/string `str_eq` patched in this session |
-| C2 | `:= <int>` immutable bindings reassigned via `=` silently miscompile (load → const 0) instead of compile error | `i := 0; ...; i = i + 1` (without `mut`) | use `:= mut <int>` always | std/string `str_eq`/`str_contains_char`/`str_to_f64` patched |
+| C2 ✅ | ~~`:= <int>` immutable bindings reassigned via `=` silently miscompile~~ FIXED in checker_expr/special.rs — TC now emits `ImmutableAssign` (E009) on Expr::Assign / Expr::AssignOp when target is a non-mut Ident binding. Regression test: `tests/lang/02_control_flow/mut_reassign.vais`. | — | — | mut_reassign.vais |
 | C3 | StrHashMap<i64> generic specialization duplicate symbol cross-module | `U std/hashmap; m: StrHashMap<i64> := ...` | none — link fails | `xfail_hashmap_strhashmap.vais` |
 | C4 | `Mutex<T>::lock` returns `MutexGuard` (unspecialized) instead of `MutexGuard$T` | calling `.lock()` on a `Mutex<i64>` | none — link fails on type mismatch | `xfail_sync_mutexguard_specialization.vais` |
 | C5 | `String.with_capacity(n)` segfaults when `n < 16` | `String.with_capacity(4); s.push_char(...)` triggers `grow()` from cap < 16 | use `with_capacity >= 16` | documented in `test_string.vais` comment |

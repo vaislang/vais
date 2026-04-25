@@ -141,7 +141,25 @@ impl TypeChecker {
             }
 
             Expr::Assign { target, value } => {
-                // Allow assignment to all variables (mutable by default in Vais)
+                // Phase 0 bug C2 fix: reject assignment to immutable bindings.
+                // Without this check, `i := 0; ...; i = i + 1` silently compiles
+                // but codegen emits `i` as SSA (no alloca), so the load reads
+                // constant 0 every iteration → infinite loop in std/string str_eq.
+                // Bindings declared without `mut` must reject `=` here.
+                //
+                // Field assignments (`s.field = ...`), index assignments
+                // (`a[i] = ...`), and dereferences are not Ident, so they fall
+                // through to the existing path.
+                if let Expr::Ident(name) = &target.node {
+                    if let Some((_ty, is_mut)) = self.lookup_var_with_mut(name) {
+                        if !is_mut {
+                            return Some(Err(TypeError::ImmutableAssign(
+                                name.clone(),
+                                Some(target.span),
+                            )));
+                        }
+                    }
+                }
                 let target_type = match self.check_expr(target) {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
@@ -174,6 +192,18 @@ impl TypeChecker {
                 target,
                 value,
             } => {
+                // Phase 0 bug C2 fix (companion): same immutable-binding check
+                // for compound assignment (`x += 1` etc.).
+                if let Expr::Ident(name) = &target.node {
+                    if let Some((_ty, is_mut)) = self.lookup_var_with_mut(name) {
+                        if !is_mut {
+                            return Some(Err(TypeError::ImmutableAssign(
+                                name.clone(),
+                                Some(target.span),
+                            )));
+                        }
+                    }
+                }
                 let target_type = match self.check_expr(target) {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
