@@ -10,16 +10,16 @@
 |----------|-------|---------|--------|
 | 01_primitives | 48 | 48/48 | ✅ |
 | 02_control_flow | 39 | 39/39 | ✅ |
-| 03_match | 26 | 26/26 | ✅ |
-| 04_struct | 32 | 32/32 | ✅ |
-| 05_enum | 27 | 27/27 | ✅ |
+| 03_match | 27 | 27/27 | ✅ |
+| 04_struct | 33 | 33/33 | ✅ |
+| 05_enum | 28 | 28/28 | ✅ |
 | 06_generic | 28 | 28/28 | ✅ |
-| 07_collections | 20 | 20/20 | ✅ |
+| 07_collections | 21 | 21/21 | ✅ |
 | 08_strings | 11 | 11/11 | ✅ |
 | 09_traits | 4 | 4/4 | ✅ |
 | 10_ffi | 3 | 3/3 | ✅ |
 | 99_integration | 68 | 68/68 | ✅ |
-| **Total** | **306** | **306/306 (100%) — ALL GREEN, ZERO XFAIL** | 🎉 |
+| **Total** | **310** | **310/310 (100%) — ALL GREEN, ZERO XFAIL** | 🎉 |
 
 Run yourself:
 ```bash
@@ -119,12 +119,12 @@ should — see TODO):
 | Bug | Test | Status |
 |-----|------|--------|
 | match default arm null literal | `tests/lang/03_match/match_phi_default_zero.vais` | ✅ landed |
-| `vec[i] = struct_value` ptr store | TODO `tests/lang/07_collections/vec_struct_assign.vais` | pending |
-| 4-byte Named struct narrow store | TODO `tests/lang/04_struct/struct_4_bytes_in_vec.vais` | pending |
-| match arm phi narrow-int width | TODO `tests/lang/03_match/match_phi_narrow_int.vais` | pending |
-| Specialized enum match (`%Unknown`) | TODO `tests/lang/05_enum/result_specialized_match.vais` | pending |
+| `vec[i] = struct_value` ptr store | `tests/lang/07_collections/vec_struct_assign.vais` | ✅ landed |
+| 4-byte Named struct narrow store | `tests/lang/04_struct/struct_4_bytes_in_vec.vais` | ✅ landed |
+| match arm phi narrow-int width | `tests/lang/03_match/match_phi_narrow_int.vais` | ✅ landed |
+| Specialized enum match (`%Unknown`) | `tests/lang/05_enum/result_specialized_match.vais` | ✅ landed |
 | Enum payload of >8B struct | `tests/lang/05_enum/enum_struct_payload.vais` | ✅ landed |
-| Vec→slice auto-coercion | TODO `tests/lang/07_collections/vec_to_slice.vais` | pending |
+| Vec→slice auto-coercion | TODO `tests/lang/07_collections/vec_to_slice.vais` | pending (codegen gap, separate work) |
 | `slice.to_vec()` builtin | (stdlib gap, not lang feature) | n/a |
 
 ## Active Work

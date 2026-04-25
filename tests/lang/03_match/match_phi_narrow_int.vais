@@ -1,0 +1,27 @@
+# CHECKS: match arm phi node merges narrow-int values without truncating
+# the i64 phi result (REGRESSION Wave 4a — earlier codegen would emit a
+# trunc that lost the high bits of an unrelated value).
+
+EN Color {
+    Red,
+    Green,
+    Blue
+}
+
+F to_byte(c: Color) -> i64 {
+    M c {
+        Red => 0xFF,
+        Green => 0x80,
+        Blue => 0x01
+    }
+}
+
+F main() -> i64 {
+    I to_byte(Red) != 255 { R 1 }
+    I to_byte(Green) != 128 { R 2 }
+    I to_byte(Blue) != 1 { R 3 }
+
+    sum: i64 := to_byte(Red) + to_byte(Green) + to_byte(Blue)
+    I sum != 384 { R 4 }
+    R 0
+}
