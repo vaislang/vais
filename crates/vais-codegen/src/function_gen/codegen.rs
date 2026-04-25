@@ -313,6 +313,54 @@ impl CodeGenerator {
                     self.fn_ctx.record_emitted_type(&loaded, &ret_llvm);
                     write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
                 } else {
+                    // Bug C9 fix: function declared `T?` / `Result<T,E>` and the
+                    // body expression produced a universal `%Option`/`%Result`
+                    // aggregate. Reinterpret-cast to the specialized
+                    // `{ i8, %T }` slot before the ret. Mirrors the Block path.
+                    let val_llvm_for_check =
+                        if value.starts_with('%') { self.llvm_type_of(&value) } else { String::new() };
+                    let body_is_universal_option = val_llvm_for_check == "%Option"
+                        || val_llvm_for_check == "%Result";
+                    let ret_is_specialized_option = ret_llvm.starts_with("{ i8, ")
+                        && ret_llvm.ends_with(" }");
+                    if body_is_universal_option && ret_is_specialized_option {
+                        let tmp = self.next_temp(&mut counter);
+                        self.emit_entry_alloca(&tmp, &val_llvm_for_check);
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* {}",
+                            val_llvm_for_check,
+                            value,
+                            val_llvm_for_check,
+                            tmp
+                        );
+                        let cast_ptr = self.next_temp(&mut counter);
+                        write_ir!(
+                            ir,
+                            "  {} = bitcast {}* {} to {}*",
+                            cast_ptr,
+                            val_llvm_for_check,
+                            tmp,
+                            ret_llvm
+                        );
+                        let loaded = self.next_temp(&mut counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
+                            loaded,
+                            ret_llvm,
+                            ret_llvm,
+                            cast_ptr
+                        );
+                        write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
+                        ir.push_str("}\n");
+                        self.splice_entry_allocas(&mut ir);
+                        self.fn_ctx.current_function = None;
+                        self.fn_ctx.current_return_type = None;
+                        self.clear_decreases_info();
+                        return Ok(ir);
+                    }
+
                     // Phase 191: float literal returned as integer — needs fptosi.
                     // E.g., `F main() -> i64 = 3.14` generates `ret i64 3.140000e+00`
                     // which is invalid; should be `fptosi double 3.14... to i64`.
@@ -539,7 +587,49 @@ impl CodeGenerator {
                         write_ir!(ir, "  ret {} @{}{}", ret_llvm, const_name, ret_dbg);
                     } else if ret_llvm.starts_with('{') {
                         // Inline struct return: if value is scalar, use zeroinitializer.
-                        if value.starts_with('%') && self.llvm_type_of(&value).starts_with('{') {
+                        let val_llvm_for_check =
+                            if value.starts_with('%') { self.llvm_type_of(&value) } else { String::new() };
+                        let body_is_universal_option = val_llvm_for_check == "%Option"
+                            || val_llvm_for_check == "%Result";
+                        let ret_is_specialized_option = ret_llvm.starts_with("{ i8, ")
+                            && ret_llvm.ends_with(" }");
+                        if body_is_universal_option && ret_is_specialized_option {
+                            // Bug C9 fix: function declared `T?` / `Result<T,E>`
+                            // (specialized layout `{ i8, %T }`) but body produced
+                            // a universal `%Option`/`%Result` aggregate via the
+                            // generic enum-variant constructor path. The two
+                            // layouts share an i64-word payload slot, so a
+                            // pointer-cast reinterpret is sound for ≤8B payloads.
+                            let tmp = self.next_temp(&mut counter);
+                            self.emit_entry_alloca(&tmp, &val_llvm_for_check);
+                            write_ir!(
+                                ir,
+                                "  store {} {}, {}* {}",
+                                val_llvm_for_check,
+                                value,
+                                val_llvm_for_check,
+                                tmp
+                            );
+                            let cast_ptr = self.next_temp(&mut counter);
+                            write_ir!(
+                                ir,
+                                "  {} = bitcast {}* {} to {}*",
+                                cast_ptr,
+                                val_llvm_for_check,
+                                tmp,
+                                ret_llvm
+                            );
+                            let loaded = self.next_temp(&mut counter);
+                            write_ir!(
+                                ir,
+                                "  {} = load {}, {}* {}",
+                                loaded,
+                                ret_llvm,
+                                ret_llvm,
+                                cast_ptr
+                            );
+                            write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
+                        } else if value.starts_with('%') && self.llvm_type_of(&value).starts_with('{') {
                             write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                         } else if ret_llvm == "{ i8*, i64 }" && value.starts_with('%') {
                             // Phase E: function body produced a typed pointer
@@ -980,55 +1070,100 @@ impl CodeGenerator {
                             .push((const_name.clone(), inner_ty, value.clone()));
                         write_ir!(ir, "  ret {} @{}{}", ret_llvm, const_name, ret_dbg);
                     } else {
-                        // Coerce return value width if needed (int, float, struct).
-                        let value = if value.starts_with('%') {
-                            let val_llvm = self.llvm_type_of(&value);
-                            if (val_llvm == "float" || val_llvm == "double")
-                                && (ret_llvm == "float" || ret_llvm == "double")
-                                && val_llvm != ret_llvm
-                            {
-                                let tmp = self.next_temp(&mut counter);
-                                if val_llvm == "double" && ret_llvm == "float" {
-                                    write_ir!(ir, "  {} = fptrunc double {} to float", tmp, value);
-                                } else {
-                                    write_ir!(ir, "  {} = fpext float {} to double", tmp, value);
-                                }
-                                tmp
-                            } else if val_llvm == "i64"
-                                && ret_llvm.starts_with('%')
-                                && !ret_llvm.ends_with('*')
-                            {
-                                let tmp_ptr = self.next_temp(&mut counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = inttoptr i64 {} to {}*",
-                                    tmp_ptr,
-                                    value,
-                                    ret_llvm
-                                );
-                                let loaded = self.next_temp(&mut counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = load {}, {}* {}",
-                                    loaded,
-                                    ret_llvm,
-                                    ret_llvm,
-                                    tmp_ptr
-                                );
-                                loaded
-                            } else {
-                                self.coerce_int_width(
-                                    &value,
-                                    &val_llvm,
-                                    &ret_llvm,
-                                    &mut counter,
-                                    &mut ir,
-                                )
-                            }
+                        // Bug C9 fix: function declared `T?` / `Result<T,E>`
+                        // but body produced a universal `%Option`/`%Result`
+                        // aggregate via the generic enum-variant constructor.
+                        // Reinterpret-cast to the specialized `{ i8, %T }` slot.
+                        let val_llvm_for_check = if value.starts_with('%') {
+                            self.llvm_type_of(&value)
                         } else {
-                            value
+                            String::new()
                         };
-                        write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
+                        let body_is_universal_option = val_llvm_for_check == "%Option"
+                            || val_llvm_for_check == "%Result";
+                        let ret_is_specialized_option =
+                            ret_llvm.starts_with("{ i8, ") && ret_llvm.ends_with(" }");
+                        if body_is_universal_option && ret_is_specialized_option {
+                            let tmp = self.next_temp(&mut counter);
+                            self.emit_entry_alloca(&tmp, &val_llvm_for_check);
+                            write_ir!(
+                                ir,
+                                "  store {} {}, {}* {}",
+                                val_llvm_for_check,
+                                value,
+                                val_llvm_for_check,
+                                tmp
+                            );
+                            let cast_ptr = self.next_temp(&mut counter);
+                            write_ir!(
+                                ir,
+                                "  {} = bitcast {}* {} to {}*",
+                                cast_ptr,
+                                val_llvm_for_check,
+                                tmp,
+                                ret_llvm
+                            );
+                            let loaded = self.next_temp(&mut counter);
+                            write_ir!(
+                                ir,
+                                "  {} = load {}, {}* {}",
+                                loaded,
+                                ret_llvm,
+                                ret_llvm,
+                                cast_ptr
+                            );
+                            write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
+                        } else {
+                            // Coerce return value width if needed (int, float, struct).
+                            let value = if value.starts_with('%') {
+                                let val_llvm = self.llvm_type_of(&value);
+                                if (val_llvm == "float" || val_llvm == "double")
+                                    && (ret_llvm == "float" || ret_llvm == "double")
+                                    && val_llvm != ret_llvm
+                                {
+                                    let tmp = self.next_temp(&mut counter);
+                                    if val_llvm == "double" && ret_llvm == "float" {
+                                        write_ir!(ir, "  {} = fptrunc double {} to float", tmp, value);
+                                    } else {
+                                        write_ir!(ir, "  {} = fpext float {} to double", tmp, value);
+                                    }
+                                    tmp
+                                } else if val_llvm == "i64"
+                                    && ret_llvm.starts_with('%')
+                                    && !ret_llvm.ends_with('*')
+                                {
+                                    let tmp_ptr = self.next_temp(&mut counter);
+                                    write_ir!(
+                                        ir,
+                                        "  {} = inttoptr i64 {} to {}*",
+                                        tmp_ptr,
+                                        value,
+                                        ret_llvm
+                                    );
+                                    let loaded = self.next_temp(&mut counter);
+                                    write_ir!(
+                                        ir,
+                                        "  {} = load {}, {}* {}",
+                                        loaded,
+                                        ret_llvm,
+                                        ret_llvm,
+                                        tmp_ptr
+                                    );
+                                    loaded
+                                } else {
+                                    self.coerce_int_width(
+                                        &value,
+                                        &val_llvm,
+                                        &ret_llvm,
+                                        &mut counter,
+                                        &mut ir,
+                                    )
+                                }
+                            } else {
+                                value
+                            };
+                            write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
+                        }
                     }
                 }
             }
