@@ -310,6 +310,7 @@ impl CodeGenerator {
                         value,
                         ret_dbg
                     );
+                    self.fn_ctx.record_emitted_type(&loaded, &ret_llvm);
                     write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
                 } else {
                     // Phase 191: float literal returned as integer — needs fptosi.
@@ -860,6 +861,7 @@ impl CodeGenerator {
                         value,
                         ret_dbg
                     );
+                    self.fn_ctx.record_emitted_type(&loaded, &ret_llvm);
                     write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
                 } else if matches!(ret_type, ResolvedType::Ref(_) | ResolvedType::RefMut(_))
                     && !value.starts_with('%')
