@@ -696,6 +696,12 @@ impl CodeGenerator {
         let inner_type = self.infer_expr_type(inner);
         let llvm_type = self.type_to_llvm(&inner_type);
 
+        // The Err/None branch below references `@.unwrap_panic_msg` and
+        // calls `@abort()`. Both are emitted as module-level declares /
+        // constants by `emit.rs::emit_string_constants` only when this
+        // flag is set, so flip it here before any IR is appended.
+        self.needs_unwrap_panic = true;
+
         let (inner_val, inner_ir) = self.generate_expr(inner, counter)?;
         let mut ir = inner_ir;
 

@@ -50,29 +50,32 @@ impl CodeGenerator {
         if !self.ref_constants.is_empty() {
             ir.push('\n');
         }
-        // Note: `abort()` is also declared by `function_gen/runtime.rs`
-        // alongside the `__panic_with_value` helper. To avoid LLVM
-        // "invalid redefinition" verifier errors when both `needs_*` flags
-        // and the standard runtime helpers are emitted in the same module,
-        // we declare `abort` here only when the runtime helpers are
-        // suppressed (currently the WASM-unknown target).
-        let abort_declared_by_runtime = !matches!(
-            self.target,
-            TargetTriple::Wasm32Unknown
-        );
+        // Always emit `abort` and `llvm.memcpy` declares when their callers
+        // are present. The original "skip if runtime emits them" heuristic
+        // broke multi-module sub-modules (which call `@abort` from the
+        // generated bounds checks but don't emit the runtime helpers in
+        // their own module) — link failed with `use of undefined value
+        // '@abort'`. Instead we keep the declares unconditionally and
+        // ensure runtime.rs doesn't emit a second `declare` next to its
+        // helper definitions.
+        // The main module defines the runtime helpers
+        // (`__panic_*`, `__memcpy`) which themselves declare `abort` and
+        // `llvm.memcpy`. Re-declaring those symbols here would be a
+        // duplicate declare in the same module — LLVM rejects matching
+        // duplicates with an "invalid redefinition" error. Skip the
+        // declares in the main module; sub-modules in a multi-module
+        // build still emit them (they call `@abort` from generated
+        // bounds checks but do not own the helper definitions).
         if self.needs_unwrap_panic {
             ir.push_str("@.unwrap_panic_msg = private unnamed_addr constant [22 x i8] c\"unwrap failed: panic!\\00\"\n");
-            if !abort_declared_by_runtime {
+            if !is_main_module {
                 ir.push_str("declare void @abort()\n\n");
             }
-        } else if self.needs_bounds_check && !abort_declared_by_runtime {
+        } else if self.needs_bounds_check && !is_main_module {
             // Bounds check uses abort() for OOB access
             ir.push_str("declare void @abort()\n\n");
         }
-        // Same dedup story for `llvm.memcpy.p0i8.p0i8.i64` — declared by
-        // runtime helpers next to `__memcpy`. Re-declare here only when
-        // those helpers are not emitted.
-        if self.needs_llvm_memcpy && !abort_declared_by_runtime {
+        if self.needs_llvm_memcpy && !is_main_module {
             ir.push_str("declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i1)\n\n");
         }
     }

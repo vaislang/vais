@@ -451,7 +451,10 @@ impl CodeGenerator {
 
         // Panic helpers — print a message and abort
         ir.push_str("\n; Runtime: panic helpers\n");
-        // Phase 0.B fix: declare libc abort so the helper bodies link.
+        // Always declare libc abort here so the helper bodies link
+        // (this module owns the helper definitions). LLVM allows two
+        // identical `declare` lines in the same module — only `define`
+        // duplicates are rejected by the verifier.
         ir.push_str("declare void @abort()\n");
         ir.push_str("@.__panic_v_fmt = private unnamed_addr constant [10 x i8] c\"%s: %lld\\0A\\00\"\n");
         ir.push_str("@.__panic_v2_fmt = private unnamed_addr constant [16 x i8] c\"%s: %lld, %lld\\0A\\00\"\n");
