@@ -30,11 +30,24 @@ export VAIS_STD_PATH="/tmp/vais-lib/std"
 
 PASS=0
 FAIL=0
+XFAIL=0
 FAIL_LIST=()
+XFAIL_LIST=()
 
 for category in [0-9][0-9]_*/; do
   for test_file in "$category"*.vais; do
     [ -f "$test_file" ] || continue
+
+    # Files starting with `# XFAIL:` are expected-to-fail regressions —
+    # they document an open compiler bug. Skip from PASS/FAIL counts
+    # but report so the bug is visible.
+    if head -1 "$test_file" | grep -q "^# XFAIL:"; then
+      reason=$(head -1 "$test_file" | sed 's/^# XFAIL: *//')
+      printf "%-60s XFAIL (%s)\n" "$test_file" "$reason"
+      XFAIL=$((XFAIL+1))
+      XFAIL_LIST+=("$test_file: $reason")
+      continue
+    fi
 
     base=$(basename "$test_file" .vais)
     work_dir=$(mktemp -d /tmp/vais_lang_${base}.XXXXXX)
@@ -81,8 +94,14 @@ done
 
 echo
 echo "=========================================="
-echo "Vais language conformance: $PASS passed, $FAIL failed"
+echo "Vais language conformance: $PASS passed, $FAIL failed, $XFAIL xfail"
 echo "=========================================="
+
+if [ "$XFAIL" -gt 0 ]; then
+  echo "Expected failures (open compiler bugs):"
+  for f in "${XFAIL_LIST[@]}"; do echo "  - $f"; done
+  echo
+fi
 
 if [ "$FAIL" -gt 0 ]; then
   echo "Failures:"

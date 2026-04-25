@@ -26,7 +26,18 @@ export VAIS_STD_PATH="/tmp/vais-lib/std"
 
 PASS=0
 FAIL=0
+XFAIL=0
 FAIL_LIST=()
+XFAIL_LIST=()
+
+# Report any xfail_*.vais files (skipped) so open compiler bugs stay visible.
+for xfail_file in xfail_*.vais; do
+  [ -f "$xfail_file" ] || continue
+  reason=$(head -1 "$xfail_file" | sed 's/^# XFAIL: *//')
+  printf "%-50s XFAIL (%s)\n" "$xfail_file" "$reason"
+  XFAIL=$((XFAIL+1))
+  XFAIL_LIST+=("$xfail_file: $reason")
+done
 
 for test_file in test_*.vais; do
   [ -f "$test_file" ] || continue
@@ -70,8 +81,14 @@ done
 
 echo
 echo "=========================================="
-echo "Stdlib self-tests: $PASS passed, $FAIL failed"
+echo "Stdlib self-tests: $PASS passed, $FAIL failed, $XFAIL xfail"
 echo "=========================================="
+
+if [ "$XFAIL" -gt 0 ]; then
+  echo "Expected failures (open compiler bugs):"
+  for f in "${XFAIL_LIST[@]}"; do echo "  - $f"; done
+  echo
+fi
 
 if [ "$FAIL" -gt 0 ]; then
   echo "Failures:"

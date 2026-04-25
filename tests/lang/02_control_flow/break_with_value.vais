@@ -1,0 +1,31 @@
+# XFAIL: B <value> (break-with-value) emits invalid IR — alloca for the loop
+# break value doesn't dominate all uses across basic blocks. Tracked as bug C1
+# in STATUS.md. stdlib str_eq was rewritten to avoid this pattern as a
+# workaround. Restore as a real test once the loop-break-value codegen path
+# emits the alloca in the entry block.
+#
+# CHECKS: B <value> (break-with-value) propagates the value via phi correctly.
+F first_match(target: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= 10 { B 0 - 1 }
+        I i == target { B i }
+        i = i + 1
+    }
+}
+
+F main() -> i64 {
+    # found at index 5
+    a: i64 := first_match(5)
+    I a != 5 { R 1 }
+
+    # found at index 0
+    b: i64 := first_match(0)
+    I b != 0 { R 2 }
+
+    # not found → -1
+    c: i64 := first_match(99)
+    I c != 0 - 1 { R 3 }
+
+    R 0
+}
