@@ -305,9 +305,26 @@ impl CodeGenerator {
                 let mut ir = String::new();
                 let variant_name = &name.node;
 
-                // Get the enum type name for proper LLVM type reference
-                let enum_name = self
-                    .get_enum_name_for_variant(variant_name)
+                // Phase α.1 fix: prefer the enum name from match_type for
+                // specialized enums (e.g., `Result$Tuple_VaisError`). The
+                // variant-name lookup falls back to the unspecialized parent
+                // (Result) which doesn't exist as a concrete LLVM type.
+                let enum_name_from_match_type =
+                    if let ResolvedType::Named { name: n, .. } = match_type {
+                        let llvm = self.type_to_llvm(match_type);
+                        // Strip leading '%' if type_to_llvm rendered it as a
+                        // struct ref. Use the bare LLVM name.
+                        let bare = llvm.strip_prefix('%').unwrap_or(&llvm).to_string();
+                        if !bare.is_empty() && bare != "Unknown" {
+                            Some(bare)
+                        } else {
+                            Some(n.clone())
+                        }
+                    } else {
+                        None
+                    };
+                let enum_name = enum_name_from_match_type
+                    .or_else(|| self.get_enum_name_for_variant(variant_name))
                     .unwrap_or_else(|| "Unknown".to_string());
 
                 // Get the tag from the enum value (first field at index 0)
@@ -1048,9 +1065,22 @@ impl CodeGenerator {
                 let mut ir = String::new();
                 let variant_name = &name.node;
 
-                // Get the enum type name for proper LLVM type reference
-                let enum_name = self
-                    .get_enum_name_for_variant(variant_name)
+                // Phase α.1 fix: prefer specialized enum name from match_type
+                // (mirrors the variant-tag-check fix above).
+                let enum_name_from_match_type =
+                    if let ResolvedType::Named { name: n, .. } = match_type {
+                        let llvm = self.type_to_llvm(match_type);
+                        let bare = llvm.strip_prefix('%').unwrap_or(&llvm).to_string();
+                        if !bare.is_empty() && bare != "Unknown" {
+                            Some(bare)
+                        } else {
+                            Some(n.clone())
+                        }
+                    } else {
+                        None
+                    };
+                let enum_name = enum_name_from_match_type
+                    .or_else(|| self.get_enum_name_for_variant(variant_name))
                     .unwrap_or_else(|| "Unknown".to_string());
 
                 // Resolve the actual field types for this variant, substituting generic
