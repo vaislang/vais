@@ -1163,7 +1163,7 @@ F test_simple_object() -> i64 {
     v := val_object(obj)
     toml := convert_to_toml(v)
     I toml == 0 { val_free(v); R 0 }
-    result := 1
+    result := mut 1
     I strlen_ptr(toml) > 5 { result = result + 1 }
     I count_nodes(v) == 4 { result = result + 1 }
     free(toml)
@@ -1184,7 +1184,7 @@ F test_nested_object() -> i64 {
     v := val_object(root_obj)
     toml := convert_to_toml(v)
     I toml == 0 { val_free(v); R 0 }
-    result := 1
+    result := mut 1
     I strlen_ptr(toml) > 10 { result = result + 1 }
     I max_depth(v) == 3 { result = result + 1 }
     free(toml)
@@ -1210,7 +1210,7 @@ F test_array_values() -> i64 {
     v := val_object(root_obj)
     toml := convert_to_toml(v)
     I toml == 0 { val_free(v); R 0 }
-    result := 1
+    result := mut 1
     I strlen_ptr(toml) > 5 { result = result + 1 }
     I count_nodes(v) == 8 { result = result + 1 }
     free(toml)
@@ -1238,7 +1238,7 @@ F test_array_of_tables() -> i64 {
     v := val_object(root_obj)
     toml := convert_to_toml(v)
     I toml == 0 { val_free(v); R 0 }
-    result := 1
+    result := mut 1
     I strlen_ptr(toml) > 10 { result = result + 1 }
     I count_nodes(v) == 8 { result = result + 1 }
     free(toml)
@@ -1252,7 +1252,7 @@ F test_empty() -> i64 {
     v := val_object(obj)
     toml := convert_to_toml(v)
     I toml == 0 { val_free(v); R 0 }
-    result := 1
+    result := mut 1
     I strlen_ptr(toml) == 0 { result = result + 1 }
     free(toml)
     val_free(v)
@@ -1275,7 +1275,7 @@ F test_escapes() -> i64 {
     v := val_object(obj)
     toml := convert_to_toml(v)
     I toml == 0 { val_free(v); R 0 }
-    result := 1
+    result := mut 1
     I strlen_ptr(toml) > 5 { result = result + 1 }
     free(toml)
     val_free(v)
@@ -1291,7 +1291,7 @@ F test_negative() -> i64 {
     v := val_object(obj)
     toml := convert_to_toml(v)
     I toml == 0 { val_free(v); R 0 }
-    result := 1
+    result := mut 1
     I strlen_ptr(toml) > 5 { result = result + 1 }
     free(toml)
     val_free(v)
@@ -1312,7 +1312,7 @@ F test_deeply_nested() -> i64 {
     v := val_object(a_obj)
     toml := convert_to_toml(v)
     I toml == 0 { val_free(v); R 0 }
-    result := 1
+    result := mut 1
     I max_depth(v) == 5 { result = result + 1 }
     I strlen_ptr(toml) > 10 { result = result + 1 }
     free(toml)
@@ -1326,7 +1326,7 @@ F test_json_parse() -> i64 {
     input := str_to_ptr("[1,2,3]")
     v := json_parse(input)
     I v == 0 { R 0 }
-    result := 1
+    result := mut 1
     I val_tag(v) == 4 { result = result + 1 }  # array
     val_free(v)
     result
@@ -1358,7 +1358,7 @@ F test_stringify() -> i64 {
     v := val_object(obj)
     s := json_stringify(v)
     I s == 0 { val_free(v); R 0 }
-    result := 1
+    result := mut 1
     I strlen_ptr(s) > 5 { result = result + 1 }
     free(s)
     val_free(v)
@@ -1380,7 +1380,7 @@ F test_mixed_types() -> i64 {
     v := val_object(obj)
     toml := convert_to_toml(v)
     I toml == 0 { val_free(v); R 0 }
-    result := 1
+    result := mut 1
     I count_nodes(v) == 8 { result = result + 1 }
     I strlen_ptr(toml) > 10 { result = result + 1 }
     free(toml)
@@ -1396,7 +1396,7 @@ F test_booleans() -> i64 {
     v := val_object(obj)
     toml := convert_to_toml(v)
     I toml == 0 { val_free(v); R 0 }
-    result := 1
+    result := mut 1
     I strlen_ptr(toml) > 10 { result = result + 1 }
     free(toml)
     val_free(v)
@@ -1410,7 +1410,7 @@ F test_null_handling() -> i64 {
     v := val_object(obj)
     toml := convert_to_toml(v)
     I toml == 0 { val_free(v); R 0 }
-    result := 1
+    result := mut 1
     I strlen_ptr(toml) > 0 { result = result + 1 }
     free(toml)
     val_free(v)
@@ -1419,7 +1419,7 @@ F test_null_handling() -> i64 {
 
 # Main: Run all tests and accumulate score
 F main() -> i64 {
-    score := 0
+    score := mut 0
     score = score + test_simple_object()
     score = score + test_nested_object()
     score = score + test_array_values()

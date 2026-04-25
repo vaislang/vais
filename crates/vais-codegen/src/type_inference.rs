@@ -887,12 +887,22 @@ impl CodeGenerator {
             Expr::Index { expr: inner, index } => {
                 // Check if this is a slice operation
                 if matches!(index.node, Expr::Range { .. }) {
-                    // Slice returns a pointer
+                    // Slice expression `arr[a..b]` produces a slice fat
+                    // pointer `{ i8*, i64 }` in text-IR codegen. Returning
+                    // `Slice(elem)` keeps the type tag in sync with the
+                    // emitted value, so downstream `s[i]` indexing takes
+                    // the `is_fat_ptr=true` branch (extractvalue + GEP).
+                    // Previously this returned `Pointer(elem)`, causing the
+                    // index path to GEP straight into the struct value and
+                    // produce a "{ ptr, i64 } expected ptr" verifier error.
                     let inner_ty = self.infer_expr_type(inner);
                     match inner_ty {
-                        ResolvedType::Pointer(elem) => ResolvedType::Pointer(elem),
-                        ResolvedType::Array(elem) => ResolvedType::Pointer(elem),
-                        _ => ResolvedType::Pointer(Box::new(ResolvedType::I64)),
+                        ResolvedType::Pointer(elem) => ResolvedType::Slice(elem),
+                        ResolvedType::Array(elem) => ResolvedType::Slice(elem),
+                        ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => {
+                            ResolvedType::Slice(elem)
+                        }
+                        _ => ResolvedType::Slice(Box::new(ResolvedType::I64)),
                     }
                 } else {
                     // Regular indexing returns element type

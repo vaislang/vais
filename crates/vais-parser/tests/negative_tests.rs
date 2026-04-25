@@ -154,10 +154,11 @@ fn test_error_enum_variant_missing_paren() {
 
 #[test]
 #[ignore] // Bug C20: parser stack overflows even at 20 nesting levels under
-          // default 8MB cargo-test thread stack — the recursive descent path
-          // for `(...)` is too deep per level. Tracked as separate work
-          // (Pratt-style flattening or explicit-stack rewrite). See STATUS.md
-          // catalogue. Re-enable once depth-budget is < 1KB/level.
+          // default 8MB cargo-test thread stack. A naive paren-chain
+          // flattening was tried (commit reverted) but broke
+          // `((1 + 2) * (3 + 4))` — distinguishing `(((x)))` from
+          // `((a) op (b))` requires real lookahead. Tracked as separate
+          // work; safe workaround is to avoid > ~15 literal `(` nests.
 fn test_error_deeply_nested_expressions() {
     // Create deeply nested expressions (using a conservative nesting level)
     // Parser has deep recursion, so we use only 20 levels to avoid stack overflow

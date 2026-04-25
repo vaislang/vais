@@ -397,7 +397,7 @@ F parse_headers_rec(raw: i64, start: i64, end_pos: i64, headers: i64) -> i64 {
         colon := find_byte(raw, end_pos, 58, start)  # ':'
         I colon < 0 { R 0 }
         # Find line end
-        line_end := find_byte(raw, end_pos, 13, start)  # \r
+        line_end := mut find_byte(raw, end_pos, 13, start)  # \r
         I line_end < 0 { line_end = end_pos }
         # Key: [start, colon), Value: [colon+2, line_end) (skip ": ")
         key := raw + start
@@ -674,7 +674,7 @@ F extract_path_param(path: i64, path_len: i64, pattern: i64, pat_len: i64) -> i6
     I colon_pos < 0 { R 0 }
     # The value starts at the same position in the path
     val_start := colon_pos
-    val_end := find_byte(path, path_len, 47, val_start)
+    val_end := mut find_byte(path, path_len, 47, val_start)
     I val_end < 0 { val_end = path_len }
     val_len := val_end - val_start
     # Copy value
@@ -923,7 +923,7 @@ F extract_json_string(body: i64, body_len: i64, key: i64, key_len: i64) -> i64 {
     pos := find_json_key(body, body_len, key, key_len, 0)
     I pos < 0 { R 0 }
     # After key, skip ": " and opening "
-    val_start := skip_json_ws(body, body_len, pos)
+    val_start := mut skip_json_ws(body, body_len, pos)
     I val_start >= body_len { R 0 }
     I load_byte(body + val_start) != 34 { R 0 }  # must be "
     val_start = val_start + 1
@@ -1009,7 +1009,7 @@ F test_hash_table() -> i64 {
     tbl := tbl_new()
     tbl_set(tbl, str_to_ptr("name"), 4, 42)
     tbl_set(tbl, str_to_ptr("age"), 3, 30)
-    result := 0
+    result := mut 0
     I tbl_size(tbl) == 2 { result = result + 1 }
     I tbl_get(tbl, str_to_ptr("name"), 4) == 42 { result = result + 1 }
     result
@@ -1020,7 +1020,7 @@ F test_hash_table_update() -> i64 {
     tbl := tbl_new()
     tbl_set(tbl, str_to_ptr("x"), 1, 10)
     tbl_set(tbl, str_to_ptr("x"), 1, 20)  # update
-    result := 0
+    result := mut 0
     I tbl_get(tbl, str_to_ptr("x"), 1) == 20 { result = result + 1 }
     I tbl_size(tbl) == 1 { result = result + 1 }  # should not duplicate
     result
@@ -1032,7 +1032,7 @@ F test_request_parsing() -> i64 {
     raw_len := strlen_ptr(raw)
     req := parse_request(raw, raw_len)
     I req == 0 { free(raw); R 0 }
-    result := 0
+    result := mut 0
     I req_is_method(req, str_to_ptr("GET")) == 1 { result = result + 1 }
     I req_path_len(req) == 6 { result = result + 1 }  # "/items"
     free(raw)
@@ -1044,7 +1044,7 @@ F test_request_parsing() -> i64 {
 F test_response_building() -> i64 {
     r := resp_ok(str_to_ptr("test"))
     s := resp_to_string(r)
-    result := 0
+    result := mut 0
     I strlen_ptr(s) > 30 { result = result + 1 }
     # Check status code in response
     I load_byte(s + 9) == 50 { result = result + 1 }  # '2' from "200"
@@ -1061,7 +1061,7 @@ F test_router_basic() -> i64 {
     router_add(router, str_to_ptr("POST"), str_to_ptr("/items"), 2)
     raw := make_request(str_to_ptr("GET"), str_to_ptr("/health"), 0)
     req := parse_request(raw, strlen_ptr(raw))
-    result := 0
+    result := mut 0
     handler := router_match(router, req)
     I handler == 6 { result = result + 1 }
     free(raw)
@@ -1078,7 +1078,7 @@ F test_router_basic() -> i64 {
 
 # Test 6: Path parameter matching
 F test_path_params() -> i64 {
-    result := 0
+    result := mut 0
     I path_matches(str_to_ptr("/items/42"), 9, str_to_ptr("/items/:id"), 10) == 1 {
         result = result + 1
     }
@@ -1091,7 +1091,7 @@ F test_path_params() -> i64 {
 # Test 7: Path parameter extraction
 F test_path_extraction() -> i64 {
     id := extract_path_param(str_to_ptr("/items/42"), 9, str_to_ptr("/items/:id"), 10)
-    result := 0
+    result := mut 0
     I id != 0 {
         I str_to_i64(id, strlen_ptr(id)) == 42 { result = result + 1 }
         free(id)
@@ -1108,7 +1108,7 @@ F test_path_extraction() -> i64 {
 F test_store_crud() -> i64 {
     s := store_new()
     item := store_create(s, str_to_ptr("widget"), 6, 100)
-    result := 0
+    result := mut 0
     I store_count(s) == 1 { result = result + 1 }
     I load_i64(item) == 1 { result = result + 1 }  # id should be 1
     result
@@ -1119,7 +1119,7 @@ F test_store_get_update() -> i64 {
     s := store_new()
     store_create(s, str_to_ptr("alpha"), 5, 10)
     store_create(s, str_to_ptr("beta"), 4, 20)
-    result := 0
+    result := mut 0
     item := store_get(s, 1)
     I item != 0 && load_i64(item + 24) == 10 { result = result + 1 }
     store_update(s, 1, str_to_ptr("updated"), 7, 99)
@@ -1132,7 +1132,7 @@ F test_store_get_update() -> i64 {
 F test_store_delete() -> i64 {
     s := store_new()
     store_create(s, str_to_ptr("temp"), 4, 1)
-    result := 0
+    result := mut 0
     I store_count(s) == 1 { result = result + 1 }
     store_delete(s, 1)
     I store_count(s) == 0 { result = result + 1 }
@@ -1148,7 +1148,7 @@ F test_health_endpoint() -> i64 {
     req := parse_request(raw, strlen_ptr(raw))
     handler := router_match(router, req)
     resp := handle_request(handler, req, store)
-    result := 0
+    result := mut 0
     I load_i64(resp) == 200 { result = result + 1 }
     s := resp_to_string(resp)
     I strlen_ptr(s) > 20 { result = result + 1 }
@@ -1167,7 +1167,7 @@ F test_list_empty() -> i64 {
     req := parse_request(raw, strlen_ptr(raw))
     handler := router_match(router, req)
     resp := handle_request(handler, req, store)
-    result := 0
+    result := mut 0
     I load_i64(resp) == 200 { result = result + 1 }
     # Body should be "[]" (empty array)
     body := load_i64(resp + 24)
@@ -1179,7 +1179,7 @@ F test_list_empty() -> i64 {
 
 # Test 13: Integer to string and back
 F test_int_conversion() -> i64 {
-    result := 0
+    result := mut 0
     s1 := i64_to_str(42)
     I str_to_i64(s1, strlen_ptr(s1)) == 42 { result = result + 1 }
     free(s1)
@@ -1200,7 +1200,7 @@ F test_json_builder() -> i64 {
     json_str_val(b, str_to_ptr("test"))
     json_obj_end(b)
     s := buf_to_cstr(b)
-    result := 0
+    result := mut 0
     I strlen_ptr(s) > 10 { result = result + 1 }
     # Verify it starts with '{' (123)
     I load_byte(s) == 123 { result = result + 1 }
@@ -1211,7 +1211,7 @@ F test_json_builder() -> i64 {
 
 # Main: Run all tests
 F main() -> i64 {
-    score := 0
+    score := mut 0
     score = score + test_hash_table()
     score = score + test_hash_table_update()
     score = score + test_request_parsing()
