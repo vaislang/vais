@@ -1,7 +1,12 @@
-# XFAIL: `Vec<Color> := mut vec_new()` fails TC — vec_new() returns Vec<i64>
-# default and unifier can't promote to Vec<Color>. Tracked as bug C16.
-# Workarounds tried (vec_new_t<T>) all fail due to zero-arg generic resolution
-# at user-code call sites (the C17 fix only helps inside specialized bodies).
+# XFAIL: Vec<EnumType> instantiation requires transitive generic propagation
+# that's not yet implemented. Direct attempt:
+#   `v: Vec<Color> := mut vec_new()` — fails because vec_new() returns Vec<i64>
+#   `v: Vec<Color> := mut vec_new_t()` — generic vec_new_t<T> spec generates
+#     correctly (vec_new_t$Color), but the body calls Vec.with_capacity(8)
+#     which is hard-mangled as Vec_with_capacity$i64. Cross-fn-cross-method
+#     transitive specialization propagation is needed (vec_new_t<T>'s body
+#     in specialized form should call Vec.with_capacity$T, not bare Vec
+#     .with_capacity$i64). Tracked as bug C16.
 #
 # CHECKS: Vec<EnumType> push and iteration.
 U std/vec.{vec_new};

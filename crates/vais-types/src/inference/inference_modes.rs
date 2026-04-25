@@ -36,6 +36,76 @@ impl TypeChecker {
                     Expr::Array(elements) => {
                         self.check_array_with_expected(elements, expected, &expr.span)
                     }
+                    // Phase 0 bug C16 fix: a zero-arg generic call like `vec_new()`
+                    // can't infer T from arguments. After the regular inference
+                    // path (which leaves T as a fresh Var), unify the call's
+                    // return type against the expected hint to nail T to the
+                    // concrete type, then re-register the instantiation if it
+                    // became fully concrete. The call below also handles the
+                    // post-unify expr_types refresh.
+                    Expr::Call { func, args } => {
+                        let inferred = self.check_expr(expr)?;
+                        self.unify(expected, &inferred).map_err(|e| match e {
+                            TypeError::Mismatch { expected: exp, found, .. } =>
+                                TypeError::Mismatch {
+                                    expected: exp,
+                                    found,
+                                    span: Some(expr.span),
+                                },
+                            _ => e,
+                        })?;
+                        // After unify, if `func` was a known generic fn,
+                        // resolve its generic args concretely and add an
+                        // instantiation that downstream codegen can pick up.
+                        if let Expr::Ident(fn_name) = &func.node {
+                            if let Some(sig) = self.functions.get(fn_name).cloned() {
+                                if !sig.generics.is_empty() {
+                                    let _ = args; // args already type-checked above
+                                    // Re-derive concrete type args by unifying
+                                    // the call's return type pattern against
+                                    // the resolved inferred type.
+                                    let resolved_inf = self.apply_substitutions(&inferred);
+                                    let mut bindings: std::collections::HashMap<String, ResolvedType> =
+                                        std::collections::HashMap::new();
+                                    if Self::infer_args_from_return_type(
+                                        &sig.ret,
+                                        &resolved_inf,
+                                        &sig.generics,
+                                        &mut bindings,
+                                    ) {
+                                        let concrete: Vec<ResolvedType> = sig
+                                            .generics
+                                            .iter()
+                                            .map(|g| bindings.get(g).cloned()
+                                                .unwrap_or(ResolvedType::Unknown))
+                                            .collect();
+                                        let all_concrete = concrete.iter().all(|t| !matches!(t,
+                                            ResolvedType::Var(_) | ResolvedType::Unknown));
+                                        if all_concrete {
+                                            let inst = crate::types::GenericInstantiation::function(
+                                                &sig.name, concrete,
+                                            );
+                                            self.add_instantiation(inst);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        let resolved = self.apply_substitutions(&inferred);
+                        if Self::has_concrete_container_generics(&resolved)
+                            && !Self::has_concrete_container_generics(&inferred)
+                        {
+                            let file_id = if expr.span.file_id != 0 {
+                                expr.span.file_id
+                            } else {
+                                self.current_file_id
+                            };
+                            let span_key = (file_id, expr.span.start, expr.span.end);
+                            self.expr_types.insert(span_key, resolved.clone());
+                            return Ok(resolved);
+                        }
+                        return Ok(inferred);
+                    }
                     // For other expressions, infer then unify
                     _ => {
                         let inferred = self.check_expr(expr)?;
@@ -275,6 +345,62 @@ impl TypeChecker {
                 !generics.is_empty() && generics.iter().all(is_concrete)
             }
             _ => false,
+        }
+    }
+
+    /// Phase 0 bug C16 helper: structurally walk `pattern` (the function's
+    /// declared return type) against `concrete` (the resolved return type
+    /// after unification) to derive concrete bindings for each generic name
+    /// in `generics`. Returns true if the walk succeeded; the bindings map
+    /// is mutated in place.
+    ///
+    /// Limited support: handles ResolvedType::Generic, Named (recursing into
+    /// generics), Optional/Result/Tuple/Array/Ref. Other shapes are treated
+    /// as "no info from this branch".
+    fn infer_args_from_return_type(
+        pattern: &ResolvedType,
+        concrete: &ResolvedType,
+        generics: &[String],
+        bindings: &mut std::collections::HashMap<String, ResolvedType>,
+    ) -> bool {
+        match (pattern, concrete) {
+            (ResolvedType::Generic(name), ty) if generics.iter().any(|g| g == name) => {
+                bindings.entry(name.clone()).or_insert_with(|| ty.clone());
+                true
+            }
+            (
+                ResolvedType::Named { name: n1, generics: g1 },
+                ResolvedType::Named { name: n2, generics: g2 },
+            ) => {
+                if n1 != n2 || g1.len() != g2.len() {
+                    return false;
+                }
+                for (p, c) in g1.iter().zip(g2.iter()) {
+                    Self::infer_args_from_return_type(p, c, generics, bindings);
+                }
+                true
+            }
+            (ResolvedType::Optional(p), ResolvedType::Optional(c)) => {
+                Self::infer_args_from_return_type(p, c, generics, bindings)
+            }
+            (ResolvedType::Result(p_ok, p_err), ResolvedType::Result(c_ok, c_err)) => {
+                Self::infer_args_from_return_type(p_ok, c_ok, generics, bindings);
+                Self::infer_args_from_return_type(p_err, c_err, generics, bindings);
+                true
+            }
+            (ResolvedType::Tuple(ps), ResolvedType::Tuple(cs)) if ps.len() == cs.len() => {
+                for (p, c) in ps.iter().zip(cs.iter()) {
+                    Self::infer_args_from_return_type(p, c, generics, bindings);
+                }
+                true
+            }
+            (ResolvedType::Array(p), ResolvedType::Array(c))
+            | (ResolvedType::Ref(p), ResolvedType::Ref(c))
+            | (ResolvedType::RefMut(p), ResolvedType::RefMut(c))
+            | (ResolvedType::Pointer(p), ResolvedType::Pointer(c)) => {
+                Self::infer_args_from_return_type(p, c, generics, bindings)
+            }
+            _ => true,
         }
     }
 }
