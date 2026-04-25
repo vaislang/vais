@@ -1,14 +1,11 @@
-# XFAIL: match arm guards `pattern if expr => body` aren't recognized by the
-# parser. The `if` keyword is consumed as an Ident before the parser looks
-# for `=>`, so guards never reach codegen. Tracked as Phase 0 finding C10.
-#
-# CHECKS: match arm guards (`pattern if expr => body`).
+# CHECKS: match arm guards `pattern I expr => body` (note: vais uses single-char
+# `I` keyword for if/guard, not the spelled-out `if`).
 F classify(n: i64) -> i64 {
     M n {
-        x if x < 0 => 1,
+        x I x< 0 => 1,
         0          => 2,
-        x if x < 10 => 3,
-        x if x < 100 => 4,
+        x I x< 10 => 3,
+        x I x< 100 => 4,
         _ => 5,
     }
 }

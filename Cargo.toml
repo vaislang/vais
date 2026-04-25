@@ -33,36 +33,35 @@ members = [
     "examples/plugins/example-lint",
     "benches",
 ]
-# Exclude Python/Node bindings from default build - they require
-# their respective language toolchains (maturin for Python, napi for Node)
+# Phase 0.A (2026-04-25): default-members reduced to core (7) + auxiliary (6).
+# Experimental crates remain in `members` so `cargo build -p <name>` still
+# works, but `cargo build` / `cargo test` no longer compile them by default.
+# This keeps the v1.0 trust path (lang conformance + stdlib + hello-world)
+# deterministic and fast, and prevents an unrelated experimental-crate
+# breakage from blocking the main compiler.
+#
+# To opt-in to the full surface: `cargo build --workspace` (or per-crate
+# `cargo build -p vais-jit`). Python/Node bindings still need their own
+# toolchains (maturin / napi).
+#
+# Tier definitions: see `compiler/docs/CRATE_AUDIT.md`.
 default-members = [
+    # Core (production-track) — must be green for v1.0
     "crates/vais-lexer",
     "crates/vais-parser",
     "crates/vais-ast",
     "crates/vais-types",
     "crates/vais-codegen",
+    "crates/vais-mir",
+    "crates/vaisc",
+    # Auxiliary (best-effort, not v1.0-blocking)
     "crates/vais-lsp",
     "crates/vais-dap",
     "crates/vais-i18n",
     "crates/vais-plugin",
-    "crates/vais-jit",
-    "crates/vais-gc",
-    "crates/vais-gpu",
-    "crates/vais-hotreload",
-    "crates/vais-dynload",
     "crates/vais-macro",
-    "crates/vais-profiler",
-    "crates/vais-registry-server",
-    "crates/vais-playground-server",
-    "crates/vais-tutorial",
     "crates/vais-bindgen",
-    "crates/vais-codegen-js",
-    "crates/vais-query",
-    "crates/vais-mir",
-    "crates/vais-testgen",
-    "crates/vais-supply-chain",
-    "crates/vais-security",
-    "crates/vaisc",
+    # Test fixtures + benchmarks: keep building so infra rot surfaces early.
     "examples/plugins/example-lint",
     "benches",
 ]

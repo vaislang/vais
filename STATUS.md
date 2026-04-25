@@ -10,7 +10,7 @@
 |----------|-------|---------|--------|
 | 01_primitives | 16 | 16/16 | ✅ |
 | 02_control_flow | 16 | 16/16 | ✅ |
-| 03_match | 8 | 7/7 + 1 xfail | ✅ |
+| 03_match | 8 | 8/8 | ✅ |
 | 04_struct | 11 | 11/11 | ✅ |
 | 05_enum | 7 | 7/7 | ✅ |
 | 06_generic | 8 | 8/8 | ✅ |
@@ -19,7 +19,7 @@
 | 09_traits | 0 | — | not yet |
 | 10_ffi | 0 | — | not yet |
 | 99_integration | 11 | 11/11 | ✅ |
-| **Total** | **83** | **83/83 (100%) + 1 xfail** | 🎉 |
+| **Total** | **84** | **84/84 (100%)** | 🎉 |
 
 Run yourself:
 ```bash
@@ -94,7 +94,7 @@ cd compiler/std/tests && bash run.sh
 | C3 ✅ | ~~StrHashMap<i64> generic specialization duplicate symbol cross-module~~ FIXED in function_gen/generics.rs by emitting specialized definitions with `linkonce_odr` linkage. Standard C++-template-instantiation discipline — equivalent monomorphizations from multiple consumer modules merge at link time. Promoted xfail_hashmap_strhashmap.vais → test_hashmap.vais. | — | — | test_hashmap.vais |
 | C4 partial | Specialized generic body's call to another generic's static method now correctly resolves to the inner specialization. `MutexGuard::new(&self)` inside `Mutex_lock$i64` mangles to `MutexGuard_new$i64` (was bare `MutexGuard_new`). Two changes in `expr_helpers_call/method_call.rs`: (1) substitute `expected_ret` using current spec context; (2) when struct has generics + spec context active + concrete expected_ret, prefer expected_ret's generics over arg-type inference. STILL XFAIL — std/sync exercises a deeper unrelated bug C9. | — | — | xfail_sync_mutexguard_specialization.vais |
 | C9 partial | ~~`?` postfix type fell to ResolvedType::Unknown → i64 in signature~~ FIXED in `types/conversion.rs::ast_type_to_resolved_impl`: `Type::Optional` → `ResolvedType::Optional`, `Type::Result` → `ResolvedType::Result(_, i64)`. Function signatures now match their declared return type. STILL latent: when the function body returns `Some(<user_struct>)`, the `Some(...)` constructor uses the global `%Option = {i32, {i64}}` layout instead of `{i8, %Struct}`. That deeper "specialized Optional layout per call site" issue is what still blocks C4. | use named `Option<T>` instead of `T?` (which now also works) | — | partial in conversion.rs |
-| C10 | match arm guards `pattern if expr => body` not recognized by parser. The `if` keyword is consumed as Ident before parser looks for `=>`. | `M n { x if x < 0 => 1, ... }` | rewrite as nested `M` or `I cond { result } EL { ... }` | `tests/lang/03_match/match_guard.vais` |
+| C10 ✅ | ~~match arm guards not recognized~~ NOT A BUG — vais uses single-char `I` keyword for guards (`pattern I expr => body`); spelled-out `if` is just an ident. Test was using wrong syntax. Updated `tests/lang/03_match/match_guard.vais` to use `I` and the test passes. | — | — | match_guard.vais |
 | C5 ✅ | ~~`String.with_capacity(n)` segfaults when `n < 16`~~ FIXED in std/string.vais: `new_cap := self.cap * 2` is now `:= mut`. Root cause: codegen alloca'd `new_cap` but skipped the initial store; only the `< 16` branch wrote to it, leaving the else branch reading uninitialized memory → `malloc(garbage)` crash. Underlying codegen bug remains (separate finding: alloca without initial store when binding is later reassigned). | — | — | test_string.vais cap=4 |
 | C6 ✅ | ~~struct field of fixed-size array `[T; N]` triggers ICE on read~~ FIXED in `inkwell/gen_aggregate.rs::generate_index` (handle ArrayValue by spilling to alloca + GEP) AND `inkwell/gen_advanced.rs::generate_struct_literal` (load array through pointer when field type is array). Two distinct codegen paths needed updating because `generate_array` returns the alloca pointer, not the array value. Test: `tests/lang/04_struct/struct_array_field.vais`. | — | — | struct_array_field.vais |
 | C7 ✅ | ~~match arms with nested variant patterns produce invalid phi/wrong arm dispatch~~ FIXED in `inkwell/gen_match.rs` — two-part fix: (1) `push_inner_scrutinee_for_variant` threads the inner Option/Result type onto the scrutinee stack while recursing into nested patterns so payload-decoding lookups resolve correctly; (2) `Pattern::Variant` pattern-check now AND-s the inner pattern's check when any field is itself a Variant/Literal/Range, so sibling arms like `Some(Some(v))` and `Some(None)` no longer collapse to the same outer-tag check. Test: `tests/lang/03_match/match_nested_enum.vais`. | — | — | match_nested_enum.vais |
@@ -120,7 +120,7 @@ should — see TODO):
 
 ## Active Work
 
-- **Phase 0.A**: surface area audit (in progress, doc landed)
+- **Phase 0.A**: surface area audit + workspace pruning ✅ — default-members reduced from 28 to 13 (7 core + 6 auxiliary). Experimental crates remain in `members` so `cargo build -p <name>` still works, but `cargo build` / `cargo test` no longer compile them by default. CRATE_AUDIT.md is the source of truth for tier definitions.
 - **Phase 0.B**: conformance suite — 54 tests landed, target 300+
 - **Phase 0.C**: stdlib self-tests — 5 tests landed (1 XFAIL each for hashmap, sync)
 - **Phase 0.D**: hello world examples — 12/12 ✅
