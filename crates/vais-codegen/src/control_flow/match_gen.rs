@@ -504,10 +504,23 @@ impl CodeGenerator {
                         }
                     }
                 }
-                match &resolved {
-                    ResolvedType::Str => {
-                        // Str PHI uses fat-pointer { i8*, i64 } — emit a zero
-                        // constant for the unreachable default fallthrough.
+                // Phase α.1 fix: when the inferred resolved type is wider than
+                // the actual phi (e.g., Named wrapper but inner phi is i32),
+                // first check the actual LLVM type registered for arm values.
+                // Fall back to resolved type only when actual is unknown.
+                let phi_llvm_actual = arm_values
+                    .iter()
+                    .find_map(|(v, _)| self.fn_ctx.get_emitted_type(v).map(|s| s.to_string()))
+                    .or_else(|| {
+                        arm_values
+                            .iter()
+                            .find_map(|(v, _)| self.llvm_type_of_checked(v))
+                    });
+                if let Some(actual) = phi_llvm_actual {
+                    // Use actual phi type to pick a type-correct default.
+                    if actual.ends_with('*') {
+                        "null".to_string()
+                    } else if actual == "{ i8*, i64 }" {
                         let zinit = self.next_temp(counter);
                         write_ir!(
                             ir,
@@ -515,13 +528,36 @@ impl CodeGenerator {
                             zinit
                         );
                         zinit
+                    } else if actual == "double" || actual == "float" {
+                        "0.0".to_string()
+                    } else {
+                        "0".to_string()
                     }
-                    ResolvedType::Named { .. }
-                    | ResolvedType::Ref(_)
-                    | ResolvedType::RefMut(_) => "null".to_string(),
-                    ResolvedType::F64 => "0.0".to_string(),
-                    ResolvedType::Bool => "0".to_string(), // Bool → i64 in phi
-                    _ => "0".to_string(),
+                } else {
+                    // Phase α.1 fix: when Named/Ref resolved but actual is
+                    // unknown, the phi may still be a narrow integer (e.g.,
+                    // when match is over an Option inner i32). Use literal "0"
+                    // as a safe default — only emit "null" when the IR string
+                    // form of the resolved type is actually a pointer.
+                    let resolved_llvm = self.type_to_llvm(&resolved);
+                    match &resolved {
+                        ResolvedType::Str => {
+                            let zinit = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
+                                zinit
+                            );
+                            zinit
+                        }
+                        ResolvedType::Named { .. }
+                        | ResolvedType::Ref(_)
+                        | ResolvedType::RefMut(_)
+                            if resolved_llvm.ends_with('*') => "null".to_string(),
+                        ResolvedType::F64 => "0.0".to_string(),
+                        ResolvedType::Bool => "0".to_string(),
+                        _ => "0".to_string(),
+                    }
                 }
             };
             arm_values.push((default_val, default_label.clone()));
