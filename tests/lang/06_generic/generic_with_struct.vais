@@ -1,0 +1,18 @@
+# CHECKS: generic fn that takes a struct + generic returns one of its fields.
+S Pair<A, B> {
+    first: A,
+    second: B
+}
+
+F first<A, B>(p: Pair<A, B>) -> A { p.first }
+F second<A, B>(p: Pair<A, B>) -> B { p.second }
+
+F main() -> i64 {
+    p: Pair<i64, i64> := Pair { first: 100, second: 200 }
+    I first(p) != 100 { R 1 }
+
+    q: Pair<i64, i64> := Pair { first: 0 - 5, second: 50 }
+    I second(q) != 50 { R 2 }
+    I first(q) != 0 - 5 { R 3 }
+    R 0
+}

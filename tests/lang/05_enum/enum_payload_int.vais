@@ -1,0 +1,23 @@
+# CHECKS: user enum with i64 payload variants.
+EN Shape {
+    Square(i64),
+    Circle(i64),
+    Rect(i64, i64)
+}
+
+F area(s: Shape) -> i64 {
+    M s {
+        Square(side) => side * side,
+        Circle(r) => r * r * 3,   # approximate (no float for now)
+        Rect(w, h) => w * h
+    }
+}
+
+F main() -> i64 {
+    I area(Square(5)) != 25 { R 1 }
+    I area(Square(0)) != 0 { R 2 }
+    I area(Circle(10)) != 300 { R 3 }
+    I area(Rect(3, 4)) != 12 { R 4 }
+    I area(Rect(7, 8)) != 56 { R 5 }
+    R 0
+}

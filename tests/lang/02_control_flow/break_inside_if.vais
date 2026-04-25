@@ -1,0 +1,23 @@
+# CHECKS: break inside an if inside a loop — innermost scope only.
+F main() -> i64 {
+    sum: i64 := mut 0
+    LF i: 0..10 {
+        I i == 5 { B }
+        sum = sum + i
+    }
+    # 0+1+2+3+4 = 10
+    I sum != 10 { R 1 }
+
+    # break in nested if
+    found: i64 := mut 0 - 1
+    LF i: 0..20 {
+        I i > 10 {
+            I (i % 3) == 0 {
+                found = i
+                B
+            }
+        }
+    }
+    I found != 12 { R 2 }
+    R 0
+}

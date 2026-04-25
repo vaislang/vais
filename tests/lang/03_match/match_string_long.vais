@@ -1,0 +1,24 @@
+# CHECKS: match on str with longer literals.
+F lookup(name: str) -> i64 {
+    M name {
+        "alpha"   => 1,
+        "beta"    => 2,
+        "gamma"   => 3,
+        "delta"   => 4,
+        "epsilon" => 5,
+        "zeta"    => 6,
+        _         => 0
+    }
+}
+
+F main() -> i64 {
+    I lookup("alpha") != 1 { R 1 }
+    I lookup("beta") != 2 { R 2 }
+    I lookup("gamma") != 3 { R 3 }
+    I lookup("delta") != 4 { R 4 }
+    I lookup("epsilon") != 5 { R 5 }
+    I lookup("zeta") != 6 { R 6 }
+    I lookup("omega") != 0 { R 7 }
+    I lookup("") != 0 { R 8 }
+    R 0
+}

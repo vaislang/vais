@@ -1,0 +1,29 @@
+# CHECKS: hand-rolled startsWith via byte iteration.
+F starts_with(p: i64, plen: i64, prefix: i64, prelen: i64) -> i64 {
+    I prelen > plen { R 0 }
+    LF i: 0..prelen {
+        I load_byte(p + i) != load_byte(prefix + i) { R 0 }
+    }
+    1
+}
+
+F main() -> i64 {
+    p: i64 := str_to_ptr("hello world")
+    plen: i64 := strlen(p)
+
+    pre1: i64 := str_to_ptr("hello")
+    I starts_with(p, plen, pre1, strlen(pre1)) != 1 { R 1 }
+
+    pre2: i64 := str_to_ptr("world")
+    I starts_with(p, plen, pre2, strlen(pre2)) != 0 { R 2 }
+
+    pre3: i64 := str_to_ptr("")   # empty prefix
+    I starts_with(p, plen, pre3, 0) != 1 { R 3 }
+
+    pre4: i64 := str_to_ptr("hello world!")   # too long
+    I starts_with(p, plen, pre4, strlen(pre4)) != 0 { R 4 }
+
+    pre5: i64 := str_to_ptr("hello world")   # exact match
+    I starts_with(p, plen, pre5, strlen(pre5)) != 1 { R 5 }
+    R 0
+}

@@ -1,0 +1,15 @@
+# CHECKS: two generic helper fns chaining via i64.
+F double<T>(x: T) -> T {
+    add_self(x)
+}
+
+F add_self<T>(x: T) -> T {
+    x   # placeholder — without operator overloading, just return x
+}
+
+F main() -> i64 {
+    I double(5) != 5 { R 1 }
+    I double(0) != 0 { R 2 }
+    I double(0 - 7) != 0 - 7 { R 3 }
+    R 0
+}

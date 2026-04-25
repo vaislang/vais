@@ -1,0 +1,20 @@
+# CHECKS: large i64 multiplication and addition near edge cases.
+F main() -> i64 {
+    # 1B * 1B = 1e18 (fits in i64 max ~9.2e18)
+    a: i64 := 1000000000
+    I a * a != 1000000000000000000 { R 1 }
+
+    # large addition
+    b: i64 := 4000000000000000000
+    c: i64 := 4000000000000000000
+    I b + c != 8000000000000000000 { R 2 }
+
+    # large negative
+    d: i64 := 0 - 1000000000000
+    I d * 2 != 0 - 2000000000000 { R 3 }
+
+    # zero behavior
+    I a * 0 != 0 { R 4 }
+    I 0 * a != 0 { R 5 }
+    R 0
+}
