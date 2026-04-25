@@ -1,24 +1,40 @@
-# CHECKS: && and || basic eval (bool returns from comparison + logical ops).
+# CHECKS: && and || basic eval (bool returns from comparison + logical ops)
+# AND `bool as i64` returns 0 or 1 (not -1/255 — bug C8 regression).
 F main() -> i64 {
+    # bool as i64 — true → 1, false → 0
+    a: bool := (1 == 1)
+    I (a as i64) != 1 { R 1 }
+    b: bool := (1 == 2)
+    I (b as i64) != 0 { R 2 }
+
     # && — both true
-    I (1 == 1) && (2 == 2) {} EL { R 1 }
+    c: bool := (1 == 1) && (2 == 2)
+    I (c as i64) != 1 { R 3 }
     # && — first false
-    I (1 == 2) && (2 == 2) { R 2 }
+    d: bool := (1 == 2) && (2 == 2)
+    I (d as i64) != 0 { R 4 }
     # && — second false
-    I (1 == 1) && (2 == 3) { R 3 }
+    e: bool := (1 == 1) && (2 == 3)
+    I (e as i64) != 0 { R 5 }
 
     # || — both true
-    I (1 == 1) || (2 == 2) {} EL { R 4 }
-    # || — first true, second false
-    I (1 == 1) || (2 == 3) {} EL { R 5 }
+    f: bool := (1 == 1) || (2 == 2)
+    I (f as i64) != 1 { R 6 }
+    # || — first true
+    g: bool := (1 == 1) || (2 == 3)
+    I (g as i64) != 1 { R 7 }
     # || — first false, second true
-    I (1 == 2) || (2 == 2) {} EL { R 6 }
+    h: bool := (1 == 2) || (2 == 2)
+    I (h as i64) != 1 { R 8 }
     # || — both false
-    I (1 == 2) || (2 == 3) { R 7 }
+    i: bool := (1 == 2) || (2 == 3)
+    I (i as i64) != 0 { R 9 }
 
     # Mixed
-    I (1 == 1) && (2 == 2) && (3 == 3) {} EL { R 8 }
-    I (1 == 2) || (2 == 3) || (3 == 3) {} EL { R 9 }
+    j: bool := (1 == 1) && (2 == 2) && (3 == 3)
+    I (j as i64) != 1 { R 10 }
+    k: bool := (1 == 2) || (2 == 3) || (3 == 3)
+    I (k as i64) != 1 { R 11 }
 
     R 0
 }

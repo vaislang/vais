@@ -177,14 +177,28 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             let src_width = val.into_int_value().get_type().get_bit_width();
             let dst_width = target_type.into_int_type().get_bit_width();
             if src_width < dst_width {
-                let result = self
-                    .builder
-                    .build_int_s_extend(
-                        val.into_int_value(),
-                        target_type.into_int_type(),
-                        "cast_sext",
-                    )
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                // Phase 0 bug C8 fix: i1 (bool) widening must use zext, not
+                // sext. `true` is i1 1 → sext gives all-1s (-1, or 255 mod
+                // 256) but `true as i64` should be 1. zext zero-fills the
+                // upper bits, yielding 1. For other narrow→wide casts we
+                // preserve sign.
+                let result = if src_width == 1 {
+                    self.builder
+                        .build_int_z_extend(
+                            val.into_int_value(),
+                            target_type.into_int_type(),
+                            "cast_zext_bool",
+                        )
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                } else {
+                    self.builder
+                        .build_int_s_extend(
+                            val.into_int_value(),
+                            target_type.into_int_type(),
+                            "cast_sext",
+                        )
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                };
                 Ok(result.into())
             } else if src_width > dst_width {
                 let result = self
