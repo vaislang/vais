@@ -72,6 +72,21 @@ cd compiler/std/tests && bash run.sh
 - `vais-lexer`, `vais-parser`, `vais-ast`, `vais-types`, `vais-codegen`, `vais-mir`, `vaisc`
 - These crates produce LLVM IR. Trust target: 100% conformance suite green.
 
+#### Two codegen backends — **only inkwell is v1.0-trusted**
+The `vais-codegen` crate currently houses two parallel lowering paths:
+- **Inkwell** (default for `vaisc build`) — what the lang conformance suite,
+  stdlib self-tests, hello world examples, and bootstrap_tests all exercise.
+  All four green: lang 310/310, stdlib 7/7, hello 12/12, bootstrap 17/17.
+- **Text-IR** (used by `crates/vaisc/tests/e2e/`) — older string-based
+  emit path. As of 2026-04-25, ~176 / 2625 e2e tests fail (predates the
+  Phase 0 commit series; verified by running pre-C12 commit). Most
+  failures cluster on `strstr`/`strncmp` runtime decl duplication, str
+  comparison, format/HTTP/atomics. **Tracked as separate cleanup work,
+  not blocking v1.0** — the text-IR backend will be retired in favour of
+  inkwell once the remaining few features (rare async patterns) are
+  ported. Until then, do not ship code that relies on text-IR-only
+  codepaths.
+
 ### Auxiliary (best-effort)
 - `vais-lsp`, `vais-dap`, `vais-i18n`, `vais-plugin`, `vais-macro`, `vais-bindgen`
 - Compile but not exhaustively tested. Known to break on uncommon edge cases.
