@@ -244,6 +244,33 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// None for struct/aggregate payloads (those go through
     /// `option_result_payload_struct_type`) and when the scrutinee type is
     /// unresolved.
+    /// Phase 0 bug C7 helper: when descending into a nested variant pattern
+    /// (e.g. `Some(Some(v))`), push the inner payload type onto the scrutinee
+    /// stack so recursive `option_result_payload_*` lookups resolve relative
+    /// to the inner Option/Result rather than the outer one. Returns true
+    /// when a push happened (caller must pop).
+    fn push_inner_scrutinee_for_variant(&mut self, variant_name: &str) -> bool {
+        use vais_types::ResolvedType as R;
+        let inner_ty = {
+            let outer = match self.match_scrutinee_type_stack.last() {
+                Some(t) => t,
+                None => return false,
+            };
+            match (outer, variant_name) {
+                (R::Optional(inner), "Some") => Some((**inner).clone()),
+                (R::Result(ok, _), "Ok") => Some((**ok).clone()),
+                (R::Result(_, err), "Err") => Some((**err).clone()),
+                _ => None,
+            }
+        };
+        if let Some(t) = inner_ty {
+            self.match_scrutinee_type_stack.push(t);
+            true
+        } else {
+            false
+        }
+    }
+
     fn option_result_payload_primitive_type(
         &self,
         variant_name: &str,
@@ -886,7 +913,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
                 Ok(result)
             }
-            Pattern::Variant { name, fields: _ } => {
+            Pattern::Variant { name, fields } => {
                 // Enum variant pattern: check the tag matches
                 // Enum is represented as { i8 tag, i64 data }
                 let struct_val = match_val.into_struct_value();
@@ -899,7 +926,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // Find expected tag value
                 let expected_tag = self.get_enum_variant_tag(&name.node);
 
-                let result = self
+                let tag_match = self
                     .builder
                     .build_int_compare(
                         IntPredicate::EQ,
@@ -909,7 +936,124 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     )
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
-                Ok(result)
+                // Phase 0 bug C7 (part 2): if any inner field is itself a
+                // Variant pattern (e.g. `Some(Some(v))` or `Some(None)`), AND-in
+                // the inner pattern check so we distinguish between sibling
+                // arms that share the outer tag. Without this, arms like
+                // `Some(Some(v)) => ...` and `Some(None) => ...` collapse to
+                // the same `tag == Some` predicate, causing the wrong arm
+                // to fire. Bare Ident/Wildcard inner patterns match anything
+                // and don't add extra constraints.
+                let needs_inner_check = fields.iter().any(|f| {
+                    matches!(
+                        f.node,
+                        Pattern::Variant { .. } | Pattern::Literal(_) | Pattern::Range { .. }
+                    )
+                });
+                if !needs_inner_check || fields.is_empty() {
+                    return Ok(tag_match);
+                }
+
+                // Decode the payload and recurse on the inner pattern.
+                // Single-field variant (Option/Result/single-payload user enums):
+                // re-use the same payload-decoding logic as
+                // `generate_pattern_bindings`. To keep this contained, we
+                // synthesize a short check: extract data, decode struct or
+                // primitive based on scrutinee type, then recurse.
+                if fields.len() != 1 {
+                    // Multi-field variants don't currently surface nested
+                    // variant patterns; leave the bare tag check.
+                    return Ok(tag_match);
+                }
+                let inner_pat = &fields[0];
+                if !matches!(
+                    inner_pat.node,
+                    Pattern::Variant { .. } | Pattern::Literal(_) | Pattern::Range { .. }
+                ) {
+                    return Ok(tag_match);
+                }
+
+                // Build inner check inside an "AND" — only run if outer tag
+                // matched. We use short-circuit branch-and-merge.
+                let fn_value = self.current_function.ok_or_else(|| {
+                    CodegenError::LlvmError("no current function for variant pattern".into())
+                })?;
+                let then_blk = self.context.append_basic_block(fn_value, "variant_inner");
+                let join_blk = self.context.append_basic_block(fn_value, "variant_join");
+                let entry_blk = self.builder.get_insert_block().unwrap();
+                self.builder
+                    .build_conditional_branch(tag_match, then_blk, join_blk)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                // Decode the variant payload as the inner scrutinee value.
+                self.builder.position_at_end(then_blk);
+                let data_val = self
+                    .builder
+                    .build_extract_value(struct_val, 1, "variant_data_check")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                let inner_val: BasicValueEnum<'ctx> = if let Some((_, struct_ty)) =
+                    self.option_result_payload_struct_type(&name.node)
+                {
+                    let target_data = inkwell::targets::TargetData::create(
+                        &self.module.get_triple().as_str().to_string_lossy(),
+                    );
+                    let size_bytes = target_data.get_store_size(&struct_ty);
+                    let i64_ty = self.context.i64_type();
+                    let data_i64 = data_val.into_int_value();
+                    if size_bytes > 8 {
+                        let ptr_ty = struct_ty.ptr_type(AddressSpace::default());
+                        let heap_ptr = self
+                            .builder
+                            .build_int_to_ptr(data_i64, ptr_ty, "variant_inner_heap_ptr")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        self.builder
+                            .build_load(struct_ty, heap_ptr, "variant_inner_heap_load")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    } else {
+                        let tmp_alloca = self
+                            .builder
+                            .build_alloca(i64_ty, "variant_inner_small")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        self.builder
+                            .build_store(tmp_alloca, data_i64)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        let typed_ptr = self
+                            .builder
+                            .build_bitcast(
+                                tmp_alloca,
+                                struct_ty.ptr_type(AddressSpace::default()),
+                                "variant_inner_typed",
+                            )
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            .into_pointer_value();
+                        self.builder
+                            .build_load(struct_ty, typed_ptr, "variant_inner_small_load")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    }
+                } else {
+                    data_val
+                };
+
+                let pushed = self.push_inner_scrutinee_for_variant(&name.node);
+                let inner_check = self.generate_pattern_check(inner_pat, &inner_val)?;
+                if pushed {
+                    self.match_scrutinee_type_stack.pop();
+                }
+                let then_end = self.builder.get_insert_block().unwrap();
+                self.builder
+                    .build_unconditional_branch(join_blk)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                self.builder.position_at_end(join_blk);
+                let phi = self
+                    .builder
+                    .build_phi(self.context.bool_type(), "variant_combined")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                phi.add_incoming(&[
+                    (&self.context.bool_type().const_zero(), entry_blk),
+                    (&inner_check, then_end),
+                ]);
+                Ok(phi.as_basic_value().into_int_value())
             }
             Pattern::Struct { name, fields, .. } => {
                 // Struct pattern: check field patterns.
@@ -1153,9 +1297,20 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                         .build_load(struct_ty, typed_ptr, "variant_small_load")
                                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                                 };
+                                // Phase 0 bug C7 fix: nested Option/Result patterns like
+                                // `Some(Some(v))` need the scrutinee stack updated as we
+                                // descend. Without pushing the inner-Option's type, the
+                                // recursive `Some(v)` lookup still sees the outer
+                                // `Option<Option<i64>>` and binds v as `Option<i64>` instead
+                                // of `i64`. Push the inner payload type onto the scrutinee
+                                // stack for the duration of the recursive call.
+                                let pushed = self.push_inner_scrutinee_for_variant(&name.node);
                                 // Bind the loaded struct value, then record its type name
                                 // so downstream field access can resolve the struct.
                                 self.generate_pattern_bindings(first_field, &loaded_struct)?;
+                                if pushed {
+                                    self.match_scrutinee_type_stack.pop();
+                                }
                                 if let (Pattern::Ident(ident_name), Some(struct_name)) =
                                     (&first_field.node, struct_name_opt.as_ref())
                                 {
@@ -1215,11 +1370,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             } else {
                                 data_val
                             };
+                            let pushed = self.push_inner_scrutinee_for_variant(&name.node);
                             self.generate_pattern_bindings(first_field, &decoded)?;
+                            if pushed {
+                                self.match_scrutinee_type_stack.pop();
+                            }
                             return Ok(());
                         }
 
+                        let pushed = self.push_inner_scrutinee_for_variant(&name.node);
                         self.generate_pattern_bindings(first_field, &data_val)?;
+                        if pushed {
+                            self.match_scrutinee_type_stack.pop();
+                        }
                     }
                 } else {
                     // Multi-field variant: the payload is packed into an anonymous struct

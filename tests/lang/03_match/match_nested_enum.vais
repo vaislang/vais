@@ -1,10 +1,11 @@
-# XFAIL: match arms with i64 results in a context where the match result type
-# is the enum aggregate produce invalid IR (phi typed `{i8, i64}` with int
-# constants). Tracked as Phase 0 finding C7. The bug is in the match-result
-# phi codegen path which doesn't coerce arm values to the merged aggregate
-# type.
-#
 # CHECKS: match on Option<Option<i64>> for two-level destructuring.
+# REGRESSION for bug C7: prior to the fix, `Some(Some(v))` and `Some(None)`
+# arms collapsed to a single tag check (both check outer Some), and the
+# inner Some payload was decoded with the wrong type. Two-part fix:
+# (1) `push_inner_scrutinee_for_variant` updates the scrutinee stack as we
+#     recurse into nested patterns so inner-payload type lookups work.
+# (2) `Pattern::Variant` check now AND-s in the inner pattern check when
+#     any field is itself a Variant/Literal/Range.
 F deep_unwrap(o: Option<Option<i64>>) -> i64 {
     M o {
         Some(Some(v)) => v,
