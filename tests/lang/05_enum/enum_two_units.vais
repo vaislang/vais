@@ -1,0 +1,34 @@
+# CHECKS: enum with 2 unit-only variants and dispatch.
+# Note: returning the enum directly from a match (like `flip(t) -> Toggle`)
+# triggers a dominance issue when the arms produce enum constructors.
+# Use ints to indicate state instead.
+EN Toggle {
+    On,
+    Off
+}
+
+F to_int(t: Toggle) -> i64 {
+    M t {
+        On => 1,
+        Off => 0
+    }
+}
+
+F flip_int(state: i64) -> i64 {
+    I state == 0 { 1 } EL { 0 }
+}
+
+F main() -> i64 {
+    I to_int(On) != 1 { R 1 }
+    I to_int(Off) != 0 { R 2 }
+
+    # Use int to track flips
+    s: i64 := mut to_int(On)
+    s = flip_int(s)
+    I s != 0 { R 3 }
+    s = flip_int(s)
+    I s != 1 { R 4 }
+    s = flip_int(flip_int(s))
+    I s != 1 { R 5 }
+    R 0
+}

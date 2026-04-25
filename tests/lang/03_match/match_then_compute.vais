@@ -1,0 +1,21 @@
+# CHECKS: result of match used in subsequent arithmetic.
+F dispatch(n: i64) -> i64 {
+    M n {
+        0 => 1,
+        1 => 10,
+        2 => 100,
+        _ => 0
+    }
+}
+
+F main() -> i64 {
+    r: i64 := dispatch(0) + dispatch(1) + dispatch(2)
+    I r != 111 { R 1 }
+
+    s: i64 := dispatch(0) * 2 + dispatch(2) - 1
+    I s != 101 { R 2 }
+
+    t: i64 := dispatch(99) + dispatch(99)
+    I t != 0 { R 3 }
+    R 0
+}

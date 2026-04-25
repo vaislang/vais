@@ -1,0 +1,14 @@
+# CHECKS: running total of squares.
+F main() -> i64 {
+    sum: i64 := mut 0
+    sum_of_sums: i64 := mut 0
+    LF i: 1..=5 {
+        sum = sum + i * i
+        sum_of_sums = sum_of_sums + sum
+    }
+    # sum after each iter: 1, 5, 14, 30, 55
+    # sum_of_sums = 1+5+14+30+55 = 105
+    I sum != 55 { R 1 }
+    I sum_of_sums != 105 { R 2 }
+    R 0
+}

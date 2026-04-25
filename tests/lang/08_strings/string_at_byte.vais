@@ -1,0 +1,21 @@
+# CHECKS: bound-checked byte access via load_byte.
+F at_or(p: i64, n: i64, idx: i64, default: i64) -> i64 {
+    I idx < 0 || idx >= n { R default }
+    load_byte(p + idx)
+}
+
+F main() -> i64 {
+    p: i64 := str_to_ptr("abc")
+    n: i64 := strlen(p)
+
+    # in range
+    I at_or(p, n, 0, 0 - 1) != 97 { R 1 }
+    I at_or(p, n, 1, 0 - 1) != 98 { R 2 }
+    I at_or(p, n, 2, 0 - 1) != 99 { R 3 }
+
+    # out of range
+    I at_or(p, n, 0 - 1, 0 - 1) != 0 - 1 { R 4 }
+    I at_or(p, n, 3, 0 - 1) != 0 - 1 { R 5 }
+    I at_or(p, n, 100, 0 - 1) != 0 - 1 { R 6 }
+    R 0
+}

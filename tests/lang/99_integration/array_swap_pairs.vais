@@ -1,0 +1,26 @@
+# CHECKS: swap adjacent pairs in Vec<i64>.
+U std/vec.{vec_new};
+
+F main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    LF i: 0..6 {
+        v.push(i + 1)   # [1,2,3,4,5,6]
+    }
+
+    # swap (0,1), (2,3), (4,5)
+    i: i64 := mut 0
+    LW i + 1 < v.len() {
+        tmp: i64 := v[i]
+        v[i] = v[i + 1]
+        v[i + 1] = tmp
+        i = i + 2
+    }
+    # expected: [2,1,4,3,6,5]
+    I v[0] != 2 { R 1 }
+    I v[1] != 1 { R 2 }
+    I v[2] != 4 { R 3 }
+    I v[3] != 3 { R 4 }
+    I v[4] != 6 { R 5 }
+    I v[5] != 5 { R 6 }
+    R 0
+}
