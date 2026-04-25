@@ -1156,6 +1156,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 Ok(())
             }
             Pattern::Ident(name) => {
+                // Phase 0 bug C18 fix: if `name` is a known unit-variant
+                // (e.g. `On`, `Off`, `Red`, `Green`, `Blue`) then this is a
+                // variant pattern, not a fresh binding. The pattern check
+                // already discriminates by tag; we should NOT alloca/store
+                // the whole match value under the variant's name (which then
+                // leaks across sibling arms via shared LLVM symbol).
+                let is_unit_variant = self
+                    .enum_variants
+                    .iter()
+                    .any(|((_, v_name), _)| v_name == name);
+                if is_unit_variant {
+                    return Ok(());
+                }
                 // Bind identifier to the matched value
                 let var_type = match_val.get_type();
                 let alloca = self

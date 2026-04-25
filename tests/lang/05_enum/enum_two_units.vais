@@ -1,10 +1,17 @@
-# CHECKS: enum with 2 unit-only variants and dispatch.
-# Note: returning the enum directly from a match (like `flip(t) -> Toggle`)
-# triggers a dominance issue when the arms produce enum constructors.
-# Use ints to indicate state instead.
+# CHECKS: enum with 2 unit-only variants and dispatch (REGRESSION C18).
+# `flip(t) -> Toggle` returns enum constructor from match arms — was the
+# original C18 dominance bug. Fix in inkwell/gen_match.rs treats unit-variant
+# idents as patterns (not bindings) in pattern bindings, matching TC behavior.
 EN Toggle {
     On,
     Off
+}
+
+F flip(t: Toggle) -> Toggle {
+    M t {
+        On => Off,
+        Off => On
+    }
 }
 
 F to_int(t: Toggle) -> i64 {
@@ -14,21 +21,12 @@ F to_int(t: Toggle) -> i64 {
     }
 }
 
-F flip_int(state: i64) -> i64 {
-    I state == 0 { 1 } EL { 0 }
-}
-
 F main() -> i64 {
     I to_int(On) != 1 { R 1 }
     I to_int(Off) != 0 { R 2 }
 
-    # Use int to track flips
-    s: i64 := mut to_int(On)
-    s = flip_int(s)
-    I s != 0 { R 3 }
-    s = flip_int(s)
-    I s != 1 { R 4 }
-    s = flip_int(flip_int(s))
-    I s != 1 { R 5 }
+    I to_int(flip(On)) != 0 { R 3 }
+    I to_int(flip(Off)) != 1 { R 4 }
+    I to_int(flip(flip(On))) != 1 { R 5 }
     R 0
 }
