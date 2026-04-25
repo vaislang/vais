@@ -72,28 +72,18 @@ cd compiler/std/tests && bash run.sh
 - `vais-lexer`, `vais-parser`, `vais-ast`, `vais-types`, `vais-codegen`, `vais-mir`, `vaisc`
 - These crates produce LLVM IR. Trust target: 100% conformance suite green.
 
-#### Two codegen backends — **only inkwell is v1.0-trusted**
+#### Two codegen backends — both green as of 2026-04-26
 The `vais-codegen` crate currently houses two parallel lowering paths:
 - **Inkwell** (default for `vaisc build`) — what the lang conformance suite,
   stdlib self-tests, hello world examples, and bootstrap_tests all exercise.
   All four green: lang 311/311, stdlib 7/7, hello 12/12, bootstrap 17/17.
 - **Text-IR** (used by `crates/vaisc/tests/e2e/`) — older string-based
-  emit path. As of 2026-04-26, **~11 / 2625 e2e tests fail** (down from
-  176; -94%). The remaining 11 are catalogued as text-IR-only and do
-  not affect `vaisc build`:
-    * `async_runtime::e2e_http_*` (8) + `concurrency::e2e_sync_atomics`,
-      `e2e_thread_sleep_yield` (2) — duplicate symbol at link time
-      because the e2e helper compiles a `.c` runtime sidecar that
-      defines the same `___store_ptr` / `___memcpy` / `___str_eq` /
-      `___malloc` / `___strlen` / `___free` / `___call_fn` symbols the
-      text-IR module already emits. Pure test-infra layering bug.
-    * `phase158_type_strict::e2e_phase158_strict_explicit_cast_bool_to_i64`
-      (1) — exit code 255 instead of 1 (sign-extension on `bool as i64`
-      via the text-IR path; inkwell's C8 fix landed for this case).
-  Text-IR backend will be retired in favour of inkwell. Do not ship
-  code that relies on text-IR-only codepaths.
+  emit path. **2625 / 2625 e2e tests pass, 0 failed** (down from 176
+  fails on the same suite — full -100%). The text-IR backend will
+  still be retired in favour of inkwell long-term, but it is no
+  longer a known-broken path.
 
-  Cleanup landed on the way:
+  Cleanup that landed across the run:
   - `function_gen/runtime.rs::generate_wasm_runtime` no longer
     redeclares `llvm.memcpy.p0i8.p0i8.i64`.
   - `string_ops.rs` no longer redeclares `strstr`.
@@ -102,9 +92,19 @@ The `vais-codegen` crate currently houses two parallel lowering paths:
   - `type_inference.rs::infer_expr_type Expr::Index` returns
     `Slice(elem)` (was `Pointer(elem)`) when index is a Range, so the
     text-IR slice-element index path takes the `is_fat_ptr=true`
-    branch and emits `extractvalue` + GEP — fixes the slice ABI gap
+    branch and emits `extractvalue` + GEP — fixed the slice ABI gap
     that crashed `phase109_bounds_check::slice_*` and the
     json2toml/REST API pilots (5 + 3 = 8 tests).
+  - `expr_helpers.rs::generate_cast_expr` now emits `zext` (not
+    `sext`) when widening `i1` → wider int — text-IR companion to the
+    inkwell C8 fix. Eliminates the `bool as i64 → 255` regression in
+    `phase158_type_strict`.
+  - 7 runtime helper definitions (`__malloc`, `__free`, `__memcpy`,
+    `__strlen`, `__store_ptr`, `__str_eq`, `__call_fn`) now emit as
+    `linkonce_odr` so they coexist with the same symbols defined in
+    the e2e helper's `.c` runtime sidecars (`http_runtime.c`,
+    `thread_runtime.c`). Resolved 10 duplicate-symbol link failures
+    in `async_runtime::e2e_http_*` and `concurrency::e2e_*`.
   - 130-binding `:= mut` patch across 15 e2e test files +
     32-binding patch in `examples/pilot_*.vais` to comply with C2
     strict-immutable enforcement (eliminated 80+ ImmutableAssign

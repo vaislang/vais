@@ -695,10 +695,18 @@ impl CodeGenerator {
                             llvm_type
                         );
                     } else {
+                        // Bug C8 (text-IR companion): widening i1 → wider int
+                        // must use `zext`, not `sext`. Sign-extending an i1
+                        // value of 1 produces all-1s (255 in i8/i64-low),
+                        // which is what made `true as i64` return 255 in the
+                        // text-IR backend. The inkwell backend already
+                        // landed this fix; this brings text-IR into parity.
+                        let widening_op = if src_llvm_ty == "i1" { "zext" } else { "sext" };
                         write_ir!(
                             ir,
-                            "  {} = sext {} {} to {}",
+                            "  {} = {} {} {} to {}",
                             result,
+                            widening_op,
                             src_llvm_ty,
                             val,
                             llvm_type

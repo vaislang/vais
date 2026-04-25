@@ -361,7 +361,7 @@ impl CodeGenerator {
 
         // __malloc: pointer-as-i64 wrapper for libc malloc
         ir.push_str("\n; Runtime: malloc wrapper (i64-ptr)\n");
-        ir.push_str("define i64 @__malloc(i64 %size) {\n");
+        ir.push_str("define linkonce_odr i64 @__malloc(i64 %size) {\n");
         ir.push_str("entry:\n");
         ir.push_str("  %p = call i8* @malloc(i64 %size)\n");
         ir.push_str("  %pi = ptrtoint i8* %p to i64\n");
@@ -370,7 +370,7 @@ impl CodeGenerator {
 
         // __free: pointer-as-i64 wrapper for libc free
         ir.push_str("\n; Runtime: free wrapper (i64-ptr)\n");
-        ir.push_str("define i64 @__free(i64 %ptr) {\n");
+        ir.push_str("define linkonce_odr i64 @__free(i64 %ptr) {\n");
         ir.push_str("entry:\n");
         ir.push_str("  %p = inttoptr i64 %ptr to i8*\n");
         ir.push_str("  call void @free(i8* %p)\n");
@@ -381,7 +381,7 @@ impl CodeGenerator {
         // (libc memcpy may already be declared with a conflicting signature).
         ir.push_str("\n; Runtime: memcpy wrapper (i64-ptr, via intrinsic)\n");
         ir.push_str("declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i1)\n");
-        ir.push_str("define i64 @__memcpy(i64 %dst, i64 %src, i64 %n) {\n");
+        ir.push_str("define linkonce_odr i64 @__memcpy(i64 %dst, i64 %src, i64 %n) {\n");
         ir.push_str("entry:\n");
         ir.push_str("  %d = inttoptr i64 %dst to i8*\n");
         ir.push_str("  %s = inttoptr i64 %src to i8*\n");
@@ -391,7 +391,7 @@ impl CodeGenerator {
 
         // __strlen: pointer-accepting strlen (explicit variant)
         ir.push_str("\n; Runtime: strlen wrapper\n");
-        ir.push_str("define i64 @__strlen(i8* %p) {\n");
+        ir.push_str("define linkonce_odr i64 @__strlen(i8* %p) {\n");
         ir.push_str("entry:\n");
         ir.push_str("  %r = call i64 @strlen(i8* %p)\n");
         ir.push_str("  ret i64 %r\n");
@@ -405,7 +405,7 @@ impl CodeGenerator {
         ir.push_str("  %v = load i64, i64* %p\n");
         ir.push_str("  ret i64 %v\n");
         ir.push_str("}\n");
-        ir.push_str("define i64 @__store_ptr(i64 %addr, i64 %val) {\n");
+        ir.push_str("define linkonce_odr i64 @__store_ptr(i64 %addr, i64 %val) {\n");
         ir.push_str("entry:\n");
         ir.push_str("  %p = inttoptr i64 %addr to i64*\n");
         ir.push_str("  store i64 %val, i64* %p\n");
@@ -432,7 +432,7 @@ impl CodeGenerator {
         // __str_eq: strcmp == 0
         ir.push_str("\n; Runtime: string equality / contains\n");
         ir.push_str("declare i8* @strstr(i8*, i8*)\n");
-        ir.push_str("define i64 @__str_eq(i8* %a, i8* %b) {\n");
+        ir.push_str("define linkonce_odr i64 @__str_eq(i8* %a, i8* %b) {\n");
         ir.push_str("entry:\n");
         ir.push_str("  %r = call i32 @strcmp(i8* %a, i8* %b)\n");
         ir.push_str("  %eq = icmp eq i32 %r, 0\n");
@@ -483,7 +483,7 @@ impl CodeGenerator {
         // __call_fn / __try_call_fn: invoke a function pointer stored as i64
         // Without setjmp/longjmp, __try_call_fn is a plain call that aborts on panic.
         ir.push_str("\n; Runtime: call-fn helpers\n");
-        ir.push_str("define i64 @__call_fn(i64 %fn) {\n");
+        ir.push_str("define linkonce_odr i64 @__call_fn(i64 %fn) {\n");
         ir.push_str("entry:\n");
         ir.push_str("  %fp = inttoptr i64 %fn to i64 ()*\n");
         ir.push_str("  %r = call i64 %fp()\n");
