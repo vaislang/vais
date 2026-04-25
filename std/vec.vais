@@ -520,3 +520,10 @@ X Vec<T> {
 F vec_new() -> Vec<i64> {
     Vec.with_capacity(8)
 }
+
+# Phase 0 bug C16 workaround: explicitly-typed Vec<T> constructor.
+# Use this when `vec_new()` would fail to unify with a non-i64 element type.
+# Example: `v: Vec<Color> := mut vec_new_t()`.
+F vec_new_t<T>() -> Vec<T> {
+    Vec.with_capacity(8)
+}
