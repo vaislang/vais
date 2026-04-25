@@ -66,12 +66,20 @@ impl CodeGenerator {
     /// NOTE: prefer `llvm_type_of_checked` when a wrong answer would produce
     /// invalid IR — the "i64" fallback here can mislead pointer/float paths.
     pub(crate) fn llvm_type_of(&self, val: &str) -> String {
+        // Special-case the literal "void" return marker — this isn't an SSA
+        // value, but some callers route void-returning expressions through
+        // llvm_type_of (e.g., fall-through if-expr branches). Returning "void"
+        // is correct ground-truth and stops the probe from flagging it.
+        if val == "void" {
+            return String::from("void");
+        }
         self.llvm_type_of_checked(val).unwrap_or_else(|| {
             // Wave 4a probe: report missing ground-truth registrations to stderr
             // so callers/iterations can extend coverage. Falls back to "i64" for
             // graceful degradation — does NOT panic.
             if std::env::var("VAIS_GROUND_TRUTH_PROBE").is_ok() {
-                eprintln!("[ground-truth-miss] {}", val);
+                let fn_name = self.fn_ctx.current_function.as_deref().unwrap_or("?");
+                eprintln!("[ground-truth-miss] fn={} val={}", fn_name, val);
             }
             String::from("i64")
         })
