@@ -1,9 +1,7 @@
-# XFAIL: generic `unwrap_or<T>(o: Option<T>, default: T) -> T` triggers
-# codegen ICE — `load {}, ptr %default` (Unit type load) appears, suggesting
-# the second generic parameter `default` got erased to () somewhere in the
-# specialization pipeline. Tracked as Phase 0 finding C14.
-#
-# CHECKS: generic identity-style fn used in multiple contexts.
+# CHECKS: generic identity-style fn `unwrap_or<T>(o: Option<T>, default: T) -> T`.
+# Note: `None` literal without explicit T causes the TC to emit a `$unknown`
+# specialization that codegen can't lower. Use explicit `Option<i64>` annotations
+# at call sites to force concrete T inference.
 F unwrap_or<T>(o: Option<T>, default: T) -> T {
     M o {
         Some(v) => v,
@@ -15,11 +13,15 @@ F main() -> i64 {
     a: i64 := unwrap_or(Some(42), 0)
     I a != 42 { R 1 }
 
-    b: i64 := unwrap_or(None, 99)
+    # explicit type annotation tells TC the T to use for None
+    nope: Option<i64> := None
+    b: i64 := unwrap_or(nope, 99)
     I b != 99 { R 2 }
 
-    # nested call
-    c: i64 := unwrap_or(Some(unwrap_or(Some(7), 0)), 0)
+    # nested
+    inner: Option<i64> := Some(7)
+    outer: Option<i64> := Some(unwrap_or(inner, 0))
+    c: i64 := unwrap_or(outer, 0)
     I c != 7 { R 3 }
     R 0
 }

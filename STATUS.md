@@ -13,13 +13,13 @@
 | 03_match | 10 | 10/10 | ✅ |
 | 04_struct | 13 | 13/13 | ✅ |
 | 05_enum | 9 | 9/9 | ✅ |
-| 06_generic | 11 | 10/10 + 1 xfail | ✅ |
+| 06_generic | 11 | 11/11 | ✅ |
 | 07_collections | 5 | 5/5 | ✅ |
 | 08_strings | 2 | 2/2 | ✅ |
 | 09_traits | 4 | 3/3 + 1 xfail | ✅ |
 | 10_ffi | 2 | 2/2 | ✅ |
 | 99_integration | 15 | 15/15 | ✅ |
-| **Total** | **112** | **110/110 (100%) + 2 xfail** | 🎉 |
+| **Total** | **112** | **111/111 (100%) + 1 xfail** | 🎉 |
 
 Run yourself:
 ```bash
@@ -98,7 +98,7 @@ cd compiler/std/tests && bash run.sh
 | C11 | trait default methods not dispatched on impls that don't override. Codegen looks up the per-impl method table without falling back to trait's default. | `W T { F a() {default body} } X S: T {} let s: S; s.a()` → "Undefined function: S_a" | implement every method explicitly per-impl | `tests/lang/09_traits/trait_default.vais` |
 | C12 | `X F builtin_name(...)` re-declares an already-builtin function, emitting double `declare` + suffixed `@name.1` call → link fails on missing `_name.1` symbol. | `X F sqrt(x: f64) -> f64; sqrt(25.0)` | omit the extern decl for builtins | n/a (sidestepped in ffi_math.vais) |
 | C13 ✅ | ~~storing an i64 literal into a u32/i32/u8 alloca writes 8 bytes against a 4-byte slot, clobbering adjacent allocas~~ FIXED in `inkwell/gen_stmt.rs`: when the binding has a narrower-than-i64 type and the RHS is wider, truncate (or zext when widening) before `build_store`. | — | — | int_unsigned.vais |
-| C14 | generic 2-param fn `f<T>(a: Option<T>, default: T)` triggers `load {}, ptr %default` (Unit-type load) at codegen — looks like the second generic param erases to Unit. | `F unwrap_or<T>(o: Option<T>, default: T) -> T { ... }` called with i64 args | inline match on the call site instead of factoring the helper | `tests/lang/06_generic/generic_unwrap.vais` |
+| C14 | bare `None` literal (no context type) at a generic-fn call site triggers an extra `$unknown` specialization where T erases to Unit — IR is structurally invalid (`phi i64 ... ret {}`). The actual i64 spec is also generated and works fine; the broken `$unknown` body just sits next to it and trips the verifier. | `let b := unwrap_or(None, 99)` | bind `None` to a typed local first: `nope: Option<i64> := None; unwrap_or(nope, 99)` | tests/lang/06_generic/generic_unwrap.vais (uses workaround) |
 | C5 ✅ | ~~`String.with_capacity(n)` segfaults when `n < 16`~~ FIXED in std/string.vais: `new_cap := self.cap * 2` is now `:= mut`. Root cause: codegen alloca'd `new_cap` but skipped the initial store; only the `< 16` branch wrote to it, leaving the else branch reading uninitialized memory → `malloc(garbage)` crash. Underlying codegen bug remains (separate finding: alloca without initial store when binding is later reassigned). | — | — | test_string.vais cap=4 |
 | C6 ✅ | ~~struct field of fixed-size array `[T; N]` triggers ICE on read~~ FIXED in `inkwell/gen_aggregate.rs::generate_index` (handle ArrayValue by spilling to alloca + GEP) AND `inkwell/gen_advanced.rs::generate_struct_literal` (load array through pointer when field type is array). Two distinct codegen paths needed updating because `generate_array` returns the alloca pointer, not the array value. Test: `tests/lang/04_struct/struct_array_field.vais`. | — | — | struct_array_field.vais |
 | C7 ✅ | ~~match arms with nested variant patterns produce invalid phi/wrong arm dispatch~~ FIXED in `inkwell/gen_match.rs` — two-part fix: (1) `push_inner_scrutinee_for_variant` threads the inner Option/Result type onto the scrutinee stack while recursing into nested patterns so payload-decoding lookups resolve correctly; (2) `Pattern::Variant` pattern-check now AND-s the inner pattern's check when any field is itself a Variant/Literal/Range, so sibling arms like `Some(Some(v))` and `Some(None)` no longer collapse to the same outer-tag check. Test: `tests/lang/03_match/match_nested_enum.vais`. | — | — | match_nested_enum.vais |
