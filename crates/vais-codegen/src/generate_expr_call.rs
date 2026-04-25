@@ -1658,6 +1658,31 @@ impl CodeGenerator {
                     write_ir!(ir, "  store float {}, float* {}", tmp3, tmp1);
                 }
             }
+            4 if matches!(resolved_t, ResolvedType::Named { .. }) => {
+                // Phase α.1 fix: 4-byte Named struct (e.g., {i16,i16})
+                // must store as the native struct type, not narrow i32.
+                // The val_val may be a pointer-to-struct (alloca form);
+                // load through it before storing.
+                let llvm_ty = self.type_to_llvm(&resolved_t);
+                let tmp1 = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to {}*", tmp1, ptr_val, llvm_ty);
+                let val_to_store = if val_val.starts_with('%') {
+                    let loaded = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded, llvm_ty, llvm_ty, val_val
+                    );
+                    loaded
+                } else {
+                    val_val.clone()
+                };
+                write_ir!(
+                    ir,
+                    "  store {} {}, {}* {}",
+                    llvm_ty, val_to_store, llvm_ty, tmp1
+                );
+            }
             4 => {
                 let tmp1 = self.next_temp(counter);
                 write_ir!(ir, "  {} = inttoptr i64 {} to i32*", tmp1, ptr_val);
