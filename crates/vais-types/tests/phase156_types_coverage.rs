@@ -279,9 +279,13 @@ fn test_closure_no_capture() {
 // ═════════════════════════════════════════════════════════════════════════════
 
 #[test]
-fn test_try_on_non_result_errors() {
-    // `?` applied to plain i64 should fail
-    check_err(
+fn test_try_on_non_result_is_lenient() {
+    // Phase 250: `?` on non-Result/Option types is treated as identity
+    // (lenient fallback). This was a deliberate relaxation for vaisdb
+    // interop with stdlib calls that return raw i64 even when the source
+    // semantics involve a Result wrapper that hasn't propagated through
+    // inference. See `checker_expr/special.rs` Expr::Try arm.
+    check_ok(
         r#"
         F f(x: i64) -> i64 = x?
     "#,

@@ -1130,7 +1130,7 @@ X CodeGenerator {
 
         # Build vtable name: __vtable_TypeName_TraitName
         store_i64(self.temp_buf + 8, 0)  # Clear temp buffer
-        tb_data := load_i64(self.temp_buf)
+        tb_data := mut load_i64(self.temp_buf)
         tb_cap := load_i64(self.temp_buf + 16)
 
         type_ptr := @.get_string_ptr(impl_type_idx)
@@ -1304,7 +1304,7 @@ X CodeGenerator {
         base_len := @.get_string_len(fn_name_idx)
 
         # Build: base_name + "_mono_" + kind1 + "_" + kind2 + ...
-        tb_data := load_i64(self.temp_buf)
+        tb_data := mut load_i64(self.temp_buf)
         tb_cap := load_i64(self.temp_buf + 16)
 
         # Ensure capacity
@@ -3074,7 +3074,7 @@ X CodeGenerator {
         elements_len := load_i64(expr_ptr + 32)
 
         # Allocate memory for tuple (elements_len * 8 bytes)
-        size := elements_len * 8
+        size := mut elements_len * 8
         I size == 0 { size = 8 } EL { 0 }
 
         size_reg := @.fresh_reg()
@@ -4413,7 +4413,7 @@ X CodeGenerator {
         fields_len := load_i64(expr_ptr + 40)
 
         # Allocate memory for the struct (fields_len * 8 bytes)
-        size := fields_len * 8
+        size := mut fields_len * 8
         I size == 0 { size = 8 } EL { 0 }  # Minimum 8 bytes
 
         # Call malloc

@@ -1052,7 +1052,7 @@ X TypeChecker {
             recv_generics_len := load_i64(recv_type_ptr + 24)
 
             # 1. Look for inherent method on the struct
-            method_sig := @.find_method_in_struct(type_name_idx, method_name_idx)
+            method_sig := mut @.find_method_in_struct(type_name_idx, method_name_idx)
 
             # 2. If not found, look in trait implementations
             I method_sig == 0 {
@@ -1321,8 +1321,8 @@ X TypeChecker {
 
         # Use 1-row DP approach: prev_row[j] for j in 0..b_len+1
         row_size := b_len + 1
-        prev_row := malloc(row_size * 8)
-        curr_row := malloc(row_size * 8)
+        prev_row := mut malloc(row_size * 8)
+        curr_row := mut malloc(row_size * 8)
 
         # Initialize prev_row = [0, 1, 2, ..., b_len]
         j: mut i64 = 0
@@ -1348,7 +1348,7 @@ X TypeChecker {
                 insert_cost := load_i64(curr_row + j2 * 8) + 1
                 replace_cost := load_i64(prev_row + j2 * 8) + cost
 
-                min_val := delete_cost
+                min_val := mut delete_cost
                 I insert_cost < min_val { min_val = insert_cost } EL { 0 }
                 I replace_cost < min_val { min_val = replace_cost } EL { 0 }
 
@@ -4124,7 +4124,7 @@ X TypeChecker {
                 }
 
                 # Find static method in struct's impl
-                method_sig := @.find_method_in_struct(type_idx, method_idx)
+                method_sig := mut @.find_method_in_struct(type_idx, method_idx)
                 I method_sig == 0 {
                     method_sig = @.find_method_in_trait_impls(type_idx, method_idx)
                     0

@@ -8,11 +8,11 @@
 
 | Category | Tests | Passing | Status |
 |----------|-------|---------|--------|
-| 01_primitives | 48 | 48/48 | ✅ |
-| 02_control_flow | 39 | 39/39 | ✅ |
+| 01_primitives | 47 | 47/47 | ✅ |
+| 02_control_flow | 41 | 41/41 | ✅ |
 | 03_match | 27 | 27/27 | ✅ |
 | 04_struct | 33 | 33/33 | ✅ |
-| 05_enum | 28 | 28/28 | ✅ |
+| 05_enum | 27 | 27/27 | ✅ |
 | 06_generic | 28 | 28/28 | ✅ |
 | 07_collections | 21 | 21/21 | ✅ |
 | 08_strings | 11 | 11/11 | ✅ |
@@ -108,6 +108,7 @@ cd compiler/std/tests && bash run.sh
 | C7 ✅ | ~~match arms with nested variant patterns produce invalid phi/wrong arm dispatch~~ FIXED in `inkwell/gen_match.rs` — two-part fix: (1) `push_inner_scrutinee_for_variant` threads the inner Option/Result type onto the scrutinee stack while recursing into nested patterns so payload-decoding lookups resolve correctly; (2) `Pattern::Variant` pattern-check now AND-s the inner pattern's check when any field is itself a Variant/Literal/Range, so sibling arms like `Some(Some(v))` and `Some(None)` no longer collapse to the same outer-tag check. Test: `tests/lang/03_match/match_nested_enum.vais`. | — | — | match_nested_enum.vais |
 | C8 ✅ | ~~`bool as i64` returns 255~~ FIXED in `inkwell/gen_expr/misc.rs`: when widening i1 → wider int, use `zext` (zero-extend) instead of `sext`. Sign-extending i1 1 produces all-1s; zext gives 1 as expected. Regression test: `tests/lang/01_primitives/bool_short_circuit.vais` (11 assertions exercise `bool as i64`). | — | — | bool_short_circuit.vais |
 | C19 ✅ | ~~`&self.x as i64` parses as `&((self.x) as i64)` instead of `(&self.x) as i64`~~ FIXED in `vais-parser/src/expr/unary.rs`: after `parse_unary` returns for the inner of `&`, if the inner is `Cast { expr, ty }`, re-shape the AST to `Cast { expr: Ref(expr), ty }` so the cast wraps the reference. This matches Rust precedence (unary `&` binds tighter than `as`) without changing `parse_postfix`. Reverted std/sync.vais's `(&self.value) as i64` paren-wrap to natural `&self.value as i64`. Test: `tests/lang/01_primitives/ref_field_as_cast.vais`. | — | — | ref_field_as_cast.vais |
+| C20 (parser) | `parse_unary`/`parse_postfix` recursive descent burns ~400KB+ of stack per `(` level; 20 levels of nesting overflow the default 8MB `cargo test` thread stack. Function correctness is fine (the lang suite passes complex programs daily) — this is a pure depth-bound robustness gap, distinct from the `MAX_PARSE_DEPTH` runtime check (which only fires *after* the Rust stack already blew up). Test `test_error_deeply_nested_expressions` is `#[ignore]`d until the parser is rewritten with explicit-stack handling for the `(...)` and unary-prefix paths. | avoid >15 levels of literal `(...)` nesting | — | n/a (negative test, not a real-world failure) |
 
 ### Phase 17 Wave 1-4a discovered bugs (prior sessions)
 

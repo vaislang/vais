@@ -1854,7 +1854,7 @@ X Parser {
         @.advance()  # consume :
 
         # Allocate space for bounds (max 16)
-        bounds_ptr := malloc(16 * 8 + 8)
+        bounds_ptr := mut malloc(16 * 8 + 8)
         store_i64(bounds_ptr, 0)  # length stored at start
         bounds_ptr = bounds_ptr + 8
         bounds_len: mut i64 = 0
@@ -1893,7 +1893,7 @@ X Parser {
 
     F parse_trait_bounds(&self) -> i64 {
         # Allocate space for bounds (max 16)
-        bounds_ptr := malloc(16 * 8 + 8)
+        bounds_ptr := mut malloc(16 * 8 + 8)
         store_i64(bounds_ptr, 0)  # length stored at start
         bounds_ptr = bounds_ptr + 8
         bounds_len: mut i64 = 0
@@ -2015,7 +2015,7 @@ X Parser {
         @.advance()  # consume <
 
         # Allocate space for generics (max 16 type parameters)
-        generics_ptr := malloc(16 * GenericParam.size() + 8)
+        generics_ptr := mut malloc(16 * GenericParam.size() + 8)
         store_i64(generics_ptr, 0)  # length stored at start
         generics_ptr = generics_ptr + 8
         generics_len: mut i64 = 0
@@ -3234,7 +3234,7 @@ X Parser {
 
             # Parse match arms
             arms_cap: mut i64 = 16
-            arms_buf := malloc(arms_cap * 40)  # MatchArm.size() = 40
+            arms_buf := mut malloc(arms_cap * 40)  # MatchArm.size() = 40
             arms_len: mut i64 = 0
 
             LW @.check(TOK_RBRACE()) == 0 && @.check(TOK_EOF()) == 0 {
@@ -3479,7 +3479,7 @@ X Parser {
 
         # Collect patterns
         pats_cap: mut i64 = 8
-        pats_buf := malloc(pats_cap * 8)
+        pats_buf := mut malloc(pats_cap * 8)
         store_i64(pats_buf, first)
         pats_len: mut i64 = 1
 
@@ -3635,7 +3635,7 @@ X Parser {
         I tok.kind == TOK_LPAREN() {
             @.advance()
             pats_cap: mut i64 = 8
-            pats_buf := malloc(pats_cap * 8)
+            pats_buf := mut malloc(pats_cap * 8)
             pats_len: mut i64 = 0
 
             LW @.check(TOK_RPAREN()) == 0 && @.check(TOK_EOF()) == 0 {
@@ -3685,7 +3685,7 @@ X Parser {
             I @.check(TOK_LPAREN()) == 1 {
                 @.advance()
                 pats_cap: mut i64 = 8
-                pats_buf := malloc(pats_cap * 8)
+                pats_buf := mut malloc(pats_cap * 8)
                 pats_len: mut i64 = 0
 
                 LW @.check(TOK_RPAREN()) == 0 && @.check(TOK_EOF()) == 0 {
@@ -3909,7 +3909,7 @@ F p_sb_print_free(sb: i64) -> i64 {
 F offset_to_line(source_ptr: i64, source_len: i64, offset: i64) -> i64 {
     line: mut i64 = 1
     i: mut i64 = 0
-    limit := offset
+    limit := mut offset
     I limit > source_len { limit = source_len; 0 } EL { 0 }
     L {
         I i >= limit { B }
@@ -3925,7 +3925,7 @@ F offset_to_line(source_ptr: i64, source_len: i64, offset: i64) -> i64 {
 
 # Convert a byte offset to column number (1-based) by scanning back to last newline
 F offset_to_col(source_ptr: i64, source_len: i64, offset: i64) -> i64 {
-    pos := offset
+    pos := mut offset
     I pos > source_len { pos = source_len; 0 } EL { 0 }
     # Scan backwards to find last newline
     i: mut i64 = pos - 1

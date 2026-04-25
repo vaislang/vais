@@ -265,7 +265,8 @@ fn test_valid_if_else() {
 
 #[test]
 fn test_valid_loop() {
-    check_ok("F test()->i64{x:=0;L _:x<10{x=x+1};x}");
+    // Phase 0 bug C2: `:= mut` required for reassignment.
+    check_ok("F test()->i64{x:= mut 0;L _:x<10{x=x+1};x}");
 }
 
 #[test]
@@ -315,7 +316,8 @@ fn test_valid_nested_if() {
 
 #[test]
 fn test_valid_for_loop() {
-    check_ok("F test()->i64{s:=0;L i:0..10{s=s+i};s}");
+    // Phase 0 bug C2: `:= mut` required for reassignment.
+    check_ok("F test()->i64{s:= mut 0;L i:0..10{s=s+i};s}");
 }
 
 #[test]

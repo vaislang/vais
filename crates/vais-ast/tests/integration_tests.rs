@@ -939,10 +939,11 @@ fn test_pattern_struct() {
             sp_string("x", 6, 7),
             Some(spanned(Pattern::Ident("a".to_string()), 8, 9)),
         )],
+        enum_name: None,
     };
 
     match pat {
-        Pattern::Struct { name, fields } => {
+        Pattern::Struct { name, fields, .. } => {
             assert_eq!(name.node, "Point");
             assert_eq!(fields.len(), 1);
         }
