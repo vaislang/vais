@@ -243,6 +243,23 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 } else {
                     val
                 };
+                // Bug C15 fix: when the annotated type is `[T; N]` (ConstArray
+                // → LLVM `[N x T]`) and the RHS produced a pointer to the
+                // array literal (Expr::Array returns a `[N x T]*`), `build_store`
+                // would write 8 bytes (the pointer) into the N*sizeof(T)-byte
+                // alloca slot, leaving the rest as garbage. Load the array
+                // value through the pointer first, then store by-value.
+                let store_val = if var_type.is_array_type()
+                    && store_val.is_pointer_value()
+                {
+                    let array_val = self
+                        .builder
+                        .build_load(var_type, store_val.into_pointer_value(), "arr_init")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    array_val
+                } else {
+                    store_val
+                };
                 self.builder
                     .build_store(alloca, store_val)
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;

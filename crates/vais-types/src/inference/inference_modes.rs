@@ -272,12 +272,30 @@ impl TypeChecker {
 
         // Phase 1.12: preserve the container shape from the expected hint so
         // `a: Vec<i64> := []` returns `Vec<i64>`, not `Array<i64>`.
+        let elements_len = elements.len();
         let wrap_result = |elem_ty: ResolvedType| -> ResolvedType {
             match expected {
                 ResolvedType::Array(_) => ResolvedType::Array(Box::new(elem_ty)),
                 ResolvedType::Pointer(_) => ResolvedType::Pointer(Box::new(elem_ty)),
                 ResolvedType::Slice(_) => ResolvedType::Slice(Box::new(elem_ty)),
                 ResolvedType::SliceMut(_) => ResolvedType::SliceMut(Box::new(elem_ty)),
+                // Bug C15 fix: `a: [T; N] := [e1, .., eN]` — when annotated
+                // size matches literal length, type the literal as ConstArray
+                // so the binding lowers to a real `[N x T]` slot (not a slice).
+                ResolvedType::ConstArray { size, .. } => {
+                    let matches_size = size
+                        .try_evaluate()
+                        .map(|n| n as usize == elements_len)
+                        .unwrap_or(false);
+                    if matches_size {
+                        ResolvedType::ConstArray {
+                            element: Box::new(elem_ty),
+                            size: size.clone(),
+                        }
+                    } else {
+                        ResolvedType::Array(Box::new(elem_ty))
+                    }
+                }
                 ResolvedType::Named { name, .. }
                     if (name == "Vec" || name == "VecMut") =>
                 {

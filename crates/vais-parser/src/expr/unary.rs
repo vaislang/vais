@@ -68,6 +68,26 @@ impl Parser {
             }
             let expr = self.parse_unary()?;
             let end = expr.span.end;
+            // Bug C19 fix: `&x as T` should bind as `(&x) as T` (Rust-style:
+            // unary `&` binds tighter than `as`). The recursive `parse_unary`
+            // above falls through to `parse_postfix`, which greedily absorbs
+            // any trailing `as` into a `Cast` — producing the wrong shape
+            // `&(x as T)`. Detect that pattern and re-shape the AST so the
+            // cast wraps the reference, matching user intent.
+            if let Expr::Cast { expr: inner, ty } = expr.node {
+                let inner_end = inner.span.end;
+                let ref_expr = Spanned::new(
+                    Expr::Ref(Box::new(*inner)),
+                    Span::new(start, inner_end),
+                );
+                return Ok(Spanned::new(
+                    Expr::Cast {
+                        expr: Box::new(ref_expr),
+                        ty,
+                    },
+                    Span::new(start, end),
+                ));
+            }
             return Ok(Spanned::new(
                 Expr::Ref(Box::new(expr)),
                 Span::new(start, end),
