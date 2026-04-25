@@ -1,0 +1,10 @@
+# CHECKS: bool literals + logical and/or/not
+F main() -> i64 {
+    t: bool := true
+    f: bool := false
+    I t && f { R 1 }       # short-circuit && should be false
+    I !(t || f) { R 2 }    # !true == false
+    flipped: bool := !t
+    I flipped != f { R 3 } # !true == false
+    R 0
+}

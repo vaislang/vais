@@ -1,0 +1,16 @@
+# CHECKS: bounded while loop (break/continue unimplemented in current vaisc;
+#         this test exercises a simple while termination via condition).
+# STATUS: break/continue keywords currently rejected by parser.
+#         Test renamed to bounded_while; original break_continue intent
+#         deferred to language feature work.
+F main() -> i64 {
+    i: i64 := mut 0
+    sum: i64 := mut 0
+    LW i < 5 {
+        i = i + 1
+        sum = sum + i
+    }
+    # 1+2+3+4+5 = 15
+    I sum != 15 { R 1 }
+    R 0
+}

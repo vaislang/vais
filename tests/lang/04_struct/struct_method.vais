@@ -1,0 +1,25 @@
+# CHECKS: struct method call via X impl block
+S Counter {
+    n: i64,
+}
+
+X Counter {
+    F new() -> Counter {
+        Counter { n: 0 }
+    }
+    F bump(mut self) -> Counter {
+        Counter { n: self.n + 1 }
+    }
+    F value(self) -> i64 {
+        self.n
+    }
+}
+
+F main() -> i64 {
+    c: Counter := mut Counter.new()
+    c2: Counter := c.bump()
+    c3: Counter := c2.bump()
+    c4: Counter := c3.bump()
+    I c4.value() != 3 { R 1 }
+    R 0
+}

@@ -1,0 +1,11 @@
+# CHECKS: while loop accumulator
+F main() -> i64 {
+    i: i64 := mut 1
+    sum: i64 := mut 0
+    LW i <= 10 {
+        sum = sum + i
+        i = i + 1
+    }
+    I sum != 55 { R 1 }    # 1+2+...+10
+    R 0
+}

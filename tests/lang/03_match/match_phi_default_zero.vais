@@ -1,0 +1,19 @@
+# CHECKS: match expression with non-pointer phi type uses 0 for default arm,
+#         not the literal `null` (which is invalid LLVM IR for non-pointer phis).
+# REGRESSION: Phase 17 iter 64, compiler commit 7c3aed52
+#             control_flow/match_gen.rs default fallthrough — previously
+#             unconditionally chose "null" for ResolvedType::Named, even
+#             when the actual phi LLVM type was a narrow integer.
+
+F main() -> i64 {
+    x: i32 := mut 5
+    result: i64 := M x {
+        1 => 100i64,
+        2 => 200i64,
+        _ => 0i64,
+    }
+    I result != 0 {
+        R 1
+    }
+    R 0
+}

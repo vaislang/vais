@@ -1,0 +1,10 @@
+# CHECKS: i64 add and sub round-trip
+F main() -> i64 {
+    a: i64 := 10
+    b: i64 := 3
+    sum: i64 := a + b
+    diff: i64 := a - b
+    I sum != 13 { R 1 }
+    I diff != 7 { R 2 }
+    R 0
+}

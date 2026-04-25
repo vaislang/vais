@@ -1,0 +1,18 @@
+# CHECKS: generic struct specialization (Box<T>)
+# Vais syntax: top-level generic functions may not be supported yet;
+# verify that generic struct + impl method specialization works instead.
+S Wrap<T> {
+    inner: T,
+}
+
+X Wrap<T> {
+    F new(value: T) -> Wrap<T> {
+        Wrap { inner: value }
+    }
+}
+
+F main() -> i64 {
+    w: Wrap<i64> := Wrap.new(42)
+    I w.inner != 42 { R 1 }
+    R 0
+}
