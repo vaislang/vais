@@ -354,6 +354,7 @@ impl CodeGenerator {
                     recv_ptr,
                     substr_ptr
                 );
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
             "substring" => {
@@ -418,6 +419,7 @@ impl CodeGenerator {
                     recv_ptr,
                     prefix_ptr
                 );
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
             "endsWith" => {
@@ -439,6 +441,7 @@ impl CodeGenerator {
                     recv_ptr,
                     suffix_ptr
                 );
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
             "isEmpty" => {
