@@ -142,6 +142,7 @@ impl CodeGenerator {
                         rbits,
                         right_val
                     );
+                    self.fn_ctx.record_emitted_type(&widened, "i64");
                     widened
                 } else {
                     right_val.clone()
@@ -703,6 +704,7 @@ impl CodeGenerator {
                             llvm_type
                         );
                     }
+                    self.fn_ctx.record_emitted_type(&result, &llvm_type);
                     return Ok((result, ir));
                 }
             }
