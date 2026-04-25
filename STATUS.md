@@ -12,14 +12,14 @@
 | 02_control_flow | 39 | 39/39 | ✅ |
 | 03_match | 26 | 26/26 | ✅ |
 | 04_struct | 32 | 32/32 | ✅ |
-| 05_enum | 27 | 26/26 + 1 xfail | ✅ |
+| 05_enum | 27 | 27/27 | ✅ |
 | 06_generic | 28 | 28/28 | ✅ |
 | 07_collections | 20 | 20/20 | ✅ |
 | 08_strings | 11 | 11/11 | ✅ |
-| 09_traits | 4 | 3/3 + 1 xfail | ✅ |
+| 09_traits | 4 | 4/4 | ✅ |
 | 10_ffi | 2 | 2/2 | ✅ |
 | 99_integration | 68 | 68/68 | ✅ |
-| **Total** | **303** | **301/301 (100%) + 2 xfail** | 🎉 |
+| **Total** | **303** | **302/302 (100%) + 1 xfail** | 🎉 |
 
 Run yourself:
 ```bash

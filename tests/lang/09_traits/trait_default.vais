@@ -1,10 +1,8 @@
-# XFAIL: trait default methods not dispatched on impl. The trait's `doubled()`
-# default is defined, but calling `p.doubled()` on an impl that doesn't
-# override fails with "Undefined function: Plain_doubled" — codegen looks
-# up the per-impl method table without falling back to the trait's default.
-# Tracked as Phase 0 finding C11.
-#
 # CHECKS: trait method with default implementation, optionally overridden.
+# REGRESSION for bug C11: when an impl doesn't override a trait method that
+# has a default body, codegen now synthesizes a method on the impl type
+# using the trait's default body, and TC also registers the synthesized sig
+# so call resolution finds it.
 W Counter {
     F base(&self) -> i64
     F doubled(&self) -> i64 {

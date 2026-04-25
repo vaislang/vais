@@ -413,6 +413,46 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         for method in &impl_block.methods {
                             self.declare_method(&type_name, &method.node)?;
                         }
+                        // Phase 0 bug C11: also declare synthetic methods
+                        // for trait defaults the impl doesn't override, so
+                        // call sites can resolve before the body-emit pass.
+                        if let Some(trait_name) = &impl_block.trait_name {
+                            let impl_method_names: std::collections::HashSet<String> = impl_block
+                                .methods
+                                .iter()
+                                .map(|m| m.node.name.node.clone())
+                                .collect();
+                            for trait_item in &vais_module.items {
+                                if let ast::Item::Trait(t) = &trait_item.node {
+                                    if t.name.node != trait_name.node {
+                                        continue;
+                                    }
+                                    for tm in &t.methods {
+                                        if impl_method_names.contains(&tm.name.node) {
+                                            continue;
+                                        }
+                                        let body = match &tm.default_body {
+                                            Some(b) => b.clone(),
+                                            None => continue,
+                                        };
+                                        let synth_fn = ast::Function {
+                                            name: tm.name.clone(),
+                                            generics: tm.generics.clone(),
+                                            params: tm.params.clone(),
+                                            ret_type: tm.ret_type.clone(),
+                                            body,
+                                            is_async: tm.is_async,
+                                            is_partial: false,
+                                            is_pub: false,
+                                            declared_effect: None,
+                                            attributes: Vec::new(),
+                                            where_clause: Vec::new(),
+                                        };
+                                        self.declare_method(&type_name, &synth_fn)?;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 ast::Item::Struct(s) => {
@@ -655,6 +695,54 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     {
                         for method in &impl_block.methods {
                             self.generate_method(&type_name, &method.node)?;
+                        }
+                        // Phase 0 bug C11 fix: if this impl is for a trait,
+                        // emit synthetic methods for any trait method with a
+                        // default body that the impl doesn't override. The
+                        // default body references `self.<other_method>()`
+                        // calls which resolve via the impl's own methods, so
+                        // we just generate the trait's default body as a
+                        // method on this concrete type.
+                        if let Some(trait_name) = &impl_block.trait_name {
+                            let impl_method_names: std::collections::HashSet<String> = impl_block
+                                .methods
+                                .iter()
+                                .map(|m| m.node.name.node.clone())
+                                .collect();
+                            // Find the trait AST and its default-bodied methods.
+                            for trait_item in &vais_module.items {
+                                if let ast::Item::Trait(t) = &trait_item.node {
+                                    if t.name.node != trait_name.node {
+                                        continue;
+                                    }
+                                    for trait_method in &t.methods {
+                                        if impl_method_names.contains(&trait_method.name.node) {
+                                            continue;
+                                        }
+                                        let body = match &trait_method.default_body {
+                                            Some(b) => b.clone(),
+                                            None => continue,
+                                        };
+                                        // Synthesize an ast::Function for the
+                                        // concrete type using the trait's
+                                        // default body.
+                                        let synth_fn = ast::Function {
+                                            name: trait_method.name.clone(),
+                                            generics: trait_method.generics.clone(),
+                                            params: trait_method.params.clone(),
+                                            ret_type: trait_method.ret_type.clone(),
+                                            body,
+                                            is_async: trait_method.is_async,
+                                            is_partial: false,
+                                            is_pub: false,
+                                            declared_effect: None,
+                                            attributes: Vec::new(),
+                                            where_clause: Vec::new(),
+                                        };
+                                        self.generate_method(&type_name, &synth_fn)?;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
