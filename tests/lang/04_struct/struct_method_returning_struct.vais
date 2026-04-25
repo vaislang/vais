@@ -1,0 +1,27 @@
+# CHECKS: method returns the same struct type (immutable transform pattern).
+S Point {
+    x: i64,
+    y: i64
+}
+
+X Point {
+    F translate(&self, dx: i64, dy: i64) -> Point {
+        Point { x: self.x + dx, y: self.y + dy }
+    }
+
+    F scale(&self, factor: i64) -> Point {
+        Point { x: self.x * factor, y: self.y * factor }
+    }
+}
+
+F main() -> i64 {
+    p: Point := Point { x: 10, y: 20 }
+    q: Point := p.translate(5, 0 - 3)
+    I q.x != 15 { R 1 }
+    I q.y != 17 { R 2 }
+
+    r: Point := q.scale(2)
+    I r.x != 30 { R 3 }
+    I r.y != 34 { R 4 }
+    R 0
+}

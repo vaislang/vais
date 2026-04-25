@@ -1,0 +1,31 @@
+# CHECKS: hand-rolled "reduce" pattern over Vec<i64>.
+U std/vec.{vec_new};
+
+F sum_vec(v: &Vec<i64>) -> i64 {
+    acc: i64 := mut 0
+    LF i: 0..v.len() {
+        acc = acc + v[i]
+    }
+    acc
+}
+
+F max_vec(v: &Vec<i64>) -> i64 {
+    I v.len() == 0 { R 0 - 1 }
+    best: i64 := mut v[0]
+    LF i: 1..v.len() {
+        I v[i] > best { best = v[i] }
+    }
+    best
+}
+
+F main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    LF i: 1..=10 {
+        v.push(i)
+    }
+    # 1+2+...+10 = 55
+    I sum_vec(&v) != 55 { R 1 }
+    I max_vec(&v) != 10 { R 2 }
+    I v.len() != 10 { R 3 }
+    R 0
+}

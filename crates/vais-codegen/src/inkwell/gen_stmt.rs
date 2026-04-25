@@ -207,8 +207,44 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .builder
                     .build_alloca(var_type, &name.node)
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                // Phase 0 bug C13 fix: when the binding has an explicit narrow
+                // integer type (e.g. `a: u32 := 100`), the RHS literal is
+                // typed i64 by default. Storing i64 into an i32 alloca writes
+                // 8 bytes against a 4-byte slot, clobbering adjacent allocas.
+                // Truncate first if widths differ.
+                let store_val = if val.is_int_value() && var_type.is_int_type() {
+                    let val_int = val.into_int_value();
+                    let val_w = val_int.get_type().get_bit_width();
+                    let dst_w = var_type.into_int_type().get_bit_width();
+                    if val_w > dst_w {
+                        self.builder
+                            .build_int_truncate(
+                                val_int,
+                                var_type.into_int_type(),
+                                "narrow_init",
+                            )
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            .into()
+                    } else if val_w < dst_w {
+                        // Widen: zext for u-types, sext for i-types — but
+                        // the resolved type is already in `var_type`, and
+                        // i64-narrow ops are unsigned-friendly. Default zext.
+                        self.builder
+                            .build_int_z_extend(
+                                val_int,
+                                var_type.into_int_type(),
+                                "widen_init",
+                            )
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            .into()
+                    } else {
+                        val
+                    }
+                } else {
+                    val
+                };
                 self.builder
-                    .build_store(alloca, val)
+                    .build_store(alloca, store_val)
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 self.locals.insert(name.node.clone(), (alloca, var_type));
 
