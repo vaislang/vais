@@ -102,10 +102,20 @@ impl TypeChecker {
         }
 
         // Check body
-        let body_type = match &f.body {
-            FunctionBody::Expr(expr) => self.check_expr(expr)?,
-            FunctionBody::Block(stmts) => self.check_block(stmts)?,
+        // Phase 0 bug C16 fix: push the function's declared return type as
+        // the expected type so the body's tail-position calls (e.g. inside
+        // a generic fn body, the call that produces the return) can use it
+        // to disambiguate generic type vars. This lets `Vec.with_capacity(8)`
+        // inside `vec_new_t<T>()` unify its return-type hint with `Vec<T>`,
+        // binding T → Generic("T"), which downstream propagation needs to
+        // record the correct callee type args.
+        self.push_expected_type(ret_type.clone());
+        let body_type_result = match &f.body {
+            FunctionBody::Expr(expr) => self.check_expr(expr),
+            FunctionBody::Block(stmts) => self.check_block(stmts),
         };
+        self.pop_expected_type();
+        let body_type = body_type_result?;
 
         // Explicit return type with empty/void body: detect missing return value.
         // If the function has an explicit non-Unit return type and the body is Unit

@@ -83,9 +83,21 @@ impl TypeChecker {
                                             ResolvedType::Var(_) | ResolvedType::Unknown));
                                         if all_concrete {
                                             let inst = crate::types::GenericInstantiation::function(
-                                                &sig.name, concrete,
+                                                &sig.name, concrete.clone(),
                                             );
                                             self.add_instantiation(inst);
+                                            // Phase 0 bug C16 part 2: propagate
+                                            // transitive instantiations from this
+                                            // newly-registered concrete spec so any
+                                            // generic-method calls inside the body
+                                            // (recorded as method-flavored callees)
+                                            // get their concrete specs registered.
+                                            self.propagate_transitive_instantiations(
+                                                &sig.name,
+                                                &sig.generics,
+                                                &concrete,
+                                                &mut std::collections::HashSet::new(),
+                                            );
                                         }
                                     }
                                 }

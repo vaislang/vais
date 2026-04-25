@@ -1,6 +1,6 @@
 //! Function/method call expression checking
 
-use crate::types::{self, GenericInstantiation, ResolvedType, TypeError, TypeResult};
+use crate::types::{self, GenericCallee, GenericInstantiation, ResolvedType, TypeError, TypeResult};
 use crate::TypeChecker;
 use std::collections::HashMap;
 use vais_ast::*;
@@ -1796,6 +1796,36 @@ impl TypeChecker {
                     let all_concrete = inferred_type_args
                         .iter()
                         .all(|t| !matches!(t, ResolvedType::Var(_) | ResolvedType::Generic(_)));
+                    // Phase 0 bug C16 fix: when this static method call is
+                    // inside a generic function body (current_generics is
+                    // non-empty), record it as a `generic_callee` of the
+                    // current fn so that when the caller is concretely
+                    // instantiated, `propagate_transitive_instantiations`
+                    // can derive the concrete method instantiation. The
+                    // callee_name for methods follows the same Type_method
+                    // mangle convention used downstream.
+                    if !self.current_generics.is_empty() {
+                        if let Some(ref caller_name) = self.current_fn_name.clone() {
+                            let callee_name = format!("{}_{}", type_name.node, method.node);
+                            let callee = GenericCallee {
+                                callee_name,
+                                type_args: inferred_type_args.clone(),
+                                method_info: Some((
+                                    type_name.node.clone(),
+                                    method.node.clone(),
+                                )),
+                            };
+                            if let Some(caller_sig) = self.functions.get_mut(caller_name) {
+                                let already = caller_sig.generic_callees.iter().any(|c| {
+                                    c.callee_name == callee.callee_name
+                                        && c.type_args == callee.type_args
+                                });
+                                if !already {
+                                    caller_sig.generic_callees.push(callee);
+                                }
+                            }
+                        }
+                    }
                     if all_concrete {
                         let inst = GenericInstantiation::struct_type(
                             &type_name.node,

@@ -176,12 +176,19 @@ pub(crate) struct VarInfo {
 /// and `foo<i64>` is instantiated, we derive that `bar<i64>` is also needed.
 #[derive(Debug, Clone)]
 pub struct GenericCallee {
-    /// Name of the called generic function
+    /// Name of the called generic function (or `<TypeName>_<methodName>` for
+    /// method calls — when `is_method` is true, the propagation pass should
+    /// register a Method-kind instantiation instead of Function-kind).
     pub callee_name: String,
     /// The type arguments passed to the callee, expressed as ResolvedType.
     /// Generic params (e.g., T) appear as ResolvedType::Generic("T").
     /// These are later substituted with concrete types during transitive propagation.
     pub type_args: Vec<ResolvedType>,
+    /// Phase 0 bug C16 fix: when this callee originates from a static
+    /// method call (e.g. `Vec.with_capacity(...)` inside `vec_new_t<T>`),
+    /// store the receiver-type name and method name so transitive propagation
+    /// can register a Method-kind instantiation. None for plain Fn callees.
+    pub method_info: Option<(String, String)>,
 }
 
 /// Generic instantiation tracking for monomorphization
