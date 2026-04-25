@@ -1,0 +1,41 @@
+# CHECKS: associated constructor functions on structs (e.g., Point.origin()).
+S Point {
+    x: i64,
+    y: i64
+}
+
+X Point {
+    F origin() -> Point {
+        Point { x: 0, y: 0 }
+    }
+
+    F new(x: i64, y: i64) -> Point {
+        Point { x: x, y: y }
+    }
+
+    F distance_squared(&self, other: Point) -> i64 {
+        dx: i64 := self.x - other.x
+        dy: i64 := self.y - other.y
+        dx * dx + dy * dy
+    }
+}
+
+F main() -> i64 {
+    o: Point := Point.origin()
+    I o.x != 0 { R 1 }
+    I o.y != 0 { R 2 }
+
+    p: Point := Point.new(3, 4)
+    I p.x != 3 { R 3 }
+    I p.y != 4 { R 4 }
+
+    # 3*3 + 4*4 = 25
+    d: i64 := p.distance_squared(o)
+    I d != 25 { R 5 }
+
+    q: Point := Point.new(0 - 1, 0 - 2)
+    # (0 - (0 - 1))^2 + (0 - (0 - 2))^2 = 1 + 4 = 5
+    d2: i64 := o.distance_squared(q)
+    I d2 != 5 { R 6 }
+    R 0
+}

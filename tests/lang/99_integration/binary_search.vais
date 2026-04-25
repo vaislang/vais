@@ -1,0 +1,64 @@
+# CHECKS: classic binary search over a sorted Vec<i64> (built inline).
+U std/vec.{vec_new};
+
+F main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    LF i: 0..20 {
+        v.push(i * 2)   # 0, 2, 4, ..., 38
+    }
+
+    # search target = 18 (expected idx 9)
+    target: i64 := 18
+    lo: i64 := mut 0
+    hi: i64 := mut v.len()
+    found: i64 := mut 0 - 1
+    L {
+        I lo >= hi { B }
+        mid: i64 := (lo + hi) / 2
+        midv: i64 := v[mid]
+        I midv == target { found = mid B }
+        I midv < target {
+            lo = mid + 1
+        } EL {
+            hi = mid
+        }
+    }
+    I found != 9 { R 1 }
+
+    # second search, target = 0 (idx 0)
+    target2: i64 := 0
+    lo2: i64 := mut 0
+    hi2: i64 := mut v.len()
+    found2: i64 := mut 0 - 1
+    L {
+        I lo2 >= hi2 { B }
+        mid: i64 := (lo2 + hi2) / 2
+        midv: i64 := v[mid]
+        I midv == target2 { found2 = mid B }
+        I midv < target2 {
+            lo2 = mid + 1
+        } EL {
+            hi2 = mid
+        }
+    }
+    I found2 != 0 { R 2 }
+
+    # third: missing target = 17 (between 16 and 18)
+    target3: i64 := 17
+    lo3: i64 := mut 0
+    hi3: i64 := mut v.len()
+    found3: i64 := mut 0 - 1
+    L {
+        I lo3 >= hi3 { B }
+        mid: i64 := (lo3 + hi3) / 2
+        midv: i64 := v[mid]
+        I midv == target3 { found3 = mid B }
+        I midv < target3 {
+            lo3 = mid + 1
+        } EL {
+            hi3 = mid
+        }
+    }
+    I found3 != 0 - 1 { R 3 }
+    R 0
+}

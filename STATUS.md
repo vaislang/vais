@@ -9,17 +9,17 @@
 | Category | Tests | Passing | Status |
 |----------|-------|---------|--------|
 | 01_primitives | 14 | 14/14 | ✅ |
-| 02_control_flow | 13 | 13/13 | ✅ |
+| 02_control_flow | 14 | 14/14 | ✅ |
 | 03_match | 7 | 6/6 + 1 xfail | ✅ |
-| 04_struct | 8 | 7/7 + 1 xfail | ✅ |
+| 04_struct | 9 | 8/8 + 1 xfail | ✅ |
 | 05_enum | 6 | 6/6 | ✅ |
 | 06_generic | 7 | 7/7 | ✅ |
 | 07_collections | 3 | 3/3 | ✅ |
 | 08_strings | 2 | 2/2 | ✅ |
 | 09_traits | 0 | — | not yet |
 | 10_ffi | 0 | — | not yet |
-| 99_integration | 7 | 7/7 | ✅ |
-| **Total** | **67** | **67/67 (100%) + 2 xfail** | 🎉 |
+| 99_integration | 9 | 9/9 | ✅ |
+| **Total** | **71** | **71/71 (100%) + 2 xfail** | 🎉 |
 
 Run yourself:
 ```bash
