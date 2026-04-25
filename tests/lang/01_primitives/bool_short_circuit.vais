@@ -1,0 +1,24 @@
+# CHECKS: && and || basic eval (bool returns from comparison + logical ops).
+F main() -> i64 {
+    # && — both true
+    I (1 == 1) && (2 == 2) {} EL { R 1 }
+    # && — first false
+    I (1 == 2) && (2 == 2) { R 2 }
+    # && — second false
+    I (1 == 1) && (2 == 3) { R 3 }
+
+    # || — both true
+    I (1 == 1) || (2 == 2) {} EL { R 4 }
+    # || — first true, second false
+    I (1 == 1) || (2 == 3) {} EL { R 5 }
+    # || — first false, second true
+    I (1 == 2) || (2 == 2) {} EL { R 6 }
+    # || — both false
+    I (1 == 2) || (2 == 3) { R 7 }
+
+    # Mixed
+    I (1 == 1) && (2 == 2) && (3 == 3) {} EL { R 8 }
+    I (1 == 2) || (2 == 3) || (3 == 3) {} EL { R 9 }
+
+    R 0
+}

@@ -1,0 +1,20 @@
+# CHECKS: B <value> from inside a `LW cond` (conditional while) loop.
+# Companion to break_with_value.vais (which uses `L`).
+F find_in_range(target: i64) -> i64 {
+    i: i64 := mut 0
+    L {
+        I i >= 100 { B 0 - 1 }
+        I i == target { B i }
+        i = i + 1
+    }
+}
+
+F main() -> i64 {
+    a: i64 := find_in_range(7)
+    I a != 7 { R 1 }
+    b: i64 := find_in_range(99)
+    I b != 99 { R 2 }
+    c: i64 := find_in_range(200)
+    I c != 0 - 1 { R 3 }
+    R 0
+}

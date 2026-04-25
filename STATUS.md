@@ -8,18 +8,18 @@
 
 | Category | Tests | Passing | Status |
 |----------|-------|---------|--------|
-| 01_primitives | 11 | 11/11 | ✅ |
-| 02_control_flow | 11 | 11/11 | ✅ |
-| 03_match | 6 | 6/6 | ✅ |
-| 04_struct | 7 | 7/7 | ✅ |
-| 05_enum | 5 | 5/5 | ✅ |
-| 06_generic | 5 | 5/5 | ✅ |
-| 07_collections | 2 | 2/2 | ✅ |
+| 01_primitives | 14 | 14/14 | ✅ |
+| 02_control_flow | 13 | 13/13 | ✅ |
+| 03_match | 7 | 6/6 + 1 xfail | ✅ |
+| 04_struct | 8 | 7/7 + 1 xfail | ✅ |
+| 05_enum | 6 | 6/6 | ✅ |
+| 06_generic | 7 | 7/7 | ✅ |
+| 07_collections | 3 | 3/3 | ✅ |
 | 08_strings | 2 | 2/2 | ✅ |
 | 09_traits | 0 | — | not yet |
 | 10_ffi | 0 | — | not yet |
-| 99_integration | 6 | 6/6 | ✅ |
-| **Total** | **56** | **56/56 (100%)** | 🎉 |
+| 99_integration | 7 | 7/7 | ✅ |
+| **Total** | **67** | **67/67 (100%) + 2 xfail** | 🎉 |
 
 Run yourself:
 ```bash
@@ -94,6 +94,9 @@ cd compiler/std/tests && bash run.sh
 | C3 ✅ | ~~StrHashMap<i64> generic specialization duplicate symbol cross-module~~ FIXED in function_gen/generics.rs by emitting specialized definitions with `linkonce_odr` linkage. Standard C++-template-instantiation discipline — equivalent monomorphizations from multiple consumer modules merge at link time. Promoted xfail_hashmap_strhashmap.vais → test_hashmap.vais. | — | — | test_hashmap.vais |
 | C4 | `Mutex<T>::lock` returns `MutexGuard` (unspecialized) instead of `MutexGuard$T` | calling `.lock()` on a `Mutex<i64>` | none — link fails on type mismatch | `xfail_sync_mutexguard_specialization.vais` |
 | C5 ✅ | ~~`String.with_capacity(n)` segfaults when `n < 16`~~ FIXED in std/string.vais: `new_cap := self.cap * 2` is now `:= mut`. Root cause: codegen alloca'd `new_cap` but skipped the initial store; only the `< 16` branch wrote to it, leaving the else branch reading uninitialized memory → `malloc(garbage)` crash. Underlying codegen bug remains (separate finding: alloca without initial store when binding is later reassigned). | — | — | test_string.vais cap=4 |
+| C6 | struct field of fixed-size array `[T; N]` triggers ICE on read — codegen tries to convert ArrayValue to PointerValue. | `S P { c: [i64;3] } let p := P{...}; p.c[0]` | use `Vec<T>` or store array as separate vars | `tests/lang/04_struct/struct_array_field.vais` |
+| C7 | match arms whose body is a primitive integer can't merge into a phi typed as the enum aggregate; codegen emits phi `{i8,i64}` with i64 constants | match Option<Option<T>> with `Some(Some(v)) => v, Some(None) => 0 - 1, None => 0 - 2` | wrap each result in the same enum constructor or use early `R` instead of fall-through | `tests/lang/03_match/match_nested_enum.vais` |
+| C8 | `bool as i64` returns 255 (sign-extension of i1 to i8 to i64) instead of 0 or 1 | `let b: bool := (1 == 1); R b as i64` returns -1/255 | use `I cond { 1 } EL { 0 }` or compare to true | n/a (sidestepped in tests) |
 
 ### Phase 17 Wave 1-4a discovered bugs (prior sessions)
 
