@@ -1,0 +1,29 @@
+# CHECKS: LF range with step collected into a sum.
+F sum_range(start: i64, end: i64) -> i64 {
+    acc: i64 := mut 0
+    LF i: start..end {
+        acc = acc + i
+    }
+    acc
+}
+
+F sum_inclusive(start: i64, end: i64) -> i64 {
+    acc: i64 := mut 0
+    LF i: start..=end {
+        acc = acc + i
+    }
+    acc
+}
+
+F main() -> i64 {
+    # 0..10 = 0+1+...+9 = 45
+    I sum_range(0, 10) != 45 { R 1 }
+    # 1..=10 = 1+2+...+10 = 55
+    I sum_inclusive(1, 10) != 55 { R 2 }
+    # empty range
+    I sum_range(5, 5) != 0 { R 3 }
+    I sum_inclusive(5, 4) != 0 { R 4 }
+    # negative range
+    I sum_range(0 - 3, 3) != 0 - 3 { R 5 }
+    R 0
+}

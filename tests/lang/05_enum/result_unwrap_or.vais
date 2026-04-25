@@ -1,0 +1,25 @@
+# CHECKS: Result<T, E> via match for the unwrap_or pattern.
+F safe_parse(s: str) -> Result<i64, i64> {
+    M s {
+        "1"  => Ok(1),
+        "2"  => Ok(2),
+        "10" => Ok(10),
+        "42" => Ok(42),
+        _    => Err(0 - 1)
+    }
+}
+
+F unwrap_or(r: Result<i64, i64>, default: i64) -> i64 {
+    M r {
+        Ok(v)  => v,
+        Err(_) => default
+    }
+}
+
+F main() -> i64 {
+    I unwrap_or(safe_parse("1"), 0) != 1 { R 1 }
+    I unwrap_or(safe_parse("42"), 0) != 42 { R 2 }
+    I unwrap_or(safe_parse("xyz"), 99) != 99 { R 3 }
+    I unwrap_or(safe_parse(""), 7) != 7 { R 4 }
+    R 0
+}

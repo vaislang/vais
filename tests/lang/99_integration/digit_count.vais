@@ -1,0 +1,23 @@
+# CHECKS: count digits of a positive integer using division.
+F digit_count(n: i64) -> i64 {
+    I n == 0 { R 1 }
+    cur: i64 := mut n
+    count: i64 := mut 0
+    LW cur > 0 {
+        cur = cur / 10
+        count = count + 1
+    }
+    count
+}
+
+F main() -> i64 {
+    I digit_count(0) != 1 { R 1 }
+    I digit_count(1) != 1 { R 2 }
+    I digit_count(9) != 1 { R 3 }
+    I digit_count(10) != 2 { R 4 }
+    I digit_count(99) != 2 { R 5 }
+    I digit_count(100) != 3 { R 6 }
+    I digit_count(123456) != 6 { R 7 }
+    I digit_count(1000000) != 7 { R 8 }
+    R 0
+}

@@ -1,0 +1,24 @@
+# CHECKS: two parallel Vec<i64> updated in lockstep.
+U std/vec.{vec_new};
+
+F main() -> i64 {
+    keys: Vec<i64> := mut vec_new()
+    vals: Vec<i64> := mut vec_new()
+
+    LF i: 0..10 {
+        keys.push(i)
+        vals.push(i * i)
+    }
+
+    I keys.len() != 10 { R 1 }
+    I vals.len() != 10 { R 2 }
+
+    # parallel access
+    sum: i64 := mut 0
+    LF i: 0..keys.len() {
+        sum = sum + keys[i] * vals[i]
+    }
+    # sum of i * i^2 = i^3 for i in 0..10 = 0+1+8+27+64+125+216+343+512+729 = 2025
+    I sum != 2025 { R 3 }
+    R 0
+}

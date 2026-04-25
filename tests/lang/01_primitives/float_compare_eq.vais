@@ -1,0 +1,23 @@
+# CHECKS: f64 equality and ordering comparisons.
+F main() -> i64 {
+    a: f64 := 3.14
+    b: f64 := 3.14
+
+    # equal
+    I a == b {} EL { R 1 }
+    # not equal
+    I 1.0 == 2.0 { R 2 }
+
+    # less / greater
+    I 1.0 < 2.0 {} EL { R 3 }
+    I 2.0 > 1.0 {} EL { R 4 }
+    I 1.0 <= 1.0 {} EL { R 5 }
+    I 1.0 >= 1.0 {} EL { R 6 }
+
+    # negative comparisons
+    n: f64 := 0.0 - 5.0
+    I n < 0.0 {} EL { R 7 }
+    I n > 0.0 - 10.0 {} EL { R 8 }
+
+    R 0
+}
