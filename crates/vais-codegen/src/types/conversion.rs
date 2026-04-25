@@ -613,6 +613,25 @@ impl CodeGenerator {
             Type::Affine(inner) => {
                 ResolvedType::Affine(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
             }
+            // Phase 0 bug C9 fix: `T?` postfix syntax in function signatures.
+            // Without this branch, the catch-all returned ResolvedType::Unknown
+            // which lowered to i64, but the function body returned a real
+            // Option<T> aggregate → IR verifier failed with "ret type mismatch".
+            Type::Optional(inner) => {
+                ResolvedType::Optional(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
+            }
+            // `T!` postfix syntax → Result<T, _>. Same hazard as above.
+            Type::Result(inner) => {
+                let inner_ty = self.ast_type_to_resolved_impl(&inner.node);
+                ResolvedType::Result(
+                    Box::new(inner_ty),
+                    // Default error type to i64 — most stdlib uses err codes.
+                    // TC normally provides the concrete err via the named
+                    // Result<_, _> path; this fallback only fires when the
+                    // user wrote the postfix `!` shorthand.
+                    Box::new(ResolvedType::I64),
+                )
+            }
             Type::Dependent {
                 var_name,
                 base,
