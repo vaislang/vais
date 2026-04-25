@@ -1111,6 +1111,7 @@ impl CodeGenerator {
                 all_args.join(", "),
                 dbg_info
             );
+            self.fn_ctx.record_emitted_type(&tmp, "i64");
             Ok((tmp, ir))
         } else if fn_name == "malloc" {
             // Special handling for malloc: call returns i8*, convert to i64
@@ -1161,6 +1162,7 @@ impl CodeGenerator {
                 n_val,
                 dbg_info
             );
+            self.fn_ctx.record_emitted_type(&result, "i8*");
             // Convert result back to i64
             let result_i64 = self.next_temp(counter);
             write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result_i64, result);
@@ -1370,6 +1372,7 @@ impl CodeGenerator {
                     arg_vals.join(", "),
                     dbg_info
                 );
+                self.fn_ctx.record_emitted_type(&tmp, &ret_ty);
             } else {
                 write_ir!(
                     ir,
@@ -1380,6 +1383,7 @@ impl CodeGenerator {
                     arg_vals.join(", "),
                     dbg_info
                 );
+                self.fn_ctx.record_emitted_type(&tmp, &ret_ty);
             }
 
             // For extern C functions returning str, the C function returns i8*
