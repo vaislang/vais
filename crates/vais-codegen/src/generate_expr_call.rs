@@ -440,6 +440,7 @@ impl CodeGenerator {
                         fat1,
                         data_i8
                     );
+                    self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
                     let fat2 = self.next_temp(counter);
                     write_ir!(
                         ir,
@@ -448,6 +449,7 @@ impl CodeGenerator {
                         fat1,
                         len_val
                     );
+                    self.fn_ctx.record_emitted_type(&fat2, "{ i8*, i64 }");
                     val = fat2;
                     did_vec_to_slice = true;
                     "{ i8*, i64 }".to_string()
@@ -581,6 +583,7 @@ impl CodeGenerator {
                                     trait_obj_1,
                                     data_ptr
                                 );
+                                self.fn_ctx.record_emitted_type(&trait_obj_1, "{ i8*, i8* }");
                                 let vtable_cast = self.next_temp(counter);
                                 write_ir!(
                                     ir,
@@ -588,6 +591,7 @@ impl CodeGenerator {
                                     vtable_cast,
                                     vtable.global_name
                                 );
+                                self.fn_ctx.record_emitted_type(&vtable_cast, "i8*");
                                 let trait_obj_2 = self.next_temp(counter);
                                 write_ir!(
                                     ir,
@@ -596,6 +600,7 @@ impl CodeGenerator {
                                     trait_obj_1,
                                     vtable_cast
                                 );
+                                self.fn_ctx.record_emitted_type(&trait_obj_2, "{ i8*, i8* }");
 
                                 val = trait_obj_2;
                             }
