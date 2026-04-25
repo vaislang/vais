@@ -1,0 +1,29 @@
+# CHECKS: match guards differentiate negative ranges.
+F sign(n: i64) -> i64 {
+    M n {
+        0 => 0,
+        x I x > 0 => 1,
+        _ => 0 - 1
+    }
+}
+
+F clamp(n: i64) -> i64 {
+    M n {
+        x I x < 0 => 0,
+        x I x > 100 => 100,
+        _ => n
+    }
+}
+
+F main() -> i64 {
+    I sign(0) != 0 { R 1 }
+    I sign(42) != 1 { R 2 }
+    I sign(0 - 5) != 0 - 1 { R 3 }
+
+    I clamp(50) != 50 { R 4 }
+    I clamp(0 - 10) != 0 { R 5 }
+    I clamp(150) != 100 { R 6 }
+    I clamp(0) != 0 { R 7 }
+    I clamp(100) != 100 { R 8 }
+    R 0
+}

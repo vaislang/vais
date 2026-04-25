@@ -1,0 +1,22 @@
+# CHECKS: integer range overlap detection.
+F overlaps(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> i64 {
+    I a_hi < b_lo { R 0 }
+    I b_hi < a_lo { R 0 }
+    1
+}
+
+F main() -> i64 {
+    # full overlap
+    I overlaps(0, 10, 5, 15) != 1 { R 1 }
+    I overlaps(5, 15, 0, 10) != 1 { R 2 }
+    # contained
+    I overlaps(0, 100, 25, 75) != 1 { R 3 }
+    # touching at edge
+    I overlaps(0, 5, 5, 10) != 1 { R 4 }
+    # disjoint
+    I overlaps(0, 5, 10, 20) != 0 { R 5 }
+    I overlaps(20, 30, 0, 10) != 0 { R 6 }
+    # identical
+    I overlaps(5, 10, 5, 10) != 1 { R 7 }
+    R 0
+}

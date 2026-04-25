@@ -1,0 +1,36 @@
+# CHECKS: run-length encoding count over a Vec<i64>.
+U std/vec.{vec_new};
+
+F count_runs(v: &Vec<i64>) -> i64 {
+    I v.len() == 0 { R 0 }
+    runs: i64 := mut 1
+    LF i: 1..v.len() {
+        I v[i] != v[i - 1] { runs = runs + 1 }
+    }
+    runs
+}
+
+F main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    v.push(1)
+    v.push(1)
+    v.push(2)
+    v.push(2)
+    v.push(2)
+    v.push(3)
+    v.push(1)
+    # 1,1 | 2,2,2 | 3 | 1 → 4 runs
+    I count_runs(&v) != 4 { R 1 }
+
+    w: Vec<i64> := mut vec_new()
+    w.push(7)
+    w.push(7)
+    w.push(7)
+    w.push(7)
+    # all same → 1 run
+    I count_runs(&w) != 1 { R 2 }
+
+    e: Vec<i64> := mut vec_new()
+    I count_runs(&e) != 0 { R 3 }
+    R 0
+}

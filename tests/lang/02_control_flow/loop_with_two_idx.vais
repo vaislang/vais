@@ -1,0 +1,15 @@
+# CHECKS: nested LF — outer i, inner j.
+F main() -> i64 {
+    sum: i64 := mut 0
+    LF i: 0..3 {
+        LF j: 0..4 {
+            sum = sum + i * 10 + j
+        }
+    }
+    # i=0: 0+1+2+3 = 6
+    # i=1: 10+11+12+13 = 46
+    # i=2: 20+21+22+23 = 86
+    # total = 138
+    I sum != 138 { R 1 }
+    R 0
+}

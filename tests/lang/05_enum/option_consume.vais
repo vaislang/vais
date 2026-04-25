@@ -1,0 +1,17 @@
+# CHECKS: Option<T> consume by match — branches both match.
+F describe(o: Option<i64>) -> i64 {
+    M o {
+        Some(v) I v < 0 => 1,
+        Some(v) I v == 0 => 2,
+        Some(_) => 3,
+        None => 4
+    }
+}
+
+F main() -> i64 {
+    I describe(Some(0 - 5)) != 1 { R 1 }
+    I describe(Some(0)) != 2 { R 2 }
+    I describe(Some(42)) != 3 { R 3 }
+    I describe(None) != 4 { R 4 }
+    R 0
+}

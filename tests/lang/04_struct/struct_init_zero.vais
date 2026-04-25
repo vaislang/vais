@@ -1,0 +1,39 @@
+# CHECKS: struct with all zero fields then mutate via methods.
+S Stats {
+    games: i64,
+    wins: i64,
+    losses: i64,
+    draws: i64
+}
+
+X Stats {
+    F record_win(&self) {
+        self.games = self.games + 1
+        self.wins = self.wins + 1
+    }
+
+    F record_loss(&self) {
+        self.games = self.games + 1
+        self.losses = self.losses + 1
+    }
+
+    F record_draw(&self) {
+        self.games = self.games + 1
+        self.draws = self.draws + 1
+    }
+}
+
+F main() -> i64 {
+    s: Stats := mut Stats { games: 0, wins: 0, losses: 0, draws: 0 }
+    s.record_win()
+    s.record_win()
+    s.record_loss()
+    s.record_draw()
+    s.record_win()
+
+    I s.games != 5 { R 1 }
+    I s.wins != 3 { R 2 }
+    I s.losses != 1 { R 3 }
+    I s.draws != 1 { R 4 }
+    R 0
+}
