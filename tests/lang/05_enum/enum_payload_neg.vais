@@ -1,0 +1,27 @@
+# CHECKS: enum payload with negative values.
+EN Signed {
+    Pos(i64),
+    Neg(i64),
+    Zero
+}
+
+F to_value(s: Signed) -> i64 {
+    M s {
+        Pos(n) => n,
+        Neg(n) => 0 - n,
+        Zero => 0
+    }
+}
+
+F main() -> i64 {
+    I to_value(Pos(42)) != 42 { R 1 }
+    I to_value(Neg(7)) != 0 - 7 { R 2 }
+    I to_value(Zero) != 0 { R 3 }
+    I to_value(Pos(0)) != 0 { R 4 }
+    I to_value(Neg(0)) != 0 { R 5 }
+
+    # arithmetic
+    a: i64 := to_value(Pos(10)) + to_value(Neg(3))
+    I a != 7 { R 6 }
+    R 0
+}

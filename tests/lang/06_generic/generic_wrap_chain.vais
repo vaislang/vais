@@ -1,0 +1,26 @@
+# CHECKS: chain of generic Wrap<T> through helpers (REGRESSION C17 stress).
+S Wrap<T> {
+    val: T
+}
+
+X Wrap<T> {
+    F new(v: T) -> Wrap<T> { Wrap { val: v } }
+    F get(&self) -> T { self.val }
+}
+
+F unwrap_then_double<T>(w: Wrap<T>) -> T {
+    w.get()
+}
+
+F main() -> i64 {
+    w: Wrap<i64> := Wrap.new(42)
+    I unwrap_then_double(w) != 42 { R 1 }
+
+    w2: Wrap<i64> := Wrap.new(0 - 5)
+    I unwrap_then_double(w2) != 0 - 5 { R 2 }
+
+    # nested unwrap
+    w3: Wrap<i64> := Wrap.new(unwrap_then_double(Wrap.new(99)))
+    I w3.get() != 99 { R 3 }
+    R 0
+}
