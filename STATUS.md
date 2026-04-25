@@ -8,18 +8,18 @@
 
 | Category | Tests | Passing | Status |
 |----------|-------|---------|--------|
-| 01_primitives | 16 | 16/16 | ✅ |
+| 01_primitives | 17 | 17/17 | ✅ |
 | 02_control_flow | 16 | 16/16 | ✅ |
 | 03_match | 8 | 8/8 | ✅ |
 | 04_struct | 11 | 11/11 | ✅ |
-| 05_enum | 7 | 7/7 | ✅ |
-| 06_generic | 8 | 8/8 | ✅ |
-| 07_collections | 3 | 3/3 | ✅ |
+| 05_enum | 8 | 8/8 | ✅ |
+| 06_generic | 9 | 9/9 | ✅ |
+| 07_collections | 4 | 4/4 | ✅ |
 | 08_strings | 2 | 2/2 | ✅ |
-| 09_traits | 0 | — | not yet |
-| 10_ffi | 0 | — | not yet |
-| 99_integration | 11 | 11/11 | ✅ |
-| **Total** | **84** | **84/84 (100%)** | 🎉 |
+| 09_traits | 4 | 3/3 + 1 xfail | ✅ |
+| 10_ffi | 2 | 2/2 | ✅ |
+| 99_integration | 12 | 12/12 | ✅ |
+| **Total** | **94** | **94/94 (100%) + 1 xfail** | 🎉 |
 
 Run yourself:
 ```bash
@@ -95,6 +95,8 @@ cd compiler/std/tests && bash run.sh
 | C4 partial | Specialized generic body's call to another generic's static method now correctly resolves to the inner specialization. `MutexGuard::new(&self)` inside `Mutex_lock$i64` mangles to `MutexGuard_new$i64` (was bare `MutexGuard_new`). Two changes in `expr_helpers_call/method_call.rs`: (1) substitute `expected_ret` using current spec context; (2) when struct has generics + spec context active + concrete expected_ret, prefer expected_ret's generics over arg-type inference. STILL XFAIL — std/sync exercises a deeper unrelated bug C9. | — | — | xfail_sync_mutexguard_specialization.vais |
 | C9 partial | ~~`?` postfix type fell to ResolvedType::Unknown → i64 in signature~~ FIXED in `types/conversion.rs::ast_type_to_resolved_impl`: `Type::Optional` → `ResolvedType::Optional`, `Type::Result` → `ResolvedType::Result(_, i64)`. Function signatures now match their declared return type. STILL latent: when the function body returns `Some(<user_struct>)`, the `Some(...)` constructor uses the global `%Option = {i32, {i64}}` layout instead of `{i8, %Struct}`. That deeper "specialized Optional layout per call site" issue is what still blocks C4. | use named `Option<T>` instead of `T?` (which now also works) | — | partial in conversion.rs |
 | C10 ✅ | ~~match arm guards not recognized~~ NOT A BUG — vais uses single-char `I` keyword for guards (`pattern I expr => body`); spelled-out `if` is just an ident. Test was using wrong syntax. Updated `tests/lang/03_match/match_guard.vais` to use `I` and the test passes. | — | — | match_guard.vais |
+| C11 | trait default methods not dispatched on impls that don't override. Codegen looks up the per-impl method table without falling back to trait's default. | `W T { F a() {default body} } X S: T {} let s: S; s.a()` → "Undefined function: S_a" | implement every method explicitly per-impl | `tests/lang/09_traits/trait_default.vais` |
+| C12 | `X F builtin_name(...)` re-declares an already-builtin function, emitting double `declare` + suffixed `@name.1` call → link fails on missing `_name.1` symbol. | `X F sqrt(x: f64) -> f64; sqrt(25.0)` | omit the extern decl for builtins | n/a (sidestepped in ffi_math.vais) |
 | C5 ✅ | ~~`String.with_capacity(n)` segfaults when `n < 16`~~ FIXED in std/string.vais: `new_cap := self.cap * 2` is now `:= mut`. Root cause: codegen alloca'd `new_cap` but skipped the initial store; only the `< 16` branch wrote to it, leaving the else branch reading uninitialized memory → `malloc(garbage)` crash. Underlying codegen bug remains (separate finding: alloca without initial store when binding is later reassigned). | — | — | test_string.vais cap=4 |
 | C6 ✅ | ~~struct field of fixed-size array `[T; N]` triggers ICE on read~~ FIXED in `inkwell/gen_aggregate.rs::generate_index` (handle ArrayValue by spilling to alloca + GEP) AND `inkwell/gen_advanced.rs::generate_struct_literal` (load array through pointer when field type is array). Two distinct codegen paths needed updating because `generate_array` returns the alloca pointer, not the array value. Test: `tests/lang/04_struct/struct_array_field.vais`. | — | — | struct_array_field.vais |
 | C7 ✅ | ~~match arms with nested variant patterns produce invalid phi/wrong arm dispatch~~ FIXED in `inkwell/gen_match.rs` — two-part fix: (1) `push_inner_scrutinee_for_variant` threads the inner Option/Result type onto the scrutinee stack while recursing into nested patterns so payload-decoding lookups resolve correctly; (2) `Pattern::Variant` pattern-check now AND-s the inner pattern's check when any field is itself a Variant/Literal/Range, so sibling arms like `Some(Some(v))` and `Some(None)` no longer collapse to the same outer-tag check. Test: `tests/lang/03_match/match_nested_enum.vais`. | — | — | match_nested_enum.vais |
