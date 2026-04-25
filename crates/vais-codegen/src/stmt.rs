@@ -953,6 +953,7 @@ impl CodeGenerator {
                     struct_ty,
                     effective_ptr
                 );
+                self.fn_ctx.record_emitted_type(&format!("%{}", ret_tmp), "i64");
             }
 
             // 2) Shallow-free (if has_owned_mask — frees heap-owned string fields)
@@ -1152,6 +1153,7 @@ impl CodeGenerator {
                     struct_ty,
                     effective_ptr
                 );
+                self.fn_ctx.record_emitted_type(&format!("%{}", ret_tmp), "i64");
             }
 
             if *has_shallow {

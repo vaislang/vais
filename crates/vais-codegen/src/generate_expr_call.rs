@@ -1047,6 +1047,7 @@ impl CodeGenerator {
                     all_args.join(", "),
                     dbg_info
                 );
+                self.fn_ctx.record_emitted_type(&tmp, "i64");
                 return Ok((tmp, ir));
             }
 
