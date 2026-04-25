@@ -1,7 +1,4 @@
-# XFAIL: same C17 cascade — `double<T>` calls `add_self<T>` but link fails
-# on bare `add_self` reference inside the i64 specialization.
-#
-# CHECKS: two generic helper fns chaining via i64.
+# CHECKS: two generic helper fns chaining via i64 (REGRESSION for bug C17).
 F double<T>(x: T) -> T {
     add_self(x)
 }

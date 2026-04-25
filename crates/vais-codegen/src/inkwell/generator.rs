@@ -472,6 +472,44 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
+        // Phase 0 bug C17 fix: pre-declare ALL function/method specs first
+        // so that body-generation calls (in the main loop below) can find
+        // every other specialization regardless of iteration order. Without
+        // this, a body generated early references a later-declared spec by
+        // the bare name, leading to link errors. Struct specs are skipped
+        // here because they're declared inside the same iteration anyway.
+        for inst in instantiations {
+            if let vais_types::InstantiationKind::Function = inst.kind {
+                if let Some(generic_fn) = generic_function_templates.get(&inst.base_name) {
+                    let param_types: Vec<ResolvedType> = generic_fn
+                        .params
+                        .iter()
+                        .map(|p| self.ast_type_to_resolved(&p.ty.node))
+                        .collect();
+                    let return_type = if let Some(ret) = generic_fn.ret_type.as_ref() {
+                        self.ast_type_to_resolved(&ret.node)
+                    } else {
+                        ResolvedType::Unit
+                    };
+                    let generic_names: Vec<String> = generic_fn
+                        .generics
+                        .iter()
+                        .filter(|g| {
+                            !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. })
+                        })
+                        .map(|g| g.name.node.clone())
+                        .collect();
+                    let _ = self.declare_specialized_function(
+                        &inst.base_name,
+                        &inst.type_args,
+                        &param_types,
+                        &return_type,
+                        &generic_names,
+                    );
+                }
+            }
+        }
+
         for inst in instantiations {
             match &inst.kind {
                 vais_types::InstantiationKind::Struct => {

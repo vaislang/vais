@@ -13,13 +13,13 @@
 | 03_match | 18 | 18/18 | ✅ |
 | 04_struct | 24 | 24/24 | ✅ |
 | 05_enum | 18 | 17/17 + 1 xfail | ✅ |
-| 06_generic | 20 | 17/17 + 3 xfail | ✅ |
+| 06_generic | 20 | 20/20 | ✅ |
 | 07_collections | 12 | 12/12 | ✅ |
 | 08_strings | 7 | 7/7 | ✅ |
 | 09_traits | 4 | 3/3 + 1 xfail | ✅ |
 | 10_ffi | 2 | 2/2 | ✅ |
 | 99_integration | 39 | 39/39 | ✅ |
-| **Total** | **205** | **200/200 (100%) + 5 xfail** | 🎉 |
+| **Total** | **205** | **203/203 (100%) + 2 xfail** | 🎉 |
 
 Run yourself:
 ```bash
@@ -101,7 +101,7 @@ cd compiler/std/tests && bash run.sh
 | C14 ✅ | ~~bare `None` literal triggered an extra `$unknown` specialization with Unit-erased T~~ FIXED in `module_gen/instantiations.rs`: skip Function instantiations whose type_args contain Unknown/Generic/Var (the well-typed siblings already cover the real call sites). Same skip already existed for Method instantiations; this brings function path into parity. | — | — | generic_unwrap.vais |
 | C15 | array literal `[1, 2, 3]` is typed `[i64]` (slice), not `[i64; 3]` (fixed-size array). Annotating `: [i64; N]` raises a TC mismatch. | `let a: [i64; 3] := [1, 2, 3]` | drop the size and use `[i64]` (slice), or use Vec<T> with explicit pushes | n/a (worked around with Vec<T> in tests) |
 | C16 | `Vec<EnumType> := mut vec_new()` fails TC — vec_new() returns Vec<i64> default and unifier can't promote to Vec<Color>. | `let v: Vec<Color> := mut vec_new()` | use bare `let v := mut vec_new()` and let inference flow from first push | enum_in_vec.vais |
-| C17 | pyramid of generic helpers (id/twice/triple all `<T>`) link-fails — cascade specialization emits unspecialized `id`/`twice` references inside `twice$T`/`triple$T` fallback paths that have no symbol. | nested generic-fn calls | inline the helpers manually | generic_helper_pyramid.vais |
+| C17 ✅ | ~~cascade generic specialization left unspecialized refs~~ FIXED in `inkwell/gen_expr/call.rs` (rewrite call site to mangled spec when in specialized body) AND `inkwell/generator.rs` (pre-declare ALL function specs in pass 1 so any body in pass 2 can find any other spec by name regardless of iteration order). | — | — | generic_chain.vais, generic_chain_two.vais, generic_helper_pyramid.vais |
 | C5 ✅ | ~~`String.with_capacity(n)` segfaults when `n < 16`~~ FIXED in std/string.vais: `new_cap := self.cap * 2` is now `:= mut`. Root cause: codegen alloca'd `new_cap` but skipped the initial store; only the `< 16` branch wrote to it, leaving the else branch reading uninitialized memory → `malloc(garbage)` crash. Underlying codegen bug remains (separate finding: alloca without initial store when binding is later reassigned). | — | — | test_string.vais cap=4 |
 | C6 ✅ | ~~struct field of fixed-size array `[T; N]` triggers ICE on read~~ FIXED in `inkwell/gen_aggregate.rs::generate_index` (handle ArrayValue by spilling to alloca + GEP) AND `inkwell/gen_advanced.rs::generate_struct_literal` (load array through pointer when field type is array). Two distinct codegen paths needed updating because `generate_array` returns the alloca pointer, not the array value. Test: `tests/lang/04_struct/struct_array_field.vais`. | — | — | struct_array_field.vais |
 | C7 ✅ | ~~match arms with nested variant patterns produce invalid phi/wrong arm dispatch~~ FIXED in `inkwell/gen_match.rs` — two-part fix: (1) `push_inner_scrutinee_for_variant` threads the inner Option/Result type onto the scrutinee stack while recursing into nested patterns so payload-decoding lookups resolve correctly; (2) `Pattern::Variant` pattern-check now AND-s the inner pattern's check when any field is itself a Variant/Literal/Range, so sibling arms like `Some(Some(v))` and `Some(None)` no longer collapse to the same outer-tag check. Test: `tests/lang/03_match/match_nested_enum.vais`. | — | — | match_nested_enum.vais |

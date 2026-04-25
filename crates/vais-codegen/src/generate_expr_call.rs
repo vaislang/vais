@@ -240,9 +240,24 @@ impl CodeGenerator {
         let (fn_name, is_indirect) = if let Expr::Ident(name) = &func.node {
             // Check if this is a generic function that needs monomorphization
             if let Some(instantiations_list) = self.generics.fn_instantiations.get(name) {
-                // Infer argument types to select the right specialization
-                let arg_types: Vec<ResolvedType> =
-                    args.iter().map(|a| self.infer_expr_type(a)).collect();
+                // Infer argument types to select the right specialization.
+                // Phase 0 bug C17 fix: when this call is inside a specialized
+                // generic body (e.g. `identity(x)` inside `double_it$i64`),
+                // the arg types come from `infer_expr_type` which uses local
+                // declared types (T). Substitute via the active spec context
+                // so the mangled call matches a registered specialization
+                // (i.e. resolve identity(x: T) → identity$i64 not identity$T).
+                let arg_types: Vec<ResolvedType> = args
+                    .iter()
+                    .map(|a| {
+                        let raw = self.infer_expr_type(a);
+                        if self.generics.substitutions.is_empty() {
+                            raw
+                        } else {
+                            vais_types::substitute_type(&raw, &self.generics.substitutions)
+                        }
+                    })
+                    .collect();
 
                 // Phase 16 A2.5: supply TC-known call-site return type as a hint
                 // so generic parameters that only appear in the return type

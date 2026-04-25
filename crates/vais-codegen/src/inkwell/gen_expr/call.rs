@@ -383,6 +383,33 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
+        // Phase 0 bug C17 fix: when called from inside a specialized generic
+        // body, prefer a specialization mangled with the current substitution
+        // context over the bare un-instantiated function. Common case: inside
+        // `double_it$i64`, `identity(x)` should resolve to `@identity$i64`,
+        // not `@identity` (a body-less declaration → link error).
+        // Note: we check existence (declared-or-defined), not body presence,
+        // because specialization bodies are generated in a second pass after
+        // all specializations are declared, so the inner spec we're calling
+        // may not have its body filled in yet at this point.
+        let fn_name = if !self.generic_substitutions.is_empty() {
+            let mut chosen = fn_name.clone();
+            for ty in self.generic_substitutions.values() {
+                let candidate = vais_types::mangle_name(&fn_name, std::slice::from_ref(ty));
+                let exists = self
+                    .functions
+                    .contains_key(&candidate)
+                    || self.module.get_function(&candidate).is_some();
+                if exists {
+                    chosen = candidate;
+                    break;
+                }
+            }
+            chosen
+        } else {
+            fn_name
+        };
+
         // Get function value
         let fn_value = self
             .functions
