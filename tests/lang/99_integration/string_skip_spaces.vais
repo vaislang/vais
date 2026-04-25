@@ -1,0 +1,24 @@
+# CHECKS: count non-space characters.
+F count_nonspace(p: i64, n: i64) -> i64 {
+    count: i64 := mut 0
+    LF i: 0..n {
+        c: i64 := load_byte(p + i)
+        I c != 32 { count = count + 1 }
+    }
+    count
+}
+
+F main() -> i64 {
+    p1: i64 := str_to_ptr("hello world")
+    I count_nonspace(p1, strlen(p1)) != 10 { R 1 }   # 5 + 5
+
+    p2: i64 := str_to_ptr("a b c d e")
+    I count_nonspace(p2, strlen(p2)) != 5 { R 2 }
+
+    p3: i64 := str_to_ptr("nospaces")
+    I count_nonspace(p3, strlen(p3)) != 8 { R 3 }
+
+    p4: i64 := str_to_ptr("    ")
+    I count_nonspace(p4, strlen(p4)) != 0 { R 4 }
+    R 0
+}

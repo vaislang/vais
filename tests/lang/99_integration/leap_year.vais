@@ -1,0 +1,18 @@
+# CHECKS: Gregorian leap year rule.
+F is_leap(year: i64) -> i64 {
+    I (year % 4) != 0 { R 0 }
+    I (year % 100) != 0 { R 1 }
+    I (year % 400) == 0 { R 1 }
+    0
+}
+
+F main() -> i64 {
+    I is_leap(2000) != 1 { R 1 }   # divisible by 400
+    I is_leap(2004) != 1 { R 2 }   # divisible by 4 but not 100
+    I is_leap(1900) != 0 { R 3 }   # divisible by 100 but not 400
+    I is_leap(2001) != 0 { R 4 }
+    I is_leap(2024) != 1 { R 5 }
+    I is_leap(2100) != 0 { R 6 }
+    I is_leap(2400) != 1 { R 7 }
+    R 0
+}
