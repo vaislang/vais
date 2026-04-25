@@ -1,6 +1,6 @@
 # Hello World — Vais Language Examples
 
-These five programs demonstrate the **stable subset** of Vais language
+These programs demonstrate the **stable subset** of Vais language
 features as of Phase 0 kickoff.
 
 | File | Demonstrates | Expected exit |
@@ -10,6 +10,8 @@ features as of Phase 0 kickoff.
 | `03_struct.vais` | struct + method via `X` impl block | 7 |
 | `04_option.vais` | `Option<T>` + match expression | 3 |
 | `05_recursion.vais` | recursive fibonacci | 21 |
+| `06_loop.vais` | while loop accumulator | 28 |
+| `07_generic.vais` | generic `max<T>(a, b)` | 15 |
 
 ## Build & run
 

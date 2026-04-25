@@ -1,0 +1,22 @@
+# CHECKS: struct used as a local + assignment (not via Vec — Vec<Struct>
+#         specialization separately covered once standalone Vec<T>
+#         construction syntax is finalized).
+# REGRESSION: Phase 17 Wave 2a — struct value store path
+S Item {
+    id: i64,
+    score: i64,
+}
+
+F main() -> i64 {
+    a: Item := mut Item { id: 1, score: 100 }
+    b: Item := mut Item { id: 2, score: 200 }
+    I a.id != 1      { R 1 }
+    I a.score != 100 { R 2 }
+    I b.id != 2      { R 3 }
+    I b.score != 200 { R 4 }
+    # swap-like assignment
+    a = b
+    I a.id != 2      { R 5 }
+    I a.score != 200 { R 6 }
+    R 0
+}

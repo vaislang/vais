@@ -1,0 +1,10 @@
+# CHECKS: top-level generic function (syntax: F name<T>(args) -> T)
+F identity<T>(x: T) -> T {
+    x
+}
+
+F main() -> i64 {
+    a: i64 := identity(42)
+    I a != 42 { R 1 }
+    R 0
+}

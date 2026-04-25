@@ -1,13 +1,11 @@
-# CHECKS: bounded while loop (break/continue unimplemented in current vaisc;
-#         this test exercises a simple while termination via condition).
-# STATUS: break/continue keywords currently rejected by parser.
-#         Test renamed to bounded_while; original break_continue intent
-#         deferred to language feature work.
+# CHECKS: B (break) inside infinite LW loop — exits when condition met
+# Vais uses single-char keyword: B = break, C = continue.
 F main() -> i64 {
     i: i64 := mut 0
     sum: i64 := mut 0
-    LW i < 5 {
+    LW true {
         i = i + 1
+        I i > 5 { B }
         sum = sum + i
     }
     # 1+2+3+4+5 = 15

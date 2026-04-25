@@ -38,11 +38,13 @@ for category in [0-9][0-9]_*/; do
 
     base=$(basename "$test_file" .vais)
     work_dir=$(mktemp -d /tmp/vais_lang_${base}.XXXXXX)
-    ll_out="$work_dir/${base}.ll"
     bin_out="$work_dir/${base}"
     log="$work_dir/${base}.log"
 
-    # Step 1: compile
+    # Clean global emit area so previous runs don't leak into this test.
+    rm -f /tmp/${base}*.ll 2>/dev/null
+    # Step 1: compile (vaisc emits to /tmp/<base>*.ll based on -o basename)
+    ll_out="/tmp/${base}.ll"
     if ! "$VAISC" build "$test_file" --emit-ir -o "$ll_out" --force-rebuild >"$log" 2>&1; then
       printf "%-60s FAIL (compile)\n" "$test_file"
       FAIL=$((FAIL+1))
@@ -52,7 +54,7 @@ for category in [0-9][0-9]_*/; do
     fi
 
     # Step 2: link (vaisc may emit multiple .ll files with the basename prefix)
-    ll_files=$(ls "$work_dir"/${base}*.ll 2>/dev/null)
+    ll_files=$(ls /tmp/${base}*.ll 2>/dev/null)
     if [ -z "$ll_files" ]; then ll_files="$ll_out"; fi
     if ! clang -O0 -o "$bin_out" $ll_files "$RUNTIME_O" "$SYNC_O" -lm >>"$log" 2>&1; then
       printf "%-60s FAIL (link)\n" "$test_file"

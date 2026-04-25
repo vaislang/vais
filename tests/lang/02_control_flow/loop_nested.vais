@@ -1,0 +1,12 @@
+# CHECKS: nested loops + double accumulation
+F main() -> i64 {
+    sum: i64 := mut 0
+    LF i: 1..=3 {
+        LF j: 1..=3 {
+            sum = sum + i * j
+        }
+    }
+    # (1+2+3) * (1+2+3) = 36
+    I sum != 36 { R 1 }
+    R 0
+}

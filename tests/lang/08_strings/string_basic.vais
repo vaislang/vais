@@ -1,0 +1,6 @@
+# CHECKS: string literal storage + length
+F main() -> i64 {
+    s: str := "hello"
+    I s.len() != 5 { R 1 }
+    R 0
+}

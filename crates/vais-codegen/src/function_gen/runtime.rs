@@ -451,6 +451,8 @@ impl CodeGenerator {
 
         // Panic helpers — print a message and abort
         ir.push_str("\n; Runtime: panic helpers\n");
+        // Phase 0.B fix: declare libc abort so the helper bodies link.
+        ir.push_str("declare void @abort()\n");
         ir.push_str("@.__panic_v_fmt = private unnamed_addr constant [10 x i8] c\"%s: %lld\\0A\\00\"\n");
         ir.push_str("@.__panic_v2_fmt = private unnamed_addr constant [16 x i8] c\"%s: %lld, %lld\\0A\\00\"\n");
         ir.push_str("@.__panic_s2_fmt = private unnamed_addr constant [14 x i8] c\"%s: %s vs %s\\0A\\00\"\n");
@@ -721,6 +723,14 @@ impl CodeGenerator {
     ///   every `{ i8*, i64 }` field). Safe to call multiple times because
     ///   free on null is a no-op.
     fn emit_struct_load_store_helpers(&self, ir: &mut String) {
+        // Phase 0.B fix: only emit these helpers when the main module
+        // actually defines the required struct types. Previously emitted
+        // unconditionally, producing `load %TestCase, %TestCase* p` even
+        // for programs that never import std/test — invalid IR.
+        if !self.types.structs.contains_key("TestCase") {
+            return;
+        }
+
         ir.push_str("\n; Phase C2: std/test struct helpers\n");
 
         // TestCase load / store
