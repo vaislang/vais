@@ -612,6 +612,21 @@ impl CodeGenerator {
         );
         for inst in instantiations {
             if let vais_types::InstantiationKind::Function = inst.kind {
+                // Phase 0 bug C14 fix: skip instantiations whose type args
+                // contain Unknown / Generic / Var. These slip in when TC
+                // can't infer T at a call site (e.g. bare `None` literal
+                // without a context type), and the resulting `$unknown`
+                // mangled name produces structurally invalid IR (Unit-typed
+                // load, phi/ret type mismatch). The valid concrete spec is
+                // already generated next to it from the well-typed call
+                // sites, so dropping the bogus one is safe.
+                if inst.type_args.iter().any(|t| matches!(t,
+                    ResolvedType::Unknown
+                        | ResolvedType::Generic(_)
+                        | ResolvedType::Var(_)
+                )) {
+                    continue;
+                }
                 if let Some(generic_fn) = self
                     .generics
                     .function_templates
