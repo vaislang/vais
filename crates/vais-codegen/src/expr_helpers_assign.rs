@@ -339,7 +339,31 @@ impl CodeGenerator {
             );
             // Coerce value to match element type (e.g., i8 from trunc → i64 for Vec store)
             let val_ty = self.llvm_type_of(&val);
-            let store_val = self.coerce_int_width(&val, &val_ty, &elem_llvm_ty, counter, &mut ir);
+            // Phase α.1 fix: when storing a struct value but `val` is a
+            // pointer-to-struct (alloca form), load through the pointer to
+            // get the struct value before storing.
+            //
+            // Heuristic: if elem type is a named struct (`%T`) AND val is an
+            // SSA register starting with %, AND either val_ty is `%T*` or the
+            // val is identifiably an alloca/local (looking up locals map), the
+            // value needs a load. The `val_ty` lookup may fall back to "i64"
+            // when the alloca wasn't recorded; in that case we still infer the
+            // load from the elem type and the val's local-binding.
+            let elem_is_named_struct = elem_llvm_ty.starts_with('%')
+                && !elem_llvm_ty.contains('{')
+                && !elem_llvm_ty.contains('[');
+            let needs_load = elem_is_named_struct && val.starts_with('%');
+            let store_val = if needs_load {
+                let loaded = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = load {}, {}* {}",
+                    loaded, elem_llvm_ty, elem_llvm_ty, val
+                );
+                loaded
+            } else {
+                self.coerce_int_width(&val, &val_ty, &elem_llvm_ty, counter, &mut ir)
+            };
             write_ir!(
                 ir,
                 "  store {} {}, {}* {}",
