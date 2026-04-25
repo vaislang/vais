@@ -1,10 +1,8 @@
-# XFAIL: StrHashMap<i64> generic specialization duplicate-symbol cross-module link bug.
-# When this file imports `std/hashmap`, the compiler emits `StrHashMap_hash$i64`
-# in both the test module and the stdlib module, producing duplicate-symbol
-# at link time. Tracked as a Phase 0 compiler bug; restore as test_hashmap.vais
-# once cross-module generic specialization dedup is fixed.
-#
-# Stdlib self-test: StrHashMap<i64> basic operations
+# Stdlib self-test: StrHashMap<i64> basic operations.
+# REGRESSION for bug C3: prior to the linkonce_odr fix in
+# function_gen/generics.rs, this file failed to link because the same
+# `StrHashMap_hash$i64` specialization was emitted in both std/hashmap and
+# the consumer module. linkonce_odr lets the linker dedupe equivalent copies.
 U std/hashmap
 
 F main() -> i64 {

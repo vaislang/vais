@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use inkwell::module::Linkage;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType};
 use inkwell::values::{BasicValueEnum, FunctionValue};
 
@@ -341,7 +342,21 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             ret_type.fn_type(&llvm_param_types, false)
         };
 
-        let fn_value = self.module.add_function(&mangled_name, fn_type, None);
+        // Phase 0 bug C3 fix: emit specialized generic functions with
+        // LinkOnceODR linkage. In multi-module builds, every module that
+        // imports a generic gets its own copy of the AST template, and each
+        // emits its own monomorphized variant — yielding duplicate-symbol
+        // link errors (e.g. `_StrHashMap_hash$i64` defined in both std/hashmap
+        // and the consumer module). LinkOnceODR tells the linker that all
+        // copies are equivalent and it may pick any one. This matches how
+        // C++ handles template instantiations across translation units and
+        // is a standard idiom for monomorphized generic ABIs.
+        let fn_value = self
+            .module
+            .add_function(&mangled_name, fn_type, Some(Linkage::LinkOnceODR));
+        // Belt-and-suspenders: also call set_linkage in case add_function's
+        // linkage parameter is silently ignored on some inkwell builds.
+        fn_value.set_linkage(Linkage::LinkOnceODR);
         self.functions.insert(mangled_name, fn_value);
 
         Ok(fn_value)

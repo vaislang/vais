@@ -569,10 +569,12 @@ fn test_generate_specialized_function() {
         .generate_module_with_instantiations(&module, &instantiations)
         .unwrap();
 
-    // Should contain specialized function identity$i64
+    // Should contain specialized function identity$i64. Phase 0 bug C3 fix
+    // emits these as `linkonce_odr` so duplicate copies (one per consumer
+    // module) merge cleanly at link time.
     assert!(
-        ir.contains("define i64 @identity$i64"),
-        "Expected identity$i64 in IR: {}",
+        ir.contains("define linkonce_odr i64 @identity$i64"),
+        "Expected linkonce_odr identity$i64 in IR: {}",
         ir
     );
     assert!(ir.contains("ret i64 %x"), "Expected return in identity$i64");

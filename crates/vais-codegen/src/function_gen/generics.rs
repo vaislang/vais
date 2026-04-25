@@ -416,9 +416,14 @@ impl CodeGenerator {
                 .collect::<Vec<_>>()
                 .join(", ")
         );
+        // Phase 0 bug C3 fix: emit specialized generic functions with
+        // linkonce_odr linkage so duplicate copies (one per consumer module)
+        // are merged at link time. Without this, importing a generic from
+        // multiple modules produces duplicate-symbol link errors. Standard
+        // C++-like template instantiation discipline.
         write_ir!(
             ir,
-            "define {} @{}({}) {{",
+            "define linkonce_odr {} @{}({}) {{",
             ret_llvm,
             inst.mangled_name,
             params.join(", ")
