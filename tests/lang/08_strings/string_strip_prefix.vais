@@ -1,0 +1,27 @@
+# CHECKS: detect and report prefix-stripped length.
+F strip_prefix_len(p: i64, n: i64, prefix: i64, plen: i64) -> i64 {
+    # Returns remaining length if matched, -1 otherwise.
+    I plen > n { R 0 - 1 }
+    LF i: 0..plen {
+        I load_byte(p + i) != load_byte(prefix + i) { R 0 - 1 }
+    }
+    n - plen
+}
+
+F main() -> i64 {
+    p: i64 := str_to_ptr("hello world")
+    plen: i64 := strlen(p)
+
+    pre1: i64 := str_to_ptr("hello ")
+    I strip_prefix_len(p, plen, pre1, strlen(pre1)) != 5 { R 1 }
+
+    pre2: i64 := str_to_ptr("world")
+    I strip_prefix_len(p, plen, pre2, strlen(pre2)) != 0 - 1 { R 2 }
+
+    pre3: i64 := str_to_ptr("")
+    I strip_prefix_len(p, plen, pre3, 0) != plen { R 3 }
+
+    pre4: i64 := str_to_ptr("hello world!")  # too long
+    I strip_prefix_len(p, plen, pre4, strlen(pre4)) != 0 - 1 { R 4 }
+    R 0
+}

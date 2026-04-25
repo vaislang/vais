@@ -1,0 +1,24 @@
+# CHECKS: method returns a struct + chaining via temporary.
+S V2 { x: i64, y: i64 }
+
+X V2 {
+    F new(x: i64, y: i64) -> V2 { V2 { x: x, y: y } }
+    F flip(&self) -> V2 { V2 { x: self.y, y: self.x } }
+    F double(&self) -> V2 { V2 { x: self.x * 2, y: self.y * 2 } }
+    F sum(&self) -> i64 { self.x + self.y }
+}
+
+F main() -> i64 {
+    a: V2 := V2.new(3, 4)
+    I a.sum() != 7 { R 1 }
+
+    b: V2 := a.flip()
+    I b.x != 4 { R 2 }
+    I b.y != 3 { R 3 }
+
+    c: V2 := a.double()
+    I c.x != 6 { R 4 }
+    I c.y != 8 { R 5 }
+    I c.sum() != 14 { R 6 }
+    R 0
+}
