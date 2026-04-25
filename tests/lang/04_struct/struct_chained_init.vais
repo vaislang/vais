@@ -1,0 +1,39 @@
+# CHECKS: struct field set via initializer + later mutation through methods.
+S Inventory {
+    items: i64,
+    capacity: i64,
+    full: i64
+}
+
+X Inventory {
+    F new(cap: i64) -> Inventory {
+        Inventory { items: 0, capacity: cap, full: 0 }
+    }
+
+    F add(&self, n: i64) {
+        self.items = self.items + n
+        I self.items >= self.capacity {
+            self.full = 1
+        } EL {
+            self.full = 0
+        }
+    }
+}
+
+F main() -> i64 {
+    inv: Inventory := mut Inventory.new(10)
+    I inv.full != 0 { R 1 }
+
+    inv.add(5)
+    I inv.items != 5 { R 2 }
+    I inv.full != 0 { R 3 }
+
+    inv.add(3)
+    I inv.items != 8 { R 4 }
+    I inv.full != 0 { R 5 }
+
+    inv.add(2)
+    I inv.items != 10 { R 6 }
+    I inv.full != 1 { R 7 }
+    R 0
+}

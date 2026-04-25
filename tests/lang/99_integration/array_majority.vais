@@ -1,0 +1,43 @@
+# CHECKS: detect majority element (Boyer-Moore-ish without verify).
+U std/vec.{vec_new};
+
+F majority_candidate(v: &Vec<i64>) -> i64 {
+    I v.len() == 0 { R 0 }
+    candidate: i64 := mut v[0]
+    count: i64 := mut 1
+    LF i: 1..v.len() {
+        I count == 0 {
+            candidate = v[i]
+            count = 1
+        } EL {
+            I v[i] == candidate { count = count + 1 } EL { count = count - 1 }
+        }
+    }
+    candidate
+}
+
+F main() -> i64 {
+    # majority is 3
+    v: Vec<i64> := mut vec_new()
+    v.push(3)
+    v.push(3)
+    v.push(4)
+    v.push(2)
+    v.push(3)
+    v.push(3)
+    v.push(3)
+    I majority_candidate(&v) != 3 { R 1 }
+
+    # all same
+    w: Vec<i64> := mut vec_new()
+    w.push(7)
+    w.push(7)
+    w.push(7)
+    I majority_candidate(&w) != 7 { R 2 }
+
+    # single element
+    s: Vec<i64> := mut vec_new()
+    s.push(42)
+    I majority_candidate(&s) != 42 { R 3 }
+    R 0
+}

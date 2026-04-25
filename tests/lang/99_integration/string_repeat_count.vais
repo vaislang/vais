@@ -1,0 +1,23 @@
+# CHECKS: count how many times a 1-char pattern appears.
+F count_pattern(p: i64, n: i64, pat: i64) -> i64 {
+    count: i64 := mut 0
+    LF i: 0..n {
+        I load_byte(p + i) == pat { count = count + 1 }
+    }
+    count
+}
+
+F main() -> i64 {
+    p1: i64 := str_to_ptr("abracadabra")
+    # 'a' = 97, 5 occurrences
+    I count_pattern(p1, strlen(p1), 97) != 5 { R 1 }
+    # 'b' = 98, 2 occurrences
+    I count_pattern(p1, strlen(p1), 98) != 2 { R 2 }
+    # 'r' = 114, 2 occurrences
+    I count_pattern(p1, strlen(p1), 114) != 2 { R 3 }
+    # 'c' = 99, 1 occurrence
+    I count_pattern(p1, strlen(p1), 99) != 1 { R 4 }
+    # 'z' = 122, 0 occurrences
+    I count_pattern(p1, strlen(p1), 122) != 0 { R 5 }
+    R 0
+}

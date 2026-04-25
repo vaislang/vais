@@ -1,0 +1,40 @@
+# CHECKS: count distinct "runs" in a Vec where elements differ.
+U std/vec.{vec_new};
+
+F count_runs(v: &Vec<i64>) -> i64 {
+    I v.len() == 0 { R 0 }
+    runs: i64 := mut 1
+    LF i: 1..v.len() {
+        I v[i] != v[i - 1] { runs = runs + 1 }
+    }
+    runs
+}
+
+F main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    v.push(1)
+    v.push(1)
+    v.push(2)
+    v.push(2)
+    v.push(2)
+    v.push(3)
+    # 1 | 2 | 3 → 3 runs
+    I count_runs(&v) != 3 { R 1 }
+
+    # all same
+    s: Vec<i64> := mut vec_new()
+    s.push(7)
+    s.push(7)
+    I count_runs(&s) != 1 { R 2 }
+
+    # all distinct
+    d: Vec<i64> := mut vec_new()
+    d.push(1)
+    d.push(2)
+    d.push(3)
+    I count_runs(&d) != 3 { R 3 }
+
+    e: Vec<i64> := mut vec_new()
+    I count_runs(&e) != 0 { R 4 }
+    R 0
+}

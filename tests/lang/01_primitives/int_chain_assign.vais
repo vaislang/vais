@@ -1,0 +1,18 @@
+# CHECKS: integer chain of assignments and accumulation.
+F main() -> i64 {
+    a: i64 := mut 0
+    a = a + 1
+    a = a * 2
+    a = a + 3
+    a = a * 4
+    # ((0+1)*2 + 3) * 4 = 20
+    I a != 20 { R 1 }
+
+    b: i64 := mut 100
+    b = b - 50
+    b = b / 5
+    b = b * 3
+    # ((100-50)/5)*3 = 30
+    I b != 30 { R 2 }
+    R 0
+}

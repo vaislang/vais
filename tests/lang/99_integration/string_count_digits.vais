@@ -1,0 +1,24 @@
+# CHECKS: count digit characters in a string.
+F count_digits(p: i64, n: i64) -> i64 {
+    count: i64 := mut 0
+    LF i: 0..n {
+        c: i64 := load_byte(p + i)
+        I c >= 48 && c <= 57 { count = count + 1 }
+    }
+    count
+}
+
+F main() -> i64 {
+    p1: i64 := str_to_ptr("abc123")
+    I count_digits(p1, strlen(p1)) != 3 { R 1 }
+
+    p2: i64 := str_to_ptr("12345")
+    I count_digits(p2, strlen(p2)) != 5 { R 2 }
+
+    p3: i64 := str_to_ptr("hello")
+    I count_digits(p3, strlen(p3)) != 0 { R 3 }
+
+    p4: i64 := str_to_ptr("ph0n3")
+    I count_digits(p4, strlen(p4)) != 2 { R 4 }
+    R 0
+}

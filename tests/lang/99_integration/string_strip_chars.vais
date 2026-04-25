@@ -1,0 +1,26 @@
+# CHECKS: count chars after virtually stripping spaces and digits.
+F count_letters(p: i64, n: i64) -> i64 {
+    count: i64 := mut 0
+    LF i: 0..n {
+        c: i64 := load_byte(p + i)
+        I c >= 97 && c <= 122 { count = count + 1 }
+        I c >= 65 && c <= 90 { count = count + 1 }
+    }
+    count
+}
+
+F main() -> i64 {
+    p1: i64 := str_to_ptr("hello 123 world")
+    # h, e, l, l, o, w, o, r, l, d → 10
+    I count_letters(p1, strlen(p1)) != 10 { R 1 }
+
+    p2: i64 := str_to_ptr("12345")
+    I count_letters(p2, strlen(p2)) != 0 { R 2 }
+
+    p3: i64 := str_to_ptr("HELLO")
+    I count_letters(p3, strlen(p3)) != 5 { R 3 }
+
+    p4: i64 := str_to_ptr("MixED")
+    I count_letters(p4, strlen(p4)) != 5 { R 4 }
+    R 0
+}
