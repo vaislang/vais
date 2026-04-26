@@ -68,6 +68,72 @@ echo '<Vais code>' > /tmp/test.vais
 
 ---
 
+## 사전 가드레일 (Pre-emptive Rules — 2026-04-26 추가)
+
+규칙 1~7은 **사후 가드레일** (regression 후 대응)이다. 다음 규칙 8~12는 **사전 가드레일** — ad-hoc fix가 추가되는 순간 차단한다. 본 규칙은 [ADR 0001](docs/adr/0001-root-cause-definition.md) "근본 해결 정의"를 기반으로 한다.
+
+### 규칙 8 — codegen에 새 if-coerce 분기 추가 시 ADR 0001 분류 의무
+
+`crates/vais-codegen/`에 다음 패턴을 새로 추가할 때:
+
+```rust
+} else if val_ty != ret_type && val_ty == "..." && ret_type == "..." {
+    // 변환 로직
+}
+```
+
+PR/commit message에 ADR 0001 분류를 명시한다:
+- **근본 fix**로 분류 시: invariant + 차단 테스트 + same-class audit 의무 (ADR 0001 §1)
+- **사이트 fix**로 분류 시: `// TEMP-SITE-FIX(adr-0001):` 주석 + 추적 issue + 만료 Phase 의무 (ADR 0001 §2)
+
+분류 없이 새 if-coerce 분기 추가 금지. 현재 165개 분기는 retro-active 분류 대상 (Pillar 1 시 일괄 흡수 예정).
+
+**Why**: 165개 ad-hoc 분기가 누적된 결과 "근본 해결"이라 부르는 fix가 사실 사이트 fix인 경우가 반복됨. Phase 158 5회 토글, Phase 17 stopped의 직접 원인.
+
+### 규칙 9 — 수동 `register_temp_type` / `record_emitted_type` 추가 신중히
+
+현재 329개 수동 호출이 산재. 새 추가 시:
+- (a) 가능하면 **호출 자체를 피하는 설계**를 우선 검토 (자동 등록 인프라 활용 또는 신설)
+- (b) 불가피한 경우, 그 사이트가 자동화 대상임을 추적 issue에 기록 (Pillar 1 흡수 대기)
+
+**Why**: 329개 수동 등록 = 329개 누락 가능 지점. Task #6/#7 같은 누락이 구조적으로 발생하는 직접 원인.
+
+### 규칙 10 — 단일-사이트 fix 시 추적 issue 의무
+
+ADR 0001 §2 (S2)와 동일. 사이트 fix 추가 시:
+- "이 클래스의 근본 fix"를 추적하는 issue/Phase entry 의무
+- ROADMAP에 같은 클래스 사이트 누적 카운트 기록
+- 사이트 누적 카운트가 임계값 (예: 5개) 초과 시 자동으로 근본 fix Phase 신설 트리거
+
+**Why**: 사이트 fix가 누적만 되고 근본화 안 되는 패턴 차단. memory `phase17_3_negatives_escalation` 정책 강화.
+
+### 규칙 11 — Phase 시작 시 invariant 명시 의무
+
+ROADMAP에 새 Phase 추가 시 첫 줄에 다음 형식으로 invariant 명시:
+
+```markdown
+## Phase N: <name>
+invariant: <이 Phase 종료 후 컴파일러가 보장하는 속성, 한 문장>
+exit_audit: <invariant 충족 여부 검증 방법>
+```
+
+invariant 명시 없는 Phase 시작 금지. 단순 cleanup/audit Phase는 `invariant: N/A (cleanup-only)` 명시 가능.
+
+**Why**: Phase가 "이슈 해결" 단위로만 정의되어 invariant 보장 없이 종료되는 패턴이 반복됨. Phase 종료 시 무엇을 보장하는지 명확해야 다음 Phase가 그 위에서 안전하게 구축됨.
+
+### 규칙 12 — ROADMAP `mode: stopped` 상태 1주 내 결정 의무
+
+Phase가 `mode: stopped (...)` 상태에 들어간 경우:
+- **1주 (7일) 내** 다음 중 하나로 전이 의무:
+  - `mode: pending` (구체적 task와 함께 재개)
+  - `mode: cancelled` (이유 + 후속 처리 명시)
+  - `mode: completed` (실제로 완료된 부분만)
+- 1주 경과 시 자동으로 `mode: cancelled` 전환 + 후속 결정 사용자에게 escalation
+
+**Why**: Phase 16 `mode: stopped (unknown)`, Phase 17 `mode: stopped (unknown)` 같은 무한 stopped 상태가 누적. "다음 세션에 결정"이 영구 미결정으로 변하는 패턴 차단.
+
+---
+
 ## GitHub & Links
 
 > GitHub org은 `vaislang`이며, 모든 외부 링크는 `vaislang/vais`를 사용할 것. 상세 URL은 README.md의 Links 섹션 참조.

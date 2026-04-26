@@ -1,0 +1,114 @@
+name: VaisDB Regression
+
+# vaisdb 빌드를 compiler regression suite로 실행한다.
+# Pillar 2 (Phase Ω) 산출물 — ADR 0001 §1 R3 (same-class audit) 자동화.
+#
+# Why: vaisdb 빌드 깨짐이 compiler "green" 상태를 통과해 머지되는 패턴 차단.
+#      compiler PR이 vaisdb를 깨면 즉시 발견 + 차단됨.
+#
+# Setup: 이 workflow는 vaisdb를 별도 repo에서 checkout한다.
+#        vais-lang 모노레포가 별도이므로 path는 시크릿 또는 hardcode 필요.
+#        현재는 wave 1 (smoke test only) — 본격 cross-repo는 후속 단계.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+# Cancel in-progress runs for the same branch/PR
+concurrency:
+  group: vaisdb-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vaisdb-build:
+    name: vaisdb test_btree build + link
+    runs-on: ubuntu-latest
+
+    # NOTE (Pillar 2 wave 1):
+    # 현재는 smoke test (test_btree만). 다음 wave에서 vaisdb 전체 + vais-server +
+    # vais-web 통합 예정.
+    # KNOWN_FAILURE_COUNT=2 (Task #6/#7 미해결 상태). Task 완료 시 0으로 갱신.
+
+    steps:
+      - name: Checkout vais compiler
+        uses: actions/checkout@v4
+        with:
+          path: vais
+
+      - name: Checkout vais-lang (vaisdb)
+        uses: actions/checkout@v4
+        with:
+          repository: vaislang/vais-lang
+          path: vais-lang
+          # vais-lang이 private 또는 별도 자격 필요 시 token 추가:
+          # token: ${{ secrets.VAIS_LANG_PAT }}
+        continue-on-error: true  # repo 부재 시 skip (wave 1만)
+
+      - name: Skip if vais-lang not available
+        id: check_lang
+        run: |
+          if [[ ! -d vais-lang/packages/vaisdb ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "ℹ vais-lang/vaisdb not available — skipping (wave 1 grace period)"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust toolchain
+        if: steps.check_lang.outputs.skip != 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM 17
+        if: steps.check_lang.outputs.skip != 'true'
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main"
+          sudo apt-get update
+          sudo apt-get install -y llvm-17 llvm-17-dev libpolly-17-dev clang-17
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> "$GITHUB_ENV"
+
+      - name: Cache cargo registry
+        if: steps.check_lang.outputs.skip != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            vais/target
+          key: vaisdb-regression-${{ runner.os }}-${{ hashFiles('vais/Cargo.lock') }}
+
+      - name: Build vaisc
+        if: steps.check_lang.outputs.skip != 'true'
+        working-directory: vais
+        run: cargo build --release --bin vaisc
+
+      - name: Setup std symlink
+        if: steps.check_lang.outputs.skip != 'true'
+        run: |
+          mkdir -p /tmp/vais-lib
+          ln -sf "$GITHUB_WORKSPACE/vais/std" /tmp/vais-lib/std
+
+      - name: Run vaisdb regression
+        if: steps.check_lang.outputs.skip != 'true'
+        env:
+          VAISC: ${{ github.workspace }}/vais/target/release/vaisc
+          VAISDB_ROOT: ${{ github.workspace }}/vais-lang/packages/vaisdb
+          STD_PATH: /tmp/vais-lib/std
+        working-directory: vais
+        run: ./scripts/vaisdb-regression.sh
+
+      - name: Upload regression logs on failure
+        if: failure() && steps.check_lang.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vaisdb-regression-logs
+          path: |
+            /tmp/test_btree_*.ll
+            /tmp/build_log_*.txt
+          retention-days: 7
