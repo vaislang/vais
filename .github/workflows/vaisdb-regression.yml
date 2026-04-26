@@ -27,13 +27,16 @@ concurrency:
 
 jobs:
   vaisdb-build:
-    name: vaisdb test_btree build + link
+    name: vaisdb wave 1 (5 tests) build + link
     runs-on: ubuntu-latest
 
-    # NOTE (Pillar 2 wave 1):
-    # 현재는 smoke test (test_btree만). 다음 wave에서 vaisdb 전체 + vais-server +
-    # vais-web 통합 예정.
-    # KNOWN_FAILURE_COUNT=2 (Task #6/#7 미해결 상태). Task 완료 시 0으로 갱신.
+    # NOTE (Pillar 2 wave 1, iter 79 expanded):
+    # 5-test smoke suite: test_btree + test_wal + test_buffer_pool + test_graph + test_migration.
+    # test_planner_types deferred to wave 2 (transitive dependency 폭증, 25 errors).
+    # 다음 wave에서 vais-server + vais-web 통합 예정.
+    # baseline (per-test KNOWN_FAILURE_COUNTS in scripts/vaisdb-regression.sh):
+    #   test_btree=2, test_wal=1, test_buffer_pool=1, test_graph=2, test_migration=3 (합계 9)
+    # Task 완료 시 해당 카운트 갱신.
 
     steps:
       - name: Checkout vais compiler
@@ -94,14 +97,14 @@ jobs:
           mkdir -p /tmp/vais-lib
           ln -sf "$GITHUB_WORKSPACE/vais/std" /tmp/vais-lib/std
 
-      - name: Run vaisdb regression
+      - name: Run vaisdb regression (wave 1, 5 tests)
         if: steps.check_lang.outputs.skip != 'true'
         env:
           VAISC: ${{ github.workspace }}/vais/target/release/vaisc
           VAISDB_ROOT: ${{ github.workspace }}/vais-lang/packages/vaisdb
           STD_PATH: /tmp/vais-lib/std
         working-directory: vais
-        run: ./scripts/vaisdb-regression.sh
+        run: ./scripts/vaisdb-regression.sh --all
 
       - name: Upload regression logs on failure
         if: failure() && steps.check_lang.outputs.skip != 'true'
@@ -110,5 +113,9 @@ jobs:
           name: vaisdb-regression-logs
           path: |
             /tmp/test_btree_*.ll
+            /tmp/test_wal_*.ll
+            /tmp/test_buffer_pool_*.ll
+            /tmp/test_graph_*.ll
+            /tmp/test_migration_*.ll
             /tmp/build_log_*.txt
           retention-days: 7
