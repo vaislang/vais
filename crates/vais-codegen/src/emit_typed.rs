@@ -57,10 +57,13 @@
 //!   call site, so the wrapper crosses the production boundary at the
 //!   same iter as the first real caller.
 
-// iter 105 introduces only the API surface; the production callers land in
-// iter 106+ with the first migrated site. Until then, the items below have
-// no non-test users, and the `dead_code` lint correctly notes that. This
-// allow is removed in iter 106 as soon as a real caller appears.
+// iter 107 introduced the first production caller (stmt_visitor.rs:708),
+// so most of the API surface is now exercised by non-test code. A handful
+// of `_with_prefix` / `_void` variants and helpers are not yet used by
+// production but exist as the migration target for sites that land in
+// iter 108~125; we keep `dead_code` allowed at module scope until those
+// sites are wired in and remove this allow once every method has at least
+// one production caller.
 #![allow(dead_code)]
 
 use std::fmt::Write as _;

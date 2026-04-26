@@ -706,17 +706,23 @@ impl CodeGenerator {
                         format!("%{}*", base_name)
                     };
                     let src_ptr = if base_ptr_ty != expected_ptr_ty {
-                        let cast = format!("%ret.cast.{}", counter);
-                        *counter += 1;
-                        write_ir!(
-                            ir,
-                            "  {} = bitcast {} {} to {}*",
-                            cast,
-                            base_ptr_ty,
-                            val,
-                            llvm_ty
-                        );
-                        cast
+                        // P1.4 iter 107: first production caller of TypedEmitter.
+                        // emit_bitcast_with_prefix preserves the legacy
+                        // `%ret.cast.{counter}` SSA name format byte-for-byte
+                        // and auto-registers the cast's emitted type via
+                        // record_emitted_type. The pre-migration code at
+                        // this site never registered the cast result (a
+                        // structural class-1 omission, ADR 0002).
+                        use crate::emit_typed::{LlvmType, TypedEmitter};
+                        let dst_ty = format!("{}*", llvm_ty);
+                        let cast = TypedEmitter::new(&mut ir, &mut self.fn_ctx, counter)
+                            .emit_bitcast_with_prefix(
+                                "ret.cast.",
+                                LlvmType::from(base_ptr_ty.as_str()),
+                                &val,
+                                LlvmType::from(dst_ty.as_str()),
+                            );
+                        cast.name().to_string()
                     } else {
                         val.clone()
                     };
