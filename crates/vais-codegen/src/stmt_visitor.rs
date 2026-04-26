@@ -835,16 +835,15 @@ impl CodeGenerator {
             let alloc_cleanup_ir = self.generate_alloc_cleanup();
             ir.push_str(&alloc_cleanup_ir);
 
-            // Final safety: coerce if actual IR value type differs from ret type
-            // (catches cases where body sext'd i32→i64 but function returns i32)
-            // Skip if we already coerced above to avoid double trunc
+            // Mini Pillar 1 (ADR 0001 §1): coerce return value to match
+            // function ret type via single coerce_ret_value entry point.
+            // Skip if we already coerced above to avoid double conversion.
             let ret_val = if !coerced {
                 let actual = self.llvm_type_of(&ret_val);
-                if actual != llvm_ty && actual.starts_with('i') && llvm_ty.starts_with('i') {
-                    self.coerce_int_width(&ret_val, &actual, &llvm_ty, counter, &mut ir)
-                } else {
-                    ret_val
-                }
+                let (coerced_val, coerce_ir) =
+                    self.coerce_ret_value(&ret_val, &actual, &llvm_ty, counter);
+                ir.push_str(&coerce_ir);
+                coerced_val
             } else {
                 ret_val
             };

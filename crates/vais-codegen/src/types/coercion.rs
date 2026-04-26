@@ -85,6 +85,127 @@ impl CodeGenerator {
         })
     }
 
+    /// Coerce an IR value to match a function return type before `ret`.
+    ///
+    /// **Mini Pillar 1 (ADR 0001 §1)** — single coerce point for all `ret`
+    /// emit sites. Currently invoked from `stmt_visitor::generate_return_stmt_visitor`;
+    /// other ret sites (`function_gen/codegen.rs`, `string_ops.rs`, `emit.rs`,
+    /// `stmt.rs`, `stmt_visitor` async/poll) will migrate incrementally as
+    /// part of Pillar 1.
+    ///
+    /// **Invariant (ADR 0001 R1)**: After this call, the returned value's
+    /// LLVM type equals `ret_llvm` byte-for-byte (or the value is unchanged
+    /// when already matching).
+    ///
+    /// **Conversions handled** (kept narrow on purpose — only verified cases):
+    /// - `iN → iM` (different widths) — sext/trunc via `coerce_int_width`
+    /// - `float ↔ double` — fpext/fptrunc via `coerce_float_width`
+    /// - `%Vec*` / `%Vec$T*` → `{ i8*, i64 }` — load Vec.data + Vec.len + insertvalue
+    ///
+    /// Returns `(coerced_value, ir_to_emit)`. Caller appends `ir_to_emit` to
+    /// the function's IR buffer before emitting the `ret` instruction.
+    ///
+    /// **Tracker**: `vaisdb_iter74_pillar3_pillar2_landed_2026-04-26.md`
+    /// **Tests**: `crates/vais-codegen/tests/ret_invariant_test.rs` (TBD)
+    pub(crate) fn coerce_ret_value(
+        &mut self,
+        val: &str,
+        val_ty: &str,
+        ret_llvm: &str,
+        counter: &mut usize,
+    ) -> (String, String) {
+        if val_ty == ret_llvm {
+            return (val.to_string(), String::new());
+        }
+        let mut ir = String::new();
+
+        // Case 1: integer width mismatch (iN → iM).
+        if val_ty.starts_with('i')
+            && ret_llvm.starts_with('i')
+            && Self::int_type_width(val_ty) > 0
+            && Self::int_type_width(ret_llvm) > 0
+        {
+            let coerced = self.coerce_int_width(val, val_ty, ret_llvm, counter, &mut ir);
+            return (coerced, ir);
+        }
+
+        // Case 2: float width mismatch (float ↔ double).
+        if (val_ty == "float" || val_ty == "double")
+            && (ret_llvm == "float" || ret_llvm == "double")
+        {
+            let coerced = self.coerce_float_width(val, val_ty, ret_llvm, counter, &mut ir);
+            return (coerced, ir);
+        }
+
+        // Case 3: Vec struct pointer → slice fat-ptr.
+        // Pattern: function returns &[T] (slice) but body returns &self.field
+        // where self.field: Vec<T>. Construct fat-ptr from Vec.data (field 0,
+        // i8*) + Vec.len (field 1, i64).
+        //
+        // Tracker: vaisdb Task #6 (test_btree_node.ll:1736).
+        // ADR 0001 §1 R3 same-class audit: ret emit sites scattered across 31+
+        // locations; this coerce_ret_value is the migration target. Initial
+        // adoption in stmt_visitor.rs only — others migrate incrementally.
+        if val_ty.starts_with("%Vec")
+            && val_ty.ends_with('*')
+            && ret_llvm == "{ i8*, i64 }"
+        {
+            let vec_struct_ty = val_ty.trim_end_matches('*');
+            let data_ptr_field = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = getelementptr {}, {} {}, i32 0, i32 0",
+                data_ptr_field,
+                vec_struct_ty,
+                val_ty,
+                val
+            );
+            let data_i64 = self.next_temp(counter);
+            write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_ptr_field);
+            let data_i8ptr = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = inttoptr i64 {} to i8*",
+                data_i8ptr,
+                data_i64
+            );
+            let len_field = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = getelementptr {}, {} {}, i32 0, i32 1",
+                len_field,
+                vec_struct_ty,
+                val_ty,
+                val
+            );
+            let len_val = self.next_temp(counter);
+            write_ir!(ir, "  {} = load i64, i64* {}", len_val, len_field);
+            let fp1 = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+                fp1,
+                data_i8ptr
+            );
+            let fp2 = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
+                fp2,
+                fp1,
+                len_val
+            );
+            self.fn_ctx.record_emitted_type(&fp2, "{ i8*, i64 }");
+            return (fp2, ir);
+        }
+
+        // No conversion known — return value as-is. Caller will emit `ret <ret_llvm> <val>`
+        // which may produce a clang IR-verify error. This is the signal that a new
+        // (val_ty, ret_llvm) pair needs to be added here, NOT to a new emit-site
+        // if-branch (CLAUDE.md 규칙 8 — ADR 0001 forbids site-fix without R3 audit).
+        (val.to_string(), ir)
+    }
+
     /// Coerce an IR value to a target integer LLVM type, emitting sext/trunc if needed.
     ///
     /// Returns the (possibly new) value name that has the target type.
