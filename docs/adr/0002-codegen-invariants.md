@@ -1,7 +1,7 @@
-# ADR 0002 — Codegen Invariants (4 클래스)
+# ADR 0002 — Codegen Invariants (4 클래스) + AI Multi-Session Protocol
 
-**Status**: Draft (iter 80, 2026-04-26)
-**Decision driver**: Phase Ω Pillar 1.0. ADR 0001 §1이 정의한 "근본 fix" 게이트 (R1+R2+R3)를 codegen 4 클래스에 구체화한다.
+**Status**: Accepted (iter 80, 2026-04-26 — 사용자 명시 승인)
+**Decision driver**: Phase Ω Pillar 1.0. ADR 0001 §1이 정의한 "근본 fix" 게이트 (R1+R2+R3)를 codegen 4 클래스에 구체화한다. **AI multi-session 협업 안전성도 본 ADR scope** — 기계 검증 가능한 audit + Self-Audit Checklist + Anti-Patterns + Iter Entry Spec + Rollback Trigger.
 **Depends on**: [ADR 0001](0001-root-cause-definition.md) — "근본 해결"의 공식 정의.
 
 ---
@@ -50,10 +50,17 @@ iter 78 baseline 측정 (5 vaisdb test, 32 clang errors)은 이 결여의 직접
   - i64 → struct (gated)
 - 추가 case 필요: function_gen/codegen.rs ~20 사이트, string_ops.rs 6, emit.rs 1, stmt_visitor poll/async 2 — 각 마이그레이션 시 case 추가 의무
 
-#### R3 — Same-Class Audit
-- grep target: `crates/vais-codegen/src/` 내 `ret <` emit 사이트
+#### R3 — Same-Class Audit (기계 검증)
 - 통합 helper: `coerce_ret_value` (iter 74 7cfc5caf 신설)
-- audit 의무: 새 ret emit 사이트 추가 시 `coerce_ret_value` 호출 확증
+- audit 명령:
+  ```bash
+  grep -rn '"\s*ret ' crates/vais-codegen/src/ \
+    | grep -v 'coerce_ret_value\|test\|//\|Binary file' \
+    | wc -l
+  ```
+- **baseline (iter 80)**: 152 사이트
+- **Phase Ω 종료 목표**: 0 (모든 ret emit이 `coerce_ret_value` 경유)
+- audit 의무: 신규 ret emit 사이트 추가 시 `coerce_ret_value` 호출 확증. 매 P1.x iter 종료 시 baseline 카운트 갱신
 
 ### Class 2 — `index/store` elem-ty (PARTIAL, iter 74 R2 5 case)
 
@@ -72,14 +79,23 @@ iter 78 baseline 측정 (5 vaisdb test, 32 clang errors)은 이 결여의 직접
   - **Vec<&[u8]> indexing read (key.ll:1128 패턴)**
   - **Vec<Vec<u8>> indexing read (node.ll:1848 패턴)**
 
-#### R3 — Same-Class Audit
-- grep target: `getelementptr` / `store` emit 4 path
-  - `expr_helpers_data.rs` (read)
-  - `expr_helpers_assign.rs` (simple write)
-  - `expr_helpers_assign.rs` (compound write)
-  - `inkwell/` (별도 backend)
+#### R3 — Same-Class Audit (기계 검증)
 - 통합 helper 후보: `resolve_index_access(arr_ty) -> (elem_llvm, AccessKind, elem_resolved)` (P1.3에서 신설 예정)
-- audit 의무: P1.3 LANDED 시점에 4 path 모두 단일 helper로 수렴
+- audit 명령:
+  ```bash
+  # GEP emit 사이트 (4 path: data read / simple write / compound write / inkwell)
+  grep -rn 'getelementptr' crates/vais-codegen/src/ \
+    | grep -v 'test\|//\|Binary' | wc -l
+  # store emit 사이트
+  grep -rn '"\s*store ' crates/vais-codegen/src/ \
+    | grep -v 'test\|//\|Binary' | wc -l
+  ```
+- **baseline (iter 80)**: GEP 160 사이트 / store 164 사이트
+- **Phase Ω 종료 목표**: 단일 `resolve_index_access` helper로 GEP+store 모두 수렴 (직접 emit ≤ 5 사이트)
+- audit 의무: P1.3 LANDED 시점에 4 path 모두 단일 helper. 매 P1.x iter 종료 시 baseline 갱신
+- vaisdb 패턴 cover 의무 (iter 78 baseline 기반):
+  - node.ll:1848 — Vec<Vec<u8>> push of slice element
+  - key.ll:1128 — Vec<&[u8]> indexing (fat-ptr-of-fat-ptr)
 
 ### Class 3 — `call-arg` coerce (PARTIAL, iter 74 structural guard)
 
@@ -96,9 +112,21 @@ iter 78 baseline 측정 (5 vaisdb test, 32 clang errors)은 이 결여의 직접
   - generic function instantiation 시 param/arg generic erasure 시점
   - tuple/struct unpacking → call
 
-#### R3 — Same-Class Audit
-- grep target: `call ` emit 사이트 (~329 사이트 중 method_call.rs / function_call.rs / trait_dispatch.rs 등)
+#### R3 — Same-Class Audit (기계 검증)
 - 통합 helper 후보: `coerce_call_arg(param_ty, arg_val) -> Value` (P1.4 Type-Tagged IR Builder에서 흡수)
+- audit 명령:
+  ```bash
+  grep -rn '"\s*call ' crates/vais-codegen/src/ \
+    | grep -v 'coerce_call_arg\|test\|//\|Binary' | wc -l
+  ```
+- **baseline (iter 80)**: 86 사이트
+- **Phase Ω 종료 목표**: 0 (모든 call emit이 `coerce_call_arg` 경유)
+- 보조 grep (수동 register_temp_type 카운트):
+  ```bash
+  grep -rn 'register_temp_type\|record_emitted_type' crates/vais-codegen/src/ | wc -l
+  ```
+- **baseline (iter 80)**: 334 호출 (ADR 0001 측정 329와 일치)
+- **Phase Ω 종료 목표**: < 50 (자동 등록 인프라 흡수, P1.4)
 
 ### Class 4 — `var-to-llvm` (NEW)
 
@@ -113,23 +141,124 @@ iter 78 baseline 측정 (5 vaisdb test, 32 clang errors)은 이 결여의 직접
   - Generic 타입은 codegen에서 i64 fallback 허용 + Warning emit (현 동작)
   - ConstGeneric도 동일
 
-#### R3 — Same-Class Audit
-- grep target:
-  - `crates/vais-codegen/src/types/conversion.rs:360-366` (현 fallback 사이트)
-  - `crates/vais-codegen/src/expr_helpers_data.rs:484-489` (Named/Unknown/Generic → "i64")
-  - `_ => "i64"` 패턴 전수 grep
-- audit 의무: `_ => "i64"` 가 ResolvedType 매칭에 있으면 (a) Generic/ConstGeneric만 허용 (b) 다른 케이스는 panic 또는 에러 전환
+#### R3 — Same-Class Audit (기계 검증)
+- audit 명령:
+  ```bash
+  # 좁은 패턴: '_ => "i64"' fallback
+  grep -rn '_ => "i64"' crates/vais-codegen/src/ | wc -l
+  # 넓은 패턴: ResolvedType::Var/Unknown match arm
+  grep -rn 'ResolvedType::Var\|ResolvedType::Unknown' crates/vais-codegen/src/ | wc -l
+  ```
+- **baseline (iter 80)**: 좁은 fallback 7 / Var·Unknown match arm 53
+- **Phase Ω 종료 목표**: 좁은 fallback 0 / Var·Unknown 도달 시 panic (Generic/ConstGeneric만 fallback 허용)
+- 알려진 fix 사이트 (iter 74 인계):
+  - `crates/vais-codegen/src/types/conversion.rs:360-366`
+  - `crates/vais-codegen/src/expr_helpers_data.rs:484-489`
+- audit 의무: `_ => "i64"`가 ResolvedType 매칭에 있으면 (a) Generic/ConstGeneric만 허용 (b) 다른 케이스는 panic 또는 에러 전환
+
+---
+
+## AI Multi-Session Protocol (강화 2~5)
+
+본 ADR은 인간 개발자뿐 아니라 **Claude Code multi-session AI 협업**도 일급 사용자로 본다. AI multi-session에는 컨텍스트 유실, 자기기만 라벨링, 검증 루프 단축, 사이트 fix 회귀 등 인간과 다른 실패 모드가 있다. 다음 4 절이 AI 안전망이다.
+
+---
+
+### Self-Audit Checklist (매 Pillar 1 iter 종료 전 의무)
+
+본 ADR을 따르는 fix를 LANDED하기 전, 다음 9개 Y/N 체크. **하나라도 NO → LANDED 금지 + 사용자 escalation 의무** (단순 site-fix로 재분류는 가능):
+
+```
+[ ] (R1)  commit message에 4 클래스 중 어느 invariant인지 명시?
+[ ] (R2)  대응 *_invariant_test.rs에 case 추가됨?
+[ ] (R2)  추가 case가 fix 적용 전 fail / 후 pass 양방향 확증?
+[ ] (R3)  해당 클래스 R3 audit 명령 실행 → 카운트 기록?
+[ ] (R3)  카운트가 줄거나 같음 (절대 늘지 않음)?
+[ ] (verify-cargo)     cargo test --workspace ≥ 2625?
+[ ] (verify-integrity) ./scripts/check-integrity.sh INTEGRITY OK?
+[ ] (verify-vaisdb)    ./scripts/vaisdb-regression.sh --all 합계 ≤ 9?
+[ ] (recon)            memory/ROADMAP의 LOC 추정과 실제 wc -l 일치?
+```
+
+NO 발생 시 ROADMAP에 `audit_fail: <항목 + 사유>` 기록 의무.
+
+---
+
+### AI Failure Mode Anti-Patterns (avoid)
+
+본 ADR을 따르는 multi-session AI는 다음 패턴을 **절대 반복하지 않는다**. 각 anti-pattern은 실제 발생 commit/iter에 trace됨.
+
+| # | Anti-pattern | 회피 의무 | Trace |
+|---|---|---|---|
+| A1 | memory의 LOC/카운트 추정을 신뢰하고 wc -l 생략 | 항상 실측 cross-check | memory `feedback_recon_mandatory`, iter 4 "280 panic 30배 과대" |
+| A2 | research-haiku idle_notification 후 텍스트 미수신 시 무한 대기 | Opus direct 전환 또는 background 재spawn | iter 76 P3.1+P2.1 사례 |
+| A3 | cargo test PASS만 보고 LANDED | integrity + vaisdb 3축 의무 | CLAUDE 규칙 4, Phase 2.10 |
+| A4 | import 기반 정적 분석으로 cascade 위험 판정 | standalone build cross-check 의무 | iter 78 false-negative (recon 5 후보 → 실제 32 errors) |
+| A5 | "R2 case 5개 PASS = invariant 충족" 결론 | vaisdb 실제 패턴 cover 별도 확증 | iter 74 compound assign REVERTED |
+| A6 | 이전 iter 결정 반전 시 ROADMAP 사유 미기록 | 반전 사유 명시 의무 | Phase 158 5회 토글 |
+| A7 | iter 종료 시 "다음 세션에 결정" 무한 deferral | CLAUDE 규칙 12 (1주 결정 의무) | Phase 16/17 stopped(unknown) |
+| A8 | foreground research-haiku spawn 후 텍스트 도달 안 함 | background로 spawn 또는 Opus direct | iter 76 동일 사례 |
+| A9 | 검증 build 시 cache nuke 생략 | force-rebuild + cache nuke 항상 | iter 73 cache-state illusion |
+
+새 anti-pattern 발견 시 본 절 갱신 의무 (다음 iter 시작 시).
+
+---
+
+### Iter Entry Point Spec (multi-session 견고성)
+
+매 Pillar 1 iter는 다음 형식의 entry block으로 시작 의무 (lang/packages/vaisdb/ROADMAP.md):
+
+```yaml
+iter: <N>
+prerequisite_check:
+  - [ ] /tmp/vais-lib/std symlink 존재
+  - [ ] ~/.cargo/bin/vaisc 실행 가능 (vaisc --version 출력)
+  - [ ] cargo test --workspace ≥ <prev_baseline>
+  - [ ] ./scripts/vaisdb-regression.sh --all 합계 ≤ <prev_baseline>
+class_in_focus: <1|2|3|4>
+sub_invariant: <한 줄 — 본 iter에서 추가/강화하는 sub-property>
+r2_target_test: crates/vais-codegen/tests/<class>_invariant_test.rs
+r3_grep_command: <복사 가능 명령 — 본 ADR에서 인용>
+r3_baseline_count: <iter 시작 시점 측정값>
+expected_landing: <"draft" | "test-added" | "fix-LANDED" | "audit-PASS">
+session_scope: <"recon" | "fix" | "verification">
+multi_session_marker: <"continuing iter N-1" | "new iter">
+```
+
+iter 종료 시 동일 block + actual 결과 + 다음 iter entry로 갱신. ROADMAP 산문 흩어짐 방지.
+
+---
+
+### Rollback Trigger (정량)
+
+다음 중 하나라도 충족 시 **즉시 git revert + stash 보관 + ROADMAP 기록 의무**. CLAUDE 규칙 4번을 본 ADR에 binding.
+
+| Trigger | 검출 명령 | 임계값 |
+|---|---|---|
+| T1. cargo test 카운트 감소 | `cargo test --workspace 2>&1 \| grep -E 'test result:'` | -1 라도 trigger |
+| T2. integrity 감소 | `./scripts/check-integrity.sh \| tail -3` | std/vaisdb 카운트 -1 |
+| T3. vaisdb regression 증가 | `./scripts/vaisdb-regression.sh --all` | 합계 errors > 9 |
+| T4. clippy 신규 에러 | `cargo clippy --workspace --exclude vais-python --exclude vais-node` | error 신규 (warning OK) |
+| T5. Self-Audit Checklist NO | (위 9개 중 하나) | 1개라도 NO |
+
+Rollback 후 의무:
+1. **stash 보관** (drop 금지) — 학습 자료
+2. ROADMAP에 `rollback: <iter N>. <trigger>. 영향: <카운트>` 기록
+3. 같은 fix 재시도 시 Self-Audit Checklist 처음부터 + 추가 case 보강
+4. **3회 연속 rollback** → 사용자 escalation (단일 사이트 fix 금지, Pillar 재설계 검토)
+
+T5 "Self-Audit NO"가 안전망 — 단순 panic/unreachable 추가가 T1~T4에서 silent하게 통과해도 T5에서 차단.
 
 ---
 
 ## R1+R2+R3 충족 매트릭스 (iter 80 baseline)
 
-| Class | R1 stated | R2 test exists | R2 case sufficient | R3 audit done | Status |
-|---|---|---|---|---|---|
-| 1. ret elem-ty | ✅ | ✅ ret_invariant_test.rs | ⚠ 5/40+ sites | ⚠ partial (1/30+ migrated) | **partial-LANDED** |
-| 2. index/store | ✅ | ✅ index_invariant_test.rs | ⚠ 5 → ≥10 needed (P1.1) | ❌ 4 path 미통합 (P1.3) | **partial-LANDED** |
-| 3. call-arg | ✅ | ✅ call_arg_invariant_test.rs | ⚠ 1 active + 1 ignored | ❌ ~329 site 미통합 (P1.4) | **partial-LANDED** |
-| 4. var-to-llvm | ✅ (이 ADR) | ❌ 신설 필요 (P1.0 후속) | — | ❌ 미수행 | **NEW (proposed)** |
+| Class | R1 | R2 test | R2 case | R3 baseline | R3 목표 | Status |
+|---|---|---|---|---:|---:|---|
+| 1. ret elem-ty | ✅ | ✅ ret_invariant_test.rs | ⚠ 5/40+ | 152 ret emit | 0 (helper 경유) | **partial-LANDED** |
+| 2. index/store | ✅ | ✅ index_invariant_test.rs | ⚠ 5→≥10 (P1.1) | 160 GEP / 164 store | helper ≤ 5 사이트 | **partial-LANDED** |
+| 3. call-arg | ✅ | ✅ call_arg_invariant_test.rs | ⚠ 1 active+1 ignored | 86 call / 334 register | call 0 / register < 50 | **partial-LANDED** |
+| 4. var-to-llvm | ✅ (이 ADR) | ❌ 신설 (P1.0 후속) | — | 7 fallback / 53 match | 0 fallback / panic 도달 | **NEW (proposed)** |
 
 **Phase Ω 완성 상태** (목표):
 - 4/4 R1+R2+R3 모두 ✅
@@ -187,9 +316,10 @@ iter 78 baseline 측정 (5 vaisdb test, 32 clang errors)은 이 결여의 직접
 
 ## 적용 시점
 
-- **2026-04-26 (본 문서 채택일)**: ADR 0002 Draft 상태. 사용자 review 후 Accepted 전환
-- **iter 81~ Accepted 후**: 신규 codegen if-coerce 분기는 본 ADR 4 클래스 중 하나에 분류 의무 (CLAUDE.md 규칙 8 강화)
-- **Pillar 1 종료 후**: 본 ADR 가 Pillar 1의 exit audit 기준
+- **2026-04-26 iter 80 (P1.0a Draft + P1.0b Accepted)**: 본 ADR 채택. AI multi-session protocol 4 절 흡수 (Self-Audit / Anti-Patterns / Iter Entry / Rollback)
+- **iter 81~**: 신규 codegen if-coerce 분기는 본 ADR 4 클래스 중 하나에 분류 의무 (CLAUDE.md 규칙 8 강화)
+- **iter 83 P1.1 시작 시점**: 본 ADR Self-Audit Checklist를 모든 P1.x iter LANDED 게이트로 적용
+- **Pillar 1 종료 후**: 본 ADR가 Pillar 1의 exit audit 기준 (R1+R2+R3 4/4 ✅ + R3 카운트 모두 목표 도달)
 
 ---
 
@@ -207,4 +337,5 @@ iter 78 baseline 측정 (5 vaisdb test, 32 clang errors)은 이 결여의 직접
 
 | 일자 | iter | 변경 | 작성자 |
 |------|------|------|--------|
-| 2026-04-26 | 80 | Draft 작성 | Opus direct (P1.0) |
+| 2026-04-26 | 80 | Draft 작성 (P1.0a) | Opus direct |
+| 2026-04-26 | 80 | Accepted 전환 + AI multi-session protocol 4 절 흡수 (P1.0b). R3 audit baseline 측정 (iter 80 실측 grep) | Opus direct (사용자 승인) |

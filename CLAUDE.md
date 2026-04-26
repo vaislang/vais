@@ -72,7 +72,7 @@ echo '<Vais code>' > /tmp/test.vais
 
 규칙 1~7은 **사후 가드레일** (regression 후 대응)이다. 다음 규칙 8~12는 **사전 가드레일** — ad-hoc fix가 추가되는 순간 차단한다. 본 규칙은 [ADR 0001](docs/adr/0001-root-cause-definition.md) "근본 해결 정의"를 기반으로 한다.
 
-### 규칙 8 — codegen에 새 if-coerce 분기 추가 시 ADR 0001 분류 의무
+### 규칙 8 — codegen에 새 if-coerce 분기 추가 시 ADR 0001 + ADR 0002 분류 의무
 
 `crates/vais-codegen/`에 다음 패턴을 새로 추가할 때:
 
@@ -82,13 +82,17 @@ echo '<Vais code>' > /tmp/test.vais
 }
 ```
 
-PR/commit message에 ADR 0001 분류를 명시한다:
-- **근본 fix**로 분류 시: invariant + 차단 테스트 + same-class audit 의무 (ADR 0001 §1)
+PR/commit message에 ADR 0001 분류 + ADR 0002 클래스를 명시한다:
+- **근본 fix**로 분류 시: ADR 0002 4 클래스 중 어느 invariant인지 명시 + R1/R2/R3 충족 의무
+  - Class 1 ret elem-ty / Class 2 index-store / Class 3 call-arg / Class 4 var-to-llvm
+  - 5번째 클래스 발견 시 ADR 0002 갱신 또는 ADR 0003 신설
 - **사이트 fix**로 분류 시: `// TEMP-SITE-FIX(adr-0001):` 주석 + 추적 issue + 만료 Phase 의무 (ADR 0001 §2)
 
-분류 없이 새 if-coerce 분기 추가 금지. 현재 165개 분기는 retro-active 분류 대상 (Pillar 1 시 일괄 흡수 예정).
+분류 없이 새 if-coerce 분기 추가 금지. 현재 165개 분기는 retro-active 분류 대상 (Pillar 1 P1.4 Type-Tagged IR Builder에서 일괄 흡수 예정).
 
-**Why**: 165개 ad-hoc 분기가 누적된 결과 "근본 해결"이라 부르는 fix가 사실 사이트 fix인 경우가 반복됨. Phase 158 5회 토글, Phase 17 stopped의 직접 원인.
+ADR 0002의 **Self-Audit Checklist (9 항목)**를 LANDED 게이트로 적용. 하나라도 NO → LANDED 금지 또는 site-fix 재분류.
+
+**Why**: 165개 ad-hoc 분기가 누적된 결과 "근본 해결"이라 부르는 fix가 사실 사이트 fix인 경우가 반복됨. Phase 158 5회 토글, Phase 17 stopped의 직접 원인. ADR 0002는 4 클래스 명세 + AI multi-session protocol로 분기 누적을 차단한다.
 
 ### 규칙 9 — 수동 `register_temp_type` / `record_emitted_type` 추가 신중히
 
