@@ -1129,9 +1129,43 @@ impl TypeChecker {
                         return Ok(ResolvedType::Bool);
                     }
                     "push" => {
-                        // Vec push returns i64 in stdlib
+                        // Vec push returns i64 in stdlib.
+                        //
+                        // Phase Ω P1.2 (iter 90): unify receiver's element type
+                        // generic (Vec<T>'s T) with the arg type. Without this,
+                        // unannotated `Vec.with_capacity(...).push(elem)` leaves
+                        // T as Var(N), erasing to i64 in codegen indexing path.
+                        // Tracked test: call_arg_invariant_test::vec_of_vec_no_annotation_loses_inner_type
+                        // ADR 0002 Class 4 (var-to-llvm).
                         if name == "Vec" && args.len() == 1 {
-                            let _ = self.check_expr(&args[0]);
+                            let arg_ty = self.check_expr(&args[0])?;
+                            if let Some(elem_ty) = generics.first() {
+                                let _ = self.unify(elem_ty, &arg_ty);
+                            }
+                            // Update receiver's local var if its generic resolved.
+                            if let Expr::Ident(recv_name) = &receiver.node {
+                                let resolved_generics: Vec<ResolvedType> = generics
+                                    .iter()
+                                    .map(|g| self.apply_substitutions(g))
+                                    .collect();
+                                let any_changed = resolved_generics
+                                    .iter()
+                                    .zip(generics.iter())
+                                    .any(|(r, o)| r != o);
+                                if any_changed {
+                                    let new_named = ResolvedType::Named {
+                                        name: name.clone(),
+                                        generics: resolved_generics,
+                                    };
+                                    let new_ty = match &receiver_type {
+                                        ResolvedType::Ref(_) => ResolvedType::Ref(Box::new(new_named)),
+                                        ResolvedType::RefMut(_) => ResolvedType::RefMut(Box::new(new_named)),
+                                        ResolvedType::Pointer(_) => ResolvedType::Pointer(Box::new(new_named)),
+                                        _ => new_named,
+                                    };
+                                    self.update_var_type(recv_name, new_ty);
+                                }
+                            }
                             return Ok(ResolvedType::I64);
                         }
                     }
