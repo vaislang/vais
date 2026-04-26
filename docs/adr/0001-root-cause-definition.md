@@ -145,3 +145,80 @@ ROADMAP에 task 추가 시 다음 형식 권장:
 - 정량 분석 출처: `lang/packages/vaisdb/ROADMAP.md` iter 74 entry (2026-04-26)
 - 4-Pillar 안정화 제안: 동 문서, Phase Ω 섹션
 - 기존 CLAUDE.md 규칙 1~7: 사후 가드레일 (regression 후 대응) — 본 ADR + 규칙 8~12는 사전 가드레일
+
+---
+
+## Retrospective (2026-04-26, Phase Ω P4.1, iter 83)
+
+ADR 0001 LANDED 이후 ~9시간 / 15 compiler commits / 8 lang commits 의 적용 효과 평가.
+
+### 정량 측정
+
+**측정 윈도우**: c683bd42 (ADR 0001 LANDED, iter 74) → d0a4c89a (iter 82, 본 retrospective 시점)
+
+| 지표 | 값 | 평가 |
+|---|---:|---|
+| 신규 commits (ADR LANDED 이후) | 15 | — |
+| ADR 0001 명시 인용 commits | 13/15 (87%) | ✅ 강한 채택 |
+| `revert` 메시지 commits | 0 | ✅ Phase 158 5회 토글 패턴 부재 |
+| `TEMP-SITE-FIX(adr-0001)` 주석 사이트 | 0 | ✅ site-fix 누적 부재 (또는 모두 root-cause로 라벨) |
+| stash (cascade 시 보관) | 1 (`phaseO_compound_assign_fix`) | ✅ 규칙 적용 (iter 74 fix 시도가 vaisdb 깨짐 → revert 대신 stash) |
+| 신규 R1+R2+R3 충족 invariant | 2 (ret + call-arg) | ✅ ret_invariant_test (5 case) + call_arg_invariant_test (3 case) |
+| ADR 신규 (0002) | 1 | ✅ 0001 게이트를 codegen 4 클래스로 확장 |
+
+### 질적 관찰
+
+#### 1. R3 게이트가 cascade 차단에 성공
+- iter 74: stash@{0} `phaseO_compound_assign_fix`가 vaisdb 3건 regression 유발 → R3 audit 미충족 → CLAUDE 규칙 4 (즉시 revert)에 따라 stash 보관, 진행 차단
+- 결과: Phase 17/Phase 158 같은 "임시 fix가 main에 유입되어 cascade" 패턴 차단
+- 직접 효과: 본 retrospective 시점 main HEAD에 cascade 흔적 0건
+
+#### 2. 단일 coerce point 패턴 도입 성공 (Mini Pillar 1)
+- 7cfc5caf: `coerce_ret_value` 신설 → c0d5bd31, 628674ec, 2ab0a421로 3 사이트 migration
+- ret_invariant_test 5/5 PASS 유지 (각 migration commit마다 cargo test로 검증)
+- ad-hoc if-coerce 165 → 162 (3 사이트 흡수, ADR 0002 Pillar 1.4가 나머지 처리 예정)
+
+#### 3. ADR 0002 (codegen invariants)로 0001을 4 클래스로 정밀화
+- 0001은 "근본 fix 정의"만 명시 (보편 게이트), 0002는 codegen에 한해 4 클래스 invariant + R3 grep+카운트 baseline 명시
+- iter 80 baseline: ret 152 / GEP 160 / store 164 / call 86 / register 334 / Var fallback 7 / Var match 53
+- iter 81 P4.2: 위 7 baseline 모두 0 변동 확증 → R3 게이트가 측정 가능
+
+#### 4. AI multi-session protocol 흡수 (ADR 0002)
+- 0001은 게이트 정의만, 0002는 AI agent의 multi-session work을 위한 5 강화 흡수:
+  - Self-Audit Checklist 9 항목 (R1+R2+R3 + verify-cargo/integrity/vaisdb + recon)
+  - AI Failure Mode Anti-Patterns 9건 (A1~A9, commit/iter trace)
+  - Iter Entry Point Spec yaml block
+  - Rollback Trigger T1~T5 (T5 = Self-Audit NO 안전망)
+- iter 81 P4.2가 이 protocol을 첫 적용 → R3 baseline 7/7 정확 확증으로 protocol 가치 입증
+
+### 부정적 관찰 (정책 한계)
+
+#### 1. R1+R2+R3 부담 평가
+- 본 retrospective 측정 윈도우의 13 ADR-cited commits에서 R1+R2+R3 모두 명시한 것은 4건 (db44f364, 1b99766c, 7cfc5caf, 041685e6)
+- 나머지 9건은 R3 또는 R2만 부분 명시 (refactor migration commits는 R2 PASS만 인용)
+- 평가: refactor commits는 R1 invariant가 prior commit에서 이미 정의됨을 가정 → 명시 부담 감소가 정당
+- 정책 보강 권장 없음 (현 운영 적정)
+
+#### 2. 0001만으로는 codegen 외 영역 커버 불충분
+- 본 P4.2 발견: std E009 38건은 codegen이 아닌 .vais source 정합성 이슈
+- 0001 R1+R2+R3는 codegen invariant 강화에는 효과적이지만 "codebase 정합성" 영역은 별도
+- 0001 적용 영역: codegen / TC fix만 명확히 정의, std/vaisdb source 변경은 ADR 적용 의무 모호
+- 정책 보강 권장: ADR 0001에 "적용 범위" 절 추가 (codegen + TC 핵심, source-only 변경은 면제)
+
+### 결론
+
+**ADR 0001 + ADR 0002 + CLAUDE 규칙 8~12 + Phase Ω Pillar 3+2의 통합 효과**:
+- ad-hoc fix 누적 차단: ✅ 0건 신규 site-fix label, stash로 cascade 차단
+- invariant 명시 의무: ✅ 87% adoption rate (13/15)
+- R3 cascade audit: ✅ 1건 cascade 사전 차단 (stash@{0})
+- 측정 가능 baseline: ✅ ADR 0002로 7항 grep+카운트 명시
+
+**개선 제안 (미래 ADR 0003+ 후보)**:
+1. 0001 §"적용 범위" 절 추가 — codegen + TC 외부 (std/vaisdb source) 변경의 ADR 적용 의무 명시
+2. R1 명시 부담 감소 — refactor commits는 prior commit의 R1 인용 허용 (관행화)
+3. retrospective 의무화 (P4.1 본건이 첫 사례) — 매 N iter (예: 10 iter) 자동 재평가
+
+**본 retrospective의 결정**:
+- 정책 변경 미권장 (현 ADR 0001+0002 효과 충분히 검증)
+- 개선 제안 1번 (적용 범위 명시)은 별도 ADR 0003 후보로 등록 (백로그)
+- ADR 0001 Status: **Accepted (sustained)** — retrospective 통과
