@@ -539,6 +539,51 @@ impl TypeChecker {
                     ret_type_raw
                 };
 
+                // ADR 0001 §1 — TC inference invariant for instance method calls:
+                //   "When an instance method on a generic struct (e.g. Vec<T>.push)
+                //    unifies the struct's generic param T against an argument type,
+                //    propagate the resolved T back to the receiver's local-var
+                //    binding so subsequent uses (e.g. indexing) see the concrete T."
+                //
+                // Why: vaisdb test_btree_node.ll:1848 root cause. `keys.push(inner)`
+                // unifies Vec<?N>'s ?N with Vec<u8>, but `keys` local var still
+                // holds Vec<?N>. Later `keys[0]` indexing then sees ?N which
+                // defaults to i64, producing raw `load i64` and mismatched call args.
+                //
+                // Tracker: vaisdb Task #13. Test:
+                //   call_arg_invariant_test::vec_of_vec_no_annotation_loses_inner_type
+                if !receiver_generics.is_empty() {
+                    if let Expr::Ident(recv_name) = &receiver.node {
+                        // Re-resolve receiver's generic args after arg unification.
+                        let resolved_generics: Vec<ResolvedType> = receiver_generics
+                            .iter()
+                            .map(|g| self.apply_substitutions(g))
+                            .collect();
+                        // If anything changed (Var → concrete), update the local
+                        // var's type. Preserve the outer wrapper (Ref/RefMut/Pointer)
+                        // so auto-deref behavior stays consistent.
+                        let any_changed = resolved_generics
+                            .iter()
+                            .zip(receiver_generics.iter())
+                            .any(|(r, o)| r != o);
+                        if any_changed {
+                            let new_named = ResolvedType::Named {
+                                name: inner_type.clone(),
+                                generics: resolved_generics,
+                            };
+                            // Look at original receiver_type to know if we need a
+                            // Ref/RefMut/Pointer wrapper.
+                            let new_ty = match &receiver_type {
+                                ResolvedType::Ref(_) => ResolvedType::Ref(Box::new(new_named)),
+                                ResolvedType::RefMut(_) => ResolvedType::RefMut(Box::new(new_named)),
+                                ResolvedType::Pointer(_) => ResolvedType::Pointer(Box::new(new_named)),
+                                _ => new_named,
+                            };
+                            self.update_var_type(recv_name, new_ty);
+                        }
+                    }
+                }
+
                 // Record generic instantiation for monomorphization
                 if !receiver_generics.is_empty() {
                     let inferred_type_args: Vec<_> = receiver_generics
