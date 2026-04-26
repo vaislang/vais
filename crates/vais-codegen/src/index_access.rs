@@ -1,17 +1,32 @@
-//! Single-source index access type derivation (Phase Ω P1.3, iter 97).
+//! Single-source index access type derivation (Phase Ω P1.3, iter 97~100).
 //!
 //! Pre-Phase-Ω there were 4 separate `match arr_ty` blocks in:
-//!   - `expr_helpers_data.rs::generate_index_expr` (Path 1, data read)
-//!   - `expr_helpers_assign.rs` (Paths 2/3, simple + compound assign)
-//!   - `inkwell/gen_aggregate.rs::generate_index` (Path 4, inkwell backend)
+//!   - `expr_helpers_data.rs::generate_index_expr` (Path 1, data read) — MIGRATED iter 97
+//!   - `expr_helpers_assign.rs::generate_assign_expr` (Path 2, simple) — MIGRATED iter 98
+//!   - `expr_helpers_assign.rs::generate_assign_op_expr` (Path 3, compound) — DEFERRED iter 99+
+//!     - Reason: minimal current implementation falls back to `llvm_type_of`,
+//!       not full match. iter 74 stash@{0} `phaseO_compound_assign_fix`
+//!       represents the missing logic; cascade risk 7-8/10 (vaisdb -3 regression
+//!       in iter 74 attempt).
+//!   - `inkwell/gen_aggregate.rs::generate_index` (Path 4, inkwell) — NOT MIGRATED
+//!     - Reason: inkwell uses `inkwell::types::BasicTypeEnum<'ctx>` — a
+//!       lifetime-parameterized typed LLVM type — fundamentally incompatible
+//!       with this helper's `String` elem_llvm. Inkwell also uses
+//!       `var_resolved_types` HashMap directly rather than codegen-local
+//!       `infer_expr_type`. Migrating Path 4 would either require a separate
+//!       inkwell-specific helper (duplicating logic) or a lossy String round-trip
+//!       (parsing fragility). Document as known scope: this helper covers Text IR
+//!       backend only. Inkwell Path 4 is treated as a separate implementation
+//!       to be revisited in P1.4 (Type-Tagged IR Builder) where the broader
+//!       refactor naturally addresses both backends.
 //!
 //! Each independently mapped `ResolvedType → (elem_llvm_ty, is_fat_ptr,
 //! elem_resolved)`. Drift between them caused vaisdb test_btree class of
 //! errors (Class 2 in ADR 0002): one path emits `getelementptr i32` while
 //! another emits `getelementptr i64` for the same Vec<i32>.
 //!
-//! This module is the **single source** for that derivation. All four paths
-//! migrate to call `CodeGenerator::resolve_index_access(arr_ty)`.
+//! This module is the **single source** for the Text IR backend's 3 paths
+//! (Path 1, 2, eventually 3). Path 4 (inkwell) is intentionally separate.
 //!
 //! ADR 0001 §1 invariant (R1):
 //!   "Every indexing emit site derives elem_llvm/is_fat_ptr/elem_resolved
