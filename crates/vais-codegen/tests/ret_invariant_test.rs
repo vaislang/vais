@@ -354,6 +354,220 @@ fn ret_invariant_blocks_vec_ptr_to_fat_ptr_regression() {
     );
 }
 
+// -----------------------------------------------------------------------
+// P1.4 iter 111 — R2 blocking test for the iter 107 ret-cast migration.
+//
+// The migrated site at `stmt_visitor.rs:708` now emits the bitcast through
+// `TypedEmitter::emit_bitcast_with_prefix`, which automatically calls
+// `record_emitted_type(name, dst_ty)` for the cast result. The legacy
+// hand-rolled emission (pre-iter 107) skipped that registration, leaving
+// the SSA in the i64 fallback path for any downstream consumer that
+// queried `actual_llvm_type`.
+//
+// This test pins the migrated behavior in two ways:
+//   1. The emitted IR for the ret-cast site uses the legacy SSA name
+//      format `%ret.cast.{N}` byte-for-byte. If a future change switches
+//      to the wrapper's default `%t{N}` allocator, the assertion fires.
+//   2. The cast line is followed *immediately* by a `load` whose pointer
+//      operand is that same `%ret.cast.{N}` SSA. If `record_emitted_type`
+//      were skipped (or the cast were emitted in the wrong shape) the
+//      pair would not match and downstream type lookup would fall back
+//      to i64.
+//
+// This is an R2 (regression-blocking) test in the ADR 0002 sense: any
+// future migration that breaks the wrapper's type-tagging contract for
+// this site will fail here before reaching production.
+// -----------------------------------------------------------------------
+
+/// Find every `bitcast` line whose SSA has the legacy `%ret.cast.{N}`
+/// name format. Returns (function_name, ssa_name, full_line).
+fn find_ret_cast_bitcasts(ir: &str) -> Vec<(String, String, String)> {
+    let mut out = Vec::new();
+    let mut current_fn = String::from("<unknown>");
+    let mut current_is_helper = false;
+    for line in ir.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("define ") {
+            if let Some(at_idx) = rest.find('@') {
+                let after_at = &rest[at_idx + 1..];
+                let end = after_at
+                    .find('(')
+                    .unwrap_or_else(|| after_at.find(' ').unwrap_or(after_at.len()));
+                current_fn = after_at[..end].to_string();
+                current_is_helper = is_runtime_helper(&current_fn);
+            }
+        }
+        if current_is_helper {
+            continue;
+        }
+        // Match `  %ret.cast.{N} = bitcast ...`
+        if let Some(after_pct) = trimmed.strip_prefix('%') {
+            if after_pct.starts_with("ret.cast.") {
+                if let Some(eq_idx) = after_pct.find(" =") {
+                    let name = format!("%{}", &after_pct[..eq_idx]);
+                    let rhs = &after_pct[eq_idx + 2..].trim_start();
+                    if rhs.starts_with("bitcast ") {
+                        out.push((current_fn.clone(), name, trimmed.to_string()));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn ret_cast_migration_uses_legacy_prefix_format() {
+    // Constructs a function whose body returns a specialized Result, which
+    // hits the `base_ptr_ty != expected_ptr_ty` branch at
+    // stmt_visitor.rs:708 and emits a `%ret.cast.{N}` bitcast.
+    let ir = gen_ir(
+        r#"
+        F maybe(x: i64) -> Result<i64, str> {
+            R Ok(x);
+        }
+        F main() -> i64 {
+            R 0;
+        }
+        "#,
+    );
+    let casts = find_ret_cast_bitcasts(&ir);
+    assert!(
+        !casts.is_empty(),
+        "P1.4 iter 107 migration regression: stmt_visitor.rs:708 must \
+         continue to emit `%ret.cast.{{N}}` bitcasts on the \
+         base_ptr_ty != expected_ptr_ty path. None were found.\nIR:\n{}",
+        ir
+    );
+    // Every emitted bitcast at this site must keep the legacy prefix.
+    for (fn_name, name, line) in &casts {
+        assert!(
+            name.starts_with("%ret.cast."),
+            "fn `{}` emitted a ret-cast with non-legacy SSA name `{}`. \
+             The TypedEmitter migration is required to preserve the \
+             `%ret.cast.{{N}}` prefix byte-for-byte (iter 106\
+             /107 commit message).\nLine: {}",
+            fn_name,
+            name,
+            line
+        );
+    }
+}
+
+#[test]
+fn ret_cast_is_immediately_followed_by_typed_load() {
+    // Locates each `%ret.cast.{N}` bitcast and asserts the next non-empty
+    // IR line consumes it as the pointer operand of a `load`. If
+    // `record_emitted_type` were skipped on the cast result, downstream
+    // emission could pick a different SSA shape for the load and the
+    // pair would no longer match.
+    let ir = gen_ir(
+        r#"
+        F maybe(x: i64) -> Result<i64, str> {
+            R Ok(x);
+        }
+        F main() -> i64 {
+            R 0;
+        }
+        "#,
+    );
+    let casts = find_ret_cast_bitcasts(&ir);
+    assert!(!casts.is_empty(), "expected at least one ret-cast site");
+
+    for (_, cast_name, _) in &casts {
+        // Find the cast line, then scan forward for the next instruction
+        // line (skipping blank lines).
+        let mut found_pair = false;
+        let mut saw_cast = false;
+        for line in ir.lines() {
+            let trimmed = line.trim();
+            if !saw_cast {
+                if let Some(rest) = trimmed.strip_prefix(cast_name) {
+                    if rest.trim_start().starts_with("=") {
+                        saw_cast = true;
+                    }
+                }
+                continue;
+            }
+            if trimmed.is_empty() {
+                continue;
+            }
+            // Expected shape: `  %ret.{N} = load <ty>, <ty>* %ret.cast.{N}`
+            let active = strip_debug(line);
+            if active.contains("= load ") && active.ends_with(cast_name) {
+                found_pair = true;
+            }
+            break;
+        }
+        assert!(
+            found_pair,
+            "ret-cast `{}` was not immediately consumed by a `load <ty>, \
+             <ty>* {}` instruction. The TypedEmitter migration at \
+             stmt_visitor.rs:708 must keep the cast → load pairing \
+             intact so that the auto-registered cast type drives \
+             downstream emission.\nIR:\n{}",
+            cast_name, cast_name, ir
+        );
+    }
+}
+
+#[test]
+fn ret_cast_dst_type_is_pointer_to_specialized_form() {
+    // The destination type of the bitcast must be `%<specialized>*`,
+    // where `<specialized>` includes the generic monomorphization marker
+    // (e.g., `%Result$i64$str*`). If the `format!("{}*", llvm_ty)`
+    // construction at stmt_visitor.rs migration breaks (e.g., emits a
+    // bare `%Result*` again), the cast becomes a no-op and downstream
+    // typed-pointer load mismatches.
+    let ir = gen_ir(
+        r#"
+        F maybe(x: i64) -> Result<i64, str> {
+            R Ok(x);
+        }
+        F main() -> i64 {
+            R 0;
+        }
+        "#,
+    );
+    let casts = find_ret_cast_bitcasts(&ir);
+    assert!(!casts.is_empty(), "expected at least one ret-cast site");
+
+    for (fn_name, name, line) in &casts {
+        // `bitcast <src_ty> <val> to <dst_ty>` — pull <dst_ty>.
+        let to_pos = line.rfind(" to ").unwrap_or_else(|| {
+            panic!(
+                "ret-cast in `{}` is missing ` to ` separator: {}",
+                fn_name, line
+            )
+        });
+        let dst_ty = line[to_pos + 4..].trim();
+        assert!(
+            dst_ty.ends_with('*'),
+            "ret-cast `{}` in `{}` produced a non-pointer dst type `{}`. \
+             The stmt_visitor.rs:708 migration must keep `format!(\"{{}}*\", \
+             llvm_ty)` to maintain the typed-pointer load contract.\n\
+             Line: {}",
+            name,
+            fn_name,
+            dst_ty,
+            line
+        );
+        assert!(
+            dst_ty.contains('$'),
+            "ret-cast `{}` in `{}` produced a non-specialized dst type \
+             `{}`. The bitcast at this site is meaningful only when \
+             casting `%Result*` (base) → `%Result$<args>*` (specialized). \
+             A non-specialized dst means either the test setup no longer \
+             reaches this branch or the migration accidentally bypasses \
+             specialization.\nLine: {}",
+            name,
+            fn_name,
+            dst_ty,
+            line
+        );
+    }
+}
+
 #[test]
 fn find_ret_violations_detects_synthetic_mismatch() {
     // Sanity check: hand-craft IR with a known violation and confirm we catch it.
