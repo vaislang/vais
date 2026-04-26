@@ -88,7 +88,7 @@ X Column {
 
     # Write column definition SQL to buffer at pos, returns new pos
     F write_def(&self, buf: i64, pos: i64) -> i64 {
-        p := pos
+        p := mut pos
         p = p + __str_copy_to(buf + p, self.name)
         store_byte(buf + p, 32)  # space
         p = p + 1
@@ -190,13 +190,13 @@ X Schema {
     # Generate CREATE TABLE SQL
     F create_table(&self) -> str {
         buf := __malloc(SQL_BUFFER_SIZE)
-        pos := 0
+        pos := mut 0
 
         pos = pos + __str_copy_to(buf + pos, "CREATE TABLE IF NOT EXISTS ")
         pos = pos + __str_copy_to(buf + pos, self.table_name)
         pos = pos + __str_copy_to(buf + pos, " (")
 
-        i := 0
+        i := mut 0
         LW i < self.column_count {
             I i > 0 {
                 store_byte(buf + pos, 44)  # ,
@@ -244,7 +244,7 @@ X Schema {
     # Generate DROP TABLE SQL
     F drop_table(&self) -> str {
         buf := __malloc(SQL_BUFFER_SIZE)
-        pos := 0
+        pos := mut 0
         pos = pos + __str_copy_to(buf + pos, "DROP TABLE IF EXISTS ")
         pos = pos + __str_copy_to(buf + pos, self.table_name)
         store_byte(buf + pos, 59)  # ;
@@ -309,10 +309,10 @@ X WhereClause {
             R pos
         }
 
-        p := pos
+        p := mut pos
         p = p + __str_copy_to(buf + p, " WHERE ")
 
-        i := 0
+        i := mut 0
         LW i < self.count {
             offset := i * 32
             connector := __load_ptr(self.items + offset) as str
@@ -504,7 +504,7 @@ X QueryBuilder {
     # Build the final SQL string
     F build(&self) -> str {
         buf := __malloc(SQL_BUFFER_SIZE)
-        pos := 0
+        pos := mut 0
 
         M self.query_type {
             1 => {
@@ -679,8 +679,8 @@ X MigrationRunner {
     # Get all up-migration SQL statements concatenated
     F migrate_up_all(&self) -> str {
         buf := __malloc(SQL_BUFFER_SIZE * 4)
-        pos := 0
-        i := 0
+        pos := mut 0
+        i := mut 0
         LW i < self.count {
             m_ptr := __load_ptr(self.migrations + i * 8)
             I m_ptr != 0 {
@@ -698,8 +698,8 @@ X MigrationRunner {
     # Get all down-migration SQL statements (in reverse order)
     F migrate_down_all(&self) -> str {
         buf := __malloc(SQL_BUFFER_SIZE * 4)
-        pos := 0
-        i := self.count - 1
+        pos := mut 0
+        i := mut self.count - 1
         LW i >= 0 {
             m_ptr := __load_ptr(self.migrations + i * 8)
             I m_ptr != 0 {
@@ -721,7 +721,7 @@ X MigrationRunner {
 
     # Free memory
     F drop(&self) -> i64 {
-        i := 0
+        i := mut 0
         LW i < self.count {
             m_ptr := __load_ptr(self.migrations + i * 8)
             I m_ptr != 0 {

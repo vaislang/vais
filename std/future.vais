@@ -429,7 +429,7 @@ X AsyncDropScope {
     # Returns 0 on success, number of failed drops otherwise
     F drop_all(&self) -> i64 {
         errors := 0
-        current := self.head
+        current := mut self.head
 
         LW current != 0 {
             value_ptr := load_i64(current)
@@ -592,8 +592,8 @@ X RetryFuture {
         I self.attempt == 0 {
             self.backoff_base
         } EL {
-            delay := self.backoff_base
-            shifts := self.attempt
+            delay := mut self.backoff_base
+            shifts := mut self.attempt
             LW shifts > 0 {
                 delay = delay * 2
                 shifts = shifts - 1

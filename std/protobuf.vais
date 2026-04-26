@@ -38,7 +38,7 @@ F pb_buf_ensure(buf: i64, needed: i64) -> i64 {
     len := load_i64(buf + 8)
     cap := load_i64(buf + 16)
     I len + needed <= cap { 0 } EL {
-        new_cap := cap * 2
+        new_cap := mut cap * 2
         I new_cap < len + needed { new_cap = len + needed + 256 }
         new_data := malloc(new_cap)
         memcpy(new_data, load_i64(buf), len)

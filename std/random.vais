@@ -145,7 +145,7 @@ F random_shuffle(arr: i64, len: i64) -> i64 {
     I arr == 0 || len <= 1 {
         0
     } EL {
-        i := len - 1
+        i := mut len - 1
         LW i > 0 {
             # Pick random index from 0 to i
             j := random_below(i + 1)
@@ -170,7 +170,7 @@ F random_bytes(buffer: i64, count: i64) -> i64 {
     I buffer == 0 || count <= 0 {
         0
     } EL {
-        i := 0
+        i := mut 0
         LW i < count {
             # Generate random byte (0-255)
             byte := random_i64() % 256
@@ -217,13 +217,13 @@ F random_hex() -> i64 {
 F i64_to_f64(x: i64) -> f64 {
     # Simple approximation for positive numbers
     # In practice, this would use proper conversion
-    result := 0.0
+    result := mut 0.0
     I x == 0 {
         0.0
     } EL {
         # Build up the float value
-        remaining := x
-        multiplier := 1.0
+        remaining := mut x
+        multiplier := mut 1.0
         LW remaining > 0 {
             digit := remaining % 10
             result = result + ((digit as f64) * multiplier)
@@ -257,7 +257,7 @@ F random_init() -> i64 {
 G xorshift_state: i64 = 88172645463325252
 
 F random_xorshift() -> i64 {
-    x := xorshift_state
+    x := mut xorshift_state
     I x == 0 {
         x = 88172645463325252
     }

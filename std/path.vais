@@ -44,7 +44,7 @@ X Path {
         }
 
         # Check if self ends with '/'
-        ends_with_slash := 0
+        ends_with_slash := mut 0
         I self.len > 0 {
             I load_byte(self.data + self.len - 1) == 47 {
                 ends_with_slash = 1
@@ -52,7 +52,7 @@ X Path {
         }
 
         # Calculate new length
-        new_len := 0
+        new_len := mut 0
         I ends_with_slash {
             new_len = self.len + other_len
         } EL {
@@ -76,8 +76,8 @@ X Path {
     # Get parent directory: "/usr/bin/ls" => "/usr/bin"
     F parent(&self) -> Path {
         # Find last '/' using backward scan
-        pos := -1
-        i := self.len - 1
+        pos := mut -1
+        i := mut self.len - 1
         L {
             I i < 0 { B }
             I load_byte(self.data + i) == 47 {
@@ -113,8 +113,8 @@ X Path {
     # Get filename: "/usr/bin/ls" => "ls"
     F filename(&self) -> Path {
         # Find last '/'
-        pos := -1
-        i := self.len - 1
+        pos := mut -1
+        i := mut self.len - 1
         L {
             I i < 0 { B }
             I load_byte(self.data + i) == 47 {
@@ -144,8 +144,8 @@ X Path {
         fname := @.filename()
 
         # Find last '.' in filename
-        pos := -1
-        i := fname.len - 1
+        pos := mut -1
+        i := mut fname.len - 1
         L {
             I i < 0 { B }
             I load_byte(fname.data + i) == 46 {
@@ -177,8 +177,8 @@ X Path {
         fname := @.filename()
 
         # Find last '.' in filename
-        pos := -1
-        i := fname.len - 1
+        pos := mut -1
+        i := mut fname.len - 1
         L {
             I i < 0 { B }
             I load_byte(fname.data + i) == 46 {
@@ -263,7 +263,7 @@ X PathBuf {
         }
 
         # Check if we need to add separator
-        needs_sep := 0
+        needs_sep := mut 0
         I self.len > 0 {
             I load_byte(self.data + self.len - 1) != 47 {
                 needs_sep = 1
@@ -271,7 +271,7 @@ X PathBuf {
         }
 
         # Calculate required size
-        new_len := 0
+        new_len := mut 0
         I needs_sep {
             new_len = self.len + 1 + comp_len
         } EL {
@@ -280,7 +280,7 @@ X PathBuf {
 
         # Grow if needed
         I new_len >= self.cap {
-            new_cap := self.cap * 2
+            new_cap := mut self.cap * 2
             L {
                 I new_cap > new_len { B }
                 new_cap = new_cap * 2
@@ -306,8 +306,8 @@ X PathBuf {
 
     F pop(&self) -> i64 {
         # Find last '/'
-        pos := -1
-        i := self.len - 1
+        pos := mut -1
+        i := mut self.len - 1
         L {
             I i < 0 { B }
             I load_byte(self.data + i) == 47 {
@@ -337,9 +337,9 @@ X PathBuf {
     F set_extension(&self, ext: str) -> i64 {
         ext_ptr := str_to_ptr(ext)
         # Find last '.' after last '/'
-        last_slash := -1
-        last_dot := -1
-        i := self.len - 1
+        last_slash := mut -1
+        last_dot := mut -1
+        i := mut self.len - 1
         L {
             I i < 0 { B }
             ch := load_byte(self.data + i)
@@ -364,7 +364,7 @@ X PathBuf {
             # Ensure capacity
             new_len := self.len + 1 + ext_len
             I new_len >= self.cap {
-                new_cap := self.cap * 2
+                new_cap := mut self.cap * 2
                 L {
                     I new_cap > new_len { B }
                     new_cap = new_cap * 2
@@ -412,7 +412,7 @@ F path_join(a: str, b: str) -> i64 {
     }
 
     # Check if a ends with '/'
-    ends_with_slash := 0
+    ends_with_slash := mut 0
     I a_len > 0 {
         I load_byte(a_ptr + a_len - 1) == 47 {
             ends_with_slash = 1
@@ -420,7 +420,7 @@ F path_join(a: str, b: str) -> i64 {
     }
 
     # Calculate new length
-    new_len := 0
+    new_len := mut 0
     I ends_with_slash {
         new_len = a_len + b_len
     } EL {
@@ -446,8 +446,8 @@ F path_parent(path: str) -> i64 {
     len := strlen(ptr)
 
     # Find last '/'
-    pos := -1
-    i := len - 1
+    pos := mut -1
+    i := mut len - 1
     L {
         I i < 0 { B }
         I load_byte(ptr + i) == 47 {
@@ -485,8 +485,8 @@ F path_filename(path: str) -> i64 {
     len := strlen(ptr)
 
     # Find last '/'
-    pos := -1
-    i := len - 1
+    pos := mut -1
+    i := mut len - 1
     L {
         I i < 0 { B }
         I load_byte(ptr + i) == 47 {
@@ -518,8 +518,8 @@ F path_extension(path: str) -> i64 {
     fname_len := strlen(fname)
 
     # Find last '.' in filename
-    pos := -1
-    i := fname_len - 1
+    pos := mut -1
+    i := mut fname_len - 1
     L {
         I i < 0 { B }
         I load_byte(fname + i) == 46 {
@@ -551,8 +551,8 @@ F path_stem(path: str) -> i64 {
     fname_len := strlen(fname)
 
     # Find last '.' in filename
-    pos := -1
-    i := fname_len - 1
+    pos := mut -1
+    i := mut fname_len - 1
     L {
         I i < 0 { B }
         I load_byte(fname + i) == 46 {

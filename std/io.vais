@@ -90,7 +90,7 @@ X F atof_ptr(s: i64) -> f64
 # buffer: destination buffer (must be pre-allocated)
 # max_len: maximum length including null terminator (must be 1..=1048576)
 # SAFETY: Caller must ensure buffer has at least max_len bytes allocated
-F read_line(buffer: i64, max_len: i64) -> i64 {
+F read_line(buffer: i64, mut max_len: i64) -> i64 {
     # Validate max_len range to prevent buffer overflow
     I max_len <= 0 {
         0
@@ -104,7 +104,7 @@ F read_line(buffer: i64, max_len: i64) -> i64 {
         0
     } EL {
         # Remove trailing newline if present
-        i := 0
+        i := mut 0
         LW i < max_len {
             c := load_byte(buffer + i)
             I c == 0 {

@@ -192,7 +192,7 @@ X PoolAllocator {
         }
 
         # Initialize free list - each block points to next
-        i := 0
+        i := mut 0
         LW i < num_blocks - 1 {
             block := buffer + i * actual_block_size
             next_block := buffer + (i + 1) * actual_block_size
@@ -308,12 +308,12 @@ X FreeListAllocator {
         aligned_size := ptr_align_up(min_size, 8)
 
         # First-fit search
-        prev := 0
-        curr := self.free_list
+        prev := mut 0
+        curr := mut self.free_list
 
         LW curr != 0 {
             block_size := load_i64(curr)
-            next := load_i64(curr + 8)
+            next := mut load_i64(curr + 8)
 
             I block_size >= aligned_size {
                 # Found a suitable block

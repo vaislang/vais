@@ -71,7 +71,7 @@ X Url {
     # Parse a URL string into components
     F parse(raw_url: str) -> Url {
         host := __hc_parse_url_host(raw_url)
-        port := __hc_parse_url_port(raw_url)
+        port := mut __hc_parse_url_port(raw_url)
         path := __hc_parse_url_path(raw_url)
         query := __hc_parse_url_query(raw_url)
         scheme := __hc_parse_url_scheme(raw_url)
@@ -121,7 +121,7 @@ X Url {
             self.host
         } EL {
             buf := __malloc(256)
-            pos := __str_copy_to(buf, self.host)
+            pos := mut __str_copy_to(buf, self.host)
             __store_byte(buf + pos, 58)  # ':'
             pos = pos + 1
             pos = pos + __i64_to_str(buf + pos, self.port)
@@ -217,7 +217,7 @@ X HttpRequest {
     # Set or replace a header
     F set_header(&self, name: str, value: str) -> HttpRequest {
         # Search for existing header
-        i := 0
+        i := mut 0
         LW i < self.header_count {
             offset := i * 16
             header_name := __load_ptr(self.headers + offset) as str
@@ -234,13 +234,13 @@ X HttpRequest {
 
     # Remove a header by name
     F remove_header(&self, name: str) -> HttpRequest {
-        i := 0
+        i := mut 0
         LW i < self.header_count {
             offset := i * 16
             header_name := __load_ptr(self.headers + offset) as str
             I __str_eq_ignore_case(header_name, name) == 1 {
                 # Shift remaining headers down
-                j := i
+                j := mut i
                 LW j < self.header_count - 1 {
                     src_offset := (j + 1) * 16
                     dst_offset := j * 16
@@ -258,7 +258,7 @@ X HttpRequest {
 
     # Get a header value by name
     F get_header(&self, name: str) -> str? {
-        i := 0
+        i := mut 0
         LW i < self.header_count {
             offset := i * 16
             header_name := __load_ptr(self.headers + offset) as str
@@ -308,7 +308,7 @@ X HttpRequest {
     # Set Authorization header (Bearer token)
     F with_bearer_token(&self, token: str) -> HttpRequest {
         buf := __malloc(512)
-        pos := __str_copy_to(buf, "Bearer ")
+        pos := mut __str_copy_to(buf, "Bearer ")
         pos = pos + __str_copy_to(buf + pos, token)
         __store_byte(buf + pos, 0)  # null terminate
         self.set_header("Authorization", buf as str)
@@ -317,7 +317,7 @@ X HttpRequest {
     # Set basic auth header
     F with_basic_auth(&self, encoded: str) -> HttpRequest {
         buf := __malloc(512)
-        pos := __str_copy_to(buf, "Basic ")
+        pos := mut __str_copy_to(buf, "Basic ")
         pos = pos + __str_copy_to(buf + pos, encoded)
         __store_byte(buf + pos, 0)  # null terminate
         self.set_header("Authorization", buf as str)
@@ -340,7 +340,7 @@ X HttpRequest {
     # Serialize the request to a buffer for sending
     # Returns number of bytes written
     F serialize(&self, buffer: i64, buffer_size: i64) -> i64 {
-        pos := 0
+        pos := mut 0
 
         # Request line: METHOD PATH HTTP/1.1\r\n
         method_s := self.method_str()
@@ -366,7 +366,7 @@ X HttpRequest {
         pos = pos + 2
 
         # User headers
-        i := 0
+        i := mut 0
         LW i < self.header_count {
             offset := i * 16
             name := __load_ptr(self.headers + offset) as str
@@ -507,7 +507,7 @@ X HttpResponse {
 
     # Get a response header value by name (case-insensitive)
     F get_header(&self, name: str) -> str? {
-        i := 0
+        i := mut 0
         LW i < self.header_count {
             offset := i * 16
             header_name := __load_ptr(self.headers + offset) as str
@@ -522,7 +522,7 @@ X HttpResponse {
 
     # Check if a response header exists
     F has_header(&self, name: str) -> i64 {
-        i := 0
+        i := mut 0
         LW i < self.header_count {
             offset := i * 16
             header_name := __load_ptr(self.headers + offset) as str
@@ -609,7 +609,7 @@ X ConnectionPool {
 
     # Get a cached connection fd for host:port, or -1 if none
     F get(&self, host: str, port: i64) -> i64 {
-        i := 0
+        i := mut 0
         LW i < self.count {
             offset := i * POOL_ENTRY_SIZE
             entry_host := __load_ptr(self.entries + offset) as str
@@ -630,7 +630,7 @@ X ConnectionPool {
     # Return a connection to the pool for reuse
     F put(&self, host: str, port: i64, fd: i64) -> i64 {
         # Try to find an empty slot
-        i := 0
+        i := mut 0
         LW i < self.count {
             offset := i * POOL_ENTRY_SIZE
             entry_alive := __load_i64(self.entries + offset + 24)
@@ -662,7 +662,7 @@ X ConnectionPool {
 
     # Close all pooled connections
     F close_all(&self) -> i64 {
-        i := 0
+        i := mut 0
         LW i < self.count {
             offset := i * POOL_ENTRY_SIZE
             entry_alive := __load_i64(self.entries + offset + 24)
@@ -763,7 +763,7 @@ X HttpClient {
     # Execute an HttpRequest and return an HttpResponse
     F send(&self, request: &HttpRequest) -> HttpResponse {
         # Apply default headers (if not already set)
-        i := 0
+        i := mut 0
         LW i < self.default_header_count {
             offset := i * 16
             name := __load_ptr(self.default_headers + offset) as str
@@ -780,7 +780,7 @@ X HttpClient {
         }
 
         # Use request timeout or client default
-        effective_timeout := request.timeout_ms
+        effective_timeout := mut request.timeout_ms
         I effective_timeout <= 0 {
             effective_timeout = self.timeout_ms
         }
@@ -796,7 +796,7 @@ X HttpClient {
         is_https := request.url.is_https()
 
         # Try to get a pooled connection (only for plain HTTP)
-        fd := -1
+        fd := mut -1
         I self.keep_alive == 1 & is_https == 0 {
             fd = self.pool.get(host, port)
         }
@@ -865,7 +865,7 @@ X HttpClient {
 
             # Receive response via TLS
             recv_buf := __malloc(CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
-            total_recv := 0
+            total_recv := mut 0
 
             LW true {
                 n := __tls_read(tls, recv_buf + total_recv, CLIENT_RECV_CHUNK)
@@ -931,7 +931,7 @@ X HttpClient {
 
             # Receive response
             recv_buf := __malloc(CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
-            total_recv := 0
+            total_recv := mut 0
 
             LW true {
                 n := __tcp_recv(fd, recv_buf + total_recv, CLIENT_RECV_CHUNK)
@@ -969,7 +969,7 @@ X HttpClient {
             # Handle keep-alive: return connection to pool or close it
             I self.keep_alive == 1 {
                 conn_header := response.get_header("Connection")
-                should_close := 0
+                should_close := mut 0
                 M conn_header {
                     Some(v) => {
                         I __str_eq_ignore_case(v, "close") == 1 {
@@ -1082,7 +1082,7 @@ X HttpClient {
 # Result: {"key":"value"}
 F json_kv(key: str, value: str) -> str {
     buf := __malloc(1024)
-    pos := 0
+    pos := mut 0
     __store_byte(buf + pos, 123)  # {
     pos = pos + 1
     __store_byte(buf + pos, 34)   # "
@@ -1107,7 +1107,7 @@ F json_kv(key: str, value: str) -> str {
 # Result: {"k1":"v1","k2":"v2"}
 F json_kv2(k1: str, v1: str, k2: str, v2: str) -> str {
     buf := __malloc(2048)
-    pos := 0
+    pos := mut 0
     __store_byte(buf + pos, 123)  # {
     pos = pos + 1
     __store_byte(buf + pos, 34)   # "
@@ -1146,7 +1146,7 @@ F json_kv2(k1: str, v1: str, k2: str, v2: str) -> str {
 # Result: {"key":123}
 F json_kv_int(key: str, value: i64) -> str {
     buf := __malloc(512)
-    pos := 0
+    pos := mut 0
     __store_byte(buf + pos, 123)  # {
     pos = pos + 1
     __store_byte(buf + pos, 34)   # "
@@ -1243,8 +1243,8 @@ F hex_digit_value(c: i64) -> i64 {
 # Reads until \r\n and returns the decoded size, or -1 on error.
 # The caller should advance past the \r\n (2 bytes) after the returned header.
 F parse_chunk_size(buffer: i64, pos: i64) -> i64 {
-    size := 0
-    i := pos
+    size := mut 0
+    i := mut pos
     LW true {
         c := load_byte(buffer + i)
         # Check for \r (end of hex digits line)
@@ -1271,8 +1271,8 @@ F parse_chunk_size(buffer: i64, pos: i64) -> i64 {
 F parse_chunked_body(buffer: i64, start: i64, total_len: i64) -> i64 {
     # Allocate output buffer (worst case: same size as input)
     out_buf := __malloc(total_len + 1)
-    out_pos := 0
-    pos := start
+    out_pos := mut 0
+    pos := mut start
 
     LW true {
         # Guard: ensure we haven't overrun the buffer
@@ -1306,7 +1306,7 @@ F parse_chunked_body(buffer: i64, start: i64, total_len: i64) -> i64 {
         }
 
         # Copy chunk data to output buffer
-        bytes_left := chunk_size
+        bytes_left := mut chunk_size
         I pos + bytes_left > start + total_len {
             bytes_left = start + total_len - pos
         }
@@ -1393,8 +1393,8 @@ F hex_nibble(n: i64) -> i64 {
 F url_encode(input: i64, input_len: i64) -> i64 {
     # Worst case: every byte expands to 3 characters (%XX)
     out_buf := __malloc(input_len * 3 + 1)
-    out_pos := 0
-    i := 0
+    out_pos := mut 0
+    i := mut 0
     LW i < input_len {
         c := load_byte(input + i)
         I c == 0 {
@@ -1439,11 +1439,11 @@ F query_builder_new() -> i64 {
 # Percent-encodes both key and value. Inserts '&' separator between pairs.
 # Returns the query builder pointer (for chaining).
 F query_builder_add(qb: i64, key: i64, value: i64) -> i64 {
-    key_len := 0
+    key_len := mut 0
     LW load_byte(key + key_len) != 0 {
         key_len = key_len + 1
     }
-    val_len := 0
+    val_len := mut 0
     LW load_byte(value + val_len) != 0 {
         val_len = val_len + 1
     }
@@ -1451,27 +1451,27 @@ F query_builder_add(qb: i64, key: i64, value: i64) -> i64 {
     # Encode key and value
     enc_key := url_encode(key, key_len)
     enc_val := url_encode(value, val_len)
-    enc_key_len := 0
+    enc_key_len := mut 0
     LW load_byte(enc_key + enc_key_len) != 0 {
         enc_key_len = enc_key_len + 1
     }
-    enc_val_len := 0
+    enc_val_len := mut 0
     LW load_byte(enc_val + enc_val_len) != 0 {
         enc_val_len = enc_val_len + 1
     }
 
     # Space needed: [&]key=value
     count := __load_i64(qb + QB_COUNT)
-    separator_len := 0
+    separator_len := mut 0
     I count > 0 {
         separator_len = 1
     }
     needed := separator_len + enc_key_len + 1 + enc_val_len  # key=value
 
     # Grow buffer if necessary
-    buf_ptr := __load_i64(qb + QB_BUF_PTR)
-    buf_len := __load_i64(qb + QB_BUF_LEN)
-    buf_cap := __load_i64(qb + QB_BUF_CAP)
+    buf_ptr := mut __load_i64(qb + QB_BUF_PTR)
+    buf_len := mut __load_i64(qb + QB_BUF_LEN)
+    buf_cap := mut __load_i64(qb + QB_BUF_CAP)
     I buf_len + needed + 1 > buf_cap {
         new_cap := (buf_cap + needed + 1) * 2
         new_buf := __malloc(new_cap)
@@ -1556,7 +1556,7 @@ F response_header_at(resp: &HttpResponse, index: i64) -> str {
     val_len := __strlen(value)
     # "Name: Value\0"
     buf := __malloc(name_len + val_len + 3)
-    pos := __str_copy_to(buf, name)
+    pos := mut __str_copy_to(buf, name)
     __store_byte(buf + pos, 58)   # ':'
     pos = pos + 1
     __store_byte(buf + pos, 32)   # ' '

@@ -218,7 +218,7 @@ X TestCase {
 
     # Check if test has a specific tag
     F has_tag(&self, tag: str) -> i64 {
-        i := 0
+        i := mut 0
         LW i < self.tag_count {
             t := __load_ptr(self.tags + i * 8) as str
             LW __str_eq(t, tag) == 1 {
@@ -243,7 +243,7 @@ X TestCase {
         start_time := __time_now_ns()
         result := 0
         message := ""
-        panicked := 0
+        panicked := mut 0
 
         # Run test with panic handling
         panicked = __try_call_fn(self.fn_ptr, &result as i64)
@@ -360,7 +360,7 @@ X TestSuite {
             __call_fn(self.before_all_fn)
         }
 
-        i := 0
+        i := mut 0
         LW i < self.test_count {
             test := __load_test_case(self.tests + i * 88)
 
@@ -396,7 +396,7 @@ X TestSuite {
             __call_fn(self.before_all_fn)
         }
 
-        i := 0
+        i := mut 0
         LW i < self.test_count {
             test := __load_test_case(self.tests + i * 88)
 
@@ -428,7 +428,7 @@ X TestSuite {
     F run_tagged(&self, tag: str) -> TestSuiteResult {
         results := TestSuiteResult::new(self.name)
 
-        i := 0
+        i := mut 0
         LW i < self.test_count {
             test := __load_test_case(self.tests + i * 88)
 
@@ -521,7 +521,7 @@ X TestSuiteResult {
         __print_str("\n")
         __print_str("─────────────────────────────────────\n")
 
-        i := 0
+        i := mut 0
         LW i < self.result_count {
             result := __load_test_result(self.results + i * 48)
 
@@ -796,9 +796,9 @@ X TestRunner {
 
     # Run all tests
     F run(&self) -> i64 {
-        total_passed := 0
-        total_failed := 0
-        total_skipped := 0
+        total_passed := mut 0
+        total_failed := mut 0
+        total_skipped := mut 0
 
         __print_str("\n")
         __print_str(COLOR_BLUE)
@@ -806,7 +806,7 @@ X TestRunner {
         __print_str(COLOR_RESET)
         __print_str("\n\n")
 
-        i := 0
+        i := mut 0
         LW i < self.suite_count {
             suite_ptr := __load_ptr(self.suites + i * 8)
             suite := suite_ptr as &TestSuite

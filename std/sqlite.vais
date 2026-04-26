@@ -226,7 +226,7 @@ X Database {
     # table_name is just the name, the DROP TABLE IF EXISTS is added automatically
     F drop_table(&self, table_name: str) -> i64 {
         buf := __malloc(256)
-        pos := 0
+        pos := mut 0
         pos = pos + __str_copy_to(buf + pos, "DROP TABLE IF EXISTS ")
         pos = pos + __str_copy_to(buf + pos, table_name)
         store_byte(buf + pos, 0)
@@ -388,7 +388,7 @@ X Statement {
     # Execute the statement to completion (no results expected)
     # Useful for INSERT, UPDATE, DELETE
     F execute(&self) -> i64 {
-        rc := self.step()
+        rc := mut self.step()
         I rc == SQLITE_DONE {
             SQLITE_OK
         } EL I rc == SQLITE_ROW {
@@ -506,7 +506,7 @@ F table_exists(db: &Database, name: str) -> i64 {
     }
     stmt.bind_text(1, name)
     rc := stmt.step()
-    result := 0
+    result := mut 0
     I rc == SQLITE_ROW {
         result = stmt.column_int(0)
     }
@@ -520,7 +520,7 @@ F table_exists(db: &Database, name: str) -> i64 {
 F table_count(db: &Database, table: str) -> i64 {
     # Build "SELECT count(*) FROM <table>" using a fixed-size buffer
     buf := __malloc(512)
-    pos := 0
+    pos := mut 0
     pos = pos + __str_copy_to(buf + pos, "SELECT count(*) FROM ")
     pos = pos + __str_copy_to(buf + pos, table)
     __store_byte(buf + pos, 0)
@@ -530,7 +530,7 @@ F table_count(db: &Database, table: str) -> i64 {
         R -1
     }
     rc := stmt.step()
-    result := -1
+    result := mut -1
     I rc == SQLITE_ROW {
         result = stmt.column_int(0)
     }

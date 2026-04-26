@@ -84,9 +84,9 @@ C ALIGN_RIGHT: i64 = 2
 
 # Convert i64 to decimal string
 # Returns pointer to null-terminated string (caller must free)
-F itoa(value: i64) -> i64 {
+F itoa(mut value: i64) -> i64 {
     buf := malloc(21)  # Max i64 digits + sign + null
-    pos := 20
+    pos := mut 20
     store_i64(buf + pos, 0)  # null terminator
 
     LW value == 0 {
@@ -95,7 +95,7 @@ F itoa(value: i64) -> i64 {
         R buf + pos
     }
 
-    negative := 0
+    negative := mut 0
     LW value < 0 {
         negative = 1
         value = 0 - value
@@ -117,9 +117,9 @@ F itoa(value: i64) -> i64 {
 }
 
 # Convert i64 to hexadecimal string (lowercase)
-partial F itoa_hex(value: i64) -> i64 {
+partial F itoa_hex(mut value: i64) -> i64 {
     buf := malloc(19)  # 0x + 16 hex digits + null
-    pos := 18
+    pos := mut 18
     store_i64(buf + pos, 0)
 
     LW value == 0 {
@@ -143,9 +143,9 @@ partial F itoa_hex(value: i64) -> i64 {
 }
 
 # Convert i64 to binary string
-partial F itoa_bin(value: i64) -> i64 {
+partial F itoa_bin(mut value: i64) -> i64 {
     buf := malloc(67)  # 64 bits + "0b" + null
-    pos := 66
+    pos := mut 66
     store_i64(buf + pos, 0)
 
     LW value == 0 {
@@ -168,9 +168,9 @@ partial F itoa_bin(value: i64) -> i64 {
 }
 
 # Convert i64 to octal string
-F itoa_oct(value: i64) -> i64 {
+F itoa_oct(mut value: i64) -> i64 {
     buf := malloc(24)  # Max octal digits + null
-    pos := 23
+    pos := mut 23
     store_i64(buf + pos, 0)
 
     LW value == 0 {
@@ -195,7 +195,7 @@ F itoa_oct(value: i64) -> i64 {
 
 # Get string length (null-terminated)
 F strlen(s: i64) -> i64 {
-    len := 0
+    len := mut 0
     LW load_i64(s + len) != 0 {
         len = len + 1
     }
@@ -204,7 +204,7 @@ F strlen(s: i64) -> i64 {
 
 # Copy string to buffer
 F strcpy(dst: i64, src: i64) -> i64 {
-    i := 0
+    i := mut 0
     LW 1 {
         ch := load_i64(src + i)
         store_i64(dst + i, ch)
@@ -268,7 +268,7 @@ X FormatBuilder {
 
     # Write a string
     F write_str(&self, s: i64) -> i64 {
-        i := 0
+        i := mut 0
         LW 1 {
             ch := load_i64(s + i)
             LW ch == 0 {
@@ -290,7 +290,7 @@ X FormatBuilder {
 
     # Write N copies of a character (for padding)
     F write_repeat(&self, ch: i64, count: i64) -> i64 {
-        i := 0
+        i := mut 0
         LW i < count {
             self.write_char(ch)
             i = i + 1
@@ -302,7 +302,7 @@ X FormatBuilder {
     partial F write_padded_int(&self, value: i64, width: i64, align: i64, pad_char: i64) -> i64 {
         s := itoa(value)
         slen := strlen(s)
-        padding := width - slen
+        padding := mut width - slen
         LW padding < 0 {
             padding = 0
         }

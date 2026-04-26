@@ -231,8 +231,8 @@ X WsConnection {
         }
 
         # Server sends unmasked, client sends masked
-        masked := 0
-        mk := 0
+        masked := mut 0
+        mk := mut 0
         I self.is_server == 0 {
             masked = 1
             mk = __ws_random_mask_key()
@@ -309,7 +309,7 @@ X WsConnection {
             R WsFrame { opcode: -1, payload: 0, payload_len: 0, is_final: 0, is_masked: 0 }
         }
 
-        total := 0
+        total := mut 0
 
         # Read at least 2 bytes for frame header
         LW total < 2 {
@@ -329,7 +329,7 @@ X WsConnection {
             R WsFrame { opcode: -1, payload: 0, payload_len: 0, is_final: 0, is_masked: 0 }
         }
 
-        consumed := __ws_decode_frame(buf, total, frame_out)
+        consumed := mut __ws_decode_frame(buf, total, frame_out)
 
         # If incomplete, read more data
         LW consumed == 0 & total < WS_MAX_FRAME_SIZE + 14 {
@@ -461,7 +461,7 @@ X WsServer {
             R WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
         }
 
-        total := 0
+        total := mut 0
         LW true {
             n := __tcp_recv(client_fd, buf + total, WS_RECV_BUFFER)
             I n <= 0 {

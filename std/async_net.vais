@@ -326,7 +326,7 @@ X AsyncTcpStream {
             R -1
         }
 
-        total := 0
+        total := mut 0
         L {
             # Check if we need to grow buffer
             I self.read_buf_len >= self.read_buf_cap {

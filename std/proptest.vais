@@ -265,7 +265,7 @@ X Property {
     F check(&self) -> PropertyResult {
         random_seed(self.seed)
 
-        i := 0
+        i := mut 0
         LW i < self.num_tests {
             # Generate random input
             value := self.generator.generate()
@@ -304,8 +304,8 @@ S ShrinkResult {
 
 # Shrink a counterexample to find minimal failing case
 F shrink_counterexample(gen: &Generator, test_fn: i64, initial: i64) -> ShrinkResult {
-    current := initial
-    steps := 0
+    current := mut initial
+    steps := mut 0
 
     # Guard: combine i64 check against MAX_SHRINK_ATTEMPTS with
     # can_shrink() (i64) via nested I expression — mixing bool `<`

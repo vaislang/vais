@@ -800,7 +800,7 @@ F toml_write_top_entries(buf: i64, node: i64, pos: i64) -> i64 {
             store_byte(buf + pos + 1 + key_len, 93)  # ']'
             store_byte(buf + pos + 2 + key_len, 10)   # '\n'
             sub_tbl := load_i64(val + 8)
-            sub_pos := pos + 3 + key_len
+            sub_pos := mut pos + 3 + key_len
             sub_pos = toml_write_top_buckets(buf, load_i64(sub_tbl), load_i64(sub_tbl + 16), 0, sub_pos)
             next := load_i64(node + 24)
             toml_write_top_entries(buf, next, sub_pos)

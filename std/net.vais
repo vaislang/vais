@@ -656,7 +656,7 @@ X TcpStream {
         } EL I len <= 0 {
             -1
         } EL {
-            total := 0
+            total := mut 0
             LW total < len {
                 sent := send(self.fd, data + total, len - total, 0)
                 I sent <= 0 {

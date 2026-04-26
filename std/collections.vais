@@ -151,7 +151,7 @@ X LinkedList {
 
     # Clear all elements
     F clear(&self) -> i64 {
-        current := self.head
+        current := mut self.head
         LW current != 0 {
             next := load_i64(current + 16)
             free(current)
@@ -165,7 +165,7 @@ X LinkedList {
 
     # Check if value exists in list
     F contains(&self, value: i64) -> i64 {
-        current := self.head
+        current := mut self.head
         LW current != 0 {
             LW load_i64(current) == value {
                 R 1

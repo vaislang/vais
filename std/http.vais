@@ -91,7 +91,7 @@ X Headers {
 
     # Get a header value by name (case-insensitive)
     F get(&self, name: str) -> str? {
-        i := 0
+        i := mut 0
         LW i < self.count {
             offset := i * 16
             header_name := __load_ptr(self.items + offset) as str
@@ -106,13 +106,13 @@ X Headers {
 
     # Remove a header by name
     F remove(&self, name: str) -> i64 {
-        i := 0
+        i := mut 0
         LW i < self.count {
             offset := i * 16
             header_name := __load_ptr(self.items + offset) as str
             LW __str_eq_ignore_case(header_name, name) == 1 {
                 # Shift remaining headers down
-                j := i
+                j := mut i
                 LW j < self.count - 1 {
                     src_offset := (j + 1) * 16
                     dst_offset := j * 16
@@ -130,7 +130,7 @@ X Headers {
 
     # Check if header exists
     F contains(&self, name: str) -> i64 {
-        i := 0
+        i := mut 0
         LW i < self.count {
             offset := i * 16
             header_name := __load_ptr(self.items + offset) as str
@@ -241,7 +241,7 @@ X Request {
     # Serialize request to bytes
     F serialize(&self, buffer: i64, buffer_size: i64) -> i64 {
         # Request line: METHOD PATH VERSION\r\n
-        pos := 0
+        pos := mut 0
         method_s := self.method_str()
         pos = __str_copy_to(buffer + pos, method_s)
         __store_byte(buffer + pos, 32)  # space
@@ -255,7 +255,7 @@ X Request {
         pos = pos + 2
 
         # Headers
-        i := 0
+        i := mut 0
         LW i < self.headers.count {
             offset := i * 16
             name := __load_ptr(self.headers.items + offset) as str
@@ -404,7 +404,7 @@ X Response {
 
     # Serialize response to bytes
     F serialize(&self, buffer: i64, buffer_size: i64) -> i64 {
-        pos := 0
+        pos := mut 0
 
         # Status line: VERSION STATUS STATUS_TEXT\r\n
         pos = pos + __str_copy_to(buffer + pos, self.version)
@@ -419,7 +419,7 @@ X Response {
         pos = pos + 2
 
         # Headers
-        i := 0
+        i := mut 0
         LW i < self.headers.count {
             offset := i * 16
             name := __load_ptr(self.headers.items + offset) as str
@@ -536,7 +536,7 @@ X Client {
 
         # Receive response
         recv_buffer := __malloc(HTTP_MAX_HEADER_SIZE + HTTP_MAX_BODY_SIZE)
-        total_recv := 0
+        total_recv := mut 0
 
         # Read response
         LW 1 {
@@ -570,7 +570,7 @@ X Client {
     F get(&self, url: str) -> Response? {
         # Parse URL: http://host:port/path
         host := __parse_url_host(url)
-        port := __parse_url_port(url)
+        port := mut __parse_url_port(url)
         path := __parse_url_path(url)
 
         LW port == 0 {
@@ -584,7 +584,7 @@ X Client {
     # Convenience method: POST request
     F post(&self, url: str, body: str) -> Response? {
         host := __parse_url_host(url)
-        port := __parse_url_port(url)
+        port := mut __parse_url_port(url)
         path := __parse_url_path(url)
 
         LW port == 0 {
@@ -670,7 +670,7 @@ X Router {
 
     # Find handler for request
     F find_handler(&self, method: i64, path: str) -> i64 {
-        i := 0
+        i := mut 0
         LW i < self.count {
             offset := i * 24
             route_method := __load_i64(self.routes + offset)
@@ -747,7 +747,7 @@ X Server {
     partial F handle_connection(&self, fd: i64) -> i64 {
         # Read request
         buffer := __malloc(HTTP_MAX_HEADER_SIZE)
-        total := 0
+        total := mut 0
 
         LW 1 {
             n := __tcp_recv(fd, buffer + total, HTTP_DEFAULT_BUFFER)

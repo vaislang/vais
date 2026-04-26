@@ -321,7 +321,7 @@ X Scope {
 
     # Wait for all threads to complete
     F join_all(&self) -> i64 {
-        i := 0
+        i := mut 0
         LW i < self.thread_count {
             offset := i * 24
             handle := __load_i64(self.threads + offset + 8)
@@ -372,7 +372,7 @@ X ThreadPool {
         }
 
         # Spawn worker threads
-        i := 0
+        i := mut 0
         LW i < num_threads {
             handle := __thread_spawn(__worker_fn as i64, &pool as i64, 0)
             __store_i64(workers + i * 8, handle)
@@ -397,7 +397,7 @@ X ThreadPool {
         self.shutdown = 1
 
         # Wait for all workers
-        i := 0
+        i := mut 0
         LW i < self.worker_count {
             handle := __load_i64(self.workers + i * 8)
             __thread_join(handle)

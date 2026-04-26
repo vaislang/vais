@@ -305,7 +305,7 @@ F yaml_is_digit(c: i64) -> i64 {
 # Read an unquoted scalar until end of line or special chars
 F yaml_parse_unquoted_scalar(p: i64) -> i64 {
     buf := malloc(256)
-    len := yaml_read_scalar_chars(p, buf, 0)
+    len := mut yaml_read_scalar_chars(p, buf, 0)
     # Trim trailing whitespace
     len = yaml_rtrim(buf, len)
     store_byte(buf + len, 0)
@@ -333,14 +333,14 @@ F yaml_parse_unquoted_scalar(p: i64) -> i64 {
 
     # Try to parse as integer
     first := load_byte(buf)
-    is_number := 1
-    start := 0
+    is_number := mut 1
+    start := mut 0
     I first == 45 || first == 43 {
         I len == 1 { is_number = 0 }
         EL { start = 1 }
     }
     I is_number == 1 {
-        i := start
+        i := mut start
         L {
             I i >= len { B 0 }
             c := load_byte(buf + i)
@@ -438,7 +438,7 @@ F yaml_read_quoted_chars(p: i64, buf: i64, len: i64, quote: i64) -> i64 {
 # Parse a value at the current position, given the expected indent level
 F yaml_parse_value(p: i64, indent: i64) -> i64 {
     yaml_skip_blank_lines(p)
-    c := yaml_peek(p)
+    c := mut yaml_peek(p)
     I c == 0 { R yaml_null() }
 
     # Check if this is a flow sequence [...]
@@ -524,7 +524,7 @@ F yaml_parse_block_seq(p: i64, base_indent: i64) -> i64 {
 
 F yaml_parse_seq_items(p: i64, seq: i64, base_indent: i64) -> i64 {
     yaml_skip_blank_lines(p)
-    c := yaml_peek(p)
+    c := mut yaml_peek(p)
     I c == 0 { R 0 }
 
     cur_indent := yaml_count_indent(p)
@@ -573,7 +573,7 @@ F yaml_parse_block_mapping(p: i64, base_indent: i64) -> i64 {
 
 F yaml_parse_mapping_pairs(p: i64, m: i64, base_indent: i64) -> i64 {
     yaml_skip_blank_lines(p)
-    c := yaml_peek(p)
+    c := mut yaml_peek(p)
     I c == 0 { R 0 }
 
     cur_indent := yaml_count_indent(p)
@@ -584,7 +584,7 @@ F yaml_parse_mapping_pairs(p: i64, m: i64, base_indent: i64) -> i64 {
     # Parse key
     c = yaml_peek(p)
     key_buf := malloc(256)
-    key_len := 0
+    key_len := mut 0
 
     I c == 34 || c == 39 {
         # Quoted key
@@ -691,8 +691,8 @@ F yaml_parse_flow_mapping_items(p: i64, m: i64) -> i64 {
     yaml_skip_flow_ws(p)
     # Parse key
     key_buf := malloc(256)
-    key_len := 0
-    c := yaml_peek(p)
+    key_len := mut 0
+    c := mut yaml_peek(p)
     I c == 34 || c == 39 {
         v := yaml_parse_quoted_string(p)
         key_data := load_i64(v + 8)
@@ -749,7 +749,7 @@ F yaml_parse_flow_value(p: i64) -> i64 {
 
 F yaml_parse_flow_scalar(p: i64) -> i64 {
     buf := malloc(256)
-    len := yaml_read_flow_scalar_chars(p, buf, 0)
+    len := mut yaml_read_flow_scalar_chars(p, buf, 0)
     len = yaml_rtrim(buf, len)
     store_byte(buf + len, 0)
 
@@ -772,14 +772,14 @@ F yaml_parse_flow_scalar(p: i64) -> i64 {
 
     # Try integer
     first := load_byte(buf)
-    is_number := 1
-    start := 0
+    is_number := mut 1
+    start := mut 0
     I first == 45 || first == 43 {
         I len == 1 { is_number = 0 }
         EL { start = 1 }
     }
     I is_number == 1 {
-        i := start
+        i := mut start
         L {
             I i >= len { B 0 }
             I yaml_is_digit(load_byte(buf + i)) == 0 {
@@ -986,7 +986,7 @@ F yaml_stringify_seq(seq: i64, indent: i64) -> i64 {
 F yaml_write_seq_items(buf: i64, data: i64, len: i64, idx: i64, pos: i64, indent: i64) -> i64 {
     I idx >= len { pos } EL {
         # Write newline + indent + "- "
-        new_pos := I idx > 0 {
+        new_pos := mut I idx > 0 {
             store_byte(buf + pos, 10)
             pos + 1
         } EL { pos }
@@ -1059,7 +1059,7 @@ F yaml_write_map_entries(buf: i64, node: i64, pos: i64, indent: i64, first: i64)
         store_i64(result + 8, first)
         result
     } EL {
-        new_pos := I first == 0 {
+        new_pos := mut I first == 0 {
             store_byte(buf + pos, 10)
             pos + 1
         } EL { pos }

@@ -220,7 +220,7 @@ X PriorityQueue {
 
     # Internal: Grow capacity (double it)
     F grow(&self) -> i64 {
-        new_cap := self.capacity * 2
+        new_cap := mut self.capacity * 2
         I new_cap < 8 {
             new_cap = 8
         }

@@ -105,7 +105,7 @@ X Compressor {
     # Create a new deflate compressor (raw RFC 1951)
     F deflate(level: i64) -> Compressor {
         # Clamp level to valid range
-        actual_level := level
+        actual_level := mut level
         I level < 1 { actual_level = 1 }
         I level > 9 { actual_level = 9 }
 
@@ -121,7 +121,7 @@ X Compressor {
     # Create a new gzip compressor (RFC 1952)
     F gzip(level: i64) -> Compressor {
         # Clamp level to valid range
-        actual_level := level
+        actual_level := mut level
         I level < 1 { actual_level = 1 }
         I level > 9 { actual_level = 9 }
 

@@ -29,7 +29,7 @@ F base64_encode_ex(data: i64, len: i64, url_safe: i64) -> String {
         # Choose alphabet
         alphabet := I url_safe == 1 { BASE64_URL_ALPHABET } EL { BASE64_ALPHABET }
 
-        i := 0
+        i := mut 0
         LW i < len {
             # Read up to 3 bytes
             b0 := load_byte(data + i)
@@ -129,7 +129,7 @@ F base64_decode(encoded: String) -> Vec<i64> {
         # Create result vector
         result := Vec.with_capacity(out_len)
 
-        i := 0
+        i := mut 0
         LW i < encoded.len {
             # Read 4 base64 characters
             I i + 3 >= encoded.len {
@@ -187,7 +187,7 @@ F base64_decode_str(encoded: String) -> i64 {
         result := malloc(vec.len + 1)
 
         # Copy bytes
-        i := 0
+        i := mut 0
         LW i < vec.len {
             b := vec.get(i)
             store_byte(result + i, b)
@@ -226,8 +226,8 @@ F is_base64(s: String) -> i64 {
     I s.len % 4 != 0 {
         0
     } EL {
-        i := 0
-        padding_count := 0
+        i := mut 0
+        padding_count := mut 0
 
         LW i < s.len {
             c := s.char_at(i)
@@ -284,7 +284,7 @@ F base64_encode_vec(vec: Vec<i64>) -> String {
         # Allocate temporary buffer
         buffer := malloc(vec.len)
 
-        i := 0
+        i := mut 0
         LW i < vec.len {
             b := vec.get(i)
             store_byte(buffer + i, b & 255)

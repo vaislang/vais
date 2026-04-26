@@ -206,7 +206,7 @@ X Profiler {
     # Find or create a profile entry by name
     F get_entry(&self, name: str) -> i64 {
         # Search for existing entry
-        i := 0
+        i := mut 0
         LW i < self.entry_count {
             offset := i * 64
             entry_name := __load_str(self.entries + offset)
@@ -306,7 +306,7 @@ X Profiler {
 
     # Reset all entries
     F reset(&self) -> i64 {
-        i := 0
+        i := mut 0
         LW i < self.entry_count {
             offset := i * 64
             __store_i64(self.entries + offset + 8, 0)   # call_count
@@ -333,7 +333,7 @@ X Profiler {
         __print_str("Name                          Calls      Total(ms)  Avg(us)   Min(us)   Max(us)\n")
         __print_str("--------------------------------------------------------------------------------\n")
 
-        i := 0
+        i := mut 0
         LW i < self.entry_count {
             offset := i * 64
             name := __load_str(self.entries + offset)

@@ -165,7 +165,7 @@ X Sha256 {
 
     # Update hash with data
     F update(&self, data: i64, data_len: i64) -> i64 {
-        i := 0
+        i := mut 0
         LW i < data_len {
             # Copy single byte to buffer
             store_byte(self.buffer + self.buf_len, load_byte(data + i))
@@ -189,7 +189,7 @@ X Sha256 {
         w := malloc(512)
 
         # Prepare message schedule W[0..15] from buffer (big-endian 32-bit words)
-        i := 0
+        i := mut 0
         LW i < 16 {
             # Read 4 bytes from buffer as big-endian 32-bit word
             b0 := load_byte(self.buffer + i * 4) & 255
@@ -211,14 +211,14 @@ X Sha256 {
         }
 
         # Initialize working variables from current hash state
-        a := load_i64(self.state)
-        b := load_i64(self.state + 8)
-        c := load_i64(self.state + 16)
-        d := load_i64(self.state + 24)
-        e := load_i64(self.state + 32)
-        f := load_i64(self.state + 40)
-        g := load_i64(self.state + 48)
-        h := load_i64(self.state + 56)
+        a := mut load_i64(self.state)
+        b := mut load_i64(self.state + 8)
+        c := mut load_i64(self.state + 16)
+        d := mut load_i64(self.state + 24)
+        e := mut load_i64(self.state + 32)
+        f := mut load_i64(self.state + 40)
+        g := mut load_i64(self.state + 48)
+        h := mut load_i64(self.state + 56)
 
         # 64 rounds of SHA-256 compression
         i = 0
@@ -330,7 +330,7 @@ X Hmac {
 
         # Allocate padded key
         padded_key := malloc(SHA256_BLOCK_SIZE)
-        i := 0
+        i := mut 0
         LW i < SHA256_BLOCK_SIZE {
             I i < self.key_len {
                 store_byte(padded_key + i, load_byte(self.key + i))
@@ -1025,7 +1025,7 @@ F aes_rcon(round: i64) -> i64 {
 # xtime doubling in GF(2^8) with irreducible polynomial 0x1b (27)
 F gf_xtime(a: i64) -> i64 {
     high_bit := (a >> 7) & 1
-    result := (a << 1) & 255
+    result := mut (a << 1) & 255
     I high_bit == 1 {
         result = (result ^ 27) & 255
     }
@@ -1033,10 +1033,10 @@ F gf_xtime(a: i64) -> i64 {
 }
 
 # Multiply two values in GF(2^8)
-F gf_mul(a: i64, b: i64) -> i64 {
+F gf_mul(mut a: i64, mut b: i64) -> i64 {
     a = a & 255
     b = b & 255
-    result := 0
+    result := mut 0
 
     i := mut 0
     LW i < 8 {
@@ -1075,10 +1075,10 @@ F aes_key_expand(key: i64, sbox: i64) -> i64 {
         word_idx := (i / 4) & 4294967295
 
         # Get previous 4 bytes (word)
-        b0 := load_byte(expanded + i - 4)
-        b1 := load_byte(expanded + i - 3)
-        b2 := load_byte(expanded + i - 2)
-        b3 := load_byte(expanded + i - 1)
+        b0 := mut load_byte(expanded + i - 4)
+        b1 := mut load_byte(expanded + i - 3)
+        b2 := mut load_byte(expanded + i - 2)
+        b3 := mut load_byte(expanded + i - 1)
 
         I (word_idx & 7) == 0 {
             # Every 8th word: RotWord + SubWord + Rcon
@@ -1162,7 +1162,7 @@ F aes_shift_rows(state: i64) -> i64 {
     # Row 3: left shift 3
 
     # Row 1: [s1, s5, s9, s13] -> [s5, s9, s13, s1]
-    tmp := load_byte(state + 1)
+    tmp := mut load_byte(state + 1)
     store_byte(state + 1, load_byte(state + 5))
     store_byte(state + 5, load_byte(state + 9))
     store_byte(state + 9, load_byte(state + 13))
@@ -1188,7 +1188,7 @@ F aes_shift_rows(state: i64) -> i64 {
 
 F aes_inv_shift_rows(state: i64) -> i64 {
     # Row 1: right shift 1
-    tmp := load_byte(state + 13)
+    tmp := mut load_byte(state + 13)
     store_byte(state + 13, load_byte(state + 9))
     store_byte(state + 9, load_byte(state + 5))
     store_byte(state + 5, load_byte(state + 1))
@@ -1702,7 +1702,7 @@ F aes_ctr_encrypt(aes: &Aes256, data: i64, data_len: i64, nonce: i64) -> AesResu
         aes.encrypt_block(keystream)
 
         # XOR data with keystream
-        bytes_in_block := 16
+        bytes_in_block := mut 16
         I block_idx + 16 > data_len {
             bytes_in_block = data_len - block_idx
         }

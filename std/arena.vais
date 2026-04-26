@@ -60,7 +60,7 @@ X Arena {
     F alloc_zeroed(&self, size: i64) -> i64 {
         ptr := @.alloc(size)
         # Zero out the memory
-        i := 0
+        i := mut 0
         L {
             I i >= size { B 0 }
             store_byte(ptr + i, 0)
@@ -112,7 +112,7 @@ X Arena {
     # Free all memory
     F drop(&self) -> i64 {
         # Free all chunks
-        i := 0
+        i := mut 0
         L {
             I i >= self.chunk_count { B 0 }
             chunk_ptr := self.chunks + i * 8

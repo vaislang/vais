@@ -65,8 +65,8 @@ X Duration {
     # Create a new Duration from seconds and nanoseconds
     F new(secs: i64, nanos: i64) -> Duration {
         # Normalize nanoseconds to be in range [0, 999999999]
-        extra_secs := nanos / 1000000000
-        norm_nanos := nanos % 1000000000
+        extra_secs := mut nanos / 1000000000
+        norm_nanos := mut nanos % 1000000000
 
         I norm_nanos < 0 {
             norm_nanos = norm_nanos + 1000000000

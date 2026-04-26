@@ -136,7 +136,7 @@ X UnboundedChannel {
             new_buf := malloc(new_cap * 8)
 
             # Copy existing items
-            i := 0
+            i := mut 0
             L {
                 I i >= count { B }
                 src_off := ((self.head + i) % old_cap) * 8
@@ -251,9 +251,9 @@ X UnboundedSender {
             R -1
         }
 
-        head := load_i64(ch_ptr + 16)
-        tail := load_i64(ch_ptr + 24)
-        cap := load_i64(ch_ptr + 8)
+        head := mut load_i64(ch_ptr + 16)
+        tail := mut load_i64(ch_ptr + 24)
+        cap := mut load_i64(ch_ptr + 8)
         count := tail - head
 
         I count >= cap {
@@ -261,7 +261,7 @@ X UnboundedSender {
             old_cap := cap
             new_cap := old_cap * 2
             new_buf := malloc(new_cap * 8)
-            i := 0
+            i := mut 0
             L {
                 I i >= count { B }
                 src_off := ((head + i) % old_cap) * 8
@@ -373,7 +373,7 @@ X ChannelSet {
 
     # Poll all channels, return index of first ready channel (-1 if none)
     F try_select(&self) -> i64 {
-        i := 0
+        i := mut 0
         L {
             I i >= self.count { B }
             ch_ptr := load_i64(self.channels + i * 8)
@@ -440,16 +440,16 @@ F channel_send(ch: i64, value: i64) -> i64 {
         R -1
     }
 
-    head := load_i64(ch + 16)
-    tail := load_i64(ch + 24)
-    cap := load_i64(ch + 8)
+    head := mut load_i64(ch + 16)
+    tail := mut load_i64(ch + 24)
+    cap := mut load_i64(ch + 8)
     count := tail - head
 
     I count >= cap {
         old_cap := cap
         new_cap := old_cap * 2
         new_buf := malloc(new_cap * 8)
-        i := 0
+        i := mut 0
         L {
             I i >= count { B }
             src_off := ((head + i) % old_cap) * 8
@@ -540,7 +540,7 @@ F channel_is_empty(ch: i64) -> i64 {
 
 # Select: poll multiple channels, return index of first ready (-1 if none)
 F channel_select(channels: i64, count: i64) -> i64 {
-    i := 0
+    i := mut 0
     L {
         I i >= count { B }
         ch_ptr := load_i64(channels + i * 8)

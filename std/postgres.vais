@@ -501,7 +501,7 @@ X PgParams {
             new_capacity := self.capacity * 2
             new_values := __malloc(new_capacity * 8)
             # Copy existing pointers
-            i := 0
+            i := mut 0
             LW i < self.count {
                 src := self.values + i * 8
                 dst := new_values + i * 8
@@ -563,7 +563,7 @@ X PgParams {
 # Returns a connection string like "host=localhost port=5432 dbname=mydb user=myuser password=secret"
 F build_conninfo(host: str, port: i64, dbname: str, user: str, password: str) -> str {
     buf := __malloc(PG_CONNINFO_MAX)
-    pos := 0
+    pos := mut 0
 
     # host=
     pos = pos + __str_copy_to(buf + pos, "host=")

@@ -133,8 +133,8 @@ F uuid_v4() -> Uuid {
     random_bytes(bytes, 16)
 
     # Read as two i64 values
-    high := load_i64(bytes)
-    low := load_i64(bytes + 8)
+    high := mut load_i64(bytes)
+    low := mut load_i64(bytes + 8)
 
     free(bytes)
 
@@ -173,8 +173,8 @@ F uuid_parse(s: String) -> Uuid {
             Uuid.nil()
         } EL {
             # Parse hex digits
-            high := 0
-            low := 0
+            high := mut 0
+            low := mut 0
 
             # Bytes 0-7 (high)
             # Positions: 0-1, 2-3, 4-5, 6-7, 9-10, 11-12, 14-15, 16-17
@@ -188,7 +188,7 @@ F uuid_parse(s: String) -> Uuid {
             store_i64(pos_high + 48, 14)
             store_i64(pos_high + 56, 16)
 
-            i := 0
+            i := mut 0
             LW i < 8 {
                 pos := load_i64(pos_high + i * 8)
                 b := parse_hex_byte(s, pos)

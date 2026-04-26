@@ -120,10 +120,10 @@ X Runtime {
     partial F run(&self) -> i64 {
         # Keep polling until no pending tasks
         LW self.task_count > 0 {
-            made_progress := 0
+            made_progress := mut 0
 
             # Iterate through task list
-            current := self.head
+            current := mut self.head
             LW current != 0 {
                 status := load_i64(current + 24)
 
@@ -367,8 +367,8 @@ X EventLoop {
 
     # Remove an event source by fd
     partial F remove_source(&self, fd: i64) -> i64 {
-        prev := 0
-        current := self.sources_head
+        prev := mut 0
+        current := mut self.sources_head
 
         LW current != 0 {
             src_fd := load_i64(current + 8)
@@ -399,7 +399,7 @@ X EventLoop {
 
     # Find the task waiting on a given fd
     F find_task_for_fd(&self, fd: i64) -> i64 {
-        current := self.sources_head
+        current := mut self.sources_head
         LW current != 0 {
             src_fd := load_i64(current + 8)
             LW src_fd == fd {
@@ -439,7 +439,7 @@ X EventLoop {
     # Cleanup all resources
     F cleanup(&self) -> i64 {
         # Free all event sources
-        current := self.sources_head
+        current := mut self.sources_head
         LW current != 0 {
             next := load_i64(current + 32)
             free(current)
@@ -771,7 +771,7 @@ X TaskGroup {
     # Run all tasks in the group to completion
     # Returns 0 on success, 1 if any task failed
     partial F run(&self) -> i64 {
-        has_error := 0
+        has_error := mut 0
 
         LW self.completed_count < self.task_count {
             LW self.cancelled == 1 {
@@ -781,7 +781,7 @@ X TaskGroup {
             }
 
             # Poll all pending/running tasks
-            current := self.head
+            current := mut self.head
             LW current != 0 {
                 status := load_i64(current + 24)
 
@@ -828,7 +828,7 @@ X TaskGroup {
 
     # Cancel all remaining tasks
     F cancel_remaining(&self) -> i64 {
-        current := self.head
+        current := mut self.head
         LW current != 0 {
             status := load_i64(current + 24)
             # Cancel tasks that haven't completed
@@ -869,8 +869,8 @@ X TaskGroup {
 
     # Get result of task at index (0-based)
     F result(&self, index: i64) -> i64 {
-        current := self.head
-        i := 0
+        current := mut self.head
+        i := mut 0
         LW current != 0 {
             LW i == index {
                 R load_i64(current + 32)
@@ -883,8 +883,8 @@ X TaskGroup {
 
     # Get error flag of task at index
     F has_error(&self, index: i64) -> i64 {
-        current := self.head
-        i := 0
+        current := mut self.head
+        i := mut 0
         LW current != 0 {
             LW i == index {
                 R load_i64(current + 40)
@@ -897,8 +897,8 @@ X TaskGroup {
 
     # Get status of task at index
     F task_status(&self, index: i64) -> i64 {
-        current := self.head
-        i := 0
+        current := mut self.head
+        i := mut 0
         LW current != 0 {
             LW i == index {
                 R load_i64(current + 24)
@@ -911,7 +911,7 @@ X TaskGroup {
 
     # Free all task entries
     F cleanup(&self) -> i64 {
-        current := self.head
+        current := mut self.head
         LW current != 0 {
             next := load_i64(current + 48)
             free(current)
@@ -937,7 +937,7 @@ X ScopedTask {
         # Allocate TaskGroup on heap
         group_ptr := malloc(72)  # 9 fields * 8 bytes
         # Initialize all fields to 0
-        i := 0
+        i := mut 0
         LW i < 9 {
             store_i64(group_ptr + i * 8, 0)
             i = i + 1

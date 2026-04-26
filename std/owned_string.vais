@@ -82,7 +82,7 @@ X OwnedString {
     # Ensure at least `needed` bytes of capacity
     F ensure_capacity(&self, needed: i64) -> i64 {
         I needed <= self.cap { R self.cap }
-        new_cap := self.cap
+        new_cap := mut self.cap
         L {
             I new_cap >= needed { B 0 }
             new_cap = new_cap * 2
@@ -97,7 +97,7 @@ X OwnedString {
 
     # Grow capacity (double it)
     F grow(&self) -> i64 {
-        new_cap := self.cap * 2
+        new_cap := mut self.cap * 2
         I new_cap < 16 { new_cap = 16 }
         new_data := malloc(new_cap)
         memcpy(new_data, self.data, self.len + 1)
