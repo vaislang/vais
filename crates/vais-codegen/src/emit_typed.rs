@@ -57,14 +57,16 @@
 //!   call site, so the wrapper crosses the production boundary at the
 //!   same iter as the first real caller.
 
-// iter 107 introduced the first production caller (stmt_visitor.rs:708),
-// so most of the API surface is now exercised by non-test code. A handful
-// of `_with_prefix` / `_void` variants and helpers are not yet used by
-// production but exist as the migration target for sites that land in
-// iter 108~125; we keep `dead_code` allowed at module scope until those
-// sites are wired in and remove this allow once every method has at least
-// one production caller.
-#![allow(dead_code)]
+// iter 112 (Phase Ω P1.4): module-level `allow(dead_code)` is removed.
+// iter 107 production caller exercises the core API: LlvmType,
+// TypedTemp::unregistered/name/ty/Display, TypedEmitter::new,
+// emit_bitcast_with_prefix, fresh_temp_with_prefix, plus the
+// `impl TypeRegistrar for FunctionContext` bridge. The remaining
+// `emit_*` variants (default-prefix bitcast/load, _with_prefix load,
+// store, void call) and the `LlvmType::new` constructor stay open as
+// migration targets for iter 113+; they are explicitly tagged
+// `#[allow(dead_code)]` per item so future additions get an immediate
+// compiler signal.
 
 use std::fmt::Write as _;
 
@@ -80,6 +82,11 @@ pub(crate) struct LlvmType(String);
 
 impl LlvmType {
     /// Construct an `LlvmType` from any string-like value.
+    ///
+    /// `From<&str>` and `From<String>` cover every iter 107 caller; this
+    /// constructor stays available for sites that already hold a generic
+    /// `impl Into<String>` value (no adoption planned before iter 116).
+    #[allow(dead_code)]
     pub(crate) fn new(s: impl Into<String>) -> Self {
         Self(s.into())
     }
@@ -129,7 +136,10 @@ pub(crate) struct TypedTemp {
 impl TypedTemp {
     /// Construct a `TypedTemp` *without* registering it with a registry.
     /// Reserved for callers that hold a temporary whose emission they did
-    /// not perform (e.g., function parameters reified at entry).
+    /// not perform (e.g., function parameters reified at entry). No
+    /// production caller yet — function parameter reification migration
+    /// is iter 117+ work.
+    #[allow(dead_code)]
     pub(crate) fn unregistered(name: impl Into<String>, ty: impl Into<LlvmType>) -> Self {
         Self {
             name: name.into(),
@@ -142,7 +152,10 @@ impl TypedTemp {
         &self.name
     }
 
-    /// The LLVM type the producing instruction emitted.
+    /// The LLVM type the producing instruction emitted. Iter 107 only
+    /// needs `name()`; type-driven dispatch sites that consume `ty()`
+    /// are expected to land in iter 116+.
+    #[allow(dead_code)]
     pub(crate) fn ty(&self) -> &LlvmType {
         &self.ty
     }
@@ -171,9 +184,11 @@ pub(crate) trait TypeRegistrar {
     /// before returning the [`TypedTemp`].
     fn record_emitted_type(&mut self, name: &str, llvm_ty: &str);
 
-    /// Look up a previously recorded LLVM type, if any. Used by tests and
-    /// (in iter 116+) by IR-emit sites that need to consult the
-    /// ground-truth type of an SSA they did not produce.
+    /// Look up a previously recorded LLVM type, if any. Used by tests
+    /// and — starting in iter 116+ — by IR-emit sites that need to
+    /// consult the ground-truth type of an SSA they did not produce.
+    /// No production caller yet, so the lint is suppressed per item.
+    #[allow(dead_code)]
     fn get_emitted_type(&self, name: &str) -> Option<&str>;
 }
 
@@ -229,6 +244,10 @@ impl<'a, R: TypeRegistrar + ?Sized> TypedEmitter<'a, R> {
     /// The returned [`TypedTemp`] has been registered with the registry.
     /// The IR line is of the form
     /// `  %tN = call <ret_ty> <callee>(<arg_ty> <arg>, ...)`.
+    ///
+    /// Migration target: 106 raw `call` IR emit sites (iter 104 recon).
+    /// First production caller expected iter 116+.
+    #[allow(dead_code)]
     pub(crate) fn emit_call(
         &mut self,
         ret_ty: LlvmType,
@@ -252,6 +271,9 @@ impl<'a, R: TypeRegistrar + ?Sized> TypedEmitter<'a, R> {
     ///
     /// Returns no `TypedTemp`. The IR line is of the form
     /// `  call void <callee>(<arg_ty> <arg>, ...)`.
+    ///
+    /// Migration target: void-call sites (iter 116+ alongside `emit_call`).
+    #[allow(dead_code)]
     pub(crate) fn emit_call_void(&mut self, callee: &str, args: &[(LlvmType, &str)]) {
         let _ = write!(self.ir, "  call void {}(", callee);
         for (i, (ty, val)) in args.iter().enumerate() {
@@ -269,13 +291,12 @@ impl<'a, R: TypeRegistrar + ?Sized> TypedEmitter<'a, R> {
     /// `  %tN = bitcast <src_ty> <src> to <dst_ty>`. Returns the
     /// auto-registered [`TypedTemp`] tagged with `dst_ty`.
     ///
-    /// ## Migration target (iter 107+)
-    ///
-    /// `stmt_visitor.rs:708` (Class 1 ret elem-ty bitcast site, recon iter
-    /// 104) will migrate to this method via the `_with_prefix` variant
-    /// because that site uses a stable `%ret.cast.{counter}` name format
-    /// and switching to the default `%tN` allocator would cause an IR
-    /// diff. See [`emit_bitcast_with_prefix`](Self::emit_bitcast_with_prefix).
+    /// iter 107 chose `emit_bitcast_with_prefix` (not this default-name
+    /// variant) for the first migration to preserve the legacy
+    /// `%ret.cast.{N}` SSA name format. Default-name bitcast call sites
+    /// (e.g., the 78 raw `bitcast` emit sites enumerated in iter 104
+    /// recon) migrate iter 116+.
+    #[allow(dead_code)]
     pub(crate) fn emit_bitcast(
         &mut self,
         src_ty: LlvmType,
@@ -325,6 +346,13 @@ impl<'a, R: TypeRegistrar + ?Sized> TypedEmitter<'a, R> {
     /// Writes `  %tN = load <pointee_ty>, <pointee_ty>* <ptr>` (LLVM 14+
     /// typed-pointer form, matching the rest of this codebase). Returns
     /// the auto-registered [`TypedTemp`] tagged with `pointee_ty`.
+    ///
+    /// Default-name load sites land iter 116+. The iter 110 attempt at
+    /// `stmt_visitor.rs:723` (using `emit_load_with_prefix`) was REVERTED
+    /// for variance regression — see ROADMAP iter 110 for the analysis.
+    /// Reinstating load migration is iter 113+ work after specific
+    /// debugging.
+    #[allow(dead_code)]
     pub(crate) fn emit_load(&mut self, pointee_ty: LlvmType, ptr: &str) -> TypedTemp {
         let name = self.fresh_temp();
         let _ = writeln!(
@@ -345,6 +373,11 @@ impl<'a, R: TypeRegistrar + ?Sized> TypedEmitter<'a, R> {
     /// See [`emit_bitcast_with_prefix`](Self::emit_bitcast_with_prefix)
     /// for prefix semantics. Used at sites that previously hand-rolled
     /// `format!("%ret.{}", counter)` and similar.
+    ///
+    /// iter 110 reverted (variance ±1 vs deterministic 221 baseline);
+    /// see ROADMAP iter 110 for the LLVM-type-diversity hypothesis. No
+    /// production caller until that variance is understood.
+    #[allow(dead_code)]
     pub(crate) fn emit_load_with_prefix(
         &mut self,
         prefix: &str,
@@ -369,6 +402,10 @@ impl<'a, R: TypeRegistrar + ?Sized> TypedEmitter<'a, R> {
     ///
     /// Writes `  store <val_ty> <val>, <val_ty>* <ptr>`. `store` does not
     /// produce a value, so this method returns nothing.
+    ///
+    /// Migration target: 150 raw `store` IR emit sites (iter 104 recon).
+    /// First production caller iter 116+.
+    #[allow(dead_code)]
     pub(crate) fn emit_store(&mut self, val_ty: LlvmType, val: &str, ptr: &str) {
         let _ = writeln!(self.ir, "  store {} {}, {}* {}", val_ty, val, val_ty, ptr);
     }
@@ -376,8 +413,9 @@ impl<'a, R: TypeRegistrar + ?Sized> TypedEmitter<'a, R> {
     /// Allocate a fresh SSA name for the next temporary.
     ///
     /// Names are generated as `%t{counter}`, matching the `next_temp`
-    /// helper in `helpers.rs:210`. iter 106+ migration sites that already
-    /// use that helper drop into the wrapper without renaming.
+    /// helper in `helpers.rs:210`. Default-name emit methods will use
+    /// this once they pick up production callers (iter 116+).
+    #[allow(dead_code)]
     fn fresh_temp(&mut self) -> String {
         let n = *self.counter;
         *self.counter += 1;
