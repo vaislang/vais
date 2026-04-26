@@ -260,6 +260,116 @@ impl<'a, R: TypeRegistrar + ?Sized> TypedEmitter<'a, R> {
         let _ = writeln!(self.ir, ")");
     }
 
+    /// Emit a `bitcast` instruction.
+    ///
+    /// Allocates a fresh SSA name and writes
+    /// `  %tN = bitcast <src_ty> <src> to <dst_ty>`. Returns the
+    /// auto-registered [`TypedTemp`] tagged with `dst_ty`.
+    ///
+    /// ## Migration target (iter 107+)
+    ///
+    /// `stmt_visitor.rs:708` (Class 1 ret elem-ty bitcast site, recon iter
+    /// 104) will migrate to this method via the `_with_prefix` variant
+    /// because that site uses a stable `%ret.cast.{counter}` name format
+    /// and switching to the default `%tN` allocator would cause an IR
+    /// diff. See [`emit_bitcast_with_prefix`](Self::emit_bitcast_with_prefix).
+    pub(crate) fn emit_bitcast(
+        &mut self,
+        src_ty: LlvmType,
+        src: &str,
+        dst_ty: LlvmType,
+    ) -> TypedTemp {
+        let name = self.fresh_temp();
+        let _ = writeln!(
+            self.ir,
+            "  {} = bitcast {} {} to {}",
+            name, src_ty, src, dst_ty
+        );
+        self.registry.record_emitted_type(&name, dst_ty.as_str());
+        TypedTemp { name, ty: dst_ty }
+    }
+
+    /// Emit a `bitcast` instruction with a caller-supplied SSA name prefix.
+    ///
+    /// Names are generated as `%{prefix}{counter}`, matching the legacy
+    /// hand-rolled `format!("%ret.cast.{}", counter)` shape used by
+    /// `stmt_visitor.rs:708` and similar sites. The counter is still
+    /// drawn from the shared `&mut usize`, so migration produces the same
+    /// IR text the legacy code emitted byte-for-byte (regression-neutral
+    /// migration, ADR 0002 R2 prerequisite).
+    ///
+    /// `prefix` is the literal text to insert after `%`; do not include
+    /// the leading `%` or the trailing counter.
+    pub(crate) fn emit_bitcast_with_prefix(
+        &mut self,
+        prefix: &str,
+        src_ty: LlvmType,
+        src: &str,
+        dst_ty: LlvmType,
+    ) -> TypedTemp {
+        let name = self.fresh_temp_with_prefix(prefix);
+        let _ = writeln!(
+            self.ir,
+            "  {} = bitcast {} {} to {}",
+            name, src_ty, src, dst_ty
+        );
+        self.registry.record_emitted_type(&name, dst_ty.as_str());
+        TypedTemp { name, ty: dst_ty }
+    }
+
+    /// Emit a `load` instruction.
+    ///
+    /// Writes `  %tN = load <pointee_ty>, <pointee_ty>* <ptr>` (LLVM 14+
+    /// typed-pointer form, matching the rest of this codebase). Returns
+    /// the auto-registered [`TypedTemp`] tagged with `pointee_ty`.
+    pub(crate) fn emit_load(&mut self, pointee_ty: LlvmType, ptr: &str) -> TypedTemp {
+        let name = self.fresh_temp();
+        let _ = writeln!(
+            self.ir,
+            "  {} = load {}, {}* {}",
+            name, pointee_ty, pointee_ty, ptr
+        );
+        self.registry
+            .record_emitted_type(&name, pointee_ty.as_str());
+        TypedTemp {
+            name,
+            ty: pointee_ty,
+        }
+    }
+
+    /// Emit a `load` instruction with a caller-supplied SSA name prefix.
+    ///
+    /// See [`emit_bitcast_with_prefix`](Self::emit_bitcast_with_prefix)
+    /// for prefix semantics. Used at sites that previously hand-rolled
+    /// `format!("%ret.{}", counter)` and similar.
+    pub(crate) fn emit_load_with_prefix(
+        &mut self,
+        prefix: &str,
+        pointee_ty: LlvmType,
+        ptr: &str,
+    ) -> TypedTemp {
+        let name = self.fresh_temp_with_prefix(prefix);
+        let _ = writeln!(
+            self.ir,
+            "  {} = load {}, {}* {}",
+            name, pointee_ty, pointee_ty, ptr
+        );
+        self.registry
+            .record_emitted_type(&name, pointee_ty.as_str());
+        TypedTemp {
+            name,
+            ty: pointee_ty,
+        }
+    }
+
+    /// Emit a `store` instruction (no SSA name produced, no registration).
+    ///
+    /// Writes `  store <val_ty> <val>, <val_ty>* <ptr>`. `store` does not
+    /// produce a value, so this method returns nothing.
+    pub(crate) fn emit_store(&mut self, val_ty: LlvmType, val: &str, ptr: &str) {
+        let _ = writeln!(self.ir, "  store {} {}, {}* {}", val_ty, val, val_ty, ptr);
+    }
+
     /// Allocate a fresh SSA name for the next temporary.
     ///
     /// Names are generated as `%t{counter}`, matching the `next_temp`
@@ -269,6 +379,37 @@ impl<'a, R: TypeRegistrar + ?Sized> TypedEmitter<'a, R> {
         let n = *self.counter;
         *self.counter += 1;
         format!("%t{}", n)
+    }
+
+    /// Allocate a fresh SSA name with a caller-supplied prefix.
+    ///
+    /// Returns `%{prefix}{counter}`. Used by `_with_prefix` variants to
+    /// preserve byte-for-byte IR compatibility with legacy hand-rolled
+    /// allocations such as `format!("%ret.cast.{}", counter)`.
+    fn fresh_temp_with_prefix(&mut self, prefix: &str) -> String {
+        let n = *self.counter;
+        *self.counter += 1;
+        format!("%{}{}", prefix, n)
+    }
+}
+
+// -----------------------------------------------------------------------
+// Production bridge: `FunctionContext` is the canonical type registry in
+// the codegen crate. iter 106 lands the bridge so that iter 107+ migrated
+// call sites can write `TypedEmitter::new(ir, &mut self.fn_ctx, counter)`
+// directly. Until the first migration site lands (iter 107), this impl
+// has no callers, but the function-context surface area required by the
+// trait is already there: see `state.rs:204` (`record_emitted_type`) and
+// `state.rs:230` (`get_emitted_type`).
+// -----------------------------------------------------------------------
+
+impl TypeRegistrar for crate::state::FunctionContext {
+    fn record_emitted_type(&mut self, name: &str, llvm_ty: &str) {
+        crate::state::FunctionContext::record_emitted_type(self, name, llvm_ty)
+    }
+
+    fn get_emitted_type(&self, name: &str) -> Option<&str> {
+        crate::state::FunctionContext::get_emitted_type(self, name)
     }
 }
 
@@ -449,5 +590,134 @@ mod tests {
         assert_eq!(result.name(), "%t5");
         assert_eq!(ir, "  %t5 = call i64 @f()\n");
         assert_eq!(counter, 6);
+    }
+
+    #[test]
+    fn emit_bitcast_writes_one_line_and_registers_dst_ty() {
+        let mut ir = String::new();
+        let mut reg = StubRegistry::default();
+        let mut counter: usize = 0;
+        let result = {
+            let mut te = TypedEmitter::new(&mut ir, &mut reg, &mut counter);
+            te.emit_bitcast(LlvmType::from("i8*"), "%p", LlvmType::from("%MyStruct*"))
+        };
+        assert_eq!(ir, "  %t0 = bitcast i8* %p to %MyStruct*\n");
+        assert_eq!(result.name(), "%t0");
+        assert_eq!(result.ty().as_str(), "%MyStruct*");
+        assert_eq!(reg.get_emitted_type("%t0"), Some("%MyStruct*"));
+    }
+
+    #[test]
+    fn emit_bitcast_with_prefix_uses_caller_supplied_name() {
+        // Verifies regression-neutral migration: the legacy site at
+        // stmt_visitor.rs:708 used `%ret.cast.{counter}`. The wrapper
+        // must produce the same byte sequence when handed the same
+        // prefix and counter.
+        let mut ir = String::new();
+        let mut reg = StubRegistry::default();
+        let mut counter: usize = 7;
+        let result = {
+            let mut te = TypedEmitter::new(&mut ir, &mut reg, &mut counter);
+            te.emit_bitcast_with_prefix(
+                "ret.cast.",
+                LlvmType::from("%Result*"),
+                "%val",
+                LlvmType::from("%Result$i64$str"),
+            )
+        };
+        assert_eq!(
+            ir,
+            "  %ret.cast.7 = bitcast %Result* %val to %Result$i64$str\n"
+        );
+        assert_eq!(result.name(), "%ret.cast.7");
+        assert_eq!(result.ty().as_str(), "%Result$i64$str");
+        assert_eq!(reg.get_emitted_type("%ret.cast.7"), Some("%Result$i64$str"));
+        assert_eq!(counter, 8);
+    }
+
+    #[test]
+    fn emit_load_typed_pointer_form() {
+        let mut ir = String::new();
+        let mut reg = StubRegistry::default();
+        let mut counter: usize = 0;
+        let result = {
+            let mut te = TypedEmitter::new(&mut ir, &mut reg, &mut counter);
+            te.emit_load(LlvmType::from("i64"), "%ptr")
+        };
+        assert_eq!(ir, "  %t0 = load i64, i64* %ptr\n");
+        assert_eq!(result.ty().as_str(), "i64");
+        assert_eq!(reg.get_emitted_type("%t0"), Some("i64"));
+    }
+
+    #[test]
+    fn emit_load_with_prefix_matches_legacy_format() {
+        // stmt_visitor.rs:723 used `format!("%ret.{}", counter)`.
+        let mut ir = String::new();
+        let mut reg = StubRegistry::default();
+        let mut counter: usize = 7;
+        let result = {
+            let mut te = TypedEmitter::new(&mut ir, &mut reg, &mut counter);
+            te.emit_load_with_prefix("ret.", LlvmType::from("%Result*"), "%cast")
+        };
+        assert_eq!(ir, "  %ret.7 = load %Result*, %Result** %cast\n");
+        assert_eq!(result.name(), "%ret.7");
+    }
+
+    #[test]
+    fn emit_store_does_not_produce_ssa_or_register() {
+        let mut ir = String::new();
+        let mut reg = StubRegistry::default();
+        let mut counter: usize = 0;
+        {
+            let mut te = TypedEmitter::new(&mut ir, &mut reg, &mut counter);
+            te.emit_store(LlvmType::from("i64"), "42", "%dst");
+        }
+        assert_eq!(ir, "  store i64 42, i64* %dst\n");
+        assert_eq!(counter, 0);
+        assert!(reg.get_emitted_type("%t0").is_none());
+    }
+
+    #[test]
+    fn mixed_emit_calls_share_a_single_counter() {
+        // The counter is shared with the legacy `next_temp` helper. A
+        // call sequence that mixes wrapper-emitted and legacy-emitted
+        // names must produce a coherent SSA index space.
+        let mut ir = String::new();
+        let mut reg = StubRegistry::default();
+        let mut counter: usize = 0;
+        let (a, b) = {
+            let mut te = TypedEmitter::new(&mut ir, &mut reg, &mut counter);
+            let a = te.emit_bitcast(LlvmType::from("i8*"), "%p", LlvmType::from("%S*"));
+            let b = te.emit_load(LlvmType::from("%S"), "%t0");
+            (a, b)
+        };
+        assert_eq!(a.name(), "%t0");
+        assert_eq!(b.name(), "%t1");
+        assert_eq!(
+            ir,
+            "  %t0 = bitcast i8* %p to %S*\n  %t1 = load %S, %S* %t0\n"
+        );
+        assert_eq!(counter, 2);
+    }
+
+    #[test]
+    fn fresh_temp_with_prefix_does_not_double_percent() {
+        // Caller passes `"ret.cast."` — wrapper must not produce
+        // `%%ret.cast.0`. Defensive against migration mistakes.
+        let mut ir = String::new();
+        let mut reg = StubRegistry::default();
+        let mut counter: usize = 0;
+        let result = {
+            let mut te = TypedEmitter::new(&mut ir, &mut reg, &mut counter);
+            te.emit_bitcast_with_prefix(
+                "ret.cast.",
+                LlvmType::from("i8*"),
+                "%p",
+                LlvmType::from("%S*"),
+            )
+        };
+        assert!(result.name().starts_with('%'));
+        assert!(!result.name().starts_with("%%"));
+        assert_eq!(result.name(), "%ret.cast.0");
     }
 }
