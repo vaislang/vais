@@ -200,6 +200,33 @@ impl TypeChecker {
             }
         }
 
+        // ADR 0001 §1 — TC inference invariant for stamped expression types:
+        //   "After function-body unification completes, all expr_types entries
+        //    must reflect the final substituted types (no lingering Var(n))."
+        //
+        // Why: codegen reads expr_types to drive emit decisions. Without this
+        // sweep, expressions stamped early (e.g. `keys.push(inner)`'s ?N receiver
+        // var) keep the pre-unification Var even after the unify call resolved
+        // it. Codegen's `infer_expr_type` then refuses the upgrade (it skips
+        // tc_ty when contains_unresolved_var), falling back to local inference
+        // that defaults to i64 — producing the vaisdb test_btree_node.ll:1848
+        // class of "load i64 / call expects { i8*, i64 }" mismatches.
+        //
+        // The sweep is conservative: it only touches entries currently in the
+        // map and only applies the existing substitution table, so it can't
+        // introduce types that weren't already implied by user code.
+        //
+        // Tracker: vaisdb Task #13 follow-up.
+        let stamped_keys: Vec<_> = self.expr_types.keys().cloned().collect();
+        for key in stamped_keys {
+            if let Some(ty) = self.expr_types.get(&key).cloned() {
+                let resolved = self.apply_substitutions(&ty);
+                if resolved != ty {
+                    self.expr_types.insert(key, resolved);
+                }
+            }
+        }
+
         // Verify ImplTrait/DynTrait bounds: if return type is impl Trait or dyn Trait,
         // check that the concrete body type implements the required trait bounds.
         self.verify_trait_type_bounds(&expected_ret, &body_type_deref);
