@@ -140,6 +140,43 @@ ROADMAP에 task 추가 시 다음 형식 권장:
 
 ---
 
+## 적용 범위 (2026-04-26 추가, P4.1 retrospective 백로그 1번)
+
+본 ADR (R1+R2+R3 게이트)의 적용 영역과 면제 영역을 명시한다. P4.2에서 std E009
+38건 mechanical fix가 ADR 게이트 적용 의무 모호 영역으로 드러난 것이 동기.
+
+### 의무 적용 (R1+R2+R3 모두)
+
+- **codegen Rust 코드**: `crates/vais-codegen/`, `crates/vais-types/checker_*` 등 컴파일러 핵심
+- **TC inference / unification**: `crates/vais-types/src/inference/` 등 타입 추론 변경
+- **새 codegen path 추가** 또는 **기존 path semantics 변경**
+- **ADR 0002 4 클래스 invariant 영향**: ret / index-store / call-arg / var-to-llvm
+
+### 면제 (R1+R2+R3 의무 없음, 단 commit message에 분류만 명시)
+
+- **`.vais` source-only 변경**: std/, lang/packages/*/src/, examples/, tutorial/
+  - 예: P4.2 std E009 mut 38건 일괄 추가
+  - 이유: codegen invariant와 무관, .vais source 정합성 회복은 mechanical
+  - 의무: commit message에 "ADR 0001 분류: source-only (codegen 무영향)" 명시
+- **문서 / 정책 / spec**: docs/, README, CLAUDE.md, ADR 자체
+  - 의무: ADR 변경 시 reference link만 명시
+- **CI / 인프라 / scripts**: .github/workflows/, scripts/, Cargo.toml 의존성
+  - 의무: 차단력 (regression detection) 평가 명시
+- **테스트 추가**: tests/, benches/ — 단 codegen invariant 변경 동반 시 R2로 분류
+
+### 경계 사례 — 사용자 판단
+
+- **.vais → Rust binding 변경** (vais-node, vais-python): 면제 (downstream binding)
+- **CLAUDE.md 규칙 추가**: 정책으로 면제, 단 동반 ADR 변경 시 함께 LANDED
+- **stdlib 함수 신규 (.vais)**: 면제, 단 codegen이 builtin dispatch 처리 시 codegen 측 audit 의무
+
+### Why
+P4.2 audit이 std E009 38건을 발견했을 때 "ADR 0001 적용 의무인가?"가 결정 모호.
+실제로 std E009 fix는 codegen 무영향 mechanical 변경이라 R1+R2+R3 부담 정당화
+어려움. 본 절 추가로 미래 audit/PR 결정이 명확해짐.
+
+---
+
 ## 참고
 
 - 정량 분석 출처: `lang/packages/vaisdb/ROADMAP.md` iter 74 entry (2026-04-26)
