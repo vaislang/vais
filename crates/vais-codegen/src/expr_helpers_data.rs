@@ -1178,12 +1178,24 @@ impl CodeGenerator {
 
                     // obj_val is an i64 (erased struct value from Vec).
                     // Reinterpret as a pointer to the struct type, then GEP to the field.
+                    // Robustness guard: if obj_val carries a narrower integer
+                    // tag (e.g. an `i8` byte that flowed through a polluted
+                    // generic-erasure path), zext to i64 first so the
+                    // `inttoptr i64 …` instruction is type-correct.
+                    let obj_llvm = self.llvm_type_of(&obj_val);
+                    let widened_val = if matches!(obj_llvm.as_str(), "i1" | "i8" | "i16" | "i32") {
+                        let z = self.next_temp(counter);
+                        write_ir!(ir, "  {} = zext {} {} to i64", z, obj_llvm, obj_val);
+                        z
+                    } else {
+                        obj_val.clone()
+                    };
                     let struct_ptr = self.next_temp(counter);
                     write_ir!(
                         ir,
                         "  {} = inttoptr i64 {} to %{}*",
                         struct_ptr,
-                        obj_val,
+                        widened_val,
                         type_name
                     );
 
