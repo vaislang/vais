@@ -375,36 +375,16 @@ impl CodeGenerator {
                         value
                     };
 
-                    // Coerce return value width if needed. Use i64 as assumed source
-                    // for small int returns (body convention is "everything is i64").
-                    let ret_width = Self::int_type_width(&ret_llvm);
-                    let value = if value.starts_with('%') && ret_width > 0 && ret_width < 64 {
-                        let trunc_tmp = self.next_temp(&mut counter);
-                        write_ir!(ir, "  {} = trunc i64 {} to {}", trunc_tmp, value, ret_llvm);
-                        trunc_tmp
-                    } else if value.starts_with('%') {
+                    // Mini Pillar 1 (ADR 0001 §1) — single coerce point for ret.
+                    // Migrated from inline trunc/fptrunc/fpext/coerce_int_width chain.
+                    // Body convention is "everything is i64" — small int returns
+                    // need trunc which coerce_ret_value handles via int_width path.
+                    let value = if value.starts_with('%') {
                         let val_llvm = self.llvm_type_of(&value);
-                        if (val_llvm == "float" || val_llvm == "double")
-                            && (ret_llvm == "float" || ret_llvm == "double")
-                            && val_llvm != ret_llvm
-                        {
-                            // Float width coercion for return
-                            let tmp = self.next_temp(&mut counter);
-                            if val_llvm == "double" && ret_llvm == "float" {
-                                write_ir!(ir, "  {} = fptrunc double {} to float", tmp, value);
-                            } else {
-                                write_ir!(ir, "  {} = fpext float {} to double", tmp, value);
-                            }
-                            tmp
-                        } else {
-                            self.coerce_int_width(
-                                &value,
-                                &val_llvm,
-                                &ret_llvm,
-                                &mut counter,
-                                &mut ir,
-                            )
-                        }
+                        let (coerced_val, coerce_ir) =
+                            self.coerce_ret_value(&value, &val_llvm, &ret_llvm, &mut counter);
+                        ir.push_str(&coerce_ir);
+                        coerced_val
                     } else {
                         value
                     };
