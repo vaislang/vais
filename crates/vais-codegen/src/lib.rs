@@ -52,6 +52,7 @@ pub mod cross_compile;
 pub mod debug;
 mod diagnostics;
 mod emit;
+mod emit_typed;
 mod error;
 mod expr;
 mod expr_helpers;
