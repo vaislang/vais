@@ -69,6 +69,7 @@ mod generate_expr_loop;
 mod generate_expr_struct;
 mod generics_helpers;
 mod helpers;
+mod index_access;
 mod init;
 pub mod ir_verify;
 mod lambda_closure;

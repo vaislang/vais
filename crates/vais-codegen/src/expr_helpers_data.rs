@@ -436,65 +436,20 @@ impl CodeGenerator {
         let mut ir = arr_ir;
         ir.push_str(&idx_ir);
 
-        // Infer element type for correct LLVM IR generation
+        // Phase Ω P1.3 (iter 97 LANDED): single-source index access derivation.
+        // The prior inline `match arr_ty` block here is now centralized in
+        // `index_access::resolve_index_access` so all 4 indexing paths
+        // (Path 1 read here, Path 2/3 assign, Path 4 inkwell) share one
+        // implementation. Behavior is byte-identical to the prior block.
         let arr_ty = self.infer_expr_type(array);
-        // elem_resolved_ty holds the full ResolvedType for Vec element (used for struct detection)
-        let (elem_llvm_ty, is_fat_ptr, elem_resolved_ty) = match arr_ty {
-            vais_types::ResolvedType::Pointer(ref elem) => (self.type_to_llvm(elem), false, None),
-            vais_types::ResolvedType::Array(ref elem) => (self.type_to_llvm(elem), false, None),
-            vais_types::ResolvedType::Slice(ref elem)
-            | vais_types::ResolvedType::SliceMut(ref elem) => (self.type_to_llvm(elem), true, None),
-            // Vec<T>[idx] → element type T, access via data pointer
-            vais_types::ResolvedType::Named {
-                ref name,
-                ref generics,
-            } if name == "Vec" && !generics.is_empty() => (
-                self.type_to_llvm(&generics[0]),
-                false,
-                Some(generics[0].clone()),
-            ),
-            // &Vec<T>[idx]
-            vais_types::ResolvedType::Ref(ref inner)
-            | vais_types::ResolvedType::RefMut(ref inner) => {
-                match inner.as_ref() {
-                    vais_types::ResolvedType::Named {
-                        ref name,
-                        ref generics,
-                    } if name == "Vec" && !generics.is_empty() => (
-                        self.type_to_llvm(&generics[0]),
-                        false,
-                        Some(generics[0].clone()),
-                    ),
-                    vais_types::ResolvedType::Slice(ref elem)
-                    | vais_types::ResolvedType::SliceMut(ref elem) => {
-                        (self.type_to_llvm(elem), true, None)
-                    }
-                    vais_types::ResolvedType::Array(ref elem) => {
-                        (self.type_to_llvm(elem), false, None)
-                    }
-                    _ => {
-                        // Treat as i64 pointer indexing
-                        ("i64".to_string(), false, None)
-                    }
-                }
-            }
-            // Str indexing → byte access
-            vais_types::ResolvedType::Str => ("i8".to_string(), true, None),
-            // Named types (non-Vec) that may have operator overloading or custom indexing
-            vais_types::ResolvedType::Named { .. }
-            | vais_types::ResolvedType::Unknown
-            | vais_types::ResolvedType::Generic(_) => {
-                // Fallback: treat as i64 pointer for named/unknown types
-                ("i64".to_string(), false, None)
-            }
-            ref other => {
-                // Concrete non-indexable types (i64, f64, bool, etc.) — return error
-                return Err(CodegenError::TypeError(format!(
-                    "Cannot index into type '{}' — indexing requires an array, slice, pointer, Vec, or string type",
-                    other
-                )));
-            }
-        };
+        let acc = self.resolve_index_access(&arr_ty)?;
+        let elem_llvm_ty = acc.elem_llvm;
+        let is_fat_ptr = matches!(
+            acc.access_kind,
+            crate::index_access::AccessKind::FatPtr
+                | crate::index_access::AccessKind::StrByte
+        );
+        let elem_resolved_ty = acc.elem_resolved;
 
         // Extend index to i64 if necessary (i8, i16, i32 → i64)
         let idx_type = self.infer_expr_type(index);
