@@ -382,6 +382,7 @@ impl CodeGenerator {
                         .map(|(_, ty, _)| ty.clone())
                 });
 
+
             // Use parameter type from signature if available, unless generic
             let mut did_vec_to_slice = false;
             let arg_llvm_ty = if let Some(ref pt) = param_ty {
@@ -754,6 +755,66 @@ impl CodeGenerator {
             if arg_llvm_ty == "void" {
                 continue;
             }
+
+            // ADR 0001 §1 (Mini Pillar 1 — call-arg invariant):
+            //   "When param expects { i8*, i64 } (slice fat-ptr) and val's
+            //    LLVM type is %Vec* / %Vec$T*, emit Vec→fat-ptr coercion."
+            //
+            // This catches cases where inferred_ty was erased (Generic) or
+            // mistakenly inferred as Ref(scalar) (e.g. vaisdb node.ll:1848:
+            // `key_refs.push(&keys_owned[i])` where keys_owned[i] is a
+            // generic-erased Vec<u8> indexed as i64). The earlier
+            // is_vec_to_slice_coercion path uses inferred_ty which doesn't
+            // see post-erasure LLVM truth, so we add a structural guard here.
+            //
+            // Tracker: vaisdb Task #10 (test_btree_node.ll:1848).
+            // Tests: ret_invariant_test covers ret class; call-arg class
+            //        will get its own invariant test once stable.
+            if !did_vec_to_slice
+                && arg_llvm_ty == "{ i8*, i64 }"
+                && val.starts_with('%')
+            {
+                let val_actual = self.llvm_type_of(&val);
+                if val_actual.starts_with("%Vec") && val_actual.ends_with('*') {
+                    let vec_struct_ty = val_actual.trim_end_matches('*').to_string();
+                    let data_gep = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {} {}, i32 0, i32 0",
+                        data_gep, vec_struct_ty, val_actual, val
+                    );
+                    let data_i64 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_gep);
+                    self.fn_ctx.record_emitted_type(&data_i64, "i64");
+                    let data_i8 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_i8, data_i64);
+                    let len_gep = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {} {}, i32 0, i32 1",
+                        len_gep, vec_struct_ty, val_actual, val
+                    );
+                    let len_val = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i64, i64* {}", len_val, len_gep);
+                    self.fn_ctx.record_emitted_type(&len_val, "i64");
+                    let fat1 = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+                        fat1, data_i8
+                    );
+                    self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
+                    let fat2 = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
+                        fat2, fat1, len_val
+                    );
+                    self.fn_ctx.record_emitted_type(&fat2, "{ i8*, i64 }");
+                    val = fat2;
+                }
+            }
+
             arg_vals.push(format!("{} {}", arg_llvm_ty, val));
         }
 
