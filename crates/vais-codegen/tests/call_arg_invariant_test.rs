@@ -196,18 +196,59 @@ entry:
 }
 
 #[test]
-#[ignore = "vaisdb Task #11: deeper TC type-inference fix needed (Vec<Vec<u8>> erasure)"]
-fn vec_of_vec_indexing_loses_element_type() {
-    // Direct repro of vaisdb test_btree_node.ll:1848 pattern.
+#[ignore = "vaisdb Task #12: TC unification fails to flow Vec<Vec<u8>> inner type from push site back to with_capacity. Activates when fixed."]
+fn vec_of_vec_no_annotation_loses_inner_type() {
+    // Closer reduction of vaisdb test_btree_node.ll:1848 shape.
     //
-    // Vec<Vec<u8>> indexing path erases inner Vec<u8> to i64. After
-    // `keys_owned[i]` returns a raw i64, `&keys_owned[i]` cannot recover
-    // the original Vec<u8> shape, and the slice-fat-ptr call-arg coercion
-    // has no way to fire.
+    // Vais source (line 241-253 of vaisdb btree/node.vais):
+    //   keys_owned := mut Vec.with_capacity(...)  <-- no annotation
+    //   keys_owned.push(key_copy)                  <-- key_copy is Vec<u8>
+    //   key_refs.push(&keys_owned[i])              <-- &Vec<u8> as &[u8]
     //
-    // This test is currently #[ignore]'d — when the upstream TC inference
-    // fix lands (or a codegen-local Vec<Vec<T>> indexing patch lands),
-    // remove the #[ignore] and the test will pass.
+    // Hypothesis: without explicit `keys_owned: Vec<Vec<u8>>`, TC infers
+    // the inner element type via push-site unification. Some path of that
+    // unification erases inner Vec<u8> → i64, so indexing later loads as
+    // raw i64.
+    let ir = gen_ir(
+        r#"
+        F take_slice(s: &[u8]) -> i64 {
+            R 0;
+        }
+        F main() -> i64 {
+            keys := mut Vec.with_capacity(2);
+            inner := mut Vec.with_capacity(1);
+            inner.push(42u8);
+            keys.push(inner);
+            R take_slice(&keys[0]);
+        }
+        "#,
+    );
+    let violations = find_callarg_struct_scalar_mismatches(&ir);
+    assert!(
+        violations.is_empty(),
+        "Vec<Vec<u8>> no-annotation erasure:\n{:#?}\nIR:\n{}",
+        violations,
+        ir
+    );
+}
+
+#[test]
+fn vec_of_vec_indexing_simple_repro_passes() {
+    // Smaller standalone repro of the vaisdb test_btree_node.ll:1848
+    // shape: Vec<Vec<u8>> with explicit type annotations.
+    //
+    // PASSES — the compiler correctly resolves the inner type when (a) the
+    // outer Vec is type-annotated and (b) explicit `inner: Vec<u8>` is
+    // declared before push.
+    //
+    // The vaisdb failure occurs in a more complex context where:
+    //   - keys_owned has no explicit type annotation
+    //   - inner key_copy is constructed via Vec.with_capacity inside a loop
+    //   - cross-module + generic instantiation produce inference path that
+    //     loses the inner Vec<u8> shape
+    //
+    // Reduction of the actual failing vaisdb shape is a separate task
+    // (vaisdb Task #11 follow-up). For now this test guards the simple case.
     let ir = gen_ir(
         r#"
         F take_slice(s: &[u8]) -> i64 {
