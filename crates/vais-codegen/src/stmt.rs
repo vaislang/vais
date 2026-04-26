@@ -442,97 +442,15 @@ impl CodeGenerator {
                     let alloc_cleanup_ir = self.generate_alloc_cleanup();
                     ir.push_str(&alloc_cleanup_ir);
 
-                    // Coerce value to match function return type if needed
-                    // (e.g., sext i32→i64 in body then ret i32 needs trunc back)
+                    // Mini Pillar 1 (ADR 0001 §1) — single coerce point for ret.
+                    // Migrated from inline 4-branch (int width / float width / str
+                    // void-placeholder / specialized struct erasure) chain.
                     let final_val = {
                         let val_ty = self.llvm_type_of(&final_val);
-                        if val_ty != ret_type
-                            && val_ty.starts_with('i')
-                            && ret_type.starts_with('i')
-                        {
-                            let val_bits: u32 = val_ty[1..].parse().unwrap_or(64);
-                            let ret_bits: u32 = ret_type[1..].parse().unwrap_or(64);
-                            if val_bits > 0 && ret_bits > 0 && val_bits != ret_bits {
-                                let tmp = self.next_temp(counter);
-                                if val_bits > ret_bits {
-                                    write_ir!(
-                                        ir,
-                                        "  {} = trunc {} {} to {}",
-                                        tmp,
-                                        val_ty,
-                                        final_val,
-                                        ret_type
-                                    );
-                                } else {
-                                    write_ir!(
-                                        ir,
-                                        "  {} = sext {} {} to {}",
-                                        tmp,
-                                        val_ty,
-                                        final_val,
-                                        ret_type
-                                    );
-                                }
-                                tmp
-                            } else {
-                                final_val
-                            }
-                        } else if val_ty != ret_type
-                            && (val_ty == "float" || val_ty == "double")
-                            && (ret_type == "float" || ret_type == "double")
-                        {
-                            // Float width coercion (e.g., double→float fptrunc)
-                            let tmp = self.next_temp(counter);
-                            if val_ty == "double" && ret_type == "float" {
-                                write_ir!(ir, "  {} = fptrunc double {} to float", tmp, final_val);
-                            } else {
-                                write_ir!(ir, "  {} = fpext float {} to double", tmp, final_val);
-                            }
-                            tmp
-                        } else if val_ty != ret_type
-                            && val_ty == "i64"
-                            && ret_type == "{ i8*, i64 }"
-                        {
-                            // Str return type mismatch — value is i64 (void placeholder)
-                            // but return type is str fat pointer. Use zeroinitializer.
-                            let zinit = self.next_temp(counter);
-                            write_ir!(
-                                ir,
-                                "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
-                                zinit
-                            );
-                            self.fn_ctx.record_emitted_type(&zinit, "{ i8*, i64 }");
-                            zinit
-                        } else if val_ty != ret_type
-                            && val_ty == "i64"
-                            && ret_type.starts_with('%')
-                            && !ret_type.ends_with('*')
-                        {
-                            // Struct return type mismatch — value is i64 but return type is struct.
-                            // This happens in specialized generic functions where the body
-                            // uses i64 (generic erasure) but the function signature declares
-                            // a concrete struct type. Use inttoptr+load to reinterpret.
-                            let tmp_ptr = self.next_temp(counter);
-                            write_ir!(
-                                ir,
-                                "  {} = inttoptr i64 {} to {}*",
-                                tmp_ptr,
-                                final_val,
-                                ret_type
-                            );
-                            let loaded = self.next_temp(counter);
-                            write_ir!(
-                                ir,
-                                "  {} = load {}, {}* {}",
-                                loaded,
-                                ret_type,
-                                ret_type,
-                                tmp_ptr
-                            );
-                            loaded
-                        } else {
-                            final_val
-                        }
+                        let (coerced_val, coerce_ir) =
+                            self.coerce_ret_value(&final_val, &val_ty, &ret_type, counter);
+                        ir.push_str(&coerce_ir);
+                        coerced_val
                     };
 
                     // Emit the ret instruction

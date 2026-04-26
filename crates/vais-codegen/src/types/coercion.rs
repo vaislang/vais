@@ -199,6 +199,61 @@ impl CodeGenerator {
             return (fp2, ir);
         }
 
+        // Case 4: i64 void-placeholder → str fat-ptr (zeroinitializer fallback).
+        // Body produced an i64 placeholder for a void/Unit expression but
+        // function ret is `str` (fat pointer). Use zero fat-ptr.
+        //
+        // SAFETY: Same gating as Case 5 — only fire when val_ty is
+        // ground-truth i64 to avoid clobbering unregistered struct loads.
+        if val_ty == "i64" && ret_llvm == "{ i8*, i64 }" {
+            let actual = self.llvm_type_of_checked(val);
+            if actual.as_deref() == Some("i64") {
+                let zinit = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
+                    zinit
+                );
+                self.fn_ctx.record_emitted_type(&zinit, "{ i8*, i64 }");
+                return (zinit, ir);
+            }
+        }
+
+        // Case 5: i64 → %Struct (specialized generic erasure).
+        // Specialized generic functions: body uses i64 (generic erasure)
+        // but signature declares a concrete struct. Reinterpret-cast via
+        // inttoptr + load.
+        //
+        // SAFETY: Only fire when val_ty is *known* to be i64 (ground-truth
+        // registered). The fallback in llvm_type_of returns "i64" for
+        // unregistered SSA temps, which would falsely trigger this branch
+        // for values that are actually struct loads (e.g. `%ret.8 = load
+        // %Vec$T, %Vec$T* %ptr`). Use llvm_type_of_checked to gate.
+        if val_ty == "i64" && ret_llvm.starts_with('%') && !ret_llvm.ends_with('*') {
+            // Only if ground-truth confirms i64 (not fallback)
+            let actual = self.llvm_type_of_checked(val);
+            if actual.as_deref() == Some("i64") {
+                let tmp_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = inttoptr i64 {} to {}*",
+                    tmp_ptr,
+                    val,
+                    ret_llvm
+                );
+                let loaded = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = load {}, {}* {}",
+                    loaded,
+                    ret_llvm,
+                    ret_llvm,
+                    tmp_ptr
+                );
+                return (loaded, ir);
+            }
+        }
+
         // No conversion known — return value as-is. Caller will emit `ret <ret_llvm> <val>`
         // which may produce a clang IR-verify error. This is the signal that a new
         // (val_ty, ret_llvm) pair needs to be added here, NOT to a new emit-site
