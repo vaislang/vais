@@ -35,7 +35,8 @@ jobs:
     # test_planner_types deferred to wave 2 (transitive dependency 폭증, 25 errors).
     # 다음 wave에서 vais-server + vais-web 통합 예정.
     # baseline (per-test KNOWN_FAILURE_COUNTS in scripts/vaisdb-regression.sh):
-    #   test_btree=2, test_wal=1, test_buffer_pool=1, test_graph=2, test_migration=3 (합계 9)
+    #   test_btree=2, test_wal=1, test_buffer_pool=1, test_graph=1, test_migration=3 (합계 8)
+    # (test_graph 2→1: Phase Ω P1.2 iter 90+91 fix, commits 7fcdd285+27f6b260)
     # Task 완료 시 해당 카운트 갱신.
 
     steps:

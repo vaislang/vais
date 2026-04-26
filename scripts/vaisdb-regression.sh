@@ -27,7 +27,12 @@ STD_PATH="${STD_PATH:-/tmp/vais-lib/std}"
 # These clang errors are tracked as TEMP-SITE-FIX(adr-0001) — to be resolved
 # by Task #6 (stmt.rs Vec→fat-ptr ret) and Task #7 (slice indexing bitcast).
 WAVE1_TESTS=(test_btree test_wal test_buffer_pool test_graph test_migration)
-WAVE1_BASELINES=(2 1 1 2 3)
+# test_graph: 2 → 1 (Phase Ω P1.2 iter 90+91, commits 7fcdd285+27f6b260).
+# Vec.push + HashMap.insert update_var_type fixes resolved 1+ Vec<T> indexing
+# erasures in graph.vais. Flaky between 0 and 1 in --all context (CLAUDE
+# known-issue: 제네릭 인스턴스 process leak); standalone is 0 or 1.
+# Conservative baseline 1 to avoid CI false-positive on flaky 0 measurements.
+WAVE1_BASELINES=(2 1 1 1 3)
 WAVE1_PATHS=(
     "tests/storage/test_btree.vais"
     "tests/storage/test_wal.vais"
