@@ -1268,6 +1268,34 @@ impl TypeChecker {
                             {
                                 let _ = self.unify(&v_slot, &v_actual);
                             }
+                            // Phase Ω P1.2 R3 audit (iter 91): same update_var_type
+                            // propagation as Vec.push fix, applied to HashMap-family
+                            // receivers. ADR 0002 Class 4 — without this, var_info
+                            // freezes to ?K/?V at declaration, codegen falls back
+                            // to i64 for indexing/method dispatch on receiver.
+                            if let Expr::Ident(recv_name) = &receiver.node {
+                                let resolved_generics: Vec<ResolvedType> = generics
+                                    .iter()
+                                    .map(|g| self.apply_substitutions(g))
+                                    .collect();
+                                let any_changed = resolved_generics
+                                    .iter()
+                                    .zip(generics.iter())
+                                    .any(|(r, o)| r != o);
+                                if any_changed {
+                                    let new_named = ResolvedType::Named {
+                                        name: name.clone(),
+                                        generics: resolved_generics,
+                                    };
+                                    let new_ty = match &receiver_type {
+                                        ResolvedType::Ref(_) => ResolvedType::Ref(Box::new(new_named)),
+                                        ResolvedType::RefMut(_) => ResolvedType::RefMut(Box::new(new_named)),
+                                        ResolvedType::Pointer(_) => ResolvedType::Pointer(Box::new(new_named)),
+                                        _ => new_named,
+                                    };
+                                    self.update_var_type(recv_name, new_ty);
+                                }
+                            }
                             return Ok(generics
                                 .get(1)
                                 .cloned()
