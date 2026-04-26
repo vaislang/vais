@@ -8,9 +8,9 @@
 #      compiler PR이 vaisdb를 깨면 즉시 발견 + 차단됨.
 #
 # Usage:
-#   ./scripts/vaisdb-regression.sh                    # default: test_btree only
+#   ./scripts/vaisdb-regression.sh                    # default: test_btree only (backward compat)
 #   ./scripts/vaisdb-regression.sh test_btree         # specific test
-#   ./scripts/vaisdb-regression.sh --all              # all vaisdb storage tests
+#   ./scripts/vaisdb-regression.sh --all              # wave 1: 5 tests
 #   VERBOSE=1 ./scripts/vaisdb-regression.sh          # show full clang output
 
 set -uo pipefail
@@ -22,14 +22,53 @@ VAISDB_ROOT="${VAISDB_ROOT:-$REPO_ROOT/../lang/packages/vaisdb}"
 VAISC="${VAISC:-$HOME/.cargo/bin/vaisc}"
 STD_PATH="${STD_PATH:-/tmp/vais-lib/std}"
 
-# Known-failure baseline (2026-04-26).
+# Known-failure baselines (2026-04-26, iter 78 실측).
+# bash 3.2 (macOS 기본) 은 associative array 미지원 — parallel arrays + lookup 함수로 우회.
 # These clang errors are tracked as TEMP-SITE-FIX(adr-0001) — to be resolved
 # by Task #6 (stmt.rs Vec→fat-ptr ret) and Task #7 (slice indexing bitcast).
-KNOWN_FAILURE_COUNT="${KNOWN_FAILURE_COUNT:-2}"
-KNOWN_FAILURE_PATTERNS=(
-    "test_btree_node.ll:.*ret.*i8\*.*i64.*defined with type 'ptr' but expected"
-    "test_btree_key.ll:.*defined with type 'ptr' but expected.*i8\*.*i64"
+WAVE1_TESTS=(test_btree test_wal test_buffer_pool test_graph test_migration)
+WAVE1_BASELINES=(2 1 1 2 3)
+WAVE1_PATHS=(
+    "tests/storage/test_btree.vais"
+    "tests/storage/test_wal.vais"
+    "tests/storage/test_buffer_pool.vais"
+    "tests/graph/test_graph.vais"
+    "tests/sql/test_migration.vais"
 )
+
+# Lookup helpers (bash 3.2 compatible).
+get_baseline() {
+    local name="$1"
+    local i=0
+    for t in "${WAVE1_TESTS[@]}"; do
+        if [[ "$t" == "$name" ]]; then
+            echo "${WAVE1_BASELINES[$i]}"
+            return 0
+        fi
+        i=$((i + 1))
+    done
+    echo ""
+}
+
+get_path() {
+    local name="$1"
+    local i=0
+    for t in "${WAVE1_TESTS[@]}"; do
+        if [[ "$t" == "$name" ]]; then
+            echo "${WAVE1_PATHS[$i]}"
+            return 0
+        fi
+        i=$((i + 1))
+    done
+    echo ""
+}
+
+is_known_test() {
+    local name="$1"
+    local found=""
+    found="$(get_baseline "$name")"
+    [[ -n "$found" ]]
+}
 
 # ─── Pre-flight ──────────────────────────────────────────────────────────────
 
@@ -57,89 +96,113 @@ fi
 
 echo "▶ Nuking vaisdb caches and /tmp test artifacts..."
 find "$VAISDB_ROOT" -name ".vais-cache" -type d -exec rm -rf {} + 2>/dev/null || true
-rm -rf /tmp/test_btree* 2>/dev/null || true
+for t in "${WAVE1_TESTS[@]}"; do
+    rm -rf /tmp/${t}* 2>/dev/null || true
+done
 
-# ─── Build ───────────────────────────────────────────────────────────────────
+# ─── Target selection ────────────────────────────────────────────────────────
 
-TARGET_TEST="${1:-test_btree}"
+TARGET_ARG="${1:-test_btree}"
 
-if [[ "$TARGET_TEST" == "--all" ]]; then
-    echo "❌ --all not yet implemented (Pillar 2 follow-up)"
+if [[ "$TARGET_ARG" == "--all" ]]; then
+    TESTS=("${WAVE1_TESTS[@]}")
+elif is_known_test "$TARGET_ARG"; then
+    TESTS=("$TARGET_ARG")
+else
+    echo "❌ Unknown test: $TARGET_ARG"
+    echo "   Available: ${WAVE1_TESTS[*]}"
+    echo "   Or: --all"
     exit 2
 fi
 
-TEST_FILE="$VAISDB_ROOT/tests/storage/$TARGET_TEST.vais"
-if [[ ! -f "$TEST_FILE" ]]; then
-    echo "❌ Test file not found: $TEST_FILE"
-    exit 2
-fi
+# ─── Per-test build + link + verdict ─────────────────────────────────────────
 
-echo "▶ Building $TARGET_TEST.vais (vaisc emit IR)..."
 cd "$VAISDB_ROOT"
 
-BUILD_LOG=$(mktemp)
-if ! VAIS_DEP_PATHS="$(pwd)/src:$STD_PATH" VAIS_STD_PATH="$STD_PATH" \
-    "$VAISC" build "tests/storage/$TARGET_TEST.vais" \
-    --emit-ir -o "/tmp/$TARGET_TEST.ll" --force-rebuild \
-    > "$BUILD_LOG" 2>&1; then
-    echo "❌ vaisc build FAILED — see $BUILD_LOG"
-    tail -30 "$BUILD_LOG"
-    exit 1
-fi
+TOTAL_ERRORS=0
+TOTAL_BASELINE=0
+FAILED_TESTS=()
+IMPROVED_TESTS=()
 
-[[ "${VERBOSE:-0}" == "1" ]] && cat "$BUILD_LOG"
+for TARGET_TEST in "${TESTS[@]}"; do
+    BASELINE="$(get_baseline "$TARGET_TEST")"
+    TEST_PATH="$(get_path "$TARGET_TEST")"
+    TOTAL_BASELINE=$((TOTAL_BASELINE + BASELINE))
 
-EMITTED_IR_COUNT=$(ls /tmp/${TARGET_TEST}_*.ll 2>/dev/null | wc -l | tr -d ' ')
-echo "  ✓ vaisc emitted $EMITTED_IR_COUNT IR files"
+    echo ""
+    echo "═══ $TARGET_TEST ═══"
+    echo "▶ Building $TARGET_TEST.vais (baseline: $BASELINE errors)..."
 
-# ─── Link (clang) ────────────────────────────────────────────────────────────
+    BUILD_LOG=$(mktemp)
+    if ! VAIS_DEP_PATHS="$(pwd)/src:$STD_PATH" VAIS_STD_PATH="$STD_PATH" \
+        "$VAISC" build "$TEST_PATH" \
+        --emit-ir -o "/tmp/$TARGET_TEST.ll" --force-rebuild \
+        > "$BUILD_LOG" 2>&1; then
+        echo "❌ vaisc build FAILED — see $BUILD_LOG"
+        tail -30 "$BUILD_LOG"
+        FAILED_TESTS+=("$TARGET_TEST (build fail)")
+        continue
+    fi
 
-echo "▶ Linking IR with clang..."
-LINK_LOG=$(mktemp)
-clang -O0 -o "/tmp/${TARGET_TEST}_bin" /tmp/${TARGET_TEST}_*.ll -lm \
-    > "$LINK_LOG" 2>&1
-LINK_EXIT=$?
+    [[ "${VERBOSE:-0}" == "1" ]] && cat "$BUILD_LOG"
 
-# Count clang errors (signature: "error: ...")
-CLANG_ERRORS=$(grep -c "^[^:]*\.ll:[0-9]*:[0-9]*: error:" "$LINK_LOG" || true)
+    EMITTED_IR_COUNT=$(ls /tmp/${TARGET_TEST}_*.ll 2>/dev/null | wc -l | tr -d ' ')
+    echo "  ✓ vaisc emitted $EMITTED_IR_COUNT IR files"
 
-# ─── Verdict ─────────────────────────────────────────────────────────────────
+    LINK_LOG=$(mktemp)
+    clang -O0 -o "/tmp/${TARGET_TEST}_bin" /tmp/${TARGET_TEST}_*.ll -lm \
+        > "$LINK_LOG" 2>&1
+
+    CLANG_ERRORS=$(grep -c "^[^:]*\.ll:[0-9]*:[0-9]*: error:" "$LINK_LOG" 2>/dev/null || echo 0)
+    CLANG_ERRORS=${CLANG_ERRORS//[^0-9]/}
+    [[ -z "$CLANG_ERRORS" ]] && CLANG_ERRORS=0
+    TOTAL_ERRORS=$((TOTAL_ERRORS + CLANG_ERRORS))
+
+    echo "  clang errors: $CLANG_ERRORS (baseline: $BASELINE)"
+
+    if [[ "$CLANG_ERRORS" -gt "$BASELINE" ]]; then
+        echo "  ❌ REGRESSION ($CLANG_ERRORS > $BASELINE)"
+        grep -E "^[^:]*\.ll:[0-9]*:[0-9]*: error:" "$LINK_LOG" | head -10
+        FAILED_TESTS+=("$TARGET_TEST ($CLANG_ERRORS > $BASELINE)")
+    elif [[ "$CLANG_ERRORS" -lt "$BASELINE" ]]; then
+        echo "  🎉 IMPROVEMENT ($CLANG_ERRORS < $BASELINE)"
+        IMPROVED_TESTS+=("$TARGET_TEST: $CLANG_ERRORS (was $BASELINE)")
+    else
+        echo "  ✓ baseline holds ($CLANG_ERRORS = $BASELINE)"
+    fi
+done
+
+# ─── Global summary ──────────────────────────────────────────────────────────
 
 echo ""
-echo "▶ Result:"
-echo "  clang exit code: $LINK_EXIT"
-echo "  clang errors:    $CLANG_ERRORS (baseline known-failure: $KNOWN_FAILURE_COUNT)"
+echo "═══ Summary ═══"
+echo "  Total errors:   $TOTAL_ERRORS"
+echo "  Total baseline: $TOTAL_BASELINE"
+echo "  Tests run:      ${#TESTS[@]}"
 
-if [[ "$CLANG_ERRORS" -gt "$KNOWN_FAILURE_COUNT" ]]; then
+if [[ "${#FAILED_TESTS[@]}" -gt 0 ]]; then
     echo ""
-    echo "❌ REGRESSION DETECTED — clang errors $CLANG_ERRORS > baseline $KNOWN_FAILURE_COUNT"
-    echo ""
-    echo "Errors:"
-    grep -E "^[^:]*\.ll:[0-9]*:[0-9]*: error:" "$LINK_LOG" | head -20
+    echo "❌ REGRESSION DETECTED in:"
+    for t in "${FAILED_TESTS[@]}"; do echo "  - $t"; done
     echo ""
     echo "ADR 0001 §1 R3: same-class audit failed."
     echo "  → fix the new error sites OR document them as TEMP-SITE-FIX(adr-0001)"
-    echo "  → update KNOWN_FAILURE_COUNT in this script if the new baseline is intentional"
+    echo "  → update WAVE1_BASELINES in this script if the new baseline is intentional"
     exit 1
 fi
 
-if [[ "$CLANG_ERRORS" -lt "$KNOWN_FAILURE_COUNT" ]]; then
+if [[ "${#IMPROVED_TESTS[@]}" -gt 0 ]]; then
     echo ""
-    echo "🎉 IMPROVEMENT — clang errors $CLANG_ERRORS < baseline $KNOWN_FAILURE_COUNT"
+    echo "🎉 IMPROVEMENTS:"
+    for t in "${IMPROVED_TESTS[@]}"; do echo "  - $t"; done
     echo ""
     echo "Action required:"
-    echo "  1. Verify the improvement is intentional (not a flaky test)"
-    echo "  2. Update KNOWN_FAILURE_COUNT=$CLANG_ERRORS in scripts/vaisdb-regression.sh"
-    echo "  3. Update ROADMAP to mark which task closed the gap"
+    echo "  1. Verify improvements are intentional (not flaky)"
+    echo "  2. Update WAVE1_BASELINES in scripts/vaisdb-regression.sh"
+    echo "  3. Update ROADMAP to mark which task closed the gaps"
     exit 0
 fi
 
 echo ""
-echo "✓ vaisdb regression baseline holds ($CLANG_ERRORS = $KNOWN_FAILURE_COUNT)"
-echo ""
-echo "Pending site fixes (TEMP-SITE-FIX, awaiting Task #6/#7):"
-for pattern in "${KNOWN_FAILURE_PATTERNS[@]}"; do
-    echo "  - $pattern"
-done
-
+echo "✓ vaisdb wave 1 baseline holds (all ${#TESTS[@]} tests)"
 exit 0
