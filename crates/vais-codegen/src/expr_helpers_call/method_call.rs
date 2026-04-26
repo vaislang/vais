@@ -383,22 +383,122 @@ impl CodeGenerator {
                 });
 
             // Use parameter type from signature if available, unless generic
+            let mut did_vec_to_slice = false;
             let arg_llvm_ty = if let Some(ref pt) = param_ty {
                 if let ResolvedType::Generic(ref name) = pt {
                     // Check if a concrete substitution exists for this generic parameter
                     if let Some(concrete_ty) = self.get_generic_substitution(name) {
-                        self.type_to_llvm(&concrete_ty)
+                        // After substitution, the substituted type may be a Slice
+                        // while the actual arg is a Vec — handle that coercion
+                        // here too (mirrors generate_static_method_call_expr path).
+                        let sub = concrete_ty.clone();
+                        if Self::is_vec_to_slice_coercion(&sub, &inferred_ty) {
+                            let vec_ptr_ty = self.llvm_type_of(&val);
+                            let vec_struct_ty = vec_ptr_ty
+                                .strip_suffix('*')
+                                .map(|s| s.to_string())
+                                .unwrap_or_else(|| "%Vec".to_string());
+                            let data_gep = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
+                                data_gep, vec_struct_ty, vec_struct_ty, val
+                            );
+                            let data_i64 = self.next_temp(counter);
+                            write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_gep);
+                            self.fn_ctx.record_emitted_type(&data_i64, "i64");
+                            let data_i8 = self.next_temp(counter);
+                            write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_i8, data_i64);
+                            let len_gep = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = getelementptr {}, {}* {}, i32 0, i32 1",
+                                len_gep, vec_struct_ty, vec_struct_ty, val
+                            );
+                            let len_val = self.next_temp(counter);
+                            write_ir!(ir, "  {} = load i64, i64* {}", len_val, len_gep);
+                            self.fn_ctx.record_emitted_type(&len_val, "i64");
+                            let fat1 = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+                                fat1, data_i8
+                            );
+                            self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
+                            let fat2 = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
+                                fat2, fat1, len_val
+                            );
+                            self.fn_ctx.record_emitted_type(&fat2, "{ i8*, i64 }");
+                            val = fat2;
+                            did_vec_to_slice = true;
+                            "{ i8*, i64 }".to_string()
+                        } else {
+                            self.type_to_llvm(&sub)
+                        }
                     } else {
                         // Generic params are erased to i64 in LLVM IR
                         // Use i64 as the LLVM type, and coerce if needed
                         "i64".to_string()
                     }
+                } else if Self::is_vec_to_slice_coercion(pt, &inferred_ty) {
+                    // Non-generic param explicitly typed as Slice but arg is a Vec.
+                    let vec_ptr_ty = self.llvm_type_of(&val);
+                    let vec_struct_ty = vec_ptr_ty
+                        .strip_suffix('*')
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "%Vec".to_string());
+                    let data_gep = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
+                        data_gep, vec_struct_ty, vec_struct_ty, val
+                    );
+                    let data_i64 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_gep);
+                    self.fn_ctx.record_emitted_type(&data_i64, "i64");
+                    let data_i8 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_i8, data_i64);
+                    let len_gep = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 1",
+                        len_gep, vec_struct_ty, vec_struct_ty, val
+                    );
+                    let len_val = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i64, i64* {}", len_val, len_gep);
+                    self.fn_ctx.record_emitted_type(&len_val, "i64");
+                    let fat1 = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+                        fat1, data_i8
+                    );
+                    self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
+                    let fat2 = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
+                        fat2, fat1, len_val
+                    );
+                    self.fn_ctx.record_emitted_type(&fat2, "{ i8*, i64 }");
+                    val = fat2;
+                    did_vec_to_slice = true;
+                    "{ i8*, i64 }".to_string()
                 } else {
                     self.type_to_llvm(pt)
                 }
             } else {
                 self.type_to_llvm(&inferred_ty)
             };
+
+            // Skip downstream coercions when Vec→slice has produced final fat ptr.
+            if did_vec_to_slice {
+                arg_vals.push(format!("{} {}", arg_llvm_ty, val));
+                continue;
+            }
 
             // Integer width coercion: coerce to match arg_llvm_ty.
             // Phase 17.H4.4: prefer the **actual** LLVM type of `val`
