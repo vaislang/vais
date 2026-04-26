@@ -187,12 +187,30 @@ impl CodeGenerator {
                     if (actual_llvm == "i64" || actual_llvm.starts_with('i'))
                         && effective_ty.starts_with('%')
                     {
+                        // Narrow integers (i1/i8/i16/i32) must be widened to i64
+                        // before `inttoptr i64 ... to %T*`. Without this, vaisdb
+                        // prefix.vais hits `inttoptr i64 %t33 to %CompressedKey*`
+                        // where %t33 is `load i8` from a Vec<CompressedKey>::push(u8)
+                        // misuse path.
+                        let mut int_val = arg_val.to_string();
+                        if matches!(actual_llvm.as_str(), "i1" | "i8" | "i16" | "i32") {
+                            let widened = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = zext {} {} to i64",
+                                widened,
+                                actual_llvm,
+                                arg_val
+                            );
+                            self.fn_ctx.record_emitted_type(&widened, "i64");
+                            int_val = widened;
+                        }
                         let src_ptr = self.next_temp(counter);
                         write_ir!(
                             ir,
                             "  {} = inttoptr i64 {} to {}*",
                             src_ptr,
-                            arg_val,
+                            int_val,
                             effective_ty
                         );
                         let loaded = self.next_temp(counter);

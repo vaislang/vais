@@ -843,6 +843,17 @@ impl CodeGenerator {
             if arg_ty.starts_with('%') && !arg_ty.ends_with('*') {
                 let inferred = self.infer_expr_type(arg_for_gen);
                 if !matches!(inferred, ResolvedType::Named { .. }) {
+                    // If val was emitted as a narrow integer (i1/i8/i16/i32),
+                    // zext to i64 first — `inttoptr` requires i64 source here.
+                    // vaisdb prefix.vais hits this when a misuse like
+                    // Vec<CompressedKey>::push(u8_byte) reaches codegen.
+                    let actual = self.llvm_type_of(&val);
+                    if matches!(actual.as_str(), "i1" | "i8" | "i16" | "i32") {
+                        let widened = self.next_temp(counter);
+                        write_ir!(ir, "  {} = zext {} {} to i64", widened, actual, val);
+                        self.fn_ctx.record_emitted_type(&widened, "i64");
+                        val = widened;
+                    }
                     let ptr_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = inttoptr i64 {} to {}*", ptr_tmp, val, arg_ty);
                     let loaded = self.next_temp(counter);

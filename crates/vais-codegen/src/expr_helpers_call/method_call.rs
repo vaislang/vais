@@ -617,6 +617,18 @@ impl CodeGenerator {
                 if !matches!(inferred, ResolvedType::Named { .. }) {
                     // Value is i64 (generic erasure) but param expects struct type
                     // Coerce via inttoptr + load: i64 → struct_ptr → struct
+                    // Guard: if val was emitted as a narrow integer (i1/i8/i16/i32),
+                    // zext to i64 first — `inttoptr` requires the source to be i64
+                    // here. Without this, vaisdb prefix.vais hits
+                    //   `%t34 = inttoptr i64 %t33 to %CompressedKey*`
+                    // where %t33 is `load i8` (Vec<CompressedKey>::push(u8) misuse).
+                    let actual = self.llvm_type_of(&val);
+                    if matches!(actual.as_str(), "i1" | "i8" | "i16" | "i32") {
+                        let widened = self.next_temp(counter);
+                        write_ir!(ir, "  {} = zext {} {} to i64", widened, actual, val);
+                        self.fn_ctx.record_emitted_type(&widened, "i64");
+                        val = widened;
+                    }
                     let ptr_tmp = self.next_temp(counter);
                     write_ir!(
                         ir,
