@@ -245,36 +245,32 @@ impl CodeGenerator {
             ir.push_str(&arr_ir);
             ir.push_str(&idx_ir);
 
-            // Infer element type for correct GEP + store
+            // Phase Ω P1.3 (iter 98 LANDED): single-source index access derivation.
+            // Path 2 (data write simple) migrated to use resolve_index_access.
+            // Behavior preserved: Ref/RefMut peel happens inside helper; the local
+            // `arr_ty_inner` binding kept only for downstream `vec_llvm_ty` lookup
+            // in the VecData branch below.
             let arr_ty = self.infer_expr_type(arr_expr);
-            // Strip Ref/RefMut — Vec indexed assign on a &Vec receiver still
-            // uses the underlying Vec element type.
             let arr_ty_inner = match &arr_ty {
                 ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
                 other => other,
             };
+            // Local enum kept for the GEP/store emit logic below — maps from
+            // helper's AccessKind to the assignment-side three-way enum.
+            // FatPtr + StrByte both treated as FatSlice (str-index assign not
+            // supported, falls into helper's catch-all errorr if it reaches).
             enum AccessKind {
-                /// Pointer math on a raw `T*` (array / pointer / typed slice
-                /// with fat-pointer extraction).
                 Direct,
-                /// Fat-pointer slice `{ i8*, i64 }` — extract data, bitcast.
                 FatSlice,
-                /// Vec<T> — load data pointer from the first field of the
-                /// Vec struct, then GEP/store through that pointer.
                 VecData,
             }
-            let (elem_llvm_ty, access) = match arr_ty_inner {
-                ResolvedType::Pointer(elem) => (self.type_to_llvm(elem), AccessKind::Direct),
-                ResolvedType::Array(elem) => (self.type_to_llvm(elem), AccessKind::Direct),
-                ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => {
-                    (self.type_to_llvm(elem), AccessKind::FatSlice)
-                }
-                ResolvedType::Named { name, generics }
-                    if name == "Vec" && !generics.is_empty() =>
-                {
-                    (self.type_to_llvm(&generics[0]), AccessKind::VecData)
-                }
-                _ => ("i64".to_string(), AccessKind::Direct),
+            let acc = self.resolve_index_access(&arr_ty)?;
+            let elem_llvm_ty = acc.elem_llvm.clone();
+            let access = match acc.access_kind {
+                crate::index_access::AccessKind::Direct => AccessKind::Direct,
+                crate::index_access::AccessKind::FatPtr
+                | crate::index_access::AccessKind::StrByte => AccessKind::FatSlice,
+                crate::index_access::AccessKind::VecData => AccessKind::VecData,
             };
 
             // Build the pointer we will GEP through.
