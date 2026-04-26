@@ -169,9 +169,37 @@ mod integrity {
         }
     }
 
+    /// Compute a unique per-input IR output path so parallel codegen
+    /// tests don't race on `/tmp/__ok.ll`.
+    ///
+    /// **Background (Phase Ω P1.4 iter 114)**: prior to this commit,
+    /// `ok_codegen` / `ok_codegen_pkg` both wrote to a single shared
+    /// `/tmp/__ok.ll`. `cargo test` runs the integrity tests in parallel
+    /// (multiple test threads inside this single test binary, plus
+    /// possibly multiple test binaries). When two `vaisc build` invocations
+    /// raced on that single `-o` target, one would clobber the other's
+    /// IR mid-write, sometimes corrupting the file the second `vaisc`
+    /// process was still reading back as part of its own pipeline (or
+    /// crashing one of the two with a write-after-truncate). The result
+    /// was a non-deterministic vaisdb pass count in the 217–223 range
+    /// even on byte-identical source trees (documented in ROADMAP iter
+    /// 109/113 retro). This unique-path scheme aligns codegen with the
+    /// pattern `unique_exe_path` already uses for `ok_build`.
+    fn unique_ir_path(input: &Path) -> PathBuf {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut h = DefaultHasher::new();
+        input.to_string_lossy().hash(&mut h);
+        std::process::id().hash(&mut h);
+        // Include the test thread id so concurrent invocations within a
+        // single test process also separate cleanly.
+        format!("{:?}", std::thread::current().id()).hash(&mut h);
+        PathBuf::from(format!("/tmp/__ok_ir_{:016x}.ll", h.finish()))
+    }
+
     /// Stage 4: Codegen OK? (produces LLVM IR, does not link)
     ///
-    /// Runs `vaisc build <path> --emit-ir -o /tmp/__ok.ll --force-rebuild`.
+    /// Runs `vaisc build <path> --emit-ir -o <unique> --force-rebuild`.
     pub fn ok_codegen(path: &Path) -> bool {
         let vaisc = vaisc_path();
         // Phase 5.24: provide VAIS_STD_PATH + VAIS_DEP_PATHS so std files
@@ -180,16 +208,19 @@ mod integrity {
         // allowed directories" / "Cannot find Vais standard library"
         // failures even when the file builds OK interactively.
         let std_path = "/tmp/vais-lib/std";
+        let ir_out = unique_ir_path(path);
         let output = Command::new(&vaisc)
             .arg("build")
             .arg(path)
             .arg("--emit-ir")
             .arg("-o")
-            .arg("/tmp/__ok.ll")
+            .arg(&ir_out)
             .arg("--force-rebuild")
             .env("VAIS_STD_PATH", std_path)
             .env("VAIS_DEP_PATHS", std_path)
             .output();
+        // Best-effort cleanup so /tmp doesn't fill up over a full run.
+        let _ = std::fs::remove_file(&ir_out);
         match output {
             Err(e) => {
                 eprintln!(
@@ -221,16 +252,18 @@ mod integrity {
     /// `stdroot` — path to std root.
     pub fn ok_codegen_pkg(path: &Path, deps: &str, stdroot: &str) -> bool {
         let vaisc = vaisc_path();
+        let ir_out = unique_ir_path(path);
         let output = Command::new(&vaisc)
             .arg("build")
             .arg(path)
             .arg("--emit-ir")
             .arg("-o")
-            .arg("/tmp/__ok.ll")
+            .arg(&ir_out)
             .arg("--force-rebuild")
             .env("VAIS_DEP_PATHS", deps)
             .env("VAIS_STD_PATH", stdroot)
             .output();
+        let _ = std::fs::remove_file(&ir_out);
         match output {
             Err(e) => {
                 eprintln!(
