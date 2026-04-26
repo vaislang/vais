@@ -229,6 +229,36 @@ iter 종료 시 동일 block + actual 결과 + 다음 iter entry로 갱신. ROAD
 
 ---
 
+### Iter Retrospective (의무, P4.3 LANDED iter 84)
+
+매 iter 종료 시 ROADMAP `lang/packages/vaisdb/ROADMAP.md`에 다음 형식의 retrospective 절 추가 의무:
+
+```markdown
+### iter <N> strategy + 결과 (YYYY-MM-DD, <task-id> LANDED)
+- task: <id> <subject> (<단독|병렬>, 위험 <0~10/10>, 추정 <시간>)
+- strategy: <Opus direct | impl-sonnet | research-haiku> (<이유>)
+- 산출 (<repo> commit `<hash>`):
+  - <변경 1>
+  - <변경 2>
+- ADR 0001 분류: <root-cause-fix | site-fix | N/A>
+- ADR 0002 분류: <Class 1|2|3|4 | N/A> (codegen 변경 시)
+- 검증: cargo test <count> / check-integrity <std>/<vaisdb> / vaisdb-regression <count>
+- 다음 task 후보 (iter <N+1>+): <옵션 A> / <옵션 B>
+- 본 iter commits <count>: <repo> `<hash>` ...
+```
+
+**의무 항목**:
+1. 매 iter LANDED 시 ROADMAP에 위 형식 절 추가 (즉시, iter close 전)
+2. iter close 시 mode/iteration/max_iterations 갱신
+3. multi-session 종료 시 별도 "iter N~M 세션 종료" 절 추가 (iter 76~80 패턴)
+4. retrospective 누락 시 다음 iter entry 차단 (lint 권장 — tooling 미구현, manual 게이트)
+
+**Why**: iter 76~83에서 자발적 관행화. 본 P4.3에서 정책 명문화로 채택. ROADMAP 산문 흩어짐 방지 + multi-session 인계 안전.
+
+**적용 시점**: 본 ADR 갱신 (P4.3 LANDED) 이후 모든 iter.
+
+---
+
 ### Rollback Trigger (정량)
 
 다음 중 하나라도 충족 시 **즉시 git revert + stash 보관 + ROADMAP 기록 의무**. CLAUDE 규칙 4번을 본 ADR에 binding.
