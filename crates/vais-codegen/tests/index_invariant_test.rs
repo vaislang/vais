@@ -82,10 +82,6 @@ fn ir_has_gep_with_elem(ir: &str, expected_elem: &str) -> bool {
 // ────────────────────────────────────────────────────────────────────────────
 
 #[test]
-#[ignore = "PASSES with stash@{0} phaseO_compound_assign_fix applied. \
-            Currently negative test — verifies bug exists. Will be enabled \
-            in Pillar 1.3 (codegen indexing 4-path 통합). See ROADMAP iter 74 \
-            stash decision (vaisdb -3 regression caused revert)."]
 fn index_invariant_compound_assign_i32_keeps_i32_elem_type() {
     // Vec<i32> compound assign — the GEP chain that walks Vec.data must
     // step by i32 (4 bytes), not by i64 (8 bytes). If the catch-all
@@ -154,9 +150,6 @@ fn index_invariant_compound_assign_i32_no_i64_gep_on_vec() {
 }
 
 #[test]
-#[ignore = "PASSES with stash@{0} phaseO_compound_assign_fix applied. \
-            Currently negative test — Vec<i64> compound assign emits no GEP \
-            without the fix. Will be enabled in Pillar 1.3."]
 fn index_invariant_compound_assign_i64_still_emits_i64_gep() {
     // Sanity check: when the element type genuinely is i64, the GEP
     // *should* be `getelementptr i64, i64* ...`. This catches the case
@@ -271,10 +264,6 @@ fn index_invariant_simple_assign_vec_i32_no_compound() {
 }
 
 #[test]
-#[ignore = "vaisdb node.ll:1848 패턴 (Vec<Vec<u8>> push of slice). \
-            현재 codegen에서 inner Vec<u8> erasure로 fail. \
-            Pillar 1.2 (TC inference Var 해소) + Pillar 1.3 (indexing 4-path) \
-            완료 후 PASS 예정. ADR 0002 Class 2/3 cross-cutting."]
 fn index_invariant_vec_of_vec_u8_outer_push_emits_struct_gep() {
     // vaisdb node.ll:1848의 reduced repro:
     // Vec<Vec<u8>> 의 outer indexing은 inner Vec<u8> struct ({i8*, i64})를
@@ -309,9 +298,6 @@ fn index_invariant_vec_of_vec_u8_outer_push_emits_struct_gep() {
 }
 
 #[test]
-#[ignore = "vaisdb key.ll:1128 패턴 (&[&[u8]] indexing). \
-            fat-ptr-of-fat-ptr indexing은 Pillar 1.3 helper 통합 후 명확한 \
-            GEP 형태 보장 가능. 현재는 i64 fallback path가 살아있음."]
 fn index_invariant_slice_of_slices_u8_indexing() {
     // vaisdb key.ll:1128의 reduced repro:
     // &[&[u8]] (slice of byte slices) indexing은 outer fat-ptr extract 후

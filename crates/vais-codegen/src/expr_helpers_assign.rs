@@ -726,18 +726,94 @@ impl CodeGenerator {
         } = &target.node
         {
             // Array/Vec element compound assignment: arr[idx] += value
+            //
+            // Phase Ω P1.3 iter 101 LANDED:
+            //   stash@{0} `phaseO_compound_assign_fix` 통합 + helper migration.
+            //   iter 74 -3 vaisdb regression은 P1.2 (Vec.push + HashMap.insert
+            //   builtin dispatch fix) 이전 상태에서만 발생. P1.2 LANDED 후
+            //   재시도 결과 cascade 0건 (vaisdb-regression --all 8=8 hold,
+            //   3 runs 검증).
+            //
+            // ADR 0001 §1 R1 invariant:
+            //   Compound assign GEP의 elem_llvm은 array의 ResolvedType에서
+            //   도출 (Vec<T>, [T], *T, &[T], &mut [T]). llvm_type_of(arr_val)
+            //   폴백 금지 (untracked SSA / %Vec$T* 케이스 깨짐).
+            //
+            // R2 차단: index_invariant_test.rs compound_assign_i32/i64 (4 case)
+            // R3 audit: Path 1 (data read) + Path 2 (simple assign) 동일 패턴
             let (arr_val, arr_ir) = self.generate_expr(arr_expr, counter)?;
             let (idx_val, idx_ir) = self.generate_expr(idx_expr, counter)?;
             ir.push_str(&arr_ir);
             ir.push_str(&idx_ir);
-            // Use inferred element type instead of hardcoded i64
-            let arr_type = self.infer_expr_type(arr_expr);
-            let elem_llvm = match &arr_type {
-                ResolvedType::Array(inner) | ResolvedType::Pointer(inner) => {
-                    self.type_to_llvm(inner)
-                }
-                _ => self.llvm_type_of(&arr_val),
+
+            // Single-source helper (Phase Ω P1.3, iter 97).
+            // Path 2 (simple assign)와 동일 패턴: helper 4-variant AccessKind
+            // → Path 3 local 3-variant (FatSlice = FatPtr + StrByte).
+            let arr_ty = self.infer_expr_type(arr_expr);
+            let arr_ty_inner = match &arr_ty {
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
+                other => other,
             };
+            enum AccessKind {
+                Direct,
+                FatSlice,
+                VecData,
+            }
+            let acc = self.resolve_index_access(&arr_ty)?;
+            let elem_llvm = acc.elem_llvm.clone();
+            let access = match acc.access_kind {
+                crate::index_access::AccessKind::Direct => AccessKind::Direct,
+                crate::index_access::AccessKind::FatPtr
+                | crate::index_access::AccessKind::StrByte => AccessKind::FatSlice,
+                crate::index_access::AccessKind::VecData => AccessKind::VecData,
+            };
+
+            let base_ptr = match access {
+                AccessKind::FatSlice => {
+                    let data_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                        data_ptr,
+                        arr_val
+                    );
+                    let typed_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = bitcast i8* {} to {}*",
+                        typed_ptr,
+                        data_ptr,
+                        elem_llvm
+                    );
+                    typed_ptr
+                }
+                AccessKind::VecData => {
+                    let vec_llvm_ty = self.type_to_llvm(arr_ty_inner);
+                    let data_slot = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
+                        data_slot,
+                        vec_llvm_ty,
+                        vec_llvm_ty,
+                        arr_val
+                    );
+                    let data_i64 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_slot);
+                    self.fn_ctx.record_emitted_type(&data_i64, "i64");
+                    let typed_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = inttoptr i64 {} to {}*",
+                        typed_ptr,
+                        data_i64,
+                        elem_llvm
+                    );
+                    typed_ptr
+                }
+                AccessKind::Direct => arr_val.clone(),
+            };
+
             let elem_ptr = self.next_temp(counter);
             write_ir!(
                 ir,
@@ -745,7 +821,7 @@ impl CodeGenerator {
                 elem_ptr,
                 elem_llvm,
                 elem_llvm,
-                arr_val,
+                base_ptr,
                 idx_val
             );
             write_ir!(
