@@ -659,51 +659,15 @@ impl CodeGenerator {
                             write_ir!(ir, "  ret {} zeroinitializer{}", ret_llvm, ret_dbg);
                         }
                     } else {
-                        // Coerce return value width if needed (int, float, struct).
+                        // Mini Pillar 1 (ADR 0001 §1) — single coerce point for ret.
+                        // Migrated from inline 3-branch (float width / i64→struct
+                        // erasure / int width) chain.
                         let value = if value.starts_with('%') {
                             let val_llvm = self.llvm_type_of(&value);
-                            if (val_llvm == "float" || val_llvm == "double")
-                                && (ret_llvm == "float" || ret_llvm == "double")
-                                && val_llvm != ret_llvm
-                            {
-                                let tmp = self.next_temp(&mut counter);
-                                if val_llvm == "double" && ret_llvm == "float" {
-                                    write_ir!(ir, "  {} = fptrunc double {} to float", tmp, value);
-                                } else {
-                                    write_ir!(ir, "  {} = fpext float {} to double", tmp, value);
-                                }
-                                tmp
-                            } else if val_llvm == "i64"
-                                && ret_llvm.starts_with('%')
-                                && !ret_llvm.ends_with('*')
-                            {
-                                let tmp_ptr = self.next_temp(&mut counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = inttoptr i64 {} to {}*",
-                                    tmp_ptr,
-                                    value,
-                                    ret_llvm
-                                );
-                                let loaded = self.next_temp(&mut counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = load {}, {}* {}",
-                                    loaded,
-                                    ret_llvm,
-                                    ret_llvm,
-                                    tmp_ptr
-                                );
-                                loaded
-                            } else {
-                                self.coerce_int_width(
-                                    &value,
-                                    &val_llvm,
-                                    &ret_llvm,
-                                    &mut counter,
-                                    &mut ir,
-                                )
-                            }
+                            let (coerced_val, coerce_ir) =
+                                self.coerce_ret_value(&value, &val_llvm, &ret_llvm, &mut counter);
+                            ir.push_str(&coerce_ir);
+                            coerced_val
                         } else {
                             value
                         };
