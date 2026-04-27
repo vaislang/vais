@@ -70,6 +70,48 @@
 
 use std::fmt::Write as _;
 
+/// Whether an emit method should record the produced SSA's LLVM type
+/// with the function-level registry, or skip that registration.
+///
+/// ## Background (iter 117 site classification)
+///
+/// iter 117 (Phase Ω P1.4) classified the 763 emit sites into four
+/// categories:
+///
+/// - **Category A** — single LLVM type per call site (e.g., the iter
+///   107 ret-cast at `stmt_visitor.rs:708` always casts to a
+///   pointer-to-specialized form). Auto-registering the SSA's type is
+///   strictly information-positive: downstream consumers stop falling
+///   back to the i64 default. **Use `Auto`.**
+/// - **Category B** — multiple LLVM types possible at the same call
+///   site (e.g., the ret-load at `stmt_visitor.rs:729` whose result is
+///   `struct`, scalar, or pointer depending on the function's return
+///   type). The iter 110 / iter 116 attempts both regressed under
+///   `Auto`: registering the precise type exposed contradictions with
+///   downstream code that had been written against the prior i64
+///   fallback. **Use `Skip` until the downstream can absorb the
+///   precise type.**
+/// - **Category C / D** — covered in ROADMAP iter 117; pick `Auto` or
+///   `Skip` after a 5-run measurement under the iter 114 protocol.
+///
+/// ## Why this is an explicit argument rather than a method variant
+///
+/// Adding a `_no_register` variant for every `_with_prefix` /
+/// default-name method would double the surface area. A two-valued
+/// enum keeps the API small while making the choice impossible to
+/// miss at the call site.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RegisterPolicy {
+    /// Call `record_emitted_type(name, ty)` after emitting the
+    /// instruction. Use for category-A sites.
+    Auto,
+    /// Skip the registration. The produced [`TypedTemp`] still carries
+    /// its declared `ty` for the caller's local use. Use for
+    /// category-B sites whose downstream consumers depend on the
+    /// pre-migration i64 fallback.
+    Skip,
+}
+
 /// A thin wrapper around an LLVM type string.
 ///
 /// This is *not* a parsed type — it is the textual form that will appear in
@@ -368,21 +410,31 @@ impl<'a, R: TypeRegistrar + ?Sized> TypedEmitter<'a, R> {
         }
     }
 
-    /// Emit a `load` instruction with a caller-supplied SSA name prefix.
+    /// Emit a `load` instruction with a caller-supplied SSA name prefix
+    /// and an explicit registration policy.
     ///
     /// See [`emit_bitcast_with_prefix`](Self::emit_bitcast_with_prefix)
-    /// for prefix semantics. Used at sites that previously hand-rolled
-    /// `format!("%ret.{}", counter)` and similar.
+    /// for prefix semantics. The `policy` argument decides whether the
+    /// produced SSA's LLVM type is recorded with the registry — see
+    /// [`RegisterPolicy`] for the rationale.
     ///
-    /// iter 110 reverted (variance ±1 vs deterministic 221 baseline);
-    /// see ROADMAP iter 110 for the LLVM-type-diversity hypothesis. No
-    /// production caller until that variance is understood.
+    /// ROADMAP iter 117 captures the site-by-site classification: load
+    /// sites at `stmt_visitor.rs:729` and elsewhere fall in category B
+    /// (LLVM-type diversity), so iter 110 and iter 116 both reverted
+    /// the migration under the implicit auto-register behavior. The
+    /// `Skip` mode lets such sites adopt the wrapper for IR uniformity
+    /// without paying the `record_emitted_type` cost that downstream
+    /// consumers' i64 fallback assumptions cannot yet absorb. iter 118
+    /// adds the policy argument so future migrations can opt in
+    /// site-by-site after the iter 114 deterministic protocol confirms
+    /// non-regression.
     #[allow(dead_code)]
     pub(crate) fn emit_load_with_prefix(
         &mut self,
         prefix: &str,
         pointee_ty: LlvmType,
         ptr: &str,
+        policy: RegisterPolicy,
     ) -> TypedTemp {
         let name = self.fresh_temp_with_prefix(prefix);
         let _ = writeln!(
@@ -390,8 +442,10 @@ impl<'a, R: TypeRegistrar + ?Sized> TypedEmitter<'a, R> {
             "  {} = load {}, {}* {}",
             name, pointee_ty, pointee_ty, ptr
         );
-        self.registry
-            .record_emitted_type(&name, pointee_ty.as_str());
+        if matches!(policy, RegisterPolicy::Auto) {
+            self.registry
+                .record_emitted_type(&name, pointee_ty.as_str());
+        }
         TypedTemp {
             name,
             ty: pointee_ty,
@@ -691,17 +745,50 @@ mod tests {
     }
 
     #[test]
-    fn emit_load_with_prefix_matches_legacy_format() {
-        // stmt_visitor.rs:723 used `format!("%ret.{}", counter)`.
+    fn emit_load_with_prefix_auto_records_type() {
+        // stmt_visitor.rs:729 uses `format!("%ret.{}", counter)`. With
+        // RegisterPolicy::Auto the produced SSA's type is recorded.
         let mut ir = String::new();
         let mut reg = StubRegistry::default();
         let mut counter: usize = 7;
         let result = {
             let mut te = TypedEmitter::new(&mut ir, &mut reg, &mut counter);
-            te.emit_load_with_prefix("ret.", LlvmType::from("%Result*"), "%cast")
+            te.emit_load_with_prefix(
+                "ret.",
+                LlvmType::from("%Result*"),
+                "%cast",
+                RegisterPolicy::Auto,
+            )
         };
         assert_eq!(ir, "  %ret.7 = load %Result*, %Result** %cast\n");
         assert_eq!(result.name(), "%ret.7");
+        assert_eq!(reg.get_emitted_type("%ret.7"), Some("%Result*"));
+    }
+
+    #[test]
+    fn emit_load_with_prefix_skip_does_not_record() {
+        // Category-B site adopts the wrapper for IR uniformity but
+        // suppresses registration so downstream i64-fallback
+        // assumptions are not perturbed (iter 117 classification).
+        let mut ir = String::new();
+        let mut reg = StubRegistry::default();
+        let mut counter: usize = 7;
+        let result = {
+            let mut te = TypedEmitter::new(&mut ir, &mut reg, &mut counter);
+            te.emit_load_with_prefix(
+                "ret.",
+                LlvmType::from("%Result*"),
+                "%cast",
+                RegisterPolicy::Skip,
+            )
+        };
+        assert_eq!(ir, "  %ret.7 = load %Result*, %Result** %cast\n");
+        assert_eq!(result.name(), "%ret.7");
+        // Skip mode: registry is untouched.
+        assert!(reg.get_emitted_type("%ret.7").is_none());
+        // The TypedTemp still carries its declared type for the
+        // caller's local use.
+        assert_eq!(result.ty().as_str(), "%Result*");
     }
 
     #[test]
