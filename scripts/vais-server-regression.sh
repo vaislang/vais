@@ -10,7 +10,7 @@
 # Usage:
 #   ./scripts/vais-server-regression.sh                    # default: test_shutdown only
 #   ./scripts/vais-server-regression.sh test_shutdown      # specific test
-#   ./scripts/vais-server-regression.sh --all              # wave 1: 2 tests
+#   ./scripts/vais-server-regression.sh --all              # wave 1+2: 8 tests
 #   VERBOSE=1 ./scripts/vais-server-regression.sh          # show full clang output
 #
 # Note: vais-web 통합은 별도 (Rust workspace로 cargo test 패턴, 본 script scope 외).
@@ -24,9 +24,11 @@ SERVER_ROOT="${SERVER_ROOT:-$REPO_ROOT/../lang/packages/vais-server}"
 VAISC="${VAISC:-$HOME/.cargo/bin/vaisc}"
 STD_PATH="${STD_PATH:-/tmp/vais-lib/std}"
 
-# Known-failure baselines (2026-04-26, iter 86 실측, ADR 0001 §1 R3).
+# Known-failure baselines (ADR 0001 §1 R3).
 # These clang errors are tracked as TEMP-SITE-FIX(adr-0001) — to be resolved
 # by Pillar 1.x cross-cutting fixes (Vec_push undefined, var-to-llvm typing).
+
+# Wave 1 (2026-04-26, iter 86 실측): smoke tests — core + integration
 WAVE1_TESTS=(test_shutdown test_http)
 WAVE1_BASELINES=(1 1)
 WAVE1_PATHS=(
@@ -34,13 +36,32 @@ WAVE1_PATHS=(
     "tests/integration/test_http.vais"
 )
 
+# Wave 2 (2026-04-28, iter 87 실측): coverage expansion — 6 additional areas
+# Domains: core/test_error(0), http/test_status(1), http/test_response(1),
+#          middleware/test_pipeline(1), util/test_yaml(3), ws/test_protocol(5)
+WAVE2_TESTS=(test_error test_status test_response test_pipeline test_yaml test_protocol)
+WAVE2_BASELINES=(0 1 1 1 3 5)
+WAVE2_PATHS=(
+    "tests/core/test_error.vais"
+    "tests/http/test_status.vais"
+    "tests/http/test_response.vais"
+    "tests/middleware/test_pipeline.vais"
+    "tests/util/test_yaml.vais"
+    "tests/ws/test_protocol.vais"
+)
+
+# Combined list for --all
+ALL_TESTS=("${WAVE1_TESTS[@]}" "${WAVE2_TESTS[@]}")
+ALL_BASELINES=("${WAVE1_BASELINES[@]}" "${WAVE2_BASELINES[@]}")
+ALL_PATHS=("${WAVE1_PATHS[@]}" "${WAVE2_PATHS[@]}")
+
 # Lookup helpers (bash 3.2 compatible).
 get_baseline() {
     local name="$1"
     local i=0
-    for t in "${WAVE1_TESTS[@]}"; do
+    for t in "${ALL_TESTS[@]}"; do
         if [[ "$t" == "$name" ]]; then
-            echo "${WAVE1_BASELINES[$i]}"
+            echo "${ALL_BASELINES[$i]}"
             return 0
         fi
         i=$((i + 1))
@@ -51,9 +72,9 @@ get_baseline() {
 get_path() {
     local name="$1"
     local i=0
-    for t in "${WAVE1_TESTS[@]}"; do
+    for t in "${ALL_TESTS[@]}"; do
         if [[ "$t" == "$name" ]]; then
-            echo "${WAVE1_PATHS[$i]}"
+            echo "${ALL_PATHS[$i]}"
             return 0
         fi
         i=$((i + 1))
@@ -92,7 +113,7 @@ fi
 
 echo "▶ Nuking vais-server caches and /tmp test artifacts..."
 find "$SERVER_ROOT" -name ".vais-cache" -type d -exec rm -rf {} + 2>/dev/null || true
-for t in "${WAVE1_TESTS[@]}"; do
+for t in "${ALL_TESTS[@]}"; do
     rm -rf /tmp/${t}* 2>/dev/null || true
 done
 
@@ -101,13 +122,17 @@ done
 TARGET_ARG="${1:-test_shutdown}"
 
 if [[ "$TARGET_ARG" == "--all" ]]; then
+    TESTS=("${ALL_TESTS[@]}")
+elif [[ "$TARGET_ARG" == "--wave1" ]]; then
     TESTS=("${WAVE1_TESTS[@]}")
+elif [[ "$TARGET_ARG" == "--wave2" ]]; then
+    TESTS=("${WAVE2_TESTS[@]}")
 elif is_known_test "$TARGET_ARG"; then
     TESTS=("$TARGET_ARG")
 else
     echo "❌ Unknown test: $TARGET_ARG"
-    echo "   Available: ${WAVE1_TESTS[*]}"
-    echo "   Or: --all"
+    echo "   Available: ${ALL_TESTS[*]}"
+    echo "   Or: --all / --wave1 / --wave2"
     exit 2
 fi
 
@@ -194,13 +219,13 @@ if [[ ${#IMPROVED_TESTS[@]} -gt 0 ]]; then
     echo ""
     echo "Action required:"
     echo "  1. Verify improvements are intentional (not flaky)"
-    echo "  2. Update WAVE1_BASELINES in scripts/vais-server-regression.sh"
+    echo "  2. Update WAVE1_BASELINES or WAVE2_BASELINES in scripts/vais-server-regression.sh"
     echo "  3. Update ROADMAP to mark which task closed the gaps"
 fi
 
 if [[ ${#FAILED_TESTS[@]} -eq 0 && ${#IMPROVED_TESTS[@]} -eq 0 ]]; then
     echo ""
-    echo "✓ vais-server wave 1 baseline holds (all ${#TESTS[@]} tests)"
+    echo "✓ vais-server baseline holds (all ${#TESTS[@]} tests)"
 fi
 
 exit 0

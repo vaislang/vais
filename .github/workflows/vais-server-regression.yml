@@ -26,13 +26,15 @@ concurrency:
 
 jobs:
   vais-server-build:
-    name: vais-server wave 1 (2 tests) build + link
+    name: vais-server wave 1+2 (8 tests) build + link
     runs-on: ubuntu-latest
 
-    # NOTE (Pillar 2.3 wave 1, iter 86):
-    # 2-test smoke suite: test_shutdown + test_http.
-    # baseline (per-test KNOWN_FAILURE_COUNTS in scripts/vais-server-regression.sh):
-    #   test_shutdown=1 (Vec_push undefined), test_http=1 (var-to-llvm typing) (합계 2)
+    # NOTE (Pillar 2.3 wave 1+2, iter 86 + iter 121):
+    # 8-test suite (wave 1: 2 + wave 2: 6):
+    #   wave 1: test_shutdown=1 (Vec_push undefined), test_http=1 (var-to-llvm typing)
+    #   wave 2: test_error=0, test_status=1, test_response=1, test_pipeline=1,
+    #           test_yaml=3, test_protocol=5
+    # 합계 baseline: 13 (per-test counts in scripts/vais-server-regression.sh)
     # vais-web 통합은 별도 (Rust workspace cargo test 패턴).
 
     steps:
@@ -94,7 +96,7 @@ jobs:
           mkdir -p /tmp/vais-lib
           ln -sf "$GITHUB_WORKSPACE/vais/std" /tmp/vais-lib/std
 
-      - name: Run vais-server regression (wave 1, 2 tests)
+      - name: Run vais-server regression (wave 1+2, 8 tests)
         if: steps.check_lang.outputs.skip != 'true'
         env:
           VAISC: ${{ github.workspace }}/vais/target/release/vaisc
@@ -109,7 +111,6 @@ jobs:
         with:
           name: vais-server-regression-logs
           path: |
-            /tmp/test_shutdown_*.ll
-            /tmp/test_http_*.ll
+            /tmp/test_*.ll
             /tmp/build_log_*.txt
           retention-days: 7
