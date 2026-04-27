@@ -765,11 +765,6 @@ impl TypeChecker {
             } => {
                 // Check for enum struct variant first (e.g., Shape.Circle { radius: 5.0 })
                 if let Some(ref ename) = enum_name {
-                    eprintln!(
-                        "[TC DEBUG] enum_name={}, has_enum={}",
-                        ename,
-                        self.enums.contains_key(ename)
-                    );
                     if let Some(enum_def) = self.enums.get(ename).cloned() {
                         let variant_name = &name.node;
                         if let Some(variant_fields) = enum_def.variants.get(variant_name) {
