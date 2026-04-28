@@ -518,7 +518,13 @@ impl TypeChecker {
                         ref generics,
                     } if name == "Vec" && !generics.is_empty() => {
                         if is_slice {
-                            Some(Ok(ResolvedType::Pointer(Box::new(
+                            // Phase Ω P1.7 (iter 134): Vec<T>[range] → Slice<T>
+                            // (was Pointer<T> — pre-fix, downstream `.to_vec()`
+                            // and other slice methods could not dispatch
+                            // because they only match `Slice`/`SliceMut`).
+                            // The codegen treats Pointer/Slice equivalently at
+                            // the IR level, so this is TC-only refinement.
+                            Some(Ok(ResolvedType::Slice(Box::new(
                                 self.apply_substitutions(&generics[0]),
                             ))))
                         } else if !index_type.is_integer() {

@@ -915,6 +915,16 @@ impl TypeChecker {
                         return Ok(receiver_type.clone());
                     }
                 }
+                "cmp" => {
+                    // Phase Ω P1.7 (iter 134): Rust-style `int.cmp(&other) -> Ordering`.
+                    // Vais represents Ordering as i64 (-1, 0, 1) for codegen
+                    // simplicity. vaisdb pattern:
+                    //   col_vec.sort_by(|a, b| a.column_index.cmp(&b.column_index))
+                    if args.len() == 1 {
+                        let _ = self.check_expr(&args[0]);
+                        return Ok(ResolvedType::I64);
+                    }
+                }
                 "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "wrapping_div"
                 | "wrapping_rem" | "saturating_add" | "saturating_sub" | "saturating_mul"
                 | "checked_add" | "checked_sub" | "checked_mul" | "checked_div" => {
