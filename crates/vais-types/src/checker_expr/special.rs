@@ -285,11 +285,27 @@ impl TypeChecker {
                     }
                 }
 
-                // Resolve parameter types (Type::Infer will create fresh type variables)
+                // Phase Ω P1.7 (iter 134): consume lambda-param hint if the
+                // caller pushed one (e.g. `Vec<T>.sort_by` pushes &T). The
+                // hint replaces the fresh-Var that would result from
+                // resolving an annotated `Type::Infer` param. All params of
+                // this Lambda receive the same hint — `sort_by(|a, b| ...)`
+                // wants both `a` and `b` typed as `&T`.
+                let lambda_hint = self.lambda_param_hint_stack.last().cloned();
                 let mut param_types: Vec<_> = params
                     .iter()
                     .map(|p| {
-                        let ty = self.resolve_type(&p.ty.node);
+                        let resolved = self.resolve_type(&p.ty.node);
+                        let ty = if matches!(p.ty.node, Type::Infer) {
+                            if let Some(hint) = &lambda_hint {
+                                let _ = self.unify(&resolved, hint);
+                                hint.clone()
+                            } else {
+                                resolved
+                            }
+                        } else {
+                            resolved
+                        };
                         self.define_var(&p.name.node, ty.clone(), p.is_mut);
                         ty
                     })

@@ -229,6 +229,13 @@ pub struct TypeChecker {
     /// stamped `expr_types` entry carries a fully-resolved generic — codegen
     /// can then route to the specialized `Vec_new$MigrationRecord`.
     pub(crate) expected_type_stack: Vec<ResolvedType>,
+
+    /// Phase Ω P1.7 (iter 134): lambda-param hint stack. Pushed by callers
+    /// that know the expected closure-param type (e.g. `Vec<T>.sort_by(|a, b|
+    /// ...)` pushes `&T` so `a`/`b`'s `Type::Infer` resolves to a typed Var
+    /// instead of an opaque fresh one). The Lambda check pops one entry per
+    /// param resolved via Type::Infer.
+    pub(crate) lambda_param_hint_stack: Vec<ResolvedType>,
 }
 
 impl TypeChecker {
@@ -274,6 +281,7 @@ impl TypeChecker {
             pending_method_instantiations: Vec::new(),
             enum_hint_stack: Vec::new(),
             expected_type_stack: Vec::new(),
+            lambda_param_hint_stack: Vec::new(),
         };
         checker.register_builtins();
         checker

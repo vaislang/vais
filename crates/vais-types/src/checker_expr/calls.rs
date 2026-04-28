@@ -508,13 +508,55 @@ impl TypeChecker {
 
                 // Check arguments with substituted parameter types
                 // (Phase 6.27c.3: push enum hint for bare-variant args)
+                // Phase Ω P1.7 (iter 134): when the formal param is a Fn type,
+                // push its first param-type onto `lambda_param_hint_stack` so
+                // a Lambda arg's `Type::Infer` params resolve to the concrete
+                // type instead of fresh Vars. Without this, `Vec<T>.sort_by`'s
+                // closure body fails E030 on `a.field`.
                 for (param_type, arg) in param_types.iter().zip(effective_args) {
                     let expected_type = if generic_substitutions.is_empty() {
                         param_type.clone()
                     } else {
                         self.substitute_generics(param_type, &generic_substitutions)
                     };
-                    let arg_type = self.check_expr_with_enum_hint(arg, &expected_type)?;
+                    let pushed_hint = if matches!(arg.node, Expr::Lambda { .. }) {
+                        // Phase Ω P1.7 (iter 134): closure param hint. The
+                        // formal param may be `Fn { ... }` (closure type) or
+                        // `FnPtr { ... }` (function-pointer type — stdlib
+                        // signatures like `sort_by(&self, cmp: fn(T,T) -> i64)`
+                        // resolve to FnPtr). For Generic("T") params, look up
+                        // the receiver's first generic (Vec<T>'s T) and
+                        // substitute.
+                        let fn_params_opt = match &expected_type {
+                            ResolvedType::Fn { params, .. } => Some(params.clone()),
+                            ResolvedType::FnPtr { params, .. } => Some(params.clone()),
+                            _ => None,
+                        };
+                        if let Some(fn_params) = fn_params_opt {
+                            if let Some(first) = fn_params.first().cloned() {
+                                let concrete = match &first {
+                                    ResolvedType::Generic(_) => receiver_generics
+                                        .first()
+                                        .cloned()
+                                        .unwrap_or(first),
+                                    _ => first,
+                                };
+                                self.lambda_param_hint_stack.push(concrete);
+                                true
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    };
+                    let arg_type_result = self.check_expr_with_enum_hint(arg, &expected_type);
+                    if pushed_hint {
+                        self.lambda_param_hint_stack.pop();
+                    }
+                    let arg_type = arg_type_result?;
                     self.unify(&expected_type, &arg_type)
                         .map_err(|e| e.with_span(arg.span))?;
                 }
@@ -1448,14 +1490,32 @@ impl TypeChecker {
             }
             // Phase 273: slice/Vec mutation operations — no result.
             // P1.5 (iter 128): sort_by added — `Vec.sort_by(|a, b| ...)` Unit return.
-            // Closure 인자 hint propagation은 별도 영역 (call_arg unify 또는 Lambda hint).
+            // P1.7 (iter 134) Stage A: closure 인자 hint propagation. For
+            // `Vec<T>.sort_by(|a, b| ...)`, Lambda params `a`/`b` should bind
+            // to `&T` so the closure body's field-access type-checks against
+            // the concrete element type. Without this, the params are fresh
+            // Vars and the body sees `?N.field` (E030). The hint is pushed
+            // onto `lambda_param_hint_stack` and consumed by Expr::Lambda
+            // when resolving each param's `Type::Infer`.
             if matches!(
                 method.node.as_str(),
                 "copy_from_slice" | "clone_from_slice" | "fill" | "swap" | "rotate_left"
                     | "rotate_right" | "sort" | "sort_by" | "reverse"
             ) {
+                let elem_ty_for_hint = if name == "Vec" {
+                    generics.first().cloned()
+                } else {
+                    None
+                };
                 for a in args.iter() {
-                    let _ = self.check_expr(a);
+                    if let (Some(elem), Expr::Lambda { .. }) = (&elem_ty_for_hint, &a.node) {
+                        let ref_elem = ResolvedType::Ref(Box::new(elem.clone()));
+                        self.lambda_param_hint_stack.push(ref_elem);
+                        let _ = self.check_expr(a);
+                        self.lambda_param_hint_stack.pop();
+                    } else {
+                        let _ = self.check_expr(a);
+                    }
                 }
                 return Ok(ResolvedType::Unit);
             }

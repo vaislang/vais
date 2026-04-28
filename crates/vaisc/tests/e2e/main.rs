@@ -133,3 +133,4 @@ mod phase91_lifetime;
 mod phase91_monomorphization;
 mod phase95_coverage;
 mod phase_omega_p16_expected_type_scoping;
+mod phase_omega_p17_lambda_param_hint;
