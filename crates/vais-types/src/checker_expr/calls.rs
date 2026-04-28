@@ -987,7 +987,7 @@ impl TypeChecker {
                 // handles the real mutation contract). vaisdb hits these via
                 // `page_data[a..b].copy_from_slice(entry)` patterns pervasively.
                 "copy_from_slice" | "clone_from_slice" | "fill" | "swap" | "rotate_left"
-                | "rotate_right" | "sort" | "reverse" => {
+                | "rotate_right" | "sort" | "sort_by" | "reverse" => {
                     for a in args.iter() {
                         let _ = self.check_expr(a);
                     }
@@ -1407,10 +1407,12 @@ impl TypeChecker {
                 return Ok(ResolvedType::Str);
             }
             // Phase 273: slice/Vec mutation operations — no result.
+            // P1.5 (iter 128): sort_by added — `Vec.sort_by(|a, b| ...)` Unit return.
+            // Closure 인자 hint propagation은 별도 영역 (call_arg unify 또는 Lambda hint).
             if matches!(
                 method.node.as_str(),
                 "copy_from_slice" | "clone_from_slice" | "fill" | "swap" | "rotate_left"
-                    | "rotate_right" | "sort" | "reverse"
+                    | "rotate_right" | "sort" | "sort_by" | "reverse"
             ) {
                 for a in args.iter() {
                     let _ = self.check_expr(a);
