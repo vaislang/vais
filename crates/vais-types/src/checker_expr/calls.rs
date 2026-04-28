@@ -1113,7 +1113,11 @@ impl TypeChecker {
                     _ => {}
                 }
             }
-            if name == "Vec" || name == "HashMap" || name == "StrHashMap" {
+            // P1.5 (iter 129): HashSet added — vaisdb visited-set patterns use
+            // HashSet.insert(elem) / .contains(elem) extensively (vector/hnsw).
+            // HashSet has 1 generic (T), HashMap has 2 (K, V). Branches below
+            // already gate by args.len() so adding HashSet is safe.
+            if name == "Vec" || name == "HashMap" || name == "StrHashMap" || name == "HashSet" {
                 match method.node.as_str() {
                     "len" | "size" | "capacity" => {
                         if args.is_empty() {
@@ -1246,8 +1250,44 @@ impl TypeChecker {
                         }
                     }
                     "insert" | "set" => {
+                        // HashSet.insert(elem) — 1 arg, returns Bool (Rust semantics)
+                        // P1.5 (iter 129): added for vaisdb HashSet patterns.
+                        if name == "HashSet" && args.len() == 1 {
+                            let arg_e = self.check_expr(&args[0]).ok();
+                            if let (Some(e_slot), Some(e_actual)) =
+                                (generics.first().cloned(), arg_e)
+                            {
+                                let _ = self.unify(&e_slot, &e_actual);
+                            }
+                            // Same update_var_type propagation as HashMap insert
+                            // (Phase Ω P1.2 R3 audit pattern).
+                            if let Expr::Ident(recv_name) = &receiver.node {
+                                let resolved_generics: Vec<ResolvedType> = generics
+                                    .iter()
+                                    .map(|g| self.apply_substitutions(g))
+                                    .collect();
+                                let any_changed = resolved_generics
+                                    .iter()
+                                    .zip(generics.iter())
+                                    .any(|(r, o)| r != o);
+                                if any_changed {
+                                    let new_named = ResolvedType::Named {
+                                        name: name.clone(),
+                                        generics: resolved_generics,
+                                    };
+                                    let new_ty = match &receiver_type {
+                                        ResolvedType::Ref(_) => ResolvedType::Ref(Box::new(new_named)),
+                                        ResolvedType::RefMut(_) => ResolvedType::RefMut(Box::new(new_named)),
+                                        ResolvedType::Pointer(_) => ResolvedType::Pointer(Box::new(new_named)),
+                                        _ => new_named,
+                                    };
+                                    self.update_var_type(recv_name, new_ty);
+                                }
+                            }
+                            return Ok(ResolvedType::Bool);
+                        }
                         // HashMap insert/set returns V
-                        if name != "Vec" && args.len() == 2 {
+                        if name != "Vec" && name != "HashSet" && args.len() == 2 {
                             let arg_k = self.check_expr(&args[0]).ok();
                             let arg_v = self.check_expr(&args[1]).ok();
                             // Phase 6.27d.c: unify the receiver's K/V slots
