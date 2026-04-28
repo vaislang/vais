@@ -102,19 +102,26 @@ impl TypeChecker {
         }
 
         // Check body
-        // Phase 0 bug C16 fix: push the function's declared return type as
-        // the expected type so the body's tail-position calls (e.g. inside
-        // a generic fn body, the call that produces the return) can use it
-        // to disambiguate generic type vars. This lets `Vec.with_capacity(8)`
-        // inside `vec_new_t<T>()` unify its return-type hint with `Vec<T>`,
-        // binding T → Generic("T"), which downstream propagation needs to
-        // record the correct callee type args.
-        self.push_expected_type(ret_type.clone());
+        //
+        // Phase 0 bug C16 fix (scoped — Phase Ω P1.6): push the function's
+        // declared return type as an expected-type hint ONLY when the body
+        // is a single tail expression. For block bodies, the hint leaks
+        // into every container constructor in the body (e.g. a
+        // `Vec.with_capacity(0u64)` for a local mutable accumulator gets
+        // its element type incorrectly bound to the function's return-Vec
+        // element type). The block case is covered by the body→return
+        // unification at line ~170 below and the deferred recording at
+        // `pending_method_instantiations` (Phase 193 R-1b), so the hint is
+        // not needed there.
         let body_type_result = match &f.body {
-            FunctionBody::Expr(expr) => self.check_expr(expr),
+            FunctionBody::Expr(expr) => {
+                self.push_expected_type(ret_type.clone());
+                let r = self.check_expr(expr);
+                self.pop_expected_type();
+                r
+            }
             FunctionBody::Block(stmts) => self.check_block(stmts),
         };
-        self.pop_expected_type();
         let body_type = body_type_result?;
 
         // Explicit return type with empty/void body: detect missing return value.
