@@ -185,7 +185,8 @@ else
             __tests__/e2e/vais-web-real-browser-runtime.test.ts \
             __tests__/e2e/vais-web-platform-output-runtime.test.ts \
             __tests__/e2e/vais-web-production-bundle-runtime.test.ts \
-            __tests__/e2e/vais-web-file-routing-production-runtime.test.ts
+            __tests__/e2e/vais-web-file-routing-production-runtime.test.ts \
+            __tests__/e2e/vais-web-cross-browser-hydration-runtime.test.ts
     ) 2>&1 | tee "${WEB_RUNTIME_LOG}" || WEB_RUNTIME_EXIT=$?
 fi
 

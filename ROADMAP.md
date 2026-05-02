@@ -27,7 +27,7 @@ Use these gates as the floor for any compiler change:
 | VaisDB runtime lock stability | WAL/LSN/buffer/page/checkpoint mutex release paths covered by current `28/28` smoke |
 | vais-server runtime smoke | `13/13` |
 | vais-server compiled SSR forwarding | `forward_ssr_render()` loopback upstream POST/status/content-type/body bridge plus upstream non-2xx/transport-failure/timeout/retry mapping and retry-budget observability covered by current `13/13` smoke |
-| vais-web runtime smoke | `13/13` |
+| vais-web runtime smoke | `16/16` |
 | Full Rust-hosted compiler test run | Last completed RC baseline: `cargo test --release` exit code `0`; latest current-batch attempt was interrupted after e2e/integrity passed because `registry_e2e_tests` hung at dyld start |
 | Formatting sanity | `git diff --check` clean |
 
@@ -36,15 +36,14 @@ system. The statement above means the current certified Core compiler gate is
 green. Broader product surfaces remain outside Core until they are promoted by
 fixture-backed gates.
 
-Latest downstream promotion: `vais-web` now has a local full file-routing
-static production app smoke. The certified path scans a temporary `app/` tree,
-elides a `(marketing)` group segment into `/about`, keeps nested `/docs/guide`,
-builds a minified code-split browser bundle with `tsup`, injects it through the
-static adapter `clientBundle` contract, and verifies `/`, `/about`,
-`/docs/guide`, chunk hydration, click handling, and 404 fallback in Playwright
-Chromium. This certifies local static file-routing production output only; live
-deployed platforms, cross-browser matrices, SSR/data-loading production apps,
-and broader device hydration remain outside the certified surface.
+Latest downstream promotion: `vais-web` now has a local cross-browser hydration
+matrix for generated static output. The certified path serves static adapter
+generated `index.html`/`client.js` over local HTTP and verifies the same SSR
+hydration marker, state restoration, mount metadata, marker cleanup, click
+handling, and no console/page errors in Playwright Chromium, Firefox, and
+WebKit. This certifies local 3-engine static bootstrap hydration only; live
+deployed platforms, SSR/data-loading production apps, full dynamic production
+apps, and broader device coverage remain outside the certified surface.
 
 ## Active Policy
 
@@ -221,7 +220,7 @@ Only after the Core RC tasks stay green:
     hydration marker rendering, client router dynamic param resolution,
     loading boundary propagation, serialized state delivery into hydration, and
     queued event replay in a jsdom runtime smoke. This gate remains part of the
-    current `WEB RUNTIME` `13/13` surface. A compiled `vais-server` binary
+    current `WEB RUNTIME` `16/16` surface. A compiled `vais-server` binary
     forwarding to the SSR service, production browser hydration beyond the
     promoted local Chromium smoke, and live deployed adapter behavior remain
     outside the promoted path.
@@ -262,8 +261,8 @@ Only after the Core RC tasks stay green:
     `vaisx:hydrated` event detail, mounted component metadata, marker
     attribute cleanup, browser click handling, and absence of browser
     console/page errors. This gate is part of the current `WEB RUNTIME`
-    `13/13` surface. Live deployed platforms, production minification, code
-    splitting, and cross-browser coverage remain outside the promoted path.
+    `16/16` surface. Live deployed platforms, production minification, code
+    splitting, and broader device coverage remain outside the promoted path.
 19. `vais-web` platform output runtime gate.
     Current result: `vais-web-platform-output-runtime.test.ts` writes generated
     Vercel Build Output API files and Cloudflare Worker output to a temporary
@@ -272,7 +271,7 @@ Only after the Core RC tasks stay green:
     nested dynamic function routing, and 404 handling, plus Cloudflare static
     asset lookup, dynamic response, and missing-route 404 through
     platform-like request/response APIs. This gate is part of the current
-    `WEB RUNTIME` `13/13` surface. Live deployed platforms and cross-browser
+    `WEB RUNTIME` `16/16` surface. Live deployed platforms and broader device
     coverage remain outside the promoted path.
 20. `vais-web` production bundle/code-splitting runtime gate.
     Current result: `vais-web-production-bundle-runtime.test.ts` builds a
@@ -283,9 +282,8 @@ Only after the Core RC tasks stay green:
     local HTTP in Playwright Chromium. The smoke verifies `modulepreload`,
     absence of default `/client.js`, dynamic chunk resource loading, hydration
     state/marker cleanup, click handling, and absence of console/page errors.
-    The gate is part of the current `WEB RUNTIME` `13/13` surface. Live
-    deployed platforms and cross-browser coverage remain outside the promoted
-    path.
+    The gate is part of the current `WEB RUNTIME` `16/16` surface. Live
+    deployed platforms remain outside the promoted path.
 21. `vais-web` file-routing production app gate.
     Current result: `vais-web-file-routing-production-runtime.test.ts` creates
     a temporary real `app/` directory, scans `/`, `(marketing)/about`, and
@@ -296,10 +294,20 @@ Only after the Core RC tasks stay green:
     over local HTTP in Playwright Chromium. The smoke verifies generated
     `index.html`, `about/index.html`, `docs/guide/index.html`, `404.html`,
     dynamic chunk resource loading, hydration state/marker cleanup, route
-    metadata, click handling, and missing-route 404 fallback. The gate keeps
-    `WEB RUNTIME` at `13/13`. Live deployed platforms, cross-browser coverage,
+    metadata, click handling, and missing-route 404 fallback. The gate is part
+    of the current `WEB RUNTIME` `16/16` surface. Live deployed platforms,
     SSR/data-loading production apps, and full dynamic production application
     behavior remain outside the promoted path.
+22. `vais-web` cross-browser hydration matrix gate.
+    Current result: `vais-web-cross-browser-hydration-runtime.test.ts` serves
+    static adapter generated `index.html`/`client.js` over local HTTP and runs
+    the same hydration fixture in Playwright Chromium, Firefox, and WebKit.
+    The smoke verifies SSR marker state restoration, `vaisx:hydrated` event
+    detail, mount metadata, `data-vx`/`data-vx-state` cleanup, click handling,
+    and absence of browser console/page errors in all three engines. The gate
+    keeps `WEB RUNTIME` at `16/16`. Live deployed platforms,
+    SSR/data-loading production apps, full dynamic production app behavior, and
+    broader device matrices remain outside the promoted path.
 
 This order keeps language/compiler correctness separate from product feature
 work and prevents old downstream failures from steering compiler fixes.
