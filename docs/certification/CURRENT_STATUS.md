@@ -32,7 +32,7 @@ current Core contract and promoted smoke gates pass with the evidence below.
 | VaisDB runtime lock stability | WAL/LSN/buffer/page/checkpoint mutex release paths covered by current `28/28` smoke |
 | vais-server runtime smoke | `13/13` |
 | vais-server compiled SSR forwarding | `forward_ssr_render()` loopback upstream POST/status/content-type/body bridge plus upstream non-2xx/transport-failure/timeout/retry mapping and retry-budget observability covered by current `13/13` smoke |
-| vais-web runtime smoke | `16/16` |
+| vais-web runtime smoke | `17/17` |
 | Full Rust-hosted compiler test run | Last completed RC baseline: `cargo test --release` exit code `0`; latest current-batch attempt was interrupted after e2e/integrity passed because `registry_e2e_tests` hung at dyld start |
 | Diff whitespace check | `git diff --check` clean |
 
@@ -164,6 +164,13 @@ The following claims are valid:
   marker hydration, state restoration, event detail, mount metadata, marker
   cleanup, click handling, and no browser console/page errors in Playwright
   Chromium, Firefox, and WebKit.
+- Current vais-web SSR/data-loading production runtime smoke scans a temporary
+  `app/products/[sku]/page.vaisx` route with `load()`, verifies prerender skip
+  for SSR data routes, serves SSR HTML and `/__data.json` through the kit
+  runtime helpers, round-trips route params/query/cookies, and verifies a
+  minified code-split production bundle hydrates, loads its dynamic chunk,
+  handles clicks, and produces no browser console/page errors in Playwright
+  Chromium.
 - Per-module string helper definitions are available even when only an imported
   module uses `substring`/`char_at`.
 - A heap-owned `substring` assigned into a struct field transfers ownership into
@@ -192,9 +199,8 @@ The following claims are not valid yet:
 - "vais-server SSR API parsing supports nested JSON props or a broad JSON
   escape contract."
 - "vais-web live deployed cloud platform runtime, production browser/device
-  hydration beyond the promoted local Chromium/Firefox/WebKit smoke,
-  SSR/data-loading production app behavior, or full dynamic production app
-  behavior are certified."
+  hydration beyond the promoted local Chromium/Firefox/WebKit smoke, or full
+  dynamic production app behavior are certified."
 - "Raw `str` pointer arithmetic or `load_byte(str + i)` is a certified string
   parser implementation path."
 - "Experimental crates are part of the Core proof."
@@ -252,9 +258,8 @@ Core:
 2. Keep the vais-server runtime smoke green.
 3. Keep the vais-web runtime smoke green.
 4. Promote the next downstream surface only through a new runtime smoke. The
-   next likely candidates are a live deployed-platform gate,
-   SSR/data-loading production app gate, or another bounded product surface
-   selected by the root roadmap.
+   next likely candidates are a live deployed-platform gate or another bounded
+   product surface selected by the root roadmap.
 5. Keep raw `str` pointer arithmetic out of promoted parser code until it has a
    separate compiler/runtime invariant.
 6. Classify each downstream failure as product/API drift, compiler regression,
