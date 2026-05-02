@@ -35,6 +35,25 @@ iter 78 baseline 측정 (5 vaisdb test, 32 clang errors)은 이 결여의 직접
 
 본 ADR은 codegen이 보장해야 하는 **4 클래스 invariant**를 정의한다. 각 invariant는 ADR 0001 §1의 R1+R2+R3 의무를 따른다.
 
+### Core quarantine status (2026-04-29)
+
+`scripts/check-integrity.sh` now separates the gates that were previously
+treated as one progress signal:
+
+- `CORE`: `scripts/core-certify.sh`
+- `MIR`: `cargo test -p vais-mir --test lower_strict_tests --release`,
+  `cargo test -p vais-mir --test core_strict_fixtures --release`,
+  `cargo test -p vais-mir --test validation_tests --release`
+- `CODEGEN`: `ret_invariant_test`, `index_invariant_test`,
+  `call_arg_invariant_test`
+- `ECOSYSTEM`: `cargo test -p vaisc --test integrity --release`
+- `BACKEND`: `cargo test -p vaisc --test e2e --release phase158`
+
+Downstream `vaisdb_files` counts are no longer allowed to certify compiler
+correctness by themselves. A codegen change must keep the Core and CODEGEN
+gates green before ecosystem recovery numbers are interpreted as promotion
+evidence.
+
 ### Class 1 — `ret` elem-ty (LANDED, iter 74)
 
 #### R1 — Invariant

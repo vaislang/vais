@@ -113,11 +113,10 @@ X String {
     # Returns Some(char) if index is valid, None otherwise
     F char_at_opt(&self, index: i64) -> Option<i64> {
         I index < 0 || index >= self.len {
-            None
-        } EL {
-            ptr := self.data + index
-            Some(load_byte(ptr))
+            R Option.None
         }
+        ptr := self.data + index
+        Option.Some(load_byte(ptr))
     }
 
     # Push a character to the end
@@ -677,7 +676,8 @@ F str_byte_at(s: str, i: i64) -> i64 {
     I i < 0 || i >= len {
         0
     } EL {
-        load_byte(s + i)
+        ptr := str_to_ptr(s)
+        load_byte(ptr + i)
     }
 }
 

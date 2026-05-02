@@ -57,12 +57,24 @@ impl StmtVisitor for CodeGenerator {
         let mut last_value = "0".to_string();
         let mut terminated = false;
 
-        for stmt in stmts {
+        let last_stmt_index = stmts.len().checked_sub(1);
+        for (idx, stmt) in stmts.iter().enumerate() {
             if terminated {
                 break;
             }
 
-            let (value, stmt_ir) = self.visit_stmt(stmt, counter)?;
+            let keep_expected = Some(idx) == last_stmt_index
+                && matches!(&stmt.node, Stmt::Expr(_) | Stmt::Return(_));
+            let saved_expected = if keep_expected {
+                None
+            } else {
+                Some(std::mem::take(&mut self.fn_ctx.expected_expr_types))
+            };
+            let stmt_result = self.visit_stmt(stmt, counter);
+            if let Some(saved) = saved_expected {
+                self.fn_ctx.expected_expr_types = saved;
+            }
+            let (value, stmt_ir) = stmt_result?;
             ir.push_str(&stmt_ir);
             last_value = value;
 
@@ -81,18 +93,26 @@ impl StmtVisitor for CodeGenerator {
         if !terminated {
             // Block reached natural end (no early return/break/continue).
             //
-            // Determine which string slot (if any) the block's last value owns —
-            // that slot's ownership transfers to the outer scope and must NOT be
-            // freed here.
+            // Determine which string slot(s), if any, the block's last value may
+            // own. PHI-producing str expressions can own multiple possible slots,
+            // and all must transfer to the outer scope.
             let val_key = last_value
                 .strip_prefix("{ i8*, i64 } ")
                 .unwrap_or(&last_value)
                 .trim()
                 .to_string();
-            let transfer_slot: Option<String> = {
+            let transfer_slots: Vec<String> = {
                 // 1. SSA register lookup (current path — works when var name == SSA reg)
                 if let Some(slot) = self.fn_ctx.string_value_slot.get(&val_key).cloned() {
-                    Some(slot)
+                    let mut slots = vec![slot];
+                    if let Some(extras) = self.fn_ctx.phi_extra_slots.get(&val_key).cloned() {
+                        for extra in extras {
+                            if !slots.contains(&extra) {
+                                slots.push(extra);
+                            }
+                        }
+                    }
+                    slots
                 } else {
                     // 2. Ident fallback: if the last non-terminator stmt is a bare
                     //    expression resolving to a local name, look up var_string_slot by
@@ -101,36 +121,75 @@ impl StmtVisitor for CodeGenerator {
                     let last_stmt = stmts.iter().rev().find(|s| {
                         !matches!(&s.node, Stmt::Break(_) | Stmt::Continue | Stmt::Return(_))
                     });
-                    last_stmt.and_then(|s| match &s.node {
-                        Stmt::Expr(e) => match &e.node {
-                            Expr::Ident(name) => self.fn_ctx.var_string_slot.get(name).cloned(),
+                    last_stmt
+                        .and_then(|s| match &s.node {
+                            Stmt::Expr(e) => match &e.node {
+                                Expr::Ident(name) => {
+                                    if let Some(slots) =
+                                        self.fn_ctx.var_string_slots_multi.get(name)
+                                    {
+                                        Some(slots.clone())
+                                    } else {
+                                        self.fn_ctx
+                                            .var_string_slot
+                                            .get(name)
+                                            .map(|slot| vec![slot.clone()])
+                                    }
+                                }
+                                _ => None,
+                            },
                             _ => None,
-                        },
-                        _ => None,
-                    })
+                        })
+                        .unwrap_or_default()
                 }
             };
 
             // Step 1: free all string-scope slots BEFORE Named-type drops.
             // (Strings are raw heap; Named drops may reference their contents.)
-            let str_cleanup_ir = self.generate_string_scope_cleanup(
-                &str_frame,
-                transfer_slot.as_deref(),
-            );
+            let str_cleanup_ir = self.generate_string_scope_cleanup(&str_frame, &transfer_slots);
             if !str_cleanup_ir.is_empty() {
                 ir.push_str(&str_cleanup_ir);
             }
 
-            // If a transfer slot exists and an outer string scope frame is present,
-            // move the slot into the outer frame (ownership handoff).
-            if let Some(ref ts) = transfer_slot {
+            // Move transferred slots into the outer frame (ownership handoff).
+            for ts in &transfer_slots {
                 if let Some(outer) = self.fn_ctx.scope_str_stack.last_mut() {
-                    outer.push(ts.clone());
+                    if !outer.iter().any(|slot| slot == ts) {
+                        outer.push(ts.clone());
+                    }
                 }
             }
 
             // Step 2: drop Named-type locals in LIFO order.
-            let drop_ir = self.generate_scope_drop_cleanup(&scope_vars);
+            let moved_named_result = self
+                .fn_ctx
+                .expected_expr_types
+                .last()
+                .filter(|ty| matches!(ty, ResolvedType::Named { .. }))
+                .and_then(|_| {
+                    stmts
+                        .iter()
+                        .rev()
+                        .find(|s| {
+                            !matches!(&s.node, Stmt::Break(_) | Stmt::Continue | Stmt::Return(_))
+                        })
+                        .and_then(|s| match &s.node {
+                            Stmt::Expr(expr) => match &expr.node {
+                                Expr::Ident(name)
+                                    if scope_vars.iter().any(|scope_var| scope_var == name)
+                                        && self.fn_ctx.locals.get(name).is_some_and(|local| {
+                                            matches!(local.ty, ResolvedType::Named { .. })
+                                        }) =>
+                                {
+                                    Some(name.clone())
+                                }
+                                _ => None,
+                            },
+                            _ => None,
+                        })
+                });
+            let moved_named_vars: Vec<String> = moved_named_result.into_iter().collect();
+            let drop_ir = self.generate_scope_drop_cleanup_except(&scope_vars, &moved_named_vars);
             if !drop_ir.is_empty() {
                 ir.push_str(&drop_ir);
             }
@@ -159,8 +218,17 @@ impl CodeGenerator {
         is_mut: bool,
         counter: &mut usize,
     ) -> GenResult {
+        let declared_ty = ty.map(|t| {
+            let raw = self.ast_type_to_resolved(&t.node);
+            vais_types::substitute_type(&raw, &self.generics.substitutions)
+        });
+        if let Some(expected) = declared_ty.clone() {
+            self.fn_ctx.expected_expr_types.push(expected);
+        }
         // Infer type BEFORE generating code, so we can use function return types
-        let inferred_ty = self.infer_expr_type(value);
+        let inferred_ty_raw = self.infer_expr_type(value);
+        let inferred_ty =
+            vais_types::substitute_type(&inferred_ty_raw, &self.generics.substitutions);
 
         // Check if this is a struct literal - handle specially
         // Also detect struct tuple literal: Point(40, 2) where "Point" is a known struct
@@ -195,7 +263,21 @@ impl CodeGenerator {
             false
         };
 
-        let (val, val_ir) = self.generate_expr(value, counter)?;
+        let pushed_inferred_expected = if declared_ty.is_none()
+            && is_unit_variant
+            && matches!(inferred_ty, ResolvedType::Named { .. })
+        {
+            self.fn_ctx.expected_expr_types.push(inferred_ty.clone());
+            true
+        } else {
+            false
+        };
+
+        let value_result = self.generate_expr(value, counter);
+        if declared_ty.is_some() || pushed_inferred_expected {
+            self.fn_ctx.expected_expr_types.pop();
+        }
+        let (val, val_ir) = value_result?;
 
         // Owning-string binding: if the RHS is a tracked concat result, record
         // the slot under this variable's name. A later `return x` reaches
@@ -222,9 +304,8 @@ impl CodeGenerator {
             }
         }
 
-        let resolved_ty = ty
-            .map(|t| self.ast_type_to_resolved(&t.node))
-            .unwrap_or(inferred_ty);
+        let resolved_ty = declared_ty
+            .unwrap_or_else(|| self.refine_weak_inferred_type_from_value(inferred_ty, &val));
 
         // Determine if we can use SSA style (no alloca) to reduce stack usage
         // Conditions for SSA:
@@ -316,10 +397,9 @@ impl CodeGenerator {
             ) && matches!(&value.node, Expr::Array(_));
             if is_vec_array_lit {
                 let (elem_resolved, elem_count) = match (&resolved_ty, &value.node) {
-                    (
-                        ResolvedType::Named { generics, .. },
-                        Expr::Array(elems),
-                    ) => (generics[0].clone(), elems.len()),
+                    (ResolvedType::Named { generics, .. }, Expr::Array(elems)) => {
+                        (generics[0].clone(), elems.len())
+                    }
                     _ => unreachable!("guarded by is_vec_array_lit"),
                 };
                 let elem_size = self.compute_sizeof(&elem_resolved);
@@ -410,6 +490,67 @@ impl CodeGenerator {
                         src_ptr,
                         sizeof
                     );
+                } else if let Some(src_pointee_ty) = val_llvm_ty.strip_suffix('*') {
+                    let src_pointee_ty = src_pointee_ty.trim();
+                    if src_pointee_ty == llvm_ty {
+                        let loaded = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
+                            loaded,
+                            llvm_ty,
+                            llvm_ty,
+                            actual_val
+                        );
+                        self.fn_ctx.record_emitted_type(&loaded, &llvm_ty);
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* %{}",
+                            llvm_ty,
+                            loaded,
+                            llvm_ty,
+                            llvm_name
+                        );
+                    } else if src_pointee_ty.starts_with('%') && llvm_ty.starts_with('%') {
+                        let bc = self.next_temp(counter);
+                        let loaded = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = bitcast {}* %{} to {}*",
+                            bc,
+                            llvm_ty,
+                            llvm_name,
+                            src_pointee_ty
+                        );
+                        self.fn_ctx
+                            .record_emitted_type(&bc, &format!("{}*", src_pointee_ty));
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
+                            loaded,
+                            src_pointee_ty,
+                            src_pointee_ty,
+                            actual_val
+                        );
+                        self.fn_ctx.record_emitted_type(&loaded, src_pointee_ty);
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* {}",
+                            src_pointee_ty,
+                            loaded,
+                            src_pointee_ty,
+                            bc
+                        );
+                    } else {
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* %{}",
+                            llvm_ty,
+                            actual_val,
+                            llvm_ty,
+                            llvm_name
+                        );
+                    }
                 } else if val_llvm_ty.starts_with('%')
                     && llvm_ty.starts_with('%')
                     && val_llvm_ty != llvm_ty
@@ -491,7 +632,14 @@ impl CodeGenerator {
             if let Some(n) = array_len {
                 local = local.with_array_length(n);
             }
+            let is_str = matches!(local.ty, ResolvedType::Str);
             self.fn_ctx.locals.insert(name.node.clone(), local);
+            if is_str {
+                let depth = self.fn_ctx.scope_str_stack.len().saturating_sub(1);
+                self.fn_ctx
+                    .var_string_scope_depth
+                    .insert(name.node.clone(), depth);
+            }
 
             // Register in current scope for block-scoped drop (if inside a scope block)
             if is_named {
@@ -576,7 +724,15 @@ impl CodeGenerator {
 
             if let Some(expr) = expr {
                 // Evaluate return expression FIRST (before cleanup)
-                let (val, expr_ir) = self.generate_expr(expr, counter)?;
+                let expected_ret_type = self.fn_ctx.current_return_type.as_ref().cloned();
+                if let Some(expected) = expected_ret_type {
+                    self.fn_ctx.expected_expr_types.push(expected);
+                }
+                let expr_result = self.generate_expr(expr, counter);
+                if self.fn_ctx.current_return_type.is_some() {
+                    self.fn_ctx.expected_expr_types.pop();
+                }
+                let (val, expr_ir) = expr_result?;
                 ir.push_str(&expr_ir);
 
                 // Codegen promotes bool to i64 (zext), truncate back for i1 return
@@ -635,9 +791,20 @@ impl CodeGenerator {
         let mut ir = String::new();
 
         if let Some(expr) = expr {
+            let expected_ret_type = self
+                .fn_ctx
+                .current_return_type
+                .as_ref()
+                .cloned()
+                .unwrap_or(ResolvedType::I64);
             // Evaluate return expression FIRST (before cleanup),
             // so we don't free memory that the expression still needs.
-            let (val, expr_ir) = self.generate_expr(expr, counter)?;
+            self.fn_ctx
+                .expected_expr_types
+                .push(expected_ret_type.clone());
+            let expr_result = self.generate_expr(expr, counter);
+            self.fn_ctx.expected_expr_types.pop();
+            let (val, expr_ir) = expr_result?;
             ir.push_str(&expr_ir);
             // Keep an independent copy for later ownership-transfer lookup
             // (the original `val` is moved into `ret_val` below). Strip the
@@ -650,12 +817,7 @@ impl CodeGenerator {
                 .to_string();
 
             // Get return type from current function context
-            let ret_type = self
-                .fn_ctx
-                .current_return_type
-                .as_ref()
-                .cloned()
-                .unwrap_or(ResolvedType::I64);
+            let ret_type = expected_ret_type;
             let llvm_ty = self.type_to_llvm(&ret_type);
 
             // For struct types, may need to load from pointer.
@@ -791,7 +953,21 @@ impl CodeGenerator {
             ir.push_str(&defer_ir);
 
             // Call Drop::drop() for droppable locals (reverse order)
-            let drop_ir = self.generate_drop_cleanup();
+            let moved_return_vars: Vec<String> = if matches!(ret_type, ResolvedType::Named { .. }) {
+                match &expr.node {
+                    Expr::Ident(name)
+                        if self.fn_ctx.locals.get(name).is_some_and(|local| {
+                            matches!(local.ty, ResolvedType::Named { .. })
+                        }) =>
+                    {
+                        vec![name.clone()]
+                    }
+                    _ => Vec::new(),
+                }
+            } else {
+                Vec::new()
+            };
+            let drop_ir = self.generate_drop_cleanup_except(&moved_return_vars);
             ir.push_str(&drop_ir);
 
             // Return-value ownership transfer: if the returned SSA fat pointer
@@ -808,14 +984,10 @@ impl CodeGenerator {
                 // them to the variable's multi-slot list.
                 let mut matched = false;
                 if let Expr::Ident(name) = &expr.node {
-                    if let Some(slots) =
-                        self.fn_ctx.var_string_slots_multi.get(name).cloned()
-                    {
+                    if let Some(slots) = self.fn_ctx.var_string_slots_multi.get(name).cloned() {
                         self.fn_ctx.pending_return_skip_slot.extend(slots);
                         matched = true;
-                    } else if let Some(slot) =
-                        self.fn_ctx.var_string_slot.get(name).cloned()
-                    {
+                    } else if let Some(slot) = self.fn_ctx.var_string_slot.get(name).cloned() {
                         self.fn_ctx.pending_return_skip_slot.push(slot);
                         matched = true;
                     }
@@ -824,13 +996,9 @@ impl CodeGenerator {
                 // binding). Also includes phi_extra_slots for inline PHI
                 // returns like `return I c { a+b } E { c+d }`.
                 if !matched {
-                    if let Some(slot) =
-                        self.fn_ctx.string_value_slot.get(&val_key).cloned()
-                    {
+                    if let Some(slot) = self.fn_ctx.string_value_slot.get(&val_key).cloned() {
                         self.fn_ctx.pending_return_skip_slot.push(slot);
-                        if let Some(extras) =
-                            self.fn_ctx.phi_extra_slots.get(&val_key).cloned()
-                        {
+                        if let Some(extras) = self.fn_ctx.phi_extra_slots.get(&val_key).cloned() {
                             self.fn_ctx.pending_return_skip_slot.extend(extras);
                         }
                     }
@@ -846,8 +1014,22 @@ impl CodeGenerator {
             // Skip if we already coerced above to avoid double conversion.
             let ret_val = if !coerced {
                 let actual = self.llvm_type_of(&ret_val);
+                let inferred_ret_expr_type = self.infer_expr_type(expr);
+                let actual_for_coerce = if actual == "i64"
+                    && matches!(ret_type, ResolvedType::Named { .. })
+                    && matches!(inferred_ret_expr_type, ResolvedType::Named { .. })
+                {
+                    let inferred_llvm = self.type_to_llvm(&inferred_ret_expr_type);
+                    if inferred_llvm.starts_with('%') && !inferred_llvm.ends_with('*') {
+                        inferred_llvm
+                    } else {
+                        actual.clone()
+                    }
+                } else {
+                    actual.clone()
+                };
                 let (coerced_val, coerce_ir) =
-                    self.coerce_ret_value(&ret_val, &actual, &llvm_ty, counter);
+                    self.coerce_ret_value(&ret_val, &actual_for_coerce, &llvm_ty, counter);
                 ir.push_str(&coerce_ir);
                 coerced_val
             } else {

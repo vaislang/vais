@@ -1,0 +1,98 @@
+U storage/wal/segment
+U storage/wal/naming
+U storage/file
+U storage/error
+U std/string.{str_byte_at}
+
+F wal_name_path(dir: str, segment_num: u32) -> str {
+    filename := mut WalSegmentHeader.segment_filename(segment_num)
+    dir.clone() + "/" + filename
+}
+
+F expect_byte_at(name: str, index: i64, expected: i64) -> bool {
+    str_byte_at(name, index) == expected
+}
+
+F verify_segment_name_code(name: str, segment_num: u32, d0: i64, d1: i64, d2: i64, d3: i64, d4: i64, d5: i64, base: i64) -> i64 {
+    I name.len() != 10 { R base + 1 }
+    I !expect_byte_at(name, 0, d0) { R base + 2 }
+    I !expect_byte_at(name, 1, d1) { R base + 3 }
+    I !expect_byte_at(name, 2, d2) { R base + 4 }
+    I !expect_byte_at(name, 3, d3) { R base + 5 }
+    I !expect_byte_at(name, 4, d4) { R base + 6 }
+    I !expect_byte_at(name, 5, d5) { R base + 7 }
+    I !expect_byte_at(name, 6, 46) { R base + 8 }
+    I !expect_byte_at(name, 7, 119) { R base + 9 }
+    I !expect_byte_at(name, 8, 97) { R base + 10 }
+    I !expect_byte_at(name, 9, 108) { R base + 11 }
+    I !is_wal_segment_filename(name) { R base + 12 }
+    parsed := mut M parse_wal_segment_number(name) {
+        Ok(v) => v,
+        Err(_) => { R base + 13 },
+    }
+    I parsed != segment_num { R base + 14 }
+    0
+}
+
+F create_empty_segment_file(dir: str, segment_num: u32) -> Result<(), VaisError> {
+    path := mut wal_name_path(dir, segment_num)
+    file := mut File.open(path, "rw+")?;
+    file.truncate(0)?;
+    file.fsync()
+}
+
+F main() -> i64 {
+    name_1 := mut WalSegmentHeader.segment_filename(1 as u32)
+    name_1_code := mut verify_segment_name_code(name_1, 1 as u32, 48, 48, 48, 48, 48, 49, 10)
+    I name_1_code != 0 { R name_1_code }
+
+    name_42 := mut WalSegmentHeader.segment_filename(42 as u32)
+    name_42_code := mut verify_segment_name_code(name_42, 42 as u32, 48, 48, 48, 48, 52, 50, 30)
+    I name_42_code != 0 { R name_42_code }
+
+    name_max := mut WalSegmentHeader.segment_filename(123456 as u32)
+    name_max_code := mut verify_segment_name_code(name_max, 123456 as u32, 49, 50, 51, 52, 53, 54, 50)
+    I name_max_code != 0 { R name_max_code }
+
+    wal_dir := mut "wal_segment_filename_read_dir_wal"
+    M create_dir_all(&wal_dir) {
+        Ok(_) => {},
+        Err(_) => { R 4 },
+    }
+    M create_empty_segment_file(wal_dir.clone(), 1 as u32) {
+        Ok(_) => {},
+        Err(_) => { R 5 },
+    }
+    M create_empty_segment_file(wal_dir.clone(), 42 as u32) {
+        Ok(_) => {},
+        Err(_) => { R 6 },
+    }
+
+    entries := mut M read_dir(&wal_dir) {
+        Ok(v) => v,
+        Err(_) => { R 7 },
+    }
+    saw_1 := mut false
+    saw_42 := mut false
+
+    LF entry: &entries {
+        name := mut entry.file_name()
+        I is_wal_segment_filename(name) {
+            segment_num := mut M parse_wal_segment_number(name) {
+                Ok(v) => v,
+                Err(_) => { R 8 },
+            }
+            I segment_num == 1 as u32 {
+                saw_1 = true
+            }
+            I segment_num == 42 as u32 {
+                saw_42 = true
+            }
+        }
+    }
+
+    I !saw_1 { R 9 }
+    I !saw_42 { R 10 }
+
+    R 0
+}

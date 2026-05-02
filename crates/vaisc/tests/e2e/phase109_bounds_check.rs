@@ -105,3 +105,32 @@ F main() -> i64 {
         9,
     );
 }
+
+#[test]
+fn slice_to_vec_copies_elements() {
+    assert_exit_code(
+        r#"
+S Vec<T> {
+    data: i64,
+    len: i64,
+    cap: i64,
+    elem_size: i64,
+    owned: i64
+}
+
+X Vec<T> {
+    F with_capacity(capacity: i64) -> Vec<T> {
+        Vec { data: malloc(capacity * 8), len: 0, cap: capacity, elem_size: 8, owned: 0 }
+    }
+}
+
+F main() -> i64 {
+    arr := [10, 20, 30, 40]
+    s := arr[1..4]
+    v := s.to_vec()
+    R v[0] + v[2]
+}
+"#,
+        60,
+    );
+}

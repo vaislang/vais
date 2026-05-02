@@ -146,10 +146,7 @@ impl CodeGenerator {
         // ADR 0001 §1 R3 same-class audit: ret emit sites scattered across 31+
         // locations; this coerce_ret_value is the migration target. Initial
         // adoption in stmt_visitor.rs only — others migrate incrementally.
-        if val_ty.starts_with("%Vec")
-            && val_ty.ends_with('*')
-            && ret_llvm == "{ i8*, i64 }"
-        {
+        if val_ty.starts_with("%Vec") && val_ty.ends_with('*') && ret_llvm == "{ i8*, i64 }" {
             let vec_struct_ty = val_ty.trim_end_matches('*');
             let data_ptr_field = self.next_temp(counter);
             write_ir!(
@@ -163,12 +160,7 @@ impl CodeGenerator {
             let data_i64 = self.next_temp(counter);
             write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_ptr_field);
             let data_i8ptr = self.next_temp(counter);
-            write_ir!(
-                ir,
-                "  {} = inttoptr i64 {} to i8*",
-                data_i8ptr,
-                data_i64
-            );
+            write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_i8ptr, data_i64);
             let len_field = self.next_temp(counter);
             write_ir!(
                 ir,
@@ -234,13 +226,7 @@ impl CodeGenerator {
             let actual = self.llvm_type_of_checked(val);
             if actual.as_deref() == Some("i64") {
                 let tmp_ptr = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = inttoptr i64 {} to {}*",
-                    tmp_ptr,
-                    val,
-                    ret_llvm
-                );
+                write_ir!(ir, "  {} = inttoptr i64 {} to {}*", tmp_ptr, val, ret_llvm);
                 let loaded = self.next_temp(counter);
                 write_ir!(
                     ir,
@@ -250,6 +236,51 @@ impl CodeGenerator {
                     ret_llvm,
                     tmp_ptr
                 );
+                return (loaded, ir);
+            }
+        }
+
+        // Case 6: value-level specialized wrapper mismatch.
+        // `Ok(-1)` defaults to Result<i64, E>, while a function may declare
+        // Result<i32, E>. Text codegen lowers these stdlib wrappers to the
+        // same payload-erased layout, so reinterpret through a stack slot when
+        // the LLVM struct base is the same (`%Result$...` -> `%Result$...`,
+        // `%Option$...` -> `%Option$...`).
+        if val_ty.starts_with('%')
+            && ret_llvm.starts_with('%')
+            && !val_ty.ends_with('*')
+            && !ret_llvm.ends_with('*')
+        {
+            let value_base = val_ty.trim_start_matches('%').split('$').next();
+            let ret_base = ret_llvm.trim_start_matches('%').split('$').next();
+            if value_base.is_some()
+                && value_base == ret_base
+                && matches!(value_base, Some("Result" | "Option"))
+            {
+                let slot = self.next_temp(counter);
+                write_ir!(ir, "  {} = alloca {}", slot, val_ty);
+                write_ir!(ir, "  store {} {}, {}* {}", val_ty, val, val_ty, slot);
+                let cast = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = bitcast {}* {} to {}*",
+                    cast,
+                    val_ty,
+                    slot,
+                    ret_llvm
+                );
+                self.fn_ctx
+                    .record_emitted_type(&cast, &format!("{}*", ret_llvm));
+                let loaded = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = load {}, {}* {}",
+                    loaded,
+                    ret_llvm,
+                    ret_llvm,
+                    cast
+                );
+                self.fn_ctx.record_emitted_type(&loaded, ret_llvm);
                 return (loaded, ir);
             }
         }

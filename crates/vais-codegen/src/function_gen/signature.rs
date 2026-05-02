@@ -28,7 +28,9 @@ impl CodeGenerator {
     /// Clears locals, resets label counter and loop stack.
     pub(crate) fn initialize_function_state(&mut self, func_name: &str) {
         self.fn_ctx.current_function = Some(func_name.to_string());
+        self.fn_ctx.current_return_type = None;
         self.fn_ctx.locals.clear();
+        self.fn_ctx.expected_expr_types.clear();
         self.fn_ctx.label_counter = 0;
         self.fn_ctx.loop_stack.clear();
         self.fn_ctx.future_poll_fns.clear();

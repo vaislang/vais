@@ -8,6 +8,68 @@ use vais_ast::{BinOp, Expr, Spanned};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
+    fn assignment_target_expected_type(&self, target: &Spanned<Expr>) -> Option<ResolvedType> {
+        match &target.node {
+            Expr::Ident(name) => self
+                .fn_ctx
+                .locals
+                .get(name)
+                .map(|local| local.ty.clone())
+                .or_else(|| {
+                    self.types
+                        .globals
+                        .get(name)
+                        .map(|global| global._ty.clone())
+                }),
+            Expr::Field {
+                expr: obj_expr,
+                field,
+            } => {
+                let obj_type = self.infer_expr_type(obj_expr);
+                let resolved_type = match &obj_type {
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                        inner.as_ref().clone()
+                    }
+                    other => other.clone(),
+                };
+
+                if let ResolvedType::Named { name, .. } = &resolved_type {
+                    let struct_name = self.resolve_struct_name(name);
+                    self.types
+                        .structs
+                        .get(&struct_name)
+                        .and_then(|struct_info| {
+                            struct_info
+                                .fields
+                                .iter()
+                                .find(|(field_name, _)| field_name == &field.node)
+                                .map(|(_, field_ty)| field_ty.clone())
+                        })
+                } else {
+                    None
+                }
+            }
+            Expr::Index { expr: arr_expr, .. } => {
+                let arr_ty = self.infer_expr_type(arr_expr);
+                self.resolve_index_access(&arr_ty)
+                    .ok()
+                    .and_then(|access| access.elem_resolved)
+            }
+            _ => None,
+        }
+    }
+
+    fn should_push_assignment_expected(target: &Spanned<Expr>, ty: &ResolvedType) -> bool {
+        if type_contains_never(ty) {
+            return false;
+        }
+
+        match &target.node {
+            Expr::Ident(_) => !generics_all_empty_enum(ty),
+            _ => true,
+        }
+    }
+
     /// Generate assign expression
     #[inline(never)]
     pub(crate) fn generate_assign_expr(
@@ -16,6 +78,15 @@ impl CodeGenerator {
         value: &Spanned<Expr>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
+        let target_expected_ty = self.assignment_target_expected_type(target);
+        let pushed_expected = target_expected_ty
+            .as_ref()
+            .filter(|ty| Self::should_push_assignment_expected(target, ty))
+            .cloned();
+        if let Some(expected) = pushed_expected.clone() {
+            self.fn_ctx.expected_expr_types.push(expected);
+        }
+
         // Phase 6.27b iteration 34: codegen-side mirror of TC's Never-promotion on
         // Expr::Assign. If the target local's type contains Never (from `mut None`
         // init) and the RHS has a concrete wrapper type, update the local's
@@ -38,7 +109,11 @@ impl CodeGenerator {
             }
         }
 
-        let (val, val_ir) = self.generate_expr(value, counter)?;
+        let value_result = self.generate_expr(value, counter);
+        if pushed_expected.is_some() {
+            self.fn_ctx.expected_expr_types.pop();
+        }
+        let (val, val_ir) = value_result?;
         let mut ir = val_ir;
 
         if let Expr::Ident(name) = &target.node {
@@ -57,9 +132,8 @@ impl CodeGenerator {
                         // (numbers) of scalar integer/float types are guaranteed
                         // safe — register references (%tN) may not dominate
                         // entry, and aggregate types cannot use a numeric literal.
-                        let is_scalar_ty = llvm_ty.starts_with('i')
-                            || llvm_ty == "double"
-                            || llvm_ty == "float";
+                        let is_scalar_ty =
+                            llvm_ty.starts_with('i') || llvm_ty == "double" || llvm_ty == "float";
                         let is_immediate = old_ssa_val
                             .chars()
                             .next()
@@ -71,14 +145,12 @@ impl CodeGenerator {
                             // including paths that bypass the reassignment branch.
                             self.fn_ctx.entry_allocas.push(format!(
                                 "  %{} = alloca {}\n  store {} {}, {}* %{}",
-                                alloca_name,
-                                llvm_ty,
-                                llvm_ty,
-                                old_ssa_val,
-                                llvm_ty,
-                                alloca_name
+                                alloca_name, llvm_ty, llvm_ty, old_ssa_val, llvm_ty, alloca_name
                             ));
-                            self.fn_ctx.record_emitted_type(&format!("%{}", alloca_name), &format!("{}*", llvm_ty));
+                            self.fn_ctx.record_emitted_type(
+                                &format!("%{}", alloca_name),
+                                &format!("{}*", llvm_ty),
+                            );
                         } else {
                             // Fallback: alloca only; the reassignment store covers the
                             // reachable paths (legacy behavior). Non-immediate SSA values
@@ -130,6 +202,32 @@ impl CodeGenerator {
                             llvm_ty,
                             local.llvm_name
                         );
+                    }
+                    if matches!(local.ty, ResolvedType::Str) {
+                        let val_key = val
+                            .strip_prefix("{ i8*, i64 } ")
+                            .unwrap_or(&val)
+                            .trim()
+                            .to_string();
+                        if let Some(slot) = self.fn_ctx.string_value_slot.get(&val_key).cloned() {
+                            self.fn_ctx
+                                .var_string_slot
+                                .insert(name.clone(), slot.clone());
+                            self.transfer_string_slot_to_var_scope(name, &slot);
+                            if let Some(extras) = self.fn_ctx.phi_extra_slots.remove(&val_key) {
+                                let mut all = vec![slot];
+                                for extra in extras {
+                                    self.transfer_string_slot_to_var_scope(name, &extra);
+                                    all.push(extra);
+                                }
+                                self.fn_ctx.var_string_slots_multi.insert(name.clone(), all);
+                            } else {
+                                self.fn_ctx.var_string_slots_multi.remove(name);
+                            }
+                        } else {
+                            self.fn_ctx.var_string_slot.remove(name);
+                            self.fn_ctx.var_string_slots_multi.remove(name);
+                        }
                     }
                 }
             } else if let Some(global_ty) = self.types.globals.get(name).map(|g| g._ty.clone()) {
@@ -184,22 +282,23 @@ impl CodeGenerator {
                             // Named field type: the value may be a pointer to the struct
                             // (e.g., SSA param spill %__severity_ptr). Find the local by
                             // matching llvm_name since the val is the LLVM name, not source name.
-                            let is_ssa_named_ptr = self.fn_ctx.locals.values().any(|local| {
-                                local.llvm_name == val
-                                    && local.is_ssa()
-                                    && matches!(local.ty, ResolvedType::Named { .. })
-                            });
+                            let actual_checked = self.llvm_type_of_checked(&val);
+                            let is_ssa_named_ptr = actual_checked.is_none()
+                                && self.fn_ctx.locals.values().any(|local| {
+                                    local.llvm_name == val
+                                        && local.is_ssa()
+                                        && matches!(local.ty, ResolvedType::Named { .. })
+                                });
                             // Phase 17.H4.8: also load when the rhs is an
                             // alloca'd struct literal. A struct literal
                             // emits `%tN = alloca %T; store fields @ %tN`,
                             // so `val = %tN` is a pointer, not a value.
-                            // Registered temp type tells us whether this
-                            // SSA name is actually the named struct type.
+                            // Ground-truth emitted LLVM type decides whether
+                            // this SSA name is a pointer or an aggregate value.
                             let is_alloca_named_ptr =
-                                self.fn_ctx
-                                    .get_temp_type(&val)
-                                    .is_some_and(|t| matches!(t, ResolvedType::Named { .. }))
-                                    || actual_val_ty == format!("{}*", llvm_ty);
+                                actual_checked.as_deref().is_some_and(|actual| {
+                                    actual == "ptr" || actual == format!("{}*", llvm_ty)
+                                });
                             if is_ssa_named_ptr || is_alloca_named_ptr {
                                 let loaded = self.next_temp(counter);
                                 write_ir!(
@@ -210,6 +309,7 @@ impl CodeGenerator {
                                     llvm_ty,
                                     val
                                 );
+                                self.fn_ctx.record_emitted_type(&loaded, &llvm_ty);
                                 loaded
                             } else {
                                 self.coerce_int_width(
@@ -231,6 +331,40 @@ impl CodeGenerator {
                             llvm_ty,
                             field_ptr
                         );
+                        if struct_info.has_owned_mask && matches!(field_ty, ResolvedType::Str) {
+                            let val_key = val
+                                .strip_prefix("{ i8*, i64 } ")
+                                .unwrap_or(&val)
+                                .trim()
+                                .to_string();
+                            if let Some(slot) = self.fn_ctx.string_value_slot.remove(&val_key) {
+                                let mask_ptr = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
+                                    mask_ptr,
+                                    struct_name,
+                                    struct_name,
+                                    obj_val,
+                                    struct_info.fields.len()
+                                );
+                                let old_mask = self.next_temp(counter);
+                                write_ir!(ir, "  {} = load i64, i64* {}", old_mask, mask_ptr);
+                                let new_mask = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = or i64 {}, {}",
+                                    new_mask,
+                                    old_mask,
+                                    1u64 << field_idx
+                                );
+                                write_ir!(ir, "  store i64 {}, i64* {}", new_mask, mask_ptr);
+                                write_ir!(ir, "  store i8* null, i8** {}", slot);
+                                if let Some(frame) = self.fn_ctx.scope_str_stack.last_mut() {
+                                    frame.retain(|s| s != &slot);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -334,7 +468,10 @@ impl CodeGenerator {
                 idx_val
             );
             // Coerce value to match element type (e.g., i8 from trunc → i64 for Vec store)
-            let val_ty = self.llvm_type_of(&val);
+            let actual_val_ty = self.llvm_type_of_checked(&val);
+            let val_ty = actual_val_ty
+                .clone()
+                .unwrap_or_else(|| self.llvm_type_of(&val));
             // Phase α.1 fix: when storing a struct value but `val` is a
             // pointer-to-struct (alloca form), load through the pointer to
             // get the struct value before storing.
@@ -348,14 +485,23 @@ impl CodeGenerator {
             let elem_is_named_struct = elem_llvm_ty.starts_with('%')
                 && !elem_llvm_ty.contains('{')
                 && !elem_llvm_ty.contains('[');
-            let needs_load = elem_is_named_struct && val.starts_with('%');
+            let expected_ptr_ty = format!("{}*", elem_llvm_ty);
+            let needs_load = elem_is_named_struct
+                && val.starts_with('%')
+                && (actual_val_ty.as_deref() == Some(expected_ptr_ty.as_str())
+                    || actual_val_ty.as_deref() == Some("ptr")
+                    || (actual_val_ty.is_none() && !self.is_expr_value(value)));
             let store_val = if needs_load {
                 let loaded = self.next_temp(counter);
                 write_ir!(
                     ir,
                     "  {} = load {}, {}* {}",
-                    loaded, elem_llvm_ty, elem_llvm_ty, val
+                    loaded,
+                    elem_llvm_ty,
+                    elem_llvm_ty,
+                    val
                 );
+                self.fn_ctx.record_emitted_type(&loaded, &elem_llvm_ty);
                 loaded
             } else {
                 self.coerce_int_width(&val, &val_ty, &elem_llvm_ty, counter, &mut ir)
@@ -404,46 +550,29 @@ impl CodeGenerator {
                 // of falling back to i64. This is the single biggest source
                 // of "i64 vs <N-bit>" mismatches across vaisdb tests.
                 self.fn_ctx.register_temp_type(&tmp, local.ty.clone());
+                if matches!(local.ty, ResolvedType::Str) {
+                    if let Some(slots) = self.fn_ctx.var_string_slots_multi.get(name).cloned() {
+                        if let Some(first) = slots.first() {
+                            self.fn_ctx
+                                .string_value_slot
+                                .insert(tmp.clone(), first.clone());
+                            if slots.len() > 1 {
+                                self.fn_ctx
+                                    .phi_extra_slots
+                                    .insert(tmp.clone(), slots[1..].to_vec());
+                            }
+                        }
+                    } else if let Some(slot) = self.fn_ctx.var_string_slot.get(name).cloned() {
+                        self.fn_ctx.string_value_slot.insert(tmp.clone(), slot);
+                    }
+                }
                 Ok((tmp, ir))
             }
         } else if name == "self" {
             // Handle self reference
             Ok(("%self".to_string(), String::new()))
         } else if self.is_unit_enum_variant(name) {
-            // Unit enum variant (e.g., None)
-            // Create enum value on stack with just the tag
-            // Clone enum info to avoid borrow conflict with self.next_temp/emit_entry_alloca
-            let mut found = None;
-            for enum_info in self.types.enums.values() {
-                for (tag, variant) in enum_info.variants.iter().enumerate() {
-                    if variant.name == name {
-                        found = Some((enum_info.name.clone(), tag));
-                        break;
-                    }
-                }
-                if found.is_some() {
-                    break;
-                }
-            }
-            if let Some((enum_name, tag)) = found {
-                let mut ir = String::new();
-                let enum_ptr = self.next_temp(counter);
-                self.emit_entry_alloca(&enum_ptr, &format!("%{}", enum_name));
-                // Store tag
-                let tag_ptr = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
-                    tag_ptr,
-                    enum_name,
-                    enum_name,
-                    enum_ptr
-                );
-                write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
-                return Ok((enum_ptr, ir));
-            }
-            // Fallback if not found (shouldn't happen)
-            Ok((format!("@{}", name), String::new()))
+            self.generate_unit_enum_variant(name, counter)
         } else if let Some(const_info) = self.types.constants.get(name).cloned() {
             // Constant reference - inline the constant value
             self.generate_expr(&const_info.value, counter)
@@ -453,7 +582,8 @@ impl CodeGenerator {
             let tmp = self.next_temp(counter);
             let ir = format!("  {} = load {}, {}* @{}\n", tmp, llvm_ty, llvm_ty, name);
             // Phase E.6: register load result type (see alloca-local comment).
-            self.fn_ctx.register_temp_type(&tmp, global_info._ty.clone());
+            self.fn_ctx
+                .register_temp_type(&tmp, global_info._ty.clone());
             Ok((tmp, ir))
         } else if let Some(fn_info) = self.types.functions.get(name).cloned() {
             // Function reference used as a value — convert function pointer to i64
@@ -624,24 +754,27 @@ impl CodeGenerator {
         };
 
         // Coerce both operands to the target integer width.
-        let coerce = |val: &str, bits: u32, cg: &mut Self, ir: &mut String, counter: &mut usize| -> String {
-            if bits == target_bits || target_bits == 0 {
-                val.to_string()
-            } else if bits > target_bits {
-                let t = cg.next_temp(counter);
-                write_ir!(ir, "  {} = trunc i{} {} to i{}", t, bits, val, target_bits);
-                t
-            } else {
-                let t = cg.next_temp(counter);
-                write_ir!(ir, "  {} = sext i{} {} to i{}", t, bits, val, target_bits);
-                t
-            }
-        };
-        let current_bits = self.llvm_type_of(&current_val)
+        let coerce =
+            |val: &str, bits: u32, cg: &mut Self, ir: &mut String, counter: &mut usize| -> String {
+                if bits == target_bits || target_bits == 0 {
+                    val.to_string()
+                } else if bits > target_bits {
+                    let t = cg.next_temp(counter);
+                    write_ir!(ir, "  {} = trunc i{} {} to i{}", t, bits, val, target_bits);
+                    t
+                } else {
+                    let t = cg.next_temp(counter);
+                    write_ir!(ir, "  {} = sext i{} {} to i{}", t, bits, val, target_bits);
+                    t
+                }
+            };
+        let current_bits = self
+            .llvm_type_of(&current_val)
             .strip_prefix('i')
             .and_then(|s| s.parse::<u32>().ok())
             .unwrap_or(64);
-        let rhs_bits = self.llvm_type_of(&rhs_val)
+        let rhs_bits = self
+            .llvm_type_of(&rhs_val)
             .strip_prefix('i')
             .and_then(|s| s.parse::<u32>().ok())
             .unwrap_or(64);

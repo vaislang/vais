@@ -53,6 +53,7 @@ impl CodeGenerator {
             fn_ctx: FunctionContext {
                 current_function: None,
                 current_return_type: None,
+                expected_expr_types: Vec::new(),
                 locals: HashMap::with_capacity(32),
                 label_counter: 0,
                 loop_stack: Vec::with_capacity(4),
@@ -66,6 +67,7 @@ impl CodeGenerator {
                 pending_return_skip_slot: Vec::new(),
                 var_string_slot: HashMap::new(),
                 var_string_slots_multi: HashMap::new(),
+                var_string_scope_depth: HashMap::new(),
                 phi_extra_slots: HashMap::new(),
                 temp_var_types: HashMap::with_capacity(64),
                 actual_llvm_type: HashMap::with_capacity(64),
@@ -243,10 +245,7 @@ impl CodeGenerator {
     ///
     /// Call sites must invoke this alongside `set_expr_types` so that the
     /// two views of the type checker's output stay in sync.
-    pub fn set_implicit_try_sites(
-        &mut self,
-        sites: std::collections::HashSet<(usize, usize)>,
-    ) {
+    pub fn set_implicit_try_sites(&mut self, sites: std::collections::HashSet<(usize, usize)>) {
         self.implicit_try_sites = sites;
     }
 
@@ -254,8 +253,7 @@ impl CodeGenerator {
     /// error propagation by the type checker.
     #[inline]
     pub(crate) fn is_implicit_try_site(&self, span: vais_ast::Span) -> bool {
-        self.implicit_try_sites
-            .contains(&(span.start, span.end))
+        self.implicit_try_sites.contains(&(span.start, span.end))
     }
 
     /// Set string prefix for per-module codegen (avoids .str.N collisions across modules)

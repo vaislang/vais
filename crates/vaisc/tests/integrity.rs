@@ -12,8 +12,8 @@
 ///   integrity/ecosystem_health.rs  — std/ and vaisdb/ measurement tests
 
 mod integrity {
-    pub mod compiler_syntax;
     pub mod compiler_stages;
+    pub mod compiler_syntax;
     pub mod ecosystem_health;
 
     use std::path::{Path, PathBuf};

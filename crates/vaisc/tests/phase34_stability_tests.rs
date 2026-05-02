@@ -77,8 +77,8 @@ F main() -> i64 {
 fn strict_conditionals_and_loops() {
     let source = r#"
 F main() -> i64 {
-    sum := 0
-    i := 0
+    sum := mut 0
+    i := mut 0
     L i < 10 {
         sum = sum + i
         i = i + 1

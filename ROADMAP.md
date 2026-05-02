@@ -1,111 +1,305 @@
-# Vais — Next Drive Candidates
+# Vais Compiler ROADMAP
 
-> **상태**: 신규 드라이브 선택 대기
-> **직전 드라이브**: `ROADMAP-fh-drive.md` ("struct-in-array-literal → Phase 4.x SCOPED", 3/3 완료 2026-04-21, 마지막 커밋 `b74376b0`)
-> **더 이전 드라이브**: `ROADMAP-cascade-drive.md` (4/4 완료)
-> **더 이전**: `ROADMAP-compiler-drive.md` (11/11 완료)
-> **아카이브**: `ROADMAP-archive.md` (Phase 0 ~ 6.31)
+> Status: Certified Core frozen for downstream re-entry.
+> Canonical workspace roadmap: `/Users/sswoo/study/projects/vais/ROADMAP.md`
+> Last verified: 2026-05-02
 
----
+This file is intentionally short. Historical drive plans and old candidate
+lists live in `docs/history/`. Do not resume work from those archived plans
+unless the root roadmap promotes that item again.
 
-## 현재 baseline (2026-04-21)
+## Current Verified Baseline
 
-| 항목 | 숫자 |
-|------|------|
-| compiler_syntax | 200/200 |
-| compiler_stages | 14/14 (1 #[ignore] B7) |
-| std_files | 82/82 |
-| living_spec | 117/117 |
-| phase158 strict | 18/18 |
-| vaisdb_files | 237/261 (90.8%) |
-| vaisc e2e | 2625/0/1 |
-| vaisc integration | 147/147 |
+The current active baseline is newer than the archived 2026-04-21 drive notes.
+Use these gates as the floor for any compiler change:
 
-모든 다음 드라이브는 이 baseline 을 **regression floor** 로 유지.
+| Gate | Current status |
+|---|---|
+| Core certification | `CORE_CERTIFICATION pass=16 fail=0 total=16` |
+| MIR strict gate | `MIR OK` |
+| Codegen invariant gate | `CODEGEN OK` |
+| Syntax integrity | `218 passed; 0 failed; 0 ignored` |
+| Std package codegen | `82/82` |
+| VaisDB package codegen | `261/261` |
+| Phase 158 backend smoke | `18/18` |
+| std/http_client runtime smoke | `1/1` |
+| VaisDB runtime smoke | `28/28` |
+| VaisDB runtime lock stability | WAL/LSN/buffer/page/checkpoint mutex release paths covered by current `28/28` smoke |
+| vais-server runtime smoke | `13/13` |
+| vais-server compiled SSR forwarding | `forward_ssr_render()` loopback upstream POST/status/content-type/body bridge plus upstream non-2xx/transport-failure/timeout/retry mapping and retry-budget observability covered by current `13/13` smoke |
+| vais-web runtime smoke | `13/13` |
+| Full Rust-hosted compiler test run | Last completed RC baseline: `cargo test --release` exit code `0`; latest current-batch attempt was interrupted after e2e/integrity passed because `registry_e2e_tests` hung at dyld start |
+| Formatting sanity | `git diff --check` clean |
 
----
+The language implementation is still not a product-level "100% complete"
+system. The statement above means the current certified Core compiler gate is
+green. Broader product surfaces remain outside Core until they are promoted by
+fixture-backed gates.
 
-## 직전 드라이브들의 잔여 항목 (다음 드라이브 후보 풀)
+Latest downstream promotion: `vais-web` now has a local full file-routing
+static production app smoke. The certified path scans a temporary `app/` tree,
+elides a `(marketing)` group segment into `/about`, keeps nested `/docs/guide`,
+builds a minified code-split browser bundle with `tsup`, injects it through the
+static adapter `clientBundle` contract, and verifies `/`, `/about`,
+`/docs/guide`, chunk hydration, click handling, and 404 fallback in Playwright
+Chromium. This certifies local static file-routing production output only; live
+deployed platforms, cross-browser matrices, SSR/data-loading production apps,
+and broader device hydration remain outside the certified surface.
 
-### 가장 명확히 정의된 후보 (이 compiler 저장소 내)
+## Active Policy
 
-#### 1. Vec<Struct> write-through (B.4 후속) ⭐ 작고 명확
-**목적**: D.2 + F.1 이후 `v: Vec<Point> := [...]; v[0].x = 99` 로 literal
-초기화 된 Vec 의 원소 수정이 실제 버퍼에 반영되지 않음. B.4 write-through
-가 Vec<scalar>만 처리하고 Vec<Struct> 는 memcpy-to-temp 경로로 fallback.
+- Core compiler work comes before `vaisdb`, `vais-server`, and `vais-web`
+  product expansion.
+- A new compiler task must promote exactly one invariant or one certification
+  audit class at a time.
+- Do not make fixes from archived failure counts such as `vaisdb=237/261` or
+  `VAISDB RUNTIME smoke=18/18`; those are historical.
+- Do not treat successful downstream package codegen as proof of language
+  semantics. Core proof still depends on the Core fixture manifest, strict MIR
+  lowering, MIR validation, and interpreter/native agreement for promoted
+  fixtures.
+- When a stale test expectation conflicts with current certified behavior,
+  update the test only after identifying the current source of truth and adding
+  or preserving an invariant gate.
 
-**target**: B.4 관련 codegen 경로 (추정: `expr_helpers_data.rs` 또는
-`generate_expr` 인덱스-write-back 로직).
+## Core Freeze Bundle
 
-**완료 기준**: `v: Vec<Point> := [Point{x:1,y:2}, Point{x:3,y:4}]; v[0].x = 99;
-R v[0].x + v[1].x` → 102.
+These gates are complete and must stay green while downstream product work
+resumes:
 
-**리스크**: 중간. B.4 는 기존 Vec<scalar> 로직이 섬세함. 전체 memcpy→GEP
-변환은 위험. Vec<Struct> 만 분기하는 쪽이 안전.
+1. **RC status report lock**
+   - Add or update the certification status report in `docs/certification/`.
+   - Record the exact active gates, known excluded surfaces, and stop rules.
+   - Verification: `cargo test --release`, `bash scripts/check-integrity.sh`,
+     `bash scripts/core-certify.sh`, `git diff --check`.
 
-#### 2. E034 flow-sensitive analysis (`contains_key → insert → get!` 패턴)
-**목적**: H.1 에서 발견한 가장 가치 있는 E034 개선. Flow-sensitive 분석으로
-`insert` 후 `get!` 가 안전함을 증명. vaisdb 4 E034 중 window.vais 1 개
-확실히 unblock 가능.
+2. **Core spec drift audit**
+   - Compare `docs/certification/VAIS_CORE_V0.md`,
+     `docs/certification/MIR_CONTRACT.md`, `docs/LANGUAGE_SPEC.md`, and the
+     actual fixtures.
+   - Promote only documented, fixture-backed behavior.
+   - Move unsupported or non-Core claims to deferred/experimental language.
+   - Current result: recorded in
+     `docs/certification/SPEC_DRIFT_AUDIT.md`.
 
-**target**: `crates/vais-types/src/totality.rs` 의 walk 확장 + 간단한
-control-flow tracking.
+3. **Ignored/deferred surface audit**
+   - Re-run the certification exclusion manifest audit.
+   - Classify every ignored test that remains outside the canonical Core gate.
+   - Any new ignore must be added to a manifest or removed.
+   - Current result: recorded in
+     `docs/certification/IGNORED_SURFACE_AUDIT.md`.
 
-**리스크**: 높음. Phase 4.x SCOPED, Phase 158 요요 경고. 범위 폭발 위험.
-별도 "purity drive" 로 계획 후 진행 권장.
+4. **Strict MIR promotion pass**
+   - Promote the next smallest Core fixture class into strict MIR only when the
+     interpreter can execute it without placeholder lowering.
+   - Do not use LLVM success alone as semantic proof.
+   - Current result: `Result<i64,i64>` construction and match are promoted, and
+     other `Result<T, E>` payload shapes are covered by a strict negative gate.
 
-#### 3. 매크로 + dyn trait 완전 vtable (Phase 4.21)
-**목적**: LANGUAGE_SPEC Matrix 의 `◐` 항목들 중 일부 (macro, dyn trait full
-vtable). 사용자가 실제로 dyn trait 많이 쓰지 않으면 우선순위 낮음.
+5. **Aggregate gate failure propagation**
+   - `check-integrity.sh` must fail when any grouped MIR or CODEGEN subtest
+     fails.
+   - Current result: grouped MIR/CODEGEN cargo tests use explicit `&&`
+     short-circuiting so an early failure cannot be logged and then masked by a
+     later passing command.
 
-**리스크**: 매우 높음. Phase 4.21 SCOPED 전체 재설계. 장기 프로젝트.
+6. **Full release-candidate verification**
+   - Re-run the full gate sequence after every RC slice.
+   - No downstream product development should start while these gates are red.
+   - Current result: `bash scripts/check-integrity.sh` is green for the current
+     slice. The last completed RC full-suite baseline was green, but the latest
+     current-batch `cargo test --release` attempt was interrupted after the
+     e2e and integrity suites had passed because the `registry_e2e_tests`
+     binary hung at dyld start. Treat that as a separate test-runner/tooling
+     issue before using full-suite status as fresh evidence.
 
-#### 4. `Vec::new()` 를 `std/vec.vais` 에 추가 (초소형)
-**목적**: 현재 `Vec.with_capacity(0)` 만 가능. `Vec::new()` 관용구 지원.
+7. **AI-native language principle alignment**
+   - Keep project-level AI-native goals tied to compiler gates, not broad
+     feature claims.
+   - Current result: the principle document lives at
+     `/Users/sswoo/study/projects/vais/docs/design/ai-native-language-principles.md`
+     and is linked from the live certification status.
 
-**target**: `std/vec.vais` ~5 줄 추가.
+8. **Core diagnostic surface gate**
+   - Negative Core fixtures must not pass with vague or incidental error text.
+   - Current result: `core_certification_manifest` requires every negative
+     fixture to declare a stable diagnostic code and emit `error[CODE]`; see
+     `docs/certification/DIAGNOSTIC_CONTRACT.md`.
 
-**리스크**: 최소. 단순 stdlib 확장.
+9. **Core freeze criteria**
+   - Downstream work may resume only after the freeze bundle is green in the
+     same batch.
+   - Current result: `docs/certification/CORE_FREEZE_CRITERIA.md` defines the
+     bundle, and `core_freeze_criteria_doc_is_current` fails if the document
+     drifts from current gate labels or manifest counts.
 
-### 다른 저장소 작업 후보 (이 세션에서 불가)
+10. **Core freeze decision**
+    - The active freeze decision must be a stale-guarded certification artifact,
+      not a loose status note.
+    - Current result: `docs/certification/CORE_FREEZE_DECISION.md` records
+      `Frozen for downstream re-entry`, and
+      `core_freeze_decision_doc_is_current` fails if the decision drifts from
+      current evidence, scope, or the compiler roadmap status.
 
-#### 5. vaisdb cleanup drive
-**위치**: `/Users/sswoo/study/projects/vais/lang/packages/vaisdb/` (별도 저장소).
-**목적**: 20 bucket (b) bugs 정리. 237 → 250+/261 목표.
+## Downstream Re-Entry Order
 
-**왜 별도인가**: vaisdb CLAUDE.md 규칙 별도, `check-integrity.sh` 없음,
-BufferPool API 재설계 (`write_page` 2-arg → 1-arg + frame.data 흐름) 등
-9+ 사이트 개별 판단 필요. compiler 저장소 세션에서는 안전망 밖.
+Only after the Core RC tasks stay green:
 
-**시작 방법**: `cd /Users/sswoo/study/projects/vais/lang/packages/vaisdb && /harness`.
-`docs/vaisdb-cascade-survey.md` (이 저장소) §3.2 가 가이드.
+1. VaisDB embedded durability scenario. Current result:
+   `embedded_durability_smoke.vais` verifies actual EmbeddedDatabase
+   create/close/reopen durability.
+2. VaisDB vector/HNSW correctness scenario. Current result:
+   `hnsw_search_recall_larger_smoke.vais` remains part of the runtime gate.
+3. `vais-server` minimal runtime gate.
+   Current result: `minimal_runtime_smoke.vais` verifies Config/App,
+   Context response, HTTP method/status/header, and error classification
+   through `vaisc build` + executable runtime.
+4. `vais-server` + VaisDB integration gate.
+   Current result: `vaisdb_embedded_integration_smoke.vais` verifies
+   `App`/`Context` plus EmbeddedDatabase create/flush/close/reopen durability
+   in one `vaisc build` runtime.
+5. `vais-server` request/router/runtime gate.
+   Current result: `request_router_runtime_smoke.vais` verifies Request
+   header/content-type handling plus static Router exact match, 404, and 405
+   behavior in one `vaisc build` runtime.
+6. Compiler string range/substring ownership gate.
+   Current result: `phase_string_runtime` verifies per-module string helper
+   link stability and a stored `substring` field surviving a struct return
+   across module boundaries. Field assignment now transfers tracked string
+   ownership into the struct `__ownership_mask`, and block/return move-out of a
+   `Named` local skips source shallow-drop before the returned value is loaded.
+7. `vais-server` path params/query parser gate.
+   Current result: `path_query_runtime_smoke.vais` verifies Request query
+   parsing, `Params.parse_query`, dynamic `:param` route matching/extraction,
+   and dynamic route 405/404 behavior in one `vaisc build` runtime. The parser
+   uses certified string APIs such as `str.char_at` and `substring`; raw `str`
+   pointer arithmetic remains outside the promoted path.
+8. `vais-server` wildcard routing gate.
+   Current result: `wildcard_runtime_smoke.vais` verifies terminal `*param`
+   catch-all extraction, unnamed `*` default `wildcard` key extraction, static
+   route priority over wildcard routes, wildcard 405 handling, empty remainder
+   rejection, and embedded `a*b` wildcard rejection in one `vaisc build`
+   runtime.
+9. `vais-server` request body parser gate.
+   Current result: `body_parser_runtime_smoke.vais` verifies form-urlencoded
+   body parsing, compact flat JSON object parsing, content-type routed
+   `parse_body`, Request body/content-type integration, unsupported
+   content-type errors, and non-object JSON errors in one `vaisc build`
+   runtime. Full JSON validation, nested objects/arrays, and broad escape
+   semantics remain outside the promoted path.
+10. `vais-server` middleware pipeline gate.
+    Current result: `middleware_pipeline_runtime_smoke.vais` verifies pipeline
+    registration/name lookup, unknown before pass-through, symbolic `deny`
+    short-circuit response, and after hook reverse-order execution in one
+    `vaisc build` runtime. Arbitrary middleware instance dispatch and response
+    body string-concat transforms remain outside the promoted path.
+11. `vais-server` SSR API runtime gate.
+    Current result: `ssr_api_runtime_smoke.vais` verifies compiled
+    `vais-server` SSR request parsing, render response shape, hydrate response
+    shape, missing-route error response, and health response in one
+    `vaisc build` runtime. The SSR module no longer imports the broader REST
+    helper surface for this bounded contract, and `cookie.vais` no longer
+    depends on stale external string/concat helpers pulled in through
+    `Response`. Later gates cover compiled loopback SSR forwarding. Full JSON
+    escaping and nested props remain outside the promoted path.
+12. `std/http_client` plain HTTP loopback runtime gate.
+    Current result: `phase_http_client_runtime` verifies a `vaisc build`
+    executable sends a real loopback `POST /ssr/render` JSON request, links the
+    required `http_runtime.c` + `http_client_runtime.c` files, parses status
+    and body through the C runtime ABI, and exposes body text with a `{ptr,len}`
+    string view. HTTPS/TLS, redirect semantics, keep-alive pooling, external
+    network behavior, and compiled `vais-server` SSR forwarding remain outside
+    the promoted path.
+13. `vais-web` + `vais-server` end-to-end gate.
+    Current result: `vais-server-bridge.test.ts` verifies the Node SSR bridge
+    over real loopback HTTP: `POST /ssr/render`, props delivery into the
+    renderer, HTML/head/style/script response shape, protocol-level 404 for
+    unresolved routes, and HTTP 404 for non-render endpoints. This is wired
+    into `scripts/check-integrity.sh`.
+14. `vais-web` route/hydration runtime gate.
+    Current result: `vais-web-route-hydration.test.ts` verifies SSR client
+    hydration marker rendering, client router dynamic param resolution,
+    loading boundary propagation, serialized state delivery into hydration, and
+    queued event replay in a jsdom runtime smoke. This gate remains part of the
+    current `WEB RUNTIME` `13/13` surface. A compiled `vais-server` binary
+    forwarding to the SSR service, production browser hydration beyond the
+    promoted local Chromium smoke, and live deployed adapter behavior remain
+    outside the promoted path.
+15. `vais-web` adapter runtime gate.
+    Current result: `vais-web-adapter-runtime.test.ts` verifies static adapter
+    generated output, server-only API route rejection for static builds, node
+    adapter nested route flattening in generated server entry, and node request
+    handler HTML response shape. Together with the SSR bridge and
+    route/hydration smoke, this formed the generated-output/request-handler
+    adapter gate.
+16. `vais-web` Node live adapter gate.
+    Current result: `vais-web-node-live.test.ts` writes the generated node
+    server entry to a temporary filesystem, starts it in a child Node process
+    on an ephemeral local port, and verifies static index serving, dynamic
+    route fallback HTML, and `404.html` fallback with HTTP 404 status over real
+    fetch requests. This contributes to the current generated-output runtime
+    surface. Later gates cover generated cloud adapter runtime, static browser
+    bootstrap runtime, real browser runtime, and platform output runtime.
+    Deployed platform runtime,
+    production browser hydration, production bundler output, and full routing
+    app runtime remain outside the promoted path.
+17. `vais-server` compiled SSR forwarding retry-budget observability gate.
+    Current result:
+    `e2e_vais_server_12_ssr_forwarding_retry_budget_observability_runtime_smoke`
+    verifies a `vaisc build` executable sends exactly three loopback
+    `/ssr/render` requests for initial attempt + two retries, then returns
+    `502 Bad Gateway` with `X-SSR-Retry-Budget: exhausted`,
+    `X-SSR-Retry-Backoff: base+jitter`,
+    `X-SSR-Retry-Last-Error: transport`, and body markers for retry budget,
+    backoff, and jitter. The gate also keeps `SERVER RUNTIME` at `13/13`.
+    Real delay sleep, probabilistic jitter, HTTPS/TLS, external network
+    stability, and deployed Node SSR operation remain outside the promoted
+    path.
+18. `vais-web` real browser runtime gate.
+    Current result: `vais-web-real-browser-runtime.test.ts` verifies static
+    adapter generated `index.html`/`client.js` over a local HTTP server in
+    Playwright Chromium. The smoke confirms SSR marker hydration,
+    `vaisx:hydrated` event detail, mounted component metadata, marker
+    attribute cleanup, browser click handling, and absence of browser
+    console/page errors. This gate is part of the current `WEB RUNTIME`
+    `13/13` surface. Live deployed platforms, production minification, code
+    splitting, and cross-browser coverage remain outside the promoted path.
+19. `vais-web` platform output runtime gate.
+    Current result: `vais-web-platform-output-runtime.test.ts` writes generated
+    Vercel Build Output API files and Cloudflare Worker output to a temporary
+    filesystem, then imports the generated serverless function/worker from disk
+    with native dynamic import. The smoke verifies Vercel static output,
+    nested dynamic function routing, and 404 handling, plus Cloudflare static
+    asset lookup, dynamic response, and missing-route 404 through
+    platform-like request/response APIs. This gate is part of the current
+    `WEB RUNTIME` `13/13` surface. Live deployed platforms and cross-browser
+    coverage remain outside the promoted path.
+20. `vais-web` production bundle/code-splitting runtime gate.
+    Current result: `vais-web-production-bundle-runtime.test.ts` builds a
+    temporary browser fixture through
+    `tsup --format esm --splitting --minify --platform browser`, passes the
+    generated `/assets/entry.js` and dynamic `/assets/counter-*.js` chunk to
+    `AdapterConfig.clientBundle`, and serves the generated static shell over
+    local HTTP in Playwright Chromium. The smoke verifies `modulepreload`,
+    absence of default `/client.js`, dynamic chunk resource loading, hydration
+    state/marker cleanup, click handling, and absence of console/page errors.
+    The gate is part of the current `WEB RUNTIME` `13/13` surface. Live
+    deployed platforms and cross-browser coverage remain outside the promoted
+    path.
+21. `vais-web` file-routing production app gate.
+    Current result: `vais-web-file-routing-production-runtime.test.ts` creates
+    a temporary real `app/` directory, scans `/`, `(marketing)/about`, and
+    `/docs/guide` with `buildRouteTree()`/`generateManifest()`, verifies group
+    segment URL elision plus nested route manifest entries, builds a minified
+    code-split browser bundle with `tsup`, injects the generated entry/chunk
+    through `AdapterConfig.clientBundle`, and serves generated static output
+    over local HTTP in Playwright Chromium. The smoke verifies generated
+    `index.html`, `about/index.html`, `docs/guide/index.html`, `404.html`,
+    dynamic chunk resource loading, hydration state/marker cleanup, route
+    metadata, click handling, and missing-route 404 fallback. The gate keeps
+    `WEB RUNTIME` at `13/13`. Live deployed platforms, cross-browser coverage,
+    SSR/data-loading production apps, and full dynamic production application
+    behavior remain outside the promoted path.
 
----
-
-## 선택 방식
-
-사용자가 1/2/3/4/5 또는 조합을 지정하면 이 파일을 해당 드라이브의 실행
-ROADMAP 으로 재작성.
-
-추천 우선순위 (Opus 판단):
-- **1번 (Vec<Struct> write-through)**: 작고 가치 명확. D.2+F.1 자연 마무리.
-- **4번 (Vec::new in std)**: 5줄 stdlib 확장, trivial.
-- **5번 (vaisdb cleanup)**: 사용자 체감 가장 큰 효과, 저장소 이동 필요.
-- **2번 / 3번**: 범위 큰 투자 필요, 별도 세션 + 계획 권장.
-
----
-
-## 드라이브 외 단발성 과제 (언제든 가능)
-
-- **LANGUAGE_SPEC.md Matrix `◐` 행 재검증** (한 번 훑기).
-- **examples/ 디렉토리 정리** (deprecated 예제 제거).
-- **`docs/LANGUAGE_SPEC.md` L262 최종 ✓ 선언** (Vec<Struct> write-through 완성 시).
-
----
-
-## 작업 시작 시
-
-드라이브 선택 후:
-1. 이 파일을 새 드라이브 ROADMAP 으로 재작성.
-2. 현재 baseline 재측정 (`./scripts/check-integrity.sh`) → 고정.
-3. `harness-init` 또는 `harness-plan` 이 나머지 처리.
+This order keeps language/compiler correctness separate from product feature
+work and prevents old downstream failures from steering compiler fixes.

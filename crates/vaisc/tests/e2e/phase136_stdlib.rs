@@ -6,6 +6,9 @@
 //!         memory, hash, set, deque, arena, base64
 
 use super::helpers::*;
+use std::path::PathBuf;
+use std::process::Command;
+use tempfile::TempDir;
 
 // ==================== 1. Vec ====================
 
@@ -352,6 +355,90 @@ F main() -> i64 {
     assert_exit_code(source, 2);
 }
 
+#[test]
+fn e2e_p136_stdlib_hashmap_keys_values_typed_vec() {
+    let source = r#"
+U std/hashmap
+U std/vec
+
+S Pair {
+    left: i64,
+    right: i64,
+}
+
+F main() -> i64 {
+    m: HashMap<i64, Pair> := mut HashMap.with_capacity(8)
+    m.insert(10, Pair { left: 11, right: 1 })
+    m.insert(20, Pair { left: 22, right: 2 })
+
+    keys: Vec<i64> := mut m.keys()
+    vals: Vec<Pair> := mut m.values()
+
+    I keys.len() != 2 { R 1 }
+    I vals.len() != 2 { R 2 }
+
+    key_sum := mut 0
+    i := mut 0
+    L {
+        I i >= keys.len() { B }
+        key_sum = key_sum + keys[i]
+        i = i + 1
+    }
+
+    value_sum := mut 0
+    j := mut 0
+    L {
+        I j >= vals.len() { B }
+        p := vals[j]
+        value_sum = value_sum + p.left + p.right
+        j = j + 1
+    }
+
+    I key_sum != 30 { R 3 }
+    I value_sum != 36 { R 4 }
+    R 0
+}
+"#;
+
+    let temp = TempDir::new().expect("failed to create std HashMap smoke temp dir");
+    let source_path = temp.path().join("hashmap_keys_values_typed_vec.vais");
+    let exe_path = temp.path().join("hashmap_keys_values_typed_vec");
+    std::fs::write(&source_path, source).expect("failed to write std HashMap smoke source");
+
+    let compiler_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("failed to canonicalize compiler root");
+    let build = Command::new(env!("CARGO_BIN_EXE_vaisc"))
+        .arg("build")
+        .arg(&source_path)
+        .arg("-o")
+        .arg(&exe_path)
+        .arg("--force-rebuild")
+        .env("VAIS_STD_PATH", compiler_root.join("std"))
+        .output()
+        .expect("failed to spawn vaisc std HashMap smoke build");
+
+    assert!(
+        build.status.success(),
+        "std HashMap keys()/values() typed Vec smoke failed to build.\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr)
+    );
+
+    let run = Command::new(&exe_path)
+        .output()
+        .expect("failed to run std HashMap smoke executable");
+
+    assert_eq!(
+        run.status.code().unwrap_or(-1),
+        0,
+        "std HashMap keys()/values() typed Vec smoke exited unexpectedly.\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+}
+
 // ==================== 4. Option ====================
 
 #[test]
@@ -409,6 +496,391 @@ F main() -> i64 {
 }
 "#;
     assert_exit_code(source, 2);
+}
+
+#[test]
+fn e2e_p136_qualified_option_constructor_implicit_block_return() {
+    // Regression: `Option.Some(...)` in block tail position must be loaded
+    // from the constructor alloca before returning the enum aggregate.
+    let source = r#"
+E Option {
+    None,
+    Some(i64)
+}
+
+F pick(flag: i64) -> Option {
+    I flag == 0 {
+        R Option.None
+    }
+    Option.Some(42)
+}
+
+F main() -> i64 {
+    opt := pick(1)
+    M opt {
+        Some(v) => v,
+        None => 0
+    }
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_p136_tail_if_option_none_uses_return_context() {
+    // Regression: an unqualified `None` in an implicit-return if branch must
+    // use the function's expected enum type, not an arbitrary same-named enum
+    // variant from the global registry.
+    let source = r#"
+E QuantizationStrategy {
+    None
+}
+
+E Option {
+    None,
+    Some(i64)
+}
+
+F pick(flag: i64) -> Option {
+    I flag == 0 {
+        None
+    } EL {
+        Some(42)
+    }
+}
+
+F main() -> i64 {
+    opt := pick(1)
+    M opt {
+        Some(v) => v,
+        None => 0
+    }
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_p136_option_none_local_promotes_to_str_across_match_arm() {
+    // Regression: assigning Option.Some(str) to a mutable local initialized
+    // with Option.None inside a match arm must update the outer local's type.
+    // Otherwise the later Some(v) binding is lowered as i64 instead of str.
+    let source = r#"
+E Option {
+    None,
+    Some(str)
+}
+
+F score(s: &str) -> i64 {
+    s.len()
+}
+
+F main() -> i64 {
+    col := mut Option.None
+
+    M 1 {
+        1 => {
+            col = Option.Some("abc")
+        },
+        _ => {}
+    }
+
+    M col {
+        Option.Some(v) => score(v),
+        Option.None => 0
+    }
+}
+"#;
+    assert_exit_code(source, 3);
+}
+
+#[test]
+fn e2e_p136_struct_field_none_uses_field_context() {
+    // Regression: a bare None in a struct literal field must use that field's
+    // enum type, not another enum that happens to have a None variant.
+    let source = r#"
+E QuantizationStrategy {
+    None
+}
+
+E Option {
+    None,
+    Some(i64)
+}
+
+S Holder {
+    value: Option
+}
+
+F main() -> i64 {
+    holder := Holder { value: None }
+    M holder.value {
+        Some(v) => v,
+        None => 7
+    }
+}
+"#;
+    assert_exit_code(source, 7);
+}
+
+#[test]
+fn e2e_p136_nested_match_str_does_not_use_function_return_context() {
+    // Regression: a nested match used for a local str must not inherit the
+    // enclosing function's Result return type as its phi type.
+    let source = r#"
+E Result {
+    Ok(i64),
+    Err(i64)
+}
+
+E SqlValue {
+    StringVal { v: str },
+    Null
+}
+
+F text_len(value: &SqlValue) -> Result {
+    fallback := mut "fallback"
+    text := mut M value {
+        SqlValue.StringVal { v } => v.clone(),
+        _ => fallback
+    }
+    Ok(text.len())
+}
+
+F main() -> i64 {
+    val := SqlValue.StringVal { v: "abc" }
+    result := text_len(&val)
+    M result {
+        Ok(v) => v,
+        Err(e) => e
+    }
+}
+"#;
+    assert_exit_code(source, 3);
+}
+
+#[test]
+fn e2e_p136_field_assignment_none_uses_field_context() {
+    // Regression: a bare None on the RHS of a struct-field assignment must use
+    // the field's enum type, not another same-named unit variant.
+    let source = r#"
+E QuantizationStrategy {
+    None
+}
+
+E MyOption {
+    None,
+    Some(i64)
+}
+
+S Holder {
+    value: MyOption
+}
+
+F clear(mut holder: Holder) -> Holder {
+    holder.value = None
+    holder
+}
+
+F main() -> i64 {
+    holder := Holder { value: MyOption.Some(3) }
+    cleared := clear(holder)
+    M cleared.value {
+        Some(v) => v,
+        None => 9
+    }
+}
+"#;
+    assert_exit_code(source, 9);
+}
+
+#[test]
+fn e2e_p136_impl_method_self_return_resolves_to_impl_type() {
+    // Regression: impl methods returning `Self` must lower to the concrete impl
+    // struct type, not an undefined `%Self` LLVM type.
+    let source = r#"
+S Builder {
+    value: i64
+}
+
+X Builder {
+    F set(mut self, value: i64) -> Self {
+        self.value = value
+        self
+    }
+}
+
+F main() -> i64 {
+    builder := Builder { value: 0 }
+    _updated := builder.set(42)
+    42
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_p136_mut_unit_variant_let_uses_inferred_enum_context() {
+    // Regression: `x := mut None` in a non-tail statement must use the enum type
+    // inferred from later assignments/return, not an arbitrary `None` variant.
+    let source = r#"
+E Option {
+    None
+}
+
+E Strategy {
+    None,
+    Scalar,
+    PQ
+}
+
+S Manager {
+    strategy: Strategy
+}
+
+X Manager {
+    F select(mut self, use_scalar: bool) -> Strategy {
+        selected := mut None
+        I use_scalar {
+            selected = Scalar
+        } EL {
+            selected = PQ
+        }
+        self.strategy = selected
+        selected
+    }
+}
+
+F main() -> i64 {
+    manager := Manager { strategy: Strategy.None }
+    selected := manager.select(true)
+    M selected {
+        Scalar => 11,
+        PQ => 22,
+        None => 33
+    }
+}
+"#;
+    assert_exit_code(source, 11);
+}
+
+#[test]
+fn e2e_p136_match_unit_try_phi_uses_actual_success_block() {
+    // Regression: a match arm containing `Result<(), E>?` must record the
+    // `try_ok` continuation as the phi predecessor, not the original arm label.
+    let source = r#"
+E Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+E Strategy {
+    None,
+    Scalar,
+    PQ
+}
+
+F ok_unit() -> Result<(), i64> {
+    Ok(())
+}
+
+F train_enum(strategy: Strategy) -> Result<(), i64> {
+    M strategy {
+        None => {
+            Ok(())
+        },
+        Scalar => {
+            ok_unit()?;
+            Ok(())
+        },
+        PQ => {
+            ok_unit()?;
+            Ok(())
+        },
+    }
+}
+
+F train_tag(tag: i64) -> Result<(), i64> {
+    M tag {
+        0 => {
+            ok_unit()?;
+            Ok(())
+        },
+        1 => {
+            Ok(())
+        },
+        _ => {
+            R Err(9)
+        }
+    }
+}
+
+F main() -> i64 {
+    enum_result := train_enum(Scalar)
+    tag_result := train_tag(0)
+    total := mut 0
+    M enum_result {
+        Ok(_) => { total = total + 10 },
+        Err(e) => { total = total + e }
+    }
+    M tag_result {
+        Ok(_) => { total = total + 20 },
+        Err(e) => { total = total + e }
+    }
+    total
+}
+"#;
+    assert_exit_code(source, 30);
+}
+
+#[test]
+fn e2e_p136_option_ok_or_try_preserves_result_abi() {
+    // Regression: Option<T>.ok_or(E)? must lower to the same Named Result ABI
+    // used by Ok/Err constructors, not to an erased i64 or an undeclared method.
+    let source = r#"
+EN Option<T> {
+    None,
+    Some(T)
+}
+
+EN Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+S BuildError {
+    code: i64
+}
+
+S Builder {
+    name: Option<str>
+}
+
+X Builder {
+    F build(self) -> Result<str, BuildError> {
+        Ok(self.name.ok_or(BuildError { code: 7 })?)
+    }
+}
+
+F main() -> i64 {
+    ok_builder := Builder { name: Some("abc") }
+    err_builder := Builder { name: None }
+    ok_result := ok_builder.build()
+    err_result := err_builder.build()
+
+    total := mut 0
+    M ok_result {
+        Ok(v) => { total = total + v.len() },
+        Err(e) => { total = total + e.code }
+    }
+    M err_result {
+        Ok(v) => { total = total + v.len() },
+        Err(e) => { total = total + e.code }
+    }
+    total
+}
+"#;
+    assert_exit_code(source, 10);
 }
 
 // ==================== 5. Result ====================
@@ -1099,4 +1571,65 @@ F main() -> i64 {
 }
 "#;
     assert_exit_code(source, 4);
+}
+
+#[test]
+fn e2e_p136_str_to_lowercase_helper_links_and_runs() {
+    let source = r#"
+F main() -> i64 {
+    lower := "AbC-12".to_lowercase()
+    result := mut 0
+    I lower.byte_at(0) == 97 { result = result + 1 }
+    I lower.byte_at(1) == 98 { result = result + 1 }
+    I lower.byte_at(2) == 99 { result = result + 1 }
+    I lower.byte_at(3) == 45 { result = result + 1 }
+    result
+}
+"#;
+    assert_exit_code(source, 4);
+}
+
+#[test]
+fn e2e_p136_complex_struct_method_specializations_define_receiver_layout() {
+    let source = r#"
+S BigNode {
+    a: i64,
+    b: i64,
+    c: i64,
+    d: i64,
+    e: i64,
+    f: i64,
+    g: i64,
+}
+
+S Carrier<T> {
+    len: i64,
+}
+
+X Carrier<T> {
+    F new(value: T) -> Carrier<T> {
+        Carrier { len: 1 }
+    }
+
+    F echo(&self, value: T) -> T {
+        value
+    }
+}
+
+F main() -> i64 {
+    carrier: Carrier<BigNode> := Carrier.new(BigNode { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7 })
+    found := carrier.echo(BigNode { a: 11, b: 12, c: 13, d: 14, e: 15, f: 16, g: 17 })
+    I found.g != 17 {
+        R 1
+    }
+    I found.a != 11 {
+        R 2
+    }
+    I found.g != 17 {
+        R 3
+    }
+    0
+}
+"#;
+    assert_exit_code(source, 0);
 }

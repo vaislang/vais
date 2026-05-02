@@ -31,19 +31,25 @@ X Mutex<T> {
     }
 
     # Try to acquire the lock without blocking
-    partial F try_lock(&self) -> MutexGuard<T>? {
+    partial F try_lock(&self) -> Option<MutexGuard<T>> {
         result := __mutex_try_lock(self.os_mutex)
         I result == 1 {
             self.lock_state = 1
-            Some(MutexGuard::new(&self))
-        } EL {
-            None
+            R Option.Some(MutexGuard::new(&self))
         }
+        Option.None
     }
 
     # Check if the mutex is locked
     F is_locked(&self) -> i64 {
         self.lock_state
+    }
+
+    # Explicitly release the lock when a guard destructor cannot be used.
+    F unlock(&self) -> i64 {
+        self.lock_state = 0
+        __mutex_unlock(self.os_mutex)
+        0
     }
 
     # Get the inner value (unsafe, should only be called with lock held)
@@ -66,12 +72,12 @@ S MutexGuard<T> {
 X MutexGuard<T> {
     F new(mutex: &Mutex<T>) -> MutexGuard<T> {
         MutexGuard {
-            mutex_ptr: mutex as i64
+            mutex_ptr: mutex.os_mutex
         }
     }
 
     # Access the protected value — placeholder until raw pointer deref lands.
-    # Returns mutex_ptr so callers have the underlying handle.
+    # Returns the underlying OS mutex handle.
     F get(&self) -> i64 {
         self.mutex_ptr
     }
@@ -135,25 +141,23 @@ X RwLock<T> {
     }
 
     # Try to acquire read lock
-    partial F try_read(&self) -> RwLockReadGuard<T>? {
+    partial F try_read(&self) -> Option<RwLockReadGuard<T>> {
         result := __rwlock_try_read_lock(self.os_rwlock)
         I result == 1 {
             self.readers = self.readers + 1
-            Some(RwLockReadGuard::new(&self))
-        } EL {
-            None
+            R Option.Some(RwLockReadGuard::new(&self))
         }
+        Option.None
     }
 
     # Try to acquire write lock
-    partial F try_write(&self) -> RwLockWriteGuard<T>? {
+    partial F try_write(&self) -> Option<RwLockWriteGuard<T>> {
         result := __rwlock_try_write_lock(self.os_rwlock)
         I result == 1 {
             self.writer = 1
-            Some(RwLockWriteGuard::new(&self))
-        } EL {
-            None
+            R Option.Some(RwLockWriteGuard::new(&self))
         }
+        Option.None
     }
 
     F get_inner(&self) -> &T {
@@ -425,14 +429,14 @@ X Channel<T> {
     }
 
     # Receive a message (blocks if buffer is empty)
-    F recv(&self) -> T? {
+    F recv(&self) -> Option<T> {
         __mutex_lock(self.mutex)
 
         # Wait until there's a message
         LW self.head >= self.tail {
             LW self.closed == 1 {
                 __mutex_unlock(self.mutex)
-                R None
+                R Option.None
             }
             __condvar_wait(self.not_empty, self.mutex)
         }
@@ -444,7 +448,7 @@ X Channel<T> {
 
         __condvar_signal(self.not_full)
         __mutex_unlock(self.mutex)
-        Some(value as T)
+        Option.Some(value as T)
     }
 
     # Try to send without blocking
@@ -469,15 +473,15 @@ X Channel<T> {
     }
 
     # Try to receive without blocking
-    F try_recv(&self) -> T? {
+    F try_recv(&self) -> Option<T> {
         result := __mutex_try_lock(self.mutex)
         LW result == 0 {
-            R None
+            R Option.None
         }
 
         LW self.head >= self.tail {
             __mutex_unlock(self.mutex)
-            R None
+            R Option.None
         }
 
         offset := (self.head % self.capacity) * 8
@@ -486,7 +490,7 @@ X Channel<T> {
 
         __condvar_signal(self.not_full)
         __mutex_unlock(self.mutex)
-        Some(value as T)
+        Option.Some(value as T)
     }
 
     # Close the channel
@@ -531,11 +535,11 @@ X Receiver<T> {
     }
 
     F recv(&self) -> Option<T> {
-        None
+        Option.None
     }
 
     F try_recv(&self) -> Option<T> {
-        None
+        Option.None
     }
 }
 
@@ -655,12 +659,11 @@ X SpinLock {
         SpinLockGuard::new(&self)
     }
 
-    F try_lock(&self) -> SpinLockGuard? {
+    F try_lock(&self) -> Option<SpinLockGuard> {
         I self.locked.compare_exchange(0, 1) == 0 {
-            Some(SpinLockGuard::new(&self))
-        } EL {
-            None
+            R Option.Some(SpinLockGuard::new(&self))
         }
+        Option.None
     }
 
     F unlock(&self) -> i64 {

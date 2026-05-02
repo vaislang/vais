@@ -11,6 +11,8 @@
 //! Scope: this module is **read-only** (a lookup table). It does not mutate
 //! the type checker's state.
 
+#![allow(dead_code)]
+
 use crate::types::ResolvedType;
 
 /// Receiver shape abstraction — matches the *kind* of receiver without
@@ -44,9 +46,7 @@ impl ReceiverShape {
             ResolvedType::Optional(_) => Some(Self::Option),
             ResolvedType::Result(_, _) => Some(Self::Result),
             ResolvedType::Str => Some(Self::Str),
-            ResolvedType::Ref(inner) if matches!(**inner, ResolvedType::Str) => {
-                Some(Self::StrRef)
-            }
+            ResolvedType::Ref(inner) if matches!(**inner, ResolvedType::Str) => Some(Self::StrRef),
             _ => None,
         }
     }
@@ -148,10 +148,7 @@ pub fn lookup_method_return(shape: ReceiverShape, method: &str) -> Option<Return
 /// fully-resolved return type. Returns `None` if the receiver's generics
 /// don't match what the rule expects (e.g. `FirstGeneric` on a Vec with
 /// no generics).
-pub fn expand_return_rule(
-    rule: &ReturnRule,
-    receiver: &ResolvedType,
-) -> Option<ResolvedType> {
+pub fn expand_return_rule(rule: &ReturnRule, receiver: &ResolvedType) -> Option<ResolvedType> {
     match rule {
         ReturnRule::Concrete(t) => Some(t.clone()),
         ReturnRule::Unit => Some(ResolvedType::Unit),
@@ -185,7 +182,10 @@ mod tests {
             name: "Vec".into(),
             generics: vec![ResolvedType::I64],
         };
-        assert_eq!(expand_return_rule(&rule, &receiver), Some(ResolvedType::I64));
+        assert_eq!(
+            expand_return_rule(&rule, &receiver),
+            Some(ResolvedType::I64)
+        );
     }
 
     #[test]
@@ -195,9 +195,8 @@ mod tests {
             name: "Vec".into(),
             generics: vec![ResolvedType::I64],
         };
-        let expected = ResolvedType::Optional(Box::new(ResolvedType::Ref(Box::new(
-            ResolvedType::I64,
-        ))));
+        let expected =
+            ResolvedType::Optional(Box::new(ResolvedType::Ref(Box::new(ResolvedType::I64))));
         assert_eq!(expand_return_rule(&rule, &receiver), Some(expected));
     }
 

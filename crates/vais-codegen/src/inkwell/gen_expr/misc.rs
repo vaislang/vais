@@ -35,11 +35,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .i8_type()
                     .ptr_type(inkwell::AddressSpace::default());
                 self.builder
-                    .build_int_to_ptr(
-                        field0.into_int_value(),
-                        i8_ptr_type,
-                        "str_raw_ptr_from_i64",
-                    )
+                    .build_int_to_ptr(field0.into_int_value(), i8_ptr_type, "str_raw_ptr_from_i64")
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))
             } else if field0.is_struct_value() {
                 // Nested struct — recurse. This happens when a struct's first

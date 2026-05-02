@@ -270,6 +270,27 @@ fn test_if_branch_type_mismatch() {
 }
 
 #[test]
+fn test_codegen_unresolved_type_detector() {
+    let unresolved_vec = ResolvedType::Named {
+        name: "Vec".to_string(),
+        generics: vec![ResolvedType::Var(7)],
+    };
+    assert_eq!(
+        TypeChecker::codegen_unresolved_type(&unresolved_vec),
+        Some("type variable #7".to_string())
+    );
+
+    let generic_template = ResolvedType::Named {
+        name: "Vec".to_string(),
+        generics: vec![ResolvedType::Generic("T".to_string())],
+    };
+    assert_eq!(
+        TypeChecker::codegen_unresolved_type(&generic_template),
+        None
+    );
+}
+
+#[test]
 fn test_match_arm_type_mismatch() {
     let source = "F f(x:i64)->i64=M x{0=>0,1=>\"one\",_=>2}";
     let module = parse(source).unwrap();

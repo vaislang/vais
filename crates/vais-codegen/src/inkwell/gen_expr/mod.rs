@@ -57,7 +57,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             } => self.generate_match(match_expr, arms),
 
             // Struct
-            Expr::StructLit { name, fields, enum_name } => {
+            Expr::StructLit {
+                name,
+                fields,
+                enum_name,
+            } => {
                 if let Some(ref e_name) = enum_name {
                     // Phase 6.27b: enum struct-variant construction
                     // `Enum.Variant { field1: v1, field2: v2 }` — build payload struct,
@@ -80,11 +84,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         || self.constants.contains_key(var_name)
                         || self.globals.contains_key(var_name);
                     if !shadowed {
-                        let is_variant = self.enum_variants.iter().any(
-                            |((e_name, v_name), _)| {
-                                e_name == var_name && v_name == &field.node
-                            },
-                        );
+                        let is_variant = self.enum_variants.iter().any(|((e_name, v_name), _)| {
+                            e_name == var_name && v_name == &field.node
+                        });
                         if is_variant {
                             return self.generate_var(&field.node);
                         }
@@ -93,7 +95,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 self.generate_field_access(&obj.node, &field.node)
             }
             Expr::TupleFieldAccess { expr: obj, index } => {
-                self.generate_field_access(&obj.node, &index.to_string())
+                self.generate_tuple_field_access(&obj.node, *index)
             }
 
             // Array/Tuple/Index

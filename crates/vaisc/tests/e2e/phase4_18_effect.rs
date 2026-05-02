@@ -3,8 +3,6 @@
 //! Existing EffectInferrer already enforces effect constraints.
 //! These tests capture the current working behavior to prevent regression.
 
-use super::helpers::*;
-
 fn check_only_ok(source: &str) {
     use tempfile::TempDir;
     let dir = TempDir::new().expect("tempdir");

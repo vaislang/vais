@@ -46,7 +46,7 @@ F make_empty_store() -> TodoStore {
 }
 
 F main() -> i64 {
-    s := make_empty_store()
+    s := mut make_empty_store()
     s = s.add_todo(100)
     s = s.add_todo(200)
     s = s.add_todo(300)

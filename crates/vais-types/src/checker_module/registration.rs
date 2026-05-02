@@ -39,6 +39,10 @@ impl TypeChecker {
                     self.fresh_type_var()
                 }
             });
+        for (_, ty, _) in &params {
+            self.record_type_instantiations(ty);
+        }
+        self.record_type_instantiations(&ret);
 
         // Restore previous generics
         self.restore_generics(saved);
@@ -125,6 +129,10 @@ impl TypeChecker {
             .as_ref()
             .map(|t| self.resolve_type(&t.node))
             .unwrap_or(ResolvedType::Unit);
+        for (_, ty, _) in &params {
+            self.record_type_instantiations(ty);
+        }
+        self.record_type_instantiations(&ret);
 
         // Validate common extern function signatures and warn on mismatches
         self.validate_extern_signature(&name, &ret);
@@ -187,6 +195,7 @@ impl TypeChecker {
         for field in &s.fields {
             let field_name = field.name.node.clone();
             let ty = self.resolve_type(&field.ty.node);
+            self.record_type_instantiations(&ty);
             field_order.push(field_name.clone());
             fields.insert(field_name, ty);
         }
@@ -209,6 +218,10 @@ impl TypeChecker {
                 .as_ref()
                 .map(|t| self.resolve_type(&t.node))
                 .unwrap_or(ResolvedType::Unit);
+            for (_, ty, _) in &params {
+                self.record_type_instantiations(ty);
+            }
+            self.record_type_instantiations(&ret);
 
             // Build method generic bounds: merge inline bounds with where clause bounds
             let mut method_bounds: HashMap<String, Vec<String>> = method

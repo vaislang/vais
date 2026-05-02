@@ -43,7 +43,15 @@ pub(crate) fn load_module_with_imports_rooted(
 ) -> Result<Module, String> {
     let source =
         fs::read_to_string(path).map_err(|e| format!("Cannot read '{}': {}", path.display(), e))?;
-    load_module_with_imports_internal(path, loaded, loading_stack, verbose, &source, query_db, source_root)
+    load_module_with_imports_internal(
+        path,
+        loaded,
+        loading_stack,
+        verbose,
+        &source,
+        query_db,
+        source_root,
+    )
 }
 
 /// Internal function to load a module with source already read
@@ -146,7 +154,8 @@ pub(crate) fn load_module_with_imports_internal(
         match &item.node {
             Item::Use(use_stmt) => {
                 // Resolve import path
-                let module_path = resolve_import_path_with_root(base_dir, &use_stmt.path, source_root)?;
+                let module_path =
+                    resolve_import_path_with_root(base_dir, &use_stmt.path, source_root)?;
 
                 if verbose {
                     println!("  {} {}", "Importing".cyan(), module_path.display());
@@ -363,7 +372,8 @@ pub(crate) fn load_module_with_imports_parallel(
         for item in parsed_module.items {
             match &item.node {
                 Item::Use(use_stmt) => {
-                    let sub_path = resolve_import_path_with_root(sub_base, &use_stmt.path, source_root)?;
+                    let sub_path =
+                        resolve_import_path_with_root(sub_base, &use_stmt.path, source_root)?;
                     let mut sub_loading_stack = Vec::new();
                     let sub_imported = load_module_with_imports_rooted(
                         &sub_path,
@@ -615,9 +625,15 @@ pub(crate) fn resolve_import_path_with_root(
                             let root_as_file = root_file_path.join(format!("{}.vais", seg.node));
                             let root_as_dir = root_file_path.join(&seg.node).join("mod.vais");
                             if root_as_file.exists() {
-                                return validate_and_canonicalize_import(&root_as_file, &root_canonical);
+                                return validate_and_canonicalize_import(
+                                    &root_as_file,
+                                    &root_canonical,
+                                );
                             } else if root_as_dir.exists() {
-                                return validate_and_canonicalize_import(&root_as_dir, &root_canonical);
+                                return validate_and_canonicalize_import(
+                                    &root_as_dir,
+                                    &root_canonical,
+                                );
                             }
                         } else {
                             root_file_path = root_file_path.join(&seg.node);

@@ -46,8 +46,7 @@ fn check_for_update() {
     let current = env!("CARGO_PKG_VERSION");
 
     // Determine cache path: ~/.vais/update-check.json
-    let cache_path = dirs::home_dir()
-        .map(|h| h.join(".vais").join("update-check.json"));
+    let cache_path = dirs::home_dir().map(|h| h.join(".vais").join("update-check.json"));
 
     // Check cache TTL (24 hours)
     const TTL_SECS: u64 = 24 * 60 * 60;

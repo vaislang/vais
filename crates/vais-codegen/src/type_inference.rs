@@ -42,16 +42,24 @@ fn expr_shape_matches_type(node: &Expr, ty: &ResolvedType) -> bool {
     match node {
         Expr::Int(_) => matches!(
             ty,
-            R::I8 | R::I16 | R::I32 | R::I64 | R::I128
-                | R::U8 | R::U16 | R::U32 | R::U64 | R::U128
-                | R::F32 | R::F64
+            R::I8
+                | R::I16
+                | R::I32
+                | R::I64
+                | R::I128
+                | R::U8
+                | R::U16
+                | R::U32
+                | R::U64
+                | R::U128
+                | R::F32
+                | R::F64
                 | R::Bool
         ),
         Expr::Float(_) => matches!(ty, R::F32 | R::F64),
         Expr::Bool(_) => matches!(ty, R::Bool | R::I64),
         Expr::String(_) | Expr::StringInterp(_) => {
-            matches!(ty, R::Str)
-                || matches!(ty, R::Ref(inner) if matches!(inner.as_ref(), R::Str))
+            matches!(ty, R::Str) || matches!(ty, R::Ref(inner) if matches!(inner.as_ref(), R::Str))
         }
         _ => true,
     }
@@ -87,7 +95,136 @@ fn contains_unresolved_var(ty: &ResolvedType) -> bool {
     }
 }
 
+fn contains_unresolved_generic_or_var(ty: &ResolvedType) -> bool {
+    match ty {
+        ResolvedType::Var(_) | ResolvedType::Generic(_) => true,
+        ResolvedType::Array(inner)
+        | ResolvedType::Optional(inner)
+        | ResolvedType::Pointer(inner)
+        | ResolvedType::Ref(inner)
+        | ResolvedType::RefMut(inner)
+        | ResolvedType::Slice(inner)
+        | ResolvedType::SliceMut(inner)
+        | ResolvedType::Range(inner)
+        | ResolvedType::Future(inner) => contains_unresolved_generic_or_var(inner),
+        ResolvedType::ConstArray { element, .. } => contains_unresolved_generic_or_var(element),
+        ResolvedType::Map(k, v) => {
+            contains_unresolved_generic_or_var(k) || contains_unresolved_generic_or_var(v)
+        }
+        ResolvedType::Result(ok, err) => {
+            contains_unresolved_generic_or_var(ok) || contains_unresolved_generic_or_var(err)
+        }
+        ResolvedType::Tuple(items) => items.iter().any(contains_unresolved_generic_or_var),
+        ResolvedType::Named { generics, .. } => {
+            generics.iter().any(contains_unresolved_generic_or_var)
+        }
+        ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
+            params.iter().any(contains_unresolved_generic_or_var)
+                || contains_unresolved_generic_or_var(ret)
+        }
+        _ => false,
+    }
+}
+
+fn unresolved_generic_can_upgrade_to(local: &ResolvedType, tc_ty: &ResolvedType) -> bool {
+    if contains_unresolved_generic_or_var(tc_ty) {
+        return false;
+    }
+
+    match (local, tc_ty) {
+        (ResolvedType::Var(_) | ResolvedType::Generic(_), _) => true,
+        (
+            ResolvedType::Named {
+                name: l_name,
+                generics: l_gen,
+            },
+            ResolvedType::Named {
+                name: r_name,
+                generics: r_gen,
+            },
+        ) if l_name == r_name && l_gen.len() == r_gen.len() => {
+            l_gen.iter().any(contains_unresolved_generic_or_var)
+        }
+        (ResolvedType::Ref(l), ResolvedType::Ref(r))
+        | (ResolvedType::RefMut(l), ResolvedType::RefMut(r))
+        | (ResolvedType::Pointer(l), ResolvedType::Pointer(r))
+        | (ResolvedType::Optional(l), ResolvedType::Optional(r))
+        | (ResolvedType::Slice(l), ResolvedType::Slice(r))
+        | (ResolvedType::SliceMut(l), ResolvedType::SliceMut(r))
+        | (ResolvedType::Array(l), ResolvedType::Array(r))
+        | (ResolvedType::Future(l), ResolvedType::Future(r))
+        | (ResolvedType::Range(l), ResolvedType::Range(r)) => {
+            unresolved_generic_can_upgrade_to(l, r)
+        }
+        (ResolvedType::Tuple(l_items), ResolvedType::Tuple(r_items))
+            if l_items.len() == r_items.len() =>
+        {
+            l_items
+                .iter()
+                .zip(r_items)
+                .any(|(l, r)| unresolved_generic_can_upgrade_to(l, r))
+        }
+        (ResolvedType::Result(l_ok, l_err), ResolvedType::Result(r_ok, r_err)) => {
+            unresolved_generic_can_upgrade_to(l_ok, r_ok)
+                || unresolved_generic_can_upgrade_to(l_err, r_err)
+        }
+        (ResolvedType::Map(l_k, l_v), ResolvedType::Map(r_k, r_v)) => {
+            unresolved_generic_can_upgrade_to(l_k, r_k)
+                || unresolved_generic_can_upgrade_to(l_v, r_v)
+        }
+        _ => false,
+    }
+}
+
+fn is_span_bleed_prone_container(ty: &ResolvedType) -> bool {
+    match ty {
+        ResolvedType::Named { name, .. } => {
+            matches!(
+                name.as_str(),
+                "Vec" | "HashMap" | "Option" | "Result" | "Box"
+            )
+        }
+        ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) | ResolvedType::Pointer(inner) => {
+            is_span_bleed_prone_container(inner)
+        }
+        _ => false,
+    }
+}
+
 impl CodeGenerator {
+    /// Refine a weak codegen-local inference result using the type registered
+    /// by the expression emitter for the actual SSA value.
+    ///
+    /// This keeps statement lowering from allocating/storing as the legacy i64
+    /// fallback when the generated value is known to be a struct, tuple, float,
+    /// bool, or narrow integer. It intentionally only upgrades weak inference
+    /// results so explicit annotations and precise local inference keep winning.
+    pub(crate) fn refine_weak_inferred_type_from_value(
+        &self,
+        inferred_ty: ResolvedType,
+        generated_value: &str,
+    ) -> ResolvedType {
+        if !matches!(
+            inferred_ty,
+            ResolvedType::I64 | ResolvedType::Unknown | ResolvedType::Never
+        ) {
+            return inferred_ty;
+        }
+
+        let Some(generated_ty) = self.fn_ctx.get_temp_type(generated_value).cloned() else {
+            return inferred_ty;
+        };
+
+        if matches!(
+            generated_ty,
+            ResolvedType::I64 | ResolvedType::Unknown | ResolvedType::Never
+        ) {
+            inferred_ty
+        } else {
+            generated_ty
+        }
+    }
+
     /// Infer type of a statement block (for if-else phi nodes)
     #[inline]
     pub(crate) fn infer_block_type(&self, stmts: &[Spanned<Stmt>]) -> ResolvedType {
@@ -208,7 +345,31 @@ impl CodeGenerator {
                 true // regular function call produces a value
             }
             Expr::MethodCall { .. } => true, // method call produces a value
-            Expr::StaticMethodCall { .. } => true, // static method call produces a value
+            Expr::StaticMethodCall {
+                type_name, method, ..
+            } => {
+                // Qualified enum constructors such as `Option.Some(x)` and
+                // `Result.Err(e)` lower through generate_enum_variant_constructor,
+                // which returns an alloca pointer to the enum aggregate.
+                if self
+                    .types
+                    .enums
+                    .get(type_name.node.as_str())
+                    .map(|enum_info| enum_info.variants.iter().any(|v| v.name == method.node))
+                    .unwrap_or(false)
+                {
+                    return false;
+                }
+                // Stdlib enum constructors may be available in cross-module
+                // codegen even when the enum registry entry is absent.
+                if matches!(
+                    (type_name.node.as_str(), method.node.as_str()),
+                    ("Option", "Some") | ("Option", "None") | ("Result", "Ok") | ("Result", "Err")
+                ) {
+                    return false;
+                }
+                true
+            }
             // Struct-typed local variables are stored as pointers (single alloca %T*)
             // so generate_expr returns a pointer, not a value
             Expr::Ident(name) => {
@@ -363,8 +524,12 @@ impl CodeGenerator {
         // the exact (file_id, start, end) key won't match, but a unique
         // (*, start, end) entry often exists. Only promote when exactly
         // one such entry matches, to avoid cross-module span-bleed.
-        let fallback_tc_ty = if !self.expr_types.contains_key(&span_key) {
-            let mut iter = self.expr_types.iter()
+        let exact_tc_ty = self.expr_types.get(&span_key).cloned();
+        let tc_lookup_is_exact = exact_tc_ty.is_some();
+        let fallback_tc_ty = if exact_tc_ty.is_none() {
+            let mut iter = self
+                .expr_types
+                .iter()
                 .filter(|((_, s, e), _)| *s == expr.span.start && *e == expr.span.end);
             let first = iter.next();
             let second = iter.next();
@@ -375,7 +540,7 @@ impl CodeGenerator {
         } else {
             None
         };
-        if let Some(tc_ty_owned) = self.expr_types.get(&span_key).cloned().or(fallback_tc_ty) {
+        if let Some(tc_ty_owned) = exact_tc_ty.or(fallback_tc_ty) {
             let tc_ty = &tc_ty_owned;
             // Phase 6.30.2: skip upgrade when tc_ty carries unresolved inference
             // vars (TC can leave Var(n) in expr_types when later unification is
@@ -433,12 +598,11 @@ impl CodeGenerator {
                     // local's declared type is I64 — a legitimate Vec<T>
                     // binding would have been stored as Named{Vec,..} from
                     // the start, not I64.
-                    if matches!(local_var.ty, ResolvedType::I64) {
-                        if let ResolvedType::Named { name: tn, .. } = tc_ty {
-                            if matches!(tn.as_str(), "Vec" | "HashMap" | "Option" | "Result" | "Box") {
-                                return local_var.ty.clone();
-                            }
-                        }
+                    if matches!(local_var.ty, ResolvedType::I64)
+                        && !tc_lookup_is_exact
+                        && is_span_bleed_prone_container(tc_ty)
+                    {
+                        return local_var.ty.clone();
                     }
                 }
             }
@@ -446,15 +610,70 @@ impl CodeGenerator {
             let should_upgrade = match (&local, tc_ty) {
                 (ResolvedType::I64, ResolvedType::Tuple(_)) => true,
                 (ResolvedType::I64, ResolvedType::Named { generics, .. })
-                    if !generics.is_empty() => true,
+                    if !generics.is_empty() =>
+                {
+                    true
+                }
+                (
+                    ResolvedType::I64,
+                    ResolvedType::Ref(inner)
+                    | ResolvedType::RefMut(inner)
+                    | ResolvedType::Pointer(inner),
+                ) if matches!(
+                    inner.as_ref(),
+                    ResolvedType::Named { generics, .. } if !generics.is_empty()
+                ) =>
+                {
+                    true
+                }
                 // Phase 6.27b+: local Unit but TC has concrete type.
                 // Happens when codegen-local infer returns Unit for method
                 // calls it can't resolve (cross-module, generic receivers).
                 (ResolvedType::Unit, tc) if !matches!(tc, ResolvedType::Unit) => true,
+                // Package/import builds can leave codegen-local inference at
+                // `Vec<T>` or bare `T` while TC expr_types has already
+                // resolved the slot from later push/get usage. Use the TC
+                // concrete type when it is the same outer shape with only
+                // generic/var holes filled in.
+                (local_ty, tc) if unresolved_generic_can_upgrade_to(local_ty, tc) => true,
+                (
+                    ResolvedType::Named {
+                        name: l_name,
+                        generics: l_gen,
+                    },
+                    ResolvedType::Named {
+                        name: r_name,
+                        generics: r_gen,
+                    },
+                ) if tc_lookup_is_exact
+                    && l_name == r_name
+                    && l_gen.is_empty()
+                    && !r_gen.is_empty()
+                    && !contains_unresolved_generic_or_var(tc_ty) =>
+                {
+                    true
+                }
+                // Exact TC info disambiguates bare unit enum variants such as
+                // `None` when multiple enums expose the same variant name. Local
+                // codegen inference can only pick one registry entry; TC has the
+                // surrounding assignment/return constraints.
+                (ResolvedType::Named { .. }, ResolvedType::Named { .. })
+                    if tc_lookup_is_exact
+                        && matches!(&expr.node, Expr::Ident(name) if self.is_unit_enum_variant(name))
+                        && !contains_unresolved_generic_or_var(tc_ty) =>
+                {
+                    true
+                }
                 // local says Vec<I64> (generic erased) but TC says Vec<Tuple<..>>
                 (
-                    ResolvedType::Named { name: l_name, generics: l_gen },
-                    ResolvedType::Named { name: r_name, generics: r_gen },
+                    ResolvedType::Named {
+                        name: l_name,
+                        generics: l_gen,
+                    },
+                    ResolvedType::Named {
+                        name: r_name,
+                        generics: r_gen,
+                    },
                 ) if l_name == r_name
                     && l_gen.len() == r_gen.len()
                     && l_gen.iter().all(|g| matches!(g, ResolvedType::I64))
@@ -467,8 +686,14 @@ impl CodeGenerator {
                 | (ResolvedType::RefMut(l_inner), ResolvedType::RefMut(r_inner)) => {
                     match (l_inner.as_ref(), r_inner.as_ref()) {
                         (
-                            ResolvedType::Named { name: l_n, generics: l_g },
-                            ResolvedType::Named { name: r_n, generics: r_g },
+                            ResolvedType::Named {
+                                name: l_n,
+                                generics: l_g,
+                            },
+                            ResolvedType::Named {
+                                name: r_n,
+                                generics: r_g,
+                            },
                         ) if l_n == r_n
                             && l_g.len() == r_g.len()
                             && l_g.iter().all(|g| matches!(g, ResolvedType::I64))
@@ -504,7 +729,9 @@ impl CodeGenerator {
         }
         // Phase 17.H1 fallback: serial TC path stores under a single file_id.
         // Match (start, end) only if unique, otherwise bail out.
-        let mut iter = self.expr_types.iter()
+        let mut iter = self
+            .expr_types
+            .iter()
             .filter(|((_, s, e), _)| *s == expr.span.start && *e == expr.span.end);
         let first = iter.next();
         let second = iter.next();
@@ -538,6 +765,12 @@ impl CodeGenerator {
                     global_info._ty.clone()
                 } else if self.is_unit_enum_variant(name) {
                     // Unit enum variant (e.g., None)
+                    if let Some(expected_ty) = self.expected_enum_type_for_variant(
+                        name,
+                        self.fn_ctx.expected_expr_types.last(),
+                    ) {
+                        return expected_ty;
+                    }
                     for enum_info in self.types.enums.values() {
                         for variant in &enum_info.variants {
                             if variant.name == *name {
@@ -640,6 +873,12 @@ impl CodeGenerator {
                     // For well-known generic enums (Option, Result), propagate the
                     // argument type as a generic parameter so downstream pattern matching
                     // can resolve variant field types correctly (fixes struct erasure).
+                    if let Some(expected_ty) = self.expected_enum_type_for_variant(
+                        fn_name,
+                        self.fn_ctx.expected_expr_types.last(),
+                    ) {
+                        return expected_ty;
+                    }
                     if let Some((enum_name, _)) = self.get_tuple_variant_info(fn_name) {
                         let generics = match fn_name.as_str() {
                             "Some" => {
@@ -686,6 +925,15 @@ impl CodeGenerator {
                             .map(|n| n.contains('$'))
                             .unwrap_or(false);
                         if fn_is_specialized {
+                            if let Some(Spanned {
+                                node: Expr::Ident(ident),
+                                ..
+                            }) = args.get(1)
+                            {
+                                if let Some(concrete) = self.get_generic_substitution(ident) {
+                                    return concrete;
+                                }
+                            }
                             if let Some(concrete) = self.get_generic_substitution("T") {
                                 return concrete;
                             }
@@ -768,7 +1016,12 @@ impl CodeGenerator {
                 ResolvedType::Pointer(inner) => *inner,
                 ResolvedType::Ref(inner) => *inner,
                 ResolvedType::RefMut(inner) => *inner,
-                _ => ResolvedType::I64,
+                ResolvedType::Named { name, generics } if name == "Box" && generics.len() == 1 => {
+                    generics[0].clone()
+                }
+                // Mirror the type checker and deref codegen: when a previous
+                // deref already materialized a value, an extra `*` is a no-op.
+                other => other,
             },
             Expr::StructLit {
                 name,
@@ -951,8 +1204,8 @@ impl CodeGenerator {
                 if matches!(recv_type, ResolvedType::Str) {
                     return match method.node.as_str() {
                         "len" | "charAt" | "char_at" | "byte_at" | "indexOf" | "contains"
-                        | "startsWith" | "endsWith" | "isEmpty" | "is_empty"
-                        | "starts_with" | "ends_with" => ResolvedType::I64,
+                        | "startsWith" | "endsWith" | "isEmpty" | "is_empty" | "starts_with"
+                        | "ends_with" => ResolvedType::I64,
                         "substring" | "push_str" | "to_uppercase" | "to_lowercase" | "trim"
                         | "to_string" | "clone" => ResolvedType::Str,
                         "as_bytes" | "into_bytes" => ResolvedType::Named {
@@ -980,6 +1233,28 @@ impl CodeGenerator {
                             }),
                         ),
                         _ => ResolvedType::I64,
+                    };
+                }
+
+                if matches!(
+                    recv_type,
+                    ResolvedType::I8
+                        | ResolvedType::U8
+                        | ResolvedType::I16
+                        | ResolvedType::U16
+                        | ResolvedType::I32
+                        | ResolvedType::U32
+                        | ResolvedType::I64
+                        | ResolvedType::U64
+                        | ResolvedType::F32
+                        | ResolvedType::F64
+                ) && matches!(
+                    method.node.as_str(),
+                    "to_le_bytes" | "to_be_bytes" | "to_ne_bytes"
+                ) {
+                    return ResolvedType::Named {
+                        name: "Vec".to_string(),
+                        generics: vec![ResolvedType::U8],
                     };
                 }
 
@@ -1065,6 +1340,36 @@ impl CodeGenerator {
                 // Hardcoded heuristics for types without registered signatures
                 // (e.g., std library types used without explicit impl blocks in scope)
                 if let ResolvedType::Named { name, .. } = inner_recv {
+                    if name == "Option" {
+                        let generics = if let ResolvedType::Named { generics, .. } = inner_recv {
+                            generics.clone()
+                        } else {
+                            vec![]
+                        };
+                        let ok_ty = generics.first().cloned().unwrap_or(ResolvedType::I64);
+                        let err_ty = args.first().map(|arg| self.infer_expr_type(arg)).unwrap_or(
+                            ResolvedType::Named {
+                                name: "VaisError".to_string(),
+                                generics: vec![],
+                            },
+                        );
+                        return match method.node.as_str() {
+                            "is_some" | "is_none" => ResolvedType::Bool,
+                            "unwrap" => ok_ty,
+                            "unwrap_or" | "unwrap_or_default" | "unwrap_or_else" => ok_ty,
+                            "ok_or" | "ok_or_else" => ResolvedType::Named {
+                                name: "Result".to_string(),
+                                generics: vec![ok_ty, err_ty],
+                            },
+                            "as_ref" => ResolvedType::Named {
+                                name: "Option".to_string(),
+                                generics: vec![ResolvedType::Ref(Box::new(ok_ty))],
+                            },
+                            "clone" => recv_type,
+                            _ => ResolvedType::I64,
+                        };
+                    }
+
                     if name == "ByteBuffer" {
                         return match method.node.as_str() {
                             "read_u8" | "read_i8" | "read_u16" | "read_i16" | "read_u32"
@@ -1095,9 +1400,7 @@ impl CodeGenerator {
                     // Keeping these in sync with the stdlib signatures avoids the
                     // I64 fallback that made `map.keys()[i]` trigger C003 in codegen.
                     if name == "HashMap" || name == "StringMap" {
-                        let generics = if let ResolvedType::Named { generics, .. } =
-                            inner_recv
-                        {
+                        let generics = if let ResolvedType::Named { generics, .. } = inner_recv {
                             generics.clone()
                         } else {
                             vec![]
@@ -1117,15 +1420,13 @@ impl CodeGenerator {
                                 name: "Vec".to_string(),
                                 generics: vec![val_ty],
                             },
-                            "get" => ResolvedType::Optional(Box::new(
-                                ResolvedType::Ref(Box::new(val_ty)),
-                            )),
-                            "get_mut" => ResolvedType::Optional(Box::new(
-                                ResolvedType::RefMut(Box::new(val_ty)),
-                            )),
-                            "insert" | "remove" => {
-                                ResolvedType::Optional(Box::new(val_ty))
-                            }
+                            "get" => ResolvedType::Optional(Box::new(ResolvedType::Ref(Box::new(
+                                val_ty,
+                            )))),
+                            "get_mut" => ResolvedType::Optional(Box::new(ResolvedType::RefMut(
+                                Box::new(val_ty),
+                            ))),
+                            "insert" | "remove" => ResolvedType::Optional(Box::new(val_ty)),
                             "contains_key" | "is_empty" => ResolvedType::Bool,
                             "len" | "capacity" => ResolvedType::I64,
                             "clear" => ResolvedType::Unit,
@@ -1138,21 +1439,24 @@ impl CodeGenerator {
                 // function search, otherwise `.ok_or()` would fall through to the
                 // I64 fallback and codegen-level ? / field-access would misbehave.
                 if let ResolvedType::Optional(ref inner) = recv_type {
+                    let err_ty = args.first().map(|arg| self.infer_expr_type(arg)).unwrap_or(
+                        ResolvedType::Named {
+                            name: "VaisError".to_string(),
+                            generics: vec![],
+                        },
+                    );
                     return match method.node.as_str() {
                         "is_some" | "is_none" => ResolvedType::Bool,
                         "unwrap" => (**inner).clone(),
                         "unwrap_or" | "unwrap_or_default" => (**inner).clone(),
                         "unwrap_or_else" => (**inner).clone(),
-                        "ok_or" | "ok_or_else" => ResolvedType::Result(
-                            Box::new((**inner).clone()),
-                            Box::new(ResolvedType::Named {
-                                name: "VaisError".to_string(),
-                                generics: vec![],
-                            }),
-                        ),
-                        "as_ref" => ResolvedType::Optional(Box::new(
-                            ResolvedType::Ref(Box::new((**inner).clone())),
-                        )),
+                        "ok_or" | "ok_or_else" => ResolvedType::Named {
+                            name: "Result".to_string(),
+                            generics: vec![(**inner).clone(), err_ty],
+                        },
+                        "as_ref" => ResolvedType::Optional(Box::new(ResolvedType::Ref(Box::new(
+                            (**inner).clone(),
+                        )))),
                         "clone" => recv_type.clone(),
                         _ => ResolvedType::I64,
                     };
@@ -1208,6 +1512,75 @@ impl CodeGenerator {
                 method,
                 args,
             } => {
+                if matches!(
+                    (type_name.node.as_str(), method.node.as_str()),
+                    ("Option", "Some") | ("Option", "None") | ("Result", "Ok") | ("Result", "Err")
+                ) {
+                    if let Some(expected_ty) = self.expected_enum_type_for_variant(
+                        &method.node,
+                        self.fn_ctx.expected_expr_types.last(),
+                    ) {
+                        return expected_ty;
+                    }
+                    let generics = match (type_name.node.as_str(), method.node.as_str()) {
+                        ("Option", "Some") => args
+                            .first()
+                            .map(|arg| vec![self.infer_expr_type(arg)])
+                            .unwrap_or_default(),
+                        ("Result", "Ok") => args
+                            .first()
+                            .map(|arg| vec![self.infer_expr_type(arg), ResolvedType::I64])
+                            .unwrap_or_default(),
+                        ("Result", "Err") => args
+                            .first()
+                            .map(|arg| vec![ResolvedType::I64, self.infer_expr_type(arg)])
+                            .unwrap_or_default(),
+                        _ => vec![],
+                    };
+                    return ResolvedType::Named {
+                        name: type_name.node.clone(),
+                        generics,
+                    };
+                }
+                if self
+                    .types
+                    .enums
+                    .get(type_name.node.as_str())
+                    .map(|enum_info| enum_info.variants.iter().any(|v| v.name == method.node))
+                    .unwrap_or(false)
+                {
+                    if let Some(expected_ty) = self.expected_enum_type_for_variant(
+                        &method.node,
+                        self.fn_ctx.expected_expr_types.last(),
+                    ) {
+                        return expected_ty;
+                    }
+                    return ResolvedType::Named {
+                        name: type_name.node.clone(),
+                        generics: vec![],
+                    };
+                }
+                if matches!(
+                    (type_name.node.as_str(), method.node.as_str()),
+                    ("Vec", "new")
+                        | ("Vec", "with_capacity")
+                        | ("HashMap", "new")
+                        | ("HashMap", "with_capacity")
+                        | ("HashSet", "new")
+                        | ("HashSet", "with_capacity")
+                ) {
+                    if let Some(expected) = self.fn_ctx.expected_expr_types.last() {
+                        if let ResolvedType::Named { name, .. } = expected {
+                            if name == &type_name.node {
+                                return expected.clone();
+                            }
+                        }
+                    }
+                    return ResolvedType::Named {
+                        name: type_name.node.clone(),
+                        generics: vec![],
+                    };
+                }
                 // Get static method return type from function info.
                 // Check specialized versions first via fn_instantiations so
                 // generic return types (e.g., Box<T>) are resolved to concrete
@@ -1264,6 +1637,17 @@ impl CodeGenerator {
                     ResolvedType::Pointer(inner) => inner.as_ref(),
                     other => other,
                 };
+
+                // Tuple field access: `.0`, `.1`, ... return the element type so
+                // a tuple-of-structs payload doesn't collapse to i64 downstream
+                // (Result/enum tuple binding → `pair.1` storage).
+                if let ResolvedType::Tuple(elem_types) = inner_type {
+                    if let Ok(idx) = field.node.parse::<usize>() {
+                        if let Some(elem_ty) = elem_types.get(idx) {
+                            return elem_ty.clone();
+                        }
+                    }
+                }
 
                 // If it's a named type (struct), look up the field type
                 if let ResolvedType::Named {
@@ -1338,12 +1722,10 @@ impl CodeGenerator {
                     }
                 }
             }
-            Expr::Unary { op, expr: inner } => {
-                match op {
-                    vais_ast::UnaryOp::Not => ResolvedType::Bool,
-                    _ => self.infer_expr_type(inner),
-                }
-            }
+            Expr::Unary { op, expr: inner } => match op {
+                vais_ast::UnaryOp::Not => ResolvedType::Bool,
+                _ => self.infer_expr_type(inner),
+            },
             Expr::Ternary { then, .. } => {
                 // Ternary returns the type of its then branch
                 self.infer_expr_type(then)
@@ -1352,13 +1734,23 @@ impl CodeGenerator {
                 // If-else returns the type of its then block
                 self.infer_block_type(then)
             }
-            Expr::Match { arms, .. } => {
-                // Match returns the type of its first arm body
-                if let Some(arm) = arms.first() {
-                    self.infer_expr_type(&arm.body)
-                } else {
-                    ResolvedType::I64
+            Expr::Match { expr, arms } => {
+                // Match returns the first informative arm type. Pattern-bound
+                // identifiers such as `Ok(v) => v` need the matched enum's
+                // concrete payload type, not the fallback Ident/i64 type.
+                let match_type = self.infer_expr_type(expr);
+                let mut fallback = ResolvedType::I64;
+                for arm in arms {
+                    let ty = self.infer_match_arm_result_type(arm, &match_type);
+                    match ty {
+                        ResolvedType::Unknown | ResolvedType::Never => {}
+                        ResolvedType::I64 => {
+                            fallback = ResolvedType::I64;
+                        }
+                        other => return other,
+                    }
                 }
+                fallback
             }
             Expr::Cast { ty, .. } => {
                 // Cast returns the target type
@@ -1393,7 +1785,9 @@ impl CodeGenerator {
                     other => {
                         // Non-fatal: await on non-Future type, possibly cross-module async.
                         // Return the type as-is rather than panicking.
-                        eprintln!("[WARN] await on non-Future type `{other}` — treating as passthrough");
+                        eprintln!(
+                            "[WARN] await on non-Future type `{other}` — treating as passthrough"
+                        );
                         other
                     }
                 }

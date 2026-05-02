@@ -228,10 +228,9 @@ X Vec<T> {
         I self.len > 0 {
             self.len = self.len - 1
             ptr := self.data + self.len * self.elem_size
-            load_typed(ptr)
-        } EL {
-            0
+            R load_typed(ptr)
         }
+        R 0
     }
 
     # Pop element from end using Option type
@@ -240,10 +239,9 @@ X Vec<T> {
         I self.len > 0 {
             self.len = self.len - 1
             ptr := self.data + self.len * self.elem_size
-            Some(load_typed(ptr))
-        } EL {
-            None
+            R Some(load_typed(ptr))
         }
+        R None
     }
 
     # Grow capacity (double it)

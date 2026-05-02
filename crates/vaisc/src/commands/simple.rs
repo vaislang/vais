@@ -118,8 +118,7 @@ fn cmd_run_jit(input: &PathBuf, verbose: bool) -> Result<(), String> {
         .map_err(|e| format!("Type error: {}", e))?;
 
     // JIT compile and run main
-    let mut jit =
-        JitCompiler::new().map_err(|e| format!("JIT init failed: {}", e))?;
+    let mut jit = JitCompiler::new().map_err(|e| format!("JIT init failed: {}", e))?;
     let exit_code = jit
         .compile_and_run_main(&ast)
         .map_err(|e| format!("JIT execution failed: {}", e))?;

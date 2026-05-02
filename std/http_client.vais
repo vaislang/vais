@@ -11,6 +11,8 @@
 # - Timeout support via setsockopt
 # - Keep-alive connection reuse
 # - Connection pooling basics
+# - Plain HTTP runtime path is promoted; HTTPS/TLS returns CLIENT_ERR_TLS_INIT
+#   until a separate TLS runtime gate promotes that surface.
 
 # ============================================
 # Constants
@@ -108,7 +110,14 @@ X Url {
     F request_path(&self) -> str {
         query_len := __strlen(self.query)
         I query_len > 0 {
-            __str_concat3(self.path, "?", self.query)
+            path_len := __strlen(self.path)
+            buf := __malloc(path_len + query_len + 2)
+            pos := mut __str_copy_to(buf, self.path)
+            __store_byte(buf + pos, 63)  # '?'
+            pos = pos + 1
+            pos = pos + __str_copy_to(buf + pos, self.query)
+            __store_byte(buf + pos, 0)
+            buf as str
         } EL {
             self.path
         }
@@ -256,19 +265,19 @@ X HttpRequest {
         self
     }
 
-    # Get a header value by name
-    F get_header(&self, name: str) -> str? {
+    # Get a header value by name. Returns "" if not found.
+    F get_header(&self, name: str) -> str {
         i := mut 0
         LW i < self.header_count {
             offset := i * 16
             header_name := __load_ptr(self.headers + offset) as str
             I __str_eq_ignore_case(header_name, name) == 1 {
-                value := __load_ptr(self.headers + offset + 8) as str
-                R Some(value)
+                value_ptr := __load_ptr(self.headers + offset + 8)
+                R __hc_str_from_buffer(value_ptr, __strlen(value_ptr as str))
             }
             i = i + 1
         }
-        None
+        ""
     }
 
     # Set raw body data
@@ -499,25 +508,25 @@ X HttpResponse {
     # Get body as string
     F body_text(&self) -> str {
         I self.body != 0 & self.body_len > 0 {
-            self.body as str
+            __hc_str_from_buffer(self.body, self.body_len)
         } EL {
             ""
         }
     }
 
-    # Get a response header value by name (case-insensitive)
-    F get_header(&self, name: str) -> str? {
+    # Get a response header value by name (case-insensitive). Returns "" if not found.
+    F get_header(&self, name: str) -> str {
         i := mut 0
         LW i < self.header_count {
             offset := i * 16
             header_name := __load_ptr(self.headers + offset) as str
             I __str_eq_ignore_case(header_name, name) == 1 {
-                value := __load_ptr(self.headers + offset + 8) as str
-                R Some(value)
+                value_ptr := __load_ptr(self.headers + offset + 8)
+                R __hc_str_from_buffer(value_ptr, __strlen(value_ptr as str))
             }
             i = i + 1
         }
-        None
+        ""
     }
 
     # Check if a response header exists
@@ -535,21 +544,22 @@ X HttpResponse {
     }
 
     # Get Content-Type header
-    F content_type(&self) -> str? {
+    F content_type(&self) -> str {
         self.get_header("Content-Type")
     }
 
     # Get Content-Length as i64 (-1 if not present)
     F content_length(&self) -> i64 {
         cl := self.get_header("Content-Length")
-        M cl {
-            Some(v) => __str_to_i64(v),
-            None => -1
+        I __strlen(cl) > 0 {
+            __str_to_i64(cl)
+        } EL {
+            -1
         }
     }
 
     # Get Location header (for redirects)
-    F location(&self) -> str? {
+    F location(&self) -> str {
         self.get_header("Location")
     }
 
@@ -769,12 +779,8 @@ X HttpClient {
             name := __load_ptr(self.default_headers + offset) as str
             value := __load_ptr(self.default_headers + offset + 8) as str
             existing := request.get_header(name)
-            M existing {
-                Some(v) => 0,   # already set, skip
-                None => {
-                    request.add_header(name, value)
-                    0
-                }
+            I __strlen(existing) == 0 {
+                request.add_header(name, value)
             }
             i = i + 1
         }
@@ -819,106 +825,13 @@ X HttpClient {
         send_buf := __malloc(CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
         req_len := request.serialize(send_buf, CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
 
-        # HTTPS path: use TLS for send/recv
+        # HTTPS is intentionally not promoted by the plain HTTP client runtime
+        # gate. Return a stable TLS error until std/tls is certified together
+        # with this client.
         I is_https == 1 {
-            # Create TLS context and connection
-            tls_ctx := __tls_ctx_new(0)  # client mode
-            I tls_ctx == 0 {
-                __free(send_buf)
-                __tcp_close(fd)
-                R HttpResponse::error(CLIENT_ERR_TLS_INIT)
-            }
-            __tls_ctx_set_default_verify(tls_ctx)
-
-            tls := __tls_new(tls_ctx, fd)
-            I tls == 0 {
-                __free(send_buf)
-                __tls_ctx_free(tls_ctx)
-                __tcp_close(fd)
-                R HttpResponse::error(CLIENT_ERR_TLS_INIT)
-            }
-
-            # Set SNI hostname
-            __tls_set_hostname(tls, host)
-
-            # TLS handshake
-            hs_result := __tls_connect(tls)
-            I hs_result != 0 {
-                __free(send_buf)
-                __tls_free(tls)
-                __tls_ctx_free(tls_ctx)
-                __tcp_close(fd)
-                R HttpResponse::error(CLIENT_ERR_TLS_HANDSHAKE)
-            }
-
-            # Send request via TLS
-            sent := __tls_write(tls, send_buf, req_len)
             __free(send_buf)
-
-            I sent < 0 {
-                __tls_shutdown(tls)
-                __tls_free(tls)
-                __tls_ctx_free(tls_ctx)
-                __tcp_close(fd)
-                R HttpResponse::error(CLIENT_ERR_SEND)
-            }
-
-            # Receive response via TLS
-            recv_buf := __malloc(CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
-            total_recv := mut 0
-
-            LW true {
-                n := __tls_read(tls, recv_buf + total_recv, CLIENT_RECV_CHUNK)
-                I n <= 0 {
-                    B
-                }
-                total_recv = total_recv + n
-
-                header_end := __find_header_end(recv_buf, total_recv)
-                I header_end >= 0 {
-                    content_len := __hc_get_content_length(recv_buf, total_recv)
-                    I content_len >= 0 {
-                        body_received := total_recv - header_end
-                        I body_received >= content_len {
-                            B
-                        }
-                    } EL {
-                        B
-                    }
-                }
-            }
-
-            # Cleanup TLS
-            __tls_shutdown(tls)
-            __tls_free(tls)
-            __tls_ctx_free(tls_ctx)
             __tcp_close(fd)
-
-            I total_recv <= 0 {
-                __free(recv_buf)
-                R HttpResponse::error(CLIENT_ERR_RECV)
-            }
-
-            response := __hc_parse_response(recv_buf, total_recv)
-            __free(recv_buf)
-
-            # Handle redirects
-            I self.follow_redirects == 1 & response.is_redirect() == 1 {
-                I redirect_count >= self.max_redirects {
-                    R HttpResponse::error(CLIENT_ERR_TOO_MANY_REDIRECTS)
-                }
-                location := response.location()
-                M location {
-                    Some(new_url) => {
-                        redirect_req := HttpRequest::get(new_url)
-                        redirect_req.timeout_ms = request.timeout_ms
-                        R self.do_send(&redirect_req, redirect_count + 1, timeout_ms)
-                    },
-                    None => response
-                }
-            } EL {
-                response
-            }
+            R HttpResponse::error(CLIENT_ERR_TLS_INIT)
         } EL {
             # Plain HTTP path (unchanged)
             sent := __tcp_send(fd, send_buf, req_len)
@@ -932,10 +845,12 @@ X HttpClient {
             # Receive response
             recv_buf := __malloc(CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
             total_recv := mut 0
+            last_recv := mut 0
 
             LW true {
                 n := __tcp_recv(fd, recv_buf + total_recv, CLIENT_RECV_CHUNK)
                 I n <= 0 {
+                    last_recv = n
                     B
                 }
                 total_recv = total_recv + n
@@ -959,6 +874,9 @@ X HttpClient {
             I total_recv <= 0 {
                 __tcp_close(fd)
                 __free(recv_buf)
+                I last_recv < 0 & timeout_ms > 0 {
+                    R HttpResponse::error(CLIENT_ERR_TIMEOUT)
+                }
                 R HttpResponse::error(CLIENT_ERR_RECV)
             }
 
@@ -970,14 +888,8 @@ X HttpClient {
             I self.keep_alive == 1 {
                 conn_header := response.get_header("Connection")
                 should_close := mut 0
-                M conn_header {
-                    Some(v) => {
-                        I __str_eq_ignore_case(v, "close") == 1 {
-                            should_close = 1
-                        }
-                        0
-                    },
-                    None => 0
+                I __str_eq_ignore_case(conn_header, "close") == 1 {
+                    should_close = 1
                 }
                 I should_close == 1 {
                     __tcp_close(fd)
@@ -994,14 +906,13 @@ X HttpClient {
                     R HttpResponse::error(CLIENT_ERR_TOO_MANY_REDIRECTS)
                 }
                 location := response.location()
-                M location {
-                    Some(new_url) => {
-                        # Build redirect request (GET for 301/302/303)
-                        redirect_req := HttpRequest::get(new_url)
-                        redirect_req.timeout_ms = request.timeout_ms
-                        R self.do_send(&redirect_req, redirect_count + 1, timeout_ms)
-                    },
-                    None => response
+                I __strlen(location) > 0 {
+                    # Build redirect request (GET for 301/302/303)
+                    redirect_req := HttpRequest::get(location)
+                    redirect_req.timeout_ms = request.timeout_ms
+                    R self.do_send(&redirect_req, redirect_count + 1, timeout_ms)
+                } EL {
+                    response
                 }
             } EL {
                 response
@@ -1640,21 +1551,10 @@ X F __hc_parse_url_query(url: str) -> str
 X F __hc_parse_url_scheme(url: str) -> str
 X F __hc_parse_response(buffer: i64, len: i64) -> HttpResponse
 X F __hc_get_content_length(buffer: i64, len: i64) -> i64
+X F __hc_str_from_buffer(ptr: i64, len: i64) -> str
 
 # HTTP parsing (shared with http_runtime.c)
 X F __find_header_end(buffer: i64, len: i64) -> i64
-
-# TLS operations (from tls_runtime.c)
-X F __tls_ctx_new(mode: i64) -> i64
-X F __tls_ctx_free(handle: i64) -> i64
-X F __tls_ctx_set_default_verify(handle: i64) -> i64
-X F __tls_new(ctx: i64, fd: i64) -> i64
-X F __tls_free(handle: i64) -> i64
-X F __tls_set_hostname(handle: i64, hostname: str) -> i64
-X F __tls_connect(handle: i64) -> i64
-X F __tls_read(handle: i64, buf: i64, len: i64) -> i64
-X F __tls_write(handle: i64, data: i64, len: i64) -> i64
-X F __tls_shutdown(handle: i64) -> i64
 
 # String operations
 X F __strlen(s: str) -> i64
@@ -1663,7 +1563,6 @@ X F __str_eq(a: str, b: str) -> i64
 X F __str_eq_ignore_case(a: str, b: str) -> i64
 X F __i64_to_str(dst: i64, value: i64) -> i64
 X F __str_to_i64(s: str) -> i64
-X F __str_concat3(a: str, b: str, c: str) -> str
 
 # Memory operations
 X F __malloc(size: i64) -> i64

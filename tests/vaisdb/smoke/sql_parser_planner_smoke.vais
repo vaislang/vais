@@ -1,0 +1,200 @@
+U sql/parser/parser
+U sql/parser/ast
+U sql/parser/token
+U sql/planner/types
+
+F check_int_literal(expr: Expr, expected: i64, code: i64) -> i64 {
+    M expr {
+        Expr.Literal { value } => {
+            M value {
+                SqlValue.IntVal { v } => {
+                    I v != expected { R code }
+                    R 0
+                },
+                _ => { R code },
+            }
+        },
+        _ => { R code },
+    }
+}
+
+F anchor_parser_link_symbols() -> i64 {
+    cte_columns: Vec<str> := mut Vec.with_capacity(0)
+    cte_query := mut SelectQuery.empty()
+    ctes: Vec<Cte> := mut Vec.with_capacity(1)
+    ctes.push(Cte {
+        name: "cte",
+        columns: cte_columns,
+        query: cte_query,
+        recursive: false,
+    })
+    I ctes.len() != 1 { R 31 }
+
+    columns: Vec<ColumnDef> := mut Vec.with_capacity(1)
+    columns.push(ColumnDef.new("id", SqlType.Int))
+    I columns.len() != 1 { R 32 }
+
+    upper := mut "select".to_uppercase()
+    I upper != "SELECT" { R 33 }
+    I "p1".char_at(0) != 112 { R 34 }
+
+    R 0
+}
+
+F main() -> i64 {
+    anchor_code := mut anchor_parser_link_symbols()
+    I anchor_code != 0 { R anchor_code }
+
+    tokenizer := mut Tokenizer.new("SELECT 1 + 2 AS total LIMIT 1;")
+    I tokenizer.input.len() == 0 { R 50 }
+    I tokenizer.peek() != 83u8 { R 51 }
+    tokens := mut M tokenizer.tokenize_all() {
+        Ok(v) => v,
+        Err(_) => { R 1 },
+    }
+    I tokens.len() == 0 { R 35 }
+    I token_kind_tag(&tokens[0].kind) != token_kind_tag(&TokenKind.Select) { R 49 }
+
+    parser := mut Parser.new(tokens)
+    M parser.expect(TokenKind.Select) {
+        Ok(_) => {},
+        Err(_) => { R 39 },
+    }
+    select_list_probe := mut M parser.parse_select_list() {
+        Ok(v) => v,
+        Err(_) => { R 40 },
+    }
+    I select_list_probe.len() != 1 { R 41 }
+    M parser.parse_where_clause() {
+        Ok(_) => {},
+        Err(_) => { R 42 },
+    }
+    M parser.parse_group_by() {
+        Ok(_) => {},
+        Err(_) => { R 43 },
+    }
+    M parser.parse_having() {
+        Ok(_) => {},
+        Err(_) => { R 44 },
+    }
+    M parser.parse_order_by() {
+        Ok(_) => {},
+        Err(_) => { R 45 },
+    }
+    limit_opt: Option<Expr> := mut Option.None
+    offset_opt: Option<Expr> := mut Option.None
+    I parser.match_token(TokenKind.Limit) {
+        limit_expr := mut M parser.parse_expr() {
+            Ok(v) => v,
+            Err(_) => { R 46 },
+        }
+        limit_opt = Option.Some(limit_expr)
+    }
+
+    query := mut SelectQuery {
+        ctes: Vec.with_capacity(0),
+        select_list: select_list_probe,
+        from: Option.None,
+        where_clause: Option.None,
+        group_by: Vec.with_capacity(0),
+        having: Option.None,
+        order_by: Vec.with_capacity(0),
+        limit: limit_opt,
+        offset: offset_opt,
+        distinct: false,
+        set_op: Option.None,
+    }
+
+    I query.ctes.len() != 0 { R 4 }
+    I query.select_list.len() != 1 { R 5 }
+    I query.distinct { R 6 }
+    M &query.from {
+        Some(_) => { R 7 },
+        None => {},
+    }
+
+    item := mut query.select_list[0].clone()
+    plan_expr: Expr := mut Expr.Star
+    M item {
+        SelectItem.Expr { expr, alias } => {
+            plan_expr = expr.clone()
+            M alias {
+                Some(a) => {
+                    I a != "total" { R 8 }
+                },
+                None => { R 9 },
+            }
+
+            M expr {
+                Expr.BinaryOp { left, op, right } => {
+                    M op {
+                        BinOp.Add => {},
+                        _ => { R 10 },
+                    }
+                    left_expr: Expr := mut *left
+                    left_code := mut check_int_literal(left_expr, 1, 11)
+                    I left_code != 0 { R left_code }
+                    right_expr: Expr := mut *right
+                    right_code := mut check_int_literal(right_expr, 2, 12)
+                    I right_code != 0 { R right_code }
+                },
+                _ => { R 13 },
+            }
+        },
+        _ => { R 14 },
+    }
+
+    limit_code := mut M &query.limit {
+        Some(v) => check_int_literal(v.clone(), 1, 16),
+        None => { R 15 },
+    }
+    I limit_code != 0 { R limit_code }
+
+    project_columns: Vec<ProjectColumn> := mut Vec.with_capacity(1)
+    project_columns.push(ProjectColumn.with_alias(plan_expr, "total"))
+
+    value_rows: Vec<Vec<Expr>> := mut Vec.with_capacity(0)
+    I value_rows.len() != 0 { R 27 }
+    values_plan := mut PlanNode.Values { rows: value_rows }
+    limit_plan := mut PlanNode.Limit {
+        input: Box.new(values_plan),
+        limit: Some(1 as u64),
+        offset: None,
+    }
+    M limit_plan {
+        PlanNode.Limit { limit, offset, .. } => {
+            M limit {
+                Some(v) => {
+                    I v != 1 { R 24 }
+                },
+                None => { R 25 },
+            }
+            M offset {
+                Some(_) => { R 26 },
+                None => {},
+            }
+        },
+        _ => { R 29 },
+    }
+
+    plan := mut PlanNode.Project {
+        input: Box.new(limit_plan),
+        columns: project_columns,
+    }
+
+    M plan {
+        PlanNode.Project { columns, .. } => {
+            I columns.len() != 1 { R 21 }
+            projected := mut columns[0].clone()
+            M projected.alias {
+                Some(a) => {
+                    I a != "total" { R 22 }
+                },
+                None => { R 23 },
+            }
+        },
+        _ => { R 30 },
+    }
+
+    R 0
+}

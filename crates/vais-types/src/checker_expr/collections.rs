@@ -29,9 +29,7 @@ impl TypeChecker {
                 // Mut refs and nested refs both handled.
                 fn peel_ref(t: &ResolvedType) -> ResolvedType {
                     match t {
-                        ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
-                            peel_ref(inner)
-                        }
+                        ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => peel_ref(inner),
                         _ => t.clone(),
                     }
                 }
@@ -196,10 +194,7 @@ impl TypeChecker {
                         // is still Bool semantically.
                         if !matches!(inner_type, ResolvedType::Bool)
                             && !inner_type.is_integer()
-                            && !matches!(
-                                inner_type,
-                                ResolvedType::Var(_) | ResolvedType::Unknown
-                            )
+                            && !matches!(inner_type, ResolvedType::Var(_) | ResolvedType::Unknown)
                         {
                             if let Err(e) = self.unify(&inner_type, &ResolvedType::Bool) {
                                 return Some(Err(e));
@@ -403,16 +398,12 @@ impl TypeChecker {
                         Some(Ok(fields[*index].clone()))
                     }
                     // Phase 280: unresolved type or struct — lenient fallback
-                    ResolvedType::Var(_) | ResolvedType::Unknown => {
-                        Some(Ok(ResolvedType::Unknown))
-                    }
+                    ResolvedType::Var(_) | ResolvedType::Unknown => Some(Ok(ResolvedType::Unknown)),
                     // Named struct used with tuple-field syntax (e.g., struct.0):
                     // lenient — return Unknown to avoid cascading errors in vaisdb
                     // code that uses this pattern. The actual field access validation
                     // is enforced at codegen level.
-                    ResolvedType::Named { .. } => {
-                        Some(Ok(ResolvedType::Unknown))
-                    }
+                    ResolvedType::Named { .. } => Some(Ok(ResolvedType::Unknown)),
                     other => Some(Err(TypeError::Mismatch {
                         expected: "tuple type".to_string(),
                         found: other.to_string(),
@@ -437,8 +428,12 @@ impl TypeChecker {
                 match inner_type {
                     ResolvedType::Array(elem_type) => {
                         if is_slice {
-                            // Slice returns a pointer to array elements
-                            Some(Ok(ResolvedType::Pointer(elem_type)))
+                            // Range indexing materializes a slice fat pointer
+                            // (`{ data, len }`) in codegen, so keep the type
+                            // tag as Slice<T>. Returning Pointer<T> here makes
+                            // downstream slice methods such as `.to_vec()` miss
+                            // the built-in dispatch.
+                            Some(Ok(ResolvedType::Slice(elem_type)))
                         } else if !index_type.is_integer() {
                             Some(Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
@@ -458,8 +453,7 @@ impl TypeChecker {
                     // Pointers can be indexed like arrays
                     ResolvedType::Pointer(elem_type) => {
                         if is_slice {
-                            // Slice of pointer returns a pointer
-                            Some(Ok(ResolvedType::Pointer(elem_type)))
+                            Some(Ok(ResolvedType::Slice(elem_type)))
                         } else if !index_type.is_integer() {
                             Some(Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
@@ -621,8 +615,10 @@ impl TypeChecker {
                     ResolvedType::Named {
                         ref name,
                         ref generics,
-                    } if matches!(name.as_str(), "MutexGuard" | "RwLockReadGuard" | "RwLockWriteGuard")
-                        && !generics.is_empty() =>
+                    } if matches!(
+                        name.as_str(),
+                        "MutexGuard" | "RwLockReadGuard" | "RwLockWriteGuard"
+                    ) && !generics.is_empty() =>
                     {
                         let inner = generics[0].clone();
                         // Delegate to Vec<T> / ConstArray / Slice / Str branches
@@ -782,11 +778,11 @@ impl TypeChecker {
                                 // push enum hint for the field type so bare
                                 // variants resolve to the right enum).
                                 for (field_name, value) in fields {
-                                    let expected_ty_opt = expected_fields
-                                        .get(&field_name.node)
-                                        .cloned();
-                                    let hint =
-                                        expected_ty_opt.as_ref().and_then(Self::enum_name_hint_from);
+                                    let expected_ty_opt =
+                                        expected_fields.get(&field_name.node).cloned();
+                                    let hint = expected_ty_opt
+                                        .as_ref()
+                                        .and_then(Self::enum_name_hint_from);
                                     if let Some(ref h) = hint {
                                         self.push_enum_hint(h.clone());
                                     }
@@ -833,9 +829,9 @@ impl TypeChecker {
                         // type, push its enum name so bare-variant idents
                         // inside the value resolve to that enum first.
                         let pre_subst = struct_def.fields.get(&field_name.node).cloned();
-                        let expected_ty_subst = pre_subst.as_ref().map(|et| {
-                            self.substitute_generics(et, &generic_substitutions)
-                        });
+                        let expected_ty_subst = pre_subst
+                            .as_ref()
+                            .map(|et| self.substitute_generics(et, &generic_substitutions));
                         let hint = expected_ty_subst
                             .as_ref()
                             .and_then(Self::enum_name_hint_from);
@@ -995,9 +991,9 @@ impl TypeChecker {
                                 if let crate::types::VariantFieldTypes::Struct(expected_fields) =
                                     variant_fields
                                 {
-                                    let covers_all = provided_field_names.iter().all(|pfn| {
-                                        expected_fields.contains_key(pfn.as_str())
-                                    });
+                                    let covers_all = provided_field_names
+                                        .iter()
+                                        .all(|pfn| expected_fields.contains_key(pfn.as_str()));
                                     if covers_all {
                                         enum_snapshots.push((
                                             enum_name_str.clone(),
@@ -1016,12 +1012,8 @@ impl TypeChecker {
                         // Type-check each provided field against expected
                         // (Phase 6.27c.3: propagate enum hint like above).
                         for (field_name, value) in fields {
-                            let expected_ty_opt = expected_fields
-                                .get(&field_name.node)
-                                .cloned();
-                            let hint = expected_ty_opt
-                                .as_ref()
-                                .and_then(Self::enum_name_hint_from);
+                            let expected_ty_opt = expected_fields.get(&field_name.node).cloned();
+                            let hint = expected_ty_opt.as_ref().and_then(Self::enum_name_hint_from);
                             if let Some(ref h) = hint {
                                 self.push_enum_hint(h.clone());
                             }

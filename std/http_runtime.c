@@ -168,7 +168,16 @@ long __tcp_accept(long listener_fd) {
 // Returns number of bytes sent, or -1 on error.
 long __tcp_send(long fd, long data, long len) {
     if (data == 0 || len <= 0) return -1;
-    ssize_t sent = send((int)fd, (const void*)data, (size_t)len, 0);
+#ifdef SO_NOSIGPIPE
+    int no_sigpipe = 1;
+    setsockopt((int)fd, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe, sizeof(no_sigpipe));
+#endif
+#ifdef MSG_NOSIGNAL
+    int flags = MSG_NOSIGNAL;
+#else
+    int flags = 0;
+#endif
+    ssize_t sent = send((int)fd, (const void*)data, (size_t)len, flags);
     return (long)sent;
 }
 

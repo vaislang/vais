@@ -71,6 +71,9 @@ pub(crate) struct FunctionContext {
     pub(crate) current_function: Option<String>,
     /// Current function's return type (for generating ret instructions in nested contexts)
     pub(crate) current_return_type: Option<ResolvedType>,
+    /// Expected type for the expression currently being generated.
+    /// Used to disambiguate short enum constructors such as `None`.
+    pub(crate) expected_expr_types: Vec<ResolvedType>,
     /// Local variables in current function
     pub(crate) locals: HashMap<String, crate::types::LocalVar>,
     /// Label counter for unique basic block names
@@ -117,6 +120,11 @@ pub(crate) struct FunctionContext {
     /// is a PHI (if/match as expression). Mirrors inkwell's
     /// `var_string_slots_multi`.
     pub(crate) var_string_slots_multi: std::collections::HashMap<String, Vec<String>>,
+
+    /// Lexical string-scope frame where a `str` local was declared. Assignments
+    /// inside deeper blocks move the newly owned slot back to this frame so the
+    /// inner block cleanup does not free a value still owned by the outer local.
+    pub(crate) var_string_scope_depth: std::collections::HashMap<String, usize>,
 
     /// For PHI results (str-producing if/match), the PHI's SSA is registered
     /// against its first incoming slot in `string_value_slot`; any additional
@@ -218,7 +226,8 @@ impl FunctionContext {
     ///
     /// See [`FunctionContext::actual_llvm_type`] for the invariant.
     pub(crate) fn record_emitted_type(&mut self, name: &str, llvm_ty: &str) {
-        self.actual_llvm_type.insert(name.to_string(), llvm_ty.to_string());
+        self.actual_llvm_type
+            .insert(name.to_string(), llvm_ty.to_string());
     }
 
     /// Look up the actually emitted LLVM type of a named temporary, if recorded.

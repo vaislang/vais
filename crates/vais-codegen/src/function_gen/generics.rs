@@ -161,57 +161,6 @@ impl CodeGenerator {
             return Ok(String::new());
         }
 
-        // Skip specialization for deeply nested struct types to prevent stack overflow.
-        // store_typed/load_typed have been extracted to #[inline(never)] methods, so the
-        // threshold is relaxed from >2 fields to >6 fields. Only skip if the struct has
-        // deeply nested Named fields (depth >= 2), as single-level Named fields are fine.
-        let has_complex_type = inst.type_args.iter().any(|t| {
-            if let ResolvedType::Named { name, .. } = t {
-                let fields = self
-                    .types
-                    .structs
-                    .get(name)
-                    .map(|s| &s.fields[..])
-                    .unwrap_or(&[]);
-                let generic_fields = self
-                    .generics
-                    .struct_defs
-                    .get(name)
-                    .map(|s| s.fields.len())
-                    .unwrap_or(0);
-                // Check for deeply nested Named types (depth 2: Named field whose own fields
-                // are also Named). Single-level Named fields (e.g., Vec<Point>) are allowed.
-                let has_deeply_nested = fields.iter().any(|(_, ty)| {
-                    if let ResolvedType::Named {
-                        name: inner_name, ..
-                    } = ty
-                    {
-                        self.types
-                            .structs
-                            .get(inner_name)
-                            .map(|s| {
-                                s.fields
-                                    .iter()
-                                    .any(|(_, ft)| matches!(ft, ResolvedType::Named { .. }))
-                            })
-                            .unwrap_or(false)
-                    } else {
-                        false
-                    }
-                });
-                // Complex if: >6 fields, OR deeply nested Named fields (depth >= 2)
-                fields.len() > 6 || generic_fields > 6 || has_deeply_nested
-            } else {
-                false
-            }
-        });
-        if has_complex_type {
-            self.generics
-                .generated_functions
-                .insert(inst.mangled_name.clone(), true);
-            return Ok(String::new());
-        }
-
         // Skip if already generated
         if self
             .generics
@@ -449,6 +398,8 @@ impl CodeGenerator {
                 } else {
                     let param_ptr = format!("__{}_ptr", name);
                     write_ir!(ir, "  %{} = alloca {}", param_ptr, llvm_ty);
+                    self.fn_ctx
+                        .record_emitted_type(&format!("%{}", param_ptr), &format!("{}*", llvm_ty));
                     write_ir!(
                         ir,
                         "  store {} %{}, {}* %{}",
@@ -473,7 +424,10 @@ impl CodeGenerator {
         let mut counter = 0;
         match &generic_fn.body {
             FunctionBody::Expr(expr) => {
-                let (value, expr_ir) = self.generate_expr(expr, &mut counter)?;
+                self.fn_ctx.expected_expr_types.push(ret_type.clone());
+                let expr_result = self.generate_expr(expr, &mut counter);
+                self.fn_ctx.expected_expr_types.pop();
+                let (value, expr_ir) = expr_result?;
                 ir.push_str(&expr_ir);
                 // Bug 2 safety check: if ret_type resolved to Unit but the generated
                 // function signature uses a non-void return type (detected via ret_llvm),
@@ -488,16 +442,30 @@ impl CodeGenerator {
                 } else if ret_type == ResolvedType::Unit {
                     ir.push_str("  ret void\n");
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
-                    let loaded = format!("%ret.{}", counter);
-                    write_ir!(
-                        ir,
-                        "  {} = load {}, {}* {}",
-                        loaded,
-                        ret_llvm,
-                        ret_llvm,
-                        value
-                    );
-                    write_ir!(ir, "  ret {} {}", ret_llvm, loaded);
+                    let val_ty = self.llvm_type_of(&value);
+                    if val_ty == format!("{}*", ret_llvm) {
+                        let loaded = format!("%ret.{}", counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
+                            loaded,
+                            ret_llvm,
+                            ret_llvm,
+                            value
+                        );
+                        write_ir!(ir, "  ret {} {}", ret_llvm, loaded);
+                    } else if val_ty == ret_llvm {
+                        write_ir!(ir, "  ret {} {}", ret_llvm, value);
+                    } else {
+                        let coerced = self.coerce_specialized_return(
+                            &value,
+                            &ret_llvm,
+                            &ret_type,
+                            &mut counter,
+                            &mut ir,
+                        );
+                        write_ir!(ir, "  ret {} {}", ret_llvm, coerced);
+                    }
                 } else {
                     // Coerce body value to return type if needed (e.g., i64 → double)
                     let coerced = self.coerce_specialized_return(
@@ -515,8 +483,10 @@ impl CodeGenerator {
                 // single-pointer alloca pattern consistent with generate_ident_expr.
                 // The old generate_block path creates double-pointer allocas for
                 // struct locals which causes type mismatches on return.
-                let (value, block_ir, terminated) =
-                    self.generate_block_stmts(stmts, &mut counter)?;
+                self.fn_ctx.expected_expr_types.push(ret_type.clone());
+                let block_result = self.generate_block_stmts(stmts, &mut counter);
+                self.fn_ctx.expected_expr_types.pop();
+                let (value, block_ir, terminated) = block_result?;
                 ir.push_str(&block_ir);
                 // If the block already contains a terminator (e.g., explicit `R 42`),
                 // do not emit a duplicate ret instruction.
@@ -544,6 +514,17 @@ impl CodeGenerator {
                                     &mut ir,
                                 );
                                 write_ir!(ir, "  ret {} {}", ret_llvm, coerced);
+                            } else if val_ty == format!("{}*", ret_llvm) {
+                                let loaded = format!("%ret.{}", counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load {}, {}* {}",
+                                    loaded,
+                                    ret_llvm,
+                                    ret_llvm,
+                                    value
+                                );
+                                write_ir!(ir, "  ret {} {}", ret_llvm, loaded);
                             } else {
                                 write_ir!(ir, "  ret {} {}", ret_llvm, value);
                             }
@@ -582,6 +563,8 @@ impl CodeGenerator {
         // Restore state
         self.generics.substitutions = old_subst;
         self.fn_ctx.current_function = None;
+        self.fn_ctx.current_return_type = None;
+        self.fn_ctx.expected_expr_types.clear();
 
         Ok(ir)
     }
@@ -636,6 +619,16 @@ impl CodeGenerator {
         }
         // For small int types (i8, i16, i32), truncate from i64
         if ret_llvm == "i8" || ret_llvm == "i16" || ret_llvm == "i32" {
+            let val_llvm = self.llvm_type_of(value);
+            if val_llvm == ret_llvm {
+                return value.to_string();
+            }
+            if val_llvm.starts_with('i')
+                && Self::int_type_width(&val_llvm) > 0
+                && Self::int_type_width(ret_llvm) > 0
+            {
+                return self.coerce_int_width(value, &val_llvm, ret_llvm, counter, ir);
+            }
             let tmp = self.next_temp(counter);
             write_ir!(ir, "  {} = trunc i64 {} to {}", tmp, value, ret_llvm);
             return tmp;

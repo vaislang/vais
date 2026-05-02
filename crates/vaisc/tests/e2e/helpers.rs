@@ -13,10 +13,7 @@ pub fn compile_to_ir(source: &str) -> Result<String, String> {
 
 /// Compile Vais source to LLVM IR string, optionally enabling Phase 4b.1
 /// implicit error propagation (`--implicit-try`) on the type checker.
-pub fn compile_to_ir_with_options(
-    source: &str,
-    implicit_try: bool,
-) -> Result<String, String> {
+pub fn compile_to_ir_with_options(source: &str, implicit_try: bool) -> Result<String, String> {
     let _tokens = tokenize(source).map_err(|e| format!("Lexer error: {:?}", e))?;
     let module = parse(source).map_err(|e| format!("Parser error: {:?}", e))?;
     let mut checker = TypeChecker::new();
@@ -32,7 +29,7 @@ pub fn compile_to_ir_with_options(
     // (e.g., Container_get) so codegen can resolve return types in monomorphized functions.
     gen.set_resolved_functions(checker.get_all_functions_with_methods());
     gen.set_type_aliases(checker.get_type_aliases().clone());
-    gen.set_expr_types(checker.get_expr_types().clone());
+    gen.set_expr_types(checker.get_resolved_expr_types());
     gen.set_implicit_try_sites(checker.get_implicit_try_sites().clone());
     let instantiations = checker.get_generic_instantiations();
     let ir = if instantiations.is_empty() {
@@ -226,13 +223,42 @@ pub fn compile_and_run_with_coverage(source: &str) -> Result<RunResult, String> 
 pub fn assert_exit_code(source: &str, expected: i32) {
     match compile_and_run(source) {
         Ok(result) => {
+            if result.exit_code != expected
+                && std::env::var("VAIS_E2E_DUMP_IR_ON_FAIL").as_deref() == Ok("1")
+            {
+                if let Ok(ir) = compile_to_ir(source) {
+                    let dump_path = std::env::temp_dir().join(format!(
+                        "vais_e2e_{}_expected_{}_got_{}.ll",
+                        std::process::id(),
+                        expected,
+                        result.exit_code
+                    ));
+                    if fs::write(&dump_path, ir).is_ok() {
+                        eprintln!("dumped failing Vais E2E IR to {}", dump_path.display());
+                    }
+                }
+            }
             assert_eq!(
                 result.exit_code, expected,
                 "Expected exit code {}, got {}.\nstdout: {}\nstderr: {}",
                 expected, result.exit_code, result.stdout, result.stderr
             );
         }
-        Err(e) => panic!("Compilation/execution failed: {}", e),
+        Err(e) => {
+            if std::env::var("VAIS_E2E_DUMP_IR_ON_FAIL").as_deref() == Ok("1") {
+                if let Ok(ir) = compile_to_ir(source) {
+                    let dump_path = std::env::temp_dir().join(format!(
+                        "vais_e2e_{}_compile_error_expected_{}.ll",
+                        std::process::id(),
+                        expected
+                    ));
+                    if fs::write(&dump_path, ir).is_ok() {
+                        eprintln!("dumped failing Vais E2E IR to {}", dump_path.display());
+                    }
+                }
+            }
+            panic!("Compilation/execution failed: {}", e)
+        }
     }
 }
 

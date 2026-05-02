@@ -198,6 +198,41 @@ ok_codegen_pkg() {
 
 All exit with 0 on success, 1 on failure. **No other definition of "OK" is permitted in this project.**
 
+### Core v0 certification gate
+
+The current correctness target is the smaller Core surface documented in
+`docs/certification/VAIS_CORE_V0.md`. Its dedicated gate is:
+
+```bash
+./scripts/core-certify.sh
+```
+
+This gate reads `tests/core/manifest.tsv` and validates only Core positive and
+negative fixtures. It does not replace `check-integrity.sh`; it is stricter and
+narrower. A Core failure blocks language/compiler feature work even if broader
+ecosystem measurements are unchanged.
+
+### MIR strict semantic subset gate
+
+MIR is not yet the authoritative semantic oracle for all Core fixtures. Its
+current certification contract is documented in
+`docs/certification/MIR_CONTRACT.md`. The available gate covers strict lowering,
+the strict Core fixture subset, the MIR interpreter subset, and structural
+validation:
+
+```bash
+cargo test -p vais-mir --test lower_strict_tests --release
+cargo test -p vais-mir --test core_strict_fixtures --release
+cargo test -p vais-mir --test interpreter_tests --release
+cargo test -p vais-mir --test validation_tests --release
+```
+
+This verifies strict lowering rejects semantic-loss placeholders, the currently
+certified Core fixture subset lowers without fallback, the interpreter can
+execute that subset, and malformed MIR graphs/frame references are rejected.
+`core-certify.sh` compares interpreter and native LLVM exit codes for the
+strict Core run fixtures.
+
 ---
 
 ## 4. Stage → role matrix

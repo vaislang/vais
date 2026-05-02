@@ -17,8 +17,12 @@ fn stmt_has_direct_break(stmt: &Spanned<Stmt>) -> bool {
         Stmt::Break(_) => true,
         // Look into expression statements (if/match/block — but NOT nested loops)
         Stmt::Expr(expr) => expr_has_direct_break(expr),
-        Stmt::Return(_) | Stmt::Let { .. } | Stmt::LetDestructure { .. }
-        | Stmt::Continue | Stmt::Defer(_) | Stmt::Error { .. } => false,
+        Stmt::Return(_)
+        | Stmt::Let { .. }
+        | Stmt::LetDestructure { .. }
+        | Stmt::Continue
+        | Stmt::Defer(_)
+        | Stmt::Error { .. } => false,
     }
 }
 
@@ -82,8 +86,7 @@ fn expr_has_direct_break(expr: &Spanned<Expr>) -> bool {
         Expr::Loop { .. } | Expr::While { .. } => false,
         // If/block/match: descend to find breaks for the current loop
         Expr::If { then, else_, .. } => {
-            stmts_have_direct_break(then)
-                || else_.as_ref().map_or(false, ifelse_has_direct_break)
+            stmts_have_direct_break(then) || else_.as_ref().map_or(false, ifelse_has_direct_break)
         }
         Expr::Block(stmts) => stmts_have_direct_break(stmts),
         Expr::Match { arms, .. } => arms.iter().any(|arm| expr_has_direct_break(&arm.body)),
@@ -376,9 +379,7 @@ impl TypeChecker {
                 // without a spurious E001 "expected Result, found ()" error.
                 let loop_type = if let Some(t) = break_value_type {
                     t
-                } else if pattern.is_none() && iter.is_none()
-                    && !stmts_have_direct_break(body)
-                {
+                } else if pattern.is_none() && iter.is_none() && !stmts_have_direct_break(body) {
                     ResolvedType::Never
                 } else {
                     ResolvedType::Unit

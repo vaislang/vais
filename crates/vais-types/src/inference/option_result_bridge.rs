@@ -18,6 +18,8 @@
 //!
 //! Source of truth: `unification.rs:231,247,253` (Generic no-op + bridge).
 
+#![allow(dead_code)]
+
 use crate::types::ResolvedType;
 
 /// Normalize a type into its primitive Option/Result form if it is one
@@ -32,10 +34,7 @@ pub fn normalize_to_primitive(ty: &ResolvedType) -> ResolvedType {
             ResolvedType::Optional(Box::new(generics[0].clone()))
         }
         ResolvedType::Named { name, generics } if name == "Result" && generics.len() == 2 => {
-            ResolvedType::Result(
-                Box::new(generics[0].clone()),
-                Box::new(generics[1].clone()),
-            )
+            ResolvedType::Result(Box::new(generics[0].clone()), Box::new(generics[1].clone()))
         }
         _ => ty.clone(),
     }
@@ -137,10 +136,7 @@ mod tests {
 
     #[test]
     fn is_result_shape_detects_both_forms() {
-        let prim = ResolvedType::Result(
-            Box::new(ResolvedType::I64),
-            Box::new(ResolvedType::Str),
-        );
+        let prim = ResolvedType::Result(Box::new(ResolvedType::I64), Box::new(ResolvedType::Str));
         let named = ResolvedType::Named {
             name: "Result".into(),
             generics: vec![ResolvedType::I64, ResolvedType::Str],
@@ -163,10 +159,7 @@ mod tests {
 
     #[test]
     fn result_inner_extracts_both_forms() {
-        let prim = ResolvedType::Result(
-            Box::new(ResolvedType::I64),
-            Box::new(ResolvedType::Str),
-        );
+        let prim = ResolvedType::Result(Box::new(ResolvedType::I64), Box::new(ResolvedType::Str));
         let named = ResolvedType::Named {
             name: "Result".into(),
             generics: vec![ResolvedType::Bool, ResolvedType::I64],

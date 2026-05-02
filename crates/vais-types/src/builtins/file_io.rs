@@ -419,7 +419,6 @@ impl TypeChecker {
             },
         );
 
-
         // flock: (fd, operation) -> i64 (advisory file locking)
         self.functions.insert(
             "flock".to_string(),

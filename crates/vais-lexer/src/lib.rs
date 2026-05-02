@@ -41,7 +41,6 @@ pub enum Token {
     #[token("<!--", skip_html_comment)]
     // === VaisX Template Doctype (HTML5 doctype declaration) ===
     #[regex(r"<!DOCTYPE[^>]*>", logos::skip, ignore(ascii_case))]
-
     // === Keywords (single-letter for token efficiency) ===
     // Higher priority than identifiers
     #[token("F", priority = 3)]
@@ -786,10 +785,7 @@ pub fn tokenize(source: &str) -> Result<Vec<SpannedToken>, LexError> {
 /// recovered single-quote string. Recursively applies the same recovery logic,
 /// so chained single-quote strings (e.g., a `t('a')` call followed later by
 /// an `import './x'` statement) all get handled.
-fn tokenize_suffix(
-    source: &str,
-    offset: usize,
-) -> Result<Vec<SpannedToken>, LexError> {
+fn tokenize_suffix(source: &str, offset: usize) -> Result<Vec<SpannedToken>, LexError> {
     if offset >= source.len() {
         return Ok(Vec::new());
     }
@@ -853,15 +849,44 @@ fn scan_single_quote_string(source: &str, start: usize) -> Option<(std::string::
             let after_backslash = i + 1;
             let next_char = source[after_backslash..].chars().next();
             match next_char {
-                Some('n') => { result.push('\n'); i = after_backslash + 1; }
-                Some('t') => { result.push('\t'); i = after_backslash + 1; }
-                Some('r') => { result.push('\r'); i = after_backslash + 1; }
-                Some('\\') => { result.push('\\'); i = after_backslash + 1; }
-                Some('\'') => { result.push('\''); i = after_backslash + 1; }
-                Some('"') => { result.push('"'); i = after_backslash + 1; }
-                Some('0') => { result.push('\0'); i = after_backslash + 1; }
-                Some('{') => { result.push('\\'); result.push('{'); i = after_backslash + 1; }
-                Some('}') => { result.push('\\'); result.push('}'); i = after_backslash + 1; }
+                Some('n') => {
+                    result.push('\n');
+                    i = after_backslash + 1;
+                }
+                Some('t') => {
+                    result.push('\t');
+                    i = after_backslash + 1;
+                }
+                Some('r') => {
+                    result.push('\r');
+                    i = after_backslash + 1;
+                }
+                Some('\\') => {
+                    result.push('\\');
+                    i = after_backslash + 1;
+                }
+                Some('\'') => {
+                    result.push('\'');
+                    i = after_backslash + 1;
+                }
+                Some('"') => {
+                    result.push('"');
+                    i = after_backslash + 1;
+                }
+                Some('0') => {
+                    result.push('\0');
+                    i = after_backslash + 1;
+                }
+                Some('{') => {
+                    result.push('\\');
+                    result.push('{');
+                    i = after_backslash + 1;
+                }
+                Some('}') => {
+                    result.push('\\');
+                    result.push('}');
+                    i = after_backslash + 1;
+                }
                 Some(other) => {
                     // Unknown escape, keep both `\` and the char literally.
                     // `other` may be multi-byte UTF-8 — advance by its char length.
@@ -889,10 +914,7 @@ fn scan_single_quote_string(source: &str, start: usize) -> Option<(std::string::
 /// quote of `'name'`), rewrite it as a String and remove the trailing `'` (which
 /// would otherwise have been an unbalanced apostrophe that the InvalidToken handler
 /// might also have caught, depending on what comes after).
-fn coalesce_single_quote_strings(
-    tokens: Vec<SpannedToken>,
-    source: &str,
-) -> Vec<SpannedToken> {
+fn coalesce_single_quote_strings(tokens: Vec<SpannedToken>, source: &str) -> Vec<SpannedToken> {
     let bytes = source.as_bytes();
     let mut result = Vec::with_capacity(tokens.len());
     for tok in tokens {

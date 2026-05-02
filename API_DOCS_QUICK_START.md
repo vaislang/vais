@@ -162,7 +162,7 @@ mdbook serve
 1. Browse the API documentation at http://localhost:3000
 2. Use the examples in your Vais programs
 3. Generate docs for additional modules as needed
-4. Refer to PHASE34_STAGE3_API_DOCS_SUMMARY.md for implementation details
+4. Refer to `docs/history/PHASE34_STAGE3_API_DOCS_SUMMARY.md` for implementation details
 
 ## Support
 

@@ -250,6 +250,71 @@ F main() -> i64 {
     );
 }
 
+#[test]
+fn e2e_p134_str_ref_mut_local_concat() {
+    assert_exit_code(
+        r#"
+F child(flag: bool) -> str {
+    I flag { R "x" }
+    R "y"
+}
+
+F main() -> i64 {
+    output := mut "a"
+    child_text := mut child(true)
+    output = output + "\n"
+    output = output + &child_text
+    I output == "a\nx" { R 42 }
+    R 1
+}
+"#,
+        42,
+    );
+}
+
+#[test]
+fn e2e_p134_str_match_unit_arm_keeps_fat_phi() {
+    assert_exit_code(
+        r#"
+F build(flag: bool) -> str {
+    output := mut "a"
+    M flag {
+        true => {
+            output = output + "b"
+        },
+        false => {},
+    }
+    output
+}
+
+F main() -> i64 {
+    I build(false) == "a" { R 42 }
+    R 1
+}
+"#,
+        42,
+    );
+}
+
+#[test]
+fn e2e_p134_str_reassigned_mut_local_return_keeps_owner() {
+    assert_exit_code(
+        r#"
+F build() -> str {
+    output := mut "a"
+    output = output + "b"
+    output
+}
+
+F main() -> i64 {
+    I build() == "ab" { R 42 }
+    R 1
+}
+"#,
+        42,
+    );
+}
+
 // ==================== E. String with Functions ====================
 
 #[test]
@@ -450,6 +515,31 @@ F main() -> i64 {
 }
 "#,
         42,
+    );
+}
+
+#[test]
+fn e2e_p134_format_return_keeps_owner() {
+    assert_exit_code(
+        r#"
+F make_name(n: u32) -> str {
+    R format("00000{}.wal", n)
+}
+
+F overwrite_heap(n: u32) -> str {
+    R format("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx{}", n)
+}
+
+F main() -> i64 {
+    s := make_name(1 as u32)
+    junk := overwrite_heap(2 as u32)
+    I junk.len() == 0 { R 9 }
+    I s.len() != 10 { R 1 }
+    I s != "000001.wal" { R 2 }
+    R 0
+}
+"#,
+        0,
     );
 }
 

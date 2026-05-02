@@ -1,0 +1,4 @@
+F main() -> i64 {
+    value: i64 := "not an int"
+    R value
+}

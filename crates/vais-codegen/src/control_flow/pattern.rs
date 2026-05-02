@@ -24,9 +24,13 @@ impl CodeGenerator {
                     // Generate discriminant check for unit enum variant
                     let mut ir = String::new();
 
-                    // Get the enum type name for proper LLVM type reference
+                    // Get the enum type name for proper LLVM type reference.
+                    // The matched value may be `&Enum`; keep that enum context
+                    // so duplicate unit variants (for example `Empty`) are not
+                    // resolved by global variant lookup.
                     let enum_name = self
-                        .get_enum_name_for_variant(name)
+                        .enum_name_from_match_type(match_type)
+                        .or_else(|| self.get_enum_name_for_variant(name))
                         .unwrap_or_else(|| "Unknown".to_string());
 
                     // Get the tag from the enum value (first field at index 0)
@@ -44,7 +48,9 @@ impl CodeGenerator {
                     write_ir!(ir, "  {} = load i32, i32* {}", tag_val, tag_ptr);
 
                     // Find the expected tag value for this variant
-                    let expected_tag = self.get_enum_variant_tag(name);
+                    let expected_tag = self
+                        .get_enum_variant_tag_in_enum(&enum_name, name)
+                        .unwrap_or_else(|| self.get_enum_variant_tag(name));
 
                     // Compare tag
                     let result = self.next_temp(counter);
@@ -61,12 +67,24 @@ impl CodeGenerator {
                     // Named constant pattern — compare match value against constant
                     let mut ir = String::new();
                     let result = self.next_temp(counter);
-                    // Codegen widens all narrow integers (u8, i8, u16, etc.) to i64,
-                    // so always use i64 for the comparison — matches Pattern::Literal(Int) behavior.
+                    let match_ty = self
+                        .llvm_type_of_checked(match_val)
+                        .filter(|ty| ty.starts_with('i'))
+                        .unwrap_or_else(|| {
+                            match match_type {
+                                ResolvedType::I8 | ResolvedType::U8 => "i8",
+                                ResolvedType::I16 | ResolvedType::U16 => "i16",
+                                ResolvedType::I32 | ResolvedType::U32 => "i32",
+                                ResolvedType::Bool => "i1",
+                                _ => "i64",
+                            }
+                            .to_string()
+                        });
                     write_ir!(
                         ir,
-                        "  {} = icmp eq i64 {}, {}",
+                        "  {} = icmp eq {} {}, {}",
                         result,
+                        match_ty,
                         match_val,
                         const_val
                     );
@@ -81,18 +99,21 @@ impl CodeGenerator {
                     // Use the match value's actual integer width when known,
                     // so matching an i32 payload against a literal uses
                     // `icmp eq i32` instead of i64 (mismatch under clang).
-                    let match_ty = match match_type {
-                        ResolvedType::I8 | ResolvedType::U8 => "i8",
-                        ResolvedType::I16 | ResolvedType::U16 => "i16",
-                        ResolvedType::I32 | ResolvedType::U32 => "i32",
-                        ResolvedType::Bool => "i1",
-                        _ => "i64",
-                    };
+                    let match_ty = self
+                        .llvm_type_of_checked(match_val)
+                        .filter(|ty| ty.starts_with('i'))
+                        .unwrap_or_else(|| {
+                            match match_type {
+                                ResolvedType::I8 | ResolvedType::U8 => "i8",
+                                ResolvedType::I16 | ResolvedType::U16 => "i16",
+                                ResolvedType::I32 | ResolvedType::U32 => "i32",
+                                ResolvedType::Bool => "i1",
+                                _ => "i64",
+                            }
+                            .to_string()
+                        });
                     let result = self.next_temp(counter);
-                    let ir = format!(
-                        "  {} = icmp eq {} {}, {}\n",
-                        result, match_ty, match_val, n
-                    );
+                    let ir = format!("  {} = icmp eq {} {}, {}\n", result, match_ty, match_val, n);
                     Ok((result, ir))
                 }
                 Literal::Bool(b) => {
@@ -309,20 +330,7 @@ impl CodeGenerator {
                 // specialized enums (e.g., `Result$Tuple_VaisError`). The
                 // variant-name lookup falls back to the unspecialized parent
                 // (Result) which doesn't exist as a concrete LLVM type.
-                let enum_name_from_match_type =
-                    if let ResolvedType::Named { name: n, .. } = match_type {
-                        let llvm = self.type_to_llvm(match_type);
-                        // Strip leading '%' if type_to_llvm rendered it as a
-                        // struct ref. Use the bare LLVM name.
-                        let bare = llvm.strip_prefix('%').unwrap_or(&llvm).to_string();
-                        if !bare.is_empty() && bare != "Unknown" {
-                            Some(bare)
-                        } else {
-                            Some(n.clone())
-                        }
-                    } else {
-                        None
-                    };
+                let enum_name_from_match_type = self.enum_name_from_match_type(match_type);
                 let enum_name = enum_name_from_match_type
                     .or_else(|| self.get_enum_name_for_variant(variant_name))
                     .unwrap_or_else(|| "Unknown".to_string());
@@ -342,7 +350,9 @@ impl CodeGenerator {
                 write_ir!(ir, "  {} = load i32, i32* {}", tag_val, tag_ptr);
 
                 // Find the expected tag value for this variant
-                let expected_tag = self.get_enum_variant_tag(variant_name);
+                let expected_tag = self
+                    .get_enum_variant_tag_in_enum(&enum_name, variant_name)
+                    .unwrap_or_else(|| self.get_enum_variant_tag(variant_name));
 
                 // Compare tag
                 let result = self.next_temp(counter);
@@ -356,7 +366,11 @@ impl CodeGenerator {
 
                 Ok((result, ir))
             }
-            Pattern::Struct { name, fields, enum_name: enum_hint } => {
+            Pattern::Struct {
+                name,
+                fields,
+                enum_name: enum_hint,
+            } => {
                 // Struct pattern: always matches if type is correct, but we check field patterns
                 let struct_name = &name.node;
                 let enum_hint_ref = enum_hint.as_deref();
@@ -439,7 +453,9 @@ impl CodeGenerator {
                     );
                     let tag_val = self.next_temp(counter);
                     write_ir!(ir, "  {} = load i32, i32* {}", tag_val, tag_ptr);
-                    let expected_tag = self.get_enum_variant_tag(struct_name);
+                    let expected_tag = self
+                        .get_enum_variant_tag_in_enum(&enum_name, struct_name)
+                        .unwrap_or_else(|| self.get_enum_variant_tag(struct_name));
                     let tag_ok = self.next_temp(counter);
                     write_ir!(
                         ir,
@@ -506,35 +522,15 @@ impl CodeGenerator {
                                     }
                                     ResolvedType::Bool => {
                                         let raw = self.next_temp(counter);
-                                        write_ir!(
-                                            ir,
-                                            "  {} = load i64, i64* {}",
-                                            raw,
-                                            payload_ptr
-                                        );
+                                        write_ir!(ir, "  {} = load i64, i64* {}", raw, payload_ptr);
                                         self.fn_ctx.record_emitted_type(&raw, "i64");
-                                        write_ir!(
-                                            ir,
-                                            "  {} = trunc i64 {} to i1",
-                                            field_val,
-                                            raw
-                                        );
+                                        write_ir!(ir, "  {} = trunc i64 {} to i1", field_val, raw);
                                     }
                                     ResolvedType::I32 | ResolvedType::U32 => {
                                         let raw = self.next_temp(counter);
-                                        write_ir!(
-                                            ir,
-                                            "  {} = load i64, i64* {}",
-                                            raw,
-                                            payload_ptr
-                                        );
+                                        write_ir!(ir, "  {} = load i64, i64* {}", raw, payload_ptr);
                                         self.fn_ctx.record_emitted_type(&raw, "i64");
-                                        write_ir!(
-                                            ir,
-                                            "  {} = trunc i64 {} to i32",
-                                            field_val,
-                                            raw
-                                        );
+                                        write_ir!(ir, "  {} = trunc i64 {} to i32", field_val, raw);
                                     }
                                     _ => {
                                         write_ir!(
@@ -546,10 +542,7 @@ impl CodeGenerator {
                                     }
                                 }
                                 let (check, check_ir) = self.generate_pattern_check_typed(
-                                    pat,
-                                    &field_val,
-                                    counter,
-                                    field_ty,
+                                    pat, &field_val, counter, field_ty,
                                 )?;
                                 ir.push_str(&check_ir);
                                 checks.push(check);
@@ -610,6 +603,63 @@ impl CodeGenerator {
         }
     }
 
+    /// Resolve the concrete enum type name from the type being matched.
+    ///
+    /// Pattern checks and bindings need the enum attached to the match value,
+    /// not the first globally registered enum that happens to contain a
+    /// variant with the same short name. This matters for `M &node {
+    /// PlanNode.Empty => ... }`, where `match_type` is `Ref(Named(PlanNode))`.
+    pub(crate) fn enum_name_from_match_type(&self, match_type: &ResolvedType) -> Option<String> {
+        fn named(ty: &ResolvedType) -> Option<&str> {
+            match ty {
+                ResolvedType::Named { name, .. } => Some(name.as_str()),
+                _ => None,
+            }
+        }
+
+        let enum_ty = match match_type {
+            ResolvedType::Named { .. } => match_type,
+            ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::RefLifetime { inner, .. }
+            | ResolvedType::RefMutLifetime { inner, .. } => inner.as_ref(),
+            _ => return None,
+        };
+        let fallback = named(enum_ty)?;
+        let llvm = self.type_to_llvm(enum_ty);
+        let bare = llvm
+            .strip_prefix('%')
+            .unwrap_or(&llvm)
+            .trim_end_matches('*');
+        if !bare.is_empty() && bare != "Unknown" {
+            Some(bare.to_string())
+        } else {
+            Some(fallback.to_string())
+        }
+    }
+
+    pub(crate) fn get_enum_variant_tag_in_enum(
+        &self,
+        enum_name: &str,
+        variant_name: &str,
+    ) -> Option<i32> {
+        let base_name = enum_name
+            .split_once('$')
+            .map(|(base, _)| base)
+            .unwrap_or(enum_name);
+        let enum_info = self
+            .types
+            .enums
+            .get(enum_name)
+            .or_else(|| self.types.enums.get(base_name))?;
+
+        enum_info
+            .variants
+            .iter()
+            .position(|variant| variant.name == variant_name)
+            .map(|idx| idx as i32)
+    }
+
     /// Get the enum name that contains a given variant
     #[inline(never)]
     pub(crate) fn get_enum_name_for_variant(&self, variant_name: &str) -> Option<String> {
@@ -631,7 +681,7 @@ impl CodeGenerator {
     /// when the parser produced a `Pattern::Struct` (which happens whenever the
     /// match arm omits the `EnumType.` qualifier, for example
     /// `Varchar { max_len } => …`).
-    #[allow(clippy::type_complexity)]
+    #[allow(dead_code, clippy::type_complexity)]
     pub(crate) fn resolve_enum_struct_variant(
         &self,
         variant_name: &str,
@@ -642,6 +692,7 @@ impl CodeGenerator {
     /// Phase 6.27b: disambiguation helper — prefer the enum matching `enum_hint`
     /// when multiple enums contain a variant with the same name (e.g. both
     /// `GrantType.Privileges` and `RevokeType.Privileges` exist).
+    #[allow(dead_code)]
     pub(crate) fn resolve_enum_struct_variant_with_hint(
         &self,
         variant_name: &str,
@@ -688,9 +739,9 @@ impl CodeGenerator {
                             first = Some((enum_info.name.clone(), tag as i32, fields.clone()));
                         }
                         if !requested_fields.is_empty() {
-                            let covers_all = requested_fields.iter().all(|rf| {
-                                fields.iter().any(|(n, _)| n == rf)
-                            });
+                            let covers_all = requested_fields
+                                .iter()
+                                .all(|rf| fields.iter().any(|(n, _)| n == rf));
                             if covers_all && best.is_none() {
                                 best = Some((enum_info.name.clone(), tag as i32, fields.clone()));
                             }
@@ -716,6 +767,97 @@ impl CodeGenerator {
         false
     }
 
+    pub(crate) fn enum_name_hint_from_type(&self, ty: &ResolvedType) -> Option<String> {
+        match ty {
+            ResolvedType::Named { name, .. } => {
+                let base = name.split('$').next().unwrap_or(name);
+                self.types
+                    .enums
+                    .contains_key(base)
+                    .then(|| base.to_string())
+            }
+            ResolvedType::Optional(_) => Some("Option".to_string()),
+            ResolvedType::Result(_, _) => Some("Result".to_string()),
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                self.enum_name_hint_from_type(inner)
+            }
+            _ => None,
+        }
+    }
+
+    pub(crate) fn named_enum_type_from_expected(
+        &self,
+        enum_name: &str,
+        expected: &ResolvedType,
+    ) -> ResolvedType {
+        match expected {
+            ResolvedType::Named { name, generics } if name.split('$').next() == Some(enum_name) => {
+                ResolvedType::Named {
+                    name: enum_name.to_string(),
+                    generics: generics.clone(),
+                }
+            }
+            ResolvedType::Optional(inner) if enum_name == "Option" => ResolvedType::Named {
+                name: "Option".to_string(),
+                generics: vec![(**inner).clone()],
+            },
+            ResolvedType::Result(ok, err) if enum_name == "Result" => ResolvedType::Named {
+                name: "Result".to_string(),
+                generics: vec![(**ok).clone(), (**err).clone()],
+            },
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                self.named_enum_type_from_expected(enum_name, inner)
+            }
+            _ => ResolvedType::Named {
+                name: enum_name.to_string(),
+                generics: vec![],
+            },
+        }
+    }
+
+    pub(crate) fn expected_enum_type_for_variant(
+        &self,
+        variant_name: &str,
+        expected: Option<&ResolvedType>,
+    ) -> Option<ResolvedType> {
+        let expected = expected?;
+        let enum_name = self.enum_name_hint_from_type(expected)?;
+        let enum_info = self.types.enums.get(&enum_name)?;
+        enum_info
+            .variants
+            .iter()
+            .any(|variant| variant.name == variant_name)
+            .then(|| self.named_enum_type_from_expected(&enum_name, expected))
+    }
+
+    pub(crate) fn get_unit_variant_info_with_expected(
+        &self,
+        variant_name: &str,
+        expected: Option<&ResolvedType>,
+    ) -> Option<(String, i32)> {
+        use crate::types::EnumVariantFields;
+        if let Some(enum_name) = expected.and_then(|ty| self.enum_name_hint_from_type(ty)) {
+            if let Some(enum_info) = self.types.enums.get(&enum_name) {
+                if let Some(tag) = enum_info.variants.iter().position(|variant| {
+                    variant.name == variant_name
+                        && matches!(variant.fields, EnumVariantFields::Unit)
+                }) {
+                    return Some((enum_name, tag as i32));
+                }
+            }
+        }
+
+        for enum_info in self.types.enums.values() {
+            for (tag, variant) in enum_info.variants.iter().enumerate() {
+                if variant.name == variant_name && matches!(variant.fields, EnumVariantFields::Unit)
+                {
+                    return Some((enum_info.name.clone(), tag as i32));
+                }
+            }
+        }
+        None
+    }
+
     /// Check if a name is a tuple enum variant and get its enum name and tag
     #[inline(never)]
     pub(crate) fn get_tuple_variant_info(&self, name: &str) -> Option<(String, i32)> {
@@ -727,6 +869,26 @@ impl CodeGenerator {
                 }
             }
         }
+        None
+    }
+
+    pub(crate) fn get_tuple_variant_info_with_expected(
+        &self,
+        variant_name: &str,
+        expected: Option<&ResolvedType>,
+    ) -> Option<(String, i32)> {
+        use crate::types::EnumVariantFields;
+        if let Some(enum_name) = expected.and_then(|ty| self.enum_name_hint_from_type(ty)) {
+            if let Some(enum_info) = self.types.enums.get(&enum_name) {
+                if let Some(tag) = enum_info.variants.iter().position(|variant| {
+                    variant.name == variant_name
+                        && matches!(variant.fields, EnumVariantFields::Tuple(_))
+                }) {
+                    return Some((enum_name, tag as i32));
+                }
+            }
+        }
+
         None
     }
 
@@ -761,7 +923,7 @@ impl CodeGenerator {
     ///
     /// For example, given `Option<Vec<u64>>::Some(T)`, this returns `[Vec<u64>]`
     /// by substituting `T` → `Vec<u64>` from the match_type generics.
-    fn resolve_variant_field_types(
+    pub(crate) fn resolve_variant_field_types(
         &self,
         enum_name: &str,
         variant_name: &str,
@@ -777,11 +939,39 @@ impl CodeGenerator {
             ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
             other => other,
         };
-
+        match (variant_name, inner_match_type) {
+            ("Ok", ResolvedType::Named { name, generics })
+                if name == "Result" && generics.len() >= 2 =>
+            {
+                return vec![generics[0].clone()];
+            }
+            ("Err", ResolvedType::Named { name, generics })
+                if name == "Result" && generics.len() >= 2 =>
+            {
+                return vec![generics[1].clone()];
+            }
+            ("Some", ResolvedType::Named { name, generics })
+                if name == "Option" && !generics.is_empty() =>
+            {
+                return vec![generics[0].clone()];
+            }
+            _ => {}
+        }
         // Look up the enum definition to find the variant's field types
-        let enum_info = match self.types.enums.get(enum_name) {
-            Some(info) => info,
-            None => return vec![],
+        let enum_info = if let Some((base, _)) = enum_name.split_once('$') {
+            match self
+                .types
+                .enums
+                .get(base)
+                .or_else(|| self.types.enums.get(enum_name))
+            {
+                Some(info) => info,
+                None => return vec![],
+            }
+        } else if let Some(info) = self.types.enums.get(enum_name) {
+            info
+        } else {
+            return vec![];
         };
 
         // Find the variant
@@ -797,20 +987,6 @@ impl CodeGenerator {
             EnumVariantFields::Struct(fields) => fields.iter().map(|(_, ty)| ty).collect(),
         };
 
-        // Extract the concrete generic args from match_type (e.g., [Vec<u64>] from Option<Vec<u64>>)
-        // Phase 300a-style: also handle primitive Optional(T)/Result(T,E) which
-        // aren't Named { generics } but carry the concrete inner type directly.
-        let extracted_generics: Vec<ResolvedType> = match inner_match_type {
-            ResolvedType::Named { generics, .. } if !generics.is_empty() => generics.clone(),
-            ResolvedType::Optional(inner) => vec![(**inner).clone()],
-            ResolvedType::Result(ok, err) => vec![(**ok).clone(), (**err).clone()],
-            _ => {
-                // Non-generic enum: field types are already concrete, return them directly.
-                return raw_field_types.into_iter().cloned().collect();
-            }
-        };
-        let concrete_generics = &extracted_generics;
-
         // Build a substitution map: collect unique generic param names from ALL variants
         // in declaration order, then map to concrete_generics by index.
         // e.g., Option: [T] → generics[0]; Result: [T, E] → generics[0], generics[1]
@@ -825,6 +1001,31 @@ impl CodeGenerator {
                 Self::collect_generic_names(ft, &mut generic_param_order);
             }
         }
+        if generic_param_order.is_empty() {
+            return raw_field_types.into_iter().cloned().collect();
+        }
+
+        // Extract the concrete generic args from match_type (e.g., [Vec<u64>] from Option<Vec<u64>>)
+        // Phase 300a-style: also handle primitive Optional(T)/Result(T,E) which
+        // aren't Named { generics } but carry the concrete inner type directly.
+        let extracted_generics: Vec<ResolvedType> = match inner_match_type {
+            ResolvedType::Named { generics, .. } if !generics.is_empty() => generics.clone(),
+            ResolvedType::Named { name, .. } => {
+                Self::generics_from_mangled_name(name, generic_param_order.len())
+                    .or_else(|| {
+                        Self::generics_from_mangled_name(enum_name, generic_param_order.len())
+                    })
+                    .unwrap_or_default()
+            }
+            ResolvedType::Optional(inner) => vec![(**inner).clone()],
+            ResolvedType::Result(ok, err) => vec![(**ok).clone(), (**err).clone()],
+            _ => Self::generics_from_mangled_name(enum_name, generic_param_order.len())
+                .unwrap_or_default(),
+        };
+        if extracted_generics.is_empty() {
+            return raw_field_types.into_iter().cloned().collect();
+        }
+        let concrete_generics = &extracted_generics;
 
         // Build substitution map: param_name -> concrete_type
         let mut substitutions: std::collections::HashMap<String, ResolvedType> =
@@ -840,6 +1041,119 @@ impl CodeGenerator {
             .into_iter()
             .map(|ty| Self::substitute_generics(ty, &substitutions))
             .collect()
+    }
+
+    fn generics_from_mangled_name(
+        mangled_name: &str,
+        generic_count: usize,
+    ) -> Option<Vec<ResolvedType>> {
+        if generic_count == 0 {
+            return Some(vec![]);
+        }
+        let (_, suffix) = mangled_name.split_once('$')?;
+        let parts: Vec<&str> = suffix.split('_').filter(|p| !p.is_empty()).collect();
+        let mut result = Vec::with_capacity(generic_count);
+        let mut idx = 0;
+
+        for arg_index in 0..generic_count {
+            let remaining_args = generic_count - arg_index - 1;
+            let max_end = parts.len().checked_sub(remaining_args)?;
+            let (ty, next_idx) = Self::parse_mangled_type_parts(&parts, idx, max_end)?;
+            result.push(ty);
+            idx = next_idx;
+        }
+
+        (idx == parts.len()).then_some(result)
+    }
+
+    fn parse_mangled_type_parts(
+        parts: &[&str],
+        idx: usize,
+        max_end: usize,
+    ) -> Option<(ResolvedType, usize)> {
+        if idx >= max_end {
+            return None;
+        }
+
+        let token = parts[idx];
+        let primitive = match token {
+            "i8" => Some(ResolvedType::I8),
+            "i16" => Some(ResolvedType::I16),
+            "i32" => Some(ResolvedType::I32),
+            "i64" => Some(ResolvedType::I64),
+            "i128" => Some(ResolvedType::I128),
+            "u8" => Some(ResolvedType::U8),
+            "u16" => Some(ResolvedType::U16),
+            "u32" => Some(ResolvedType::U32),
+            "u64" => Some(ResolvedType::U64),
+            "u128" => Some(ResolvedType::U128),
+            "f32" => Some(ResolvedType::F32),
+            "f64" => Some(ResolvedType::F64),
+            "bool" => Some(ResolvedType::Bool),
+            "str" => Some(ResolvedType::Str),
+            "unit" => Some(ResolvedType::Unit),
+            _ => None,
+        };
+        if let Some(ty) = primitive {
+            return Some((ty, idx + 1));
+        }
+
+        match token {
+            "opt" => {
+                let (inner, next) = Self::parse_mangled_type_parts(parts, idx + 1, max_end)?;
+                Some((ResolvedType::Optional(Box::new(inner)), next))
+            }
+            "res" => {
+                let (ok, next) = Self::parse_mangled_type_parts(parts, idx + 1, max_end)?;
+                let (err, next) = Self::parse_mangled_type_parts(parts, next, max_end)?;
+                Some((ResolvedType::Result(Box::new(ok), Box::new(err)), next))
+            }
+            "arr" => {
+                let (inner, next) = Self::parse_mangled_type_parts(parts, idx + 1, max_end)?;
+                Some((ResolvedType::Array(Box::new(inner)), next))
+            }
+            "ptr" => {
+                let (inner, next) = Self::parse_mangled_type_parts(parts, idx + 1, max_end)?;
+                Some((ResolvedType::Pointer(Box::new(inner)), next))
+            }
+            "ref" => {
+                let (inner, next) = Self::parse_mangled_type_parts(parts, idx + 1, max_end)?;
+                Some((ResolvedType::Ref(Box::new(inner)), next))
+            }
+            "refmut" => {
+                let (inner, next) = Self::parse_mangled_type_parts(parts, idx + 1, max_end)?;
+                Some((ResolvedType::RefMut(Box::new(inner)), next))
+            }
+            "slice" => {
+                let (inner, next) = Self::parse_mangled_type_parts(parts, idx + 1, max_end)?;
+                Some((ResolvedType::Slice(Box::new(inner)), next))
+            }
+            "slicemut" => {
+                let (inner, next) = Self::parse_mangled_type_parts(parts, idx + 1, max_end)?;
+                Some((ResolvedType::SliceMut(Box::new(inner)), next))
+            }
+            "fut" => {
+                let (inner, next) = Self::parse_mangled_type_parts(parts, idx + 1, max_end)?;
+                Some((ResolvedType::Future(Box::new(inner)), next))
+            }
+            "Vec" if idx + 1 < max_end => {
+                let (inner, next) = Self::parse_mangled_type_parts(parts, idx + 1, max_end)?;
+                Some((
+                    ResolvedType::Named {
+                        name: "Vec".to_string(),
+                        generics: vec![inner],
+                    },
+                    next,
+                ))
+            }
+            _ => Some((
+                ResolvedType::Named {
+                    name: token.to_string(),
+                    generics: vec![],
+                },
+                idx + 1,
+            )),
+        }
     }
 
     /// Collect unique generic parameter names from a ResolvedType, preserving first-appearance order.
@@ -953,6 +1267,7 @@ impl CodeGenerator {
 
     /// Generate pattern bindings (assign matched values to pattern variables)
     #[inline(never)]
+    #[allow(dead_code)]
     pub(crate) fn generate_pattern_bindings(
         &mut self,
         pattern: &Spanned<Pattern>,
@@ -993,6 +1308,19 @@ impl CodeGenerator {
                 // Generate unique LLVM name for pattern binding
                 let _llvm_name = format!("{}.{}", name, counter);
                 *counter += 1;
+
+                if match_val.starts_with('%') && self.llvm_type_of_checked(match_val).is_none() {
+                    let llvm_ty = match &ty {
+                        ResolvedType::Named { .. } => format!("{}*", self.type_to_llvm(&ty)),
+                        ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                            format!("{}*", self.type_to_llvm(inner))
+                        }
+                        _ => self.type_to_llvm(&ty),
+                    };
+                    if llvm_ty != "void" {
+                        self.fn_ctx.record_emitted_type(match_val, &llvm_ty);
+                    }
+                }
 
                 self.fn_ctx.locals.insert(
                     name.clone(),
@@ -1053,8 +1381,12 @@ impl CodeGenerator {
                     } else {
                         elem.clone()
                     };
-                    let bind_ir =
-                        self.generate_pattern_bindings_typed(pat, &elem_to_pass, counter, &elem_ty)?;
+                    let bind_ir = self.generate_pattern_bindings_typed(
+                        pat,
+                        &elem_to_pass,
+                        counter,
+                        &elem_ty,
+                    )?;
                     ir.push_str(&bind_ir);
                 }
 
@@ -1067,18 +1399,7 @@ impl CodeGenerator {
 
                 // Phase α.1 fix: prefer specialized enum name from match_type
                 // (mirrors the variant-tag-check fix above).
-                let enum_name_from_match_type =
-                    if let ResolvedType::Named { name: n, .. } = match_type {
-                        let llvm = self.type_to_llvm(match_type);
-                        let bare = llvm.strip_prefix('%').unwrap_or(&llvm).to_string();
-                        if !bare.is_empty() && bare != "Unknown" {
-                            Some(bare)
-                        } else {
-                            Some(n.clone())
-                        }
-                    } else {
-                        None
-                    };
+                let enum_name_from_match_type = self.enum_name_from_match_type(match_type);
                 let enum_name = enum_name_from_match_type
                     .or_else(|| self.get_enum_name_for_variant(variant_name))
                     .unwrap_or_else(|| "Unknown".to_string());
@@ -1162,6 +1483,8 @@ impl CodeGenerator {
                                 raw_i64,
                                 llvm_field_ty
                             );
+                            self.fn_ctx
+                                .record_emitted_type(&typed_ptr, &format!("{}*", llvm_field_ty));
                             if matches!(&field_type, ResolvedType::Named { .. }) {
                                 // Struct type: bind as pointer (field access uses GEP)
                                 let bind_ir = self.generate_pattern_bindings_typed(
@@ -1182,6 +1505,11 @@ impl CodeGenerator {
                                     llvm_field_ty,
                                     typed_ptr
                                 );
+                                self.fn_ctx.record_emitted_type(&field_val, &llvm_field_ty);
+                                if matches!(&field_type, ResolvedType::Tuple(_)) {
+                                    self.fn_ctx
+                                        .register_temp_type(&field_val, field_type.clone());
+                                }
                                 let bind_ir = self.generate_pattern_bindings_typed(
                                     field_pat,
                                     &field_val,
@@ -1201,6 +1529,8 @@ impl CodeGenerator {
                                 payload_ptr,
                                 llvm_field_ty
                             );
+                            self.fn_ctx
+                                .record_emitted_type(&cast_ptr, &format!("{}*", llvm_field_ty));
                             if matches!(&field_type, ResolvedType::Named { .. }) {
                                 // Struct type: bind as pointer (field access uses GEP)
                                 let bind_ir = self.generate_pattern_bindings_typed(
@@ -1221,6 +1551,11 @@ impl CodeGenerator {
                                     llvm_field_ty,
                                     cast_ptr
                                 );
+                                self.fn_ctx.record_emitted_type(&field_val, &llvm_field_ty);
+                                if matches!(&field_type, ResolvedType::Tuple(_)) {
+                                    self.fn_ctx
+                                        .register_temp_type(&field_val, field_type.clone());
+                                }
                                 let bind_ir = self.generate_pattern_bindings_typed(
                                     field_pat,
                                     &field_val,
@@ -1229,6 +1564,18 @@ impl CodeGenerator {
                                 )?;
                                 ir.push_str(&bind_ir);
                             }
+                        } else if matches!(&field_type, ResolvedType::Named { name, .. } if name == "Box")
+                        {
+                            let raw_val = self.next_temp(counter);
+                            write_ir!(ir, "  {} = load i64, i64* {}", raw_val, payload_ptr);
+                            self.fn_ctx.record_emitted_type(&raw_val, "i64");
+                            let bind_ir = self.generate_pattern_bindings_typed(
+                                field_pat,
+                                &raw_val,
+                                counter,
+                                &field_type,
+                            )?;
+                            ir.push_str(&bind_ir);
                         } else if matches!(&field_type, ResolvedType::Named { .. }) {
                             // Struct field in native payload slot (custom enum with concrete
                             // struct variant). The GEP already returns the correct struct
@@ -1236,6 +1583,35 @@ impl CodeGenerator {
                             let bind_ir = self.generate_pattern_bindings_typed(
                                 field_pat,
                                 &payload_ptr,
+                                counter,
+                                &field_type,
+                            )?;
+                            self.fn_ctx
+                                .record_emitted_type(&payload_ptr, &format!("{}*", llvm_field_ty));
+                            ir.push_str(&bind_ir);
+                        } else if let ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) =
+                            &field_type
+                        {
+                            // Reference payloads are stored in the enum's i64 payload slot.
+                            // Recover the typed pointee pointer before binding so
+                            // `Ok(v) => v` can feed a `%T*` phi instead of a raw i64.
+                            let raw_val = self.next_temp(counter);
+                            write_ir!(ir, "  {} = load i64, i64* {}", raw_val, payload_ptr);
+                            self.fn_ctx.record_emitted_type(&raw_val, "i64");
+                            let field_val = self.next_temp(counter);
+                            let inner_llvm = self.type_to_llvm(inner);
+                            let target = format!("{}*", inner_llvm);
+                            write_ir!(
+                                ir,
+                                "  {} = inttoptr i64 {} to {}",
+                                field_val,
+                                raw_val,
+                                target
+                            );
+                            self.fn_ctx.record_emitted_type(&field_val, &target);
+                            let bind_ir = self.generate_pattern_bindings_typed(
+                                field_pat,
+                                &field_val,
                                 counter,
                                 &field_type,
                             )?;
@@ -1251,10 +1627,7 @@ impl CodeGenerator {
                                 write_ir!(ir, "  {} = trunc i64 {} to i1", bool_val, raw_val);
                                 self.fn_ctx.record_emitted_type(&bool_val, "i1");
                                 bool_val
-                            } else if matches!(
-                                llvm_field_ty.as_str(),
-                                "i8" | "i16" | "i32"
-                            ) {
+                            } else if matches!(llvm_field_ty.as_str(), "i8" | "i16" | "i32") {
                                 // Narrow int: trunc from the i64 payload slot.
                                 let narrowed = self.next_temp(counter);
                                 write_ir!(
@@ -1267,36 +1640,16 @@ impl CodeGenerator {
                                 narrowed
                             } else if llvm_field_ty == "double" {
                                 let fp = self.next_temp(counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = bitcast i64* {} to double*",
-                                    fp,
-                                    payload_ptr
-                                );
+                                write_ir!(ir, "  {} = bitcast i64* {} to double*", fp, payload_ptr);
                                 let fv = self.next_temp(counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = load double, double* {}",
-                                    fv,
-                                    fp
-                                );
+                                write_ir!(ir, "  {} = load double, double* {}", fv, fp);
                                 self.fn_ctx.record_emitted_type(&fv, "double");
                                 fv
                             } else if llvm_field_ty == "float" {
                                 let fp = self.next_temp(counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = bitcast i64* {} to float*",
-                                    fp,
-                                    payload_ptr
-                                );
+                                write_ir!(ir, "  {} = bitcast i64* {} to float*", fp, payload_ptr);
                                 let fv = self.next_temp(counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = load float, float* {}",
-                                    fv,
-                                    fp
-                                );
+                                write_ir!(ir, "  {} = load float, float* {}", fv, fp);
                                 self.fn_ctx.record_emitted_type(&fv, "float");
                                 fv
                             } else {
@@ -1334,6 +1687,8 @@ impl CodeGenerator {
                                 payload_val,
                                 llvm_field_ty
                             );
+                            self.fn_ctx
+                                .record_emitted_type(&typed_ptr, &format!("{}*", llvm_field_ty));
                             if matches!(&field_type, ResolvedType::Named { .. }) {
                                 // Struct type: bind as pointer (field access uses GEP)
                                 let bind_ir = self.generate_pattern_bindings_typed(
@@ -1376,6 +1731,8 @@ impl CodeGenerator {
                                 tmp_alloca,
                                 llvm_field_ty
                             );
+                            self.fn_ctx
+                                .record_emitted_type(&cast_ptr, &format!("{}*", llvm_field_ty));
                             if matches!(&field_type, ResolvedType::Named { .. }) {
                                 // Struct type: bind as pointer (field access uses GEP)
                                 let bind_ir = self.generate_pattern_bindings_typed(
@@ -1404,6 +1761,27 @@ impl CodeGenerator {
                                 )?;
                                 ir.push_str(&bind_ir);
                             }
+                        } else if let ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) =
+                            &field_type
+                        {
+                            let field_val = self.next_temp(counter);
+                            let inner_llvm = self.type_to_llvm(inner);
+                            let target = format!("{}*", inner_llvm);
+                            write_ir!(
+                                ir,
+                                "  {} = inttoptr i64 {} to {}",
+                                field_val,
+                                payload_val,
+                                target
+                            );
+                            self.fn_ctx.record_emitted_type(&field_val, &target);
+                            let bind_ir = self.generate_pattern_bindings_typed(
+                                field_pat,
+                                &field_val,
+                                counter,
+                                &field_type,
+                            )?;
+                            ir.push_str(&bind_ir);
                         } else {
                             let field_val = if llvm_field_ty == "i1" {
                                 // Bool field: extracted payload is i64, but binding needs i1 for branch instructions
@@ -1427,7 +1805,11 @@ impl CodeGenerator {
 
                 Ok(ir)
             }
-            Pattern::Struct { name, fields, enum_name: enum_hint } => {
+            Pattern::Struct {
+                name,
+                fields,
+                enum_name: enum_hint,
+            } => {
                 // Bind fields from struct
                 let struct_name = &name.node;
                 let enum_hint_ref = enum_hint.as_deref();
@@ -1470,10 +1852,7 @@ impl CodeGenerator {
                                 // Ident-pattern bindings register the correct
                                 // LocalVar type (e.g., F64 for `FloatVal { v: a }`).
                                 let bind_ir = self.generate_pattern_bindings_typed(
-                                    pat,
-                                    &field_val,
-                                    counter,
-                                    field_ty,
+                                    pat, &field_val, counter, field_ty,
                                 )?;
                                 ir.push_str(&bind_ir);
                             } else {
@@ -1525,7 +1904,7 @@ impl CodeGenerator {
                         // downstream uses truncate. For float fields we must load the
                         // matching-width float so assertions like `assert_approx(v, ...)`
                         // receive a `double` and not an `i64` bit pattern.
-                        let field_val = self.next_temp(counter);
+                        let mut field_val = self.next_temp(counter);
                         match &field_ty {
                             crate::ResolvedType::F64 => {
                                 let float_ptr = self.next_temp(counter);
@@ -1551,12 +1930,7 @@ impl CodeGenerator {
                                     float_ptr,
                                     payload_ptr
                                 );
-                                write_ir!(
-                                    ir,
-                                    "  {} = load float, float* {}",
-                                    field_val,
-                                    float_ptr
-                                );
+                                write_ir!(ir, "  {} = load float, float* {}", field_val, float_ptr);
                                 self.fn_ctx.record_emitted_type(&field_val, "float");
                             }
                             crate::ResolvedType::Bool => {
@@ -1614,23 +1988,62 @@ impl CodeGenerator {
                                 );
                                 self.fn_ctx.record_emitted_type(&field_val, "{ i8*, i64 }");
                             }
+                            crate::ResolvedType::Named { name, .. } if name == "Box" => {
+                                let raw = self.next_temp(counter);
+                                write_ir!(ir, "  {} = load i64, i64* {}", raw, payload_ptr);
+                                self.fn_ctx.record_emitted_type(&raw, "i64");
+                                field_val = raw;
+                            }
                             crate::ResolvedType::Named { .. } => {
-                                // Named payloads (Vec<T>, user structs, nested enums)
-                                // are likewise heap-allocated when > 8 bytes. Return an
-                                // i64→%T* converted pointer so downstream method calls
-                                // / field access see a typed pointer instead of a raw
-                                // i64 slot value.
                                 let llvm_ty = self.type_to_llvm(&field_ty);
+                                if self.compute_sizeof(&field_ty) <= 8 {
+                                    // Small named payloads (notably nested enum tags
+                                    // such as BinOp) are stored inline in the i64
+                                    // payload slot. Bind the slot itself as a typed
+                                    // pointer; inttoptr would treat inline bits as an
+                                    // address and can segfault.
+                                    write_ir!(
+                                        ir,
+                                        "  {} = bitcast i64* {} to {}*",
+                                        field_val,
+                                        payload_ptr,
+                                        llvm_ty
+                                    );
+                                    self.fn_ctx
+                                        .record_emitted_type(&field_val, &format!("{}*", llvm_ty));
+                                } else {
+                                    // Larger named payloads (Vec<T>, user structs,
+                                    // nested large enums) are heap-allocated and the
+                                    // payload slot stores their pointer as i64.
+                                    let raw = self.next_temp(counter);
+                                    write_ir!(ir, "  {} = load i64, i64* {}", raw, payload_ptr);
+                                    self.fn_ctx.record_emitted_type(&raw, "i64");
+                                    write_ir!(
+                                        ir,
+                                        "  {} = inttoptr i64 {} to {}*",
+                                        field_val,
+                                        raw,
+                                        llvm_ty
+                                    );
+                                    self.fn_ctx
+                                        .record_emitted_type(&field_val, &format!("{}*", llvm_ty));
+                                }
+                            }
+                            crate::ResolvedType::Ref(inner)
+                            | crate::ResolvedType::RefMut(inner) => {
+                                let inner_llvm = self.type_to_llvm(inner);
+                                let target = format!("{}*", inner_llvm);
                                 let raw = self.next_temp(counter);
                                 write_ir!(ir, "  {} = load i64, i64* {}", raw, payload_ptr);
                                 self.fn_ctx.record_emitted_type(&raw, "i64");
                                 write_ir!(
                                     ir,
-                                    "  {} = inttoptr i64 {} to {}*",
+                                    "  {} = inttoptr i64 {} to {}",
                                     field_val,
                                     raw,
-                                    llvm_ty
+                                    target
                                 );
+                                self.fn_ctx.record_emitted_type(&field_val, &target);
                             }
                             _ => {
                                 write_ir!(ir, "  {} = load i64, i64* {}", field_val, payload_ptr);
@@ -1639,10 +2052,7 @@ impl CodeGenerator {
 
                         if let Some(pat) = field_pat {
                             let bind_ir = self.generate_pattern_bindings_typed(
-                                pat,
-                                &field_val,
-                                counter,
-                                &field_ty,
+                                pat, &field_val, counter, &field_ty,
                             )?;
                             ir.push_str(&bind_ir);
                         } else {

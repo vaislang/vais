@@ -101,6 +101,10 @@ fn collect_rvalue_reads(rvalue: &Rvalue, used: &mut HashSet<Local>) {
         Rvalue::Len(place) => {
             used.insert(place.local);
         }
+        Rvalue::VecPush(place, op) => {
+            used.insert(place.local);
+            collect_operand_reads(op, used);
+        }
     }
 }
 
@@ -262,6 +266,7 @@ fn propagate_in_rvalue(rvalue: &mut Rvalue, const_map: &HashMap<Local, Constant>
                 propagate_in_operand(op, const_map);
             }
         }
+        Rvalue::VecPush(_, op) => propagate_in_operand(op, const_map),
         _ => {}
     }
 }
@@ -444,6 +449,10 @@ fn replace_locals_in_rvalue(rvalue: &mut Rvalue, map: &HashMap<Local, Local>) {
                 replace_local_in_operand(op, map);
             }
         }
+        Rvalue::VecPush(place, op) => {
+            replace_local_in_place(place, map);
+            replace_local_in_operand(op, map);
+        }
         _ => {}
     }
 }
@@ -452,13 +461,25 @@ fn replace_locals_in_rvalue(rvalue: &mut Rvalue, map: &HashMap<Local, Local>) {
 fn replace_local_in_operand(op: &mut Operand, map: &HashMap<Local, Local>) {
     match op {
         Operand::Copy(place) | Operand::Move(place) => {
-            if place.projections.is_empty() {
-                if let Some(&replacement) = map.get(&place.local) {
-                    place.local = replacement;
-                }
-            }
+            replace_local_in_place(place, map);
         }
         Operand::Constant(_) => {}
+    }
+}
+
+fn replace_local_in_place(place: &mut Place, map: &HashMap<Local, Local>) {
+    if place.projections.is_empty() {
+        if let Some(&replacement) = map.get(&place.local) {
+            place.local = replacement;
+        }
+    }
+
+    for projection in &mut place.projections {
+        if let Projection::Index(local) = projection {
+            if let Some(&replacement) = map.get(local) {
+                *local = replacement;
+            }
+        }
     }
 }
 
@@ -752,6 +773,10 @@ fn collect_escaping_from_rvalue(
                 collect_escaping_from_operand(op, alloc_locals, escaped);
             }
         }
+        Rvalue::VecPush(place, op) => {
+            collect_escaping_from_place(place, alloc_locals, escaped);
+            collect_escaping_from_operand(op, alloc_locals, escaped);
+        }
         _ => {}
     }
 }
@@ -764,11 +789,19 @@ fn collect_escaping_from_operand(
 ) {
     match op {
         Operand::Copy(place) | Operand::Move(place) => {
-            if alloc_locals.contains(&place.local) {
-                escaped.insert(place.local);
-            }
+            collect_escaping_from_place(place, alloc_locals, escaped);
         }
         Operand::Constant(_) => {}
+    }
+}
+
+fn collect_escaping_from_place(
+    place: &Place,
+    alloc_locals: &HashSet<Local>,
+    escaped: &mut HashSet<Local>,
+) {
+    if alloc_locals.contains(&place.local) {
+        escaped.insert(place.local);
     }
 }
 

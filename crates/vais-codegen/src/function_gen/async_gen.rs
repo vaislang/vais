@@ -262,14 +262,16 @@ impl CodeGenerator {
             "  %ret_0 = insertvalue {{ i64, {} }} undef, i64 1, 0",
             ret_llvm
         );
-        self.fn_ctx.record_emitted_type("%ret_0", &format!("{{ i64, {} }}", ret_llvm));
+        self.fn_ctx
+            .record_emitted_type("%ret_0", &format!("{{ i64, {} }}", ret_llvm));
         write_ir!(
             ir,
             "  %ret_1 = insertvalue {{ i64, {} }} %ret_0, {} %ret_val, 1",
             ret_llvm,
             ret_llvm
         );
-        self.fn_ctx.record_emitted_type("%ret_1", &format!("{{ i64, {} }}", ret_llvm));
+        self.fn_ctx
+            .record_emitted_type("%ret_1", &format!("{{ i64, {} }}", ret_llvm));
         write_ir!(ir, "  ret {{ i64, {} }} %ret_1\n", ret_llvm);
 
         // Invalid state handler
@@ -279,7 +281,8 @@ impl CodeGenerator {
             "  %invalid_ret = insertvalue {{ i64, {} }} undef, i64 0, 0",
             ret_llvm
         );
-        self.fn_ctx.record_emitted_type("%invalid_ret", &format!("{{ i64, {} }}", ret_llvm));
+        self.fn_ctx
+            .record_emitted_type("%invalid_ret", &format!("{{ i64, {} }}", ret_llvm));
         write_ir!(ir, "  ret {{ i64, {} }} %invalid_ret", ret_llvm);
 
         ir.push_str("}\n");

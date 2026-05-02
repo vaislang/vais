@@ -1,0 +1,11 @@
+S Point {
+    x: i64,
+    y: i64,
+}
+
+F main() -> i64 {
+    p: Point := Point { x: 3, y: 4 }
+    I p.x != 3 { R 1 }
+    I p.y != 4 { R 2 }
+    R 0
+}

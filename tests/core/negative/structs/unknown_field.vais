@@ -1,0 +1,9 @@
+S Point {
+    x: i64,
+    y: i64,
+}
+
+F main() -> i64 {
+    p: Point := Point { x: 1, z: 2 }
+    R p.x
+}

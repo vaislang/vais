@@ -397,14 +397,46 @@ impl CodeGenerator {
             }
         }
 
-        // Generate specialized struct types from explicit Struct instantiations
+        // Generate specialized struct types from explicit Struct instantiations.
+        // Method instantiations on generic structs also need the receiver's
+        // concrete struct layout, even when no separate Struct instantiation was
+        // recorded by type checking.
         for inst in instantiations {
-            if let vais_types::InstantiationKind::Struct = inst.kind {
-                if let Some(generic_struct) =
-                    self.generics.struct_defs.get(&inst.base_name).cloned()
-                {
-                    self.generate_specialized_struct_type(&generic_struct, inst, &mut ir)?;
+            match &inst.kind {
+                vais_types::InstantiationKind::Struct => {
+                    if let Some(generic_struct) =
+                        self.generics.struct_defs.get(&inst.base_name).cloned()
+                    {
+                        self.generate_specialized_struct_type(&generic_struct, inst, &mut ir)?;
+                    }
                 }
+                vais_types::InstantiationKind::Method { struct_name } => {
+                    if inst.type_args.iter().any(|t| {
+                        matches!(
+                            t,
+                            ResolvedType::Unknown | ResolvedType::Generic(_) | ResolvedType::Var(_)
+                        )
+                    }) {
+                        continue;
+                    }
+                    if let Some(generic_struct) =
+                        self.generics.struct_defs.get(struct_name).cloned()
+                    {
+                        let struct_inst = vais_types::GenericInstantiation {
+                            kind: vais_types::InstantiationKind::Struct,
+                            base_name: struct_name.clone(),
+                            mangled_name: vais_types::mangle_name(struct_name, &inst.type_args),
+                            type_args: inst.type_args.clone(),
+                            const_args: Vec::new(),
+                        };
+                        self.generate_specialized_struct_type(
+                            &generic_struct,
+                            &struct_inst,
+                            &mut ir,
+                        )?;
+                    }
+                }
+                vais_types::InstantiationKind::Function => {}
             }
         }
 
@@ -547,6 +579,12 @@ impl CodeGenerator {
             // currently emitting the main module.
             if is_main_module
                 && crate::function_gen::runtime::is_runtime_intrinsic(&info.signature.name)
+            {
+                declared_fns.insert(info.signature.name.clone());
+                continue;
+            }
+            if is_main_module
+                && crate::function_gen::runtime::is_main_runtime_c_decl(&info.signature.name)
             {
                 declared_fns.insert(info.signature.name.clone());
                 continue;
@@ -830,13 +868,16 @@ impl CodeGenerator {
             }
         }
 
-        if self.needs_string_helpers {
-            if is_main_module {
-                ir.push_str(&self.generate_string_helper_functions());
-            } else {
-                // Non-main modules: declare string helpers as external (defined in main module)
-                ir.push_str(&self.generate_string_helper_declarations());
+        if is_main_module {
+            // Per-module linking needs one canonical definition of the string
+            // helpers even when only an imported module used substring/concat.
+            ir.push_str(&self.generate_string_helper_functions());
+            if !self.target.is_wasm() {
+                ir.push_str(&self.generate_string_extern_declarations());
             }
+        } else if self.needs_string_helpers {
+            // Non-main modules: declare string helpers as external (defined in main module)
+            ir.push_str(&self.generate_string_helper_declarations());
             if !self.target.is_wasm() {
                 ir.push_str(&self.generate_string_extern_declarations());
             }
@@ -854,17 +895,13 @@ impl CodeGenerator {
         // Struct shallow-free helpers (RFC-002 §4.2, Phase 191 #2b-C).
         for struct_name in &self.needs_struct_shallow.clone() {
             if let Some(info) = self.types.structs.get(struct_name) {
-                if is_main_module {
-                    let field_count = info.fields.len();
-                    let heap_fields = info.heap_fields.clone();
-                    ir.push_str(&self.generate_struct_shallow_free_helper(
-                        struct_name,
-                        field_count,
-                        &heap_fields,
-                    ));
-                } else {
-                    ir.push_str(&Self::generate_struct_shallow_free_declaration(struct_name));
-                }
+                let field_count = info.fields.len();
+                let heap_fields = info.heap_fields.clone();
+                ir.push_str(&self.generate_struct_shallow_free_helper(
+                    struct_name,
+                    field_count,
+                    &heap_fields,
+                ));
             }
         }
 
@@ -908,9 +945,9 @@ impl CodeGenerator {
         {
             use std::collections::BTreeSet;
             let mut referenced: BTreeSet<String> = BTreeSet::new();
-            for token in ir.split(|c: char| {
-                !(c.is_ascii_alphanumeric() || c == '_' || c == '$' || c == '%')
-            }) {
+            for token in
+                ir.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '$' || c == '%'))
+            {
                 if let Some(rest) = token.strip_prefix('%') {
                     if rest.is_empty() {
                         continue;
@@ -923,9 +960,7 @@ impl CodeGenerator {
                     }
                     // Track specialized generics (contain `$`) and bare
                     // generic-enum bases that the body may alloca/GEP on.
-                    if rest.contains('$')
-                        || matches!(rest, "Result" | "Option")
-                    {
+                    if rest.contains('$') || matches!(rest, "Result" | "Option") {
                         referenced.insert(rest.to_string());
                     }
                 }
@@ -939,10 +974,7 @@ impl CodeGenerator {
                 }
                 let base = mangled.split('$').next().unwrap_or(mangled);
                 if self.types.enums.contains_key(base) {
-                    forward_decls.push_str(&format!(
-                        "%{} = type {{ i32, {{ i64 }} }}\n",
-                        mangled
-                    ));
+                    forward_decls.push_str(&format!("%{} = type {{ i32, {{ i64 }} }}\n", mangled));
                 } else if let Some(info) = self.types.structs.get(base) {
                     let fields: Vec<String> = info
                         .fields
@@ -956,10 +988,7 @@ impl CodeGenerator {
                     ));
                 } else if matches!(base, "Result" | "Option") {
                     // Generic stdlib enums: erased layout.
-                    forward_decls.push_str(&format!(
-                        "%{} = type {{ i32, {{ i64 }} }}\n",
-                        mangled
-                    ));
+                    forward_decls.push_str(&format!("%{} = type {{ i32, {{ i64 }} }}\n", mangled));
                 } else if base == "Vec" {
                     // std::Vec<T> struct: 5 i64 fields (data, len, cap,
                     // elem_size, owned). All specializations share layout.
@@ -973,14 +1002,14 @@ impl CodeGenerator {
                         "%{} = type {{ i64, i64, i64, i64, i64, i64, i64, i64 }}\n",
                         mangled
                     ));
+                } else if base == "HashSet" {
+                    // std::HashSet<T>: buckets, size, cap.
+                    forward_decls.push_str(&format!("%{} = type {{ i64, i64, i64 }}\n", mangled));
                 } else if base == "Box" {
                     // std::Box<T> is a heap-wrapper struct with a single
                     // i64 payload (the boxed pointer). Specializations
                     // share the same layout.
-                    forward_decls.push_str(&format!(
-                        "%{} = type {{ i64 }}\n",
-                        mangled
-                    ));
+                    forward_decls.push_str(&format!("%{} = type {{ i64 }}\n", mangled));
                 }
             }
             let replacement = if forward_decls.is_empty() {

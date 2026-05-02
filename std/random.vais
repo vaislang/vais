@@ -239,8 +239,8 @@ F random_f64_simple() -> f64 {
     # Generate random number and scale to [0, 1)
     r := random_i64()
     # Use direct float division
-    f_r := r
-    f_max := LCG_M
+    f_r := r as f64
+    f_max := LCG_M as f64
     f_r / f_max
 }
 

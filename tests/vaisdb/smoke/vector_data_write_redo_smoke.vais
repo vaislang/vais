@@ -1,0 +1,227 @@
+U vector/hnsw/wal
+U vector/hnsw/types
+U storage/wal/record_vector
+U storage/constants
+U storage/error
+U storage/file
+U storage/page/manager
+U storage/page/types
+U storage/page/header
+U storage/buffer/pool
+U storage/bytes
+
+S RedoSmokeStore {
+    node: HnswNode,
+}
+
+X RedoSmokeStore {
+    F new() -> RedoSmokeStore {
+        RedoSmokeStore {
+            node: HnswNode.new(0, 0, 0, 0, 0, 0),
+        }
+    }
+}
+
+X RedoSmokeStore : NodeStore {
+    F load_node(self, node_id: u64) -> Result<HnswNode, VaisError> {
+        Ok(self.node.clone())
+    }
+
+    F load_vector(self, node_id: u64) -> Result<Vec<f32>, VaisError> {
+        values: Vec<f32> := mut Vec.with_capacity(0)
+        Ok(values)
+    }
+
+    F store_node(mut self, node: HnswNode) -> Result<(), VaisError> {
+        self.node = node
+        Ok(())
+    }
+
+    F allocate_node_id(mut self) -> u64 {
+        1
+    }
+
+    F get_file_page(self, node_id: u64) -> Result<(u8, u32), VaisError> {
+        Ok((FILE_ID_VECTORS, node_id as u32))
+    }
+
+    F allocate_node_page(mut self, node_id: u64) -> Result<(u8, u32), VaisError> {
+        Ok((FILE_ID_VECTORS, node_id as u32))
+    }
+}
+
+F redo_open_clean(path: str) -> Result<File, VaisError> {
+    file := mut File.open(path, "rw+")?;
+    file.truncate(0)?;
+    Ok(file)
+}
+
+F redo_open_existing(path: str) -> Result<File, VaisError> {
+    File.open(path, "rw+")
+}
+
+F redo_files_clean(prefix: str) -> Result<Vec<File>, VaisError> {
+    files: Vec<File> := mut Vec.with_capacity(5)
+    data_file := mut redo_open_clean(prefix + "_data.vdb")?;
+    vector_file := mut redo_open_clean(prefix + "_vectors.vdb")?;
+    graph_file := mut redo_open_clean(prefix + "_graph.vdb")?;
+    fulltext_file := mut redo_open_clean(prefix + "_fulltext.vdb")?;
+    undo_file := mut redo_open_clean(prefix + "_undo.vdb")?;
+    files.push(data_file)
+    files.push(vector_file)
+    files.push(graph_file)
+    files.push(fulltext_file)
+    files.push(undo_file)
+    Ok(files)
+}
+
+F redo_files_existing(prefix: str) -> Result<Vec<File>, VaisError> {
+    files: Vec<File> := mut Vec.with_capacity(5)
+    data_file := mut redo_open_existing(prefix + "_data.vdb")?;
+    vector_file := mut redo_open_existing(prefix + "_vectors.vdb")?;
+    graph_file := mut redo_open_existing(prefix + "_graph.vdb")?;
+    fulltext_file := mut redo_open_existing(prefix + "_fulltext.vdb")?;
+    undo_file := mut redo_open_existing(prefix + "_undo.vdb")?;
+    files.push(data_file)
+    files.push(vector_file)
+    files.push(graph_file)
+    files.push(fulltext_file)
+    files.push(undo_file)
+    Ok(files)
+}
+
+F main() -> i64 {
+    prefix := mut "vector_data_write_redo"
+    page_id := mut 2 as u32
+    offset := mut 256 as u16
+
+    files := mut M redo_files_clean(prefix) {
+        Ok(v) => v,
+        Err(_) => { R 1 },
+    }
+    page_manager := mut PageManager.new(files, PAGE_SIZE_8K)
+    initial := mut M page_manager.allocate_page(
+        FILE_ID_VECTORS,
+        page_id,
+        PAGE_TYPE_VECTOR_DATA,
+        ENGINE_TAG_VECTOR
+    ) {
+        Ok(page) => page,
+        Err(_) => { R 2 },
+    }
+
+    initial[(offset as u64) - 2] = 17 as u8
+    initial[(offset as u64) - 1] = 18 as u8
+    initial[(offset as u64) + 8] = 19 as u8
+    initial[(offset as u64) + 9] = 20 as u8
+    M page_manager.write_page(FILE_ID_VECTORS, page_id, &initial) {
+        Ok(_) => {},
+        Err(_) => { R 3 },
+    }
+
+    expected := mut initial.clone()
+    patch: Vec<u8> := mut Vec.with_capacity(8)
+    patch.push(1 as u8)
+    patch.push(2 as u8)
+    patch.push(3 as u8)
+    patch.push(4 as u8)
+    patch.push(250 as u8)
+    patch.push(0 as u8)
+    patch.push(17 as u8)
+    patch.push(99 as u8)
+
+    i := mut 0u64
+    LW i < patch.len() {
+        expected[(offset as u64) + i] = patch[i]
+        i = i + 1
+    }
+    PageHeader.update_checksum_vec(&expected)
+
+    payload := mut VectorDataWritePayload {
+        file_id: FILE_ID_VECTORS,
+        page_id,
+        offset,
+        vector_data: patch,
+    }
+    payload_buf := mut ByteBuffer.with_capacity(64)
+    payload.serialize(&mut payload_buf)
+    payload_bytes := mut payload_buf.to_vec()
+    payload_read := mut ByteBuffer.wrap_readonly(&payload_bytes)
+    decoded := mut M VectorDataWritePayload.deserialize(&payload_read) {
+        Ok(v) => v,
+        Err(_) => { R 4 },
+    }
+    I decoded.file_id != FILE_ID_VECTORS { R 5 }
+    I decoded.page_id != page_id { R 6 }
+    I decoded.offset != offset { R 7 }
+    I decoded.vector_data.len() != 8 { R 8 }
+
+    pool := mut BufferPool.new(page_manager, PAGE_SIZE_8K, 4 as u32)
+    M redo_vector_data_write(&decoded, &mut pool) {
+        Ok(_) => {},
+        Err(_) => { R 9 },
+    }
+
+    memory_frame_id := mut M pool.pin_page(FILE_ID_VECTORS, page_id) {
+        Ok(v) => v,
+        Err(_) => { R 20 },
+    }
+    memory_page := mut pool.get_page(memory_frame_id)
+    mem_i := mut 0u64
+    LW mem_i < decoded.vector_data.len() {
+        I memory_page[(offset as u64) + mem_i] != decoded.vector_data[mem_i] {
+            pool.unpin_page(memory_frame_id, false)
+            R 21
+        }
+        mem_i = mem_i + 1
+    }
+    pool.unpin_page(memory_frame_id, false)
+
+    I pool.dirty_count() == 0 {
+        R 22
+    }
+
+    M pool.flush_all() {
+        Ok(_) => {},
+        Err(_) => { R 10 },
+    }
+    I pool.dirty_count() != 0 {
+        R 23
+    }
+
+    reader_files := mut M redo_files_existing(prefix) {
+        Ok(v) => v,
+        Err(_) => { R 11 },
+    }
+    reader := mut PageManager.new(reader_files, PAGE_SIZE_8K)
+    replayed := mut M reader.read_page(FILE_ID_VECTORS, page_id) {
+        Ok(page) => page,
+        Err(_) => { R 12 },
+    }
+    I replayed.len() != expected.len() { R 13 }
+    I replayed[(offset as u64) - 2] != 17 as u8 { R 14 }
+    I replayed[(offset as u64) - 1] != 18 as u8 { R 15 }
+    I replayed[(offset as u64) + 8] != 19 as u8 { R 16 }
+    I replayed[(offset as u64) + 9] != 20 as u8 { R 17 }
+
+    k := mut 0u64
+    LW k < decoded.vector_data.len() {
+        I replayed[(offset as u64) + k] != decoded.vector_data[k] {
+            R 18
+        }
+        k = k + 1
+    }
+
+    j := mut 0u64
+    LW j < expected.len() {
+        I j >= 20 && j < 24 {
+            j = j + 1
+        }
+        I replayed[j] != expected[j] {
+            R 19
+        }
+        j = j + 1
+    }
+
+    R 0
+}

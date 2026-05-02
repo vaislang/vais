@@ -16,7 +16,11 @@ fn phase17_fnv1a_file_id_backend(path: &Path) -> u32 {
         hash ^= *byte as u32;
         hash = hash.wrapping_mul(FNV_PRIME);
     }
-    if hash == 0 { 1 } else { hash }
+    if hash == 0 {
+        1
+    } else {
+        hash
+    }
 }
 
 /// Text-based IR code generation (default backend).

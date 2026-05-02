@@ -892,11 +892,19 @@ F main() -> i64 {
             path: vec![
                 Spanned {
                     node: "std".to_string(),
-                    span: Span { file_id: 0, start: 0, end: 3 },
+                    span: Span {
+                        file_id: 0,
+                        start: 0,
+                        end: 3,
+                    },
                 },
                 Spanned {
                     node: "io".to_string(),
-                    span: Span { file_id: 0, start: 4, end: 6 },
+                    span: Span {
+                        file_id: 0,
+                        start: 4,
+                        end: 6,
+                    },
                 },
             ],
             alias: None,
@@ -911,17 +919,29 @@ F main() -> i64 {
         let use_stmt = Use {
             path: vec![Spanned {
                 node: "std".to_string(),
-                span: Span { file_id: 0, start: 0, end: 3 },
+                span: Span {
+                    file_id: 0,
+                    start: 0,
+                    end: 3,
+                },
             }],
             alias: None,
             items: Some(vec![
                 Spanned {
                     node: "File".to_string(),
-                    span: Span { file_id: 0, start: 5, end: 9 },
+                    span: Span {
+                        file_id: 0,
+                        start: 5,
+                        end: 9,
+                    },
                 },
                 Spanned {
                     node: "Dir".to_string(),
-                    span: Span { file_id: 0, start: 11, end: 14 },
+                    span: Span {
+                        file_id: 0,
+                        start: 11,
+                        end: 14,
+                    },
                 },
             ]),
         };
@@ -934,11 +954,19 @@ F main() -> i64 {
         let use_stmt = Use {
             path: vec![Spanned {
                 node: "long_module".to_string(),
-                span: Span { file_id: 0, start: 0, end: 11 },
+                span: Span {
+                    file_id: 0,
+                    start: 0,
+                    end: 11,
+                },
             }],
             alias: Some(Spanned {
                 node: "lm".to_string(),
-                span: Span { file_id: 0, start: 15, end: 17 },
+                span: Span {
+                    file_id: 0,
+                    start: 15,
+                    end: 17,
+                },
             }),
             items: None,
         };

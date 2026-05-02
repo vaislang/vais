@@ -100,6 +100,7 @@ use std::fmt::Write as _;
 /// default-name method would double the surface area. A two-valued
 /// enum keeps the API small while making the choice impossible to
 /// miss at the call site.
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RegisterPolicy {
     /// Call `record_emitted_type(name, ty)` after emitting the
@@ -268,11 +269,7 @@ pub(crate) struct TypedEmitter<'a, R: TypeRegistrar + ?Sized> {
 
 impl<'a, R: TypeRegistrar + ?Sized> TypedEmitter<'a, R> {
     /// Construct a `TypedEmitter` over the three borrowed pieces of state.
-    pub(crate) fn new(
-        ir: &'a mut String,
-        registry: &'a mut R,
-        counter: &'a mut usize,
-    ) -> Self {
+    pub(crate) fn new(ir: &'a mut String, registry: &'a mut R, counter: &'a mut usize) -> Self {
         Self {
             ir,
             registry,
@@ -615,10 +612,7 @@ mod tests {
             te.emit_call(
                 LlvmType::from("i32"),
                 "@add",
-                &[
-                    (LlvmType::from("i32"), "%a"),
-                    (LlvmType::from("i32"), "%b"),
-                ],
+                &[(LlvmType::from("i32"), "%a"), (LlvmType::from("i32"), "%b")],
             )
         };
         assert_eq!(ir, "  %t0 = call i32 @add(i32 %a, i32 %b)\n");

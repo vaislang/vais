@@ -1,0 +1,3 @@
+F main() -> i64 {
+    R true
+}

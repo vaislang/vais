@@ -2,6 +2,18 @@
 
 Version: v0.1.0
 
+## Certification Status
+
+The full language surface described in this document is not the current
+correctness target. The active certification target is the smaller Core defined
+in `certification/VAIS_CORE_V0.md`; deferred and experimental surfaces are
+tracked in `certification/EXCLUDED_FEATURES.md`, and the current dated gate
+evidence is in `certification/CURRENT_STATUS.md`.
+
+Status tables in this file describe full-compiler availability, not a Core
+correctness guarantee. A construct is Core-certified only when it is listed in
+`VAIS_CORE_V0.md` and covered by the Core fixture manifest.
+
 ## Table of Contents
 
 1. [Overview](#overview)
@@ -34,22 +46,30 @@ Version: v0.1.0
 
 ## Overview
 
-Vais is a token-efficient, AI-optimized systems programming language designed to minimize token usage in AI code generation while maintaining full systems programming capabilities. It features:
+Vais is a token-efficient, AI-optimized systems programming language designed to
+minimize token usage in AI code generation while building toward systems
+programming capabilities. It features:
 
 - **Single-letter keywords** for maximum token efficiency
 - **Expression-oriented syntax** where everything returns a value
 - **Self-recursion operator `@`** for concise recursive functions
 - **LLVM-based compilation** for native performance
 - **Type inference** with minimal annotations
-- **Advanced features**: Generics, Traits, Async/Await, Pattern Matching
+- **Advanced features under active certification**: Generics, traits,
+  async/await, pattern matching, and other broad surfaces exist in the full
+  compiler, but not all of them are Core-certified.
 
-### Phase 182 Milestones
+### Historical Phase 182 Milestones
 
-As of Phase 182, the Vais compiler has reached the following milestones:
+As of Phase 182, the Vais compiler reached the following implementation
+milestones. These are historical implementation notes, not current Core
+certification claims:
 
 - **Self-hosting compiler**: The Vais compiler (`selfhost/`) is implemented in Vais itself, totaling 50,000+ lines of Vais source code.
 - **Generic monomorphization**: Generics are compiled using a hybrid monomorphization approach — specializing concrete types at compile time while sharing code where possible, balancing binary size and performance.
-- **`Vec<struct>` direct field access**: Fields of structs stored inside `Vec<T>` can be accessed directly without intermediate bindings (e.g., `vec.get(i).field` works correctly).
+- **`Vec<struct>` direct field access**: Several read and call paths are covered
+  by regression tests, but direct write-through is not a Core-certified
+  guarantee unless promoted by a current fixture.
 
 ---
 
@@ -121,7 +141,9 @@ false
 
 Vais reserves the following tokens. **Status column** uses:
 
-- ✓ **stable** — fully lexed, parsed, type-checked, codegened; covered by regression tests
+- ✓ **implemented** — lexed, parsed, type-checked, codegened, and covered by at
+  least one regression gate in the full compiler; not automatically
+  Core-certified
 - ◐ **partial** — lexed & parsed, but codegen/TC incomplete (see `docs/COMPILER_STAGES.md` §6 "Known gaps")
 - ✗ **removed** — formerly reserved, deleted in a past phase; re-adding requires RFC
 - ⊖ **reserved** — token exists but no grammar production yet (reserved for future use)
@@ -254,12 +276,12 @@ This table enumerates every top-level or statement-level construct the parser ac
 | Move closure | `move \|x\| x + captured` | ✓ | ✓ | ✓ | ✓ (drop-on-move tracking: Phase 4.23 SCOPED) |
 | Generics | `F id<T>(x:T)->T = x` | ✓ | ✓ | ✓ monomorphized | ✓ |
 | Where clause | `F f<T>(x:T)->T where T: Eq` | ✓ | ✓ | ✓ | ✓ |
-| Try operator `?` | `expr?` on Result/Option | ✓ | ✓ | ✓ | ✓ |
+| Try operator `?` | `expr?` on Result/Option | ✓ | ✓ | ✓ | ◐ non-Core; see `EXCLUDED_FEATURES.md` |
 | Unwrap `!` | `expr!` on Result/Option | ✓ | ✓ | ✓ | ✓ (panics on None/Err) |
 | Range `..` / `..=` | `0..10`, `0..=9` | ✓ | ✓ | ✓ | ✓ |
 | Tuple literal | `(1, "hi", true)` | ✓ | ✓ | ✓ | ✓ |
 | Array/Vec indexing | `v[i]`, `v[i] = x` | ✓ | ✓ | ✓ | ✓ |
-| `Vec<Struct>[i].field =` write | `v[i].x = 5` | ✓ | ✓ | ✓ (B.4 write-through 2026-04-21) | ◐ (D.2 scalar-Vec literal + F.1 struct-in-array-literal 2026-04-21: `Vec<Point> := [Point{...}, ...]` 이제 read 정상 `v[0].x+v[1].x` = 4. 남은 gap: literal-init 후 `v[0].x = 99` write-through 는 B.4 memcpy-to-temp 경로라 적용 안 됨 — Vec<Struct> 원소 memcpy 경로를 GEP 로 변경 필요) |
+| `Vec<Struct>[i].field =` write | `v[i].x = 5` | ✓ | ✓ | ◐ | non-Core; requires a current write-through fixture before being claimed stable |
 | Attribute `#[…]` | `#[cfg(target_os="linux")]` | ✓ | limited | limited | limited |
 | Unsafe block | `unsafe { … }` | ✓ | ◐ | ✓ (trivial pass-through) | ✓ |
 | Comptime block | `comptime { … }` | ✓ (function-body + const-init both work since B.3 2026-04-21) | ✓ | ✓ | ✓ (integer arith; complex control flow inside comptime is Phase 4.20) |
@@ -268,7 +290,10 @@ This table enumerates every top-level or statement-level construct the parser ac
 | Linear/affine types | `linear T`, `affine T` | ✓ | ✓ | ✓ | ✓ (annotation + lowering; use-count enforcement: Phase 4.19 SCOPED) |
 | Yield (iterator) | `yield x` | ✓ | ✓ | ✓ | ✓ (simplified semantics; coroutine desugar: Phase 4.22 SCOPED) |
 
-**Gate rule**: every `◐` entry has a planned Phase in `ROADMAP.md`. Moving a `◐` to `✓` requires a compiler_syntax or e2e test that currently fails, passes after the change, and stays green in Phase-0 regression floor.
+**Gate rule**: every `◐` entry needs an active root-roadmap task before it can
+be promoted. Moving a `◐` to `✓` requires a compiler_syntax, e2e, or Core
+fixture that currently fails, passes after the change, and stays green in the
+current certification floor.
 
 ### Shorthand Keywords (Phase 29)
 
@@ -925,11 +950,15 @@ F main() -> i64 {
 
 ## Error Handling
 
-Vais uses a Result/Option-based error handling system without traditional try-catch blocks. Error handling is done through the `?` (try) and `!` (unwrap) operators.
+Vais uses a Result/Option-based error handling system without traditional
+try-catch blocks. The full compiler has `?` (try) and `!` (unwrap) syntax, but
+`?` is not part of the current Core certification target; see
+`certification/EXCLUDED_FEATURES.md`.
 
 ### The `?` Operator (Error Propagation)
 
-The `?` operator is used to propagate errors to the caller. When applied to a `Result<T, E>` or `Option<T>`, it:
+The `?` operator is intended to propagate errors to the caller. When applied to
+a `Result<T, E>` or `Option<T>`, it:
 - Returns the inner value if `Ok(value)` or `Some(value)`
 - Early-returns the error/None to the calling function if `Err(e)` or `None`
 

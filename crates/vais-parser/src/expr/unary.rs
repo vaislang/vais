@@ -76,10 +76,8 @@ impl Parser {
             // cast wraps the reference, matching user intent.
             if let Expr::Cast { expr: inner, ty } = expr.node {
                 let inner_end = inner.span.end;
-                let ref_expr = Spanned::new(
-                    Expr::Ref(Box::new(*inner)),
-                    Span::new(start, inner_end),
-                );
+                let ref_expr =
+                    Spanned::new(Expr::Ref(Box::new(*inner)), Span::new(start, inner_end));
                 return Ok(Spanned::new(
                     Expr::Cast {
                         expr: Box::new(ref_expr),

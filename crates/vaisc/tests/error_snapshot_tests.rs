@@ -162,8 +162,8 @@ F main() -> i64 {
 
 #[test]
 fn snapshot_binary_op_type_error() {
-    // Phase 160-A: bool↔i64 is allowed, so use str + i64 mismatch instead
-    let source = r#"F main() -> str = "hello" + 5"#;
+    // str + i64 is accepted as string concatenation; subtraction remains invalid.
+    let source = r#"F main() -> str = "hello" - 5"#;
     assert_error_snapshot("binary_op_type_error", source);
 }
 

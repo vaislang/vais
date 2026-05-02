@@ -400,7 +400,8 @@ impl ExprVisitor for CodeGenerator {
                     ir.push_str(&val_ir);
                     let tmp_alloca = self.next_temp(counter);
                     write_ir!(ir, "  {} = alloca {}", tmp_alloca, llvm_ty);
-                    self.fn_ctx.record_emitted_type(&tmp_alloca, &format!("{}*", llvm_ty));
+                    self.fn_ctx
+                        .record_emitted_type(&tmp_alloca, &format!("{}*", llvm_ty));
                     write_ir!(
                         ir,
                         "  store {} {}, {}* {}",
@@ -417,7 +418,11 @@ impl ExprVisitor for CodeGenerator {
         // loading the field's value. Without this, `&self.x as i64` would
         // ptrtoint the loaded value (often a value, not the address),
         // breaking `__atomic_*` runtime calls that expect a real pointer.
-        if let Expr::Field { expr: obj_expr, field } = &inner.node {
+        if let Expr::Field {
+            expr: obj_expr,
+            field,
+        } = &inner.node
+        {
             let obj_type = self.infer_expr_type(obj_expr);
             let resolved_type = match &obj_type {
                 ResolvedType::Ref(inner_t)
@@ -449,7 +454,11 @@ impl ExprVisitor for CodeGenerator {
                 let type_name = if self.types.structs.contains_key(&candidate) {
                     candidate
                 } else if candidate.contains('$') {
-                    let base = candidate.split('$').next().unwrap_or(&candidate).to_string();
+                    let base = candidate
+                        .split('$')
+                        .next()
+                        .unwrap_or(&candidate)
+                        .to_string();
                     if self.types.structs.contains_key(&base) {
                         base
                     } else {
@@ -459,15 +468,14 @@ impl ExprVisitor for CodeGenerator {
                     candidate
                 };
                 if let Some(struct_info) = self.types.structs.get(&type_name).cloned() {
-                    if let Some(field_idx) =
-                        struct_info.fields.iter().position(|(n, _)| n == &field.node)
+                    if let Some(field_idx) = struct_info
+                        .fields
+                        .iter()
+                        .position(|(n, _)| n == &field.node)
                     {
                         let field_ty_raw = &struct_info.fields[field_idx].1;
                         let field_ty = if !self.generics.substitutions.is_empty() {
-                            vais_types::substitute_type(
-                                field_ty_raw,
-                                &self.generics.substitutions,
-                            )
+                            vais_types::substitute_type(field_ty_raw, &self.generics.substitutions)
                         } else {
                             field_ty_raw.clone()
                         };
@@ -632,7 +640,8 @@ impl ExprVisitor for CodeGenerator {
 
                 // For now, assume i64 elements (we'd need better type inference for mixed types)
                 write_ir!(ir, "  {} = alloca [{} x i64]", array_name, len);
-                self.fn_ctx.record_emitted_type(&array_name, &format!("[{} x i64]*", len));
+                self.fn_ctx
+                    .record_emitted_type(&array_name, &format!("[{} x i64]*", len));
 
                 for (i, elem_val) in elements.iter().enumerate() {
                     let elem_ptr = self.next_temp(counter);
@@ -702,5 +711,4 @@ impl ExprVisitor for CodeGenerator {
             self.generate_assume(inner, counter)
         }
     }
-
 }

@@ -71,9 +71,8 @@ pub fn hash_std_directory(std_root: &Path) -> Result<String, String> {
         hasher.update(rel_bytes.as_bytes());
 
         // Hash the file content.
-        let content = fs::read(file).map_err(|e| {
-            format!("Cannot read std file '{}': {}", file.display(), e)
-        })?;
+        let content = fs::read(file)
+            .map_err(|e| format!("Cannot read std file '{}': {}", file.display(), e))?;
         hasher.update((content.len() as u64).to_le_bytes());
         hasher.update(&content);
     }
@@ -85,17 +84,15 @@ pub fn hash_std_directory(std_root: &Path) -> Result<String, String> {
 /// pushing each path into `out`. Symlinks are followed only once per
 /// canonical path to avoid infinite loops.
 fn collect_std_source_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
-    let entries = fs::read_dir(dir).map_err(|e| {
-        format!("Cannot read std directory '{}': {}", dir.display(), e)
-    })?;
+    let entries = fs::read_dir(dir)
+        .map_err(|e| format!("Cannot read std directory '{}': {}", dir.display(), e))?;
     for entry in entries {
-        let entry = entry.map_err(|e| {
-            format!("Cannot read std entry in '{}': {}", dir.display(), e)
-        })?;
+        let entry =
+            entry.map_err(|e| format!("Cannot read std entry in '{}': {}", dir.display(), e))?;
         let path = entry.path();
-        let file_type = entry.file_type().map_err(|e| {
-            format!("Cannot stat '{}': {}", path.display(), e)
-        })?;
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("Cannot stat '{}': {}", path.display(), e))?;
         if file_type.is_dir() {
             collect_std_source_files(&path, out)?;
         } else if file_type.is_file() {
@@ -802,7 +799,11 @@ mod tests {
     use vais_ast::{Expr, Function, FunctionBody, Item, Ownership, Param, Span, Spanned, Type};
 
     fn make_span() -> Span {
-        Span { file_id: 0, start: 0, end: 0 }
+        Span {
+            file_id: 0,
+            start: 0,
+            end: 0,
+        }
     }
 
     fn make_spanned<T>(node: T) -> Spanned<T> {

@@ -372,18 +372,20 @@ pub(super) fn add_runtime_and_native_libs(
 
     for module in used_modules {
         if let Some(runtime_info) = get_runtime_for_module(module) {
-            if let Some(rt_path) = find_runtime_file(runtime_info.file) {
-                let rt_str = rt_path.to_str().unwrap_or(runtime_info.file).to_string();
-                if !linked_runtimes.contains(&rt_str) {
-                    linked_runtimes.push(rt_str.clone());
-                    args.push(rt_str);
-                    if verbose {
-                        println!(
-                            "{} Linking {} runtime from: {}",
-                            "info:".blue().bold(),
-                            module.strip_prefix("std::").unwrap_or(module),
-                            rt_path.display()
-                        );
+            for runtime_file in runtime_files_for_module(module, runtime_info.file) {
+                if let Some(rt_path) = find_runtime_file(runtime_file) {
+                    let rt_str = rt_path.to_str().unwrap_or(runtime_file).to_string();
+                    if !linked_runtimes.contains(&rt_str) {
+                        linked_runtimes.push(rt_str.clone());
+                        args.push(rt_str);
+                        if verbose {
+                            println!(
+                                "{} Linking {} runtime from: {}",
+                                "info:".blue().bold(),
+                                module.strip_prefix("std::").unwrap_or(module),
+                                rt_path.display()
+                            );
+                        }
                     }
                 }
             }
@@ -599,11 +601,13 @@ pub(crate) fn add_runtime_libs(
 
     for module in used_modules {
         if let Some(runtime_info) = get_runtime_for_module(module) {
-            if let Some(rt_path) = find_runtime_file(runtime_info.file) {
-                let rt_str = rt_path.to_str().unwrap_or(runtime_info.file).to_string();
-                if !linked_runtimes.contains(&rt_str) {
-                    linked_runtimes.push(rt_str.clone());
-                    args.push(rt_str);
+            for runtime_file in runtime_files_for_module(module, runtime_info.file) {
+                if let Some(rt_path) = find_runtime_file(runtime_file) {
+                    let rt_str = rt_path.to_str().unwrap_or(runtime_file).to_string();
+                    if !linked_runtimes.contains(&rt_str) {
+                        linked_runtimes.push(rt_str.clone());
+                        args.push(rt_str);
+                    }
                 }
             }
             if runtime_info.needs_pthread {

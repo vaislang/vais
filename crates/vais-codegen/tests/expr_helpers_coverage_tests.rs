@@ -254,6 +254,19 @@ fn test_cast_int_to_int() {
     assert!(!ir.is_empty());
 }
 
+#[test]
+fn test_cast_unsigned_widening_uses_zext() {
+    let ir = gen_ok(
+        r#"
+        F test(x: u8) -> u32 {
+            R x as u32
+        }
+    "#,
+    );
+    assert!(ir.contains("zext i8"));
+    assert!(!ir.contains("sext i8"));
+}
+
 // ============================================================================
 // expr_helpers.rs — generate_assign_expr: simple variable
 // ============================================================================

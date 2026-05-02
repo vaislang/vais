@@ -154,6 +154,10 @@ impl CodeGenerator {
                 declared_fns.insert(info.signature.name.clone());
                 continue;
             }
+            if crate::function_gen::runtime::is_main_runtime_c_decl(&info.signature.name) {
+                declared_fns.insert(info.signature.name.clone());
+                continue;
+            }
             if !declared_fns.contains(&info.signature.name) {
                 ir.push_str(&self.generate_extern_decl(info));
                 ir.push('\n');

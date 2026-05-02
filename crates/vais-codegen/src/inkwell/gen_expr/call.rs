@@ -396,9 +396,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             let mut chosen = fn_name.clone();
             for ty in self.generic_substitutions.values() {
                 let candidate = vais_types::mangle_name(&fn_name, std::slice::from_ref(ty));
-                let exists = self
-                    .functions
-                    .contains_key(&candidate)
+                let exists = self.functions.contains_key(&candidate)
                     || self.module.get_function(&candidate).is_some();
                 if exists {
                     chosen = candidate;
@@ -677,9 +675,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         for (i, arg) in args.iter().enumerate() {
             // Implicit error propagation (Phase 4b.1 / #7): wrap the arg in
             // Try semantics when the type checker flagged it for auto-unwrap.
-            let val = if self.is_implicit_try_site(arg.span)
-                && !matches!(&arg.node, Expr::Try(_))
-            {
+            let val = if self.is_implicit_try_site(arg.span) && !matches!(&arg.node, Expr::Try(_)) {
                 self.generate_try(&arg.node)?
             } else {
                 self.generate_expr(&arg.node)?
@@ -755,11 +751,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         } else {
             let i8_ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
             self.builder
-                .build_int_to_ptr(
-                    callee_val.into_int_value(),
-                    i8_ptr_type,
-                    "indirect_fn_ptr",
-                )
+                .build_int_to_ptr(callee_val.into_int_value(), i8_ptr_type, "indirect_fn_ptr")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?
         };
 

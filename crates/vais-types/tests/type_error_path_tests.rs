@@ -959,7 +959,11 @@ fn test_help_refinement_violation() {
 
 #[test]
 fn test_secondary_spans_use_after_move_with_span() {
-    let span = vais_ast::Span { file_id: 0, start: 10, end: 20 };
+    let span = vais_ast::Span {
+        file_id: 0,
+        start: 10,
+        end: 20,
+    };
     let err = TypeError::UseAfterMove {
         var_name: "x".to_string(),
         moved_at: Some(span),
@@ -982,7 +986,11 @@ fn test_secondary_spans_use_after_move_no_span() {
 
 #[test]
 fn test_secondary_spans_assign_while_borrowed() {
-    let span = vais_ast::Span { file_id: 0, start: 5, end: 15 };
+    let span = vais_ast::Span {
+        file_id: 0,
+        start: 5,
+        end: 15,
+    };
     let err = TypeError::AssignWhileBorrowed {
         var_name: "x".to_string(),
         borrow_at: Some(span),
@@ -996,7 +1004,11 @@ fn test_secondary_spans_assign_while_borrowed() {
 
 #[test]
 fn test_secondary_spans_dangling_reference() {
-    let span = vais_ast::Span { file_id: 0, start: 0, end: 5 };
+    let span = vais_ast::Span {
+        file_id: 0,
+        start: 0,
+        end: 5,
+    };
     let err = TypeError::DanglingReference {
         ref_var: "r".to_string(),
         source_var: "x".to_string(),
@@ -1012,7 +1024,11 @@ fn test_secondary_spans_dangling_reference() {
 
 #[test]
 fn test_secondary_spans_borrow_after_move() {
-    let span = vais_ast::Span { file_id: 0, start: 0, end: 5 };
+    let span = vais_ast::Span {
+        file_id: 0,
+        start: 0,
+        end: 5,
+    };
     let err = TypeError::BorrowAfterMove {
         var_name: "x".to_string(),
         moved_at: Some(span),
@@ -1025,7 +1041,11 @@ fn test_secondary_spans_borrow_after_move() {
 
 #[test]
 fn test_secondary_spans_return_local_ref() {
-    let span = vais_ast::Span { file_id: 0, start: 0, end: 5 };
+    let span = vais_ast::Span {
+        file_id: 0,
+        start: 0,
+        end: 5,
+    };
     let err = TypeError::ReturnLocalRef {
         var_name: "x".to_string(),
         return_at: None,
@@ -1038,7 +1058,11 @@ fn test_secondary_spans_return_local_ref() {
 
 #[test]
 fn test_secondary_spans_move_after_use() {
-    let span = vais_ast::Span { file_id: 0, start: 0, end: 5 };
+    let span = vais_ast::Span {
+        file_id: 0,
+        start: 0,
+        end: 5,
+    };
     let err = TypeError::MoveAfterUse {
         var_name: "x".to_string(),
         first_use_at: Some(span),
@@ -1172,7 +1196,11 @@ fn test_internal_error_help() {
 
 #[test]
 fn test_internal_error_span() {
-    let span = vais_ast::Span { file_id: 0, start: 0, end: 10 };
+    let span = vais_ast::Span {
+        file_id: 0,
+        start: 0,
+        end: 10,
+    };
     let err = TypeError::InternalError {
         message: "test".to_string(),
         span: Some(span),

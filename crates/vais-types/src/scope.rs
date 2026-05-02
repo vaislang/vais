@@ -207,6 +207,49 @@ impl TypeChecker {
         HashMap::new()
     }
 
+    /// Get field types for a qualified enum struct variant pattern like
+    /// `EnumName.Variant { field }`.
+    ///
+    /// This is intentionally independent of the scrutinee type. In nested
+    /// matches the scrutinee can be an expression such as `*input` whose type
+    /// has not survived strongly enough for the unqualified variant lookup, but
+    /// the source-level enum qualifier is still a precise contract.
+    pub(crate) fn get_qualified_enum_variant_fields(
+        &self,
+        enum_name: &str,
+        variant_name: &str,
+        expr_type: &ResolvedType,
+    ) -> Option<HashMap<String, ResolvedType>> {
+        let enum_def = self.enums.get(enum_name)?;
+        let VariantFieldTypes::Struct(fields) = enum_def.variants.get(variant_name)? else {
+            return None;
+        };
+
+        let deref_ty = match expr_type {
+            ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Pointer(inner) => inner.as_ref(),
+            _ => expr_type,
+        };
+        let concrete_generics = match deref_ty {
+            ResolvedType::Named { name, generics } if name == enum_name => generics.as_slice(),
+            _ => &[],
+        };
+        let substitutions: HashMap<String, ResolvedType> = enum_def
+            .generics
+            .iter()
+            .zip(concrete_generics.iter())
+            .map(|(param, concrete)| (param.clone(), concrete.clone()))
+            .collect();
+
+        Some(
+            fields
+                .iter()
+                .map(|(name, ty)| (name.clone(), self.substitute_generics(ty, &substitutions)))
+                .collect(),
+        )
+    }
+
     /// Get tuple field types for an enum tuple variant.
     /// Used in pattern matching to properly type-check variant tuple patterns.
     /// Returns a vector of field types in order.
@@ -315,9 +358,18 @@ impl TypeChecker {
                 }
                 Ok(())
             }
-            Pattern::Struct { name, fields, .. } => {
+            Pattern::Struct {
+                name,
+                fields,
+                enum_name,
+            } => {
                 // For struct patterns, look up field types from the struct or enum variant
-                let field_types = self.get_struct_or_variant_fields(&name.node, expr_type);
+                let field_types = enum_name
+                    .as_deref()
+                    .and_then(|enum_name| {
+                        self.get_qualified_enum_variant_fields(enum_name, &name.node, expr_type)
+                    })
+                    .unwrap_or_else(|| self.get_struct_or_variant_fields(&name.node, expr_type));
 
                 for (field_name, sub_pattern) in fields {
                     let field_type = field_types

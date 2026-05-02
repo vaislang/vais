@@ -36,12 +36,20 @@ impl Span {
     /// source file is known — keeping `file_id = 0` reintroduces the
     /// cross-module span-collision hazard that motivated this field.
     pub fn new(start: usize, end: usize) -> Self {
-        Self { file_id: 0, start, end }
+        Self {
+            file_id: 0,
+            start,
+            end,
+        }
     }
 
     /// Creates a new span with an explicit source `file_id`.
     pub fn with_file(file_id: u32, start: usize, end: usize) -> Self {
-        Self { file_id, start, end }
+        Self {
+            file_id,
+            start,
+            end,
+        }
     }
 
     /// Merges two spans into a single span covering both ranges.
@@ -53,7 +61,11 @@ impl Span {
     /// is responsible for keeping merged spans within one file.
     pub fn merge(self, other: Span) -> Span {
         Span {
-            file_id: if self.file_id != 0 { self.file_id } else { other.file_id },
+            file_id: if self.file_id != 0 {
+                self.file_id
+            } else {
+                other.file_id
+            },
             start: self.start.min(other.start),
             end: self.end.max(other.end),
         }

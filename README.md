@@ -16,11 +16,15 @@ Vais is designed to minimize token usage while maximizing code expressiveness, m
 - **Self-recursion operator** `@` - Call the current function recursively
 - **Expression-oriented** - Everything is an expression
 - **LLVM backend** - Native performance with LLVM 17
-- **Type inference** - Minimal type annotations with full constraint solving
-- **Memory Safety** - Borrow checker with Non-Lexical Lifetimes (NLL), `--strict-borrow` mode
+- **Type inference** - Minimal annotations on the certified Core surface, with
+  broader inference features under active hardening
+- **Memory Safety** - Ownership and borrow-checking work with `--strict-borrow`
+  mode; advanced destructor/FFI safety remains outside Core certification
 - **Slice Types** - `&[T]` / `&mut [T]` with fat pointer implementation
 - **Parallel Compilation** - DAG-based parallel type-check and codegen (2-4x speedup)
-- **Self-Hosting** - 50,000+ LOC bootstrap compiler, 21/21 clang 100% success
+- **Self-hosting workbench** - 50,000+ LOC of Vais compiler sources used for
+  bootstrap and conformance work; see the current certification notes for what
+  is actively guaranteed
 - **Rich Ecosystem** - 29 crates, 80 stdlib modules, growing package ecosystem
 
 ## Quick Example
@@ -97,6 +101,22 @@ benches/           # Benchmark suite (criterion + language comparison)
 playground/        # Web playground frontend
 ```
 
+The v1.0 trust path is the Cargo `default-members` set: core compiler crates plus
+small auxiliary crates. Experimental crates remain in the workspace for opt-in
+builds, but they are not part of the default Core gate; see
+[`docs/CRATE_AUDIT.md`](docs/CRATE_AUDIT.md). Completed phase notes and old
+ROADMAP variants live in [`docs/history/`](docs/history/).
+
+Current Core certification status is tracked in
+[`docs/certification/CURRENT_STATUS.md`](docs/certification/CURRENT_STATUS.md).
+Use that file and [`ROADMAP.md`](ROADMAP.md) instead of archived phase counts
+when deciding the next compiler task.
+
+The project-level AI-native language principles are recorded in
+[`../docs/design/ai-native-language-principles.md`](../docs/design/ai-native-language-principles.md).
+Those principles are enforced through the Core certification and promotion
+gates, not by broad feature claims.
+
 ## Building
 
 ```bash
@@ -161,24 +181,23 @@ Coverage is measured automatically on every push and pull request to `main` and 
 ./target/release/vaisc check hello.vais
 ```
 
-## Status
+## Implementation Inventory
 
-- [x] Lexer (logos-based tokenizer)
-- [x] Parser (recursive descent)
-- [x] Type checker (generics, traits, type inference, GATs, object safety)
-- [x] Code generator (LLVM IR via inkwell, JavaScript ESM, WASM)
-- [x] Standard library (80 modules: Vec, HashMap, String, File, Net, Async, GPU, etc.)
-- [x] Borrow checker (Non-Lexical Lifetimes, CFG-based dataflow, `--strict-borrow`)
-- [x] Slice types (`&[T]` / `&mut [T]` with fat pointers)
-- [x] Parallel compilation (DAG-based dependency resolution, 2-4x speedup)
-- [x] Self-hosting compiler (50,000+ LOC, 21/21 clang success, Bootstrap Phase 56)
-- [x] LSP support (diagnostics, completion, hover, go-to-definition, references, rename)
-- [x] REPL (interactive environment)
-- [x] VSCode extension + IntelliJ plugin (syntax highlighting, LSP integration)
-- [x] Optimizer (constant folding, DCE, CSE, loop unrolling, LICM, alias analysis, vectorization)
-- [x] Formatter (`vaisc fmt`)
-- [x] Debugger (DWARF metadata, lldb/gdb support)
-- [x] Ecosystem packages (vais-aes, vais-base64, vais-crc32, vais-csv, vais-json, vais-lz4, vais-regex, vais-sha256, vais-uuid)
+This is an inventory of implemented or experimental surfaces, not a Core
+certification checklist. The current proof boundary is
+`docs/certification/CURRENT_STATUS.md`.
+
+- Lexer and parser for the current grammar
+- Type checker with Core-certified fixtures plus broader generics/traits work
+- LLVM IR code generator, with JS/WASM and other backends outside the Core gate
+- Standard library modules used by Core, std, and downstream package gates
+- Borrow-checking and `--strict-borrow` work, with advanced destructor/FFI safety
+  outside Core
+- Slice types (`&[T]` / `&mut [T]`) with fat pointers
+- Parallel compilation via DAG-based dependency resolution
+- Self-hosting workbench with 50,000+ LOC of Vais compiler sources
+- LSP, REPL, editor integration, optimizer, formatter, debugger, and ecosystem
+  package work outside the Core proof boundary unless specifically promoted
 
 ## Performance
 
@@ -194,7 +213,10 @@ Vais is designed for both compilation speed and runtime performance.
 | Code Generator | ~0.54ms/1K LOC | ~1.8K lines/ms | 4.14x speedup with parallel |
 | **Full Pipeline** | **~1.2ms/1K LOC** | **~833K lines/sec** | **50K lines → 60ms** |
 
-**Self-Hosting Bootstrap:** 50,000+ LOC, 21/21 clang compilation success (100%)
+**Self-hosting bootstrap workbench:** 50,000+ LOC of Vais compiler sources.
+Historical clang compilation counts are useful regression context, but current
+compiler correctness is judged by the Core certification gate and promoted
+runtime fixtures.
 
 ### Runtime Performance
 
@@ -231,7 +253,8 @@ cd docs-site
 
 Visit the [online documentation](https://vais.dev/docs/) or browse the individual files:
 
-- [LANGUAGE_SPEC.md](docs/LANGUAGE_SPEC.md) - Complete language specification
+- [LANGUAGE_SPEC.md](docs/LANGUAGE_SPEC.md) - Full language surface and current
+  non-Core status notes
 - [STDLIB.md](docs/STDLIB.md) - Standard library reference
 - [TUTORIAL.md](docs/TUTORIAL.md) - Getting started tutorial
 - [Architecture.md](docs/Architecture.md) - Compiler architecture and design

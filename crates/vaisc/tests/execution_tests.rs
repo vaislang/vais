@@ -935,7 +935,7 @@ F push_byte(s: MyStr, b: i64) -> MyStr {
 }
 
 F main() -> i64 {
-    s := new_str()
+    s := mut new_str()
     s = push_byte(s, 72)   # H
     s = push_byte(s, 105)  # i
     store_byte(s.data + s.len, 0)
@@ -968,7 +968,7 @@ F vec_get(v: Vec, idx: i64) -> i64 {
 }
 
 F main() -> i64 {
-    v := vec_new()
+    v := mut vec_new()
     v = vec_push(v, 10)
     v = vec_push(v, 20)
     v = vec_push(v, 12)
@@ -995,7 +995,7 @@ F vec_push(v: Vec, val: i64) -> Vec {
 }
 
 F main() -> i64 {
-    v := vec_new()
+    v := mut vec_new()
     v = vec_push(v, 1)
     v = vec_push(v, 2)
     v = vec_push(v, 3)
@@ -1027,7 +1027,7 @@ F vec_get(v: Vec, idx: i64) -> i64 {
 }
 
 F main() -> i64 {
-    v := vec_new()
+    v := mut vec_new()
     i := mut 1
     L {
         I i > 9 { B }
@@ -1089,7 +1089,7 @@ F hm_get(m: HashMap, key: i64) -> i64 {
 }
 
 F main() -> i64 {
-    m := hm_new()
+    m := mut hm_new()
     m = hm_set(m, 1, 42)
     m = hm_set(m, 2, 58)
     hm_get(m, 1)
@@ -1694,7 +1694,7 @@ X Counter {
 }
 
 F main() -> i64 {
-    c := Counter::new()
+    c := mut Counter::new()
     c = c.increment(10)
     c = c.increment(32)
     c.get()
@@ -1715,7 +1715,7 @@ X Val {
 }
 
 F main() -> i64 {
-    v := Val { n: 2 }
+    v := mut Val { n: 2 }
     v = v.add(3)
     v = v.mul(7)
     v = v.add(7)

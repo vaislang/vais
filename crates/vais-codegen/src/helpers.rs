@@ -120,6 +120,13 @@ impl CodeGenerator {
         self.fn_ctx
             .entry_allocas
             .push(format!("  {} = alloca {}", var_name, llvm_type));
+        self.fn_ctx
+            .record_emitted_type(var_name, &format!("{}*", llvm_type));
+        if llvm_type == "i8*" && var_name.contains("__alloc_slot_") {
+            self.fn_ctx
+                .entry_allocas
+                .push(format!("  store i8* null, i8** {}", var_name));
+        }
     }
 
     /// Splice collected entry-block allocas into function IR.
@@ -271,12 +278,23 @@ impl CodeGenerator {
             ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
             ResolvedType::I64 | ResolvedType::U64 | ResolvedType::F64 => 8,
             ResolvedType::I128 | ResolvedType::U128 => 16,
-            ResolvedType::Str => 8, // Pointer size
-            ResolvedType::Pointer(_) | ResolvedType::Ref(_) | ResolvedType::RefMut(_) => 8,
+            ResolvedType::Str => 16, // Fat pointer { i8*, i64 }
+            ResolvedType::Pointer(_) => 8,
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => match inner.as_ref() {
+                ResolvedType::Str
+                | ResolvedType::Slice(_)
+                | ResolvedType::SliceMut(_)
+                | ResolvedType::DynTrait { .. } => self._type_size(inner),
+                _ => 8,
+            },
+            ResolvedType::Slice(_) | ResolvedType::SliceMut(_) => 16,
             ResolvedType::Named { name, .. } => {
                 // Calculate struct size
                 if let Some(info) = self.types.structs.get(name) {
-                    info.fields.iter().map(|(_, t)| self._type_size(t)).sum()
+                    self.compute_sizeof(&ResolvedType::Named {
+                        name: info._name.clone(),
+                        generics: vec![],
+                    }) as usize
                 } else {
                     8 // Default to pointer size
                 }
@@ -462,6 +480,115 @@ impl CodeGenerator {
             }
         };
 
+        // Vec<T> / &[T] slicing returns a borrowed fat pointer into the
+        // existing storage. Do not allocate/copy here: the previous i64-copy
+        // path corrupted non-i64 element slices (e.g. Vec<f32>) and returned a
+        // pointer that scope cleanup freed before the caller could use it.
+        let slice_elem_ty = match &arr_type {
+            ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => Some(elem.as_ref().clone()),
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => match inner.as_ref() {
+                ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => {
+                    Some(elem.as_ref().clone())
+                }
+                ResolvedType::Named { name, generics } if name == "Vec" && !generics.is_empty() => {
+                    Some(generics[0].clone())
+                }
+                _ => None,
+            },
+            ResolvedType::Named { name, generics } if name == "Vec" && !generics.is_empty() => {
+                Some(generics[0].clone())
+            }
+            _ => None,
+        };
+        if (is_slice_source || is_vec_source) && slice_elem_ty.is_some() {
+            let base_i8 = if is_slice_source {
+                let data_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                    data_ptr,
+                    arr_val
+                );
+                self.fn_ctx.record_emitted_type(&data_ptr, "i8*");
+                data_ptr
+            } else {
+                let data_field = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 0",
+                    data_field,
+                    arr_val
+                );
+                self.fn_ctx.record_emitted_type(&data_field, "i64*");
+                let data_i64 = self.next_temp(counter);
+                write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_field);
+                self.fn_ctx.record_emitted_type(&data_i64, "i64");
+                let data_ptr = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_ptr, data_i64);
+                self.fn_ctx.record_emitted_type(&data_ptr, "i8*");
+                data_ptr
+            };
+
+            let elem_size_val = if is_vec_source {
+                let es_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 3",
+                    es_ptr,
+                    arr_val
+                );
+                self.fn_ctx.record_emitted_type(&es_ptr, "i64*");
+                let es = self.next_temp(counter);
+                write_ir!(ir, "  {} = load i64, i64* {}", es, es_ptr);
+                self.fn_ctx.record_emitted_type(&es, "i64");
+                es
+            } else {
+                self.compute_sizeof(&slice_elem_ty.expect("slice element type present"))
+                    .to_string()
+            };
+
+            let byte_offset = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = mul i64 {}, {}",
+                byte_offset,
+                start_val,
+                elem_size_val
+            );
+            self.fn_ctx.record_emitted_type(&byte_offset, "i64");
+            let data_i8 = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = getelementptr i8, i8* {}, i64 {}",
+                data_i8,
+                base_i8,
+                byte_offset
+            );
+            self.fn_ctx.record_emitted_type(&data_i8, "i8*");
+
+            let length = self.next_temp(counter);
+            write_ir!(ir, "  {} = sub i64 {}, {}", length, end_val, start_val);
+            self.fn_ctx.record_emitted_type(&length, "i64");
+            let fat1 = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+                fat1,
+                data_i8
+            );
+            self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
+            let fat2 = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
+                fat2,
+                fat1,
+                length
+            );
+            self.fn_ctx.record_emitted_type(&fat2, "{ i8*, i64 }");
+            return Ok((fat2, ir));
+        }
+
         // If source is a slice or Vec, extract the data pointer
         let src_arr_ptr = if is_slice_source {
             let data_ptr = self.next_temp(counter);
@@ -598,12 +725,7 @@ impl CodeGenerator {
         // updated; returning a fat pointer is correct for the `&[T]` /
         // slice-producing semantic of this helper.
         let data_i8 = self.next_temp(counter);
-        write_ir!(
-            ir,
-            "  {} = bitcast i64* {} to i8*",
-            data_i8,
-            slice_ptr
-        );
+        write_ir!(ir, "  {} = bitcast i64* {} to i8*", data_i8, slice_ptr);
         self.fn_ctx.record_emitted_type(&data_i8, "i8*");
         let fat1 = self.next_temp(counter);
         write_ir!(

@@ -41,11 +41,13 @@ fn convert_const_expr(expr: &ConstExpr) -> ResolvedConst {
                     ConstBinOp::Sub => lv - rv,
                     ConstBinOp::Mul => lv * rv,
                     ConstBinOp::Div if *rv != 0 => lv / rv,
-                    _ => return ResolvedConst::BinOp {
-                        op: convert_const_binop(op),
-                        left: Box::new(l),
-                        right: Box::new(r),
-                    },
+                    _ => {
+                        return ResolvedConst::BinOp {
+                            op: convert_const_binop(op),
+                            left: Box::new(l),
+                            right: Box::new(r),
+                        }
+                    }
                 };
                 return ResolvedConst::Value(v);
             }
@@ -100,9 +102,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // the generic Named branch and become `%Option = type opaque`,
                 // causing `ret %Option zeroinitializer` / C004 Aggregate errors
                 // at match-arm extract time.
-                "Option" if generics.len() == 1 => ResolvedType::Optional(Box::new(
-                    self.ast_type_to_resolved(&generics[0].node),
-                )),
+                "Option" if generics.len() == 1 => {
+                    ResolvedType::Optional(Box::new(self.ast_type_to_resolved(&generics[0].node)))
+                }
                 "Result" if generics.len() == 2 => ResolvedType::Result(
                     Box::new(self.ast_type_to_resolved(&generics[0].node)),
                     Box::new(self.ast_type_to_resolved(&generics[1].node)),

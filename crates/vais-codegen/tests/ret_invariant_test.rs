@@ -199,7 +199,8 @@ fn last_assigned_type(ir: &str, val: &str) -> Option<String> {
                         .unwrap_or(rest.len());
                     return Some(rest[..ty_end].trim().to_string());
                 }
-                if let Some(rest) = rhs.strip_prefix("trunc ")
+                if let Some(rest) = rhs
+                    .strip_prefix("trunc ")
                     .or_else(|| rhs.strip_prefix("sext "))
                     .or_else(|| rhs.strip_prefix("zext "))
                     .or_else(|| rhs.strip_prefix("fpext "))

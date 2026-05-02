@@ -243,8 +243,6 @@ fn error_continue_outside_loop() {
 
 #[test]
 fn error_assignment_to_immutable() {
-    // Note: Current implementation allows reassignment without 'mut'
-    // This test documents the current behavior
     let source = r#"
 F main() -> i64 {
     x := 5
@@ -252,9 +250,7 @@ F main() -> i64 {
     R x
 }
 "#;
-    // Currently this compiles - mutability checking may be added in future
-    // x is reassigned to 10 and returned, so exit code is 10
-    assert_exit_code(source, 10);
+    assert_error_contains(source, "ImmutableAssign");
 }
 
 // ==================== Edge Cases ====================

@@ -19,9 +19,11 @@
 pub mod borrow_check;
 mod builder;
 pub mod emit_llvm;
+pub mod interpreter;
 pub mod lower;
 pub mod optimize;
 mod types;
+pub mod validate;
 
 pub use builder::MirBuilder;
 pub use types::*;

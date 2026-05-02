@@ -53,5 +53,16 @@ F main() -> i64 {
     big.seek(199)
     I big.read_u8() != 199 { R 21 }
 
+    # wrapped buffers must write at the seek cursor, not append past len.
+    page: Vec<u8> := mut Vec.repeat(0u8, 16)
+    wrapped := mut ByteBuffer.wrap(&page)
+    wrapped.seek(4)
+    wrapped.write_u16_le(0x1234)
+    I page[4] != 0x34 { R 22 }
+    I page[5] != 0x12 { R 23 }
+    wrapped.seek(0)
+    wrapped.write_u8(0xAB)
+    I page[0] != 0xAB { R 24 }
+
     R 0
 }

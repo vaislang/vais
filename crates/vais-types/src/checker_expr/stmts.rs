@@ -9,8 +9,32 @@ impl TypeChecker {
     pub(crate) fn check_block(&mut self, stmts: &[Spanned<Stmt>]) -> TypeResult<ResolvedType> {
         let mut last_type = ResolvedType::Unit;
 
-        for stmt in stmts {
-            last_type = self.check_stmt(stmt)?;
+        let last_stmt_index = stmts.len().checked_sub(1);
+        for (idx, stmt) in stmts.iter().enumerate() {
+            let keep_expected = Some(idx) == last_stmt_index
+                && matches!(&stmt.node, Stmt::Expr(_) | Stmt::Return(_));
+            let saved_expected = if keep_expected {
+                None
+            } else {
+                Some(std::mem::take(&mut self.expected_type_stack))
+            };
+            let enum_hint = if keep_expected {
+                self.current_expected_type()
+                    .and_then(|ty| Self::enum_name_hint_from(&ty))
+            } else {
+                None
+            };
+            if let Some(hint) = enum_hint.as_ref() {
+                self.push_enum_hint(hint.clone());
+            }
+            let stmt_result = self.check_stmt(stmt);
+            if enum_hint.is_some() {
+                self.pop_enum_hint();
+            }
+            if let Some(saved) = saved_expected {
+                self.expected_type_stack = saved;
+            }
+            last_type = stmt_result?;
         }
 
         Ok(last_type)
@@ -32,10 +56,7 @@ impl TypeChecker {
                 // as Vec<T>/Array<T>/etc. instead of decaying to Pointer(T).
                 let value_type = if let Some(ty_ann) = ty {
                     let expected_hint = self.resolve_type(&ty_ann.node);
-                    self.check_expr_bidirectional(
-                        value,
-                        crate::CheckMode::Check(expected_hint),
-                    )?
+                    self.check_expr_bidirectional(value, crate::CheckMode::Check(expected_hint))?
                 } else {
                     self.check_expr(value)?
                 };
@@ -87,6 +108,8 @@ impl TypeChecker {
                 } else {
                     value_type
                 };
+                let resolved_var_type = self.apply_substitutions(&var_type);
+                self.record_type_instantiations(&resolved_var_type);
 
                 // Convert AST Ownership to type system Linearity
                 let linearity = match ownership {
@@ -125,7 +148,14 @@ impl TypeChecker {
             Stmt::Return(expr) => {
                 let ret_span = expr.as_ref().map(|e| e.span);
                 let ret_type = if let Some(expr) = expr {
-                    self.check_expr(expr)?
+                    if let Some(expected) = self.current_fn_ret.clone() {
+                        self.push_expected_type(expected.clone());
+                        let result = self.check_expr_with_enum_hint(expr, &expected);
+                        self.pop_expected_type();
+                        result?
+                    } else {
+                        self.check_expr(expr)?
+                    }
                 } else {
                     ResolvedType::Unit
                 };

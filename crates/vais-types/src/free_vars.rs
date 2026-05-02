@@ -1,7 +1,7 @@
 //! Free variable analysis for closure capture.
 
-use vais_ast::*;
 use vais_ast::StringInterpPart;
+use vais_ast::*;
 
 use super::TypeChecker;
 

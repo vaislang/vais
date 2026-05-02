@@ -355,11 +355,7 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) -> 
         None,
     );
     // opendir(path) -> DIR*
-    module.add_function(
-        "opendir",
-        i8_ptr.fn_type(&[i8_ptr.into()], false),
-        None,
-    );
+    module.add_function("opendir", i8_ptr.fn_type(&[i8_ptr.into()], false), None);
     // closedir(dir) -> i32
     module.add_function("closedir", i32_type.fn_type(&[i8_ptr.into()], false), None);
     // readdir(dir) -> dirent*
@@ -805,8 +801,7 @@ fn declare_runtime_intrinsics<'ctx>(
         let timeval_ptr_ty = timeval_ty.ptr_type(AddressSpace::default());
 
         // declare i32 @gettimeofday(timeval*, i8*)
-        let gettime_ty =
-            i32_type.fn_type(&[timeval_ptr_ty.into(), i8_ptr.into()], false);
+        let gettime_ty = i32_type.fn_type(&[timeval_ptr_ty.into(), i8_ptr.into()], false);
         let gettime_fn = module
             .get_function("gettimeofday")
             .unwrap_or_else(|| module.add_function("gettimeofday", gettime_ty, None));
@@ -964,7 +959,11 @@ fn declare_runtime_intrinsics<'ctx>(
         let call = builder
             .build_call(
                 write_fn,
-                &[fd_i32.into(), buf.into(), i64_type.const_int(1, false).into()],
+                &[
+                    fd_i32.into(),
+                    buf.into(),
+                    i64_type.const_int(1, false).into(),
+                ],
                 "w",
             )
             .map_err(|e| format!("ICE: {e}"))?;
@@ -1000,7 +999,11 @@ fn declare_runtime_intrinsics<'ctx>(
         builder
             .build_call(
                 read_fn,
-                &[fd_i32.into(), buf.into(), i64_type.const_int(1, false).into()],
+                &[
+                    fd_i32.into(),
+                    buf.into(),
+                    i64_type.const_int(1, false).into(),
+                ],
                 "r",
             )
             .map_err(|e| format!("ICE: {e}"))?;

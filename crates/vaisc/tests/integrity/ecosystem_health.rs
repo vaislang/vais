@@ -10,7 +10,6 @@
 ///
 /// Thresholds for Phase 0.2: at least 1 file must pass in each category.
 /// The actual counts feed ROADMAP via Phase 0.3.
-
 use super::{ok_codegen, ok_codegen_pkg, ok_tc, setup_std_symlink};
 use std::path::PathBuf;
 use walkdir::WalkDir;
@@ -51,11 +50,7 @@ fn test_std_files_codegen_ok() {
     files.sort();
 
     let total = files.len();
-    assert!(
-        total > 0,
-        "No .vais files found in {}",
-        std_dir.display()
-    );
+    assert!(total > 0, "No .vais files found in {}", std_dir.display());
 
     let mut pass = 0usize;
     let mut fail = 0usize;
@@ -76,7 +71,10 @@ fn test_std_files_codegen_ok() {
     }
 
     // Machine-readable summary line — read by Phase 0.3 baseline script.
-    eprintln!("INTEGRITY std_files pass={} fail={} total={}", pass, fail, total);
+    eprintln!(
+        "INTEGRITY std_files pass={} fail={} total={}",
+        pass, fail, total
+    );
 
     // Print failing files for diagnostics.
     if !fail_names.is_empty() {
@@ -173,7 +171,11 @@ fn test_vaisdb_files_codegen_ok() {
     // Print first 20 failures for diagnostics (avoid log flooding).
     if !fail_names.is_empty() {
         let show = fail_names.len().min(20);
-        eprintln!("  vaisdb_files FAIL list (showing {}/{}):", show, fail_names.len());
+        eprintln!(
+            "  vaisdb_files FAIL list (showing {}/{}):",
+            show,
+            fail_names.len()
+        );
         for name in fail_names.iter().take(show) {
             eprintln!("    - {}", name);
         }

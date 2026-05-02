@@ -45,6 +45,48 @@ fn e2e_arith_triple_add() {
 }
 
 #[test]
+fn e2e_arith_u32_call_result_plus_u32_constant_uses_valid_width() {
+    assert_exit_code(
+        r#"
+C HEADER_SIZE: u32 = 48
+
+F offset(x: u64) -> u32 {
+    x as u32
+}
+
+F main() -> i64 {
+    end := mut offset(10) + HEADER_SIZE
+    I end == 58 as u32 { 0 } E { 1 }
+}
+"#,
+        0,
+    );
+}
+
+#[test]
+fn e2e_arith_u8_constant_match_uses_u8_compare_width() {
+    assert_exit_code(
+        r#"
+C ZERO: u8 = 0
+C ONE: u8 = 1
+
+F tag() -> u8 {
+    1 as u8
+}
+
+F main() -> i64 {
+    M tag() {
+        ZERO => 1,
+        ONE => 0,
+        _ => 2,
+    }
+}
+"#,
+        0,
+    );
+}
+
+#[test]
 fn e2e_arith_mixed_ops() {
     // 10 + 5 * 6 + 2 = 10 + 30 + 2 = 42
     assert_exit_code("F main()->i64 = 10 + 5 * 6 + 2", 42);

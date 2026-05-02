@@ -48,7 +48,8 @@ impl CodeGenerator {
         // `capacity: i32`). Downstream icmp/add are emitted as `i64`, so the
         // bounds must be widened first or LLVM rejects the IR.
         let start_actual = self.llvm_type_of(&start_val_raw);
-        let start_val = self.coerce_int_width(&start_val_raw, &start_actual, "i64", counter, &mut ir);
+        let start_val =
+            self.coerce_int_width(&start_val_raw, &start_actual, "i64", counter, &mut ir);
         let end_actual = self.llvm_type_of(&end_val_raw);
         let end_val = self.coerce_int_width(&end_val_raw, &end_actual, "i64", counter, &mut ir);
 

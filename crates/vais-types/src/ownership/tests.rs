@@ -7,7 +7,11 @@ mod tests {
     use vais_ast::Span;
 
     fn make_span() -> Span {
-        Span { file_id: 0, start: 0, end: 0 }
+        Span {
+            file_id: 0,
+            start: 0,
+            end: 0,
+        }
     }
 
     #[test]

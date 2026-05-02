@@ -584,7 +584,7 @@ impl CodeGenerator {
                 self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
-            "starts_with" | "startsWith" => {
+            "starts_with" => {
                 if args.is_empty() {
                     return Err(CodegenError::Unsupported(format!(
                         "builtin 'starts_with' requires 1 argument, got {}",
@@ -615,7 +615,7 @@ impl CodeGenerator {
                 self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
-            "ends_with" | "endsWith" => {
+            "ends_with" => {
                 if args.is_empty() {
                     return Err(CodegenError::Unsupported(format!(
                         "builtin 'ends_with' requires 1 argument, got {}",
@@ -696,7 +696,7 @@ impl CodeGenerator {
                 self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             }
-            "char_at" | "charAt" => {
+            "char_at" => {
                 if args.is_empty() {
                     return Err(CodegenError::Unsupported(format!(
                         "builtin 'char_at' requires 1 argument, got {}",
@@ -800,6 +800,88 @@ impl CodeGenerator {
         ir.push_str("  %null_pos = getelementptr i8, i8* %buf, i64 %len\n");
         ir.push_str("  store i8 0, i8* %null_pos\n");
         // Build fat pointer { i8*, i64 }
+        ir.push_str("  %fp0 = insertvalue { i8*, i64 } undef, i8* %buf, 0\n");
+        ir.push_str("  %fp1 = insertvalue { i8*, i64 } %fp0, i64 %len, 1\n");
+        ir.push_str("  ret { i8*, i64 } %fp1\n");
+        ir.push_str("}\n");
+
+        // __vais_str_char_at: return one-character string at byte index.
+        ir.push_str("\n; String helper: char_at\n");
+        ir.push_str("define { i8*, i64 } @__vais_str_char_at(i8* %s, i64 %idx) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %buf_int = call i64 @malloc(i64 2)\n");
+        ir.push_str("  %buf = inttoptr i64 %buf_int to i8*\n");
+        ir.push_str("  %src = getelementptr i8, i8* %s, i64 %idx\n");
+        ir.push_str("  %ch = load i8, i8* %src\n");
+        ir.push_str("  store i8 %ch, i8* %buf\n");
+        ir.push_str("  %null_pos = getelementptr i8, i8* %buf, i64 1\n");
+        ir.push_str("  store i8 0, i8* %null_pos\n");
+        ir.push_str("  %fp0 = insertvalue { i8*, i64 } undef, i8* %buf, 0\n");
+        ir.push_str("  %fp1 = insertvalue { i8*, i64 } %fp0, i64 1, 1\n");
+        ir.push_str("  ret { i8*, i64 } %fp1\n");
+        ir.push_str("}\n");
+
+        // __vais_str_to_upper: ASCII uppercase conversion.
+        ir.push_str("\n; String helper: to_uppercase\n");
+        ir.push_str("define { i8*, i64 } @__vais_str_to_upper(i8* %s) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %len = call i64 @strlen(i8* %s)\n");
+        ir.push_str("  %size = add i64 %len, 1\n");
+        ir.push_str("  %buf_int = call i64 @malloc(i64 %size)\n");
+        ir.push_str("  %buf = inttoptr i64 %buf_int to i8*\n");
+        ir.push_str("  br label %loop\n");
+        ir.push_str("loop:\n");
+        ir.push_str("  %i = phi i64 [ 0, %entry ], [ %next, %body ]\n");
+        ir.push_str("  %done = icmp uge i64 %i, %len\n");
+        ir.push_str("  br i1 %done, label %end, label %body\n");
+        ir.push_str("body:\n");
+        ir.push_str("  %src = getelementptr i8, i8* %s, i64 %i\n");
+        ir.push_str("  %ch = load i8, i8* %src\n");
+        ir.push_str("  %ge_a = icmp uge i8 %ch, 97\n");
+        ir.push_str("  %le_z = icmp ule i8 %ch, 122\n");
+        ir.push_str("  %is_lower = and i1 %ge_a, %le_z\n");
+        ir.push_str("  %upper = sub i8 %ch, 32\n");
+        ir.push_str("  %out = select i1 %is_lower, i8 %upper, i8 %ch\n");
+        ir.push_str("  %dst = getelementptr i8, i8* %buf, i64 %i\n");
+        ir.push_str("  store i8 %out, i8* %dst\n");
+        ir.push_str("  %next = add i64 %i, 1\n");
+        ir.push_str("  br label %loop\n");
+        ir.push_str("end:\n");
+        ir.push_str("  %null_pos = getelementptr i8, i8* %buf, i64 %len\n");
+        ir.push_str("  store i8 0, i8* %null_pos\n");
+        ir.push_str("  %fp0 = insertvalue { i8*, i64 } undef, i8* %buf, 0\n");
+        ir.push_str("  %fp1 = insertvalue { i8*, i64 } %fp0, i64 %len, 1\n");
+        ir.push_str("  ret { i8*, i64 } %fp1\n");
+        ir.push_str("}\n");
+
+        // __vais_str_to_lower: ASCII lowercase conversion.
+        ir.push_str("\n; String helper: to_lowercase\n");
+        ir.push_str("define { i8*, i64 } @__vais_str_to_lower(i8* %s) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %len = call i64 @strlen(i8* %s)\n");
+        ir.push_str("  %size = add i64 %len, 1\n");
+        ir.push_str("  %buf_int = call i64 @malloc(i64 %size)\n");
+        ir.push_str("  %buf = inttoptr i64 %buf_int to i8*\n");
+        ir.push_str("  br label %loop\n");
+        ir.push_str("loop:\n");
+        ir.push_str("  %i = phi i64 [ 0, %entry ], [ %next, %body ]\n");
+        ir.push_str("  %done = icmp uge i64 %i, %len\n");
+        ir.push_str("  br i1 %done, label %end, label %body\n");
+        ir.push_str("body:\n");
+        ir.push_str("  %src = getelementptr i8, i8* %s, i64 %i\n");
+        ir.push_str("  %ch = load i8, i8* %src\n");
+        ir.push_str("  %ge_a = icmp uge i8 %ch, 65\n");
+        ir.push_str("  %le_z = icmp ule i8 %ch, 90\n");
+        ir.push_str("  %is_upper = and i1 %ge_a, %le_z\n");
+        ir.push_str("  %lower = add i8 %ch, 32\n");
+        ir.push_str("  %out = select i1 %is_upper, i8 %lower, i8 %ch\n");
+        ir.push_str("  %dst = getelementptr i8, i8* %buf, i64 %i\n");
+        ir.push_str("  store i8 %out, i8* %dst\n");
+        ir.push_str("  %next = add i64 %i, 1\n");
+        ir.push_str("  br label %loop\n");
+        ir.push_str("end:\n");
+        ir.push_str("  %null_pos = getelementptr i8, i8* %buf, i64 %len\n");
+        ir.push_str("  store i8 0, i8* %null_pos\n");
         ir.push_str("  %fp0 = insertvalue { i8*, i64 } undef, i8* %buf, 0\n");
         ir.push_str("  %fp1 = insertvalue { i8*, i64 } %fp0, i64 %len, 1\n");
         ir.push_str("  ret { i8*, i64 } %fp1\n");
@@ -1092,7 +1174,7 @@ impl CodeGenerator {
         );
         write_ir!(
             ir,
-            "define void @__vais_struct_shallow_free_{}({}* %s) {{",
+            "define linkonce_odr void @__vais_struct_shallow_free_{}({}* %s) {{",
             struct_name,
             ty
         );
@@ -1146,7 +1228,12 @@ impl CodeGenerator {
                 field_idx
             );
             let fat = format!("%fat_{}", seq);
-            write_ir!(ir, "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* {}", fat, fptr);
+            write_ir!(
+                ir,
+                "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* {}",
+                fat,
+                fptr
+            );
             let buf = format!("%buf_{}", seq);
             write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", buf, fat);
             let is_null = format!("%null_{}", seq);
@@ -1171,6 +1258,7 @@ impl CodeGenerator {
     }
 
     /// `declare` statement for a struct shallow-free helper (per-module compilation).
+    #[allow(dead_code)]
     pub(crate) fn generate_struct_shallow_free_declaration(struct_name: &str) -> String {
         format!(
             "declare void @__vais_struct_shallow_free_{}(%{}*)\n",

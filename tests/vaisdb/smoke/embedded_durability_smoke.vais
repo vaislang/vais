@@ -1,0 +1,64 @@
+U server/embedded
+U storage/constants
+U storage/file
+
+F embedded_file_exists(db_path: str, file_name: str) -> bool {
+    path := mut db_path.clone() + "/" + file_name
+    path_exists(&path)
+}
+
+F main() -> i64 {
+    db_path := mut "embedded_durability_db"
+    durability_lsn := mut 424242 as u64
+
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut M EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { R 1 },
+    }
+    I !db.is_open() { R 2 }
+    I db.database.page_size != PAGE_SIZE_8K { R 3 }
+    I db.database.meta.last_checkpoint_lsn != 0 { R 4 }
+
+    db.database.meta.last_checkpoint_lsn = durability_lsn
+    M db.database.flush_meta() {
+        Ok(_) => {},
+        Err(_) => { R 5 },
+    }
+    M db.close() {
+        Ok(_) => {},
+        Err(_) => { R 6 },
+    }
+    I db.is_open() { R 7 }
+
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_DATA) { R 8 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_META) { R 9 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_VECTORS) { R 10 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_GRAPH) { R 11 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_FULLTEXT) { R 12 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_UNDO) { R 13 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_LOCK) { R 14 }
+
+    reopen_cfg := mut EmbeddedConfig.default()
+    reopen_cfg = reopen_cfg.with_data_dir(db_path.clone())
+
+    reopened := mut M EmbeddedDatabase.open(reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { R 20 },
+    }
+    I !reopened.is_open() { R 21 }
+    I reopened.database.page_size != PAGE_SIZE_8K { R 22 }
+    I reopened.database.meta.last_checkpoint_lsn != durability_lsn { R 23 }
+    I reopened.database.meta.next_txn_id != 1 { R 24 }
+
+    M reopened.close() {
+        Ok(_) => {},
+        Err(_) => { R 25 },
+    }
+    I reopened.is_open() { R 26 }
+
+    R 0
+}

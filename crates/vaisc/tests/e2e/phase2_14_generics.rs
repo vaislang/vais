@@ -8,8 +8,6 @@
 //! All tests use the helpers::check_only path so we don't trip codegen
 //! gaps that are the domain of Phase 3.x.
 
-use super::helpers::*;
-
 fn check_only(source: &str) {
     use tempfile::TempDir;
     let dir = TempDir::new().expect("tempdir");

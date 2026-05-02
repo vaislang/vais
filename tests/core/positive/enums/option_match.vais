@@ -1,0 +1,17 @@
+F main() -> i64 {
+    a: Option<i64> := Some(42)
+    b: Option<i64> := None
+
+    va: i64 := M a {
+        Some(v) => v,
+        None => -1,
+    }
+    vb: i64 := M b {
+        Some(v) => v,
+        None => -1,
+    }
+
+    I va != 42 { R 1 }
+    I vb != -1 { R 2 }
+    R 0
+}

@@ -135,6 +135,21 @@ pub(crate) fn get_runtime_for_module(module_path: &str) -> Option<RuntimeInfo> {
     }
 }
 
+/// Return every C runtime file required by a module runtime.
+///
+/// Most std modules have a single runtime translation unit. `std::http_client`
+/// reuses the TCP and HTTP parsing helpers from `http_runtime.c`, so linking
+/// only its primary runtime leaves plain HTTP builds with unresolved symbols.
+pub(crate) fn runtime_files_for_module(
+    module_path: &str,
+    primary_file: &'static str,
+) -> Vec<&'static str> {
+    match module_path {
+        "std::http_client" => vec!["http_runtime.c", primary_file],
+        _ => vec![primary_file],
+    }
+}
+
 /// Extract all module paths used via `use` statements from the AST.
 /// Returns a set of module paths like "std::http", "std::thread", etc.
 /// Handles both "std/thread" (file path style) and "std::thread" (module path style).
@@ -184,6 +199,14 @@ pub(crate) fn find_runtime_file(filename: &str) -> Option<PathBuf> {
     // Try std/ relative to current working directory
     if let Ok(cwd) = std::env::current_dir() {
         let rt_path = cwd.join("std").join(filename);
+        if rt_path.exists() {
+            return Some(rt_path);
+        }
+    }
+
+    // Match std import resolution in tests and packaged builds.
+    if let Ok(std_dir) = std::env::var("VAIS_STD_PATH") {
+        let rt_path = PathBuf::from(&std_dir).join(filename);
         if rt_path.exists() {
             return Some(rt_path);
         }

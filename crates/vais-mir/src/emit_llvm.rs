@@ -284,6 +284,12 @@ impl LlvmEmitter {
                     dest_name, len_name
                 ));
             }
+            Rvalue::VecPush(_, _) => {
+                self.output
+                    .push_str(&format!("  ; vec push for {}\n", dest_name));
+                self.output
+                    .push_str(&format!("  {} = add {} 0, 0\n", dest_name, llvm_ty));
+            }
         }
     }
 
@@ -512,6 +518,7 @@ impl LlvmEmitter {
                 format!("{}*", self.mir_type_to_llvm(inner))
             }
             MirType::Array(elem) => format!("[0 x {}]", self.mir_type_to_llvm(elem)),
+            MirType::Vec(elem) => format!("{{ i64, [0 x {}] }}", self.mir_type_to_llvm(elem)),
             MirType::Tuple(elems) => {
                 let parts: Vec<String> = elems.iter().map(|t| self.mir_type_to_llvm(t)).collect();
                 format!("{{ {} }}", parts.join(", "))

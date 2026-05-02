@@ -1,0 +1,344 @@
+U storage/recovery/checkpoint
+U storage/recovery/redo
+U storage/wal/writer
+U storage/wal/header
+U storage/wal/lsn
+U storage/wal/record_types
+U storage/wal/record_vector
+U storage/constants
+U storage/error
+U storage/file
+U storage/page/manager
+U storage/page/types
+U storage/page/header
+U storage/page/meta
+U storage/buffer/pool
+U storage/bytes
+
+F checkpoint_replay_open_clean(path: str) -> Result<File, VaisError> {
+    file := mut File.open(path, "rw+")?;
+    file.truncate(0)?;
+    Ok(file)
+}
+
+F checkpoint_replay_open_existing(path: str) -> Result<File, VaisError> {
+    File.open(path, "rw+")
+}
+
+F checkpoint_replay_files_clean(prefix: str) -> Result<Vec<File>, VaisError> {
+    files: Vec<File> := mut Vec.with_capacity(5)
+    data_file := mut checkpoint_replay_open_clean(prefix + "_data.vdb")?;
+    vector_file := mut checkpoint_replay_open_clean(prefix + "_vectors.vdb")?;
+    graph_file := mut checkpoint_replay_open_clean(prefix + "_graph.vdb")?;
+    fulltext_file := mut checkpoint_replay_open_clean(prefix + "_fulltext.vdb")?;
+    undo_file := mut checkpoint_replay_open_clean(prefix + "_undo.vdb")?;
+    files.push(data_file)
+    files.push(vector_file)
+    files.push(graph_file)
+    files.push(fulltext_file)
+    files.push(undo_file)
+    Ok(files)
+}
+
+F checkpoint_replay_files_existing(prefix: str) -> Result<Vec<File>, VaisError> {
+    files: Vec<File> := mut Vec.with_capacity(5)
+    data_file := mut checkpoint_replay_open_existing(prefix + "_data.vdb")?;
+    vector_file := mut checkpoint_replay_open_existing(prefix + "_vectors.vdb")?;
+    graph_file := mut checkpoint_replay_open_existing(prefix + "_graph.vdb")?;
+    fulltext_file := mut checkpoint_replay_open_existing(prefix + "_fulltext.vdb")?;
+    undo_file := mut checkpoint_replay_open_existing(prefix + "_undo.vdb")?;
+    files.push(data_file)
+    files.push(vector_file)
+    files.push(graph_file)
+    files.push(fulltext_file)
+    files.push(undo_file)
+    Ok(files)
+}
+
+F checkpoint_replay_write_u64_le(page_data: &Vec<u8>, offset: u32, value: u64) {
+    LF i: 0..8u32 {
+        page_data[(offset + i) as u64] = ((value >> (i * 8)) & 255) as u8
+    }
+}
+
+F checkpoint_replay_copy_page(data: &[u8]) -> Vec<u8> {
+    copy: Vec<u8> := mut Vec.with_capacity(data.len())
+    i := mut 0u64
+    LW i < data.len() {
+        copy.push(data[i])
+        i = i + 1
+    }
+    copy
+}
+
+F checkpoint_replay_meta_file(path: str) -> Result<File, VaisError> {
+    meta_file := mut File.open(path, "rw+")?;
+    meta_file.truncate(0)?;
+    uuid: Vec<u8> := mut Vec.with_capacity(16)
+    uuid.resize(16, 0u8)
+    meta_header := mut MetaPageHeader.new(PAGE_SIZE_8K, uuid, 100 as u64)
+    meta_page := mut Vec.with_capacity(PAGE_SIZE_8K as u64)
+    meta_page.resize(PAGE_SIZE_8K as u64, 0u8)
+    meta_header.write_to_page(&meta_page)
+    meta_file.write_at(0, &meta_page[0..meta_page.len()])?;
+    meta_file.fsync()?;
+    Ok(meta_file)
+}
+
+F main() -> i64 {
+    prefix := mut "vector_recovery_checkpoint_replay"
+    wal_dir := mut "vector_recovery_checkpoint_replay_wal"
+    meta_path := mut prefix + "_meta.vdb"
+    txn_id := mut 62001 as u64
+    page_id := mut 3 as u32
+    offset := mut 512 as u16
+
+    files := mut M checkpoint_replay_files_clean(prefix) {
+        Ok(v) => v,
+        Err(_) => { R 1 },
+    }
+    page_manager := mut PageManager.new(files, PAGE_SIZE_8K)
+    initial := mut M page_manager.allocate_page(
+        FILE_ID_VECTORS,
+        page_id,
+        PAGE_TYPE_VECTOR_DATA,
+        ENGINE_TAG_VECTOR
+    ) {
+        Ok(page) => page,
+        Err(_) => { R 2 },
+    }
+
+    initial[(offset as u64) - 2] = 31 as u8
+    initial[(offset as u64) - 1] = 32 as u8
+    initial[(offset as u64) + 8] = 33 as u8
+    initial[(offset as u64) + 9] = 34 as u8
+    M page_manager.write_page(FILE_ID_VECTORS, page_id, &initial) {
+        Ok(_) => {},
+        Err(_) => { R 3 },
+    }
+
+    checkpoint_files := mut M checkpoint_replay_files_existing(prefix) {
+        Ok(v) => v,
+        Err(_) => { R 4 },
+    }
+    checkpoint_manager := mut PageManager.new(checkpoint_files, PAGE_SIZE_8K)
+    checkpoint_pool := mut BufferPool.new(checkpoint_manager, PAGE_SIZE_8K, 4 as u32)
+
+    dirty_frame := mut M checkpoint_pool.pin_page(FILE_ID_VECTORS, page_id) {
+        Ok(v) => v,
+        Err(_) => { R 5 },
+    }
+    dirty_page := mut checkpoint_pool.get_page_mut(dirty_frame)
+    dirty_page[(offset as u64) - 4] = 41 as u8
+    checkpoint_pool.unpin_page(dirty_frame, true)
+
+    writer := mut M WalWriter.new(wal_dir, 4096 as u32) {
+        Ok(w) => w,
+        Err(_) => { R 6 },
+    }
+    M writer.open() {
+        Ok(_) => {},
+        Err(_) => { R 7 },
+    }
+
+    active_txns: Vec<u64> := mut Vec.with_capacity(0)
+    meta_file := mut M checkpoint_replay_meta_file(meta_path) {
+        Ok(f) => f,
+        Err(_) => { R 69 },
+    }
+    cp_mgr := mut CheckpointManager.with_defaults()
+    cp_result := mut M cp_mgr.perform_checkpoint(&mut writer, &mut checkpoint_pool, &meta_file, &active_txns) {
+        Ok(v) => v,
+        Err(_) => { R 8 },
+    }
+    I cp_result.end_lsn <= cp_result.begin_lsn { R 9 }
+    I cp_result.pages_flushed != 1 { R 10 }
+    I !checkpoint_pool.needs_fpi(dirty_frame) { R 11 }
+    meta_after_checkpoint := mut M meta_file.read_at(0, PAGE_SIZE_8K as u64) {
+        Ok(v) => v,
+        Err(_) => { R 70 },
+    }
+    persisted_meta := mut M MetaPageHeader.read_from_page(&meta_after_checkpoint) {
+        Ok(v) => v,
+        Err(_) => { R 71 },
+    }
+    I persisted_meta.last_checkpoint_lsn != cp_result.end_lsn { R 72 }
+
+    fpi_source := mut checkpoint_pool.get_page(dirty_frame)
+    fpi_page := mut checkpoint_replay_copy_page(fpi_source)
+    I fpi_page[(offset as u64) - 4] != 41 as u8 { R 66 }
+    I fpi_page[(offset as u64) - 2] != 31 as u8 { R 67 }
+    I fpi_page[(offset as u64) - 1] != 32 as u8 { R 68 }
+    fpi_lsn := mut M write_fpi(
+        &mut writer,
+        txn_id,
+        FILE_ID_VECTORS,
+        page_id,
+        fpi_source
+    ) {
+        Ok(v) => v,
+        Err(_) => { R 12 },
+    }
+    checkpoint_pool.clear_fpi(dirty_frame)
+    checkpoint_pool.unpin_page(dirty_frame, false)
+    I fpi_lsn <= cp_result.end_lsn { R 13 }
+
+    patch: Vec<u8> := mut Vec.with_capacity(8)
+    patch.push(9 as u8)
+    patch.push(8 as u8)
+    patch.push(7 as u8)
+    patch.push(6 as u8)
+    patch.push(5 as u8)
+    patch.push(4 as u8)
+    patch.push(3 as u8)
+    patch.push(2 as u8)
+
+    payload := mut VectorDataWritePayload {
+        file_id: FILE_ID_VECTORS,
+        page_id,
+        offset,
+        vector_data: patch,
+    }
+    payload_buf := mut ByteBuffer.with_capacity(64)
+    payload.serialize(&mut payload_buf)
+    payload_bytes := mut payload_buf.to_vec()
+
+    begin_payload := mut TxnBeginPayload { isolation_level: 1 as u8 }
+    begin_buf := mut ByteBuffer.with_capacity(8)
+    begin_payload.serialize(&mut begin_buf)
+    begin_bytes := mut begin_buf.to_vec()
+    begin_lsn := mut M writer.write_record(txn_id, TXN_BEGIN, ENGINE_META, &begin_bytes) {
+        Ok(v) => v,
+        Err(_) => { R 14 },
+    }
+    I begin_lsn <= fpi_lsn { R 15 }
+
+    data_lsn := mut M writer.write_record(txn_id, VECTOR_DATA_WRITE, ENGINE_VECTOR, &payload_bytes) {
+        Ok(v) => v,
+        Err(_) => { R 16 },
+    }
+    I data_lsn <= begin_lsn { R 17 }
+
+    commit_payload := mut TxnCommitPayload {}
+    commit_buf := mut ByteBuffer.with_capacity(1)
+    commit_payload.serialize(&mut commit_buf)
+    commit_bytes := mut commit_buf.to_vec()
+    commit_lsn := mut M writer.write_record(txn_id, TXN_COMMIT, ENGINE_META, &commit_bytes) {
+        Ok(v) => v,
+        Err(_) => { R 18 },
+    }
+    I commit_lsn <= data_lsn { R 19 }
+
+    M writer.close() {
+        Ok(_) => {},
+        Err(_) => { R 20 },
+    }
+
+    torn_files := mut M checkpoint_replay_files_existing(prefix) {
+        Ok(v) => v,
+        Err(_) => { R 21 },
+    }
+    torn_manager := mut PageManager.new(torn_files, PAGE_SIZE_8K)
+    torn_page := mut checkpoint_replay_copy_page(&fpi_page)
+    torn_page[(offset as u64) - 2] = 201 as u8
+    torn_page[(offset as u64) - 1] = 202 as u8
+    torn_page[(offset as u64) + 8] = 203 as u8
+    torn_page[(offset as u64) + 9] = 204 as u8
+    M torn_manager.write_page(FILE_ID_VECTORS, page_id, &torn_page) {
+        Ok(_) => {},
+        Err(_) => { R 22 },
+    }
+
+    analysis := mut M recovery_analysis(&wal_dir, cp_result.end_lsn) {
+        Ok(v) => v,
+        Err(_) => { R 30 },
+    }
+    I analysis.redo_start_lsn != cp_result.end_lsn { R 31 }
+    I analysis.dirty_pages.len() != 1 { R 32 }
+    dirty := mut analysis.dirty_pages[0]
+    I dirty.file_id != FILE_ID_VECTORS { R 33 }
+    I dirty.page_id != page_id { R 34 }
+    I dirty.recovery_lsn != fpi_lsn { R 35 }
+
+    txn_entry := mut M analysis.txn_table.get_opt(txn_id) {
+        Some(entry) => entry,
+        None => { R 36 },
+    }
+    I txn_entry.first_lsn != begin_lsn { R 37 }
+    I txn_entry.last_lsn != commit_lsn { R 38 }
+    committed := mut M txn_entry.state {
+        Committed => true,
+        _ => false,
+    }
+    I !committed { R 39 }
+
+    replay_files := mut M checkpoint_replay_files_existing(prefix) {
+        Ok(v) => v,
+        Err(_) => { R 40 },
+    }
+    replay_manager := mut PageManager.new(replay_files, PAGE_SIZE_8K)
+    pool := mut BufferPool.new(replay_manager, PAGE_SIZE_8K, 4 as u32)
+
+    records_redone := mut M recovery_redo(&wal_dir, &analysis, &mut pool) {
+        Ok(v) => v,
+        Err(_) => { R 41 },
+    }
+    I records_redone != 2 { R 42 }
+
+    I pool.dirty_count() == 0 { R 43 }
+    M pool.flush_all() {
+        Ok(_) => {},
+        Err(_) => { R 44 },
+    }
+
+    expected := mut checkpoint_replay_copy_page(&fpi_page)
+    i := mut 0u64
+    LW i < payload.vector_data.len() {
+        expected[(offset as u64) + i] = payload.vector_data[i]
+        i = i + 1
+    }
+    checkpoint_replay_write_u64_le(&expected, 0, data_lsn)
+    PageHeader.update_checksum_vec(&expected)
+
+    reader_files := mut M checkpoint_replay_files_existing(prefix) {
+        Ok(v) => v,
+        Err(_) => { R 50 },
+    }
+    reader := mut PageManager.new(reader_files, PAGE_SIZE_8K)
+    replayed := mut M reader.read_page(FILE_ID_VECTORS, page_id) {
+        Ok(page) => page,
+        Err(_) => { R 51 },
+    }
+    replayed_header := mut M PageHeader.read_from_page(&replayed) {
+        Ok(h) => h,
+        Err(_) => { R 52 },
+    }
+    I replayed_header.page_lsn != data_lsn { R 53 }
+    I replayed[(offset as u64) - 4] != 41 as u8 { R 54 }
+    I replayed[(offset as u64) - 2] != 31 as u8 { R 55 }
+    I replayed[(offset as u64) - 1] != 32 as u8 { R 56 }
+    I replayed[(offset as u64) + 8] != 33 as u8 { R 57 }
+    I replayed[(offset as u64) + 9] != 34 as u8 { R 58 }
+
+    k := mut 0u64
+    LW k < payload.vector_data.len() {
+        I replayed[(offset as u64) + k] != payload.vector_data[k] {
+            R 59
+        }
+        k = k + 1
+    }
+
+    j := mut 0u64
+    LW j < expected.len() {
+        I j >= 20 && j < 24 {
+            j = j + 1
+        } EL {
+            I replayed[j] != expected[j] {
+                R 60
+            }
+            j = j + 1
+        }
+    }
+
+    R 0
+}

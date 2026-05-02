@@ -36,6 +36,11 @@ impl TypeChecker {
                     ResolvedType::Ref(t) | ResolvedType::RefMut(t) | ResolvedType::Pointer(t) => {
                         Some(Ok(*t))
                     }
+                    ResolvedType::Named { name, generics }
+                        if name == "Box" && generics.len() == 1 =>
+                    {
+                        Some(Ok(generics[0].clone()))
+                    }
                     // Phase 253: lenient deref. vaisdb often dereferences
                     // Option<T> or generic ?-types directly. Treat Optional
                     // and Result as identity (return inner type), and

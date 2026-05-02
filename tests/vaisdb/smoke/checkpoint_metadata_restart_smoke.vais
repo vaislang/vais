@@ -1,0 +1,179 @@
+U storage/recovery/checkpoint
+U storage/recovery/redo
+U storage/wal/writer
+U storage/wal/header
+U storage/wal/lsn
+U storage/wal/record_types
+U storage/constants
+U storage/error
+U storage/file
+U storage/page/manager
+U storage/page/types
+U storage/page/meta
+U storage/buffer/pool
+U storage/bytes
+
+F checkpoint_meta_open_clean(path: str) -> Result<File, VaisError> {
+    file := mut File.open(path, "rw+")?;
+    file.truncate(0)?;
+    Ok(file)
+}
+
+F checkpoint_meta_open_existing(path: str) -> Result<File, VaisError> {
+    File.open(path, "rw+")
+}
+
+F checkpoint_meta_files_clean(prefix: str) -> Result<Vec<File>, VaisError> {
+    files: Vec<File> := mut Vec.with_capacity(5)
+    data_file := mut checkpoint_meta_open_clean(prefix + "_data.vdb")?;
+    vector_file := mut checkpoint_meta_open_clean(prefix + "_vectors.vdb")?;
+    graph_file := mut checkpoint_meta_open_clean(prefix + "_graph.vdb")?;
+    fulltext_file := mut checkpoint_meta_open_clean(prefix + "_fulltext.vdb")?;
+    undo_file := mut checkpoint_meta_open_clean(prefix + "_undo.vdb")?;
+    files.push(data_file)
+    files.push(vector_file)
+    files.push(graph_file)
+    files.push(fulltext_file)
+    files.push(undo_file)
+    Ok(files)
+}
+
+F checkpoint_meta_write_initial_meta(path: str) -> Result<File, VaisError> {
+    meta_file := mut checkpoint_meta_open_clean(path)?;
+    uuid: Vec<u8> := mut Vec.with_capacity(16)
+    uuid.resize(16, 0u8)
+    header := mut MetaPageHeader.new(PAGE_SIZE_8K, uuid, 101 as u64)
+    page := mut Vec.with_capacity(PAGE_SIZE_8K as u64)
+    page.resize(PAGE_SIZE_8K as u64, 0u8)
+    header.write_to_page(&page)
+    meta_file.write_at(0, &page[0..page.len()])?;
+    meta_file.fsync()?;
+    Ok(meta_file)
+}
+
+F checkpoint_meta_read_lsn(path: str) -> Result<u64, VaisError> {
+    meta_file := mut checkpoint_meta_open_existing(path)?;
+    page := mut meta_file.read_at(0, PAGE_SIZE_8K as u64)?;
+    header := mut MetaPageHeader.read_from_page(&page)?;
+    Ok(header.last_checkpoint_lsn)
+}
+
+F checkpoint_meta_needs_recovery(wal_dir: &str, checkpoint_lsn: u64) -> Result<bool, VaisError> {
+    iter := mut WalRecordIterator.from_lsn(wal_dir.to_string(), checkpoint_lsn)?;
+    first := mut iter.next()?;
+    second := mut iter.next()?;
+    M second {
+        Some(_) => Ok(true),
+        None => Ok(false),
+    }
+}
+
+F main() -> i64 {
+    prefix := mut "checkpoint_metadata_restart"
+    wal_dir := mut "checkpoint_metadata_restart_wal"
+    meta_path := mut prefix + "_meta.vdb"
+
+    files := mut M checkpoint_meta_files_clean(prefix) {
+        Ok(v) => v,
+        Err(_) => { R 1 },
+    }
+    manager := mut PageManager.new(files, PAGE_SIZE_8K)
+    pool := mut BufferPool.new(manager, PAGE_SIZE_8K, 4 as u32)
+
+    page := mut M pool.page_manager.allocate_page(
+        FILE_ID_VECTORS,
+        2 as u32,
+        PAGE_TYPE_VECTOR_DATA,
+        ENGINE_TAG_VECTOR
+    ) {
+        Ok(v) => v,
+        Err(_) => { R 2 },
+    }
+    page[128] = 77 as u8
+    M pool.page_manager.write_page(FILE_ID_VECTORS, 2 as u32, &page) {
+        Ok(_) => {},
+        Err(_) => { R 3 },
+    }
+
+    frame := mut M pool.pin_page(FILE_ID_VECTORS, 2 as u32) {
+        Ok(v) => v,
+        Err(_) => { R 4 },
+    }
+    page_ref := mut pool.get_page_mut(frame)
+    page_ref[128] = 88 as u8
+    pool.unpin_page(frame, true)
+
+    writer := mut M WalWriter.new(wal_dir, 4096 as u32) {
+        Ok(w) => w,
+        Err(_) => { R 5 },
+    }
+    M writer.open() {
+        Ok(_) => {},
+        Err(_) => { R 6 },
+    }
+
+    meta_file := mut M checkpoint_meta_write_initial_meta(meta_path) {
+        Ok(f) => f,
+        Err(_) => { R 7 },
+    }
+    active_txns: Vec<u64> := mut Vec.with_capacity(0)
+    cp_mgr := mut CheckpointManager.with_defaults()
+    cp_result := mut M cp_mgr.perform_checkpoint(&mut writer, &mut pool, &meta_file, &active_txns) {
+        Ok(v) => v,
+        Err(_) => { R 8 },
+    }
+    I cp_result.end_lsn <= cp_result.begin_lsn { R 9 }
+    I cp_mgr.last_checkpoint_lsn() != cp_result.end_lsn { R 10 }
+
+    persisted_lsn := mut M checkpoint_meta_read_lsn(meta_path) {
+        Ok(v) => v,
+        Err(_) => { R 11 },
+    }
+    I persisted_lsn != cp_result.end_lsn { R 12 }
+
+    restarted_mgr := mut CheckpointManager.with_defaults()
+    restarted_mgr.set_last_checkpoint_lsn(persisted_lsn)
+    I restarted_mgr.last_checkpoint_lsn() != cp_result.end_lsn { R 13 }
+
+    M writer.close() {
+        Ok(_) => {},
+        Err(_) => { R 14 },
+    }
+
+    no_recovery := mut M checkpoint_meta_needs_recovery(&wal_dir, persisted_lsn) {
+        Ok(v) => v,
+        Err(_) => { R 15 },
+    }
+    I no_recovery { R 16 }
+
+    writer2 := mut M WalWriter.new(wal_dir, 4096 as u32) {
+        Ok(w) => w,
+        Err(_) => { R 17 },
+    }
+    M writer2.open() {
+        Ok(_) => {},
+        Err(_) => { R 18 },
+    }
+
+    begin_payload := mut TxnBeginPayload { isolation_level: 1 as u8 }
+    begin_buf := mut ByteBuffer.with_capacity(8)
+    begin_payload.serialize(&mut begin_buf)
+    begin_bytes := mut begin_buf.to_vec()
+    post_lsn := mut M writer2.write_record(63001 as u64, TXN_BEGIN, ENGINE_META, &begin_bytes) {
+        Ok(v) => v,
+        Err(_) => { R 19 },
+    }
+    I post_lsn <= persisted_lsn { R 20 }
+    M writer2.close() {
+        Ok(_) => {},
+        Err(_) => { R 21 },
+    }
+
+    needs := mut M checkpoint_meta_needs_recovery(&wal_dir, persisted_lsn) {
+        Ok(v) => v,
+        Err(_) => { R 22 },
+    }
+    I !needs { R 23 }
+
+    R 0
+}

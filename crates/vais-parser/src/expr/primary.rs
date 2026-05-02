@@ -498,9 +498,10 @@ impl Parser {
                 // Wrap in a Block to keep the block-expression shape.
                 let end = self.prev_span().end;
                 return Ok(Spanned::new(
-                    Expr::Block(vec![
-                        Spanned::new(vais_ast::Stmt::Expr(Box::new(body)), Span::new(start, end)),
-                    ]),
+                    Expr::Block(vec![Spanned::new(
+                        vais_ast::Stmt::Expr(Box::new(body)),
+                        Span::new(start, end),
+                    )]),
                     Span::new(start, end),
                 ));
             }
@@ -890,10 +891,8 @@ impl Parser {
                             // get_struct_or_variant_fields which already looks up
                             // enum variants by name).
                             self.advance_skip();
-                            let mut fields: Vec<(
-                                Spanned<String>,
-                                Option<Spanned<Pattern>>,
-                            )> = Vec::new();
+                            let mut fields: Vec<(Spanned<String>, Option<Spanned<Pattern>>)> =
+                                Vec::new();
                             while !self.check(&Token::RBrace) && !self.is_at_end() {
                                 // Support `..` rest pattern
                                 if self.check(&Token::DotDot) {
@@ -909,9 +908,7 @@ impl Parser {
                                     None // shorthand: `x` means `x: x`
                                 };
                                 fields.push((field_name, field_pat));
-                                if !self.check(&Token::RBrace)
-                                    && !self.check(&Token::DotDot)
-                                {
+                                if !self.check(&Token::RBrace) && !self.check(&Token::DotDot) {
                                     self.expect_skip(&Token::Comma)?;
                                 }
                             }

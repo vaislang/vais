@@ -36,27 +36,101 @@ fn normalize_float_literal_for_float(val: &str) -> String {
     }
 }
 
+fn is_unsigned_integer_type(ty: &ResolvedType) -> bool {
+    matches!(
+        ty,
+        ResolvedType::U8
+            | ResolvedType::U16
+            | ResolvedType::U32
+            | ResolvedType::U64
+            | ResolvedType::U128
+    )
+}
+
 impl CodeGenerator {
+    fn enum_name_for_comparison_type(&self, ty: &ResolvedType) -> Option<String> {
+        match ty {
+            ResolvedType::Named { name, .. } if self.types.enums.contains_key(name) => {
+                Some(name.clone())
+            }
+            ResolvedType::Pointer(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner) => self.enum_name_for_comparison_type(inner),
+            _ => None,
+        }
+    }
+
+    fn emit_enum_tag_for_comparison(
+        &mut self,
+        value: &str,
+        enum_name: &str,
+        counter: &mut usize,
+        ir: &mut String,
+    ) -> String {
+        let enum_llvm = format!("%{}", enum_name);
+        let value_ty = self.llvm_type_of(value);
+
+        if value_ty == "i32" {
+            return value.to_string();
+        }
+
+        if value_ty == enum_llvm {
+            let tag = self.next_temp(counter);
+            write_ir!(ir, "  {} = extractvalue {} {}, 0", tag, enum_llvm, value);
+            self.fn_ctx.record_emitted_type(&tag, "i32");
+            return tag;
+        }
+
+        let enum_ptr = if value_ty == format!("{}*", enum_llvm) {
+            value.to_string()
+        } else if value_ty.ends_with('*') {
+            let ptr = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = bitcast {} {} to {}*",
+                ptr,
+                value_ty,
+                value,
+                enum_llvm
+            );
+            self.fn_ctx
+                .record_emitted_type(&ptr, &format!("{}*", enum_llvm));
+            ptr
+        } else {
+            let ptr = self.next_temp(counter);
+            write_ir!(ir, "  {} = inttoptr i64 {} to {}*", ptr, value, enum_llvm);
+            self.fn_ctx
+                .record_emitted_type(&ptr, &format!("{}*", enum_llvm));
+            ptr
+        };
+
+        let tag_ptr = self.next_temp(counter);
+        write_ir!(
+            ir,
+            "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
+            tag_ptr,
+            enum_llvm,
+            enum_llvm,
+            enum_ptr
+        );
+        self.fn_ctx.record_emitted_type(&tag_ptr, "i32*");
+
+        let tag = self.next_temp(counter);
+        write_ir!(ir, "  {} = load i32, i32* {}", tag, tag_ptr);
+        self.fn_ctx.record_emitted_type(&tag, "i32");
+        tag
+    }
+
     #[inline(never)]
     pub(crate) fn generate_unit_enum_variant(
         &mut self,
         name: &str,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
-        // Clone enum info to avoid borrow conflict with self.next_temp/emit_entry_alloca
-        let mut found = None;
-        for enum_info in self.types.enums.values() {
-            for (tag, variant) in enum_info.variants.iter().enumerate() {
-                if variant.name == name {
-                    found = Some((enum_info.name.clone(), tag));
-                    break;
-                }
-            }
-            if found.is_some() {
-                break;
-            }
-        }
-        if let Some((enum_name, tag)) = found {
+        let expected = self.fn_ctx.expected_expr_types.last().cloned();
+        if let Some((enum_name, tag)) =
+            self.get_unit_variant_info_with_expected(name, expected.as_ref())
+        {
             let mut ir = String::new();
             let enum_ptr = self.next_temp(counter);
             self.emit_entry_alloca(&enum_ptr, &format!("%{}", enum_name));
@@ -135,13 +209,7 @@ impl CodeGenerator {
                 let rbits = self.get_integer_bits(&right_type_for_strop);
                 let right_use = if rbits < 64 {
                     let widened = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = sext i{} {} to i64",
-                        widened,
-                        rbits,
-                        right_val
-                    );
+                    write_ir!(ir, "  {} = sext i{} {} to i64", widened, rbits, right_val);
                     self.fn_ctx.record_emitted_type(&widened, "i64");
                     widened
                 } else {
@@ -221,6 +289,46 @@ impl CodeGenerator {
         } else if is_comparison {
             // Comparison returns i1, extend to i64
             let right_type = self.infer_expr_type(right);
+
+            if matches!(op, BinOp::Eq | BinOp::Neq) {
+                if let (Some(left_enum), Some(right_enum)) = (
+                    self.enum_name_for_comparison_type(&left_type),
+                    self.enum_name_for_comparison_type(&right_type),
+                ) {
+                    if left_enum == right_enum {
+                        let left_tag = self
+                            .emit_enum_tag_for_comparison(&left_val, &left_enum, counter, &mut ir);
+                        let right_tag = self.emit_enum_tag_for_comparison(
+                            &right_val,
+                            &right_enum,
+                            counter,
+                            &mut ir,
+                        );
+                        let cmp_tmp = self.next_temp(counter);
+                        let op_str = match op {
+                            BinOp::Eq => "icmp eq",
+                            BinOp::Neq => "icmp ne",
+                            _ => unreachable!(),
+                        };
+                        let dbg_info = self.debug_info.dbg_ref_from_span(span);
+                        write_ir!(
+                            ir,
+                            "  {} = {} i32 {}, {}{}",
+                            cmp_tmp,
+                            op_str,
+                            left_tag,
+                            right_tag,
+                            dbg_info
+                        );
+
+                        let result = self.next_temp(counter);
+                        write_ir!(ir, "  {} = zext i1 {} to i64", result, cmp_tmp);
+                        self.fn_ctx.record_emitted_type(&result, "i64");
+                        return Ok((result, ir));
+                    }
+                }
+            }
+
             let is_float_cmp = matches!(left_type, ResolvedType::F64 | ResolvedType::F32)
                 || matches!(right_type, ResolvedType::F64 | ResolvedType::F32);
 
@@ -323,7 +431,13 @@ impl CodeGenerator {
                 let actual_right_ty = self.llvm_type_of(&right_val);
                 let (left_norm, left_norm_ty) = if actual_left_ty.ends_with('*') {
                     let t = self.next_temp(counter);
-                    write_ir!(ir, "  {} = ptrtoint {} {} to i64", t, actual_left_ty, left_val);
+                    write_ir!(
+                        ir,
+                        "  {} = ptrtoint {} {} to i64",
+                        t,
+                        actual_left_ty,
+                        left_val
+                    );
                     self.fn_ctx.record_emitted_type(&t, "i64");
                     (t, "i64".to_string())
                 } else {
@@ -331,7 +445,13 @@ impl CodeGenerator {
                 };
                 let (right_norm, right_norm_ty) = if actual_right_ty.ends_with('*') {
                     let t = self.next_temp(counter);
-                    write_ir!(ir, "  {} = ptrtoint {} {} to i64", t, actual_right_ty, right_val);
+                    write_ir!(
+                        ir,
+                        "  {} = ptrtoint {} {} to i64",
+                        t,
+                        actual_right_ty,
+                        right_val
+                    );
                     self.fn_ctx.record_emitted_type(&t, "i64");
                     (t, "i64".to_string())
                 } else {
@@ -425,13 +545,27 @@ impl CodeGenerator {
                 if left_is_int {
                     let conv = self.next_temp(counter);
                     let int_llvm = self.type_to_llvm(&left_type);
-                    write_ir!(ir, "  {} = sitofp {} {} to {}", conv, int_llvm, actual_left, float_llvm);
+                    write_ir!(
+                        ir,
+                        "  {} = sitofp {} {} to {}",
+                        conv,
+                        int_llvm,
+                        actual_left,
+                        float_llvm
+                    );
                     actual_left = conv;
                 }
                 if right_is_int {
                     let conv = self.next_temp(counter);
                     let int_llvm = self.type_to_llvm(&right_type);
-                    write_ir!(ir, "  {} = sitofp {} {} to {}", conv, int_llvm, actual_right, float_llvm);
+                    write_ir!(
+                        ir,
+                        "  {} = sitofp {} {} to {}",
+                        conv,
+                        int_llvm,
+                        actual_right,
+                        float_llvm
+                    );
                     actual_right = conv;
                 }
 
@@ -481,13 +615,31 @@ impl CodeGenerator {
                 let int_llvm_owned = format!("i{}", target_bits);
                 let int_llvm: &str = &int_llvm_owned;
 
-                // Coerce both operands to the target width (using inferred types, not llvm_type_of)
-                let left_ty_str = format!("i{}", if left_bits > 0 { left_bits } else { 64 });
-                let right_ty_str = format!("i{}", if right_bits > 0 { right_bits } else { 64 });
-                let coerced_left =
-                    self.coerce_int_width(&left_val, &left_ty_str, int_llvm, counter, &mut ir);
-                let coerced_right =
-                    self.coerce_int_width(&right_val, &right_ty_str, int_llvm, counter, &mut ir);
+                // Coerce from the actually emitted LLVM width when available.
+                // Some call paths materialize narrow integer returns as widened
+                // i64 SSA values while the semantic type remains u32/i32; using
+                // only the inferred type here emits invalid ops such as
+                // `add i32 %wide_i64, 48`.
+                let left_ty_str = self
+                    .llvm_type_of_checked(&left_val)
+                    .unwrap_or_else(|| format!("i{}", if left_bits > 0 { left_bits } else { 64 }));
+                let right_ty_str = self.llvm_type_of_checked(&right_val).unwrap_or_else(|| {
+                    format!("i{}", if right_bits > 0 { right_bits } else { 64 })
+                });
+                let coerced_left = self.coerce_int_width(
+                    &left_val,
+                    left_ty_str.as_str(),
+                    int_llvm,
+                    counter,
+                    &mut ir,
+                );
+                let coerced_right = self.coerce_int_width(
+                    &right_val,
+                    right_ty_str.as_str(),
+                    int_llvm,
+                    counter,
+                    &mut ir,
+                );
                 write_ir!(
                     ir,
                     "  {} = {} {} {}, {}{}",
@@ -695,13 +847,15 @@ impl CodeGenerator {
                             llvm_type
                         );
                     } else {
-                        // Bug C8 (text-IR companion): widening i1 → wider int
-                        // must use `zext`, not `sext`. Sign-extending an i1
-                        // value of 1 produces all-1s (255 in i8/i64-low),
-                        // which is what made `true as i64` return 255 in the
-                        // text-IR backend. The inkwell backend already
-                        // landed this fix; this brings text-IR into parity.
-                        let widening_op = if src_llvm_ty == "i1" { "zext" } else { "sext" };
+                        // Widening preserves the source type's signedness.
+                        // LLVM's `i8` carries no unsigned bit, so semantic
+                        // source type is required for `u8 as u32` and friends.
+                        let widening_op =
+                            if src_llvm_ty == "i1" || is_unsigned_integer_type(&src_type_static) {
+                                "zext"
+                            } else {
+                                "sext"
+                            };
                         write_ir!(
                             ir,
                             "  {} = {} {} {} to {}",

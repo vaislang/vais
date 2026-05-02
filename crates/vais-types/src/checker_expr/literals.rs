@@ -40,13 +40,15 @@ impl TypeChecker {
                 self.mark_var_used(name);
                 // Attach span to UndefinedVar so error reporting can show file:line
                 Some(self.lookup_var_or_err(name).map_err(|e| match e {
-                    TypeError::UndefinedVar { name, span: None, suggestion } => {
-                        TypeError::UndefinedVar {
-                            name,
-                            span: Some(expr.span),
-                            suggestion,
-                        }
-                    }
+                    TypeError::UndefinedVar {
+                        name,
+                        span: None,
+                        suggestion,
+                    } => TypeError::UndefinedVar {
+                        name,
+                        span: Some(expr.span),
+                        suggestion,
+                    },
                     other => other,
                 }))
             }

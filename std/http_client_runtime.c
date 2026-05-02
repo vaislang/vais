@@ -305,42 +305,63 @@ long __memset(long dst, long value, long len) {
 // HTTP Response Parsing
 // ============================================
 
-// HttpResponse struct layout (must match std/http_client.vais):
+// HttpResponse struct layout (must match std/http_client.vais and codegen):
 // offset 0:  status (i64)
-// offset 8:  status_text (ptr/str)
-// offset 16: version (ptr/str)
-// offset 24: headers (ptr - array of name/value pairs)
-// offset 32: header_count (i64)
-// offset 40: header_capacity (i64)
-// offset 48: body (ptr)
-// offset 56: body_len (i64)
-// offset 64: error_code (i64)
+// offset 8:  status_text.ptr
+// offset 16: status_text.len
+// offset 24: version.ptr
+// offset 32: version.len
+// offset 40: headers (ptr - array of name/value pairs)
+// offset 48: header_count (i64)
+// offset 56: header_capacity (i64)
+// offset 64: body (ptr)
+// offset 72: body_len (i64)
+// offset 80: error_code (i64)
+// offset 88: ownership_mask (i64, emitted by codegen for string fields)
+
+typedef struct {
+    const char* ptr;
+    long len;
+} HcStr;
+
+HcStr __hc_str_from_buffer(long ptr, long len) {
+    HcStr out;
+    out.ptr = (const char*)ptr;
+    out.len = len > 0 ? len : 0;
+    return out;
+}
 
 typedef struct {
     long status;
-    const char* status_text;
-    const char* version;
+    HcStr status_text;
+    HcStr version;
     long header_items;
     long header_count;
     long header_capacity;
     long body;
     long body_len;
     long error_code;
+    long ownership_mask;
 } HcResponse;
 
-// Parse an HTTP response from raw bytes.
-// Returns HttpResponse struct via sret pointer.
-void __hc_parse_response(HcResponse* out, long buffer, long len) {
-    const char* buf = (const char*)buffer;
-    if (buf == NULL || len <= 0 || out == NULL) {
-        if (out) {
-            memset(out, 0, sizeof(HcResponse));
-            out->error_code = -6;  // CLIENT_ERR_PARSE
-        }
-        return;
-    }
+static HcStr hc_make_str(const char* start, size_t len) {
+    HcStr out;
+    out.ptr = hc_strndup(start, len);
+    out.len = (long)len;
+    return out;
+}
 
-    memset(out, 0, sizeof(HcResponse));
+// Parse an HTTP response from raw bytes.
+// Returns HttpResponse struct by value to match the Vais external declaration.
+HcResponse __hc_parse_response(long buffer, long len) {
+    HcResponse out;
+    memset(&out, 0, sizeof(HcResponse));
+
+    const char* buf = (const char*)buffer;
+    if (buf == NULL || len <= 0) {
+        out.error_code = -6;  // CLIENT_ERR_PARSE
+        return out;
+    }
 
     const char* p = buf;
     const char* end = buf + len;
@@ -348,7 +369,7 @@ void __hc_parse_response(HcResponse* out, long buffer, long len) {
     // Parse version (e.g., "HTTP/1.1")
     const char* ver_start = p;
     while (p < end && *p != ' ') p++;
-    out->version = hc_strndup(ver_start, (size_t)(p - ver_start));
+    out.version = hc_make_str(ver_start, (size_t)(p - ver_start));
 
     // Skip space
     if (p < end) p++;
@@ -359,7 +380,7 @@ void __hc_parse_response(HcResponse* out, long buffer, long len) {
         status = status * 10 + (*p - '0');
         p++;
     }
-    out->status = status;
+    out.status = status;
 
     // Skip space
     if (p < end) p++;
@@ -367,7 +388,7 @@ void __hc_parse_response(HcResponse* out, long buffer, long len) {
     // Parse status text
     const char* text_start = p;
     while (p < end && *p != '\r' && *p != '\n') p++;
-    out->status_text = hc_strndup(text_start, (size_t)(p - text_start));
+    out.status_text = hc_make_str(text_start, (size_t)(p - text_start));
 
     // Skip \r\n
     if (p < end && *p == '\r') p++;
@@ -417,9 +438,9 @@ void __hc_parse_response(HcResponse* out, long buffer, long len) {
         count++;
     }
 
-    out->header_items = (long)items;
-    out->header_count = count;
-    out->header_capacity = capacity;
+    out.header_items = (long)items;
+    out.header_count = count;
+    out.header_capacity = capacity;
 
     // Body is everything after headers
     // Make a copy so the caller can free the receive buffer independently
@@ -430,11 +451,12 @@ void __hc_parse_response(HcResponse* out, long buffer, long len) {
             memcpy(body_copy, p, body_len);
             body_copy[body_len] = '\0';
         }
-        out->body = (long)body_copy;
-        out->body_len = (long)body_len;
+        out.body = (long)body_copy;
+        out.body_len = (long)body_len;
     }
 
-    out->error_code = 0;  // Success
+    out.error_code = 0;  // Success
+    return out;
 }
 
 // ============================================

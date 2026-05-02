@@ -7,7 +7,6 @@
 ///
 /// Stage helpers used (from mod.rs):
 ///   ok_parse / ok_tc / ok_codegen / ok_run
-
 use super::{ok_codegen, ok_parse, ok_run, ok_tc};
 use std::fs;
 use tempfile::TempDir;
@@ -43,7 +42,10 @@ fn test_lex_gate_valid() {
 #[test]
 fn test_lex_gate_unterminated_string() {
     // Unterminated string literal — should fail at lex/parse stage.
-    let (_d, p) = write_tmp("lex_unterm_str.vais", r#"F main() -> i64 { _s := "unterminated }"#);
+    let (_d, p) = write_tmp(
+        "lex_unterm_str.vais",
+        r#"F main() -> i64 { _s := "unterminated }"#,
+    );
     assert!(
         !ok_parse(&p),
         "ok_parse should fail for {}: unterminated string literal",
@@ -165,11 +167,8 @@ F main() -> i64 { square(6) }
 }
 
 #[test]
-#[ignore = "B2: char_at has no codegen dispatch (C005) — target Phase 3.13"]
 fn test_codegen_gate_char_at_b2() {
-    // `char_at` currently hits C005 (unsupported feature). When B2 is fixed
-    // this test should be un-ignored and the assertion flipped to ok_codegen
-    // returning true.
+    // B2 promoted: str.char_at codegen dispatch is part of the active stage gate.
     let src = r#"
 F main() -> i64 {
     s := "hello"
@@ -187,9 +186,8 @@ F main() -> i64 {
 
 #[test]
 fn test_codegen_gate_tuple_field_access() {
-    // Tuple field access `.0` — partially fixed per B3; test the working case.
-    // If this starts failing it indicates a regression; if it starts passing
-    // while still ignored, the bug is fixed.
+    // B3 promoted: tuple field access lowers through tuple extractvalue, not
+    // struct-name field inference.
     let src = r#"
 F main() -> i64 {
     t := (10, 20)
@@ -197,14 +195,11 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("codegen_tuple_field.vais", src);
-    // We do NOT assert a specific outcome here because B3 is partially fixed.
-    // We simply measure and print. Phase 0.3 will set the gate direction.
-    let result = ok_codegen(&p);
-    eprintln!(
-        "codegen_gate_tuple_field_access: ok_codegen={} (B3 partial, see Phase 3.12/3.14)",
-        result
+    assert!(
+        ok_codegen(&p),
+        "ok_codegen failed for {}: tuple field access (B3/C007)",
+        p.display()
     );
-    // No assertion — observation only for Phase 0.3 baseline.
 }
 
 // ---------------------------------------------------------------------------

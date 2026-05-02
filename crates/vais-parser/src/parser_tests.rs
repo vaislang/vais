@@ -557,6 +557,25 @@ fn test_import_statement() {
 }
 
 #[test]
+fn test_import_colon_colon_selective_items() {
+    let source = "U std::io::{print, println}";
+    let module = parse(source).unwrap();
+    let Item::Use(u) = &module.items[0].node else {
+        unreachable!("Expected use statement");
+    };
+    let path: Vec<_> = u.path.iter().map(|segment| segment.node.as_str()).collect();
+    let items: Vec<_> = u
+        .items
+        .as_ref()
+        .expect("selective items")
+        .iter()
+        .map(|item| item.node.as_str())
+        .collect();
+    assert_eq!(path, vec!["std", "io"]);
+    assert_eq!(items, vec!["print", "println"]);
+}
+
+#[test]
 fn test_complex_expression() {
     let source = "F f(a:i64,b:i64,c:i64)->i64=a+b*c-a/b%c";
     let module = parse(source).unwrap();

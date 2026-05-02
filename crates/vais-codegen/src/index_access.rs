@@ -83,25 +83,17 @@ impl CodeGenerator {
         arr_ty: &ResolvedType,
     ) -> Result<IndexAccess, CodegenError> {
         let triple: (String, AccessKind, Option<ResolvedType>) = match arr_ty {
-            ResolvedType::Pointer(elem) => {
-                (self.type_to_llvm(elem), AccessKind::Direct, None)
-            }
-            ResolvedType::Array(elem) => {
-                (self.type_to_llvm(elem), AccessKind::Direct, None)
-            }
+            ResolvedType::Pointer(elem) => (self.type_to_llvm(elem), AccessKind::Direct, None),
+            ResolvedType::Array(elem) => (self.type_to_llvm(elem), AccessKind::Direct, None),
             ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => {
                 (self.type_to_llvm(elem), AccessKind::FatPtr, None)
             }
             // Vec<T>[idx] → element type T, access via data pointer.
-            ResolvedType::Named { name, generics }
-                if name == "Vec" && !generics.is_empty() =>
-            {
-                (
-                    self.type_to_llvm(&generics[0]),
-                    AccessKind::VecData,
-                    Some(generics[0].clone()),
-                )
-            }
+            ResolvedType::Named { name, generics } if name == "Vec" && !generics.is_empty() => (
+                self.type_to_llvm(&generics[0]),
+                AccessKind::VecData,
+                Some(generics[0].clone()),
+            ),
             // &Vec<T>[idx] / &Slice / &Array — peel one ref level.
             ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
                 match inner.as_ref() {
@@ -132,9 +124,7 @@ impl CodeGenerator {
             ResolvedType::Str => ("i8".to_string(), AccessKind::StrByte, None),
             // Named (non-Vec) / Unknown / Generic — i64 fallback.
             // ADR 0002 Class 4 (var-to-llvm): tightening is Pillar 1.4 work.
-            ResolvedType::Named { .. }
-            | ResolvedType::Unknown
-            | ResolvedType::Generic(_) => {
+            ResolvedType::Named { .. } | ResolvedType::Unknown | ResolvedType::Generic(_) => {
                 ("i64".to_string(), AccessKind::Direct, None)
             }
             other => {

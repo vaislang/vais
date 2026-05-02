@@ -12,12 +12,9 @@
 //! Currently covers:
 //!   - method calls where param is `Slice` and arg is `&Vec<T>`
 //!
-//! Known limitation (vaisdb Task #11): when type-inference erases the
-//! element type at the indexing path (e.g. `Vec<Vec<u8>>` → `Vec<i64>`),
-//! the indexing site emits raw `load i64` and the call-arg guard cannot
-//! recover the lost type. That root cause lives in TC inference, not in
-//! call-arg coercion. The `vec_of_vec_indexing_loses_element_type` test
-//! below documents that case as `#[ignore]` until the deeper fix lands.
+//! Also covers the no-annotation `Vec<Vec<u8>>` path: a `Vec.push(inner)`
+//! call must propagate the pushed element type back into the receiver local
+//! before later indexing chooses the element LLVM load type.
 
 use vais_codegen::CodeGenerator;
 use vais_parser::parse;
@@ -196,7 +193,6 @@ entry:
 }
 
 #[test]
-#[ignore = "vaisdb Task #12: TC unification fails to flow Vec<Vec<u8>> inner type from push site back to with_capacity. Activates when fixed."]
 fn vec_of_vec_no_annotation_loses_inner_type() {
     // Closer reduction of vaisdb test_btree_node.ll:1848 shape.
     //
@@ -205,10 +201,9 @@ fn vec_of_vec_no_annotation_loses_inner_type() {
     //   keys_owned.push(key_copy)                  <-- key_copy is Vec<u8>
     //   key_refs.push(&keys_owned[i])              <-- &Vec<u8> as &[u8]
     //
-    // Hypothesis: without explicit `keys_owned: Vec<Vec<u8>>`, TC infers
-    // the inner element type via push-site unification. Some path of that
-    // unification erases inner Vec<u8> → i64, so indexing later loads as
-    // raw i64.
+    // Without explicit `keys_owned: Vec<Vec<u8>>`, codegen-local inference
+    // must still learn the inner element type from the push site. Otherwise
+    // indexing later loads the inner Vec as raw i64.
     let ir = gen_ir(
         r#"
         F take_slice(s: &[u8]) -> i64 {

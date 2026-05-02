@@ -31,6 +31,185 @@ impl CodeGenerator {
         }
     }
 
+    pub(crate) fn generate_index_lvalue_ptr_expr(
+        &mut self,
+        array: &Spanned<Expr>,
+        index: &Spanned<Expr>,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String, ResolvedType)> {
+        let (arr_val, arr_ir) = self.generate_expr(array, counter)?;
+        let (idx_val, idx_ir) = self.generate_expr(index, counter)?;
+
+        let mut ir = arr_ir;
+        ir.push_str(&idx_ir);
+
+        let arr_ty = self.infer_expr_type(array);
+        let arr_ty_inner = match &arr_ty {
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
+            other => other,
+        };
+        let acc = self.resolve_index_access(&arr_ty)?;
+        let elem_llvm_ty = acc.elem_llvm.clone();
+        let elem_resolved_ty = acc
+            .elem_resolved
+            .clone()
+            .unwrap_or_else(|| ResolvedType::Named {
+                name: elem_llvm_ty.trim_start_matches('%').to_string(),
+                generics: vec![],
+            });
+
+        let idx_type = self.infer_expr_type(index);
+        let idx_llvm = self.type_to_llvm(&idx_type);
+        let idx_val =
+            if idx_llvm != "i64" && (idx_llvm == "i8" || idx_llvm == "i16" || idx_llvm == "i32") {
+                let ext = self.next_temp(counter);
+                let op = if matches!(
+                    idx_type,
+                    ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 | ResolvedType::Bool
+                ) {
+                    "zext"
+                } else {
+                    "sext"
+                };
+                write_ir!(ir, "  {} = {} {} {} to i64", ext, op, idx_llvm, idx_val);
+                self.fn_ctx.record_emitted_type(&ext, "i64");
+                ext
+            } else {
+                idx_val
+            };
+
+        let elem_ptr = match acc.access_kind {
+            crate::index_access::AccessKind::FatPtr | crate::index_access::AccessKind::StrByte => {
+                self.needs_bounds_check = true;
+                let len_val = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 1",
+                    len_val,
+                    arr_val
+                );
+                let in_bounds = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = icmp ult i64 {}, {}",
+                    in_bounds,
+                    idx_val,
+                    len_val
+                );
+                let safe_label = self.next_label("bounds_safe");
+                let oob_label = self.next_label("bounds_oob");
+                write_ir!(
+                    ir,
+                    "  br i1 {}, label %{}, label %{}",
+                    in_bounds,
+                    safe_label,
+                    oob_label
+                );
+                write_ir!(ir, "{}:", oob_label);
+                ir.push_str("  call void @abort()\n");
+                ir.push_str("  unreachable\n");
+                write_ir!(ir, "{}:", safe_label);
+                self.fn_ctx.current_block.clone_from(&safe_label);
+
+                let data_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                    data_ptr,
+                    arr_val
+                );
+                let typed_base_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = bitcast i8* {} to {}*",
+                    typed_base_ptr,
+                    data_ptr,
+                    elem_llvm_ty
+                );
+                let typed_elem_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr {}, {}* {}, i64 {}",
+                    typed_elem_ptr,
+                    elem_llvm_ty,
+                    elem_llvm_ty,
+                    typed_base_ptr,
+                    idx_val
+                );
+                typed_elem_ptr
+            }
+            crate::index_access::AccessKind::VecData => {
+                let vec_llvm_ty = self.type_to_llvm(arr_ty_inner);
+                let data_slot = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
+                    data_slot,
+                    vec_llvm_ty,
+                    vec_llvm_ty,
+                    arr_val
+                );
+                let data_i64 = self.next_temp(counter);
+                write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_slot);
+                self.fn_ctx.record_emitted_type(&data_i64, "i64");
+
+                let es_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr {}, {}* {}, i32 0, i32 3",
+                    es_ptr,
+                    vec_llvm_ty,
+                    vec_llvm_ty,
+                    arr_val
+                );
+                let elem_size = self.next_temp(counter);
+                write_ir!(ir, "  {} = load i64, i64* {}", elem_size, es_ptr);
+                self.fn_ctx.record_emitted_type(&elem_size, "i64");
+
+                let data_ptr = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_ptr, data_i64);
+                let byte_offset = self.next_temp(counter);
+                write_ir!(ir, "  {} = mul i64 {}, {}", byte_offset, idx_val, elem_size);
+                let elem_ptr_i8 = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr i8, i8* {}, i64 {}",
+                    elem_ptr_i8,
+                    data_ptr,
+                    byte_offset
+                );
+                let typed_elem_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = bitcast i8* {} to {}*",
+                    typed_elem_ptr,
+                    elem_ptr_i8,
+                    elem_llvm_ty
+                );
+                typed_elem_ptr
+            }
+            crate::index_access::AccessKind::Direct => {
+                let elem_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr {}, {}* {}, i64 {}",
+                    elem_ptr,
+                    elem_llvm_ty,
+                    elem_llvm_ty,
+                    arr_val,
+                    idx_val
+                );
+                elem_ptr
+            }
+        };
+
+        self.fn_ctx
+            .record_emitted_type(&elem_ptr, &format!("{}*", elem_llvm_ty));
+        self.fn_ctx
+            .register_temp_type(&elem_ptr, elem_resolved_ty.clone());
+        Ok((elem_ptr, ir, elem_resolved_ty))
+    }
+
     #[inline(never)]
     pub(crate) fn generate_array_expr(
         &mut self,
@@ -53,9 +232,8 @@ impl CodeGenerator {
         // returns a pointer-to-struct (e.g., `%t1 = alloca %Point`). Storing the
         // pointer directly into the array slot emits `store %Point <ptr>` — a
         // type mismatch. Detect this case and load the struct value first.
-        let elem_is_named_struct = elem_ty.starts_with('%')
-            && !elem_ty.contains('{')
-            && !elem_ty.contains('[');
+        let elem_is_named_struct =
+            elem_ty.starts_with('%') && !elem_ty.contains('{') && !elem_ty.contains('[');
 
         let arr_ptr = self.next_temp(counter);
         write_ir!(ir, "  {} = alloca {}", arr_ptr, arr_ty);
@@ -77,19 +255,19 @@ impl CodeGenerator {
             let store_val = if elem_is_named_struct {
                 // Load struct value from the StructLit's alloca pointer first.
                 let loaded = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = load {}, {}* {}",
-                    loaded,
-                    elem_ty,
-                    elem_ty,
-                    val
-                );
+                write_ir!(ir, "  {} = load {}, {}* {}", loaded, elem_ty, elem_ty, val);
                 loaded
             } else {
                 val
             };
-            write_ir!(ir, "  store {} {}, {}* {}", elem_ty, store_val, elem_ty, elem_ptr);
+            write_ir!(
+                ir,
+                "  store {} {}, {}* {}",
+                elem_ty,
+                store_val,
+                elem_ty,
+                elem_ptr
+            );
         }
 
         let result = self.next_temp(counter);
@@ -147,20 +325,11 @@ impl CodeGenerator {
             // pointer (e.g., `self` param lowered as `%T*`, struct local,
             // field-access GEP), load the struct through that pointer so the
             // following `store` gets a value of `elem_ty`, not `elem_ty*`.
-            let store_val = if matches!(
-                &elem_resolved_types[i],
-                ResolvedType::Named { .. }
-            ) && !self.is_expr_value(elem)
+            let store_val = if matches!(&elem_resolved_types[i], ResolvedType::Named { .. })
+                && !self.is_expr_value(elem)
             {
                 let loaded = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = load {}, {}* {}",
-                    loaded,
-                    elem_ty,
-                    elem_ty,
-                    val
-                );
+                write_ir!(ir, "  {} = load {}, {}* {}", loaded, elem_ty, elem_ty, val);
                 loaded
             } else {
                 val
@@ -247,6 +416,8 @@ impl CodeGenerator {
 
             let struct_ptr = self.next_temp(counter);
             write_ir!(ir, "  {} = alloca %{}", struct_ptr, final_type_name);
+            self.fn_ctx
+                .record_emitted_type(&struct_ptr, &format!("%{}*", final_type_name));
 
             for (field_name, field_expr) in fields {
                 let field_idx = struct_info
@@ -264,7 +435,11 @@ impl CodeGenerator {
                         ))
                     })?;
 
-                let (val, field_ir) = self.generate_expr(field_expr, counter)?;
+                let field_ty = &struct_info.fields[field_idx].1;
+                self.fn_ctx.expected_expr_types.push(field_ty.clone());
+                let field_result = self.generate_expr(field_expr, counter);
+                self.fn_ctx.expected_expr_types.pop();
+                let (val, field_ir) = field_result?;
                 ir.push_str(&field_ir);
 
                 let field_ptr = self.next_temp(counter);
@@ -278,20 +453,27 @@ impl CodeGenerator {
                     field_idx
                 );
 
-                let field_ty = &struct_info.fields[field_idx].1;
                 let llvm_ty = self.type_to_llvm(field_ty);
 
-                // For struct-typed fields, val might be a pointer that needs to be loaded
-                let val_to_store = if matches!(field_ty, ResolvedType::Named { .. })
-                    && !self.is_expr_value(field_expr)
-                {
-                    // Field value is a pointer to struct, need to load the value
-                    let loaded = self.next_temp(counter);
-                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
-                    loaded
-                } else {
-                    val
-                };
+                // For struct-typed fields, load only when the emitted value is
+                // actually a pointer to the field type. SSA destructure values
+                // can already be aggregates even when the expression shape
+                // looks pointer-like.
+                let val_actual_ty = self.llvm_type_of_checked(&val);
+                let val_is_field_ptr = val_actual_ty
+                    .as_deref()
+                    .map(|actual| actual == "ptr" || actual == format!("{}*", llvm_ty))
+                    .unwrap_or(false);
+                let val_to_store =
+                    if matches!(field_ty, ResolvedType::Named { .. }) && val_is_field_ptr {
+                        // Field value is a pointer to struct, need to load the value
+                        let loaded = self.next_temp(counter);
+                        write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
+                        self.fn_ctx.record_emitted_type(&loaded, &llvm_ty);
+                        loaded
+                    } else {
+                        val
+                    };
 
                 write_ir!(
                     ir,
@@ -311,6 +493,8 @@ impl CodeGenerator {
             // Allocate union on stack
             let union_ptr = self.next_temp(counter);
             write_ir!(ir, "  {} = alloca %{}", union_ptr, type_name);
+            self.fn_ctx
+                .record_emitted_type(&union_ptr, &format!("%{}*", type_name));
 
             // Union should have exactly one field in the literal
             if fields.len() != 1 {
@@ -446,8 +630,7 @@ impl CodeGenerator {
         let elem_llvm_ty = acc.elem_llvm;
         let is_fat_ptr = matches!(
             acc.access_kind,
-            crate::index_access::AccessKind::FatPtr
-                | crate::index_access::AccessKind::StrByte
+            crate::index_access::AccessKind::FatPtr | crate::index_access::AccessKind::StrByte
         );
         let elem_resolved_ty = acc.elem_resolved;
 
@@ -778,34 +961,63 @@ impl CodeGenerator {
                             .collect::<Vec<_>>()
                             .join(", ")
                     );
-                    // obj_val is an i64-erased tuple pointer; reinterpret and GEP.
-                    let tuple_ptr = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = inttoptr i64 {} to {}*",
-                        tuple_ptr,
-                        obj_val,
-                        tuple_llvm
-                    );
-                    let field_ptr = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = getelementptr {}, {}* {}, i32 0, i32 {}",
-                        field_ptr,
-                        tuple_llvm,
-                        tuple_llvm,
-                        tuple_ptr,
-                        idx
-                    );
                     let result = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = load {}, {}* {}",
-                        result,
-                        elem_llvm,
-                        elem_llvm,
-                        field_ptr
-                    );
+                    let obj_llvm = self.llvm_type_of(&obj_val);
+                    if obj_llvm == tuple_llvm {
+                        write_ir!(
+                            ir,
+                            "  {} = extractvalue {} {}, {}",
+                            result,
+                            tuple_llvm,
+                            obj_val,
+                            idx
+                        );
+                    } else {
+                        let tuple_ptr = self.next_temp(counter);
+                        if obj_llvm == format!("{}*", tuple_llvm) {
+                            write_ir!(
+                                ir,
+                                "  {} = bitcast {}* {} to {}*",
+                                tuple_ptr,
+                                tuple_llvm,
+                                obj_val,
+                                tuple_llvm
+                            );
+                        } else {
+                            write_ir!(
+                                ir,
+                                "  {} = inttoptr i64 {} to {}*",
+                                tuple_ptr,
+                                obj_val,
+                                tuple_llvm
+                            );
+                        }
+                        let field_ptr = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = getelementptr {}, {}* {}, i32 0, i32 {}",
+                            field_ptr,
+                            tuple_llvm,
+                            tuple_llvm,
+                            tuple_ptr,
+                            idx
+                        );
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
+                            result,
+                            elem_llvm,
+                            elem_llvm,
+                            field_ptr
+                        );
+                    }
+                    Self::register_elem_type(&mut self.fn_ctx, &result, &elem_llvm);
+                    // Tuple element may be a non-primitive (Named struct, nested Tuple, etc.);
+                    // register_elem_type only handles primitives, so the result temp would
+                    // otherwise fall back to i64 in llvm_type_of and break downstream
+                    // local-binding storage (e.g. `ptr := mut pair.1` where elem is %Ptr).
+                    self.fn_ctx.record_emitted_type(&result, &elem_llvm);
+                    self.fn_ctx.register_temp_type(&result, elem_ty.clone());
                     return Ok((result, ir));
                 }
             }
@@ -1049,33 +1261,57 @@ impl CodeGenerator {
                             .collect::<Vec<_>>()
                             .join(", ")
                     );
-                    let tuple_ptr = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = inttoptr i64 {} to {}*",
-                        tuple_ptr,
-                        obj_val,
-                        tuple_llvm
-                    );
-                    let field_ptr = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = getelementptr {}, {}* {}, i32 0, i32 {}",
-                        field_ptr,
-                        tuple_llvm,
-                        tuple_llvm,
-                        tuple_ptr,
-                        idx
-                    );
                     let result = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = load {}, {}* {}",
-                        result,
-                        elem_llvm,
-                        elem_llvm,
-                        field_ptr
-                    );
+                    let obj_llvm = self.llvm_type_of(&obj_val);
+                    if obj_llvm == tuple_llvm {
+                        write_ir!(
+                            ir,
+                            "  {} = extractvalue {} {}, {}",
+                            result,
+                            tuple_llvm,
+                            obj_val,
+                            idx
+                        );
+                    } else {
+                        let tuple_ptr = self.next_temp(counter);
+                        if obj_llvm == format!("{}*", tuple_llvm) {
+                            write_ir!(
+                                ir,
+                                "  {} = bitcast {}* {} to {}*",
+                                tuple_ptr,
+                                tuple_llvm,
+                                obj_val,
+                                tuple_llvm
+                            );
+                        } else {
+                            write_ir!(
+                                ir,
+                                "  {} = inttoptr i64 {} to {}*",
+                                tuple_ptr,
+                                obj_val,
+                                tuple_llvm
+                            );
+                        }
+                        let field_ptr = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = getelementptr {}, {}* {}, i32 0, i32 {}",
+                            field_ptr,
+                            tuple_llvm,
+                            tuple_llvm,
+                            tuple_ptr,
+                            idx
+                        );
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
+                            result,
+                            elem_llvm,
+                            elem_llvm,
+                            field_ptr
+                        );
+                    }
+                    Self::register_elem_type(&mut self.fn_ctx, &result, &elem_llvm);
                     return Ok((result, ir));
                 }
             }

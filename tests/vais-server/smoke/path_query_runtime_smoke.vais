@@ -1,0 +1,111 @@
+U src/http/method
+U src/http/request
+U src/router/params
+U src/router/router
+
+F smoke_request_query() -> i64 {
+    req := mut Request.new(HttpMethod.Get, "/users/42?tab=posts&limit=10&empty")
+    req = req.parse_query_string()
+
+    I req.path != "/users/42" {
+        println("FAIL query path split")
+        R 1
+    }
+    I req.query_params.len() != 3 {
+        println("FAIL query param count")
+        R 2
+    }
+    I req.get_query("tab") != "posts" {
+        println("FAIL query tab")
+        R 3
+    }
+    I req.get_query("limit") != "10" {
+        println("FAIL query limit")
+        R 4
+    }
+    I req.get_query("empty") != "" {
+        println("FAIL query empty value")
+        R 5
+    }
+
+    0
+}
+
+F smoke_params_query() -> i64 {
+    params := mut Params.new()
+    params.parse_query("q=v&page=2")
+
+    I !params.has("q") {
+        println("FAIL params query has q")
+        R 10
+    }
+    I params.get_or("q", "") != "v" {
+        println("FAIL params query q")
+        R 11
+    }
+    I params.get_or("page", "") != "2" {
+        println("FAIL params query page")
+        R 12
+    }
+    I params.get_or("missing", "fallback") != "fallback" {
+        println("FAIL params query fallback")
+        R 13
+    }
+
+    0
+}
+
+F smoke_router_path_params() -> i64 {
+    router := mut Router.new()
+    router.get("/users/:id/posts/:post_id", 77)
+
+    found := router.match_route(METHOD_GET, "/users/42/posts/abc")
+    I !found.is_found() {
+        println("FAIL router param route found")
+        R 20
+    }
+    I found.handler_id != 77 {
+        println("FAIL router param handler")
+        R 21
+    }
+    I found.params.get_or("id", "") != "42" {
+        println("FAIL router id param")
+        R 22
+    }
+    I found.params.get_or("post_id", "") != "abc" {
+        println("FAIL router post_id param")
+        R 23
+    }
+
+    wrong_method := router.match_route(METHOD_POST, "/users/42/posts/abc")
+    I !wrong_method.is_method_not_allowed() {
+        println("FAIL router param method-not-allowed")
+        R 24
+    }
+    I wrong_method.allowed_methods.len() == 0 {
+        println("FAIL router param allowed methods")
+        R 25
+    }
+
+    missing := router.match_route(METHOD_GET, "/users/42/comments/abc")
+    I !missing.is_not_found() {
+        println("FAIL router param mismatch")
+        R 26
+    }
+
+    0
+}
+
+F main() -> i64 {
+    failures := mut 0
+    failures += smoke_request_query()
+    failures += smoke_params_query()
+    failures += smoke_router_path_params()
+
+    I failures > 0 {
+        println("VAIS_SERVER_PATH_QUERY_RUNTIME_FAIL")
+        R failures
+    }
+    println("VAIS_SERVER_PATH_QUERY_RUNTIME_OK")
+    0
+}

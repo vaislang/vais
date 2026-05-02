@@ -94,6 +94,17 @@ F main() -> i64 {
     assert_exit_code(source, 42);
 }
 
+#[test]
+fn e2e_tuple_field_access_extracts_element() {
+    let source = r#"
+F main() -> i64 {
+    t := (10, 32)
+    R t.0 + t.1
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
 // ==================== Phase 31: File System Durability ====================
 
 #[test]

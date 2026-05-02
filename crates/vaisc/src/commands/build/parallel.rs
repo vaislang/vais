@@ -1,6 +1,6 @@
 //! Parallel build paths: parallel type checking and per-module codegen.
 
-use crate::commands::compile::compile_per_module;
+use crate::commands::compile::{compile_per_module, per_module::module_artifact_stem};
 use crate::configure_type_checker;
 use crate::error_formatter;
 use colored::Colorize;
@@ -24,7 +24,11 @@ fn phase17_file_id_for_path(path: &Path) -> u32 {
         hash ^= *byte as u32;
         hash = hash.wrapping_mul(FNV_PRIME);
     }
-    if hash == 0 { 1 } else { hash }
+    if hash == 0 {
+        1
+    } else {
+        hash
+    }
 }
 
 /// Run parallel type checking across multiple modules.
@@ -171,11 +175,7 @@ pub(crate) fn run_per_module_emit_ir(
     let ir_results: Vec<Result<(String, String), String>> = module_entries
         .par_iter()
         .map(|(module_path, item_indices)| {
-            let module_stem = module_path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown")
-                .to_string();
+            let module_stem = module_artifact_stem(module_path);
             let is_main = **module_path == *input_canonical;
 
             // Create a fresh CodeGenerator for this module

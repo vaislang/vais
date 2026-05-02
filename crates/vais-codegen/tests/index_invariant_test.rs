@@ -72,9 +72,7 @@ fn find_geps(ir: &str) -> Vec<(String, String)> {
 /// `expected_elem`. Used as a positive assertion: "the function we just
 /// compiled must have produced at least one GEP with this element type".
 fn ir_has_gep_with_elem(ir: &str, expected_elem: &str) -> bool {
-    find_geps(ir)
-        .iter()
-        .any(|(elem, _)| elem == expected_elem)
+    find_geps(ir).iter().any(|(elem, _)| elem == expected_elem)
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -259,7 +257,8 @@ fn index_invariant_simple_assign_vec_i32_no_compound() {
         i32_count >= 1,
         "Vec<i32> simple assign should emit at least one `getelementptr i32, ...`. \
          Found {} i32 GEPs.\nIR:\n{}",
-        i32_count, ir
+        i32_count,
+        ir
     );
 }
 
@@ -285,9 +284,7 @@ fn index_invariant_vec_of_vec_u8_outer_push_emits_struct_gep() {
     let bad: Vec<&(String, String)> = geps
         .iter()
         .filter(|(elem, line)| {
-            elem == "i64"
-                && line.contains(", i64* %")
-                && line.contains(", i64 %")
+            elem == "i64" && line.contains(", i64* %") && line.contains(", i64 %")
         })
         .collect();
     assert!(
@@ -317,9 +314,7 @@ fn index_invariant_slice_of_slices_u8_indexing() {
     let bad: Vec<&(String, String)> = geps
         .iter()
         .filter(|(elem, line)| {
-            elem == "i64"
-                && line.contains(", i64* %")
-                && line.contains(", i64 %")
+            elem == "i64" && line.contains(", i64* %") && line.contains(", i64 %")
         })
         .collect();
     assert!(

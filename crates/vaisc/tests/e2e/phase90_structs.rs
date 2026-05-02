@@ -55,6 +55,31 @@ F main() -> i64 {
     assert_exit_code(source, 42);
 }
 
+#[test]
+fn e2e_struct_ref_clone_passed_to_value_constructor() {
+    let source = r#"
+S Params { value: i64 }
+S Executor { params: Params }
+
+X Executor {
+    F new(params: Params) -> Executor {
+        Executor { params }
+    }
+}
+
+F wrap(params: &Params) -> Executor {
+    Executor.new(params.clone())
+}
+
+F main() -> i64 {
+    params := Params { value: 42 }
+    executor := wrap(&params)
+    executor.params.value
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
 // ==================== Struct Methods ====================
 
 #[test]
@@ -224,6 +249,103 @@ S Data { a: i64, b: i64 }
 F main() -> i64 {
     d := Data { a: 0, b: 42 }
     d.a + d.b
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_ref_box_deref_passed_to_ref_param() {
+    let source = r#"
+S Box<T> {
+    ptr: i64
+}
+
+X Box<T> {
+    F new(value: T) -> Box<T> {
+        ptr := malloc(8)
+        store_typed(ptr, value)
+        Box { ptr }
+    }
+}
+
+F read_boxed_value(x: &i64) -> i64 {
+    *x
+}
+
+F main() -> i64 {
+    b := Box.new(42)
+    read_boxed_value(&*b)
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_double_deref_box_struct_local_keeps_struct_type() {
+    let source = r#"
+S Pair {
+    a: i64,
+    b: i64,
+}
+
+S Box<T> {
+    ptr: i64
+}
+
+X Box<T> {
+    F new(value: T) -> Box<T> {
+        ptr := malloc(16)
+        store_typed(ptr, value)
+        Box { ptr }
+    }
+}
+
+F main() -> i64 {
+    b := Box.new(Pair { a: 20, b: 22 })
+    pair := mut **b
+    pair.a + pair.b
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_vec_struct_index_assignment_accepts_cloned_value() {
+    let source = r#"
+S Item {
+    value: i64,
+}
+
+F main() -> i64 {
+    items: *Item = [Item { value: 0 }]
+    replacement := mut Item { value: 42 }
+    items[0] = replacement.clone()
+    items[0].value
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_generic_function_forwards_struct_param_by_value() {
+    let source = r#"
+S Item {
+    value: i64,
+}
+
+F set<T>(value: T) -> T {
+    value
+}
+
+F insert<T>(value: T) -> T {
+    set(value)
+}
+
+F main() -> i64 {
+    item := Item { value: 42 }
+    out := insert(item)
+    out.value
 }
 "#;
     assert_exit_code(source, 42);

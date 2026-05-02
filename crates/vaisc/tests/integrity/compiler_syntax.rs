@@ -17,7 +17,6 @@
 ///  10. Option/Result (Some/None/Ok/Err)                     (2 tests)
 ///
 /// Phase 1.6 will expand this file to 200+ tests.
-
 use super::{ok_parse, ok_tc};
 use std::fs;
 use tempfile::TempDir;
@@ -108,7 +107,11 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("cmp_lt.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: less-than comparison", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: less-than comparison",
+        p.display()
+    );
 }
 
 #[test]
@@ -120,7 +123,11 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("cmp_eq.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: equality comparison", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: equality comparison",
+        p.display()
+    );
 }
 
 #[test]
@@ -134,7 +141,11 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("bool_and_or.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: boolean and/or/not", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: boolean and/or/not",
+        p.display()
+    );
 }
 
 // ============================================================
@@ -170,7 +181,11 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("ctrl_loop_break.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed for {}: loop/break", p.display());
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed for {}: loop/break",
+        p.display()
+    );
 }
 
 #[test]
@@ -185,7 +200,11 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("ctrl_while.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: while loop (LW)", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: while loop (LW)",
+        p.display()
+    );
 }
 
 #[test]
@@ -200,7 +219,11 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("ctrl_for.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed for {}: for loop (LF)", p.display());
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed for {}: for loop (LF)",
+        p.display()
+    );
 }
 
 #[test]
@@ -216,7 +239,11 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("ctrl_match.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: match expression", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: match expression",
+        p.display()
+    );
 }
 
 // ============================================================
@@ -233,7 +260,11 @@ S Point {
 F main() -> i64 { 0 }
 "#;
     let (_d, p) = write_tmp("struct_def.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: struct definition", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: struct definition",
+        p.display()
+    );
 }
 
 #[test]
@@ -249,7 +280,11 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("struct_ctor.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: struct construction + field access", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: struct construction + field access",
+        p.display()
+    );
 }
 
 #[test]
@@ -272,7 +307,11 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("struct_method.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: struct impl method", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: struct impl method",
+        p.display()
+    );
 }
 
 // ============================================================
@@ -297,7 +336,11 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("enum_unit.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: enum unit variants", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: enum unit variants",
+        p.display()
+    );
 }
 
 #[test]
@@ -316,7 +359,11 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("enum_tuple.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: enum tuple variants", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: enum tuple variants",
+        p.display()
+    );
 }
 
 #[test]
@@ -333,7 +380,11 @@ F describe(c: Color) -> i64 {
 F main() -> i64 { describe(Color.Green) }
 "#;
     let (_d, p) = write_tmp("enum_match.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: enum exhaustive match", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: enum exhaustive match",
+        p.display()
+    );
 }
 
 // ============================================================
@@ -347,7 +398,11 @@ F add(a: i64, b: i64) -> i64 { a + b }
 F main() -> i64 { add(20, 22) }
 "#;
     let (_d, p) = write_tmp("fn_args.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: fn positional args", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: fn positional args",
+        p.display()
+    );
 }
 
 #[test]
@@ -357,7 +412,11 @@ F is_even(n: i64) -> bool { n % 2 == 0 }
 F main() -> i64 { is_even(4) ? 0 : 1 }
 "#;
     let (_d, p) = write_tmp("fn_ret_bool.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: fn returning bool", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: fn returning bool",
+        p.display()
+    );
 }
 
 #[test]
@@ -370,7 +429,11 @@ F fact(n: i64) -> i64 {
 F main() -> i64 { fact(5) }
 "#;
     let (_d, p) = write_tmp("fn_recursive.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: recursive function with @ operator", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: recursive function with @ operator",
+        p.display()
+    );
 }
 
 // ============================================================
@@ -386,7 +449,11 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("str_literal.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: string literal", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: string literal",
+        p.display()
+    );
 }
 
 #[test]
@@ -399,7 +466,11 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("str_interp.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: string interpolation", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: string interpolation",
+        p.display()
+    );
 }
 
 // ============================================================
@@ -413,7 +484,11 @@ F identity<T>(x: T) -> T { x }
 F main() -> i64 { identity(99) }
 "#;
     let (_d, p) = write_tmp("generic_fn.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: generic function", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: generic function",
+        p.display()
+    );
 }
 
 #[test]
@@ -429,7 +504,11 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("generic_struct.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: generic struct", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: generic struct",
+        p.display()
+    );
 }
 
 #[test]
@@ -439,7 +518,11 @@ F swap<A, B>(a: A, b: B) -> B { b }
 F main() -> i64 { swap(1, 42) }
 "#;
     let (_d, p) = write_tmp("generic_swap.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: generic fn two type params", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: generic fn two type params",
+        p.display()
+    );
 }
 
 // ============================================================
@@ -461,7 +544,11 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("option_some_none.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed for {}: Option Some/None", p.display());
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed for {}: Option Some/None",
+        p.display()
+    );
 }
 
 #[test]
@@ -558,7 +645,6 @@ fn syntax_mod_pure_expr_body() {
 }
 
 #[test]
-#[ignore = "parser-limit: double-pub P P F may not error at parse stage"]
 fn syntax_neg_mod_double_pub() {
     let src = "P P F foo() -> i64 { 0 }\nF main() -> i64 { 0 }";
     let (_d, p) = write_tmp("neg_double_pub.vais", src);
@@ -588,7 +674,10 @@ fn syntax_bind_int() {
 fn syntax_bind_mut_int() {
     let src = "F main() -> i64 { x := mut 5\n x = 10\n x }";
     let (_d, p) = write_tmp("bind_mut_int.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed: mutable integer binding + reassign");
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed: mutable integer binding + reassign"
+    );
 }
 
 #[test]
@@ -785,7 +874,10 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("ctrl_loop_expr.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: loop-as-expression with break value");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: loop-as-expression with break value"
+    );
 }
 
 #[test]
@@ -1064,7 +1156,10 @@ fn syntax_type_ref() {
 fn syntax_type_mut_ref() {
     let src = "F takes_mut_ref(x: &mut i64) -> i64 { 0 }\nF main() -> i64 { 0 }";
     let (_d, p) = write_tmp("type_mut_ref.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: &mut i64 mutable reference type");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: &mut i64 mutable reference type"
+    );
 }
 
 #[test]
@@ -1238,10 +1333,9 @@ fn syntax_expr_range_inclusive() {
 }
 
 #[test]
-#[ignore = "TC gap: unwrap `!` on local Some() needs Option type inference"]
 fn syntax_expr_unwrap() {
     let src = r#"
-F main() -> i64 {
+partial F main() -> i64 {
     v := Some(42)
     v!
 }
@@ -1260,7 +1354,10 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("expr_str_interp2.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: string interp with expression");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: string interp with expression"
+    );
 }
 
 #[test]
@@ -1319,11 +1416,13 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("struct_field_mut.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: struct field mutation c.val = 5");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: struct field mutation c.val = 5"
+    );
 }
 
 #[test]
-#[ignore = "TC gap: static method call via Point.new() syntax may need Point::new()"]
 fn syntax_struct_impl_new_method() {
     let src = r#"
 S Point { x: i64, y: i64, }
@@ -1383,7 +1482,10 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("struct_generic_impl.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: generic struct + monomorphized impl");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: generic struct + monomorphized impl"
+    );
 }
 
 #[test]
@@ -1391,7 +1493,10 @@ fn syntax_neg_struct_missing_comma() {
     // missing comma between fields
     let src = "S Bad { x: i64 y: i64 }\nF main() -> i64 { 0 }";
     let (_d, p) = write_tmp("neg_struct_comma.vais", src);
-    assert!(!ok_parse(&p), "should not parse: struct fields without comma");
+    assert!(
+        !ok_parse(&p),
+        "should not parse: struct fields without comma"
+    );
 }
 
 // ============================================================
@@ -1463,7 +1568,6 @@ F main() -> i64 { value(Coin.Dime) }
 }
 
 #[test]
-#[ignore = "parser-limit: legacy E keyword for enum may conflict with E (else)"]
 fn syntax_enum_legacy_e_keyword() {
     let src = r#"
 E Color { Red, Green, Blue, }
@@ -1478,7 +1582,10 @@ fn syntax_neg_enum_missing_comma() {
     // EN Color { Red Green } — no comma
     let src = "EN Color { Red Green }\nF main() -> i64 { 0 }";
     let (_d, p) = write_tmp("neg_enum_comma.vais", src);
-    assert!(!ok_parse(&p), "should not parse: enum variants without comma");
+    assert!(
+        !ok_parse(&p),
+        "should not parse: enum variants without comma"
+    );
 }
 
 // ============================================================
@@ -1506,7 +1613,10 @@ W Greet {
 F main() -> i64 { 0 }
 "#;
     let (_d, p) = write_tmp("trait_default.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: trait with default method body");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: trait with default method body"
+    );
 }
 
 #[test]
@@ -1559,11 +1669,13 @@ W Animal {
 F main() -> i64 { 0 }
 "#;
     let (_d, p) = write_tmp("trait_multi_methods.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: trait with multiple method signatures");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: trait with multiple method signatures"
+    );
 }
 
 #[test]
-#[ignore = "parser-limit: trait body without F keyword may not produce parse error"]
 fn syntax_neg_trait_missing_fn_keyword() {
     let src = r#"
 W Bad {
@@ -1572,7 +1684,10 @@ W Bad {
 F main() -> i64 { 0 }
 "#;
     let (_d, p) = write_tmp("neg_trait_no_fn.vais", src);
-    assert!(!ok_parse(&p), "should not parse: trait method without F keyword");
+    assert!(
+        !ok_parse(&p),
+        "should not parse: trait method without F keyword"
+    );
 }
 
 // ============================================================
@@ -1611,7 +1726,10 @@ S Stack<T> { items: Vec<T>, }
 F main() -> i64 { 0 }
 "#;
     let (_d, p) = write_tmp("generic_struct2.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: generic struct with Vec<T> field");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: generic struct with Vec<T> field"
+    );
 }
 
 #[test]
@@ -1637,7 +1755,10 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("generic_impl_method.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: generic impl method X Box<T>");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: generic impl method X Box<T>"
+    );
 }
 
 #[test]
@@ -1663,37 +1784,49 @@ fn syntax_import_simple() {
 }
 
 #[test]
-#[ignore = "TC gap: `U std::io::{print, println}` fails module resolution in isolated tempdir"]
 fn syntax_import_multi() {
     let src = "U std::io::{print, println}\nF main() -> i64 { 0 }";
     let (_d, p) = write_tmp("import_multi.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: U std::io::{{...}} multi import");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: U std::io::{{...}} multi import"
+    );
 }
 
 #[test]
 fn syntax_import_dot_path() {
     let src = "U foo.bar\nF main() -> i64 { 0 }";
     let (_d, p) = write_tmp("import_dot.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: U foo.bar dot-separated import");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: U foo.bar dot-separated import"
+    );
 }
 
 #[test]
 fn syntax_attr_cfg_linux() {
     let src = "#[cfg(target_os = \"linux\")]\nF main() -> i64 { 0 }";
     let (_d, p) = write_tmp("attr_cfg.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: #[cfg(target_os = ...)] attribute");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: #[cfg(target_os = ...)] attribute"
+    );
 }
 
 #[test]
 fn syntax_attr_wasm_export() {
     let src = "#[wasm_export(\"run\")]\nF main() -> i64 { 0 }";
     let (_d, p) = write_tmp("attr_wasm_export.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: #[wasm_export(\"name\")] attribute");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: #[wasm_export(\"name\")] attribute"
+    );
 }
 
 #[test]
 fn syntax_attr_wasm_import() {
-    let src = "#[wasm_import(\"env\", \"log\")]\nF log_val(x: i64) -> i64 { 0 }\nF main() -> i64 { 0 }";
+    let src =
+        "#[wasm_import(\"env\", \"log\")]\nF log_val(x: i64) -> i64 { 0 }\nF main() -> i64 { 0 }";
     let (_d, p) = write_tmp("attr_wasm_import.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: #[wasm_import()] attribute");
 }
@@ -1752,7 +1885,10 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("closure_in_var.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: closure assigned to variable and passed");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: closure assigned to variable and passed"
+    );
 }
 
 #[test]
@@ -1824,7 +1960,10 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("misc_hashmap.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: HashMap.new / .insert / .get");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: HashMap.new / .insert / .get"
+    );
 }
 
 #[test]
@@ -1849,7 +1988,6 @@ fn syntax_misc_empty_struct() {
 }
 
 #[test]
-#[ignore = "TC gap: Point.new() static call resolution needs Phase 2.9"]
 fn syntax_misc_self_in_impl() {
     let src = r#"
 S Node { val: i64, }
@@ -1980,7 +2118,10 @@ F main() -> i64 {
 }
 "#;
     let (_d, p) = write_tmp("extra_nested_struct.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed: nested struct field access o.inner.v");
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed: nested struct field access o.inner.v"
+    );
 }
 
 #[test]
@@ -2025,7 +2166,6 @@ fn syntax_extra_string_escape() {
 }
 
 #[test]
-#[ignore = "TC gap: Builder.new() static call + chained methods need Phase 2.9"]
 fn syntax_extra_chained_method_calls() {
     let src = r#"
 S Builder { val: i64, }
@@ -2182,7 +2322,10 @@ fn syntax_empty_file_is_empty_module() {
     // Empty file parses as an empty module — this is valid, not an error.
     let src = "";
     let (_d, p) = write_tmp("empty.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: empty file should parse as empty module");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: empty file should parse as empty module"
+    );
 }
 
 #[test]
@@ -2190,7 +2333,10 @@ fn syntax_whitespace_only_is_empty_module() {
     // Whitespace-only file parses as an empty module.
     let src = "   \n\n   ";
     let (_d, p) = write_tmp("whitespace.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: whitespace-only file should parse as empty module");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: whitespace-only file should parse as empty module"
+    );
 }
 
 #[test]
@@ -2223,7 +2369,10 @@ F show_if_eq<T>(a: T, b: T) -> str where T: Eq, T: Show { a.show() }
 F main() -> i64 { 0 }
 "#;
     let (_d, p) = write_tmp("extra_where_multi.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: where clause multiple bounds");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: where clause multiple bounds"
+    );
 }
 
 #[test]
@@ -2238,7 +2387,10 @@ S Person {
 F main() -> i64 { 0 }
 "#;
     let (_d, p) = write_tmp("extra_struct_many.vais", src);
-    assert!(ok_tc(&p), "ok_tc failed: struct with 4 fields of mixed types");
+    assert!(
+        ok_tc(&p),
+        "ok_tc failed: struct with 4 fields of mixed types"
+    );
 }
 
 #[test]

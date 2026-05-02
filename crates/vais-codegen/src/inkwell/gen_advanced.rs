@@ -67,9 +67,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // field and store. Mirrors the read path to keep byte-offset
                 // math consistent (idx * elem_size, not LLVM's typed GEP).
                 if let Expr::Index { expr: arr, index } = &obj.node {
-                    if let Some(result) =
-                        self.try_generate_vec_struct_field_assign(arr, index, &struct_name, field_idx, val)?
-                    {
+                    if let Some(result) = self.try_generate_vec_struct_field_assign(
+                        arr,
+                        index,
+                        &struct_name,
+                        field_idx,
+                        val,
+                    )? {
                         return Ok(result);
                     }
                 }
@@ -77,7 +81,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     "Complex field assignment (e.g. `v[i].field = expr` on \
                      Vec<Struct>) — Phase 3.14 codegen gap. Workaround: \
                      read the element, modify, write back: \
-                     `p := v[i]; p.field = expr; v[i] = p`".to_string(),
+                     `p := v[i]; p.field = expr; v[i] = p`"
+                        .to_string(),
                 ))
             }
             Expr::Index { expr: arr, index } => {
@@ -478,12 +483,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 };
                 struct_val = self
                     .builder
-                    .build_insert_value(
-                        struct_val,
-                        coerced_val,
-                        i as u32,
-                        &format!("field_{}", i),
-                    )
+                    .build_insert_value(struct_val, coerced_val, i as u32, &format!("field_{}", i))
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                     .into_struct_value();
             }
@@ -551,6 +551,33 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         };
         self.builder
             .build_extract_value(struct_val, field_idx, field)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))
+    }
+
+    pub(super) fn generate_tuple_field_access(
+        &mut self,
+        obj: &Expr,
+        index: usize,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        let obj_val = self.generate_expr(obj)?;
+        if !obj_val.is_struct_value() {
+            return Err(CodegenError::Unsupported(format!(
+                "tuple field access .{} on non-tuple value",
+                index
+            )));
+        }
+
+        let tuple_val = obj_val.into_struct_value();
+        let field_count = tuple_val.get_type().count_fields() as usize;
+        if index >= field_count {
+            return Err(CodegenError::Unsupported(format!(
+                "tuple field access .{} out of range for {}-element tuple",
+                index, field_count
+            )));
+        }
+
+        self.builder
+            .build_extract_value(tuple_val, index as u32, &format!("tuple_{}", index))
             .map_err(|e| CodegenError::LlvmError(e.to_string()))
     }
 

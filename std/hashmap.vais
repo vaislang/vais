@@ -50,6 +50,7 @@
 U std/option
 U std/hash
 U std/stringmap
+U std/vec
 
 # Helper function to initialize bucket array
 F hashmap_init_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
@@ -58,6 +59,14 @@ F hashmap_init_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
     } EL {
         store_i64(buckets + idx * 8, 0)
         hashmap_init_buckets(buckets, idx + 1, cap)
+    }
+}
+
+F hashmap_align_up(offset: i64, align: i64) -> i64 {
+    I align <= 1 {
+        offset
+    } EL {
+        ((offset + align - 1) / align) * align
     }
 }
 
@@ -200,6 +209,28 @@ X HashMap<K, V> {
         h % self.cap
     }
 
+    F key_size(&self) -> i64 {
+        s := sizeof(K)
+        I s <= 0 { 1 } EL { s }
+    }
+
+    F value_size(&self) -> i64 {
+        s := sizeof(V)
+        I s <= 0 { 1 } EL { s }
+    }
+
+    F value_offset(&self) -> i64 {
+        hashmap_align_up(@.key_size(), alignof(V))
+    }
+
+    F next_offset(&self) -> i64 {
+        hashmap_align_up(@.value_offset() + @.value_size(), 8)
+    }
+
+    F entry_size(&self) -> i64 {
+        @.next_offset() + 8
+    }
+
     # Get value for key, returns 0 if not found
     # Use contains() to check if key exists
     F get(&self, key: K) -> V {
@@ -211,13 +242,13 @@ X HashMap<K, V> {
     # Helper to search through chain
     F get_from_chain(&self, entry_ptr: i64, key: K) -> V {
         I entry_ptr == 0 {
-            0
+            load_typed(entry_ptr + @.value_offset(), V)
         } EL {
-            entry_key := load_typed(entry_ptr)
+            entry_key: K := load_typed(entry_ptr, K)
             I entry_key == key {
-                load_typed(entry_ptr + 8)
+                load_typed(entry_ptr + @.value_offset(), V)
             } EL {
-                next := load_i64(entry_ptr + 16)
+                next := load_i64(entry_ptr + @.next_offset())
                 @.get_from_chain(next, key)
             }
         }
@@ -227,10 +258,9 @@ X HashMap<K, V> {
     # Returns Some(value) if found, None if not found
     F get_opt(&self, key: K) -> Option<V> {
         I @.contains(key) == 1 {
-            Some(@.get(key))
-        } EL {
-            None
+            R Option.Some(@.get(key))
         }
+        Option.None
     }
 
     # Check if key exists
@@ -245,32 +275,33 @@ X HashMap<K, V> {
         I entry_ptr == 0 {
             0
         } EL {
-            entry_key := load_typed(entry_ptr)
+            entry_key: K := load_typed(entry_ptr, K)
             I entry_key == key {
                 1
             } EL {
-                next := load_i64(entry_ptr + 16)
+                next := load_i64(entry_ptr + @.next_offset())
                 @.contains_in_chain(next, key)
             }
         }
     }
 
-    # Set key-value pair, returns previous value or 0 if new
+    # Set key-value pair.
     F set(&self, key: K, value: V) -> V {
         idx := @.hash(key)
         entry_ptr := load_i64(self.buckets + idx * 8)
 
         # First try to update existing key
-        result := @.update_in_chain(entry_ptr, key, value)
-        I result >= 0 {
-            # Key was found and updated, result is old value
-            result
+        updated := @.update_in_chain(entry_ptr, key, value)
+        I updated == 1 {
+            value
         } EL {
             # Key not found, insert new entry at head
-            new_entry := malloc(24)  # 3 * 8 bytes for Entry
+            value_offset := @.value_offset()
+            next_offset := @.next_offset()
+            new_entry := malloc(@.entry_size())
             store_typed(new_entry, key)        # key
-            store_typed(new_entry + 8, value)  # value
-            store_i64(new_entry + 16, entry_ptr)  # next = old head
+            store_typed(new_entry + value_offset, value)  # value
+            store_i64(new_entry + next_offset, entry_ptr)  # next = old head
             store_i64(self.buckets + idx * 8, new_entry)  # update bucket head
             self.size = self.size + 1
 
@@ -278,24 +309,23 @@ X HashMap<K, V> {
             I self.size * 4 > self.cap * 3 {
                 @.rehash()
             }
-            0
+            value
         }
     }
 
     # Helper to update value if key exists in chain
-    # Returns old value if found (>= 0), -1 if not found
+    # Returns 1 if found and updated, 0 if not found.
     F update_in_chain(&self, entry_ptr: i64, key: K, value: V) -> i64 {
         I entry_ptr == 0 {
-            0 - 1  # -1 means not found
+            0
         } EL {
-            entry_key := load_typed(entry_ptr)
+            entry_key: K := load_typed(entry_ptr, K)
             I entry_key == key {
                 # Key exists, update value
-                old_value := load_typed(entry_ptr + 8)
-                store_typed(entry_ptr + 8, value)
-                old_value
+                store_typed(entry_ptr + @.value_offset(), value)
+                1
             } EL {
-                next := load_i64(entry_ptr + 16)
+                next := load_i64(entry_ptr + @.next_offset())
                 @.update_in_chain(next, key, value)
             }
         }
@@ -319,21 +349,20 @@ X HashMap<K, V> {
     # Returns Some(value) if found and removed, None if not found
     F remove_opt(&self, key: K) -> Option<V> {
         I @.contains(key) == 1 {
-            Some(@.remove(key))
-        } EL {
-            None
+            R Option.Some(@.remove(key))
         }
+        Option.None
     }
 
     # Helper to remove from chain
     F remove_from_chain(&self, bucket_idx: i64, prev_ptr: i64, entry_ptr: i64, key: K) -> V {
         I entry_ptr == 0 {
-            0
+            load_typed(entry_ptr + @.value_offset(), V)
         } EL {
-            entry_key := load_typed(entry_ptr)
+            entry_key: K := load_typed(entry_ptr, K)
             I entry_key == key {
-                value := load_typed(entry_ptr + 8)
-                next := load_i64(entry_ptr + 16)
+                value: V := load_typed(entry_ptr + @.value_offset(), V)
+                next := load_i64(entry_ptr + @.next_offset())
 
                 # Use dummy variable to consume if-expression result
                 _ := I prev_ptr == 0 {
@@ -342,7 +371,7 @@ X HashMap<K, V> {
                     0
                 } EL {
                     # Removing from middle/end
-                    store_i64(prev_ptr + 16, next)
+                    store_i64(prev_ptr + @.next_offset(), next)
                     0
                 }
 
@@ -350,9 +379,36 @@ X HashMap<K, V> {
                 self.size = self.size - 1
                 value
             } EL {
-                next := load_i64(entry_ptr + 16)
+                next := load_i64(entry_ptr + @.next_offset())
                 @.remove_from_chain(bucket_idx, entry_ptr, next, key)
             }
+        }
+    }
+
+    F rehash_bucket(&self, old_buckets: i64, idx: i64, old_cap: i64) -> i64 {
+        I idx >= old_cap {
+            0
+        } EL {
+            entry_ptr := load_i64(old_buckets + idx * 8)
+            @.rehash_entries(entry_ptr)
+            @.rehash_bucket(old_buckets, idx + 1, old_cap)
+        }
+    }
+
+    F rehash_entries(&self, entry_ptr: i64) -> i64 {
+        I entry_ptr == 0 {
+            0
+        } EL {
+            key: K := load_typed(entry_ptr, K)
+            next_offset := @.next_offset()
+            next := load_i64(entry_ptr + next_offset)
+
+            idx := @.hash(key)
+            old_head := load_i64(self.buckets + idx * 8)
+            store_i64(entry_ptr + next_offset, old_head)
+            store_i64(self.buckets + idx * 8, entry_ptr)
+
+            @.rehash_entries(next)
         }
     }
 
@@ -370,14 +426,8 @@ X HashMap<K, V> {
         self.buckets = new_buckets
         self.cap = new_cap
 
-        # Count entries while rehashing
-        # Note: size tracking done manually in rehash helper
-
-        # Reinsert all entries using recursive raw helper
-        hashmap_rehash_bucket_raw(new_buckets, new_cap, old_buckets, 0, old_cap)
-
-        # Count total entries (traverse all buckets)
-        self.size = hashmap_count_entries(new_buckets, 0, new_cap)
+        # Relink existing entries into the new bucket array.
+        @.rehash_bucket(old_buckets, 0, old_cap)
 
         free(old_buckets)
         1
@@ -388,6 +438,66 @@ X HashMap<K, V> {
     # Alias for contains (for API consistency with other languages)
     F contains_key(&self, key: K) -> i64 {
         @.contains(key)
+    }
+
+    F collect_keys_chain(&self, out: &mut Vec<K>, entry_ptr: i64) -> i64 {
+        I entry_ptr == 0 {
+            0
+        } EL {
+            key: K := load_typed(entry_ptr, K)
+            store_typed(out.data + out.len * out.elem_size, key)
+            out.len = out.len + 1
+            next := load_i64(entry_ptr + @.next_offset())
+            @.collect_keys_chain(out, next)
+        }
+    }
+
+    F collect_keys_bucket(&self, out: &mut Vec<K>, bucket_idx: i64) -> i64 {
+        I bucket_idx >= self.cap {
+            0
+        } EL {
+            entry_ptr := load_i64(self.buckets + bucket_idx * 8)
+            @.collect_keys_chain(out, entry_ptr)
+            @.collect_keys_bucket(out, bucket_idx + 1)
+        }
+    }
+
+    F keys(&self) -> Vec<K> {
+        elem_sz := @.key_size()
+        data := malloc(self.size * elem_sz)
+        out: Vec<K> := mut Vec { data: data, len: 0, cap: self.size, elem_size: elem_sz, owned: 0 }
+        @.collect_keys_bucket(&out, 0)
+        out
+    }
+
+    F collect_values_chain(&self, out: &mut Vec<V>, entry_ptr: i64) -> i64 {
+        I entry_ptr == 0 {
+            0
+        } EL {
+            value: V := load_typed(entry_ptr + @.value_offset(), V)
+            store_typed(out.data + out.len * out.elem_size, value)
+            out.len = out.len + 1
+            next := load_i64(entry_ptr + @.next_offset())
+            @.collect_values_chain(out, next)
+        }
+    }
+
+    F collect_values_bucket(&self, out: &mut Vec<V>, bucket_idx: i64) -> i64 {
+        I bucket_idx >= self.cap {
+            0
+        } EL {
+            entry_ptr := load_i64(self.buckets + bucket_idx * 8)
+            @.collect_values_chain(out, entry_ptr)
+            @.collect_values_bucket(out, bucket_idx + 1)
+        }
+    }
+
+    F values(&self) -> Vec<V> {
+        elem_sz := @.value_size()
+        data := malloc(self.size * elem_sz)
+        out: Vec<V> := mut Vec { data: data, len: 0, cap: self.size, elem_size: elem_sz, owned: 0 }
+        @.collect_values_bucket(&out, 0)
+        out
     }
 
     # Collect all keys into a flat array
@@ -426,9 +536,30 @@ X HashMap<K, V> {
         0
     }
 
+    F clear_entries(&self, entry_ptr: i64) -> i64 {
+        I entry_ptr == 0 {
+            0
+        } EL {
+            next := load_i64(entry_ptr + @.next_offset())
+            free(entry_ptr)
+            @.clear_entries(next)
+        }
+    }
+
+    F clear_buckets(&self, idx: i64) -> i64 {
+        I idx >= self.cap {
+            0
+        } EL {
+            entry_ptr := load_i64(self.buckets + idx * 8)
+            @.clear_entries(entry_ptr)
+            store_i64(self.buckets + idx * 8, 0)
+            @.clear_buckets(idx + 1)
+        }
+    }
+
     # Clear all entries
     F clear(&self) -> i64 {
-        hashmap_clear_buckets(self.buckets, 0, self.cap)
+        @.clear_buckets(0)
         self.size = 0
         0
     }
@@ -719,8 +850,10 @@ X StrHashMap<V> {
     }
 
     F get_opt(&self, key: str) -> Option<V> {
-        I @.contains(key) == 1 { Some(@.get(key)) }
-        EL { None }
+        I @.contains(key) == 1 {
+            R Option.Some(@.get(key))
+        }
+        Option.None
     }
 
     F contains(&self, key: str) -> i64 {

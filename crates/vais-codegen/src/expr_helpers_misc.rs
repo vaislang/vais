@@ -44,7 +44,11 @@ impl CodeGenerator {
         let (future_ptr_raw, future_ir) = self.generate_expr(inner, counter)?;
         let mut ir = future_ir;
         // void results (from non-async functions) cannot be used as i64 pointer args
-        let future_ptr = if future_ptr_raw == "void" { "0".to_string() } else { future_ptr_raw };
+        let future_ptr = if future_ptr_raw == "void" {
+            "0".to_string()
+        } else {
+            future_ptr_raw
+        };
 
         // Determine the poll function to call:
         // 1. Try static AST analysis (direct call/spawn expressions)
@@ -85,7 +89,8 @@ impl CodeGenerator {
             // Extract the async function name from the poll function name
             let async_fn_name = poll_func.trim_end_matches("__poll");
             // Look up the function's return type in the registry
-            let ret_ty = self.types
+            let ret_ty = self
+                .types
                 .functions
                 .get(async_fn_name)
                 .map(|info| self.type_to_llvm(&info.signature.ret))
@@ -97,7 +102,11 @@ impl CodeGenerator {
                         .unwrap_or_else(|| "i64".to_string())
                 });
             // void cannot be a struct field — use i64 placeholder for void async returns
-            if ret_ty == "void" { "i64".to_string() } else { ret_ty }
+            if ret_ty == "void" {
+                "i64".to_string()
+            } else {
+                ret_ty
+            }
         };
         let poll_ret_ty = format!("{{ i64, {} }}", inner_ret_llvm);
 
@@ -109,15 +118,16 @@ impl CodeGenerator {
         // Cross-module async calls need an extern declaration for the __poll function.
         // Skip only if the base async function is a local async definition (has is_async=true).
         let base_async_name = poll_func.trim_end_matches("__poll");
-        let is_local_async_fn = self.types.functions.get(base_async_name)
+        let is_local_async_fn = self
+            .types
+            .functions
+            .get(base_async_name)
             .map(|info| info.signature.is_async)
             .unwrap_or(false);
-        if !is_local_async_fn
-            && !self.types.functions.contains_key(&poll_func)
-        {
-            self.fn_ctx.async_poll_declares.insert(
-                format!("declare {} @{}(i64)", poll_ret_ty, poll_func)
-            );
+        if !is_local_async_fn && !self.types.functions.contains_key(&poll_func) {
+            self.fn_ctx
+                .async_poll_declares
+                .insert(format!("declare {} @{}(i64)", poll_ret_ty, poll_func));
         }
 
         write_ir!(ir, "  br label %{}\n", poll_start);
@@ -212,7 +222,8 @@ impl CodeGenerator {
                             local.llvm_name.clone()
                         };
                         write_ir!(capture_ir, "  {} = alloca {}", spill_ptr, llvm_ty);
-                        self.fn_ctx.record_emitted_type(&spill_ptr, &format!("{}*", llvm_ty));
+                        self.fn_ctx
+                            .record_emitted_type(&spill_ptr, &format!("{}*", llvm_ty));
                         write_ir!(
                             capture_ir,
                             "  store {} {}, {}* {}",
@@ -497,7 +508,8 @@ impl CodeGenerator {
         if ret_llvm != llvm_type && ret_llvm.starts_with('%') && llvm_type.starts_with('%') {
             let spill = self.next_temp(counter);
             write_ir!(ir, "  {} = alloca {}", spill, llvm_type);
-            self.fn_ctx.record_emitted_type(&spill, &format!("{}*", llvm_type));
+            self.fn_ctx
+                .record_emitted_type(&spill, &format!("{}*", llvm_type));
             write_ir!(
                 ir,
                 "  store {} {}, {}* {}",
@@ -579,93 +591,120 @@ impl CodeGenerator {
             // placeholder ("void") so downstream code treats this as a
             // statement-expression with no value.
             if try_llvm == "void" {
+                self.fn_ctx.current_block.clone_from(&ok_label);
                 return Ok(("void".to_string(), ir));
             }
-            let needs_cast = try_llvm != "i64"
-                && try_llvm != "i32"
-                && try_llvm != "i16"
-                && try_llvm != "i8"
-                && try_llvm != "i1"
-                && !try_llvm.ends_with('*');
-            if needs_cast {
-                let type_size = self.compute_sizeof(try_ty);
-                if type_size > 8 {
-                    // Large struct: payload holds a heap pointer (from Ok/Err constructor)
-                    let typed_ptr = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = inttoptr i64 {} to {}*",
-                        typed_ptr,
-                        value,
-                        try_llvm
-                    );
-                    let loaded = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = load {}, {}* {}",
-                        loaded,
-                        try_llvm,
-                        try_llvm,
-                        typed_ptr
-                    );
-                    loaded
-                } else {
-                    // Small struct: stored directly via bitcast in payload
-                    let tmp_result = self.next_temp(counter);
-                    self.emit_entry_alloca(&tmp_result, &llvm_type);
-                    write_ir!(
-                        ir,
-                        "  store {} {}, {}* {}",
-                        llvm_type,
-                        inner_val,
-                        llvm_type,
-                        tmp_result
-                    );
-                    let payload_ptr = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = getelementptr {}, {}* {}, i32 0, i32 1, i32 0",
-                        payload_ptr,
-                        llvm_type,
-                        llvm_type,
-                        tmp_result
-                    );
-                    let cast_ptr = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = bitcast i64* {} to {}*",
-                        cast_ptr,
-                        payload_ptr,
-                        try_llvm
-                    );
-                    let loaded = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = load {}, {}* {}",
-                        loaded,
-                        try_llvm,
-                        try_llvm,
-                        cast_ptr
-                    );
-                    loaded
-                }
-            } else {
-                // Phase 17.H3.2: primitive payload path. The extractvalue
-                // slot is the Result's declared payload type (often the
-                // erased i64), but `try_llvm` is the narrower primitive
-                // (i8/i16/i32/i1). Truncate when widths mismatch so the
-                // downstream store / assign receives the right type.
+            if try_llvm.ends_with('*') {
                 let actual = self.llvm_type_of(&value);
-                if actual != try_llvm
-                    && actual.starts_with('i')
-                    && try_llvm.starts_with('i')
-                    && Self::int_type_width(&actual) > 0
-                    && Self::int_type_width(&try_llvm) > 0
-                {
-                    let coerced = self.coerce_int_width(&value, &actual, &try_llvm, counter, &mut ir);
-                    coerced
+                if actual != try_llvm && actual.starts_with('i') {
+                    let mut int_val = value.clone();
+                    if matches!(actual.as_str(), "i1" | "i8" | "i16" | "i32") {
+                        let widened = self.next_temp(counter);
+                        write_ir!(ir, "  {} = zext {} {} to i64", widened, actual, value);
+                        self.fn_ctx.record_emitted_type(&widened, "i64");
+                        int_val = widened;
+                    }
+                    let ptr_value = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = inttoptr i64 {} to {}",
+                        ptr_value,
+                        int_val,
+                        try_llvm
+                    );
+                    self.fn_ctx.record_emitted_type(&ptr_value, &try_llvm);
+                    ptr_value
                 } else {
                     value
+                }
+            } else {
+                let needs_cast = try_llvm != "i64"
+                    && try_llvm != "i32"
+                    && try_llvm != "i16"
+                    && try_llvm != "i8"
+                    && try_llvm != "i1"
+                    && !try_llvm.ends_with('*');
+                if needs_cast {
+                    let type_size = self.compute_sizeof(try_ty);
+                    if type_size > 8 {
+                        // Large struct: payload holds a heap pointer (from Ok/Err constructor)
+                        let typed_ptr = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = inttoptr i64 {} to {}*",
+                            typed_ptr,
+                            value,
+                            try_llvm
+                        );
+                        let loaded = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
+                            loaded,
+                            try_llvm,
+                            try_llvm,
+                            typed_ptr
+                        );
+                        loaded
+                    } else {
+                        // Small struct: stored directly via bitcast in payload
+                        let tmp_result = self.next_temp(counter);
+                        self.emit_entry_alloca(&tmp_result, &llvm_type);
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* {}",
+                            llvm_type,
+                            inner_val,
+                            llvm_type,
+                            tmp_result
+                        );
+                        let payload_ptr = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = getelementptr {}, {}* {}, i32 0, i32 1, i32 0",
+                            payload_ptr,
+                            llvm_type,
+                            llvm_type,
+                            tmp_result
+                        );
+                        let cast_ptr = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = bitcast i64* {} to {}*",
+                            cast_ptr,
+                            payload_ptr,
+                            try_llvm
+                        );
+                        let loaded = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
+                            loaded,
+                            try_llvm,
+                            try_llvm,
+                            cast_ptr
+                        );
+                        loaded
+                    }
+                } else {
+                    // Phase 17.H3.2: primitive payload path. The extractvalue
+                    // slot is the Result's declared payload type (often the
+                    // erased i64), but `try_llvm` is the narrower primitive
+                    // (i8/i16/i32/i1). Truncate when widths mismatch so the
+                    // downstream store / assign receives the right type.
+                    let actual = self.llvm_type_of(&value);
+                    if actual != try_llvm
+                        && actual.starts_with('i')
+                        && try_llvm.starts_with('i')
+                        && Self::int_type_width(&actual) > 0
+                        && Self::int_type_width(&try_llvm) > 0
+                    {
+                        let coerced =
+                            self.coerce_int_width(&value, &actual, &try_llvm, counter, &mut ir);
+                        coerced
+                    } else {
+                        value
+                    }
                 }
             }
         } else {
@@ -805,28 +844,41 @@ impl CodeGenerator {
             };
             if let Some(bits) = narrow_bits {
                 let trunc_tmp = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = trunc i64 {} to i{}",
-                    trunc_tmp,
-                    value,
-                    bits
-                );
-                self.fn_ctx.register_temp_type(&trunc_tmp, unwrap_ty.clone());
+                write_ir!(ir, "  {} = trunc i64 {} to i{}", trunc_tmp, value, bits);
+                self.fn_ctx
+                    .register_temp_type(&trunc_tmp, unwrap_ty.clone());
                 return Ok((trunc_tmp, ir));
             }
             // For floats, bitcast the i64 slot to the matching width.
             if unwrap_llvm == "double" || unwrap_llvm == "float" {
                 let fval = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = bitcast i64 {} to {}",
-                    fval,
-                    value,
-                    unwrap_llvm
-                );
+                write_ir!(ir, "  {} = bitcast i64 {} to {}", fval, value, unwrap_llvm);
                 self.fn_ctx.register_temp_type(&fval, unwrap_ty.clone());
                 return Ok((fval, ir));
+            }
+            if unwrap_llvm.ends_with('*') {
+                let actual = self.llvm_type_of(&value);
+                if actual != unwrap_llvm && actual.starts_with('i') {
+                    let mut int_val = value.clone();
+                    if matches!(actual.as_str(), "i1" | "i8" | "i16" | "i32") {
+                        let widened = self.next_temp(counter);
+                        write_ir!(ir, "  {} = zext {} {} to i64", widened, actual, value);
+                        self.fn_ctx.record_emitted_type(&widened, "i64");
+                        int_val = widened;
+                    }
+                    let ptr_value = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = inttoptr i64 {} to {}",
+                        ptr_value,
+                        int_val,
+                        unwrap_llvm
+                    );
+                    self.fn_ctx.record_emitted_type(&ptr_value, &unwrap_llvm);
+                    self.fn_ctx
+                        .register_temp_type(&ptr_value, unwrap_ty.clone());
+                    return Ok((ptr_value, ir));
+                }
             }
             let needs_cast = unwrap_llvm != "i64"
                 && unwrap_llvm != "i32"

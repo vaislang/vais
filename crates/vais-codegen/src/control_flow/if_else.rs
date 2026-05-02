@@ -56,20 +56,32 @@ impl CodeGenerator {
                     // Float ↔ anything: use float (caller must coerce the
                     // integer side in its arm block before branching).
                     let picked = match (&then_type, &else_type_resolved) {
-                        (vais_types::ResolvedType::F64, _)
-                        | (_, vais_types::ResolvedType::F64) => {
+                        (vais_types::ResolvedType::F64, _) | (_, vais_types::ResolvedType::F64) => {
                             Some(vais_types::ResolvedType::F64)
                         }
-                        (vais_types::ResolvedType::F32, _)
-                        | (_, vais_types::ResolvedType::F32) => {
+                        (vais_types::ResolvedType::F32, _) | (_, vais_types::ResolvedType::F32) => {
                             Some(vais_types::ResolvedType::F32)
                         }
                         _ => None,
                     };
                     picked.unwrap_or(vais_types::ResolvedType::I64)
                 } else {
-                    then_type
+                    then_type.clone()
                 };
+                if let Some(expected) = self.fn_ctx.expected_expr_types.last().cloned() {
+                    let has_i64_fallback = matches!(block_type, ResolvedType::I64)
+                        || matches!(then_type, ResolvedType::I64)
+                        || matches!(else_type_resolved, ResolvedType::I64);
+                    if matches!(expected, ResolvedType::Named { .. }) && has_i64_fallback {
+                        block_type = expected;
+                    } else if matches!(expected, ResolvedType::Str)
+                        && has_i64_fallback
+                        && (matches!(then_type, ResolvedType::Str)
+                            || matches!(else_type_resolved, ResolvedType::Str))
+                    {
+                        block_type = expected;
+                    }
+                }
                 let mut llvm_type = self.type_to_llvm(&block_type);
 
                 // Check each branch independently for struct pointer vs value
@@ -157,6 +169,17 @@ impl CodeGenerator {
                     }
                 } else {
                     then_val // move: not used after
+                };
+                let then_val_for_phi = if !then_terminated {
+                    self.coerce_if_phi_incoming(
+                        then_val_for_phi,
+                        &llvm_type,
+                        &block_type,
+                        counter,
+                        &mut ir,
+                    )
+                } else {
+                    then_val_for_phi
                 };
 
                 let then_actual_block = std::mem::take(&mut self.fn_ctx.current_block); // take ownership
@@ -285,6 +308,17 @@ impl CodeGenerator {
                 } else {
                     else_val // move: not used after
                 };
+                let else_val_for_phi = if !else_terminated && has_else {
+                    self.coerce_if_phi_incoming(
+                        else_val_for_phi,
+                        &llvm_type,
+                        &block_type,
+                        counter,
+                        &mut ir,
+                    )
+                } else {
+                    else_val_for_phi
+                };
 
                 let else_from_label = if !else_terminated {
                     write_ir!(ir, "  br label %{}", local_merge);
@@ -328,15 +362,23 @@ impl CodeGenerator {
                 let else_actual_ty = self.llvm_type_of(&else_val_for_phi);
                 let phi_is_struct = llvm_type.starts_with('{') || llvm_type.starts_with('%');
                 let phi_type_mismatch = if phi_is_struct {
-                    (!then_from_label.is_empty() && then_actual_ty.starts_with('i') && !then_val_for_phi.starts_with("zeroinitializer"))
-                        || (!else_from_label.is_empty() && else_actual_ty.starts_with('i') && else_val_for_phi != "0")
+                    (!then_from_label.is_empty()
+                        && then_actual_ty.starts_with('i')
+                        && !then_val_for_phi.starts_with("zeroinitializer"))
+                        || (!else_from_label.is_empty()
+                            && else_actual_ty.starts_with('i')
+                            && !else_val_for_phi.starts_with("zeroinitializer"))
                 } else {
-                    (!then_from_label.is_empty() && (then_actual_ty.starts_with('{') || then_actual_ty.starts_with('%')))
-                        || (!else_from_label.is_empty() && (else_actual_ty.starts_with('{') || else_actual_ty.starts_with('%')))
+                    (!then_from_label.is_empty()
+                        && (then_actual_ty.starts_with('{') || then_actual_ty.starts_with('%')))
+                        || (!else_from_label.is_empty()
+                            && (else_actual_ty.starts_with('{') || else_actual_ty.starts_with('%')))
                 };
 
                 // Build phi node only from non-terminated predecessors and non-void types
-                if is_void_type || phi_type_mismatch {
+                let phi_mismatch_requires_placeholder =
+                    phi_type_mismatch && llvm_type != "{ i8*, i64 }";
+                if is_void_type || phi_mismatch_requires_placeholder {
                     // When the phi type is str { i8*, i64 }, use a zeroinitializer instead
                     // of void placeholder (i64 0) to avoid type mismatch downstream.
                     if llvm_type == "{ i8*, i64 }" {
@@ -346,17 +388,51 @@ impl CodeGenerator {
                             result
                         );
                         self.fn_ctx.record_emitted_type(&result, "{ i8*, i64 }");
-                        self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::Str);
+                        self.fn_ctx
+                            .register_temp_type(&result, vais_types::ResolvedType::Str);
                     } else {
                         ir.push_str(&crate::helpers::void_placeholder_ir(&result));
-                        self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::I64);
+                        self.fn_ctx
+                            .register_temp_type(&result, vais_types::ResolvedType::I64);
                     }
                 } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
                     // Substitute "void" placeholders (from void-returning calls
                     // as the last block expression) with a literal 0 — phi cannot
                     // accept void as an incoming value.
-                    let then_safe = if then_val_for_phi == "void" { "0".to_string() } else { then_val_for_phi.clone() };
-                    let else_safe = if else_val_for_phi == "void" { "0".to_string() } else { else_val_for_phi.clone() };
+                    let then_is_void = then_val_for_phi == "void";
+                    let else_is_void = else_val_for_phi == "void";
+                    let then_safe = if llvm_type == "{ i8*, i64 }"
+                        && (then_actual_ty.starts_with('i') || then_is_void)
+                    {
+                        let zinit = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
+                            zinit
+                        );
+                        self.fn_ctx.record_emitted_type(&zinit, "{ i8*, i64 }");
+                        zinit
+                    } else if then_is_void {
+                        "0".to_string()
+                    } else {
+                        then_val_for_phi.clone()
+                    };
+                    let else_safe = if llvm_type == "{ i8*, i64 }"
+                        && (else_actual_ty.starts_with('i') || else_is_void)
+                    {
+                        let zinit = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
+                            zinit
+                        );
+                        self.fn_ctx.record_emitted_type(&zinit, "{ i8*, i64 }");
+                        zinit
+                    } else if else_is_void {
+                        "0".to_string()
+                    } else {
+                        else_val_for_phi.clone()
+                    };
                     write_ir!(
                         ir,
                         "  {} = phi {} [ {}, %{} ], [ {}, %{} ]",
@@ -388,9 +464,13 @@ impl CodeGenerator {
                         let then_slot = self.fn_ctx.string_value_slot.get(&then_key).cloned();
                         let else_slot = self.fn_ctx.string_value_slot.get(&else_key).cloned();
                         let mut slots: Vec<String> = Vec::new();
-                        if let Some(s) = then_slot { slots.push(s); }
+                        if let Some(s) = then_slot {
+                            slots.push(s);
+                        }
                         if let Some(s) = else_slot {
-                            if !slots.contains(&s) { slots.push(s); }
+                            if !slots.contains(&s) {
+                                slots.push(s);
+                            }
                         }
                         if !slots.is_empty() {
                             self.fn_ctx
@@ -404,7 +484,11 @@ impl CodeGenerator {
                         }
                     }
                 } else if !then_from_label.is_empty() {
-                    let safe = if then_val_for_phi == "void" { "0".to_string() } else { then_val_for_phi.clone() };
+                    let safe = if then_val_for_phi == "void" {
+                        "0".to_string()
+                    } else {
+                        then_val_for_phi.clone()
+                    };
                     write_ir!(
                         ir,
                         "  {} = phi {} [ {}, %{} ]",
@@ -416,7 +500,11 @@ impl CodeGenerator {
                     self.fn_ctx.record_emitted_type(&result, &llvm_type);
                     self.fn_ctx.register_temp_type(&result, block_type.clone());
                 } else if !else_from_label.is_empty() {
-                    let safe = if else_val_for_phi == "void" { "0".to_string() } else { else_val_for_phi.clone() };
+                    let safe = if else_val_for_phi == "void" {
+                        "0".to_string()
+                    } else {
+                        else_val_for_phi.clone()
+                    };
                     write_ir!(
                         ir,
                         "  {} = phi {} [ {}, %{} ]",

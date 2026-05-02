@@ -10,7 +10,15 @@ use vais_types::ResolvedType;
 // (type_name, llvm_name, drop_fn_opt, has_shallow, is_double_ptr, vec_elem_shallow)
 type DroppableScopeEntry = (String, String, Option<String>, bool, bool, Option<String>);
 // (var_name, type_name, llvm_name, drop_fn_opt, has_shallow, is_double_ptr, vec_elem_shallow)
-type DroppableFnEntry = (String, String, String, Option<String>, bool, bool, Option<String>);
+type DroppableFnEntry = (
+    String,
+    String,
+    String,
+    Option<String>,
+    bool,
+    bool,
+    Option<String>,
+);
 
 impl CodeGenerator {
     /// Generate LLVM IR for a block of statements
@@ -96,10 +104,14 @@ impl CodeGenerator {
 
                 let (val, val_ir) = self.generate_expr(value, counter)?;
 
-                let resolved_ty = ty
+                let resolved_ty_raw = ty
                     .as_ref()
                     .map(|t| self.ast_type_to_resolved(&t.node))
-                    .unwrap_or(inferred_ty.clone()); // Use inferred type if not specified
+                    .unwrap_or_else(|| {
+                        self.refine_weak_inferred_type_from_value(inferred_ty.clone(), &val)
+                    }); // Use inferred type if not specified
+                let resolved_ty =
+                    vais_types::substitute_type(&resolved_ty_raw, &self.generics.substitutions);
 
                 // Generate unique LLVM name for this variable (to handle loops)
                 let llvm_name = format!("{}.{}", name.node, counter);
@@ -162,11 +174,13 @@ impl CodeGenerator {
                     // Traditional alloca style.
                     // Struct literals and Named function returns use double-pointer
                     // (%Type**) because the codegen stores a %Type* in an alloca.
-                    let needs_double_ptr =
-                        is_struct_lit || is_enum_variant_call || is_unit_variant
+                    let needs_double_ptr = is_struct_lit
+                        || is_enum_variant_call
+                        || is_unit_variant
                         || matches!(resolved_ty, ResolvedType::Named { .. });
                     if needs_double_ptr {
-                        let mut local = LocalVar::alloca_double_ptr(resolved_ty.clone(), llvm_name.clone());
+                        let mut local =
+                            LocalVar::alloca_double_ptr(resolved_ty.clone(), llvm_name.clone());
                         if let Some(n) = array_len {
                             local = local.with_array_length(n);
                         }
@@ -652,7 +666,7 @@ impl CodeGenerator {
     }
 
     /// Generate null-check + free IR for each slot in `frame`, skipping:
-    ///   - the `transfer_slot` (ownership being handed to the outer scope)
+    ///   - any `transfer_slots` (ownership being handed to the outer scope)
     ///   - any slot no longer referenced in `string_value_slot` (already freed by
     ///     intermediate-free, which removes the owning SSA→slot entry)
     ///
@@ -668,7 +682,7 @@ impl CodeGenerator {
     pub(crate) fn generate_string_scope_cleanup(
         &mut self,
         frame: &[String],
-        transfer_slot: Option<&str>,
+        transfer_slots: &[String],
     ) -> String {
         if frame.is_empty() {
             return String::new();
@@ -681,11 +695,10 @@ impl CodeGenerator {
         let mut slot_idx = 0usize;
 
         for slot_name in frame {
-            // Skip the slot being transferred out
-            if let Some(ts) = transfer_slot {
-                if slot_name == ts {
-                    continue;
-                }
+            // Skip slots being transferred out.
+            if transfer_slots.iter().any(|ts| ts == slot_name) {
+                slot_idx += 1;
+                continue;
             }
 
             // Skip if the slot is no longer live in string_value_slot (intermediate-free
@@ -704,9 +717,15 @@ impl CodeGenerator {
                 continue;
             }
 
-            let loaded = format!("%__sd_ld_{}_{}_{}", block_id, slot_idx, self.fn_ctx.label_counter);
+            let loaded = format!(
+                "%__sd_ld_{}_{}_{}",
+                block_id, slot_idx, self.fn_ctx.label_counter
+            );
             self.fn_ctx.label_counter += 1;
-            let is_null = format!("%__sd_nn_{}_{}_{}", block_id, slot_idx, self.fn_ctx.label_counter);
+            let is_null = format!(
+                "%__sd_nn_{}_{}_{}",
+                block_id, slot_idx, self.fn_ctx.label_counter
+            );
             self.fn_ctx.label_counter += 1;
             let do_free = format!("__sd_do_{}_{}", block_id, slot_idx);
             let after = format!("__sd_af_{}_{}", block_id, slot_idx);
@@ -715,7 +734,13 @@ impl CodeGenerator {
             self.fn_ctx.record_emitted_type(&loaded, "i8*");
             write_ir!(ir, "  {} = icmp eq i8* {}, null", is_null, loaded);
             self.fn_ctx.record_emitted_type(&is_null, "i1");
-            write_ir!(ir, "  br i1 {}, label %{}, label %{}", is_null, after, do_free);
+            write_ir!(
+                ir,
+                "  br i1 {}, label %{}, label %{}",
+                is_null,
+                after,
+                do_free
+            );
             write_ir!(ir, "{}:", do_free);
             write_ir!(ir, "  call void @free(i8* {})", loaded);
             write_ir!(ir, "  store i8* null, i8** {}", slot_name);
@@ -725,9 +750,7 @@ impl CodeGenerator {
 
             // Remove from string_value_slot so the transferred-slot lookup at
             // outer-scope exit can't match a slot that has already been freed.
-            self.fn_ctx
-                .string_value_slot
-                .retain(|_, s| s != slot_name);
+            self.fn_ctx.string_value_slot.retain(|_, s| s != slot_name);
             // DO NOT remove from alloc_tracker: `track_alloc_with_slot` assigns
             // slot ids from `alloc_tracker.len()`, so removing an entry would
             // let a later concat in the same function collide with this slot
@@ -754,7 +777,7 @@ impl CodeGenerator {
         let top = self.fn_ctx.scope_str_stack.len();
         for idx in loop_depth..top {
             let frame = self.fn_ctx.scope_str_stack[idx].clone();
-            let piece = self.generate_string_scope_cleanup(&frame, None);
+            let piece = self.generate_string_scope_cleanup(&frame, &[]);
             if !piece.is_empty() {
                 ir.push_str(&piece);
             }
@@ -779,7 +802,11 @@ impl CodeGenerator {
     /// because the codegen pattern is: `alloca %Type` → actual struct, then
     /// `alloca %Type*` → pointer stored in locals. We must load the inner
     /// `%Type*` before passing it to the drop function.
-    pub(crate) fn generate_scope_drop_cleanup(&mut self, scope_vars: &[String]) -> String {
+    pub(crate) fn generate_scope_drop_cleanup_except(
+        &mut self,
+        scope_vars: &[String],
+        skip_vars: &[String],
+    ) -> String {
         if scope_vars.is_empty() {
             return String::new();
         }
@@ -791,6 +818,9 @@ impl CodeGenerator {
         //   (Phase 191 #2c — nested container recursion).
         let mut droppable: Vec<DroppableScopeEntry> = Vec::new();
         for var_name in scope_vars {
+            if skip_vars.iter().any(|skip| skip == var_name) {
+                continue;
+            }
             if let Some(local) = self.fn_ctx.locals.get(var_name) {
                 let type_name = match &local.ty {
                     vais_types::ResolvedType::Named { name, .. } => name.clone(),
@@ -871,7 +901,8 @@ impl CodeGenerator {
                     struct_ty,
                     effective_ptr
                 );
-                self.fn_ctx.record_emitted_type(&format!("%{}", ret_tmp), "i64");
+                self.fn_ctx
+                    .record_emitted_type(&format!("%{}", ret_tmp), "i64");
             }
 
             // 2) Shallow-free (if has_owned_mask — frees heap-owned string fields)
@@ -914,8 +945,7 @@ impl CodeGenerator {
         if self.fn_ctx.alloc_tracker.is_empty() {
             return String::new();
         }
-        let skip_slots: Vec<String> =
-            std::mem::take(&mut self.fn_ctx.pending_return_skip_slot);
+        let skip_slots: Vec<String> = std::mem::take(&mut self.fn_ctx.pending_return_skip_slot);
         let slots: Vec<(String, String)> = self.fn_ctx.alloc_tracker.clone();
         let mut ir = String::new();
         ir.push_str("  ; auto-free cleanup (string concat heap buffers)\n");
@@ -960,9 +990,40 @@ impl CodeGenerator {
         self.fn_ctx.pending_return_skip_slot.clear();
         self.fn_ctx.var_string_slot.clear();
         self.fn_ctx.var_string_slots_multi.clear();
+        self.fn_ctx.var_string_scope_depth.clear();
         self.fn_ctx.phi_extra_slots.clear();
         self.fn_ctx.scope_str_stack.clear();
         self.fn_ctx.scope_drop_label_counter = 0;
+    }
+
+    /// Move a string allocation slot from an inner expression/block frame to the
+    /// frame where `var_name` was declared. This preserves ownership for mutable
+    /// outer `str` locals assigned inside loops or nested blocks.
+    pub(crate) fn transfer_string_slot_to_var_scope(&mut self, var_name: &str, slot_name: &str) {
+        let Some(target_depth) = self.fn_ctx.var_string_scope_depth.get(var_name).copied() else {
+            return;
+        };
+        if self.fn_ctx.scope_str_stack.is_empty()
+            || target_depth >= self.fn_ctx.scope_str_stack.len()
+        {
+            return;
+        }
+
+        let current_depth = self.fn_ctx.scope_str_stack.len() - 1;
+        if current_depth <= target_depth {
+            return;
+        }
+
+        for (idx, frame) in self.fn_ctx.scope_str_stack.iter_mut().enumerate() {
+            if idx != target_depth {
+                frame.retain(|slot| slot != slot_name);
+            }
+        }
+
+        let target = &mut self.fn_ctx.scope_str_stack[target_depth];
+        if !target.iter().any(|slot| slot == slot_name) {
+            target.push(slot_name.to_string());
+        }
     }
 
     /// Register a heap allocation for automatic cleanup at scope exit.
@@ -993,8 +1054,15 @@ impl CodeGenerator {
     /// Called before function exit points, after defer cleanup and before alloc cleanup.
     /// Variables are dropped in reverse declaration order (LIFO), matching Rust semantics.
     pub(crate) fn generate_drop_cleanup(&mut self) -> String {
+        self.generate_drop_cleanup_except(&[])
+    }
+
+    pub(crate) fn generate_drop_cleanup_except(&mut self, skip_vars: &[String]) -> String {
         let mut droppable: Vec<DroppableFnEntry> = Vec::new();
         for (var_name, local) in &self.fn_ctx.locals {
+            if skip_vars.iter().any(|skip| skip == var_name) {
+                continue;
+            }
             let type_name = match &local.ty {
                 ResolvedType::Named { name, .. } => name.clone(),
                 _ => continue,
@@ -1030,8 +1098,15 @@ impl CodeGenerator {
         ir.push_str("  ; auto-drop cleanup (Drop trait + shallow-free)\n");
         // Drop in reverse order (last declared first)
         droppable.reverse();
-        for (_var_name, type_name, llvm_name, drop_fn, has_shallow, is_double_ptr, vec_elem_shallow) in
-            &droppable
+        for (
+            _var_name,
+            type_name,
+            llvm_name,
+            drop_fn,
+            has_shallow,
+            is_double_ptr,
+            vec_elem_shallow,
+        ) in &droppable
         {
             let struct_ty = format!("%{}", type_name);
             let id = self.fn_ctx.label_counter;
@@ -1071,7 +1146,8 @@ impl CodeGenerator {
                     struct_ty,
                     effective_ptr
                 );
-                self.fn_ctx.record_emitted_type(&format!("%{}", ret_tmp), "i64");
+                self.fn_ctx
+                    .record_emitted_type(&format!("%{}", ret_tmp), "i64");
             }
 
             if *has_shallow {
@@ -1122,7 +1198,10 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
-            data_ptr, vec_ty, vec_ty, vec_ptr
+            data_ptr,
+            vec_ty,
+            vec_ty,
+            vec_ptr
         );
         self.fn_ctx.record_emitted_type(&data_ptr, "i64*");
         let data_i = format!("%__ved_di_{}", id);
@@ -1132,7 +1211,10 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  {} = getelementptr {}, {}* {}, i32 0, i32 1",
-            len_ptr, vec_ty, vec_ty, vec_ptr
+            len_ptr,
+            vec_ty,
+            vec_ty,
+            vec_ptr
         );
         self.fn_ctx.record_emitted_type(&len_ptr, "i64*");
         let len_v = format!("%__ved_len_{}", id);
@@ -1142,7 +1224,10 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  {} = getelementptr {}, {}* {}, i32 0, i32 3",
-            es_ptr, vec_ty, vec_ty, vec_ptr
+            es_ptr,
+            vec_ty,
+            vec_ty,
+            vec_ptr
         );
         self.fn_ctx.record_emitted_type(&es_ptr, "i64*");
         let es_v = format!("%__ved_es_{}", id);
@@ -1160,7 +1245,9 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}",
-            skip_cmp, lbl_exit, lbl_init
+            skip_cmp,
+            lbl_exit,
+            lbl_init
         );
         write_ir!(ir, "{}:", lbl_init);
         write_ir!(ir, "  br label %{}", lbl_head);
@@ -1169,7 +1256,10 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  {} = phi i64 [ 0, %{} ], [ %__ved_inext_{}, %{} ]",
-            i_phi, lbl_init, id, lbl_cont
+            i_phi,
+            lbl_init,
+            id,
+            lbl_cont
         );
         self.fn_ctx.record_emitted_type(&i_phi, "i64");
         let done_cmp = format!("%__ved_done_{}", id);
@@ -1178,7 +1268,9 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}",
-            done_cmp, lbl_exit, lbl_body
+            done_cmp,
+            lbl_exit,
+            lbl_body
         );
         write_ir!(ir, "{}:", lbl_body);
         let offset = format!("%__ved_off_{}", id);
@@ -1189,12 +1281,16 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  {} = inttoptr i64 {} to {}*",
-            elem_ptr, elem_int, inner_ty
+            elem_ptr,
+            elem_int,
+            inner_ty
         );
         write_ir!(
             ir,
             "  call void @__vais_struct_shallow_free_{}({}* {})",
-            inner_name, inner_ty, elem_ptr
+            inner_name,
+            inner_ty,
+            elem_ptr
         );
         write_ir!(ir, "  br label %{}", lbl_cont);
         write_ir!(ir, "{}:", lbl_cont);

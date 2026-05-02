@@ -630,3 +630,35 @@ F main() -> i64 {
         42,
     );
 }
+
+#[test]
+fn e2e_p134_pat_ref_unit_variant_uses_match_enum_context() {
+    let source = r#"
+EN FrameState { Empty, Busy }
+EN PlanNode { Scan, Empty }
+
+F classify(node: &PlanNode) -> i64 {
+    M node {
+        PlanNode.Empty => 42,
+        _ => 0,
+    }
+}
+
+F main() -> i64 {
+    node := mut PlanNode.Empty
+    classify(&node)
+}
+"#;
+    let ir = compile_to_ir(source).expect("qualified unit pattern should compile");
+    assert!(
+        ir.contains("getelementptr %PlanNode, %PlanNode* %node"),
+        "expected ref enum unit pattern to use PlanNode tag check, IR was:\n{}",
+        ir
+    );
+    assert!(
+        !ir.contains("getelementptr %FrameState, %FrameState* %node"),
+        "ref enum unit pattern used a global duplicate variant lookup:\n{}",
+        ir
+    );
+    assert_exit_code(source, 42);
+}

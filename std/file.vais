@@ -165,13 +165,13 @@ X File {
     # None on EOF or error, Some(byte) on success
     F read_byte_opt(&self) -> Option<i64> {
         I self.handle == 0 {
-            None
+            Option.None
         } EL {
             byte := fgetc(self.handle)
             I byte < 0 {
-                None
+                Option.None
             } EL {
-                Some(byte)
+                Option.Some(byte)
             }
         }
     }

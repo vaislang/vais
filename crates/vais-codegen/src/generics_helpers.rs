@@ -1,6 +1,7 @@
 //! Generic type resolution and instantiation helpers
 
 use super::*;
+use std::collections::{HashMap, HashSet};
 
 impl CodeGenerator {
     /// Get current generic substitution for a type parameter
@@ -62,6 +63,258 @@ impl CodeGenerator {
     #[inline]
     pub(crate) fn mangle_struct_name(&self, name: &str, generics: &[ResolvedType]) -> String {
         vais_types::mangle_name(name, generics)
+    }
+
+    pub(crate) fn generic_struct_layout_uses_type_args(&self, name: &str) -> bool {
+        let Some(struct_def) = self.generics.struct_defs.get(name) else {
+            return false;
+        };
+        let params: HashSet<String> = struct_def
+            .generics
+            .iter()
+            .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+            .map(|g| g.name.node.to_string())
+            .collect();
+        if params.is_empty() {
+            return false;
+        }
+
+        if let Some(struct_info) = self.types.structs.get(name) {
+            return struct_info
+                .fields
+                .iter()
+                .any(|(_, ty)| Self::type_mentions_generic_params(ty, &params));
+        }
+
+        struct_def.fields.iter().any(|field| {
+            let ty = self.ast_type_to_resolved(&field.ty.node);
+            Self::type_mentions_generic_params(&ty, &params)
+        })
+    }
+
+    pub(crate) fn infer_struct_literal_generic_args(
+        &self,
+        struct_name: &str,
+        struct_fields: &[(String, ResolvedType)],
+        literal_fields: &[(Spanned<String>, Spanned<Expr>)],
+    ) -> Option<Vec<ResolvedType>> {
+        let struct_def = self.generics.struct_defs.get(struct_name)?;
+        let params: Vec<String> = struct_def
+            .generics
+            .iter()
+            .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+            .map(|g| g.name.node.to_string())
+            .collect();
+        if params.is_empty() {
+            return None;
+        }
+        let param_set: HashSet<String> = params.iter().cloned().collect();
+        let mut bindings = HashMap::new();
+        let declared_fields: Vec<(String, ResolvedType)> = struct_def
+            .fields
+            .iter()
+            .map(|field| {
+                (
+                    field.name.node.to_string(),
+                    self.ast_type_to_resolved(&field.ty.node),
+                )
+            })
+            .collect();
+
+        for (field_name, field_expr) in literal_fields {
+            let Some((_, declared_ty)) = declared_fields
+                .iter()
+                .chain(struct_fields.iter())
+                .find(|(name, _)| name == &field_name.node)
+            else {
+                continue;
+            };
+            let actual_ty = self
+                .refine_base_named_with_unique_specialization(&self.infer_expr_type(field_expr));
+            Self::bind_generic_params_from_type_pattern(
+                declared_ty,
+                &actual_ty,
+                &param_set,
+                &mut bindings,
+            );
+        }
+
+        params
+            .into_iter()
+            .map(|param| bindings.remove(&param))
+            .collect::<Option<Vec<_>>>()
+            .filter(|args| args.iter().all(Self::is_concrete_generic_arg))
+    }
+
+    fn refine_base_named_with_unique_specialization(&self, ty: &ResolvedType) -> ResolvedType {
+        let ResolvedType::Named { name, generics } = ty else {
+            return ty.clone();
+        };
+        if !generics.is_empty() {
+            return ty.clone();
+        }
+        let Some(struct_def) = self.generics.struct_defs.get(name) else {
+            return ty.clone();
+        };
+        let params: Vec<String> = struct_def
+            .generics
+            .iter()
+            .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+            .map(|g| g.name.node.to_string())
+            .collect();
+        if params.is_empty() {
+            return ty.clone();
+        }
+
+        let prefix = format!("{name}$");
+        let mut candidates = self
+            .types
+            .structs
+            .iter()
+            .filter(|(candidate_name, _)| candidate_name.starts_with(&prefix));
+        let Some((_, specialized)) = candidates.next() else {
+            return ty.clone();
+        };
+        if candidates.next().is_some() {
+            return ty.clone();
+        }
+
+        let Some(base) = self.types.structs.get(name) else {
+            return ty.clone();
+        };
+        if base.fields.len() != specialized.fields.len() {
+            return ty.clone();
+        }
+
+        let param_set: HashSet<String> = params.iter().cloned().collect();
+        let mut bindings = HashMap::new();
+        for ((_, pattern), (_, actual)) in base.fields.iter().zip(specialized.fields.iter()) {
+            Self::bind_generic_params_from_type_pattern(pattern, actual, &param_set, &mut bindings);
+        }
+
+        params
+            .into_iter()
+            .map(|param| bindings.remove(&param))
+            .collect::<Option<Vec<_>>>()
+            .filter(|args| args.iter().all(Self::is_concrete_generic_arg))
+            .map(|generics| ResolvedType::Named {
+                name: name.clone(),
+                generics,
+            })
+            .unwrap_or_else(|| ty.clone())
+    }
+
+    fn is_concrete_generic_arg(ty: &ResolvedType) -> bool {
+        !matches!(
+            ty,
+            ResolvedType::Generic(_) | ResolvedType::Var(_) | ResolvedType::Unknown
+        )
+    }
+
+    fn type_mentions_generic_params(ty: &ResolvedType, params: &HashSet<String>) -> bool {
+        match ty {
+            ResolvedType::Generic(name) => params.contains(name),
+            ResolvedType::Named { generics, .. } | ResolvedType::DynTrait { generics, .. } => {
+                generics
+                    .iter()
+                    .any(|g| Self::type_mentions_generic_params(g, params))
+            }
+            ResolvedType::Optional(inner)
+            | ResolvedType::Pointer(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Slice(inner)
+            | ResolvedType::SliceMut(inner)
+            | ResolvedType::Array(inner)
+            | ResolvedType::Future(inner)
+            | ResolvedType::Linear(inner)
+            | ResolvedType::Affine(inner)
+            | ResolvedType::Range(inner)
+            | ResolvedType::Dependent { base: inner, .. }
+            | ResolvedType::RefLifetime { inner, .. }
+            | ResolvedType::RefMutLifetime { inner, .. } => {
+                Self::type_mentions_generic_params(inner, params)
+            }
+            ResolvedType::Result(ok, err) | ResolvedType::Map(ok, err) => {
+                Self::type_mentions_generic_params(ok, params)
+                    || Self::type_mentions_generic_params(err, params)
+            }
+            ResolvedType::Tuple(items) => items
+                .iter()
+                .any(|item| Self::type_mentions_generic_params(item, params)),
+            ResolvedType::Fn {
+                params: ps, ret, ..
+            }
+            | ResolvedType::FnPtr {
+                params: ps, ret, ..
+            } => {
+                ps.iter()
+                    .any(|p| Self::type_mentions_generic_params(p, params))
+                    || Self::type_mentions_generic_params(ret, params)
+            }
+            ResolvedType::Vector { element, .. } | ResolvedType::ConstArray { element, .. } => {
+                Self::type_mentions_generic_params(element, params)
+            }
+            ResolvedType::Associated { base, generics, .. } => {
+                Self::type_mentions_generic_params(base, params)
+                    || generics
+                        .iter()
+                        .any(|g| Self::type_mentions_generic_params(g, params))
+            }
+            _ => false,
+        }
+    }
+
+    fn bind_generic_params_from_type_pattern(
+        pattern: &ResolvedType,
+        actual: &ResolvedType,
+        params: &HashSet<String>,
+        bindings: &mut HashMap<String, ResolvedType>,
+    ) {
+        match (pattern, actual) {
+            (ResolvedType::Generic(name), actual) if params.contains(name) => {
+                if Self::is_concrete_generic_arg(actual) {
+                    bindings
+                        .entry(name.clone())
+                        .or_insert_with(|| actual.clone());
+                }
+            }
+            (
+                ResolvedType::Named {
+                    name: p_name,
+                    generics: p_generics,
+                },
+                ResolvedType::Named {
+                    name: a_name,
+                    generics: a_generics,
+                },
+            ) if p_name == a_name && p_generics.len() == a_generics.len() => {
+                for (p, a) in p_generics.iter().zip(a_generics.iter()) {
+                    Self::bind_generic_params_from_type_pattern(p, a, params, bindings);
+                }
+            }
+            (ResolvedType::Ref(p), ResolvedType::Ref(a))
+            | (ResolvedType::RefMut(p), ResolvedType::RefMut(a))
+            | (ResolvedType::Pointer(p), ResolvedType::Pointer(a))
+            | (ResolvedType::Optional(p), ResolvedType::Optional(a))
+            | (ResolvedType::Slice(p), ResolvedType::Slice(a))
+            | (ResolvedType::SliceMut(p), ResolvedType::SliceMut(a))
+            | (ResolvedType::Array(p), ResolvedType::Array(a))
+            | (ResolvedType::Range(p), ResolvedType::Range(a)) => {
+                Self::bind_generic_params_from_type_pattern(p, a, params, bindings);
+            }
+            (ResolvedType::Result(p_ok, p_err), ResolvedType::Result(a_ok, a_err))
+            | (ResolvedType::Map(p_ok, p_err), ResolvedType::Map(a_ok, a_err)) => {
+                Self::bind_generic_params_from_type_pattern(p_ok, a_ok, params, bindings);
+                Self::bind_generic_params_from_type_pattern(p_err, a_err, params, bindings);
+            }
+            (ResolvedType::Tuple(ps), ResolvedType::Tuple(as_)) if ps.len() == as_.len() => {
+                for (p, a) in ps.iter().zip(as_.iter()) {
+                    Self::bind_generic_params_from_type_pattern(p, a, params, bindings);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Generate mangled name for a generic function

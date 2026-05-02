@@ -15,9 +15,7 @@ use crate::{ParseError, ParseResult, Parser};
 fn is_primitive_lookalike_but_invalid(name: &str) -> bool {
     // Valid Vais primitives (keep in sync with lexer + LANGUAGE_SPEC).
     const VALID: &[&str] = &[
-        "i8", "i16", "i32", "i64", "i128",
-        "u8", "u16", "u32", "u64", "u128",
-        "f32", "f64",
+        "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64",
     ];
     if VALID.contains(&name) {
         return false;
@@ -656,10 +654,7 @@ impl Parser {
                     return Err(ParseError::UnexpectedToken {
                         found: Token::Gt,
                         span: self.current_span(),
-                        expected: format!(
-                            "at least one type argument inside `{}<...>`",
-                            name
-                        ),
+                        expected: format!("at least one type argument inside `{}<...>`", name),
                     });
                 }
                 let mut generics = Vec::new();

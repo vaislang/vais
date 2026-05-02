@@ -46,12 +46,15 @@ impl TypeChecker {
                     Expr::Call { func, args } => {
                         let inferred = self.check_expr(expr)?;
                         self.unify(expected, &inferred).map_err(|e| match e {
-                            TypeError::Mismatch { expected: exp, found, .. } =>
-                                TypeError::Mismatch {
-                                    expected: exp,
-                                    found,
-                                    span: Some(expr.span),
-                                },
+                            TypeError::Mismatch {
+                                expected: exp,
+                                found,
+                                ..
+                            } => TypeError::Mismatch {
+                                expected: exp,
+                                found,
+                                span: Some(expr.span),
+                            },
                             _ => e,
                         })?;
                         // After unify, if `func` was a known generic fn,
@@ -61,12 +64,14 @@ impl TypeChecker {
                             if let Some(sig) = self.functions.get(fn_name).cloned() {
                                 if !sig.generics.is_empty() {
                                     let _ = args; // args already type-checked above
-                                    // Re-derive concrete type args by unifying
-                                    // the call's return type pattern against
-                                    // the resolved inferred type.
+                                                  // Re-derive concrete type args by unifying
+                                                  // the call's return type pattern against
+                                                  // the resolved inferred type.
                                     let resolved_inf = self.apply_substitutions(&inferred);
-                                    let mut bindings: std::collections::HashMap<String, ResolvedType> =
-                                        std::collections::HashMap::new();
+                                    let mut bindings: std::collections::HashMap<
+                                        String,
+                                        ResolvedType,
+                                    > = std::collections::HashMap::new();
                                     if Self::infer_args_from_return_type(
                                         &sig.ret,
                                         &resolved_inf,
@@ -76,14 +81,23 @@ impl TypeChecker {
                                         let concrete: Vec<ResolvedType> = sig
                                             .generics
                                             .iter()
-                                            .map(|g| bindings.get(g).cloned()
-                                                .unwrap_or(ResolvedType::Unknown))
+                                            .map(|g| {
+                                                bindings
+                                                    .get(g)
+                                                    .cloned()
+                                                    .unwrap_or(ResolvedType::Unknown)
+                                            })
                                             .collect();
-                                        let all_concrete = concrete.iter().all(|t| !matches!(t,
-                                            ResolvedType::Var(_) | ResolvedType::Unknown));
+                                        let all_concrete = concrete.iter().all(|t| {
+                                            !matches!(
+                                                t,
+                                                ResolvedType::Var(_) | ResolvedType::Unknown
+                                            )
+                                        });
                                         if all_concrete {
                                             let inst = crate::types::GenericInstantiation::function(
-                                                &sig.name, concrete.clone(),
+                                                &sig.name,
+                                                concrete.clone(),
                                             );
                                             self.add_instantiation(inst);
                                             // Phase 0 bug C16 part 2: propagate
@@ -260,8 +274,9 @@ impl TypeChecker {
             | ResolvedType::Pointer(inner)
             | ResolvedType::Slice(inner)
             | ResolvedType::SliceMut(inner) => Some(inner.as_ref().clone()),
-            ResolvedType::ConstArray { element, .. }
-            | ResolvedType::Vector { element, .. } => Some(element.as_ref().clone()),
+            ResolvedType::ConstArray { element, .. } | ResolvedType::Vector { element, .. } => {
+                Some(element.as_ref().clone())
+            }
             ResolvedType::Named { name, generics }
                 if (name == "Vec" || name == "VecMut") && generics.len() == 1 =>
             {
@@ -296,9 +311,7 @@ impl TypeChecker {
                         ResolvedType::Array(Box::new(elem_ty))
                     }
                 }
-                ResolvedType::Named { name, .. }
-                    if (name == "Vec" || name == "VecMut") =>
-                {
+                ResolvedType::Named { name, .. } if (name == "Vec" || name == "VecMut") => {
                     ResolvedType::Named {
                         name: name.clone(),
                         generics: vec![elem_ty],
@@ -399,8 +412,14 @@ impl TypeChecker {
                 true
             }
             (
-                ResolvedType::Named { name: n1, generics: g1 },
-                ResolvedType::Named { name: n2, generics: g2 },
+                ResolvedType::Named {
+                    name: n1,
+                    generics: g1,
+                },
+                ResolvedType::Named {
+                    name: n2,
+                    generics: g2,
+                },
             ) => {
                 if n1 != n2 || g1.len() != g2.len() {
                     return false;

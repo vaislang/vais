@@ -7,7 +7,8 @@ S ByteBuffer {
     data: i64,      # Pointer to heap-allocated buffer
     len: i64,       # Current write position / bytes written
     cap: i64,       # Allocated capacity
-    pos: i64        # Current read position
+    pos: i64,       # Current read position
+    write_pos: i64  # Current write position
 }
 
 X ByteBuffer {
@@ -15,7 +16,7 @@ X ByteBuffer {
     F with_capacity(capacity: i64) -> ByteBuffer {
         cap := I capacity < 16 { 16 } EL { capacity }
         data := malloc(cap)
-        ByteBuffer { data: data, len: 0, cap: cap, pos: 0 }
+        ByteBuffer { data: data, len: 0, cap: cap, pos: 0, write_pos: 0 }
     }
 
     # Getters
@@ -28,6 +29,7 @@ X ByteBuffer {
     # Seek to position
     F seek(&self, pos: i64) -> i64 {
         self.pos = pos
+        self.write_pos = pos
         pos
     }
 
@@ -53,11 +55,14 @@ X ByteBuffer {
         new_cap
     }
 
-    # Write a single byte
+    # Write a single byte at the current cursor position.
     F write_u8(&self, value: i64) -> i64 {
-        @.ensure_capacity(self.len + 1)
-        store_byte(self.data + self.len, value & 255)
-        self.len = self.len + 1
+        @.ensure_capacity(self.write_pos + 1)
+        store_byte(self.data + self.write_pos, value & 255)
+        self.write_pos = self.write_pos + 1
+        I self.write_pos > self.len {
+            self.len = self.write_pos
+        }
         1
     }
 
@@ -71,12 +76,15 @@ X ByteBuffer {
 
     # Write i32 in little-endian (4 bytes)
     F write_i32_le(&self, value: i64) -> i64 {
-        @.ensure_capacity(self.len + 4)
-        store_byte(self.data + self.len, value & 255)
-        store_byte(self.data + self.len + 1, (value >> 8) & 255)
-        store_byte(self.data + self.len + 2, (value >> 16) & 255)
-        store_byte(self.data + self.len + 3, (value >> 24) & 255)
-        self.len = self.len + 4
+        @.ensure_capacity(self.write_pos + 4)
+        store_byte(self.data + self.write_pos, value & 255)
+        store_byte(self.data + self.write_pos + 1, (value >> 8) & 255)
+        store_byte(self.data + self.write_pos + 2, (value >> 16) & 255)
+        store_byte(self.data + self.write_pos + 3, (value >> 24) & 255)
+        self.write_pos = self.write_pos + 4
+        I self.write_pos > self.len {
+            self.len = self.write_pos
+        }
         4
     }
 
@@ -93,16 +101,19 @@ X ByteBuffer {
 
     # Write i64 in little-endian (8 bytes)
     F write_i64_le(&self, value: i64) -> i64 {
-        @.ensure_capacity(self.len + 8)
-        store_byte(self.data + self.len, value & 255)
-        store_byte(self.data + self.len + 1, (value >> 8) & 255)
-        store_byte(self.data + self.len + 2, (value >> 16) & 255)
-        store_byte(self.data + self.len + 3, (value >> 24) & 255)
-        store_byte(self.data + self.len + 4, (value >> 32) & 255)
-        store_byte(self.data + self.len + 5, (value >> 40) & 255)
-        store_byte(self.data + self.len + 6, (value >> 48) & 255)
-        store_byte(self.data + self.len + 7, (value >> 56) & 255)
-        self.len = self.len + 8
+        @.ensure_capacity(self.write_pos + 8)
+        store_byte(self.data + self.write_pos, value & 255)
+        store_byte(self.data + self.write_pos + 1, (value >> 8) & 255)
+        store_byte(self.data + self.write_pos + 2, (value >> 16) & 255)
+        store_byte(self.data + self.write_pos + 3, (value >> 24) & 255)
+        store_byte(self.data + self.write_pos + 4, (value >> 32) & 255)
+        store_byte(self.data + self.write_pos + 5, (value >> 40) & 255)
+        store_byte(self.data + self.write_pos + 6, (value >> 48) & 255)
+        store_byte(self.data + self.write_pos + 7, (value >> 56) & 255)
+        self.write_pos = self.write_pos + 8
+        I self.write_pos > self.len {
+            self.len = self.write_pos
+        }
         8
     }
 
@@ -123,9 +134,12 @@ X ByteBuffer {
 
     # Write raw bytes from pointer
     F write_bytes(&self, src: i64, count: i64) -> i64 {
-        @.ensure_capacity(self.len + count)
-        memcpy(self.data + self.len, src, count)
-        self.len = self.len + count
+        @.ensure_capacity(self.write_pos + count)
+        memcpy(self.data + self.write_pos, src, count)
+        self.write_pos = self.write_pos + count
+        I self.write_pos > self.len {
+            self.len = self.write_pos
+        }
         count
     }
 
@@ -148,9 +162,12 @@ X ByteBuffer {
             slen = slen + 1
         }
         @.write_i32_le(slen)
-        @.ensure_capacity(self.len + slen)
-        memcpy(self.data + self.len, p, slen)
-        self.len = self.len + slen
+        @.ensure_capacity(self.write_pos + slen)
+        memcpy(self.data + self.write_pos, p, slen)
+        self.write_pos = self.write_pos + slen
+        I self.write_pos > self.len {
+            self.len = self.write_pos
+        }
         slen + 4
     }
 
@@ -158,6 +175,7 @@ X ByteBuffer {
     F clear(&self) -> i64 {
         self.len = 0
         self.pos = 0
+        self.write_pos = 0
         0
     }
 
@@ -200,10 +218,13 @@ X ByteBuffer {
 
     # Write u16 in little-endian (2 bytes)
     F write_u16_le(&self, value: i64) -> i64 {
-        @.ensure_capacity(self.len + 2)
-        store_byte(self.data + self.len, value & 255)
-        store_byte(self.data + self.len + 1, (value >> 8) & 255)
-        self.len = self.len + 2
+        @.ensure_capacity(self.write_pos + 2)
+        store_byte(self.data + self.write_pos, value & 255)
+        store_byte(self.data + self.write_pos + 1, (value >> 8) & 255)
+        self.write_pos = self.write_pos + 2
+        I self.write_pos > self.len {
+            self.len = self.write_pos
+        }
         2
     }
 
@@ -313,6 +334,7 @@ X ByteBuffer {
         self.len = 0
         self.cap = 0
         self.pos = 0
+        self.write_pos = 0
         0
     }
 
@@ -321,13 +343,13 @@ X ByteBuffer {
         ByteBuffer.with_capacity(64)
     }
 
-    # Wrap existing byte slice as mutable ByteBuffer (shares data pointer — caller must
-    # ensure the underlying buffer lives as long as this ByteBuffer).
+    # Wrap existing byte slice as mutable ByteBuffer (shares data pointer; writes
+    # happen at the current cursor and update the underlying slice).
     # Accepts &[u8], &Vec<u8> (via coercion), or any slice reference.
     F wrap(data: &[u8]) -> ByteBuffer {
         ptr := slice_data_ptr(data)
         length := data.len()
-        ByteBuffer { data: ptr, len: length, cap: length, pos: 0 }
+        ByteBuffer { data: ptr, len: length, cap: length, pos: 0, write_pos: 0 }
     }
 
     # Wrap existing byte slice as read-only ByteBuffer (copies data into new buffer)
@@ -336,19 +358,19 @@ X ByteBuffer {
         length := data.len()
         buf := malloc(length)
         memcpy(buf, ptr, length)
-        ByteBuffer { data: buf, len: length, cap: length, pos: 0 }
+        ByteBuffer { data: buf, len: length, cap: length, pos: 0, write_pos: 0 }
     }
 
     # Wrap raw pointer and length directly (low-level, use wrap/wrap_readonly instead)
     F wrap_raw(data: i64, len: i64) -> ByteBuffer {
-        ByteBuffer { data: data, len: len, cap: len, pos: 0 }
+        ByteBuffer { data: data, len: len, cap: len, pos: 0, write_pos: 0 }
     }
 
     # Create ByteBuffer by copying from another ByteBuffer
     F from_buf(other: &ByteBuffer) -> ByteBuffer {
         buf := malloc(other.len)
         memcpy(buf, other.data, other.len)
-        ByteBuffer { data: buf, len: other.len, cap: other.len, pos: 0 }
+        ByteBuffer { data: buf, len: other.len, cap: other.len, pos: 0, write_pos: other.len }
     }
 
     # Get raw data pointer (for FFI). Use as_bytes for safe slice access.

@@ -224,6 +224,30 @@ F main() -> i64 = temp(Spring) + temp(Autumn) + 17
     assert_exit_code(source, 42);
 }
 
+#[test]
+fn e2e_enum_equality_uses_tag_not_address() {
+    let source = r#"
+EN State { Clean, Dirty }
+
+S Frame {
+    state: State,
+}
+
+X Frame {
+    F is_dirty(self) -> bool {
+        self.state == State.Dirty
+    }
+}
+
+F main() -> i64 {
+    dirty := Frame { state: State.Dirty }
+    clean := Frame { state: State.Clean }
+    I dirty.is_dirty() && !clean.is_dirty() { 42 } E { 1 }
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
 // ==================== Complex Enum Patterns ====================
 
 #[test]

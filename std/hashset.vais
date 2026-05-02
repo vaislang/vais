@@ -138,7 +138,8 @@ S HashSet<T> {
 X HashSet<T> {
     # Create a new HashSet with the default capacity (16 buckets)
     F new() -> HashSet<T> {
-        HashSet.with_capacity(16)
+        set: HashSet<T> := mut HashSet.with_capacity(16)
+        set
     }
 
     # Create a new HashSet with given capacity

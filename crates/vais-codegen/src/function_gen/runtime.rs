@@ -79,6 +79,45 @@ pub(crate) const RUNTIME_INTRINSIC_NAMES: &[&str] = &[
     "__vais_struct_shallow_free_TestCase",
     "__vais_struct_shallow_free_TestResult",
     "__vais_struct_shallow_free_TestSuiteResult",
+    "__mutex_create",
+    "__mutex_destroy",
+    "__mutex_lock",
+    "__mutex_try_lock",
+    "__mutex_unlock",
+    "__rwlock_create",
+    "__rwlock_destroy",
+    "__rwlock_read_lock",
+    "__rwlock_try_read_lock",
+    "__rwlock_read_unlock",
+    "__rwlock_write_lock",
+    "__rwlock_try_write_lock",
+    "__rwlock_write_unlock",
+    "__condvar_create",
+    "__condvar_destroy",
+    "__condvar_wait",
+    "__condvar_wait_timeout",
+    "__condvar_signal",
+    "__condvar_broadcast",
+    "__barrier_create",
+    "__barrier_destroy",
+    "__barrier_wait",
+    "__once_create",
+    "__once_call",
+    "__semaphore_create",
+    "__semaphore_destroy",
+    "__semaphore_wait",
+    "__semaphore_try_wait",
+    "__semaphore_post",
+    "__atomic_load_i64",
+    "__atomic_store_i64",
+    "__atomic_exchange_i64",
+    "__atomic_compare_exchange_i64",
+    "__atomic_fetch_add_i64",
+    "__atomic_fetch_sub_i64",
+    "__atomic_fetch_and_i64",
+    "__atomic_fetch_or_i64",
+    "__atomic_fetch_xor_i64",
+    "__cpu_pause",
 ];
 
 /// Check whether a function name is a runtime intrinsic whose body is emitted
@@ -87,6 +126,13 @@ pub(crate) const RUNTIME_INTRINSIC_NAMES: &[&str] = &[
 #[inline]
 pub(crate) fn is_runtime_intrinsic(name: &str) -> bool {
     RUNTIME_INTRINSIC_NAMES.contains(&name)
+}
+
+/// C runtime declarations emitted directly by `generate_helper_functions` in
+/// the main module because helper bodies call them with a canonical ABI.
+#[inline]
+pub(crate) fn is_main_runtime_c_decl(name: &str) -> bool {
+    matches!(name, "gettimeofday")
 }
 
 impl CodeGenerator {
@@ -98,6 +144,7 @@ impl CodeGenerator {
         // Note: exit and strlen are already declared by builtins
         ir.push_str("\n; C library function declarations\n");
         ir.push_str("declare i64 @write(i32, i8*, i64)\n");
+        ir.push_str("declare i64 @gettimeofday(i64, i64)\n");
 
         // Global constant for newline (used by panic functions)
         ir.push_str("\n; Global constants for runtime functions\n");
@@ -320,12 +367,11 @@ impl CodeGenerator {
 
         // __time_now_ms: get current time in milliseconds using gettimeofday
         ir.push_str("\n; Async helper: current time in milliseconds\n");
-        ir.push_str("declare i32 @gettimeofday(i8*, i8*)\n");
         ir.push_str("define i64 @__time_now_ms() {\n");
         ir.push_str("entry:\n");
         ir.push_str("  %tv = alloca [16 x i8], align 8\n");
-        ir.push_str("  %tvptr = bitcast [16 x i8]* %tv to i8*\n");
-        ir.push_str("  %0 = call i32 @gettimeofday(i8* %tvptr, i8* null)\n");
+        ir.push_str("  %tvptr = ptrtoint [16 x i8]* %tv to i64\n");
+        ir.push_str("  %0 = call i64 @gettimeofday(i64 %tvptr, i64 0)\n");
         ir.push_str("  %secptr = bitcast [16 x i8]* %tv to i64*\n");
         ir.push_str("  %sec = load i64, i64* %secptr\n");
         ir.push_str(
@@ -346,11 +392,13 @@ impl CodeGenerator {
         ir.push_str("define i64 @__time_now_ns() {\n");
         ir.push_str("entry:\n");
         ir.push_str("  %tv = alloca [16 x i8], align 8\n");
-        ir.push_str("  %tvptr = bitcast [16 x i8]* %tv to i8*\n");
-        ir.push_str("  %0 = call i32 @gettimeofday(i8* %tvptr, i8* null)\n");
+        ir.push_str("  %tvptr = ptrtoint [16 x i8]* %tv to i64\n");
+        ir.push_str("  %0 = call i64 @gettimeofday(i64 %tvptr, i64 0)\n");
         ir.push_str("  %secptr = bitcast [16 x i8]* %tv to i64*\n");
         ir.push_str("  %sec = load i64, i64* %secptr\n");
-        ir.push_str("  %usecptr = getelementptr inbounds [16 x i8], [16 x i8]* %tv, i64 0, i64 8\n");
+        ir.push_str(
+            "  %usecptr = getelementptr inbounds [16 x i8], [16 x i8]* %tv, i64 0, i64 8\n",
+        );
         ir.push_str("  %usecptr64 = bitcast i8* %usecptr to i64*\n");
         ir.push_str("  %usec = load i64, i64* %usecptr64\n");
         ir.push_str("  %ns_sec = mul i64 %sec, 1000000000\n");
@@ -376,6 +424,111 @@ impl CodeGenerator {
         ir.push_str("  call void @free(i8* %p)\n");
         ir.push_str("  ret i64 0\n");
         ir.push_str("}\n");
+
+        ir.push_str(
+            r#"
+; Runtime: single-thread sync shims.
+; Guards are not reliably dropped yet, so OS-level locks would deadlock current
+; generated code. These shims provide deterministic single-thread semantics.
+define linkonce_odr i64 @__mutex_create() { ret i64 1 }
+define linkonce_odr i64 @__mutex_destroy(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__mutex_lock(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__mutex_try_lock(i64 %handle) { ret i64 1 }
+define linkonce_odr i64 @__mutex_unlock(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__rwlock_create() { ret i64 1 }
+define linkonce_odr i64 @__rwlock_destroy(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__rwlock_read_lock(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__rwlock_try_read_lock(i64 %handle) { ret i64 1 }
+define linkonce_odr i64 @__rwlock_read_unlock(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__rwlock_write_lock(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__rwlock_try_write_lock(i64 %handle) { ret i64 1 }
+define linkonce_odr i64 @__rwlock_write_unlock(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__condvar_create() { ret i64 1 }
+define linkonce_odr i64 @__condvar_destroy(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__condvar_wait(i64 %condvar, i64 %mutex) { ret i64 0 }
+define linkonce_odr i64 @__condvar_wait_timeout(i64 %condvar, i64 %mutex, i64 %timeout_ms) { ret i64 0 }
+define linkonce_odr i64 @__condvar_signal(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__condvar_broadcast(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__barrier_create(i64 %count) { ret i64 1 }
+define linkonce_odr i64 @__barrier_destroy(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__barrier_wait(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__once_create() { ret i64 1 }
+define linkonce_odr i64 @__once_call(i64 %handle, i64 %fn_ptr) { ret i64 0 }
+define linkonce_odr i64 @__semaphore_create(i64 %permits) { ret i64 1 }
+define linkonce_odr i64 @__semaphore_destroy(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__semaphore_wait(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__semaphore_try_wait(i64 %handle) { ret i64 1 }
+define linkonce_odr i64 @__semaphore_post(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__cpu_pause() { ret i64 0 }
+
+; Runtime: i64 atomic helpers.
+define linkonce_odr i64 @__atomic_load_i64(i64 %ptr) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  %v = load atomic i64, i64* %p seq_cst, align 8
+  ret i64 %v
+}
+
+define linkonce_odr i64 @__atomic_store_i64(i64 %ptr, i64 %value) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  store atomic i64 %value, i64* %p seq_cst, align 8
+  ret i64 %value
+}
+
+define linkonce_odr i64 @__atomic_exchange_i64(i64 %ptr, i64 %value) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  %old = atomicrmw xchg i64* %p, i64 %value seq_cst
+  ret i64 %old
+}
+
+define linkonce_odr i64 @__atomic_compare_exchange_i64(i64 %ptr, i64 %expected, i64 %desired) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  %pair = cmpxchg i64* %p, i64 %expected, i64 %desired seq_cst seq_cst
+  %ok = extractvalue { i64, i1 } %pair, 1
+  %out = zext i1 %ok to i64
+  ret i64 %out
+}
+
+define linkonce_odr i64 @__atomic_fetch_add_i64(i64 %ptr, i64 %value) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  %old = atomicrmw add i64* %p, i64 %value seq_cst
+  ret i64 %old
+}
+
+define linkonce_odr i64 @__atomic_fetch_sub_i64(i64 %ptr, i64 %value) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  %old = atomicrmw sub i64* %p, i64 %value seq_cst
+  ret i64 %old
+}
+
+define linkonce_odr i64 @__atomic_fetch_and_i64(i64 %ptr, i64 %value) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  %old = atomicrmw and i64* %p, i64 %value seq_cst
+  ret i64 %old
+}
+
+define linkonce_odr i64 @__atomic_fetch_or_i64(i64 %ptr, i64 %value) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  %old = atomicrmw or i64* %p, i64 %value seq_cst
+  ret i64 %old
+}
+
+define linkonce_odr i64 @__atomic_fetch_xor_i64(i64 %ptr, i64 %value) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  %old = atomicrmw xor i64* %p, i64 %value seq_cst
+  ret i64 %old
+}
+
+"#,
+        );
 
         // __memcpy: pointer-as-i64 wrapper for llvm.memcpy intrinsic
         // (libc memcpy may already be declared with a conflicting signature).
@@ -418,13 +571,17 @@ impl CodeGenerator {
         ir.push_str("@.__fmt_i64 = private unnamed_addr constant [6 x i8] c\"%lld\\0A\\00\"\n");
         ir.push_str("define i64 @__print_str(i8* %s) {\n");
         ir.push_str("entry:\n");
-        ir.push_str("  %fmt = getelementptr inbounds [4 x i8], [4 x i8]* @.__fmt_str, i64 0, i64 0\n");
+        ir.push_str(
+            "  %fmt = getelementptr inbounds [4 x i8], [4 x i8]* @.__fmt_str, i64 0, i64 0\n",
+        );
         ir.push_str("  %r = call i32 (i8*, ...) @printf(i8* %fmt, i8* %s)\n");
         ir.push_str("  ret i64 0\n");
         ir.push_str("}\n");
         ir.push_str("define i64 @__print_i64(i64 %n) {\n");
         ir.push_str("entry:\n");
-        ir.push_str("  %fmt = getelementptr inbounds [6 x i8], [6 x i8]* @.__fmt_i64, i64 0, i64 0\n");
+        ir.push_str(
+            "  %fmt = getelementptr inbounds [6 x i8], [6 x i8]* @.__fmt_i64, i64 0, i64 0\n",
+        );
         ir.push_str("  %r = call i32 (i8*, ...) @printf(i8* %fmt, i64 %n)\n");
         ir.push_str("  ret i64 0\n");
         ir.push_str("}\n");
@@ -456,12 +613,16 @@ impl CodeGenerator {
         // identical `declare` lines in the same module — only `define`
         // duplicates are rejected by the verifier.
         ir.push_str("declare void @abort()\n");
-        ir.push_str("@.__panic_v_fmt = private unnamed_addr constant [10 x i8] c\"%s: %lld\\0A\\00\"\n");
+        ir.push_str(
+            "@.__panic_v_fmt = private unnamed_addr constant [10 x i8] c\"%s: %lld\\0A\\00\"\n",
+        );
         ir.push_str("@.__panic_v2_fmt = private unnamed_addr constant [16 x i8] c\"%s: %lld, %lld\\0A\\00\"\n");
         ir.push_str("@.__panic_s2_fmt = private unnamed_addr constant [14 x i8] c\"%s: %s vs %s\\0A\\00\"\n");
         ir.push_str("define i64 @__panic_with_value(i8* %msg, i64 %val) {\n");
         ir.push_str("entry:\n");
-        ir.push_str("  %fmt = getelementptr inbounds [10 x i8], [10 x i8]* @.__panic_v_fmt, i64 0, i64 0\n");
+        ir.push_str(
+            "  %fmt = getelementptr inbounds [10 x i8], [10 x i8]* @.__panic_v_fmt, i64 0, i64 0\n",
+        );
         ir.push_str("  call i32 (i8*, ...) @printf(i8* %fmt, i8* %msg, i64 %val)\n");
         ir.push_str("  call void @abort()\n");
         ir.push_str("  unreachable\n");
@@ -473,7 +634,9 @@ impl CodeGenerator {
         ir.push_str("  call void @abort()\n");
         ir.push_str("  unreachable\n");
         ir.push_str("}\n");
-        ir.push_str("@.__panic_sm_lbl = private unnamed_addr constant [13 x i8] c\"str mismatch\\00\"\n");
+        ir.push_str(
+            "@.__panic_sm_lbl = private unnamed_addr constant [13 x i8] c\"str mismatch\\00\"\n",
+        );
         ir.push_str("define i64 @__panic_str_mismatch(i8* %a, i8* %b) {\n");
         ir.push_str("entry:\n");
         ir.push_str("  %fmt = getelementptr inbounds [14 x i8], [14 x i8]* @.__panic_s2_fmt, i64 0, i64 0\n");
@@ -781,7 +944,9 @@ impl CodeGenerator {
         ir.push_str("entry:\n");
         ir.push_str("  ret void\n");
         ir.push_str("}\n");
-        ir.push_str("define void @__vais_struct_shallow_free_TestSuiteResult(%TestSuiteResult* %p) {\n");
+        ir.push_str(
+            "define void @__vais_struct_shallow_free_TestSuiteResult(%TestSuiteResult* %p) {\n",
+        );
         ir.push_str("entry:\n");
         ir.push_str("  ret void\n");
         ir.push_str("}\n");

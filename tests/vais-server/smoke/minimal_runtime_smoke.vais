@@ -1,0 +1,144 @@
+U src/core/app
+U src/core/config
+U src/core/context
+U src/core/error
+U src/http/header
+U src/http/method
+U src/http/status
+
+F smoke_config_app() -> i64 {
+    config := ServerConfig.default()
+    I config.port != 8080 {
+        println("FAIL config default port")
+        R 1
+    }
+    I config.host != "0.0.0.0" {
+        println("FAIL config default host")
+        R 1
+    }
+    I config.addr() != "0.0.0.0:8080" {
+        println("FAIL config addr")
+        R 1
+    }
+    I config.is_prod() {
+        println("FAIL dev config should not be prod")
+        R 1
+    }
+
+    app := mut App.new(config)
+    app.get("/", "handle_home")
+    app.post("/users", "handle_create_user")
+    app.use_mw("logger")
+
+    I app.route_count() != 2 {
+        println("FAIL app route count")
+        R 1
+    }
+    I app.middleware_count() != 1 {
+        println("FAIL app middleware count")
+        R 1
+    }
+    0
+}
+
+F smoke_context_response() -> i64 {
+    ctx := mut Context.new("GET", "/health")
+    ctx = ctx.set_header("X-Request-Id", "req-1")
+    res := ctx.text(200, "ok")
+
+    I res.status != 200 {
+        println("FAIL response status")
+        R 1
+    }
+    I res.body != "ok" {
+        println("FAIL response body")
+        R 1
+    }
+    I res.content_type != "text/plain; charset=utf-8" {
+        println("FAIL response content type")
+        R 1
+    }
+    I res.headers == "" {
+        println("FAIL response headers")
+        R 1
+    }
+
+    json := Context.new("POST", "/items").json(201, "{\"ok\":true}")
+    I json.status != 201 {
+        println("FAIL json response status")
+        R 1
+    }
+    I json.content_type != "application/json; charset=utf-8" {
+        println("FAIL json response content type")
+        R 1
+    }
+    0
+}
+
+F smoke_http_primitives() -> i64 {
+    ok := STATUS_OK
+    I ok.code != 200 {
+        println("FAIL status code")
+        R 1
+    }
+    I ok.reason != "OK" {
+        println("FAIL status reason")
+        R 1
+    }
+    I ok.is_success() != 1 {
+        println("FAIL status success")
+        R 1
+    }
+
+    method := HttpMethod.from_str("POST")
+    I method.to_str() != "POST" {
+        println("FAIL method roundtrip")
+        R 1
+    }
+
+    headers := mut Headers.new()
+    headers = headers.set(CONTENT_TYPE, "text/plain")
+    I headers.get(CONTENT_TYPE) != "text/plain" {
+        println("FAIL header get")
+        R 1
+    }
+    I headers.has(CONTENT_TYPE) != 1 {
+        println("FAIL header has")
+        R 1
+    }
+    0
+}
+
+F smoke_error_mapping() -> i64 {
+    not_found := VaisServerError.not_found("missing")
+    I not_found.status != 404 {
+        println("FAIL error status")
+        R 1
+    }
+    I !not_found.is_client_error() {
+        println("FAIL client error classification")
+        R 1
+    }
+
+    internal := VaisServerError.internal("boom")
+    I !internal.is_server_error() {
+        println("FAIL server error classification")
+        R 1
+    }
+    0
+}
+
+F main() -> i64 {
+    failures := mut 0
+    failures += smoke_config_app()
+    failures += smoke_context_response()
+    failures += smoke_http_primitives()
+    failures += smoke_error_mapping()
+
+    I failures > 0 {
+        println("VAIS_SERVER_MINIMAL_RUNTIME_FAIL")
+        R 1
+    }
+    println("VAIS_SERVER_MINIMAL_RUNTIME_OK")
+    0
+}

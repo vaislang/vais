@@ -217,9 +217,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             // `M s.parse_f64() { Ok(v) => ... }` knows v is f64 without
             // requiring an intermediate `let r: Result<f64, str> := ...`.
             Expr::MethodCall { method, .. } => match method.node.as_str() {
-                "parse_i64" | "parse_int" => {
-                    Some(R::Result(Box::new(R::I64), Box::new(R::Str)))
-                }
+                "parse_i64" | "parse_int" => Some(R::Result(Box::new(R::I64), Box::new(R::Str))),
                 "parse_i32" => Some(R::Result(Box::new(R::I32), Box::new(R::Str))),
                 "parse_u64" => Some(R::Result(Box::new(R::U64), Box::new(R::Str))),
                 "parse_u32" => Some(R::Result(Box::new(R::U32), Box::new(R::Str))),
@@ -286,11 +284,20 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Only interested in primitives — the struct-aware branch catches
         // Named/Optional/Result/Tuple first (see call site order).
         match payload_ty {
-            R::I8 | R::I16 | R::I32 | R::I64 | R::I128
-            | R::U8 | R::U16 | R::U32 | R::U64 | R::U128
-            | R::F32 | R::F64 | R::Bool | R::Str => {
-                Some(self.type_mapper.map_type(payload_ty))
-            }
+            R::I8
+            | R::I16
+            | R::I32
+            | R::I64
+            | R::I128
+            | R::U8
+            | R::U16
+            | R::U32
+            | R::U64
+            | R::U128
+            | R::F32
+            | R::F64
+            | R::Bool
+            | R::Str => Some(self.type_mapper.map_type(payload_ty)),
             _ => None,
         }
     }
@@ -1075,8 +1082,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             .find(|((_, v_name), _)| v_name == struct_name)
                             .map(|((e_name, _), _)| e_name.clone());
                         if let Some(enum_name) = enum_name_opt {
-                            if let Some(enum_ty) = self.generated_structs.get(&enum_name).copied()
-                            {
+                            if let Some(enum_ty) = self.generated_structs.get(&enum_name).copied() {
                                 self.builder
                                     .build_load(
                                         enum_ty,
@@ -1266,8 +1272,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             // branch (user-defined enums) still works while
                             // Option/Result paths supply a synthesized type.
                             let _ = &struct_name_opt; // retained for the
-                                                     // var_struct_types tag
-                                                     // below when available.
+                                                      // var_struct_types tag
+                                                      // below when available.
                             {
                                 // data_val is an i64 holding either the bitcast struct
                                 // (if ≤8B) or a heap pointer (if >8B). Determine which
@@ -1358,7 +1364,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             let data_i64 = data_val.into_int_value();
                             let decoded: BasicValueEnum<'ctx> = if decl_ty.is_float_type() {
                                 self.builder
-                                    .build_bitcast(data_i64, decl_ty.into_float_type(), "variant_i64_to_f")
+                                    .build_bitcast(
+                                        data_i64,
+                                        decl_ty.into_float_type(),
+                                        "variant_i64_to_f",
+                                    )
                                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                             } else if decl_ty.is_int_type() {
                                 let target = decl_ty.into_int_type();
@@ -1377,7 +1387,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                 }
                             } else if decl_ty.is_pointer_type() {
                                 self.builder
-                                    .build_int_to_ptr(data_i64, decl_ty.into_pointer_type(), "variant_i64_to_ptr")
+                                    .build_int_to_ptr(
+                                        data_i64,
+                                        decl_ty.into_pointer_type(),
+                                        "variant_i64_to_ptr",
+                                    )
                                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                                     .into()
                             } else {
@@ -1498,9 +1512,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             .find(|((_, v_name), _)| v_name == struct_name)
                             .map(|((e_name, _), _)| e_name.clone());
                         if let Some(enum_name) = enum_name_opt {
-                            if let Some(enum_ty) =
-                                self.generated_structs.get(&enum_name).copied()
-                            {
+                            if let Some(enum_ty) = self.generated_structs.get(&enum_name).copied() {
                                 self.builder
                                     .build_load(
                                         enum_ty,
@@ -1529,28 +1541,27 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     *match_val
                 };
 
-                let struct_val: inkwell::values::StructValue<'ctx> = if let Some(payload_ty) =
-                    payload_struct_ty
-                {
-                    // Extract enum.data (i64), inttoptr, load payload struct.
-                    let enum_struct = resolved_match_val.into_struct_value();
-                    let data_val = self
-                        .builder
-                        .build_extract_value(enum_struct, 1, "enum_struct_data")
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                    let data_i64 = data_val.into_int_value();
-                    let ptr_ty = payload_ty.ptr_type(AddressSpace::default());
-                    let heap_ptr = self
-                        .builder
-                        .build_int_to_ptr(data_i64, ptr_ty, "variant_struct_ptr")
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                    self.builder
-                        .build_load(payload_ty, heap_ptr, "variant_struct_load")
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                        .into_struct_value()
-                } else {
-                    resolved_match_val.into_struct_value()
-                };
+                let struct_val: inkwell::values::StructValue<'ctx> =
+                    if let Some(payload_ty) = payload_struct_ty {
+                        // Extract enum.data (i64), inttoptr, load payload struct.
+                        let enum_struct = resolved_match_val.into_struct_value();
+                        let data_val = self
+                            .builder
+                            .build_extract_value(enum_struct, 1, "enum_struct_data")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        let data_i64 = data_val.into_int_value();
+                        let ptr_ty = payload_ty.ptr_type(AddressSpace::default());
+                        let heap_ptr = self
+                            .builder
+                            .build_int_to_ptr(data_i64, ptr_ty, "variant_struct_ptr")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        self.builder
+                            .build_load(payload_ty, heap_ptr, "variant_struct_load")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            .into_struct_value()
+                    } else {
+                        resolved_match_val.into_struct_value()
+                    };
 
                 for (field_name, field_pat) in fields {
                     // For enum struct variants, field index comes from the positional

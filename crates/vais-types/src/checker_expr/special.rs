@@ -171,17 +171,21 @@ impl TypeChecker {
                 if let Err(e) = self.unify(&target_type, &value_type) {
                     return Some(Err(e));
                 }
-                // Phase 6.27b iteration 28: if target is a local Ident whose
-                // type contains Never (from `mut None` / `mut Err(...)` init
-                // pattern — see lookup.rs Phase 2.10 Never-for-Unit logic),
-                // promote its scope binding to the assigned value's type.
-                // Use update_var_type to modify the scope that OWNS the var
-                // (not the innermost pushed scope, which would leak at pop).
-                // Without this, later `M target { Some(x) => x.field }` sees
-                // Option<Never> and binds `x: Never`, failing field access.
+                // Promote underconstrained local bindings after assignment.
+                // `mut None` / `Option.None` creates `Option<?T>` (or older
+                // paths create `Option<Never>`). Once `x = Option.Some(v)`
+                // unifies `?T`, the scope binding must carry the resolved
+                // wrapper type so later `M x { Some(v) => ... }` binds the
+                // payload as the concrete type, not as `?T`/`Never`.
                 if let Expr::Ident(name) = &target.node {
-                    if type_contains_never(&target_type) && !type_contains_never(&value_type) {
-                        self.update_var_type(name, value_type);
+                    let resolved_target_type = self.apply_substitutions(&target_type);
+                    if type_needs_assignment_promotion(&target_type)
+                        && !type_needs_assignment_promotion(&resolved_target_type)
+                    {
+                        self.update_var_type(name, resolved_target_type);
+                    } else if type_contains_never(&target_type) && !type_contains_never(&value_type)
+                    {
+                        self.update_var_type(name, self.apply_substitutions(&value_type));
                     }
                 }
                 Some(Ok(ResolvedType::Unit))
@@ -461,6 +465,37 @@ fn type_contains_never(ty: &ResolvedType) -> bool {
         ResolvedType::Named { generics, .. } => generics.iter().any(type_contains_never),
         ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
             params.iter().any(type_contains_never) || type_contains_never(ret)
+        }
+        _ => false,
+    }
+}
+
+fn type_needs_assignment_promotion(ty: &ResolvedType) -> bool {
+    match ty {
+        ResolvedType::Var(_) | ResolvedType::Never => true,
+        ResolvedType::Array(inner)
+        | ResolvedType::Optional(inner)
+        | ResolvedType::Pointer(inner)
+        | ResolvedType::Ref(inner)
+        | ResolvedType::RefMut(inner)
+        | ResolvedType::Slice(inner)
+        | ResolvedType::SliceMut(inner)
+        | ResolvedType::Range(inner)
+        | ResolvedType::Future(inner) => type_needs_assignment_promotion(inner),
+        ResolvedType::ConstArray { element, .. } => type_needs_assignment_promotion(element),
+        ResolvedType::Map(k, v) => {
+            type_needs_assignment_promotion(k) || type_needs_assignment_promotion(v)
+        }
+        ResolvedType::Result(ok, err) => {
+            type_needs_assignment_promotion(ok) || type_needs_assignment_promotion(err)
+        }
+        ResolvedType::Tuple(elems) => elems.iter().any(type_needs_assignment_promotion),
+        ResolvedType::Named { generics, .. } => {
+            generics.iter().any(type_needs_assignment_promotion)
+        }
+        ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
+            params.iter().any(type_needs_assignment_promotion)
+                || type_needs_assignment_promotion(ret)
         }
         _ => false,
     }

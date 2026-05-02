@@ -873,7 +873,11 @@ mod tests {
 
     #[test]
     fn test_span_some() {
-        let span = vais_ast::Span { file_id: 0, start: 0, end: 10 };
+        let span = vais_ast::Span {
+            file_id: 0,
+            start: 0,
+            end: 10,
+        };
         let err = TypeError::Mismatch {
             expected: "i64".to_string(),
             found: "bool".to_string(),
@@ -947,7 +951,11 @@ mod tests {
 
     #[test]
     fn test_secondary_spans_use_after_move() {
-        let span = vais_ast::Span { file_id: 0, start: 10, end: 20 };
+        let span = vais_ast::Span {
+            file_id: 0,
+            start: 10,
+            end: 20,
+        };
         let err = TypeError::UseAfterMove {
             var_name: "x".to_string(),
             moved_at: Some(span),
@@ -966,7 +974,11 @@ mod tests {
 
     #[test]
     fn test_secondary_spans_borrow_conflict() {
-        let span = vais_ast::Span { file_id: 0, start: 5, end: 15 };
+        let span = vais_ast::Span {
+            file_id: 0,
+            start: 5,
+            end: 15,
+        };
         let err = TypeError::BorrowConflict {
             var_name: "x".to_string(),
             existing_borrow_at: Some(span),
@@ -981,7 +993,11 @@ mod tests {
 
     #[test]
     fn test_secondary_spans_borrow_conflict_immutable() {
-        let span = vais_ast::Span { file_id: 0, start: 5, end: 15 };
+        let span = vais_ast::Span {
+            file_id: 0,
+            start: 5,
+            end: 15,
+        };
         let err = TypeError::BorrowConflict {
             var_name: "x".to_string(),
             existing_borrow_at: Some(span),

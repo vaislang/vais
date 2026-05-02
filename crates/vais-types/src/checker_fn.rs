@@ -103,16 +103,9 @@ impl TypeChecker {
 
         // Check body
         //
-        // Phase 0 bug C16 fix (scoped — Phase Ω P1.6): push the function's
-        // declared return type as an expected-type hint ONLY when the body
-        // is a single tail expression. For block bodies, the hint leaks
-        // into every container constructor in the body (e.g. a
-        // `Vec.with_capacity(0u64)` for a local mutable accumulator gets
-        // its element type incorrectly bound to the function's return-Vec
-        // element type). The block case is covered by the body→return
-        // unification at line ~170 below and the deferred recording at
-        // `pending_method_instantiations` (Phase 193 R-1b), so the hint is
-        // not needed there.
+        // Push the function's return type as an expected-type hint. Block
+        // checking applies it only to the trailing value expression, so local
+        // constructors inside the body do not inherit the return type.
         let body_type_result = match &f.body {
             FunctionBody::Expr(expr) => {
                 self.push_expected_type(ret_type.clone());
@@ -120,7 +113,12 @@ impl TypeChecker {
                 self.pop_expected_type();
                 r
             }
-            FunctionBody::Block(stmts) => self.check_block(stmts),
+            FunctionBody::Block(stmts) => {
+                self.push_expected_type(ret_type.clone());
+                let r = self.check_block(stmts);
+                self.pop_expected_type();
+                r
+            }
         };
         let body_type = body_type_result?;
 
@@ -169,11 +167,7 @@ impl TypeChecker {
             // Phase 314: attach a span to body→return-type mismatches so E001
             // always includes a source pointer.  Prefer the declared return-type
             // span; fall back to the function-name span.
-            let ret_span = f
-                .ret_type
-                .as_ref()
-                .map(|t| t.span)
-                .unwrap_or(f.name.span);
+            let ret_span = f.ret_type.as_ref().map(|t| t.span).unwrap_or(f.name.span);
             self.unify(&expected_ret, &body_type_deref)
                 .map_err(|e| e.with_span(ret_span))?;
         }
@@ -614,8 +608,20 @@ impl TypeChecker {
 
         // Check body
         let body_type = match &method.body {
-            FunctionBody::Expr(expr) => self.check_expr(expr)?,
-            FunctionBody::Block(stmts) => self.check_block(stmts)?,
+            FunctionBody::Expr(expr) => {
+                let expected = self.current_fn_ret.clone().unwrap_or(ResolvedType::Unit);
+                self.push_expected_type(expected);
+                let r = self.check_expr(expr);
+                self.pop_expected_type();
+                r?
+            }
+            FunctionBody::Block(stmts) => {
+                let expected = self.current_fn_ret.clone().unwrap_or(ResolvedType::Unit);
+                self.push_expected_type(expected);
+                let r = self.check_block(stmts);
+                self.pop_expected_type();
+                r?
+            }
         };
 
         // Check return type (with auto-deref: &T unifies with T)

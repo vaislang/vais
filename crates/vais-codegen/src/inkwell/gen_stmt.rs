@@ -53,10 +53,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 //    Guards against UAF when alloca-backed locals produce a fresh
                 //    load SSA that doesn't match string_value_slot.
                 let last_stmt = stmts.iter().rev().find(|s| {
-                    !matches!(
-                        &s.node,
-                        Stmt::Break(_) | Stmt::Continue | Stmt::Return(_)
-                    )
+                    !matches!(&s.node, Stmt::Break(_) | Stmt::Continue | Stmt::Return(_))
                 });
                 last_stmt.and_then(|s| match &s.node {
                     Stmt::Expr(e) => match &e.node {
@@ -91,10 +88,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // removed it from string_value_slot — emit_free_slot is
                 // defensive against null but removing from string_value_slot
                 // lets us skip the IR emission entirely.
-                let still_tracked = self
-                    .string_value_slot
-                    .values()
-                    .any(|s| s == slot);
+                let still_tracked = self.string_value_slot.values().any(|s| s == slot);
                 if !still_tracked {
                     continue;
                 }
@@ -144,10 +138,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         self.var_string_slot.insert(name.node.clone(), slot);
                         let extras = self.phi_extra_slots.remove(&key).unwrap_or_default();
                         if !extras.is_empty() {
-                            let owned: Vec<_> =
-                                std::iter::once(slot).chain(extras).collect();
-                            self.var_string_slots_multi
-                                .insert(name.node.clone(), owned);
+                            let owned: Vec<_> = std::iter::once(slot).chain(extras).collect();
+                            self.var_string_slots_multi.insert(name.node.clone(), owned);
                         }
                         // Ownership stays with the enclosing block's scope
                         // frame. The variable and the scope frame share the
@@ -162,9 +154,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if let Some(t) = ty.as_ref() {
                     let resolved = self.ast_type_to_resolved(&t.node);
                     self.var_resolved_types.insert(name.node.clone(), resolved);
-                } else if let Some(resolved) =
-                    self.infer_resolved_type_from_rhs(&value.node)
-                {
+                } else if let Some(resolved) = self.infer_resolved_type_from_rhs(&value.node) {
                     // B.2: when there's no explicit annotation, try to recover
                     // the resolved type from the RHS expression. Currently
                     // handles known str builtins (`s.parse_*()`, `s.char_at()`)
@@ -218,11 +208,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     let dst_w = var_type.into_int_type().get_bit_width();
                     if val_w > dst_w {
                         self.builder
-                            .build_int_truncate(
-                                val_int,
-                                var_type.into_int_type(),
-                                "narrow_init",
-                            )
+                            .build_int_truncate(val_int, var_type.into_int_type(), "narrow_init")
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                             .into()
                     } else if val_w < dst_w {
@@ -230,11 +216,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         // the resolved type is already in `var_type`, and
                         // i64-narrow ops are unsigned-friendly. Default zext.
                         self.builder
-                            .build_int_z_extend(
-                                val_int,
-                                var_type.into_int_type(),
-                                "widen_init",
-                            )
+                            .build_int_z_extend(val_int, var_type.into_int_type(), "widen_init")
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                             .into()
                     } else {
@@ -249,9 +231,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // would write 8 bytes (the pointer) into the N*sizeof(T)-byte
                 // alloca slot, leaving the rest as garbage. Load the array
                 // value through the pointer first, then store by-value.
-                let store_val = if var_type.is_array_type()
-                    && store_val.is_pointer_value()
-                {
+                let store_val = if var_type.is_array_type() && store_val.is_pointer_value() {
                     let array_val = self
                         .builder
                         .build_load(var_type, store_val.into_pointer_value(), "arr_init")
@@ -1035,7 +1015,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// don't go through `Stmt::Return`. Callers that know the source Expr
     /// should prefer `mark_return_ownership_transfer_expr` to also match on
     /// `let`-bound identifier returns. See RFC-001 §4.6.
-    pub(super) fn mark_return_ownership_transfer(&mut self, val: &inkwell::values::BasicValueEnum<'ctx>) {
+    pub(super) fn mark_return_ownership_transfer(
+        &mut self,
+        val: &inkwell::values::BasicValueEnum<'ctx>,
+    ) {
         if val.is_struct_value() {
             use inkwell::values::AsValueRef;
             let key = val.into_struct_value().as_value_ref() as usize;
@@ -1061,10 +1044,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// For a `Block` function body, the implicit return is the trailing
     /// expression. Extracts it so we can apply variable-level ownership
     /// transfer on `F foo() -> str { let msg = a+b; msg }` patterns.
-    pub(super) fn block_trailing_expr<'a>(
-        &self,
-        stmts: &'a [Spanned<Stmt>],
-    ) -> Option<&'a Expr> {
+    pub(super) fn block_trailing_expr<'a>(&self, stmts: &'a [Spanned<Stmt>]) -> Option<&'a Expr> {
         match stmts.last().map(|s| &s.node) {
             Some(Stmt::Expr(e)) => Some(&e.node),
             _ => None,
@@ -1102,24 +1082,35 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Clone to avoid borrow conflict
         let slots: Vec<_> = self.alloc_tracker.clone();
         let skip_slots: Vec<_> = std::mem::take(&mut self.pending_return_skip_slot);
-        let ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::default());
+        let ptr_type = self
+            .context
+            .i8_type()
+            .ptr_type(inkwell::AddressSpace::default());
         for slot in slots {
             if skip_slots.contains(&slot) {
                 continue;
             }
             // Load the actual pointer from the entry-block alloca slot
-            let loaded = self.builder
+            let loaded = self
+                .builder
                 .build_load(ptr_type, slot, "alloc_cleanup_ptr")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                 .into_pointer_value();
             // Only free if not null (slot initialized to null, may not have been written in loop)
-            let is_null = self.builder
+            let is_null = self
+                .builder
                 .build_is_null(loaded, "is_null_check")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            let current_fn = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+            let current_fn = self
+                .builder
+                .get_insert_block()
+                .unwrap()
+                .get_parent()
+                .unwrap();
             let free_block = self.context.append_basic_block(current_fn, "free_alloc");
             let skip_block = self.context.append_basic_block(current_fn, "skip_free");
-            self.builder.build_conditional_branch(is_null, skip_block, free_block)
+            self.builder
+                .build_conditional_branch(is_null, skip_block, free_block)
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             self.builder.position_at_end(free_block);
             self.builder
@@ -1130,7 +1121,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.builder
                 .build_store(slot, ptr_type.const_null())
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            self.builder.build_unconditional_branch(skip_block)
+            self.builder
+                .build_unconditional_branch(skip_block)
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             self.builder.position_at_end(skip_block);
         }
@@ -1142,9 +1134,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         value: Option<&Expr>,
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         let (break_block, loop_depth) = {
-            let ctx = self.loop_stack.last().ok_or_else(|| {
-                CodegenError::Unsupported("break outside of loop".to_string())
-            })?;
+            let ctx = self
+                .loop_stack
+                .last()
+                .ok_or_else(|| CodegenError::Unsupported("break outside of loop".to_string()))?;
             (ctx.break_block, ctx.scope_str_depth)
         };
 
@@ -1177,14 +1170,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     // break value is later read at loop end. The hoist also
                     // lets mem2reg promote the slot to SSA in optimized
                     // builds.
-                    let current_block = self
-                        .builder
-                        .get_insert_block()
-                        .ok_or_else(|| {
-                            CodegenError::LlvmError(
-                                "no insert block when allocating loop break slot".to_string(),
-                            )
-                        })?;
+                    let current_block = self.builder.get_insert_block().ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "no insert block when allocating loop break slot".to_string(),
+                        )
+                    })?;
                     let entry_block = current_block
                         .get_parent()
                         .and_then(|f| f.get_first_basic_block())
@@ -1225,9 +1215,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     pub(super) fn generate_continue(&mut self) -> CodegenResult<BasicValueEnum<'ctx>> {
         let (continue_block, loop_depth) = {
-            let loop_ctx = self.loop_stack.last().ok_or_else(|| {
-                CodegenError::Unsupported("continue outside of loop".to_string())
-            })?;
+            let loop_ctx = self
+                .loop_stack
+                .last()
+                .ok_or_else(|| CodegenError::Unsupported("continue outside of loop".to_string()))?;
             (loop_ctx.continue_block, loop_ctx.scope_str_depth)
         };
 
@@ -1250,10 +1241,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         for idx in loop_depth..top {
             let frame: Vec<_> = self.scope_str_stack[idx].clone();
             for slot in frame.iter() {
-                let still_tracked = self
-                    .string_value_slot
-                    .values()
-                    .any(|s| s == slot);
+                let still_tracked = self.string_value_slot.values().any(|s| s == slot);
                 if !still_tracked {
                     continue;
                 }
@@ -1282,9 +1270,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         use vais_types::ResolvedType as R;
         match rhs {
             Expr::MethodCall { method, .. } => match method.node.as_str() {
-                "parse_i64" | "parse_int" => {
-                    Some(R::Result(Box::new(R::I64), Box::new(R::Str)))
-                }
+                "parse_i64" | "parse_int" => Some(R::Result(Box::new(R::I64), Box::new(R::Str))),
                 "parse_i32" => Some(R::Result(Box::new(R::I32), Box::new(R::Str))),
                 "parse_u64" => Some(R::Result(Box::new(R::U64), Box::new(R::Str))),
                 "parse_u32" => Some(R::Result(Box::new(R::U32), Box::new(R::Str))),

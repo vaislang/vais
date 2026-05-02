@@ -31,7 +31,8 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase141_sizeof_mixed_field_struct() {
-    // Struct with i64 + i32 fields: sizeof should be 12
+    // Struct with i64 + i32 fields follows LLVM ABI layout:
+    // 8 + 4 bytes plus 4 bytes tail padding for 8-byte struct alignment.
     let source = r#"
 S Mixed {
     a: i64,
@@ -43,7 +44,7 @@ F main() -> i64 {
     sizeof(m)
 }
 "#;
-    assert_exit_code(source, 12);
+    assert_exit_code(source, 16);
 }
 
 #[test]

@@ -33,6 +33,8 @@ impl TypeChecker {
             ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
                 Self::enum_name_hint_from(inner)
             }
+            ResolvedType::Optional(_) => Some("Option".to_string()),
+            ResolvedType::Result(_, _) => Some("Result".to_string()),
             _ => None,
         }
     }
@@ -433,7 +435,9 @@ impl TypeChecker {
         ) -> Option<String> {
             match t {
                 ResolvedType::Generic(name) => Some(name.clone()),
-                ResolvedType::Named { name, generics } if generics.is_empty() && bounds.contains_key(name) => {
+                ResolvedType::Named { name, generics }
+                    if generics.is_empty() && bounds.contains_key(name) =>
+                {
                     Some(name.clone())
                 }
                 ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {

@@ -161,7 +161,11 @@ mod cuda_codegen_tests {
     fn spanned<T>(node: T) -> Spanned<T> {
         Spanned {
             node,
-            span: Span { file_id: 0, start: 0, end: 0 },
+            span: Span {
+                file_id: 0,
+                start: 0,
+                end: 0,
+            },
         }
     }
 
@@ -1562,7 +1566,11 @@ mod kernel_generation_tests {
     fn spanned<T>(node: T) -> Spanned<T> {
         Spanned {
             node,
-            span: Span { file_id: 0, start: 0, end: 0 },
+            span: Span {
+                file_id: 0,
+                start: 0,
+                end: 0,
+            },
         }
     }
 
@@ -2183,7 +2191,11 @@ mod kernel_generation_tests {
         fn spanned<T>(node: T) -> Spanned<T> {
             Spanned {
                 node,
-                span: Span { file_id: 0, start: 0, end: 0 },
+                span: Span {
+                    file_id: 0,
+                    start: 0,
+                    end: 0,
+                },
             }
         }
 
@@ -2280,7 +2292,11 @@ mod kernel_generation_tests {
         fn spanned<T>(node: T) -> Spanned<T> {
             Spanned {
                 node,
-                span: Span { file_id: 0, start: 0, end: 0 },
+                span: Span {
+                    file_id: 0,
+                    start: 0,
+                    end: 0,
+                },
             }
         }
 

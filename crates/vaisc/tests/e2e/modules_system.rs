@@ -272,22 +272,34 @@ F get_value() -> i64 { R 100 }
         String::from_utf8_lossy(&output.stderr)
     );
 
-    // Check that .ll files were created (prefixed with main module name)
-    let main_ll = canonical_path.join("main_main.ll");
-    let lib_ll = canonical_path.join("main_lib.ll");
+    // Check that .ll files were created. Per-module artifact stems include a
+    // deterministic path hash to avoid basename collisions in real packages.
+    let find_ll = |prefix: &str| -> Option<std::path::PathBuf> {
+        fs::read_dir(&canonical_path)
+            .ok()?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .find(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with(prefix) && name.ends_with(".ll"))
+            })
+    };
+    let main_ll = find_ll("main_main_").expect("main_main_*.ll should be generated with --emit-ir");
+    let lib_ll = find_ll("main_lib_").expect("main_lib_*.ll should be generated with --emit-ir");
 
     assert!(
         main_ll.exists(),
-        "main_main.ll should be generated with --emit-ir"
+        "main_main_*.ll should be generated with --emit-ir"
     );
     assert!(
         lib_ll.exists(),
-        "main_lib.ll should be generated with --emit-ir"
+        "main_lib_*.ll should be generated with --emit-ir"
     );
 
     // Verify .ll files contain LLVM IR
-    let main_ir = fs::read_to_string(&main_ll).expect("Failed to read main_main.ll");
-    let lib_ir = fs::read_to_string(&lib_ll).expect("Failed to read main_lib.ll");
+    let main_ir = fs::read_to_string(&main_ll).expect("Failed to read main_main_*.ll");
+    let lib_ir = fs::read_to_string(&lib_ll).expect("Failed to read main_lib_*.ll");
 
     assert!(
         main_ir.contains("define") && main_ir.contains("@main"),
@@ -345,7 +357,9 @@ F bar() -> i64 { R 10 }
     // tolerance regressed.
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        !stderr.contains("circular") && !stderr.contains("Circular") && !stderr.contains("cycle detected"),
+        !stderr.contains("circular")
+            && !stderr.contains("Circular")
+            && !stderr.contains("cycle detected"),
         "Circular import should be tolerated silently (Phase 6.27c.1), got stderr: {}",
         stderr
     );

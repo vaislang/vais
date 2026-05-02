@@ -153,6 +153,12 @@ impl CodeGenerator {
                 String::from("{ i64, i64, i1 }")
             }
             ResolvedType::Named { name, generics } => {
+                if name == "Box"
+                    && !generics.is_empty()
+                    && !self.generics.struct_defs.contains_key("Box")
+                {
+                    return Ok(String::from("i64"));
+                }
                 // Single uppercase letter is likely a generic type parameter
                 if name.len() == 1 && name.chars().next().is_some_and(|c| c.is_uppercase()) {
                     if let Some(concrete) = self.get_generic_substitution(name) {
@@ -180,20 +186,14 @@ impl CodeGenerator {
                             // Enums/unions use i64-uniform layout — base name is safe.
                             format!("%{}", name)
                         } else if self.types.structs.contains_key(name) {
-                            // Phase 6.30.3: a concrete generic struct instantiation reached
-                            // type_to_llvm but its monomorphized type was not registered.
-                            // Before Phase 6.30.2 this path silently emitted `%Vec` while the
-                            // call site returned `%Vec$i64`, producing an LLVM type mismatch.
-                            // Emit a one-time debug warning so future drift in the
-                            // TC→codegen instantiation pipeline surfaces immediately.
-                            #[cfg(debug_assertions)]
-                            eprintln!(
-                                "[WARN codegen] type_to_llvm: concrete generic struct \
-                                 {} -> base %{} (mangled %{} not registered). \
-                                 This may cause IR type mismatches. See Phase 6.30.",
-                                name, name, mangled
-                            );
-                            format!("%{}", name)
+                            if !self.generic_struct_layout_uses_type_args(name) {
+                                return Ok(format!("%{}", name));
+                            }
+                            // A concrete generic struct must keep its mangled identity even
+                            // before its type body is emitted. Falling back to the base `%Vec`
+                            // erases nested shapes like `Vec<Vec<HnswNeighbor>>` and can leave
+                            // `%Vec$Vec_HnswNeighbor` as an opaque unsized type at allocation.
+                            format!("%{}", mangled)
                         } else {
                             // External or not-yet-generated specialization
                             format!("%{}", mangled)

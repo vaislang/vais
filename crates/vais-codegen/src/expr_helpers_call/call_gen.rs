@@ -92,7 +92,28 @@ impl CodeGenerator {
             // Store payload into enum payload area (generic i64 slot)
             // For non-i64 types, bitcast the payload pointer to T* and store directly
             // This copies the value INTO the Result struct (no dangling pointer)
-            let arg_type = self.infer_expr_type(arg_expr);
+            let mut arg_type = self.infer_expr_type(arg_expr);
+            if let Expr::StructLit {
+                name,
+                enum_name,
+                fields: _,
+            } = &arg_expr.node
+            {
+                let parent_enum = enum_name.clone().or_else(|| {
+                    self.types.enums.iter().find_map(|(candidate, info)| {
+                        info.variants
+                            .iter()
+                            .any(|variant| variant.name == name.node)
+                            .then(|| candidate.clone())
+                    })
+                });
+                if let Some(parent) = parent_enum {
+                    arg_type = ResolvedType::Named {
+                        name: parent,
+                        generics: vec![],
+                    };
+                }
+            }
             let llvm_ty = self.type_to_llvm(&arg_type);
             let type_size = self.compute_sizeof(&arg_type);
             // Check temp_var_types for more accurate type info when infer_expr_type returns I64.
@@ -101,7 +122,7 @@ impl CodeGenerator {
             // Phase B5: also prefer the registered SSA type when the caller-side
             // inferred type is an unspecialized generic container (e.g., `%Vec`
             // when `Vec.new()` was call-site specialized to `%Vec$f32`).
-            let (effective_ty, effective_size) = if matches!(&arg_type, ResolvedType::I64) {
+            let (mut effective_ty, mut effective_size) = if matches!(&arg_type, ResolvedType::I64) {
                 if let Some(temp_ty) = self.fn_ctx.temp_var_types.get(arg_val) {
                     let ty = self.type_to_llvm(temp_ty);
                     let sz = self.compute_sizeof(temp_ty);
@@ -137,6 +158,15 @@ impl CodeGenerator {
             } else {
                 (llvm_ty.clone(), type_size)
             };
+            if let Some(actual) = self.llvm_type_of_checked(arg_val) {
+                if actual.starts_with('%')
+                    && !actual.ends_with('*')
+                    && effective_ty == format!("{}*", actual)
+                {
+                    effective_size = type_size;
+                    effective_ty = actual;
+                }
+            }
             let needs_cast = effective_ty != "i64"
                 && effective_ty != "i32"
                 && effective_ty != "i16"
@@ -161,8 +191,45 @@ impl CodeGenerator {
                     heap_ptr,
                     effective_ty
                 );
-                self.fn_ctx.record_emitted_type(&typed_ptr, &format!("{}*", effective_ty));
-                if !self.is_expr_value(arg_expr) {
+                self.fn_ctx
+                    .record_emitted_type(&typed_ptr, &format!("{}*", effective_ty));
+                let local_name = arg_val.strip_prefix('%').unwrap_or(arg_val);
+                let local_is_alloca = self
+                    .fn_ctx
+                    .locals
+                    .get(local_name)
+                    .map(|local| local.is_alloca())
+                    .unwrap_or_else(|| {
+                        self.fn_ctx
+                            .locals
+                            .values()
+                            .any(|local| local.is_alloca() && local.llvm_name == local_name)
+                    });
+                let actual_llvm = if local_is_alloca {
+                    format!("{}*", effective_ty)
+                } else {
+                    self.llvm_type_of(arg_val)
+                };
+                if actual_llvm == format!("{}*", effective_ty)
+                    || actual_llvm == "ptr"
+                    || actual_llvm.ends_with('*')
+                {
+                    let src_ptr = if actual_llvm == format!("{}*", effective_ty) {
+                        arg_val.to_string()
+                    } else {
+                        let cast_ptr = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = bitcast {} {} to {}*",
+                            cast_ptr,
+                            actual_llvm,
+                            arg_val,
+                            effective_ty
+                        );
+                        self.fn_ctx
+                            .record_emitted_type(&cast_ptr, &format!("{}*", effective_ty));
+                        cast_ptr
+                    };
                     let loaded = self.next_temp(counter);
                     write_ir!(
                         ir,
@@ -170,7 +237,7 @@ impl CodeGenerator {
                         loaded,
                         effective_ty,
                         effective_ty,
-                        arg_val
+                        src_ptr
                     );
                     write_ir!(
                         ir,
@@ -183,7 +250,6 @@ impl CodeGenerator {
                 } else {
                     // Check if arg_val is i64 (generic erasure) but effective_ty is struct.
                     // If so, interpret i64 as pointer to struct and load before storing.
-                    let actual_llvm = self.llvm_type_of(arg_val);
                     if (actual_llvm == "i64" || actual_llvm.starts_with('i'))
                         && effective_ty.starts_with('%')
                     {
@@ -257,7 +323,43 @@ impl CodeGenerator {
                 );
                 // If arg_val is a pointer to the struct (e.g., from struct literal or local var),
                 // we must load the struct value before storing into the payload slot.
-                if !self.is_expr_value(arg_expr) {
+                let local_name = arg_val.strip_prefix('%').unwrap_or(arg_val);
+                let local_is_alloca = self
+                    .fn_ctx
+                    .locals
+                    .get(local_name)
+                    .map(|local| local.is_alloca())
+                    .unwrap_or_else(|| {
+                        self.fn_ctx
+                            .locals
+                            .values()
+                            .any(|local| local.is_alloca() && local.llvm_name == local_name)
+                    });
+                let actual_llvm = if local_is_alloca {
+                    format!("{}*", effective_ty)
+                } else {
+                    self.llvm_type_of(arg_val)
+                };
+                if actual_llvm == format!("{}*", effective_ty)
+                    || actual_llvm == "ptr"
+                    || actual_llvm.ends_with('*')
+                {
+                    let src_ptr = if actual_llvm == format!("{}*", effective_ty) {
+                        arg_val.to_string()
+                    } else {
+                        let cast_src = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = bitcast {} {} to {}*",
+                            cast_src,
+                            actual_llvm,
+                            arg_val,
+                            effective_ty
+                        );
+                        self.fn_ctx
+                            .record_emitted_type(&cast_src, &format!("{}*", effective_ty));
+                        cast_src
+                    };
                     let loaded = self.next_temp(counter);
                     write_ir!(
                         ir,
@@ -265,7 +367,7 @@ impl CodeGenerator {
                         loaded,
                         effective_ty,
                         effective_ty,
-                        arg_val
+                        src_ptr
                     );
                     write_ir!(
                         ir,
@@ -317,7 +419,8 @@ impl CodeGenerator {
                 let actual_ty = if arg_val == "void" {
                     "i64".to_string()
                 } else {
-                    self.llvm_type_of(arg_val)
+                    self.llvm_type_of_checked(arg_val)
+                        .unwrap_or_else(|| self.llvm_type_of(arg_val))
                 };
                 let final_val = if actual_ty != "i64"
                     && matches!(actual_ty.as_str(), "i1" | "i8" | "i16" | "i32")
@@ -331,6 +434,20 @@ impl CodeGenerator {
                         store_val_str
                     );
                     widened
+                } else if effective_ty.ends_with('*') && arg_val.starts_with('%') {
+                    // Reference/pointer payloads are represented by an i64 slot in
+                    // Option/Result/user-enum layout. `llvm_type_of` can miss alloca
+                    // pointer types, so use the effective declared pointer type when
+                    // packing `Ok(&self.field)`-style expressions.
+                    let casted = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = ptrtoint {} {} to i64",
+                        casted,
+                        effective_ty,
+                        store_val_str
+                    );
+                    casted
                 } else if actual_ty.ends_with('*') {
                     // Pointer payload (e.g., `Some(x)` where x is a struct
                     // returned as %T* from clone()/method call) — ptrtoint

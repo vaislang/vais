@@ -14,7 +14,47 @@ fn phase17_fnv1a_file_id_compile(path: &Path) -> u32 {
         hash ^= *byte as u32;
         hash = hash.wrapping_mul(FNV_PRIME);
     }
-    if hash == 0 { 1 } else { hash }
+    if hash == 0 {
+        1
+    } else {
+        hash
+    }
+}
+
+/// Stable, path-sensitive stem for per-module artifacts.
+///
+/// File stems alone are not unique in real packages (`types.vais` appears in
+/// multiple VaisDB submodules). Using only the basename lets parallel codegen
+/// race on the same `.ll` path and can compile the wrong IR into more than one
+/// object file. Keep the readable basename, but suffix it with a deterministic
+/// hash of the canonical module path.
+pub(crate) fn module_artifact_stem(path: &Path) -> String {
+    const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+
+    let raw_stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("module");
+    let mut safe_stem = String::with_capacity(raw_stem.len());
+    for ch in raw_stem.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '_' {
+            safe_stem.push(ch);
+        } else {
+            safe_stem.push('_');
+        }
+    }
+    if safe_stem.is_empty() {
+        safe_stem.push_str("module");
+    }
+
+    let mut hash = FNV_OFFSET;
+    for byte in path.to_string_lossy().as_bytes() {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+
+    format!("{}_{:016x}", safe_stem, hash)
 }
 
 /// Phase 17.H4.14: load generic struct templates (Vec, HashMap, Option,
@@ -33,12 +73,18 @@ fn phase17_load_stdlib_generic_templates() -> Vec<vais_ast::Struct> {
     let files = ["vec.vais", "option.vais", "hashmap.vais", "result.vais"];
     let mut structs_by_name: std::collections::HashMap<String, vais_ast::Struct> =
         std::collections::HashMap::new();
-    let mut impls_by_type: std::collections::HashMap<String, Vec<vais_ast::Spanned<vais_ast::Function>>> =
-        std::collections::HashMap::new();
+    let mut impls_by_type: std::collections::HashMap<
+        String,
+        Vec<vais_ast::Spanned<vais_ast::Function>>,
+    > = std::collections::HashMap::new();
     for file in &files {
         let path = std_path.join(file);
-        let Ok(source) = std::fs::read_to_string(&path) else { continue };
-        let Ok(module) = vais_parser::parse(&source) else { continue };
+        let Ok(source) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(module) = vais_parser::parse(&source) else {
+            continue;
+        };
         for item in module.items {
             match item.node {
                 vais_ast::Item::Struct(s) if !s.generics.is_empty() => {
@@ -60,7 +106,11 @@ fn phase17_load_stdlib_generic_templates() -> Vec<vais_ast::Struct> {
     for (name, methods) in impls_by_type {
         if let Some(s) = structs_by_name.get_mut(&name) {
             for m in methods {
-                if !s.methods.iter().any(|em| em.node.name.node == m.node.name.node) {
+                if !s
+                    .methods
+                    .iter()
+                    .any(|em| em.node.name.node == m.node.name.node)
+                {
                     s.methods.push(m);
                 }
             }
@@ -147,11 +197,7 @@ pub(crate) fn compile_per_module(
     }
     let ir_results: Vec<Result<(String, bool, String), String>> = {
         let mapper = |(module_path, item_indices): &(&std::path::PathBuf, &Vec<usize>)| {
-            let module_stem = module_path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown")
-                .to_string();
+            let module_stem = module_artifact_stem(module_path);
             let is_main = *module_path == input_canonical;
 
             // Create a fresh CodeGenerator for this module
@@ -360,6 +406,61 @@ pub(crate) fn compile_per_module(
     #[cfg(target_os = "linux")]
     {
         link_args.push("-lm".to_string());
+    }
+
+    let mut needs_pthread = false;
+    let mut linked_libs: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    let mut linked_runtimes: Vec<String> = Vec::new();
+    let mut used_modules = crate::runtime::extract_used_modules(final_ast);
+    for module_path in modules_map.keys() {
+        let is_std_file = module_path
+            .parent()
+            .and_then(|parent| parent.file_name())
+            .and_then(|name| name.to_str())
+            == Some("std");
+        if !is_std_file {
+            continue;
+        }
+        let Some(stem) = module_path.file_stem().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        let module_name = format!("std::{stem}");
+        if get_runtime_for_module(&module_name).is_some() {
+            used_modules.insert(module_name);
+        }
+    }
+    for module in &used_modules {
+        if let Some(runtime_info) = get_runtime_for_module(module) {
+            for runtime_file in runtime_files_for_module(module, runtime_info.file) {
+                if let Some(rt_path) = find_runtime_file(runtime_file) {
+                    let rt_str = rt_path.to_str().unwrap_or(runtime_file).to_string();
+                    if !linked_runtimes.contains(&rt_str) {
+                        linked_runtimes.push(rt_str.clone());
+                        link_args.push(rt_str);
+                        if verbose {
+                            println!(
+                                "{} Linking {} runtime from: {}",
+                                "info:".blue().bold(),
+                                module.strip_prefix("std::").unwrap_or(module),
+                                rt_path.display()
+                            );
+                        }
+                    }
+                }
+            }
+            if runtime_info.needs_pthread {
+                needs_pthread = true;
+            }
+            for lib in runtime_info.libs {
+                if !linked_libs.contains(lib) {
+                    linked_libs.insert(lib);
+                    link_args.push(lib.to_string());
+                }
+            }
+        }
+    }
+    if needs_pthread {
+        link_args.push("-lpthread".to_string());
     }
 
     // Phase 4c.4 / Task #55 — reproducible linker metadata.

@@ -3,6 +3,88 @@ use vais_ast::{Expr, Span, Spanned};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
+    fn lower_aggregate_format_arg_to_i64(
+        &mut self,
+        val: &str,
+        ty: &ResolvedType,
+        counter: &mut usize,
+        ir: &mut String,
+    ) -> Option<String> {
+        let named_ty = match ty {
+            ResolvedType::Named { .. } => ty,
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                if matches!(inner.as_ref(), ResolvedType::Named { .. }) =>
+            {
+                inner.as_ref()
+            }
+            _ => return None,
+        };
+        let ResolvedType::Named { name, .. } = named_ty else {
+            return None;
+        };
+        let enum_lookup = name.split_once('$').map(|(base, _)| base).unwrap_or(name);
+        let is_enum =
+            self.types.enums.contains_key(enum_lookup) || self.types.enums.contains_key(name);
+        let llvm_ty = self.type_to_llvm(named_ty);
+        let actual = self.llvm_type_of_checked(val);
+        let pointer_actual = actual
+            .as_deref()
+            .is_some_and(|actual| actual == "ptr" || actual == format!("{}*", llvm_ty));
+
+        if is_enum && pointer_actual {
+            let tag_ptr = self.next_temp(counter);
+            match actual.as_deref() {
+                Some("ptr") => {
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, ptr {}, i32 0, i32 0",
+                        tag_ptr,
+                        llvm_ty,
+                        val
+                    );
+                }
+                _ => {
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
+                        tag_ptr,
+                        llvm_ty,
+                        llvm_ty,
+                        val
+                    );
+                }
+            }
+            self.fn_ctx.record_emitted_type(&tag_ptr, "i32*");
+            let tag_i32 = self.next_temp(counter);
+            write_ir!(ir, "  {} = load i32, i32* {}", tag_i32, tag_ptr);
+            self.fn_ctx.record_emitted_type(&tag_i32, "i32");
+            let tag_i64 = self.next_temp(counter);
+            write_ir!(ir, "  {} = zext i32 {} to i64", tag_i64, tag_i32);
+            self.fn_ctx.record_emitted_type(&tag_i64, "i64");
+            return Some(tag_i64);
+        }
+
+        if is_enum && actual.as_deref() == Some(llvm_ty.as_str()) {
+            let tag_i32 = self.next_temp(counter);
+            write_ir!(ir, "  {} = extractvalue {} {}, 0", tag_i32, llvm_ty, val);
+            self.fn_ctx.record_emitted_type(&tag_i32, "i32");
+            let tag_i64 = self.next_temp(counter);
+            write_ir!(ir, "  {} = zext i32 {} to i64", tag_i64, tag_i32);
+            self.fn_ctx.record_emitted_type(&tag_i64, "i64");
+            return Some(tag_i64);
+        }
+
+        if pointer_actual {
+            let ptr_i64 = self.next_temp(counter);
+            let ptr_ty = actual.unwrap_or_else(|| format!("{}*", llvm_ty));
+            write_ir!(ir, "  {} = ptrtoint {} {} to i64", ptr_i64, ptr_ty, val);
+            self.fn_ctx.record_emitted_type(&ptr_i64, "i64");
+            return Some(ptr_i64);
+        }
+
+        None
+    }
+
     /// Generate print/println call with format string support
     ///
     /// Converts Vais format strings like `print("x = {}", x)` to printf calls.
@@ -212,7 +294,10 @@ impl CodeGenerator {
                     printf_args.push(format!("i8* {}", raw_ptr));
                 }
                 _ => {
-                    printf_args.push(format!("i64 {}", val));
+                    let lowered = self
+                        .lower_aggregate_format_arg_to_i64(&val, &arg_types[i], counter, &mut ir)
+                        .unwrap_or(val);
+                    printf_args.push(format!("i64 {}", lowered));
                 }
             }
         }
@@ -399,7 +484,10 @@ impl CodeGenerator {
                     arg_vals.push(format!("i8* {}", raw_ptr));
                 }
                 _ => {
-                    arg_vals.push(format!("i64 {}", val));
+                    let lowered = self
+                        .lower_aggregate_format_arg_to_i64(&val, &arg_types[i], counter, &mut ir)
+                        .unwrap_or(val);
+                    arg_vals.push(format!("i64 {}", lowered));
                 }
             }
         }
@@ -444,8 +532,8 @@ impl CodeGenerator {
         let buf_ptr = self.next_temp(counter);
         write_ir!(ir, "  {} = call i8* @malloc(i64 {})", buf_ptr, buf_size);
         self.fn_ctx.record_emitted_type(&buf_ptr, "i8*");
-        // Track allocation for automatic cleanup at scope exit
-        ir.push_str(&self.track_alloc(buf_ptr.clone()));
+        let (track_ir, slot) = self.track_alloc_with_slot(buf_ptr.clone());
+        ir.push_str(&track_ir);
 
         // Step 3: snprintf(buf, len+1, fmt, ...)
         let _write_result = self.next_temp(counter);
@@ -464,6 +552,10 @@ impl CodeGenerator {
 
         // Build fat pointer { i8*, i64 } with the formatted string
         let result = self.build_str_fat_ptr(&buf_ptr, &len_i64, counter, &mut ir);
+        if let Some(frame) = self.fn_ctx.scope_str_stack.last_mut() {
+            frame.push(slot.clone());
+        }
+        self.fn_ctx.string_value_slot.insert(result.clone(), slot);
         Ok((result, ir))
     }
 
