@@ -1,10 +1,10 @@
 # Current Compiler Certification Status
 
-Date: 2026-05-02
+Date: 2026-05-03
 
 ## Verdict
 
-The certified Core compiler freeze bundle is green. As of 2026-05-02, the
+The certified Core compiler freeze bundle is green. As of 2026-05-03, the
 certified Vais Core compiler is frozen for downstream re-entry under
 `CORE_FREEZE_DECISION.md`. This is not a claim that the whole Vais language,
 every advanced feature, or every ecosystem package is finished. It means the
@@ -32,7 +32,7 @@ current Core contract and promoted smoke gates pass with the evidence below.
 | VaisDB runtime lock stability | WAL/LSN/buffer/page/checkpoint mutex release paths covered by current `28/28` smoke |
 | vais-server runtime smoke | `13/13` |
 | vais-server compiled SSR forwarding | `forward_ssr_render()` loopback upstream POST/status/content-type/body bridge plus upstream non-2xx/transport-failure/timeout/retry mapping and retry-budget observability covered by current `13/13` smoke |
-| vais-web runtime smoke | `18/18` |
+| vais-web runtime smoke | `19/19` |
 | Full Rust-hosted compiler test run | Last completed RC baseline: `cargo test --release` exit code `0`; latest current-batch attempt was interrupted after e2e/integrity passed because `registry_e2e_tests` hung at dyld start |
 | Diff whitespace check | `git diff --check` clean |
 
@@ -178,6 +178,15 @@ The following claims are valid:
   parsing, schema validation JSON errors, enhanced JSON submit success, plain
   form `303` redirect, production code-split hydration, dynamic chunk loading,
   and no unexpected browser console/page errors in Playwright Chromium.
+- Current vais-web server action auth/rate-limit production runtime smoke scans
+  a temporary `app/secure/page.vaisx` route with `action()`, verifies
+  prerender skip for server-action routes, serves authenticated POSTs through
+  `handleServerAction()` with `authRequired` and `rateLimit: "2/min"`,
+  verifies unauthenticated `401` plus `WWW-Authenticate: Bearer`, Bearer-token
+  success, third-request `429` plus `Retry-After` and `X-RateLimit-*` headers,
+  `vx_session` cookie auth success, production code-split hydration, dynamic
+  chunk loading, and no unexpected browser console/page errors in Playwright
+  Chromium.
 - Per-module string helper definitions are available even when only an imported
   module uses `substring`/`char_at`.
 - A heap-owned `substring` assigned into a struct field transfers ownership into
@@ -208,8 +217,8 @@ The following claims are not valid yet:
 - "vais-web live deployed cloud platform runtime, production browser/device
   hydration beyond the promoted local Chromium/Firefox/WebKit smoke, or full
   dynamic production app behavior are certified."
-- "vais-web server action auth-required, rate limiting, file upload, or live
-  deployed action behavior are certified."
+- "vais-web server action file upload or live deployed action behavior are
+  certified."
 - "Raw `str` pointer arithmetic or `load_byte(str + i)` is a certified string
   parser implementation path."
 - "Experimental crates are part of the Core proof."

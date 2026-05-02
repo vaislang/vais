@@ -188,7 +188,8 @@ else
             __tests__/e2e/vais-web-file-routing-production-runtime.test.ts \
             __tests__/e2e/vais-web-cross-browser-hydration-runtime.test.ts \
             __tests__/e2e/vais-web-ssr-data-production-runtime.test.ts \
-            __tests__/e2e/vais-web-server-action-production-runtime.test.ts
+            __tests__/e2e/vais-web-server-action-production-runtime.test.ts \
+            __tests__/e2e/vais-web-server-action-auth-rate-production-runtime.test.ts
     ) 2>&1 | tee "${WEB_RUNTIME_LOG}" || WEB_RUNTIME_EXIT=$?
 fi
 
