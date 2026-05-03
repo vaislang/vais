@@ -1,0 +1,36 @@
+[entry]
+id = "A2-01"
+classification = "A2 certified subset"
+surface = "`?` operator on Result/Option (Core-typed, single-module)"
+predicate = "see compiler/docs/certification/A2_SUBSETS.md §A2-01"
+master_plan_version = 16
+landed = "2026-05-03"
+
+[positive]
+probe = "probe_pos.vais"
+expected_exit = 43
+description = "Result<i64,str>-typed inner; outer also Result<i64,str>; ? early-returns the Err arm; main matches and returns the inner value + 1 = 43."
+
+[negative]
+probe = "probe_neg.vais"
+expected_behavior = "rejection at some pipeline stage (currently clang IR — A2-NEG-DRIFT)"
+description = "outer's return type is i64 not Result; predicate violated; should reject."
+
+[a2_neg_drift_finding]
+note = """
+Type checker currently ACCEPTS `?` in a non-Result function (probe_neg
+exits 0 at `vaisc check`). The defect surfaces at clang IR generation
+— missing the early-return Err sugar generates malformed IR. Future
+iteration should move the rejection forward to type-check, with a
+stable error code (proposal: E_TRY_REQUIRES_MATCHING_RETURN).
+
+Until then the runner accepts clang failure as evidence the predicate
+violation is bounded — but this is a known weak point.
+"""
+
+[assertion_kind]
+kind = "exact_exit"
+expected_exit = 43
+
+[migration]
+post_tighten = "When type checker tightens, update probe_neg expected to check_fails with stable error code."
