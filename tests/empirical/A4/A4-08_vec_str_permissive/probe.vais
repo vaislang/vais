@@ -1,0 +1,14 @@
+N {
+    F puts(s: str) -> i32
+}
+
+F take_str_ref(s: &str) -> i64 {
+    puts(*s)
+    R 0
+}
+
+F main() -> i64 {
+    v: Vec<i64> = [42, 100, 999]
+    take_str_ref(v)
+    R 0
+}

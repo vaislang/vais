@@ -215,16 +215,15 @@ forms; the runner enforces only the selected form:
   a struct field at a stable offset).
 
   A4-08 (Vec<T> ↔ &T permissive) is **not** an `exit_not` candidate —
-  it is a late-codegen-silent surface and uses `build_fails` (see
-  STEP7_FINDINGS F-06: v1 sentinel currently does not reproduce, so
-  A4-08 is deferred until a probe that triggers the documented clang
-  IR mismatch is reconstructed).
+  the surface persists at type-check (`unification.rs:384`) but its v1
+  build-time symptom drifted to a runtime SIGSEGV. A4-08 uses the
+  fourth assertion form `runtime_crashes` introduced below (see
+  STEP7_FINDINGS F-06 for the symptom-drift discovery).
 
 - **`build_fails`** — `vaisc check` passes but the full build (codegen,
   link) exits non-zero, and stderr matches every regex in a list of
   required patterns. Use for late-codegen-silent surfaces (A4-09
-  linker undefined symbol; A4-08 clang IR mismatch when a current
-  reproducer is found).
+  linker undefined symbol).
 
   **Specificity requirement (codex v1 review)**: each pattern in
   `required_stderr_patterns` must distinguish the documented failure
@@ -237,15 +236,43 @@ forms; the runner enforces only the selected form:
   errors. Each fixture's `meta.toml` documents the rationale for its
   patterns.
 
+- **`runtime_crashes`** — `vaisc check` passes, build succeeds, but
+  runtime exits with a specific signal-class exit code when the
+  defective surface is actually exercised (parameter consumed, etc.).
+  Use for surfaces whose v1 build-time symptom drifted to runtime
+  (A4-08 Vec<T>↔&T permissive: build now succeeds, runtime SIGSEGVs
+  when the misinterpreted &str is read).
+
+  Required `meta.toml` fields:
+  - `expected_exit = 139` (or other signal-class code: 134 SIGABRT,
+    136 SIGFPE, 137 SIGKILL, 138 SIGBUS — pick the one observed and
+    document why that signal corresponds to the surface).
+  - `consuming_probe_required = true` — explicitly documents that
+    the probe must consume the misinterpreted parameter (a
+    non-consuming probe whose body returns a constant masks the
+    defect; see STEP7_FINDINGS F-06).
+
+  This is a fourth assertion kind separate from `build_fails` because
+  the failure mode is fundamentally different — clang/ld would have
+  produced an error message; SIGSEGV produces no diagnostic, only an
+  exit code, which is exactly the "silent" property the A4 class
+  documents.
+
 The `meta.toml` schema additions:
 
 ```toml
 [assertion_kind]
-kind = "exact_exit" | "exit_not" | "build_fails"
+kind = "exact_exit" | "exit_not" | "build_fails" | "runtime_crashes"
 
 # Required when kind = "exit_not":
 forbidden_set = [42]  # if exit lands on any of these, runner exits 1
                        # with DRIFT — investigate (fix vs collision).
+
+# Required when kind = "runtime_crashes":
+expected_exit = 139            # signal-class exit code (139 = SIGSEGV).
+consuming_probe_required = true  # probe must actually consume the
+                                  # misinterpreted parameter; a body that
+                                  # ignores it masks the defect.
 
 # Required when kind = "build_fails":
 required_stderr_patterns = [

@@ -213,43 +213,73 @@ correct in toml.
 
 ---
 
-### F-06 — A4-08 Vec ↔ &T permissive: v1 sentinel does NOT reproduce
+### F-06 — A4-08 Vec ↔ &T permissive: v1 sentinel symptom drifted, surface persists
 
-`probe.vais` (variants tried):
+Updated 2026-05-03 (second pass).
+
+**v1 expected**: clang IR mismatch ({ptr,i64} vs ptr) — build-time
+late codegen failure.
+
+**Current observation** (macOS arm64, vaisc release, 2026-05-03):
+- Type-check: PASSES (surface still firing — `unification.rs:384`
+  `Ok(()) // Permissive: allow Vec ↔ &T` is unchanged).
+- Build: SUCCEEDS (no clang IR mismatch — codegen has become more
+  robust, or the IR layout is now compatible enough for clang).
+- Runtime: When the `&str` parameter is actually CONSUMED (passed to
+  `puts()` or any function that reads it as a C string), the program
+  crashes with **SIGSEGV (exit 139)** because the Vec fat pointer is
+  misinterpreted as a str.
+
+**Reproducer (consuming probe)**:
 ```vais
-F take_str_ref(s: &str) -> i64 { R 1 }
+N {
+    F puts(s: str) -> i32
+}
+
+F take_str_ref(s: &str) -> i64 {
+    puts(*s)
+    R 0
+}
 
 F main() -> i64 {
-    v: Vec<i64> = [1, 2, 3]
-    R take_str_ref(v)            # version A
-    # v := [1, 2, 3] as Vec<i64>; R take_str_ref(v)   # version B
+    v: Vec<i64> = [42, 100, 999]
+    take_str_ref(v)
+    R 0
 }
 ```
+Result: build OK, runtime SIGSEGV (exit 139).
 
-Build: macOS arm64, vaisc release build, 2026-05-03.
-Master-plan.toml v1 expected: clang IR mismatch ({ptr,i64} vs ptr) —
-late codegen failure.
-Observed: type-checks, compiles, runs, exits 1 (= take_str_ref body
-return value).
+**Earlier non-consuming probe** (build-only, runtime returns body
+constant):
+```vais
+F take_str_ref(s: &str) -> i64 { R 1 }   # body never reads s
+```
+Result: build OK, runtime exits 1. The defect is masked because the
+function body never reads the misinterpreted parameter.
 
-The surface no longer fails at codegen. Two possibilities:
-1. **A4-08 has been silently fixed** between v1 discovery and now —
-   either the unification rule was tightened to reject this case, or
-   the codegen path was made compatible.
-2. **The probe wording from master-plan v1 is too underspecified** —
-   "take_str_ref(v) where v: Vec<i64>" may not be the exact source form
-   that produced the v1 clang error.
+**Reclassification**:
+- The surface itself (Vec ↔ &T permissive unification) is **still
+  present** — `unification.rs:384` is unchanged.
+- The v1 symptom (clang IR mismatch) no longer reproduces, but a worse
+  symptom emerged: the program builds successfully and SIGSEGVs at
+  runtime when the falsely-typed `&str` is actually consumed.
+- A4-08 should remain in the A4 inventory but **migrate from the
+  late-codegen-silent class to a runtime-crash class**, OR remain
+  classed as build-fails on the conservative reading that the v1
+  symptom was the deliberately documented one and runtime crashes are
+  out of scope.
 
-Either way, the v1 evidence does not stand under v2 retro-validation.
+**Decision (this iteration)**: keep A4-08 classified as
+`A4-late-codegen-silent` per master-plan.toml — the
+`assertion_kind = "build_fails"` form would now fail (no build error).
+Land the fixture under a new `assertion_kind` form: `runtime_crashes`,
+which asserts `vaisc check` passes, build succeeds, and runtime exit
+is 139 (SIGSEGV) when the parameter is actually consumed. The protocol
+is amended to support this fourth assertion kind (see protocol revision
+v8 below).
 
-**Status: A4-08 fixture deferred** with explicit "v1_unreproducible"
-note. Step 7 next iteration must either (a) find a probe that
-reproduces the clang IR mismatch on current toolchain, or (b)
-re-classify A4-08 (not a current A4 — perhaps Controlled now, or
-Rejected). Either outcome is a finding.
-
-This is exactly the value of v2 retro-validation: v1 single-sentinel
-discoveries can drift silently, and v2 catches that.
+**Status: A4-08 fixture LANDS this iteration** with the consuming
+probe and `assertion_kind = "runtime_crashes"`.
 
 ---
 
