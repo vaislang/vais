@@ -1,0 +1,9 @@
+F take_i64(x: i64) -> i64 {
+    R x
+}
+
+F main() -> i64 {
+    arr: [i64; 3] = [42, 100, 200]
+    p := &arr as *i64
+    R take_i64(p)
+}

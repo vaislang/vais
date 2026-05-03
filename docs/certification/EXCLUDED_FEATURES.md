@@ -174,6 +174,68 @@ lists, the verification protocol is:
    in `/tmp/` are not acceptable evidence for permanent classification
    — only initial discovery.
 
+### Assertion-kind tri-form (NEW v7 — Step 7 first iteration F-05)
+
+Step 7's first retro-validation iteration discovered that the v6 single
+"runtime exit matches expected" form is too tight for some A4 surfaces.
+Memory-load-corruption surfaces (the runtime returns a value derived
+from `load i64` against an address that was not supposed to be read as
+i64) produce exit codes that depend on stack/heap layout, optimization
+level, and OS — not on the unification rule itself. v1 single-sentinel
+exit codes for these surfaces (e.g. master-plan v1 says A4-02 = 184) do
+not generalize across environments (macOS arm64 release observed 56).
+
+The fixture's `meta.toml` `[assertion_kind]` block selects ONE of three
+forms; the runner enforces only the selected form:
+
+- **`exact_exit`** — runtime exit code must equal `expected.txt`
+  exactly. Use when the runtime observable is a source-named constant
+  (e.g. A4-01: void slot returns LLVM-default 96; A4-06: truthy branch
+  returns the literal 100; A4-07: widened literal returns 42). Stable
+  across environments because the value is determined by source, not
+  memory layout.
+
+- **`exit_not`** — runtime exit code must be in a `forbidden_set` that
+  enumerates the value(s) the surface would produce IF it were correctly
+  rejected at type-check (i.e. the values the well-typed program would
+  return). Use for memory-load-corruption surfaces (A4-02, A4-03, A4-04,
+  A4-05, possibly A4-08). Example for A4-02: `forbidden_set = [42]` —
+  the well-typed `take_i64(*p)` would return 42, so any other exit value
+  proves silent corruption. Specific corrupted value is ignored; only
+  "exit ≠ correct" matters.
+
+- **`build_fails`** — `vaisc check` passes but the full build (codegen,
+  link) exits non-zero, and stderr matches a list of required patterns.
+  Use for late-codegen-silent surfaces (A4-08 clang IR mismatch, A4-09
+  linker undefined symbol). The runner asserts both the non-zero build
+  exit AND the presence of every regex in `required_stderr_patterns` so
+  a different build failure is not silently accepted as the documented
+  one.
+
+The `meta.toml` schema additions:
+
+```toml
+[assertion_kind]
+kind = "exact_exit" | "exit_not" | "build_fails"
+
+# Required when kind = "exit_not":
+forbidden_set = [42]  # exit values that prove the surface is NOT firing
+
+# Required when kind = "build_fails":
+required_stderr_patterns = ["_take_lifetime_ref", "undefined|symbol|linker|ld:"]
+```
+
+The runner script (`run.sh`) reads the kind and applies the matching
+assertion. The previous "exit code matches expected.txt" form is
+preserved as the default `exact_exit` for backward compatibility with
+already-landed fixtures (A4-01, A4-06, A4-07 all use `exact_exit`;
+A4-09 uses `build_fails`).
+
+This protocol revision unblocks fixture creation for the 5 memory-load-
+corruption A4 entries (A4-02 through A4-05 and A4-08), which were
+deferred during Step 7's first iteration. Subsequent iterations land
+those fixtures using `exit_not`.
+
 This protocol is the only acceptable evidence for A4 / Controlled /
 Rejected classification. Speculation from `unification.rs` reading
 alone is insufficient (codex v5 review's 22+ speculative citations had

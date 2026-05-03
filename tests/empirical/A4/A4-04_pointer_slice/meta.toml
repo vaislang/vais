@@ -1,0 +1,34 @@
+# A4-04 — Pointer<T> ↔ Slice<T>/SliceMut<T> (Phase 162)
+
+[entry]
+id = "A4-04"
+classification = "A4-runtime-silent"
+surface = "Raw pointer *u8 silently unified with &[u8] slice in function call (auto-coercion added in Phase 162)"
+site = "unification.rs:417"
+site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:417"
+master_plan_version = 16
+
+[v1_evidence]
+probe_summary = "take_slice(p as *u8) where slice expected"
+expected_per_design = "type-check rejection (no implicit *T → &[T] coercion without length info)"
+actual_observed = 72
+actual_observed_macos_arm64_release_2026_05_03 = 192
+verified_date = "2026-05-03"
+
+[v2_evidence]
+status = "v1_reverified_with_protocol_revision"
+notes = """
+Environment drift (master-plan v1=72, this build=192). exit_not form with
+forbidden_set=[4] — the well-typed program (passing a 4-element slice
+explicitly) would return len=4. Pointer-fed slice has no length, so the
+runtime computes len from arbitrary stack memory.
+"""
+
+[migration]
+post_removal_expected = "vaisc check exits non-zero (proposal: E_TYPE_POINTER_SLICE_NO_LENGTH)"
+post_removal_action = "Replace with negative; positive companion uses &arr[..] slice form."
+
+[assertion_kind]
+kind = "exit_not"
+forbidden_set = [4]
+forbidden_set_rationale = "well-typed slice of 4 elements returns len=4."

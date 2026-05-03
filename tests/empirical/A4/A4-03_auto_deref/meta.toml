@@ -1,0 +1,32 @@
+# A4-03 — Auto-deref &T ↔ T
+
+[entry]
+id = "A4-03"
+classification = "A4-runtime-silent"
+surface = "Reference &i64 silently unified with i64 in function call (no explicit deref)"
+site = "unification.rs:570"
+site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:570"
+master_plan_version = 16
+
+[v1_evidence]
+probe_summary = "take_i64(r) where r: &i64 = &val"
+expected_per_design = "type-check rejection (require explicit *r)"
+actual_observed = 200  # master-plan.toml v1 sentinel
+actual_observed_macos_arm64_release_2026_05_03 = 56
+verified_date = "2026-05-03"
+
+[v2_evidence]
+status = "v1_reverified_with_protocol_revision"
+notes = """
+Same environment drift as A4-02 (master-plan v1=200, this build=56).
+Switched to exit_not per Step 7 protocol revision.
+"""
+
+[migration]
+post_removal_expected = "vaisc check exits non-zero (proposal: E_TYPE_REF_DEREF_REQUIRED)"
+post_removal_action = "Replace with negative fixture; companion positive uses explicit *r."
+
+[assertion_kind]
+kind = "exit_not"
+forbidden_set = [42]
+forbidden_set_rationale = "well-typed take_i64(*r) where val=42 returns 42."

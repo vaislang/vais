@@ -213,27 +213,64 @@ correct in toml.
 
 ---
 
-## Step 7 protocol revision needed (small)
+### F-06 — A4-08 Vec ↔ &T permissive: v1 sentinel does NOT reproduce
 
-Empirical verification protocol v2 (currently §EXCLUDED_FEATURES.md
-§Empirical verification protocol) should be amended to allow for
-**environment-stable assertions** rather than environment-specific exit
-codes. Concretely:
+`probe.vais` (variants tried):
+```vais
+F take_str_ref(s: &str) -> i64 { R 1 }
 
-- Replace "exit code matches v1 observed" with
-  "exit code is not the would-have-been-correct value", OR
-- Allow per-A4 metadata to mark assertion as
-  `assertion_kind = "exact_exit"` vs
-  `assertion_kind = "not_correct_exit"` so each A4 picks the appropriate
-  shape.
+F main() -> i64 {
+    v: Vec<i64> = [1, 2, 3]
+    R take_str_ref(v)            # version A
+    # v := [1, 2, 3] as Vec<i64>; R take_str_ref(v)   # version B
+}
+```
 
-A4-01 (Unit→i64 yields 96 from a void return — 96 is itself the LLVM
-default for the slot, not a property of the unification rule, but **the
-probe expects 0 if the rule were correctly rejected**, and 96 ≠ 0 so the
-"not correct exit" form would assert that).
+Build: macOS arm64, vaisc release build, 2026-05-03.
+Master-plan.toml v1 expected: clang IR mismatch ({ptr,i64} vs ptr) —
+late codegen failure.
+Observed: type-checks, compiles, runs, exits 1 (= take_str_ref body
+return value).
 
-This protocol revision is a separate task; it does not block A4-01
-landing.
+The surface no longer fails at codegen. Two possibilities:
+1. **A4-08 has been silently fixed** between v1 discovery and now —
+   either the unification rule was tightened to reject this case, or
+   the codegen path was made compatible.
+2. **The probe wording from master-plan v1 is too underspecified** —
+   "take_str_ref(v) where v: Vec<i64>" may not be the exact source form
+   that produced the v1 clang error.
+
+Either way, the v1 evidence does not stand under v2 retro-validation.
+
+**Status: A4-08 fixture deferred** with explicit "v1_unreproducible"
+note. Step 7 next iteration must either (a) find a probe that
+reproduces the clang IR mismatch on current toolchain, or (b)
+re-classify A4-08 (not a current A4 — perhaps Controlled now, or
+Rejected). Either outcome is a finding.
+
+This is exactly the value of v2 retro-validation: v1 single-sentinel
+discoveries can drift silently, and v2 catches that.
+
+---
+
+## Step 7 protocol revision (LANDED)
+
+The protocol revision has landed in
+`compiler/docs/certification/EXCLUDED_FEATURES.md §Empirical verification
+protocol § Assertion-kind tri-form (NEW v7 — Step 7 first iteration F-05)`.
+
+The tri-form (`exact_exit` / `exit_not` / `build_fails`) covers the four
+environment-stability classes identified in F-05. The four already-landed
+fixtures use:
+
+- A4-01: `exact_exit` (source-constant, void slot LLVM-default 96)
+- A4-06: `exact_exit` (source-constant, truthy branch literal 100)
+- A4-07: `exact_exit` (source-constant, widened literal 42)
+- A4-09: `build_fails` (linker undefined symbol _take_lifetime_ref)
+
+The 5 deferred fixtures (A4-02, A4-03, A4-04, A4-05, A4-08) will use
+`exit_not` with `forbidden_set` enumerating the value the well-typed
+program would have returned. Step 7 second iteration lands them.
 
 ---
 
