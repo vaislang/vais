@@ -483,7 +483,7 @@ enum Commands {
         indent: usize,
     },
 
-    /// Automatically fix code issues (unused vars, imports)
+    /// Automatically fix code issues (unused vars, imports, or A4 explicit-typing)
     Fix {
         /// Input source file
         input: PathBuf,
@@ -491,6 +491,15 @@ enum Commands {
         /// Show what would be fixed without modifying files
         #[arg(long)]
         dry_run: bool,
+
+        /// Run A4 explicit-typing codemod transformations (Master Plan v16)
+        #[arg(long)]
+        explicit: bool,
+
+        /// Limit A4 codemod to a single site identifier (e.g. A4-01).
+        /// Only meaningful with --explicit.
+        #[arg(long, value_name = "A4-ID")]
+        site: Option<String>,
     },
 
     /// Package management commands
@@ -1031,8 +1040,17 @@ fn main_inner() {
             check,
             indent,
         }) => commands::simple::cmd_fmt(&input, check, indent),
-        Some(Commands::Fix { input, dry_run }) => {
-            commands::fix::cmd_fix(&input, dry_run, cli.verbose)
+        Some(Commands::Fix {
+            input,
+            dry_run,
+            explicit,
+            site,
+        }) => {
+            if explicit {
+                commands::fix::cmd_fix_explicit(&input, dry_run, site.as_deref())
+            } else {
+                commands::fix::cmd_fix(&input, dry_run, cli.verbose)
+            }
         }
         Some(Commands::New {
             name,

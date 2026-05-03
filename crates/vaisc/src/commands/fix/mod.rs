@@ -2,6 +2,10 @@
 //!
 //! Provides an AST-based rewriting engine that can detect and automatically
 //! remove unused variables, unused imports, and apply other mechanical fixes.
+//!
+//! Use `vaisc fix --explicit` for A4 codemod transformations (Master Plan v16).
+
+pub(crate) mod explicit;
 
 use crate::configure_type_checker;
 use crate::error_formatter;
@@ -22,6 +26,40 @@ pub struct FixResult {
     pub unused_imports_removed: usize,
     /// Whether the file was modified
     pub modified: bool,
+}
+
+/// Run the `fix --explicit` A4 codemod on a single file.
+///
+/// Returns `Ok(())` when no findings are detected, `Err` when any A4 issue is
+/// found (so the process exits non-zero) or when a fatal error occurs.
+pub(crate) fn cmd_fix_explicit(
+    input: &std::path::Path,
+    dry_run: bool,
+    site: Option<&str>,
+) -> Result<(), String> {
+    let opts = explicit::ExplicitFixOptions {
+        dry_run,
+        site: site.map(|s| s.to_string()),
+    };
+
+    let report = explicit::run_explicit_fix(input, opts).map_err(|e| {
+        // NotImplemented is a user-facing diagnostic, not an ICE; propagate
+        // the message directly so the caller can print it via the standard
+        // error path.
+        format!("{}", e)
+    })?;
+
+    let code = explicit::print_report_and_exit_code(input, &report, dry_run);
+    if code != 0 {
+        // Non-zero: surface as Err so main.rs exits 1.
+        Err(format!(
+            "A4 explicit-fix found {} issue(s) in {}",
+            report.findings.len(),
+            input.display()
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 /// Run the fix command on a single file
