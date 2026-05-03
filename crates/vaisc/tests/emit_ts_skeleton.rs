@@ -1,8 +1,8 @@
-//! Skeleton tests for `vaisc emit-ts` (Master Plan v16 Order Step 8, Stage 0).
+//! Skeleton tests for `vaisc emit-ts` (Master Plan v16 Order Step 8).
 //!
 //! Three tests:
 //!   1. `emit_ts_basic_struct`         — happy path: pub struct with primitive fields
-//!   2. `emit_ts_unsupported_field_errors` — Vec field triggers EMIT_TS_999 non-zero exit
+//!   2. `emit_ts_unsupported_field_errors` — raw pointer `*i64` triggers EMIT_TS_009 (Stage 2)
 //!   3. `emit_ts_skips_private_struct` — only pub structs appear in the output
 
 use std::path::PathBuf;
@@ -98,7 +98,7 @@ fn emit_ts_basic_struct() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 2 — unsupported composite field triggers EMIT_TS_999 non-zero exit
+// Test 2 — raw pointer `*i64` triggers EMIT_TS_009 (Stage 2 specific code)
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -109,10 +109,7 @@ fn emit_ts_unsupported_field_errors() {
     let input_path = dir.path().join("bad.vais");
     let output_path = dir.path().join("bad.d.ts");
 
-    // Stage 1 added Vec/Option/Result/HashMap/tuple/enum/Ref lowerings, so
-    // Vec<i64> alone now compiles. Use a raw pointer (`*i64`) which is in
-    // the EMIT_TS_009 hard-fail list per cross-package-schema.md and stays
-    // EMIT_TS_999 catch-all here until stage 2 routes it specifically.
+    // Stage 2 routes raw pointer `*i64` to EMIT_TS_009 specifically.
     std::fs::write(
         &input_path,
         "P S X {\n  v: *i64,\n}\n",
@@ -137,11 +134,11 @@ fn emit_ts_unsupported_field_errors() {
         "expected non-zero exit when an unsupported field type is present"
     );
 
-    // The error output must contain both the error code and the field name.
+    // Stage 2: the error output must contain EMIT_TS_009 (raw pointer specific code).
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("EMIT_TS_999"),
-        "expected 'EMIT_TS_999' in stderr; got:\n{}",
+        stderr.contains("EMIT_TS_009"),
+        "expected 'EMIT_TS_009' in stderr (Stage 2 specific code for raw pointer); got:\n{}",
         stderr
     );
     assert!(

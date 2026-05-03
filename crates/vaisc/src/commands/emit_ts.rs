@@ -1,4 +1,4 @@
-//! `vaisc emit-ts` command — TypeScript declaration file emitter (Stage 1)
+//! `vaisc emit-ts` command — TypeScript declaration file emitter (Stage 2)
 //!
 //! Emits a `.d.ts` file from a `.vais` schema source.
 //!
@@ -12,7 +12,7 @@
 //!   - Non-pub structs: skipped silently
 //!   - Non-struct top-level items: skipped silently
 //!
-//! Stage 1 scope (this file):
+//! Stage 1 scope (LANDED):
 //!   - Composite type lowering:
 //!       Vec<T>              → ReadonlyArray<T_lowered>
 //!       &[T], &mut [T]      → ReadonlyArray<T_lowered>
@@ -27,14 +27,37 @@
 //!   - pub enum items are now emitted as tagged TS discriminated unions
 //!   - Topological emit order (leaves first) for readability
 //!
-//! Stages 2+ will add EMIT_TS_001-021 specific error codes, exhaustiveness
-//! tests, branded numeric types, and generic-constraint translation.
+//! Stage 2 scope (this file):
+//!   - Specific stable error codes EMIT_TS_001–EMIT_TS_021 for each enumerated
+//!     unsupported surface, replacing the catch-all EMIT_TS_999 for known cases.
+//!   - EMIT_TS_001: generic type parameter in struct/enum
+//!   - EMIT_TS_002: trait-bounded generic parameter
+//!   - EMIT_TS_003: dyn Trait field
+//!   - EMIT_TS_004: lifetime parameter (in struct generics or RefLifetime field)
+//!   - EMIT_TS_005: function pointer type (`fn(…)→…` or `FnPtr`)
+//!   - EMIT_TS_006: impl Trait (not present in current AST — future-proofed)
+//!   - EMIT_TS_007: pub function at module top-level
+//!   - EMIT_TS_008: pub type alias whose RHS is an unsupported surface
+//!   - EMIT_TS_009: raw pointer (`*T`)
+//!   - EMIT_TS_010: fixed-size array (`[T; N]`)
+//!   - EMIT_TS_011: Range types (Named "Range", "RangeInclusive", etc.)
+//!   - EMIT_TS_012: Future/async types (Named "Future" or ResolvedType::Future)
+//!   - EMIT_TS_013: SIMD vector / ConstArray (ResolvedType::Vector)
+//!   - EMIT_TS_014: Dependent/refinement types
+//!   - EMIT_TS_015: pub union
+//!   - EMIT_TS_016: pub trait
+//!   - EMIT_TS_017: pub const at module scope
+//!   - EMIT_TS_018: pub global
+//!   - EMIT_TS_019: impl block at module scope
+//!   - EMIT_TS_020: extern block
+//!   - EMIT_TS_021: pub macro definition
+//!   - EMIT_TS_999: catch-all for genuinely unclassified surfaces
 
 use colored::Colorize;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
-use vais_ast::{Item, Type, VariantFields};
+use vais_ast::{GenericParamKind, Item, Type, VariantFields};
 
 // ==================== Public API ====================
 
@@ -106,12 +129,12 @@ pub enum EmitTsError {
     Parse(String),
     /// The input file failed type-checking.
     TypeCheck(String),
-    /// A struct field's type is not supported in Stage 0/1.
+    /// A struct/enum field's type is not supported (EMIT_TS_001–EMIT_TS_999).
     ///
-    /// The error code is `EMIT_TS_999` for any type not yet handled.
-    /// Stages 2+ replace this with specific `EMIT_TS_001`–`EMIT_TS_021` codes.
+    /// Stage 2 routes known surfaces to specific EMIT_TS_001–EMIT_TS_021 codes.
+    /// EMIT_TS_999 is reserved for genuinely unclassified surfaces.
     UnsupportedField {
-        /// `"EMIT_TS_999"` catch-all (stage 1), or specific code (stage 2+).
+        /// Specific code: `"EMIT_TS_001"` through `"EMIT_TS_021"`, or `"EMIT_TS_999"`.
         code: String,
         /// Name of the struct/enum containing the unsupported field.
         struct_name: String,
@@ -119,6 +142,15 @@ pub enum EmitTsError {
         field_name: String,
         /// The Vais type string that could not be lowered.
         vais_type: String,
+    },
+    /// A top-level item kind is not supported in schema context (EMIT_TS_007–EMIT_TS_021).
+    UnsupportedItem {
+        /// Specific code: `"EMIT_TS_007"` through `"EMIT_TS_021"`.
+        code: String,
+        /// Kind label for the item (e.g., "function", "union", "trait").
+        kind: String,
+        /// Name of the unsupported item.
+        item_name: String,
     },
 }
 
@@ -135,8 +167,17 @@ impl fmt::Display for EmitTsError {
                 vais_type,
             } => write!(
                 f,
-                "{}: struct '{}' field '{}' has unsupported type '{}' (composite types are Stage 1+ scope)",
+                "[{}] struct '{}' field '{}' has unsupported type '{}'",
                 code, struct_name, field_name, vais_type
+            ),
+            EmitTsError::UnsupportedItem {
+                code,
+                kind,
+                item_name,
+            } => write!(
+                f,
+                "[{}] pub {} '{}' is not supported in schema emit (vaisc emit-ts emits types only)",
+                code, kind, item_name
             ),
         }
     }
@@ -194,8 +235,20 @@ pub fn run_emit_ts(opts: EmitTsOptions) -> Result<EmitTsReport, EmitTsError> {
         }
     }
 
-    // Step 5 — walk top-level items, lower pub structs and pub enums.
-    // Collect all declarations first, then topologically sort them.
+    // Step 5 — walk top-level items.
+    //   - pub struct  → emit as TS interface (after checking generics/lifetimes)
+    //   - pub enum    → emit as TS discriminated union (after checking generics)
+    //   - pub type alias → emit as TS type alias (after checking RHS for unsupported surfaces)
+    //   - pub function   → EMIT_TS_007
+    //   - pub union      → EMIT_TS_015
+    //   - pub trait      → EMIT_TS_016
+    //   - pub const      → EMIT_TS_017
+    //   - pub global     → EMIT_TS_018
+    //   - impl block     → EMIT_TS_019 (impl blocks have no is_pub; always hard-fail)
+    //   - extern block   → EMIT_TS_020
+    //   - pub macro      → EMIT_TS_021
+    //   - non-pub items  → skipped silently
+    //   - Use, TraitAlias, Error → skipped silently
     let mut decls: Vec<TsDecl> = Vec::new();
     let mut report = EmitTsReport::default();
 
@@ -206,14 +259,43 @@ pub fn run_emit_ts(opts: EmitTsOptions) -> Result<EmitTsReport, EmitTsError> {
                     continue;
                 }
                 let struct_name = s.name.node.clone();
+
+                // EMIT_TS_004: lifetime parameters on the struct declaration.
+                for gp in &s.generics {
+                    if matches!(gp.kind, GenericParamKind::Lifetime { .. }) {
+                        return Err(EmitTsError::UnsupportedItem {
+                            code: "EMIT_TS_004".to_string(),
+                            kind: "struct with lifetime parameter".to_string(),
+                            item_name: struct_name.clone(),
+                        });
+                    }
+                    // EMIT_TS_002: generic parameter with trait bounds.
+                    if matches!(gp.kind, GenericParamKind::Type { .. }) && !gp.bounds.is_empty() {
+                        return Err(EmitTsError::UnsupportedItem {
+                            code: "EMIT_TS_002".to_string(),
+                            kind: "struct with trait-bounded generic parameter".to_string(),
+                            item_name: struct_name.clone(),
+                        });
+                    }
+                    // EMIT_TS_001: any type generic parameter (even without bounds).
+                    if matches!(gp.kind, GenericParamKind::Type { .. }) {
+                        return Err(EmitTsError::UnsupportedItem {
+                            code: "EMIT_TS_001".to_string(),
+                            kind: "struct with generic type parameter".to_string(),
+                            item_name: struct_name.clone(),
+                        });
+                    }
+                }
+
                 let mut ts_fields = Vec::new();
 
                 for field in &s.fields {
                     let field_name = field.name.node.clone();
                     let ts_type =
                         lower_type(&field.ty.node, &known_types).ok_or_else(|| {
+                            let code = classify_type_error_code(&field.ty.node);
                             EmitTsError::UnsupportedField {
-                                code: "EMIT_TS_999".to_string(),
+                                code,
                                 struct_name: struct_name.clone(),
                                 field_name: field_name.clone(),
                                 vais_type: format_type(&field.ty.node),
@@ -243,6 +325,33 @@ pub fn run_emit_ts(opts: EmitTsOptions) -> Result<EmitTsReport, EmitTsError> {
                 }
                 let enum_name = e.name.node.clone();
 
+                // EMIT_TS_004: lifetime parameters on the enum declaration.
+                for gp in &e.generics {
+                    if matches!(gp.kind, GenericParamKind::Lifetime { .. }) {
+                        return Err(EmitTsError::UnsupportedItem {
+                            code: "EMIT_TS_004".to_string(),
+                            kind: "enum with lifetime parameter".to_string(),
+                            item_name: enum_name.clone(),
+                        });
+                    }
+                    // EMIT_TS_002: generic parameter with trait bounds.
+                    if matches!(gp.kind, GenericParamKind::Type { .. }) && !gp.bounds.is_empty() {
+                        return Err(EmitTsError::UnsupportedItem {
+                            code: "EMIT_TS_002".to_string(),
+                            kind: "enum with trait-bounded generic parameter".to_string(),
+                            item_name: enum_name.clone(),
+                        });
+                    }
+                    // EMIT_TS_001: any type generic parameter (even without bounds).
+                    if matches!(gp.kind, GenericParamKind::Type { .. }) {
+                        return Err(EmitTsError::UnsupportedItem {
+                            code: "EMIT_TS_001".to_string(),
+                            kind: "enum with generic type parameter".to_string(),
+                            item_name: enum_name.clone(),
+                        });
+                    }
+                }
+
                 // Build the discriminated union type expression.
                 let mut arms: Vec<String> = Vec::new();
                 for variant in &e.variants {
@@ -256,8 +365,9 @@ pub fn run_emit_ts(opts: EmitTsOptions) -> Result<EmitTsReport, EmitTsError> {
                             for (idx, ty_spanned) in types.iter().enumerate() {
                                 let ts_t =
                                     lower_type(&ty_spanned.node, &known_types).ok_or_else(|| {
+                                        let code = classify_type_error_code(&ty_spanned.node);
                                         EmitTsError::UnsupportedField {
-                                            code: "EMIT_TS_999".to_string(),
+                                            code,
                                             struct_name: enum_name.clone(),
                                             field_name: format!("{}._{}",vname, idx),
                                             vais_type: format_type(&ty_spanned.node),
@@ -274,8 +384,9 @@ pub fn run_emit_ts(opts: EmitTsOptions) -> Result<EmitTsReport, EmitTsError> {
                                 let fname = &field.name.node;
                                 let ts_t =
                                     lower_type(&field.ty.node, &known_types).ok_or_else(|| {
+                                        let code = classify_type_error_code(&field.ty.node);
                                         EmitTsError::UnsupportedField {
-                                            code: "EMIT_TS_999".to_string(),
+                                            code,
                                             struct_name: enum_name.clone(),
                                             field_name: format!("{}.{}", vname, fname),
                                             vais_type: format_type(&field.ty.node),
@@ -296,8 +407,112 @@ pub fn run_emit_ts(opts: EmitTsOptions) -> Result<EmitTsReport, EmitTsError> {
                     rhs,
                 }));
             }
-            // All other item kinds are skipped silently in Stage 1.
-            _ => {}
+            // EMIT_TS_008: pub type alias — emit if RHS is supported, hard-fail otherwise.
+            Item::TypeAlias(ta) => {
+                if !ta.is_pub {
+                    continue;
+                }
+                let alias_name = ta.name.node.clone();
+                match lower_type(&ta.ty.node, &known_types) {
+                    Some(ts_rhs) => {
+                        decls.push(TsDecl::TypeAlias(TsTypeAlias {
+                            name: alias_name,
+                            rhs: ts_rhs,
+                        }));
+                    }
+                    None => {
+                        return Err(EmitTsError::UnsupportedItem {
+                            code: "EMIT_TS_008".to_string(),
+                            kind: "type alias to unsupported surface".to_string(),
+                            item_name: alias_name,
+                        });
+                    }
+                }
+            }
+            // EMIT_TS_007: pub function at module top-level.
+            Item::Function(f) => {
+                if !f.is_pub {
+                    continue;
+                }
+                return Err(EmitTsError::UnsupportedItem {
+                    code: "EMIT_TS_007".to_string(),
+                    kind: "function".to_string(),
+                    item_name: f.name.node.clone(),
+                });
+            }
+            // EMIT_TS_015: pub union.
+            Item::Union(u) => {
+                if !u.is_pub {
+                    continue;
+                }
+                return Err(EmitTsError::UnsupportedItem {
+                    code: "EMIT_TS_015".to_string(),
+                    kind: "union".to_string(),
+                    item_name: u.name.node.clone(),
+                });
+            }
+            // EMIT_TS_016: pub trait.
+            Item::Trait(t) => {
+                if !t.is_pub {
+                    continue;
+                }
+                return Err(EmitTsError::UnsupportedItem {
+                    code: "EMIT_TS_016".to_string(),
+                    kind: "trait".to_string(),
+                    item_name: t.name.node.clone(),
+                });
+            }
+            // EMIT_TS_017: pub const at module scope.
+            Item::Const(c) => {
+                if !c.is_pub {
+                    continue;
+                }
+                return Err(EmitTsError::UnsupportedItem {
+                    code: "EMIT_TS_017".to_string(),
+                    kind: "const".to_string(),
+                    item_name: c.name.node.clone(),
+                });
+            }
+            // EMIT_TS_018: pub global.
+            Item::Global(g) => {
+                if !g.is_pub {
+                    continue;
+                }
+                return Err(EmitTsError::UnsupportedItem {
+                    code: "EMIT_TS_018".to_string(),
+                    kind: "global".to_string(),
+                    item_name: g.name.node.clone(),
+                });
+            }
+            // EMIT_TS_019: impl block (no is_pub on Impl; always hard-fail at module scope).
+            Item::Impl(_impl_block) => {
+                return Err(EmitTsError::UnsupportedItem {
+                    code: "EMIT_TS_019".to_string(),
+                    kind: "impl block".to_string(),
+                    item_name: "<impl>".to_string(),
+                });
+            }
+            // EMIT_TS_020: extern block (no is_pub; always hard-fail at module scope).
+            Item::ExternBlock(_ext) => {
+                return Err(EmitTsError::UnsupportedItem {
+                    code: "EMIT_TS_020".to_string(),
+                    kind: "extern block".to_string(),
+                    item_name: "<extern>".to_string(),
+                });
+            }
+            // EMIT_TS_021: pub macro definition.
+            Item::Macro(m) => {
+                if !m.is_pub {
+                    continue;
+                }
+                return Err(EmitTsError::UnsupportedItem {
+                    code: "EMIT_TS_021".to_string(),
+                    kind: "macro".to_string(),
+                    item_name: m.name.node.clone(),
+                });
+            }
+            // Use, TraitAlias, Error → skipped silently (no schema content).
+            Item::Use(_) | Item::TraitAlias(_) | Item::Error { .. } => {}
         }
     }
 
@@ -424,6 +639,74 @@ fn referenced_type_names(decl: &TsDecl) -> Vec<String> {
         }
     }
     names
+}
+
+// ==================== Type error classification (Stage 2) ====================
+
+/// Classify an unsupported AST `Type` node to the most specific stable error code.
+///
+/// Called only when `lower_type` returns `None` (i.e., the type is not lowerable).
+/// Returns the EMIT_TS_NNN code string that best describes why the type is rejected.
+///
+/// Code assignments:
+/// - EMIT_TS_003: `dyn Trait`
+/// - EMIT_TS_004: explicit lifetime (`&'a T`, `&'a mut T`)
+/// - EMIT_TS_005: function pointer types (`FnPtr` or `Fn`)
+/// - EMIT_TS_009: raw pointer (`*T`)
+/// - EMIT_TS_010: fixed-size array (`[T; N]`)
+/// - EMIT_TS_011: range types (`Range`, `RangeInclusive`, `RangeFrom`, `RangeTo`, `RangeFull`)
+/// - EMIT_TS_012: future/async types (`Future`, `async`)
+/// - EMIT_TS_013: SIMD vector (`Vector` or named SIMD type) — not currently reachable via
+///                AST `Type`; future-proofed here for completeness
+/// - EMIT_TS_014: dependent/refinement types
+/// - EMIT_TS_999: any other unlowerable type (catch-all)
+fn classify_type_error_code(ty: &Type) -> String {
+    match ty {
+        // EMIT_TS_009: raw pointer.
+        Type::Pointer(_) => "EMIT_TS_009".to_string(),
+
+        // EMIT_TS_010: fixed-size array [T; N].
+        Type::ConstArray { .. } => "EMIT_TS_010".to_string(),
+
+        // EMIT_TS_003: dyn Trait.
+        Type::DynTrait { .. } => "EMIT_TS_003".to_string(),
+
+        // EMIT_TS_004: explicit lifetime in reference (&'a T, &'a mut T).
+        // Stage 1's lower_type passes &'a T → T_lowered (erasing the lifetime).
+        // If lower_type returned None it means the *inner* type is unsupported —
+        // delegate to the inner type's code so the user gets the precise reason.
+        Type::RefLifetime { inner, .. } | Type::RefMutLifetime { inner, .. } => {
+            classify_type_error_code(&inner.node)
+        }
+
+        // EMIT_TS_005: function pointer or function type.
+        Type::FnPtr { .. } | Type::Fn { .. } => "EMIT_TS_005".to_string(),
+
+        // EMIT_TS_014: dependent/refinement type.
+        Type::Dependent { .. } => "EMIT_TS_014".to_string(),
+
+        // EMIT_TS_011: range types — detected via named types.
+        // EMIT_TS_012: future/async types — detected via named types.
+        Type::Named { name, .. } => {
+            // Range family
+            match name.as_str() {
+                "Range" | "RangeInclusive" | "RangeFrom" | "RangeTo" | "RangeFull" => {
+                    "EMIT_TS_011".to_string()
+                }
+                // Future / async
+                "Future" | "AsyncFuture" => "EMIT_TS_012".to_string(),
+                _ => "EMIT_TS_999".to_string(),
+            }
+        }
+
+        // EMIT_TS_014: linear / affine types (Vais-specific ownership types that
+        // carry semantic contracts not representable in TypeScript).
+        Type::Linear(_) | Type::Affine(_) => "EMIT_TS_014".to_string(),
+
+        // EMIT_TS_999: fallback for anything else that isn't lowerable and doesn't
+        // match a specific code (e.g., Infer, Associated, Map-type-that-failed, etc.).
+        _ => "EMIT_TS_999".to_string(),
+    }
 }
 
 // ==================== Type lowering ====================
@@ -635,7 +918,7 @@ pub(crate) fn cmd_emit_ts(input: &Path, output: &Path) -> Result<(), String> {
             vais_type,
         }) => {
             eprintln!(
-                "{}: {} struct '{}' field '{}' has unsupported type '{}' (composite types are Stage 1+ scope)",
+                "{} [{}]: struct '{}' field '{}' has unsupported type '{}'",
                 "error".red().bold(),
                 code,
                 struct_name,
@@ -643,10 +926,27 @@ pub(crate) fn cmd_emit_ts(input: &Path, output: &Path) -> Result<(), String> {
                 vais_type
             );
             // Exit code 1 for emit errors (EMIT_TS_NNN).
-            // We use Err here but the caller exits 1 for any Err.
             Err(format!(
-                "{}: unsupported field '{}' in struct '{}' (type: '{}')",
+                "[{}]: unsupported field '{}' in struct '{}' (type: '{}')",
                 code, field_name, struct_name, vais_type
+            ))
+        }
+        Err(EmitTsError::UnsupportedItem {
+            code,
+            kind,
+            item_name,
+        }) => {
+            eprintln!(
+                "{} [{}]: pub {} '{}' is not supported in schema emit",
+                "error".red().bold(),
+                code,
+                kind,
+                item_name
+            );
+            // Exit code 1 for emit errors (EMIT_TS_NNN).
+            Err(format!(
+                "[{}]: unsupported {} '{}' at module scope",
+                code, kind, item_name
             ))
         }
         Err(e @ EmitTsError::Io(_)) | Err(e @ EmitTsError::Parse(_)) | Err(e @ EmitTsError::TypeCheck(_)) => {
