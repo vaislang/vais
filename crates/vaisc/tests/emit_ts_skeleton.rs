@@ -80,9 +80,11 @@ fn emit_ts_basic_struct() {
         "expected 'export interface User {{' in .d.ts; got:\n{}",
         dts
     );
+    // Stage 4: integer types lower to width-branded TS aliases (VaisI64, etc.)
+    // so that an i64→f64 schema change is a typed change in TS.
     assert!(
-        dts.contains("readonly id: number;"),
-        "expected 'readonly id: number;'; got:\n{}",
+        dts.contains("readonly id: VaisI64;"),
+        "expected 'readonly id: VaisI64;'; got:\n{}",
         dts
     );
     assert!(
@@ -93,6 +95,12 @@ fn emit_ts_basic_struct() {
     assert!(
         dts.contains("readonly active: boolean;"),
         "expected 'readonly active: boolean;'; got:\n{}",
+        dts
+    );
+    // The brand prelude must be present so consumers can type the field.
+    assert!(
+        dts.contains("export type VaisI64"),
+        "expected brand prelude 'export type VaisI64' in .d.ts; got:\n{}",
         dts
     );
 }
