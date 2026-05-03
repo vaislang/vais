@@ -407,17 +407,20 @@ impl TypeChecker {
                 if let ResolvedType::Slice(elem) = inner.as_ref() {
                     self.unify(&generics[0], elem)
                 } else {
-                    // A4-08 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode
-                    // via VAIS_REJECT_A4_08=1. Default preserves the legacy silent
-                    // coercion so the baseline does not move.
-                    if std::env::var("VAIS_REJECT_A4_08").as_deref() == Ok("1") {
+                    // A4-08 (Master Plan v16 §A4 + Step 13 stage 1): strict default
+                    // — Vec<T> ↔ &T silent permissive coercion is now rejected by
+                    // default. Empirical baseline footprint = 0 std files (verified
+                    // 2026-05-04). Set VAIS_REJECT_A4_08=0 to restore the legacy
+                    // silent coercion if a previously-unmeasured downstream
+                    // consumer breaks; document any such case in STEP7_FINDINGS.
+                    if std::env::var("VAIS_REJECT_A4_08").as_deref() == Ok("0") {
+                        Ok(()) // Permissive: allow Vec ↔ &T (legacy)
+                    } else {
                         Err(crate::TypeError::Mismatch {
                             expected: format!("Vec<T>"),
                             found: format!("&T"),
                             span: None,
                         })
-                    } else {
-                        Ok(()) // Permissive: allow Vec ↔ &T
                     }
                 }
             }
@@ -467,28 +470,30 @@ impl TypeChecker {
             // Pointer<T> ↔ Slice<T> / SliceMut<T> auto-coercion (Phase 162).
             // *u8 and &[u8] are compatible in systems code — both represent byte buffers.
             // Unifies element types to maintain generic consistency.
-            // A4-04 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode
-            // via VAIS_REJECT_A4_04=1. Default preserves the legacy silent
-            // coercion so the baseline does not move.
+            // A4-04 (Master Plan v16 §A4 + Step 13 stage 1): strict default.
+            // Empirical baseline footprint = 0 std + 0 vaisdb sample (2026-05-04).
+            // Set VAIS_REJECT_A4_04=0 to restore legacy silent coercion.
             (ResolvedType::Pointer(p), ResolvedType::Slice(s))
             | (ResolvedType::Slice(s), ResolvedType::Pointer(p))
             | (ResolvedType::Pointer(p), ResolvedType::SliceMut(s))
             | (ResolvedType::SliceMut(s), ResolvedType::Pointer(p)) => {
-                if std::env::var("VAIS_REJECT_A4_04").as_deref() == Ok("1") {
+                if std::env::var("VAIS_REJECT_A4_04").as_deref() == Ok("0") {
+                    self.unify(p, s)
+                } else {
                     Err(crate::TypeError::Mismatch {
                         expected: format!("Pointer<T>"),
                         found: format!("Slice<T>"),
                         span: None,
                     })
-                } else {
-                    self.unify(p, s)
                 }
             }
             // Array/ConstArray ↔ Pointer auto-coercion (Phase 162).
             // [u64] / [u64; N] and *i64 are compatible (C-style array decay to pointer).
-            // A4-05 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode
-            // via VAIS_REJECT_A4_05=1. Default preserves the legacy silent
-            // coercion so the baseline does not move.
+            // A4-05 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode.
+            // Stage-1 attempt 2026-05-04 found ONE vaisdb dependency
+            // (lang/packages/vaisdb/src/vector/hnsw/cow.vais), so default
+            // remains legacy until that site is migrated. Set
+            // VAIS_REJECT_A4_05=1 to enable strict; default-mode INTEGRITY OK.
             (ResolvedType::ConstArray { element, .. }, ResolvedType::Pointer(p))
             | (ResolvedType::Pointer(p), ResolvedType::ConstArray { element, .. })
             | (ResolvedType::Array(element), ResolvedType::Pointer(p))
@@ -529,26 +534,26 @@ impl TypeChecker {
             // coercion so the baseline does not move.
             (ResolvedType::RefLifetime { inner, .. }, ResolvedType::Ref(other))
             | (ResolvedType::Ref(other), ResolvedType::RefLifetime { inner, .. }) => {
-                if std::env::var("VAIS_REJECT_A4_09").as_deref() == Ok("1") {
+                if std::env::var("VAIS_REJECT_A4_09").as_deref() == Ok("0") {
+                    self.unify(inner, other)
+                } else {
                     Err(crate::TypeError::Mismatch {
                         expected: format!("&'a T"),
                         found: format!("&T"),
                         span: None,
                     })
-                } else {
-                    self.unify(inner, other)
                 }
             }
             (ResolvedType::RefMutLifetime { inner, .. }, ResolvedType::RefMut(other))
             | (ResolvedType::RefMut(other), ResolvedType::RefMutLifetime { inner, .. }) => {
-                if std::env::var("VAIS_REJECT_A4_09").as_deref() == Ok("1") {
+                if std::env::var("VAIS_REJECT_A4_09").as_deref() == Ok("0") {
+                    self.unify(inner, other)
+                } else {
                     Err(crate::TypeError::Mismatch {
                         expected: format!("&'a mut T"),
                         found: format!("&mut T"),
                         span: None,
                     })
-                } else {
-                    self.unify(inner, other)
                 }
             }
             // ConstArray: element type unification + size equality

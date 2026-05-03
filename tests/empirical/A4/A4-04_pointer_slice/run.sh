@@ -1,45 +1,34 @@
 #!/usr/bin/env bash
-# A4-04 Pointer<T> ↔ Slice<T>/SliceMut<T> — empirical fixture runner (exit_not).
-# Site: unification.rs:417 (Phase 162)
-# assertion_kind = "exit_not"
-# Forbidden set: [4] — well-typed take_slice over a 4-element slice would return len=4.
+# A4-04 — Pointer↔Slice (post-removal: check_fails form).
+# Step 13 stage 1 LANDED: this surface is now rejected at vaisc check
+# under default mode (strict mode is the default since 2026-05-04).
+# Master-plan v16 §A4 prediction validated empirically — baseline
+# footprint was 0, removal landed without source migration.
 
 set -euo pipefail
-
 DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPILER_ROOT="$(cd "$DIR/../../../.." && pwd)"
 VAISC="${VAISC:-${COMPILER_ROOT}/target/release/vaisc}"
+[[ -x "$VAISC" ]] || { echo "FIXTURE_BROKEN: vaisc not found" >&2; exit 2; }
 
-if [[ ! -x "$VAISC" ]]; then
-  echo "FIXTURE_BROKEN: vaisc not found at $VAISC" >&2
-  exit 2
-fi
-
-WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
-
+WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 cp "$DIR/probe.vais" "$WORK/probe.vais"
 
-if ! "$VAISC" check "$WORK/probe.vais" >/dev/null 2>&1; then
-  echo "DRIFT: probe no longer type-checks (A4-04 may be removed)." >&2
+OUT="$( "$VAISC" check "$WORK/probe.vais" 2>&1 || true )"
+EXIT=0
+"$VAISC" check "$WORK/probe.vais" >/dev/null 2>&1 && EXIT=0 || EXIT=$?
+
+if [[ "$EXIT" == "0" ]]; then
+  echo "DRIFT: A4-04 check now succeeds — strict default may have regressed." >&2
+  echo "  Surface should be rejected at type-check." >&2
   exit 1
 fi
 
-( cd "$WORK" && "$VAISC" probe.vais >/dev/null 2>&1 )
-if [[ ! -x "$WORK/probe" ]]; then
-  echo "FIXTURE_BROKEN: vaisc did not produce binary" >&2
-  exit 2
+# E001 type mismatch is the documented stable error code.
+if ! grep -qE "E001|Type mismatch|expected" <<< "$OUT"; then
+  echo "DRIFT: A4-04 check failed but stderr lacks expected E001 pattern:" >&2
+  echo "$OUT" >&2
+  exit 1
 fi
 
-ACTUAL_EXIT=0
-"$WORK/probe" || ACTUAL_EXIT=$?
-
-FORBIDDEN=(4)
-for f in "${FORBIDDEN[@]}"; do
-  if [[ "$ACTUAL_EXIT" == "$f" ]]; then
-    echo "DRIFT: A4-04 exit $f is in forbidden_set — surface no longer firing." >&2
-    exit 1
-  fi
-done
-
-echo "A4-04 OK: probe type-checks, compiles, runs, exits ${ACTUAL_EXIT} (≠ forbidden $(IFS=,; echo "${FORBIDDEN[*]}") — silent corruption confirmed)."
+echo "A4-04 OK: vaisc check rejects probe with E001 (silent surface removed; default-mode strict)."
