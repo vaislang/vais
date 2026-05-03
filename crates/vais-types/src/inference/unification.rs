@@ -371,21 +371,21 @@ impl TypeChecker {
             (ResolvedType::F32, ResolvedType::F64) | (ResolvedType::F64, ResolvedType::F32) => {
                 Ok(())
             }
-            // A4-01 (Master Plan v16 §A4): Unit ↔ i64 was previously coerced
-            // silently. The Step 13 first removal experiment changes this to
-            // a type-check error gated behind VAIS_REJECT_A4_01=1 so the
-            // baseline can opt in without disturbing existing code that
-            // relies on the silent coercion. When VAIS_REJECT_A4_01 is unset
-            // (default) the legacy `Ok(())` continues to apply.
+            // A4-01 (Master Plan v16 §A4 + Step 13 stage 1): strict default.
+            // Empirical baseline footprint = 0 std + 0 vaisdb after the
+            // compiler/std/http.vais migration (replaced `LW handler != 0
+            // { ... } ! { ... }` if-with-else statement form with a ternary
+            // expression so the response type propagates through inference).
+            // Set VAIS_REJECT_A4_01=0 to restore the legacy silent coercion.
             (ResolvedType::Unit, ResolvedType::I64) | (ResolvedType::I64, ResolvedType::Unit) => {
-                if std::env::var("VAIS_REJECT_A4_01").as_deref() == Ok("1") {
+                if std::env::var("VAIS_REJECT_A4_01").as_deref() == Ok("0") {
+                    Ok(())
+                } else {
                     Err(crate::TypeError::Mismatch {
                         expected: ResolvedType::I64.to_string(),
                         found: ResolvedType::Unit.to_string(),
                         span: None,
                     })
-                } else {
-                    Ok(())
                 }
             }
             // Allow Result/Optional ↔ unit (implicit Ok(()) wrapping)

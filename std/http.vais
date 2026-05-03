@@ -773,17 +773,17 @@ X Server {
         # Find handler
         handler := self.router.find_handler(request.method, request.path)
 
-        response := LW handler != 0 {
-            # Call handler
-            __call_handler(handler, &request)
-        } ! {
-            # 404 Not Found
-            Response::not_found().with_text("Not Found")
-        }
+        # Step 13 A4-01: ternary used so the response type is preserved
+        # through inference; the previous `LW ... ! ...` (if-with-else)
+        # form was being lowered as a statement (Unit return), causing
+        # the silent Unit↔i64 coercion to apply at the __tcp_send call.
+        response: Response = handler != 0
+            ? __call_handler(handler, &request)
+            : Response::not_found().with_text("Not Found")
 
         # Send response
         resp_buffer := __malloc(HTTP_MAX_HEADER_SIZE + HTTP_MAX_BODY_SIZE)
-        resp_len := response.serialize(resp_buffer, HTTP_MAX_HEADER_SIZE + HTTP_MAX_BODY_SIZE)
+        resp_len: i64 = response.serialize(resp_buffer, HTTP_MAX_HEADER_SIZE + HTTP_MAX_BODY_SIZE)
         __tcp_send(fd, resp_buffer, resp_len)
         __free(resp_buffer)
 
