@@ -93,3 +93,62 @@ string to feed to `U`.
 
 Until the compiler change lands, Step 11 is BLOCKED on the silent-
 fallback issue, not on per-surface fixture authoring.
+
+---
+
+## Update — Step 11 UNBLOCKED (2026-05-03 second iteration)
+
+### F-A3-03 — VAIS_STRICT_IMPORTS=1 introduced
+
+The recommended compiler-side fix landed in
+`compiler/crates/vaisc/src/commands/simple.rs`. New behaviour:
+
+- Default (env unset or != "1"): unchanged — emit `warning:` and fall
+  back to single-file parse. Preserves regression-locked baseline.
+- `VAIS_STRICT_IMPORTS=1`: hard fail with
+  `error[E_IMPORT_NOT_FOUND]: import resolution failed in strict mode`
+  followed by the original resolver message. Exit code 1.
+
+The hint emitted under default mode now also tells the user the env
+variable name, so users see the strict-mode opt-in alongside the
+warning. The new hint reads:
+
+  Hint: set VAIS_STRICT_IMPORTS=1 to make this fatal instead of a warning.
+
+INTEGRITY OK preserved (no baseline regression: strict mode is opt-in
+and check-integrity.sh does not set the env variable).
+
+### F-A3-04 — A3 fixtures use `required_env` in meta.toml
+
+A new convention in `meta.toml [assertion_kind]` for fixtures whose
+documented behaviour requires a specific environment:
+
+```toml
+[assertion_kind]
+kind = "check_fails"
+required_env = { VAIS_STRICT_IMPORTS = "1" }
+required_stderr_patterns = ["E_IMPORT_NOT_FOUND", "grpc"]
+```
+
+The runner exports the listed env vars before invoking `vaisc check`.
+This form is OPTIONAL — fixtures whose probes work in default
+environment do not declare `required_env`.
+
+### A3-01 fixture LANDED
+
+`compiler/tests/empirical/A3/A3-01_grpc_uncertified/` covers the
+master-plan v16 A3 candidate `lang/packages/vais-server/src/api/
+grpc.vais` (import form `server/api/grpc`). Runner asserts strict-
+mode `vaisc check` rejects with E_IMPORT_NOT_FOUND + 'grpc' in stderr.
+
+### Next iterations
+
+- A3-02 graphql, A3-03 ws, A3-04 vaisdb security, etc. — same fixture
+  shape, swap surface name.
+- master-plan.toml structured A3 entries (currently just a narrative
+  list). Each entry carries import_form + filesystem_path so future
+  fixtures can be generated.
+- Consider extending `compiler/scripts/check-integrity.sh` to opt
+  into VAIS_STRICT_IMPORTS=1 once all stdlib + selfhost paths
+  resolve cleanly under strict mode. Today this would regress the
+  baseline so it's deferred.

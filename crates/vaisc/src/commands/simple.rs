@@ -206,12 +206,30 @@ pub(crate) fn cmd_check(
     let ast = match merged {
         Ok(module) => module,
         Err(import_err) => {
+            // Strict mode: fail with a stable error code instead of falling
+            // back. Opt-in via VAIS_STRICT_IMPORTS=1 environment variable
+            // (Master Plan v16 Order Step 11 unblock — STEP11_FINDINGS
+            // F-A3-01: silent fallback violates north star L-002).
+            //
+            // Default behaviour (env unset or != "1"): emit a warning and
+            // fall back to single-file parse, preserving current behaviour
+            // so the regression-locked baseline does not move.
+            let strict_imports = std::env::var("VAIS_STRICT_IMPORTS")
+                .ok()
+                .as_deref()
+                == Some("1");
+            if strict_imports {
+                return Err(format!(
+                    "error[E_IMPORT_NOT_FOUND]: import resolution failed in strict mode\n  {}\n  Set VAIS_STRICT_IMPORTS=0 (or unset) to fall back to single-file parse.",
+                    import_err
+                ));
+            }
             // Fall back to single-file parse if import resolution fails.
             // Emit a warning by default (not just on --verbose). Silent fallback
             // previously led to misleading "undefined field / function" errors
             // when the real problem was that stdlib couldn't be located.
             eprintln!(
-                "{} import resolution failed, falling back to single-file parse:\n  {}\n  Hint: run from the compiler directory or set VAIS_STD_PATH to the stdlib.",
+                "{} import resolution failed, falling back to single-file parse:\n  {}\n  Hint: run from the compiler directory or set VAIS_STD_PATH to the stdlib.\n  Hint: set VAIS_STRICT_IMPORTS=1 to make this fatal instead of a warning.",
                 "warning:".yellow().bold(),
                 import_err
             );
