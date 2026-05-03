@@ -1,0 +1,41 @@
+# A4-06 — Integer truthy
+# Empirical fixture metadata.
+
+[entry]
+id = "A4-06"
+classification = "A4-runtime-silent"
+surface = "Integer i64 silently treated as bool in if/else-if/ternary/while conditions"
+site = "control_flow.rs:188,243,273,396 (4 sites)"
+site_full_path = "compiler/crates/vais-types/src/checker_expr/control_flow.rs"
+master_plan_version = 16
+
+[v1_evidence]
+probe_summary = "I x { 100 } EL { 200 } where x: i64"
+expected_per_design = "type-check rejection (no implicit i64 → bool)"
+actual_observed = 100  # truthy branch taken — runtime correct, design violated
+verified_date = "2026-05-03"
+
+[v2_evidence]
+# Multi-sentinel retro-validation (Step 7 contract).
+# v2 status: v1_reverified — environment-stable (unlike A4-02/03).
+probes = [
+  { vais = "I x { 100 } EL { 200 } where x: i64 = 5", method = "if-else", exit_observed = 100 },
+]
+status = "v1_reverified"
+notes = """
+v1 evidence reproduces exactly on macOS arm64 release build, 2026-05-03.
+Surface is stable across environments because the runtime observable is
+the expected branch value (100), not a memory-layout artifact (unlike
+A4-02 Pointer↔i64 / A4-03 Auto-deref where exit is corrupted memory).
+
+v2 contract requires 3 distinct probes for HARD v2 status. Pending probes:
+  - else-if branch (control_flow.rs:243 site)
+  - ternary expression (control_flow.rs:273 site)
+  - while loop condition (control_flow.rs:396 site)
+Add when Step 7 second iteration runs.
+"""
+
+[migration]
+# When A4-06 is removed (Step 13), this fixture migrates to negative form.
+post_removal_expected = "vaisc check exits non-zero with stable error code (TBD; current proposal: E_TYPE_BOOL_REQUIRED)"
+post_removal_action = "Replace probe.vais with a negative fixture; update run.sh to expect non-zero exit on `vaisc check`. Add positive companion fixture using explicit `x != 0` to confirm the explicit form is accepted."

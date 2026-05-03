@@ -1,0 +1,8 @@
+F void_fn() {
+    R
+}
+
+F main() -> i64 {
+    x: i64 = void_fn()
+    R x
+}

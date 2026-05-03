@@ -1,0 +1,55 @@
+# A4-09 — Lifetime ref erasure (function definition)
+# Empirical fixture metadata.
+
+[entry]
+id = "A4-09"
+classification = "A4-late-codegen-silent"
+surface = "Function defined with lifetime param emits symbol with one mangling, called with plain reference uses different mangling — linker fails."
+site = "unification.rs:450"
+site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:450"
+master_plan_version = 16
+
+[v1_evidence]
+probe_summary = "F take_lifetime_ref<'a>(r: &'a i64) -> i64 { R 42 }; main calls with &i64"
+expected_per_design = "vaisc check rejects (lifetime tracked; monomorphization picks one mangling)"
+actual_observed = "linker undefined symbol _take_lifetime_ref"
+verified_date = "2026-05-03"
+
+[v2_evidence]
+status = "v1_reverified"
+notes = """
+v1 evidence reproduces exactly on macOS arm64 release build with clang
+linker, 2026-05-03. Output excerpt:
+
+  Undefined symbols for architecture arm64:
+    "_take_lifetime_ref", referenced from:
+        _main in ir_O0_99b7d3d1985879ce.o
+  ld: symbol(s) not found for architecture arm64
+  clang: error: linker command failed with exit code 1
+
+This is environment-stable: any clang-based toolchain rejects the missing
+symbol. The mangling mismatch happens before the linker runs; the linker
+just observes the gap.
+
+v2 contract requires 3 distinct probes for HARD v2 status. Pending probes:
+  - 'static lifetime instead of 'a
+  - lifetime param on a method in `X` impl block
+  - multiple lifetime params (<'a, 'b>)
+"""
+
+[migration]
+post_removal_expected = """
+After Step 13 removal of A4-09, vaisc check will reject the probe with a
+stable error code (TBD; current proposal: E_LIFETIME_MANGLING_MISMATCH or
+E_LIFETIME_NOT_SUPPORTED). The fixture migrates to a negative form: probe
+must fail at type-check, with the error reported at the call site or
+function definition site (TBD).
+"""
+
+[assertion_kind]
+# This fixture uses `assertion_kind = "build_fails"` per Step 7 protocol
+# revision (see compiler/tests/empirical/A4/STEP7_FINDINGS.md F-05).
+# The runner asserts the build process exits non-zero AND stderr contains
+# both the symbol name and a linker-error pattern.
+kind = "build_fails"
+required_stderr_patterns = ["_take_lifetime_ref", "undefined|symbol|linker|ld:"]

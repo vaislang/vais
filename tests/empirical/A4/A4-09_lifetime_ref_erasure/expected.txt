@@ -1,0 +1,1 @@
+build_fails: linker undefined symbol _take_lifetime_ref
