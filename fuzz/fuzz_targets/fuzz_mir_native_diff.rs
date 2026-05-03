@@ -336,9 +336,8 @@ enum PathOutcome {
 ///
 /// The `unimplemented!` is reached at runtime and causes `PathOutcome::NotImplemented`
 /// to be returned, so the differential check short-circuits without a finding.
-#[allow(unreachable_code, unused_variables)]
 fn run_mir_path(source: &str) -> PathOutcome {
-    use vais_mir::interpreter::interpret_function;
+    use vais_mir::interpreter::{interpret_function, MirValue};
     use vais_mir::lower::lower_module_checked;
     use vais_parser::parse;
     use vais_types::TypeChecker;
@@ -362,26 +361,33 @@ fn run_mir_path(source: &str) -> PathOutcome {
     };
 
     // Step 4: interpret "main"
-    // STAGE 1 GAP: interpret_function returns MirValue, not (exit_code, stdout).
-    // Replace this unimplemented! with a shim once the interpreter gains an I/O
-    // model and a RunOutput adapter.
-    let _ = (interpret_function, mir_module);
-    return PathOutcome::NotImplemented;
-
-    #[allow(unreachable_code)]
-    {
-        // Placeholder — dead code showing the intended stage 1 call site:
-        //
-        //   let result = interpret_function(&mir_module, "main", vec![]);
-        //   match result {
-        //       Ok(MirValue::Int(n)) => PathOutcome::Ok(RunOutput {
-        //           exit_code: n,
-        //           stdout: String::new(), // no I/O model yet
-        //       }),
-        //       Ok(_) => PathOutcome::InputInvalid, // non-integer main return
-        //       Err(_) => PathOutcome::InputInvalid,
-        //   }
-        PathOutcome::NotImplemented
+    // STAGE 1: bridge MirValue → (exit_code, stdout). The interpreter has no
+    // I/O model yet, so stdout is always empty; integer return is mapped to
+    // the program's exit code (8-bit truncated to match POSIX exit semantics).
+    // Stage 2+ extends this when the MIR interpreter gains print intrinsics.
+    match interpret_function(&mir_module, "main", vec![]) {
+        Ok(MirValue::Int(n)) => PathOutcome::Ok(RunOutput {
+            // Truncate to 8-bit so this matches what the native side will
+            // produce when its `exit(n)` reaches the OS.
+            exit_code: n & 0xFF,
+            stdout: String::new(),
+        }),
+        Ok(MirValue::Unit) => {
+            // `main` returning Unit is treated like `main` returning 0.
+            PathOutcome::Ok(RunOutput { exit_code: 0, stdout: String::new() })
+        }
+        Ok(_) => {
+            // Non-integer / non-unit return — input is outside the
+            // differential-test envelope (we cannot map it to an exit code).
+            PathOutcome::InputInvalid
+        }
+        Err(_) => {
+            // Interpreter errored (unsupported MIR construct, step limit, etc.)
+            // — treat as "input not in scope for this oracle" rather than as
+            // a finding. Stage 2+ may upgrade specific error classes (e.g.
+            // div-by-zero) into hard findings.
+            PathOutcome::InputInvalid
+        }
     }
 }
 
@@ -491,69 +497,26 @@ fuzz_target!(|program: VaisProgram| {
     compare_paths(&source);
 });
 
-// ─── Unit tests ─────────────────────────────────────────────────────────────
+
+// ─── Verifying this scaffold ────────────────────────────────────────────────
 //
-// These tests run under `cargo test` (not cargo-fuzz) to prove the scaffold
-// compiles and executes end-to-end on at least one deterministic input.
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A minimal Vais program that only declares a main function returning 0.
-    /// Both execution paths should either short-circuit (stage 0 stubs) or agree.
-    fn simple_main_source() -> &'static str {
-        "F main() -> i64 { 0 }"
-    }
-
-    /// A program with a binary operation in main.
-    fn arithmetic_source() -> &'static str {
-        "F main() -> i64 { (1 + 2) }"
-    }
-
-    /// A program that is deliberately invalid Vais syntax.
-    fn invalid_source() -> &'static str {
-        "this is not valid vais"
-    }
-
-    #[test]
-    fn test_compare_simple_main_does_not_panic() {
-        // Stage 0: both paths return NotImplemented, so no panic is expected.
-        compare_paths(simple_main_source());
-    }
-
-    #[test]
-    fn test_compare_arithmetic_does_not_panic() {
-        compare_paths(arithmetic_source());
-    }
-
-    #[test]
-    fn test_compare_invalid_input_does_not_panic() {
-        // Invalid input: both paths return InputInvalid, no panic.
-        compare_paths(invalid_source());
-    }
-
-    #[test]
-    fn test_compare_empty_program_does_not_panic() {
-        compare_paths("");
-    }
-
-    #[test]
-    fn test_run_output_eq() {
-        // Sanity-check the RunOutput PartialEq used in compare_paths.
-        let a = RunOutput {
-            exit_code: 0,
-            stdout: String::new(),
-        };
-        let b = RunOutput {
-            exit_code: 0,
-            stdout: String::new(),
-        };
-        let c = RunOutput {
-            exit_code: 1,
-            stdout: String::new(),
-        };
-        assert_eq!(a, b);
-        assert_ne!(a, c);
-    }
-}
+// Because `fuzz_target!` expands to a libFuzzer-provided `main`, running
+// `cargo test --bin fuzz_mir_native_diff` launches libFuzzer on the binary
+// rather than executing `#[test]` functions. There is therefore no
+// in-binary unit-test surface; the deterministic-input checks that lived
+// here in earlier drafts are removed.
+//
+// To run a single deterministic input through `compare_paths`, use a
+// short-lived corpus with cargo-fuzz:
+//
+//   cd compiler/fuzz
+//   mkdir -p corpus/fuzz_mir_native_diff
+//   echo 'F main() -> i64 { 42 }' > corpus/fuzz_mir_native_diff/seed
+//   cargo fuzz run fuzz_mir_native_diff -- -runs=1
+//
+// Stage 1 status: Path A (MIR interpret) is wired to the real
+// `interpret_function` and does map `MirValue::Int(n)` to an exit code.
+// Path B (native LLVM/clang execution) is still `NotImplemented` — Stage 2+
+// wires `vais-jit` (Cranelift in-process) so the differential check has
+// two concrete sides to compare. Until then the runner short-circuits
+// every iteration on the native side and no diff finding can land.

@@ -1,0 +1,9 @@
+target/
+corpus/
+artifacts/
+crash-*
+slow-unit-*
+hang-*
+oom-*
+leak-*
+timeout-*
