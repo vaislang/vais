@@ -358,9 +358,22 @@ impl TypeChecker {
             (ResolvedType::F32, ResolvedType::F64) | (ResolvedType::F64, ResolvedType::F32) => {
                 Ok(())
             }
-            // Allow unit () ↔ i64 (void context: i64 return in void function)
+            // A4-01 (Master Plan v16 §A4): Unit ↔ i64 was previously coerced
+            // silently. The Step 13 first removal experiment changes this to
+            // a type-check error gated behind VAIS_REJECT_A4_01=1 so the
+            // baseline can opt in without disturbing existing code that
+            // relies on the silent coercion. When VAIS_REJECT_A4_01 is unset
+            // (default) the legacy `Ok(())` continues to apply.
             (ResolvedType::Unit, ResolvedType::I64) | (ResolvedType::I64, ResolvedType::Unit) => {
-                Ok(())
+                if std::env::var("VAIS_REJECT_A4_01").as_deref() == Ok("1") {
+                    Err(crate::TypeError::Mismatch {
+                        expected: ResolvedType::I64.to_string(),
+                        found: ResolvedType::Unit.to_string(),
+                        span: None,
+                    })
+                } else {
+                    Ok(())
+                }
             }
             // Allow Result/Optional ↔ unit (implicit Ok(()) wrapping)
             (ResolvedType::Result(_, _), ResolvedType::Unit)
