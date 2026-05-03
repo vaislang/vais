@@ -1,6 +1,9 @@
 # Ignored And Deferred Surface Audit
 
 Date: 2026-05-01
+Re-evaluation cadence: every 6 months. Next due: **2026-11-01**.
+Trip-wire threshold: **130 ignored matches** (current baseline 111). Any
+single quarter that crosses 130 triggers an out-of-cadence re-audit.
 
 ## Scope
 
@@ -68,6 +71,28 @@ Stop and update the Core certification manifest if:
 - an ignored workspace test is cited as evidence of a Core guarantee,
 - a broad ignored fixture is unignored without adding a narrower invariant gate
   or without running the same-class regression tests.
+
+## Re-audit Triggers
+
+This audit is intentionally a snapshot of one date. Re-audit (rewrite the
+classification table and the date stamp at the top) when **any** of the
+following hold:
+
+1. The 6-month cadence date passes (next: 2026-11-01).
+2. The raw `rg -n '#\[ignore' crates tests -g '*.rs'` count crosses the
+   trip-wire threshold of 130 matches (current baseline 111).
+3. A class in the table moves between tiers (e.g. a self-hosting ignore
+   becomes a Core-blocking failure).
+4. A new top-level crate is added that introduces ignored tests not yet
+   classified here.
+5. The Core certification manifest gains or loses an entry, since the
+   "outside Core" classification depends on what `Core` means today.
+
+Re-audit means: re-run the raw scan, re-classify, update the
+`Classification` table, and update the date stamp + cadence header.
+`core_certification_exclusion_manifest_is_current` does **not** by itself
+trigger this audit — it polices the audited gate files only, not workspace
+expansion.
 
 ## Next Step
 

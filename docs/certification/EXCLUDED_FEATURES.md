@@ -2,24 +2,199 @@
 
 ## Purpose
 
-This document removes unstable surfaces from the first correctness target. Exclusion does not mean deletion. It means the feature cannot be used to claim Core language correctness until it passes the promotion rule in `VAIS_CORE_V0.md`.
+This document removes unstable surfaces from the first correctness target.
+Exclusion does not mean deletion. It means the feature cannot be used to
+claim Core language correctness until it passes the promotion rule in
+`VAIS_CORE_V0.md`.
+
+## Important: "Deferred" does not mean "not implemented"
+
+`Deferred` here means **not part of the certified Core proof**. Several of
+the features below are implemented in the compiler at meaningful depth and
+will accept user code without an error today. The risk is that they have
+**no certified gate**, so subtle behavior or edge-case failures are not
+guaranteed to be caught by the existing CI/integrity surface.
+
+If you are evaluating Vais for production use, treat the depth columns
+below as the actual constraint, not the `deferred` label alone:
+
+- **deep** — the feature is implemented broadly, has e2e fixtures, and
+  works for the common case. The reason it is `deferred` is administrative
+  (no dedicated certification gate yet), not technical.
+- **partial** — implemented enough to compile and sometimes run, but with
+  known gaps that the test suite does not police. Edge cases can fail
+  silently or panic.
+- **stub** — parser/AST recognizes the syntax but later stages do not
+  fully handle it. Using this in user code is unsafe.
+- **none** — explicitly disabled or not implemented; the parser may still
+  accept the syntax shape, but lowering will fail or silently no-op.
+
+The `Promotion gate` column states what would be required to move a row
+out of this document and into the Core proof.
 
 ## Deferred Language Features
 
-| Feature | Reason for exclusion | Promotion gate |
+| Feature | Depth (2026-05-03) | User-path risk if used today | Reason for exclusion | Promotion gate |
+|---|---|---|---|---|
+| broad implicit coercion (the user-facing surfaces verified by runtime fixtures) | **REMOVAL TARGET (A4-runtime-silent / A4-late-codegen-silent)** — see "Removal queue (A4)" below for the 9-entry verified inventory. | **high — silent acceptance** (proven by `/tmp/vais-fix-tests/sites/` fixtures producing wrong runtime exit codes or late codegen failures). | AI-native frame requires every conversion to be explicit. No promotion path. | A4 removal queue. Not promoted under any condition. |
+| complex type inference (HKT/ImplTrait corner cases) | **partially obsolete claim** — codex v5 review verified that HKT/ImplTrait variants were already removed in ROADMAP #18 (see `unification.rs:569` comment). The `i64` fallback no longer exists in the current code. | n/a — entry kept for historical accuracy; current code does not exhibit the fallback. | n/a | n/a |
+| integer truthy control-flow predicates | **REMOVAL TARGET (A4-design)** — verified at `control_flow.rs:188` (else-if), :243 (ternary), :273 (if), :396 (while). All four are the same Phase 254 "lenient cond" pattern. Each accepts `I x { ... }` (x: i64) without `!= 0`. | **high — silent (design)**: runtime behavior is correct (non-zero is truthy) but the explicit token `!= 0` is missing. AI may generate this pattern from other-language training. Violates north star "every check is an explicit token". | Migration to `I x != 0 { ... }` for every site. Not promoted. | A4 removal queue. Parser/type-check rejects with stable diagnostic after baseline migration. |
+| `?` error propagation | stub (~80–120 LOC, parser-level only) | medium — partial Result handling, cross-module/wrong-receiver interactions are unstable | Cross-module and wrong receiver interactions are unstable in downstream code. | Result fixture suite plus stage-specific negative tests. |
+| trait objects / vtables | partial (`vtable.rs`, ~1,186 LOC) | **high** — `dyn Trait` parses; method-dispatch resolution has uncovered paths and 0 e2e fixtures | Broad backend and ABI surface. | Dedicated design doc and call dispatch invariant. |
+| advanced generics (monomorphizable subset) | deep (`vais-types`, ~5,459 LOC in `calls.rs`) | low for the monomorphizable subset (which already passes baseline). HKT/ImplTrait variants were removed in ROADMAP #18 (see `unification.rs:569`); the previous "i64 fallback" no longer exists in current code. | Promotion of the monomorphizable subset is an A2 candidate (formal predicate required). HKT/ImplTrait re-introduction would require a dedicated A2 with full fixture coverage, not a fallback. | A2 promotion with `A2_SUBSETS.md` formal predicate. |
+| macros | partial (`vais-macro`, ~5,754 LOC, 12+ e2e fixtures) | medium — basic forms work, hygiene/cross-module expansion has gaps | Expands the language before Core semantics are stable. | Macro expansion stage contract and hygiene tests. |
+| async / await runtime semantics | **partial — codegen is skeleton-level** (`async_gen.rs`, ~377 LOC, 0 e2e fixtures) | **high — silent failure risk**: `A F foo() -> T { ... }` parses and compiles, but the state-machine lowering is incomplete. Programs may build and then misbehave at runtime. | Runtime and lowering complexity beyond Core. | MIR/runtime contract and deterministic fixtures. |
+| closures beyond simple certified cases | partial (~369 LOC, 2–3 simple-case e2e fixtures) | high — capture analysis exists; closures cannot escape (no first-class storage of the closure value past the inline call) | Existing closure inference work is still active. | Closure parameter/return type invariant and fixtures. |
+| first-class function pointers | stub (~370 LOC, 0 e2e fixtures) | high — `Token::Fn` is recognized, but there is no `FunctionPointer` type in the type system | Marked unsupported in existing safe subset. | New RFC and parser/type/codegen tests. |
+| `drop` / auto-free semantics | none (drop calls are explicitly disabled) | n/a — does not run; resource cleanup must be manual | Existing docs say drop calls are disabled. | Ownership/destructor design and run-time tests. |
+| unsafe blocks and FFI-heavy patterns | partial (`ffi.rs`, ~763 LOC, 0 e2e fixtures) | high — works for the bounded patterns the compiler internally uses; user-facing FFI is not bounded by audit | Safety story is not Core-ready. | FFI safety contract and negative tests. |
+
+<!-- inventory:auto-start -->
+
+<!-- Generated by scripts/render-excluded-features.py from master-plan.toml v16. -->
+<!-- DO NOT HAND-EDIT this section. Edit master-plan.toml then run the script. -->
+
+## Active promotion candidates
+
+Active promotion candidates are tracked exclusively in ROADMAP Master Plan v16 §Phase A2 with formal subset predicates. Each requires lifecycle stage 1 (impact preflight) before assignment.
+
+As of this plan revision the A2 candidates are:
+
+- ? operator subset (Result/Option, Core-typed, cross-module per real vaisdb baseline sql/types.vais:339 → storage/bytes.vais:40)
+- dyn / trait object dispatch (narrow subset matching baseline)
+- closures (no escape, inline-only)
+- function pointer types in std API (bounded to existing std use)
+
+Subset definition format: `compiler/docs/certification/A2_SUBSETS.md` (Order step 9 deliverable).
+
+## Removal queue (A4) — 9 verified entries
+
+Implicit-behavior surfaces verified to silently accept user code that should be rejected. Each candidate site was probed with a `.vais` fixture, compiled with `vaisc`, executed, and the runtime exit code compared to the expected value.
+
+**Status**: v1-verified (single-sentinel discovery 2026-05-03); v2 retro-validation pending Order step 7
+
+Codemod dependency: Order step 2.
+
+### A4-runtime-silent (7 entries) — type checker accepts; runtime produces wrong result
+
+| ID | Surface | Site | Probe | Expected | Actual exit |
+|---|---|---|---|---|---|
+| A4-01 | Unit ↔ i64 (void return as i64) | `unification.rs:361` | x: i64 = void_fn() | 0 | 96 |
+| A4-02 | Pointer<T> ↔ i64 | `unification.rs:410` | take_i64(p) where p: *i64 | 42 | 184 |
+| A4-03 | Auto-deref &T ↔ T | `unification.rs:570` | take_i64(r) where r: &i64 = &42 | 42 | 200 |
+| A4-04 | Pointer<T> ↔ Slice<T>/SliceMut<T> (Phase 162) | `unification.rs:417` | take_slice(p as *u8) | 4 | 72 |
+| A4-05 | Array → Pointer decay | `unification.rs:424` | arr[0] through *i64 cast | 42 | 139 |
+| A4-06 | Integer truthy (4 sites: else-if, ternary, if, while) | `control_flow.rs:188,243,273,396` | I x { 100 } EL { 200 } where x: i64 | design violation (no `!= 0` token) | 100 — runtime correct, design violated |
+| A4-07 | Numeric widening (sub-target) | `unification.rs:346` | take_i64(small_i32) | 42 | 42 — runtime correct, design pending decision |
+
+### A4-late-codegen-silent (2 entries) — type checker accepts; codegen/linker fails with obscure error
+
+| ID | Surface | Site | Probe | Failure |
+|---|---|---|---|---|
+| A4-08 | Vec<T> ↔ &T permissive | `unification.rs:384` | take_str_ref(v) where v: Vec<i64> | clang IR mismatch ({ptr,i64} vs ptr) — late codegen failure |
+| A4-09 | Lifetime ref erasure (function definition) | `unification.rs:450` | F take_lifetime_ref<'a>(r: &'a i64) -> i64 { ... } and call with plain &i64 | linker undefined symbol _take_lifetime_ref |
+
+All entries are v1-discovery (single-sentinel exit-code probe). v2 retro-validation is mandatory at Order step 7 (multi-sentinel + stdout assertion + permanent fixture in `compiler/tests/empirical/`).
+
+## Controlled coercions (9 entries — verified, NOT A4)
+
+Sites where `unification.rs` accepts the conversion AND runtime behavior is empirically correct. **Not A4 candidates.**
+
+**Status**: v1-verified (single-sentinel); v2 retro-validation pending Order step 7
+
+| Surface | Site |
+|---|---|
+| Str/str/String alias | `unification.rs:70-86` |
+| Unknown unify-any | `unification.rs:220` |
+| Never unify-any | `unification.rs:224` |
+| Fn ↔ FnPtr | `unification.rs:282` |
+| Numeric widening (runtime correctness only) | `unification.rs:346` |
+| Vec ↔ Slice (.len() path) | `unification.rs:370` |
+| &Vec ↔ &[T] | `unification.rs:173` |
+| DynTrait dispatch | `unification.rs:567` |
+| Linear/Affine wrapper erasure | `unification.rs:430,438` |
+
+## Rejected at type-check (3 entries — NOT A4, NOT Controlled)
+
+Sites where `unification.rs` has the coercion code but a separate compiler stage (type checker for downstream usage, field access, or direct `unify` rejection) catches the misuse before codegen. The user already gets a stable diagnostic. **Not A4 candidates.**
+
+| Surface | Site | How rejected |
 |---|---|---|
-| broad implicit coercion | Repeated source of type/codegen mismatches. | Explicit invariant, negative fixtures, no new fallback path. |
-| complex type inference | Current failures include unresolved `Var`/generic leaks. | Type-check completion invariant passes for fixtures. |
-| integer truthy control-flow predicates | Accepted by the current full compiler for legacy/downstream compatibility, but excluded from Core style. | Dedicated core-mode or lint gate that rejects non-bool predicates without breaking ecosystem builds. |
-| `?` error propagation | Cross-module and wrong receiver interactions are still unstable in downstream code. | Result fixture suite plus stage-specific negative tests. |
-| trait objects / full vtables | Broad backend and ABI surface. | Dedicated design doc and call dispatch invariant. |
-| advanced generics / HKT / ImplTrait | High risk for monomorphization and codegen erasure. | Separate generic certification gate. |
-| macros | Expands the language before Core semantics are stable. | Macro expansion stage contract and hygiene tests. |
-| async / await runtime semantics | Runtime and lowering complexity beyond Core. | MIR/runtime contract and deterministic fixtures. |
-| closures beyond simple certified cases | Existing closure inference work is still active. | Closure parameter/return type invariant and fixtures. |
-| first-class function pointers | Marked unsupported in existing safe subset. | New RFC and parser/type/codegen tests. |
-| `drop` / auto-free semantics | Existing docs say drop calls are disabled. | Ownership/destructor design and run-time tests. |
-| unsafe blocks and FFI-heavy patterns | Safety story is not Core-ready. | FFI safety contract and negative tests. |
+| Box raw generic (no type param) | `unification.rs:114` | Field access fails with E030 (Site 02) |
+| Box ↔ T (auto-unwrap of Box content) | `unification.rs:130` | Direct E001 Type mismatch (Site 03) |
+| Optional ↔ T (3 paths probed) | `unification.rs:98 + Named bridge unification.rs:232-244` | Direct E001 on all 3 probes: Site 23 (bare i64 → Option<i64>), Site 23b (Named form), Site 23c (reverse — explicitly NOT-allowed direction per Phase 276 comment, but rejection serves as downstream defense evidence) |
+
+## Untested / classification deferred (1 entry)
+
+Sites where the empirical fixture could not produce a probe that exercises the suspected silent path. **Treat as A4 candidate by default** until a fixture proves Controlled or Rejected.
+
+| Surface | Site | Status |
+|---|---|---|
+| Result ↔ Unit (auto Ok/Some wrap) | `unification.rs:366` | deferred (treat as A4 candidate by default until probe constructed) |
+
+<!-- inventory:auto-end -->
+
+## Empirical verification protocol (v2 — coincidence-resistant)
+
+For any future addition or removal in the A4 / Controlled / Rejected
+lists, the verification protocol is:
+
+1. Write a minimal `.vais` fixture that exercises the suspected coercion
+   at a single site.
+2. **Multi-sentinel oracle (NEW v6)**: the fixture must compute the
+   expected value from at least 2 distinct inputs and aggregate them
+   into a value `> 255`. Shell exit code is 8-bit (0-255), so a single
+   sentinel can coincide with a garbage byte. Two-input aggregation
+   makes coincidence ~1/65,536. Example: `take_i64(x)` where x = 42
+   should not just return 42; aggregate two probes into `42 * 1000 +
+   second_probe` so a coincidental garbage exit is detectable.
+3. `vaisc check <file>` — record output.
+4. `vaisc <file>` — record output.
+5. `./<binary>; echo "exit=$?"` — record runtime exit code.
+6. **Stdout assertion (NEW v6)**: where possible, the fixture also
+   prints intermediate values to stdout. Diff stdout against a fixed
+   expected string. Stdout is not byte-limited like exit code.
+7. Classify by combining steps 3-6:
+   - type-check fails (`vaisc check` reports `error[CODE]`) →
+     **REJECTED** (already safe, not A4).
+   - type-check passes + binary built + runtime exit matches multi-
+     sentinel expected + stdout matches → **CONTROLLED** (not A4).
+   - type-check passes + binary built + runtime exit / stdout differs
+     → **A4-runtime-silent** (record actual vs expected).
+   - type-check passes + binary build fails (clang/linker error) →
+     **A4-late-codegen-silent**.
+   - type-check passes + binary build succeeds + cannot construct a
+     probe that exercises the suspected silent path →
+     **Untested / deferred** (treat as A4 candidate by default).
+
+8. **Permanent fixture suite (NEW v6)**: the fixture used for any
+   classification must be checked into the repository under
+   `compiler/tests/empirical/<surface>.vais` (directory created at
+   Order step 2 deliverable ). Transient fixtures
+   in `/tmp/` are not acceptable evidence for permanent classification
+   — only initial discovery.
+
+This protocol is the only acceptable evidence for A4 / Controlled /
+Rejected classification. Speculation from `unification.rs` reading
+alone is insufficient (codex v5 review's 22+ speculative citations had
+~60% false-positive rate against this protocol's single-sentinel
+predecessor).
+
+
+
+## Silent-failure risk surface (use with caution)
+
+These features compile user code without an error today, but are not
+covered by any active gate. Failures may surface only at runtime:
+
+- **async/await** — codegen is skeleton; await points are not fully
+  lowered. Highest priority to either complete or reject at parse.
+- **closures escaping inline use** — capture analysis runs; storing the
+  closure value can fail later.
+- **trait objects / `dyn Trait`** — parses; dispatch resolution has gaps.
+
+Until each item has a certified gate, treat user code that depends on
+them as experimental.
 
 ## Deferred Syntax Forms
 
@@ -41,27 +216,41 @@ This document removes unstable surfaces from the first correctness target. Exclu
 
 ## Experimental Compiler Crates
 
-The `compiler/docs/CRATE_AUDIT.md` experimental tier remains outside Core v0: JIT, GPU, GC, JS codegen, hot reload, dynamic loading, profiler, registry server, playground server, tutorial, Python/Node bindings, query, testgen, supply-chain, and security crates.
+The `compiler/docs/CRATE_AUDIT.md` experimental tier remains outside Core
+v0: JIT, GPU, GC, JS codegen, hot reload, dynamic loading, profiler,
+registry server, playground server, tutorial, Python/Node bindings, query,
+testgen, supply-chain, and security crates.
 
-These crates may continue to exist and build opportunistically, but they do not block Core certification unless explicitly promoted.
+These crates may continue to exist and build opportunistically, but they
+do not block Core certification unless explicitly promoted.
 
 ## Current Certification Exclusion Audit
 
-`tests/core/certification_exclusions.tsv` is the machine-readable source of truth for ignored tests, plus any future partial markers, that still appear inside the canonical certification gate. `core_certification_exclusion_manifest_is_current` fails if:
+`tests/core/certification_exclusions.tsv` is the machine-readable source
+of truth for ignored tests, plus any future partial markers, that still
+appear inside the canonical certification gate.
+`core_certification_exclusion_manifest_is_current` fails if:
 
-- a new `#[ignore]` appears in the audited gate files without a manifest entry,
-- a known ignore or partial marker is removed without updating the manifest,
+- a new `#[ignore]` appears in the audited gate files without a manifest
+  entry,
+- a known ignore or partial marker is removed without updating the
+  manifest,
 - an ignore reason changes silently,
 - `tests/core/mir_deferred.tsv` gains a deferred Core fixture.
 
-The manifest may be empty when the audited quarantine surface is empty. This keeps temporary quarantine visible while preserving the narrower Core v0 proof boundary.
+The manifest may be empty when the audited quarantine surface is empty.
+This keeps temporary quarantine visible while preserving the narrower Core
+v0 proof boundary.
 
-For the current dated pass/fail evidence, use `CURRENT_STATUS.md`. This file
-defines what remains outside Core; it is not a substitute for a fresh gate run.
+For the current dated pass/fail evidence, use `CURRENT_STATUS.md`. This
+file defines what remains outside Core; it is not a substitute for a fresh
+gate run.
 
 ## Downstream Ecosystem
 
-`lang/packages/vaisdb`, `lang/packages/vais-server`, and `lang/packages/vais-web` are promotion gates after Core. They are not the first proof of language correctness.
+`lang/packages/vaisdb`, `lang/packages/vais-server`, and
+`lang/packages/vais-web` are promotion gates after Core. They are not the
+first proof of language correctness.
 
 The order is:
 

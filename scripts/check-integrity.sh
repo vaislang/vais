@@ -4,9 +4,14 @@
 # Usage:
 #   ./scripts/check-integrity.sh
 #
-# Environment overrides (defaults shown):
-#   INTEGRITY_STD_MIN=82       minimum std_files pass count
-#   INTEGRITY_VAISDB_MIN=219   minimum vaisdb_files pass count
+# Environment overrides (defaults shown; baseline locked 2026-05-03):
+#   INTEGRITY_STD_MIN=82                   minimum std_files pass count
+#   INTEGRITY_VAISDB_MIN=261               minimum vaisdb_files pass count
+#   INTEGRITY_HTTP_CLIENT_RUNTIME_MIN=1    minimum http_client runtime smoke
+#   INTEGRITY_VAISDB_RUNTIME_MIN=28        minimum vaisdb runtime smoke
+#   INTEGRITY_SERVER_RUNTIME_MIN=13        minimum vais-server runtime smoke
+#   INTEGRITY_WEB_RUNTIME_MIN=23           minimum vais-web runtime smoke
+#   INTEGRITY_BACKEND_PHASE158_MIN=18      minimum phase158 backend smoke
 #
 # Exit codes:
 #   0  all gates pass
@@ -25,13 +30,23 @@ cd "${REPO_ROOT}"
 # Baseline thresholds (override via env)
 # ---------------------------------------------------------------------------
 INTEGRITY_STD_MIN="${INTEGRITY_STD_MIN:-82}"
-# Phase Ω P1.4 iter 114: baseline 237 was a stale value carried from an
-# earlier session and is impossible to reach with the current source
-# tree (the deterministic-after-fix range is 219–221; see ROADMAP iter
-# 114 retro). Lower the threshold to the lower edge of the empirically
-# observed range so a real regression below 219 trips the CI gate.
-# Anything inside [219, 221] is treated as flaky-noise-OK.
-INTEGRITY_VAISDB_MIN="${INTEGRITY_VAISDB_MIN:-219}"
+# Baseline lock 2026-05-03: codex review identified that the prior
+# threshold of 219 (a Phase Ω P1.4 iter 114 floor) no longer reflects the
+# current certified baseline. With the package-codegen path now stable at
+# 261/261, allowing a silent drop to 219 violates the "안정성 100% / no
+# silent regression" north star. Lock to the actual current baseline so
+# any reduction below 261 trips the gate.
+INTEGRITY_VAISDB_MIN="${INTEGRITY_VAISDB_MIN:-261}"
+
+# Runtime smoke baseline lock 2026-05-03: per-runtime minima.
+# Previously the script trusted `cargo test` exit=0 only, which would not
+# catch a silent reduction in pass count if the suite count itself shrank.
+# These minima are the current promoted gate counts as of 2026-05-03.
+INTEGRITY_HTTP_CLIENT_RUNTIME_MIN="${INTEGRITY_HTTP_CLIENT_RUNTIME_MIN:-1}"
+INTEGRITY_VAISDB_RUNTIME_MIN="${INTEGRITY_VAISDB_RUNTIME_MIN:-28}"
+INTEGRITY_SERVER_RUNTIME_MIN="${INTEGRITY_SERVER_RUNTIME_MIN:-13}"
+INTEGRITY_WEB_RUNTIME_MIN="${INTEGRITY_WEB_RUNTIME_MIN:-23}"
+INTEGRITY_BACKEND_PHASE158_MIN="${INTEGRITY_BACKEND_PHASE158_MIN:-18}"
 
 # ---------------------------------------------------------------------------
 # Ensure /tmp/vais-lib/std symlink exists
@@ -329,6 +344,30 @@ if [ "${VAISDB_PASS}" != "?" ] && [ -n "${VAISDB_PASS}" ]; then
         REGRESSION=1
         REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: vaisdb_files baseline=${INTEGRITY_VAISDB_MIN} current=${VAISDB_PASS}/${VAISDB_TOTAL} (delta=$((VAISDB_PASS - INTEGRITY_VAISDB_MIN)))\n"
     fi
+fi
+
+# Runtime smoke baseline checks (2026-05-03 lock).
+# These complement the `cargo test exit=0` checks below: even if the suite
+# exits 0, a silent reduction in promoted-test count is flagged.
+if [ -n "${HTTP_CLIENT_RUNTIME_PASSED}" ] && [ "${HTTP_CLIENT_RUNTIME_PASSED}" -lt "${INTEGRITY_HTTP_CLIENT_RUNTIME_MIN}" ]; then
+    REGRESSION=1
+    REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: http_client_runtime baseline=${INTEGRITY_HTTP_CLIENT_RUNTIME_MIN} current=${HTTP_CLIENT_RUNTIME_PASSED}/${HTTP_CLIENT_RUNTIME_TOTAL}\n"
+fi
+if [ -n "${VAISDB_RUNTIME_PASSED}" ] && [ "${VAISDB_RUNTIME_PASSED}" -lt "${INTEGRITY_VAISDB_RUNTIME_MIN}" ]; then
+    REGRESSION=1
+    REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: vaisdb_runtime baseline=${INTEGRITY_VAISDB_RUNTIME_MIN} current=${VAISDB_RUNTIME_PASSED}/${VAISDB_RUNTIME_TOTAL}\n"
+fi
+if [ -n "${SERVER_RUNTIME_PASSED}" ] && [ "${SERVER_RUNTIME_PASSED}" -lt "${INTEGRITY_SERVER_RUNTIME_MIN}" ]; then
+    REGRESSION=1
+    REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: vais_server_runtime baseline=${INTEGRITY_SERVER_RUNTIME_MIN} current=${SERVER_RUNTIME_PASSED}/${SERVER_RUNTIME_TOTAL}\n"
+fi
+if [ -n "${WEB_RUNTIME_PASSED}" ] && [ "${WEB_RUNTIME_PASSED}" -lt "${INTEGRITY_WEB_RUNTIME_MIN}" ]; then
+    REGRESSION=1
+    REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: vais_web_runtime baseline=${INTEGRITY_WEB_RUNTIME_MIN} current=${WEB_RUNTIME_PASSED}/${WEB_RUNTIME_TOTAL}\n"
+fi
+if [ -n "${PHASE158_PASSED}" ] && [ "${PHASE158_PASSED}" -lt "${INTEGRITY_BACKEND_PHASE158_MIN}" ]; then
+    REGRESSION=1
+    REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: backend_phase158 baseline=${INTEGRITY_BACKEND_PHASE158_MIN} current=${PHASE158_PASSED}/${PHASE158_TOTAL}\n"
 fi
 
 # ---------------------------------------------------------------------------
