@@ -1,0 +1,25 @@
+[entry]
+id = "A3-04"
+classification = "A3 quarantine (intended-but-unfinished public API)"
+surface = "vaisdb security (TLS / encryption / RBAC)"
+import_form = "vaisdb/security/types"
+filesystem_path = "lang/packages/vaisdb/src/security/types.vais"
+master_plan_version = 16
+
+[v1_evidence]
+probe_summary = "U vaisdb/security/types; F main() -> i64 { R 0 }"
+expected_per_design = "vaisc check rejects with stable error[CODE]"
+actual_observed_default = "warning + fallback + exit 0"
+actual_observed_strict = "exit 1, error[E_IMPORT_NOT_FOUND]"
+verified_date = "2026-05-03"
+
+[v2_evidence]
+status = "v1_reverified_under_strict_mode"
+
+[migration]
+post_certification_expected = "If vaisdb security (TLS / encryption / RBAC) is certified, the import resolves and vaisc check exits 0. Migrate fixture to a positive form or remove if surface graduates out of A3."
+
+[assertion_kind]
+kind = "check_fails"
+required_env = { VAIS_STRICT_IMPORTS = "1" }
+required_stderr_patterns = ["E_IMPORT_NOT_FOUND", "security"]

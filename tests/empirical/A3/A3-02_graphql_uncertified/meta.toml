@@ -1,0 +1,25 @@
+[entry]
+id = "A3-02"
+classification = "A3 quarantine (intended-but-unfinished public API)"
+surface = "graphql API in vais-server"
+import_form = "server/api/graphql"
+filesystem_path = "lang/packages/vais-server/src/api/graphql.vais"
+master_plan_version = 16
+
+[v1_evidence]
+probe_summary = "U server/api/graphql; F main() -> i64 { R 0 }"
+expected_per_design = "vaisc check rejects with stable error[CODE]"
+actual_observed_default = "warning + fallback + exit 0"
+actual_observed_strict = "exit 1, error[E_IMPORT_NOT_FOUND]"
+verified_date = "2026-05-03"
+
+[v2_evidence]
+status = "v1_reverified_under_strict_mode"
+
+[migration]
+post_certification_expected = "If graphql API in vais-server is certified, the import resolves and vaisc check exits 0. Migrate fixture to a positive form or remove if surface graduates out of A3."
+
+[assertion_kind]
+kind = "check_fails"
+required_env = { VAIS_STRICT_IMPORTS = "1" }
+required_stderr_patterns = ["E_IMPORT_NOT_FOUND", "graphql"]

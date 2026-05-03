@@ -1,0 +1,1 @@
+check_fails (strict mode): E_IMPORT_NOT_FOUND
