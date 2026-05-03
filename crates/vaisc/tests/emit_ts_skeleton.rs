@@ -109,10 +109,13 @@ fn emit_ts_unsupported_field_errors() {
     let input_path = dir.path().join("bad.vais");
     let output_path = dir.path().join("bad.d.ts");
 
-    // Vec<i64> is not in the Stage 0 primitive table — must trigger EMIT_TS_999.
+    // Stage 1 added Vec/Option/Result/HashMap/tuple/enum/Ref lowerings, so
+    // Vec<i64> alone now compiles. Use a raw pointer (`*i64`) which is in
+    // the EMIT_TS_009 hard-fail list per cross-package-schema.md and stays
+    // EMIT_TS_999 catch-all here until stage 2 routes it specifically.
     std::fs::write(
         &input_path,
-        "P S X {\n  v: Vec<i64>,\n}\n",
+        "P S X {\n  v: *i64,\n}\n",
     )
     .expect("write input");
 
