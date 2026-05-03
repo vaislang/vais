@@ -12,6 +12,7 @@
 #   INTEGRITY_SERVER_RUNTIME_MIN=13        minimum vais-server runtime smoke
 #   INTEGRITY_WEB_RUNTIME_MIN=23           minimum vais-web runtime smoke
 #   INTEGRITY_BACKEND_PHASE158_MIN=18      minimum phase158 backend smoke
+#   INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=2   minimum cross_package_schema gate (positive + negative)
 #
 # Exit codes:
 #   0  all gates pass
@@ -46,6 +47,7 @@ INTEGRITY_HTTP_CLIENT_RUNTIME_MIN="${INTEGRITY_HTTP_CLIENT_RUNTIME_MIN:-1}"
 INTEGRITY_VAISDB_RUNTIME_MIN="${INTEGRITY_VAISDB_RUNTIME_MIN:-28}"
 INTEGRITY_SERVER_RUNTIME_MIN="${INTEGRITY_SERVER_RUNTIME_MIN:-13}"
 INTEGRITY_WEB_RUNTIME_MIN="${INTEGRITY_WEB_RUNTIME_MIN:-23}"
+INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN="${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN:-2}"
 INTEGRITY_BACKEND_PHASE158_MIN="${INTEGRITY_BACKEND_PHASE158_MIN:-18}"
 
 # ---------------------------------------------------------------------------
@@ -217,6 +219,42 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Run cross_package_schema validation gate (Master Plan v16 Step 14 stage 0)
+# ---------------------------------------------------------------------------
+# The gate proves that a typed change to a shared schema.vais propagates
+# to .vais consumers (vaisdb-style + vais-server-style) AND to .ts
+# consumers via the generated .d.ts. Source of truth:
+# compiler/tests/empirical/cross_package_schema/. See also Step 8 stage 5
+# (commit 676e92fb) and design doc compiler/docs/design/cross-package-schema.md.
+
+CROSS_PKG_SCHEMA_LOG="/tmp/vais-cross-package-schema.log"
+CROSS_PKG_SCHEMA_EXIT=0
+CROSS_PKG_SCHEMA_PASSED=0
+CROSS_PKG_SCHEMA_TOTAL=2  # positive + negative
+CROSS_PKG_SCHEMA_GATE="${REPO_ROOT}/tests/empirical/cross_package_schema/tests/gate.sh"
+
+if [ -x "${CROSS_PKG_SCHEMA_GATE}" ]; then
+    echo "check-integrity: running cross_package_schema gate (positive + negative)..."
+    : > "${CROSS_PKG_SCHEMA_LOG}"
+    POS_EXIT=0
+    bash "${CROSS_PKG_SCHEMA_GATE}" positive >> "${CROSS_PKG_SCHEMA_LOG}" 2>&1 || POS_EXIT=$?
+    NEG_EXIT=0
+    bash "${CROSS_PKG_SCHEMA_GATE}" negative >> "${CROSS_PKG_SCHEMA_LOG}" 2>&1 || NEG_EXIT=$?
+    if [ "${POS_EXIT}" -eq 0 ]; then
+        CROSS_PKG_SCHEMA_PASSED=$((CROSS_PKG_SCHEMA_PASSED + 1))
+    fi
+    if [ "${NEG_EXIT}" -eq 0 ]; then
+        CROSS_PKG_SCHEMA_PASSED=$((CROSS_PKG_SCHEMA_PASSED + 1))
+    fi
+    if [ "${POS_EXIT}" -ne 0 ] || [ "${NEG_EXIT}" -ne 0 ]; then
+        CROSS_PKG_SCHEMA_EXIT=1
+    fi
+else
+    echo "check-integrity: cross_package_schema gate.sh missing at ${CROSS_PKG_SCHEMA_GATE}" | tee -a "${CROSS_PKG_SCHEMA_LOG}"
+    CROSS_PKG_SCHEMA_EXIT=1
+fi
+
+# ---------------------------------------------------------------------------
 # Parse summary lines from logs
 # ---------------------------------------------------------------------------
 CORE_SUMMARY="$(grep "CORE_CERTIFICATION pass=" "${CORE_LOG}" 2>/dev/null | tail -1 || true)"
@@ -369,6 +407,10 @@ if [ -n "${PHASE158_PASSED}" ] && [ "${PHASE158_PASSED}" -lt "${INTEGRITY_BACKEN
     REGRESSION=1
     REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: backend_phase158 baseline=${INTEGRITY_BACKEND_PHASE158_MIN} current=${PHASE158_PASSED}/${PHASE158_TOTAL}\n"
 fi
+if [ "${CROSS_PKG_SCHEMA_PASSED}" -lt "${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN}" ]; then
+    REGRESSION=1
+    REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: cross_package_schema baseline=${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN} current=${CROSS_PKG_SCHEMA_PASSED}/${CROSS_PKG_SCHEMA_TOTAL}\n"
+fi
 
 # ---------------------------------------------------------------------------
 # Final result
@@ -432,6 +474,13 @@ fi
 if [ "${WEB_RUNTIME_EXIT}" -ne 0 ]; then
     echo ""
     echo "WEB RUNTIME SMOKE FAILED: vitest vais-web runtime smoke exited ${WEB_RUNTIME_EXIT}"
+    OVERALL_EXIT=1
+fi
+
+if [ "${CROSS_PKG_SCHEMA_EXIT}" -ne 0 ]; then
+    echo ""
+    echo "CROSS PACKAGE SCHEMA GATE FAILED: gate.sh exited ${CROSS_PKG_SCHEMA_EXIT}"
+    cat "${CROSS_PKG_SCHEMA_LOG}" 2>/dev/null | tail -20
     OVERALL_EXIT=1
 fi
 
@@ -504,11 +553,17 @@ print_gate_summary() {
     else
         echo "WEB RUNTIME FAIL: exit=${WEB_RUNTIME_EXIT} smoke=${WEB_RUNTIME_PASSED}/${WEB_RUNTIME_TOTAL}"
     fi
+
+    if [ "${CROSS_PKG_SCHEMA_EXIT}" -eq 0 ]; then
+        echo "CROSS PACKAGE SCHEMA OK: gate=${CROSS_PKG_SCHEMA_PASSED}/${CROSS_PKG_SCHEMA_TOTAL}"
+    else
+        echo "CROSS PACKAGE SCHEMA FAIL: exit=${CROSS_PKG_SCHEMA_EXIT} gate=${CROSS_PKG_SCHEMA_PASSED}/${CROSS_PKG_SCHEMA_TOTAL}"
+    fi
 }
 
 if [ "${OVERALL_EXIT}" -eq 0 ]; then
     print_gate_summary
-    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok"
+    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok cross_package_schema=ok"
     exit 0
 else
     print_gate_summary
