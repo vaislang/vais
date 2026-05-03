@@ -1,0 +1,47 @@
+# A4-11 — `?` operator in non-Result function (A2-NEG-DRIFT)
+# NEW A4 candidate discovered during Step 9 A2-01 promotion.
+# NOT yet in master-plan.toml [[phase.A4.late_codegen_silent]].
+
+[entry]
+id = "A4-11"
+classification = "A4-late-codegen-silent (NEW candidate, pending master-plan registration)"
+surface = "`?` operator in a function whose return type is not Result<_,_>/Option<_> — type-check accepts, codegen emits Result-shaped return into i64 signature, clang rejects"
+site = "TBD — vais-types/src/checker_expr/ try-operator handler"
+master_plan_version = 16
+discovery_context = "Step 9 A2-01 promotion negative fixture (A2_SUBSETS.md §A2-NEG-DRIFT)"
+
+[v1_evidence]
+probe_summary = "F outer() -> i64 { let x: i64 = inner_returning_Result()?; R x + 1 }"
+expected_per_design = "vaisc check rejects with stable error (E_TRY_REQUIRES_MATCHING_RETURN)"
+actual_observed = "type-check passes; codegen emits `ret { i8, i64 }` in i64 function; clang fails with 'value doesn't match function result type i64'"
+verified_date = "2026-05-03"
+
+[v2_evidence]
+status = "v1_verified"
+notes = """
+Late-codegen-silent: failure escapes the type checker entirely. The
+clang error is the only thing protecting the user; without an
+external linker step (vaisc-driven JIT, in-process backend) this
+would surface only at runtime as undefined behaviour.
+
+Fix path: extend vais-types check_call_expr (or wherever try-operator
+desugars to a match) to require `enclosing_return_type` matches
+Result/Option. Issue stable error code E_TRY_REQUIRES_MATCHING_RETURN.
+"""
+
+[migration]
+post_removal_expected = "vaisc check exits non-zero with E_TRY_REQUIRES_MATCHING_RETURN. Negative fixture for A2-01 promotion (A2_SUBSETS.md §A2-01) migrates from build_fails-via-clang to check_fails."
+post_removal_action = "Replace probe.vais with same content; update run.sh to expect non-zero `vaisc check` exit + E_TRY_REQUIRES_MATCHING_RETURN in stderr."
+
+[assertion_kind]
+kind = "build_fails"
+required_stderr_patterns = [
+  "clang compilation failed",
+  "doesn't match function result type",
+]
+rationale = """
+'clang compilation failed' confirms the build pipeline rejected the
+output (not a transient toolchain issue). 'doesn't match function
+result type' pins the failure to the return-type-mismatch case, not
+some unrelated clang error (missing symbol, redefinition, etc.).
+"""
