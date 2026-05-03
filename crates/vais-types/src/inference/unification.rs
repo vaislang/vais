@@ -452,19 +452,20 @@ impl TypeChecker {
             // This allows builtins like vec_new() -> i64 and malloc() -> i64 to unify with *T
             // parameters, and swap(ptr, i, j) to accept either pointer or i64 arguments.
             // Scope: unification only — does not enable arbitrary pointer arithmetic in user code.
-            // A4-02 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode
-            // via VAIS_REJECT_A4_02=1. Default preserves the legacy silent
-            // coercion so the baseline does not move.
+            // A4-02 (Master Plan v16 §A4 + Step 13 stage 1): strict default.
+            // Empirical baseline footprint = 0 std + 0 vaisdb after std/gpu.vais
+            // migration (2026-05-04). Set VAIS_REJECT_A4_02=0 to restore the
+            // legacy silent coercion.
             (ResolvedType::Pointer(_), ResolvedType::I64)
             | (ResolvedType::I64, ResolvedType::Pointer(_)) => {
-                if std::env::var("VAIS_REJECT_A4_02").as_deref() == Ok("1") {
+                if std::env::var("VAIS_REJECT_A4_02").as_deref() == Ok("0") {
+                    Ok(())
+                } else {
                     Err(crate::TypeError::Mismatch {
                         expected: format!("Pointer<T>"),
                         found: format!("i64"),
                         span: None,
                     })
-                } else {
-                    Ok(())
                 }
             }
             // Pointer<T> ↔ Slice<T> / SliceMut<T> auto-coercion (Phase 162).

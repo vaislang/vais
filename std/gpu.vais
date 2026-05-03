@@ -446,7 +446,9 @@ F kernel_config_2d(width: i64, height: i64, block_x: i64, block_y: i64) -> Kerne
 # --- Memory Management ---
 
 # Allocate GPU device memory (returns device pointer, NULL on failure)
-F gpu_alloc(size: i64) -> *i64 { 0 }
+# Step 13 A4-02: explicit `0 as *i64` so the previously-silent
+# Pointer<T>↔I64 coercion is no longer required.
+F gpu_alloc(size: i64) -> *i64 { 0 as *i64 }
 
 # Free GPU device memory
 F gpu_free(ptr: *i64) -> i64 { 0 }
@@ -464,7 +466,7 @@ F gpu_memcpy_d2d(dst: *i64, src: *i64, size: i64) -> i64 { 0 }
 F gpu_memset(ptr: *i64, value: i64, size: i64) -> i64 { 0 }
 
 # Allocate unified (managed) memory accessible from host and device
-F gpu_alloc_managed(size: i64) -> *i64 { 0 }
+F gpu_alloc_managed(size: i64) -> *i64 { 0 as *i64 }
 
 # --- Kernel Execution ---
 
@@ -479,7 +481,7 @@ F gpu_synchronize() -> i64 { 0 }
 # --- Stream Management ---
 
 # Create a new CUDA stream (returns stream handle)
-F gpu_stream_create() -> *i64 { 0 }
+F gpu_stream_create() -> *i64 { 0 as *i64 }
 
 # Destroy a CUDA stream
 F gpu_stream_destroy(stream: *i64) -> i64 { 0 }
@@ -499,7 +501,7 @@ F gpu_set_device(device_id: i64) -> i64 { 0 }
 F gpu_get_device() -> i64 { 0 }
 
 # Get device name (returns string pointer)
-F gpu_device_name(device_id: i64) -> *i8 { 0 }
+F gpu_device_name(device_id: i64) -> *i8 { 0 as *i8 }
 
 # Get total device memory in bytes
 F gpu_device_total_mem(device_id: i64) -> i64 { 0 }
@@ -510,7 +512,7 @@ F gpu_device_max_threads(device_id: i64) -> i64 { 0 }
 # --- Event Timing ---
 
 # Create a CUDA event (returns event handle)
-F gpu_event_create() -> *i64 { 0 }
+F gpu_event_create() -> *i64 { 0 as *i64 }
 
 # Destroy a CUDA event
 F gpu_event_destroy(event: *i64) -> i64 { 0 }
@@ -566,7 +568,7 @@ F gpu_memcpy_peer(dst: *i64, dst_device: i64, src: *i64, src_device: i64, size: 
 F gpu_last_error() -> i64 { 0 }
 
 # Get the last CUDA error as string
-F gpu_last_error_string() -> *i8 { 0 }
+F gpu_last_error_string() -> *i8 { 0 as *i8 }
 
 # Reset/clear the last error
 F gpu_reset_error() -> i64 { 0 }
