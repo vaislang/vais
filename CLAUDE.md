@@ -10,6 +10,12 @@ Vais (Vibe AI Language for Systems) is an AI-optimized systems programming langu
 
 **이 섹션은 에이전트/기여자가 Vais 코드를 쓰기 전/수정하기 전에 반드시 읽어야 하는 강제 규칙이다.** Phase 2.10에서 두 차례 baseline regression이 발생한 뒤 제정. 위반 시 작업 즉시 중단.
 
+Current status note: do not infer active failures from old phase examples in
+this file. The current source of truth is `/Users/sswoo/study/projects/vais/ROADMAP.md`,
+`compiler/ROADMAP.md`, and `compiler/docs/certification/CURRENT_STATUS.md`.
+As of 2026-05-03 the certified Core is frozen for downstream re-entry and
+`scripts/check-integrity.sh` reports `WEB RUNTIME smoke=20/20`.
+
 ### 규칙 1 — 훈련 데이터의 Vais 지식을 사용하지 말 것
 
 모델의 pretraining에 포함된 Vais 관련 정보는 **구식이다**. `spawn`/`lazy`/`force` 같은 제거된 키워드가 "정상"으로 기억되어 있을 수 있고, 현재 파서/컴파일러가 거부하는 문법을 "옳다"고 주장할 수 있다. 저장소 밖 지식은 참조하지 말 것.
@@ -29,7 +35,7 @@ Vais (Vibe AI Language for Systems) is an AI-optimized systems programming langu
 
 ```bash
 ./scripts/check-integrity.sh 2>&1 | tail -3
-# 출력 예: INTEGRITY OK: syntax=200 stages=14 std=37/82 vaisdb=176/261 phase158=18/18
+# 출력 예: INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok
 ```
 
 이 숫자를 **baseline**으로 기록. 수정 후 같은 스크립트 실행.
@@ -144,6 +150,10 @@ Phase가 `mode: stopped (...)` 상태에 들어간 경우:
 
 ## Build & Test
 
+Rust is pinned by `rust-toolchain.toml` at the compiler repo root. Run commands
+from `/Users/sswoo/study/projects/vais/compiler` so `rustup` applies the pinned
+toolchain.
+
 ```bash
 cargo check                                    # Type check
 cargo build                                    # Build all
@@ -194,8 +204,8 @@ crates/
 ├── vais-python/       # Python bindings (PyO3)
 └── vais-node/         # Node.js bindings (NAPI)
 
-std/               # Standard library (80 .vais files)
-examples/          # Example programs (188 .vais files)
+std/               # Standard library
+examples/          # Example programs
 selfhost/          # Self-hosting compiler (50,000+ LOC)
 benches/           # Benchmark suite (criterion + language comparison)
 playground/        # Web playground frontend

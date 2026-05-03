@@ -435,8 +435,8 @@ F main() -> i64 {
 
 #[test]
 fn e2e_vais_server_12_ssr_forwarding_retry_budget_observability_runtime_smoke() {
-    let listener = TcpListener::bind(("127.0.0.1", 0))
-        .expect("bind SSR retry budget observability listener");
+    let listener =
+        TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR retry budget observability listener");
     listener
         .set_nonblocking(true)
         .expect("set SSR retry budget observability listener nonblocking");
@@ -610,9 +610,7 @@ fn run_vais_server_generated_retry_budget_smoke(
 fn accept_n_ssr_drop_requests(listener: TcpListener, count: usize) -> Vec<String> {
     let mut collected = Vec::with_capacity(count);
     for _ in 0..count {
-        let cloned = listener
-            .try_clone()
-            .expect("clone retry budget listener");
+        let cloned = listener.try_clone().expect("clone retry budget listener");
         let request = accept_one_ssr_request_and_then(cloned, |_stream| {});
         collected.push(request);
     }

@@ -93,6 +93,12 @@ CODEGEN_INVARIANT_EXIT=0
         cargo test -p vais-codegen --test call_arg_invariant_test --release
 ) 2>&1 | tee "${CODEGEN_INVARIANT_LOG}" || CODEGEN_INVARIANT_EXIT=$?
 
+UNSAFE_AUDIT_LOG="/tmp/unsafe-audit.log"
+echo "check-integrity: running unsafe documentation audit..."
+
+UNSAFE_AUDIT_EXIT=0
+bash scripts/unsafe-audit.sh 2>&1 | tee "${UNSAFE_AUDIT_LOG}" || UNSAFE_AUDIT_EXIT=$?
+
 # ---------------------------------------------------------------------------
 # Run ecosystem integrity tests
 # ---------------------------------------------------------------------------
@@ -189,7 +195,9 @@ else
             __tests__/e2e/vais-web-cross-browser-hydration-runtime.test.ts \
             __tests__/e2e/vais-web-ssr-data-production-runtime.test.ts \
             __tests__/e2e/vais-web-server-action-production-runtime.test.ts \
-            __tests__/e2e/vais-web-server-action-auth-rate-production-runtime.test.ts
+            __tests__/e2e/vais-web-server-action-auth-rate-production-runtime.test.ts \
+            __tests__/e2e/vais-web-server-action-file-upload-production-runtime.test.ts \
+            __tests__/e2e/vais-web-cloudflare-miniflare-runtime.test.ts
     ) 2>&1 | tee "${WEB_RUNTIME_LOG}" || WEB_RUNTIME_EXIT=$?
 fi
 
@@ -352,6 +360,12 @@ if [ "${CODEGEN_INVARIANT_EXIT}" -ne 0 ]; then
     OVERALL_EXIT=1
 fi
 
+if [ "${UNSAFE_AUDIT_EXIT}" -ne 0 ]; then
+    echo ""
+    echo "UNSAFE AUDIT FAILED: unsafe documentation gate exited ${UNSAFE_AUDIT_EXIT}"
+    OVERALL_EXIT=1
+fi
+
 if [ "${PHASE158_EXIT}" -ne 0 ]; then
     echo ""
     echo "BACKEND REGRESSION FAILED: cargo test phase158 exited ${PHASE158_EXIT}"
@@ -410,6 +424,12 @@ print_gate_summary() {
         echo "CODEGEN FAIL: exit=${CODEGEN_INVARIANT_EXIT}"
     fi
 
+    if [ "${UNSAFE_AUDIT_EXIT}" -eq 0 ]; then
+        echo "UNSAFE AUDIT OK: vais-codegen undocumented_unsafe_blocks=0"
+    else
+        echo "UNSAFE AUDIT FAIL: exit=${UNSAFE_AUDIT_EXIT}"
+    fi
+
     if [ "${INTEGRITY_EXIT}" -eq 0 ] && [ "${REGRESSION}" -eq 0 ]; then
         echo "ECOSYSTEM OK: syntax=${SYNTAX_TOTAL}/? stages=${STAGES_TOTAL}/? std=${STD_PASS}/${STD_TOTAL} vaisdb=${VAISDB_PASS}/${VAISDB_TOTAL}"
     else
@@ -449,7 +469,7 @@ print_gate_summary() {
 
 if [ "${OVERALL_EXIT}" -eq 0 ]; then
     print_gate_summary
-    echo "INTEGRITY OK: core=ok mir=ok codegen=ok ecosystem=ok backend=ok http_client_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok"
+    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok"
     exit 0
 else
     print_gate_summary

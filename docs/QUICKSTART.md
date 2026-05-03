@@ -24,13 +24,17 @@ tar -xzf vais-v1.0.0-aarch64-apple-darwin.tar.gz
 export PATH="$PWD/vais:$PATH"
 ```
 
-### Option C: From Source (requires Rust 1.70+ and LLVM 17)
+### Option C: From Source (requires the pinned Rust toolchain and LLVM 17)
 
 ```bash
 git clone https://github.com/vaislang/vais.git
-cd vais && cargo build --release
+cd vais
+rustup show
+cargo build --release
 ```
 
+The repository pins the Rust toolchain in `rust-toolchain.toml`. Install
+`rustup` first if your system does not already have that toolchain available.
 The compiler binary is at `./target/release/vaisc`.
 
 ### Prerequisite: clang

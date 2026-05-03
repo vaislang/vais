@@ -18,6 +18,7 @@ Use these gates as the floor for any compiler change:
 | Core certification | `CORE_CERTIFICATION pass=16 fail=0 total=16` |
 | MIR strict gate | `MIR OK` |
 | Codegen invariant gate | `CODEGEN OK` |
+| Unsafe documentation audit | `UNSAFE AUDIT OK: vais-codegen undocumented_unsafe_blocks=0` |
 | Syntax integrity | `218 passed; 0 failed; 0 ignored` |
 | Std package codegen | `82/82` |
 | VaisDB package codegen | `261/261` |
@@ -27,7 +28,8 @@ Use these gates as the floor for any compiler change:
 | VaisDB runtime lock stability | WAL/LSN/buffer/page/checkpoint mutex release paths covered by current `28/28` smoke |
 | vais-server runtime smoke | `13/13` |
 | vais-server compiled SSR forwarding | `forward_ssr_render()` loopback upstream POST/status/content-type/body bridge plus upstream non-2xx/transport-failure/timeout/retry mapping and retry-budget observability covered by current `13/13` smoke |
-| vais-web runtime smoke | `19/19` |
+| vais-web runtime smoke | `20/20` |
+| Rust toolchain pin | `rust-toolchain.toml` pins Rust `1.92.0` with `rustfmt` and `clippy` components |
 | Full Rust-hosted compiler test run | Last completed RC baseline: `cargo test --release` exit code `0`; latest current-batch attempt was interrupted after e2e/integrity passed because `registry_e2e_tests` hung at dyld start |
 | Formatting sanity | `git diff --check` clean |
 
@@ -36,16 +38,15 @@ system. The statement above means the current certified Core compiler gate is
 green. Broader product surfaces remain outside Core until they are promoted by
 fixture-backed gates.
 
-Latest downstream promotion: `vais-web` now has a local server action
-auth/rate-limit production runtime smoke. The certified path scans a temporary
-`app/secure/page.vaisx` route with `action()`, verifies that prerender skips
-the SSR action route, serves authenticated action POSTs through
-`handleServerAction()`, enforces Bearer/session-cookie auth plus a bounded
-`2/min` rate budget, and loads a minified code-split production browser bundle
-in Playwright Chromium. This certifies local server action auth/rate-limit
-production runtime behavior only; live deployed platforms, action file upload
-behavior, full dynamic production apps, and broader device coverage remain
-outside the certified surface.
+Latest downstream promotion: `vais-web` now has a local server action file
+upload production runtime smoke. The certified path scans a temporary
+`app/upload/page.vaisx` route with `action()`, verifies that prerender skips the
+SSR action route, serves multipart action POSTs through `handleServerAction()`,
+preserves uploaded `File` name/type/size/text, and loads a minified code-split
+production browser bundle in Playwright Chromium. This certifies local server
+action file upload production runtime behavior only; live deployed platforms,
+full dynamic production apps, and broader device coverage remain outside the
+certified surface.
 
 ## Active Policy
 
@@ -53,8 +54,8 @@ outside the certified surface.
   product expansion.
 - A new compiler task must promote exactly one invariant or one certification
   audit class at a time.
-- Do not make fixes from archived failure counts such as `vaisdb=237/261` or
-  `VAISDB RUNTIME smoke=18/18`; those are historical.
+- Do not make fixes from archived failure counts or partial runtime smoke
+  counts; those are historical.
 - Do not treat successful downstream package codegen as proof of language
   semantics. Core proof still depends on the Core fixture manifest, strict MIR
   lowering, MIR validation, and interpreter/native agreement for promoted
@@ -222,7 +223,7 @@ Only after the Core RC tasks stay green:
     hydration marker rendering, client router dynamic param resolution,
     loading boundary propagation, serialized state delivery into hydration, and
     queued event replay in a jsdom runtime smoke. This gate remains part of the
-    current `WEB RUNTIME` `19/19` surface. Live deployed adapter behavior and
+    current `WEB RUNTIME` `20/20` surface. Live deployed adapter behavior and
     broader device coverage remain outside the promoted path.
 15. `vais-web` adapter runtime gate.
     Current result: `vais-web-adapter-runtime.test.ts` verifies static adapter
@@ -262,7 +263,7 @@ Only after the Core RC tasks stay green:
     `vaisx:hydrated` event detail, mounted component metadata, marker
     attribute cleanup, browser click handling, and absence of browser
     console/page errors. This gate is part of the current `WEB RUNTIME`
-    `19/19` surface. Live deployed platforms and broader device coverage
+    `20/20` surface. Live deployed platforms and broader device coverage
     remain outside the promoted path.
 19. `vais-web` platform output runtime gate.
     Current result: `vais-web-platform-output-runtime.test.ts` writes generated
@@ -272,7 +273,7 @@ Only after the Core RC tasks stay green:
     nested dynamic function routing, and 404 handling, plus Cloudflare static
     asset lookup, dynamic response, and missing-route 404 through
     platform-like request/response APIs. This gate is part of the current
-    `WEB RUNTIME` `19/19` surface. Live deployed platforms and broader device
+    `WEB RUNTIME` `20/20` surface. Live deployed platforms and broader device
     coverage remain outside the promoted path.
 20. `vais-web` production bundle/code-splitting runtime gate.
     Current result: `vais-web-production-bundle-runtime.test.ts` builds a
@@ -283,7 +284,7 @@ Only after the Core RC tasks stay green:
     local HTTP in Playwright Chromium. The smoke verifies `modulepreload`,
     absence of default `/client.js`, dynamic chunk resource loading, hydration
     state/marker cleanup, click handling, and absence of console/page errors.
-    The gate is part of the current `WEB RUNTIME` `19/19` surface. Live
+    The gate is part of the current `WEB RUNTIME` `20/20` surface. Live
     deployed platforms remain outside the promoted path.
 21. `vais-web` file-routing production app gate.
     Current result: `vais-web-file-routing-production-runtime.test.ts` creates
@@ -296,7 +297,7 @@ Only after the Core RC tasks stay green:
     `index.html`, `about/index.html`, `docs/guide/index.html`, `404.html`,
     dynamic chunk resource loading, hydration state/marker cleanup, route
     metadata, click handling, and missing-route 404 fallback. The gate is part
-    of the current `WEB RUNTIME` `19/19` surface. Live deployed platforms and
+    of the current `WEB RUNTIME` `20/20` surface. Live deployed platforms and
     full dynamic production application behavior remain outside the promoted
     path.
 22. `vais-web` cross-browser hydration matrix gate.
@@ -306,7 +307,7 @@ Only after the Core RC tasks stay green:
     The smoke verifies SSR marker state restoration, `vaisx:hydrated` event
     detail, mount metadata, `data-vx`/`data-vx-state` cleanup, click handling,
     and absence of browser console/page errors in all three engines. The gate
-    keeps `WEB RUNTIME` within the current `19/19` surface. Live deployed
+    keeps `WEB RUNTIME` within the current `20/20` surface. Live deployed
     platforms, full dynamic production app behavior, and broader device
     matrices remain outside the promoted path.
 
@@ -321,7 +322,7 @@ Only after the Core RC tasks stay green:
     `/__data.json` client data refresh, hydration marker cleanup, mount
     metadata, dynamic chunk resource loading, click handling, and no browser
     console/page errors. The gate keeps `WEB RUNTIME` within the current
-    `19/19` surface. Live deployed platforms, full dynamic production app
+    `20/20` surface. Live deployed platforms, full dynamic production app
     behavior, and broader device matrices remain outside the promoted path.
 24. `vais-web` server action production runtime gate.
     Current result: `vais-web-server-action-production-runtime.test.ts`
@@ -334,9 +335,9 @@ Only after the Core RC tasks stay green:
     errors, enhanced JSON submit success, plain form `303` redirect,
     hydration marker cleanup, mount metadata, dynamic chunk resource loading,
     and no unexpected browser console/page errors. The gate keeps
-    `WEB RUNTIME` within the current `19/19` surface. Live deployed platforms,
-    server action file-upload production behavior, full dynamic production app
-    behavior, and broader device matrices remain outside the promoted path.
+    `WEB RUNTIME` within the current `20/20` surface. Live deployed platforms,
+    full dynamic production app behavior, and broader device matrices remain
+    outside the promoted path.
 25. `vais-web` server action auth/rate-limit production runtime gate.
     Current result:
     `vais-web-server-action-auth-rate-production-runtime.test.ts` creates a
@@ -349,8 +350,21 @@ Only after the Core RC tasks stay green:
     request `429` rate exhaustion with `Retry-After` and `X-RateLimit-*`
     headers, `vx_session` cookie auth success, hydration marker cleanup, mount
     metadata, dynamic chunk resource loading, and no unexpected browser
-    console/page errors. The gate keeps `WEB RUNTIME` at `19/19`. Live deployed
-    platforms, server action file-upload production behavior, full dynamic
+    console/page errors. The gate keeps `WEB RUNTIME` at `20/20`. Live deployed
+    platforms, full dynamic production app behavior, and broader device
+    matrices remain outside the promoted path.
+26. `vais-web` server action file upload production runtime gate.
+    Current result:
+    `vais-web-server-action-file-upload-production-runtime.test.ts` creates a
+    temporary `app/upload/page.vaisx` route with `action()`, verifies manifest
+    generation and prerender skip for server-action routes, serves multipart
+    action POSTs through `handleServerAction()` with a required `file` schema
+    field, and loads a minified code-split production bundle in Playwright
+    Chromium. The smoke verifies enhanced multipart JSON submit success,
+    uploaded `File` name/type/size/text preservation, plain multipart form
+    `303` redirect, hydration marker cleanup, mount metadata, dynamic chunk
+    resource loading, and no unexpected browser console/page errors. The gate
+    keeps `WEB RUNTIME` at `20/20`. Live deployed platforms, full dynamic
     production app behavior, and broader device matrices remain outside the
     promoted path.
 

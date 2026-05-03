@@ -119,6 +119,9 @@ gates, not by broad feature claims.
 
 ## Building
 
+Rust is pinned by [`rust-toolchain.toml`](rust-toolchain.toml). LLVM 17 is
+required for crates that use the LLVM/Inkwell backend.
+
 ```bash
 cargo build --release
 cargo test                                     # Run all 12,000+ tests

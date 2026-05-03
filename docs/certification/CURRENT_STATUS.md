@@ -21,6 +21,7 @@ current Core contract and promoted smoke gates pass with the evidence below.
 | MIR strict lowering and validation | `MIR OK`; `lower_strict_tests` has `17 passed; 0 failed; 0 ignored` |
 | MIR interpreter/native comparison for promoted Core fixtures | Included in `core-certify.sh` and `check-integrity.sh` |
 | Codegen invariant tests | `CODEGEN OK` |
+| Unsafe documentation audit | `UNSAFE AUDIT OK: vais-codegen undocumented_unsafe_blocks=0` |
 | String runtime ownership invariant | `phase_string_runtime` passes stored substring field ownership, return move, string-returning if-expression PHI, and per-module helper link coverage |
 | Aggregate gate failure propagation | Grouped MIR/CODEGEN subtests short-circuit on first failing command |
 | Syntax integrity | `218 passed; 0 failed; 0 ignored` |
@@ -32,7 +33,9 @@ current Core contract and promoted smoke gates pass with the evidence below.
 | VaisDB runtime lock stability | WAL/LSN/buffer/page/checkpoint mutex release paths covered by current `28/28` smoke |
 | vais-server runtime smoke | `13/13` |
 | vais-server compiled SSR forwarding | `forward_ssr_render()` loopback upstream POST/status/content-type/body bridge plus upstream non-2xx/transport-failure/timeout/retry mapping and retry-budget observability covered by current `13/13` smoke |
-| vais-web runtime smoke | `19/19` |
+| vais-web runtime smoke | `23/23` |
+| vais-web Cloudflare workerd in-process smoke | `Miniflare dispatchFetch` against generated `_worker.js` with real KV-backed `__STATIC_CONTENT` site binding (static index, dynamic route, 404) |
+| Rust toolchain pin | `rust-toolchain.toml` pins Rust `1.92.0` with `rustfmt` and `clippy` components |
 | Full Rust-hosted compiler test run | Last completed RC baseline: `cargo test --release` exit code `0`; latest current-batch attempt was interrupted after e2e/integrity passed because `registry_e2e_tests` hung at dyld start |
 | Diff whitespace check | `git diff --check` clean |
 
@@ -57,6 +60,9 @@ The following claims are valid:
   fixtures.
 - `scripts/check-integrity.sh` propagates grouped MIR/CODEGEN subtest failures
   into the final aggregate exit status.
+- Production codegen unsafe blocks covered by the audit gate must carry
+  `SAFETY:` comments, enforced through
+  `clippy::undocumented_unsafe_blocks` for `vais-codegen`.
 - Current std and VaisDB source files compile through the active compiler gate.
 - Current VaisDB runtime smoke fixtures compile, link, and run.
 - Promoted VaisDB WAL/LSN/buffer/page/checkpoint runtime paths no longer rely
@@ -187,6 +193,21 @@ The following claims are valid:
   `vx_session` cookie auth success, production code-split hydration, dynamic
   chunk loading, and no unexpected browser console/page errors in Playwright
   Chromium.
+- Current vais-web server action file upload production runtime smoke scans a
+  temporary `app/upload/page.vaisx` route with `action()`, verifies prerender
+  skip for server-action routes, serves multipart action POSTs through
+  `handleServerAction()` with a required `file` schema field, preserves
+  uploaded `File` name/type/size/text, verifies plain multipart form `303`
+  redirect, production code-split hydration, dynamic chunk loading, and no
+  unexpected browser console/page errors in Playwright Chromium.
+- Current vais-web Cloudflare workerd in-process runtime smoke builds the
+  Cloudflare adapter `_worker.js`, instantiates Miniflare with a real workerd
+  process, registers a `sitePath`-backed `__STATIC_CONTENT` KV binding seeded
+  with a static `index.html`, and verifies through `dispatchFetch` that the
+  generated worker serves the static asset for `/`, renders the dynamic
+  `/blog/[slug]` route HTML through the fetch handler, and returns a `404`
+  with `text/plain` body for unmatched routes — all against the real
+  Cloudflare Workers runtime (not a JavaScript mock).
 - Per-module string helper definitions are available even when only an imported
   module uses `substring`/`char_at`.
 - A heap-owned `substring` assigned into a struct field transfers ownership into
@@ -214,11 +235,14 @@ The following claims are not valid yet:
   deployed Node SSR bridge operation are certified."
 - "vais-server SSR API parsing supports nested JSON props or a broad JSON
   escape contract."
-- "vais-web live deployed cloud platform runtime, production browser/device
-  hydration beyond the promoted local Chromium/Firefox/WebKit smoke, or full
-  dynamic production app behavior are certified."
-- "vais-web server action file upload or live deployed action behavior are
-  certified."
+- "vais-web live deployed cloud platform runtime (i.e., a real upload through
+  `wrangler deploy` to the Cloudflare edge, or equivalent for Vercel/Netlify/AWS),
+  production browser/device hydration beyond the promoted local
+  Chromium/Firefox/WebKit smoke, or full dynamic production app behavior are
+  certified." The promoted Cloudflare workerd smoke runs the generated
+  `_worker.js` in-process via Miniflare and does not exercise live edge
+  deployment, account auth, or external network conditions.
+- "vais-web live deployed action behavior is certified."
 - "Raw `str` pointer arithmetic or `load_byte(str + i)` is a certified string
   parser implementation path."
 - "Experimental crates are part of the Core proof."

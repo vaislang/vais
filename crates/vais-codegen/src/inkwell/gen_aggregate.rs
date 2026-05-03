@@ -483,6 +483,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             let idx_int = idx_val.into_int_value();
             let zero = self.context.i64_type().const_zero();
+            // SAFETY: `tmp` is an alloca of `array_ty`, and the GEP uses the
+            // canonical `[0, idx]` path into that aggregate. Runtime bounds are
+            // enforced by the source language/checker before codegen reaches here.
             let elem_ptr = unsafe {
                 self.builder
                     .build_gep(array_ty, tmp, &[zero, idx_int], "array_elem_ptr")
@@ -1278,6 +1281,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let idx_val = self.generate_expr(&args[0].node)?;
         let idx_i64 = self.coerce_to_i64(idx_val)?;
         let i8_ty = self.context.i8_type();
+        // SAFETY: `raw_ptr` is extracted from the canonical Vais string
+        // `{ptr,len}` representation. `char_at` callers are responsible for
+        // bounds validation before indexing into the byte buffer.
         let elem_ptr = unsafe {
             self.builder
                 .build_in_bounds_gep(i8_ty, raw_ptr, &[idx_i64], "char_at_ptr")
