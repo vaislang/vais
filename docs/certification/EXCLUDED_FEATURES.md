@@ -114,7 +114,7 @@ Sites where `unification.rs` accepts the conversion AND runtime behavior is empi
 | DynTrait dispatch | `unification.rs:567` |
 | Linear/Affine wrapper erasure | `unification.rs:430,438` |
 
-## Rejected at type-check (3 entries — NOT A4, NOT Controlled)
+## Rejected at type-check (4 entries — NOT A4, NOT Controlled)
 
 Sites where `unification.rs` has the coercion code but a separate compiler stage (type checker for downstream usage, field access, or direct `unify` rejection) catches the misuse before codegen. The user already gets a stable diagnostic. **Not A4 candidates.**
 
@@ -123,14 +123,13 @@ Sites where `unification.rs` has the coercion code but a separate compiler stage
 | Box raw generic (no type param) | `unification.rs:114` | Field access fails with E030 (Site 02) |
 | Box ↔ T (auto-unwrap of Box content) | `unification.rs:130` | Direct E001 Type mismatch (Site 03) |
 | Optional ↔ T (3 paths probed) | `unification.rs:98 + Named bridge unification.rs:232-244` | Direct E001 on all 3 probes: Site 23 (bare i64 → Option<i64>), Site 23b (Named form), Site 23c (reverse — explicitly NOT-allowed direction per Phase 276 comment, but rejection serves as downstream defense evidence) |
+| Result ↔ Unit (auto Ok/Some wrap) | `unification.rs:366` | Direct E001 Type mismatch — empirical fixture compiler/tests/empirical/Untested/U-01_result_unit_auto_ok/ verifies the type checker rejects bare Unit where Result<T,E>/Option<T> expected. Reclassified from Untested to Rejected on 2026-05-04 (STEP7_FINDINGS F-13). The fixture remains under empirical/Untested/ for now; physical relocation is cosmetic and deferred. |
 
-## Untested / classification deferred (1 entry)
+## Untested / classification deferred (0 entry)
 
 Sites where the empirical fixture could not produce a probe that exercises the suspected silent path. **Treat as A4 candidate by default** until a fixture proves Controlled or Rejected.
 
-| Surface | Site | Status |
-|---|---|---|
-| Result ↔ Unit (auto Ok/Some wrap) | `unification.rs:366` | deferred (treat as A4 candidate by default until probe constructed) |
+(empty — all surfaces previously listed here have been reclassified into A4 / Controlled / Rejected based on empirical evidence.)
 
 <!-- inventory:auto-end -->
 
