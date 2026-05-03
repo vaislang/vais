@@ -345,7 +345,20 @@ impl TypeChecker {
             }
             // Allow implicit integer type unification (widening within same signedness family).
             // Vais integer literals default to i64, so this enables `a:i8 = 1` patterns.
-            (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => Ok(()),
+            // A4-07 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode
+            // via VAIS_REJECT_A4_07=1. Default preserves the legacy silent
+            // coercion so the baseline does not move.
+            (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => {
+                if std::env::var("VAIS_REJECT_A4_07").as_deref() == Ok("1") {
+                    Err(crate::TypeError::Mismatch {
+                        expected: expected.to_string(),
+                        found: found.to_string(),
+                        span: None,
+                    })
+                } else {
+                    Ok(())
+                }
+            }
             // Allow int ↔ float unification (Phase 160-A numeric promotion).
             // Integer literals like `0` adapt to f32/f64 context. Enables `x: f32 = 0`.
             (a, b)
@@ -394,7 +407,18 @@ impl TypeChecker {
                 if let ResolvedType::Slice(elem) = inner.as_ref() {
                     self.unify(&generics[0], elem)
                 } else {
-                    Ok(()) // Permissive: allow Vec ↔ &T
+                    // A4-08 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode
+                    // via VAIS_REJECT_A4_08=1. Default preserves the legacy silent
+                    // coercion so the baseline does not move.
+                    if std::env::var("VAIS_REJECT_A4_08").as_deref() == Ok("1") {
+                        Err(crate::TypeError::Mismatch {
+                            expected: format!("Vec<T>"),
+                            found: format!("&T"),
+                            span: None,
+                        })
+                    } else {
+                        Ok(()) // Permissive: allow Vec ↔ &T
+                    }
                 }
             }
             // Ref(Vec<T>) ↔ Slice(T) auto-coercion (Phase 163).
@@ -425,21 +449,60 @@ impl TypeChecker {
             // This allows builtins like vec_new() -> i64 and malloc() -> i64 to unify with *T
             // parameters, and swap(ptr, i, j) to accept either pointer or i64 arguments.
             // Scope: unification only — does not enable arbitrary pointer arithmetic in user code.
+            // A4-02 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode
+            // via VAIS_REJECT_A4_02=1. Default preserves the legacy silent
+            // coercion so the baseline does not move.
             (ResolvedType::Pointer(_), ResolvedType::I64)
-            | (ResolvedType::I64, ResolvedType::Pointer(_)) => Ok(()),
+            | (ResolvedType::I64, ResolvedType::Pointer(_)) => {
+                if std::env::var("VAIS_REJECT_A4_02").as_deref() == Ok("1") {
+                    Err(crate::TypeError::Mismatch {
+                        expected: format!("Pointer<T>"),
+                        found: format!("i64"),
+                        span: None,
+                    })
+                } else {
+                    Ok(())
+                }
+            }
             // Pointer<T> ↔ Slice<T> / SliceMut<T> auto-coercion (Phase 162).
             // *u8 and &[u8] are compatible in systems code — both represent byte buffers.
             // Unifies element types to maintain generic consistency.
+            // A4-04 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode
+            // via VAIS_REJECT_A4_04=1. Default preserves the legacy silent
+            // coercion so the baseline does not move.
             (ResolvedType::Pointer(p), ResolvedType::Slice(s))
             | (ResolvedType::Slice(s), ResolvedType::Pointer(p))
             | (ResolvedType::Pointer(p), ResolvedType::SliceMut(s))
-            | (ResolvedType::SliceMut(s), ResolvedType::Pointer(p)) => self.unify(p, s),
+            | (ResolvedType::SliceMut(s), ResolvedType::Pointer(p)) => {
+                if std::env::var("VAIS_REJECT_A4_04").as_deref() == Ok("1") {
+                    Err(crate::TypeError::Mismatch {
+                        expected: format!("Pointer<T>"),
+                        found: format!("Slice<T>"),
+                        span: None,
+                    })
+                } else {
+                    self.unify(p, s)
+                }
+            }
             // Array/ConstArray ↔ Pointer auto-coercion (Phase 162).
             // [u64] / [u64; N] and *i64 are compatible (C-style array decay to pointer).
+            // A4-05 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode
+            // via VAIS_REJECT_A4_05=1. Default preserves the legacy silent
+            // coercion so the baseline does not move.
             (ResolvedType::ConstArray { element, .. }, ResolvedType::Pointer(p))
             | (ResolvedType::Pointer(p), ResolvedType::ConstArray { element, .. })
             | (ResolvedType::Array(element), ResolvedType::Pointer(p))
-            | (ResolvedType::Pointer(p), ResolvedType::Array(element)) => self.unify(element, p),
+            | (ResolvedType::Pointer(p), ResolvedType::Array(element)) => {
+                if std::env::var("VAIS_REJECT_A4_05").as_deref() == Ok("1") {
+                    Err(crate::TypeError::Mismatch {
+                        expected: format!("Array<T>"),
+                        found: format!("Pointer<T>"),
+                        span: None,
+                    })
+                } else {
+                    self.unify(element, p)
+                }
+            }
             // Linear type: unwrap and unify with inner type
             (ResolvedType::Linear(inner), other) | (other, ResolvedType::Linear(inner)) => {
                 self.unify(inner, other)
@@ -461,13 +524,32 @@ impl TypeChecker {
                 ResolvedType::RefMutLifetime { inner: b, .. },
             ) => self.unify(a, b),
             // Allow ref with lifetime to unify with plain ref
+            // A4-09 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode
+            // via VAIS_REJECT_A4_09=1. Default preserves the legacy silent
+            // coercion so the baseline does not move.
             (ResolvedType::RefLifetime { inner, .. }, ResolvedType::Ref(other))
             | (ResolvedType::Ref(other), ResolvedType::RefLifetime { inner, .. }) => {
-                self.unify(inner, other)
+                if std::env::var("VAIS_REJECT_A4_09").as_deref() == Ok("1") {
+                    Err(crate::TypeError::Mismatch {
+                        expected: format!("&'a T"),
+                        found: format!("&T"),
+                        span: None,
+                    })
+                } else {
+                    self.unify(inner, other)
+                }
             }
             (ResolvedType::RefMutLifetime { inner, .. }, ResolvedType::RefMut(other))
             | (ResolvedType::RefMut(other), ResolvedType::RefMutLifetime { inner, .. }) => {
-                self.unify(inner, other)
+                if std::env::var("VAIS_REJECT_A4_09").as_deref() == Ok("1") {
+                    Err(crate::TypeError::Mismatch {
+                        expected: format!("&'a mut T"),
+                        found: format!("&mut T"),
+                        span: None,
+                    })
+                } else {
+                    self.unify(inner, other)
+                }
             }
             // ConstArray: element type unification + size equality
             (
@@ -581,11 +663,30 @@ impl TypeChecker {
             (ResolvedType::DynTrait { .. }, _) | (_, ResolvedType::DynTrait { .. }) => Ok(()),
             // ImplTrait / HigherKinded were removed in ROADMAP #18.
             // Auto-deref: &T unifies with T (implicit dereference)
+            // A4-03 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode
+            // via VAIS_REJECT_A4_03=1. Default preserves the legacy silent
+            // coercion so the baseline does not move.
             (ResolvedType::Ref(inner), other) | (other, ResolvedType::Ref(inner)) => {
-                self.unify(inner, other)
+                if std::env::var("VAIS_REJECT_A4_03").as_deref() == Ok("1") {
+                    Err(crate::TypeError::Mismatch {
+                        expected: format!("&T"),
+                        found: found.to_string(),
+                        span: None,
+                    })
+                } else {
+                    self.unify(inner, other)
+                }
             }
             (ResolvedType::RefMut(inner), other) | (other, ResolvedType::RefMut(inner)) => {
-                self.unify(inner, other)
+                if std::env::var("VAIS_REJECT_A4_03").as_deref() == Ok("1") {
+                    Err(crate::TypeError::Mismatch {
+                        expected: format!("&mut T"),
+                        found: found.to_string(),
+                        span: None,
+                    })
+                } else {
+                    self.unify(inner, other)
+                }
             }
             _ => Err(TypeError::Mismatch {
                 expected: expected.to_string(),
