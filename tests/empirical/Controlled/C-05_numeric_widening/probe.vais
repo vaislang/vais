@@ -1,0 +1,5 @@
+F take_i64(x: i64) -> i64 { R x + 1 }
+F main() -> i64 {
+    small: i32 = 16
+    R take_i64(small)
+}

@@ -1,0 +1,2 @@
+F id<T>(x: T) -> T { R x }
+F main() -> i64 { R id(11) }

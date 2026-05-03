@@ -315,3 +315,52 @@ program would have returned. Step 7 second iteration lands them.
 This iterative structure is exactly what Master Plan v16 §Order Step 7
 "fixed-point iteration" calls for — discoveries go here, the protocol
 adapts, fixtures land as evidence stabilizes.
+
+---
+
+## Controlled v2 retro-validation — third iteration findings
+
+### F-07 — Controlled-06 (Vec ↔ Slice .len() path) NOT actually controlled
+
+Probe:
+```vais
+F len_of(s: &[i64]) -> i64 { R s.len() as i64 }
+F main() -> i64 {
+    v: Vec<i64> = [1, 2, 3]
+    R len_of(&v)
+}
+```
+Expected (per Controlled classification): exit 3 (Vec length).
+Observed (macOS arm64, vaisc release, 2026-05-03): exit 184 — same
+memory-load corruption pattern as A4-02/A4-03/A4-05.
+
+Master-plan.toml lists this as Controlled, but empirical evidence
+shows runtime corruption — should likely be reclassified A4
+(`A4-runtime-silent` with `exit_not = [3]` form).
+
+**Status: Controlled-06 fixture deferred** pending classification
+review. Either (a) the Controlled marking is wrong and this is A4-10,
+or (b) the probe construction is wrong (need a probe that actually
+exercises the documented Controlled behavior).
+
+### F-08 — Several Controlled probes fail to construct in current parser
+
+- **C-04 (Fn ↔ FnPtr)**: `f: F(i64) -> i64` syntax for function-pointer
+  parameter is not currently parsed; lexer emits LParen before comma.
+  Fixture deferred until Vais surface for fn-pointer parameters is
+  documented.
+- **C-08 (DynTrait dispatch)**: dyn trait surface complex; deferred.
+- **C-09 (Linear/Affine wrapper erasure)**: internal compiler concept;
+  no clear user-level surface; deferred.
+
+### F-09 — Controlled fixtures LANDED this iteration
+
+- **C-01** Str/str/String alias — exit 7 (function-return constant)
+- **C-02** Unknown unify-any — exit 11 (id<T>(11))
+- **C-05** Numeric widening — exit 17 (take_i64(16) + 1; overlaps A4-07)
+
+**Three of nine** Controlled entries have v2-reverified fixtures.
+Six deferred (C-03 Never, C-04 Fn↔FnPtr, C-06 Vec↔Slice .len(), C-07
+&Vec↔&[T], C-08 DynTrait, C-09 Linear/Affine). Step 7 next iterations
+investigate parser/syntax constraints and reclassify C-06 as A4-10
+candidate.

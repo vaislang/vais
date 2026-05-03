@@ -1,0 +1,36 @@
+# Controlled-01 — Str/str/String alias
+
+[entry]
+id = "Controlled-01"
+classification = "Controlled (verified, NOT A4)"
+surface = "Str / str / String are unified as the same surface type at unification.rs:70-86"
+site = "unification.rs:70-86"
+site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:70-86"
+master_plan_version = 16
+
+[v1_evidence]
+probe_summary = "F take_str(s: str) -> i64 { R 7 }; main passes 'hello' string literal"
+expected_per_design = "type-check accepts (intentional alias for ergonomics)"
+actual_observed = 7  # function returns 7, exit code matches
+verified_date = "2026-05-03"
+
+[v2_evidence]
+status = "v1_reverified"
+notes = """
+Controlled coercion: type-checker allows the alias deliberately, runtime
+delivers the function's return value correctly. No corruption.
+v2 contract requires 3 distinct probes for HARD v2 status. Pending:
+  - String parameter receiving str argument
+  - Method dispatch on str/String unified receiver
+  - String + str concatenation
+"""
+
+[migration]
+# Controlled coercions are not migrated by Step 13 (which targets A4).
+# If at some future point this surface is reclassified to A4, this
+# fixture documents the v1 baseline.
+
+[assertion_kind]
+kind = "exact_exit"
+expected_exit = 7
+rationale = "Function body explicitly returns 7. Surface is Controlled, so runtime correctness means the function's return propagates uncorrupted."
