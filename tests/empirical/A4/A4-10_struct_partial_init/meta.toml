@@ -1,0 +1,45 @@
+# A4-10 — Struct partial-init silent acceptance
+# NEW A4 candidate discovered during Step 8 stage 5 — not yet in
+# master-plan.toml [[phase.A4.runtime_silent]]. Pending registration
+# in next master-plan revision.
+
+[entry]
+id = "A4-10"
+classification = "A4-runtime-silent (NEW candidate, pending master-plan registration)"
+surface = "Struct constructor accepts partial init; missing required fields silently zero-initialize at runtime"
+site = "TBD"
+site_full_path = "TBD — needs codebase grep for the struct constructor type-check site (likely vais-types/src/checker_expr/ or check_struct_literal)"
+master_plan_version = 16
+discovery_context = "Step 8 stage 5 negative-gate construction; STEP7_FINDINGS F-15"
+
+[v1_evidence]
+probe_summary = "P S User { id, email, name, age }; main constructs User { id, email, name } (omits age) and returns u.age"
+expected_per_design = "type-check rejection (every required field must be present at constructor)"
+actual_observed = 0  # zero-init fills u.age
+verified_date = "2026-05-03"
+
+[v2_evidence]
+status = "v1_verified_with_protocol_revision"
+notes = """
+Used exit_not form because the corruption value (0 from zero-init) is
+itself environment-stable but distinct from any source-named return.
+The forbidden value 99 is what an explicit-init probe returns; choosing
+99 (vs the probe's 0) gives confidence that the surface is firing.
+
+v2 contract requires 3 distinct probes for HARD v2 status. Pending:
+  - non-i64 missing field (str, bool, struct)
+  - missing field accessed via method
+  - nested struct literal with inner partial-init
+
+Site identification is also pending — exact unification.rs line or
+checker_expr site has not been pinned. Step 7 next iteration responsibility.
+"""
+
+[migration]
+post_removal_expected = "vaisc check exits non-zero with stable error code (proposal: E_STRUCT_MISSING_FIELDS or E_INCOMPLETE_INIT)"
+post_removal_action = "Replace probe with negative form expecting `vaisc check` to fail. Companion positive uses full init User { id, email, name, age: 99 }."
+
+[assertion_kind]
+kind = "exit_not"
+forbidden_set = [99]
+forbidden_set_rationale = "well-typed full-init User { id: 1, email: 'a', name: 'n', age: 99 } returns u.age = 99. Defective rule allows omitting age and runtime zero-inits to 0."

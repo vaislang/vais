@@ -1,0 +1,11 @@
+P S User {
+    id: i64,
+    email: str,
+    name: str,
+    age: i64,
+}
+
+F main() -> i64 {
+    u: User = User { id: 1, email: "a", name: "n" }
+    R u.age
+}
