@@ -188,8 +188,14 @@ impl TypeChecker {
                 // Phase 254: lenient cond — accept Bool or any integer (truthy 0/1).
                 // vaisdb stdlib uses i64-returning predicates (contains_key, is_empty,
                 // contains) and chains them directly into I/while.
+                //
+                // A4-06 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode
+                // via VAIS_REJECT_A4_06=1 rejects integer-as-truthy in if/else-if;
+                // requires explicit `!= 0` or `.is_some()` etc. Default preserves
+                // legacy lenient acceptance so the baseline does not move.
+                let strict_a4_06 = std::env::var("VAIS_REJECT_A4_06").as_deref() == Ok("1");
                 if !matches!(cond_type, ResolvedType::Bool)
-                    && !cond_type.is_integer()
+                    && (strict_a4_06 || !cond_type.is_integer())
                     && !matches!(cond_type, ResolvedType::Var(_) | ResolvedType::Unknown)
                 {
                     self.unify(&cond_type, &ResolvedType::Bool)
@@ -240,9 +246,11 @@ impl TypeChecker {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
-                // Phase 254: lenient cond — Bool or integer (truthy).
+                // Phase 254 + A4-06: lenient cond by default; strict mode opt-in
+                // via VAIS_REJECT_A4_06=1.
+                let strict_a4_06 = std::env::var("VAIS_REJECT_A4_06").as_deref() == Ok("1");
                 if !matches!(cond_type, ResolvedType::Bool)
-                    && !cond_type.is_integer()
+                    && (strict_a4_06 || !cond_type.is_integer())
                     && !matches!(cond_type, ResolvedType::Var(_) | ResolvedType::Unknown)
                 {
                     if let Err(e) = self.unify(&cond_type, &ResolvedType::Bool) {
@@ -270,9 +278,11 @@ impl TypeChecker {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
-                // Phase 254: lenient cond — Bool or integer (truthy).
+                // Phase 254 + A4-06: lenient cond by default; strict mode opt-in
+                // via VAIS_REJECT_A4_06=1.
+                let strict_a4_06 = std::env::var("VAIS_REJECT_A4_06").as_deref() == Ok("1");
                 if !matches!(cond_type, ResolvedType::Bool)
-                    && !cond_type.is_integer()
+                    && (strict_a4_06 || !cond_type.is_integer())
                     && !matches!(cond_type, ResolvedType::Var(_) | ResolvedType::Unknown)
                 {
                     if let Err(e) = self.unify(&cond_type, &ResolvedType::Bool) {
@@ -393,9 +403,11 @@ impl TypeChecker {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
-                // Phase 254: lenient cond — Bool or integer (truthy).
+                // Phase 254 + A4-06: lenient cond by default; strict mode opt-in
+                // via VAIS_REJECT_A4_06=1.
+                let strict_a4_06 = std::env::var("VAIS_REJECT_A4_06").as_deref() == Ok("1");
                 if !matches!(cond_type, ResolvedType::Bool)
-                    && !cond_type.is_integer()
+                    && (strict_a4_06 || !cond_type.is_integer())
                     && !matches!(cond_type, ResolvedType::Var(_) | ResolvedType::Unknown)
                 {
                     if let Err(e) = self.unify(&ResolvedType::Bool, &cond_type) {
