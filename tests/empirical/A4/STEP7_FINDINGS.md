@@ -421,3 +421,35 @@ Rejected-03, Untested-01 (reclassification candidate).
 
 Protocol now five-form: `exact_exit | exit_not | build_fails |
 runtime_crashes | check_fails`.
+
+---
+
+### F-15 — NEW A4 candidate: struct partial-init silent acceptance
+
+Discovered while building Stage 5 cross_package_schema validation gate.
+
+Probe:
+```vais
+P S User { id: i64, email: str, name: str, age: i64 }
+F main() -> i64 {
+    u: User = User { id: 1, email: "a", name: "n" }   # age omitted
+    R 0
+}
+```
+
+Expected (per L-002): type-check rejects the partial init with a stable
+diagnostic — every required field must be present at the constructor.
+
+Observed (macOS arm64, vaisc release, 2026-05-03): vaisc check exits 0.
+The runtime presumably zeroes the missing field.
+
+This is a NEW A4-candidate surface, not in master-plan v16's A4-01..A4-09
+inventory. Step 7 next iteration should add it as A4-10 and write the
+empirical fixture (`assertion_kind = "exit_not"` form, forbidden_set
+contains the value the user expects when they think the field was set
+explicitly).
+
+Workaround applied to Stage 5: the negative gate uses field TYPE-CHANGE
+(email str → i64) instead of field ADDITION, since type-change does
+propagate via E001 'expected str, found i64' at the consumer's
+`R u.email` site.
