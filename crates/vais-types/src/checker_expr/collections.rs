@@ -874,6 +874,38 @@ impl TypeChecker {
                         }
                     }
 
+                    // A4-10 (Master Plan v16 §A4 + Step 13 stage 1): strict
+                    // default. After the per-field loop above caught any
+                    // unknown-field uses (E002-class), reject literals that
+                    // omit required fields. Was silently zero-init in codegen
+                    // (STEP7_FINDINGS F-15). Empirical baseline footprint =
+                    // 0 std + 0 vaisdb after migrating 3 sites (scan.vais,
+                    // dml.vais BTree×3, wal_integration.vais PageAllocPayload).
+                    // Set VAIS_REJECT_A4_10=0 to restore the legacy behaviour.
+                    if std::env::var("VAIS_REJECT_A4_10").as_deref() != Ok("0") {
+                        let provided: std::collections::HashSet<&str> =
+                            fields.iter().map(|(n, _)| n.node.as_str()).collect();
+                        let missing: Vec<&str> = struct_def
+                            .fields
+                            .keys()
+                            .map(|s| s.as_str())
+                            .filter(|f| !provided.contains(f))
+                            .collect();
+                        if !missing.is_empty() {
+                            return Some(Err(TypeError::Mismatch {
+                                expected: format!(
+                                    "all required fields of struct `{}`",
+                                    name.node
+                                ),
+                                found: format!(
+                                    "missing fields: {}",
+                                    missing.join(", ")
+                                ),
+                                span: Some(name.span),
+                            }));
+                        }
+                    }
+
                     // Apply substitutions to infer concrete generic types
                     let inferred_generics: Vec<_> = struct_def
                         .generics
