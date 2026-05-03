@@ -1,0 +1,3 @@
+U vaisdb/wal/bulk_graph
+
+F main() -> i64 { R 0 }
