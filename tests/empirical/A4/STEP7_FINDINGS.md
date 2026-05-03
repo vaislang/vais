@@ -453,3 +453,52 @@ Workaround applied to Stage 5: the negative gate uses field TYPE-CHANGE
 (email str → i64) instead of field ADDITION, since type-change does
 propagate via E001 'expected str, found i64' at the consumer's
 `R u.email` site.
+
+---
+
+### F-16 — A4-05 Array→Pointer is structural, not user-level (2026-05-04)
+
+Stage 1 attempt for A4-05 (Array → Pointer decay) found that the
+surface fires on EVERY fixed-size-array indexing expression in the
+language, not just the master-plan v1 probe. Minimal repro:
+
+```vais
+S Holder { arr: [i64; 3], }
+F main() -> i64 {
+    h: Holder = Holder { arr: [1, 2, 3] }
+    R h.arr[0]    # fires A4-05 under strict mode
+}
+```
+
+Trace:
+- `h.arr` resolves to `[i64; 3]` (ConstArray<i64, 3>).
+- Indexing lowers internally as `ptr_arith(arr_base, 0)` → produces
+  `Pointer<i64>`.
+- The unifier compares the resulting `Pointer<i64>` to the expected
+  element type `i64` → routes through Array↔Pointer arm → A4-05.
+
+Implications:
+- A4-05 is NOT a user-facing implicit coercion in the same sense as
+  A4-01 (Unit↔i64) or A4-02 (Pointer↔i64). It is the lowering glue
+  between source-level Array indexing and codegen-level pointer
+  arithmetic.
+- Removing A4-05 at the unifier level would require codegen to
+  expose Array indexing as a typed operation (so the result is
+  `i64`, not `Pointer<i64>`). That is a Step 16 (memory protocol)
+  scope question more than a Step 13 (A4 removal) one.
+
+Recommendation:
+- Reclassify A4-05 from A4-runtime-silent to **Controlled
+  (compiler-internal IR lowering)** per L-002 scope clause —
+  "compiler-internal IR lowering coercions are out of scope". The
+  vaisdb hnsw/cow.vais "single dependency" reported earlier in
+  master-plan status is the same indexing pattern.
+- Keep VAIS_REJECT_A4_05=1 as an opt-in for users who want their
+  source-level `as *T` casts to be visible (e.g. when implementing
+  raw-pointer manipulation at the user level), but do not flip
+  default to strict. Master-plan §A4-05 entry should be amended to
+  reflect this scope decision in the next plan revision.
+
+Status: A4-05 fixture continues to use the override-via-A4-02 path
+(probe trips A4-02 first); no user-level migration was needed and
+none is recommended.

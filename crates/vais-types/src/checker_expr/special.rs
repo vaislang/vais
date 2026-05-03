@@ -16,6 +16,39 @@ impl TypeChecker {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
+                // A4-11 (Master Plan v16 §A4 + Step 13 stage 1): strict default.
+                // The `?` operator desugars to an early-return Err / None when
+                // the receiver is the Err / None variant. That early-return is
+                // only well-typed if the enclosing function's return type is
+                // Result<_,_> or Option<_>. Previously this was unchecked at
+                // type-check; the failure surfaced only at clang IR generation
+                // ("value doesn't match function result type 'i64'", recorded
+                // as A2-NEG-DRIFT in A2_SUBSETS.md and A4-11 in master-plan).
+                // Empirical baseline footprint = 0 std + 0 vaisdb (2026-05-04);
+                // strict default lands without source migration. Set
+                // VAIS_REJECT_A4_11=0 to restore the unchecked legacy.
+                if std::env::var("VAIS_REJECT_A4_11").as_deref() != Ok("0") {
+                    let is_result_or_option = |t: &ResolvedType| -> bool {
+                        match t {
+                            ResolvedType::Result(_, _) | ResolvedType::Optional(_) => true,
+                            ResolvedType::Named { name, .. } => {
+                                name == "Result" || name == "Option"
+                            }
+                            _ => false,
+                        }
+                    };
+                    if is_result_or_option(&inner_type) {
+                        if let Some(ret) = self.current_fn_ret.clone() {
+                            if !is_result_or_option(&ret) {
+                                return Some(Err(crate::TypeError::Mismatch {
+                                    expected: format!("Result<_,_> or Option<_>"),
+                                    found: ret.to_string(),
+                                    span: Some(expr.span),
+                                }));
+                            }
+                        }
+                    }
+                }
                 // Try operator (?) works on both Result<T> and Option<T>
                 // - Result<T>: returns T on Ok, propagates Err
                 // - Option<T>: returns T on Some, propagates None
