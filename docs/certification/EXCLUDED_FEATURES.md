@@ -195,22 +195,47 @@ forms; the runner enforces only the selected form:
   across environments because the value is determined by source, not
   memory layout.
 
-- **`exit_not`** — runtime exit code must be in a `forbidden_set` that
-  enumerates the value(s) the surface would produce IF it were correctly
-  rejected at type-check (i.e. the values the well-typed program would
-  return). Use for memory-load-corruption surfaces (A4-02, A4-03, A4-04,
-  A4-05, possibly A4-08). Example for A4-02: `forbidden_set = [42]` —
-  the well-typed `take_i64(*p)` would return 42, so any other exit value
-  proves silent corruption. Specific corrupted value is ignored; only
-  "exit ≠ correct" matters.
+- **`exit_not`** — runtime exit code must **NOT** be in a `forbidden_set`
+  that enumerates the value(s) the well-typed program (with the surface
+  correctly rejected) would have returned. Use for memory-load-corruption
+  surfaces (A4-02, A4-03, A4-04, A4-05). Example for A4-02:
+  `forbidden_set = [42]` — the well-typed `take_i64(*p)` where val=42
+  would return 42, so the runner FAILS if exit lands on 42 and PASSES
+  for any other value.
+
+  **Collision caveat (codex v1 review)**: shell exit is 8-bit (0-255)
+  so a corrupted memory load can coincidentally hit a value in
+  `forbidden_set`. When a hit occurs the runner reports
+  `DRIFT: A4-NN exit landed on forbidden value F` and exits 1 —
+  treat as drift requiring investigation, NOT proof that the surface
+  was fixed. Investigation distinguishes (a) the surface was actually
+  fixed (good news, migrate fixture to negative form) from (b) the
+  corruption coincided with the well-typed value (re-craft probe to
+  use a forbidden value harder to hit, e.g. `42_000_000_007 % 256` or
+  a struct field at a stable offset).
+
+  A4-08 (Vec<T> ↔ &T permissive) is **not** an `exit_not` candidate —
+  it is a late-codegen-silent surface and uses `build_fails` (see
+  STEP7_FINDINGS F-06: v1 sentinel currently does not reproduce, so
+  A4-08 is deferred until a probe that triggers the documented clang
+  IR mismatch is reconstructed).
 
 - **`build_fails`** — `vaisc check` passes but the full build (codegen,
-  link) exits non-zero, and stderr matches a list of required patterns.
-  Use for late-codegen-silent surfaces (A4-08 clang IR mismatch, A4-09
-  linker undefined symbol). The runner asserts both the non-zero build
-  exit AND the presence of every regex in `required_stderr_patterns` so
-  a different build failure is not silently accepted as the documented
-  one.
+  link) exits non-zero, and stderr matches every regex in a list of
+  required patterns. Use for late-codegen-silent surfaces (A4-09
+  linker undefined symbol; A4-08 clang IR mismatch when a current
+  reproducer is found).
+
+  **Specificity requirement (codex v1 review)**: each pattern in
+  `required_stderr_patterns` must distinguish the documented failure
+  from incidental ones (e.g. duplicate-symbol, redefinition, missing
+  library). For A4-09 the patterns combine the specific mangled symbol
+  name (`_take_lifetime_ref`) AND a clang/ld message form that is
+  specific to undefined-symbol failures — `Undefined symbols.*for
+  architecture` plus `ld: symbol\(s\) not found` — not the looser
+  `undefined|symbol|linker|ld:` which would match unrelated linker
+  errors. Each fixture's `meta.toml` documents the rationale for its
+  patterns.
 
 The `meta.toml` schema additions:
 
@@ -219,10 +244,15 @@ The `meta.toml` schema additions:
 kind = "exact_exit" | "exit_not" | "build_fails"
 
 # Required when kind = "exit_not":
-forbidden_set = [42]  # exit values that prove the surface is NOT firing
+forbidden_set = [42]  # if exit lands on any of these, runner exits 1
+                       # with DRIFT — investigate (fix vs collision).
 
 # Required when kind = "build_fails":
-required_stderr_patterns = ["_take_lifetime_ref", "undefined|symbol|linker|ld:"]
+required_stderr_patterns = [
+  "_take_lifetime_ref",                    # specific mangled symbol
+  "Undefined symbols.*for architecture",   # specific clang form
+  "ld: symbol\\(s\\) not found",           # specific ld form
+]
 ```
 
 The runner script (`run.sh`) reads the kind and applies the matching

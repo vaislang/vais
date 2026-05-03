@@ -74,8 +74,18 @@ if ! grep -qF '_take_lifetime_ref' <<< "$BUILD_OUTPUT"; then
   exit 1
 fi
 
-if ! grep -qiE 'undefined|symbol|linker|ld:' <<< "$BUILD_OUTPUT"; then
-  echo "DRIFT: build failed but error doesn't look like a linker error:" >&2
+# Specific patterns (codex v1 review of Step 7 protocol — broad regex
+# `undefined|symbol|linker|ld:` was too loose; could match unrelated
+# linker errors like duplicate-symbol or invalid-archive).
+# Require BOTH a clang-form undefined-symbols banner AND an ld
+# symbol-not-found line — together unique to undefined-symbol failures.
+if ! grep -qE 'Undefined symbols.*for architecture' <<< "$BUILD_OUTPUT"; then
+  echo "DRIFT: build failed but no clang 'Undefined symbols' banner:" >&2
+  echo "$BUILD_OUTPUT" >&2
+  exit 1
+fi
+if ! grep -qE 'ld: symbol\(s\) not found' <<< "$BUILD_OUTPUT"; then
+  echo "DRIFT: build failed but no 'ld: symbol(s) not found' line:" >&2
   echo "$BUILD_OUTPUT" >&2
   exit 1
 fi

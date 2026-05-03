@@ -49,7 +49,14 @@ function definition site (TBD).
 [assertion_kind]
 # This fixture uses `assertion_kind = "build_fails"` per Step 7 protocol
 # revision (see compiler/tests/empirical/A4/STEP7_FINDINGS.md F-05).
-# The runner asserts the build process exits non-zero AND stderr contains
-# both the symbol name and a linker-error pattern.
+# Specificity requirement (codex v1 review of protocol revision): each
+# pattern below must distinguish the documented undefined-symbol failure
+# from unrelated linker errors (duplicate-symbol, redefinition, missing
+# library). The 3-pattern AND combination uniquely identifies the
+# A4-09 case on macOS arm64 + clang.
 kind = "build_fails"
-required_stderr_patterns = ["_take_lifetime_ref", "undefined|symbol|linker|ld:"]
+required_stderr_patterns = [
+  "_take_lifetime_ref",                  # specific mangled symbol
+  "Undefined symbols.*for architecture", # specific clang form
+  "ld: symbol\\(s\\) not found",         # specific ld form
+]
