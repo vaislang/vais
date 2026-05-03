@@ -1,0 +1,7 @@
+F take_box(b: Box) -> i64 {
+    R b.value
+}
+
+F main() -> i64 {
+    R 0
+}

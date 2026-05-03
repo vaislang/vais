@@ -364,3 +364,60 @@ Six deferred (C-03 Never, C-04 Fn↔FnPtr, C-06 Vec↔Slice .len(), C-07
 &Vec↔&[T], C-08 DynTrait, C-09 Linear/Affine). Step 7 next iterations
 investigate parser/syntax constraints and reclassify C-06 as A4-10
 candidate.
+
+---
+
+## Rejected/Untested v2 retro-validation — fourth iteration findings
+
+### F-10 — Rejected-01 LANDED (Box raw generic)
+
+Probe: `F take_box(b: Box) -> i64 { R b.value }` → vaisc check exits
+non-zero with **E030 'no field value on type Box'**. Type-check is the
+documented stable defense, exactly as master-plan v16 records.
+
+Status: Rejected-01 fixture LANDED with `assertion_kind = "check_fails"`.
+
+### F-11 — Rejected-02 (Box ↔ T) v1 sentinel does NOT reproduce
+
+Probe: `F take_box(b: Box<i64>) -> i64 { R take_i64(b) }` → vaisc
+check now PASSES, no E001. Master-plan documented E001 reject; current
+behavior accepts. Either the surface was tightened (likely fix), or
+the v1 probe wording is under-specified.
+
+Status: Rejected-02 fixture deferred. Investigation needed: is
+unification.rs:130 still the same code? What probe does fire E001?
+
+### F-12 — Rejected-03 LANDED (Optional ↔ T, bare i64)
+
+Probe: `F take_opt(x: Option<i64>); main passes 42` → E001 'expected
+Option<i64>, found i64'. Master-plan v1 sentinel reproduces exactly.
+
+Status: Rejected-03 fixture LANDED.
+
+### F-13 — Untested-01 (Result ↔ Unit auto Ok wrap) → RECLASSIFY to Rejected
+
+Probe: `F do_nothing() { R }; F take_result() -> Result<i64,str> { R do_nothing() }`
+→ E001 'expected Result<i64,str>, found ()'. The type checker DOES
+reject. Master-plan v16 listed this as Untested with "treat as A4
+candidate by default" — but empirical evidence shows it is already
+safe (Rejected). Recommendation: master-plan.toml should reclassify
+from Untested to Rejected.
+
+Status: Untested-01 fixture LANDED with reclassification recommendation
+recorded in meta.toml. After master-plan amendment, fixture moves to
+compiler/tests/empirical/Rejected/.
+
+### F-14 — `check_fails` assertion kind added (5th form)
+
+The Rejected/Untested fixtures introduced a new failure mode: the
+type checker (not the linker, not the runtime) is the stable defense.
+Existing `build_fails` form requires the type-check to PASS and the
+build to fail; that does not fit.
+
+Added `check_fails` to the Empirical verification protocol (§Assertion-
+kind tri-form, now five-form): `vaisc check` exits non-zero AND stderr
+matches every regex in `required_stderr_patterns`. Used by Rejected-01,
+Rejected-03, Untested-01 (reclassification candidate).
+
+Protocol now five-form: `exact_exit | exit_not | build_fails |
+runtime_crashes | check_fails`.

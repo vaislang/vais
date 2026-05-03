@@ -1,0 +1,9 @@
+F do_nothing() {
+    R
+}
+F take_result() -> Result<i64, str> {
+    R do_nothing()
+}
+F main() -> i64 {
+    R 0
+}

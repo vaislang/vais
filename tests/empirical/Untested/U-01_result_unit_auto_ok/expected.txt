@@ -1,0 +1,1 @@
+check_fails: E001 expected Result<i64,str>, found ()

@@ -236,6 +236,19 @@ forms; the runner enforces only the selected form:
   errors. Each fixture's `meta.toml` documents the rationale for its
   patterns.
 
+- **`check_fails`** — `vaisc check` itself exits non-zero AND stderr
+  matches every regex in a list of required patterns. Use for
+  Rejected-class surfaces: the type checker (or a downstream pre-codegen
+  pass) catches the misuse before any IR is emitted. Distinct from
+  `build_fails` because the failure happens at `vaisc check`, not after
+  it (no build needed).
+
+  Required `meta.toml` fields:
+  - `required_stderr_patterns` — same form as `build_fails`, must
+    distinguish the documented rejection from incidental check errors.
+
+  Use for: Box raw generic (E030), Box ↔ T (E001), Optional ↔ T (E001).
+
 - **`runtime_crashes`** — `vaisc check` passes, build succeeds, but
   runtime exits with a specific signal-class exit code when the
   defective surface is actually exercised (parameter consumed, etc.).
@@ -262,7 +275,7 @@ The `meta.toml` schema additions:
 
 ```toml
 [assertion_kind]
-kind = "exact_exit" | "exit_not" | "build_fails" | "runtime_crashes"
+kind = "exact_exit" | "exit_not" | "build_fails" | "runtime_crashes" | "check_fails"
 
 # Required when kind = "exit_not":
 forbidden_set = [42]  # if exit lands on any of these, runner exits 1
