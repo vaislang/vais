@@ -5,6 +5,8 @@ edition = "2021"
 publish = false
 license = "MIT"
 
+[workspace]
+
 [package.metadata]
 cargo-fuzz = true
 
@@ -15,6 +17,7 @@ vais-lexer = { path = "../crates/vais-lexer" }
 vais-parser = { path = "../crates/vais-parser" }
 vais-types = { path = "../crates/vais-types" }
 vais-codegen = { path = "../crates/vais-codegen" }
+vais-mir = { path = "../crates/vais-mir" }
 
 [[bin]]
 name = "fuzz_lexer"
@@ -47,6 +50,13 @@ bench = false
 [[bin]]
 name = "fuzz_full_pipeline"
 path = "fuzz_targets/fuzz_full_pipeline.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_mir_native_diff"
+path = "fuzz_targets/fuzz_mir_native_diff.rs"
 test = false
 doc = false
 bench = false
