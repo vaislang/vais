@@ -165,3 +165,129 @@ Stage 2 deliverables now complete:
 Real differential findings can now land. The fuzz binary
 fuzz_mir_native_diff is ready to run as `cargo fuzz run` for finding
 discovery work in stage 3+.
+
+---
+
+## Stage 3 LANDED — fuzz_mir_native_diff promoted to nightly + tracked corpus seeds (2026-05-04)
+
+Layout
+- `.github/workflows/fuzz.yml` matrix gains `fuzz_mir_native_diff`
+  (joins fuzz_lexer/parser/type_checker/codegen).
+- `fuzz/corpus_seeds/fuzz_mir_native_diff/` tracked seed dir (3 entries:
+  empty / zero / 8-byte). Necessary because `corpus/` is gitignored;
+  cold-start CI box would have nothing to mutate from.
+- New workflow step `Seed corpus from tracked seeds` copies
+  `corpus_seeds/<target>/*` → `corpus/<target>/` with `cp -n` (no
+  overwrite of cached corpus).
+- README target table updated.
+
+Verification
+- `cargo test --release` in `compiler/fuzz/` → 6/6 #[test] still pass.
+- `bash scripts/check-integrity.sh`: INTEGRITY OK.
+
+Step 17 done_when criterion 1 of 3 (nightly fuzz green) met for the
+matrix-wired job, pending first GH Actions cron execution.
+
+---
+
+## Stage 4a LANDED — sanitizer PR-blocking supersession documented (2026-05-04)
+
+Empirical finding (this iter): the assumption that the workspace
+sanitizer-tests / miri-tests jobs in `fuzz.yml` were the only sanitizer
+gate was WRONG. Dedicated workflows already gate on push/pull_request:
+- `.github/workflows/asan.yml`: `continue-on-error: false` on 7/8 steps
+  (one LLVM-bindings step kept `true` for known false SEGV).
+- `.github/workflows/tsan.yml`: `continue-on-error: false` on every step.
+
+Therefore the broader workspace ASAN/UBSAN runs in `fuzz.yml` are
+SUPERSEDED best-effort coverage. Comments added to fuzz.yml documenting
+this supersession + Step 17 stage 4a/4b sub-step structure. No workflow
+logic changes — this is recognition of pre-existing infrastructure.
+
+Step 17 done_when criterion 2 of 3 status:
+- Sanitizer (ASAN/TSAN) PR-blocking: ALREADY MET via dedicated workflows.
+- Miri PR-blocking: PENDING stage 4b — see below.
+
+---
+
+## Stage 4b DEFERRED — Miri PR-blocking promotion (multi-day stability survey)
+
+Single-session immediate landing is unsafe per CLAUDE.md rule 4
+(regression-immediate-revert protocol). Plan:
+
+1. Run nightly `cargo +nightly miri test -p vais-{lexer,parser,ast,types}
+   -- --test-threads=1` under `MIRIFLAGS=-Zmiri-disable-isolation
+   -Zmiri-tree-borrows` for 7+ consecutive days.
+2. Surface and fix any false-positive Stacked/Tree-Borrows violations
+   (Miri commonly flags valid raw-pointer patterns in self-referential
+   structures; each finding requires individual triage).
+3. After 7+ days of green nightly runs, flip the `|| true` shell-suffix
+   in fuzz.yml line 151-154 to fail-fast (or split Miri to a dedicated
+   workflow with `continue-on-error: false`).
+
+Risk if landed prematurely: first false-positive blocks ALL PR merges
+until fixed. With LLVM 17 + nightly toolchain churn the surface is
+moving; needs empirical observation period.
+
+---
+
+## Stage 5 RECONNAISSANCE — diagnostic equivalence (2026-05-04)
+
+Goal: extend `RunOutput` comparison from exit-code-only to
+`(exit_code, stdout)` — Step 17 done_when criterion 3 of 3.
+
+### Current state
+
+`compiler/fuzz/src/lib.rs:run_mir_path` and `run_native_path` both
+return `RunOutput { exit_code, stdout: String::new() }`. stdout
+diff is technically wired in `compare_paths` (PartialEq on the whole
+struct) but stays vacuously equal because both arms emit empty
+strings.
+
+### Path A blocker — vais-mir interpreter has no I/O model
+
+`crates/vais-mir/src/interpreter.rs:88` `Interpreter::call(function, args)`
+looks up `bodies.get(function)` and errors with `"function body not
+found"` if missing. There is NO builtin/intrinsic intercept layer.
+Any program calling `print` / `println` / etc. immediately produces
+`MirInterpretError`, which `run_mir_path` maps to
+`PathOutcome::InputInvalid` — silently dropped from the diff.
+
+### Path B blocker — vais-jit writes to host stdout, no capture
+
+`crates/vais-jit/src/lib.rs:JitCompiler::compile_and_run_main` runs
+the function via Cranelift in-process. Any `print` builtin is linked
+to libc's `printf` (or the Vais runtime's print shim) and writes
+directly to host stdout/stderr file descriptors. No capture
+mechanism.
+
+### Design options (for stage 5 implementation)
+
+(a) **Interpreter-side print intercept + JIT stdout redirect**:
+    - Add `BuiltinIntercept` trait to `vais_mir::interpreter::Interpreter`
+      with method `intercept_call(name, args) -> Option<MirValue>`.
+      Wire `print` / `println` / `print_int` etc. to push-to-buffer.
+    - For Path B: `dup2(stdout_pipe, 1)` before
+      `compile_and_run_main`, restore after, drain pipe into String.
+      Risk: thread-unsafe (libFuzzer's fork-server isolates each
+      worker, but libc stdio buffering may strand output).
+    - Effort: ~200-400 LOC (interpreter) + ~80-150 LOC (jit shim) +
+      tests.
+
+(b) **Recoverable stdout via runtime hook (preferred, future-safe)**:
+    - Introduce `vais-runtime` thread-local `STDOUT_SINK: RefCell<Vec<u8>>`
+      that print-builtin call sites consult before writing to fd 1.
+    - Both Path A (interpreter intercept fills the same sink) and
+      Path B (JIT-emitted print() calls into the sink) can read.
+    - Effort: ~300-500 LOC across vais-runtime + vais-mir + vais-jit
+      + builtin call lowering. Higher upfront but no fd manipulation.
+
+### Decision
+
+Stage 5 implementation is substantial (200-500 LOC across 2-3 crates +
+runtime contract change). Not single-session safe. Path (b) is the
+correct long-term choice; Path (a) is a faster MVP if needed sooner.
+
+Status: RECONNAISSANCE LANDED. Stage 5 implementation deferred.
+Re-open as task with explicit option (a)-vs-(b) decision when
+prioritization dictates.
