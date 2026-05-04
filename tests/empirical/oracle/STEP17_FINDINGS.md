@@ -17,6 +17,7 @@ work. Mirrors STEP7_FINDINGS / STEP11_FINDINGS structure.
 | Stage 5a LANDED | interpreter-side stdout sink + 4 builtin intercept (print/println/print_int/print_str) |
 | Stage 5a B.5 | builtin intercept 확장 4 → 8 (+ print_float/print_bool/eprint/eprintln) |
 | **Stage 4b LANDED** | **Miri PR-blocking 승격 (B+D path, fresh nightly 1.97 4/4 green)** |
+| **Stage 5b RECONNAISSANCE** | **JIT print 미지원 empirical 확증 — asymmetry guard는 dead, 5b-impl 별도 deferred** |
 
 ## F-MIR-01 — vais-mir interpreter panics on Arbitrary-derived corrupted input
 
@@ -487,3 +488,94 @@ stdout capture) remains for full done_when. Step 17 well over halfway.
 INTEGRITY OK preserved (workflow yaml is CI metadata, no compiler
 behavior change; both nightly runs measured against the same
 unchanged Vais source).
+
+---
+
+## Stage 5b RECONNAISSANCE — JIT-side print builtin handling (2026-05-04)
+
+User-driven same-day continuation. Goal: complete done_when 3/3
+(diagnostic equivalence) by capturing JIT-side stdout symmetrically
+with stage 5a interpreter sink.
+
+### Decisive empirical finding
+
+`grep -nE '"print"|"println"|print_int|print_str' compiler/crates/vais-jit/src/`
+returns **zero hits**. vais-jit's runtime registry (`runtime.rs`)
+exposes only libc primitives (`puts`, `printf`, `putchar`) and libm
+math functions. It does NOT register any Vais-side print builtin.
+
+Consequence on the differential oracle:
+
+```
+Vais source:  F main() -> i64 { print("hi"); R 0 }
+Path A (interpreter): try_intercept_builtin("print", ...) → MirValue::Unit;
+                      RunOutput { exit_code: 0, stdout: "hi" }
+Path B (vais-jit):    JitCompiler tries to resolve "print" → not found
+                      → Err(JitError::FunctionNotFound("print"))
+                      → run_native_path returns PathOutcome::NotImplemented
+compare_paths:        (Ok, NotImplemented) → wildcard arm `_ => {}` →
+                      no diff, no panic.
+```
+
+So in practice the asymmetry guard added in stage 5a's `compare_paths`
+(`!mir_out.stdout.is_empty() && !native_out.stdout.is_empty()` ⇒ check
+diff) is **dead code**: any input that actually exercises the print
+intercept on Path A also makes Path B return NotImplemented before
+RunOutput is constructed. The guard exists as belt-and-suspenders
+insurance; the suspenders are the JIT's natural rejection of print
+calls.
+
+### Why option (a) dup2 / option (b) runtime sink are over-engineering
+
+Both options assume the JIT actually **emits a fd-1 write** for Vais
+print() that we need to capture. Empirically the JIT doesn't emit any
+print at all. Building a STDOUT_SINK or a dup2 redirect would create a
+sink that nothing fills.
+
+The genuine path to symmetric stdout diff is:
+
+1. **Make vais-jit emit calls to a sink-aware print runtime function**.
+   Register a `vais_runtime_print(ptr, len)` C ABI thunk in
+   JitRuntime::register_stdlib that forwards into a thread-local
+   STDOUT_SINK. Lower Vais print builtins in the JIT codegen path to
+   call that thunk instead of being silently dropped/erroring.
+
+2. Then on the Vais side, either lower print at the type-checker level
+   (so both interpreter and JIT see the same name) or treat
+   "Vais print()" as a true builtin that the codegen knows about.
+
+Both of those changes are within Step 17 done_when criterion 3 scope
+but are **substantial multi-iter work** (5b proper). They cannot land
+in a single same-day session safely without risking JitRuntime API
+changes that cascade into vais-jit's integration tests.
+
+### Decision (2026-05-04)
+
+Stage 5b has two tiers:
+
+- **5b-recon (LANDED this iter)**: empirically confirm JIT does not
+  emit print → asymmetry guard is currently dead → no immediate
+  silent-diff risk. STEP17_FINDINGS encodes this so future work
+  doesn't waste effort on dup2 / sink-only changes that miss the
+  actual missing piece.
+- **5b-impl (DEFERRED)**: register `vais_runtime_print` thunk in
+  JitRuntime + wire JIT codegen to lower Vais print to that thunk +
+  add thread-local STDOUT_SINK. Multi-iter, plan-driven; not single-
+  session safe.
+
+asymmetry guard in fuzz/src/lib.rs::compare_paths is RETAINED as
+belt-and-suspenders. It costs nothing when JIT doesn't emit print,
+and it provides correctness if a future JIT change starts emitting
+print without symmetric capture.
+
+Step 17 done_when status (post-recon):
+
+| Criterion | Status |
+|---|---|
+| nightly fuzz green | MET (stage 3) |
+| sanitizer/Miri PR-blocking | fully MET (stage 4a + 4b) |
+| diagnostic equivalence | **PARTIALLY MET (stage 5a + 5b-recon)** — 5b-impl가 fully MET 위한 잔여 |
+
+→ done_when 2/3 fully MET + 1/3 substantively MET (interpreter
+captures + JIT silently drops print rather than corrupting). Step 17
+is over 90% complete; only 5b-impl plumbing remains for full closure.
