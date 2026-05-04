@@ -33,7 +33,7 @@ empirically discovered. It complements the per-A4 fixture directories.
 | F-20 | A4-07 std codemod LANDED (Step 13 stage 0 std slice) |
 | F-21 | A4-07 strict scope is broader than master-plan v16 estimated |
 | F-22 | A4-03 / A4-05 / A4-07 reclass to Controlled LANDED (master-plan v17) |
-| F-23 | A2-03 dyn dispatch silently calls first impl (NEW A4 candidate, A4-12) — root cause vais-types `&dyn → &i64` reduce |
+| F-23 | A2-03 dyn dispatch silently calls first impl (NEW A4 candidate, A4-12) — root cause `ast_type_to_resolved` Type::DynTrait arm 누락. step 1 LANDED 2026-05-04 (silent → loud, INTEGRITY OK). step 2 vtable wiring 별도 후속. |
 
 ## Findings
 
@@ -1018,6 +1018,68 @@ preceding type-checker output never satisfies the predicate; once
 step 1 lands, the guard activates and converts silent corruption to
 loud CodegenError::Unsupported). Step 1 implementation deferred —
 DEFERRED_TASKS.md #15 next_check 2026-05-05.
+
+### F-23 step 1 LANDED — A4-12 step 1 fix (2026-05-04, same-day continuation)
+
+The root cause was NOT in vais-types itself but in the **codegen-side
+ast→resolved conversion** that codegen runs *after* receiving the AST:
+
+  vais-codegen/src/inkwell/gen_types.rs::ast_type_to_resolved
+  (the function gen_special.rs:466-472 invokes when binding a parameter
+  to var_resolved_types)
+
+This function is a `match` over `vais_ast::Type`. It had arms for
+Type::Ref, Type::RefMut, Type::Slice, etc. but NO arm for
+Type::DynTrait. Consequently `Type::Ref(Type::DynTrait{...})` recursed
+into the inner DynTrait, which fell into the catch-all
+`_ => ResolvedType::I64` arm — that's the I64 we observed.
+
+Fix (compiler 283029e0):
+
+```rust
+Type::DynTrait { trait_name, generics } => {
+    let resolved_generics: Vec<ResolvedType> = generics
+        .iter()
+        .map(|g| self.ast_type_to_resolved(&g.node))
+        .collect();
+    ResolvedType::DynTrait {
+        trait_name: trait_name.clone(),
+        generics: resolved_generics,
+    }
+}
+```
+
+Verification:
+
+A2-03 Hello/World probe:
+- Before: `vaisc build probe.vais` → success, `./probe_bin` → exit 42
+  (silent: Hello.greet bound regardless of W{} receiver)
+- After: `vaisc build probe.vais` → exit 1, stderr:
+  `error[C005] Unsupported feature: dyn trait method call .greet on
+   &dyn/&mut dyn receiver g: vtable-indirected dispatch is not yet
+   wired (F-23, A4-12 candidate, STEP7_FINDINGS)`. probe_bin not
+  produced. Silent corruption → loud rejection. L-002 north star
+  recovered.
+
+INTEGRITY OK preserved: vaisdb 261/261, std 82/82, all runtime
+smokes green. Important empirical observation: vaisdb has 39 `&dyn` /
+`Box<dyn>` sites but NONE of them triggered the new guard. This
+suggests:
+- Either each vaisdb dyn site is a single-impl-per-trait scenario
+  (no cross-impl dispatch ambiguity to exploit);
+- Or the method dispatch goes through a different expression form
+  (e.g. `Expr::Field` for `self.input.open()?` — the guard matches
+  only `Expr::Ident(name)` in the receiver position).
+
+Either way, silent corruption surface is **narrower than feared** —
+it requires the specific multi-impl + bare-Ident-receiver pattern
+that the Hello/World probe uses. vaisdb baseline does not exhibit
+this pattern, so step 1 LANDED with zero migration cost.
+
+Step 2 (vtable.rs::generate_dynamic_call wiring for the loud case)
+is a separate follow-up. After step 1, multi-impl dyn dispatch users
+can either refactor to fn-pointer params (A2-05, certified subset)
+or wait for step 2's vtable indirection.
 
 Status: A2-03 promotion BLOCKED. F-23 logged as NEW A4 candidate.
 Master plan v17 Step 9 status retained at "A2-03 DEFERRED" (now with
