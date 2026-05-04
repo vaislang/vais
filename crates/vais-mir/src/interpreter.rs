@@ -5,10 +5,34 @@
 //! before LLVM output is trusted.
 
 use crate::types::*;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 
 const DEFAULT_STEP_LIMIT: usize = 10_000;
+
+/// Output captured by an interpreter run that opted into the stdout sink.
+///
+/// Step 17 stage 5a (Master Plan v17 §I-6): Path A of the MIR-vs-native
+/// differential oracle needs `(exit_code, stdout)` instead of the bare
+/// `MirValue` produced by [`interpret_function`]. This struct is the
+/// uniform exchange shape that both the MIR interpreter side (here) and
+/// the JIT/native side (vais-jit, future stage) lower into for diff.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InterpreterRunOutput {
+    /// Process-style exit code (8-bit truncated to match POSIX semantics).
+    /// Mapped from the function return value: `MirValue::Int(n)` → `n & 0xFF`,
+    /// `MirValue::Unit` → `0`, anything else → caller decides (we still
+    /// return the raw value separately so the diff layer can short-circuit).
+    pub exit_code: i64,
+    /// stdout captured during the run via the builtin print intercept
+    /// (see [`Interpreter::call_with_io`]).
+    pub stdout: String,
+    /// The raw return value, for callers that want richer comparison than
+    /// just exit code (e.g. `MirValue::Str` etc.). The diff oracle ignores
+    /// this and uses `exit_code` + `stdout` only.
+    pub return_value: MirValue,
+}
 
 /// Runtime value produced by the MIR interpreter.
 #[derive(Debug, Clone, PartialEq)]
@@ -68,9 +92,50 @@ pub fn interpret_function(
     Interpreter::new(module).call(function, args)
 }
 
+/// Step 17 stage 5a: interpret a named function with a stdout sink active.
+///
+/// Same as [`interpret_function`] but routes calls to recognized print-style
+/// builtins (`print`, `println`, `print_int`, `print_str`) into a
+/// per-run String buffer instead of erroring out with "function body not
+/// found". Returns an [`InterpreterRunOutput`] with `exit_code` derived
+/// from the return value, the captured `stdout`, and the raw `return_value`.
+///
+/// Backward compatibility: existing callers of [`interpret_function`] are
+/// unaffected — the bare-call path treats unknown function names as errors,
+/// just like before.
+pub fn interpret_function_with_io(
+    module: &MirModule,
+    function: &str,
+    args: Vec<MirValue>,
+) -> Result<InterpreterRunOutput, MirInterpretError> {
+    let mut interp = Interpreter::new(module);
+    interp.stdout_sink = Some(RefCell::new(String::new()));
+    let return_value = interp.call(function, args)?;
+    let stdout = interp
+        .stdout_sink
+        .as_ref()
+        .map(|cell| cell.borrow().clone())
+        .unwrap_or_default();
+    let exit_code = match &return_value {
+        MirValue::Int(n) => n & 0xFF,
+        MirValue::Unit => 0,
+        _ => 0, // non-int/unit: leave to caller; diff oracle short-circuits anyway
+    };
+    Ok(InterpreterRunOutput {
+        exit_code,
+        stdout,
+        return_value,
+    })
+}
+
 struct Interpreter<'a> {
     bodies: HashMap<&'a str, &'a Body>,
     step_limit: usize,
+    /// Step 17 stage 5a: when `Some`, calls to known print-style builtins
+    /// are intercepted and pushed into this buffer (rather than failing
+    /// with "function body not found"). The bare [`interpret_function`]
+    /// entry leaves this `None` so its behavior is unchanged.
+    stdout_sink: Option<RefCell<String>>,
 }
 
 impl<'a> Interpreter<'a> {
@@ -82,10 +147,68 @@ impl<'a> Interpreter<'a> {
                 .map(|body| (body.name.as_str(), body))
                 .collect(),
             step_limit: DEFAULT_STEP_LIMIT,
+            stdout_sink: None,
+        }
+    }
+
+    /// If `function` is a recognized print-style builtin AND a stdout sink
+    /// is active, push the formatted args into the sink and return
+    /// `Some(MirValue::Unit)`. Returns `None` if the call should not be
+    /// intercepted.
+    fn try_intercept_builtin(&self, function: &str, args: &[MirValue]) -> Option<MirValue> {
+        let sink = self.stdout_sink.as_ref()?;
+        let mut buf = sink.borrow_mut();
+        match function {
+            "print" | "print_str" => {
+                for arg in args {
+                    Self::write_value(&mut buf, arg);
+                }
+                Some(MirValue::Unit)
+            }
+            "println" => {
+                for arg in args {
+                    Self::write_value(&mut buf, arg);
+                }
+                buf.push('\n');
+                Some(MirValue::Unit)
+            }
+            "print_int" => {
+                if let Some(MirValue::Int(n)) = args.first() {
+                    use std::fmt::Write;
+                    let _ = write!(&mut *buf, "{}", n);
+                }
+                Some(MirValue::Unit)
+            }
+            _ => None,
+        }
+    }
+
+    fn write_value(buf: &mut String, value: &MirValue) {
+        use std::fmt::Write;
+        match value {
+            MirValue::Str(s) => buf.push_str(s),
+            MirValue::Int(n) => {
+                let _ = write!(buf, "{}", n);
+            }
+            MirValue::Float(f) => {
+                let _ = write!(buf, "{}", f);
+            }
+            MirValue::Bool(b) => {
+                buf.push_str(if *b { "true" } else { "false" });
+            }
+            MirValue::Unit => {}
+            other => {
+                let _ = write!(buf, "{:?}", other);
+            }
         }
     }
 
     fn call(&self, function: &str, args: Vec<MirValue>) -> Result<MirValue, MirInterpretError> {
+        // Step 17 stage 5a: builtin print intercept (only fires when a
+        // stdout sink is active — see `interpret_function_with_io`).
+        if let Some(value) = self.try_intercept_builtin(function, &args) {
+            return Ok(value);
+        }
         let body = self
             .bodies
             .get(function)

@@ -341,7 +341,7 @@ pub enum PathOutcome {
 /// The `unimplemented!` is reached at runtime and causes `PathOutcome::NotImplemented`
 /// to be returned, so the differential check short-circuits without a finding.
 pub fn run_mir_path(source: &str) -> PathOutcome {
-    use vais_mir::interpreter::{interpret_function, MirValue};
+    use vais_mir::interpreter::MirValue;
     use vais_mir::lower::lower_module_checked;
     use vais_parser::parse;
     use vais_types::TypeChecker;
@@ -364,34 +364,23 @@ pub fn run_mir_path(source: &str) -> PathOutcome {
         Err(_) => return PathOutcome::InputInvalid,
     };
 
-    // Step 4: interpret "main"
-    // STAGE 1: bridge MirValue → (exit_code, stdout). The interpreter has no
-    // I/O model yet, so stdout is always empty; integer return is mapped to
-    // the program's exit code (8-bit truncated to match POSIX exit semantics).
-    // Stage 2+ extends this when the MIR interpreter gains print intrinsics.
-    match interpret_function(&mir_module, "main", vec![]) {
-        Ok(MirValue::Int(n)) => PathOutcome::Ok(RunOutput {
-            // Truncate to 8-bit so this matches what the native side will
-            // produce when its `exit(n)` reaches the OS.
-            exit_code: n & 0xFF,
-            stdout: String::new(),
-        }),
-        Ok(MirValue::Unit) => {
-            // `main` returning Unit is treated like `main` returning 0.
-            PathOutcome::Ok(RunOutput { exit_code: 0, stdout: String::new() })
-        }
-        Ok(_) => {
-            // Non-integer / non-unit return — input is outside the
-            // differential-test envelope (we cannot map it to an exit code).
-            PathOutcome::InputInvalid
-        }
-        Err(_) => {
-            // Interpreter errored (unsupported MIR construct, step limit, etc.)
-            // — treat as "input not in scope for this oracle" rather than as
-            // a finding. Stage 2+ may upgrade specific error classes (e.g.
-            // div-by-zero) into hard findings.
-            PathOutcome::InputInvalid
-        }
+    // Step 4: interpret "main" via the stdout-capturing entry point.
+    //
+    // STAGE 5a (Master Plan v17 §I-6): the MIR interpreter now exposes
+    // `interpret_function_with_io`, which routes calls to known print-style
+    // builtins (print/println/print_int/print_str) into a String sink.
+    // Non-integer/non-unit returns or interpreter errors short-circuit as
+    // PathOutcome::InputInvalid (same envelope as stage 1).
+    use vais_mir::interpreter::interpret_function_with_io;
+    match interpret_function_with_io(&mir_module, "main", vec![]) {
+        Ok(out) => match out.return_value {
+            MirValue::Int(_) | MirValue::Unit => PathOutcome::Ok(RunOutput {
+                exit_code: out.exit_code,
+                stdout: out.stdout,
+            }),
+            _ => PathOutcome::InputInvalid,
+        },
+        Err(_) => PathOutcome::InputInvalid,
     }
 }
 
@@ -462,17 +451,34 @@ pub fn compare_paths(source: &str) {
     match (mir_result, native_result) {
         // Both implemented and both succeeded — check for divergence.
         (PathOutcome::Ok(mir_out), PathOutcome::Ok(native_out)) => {
-            if mir_out != native_out {
+            // Step 17 stage 5a asymmetry guard: the interpreter side
+            // (Path A) now captures stdout via the builtin print intercept,
+            // but the JIT side (Path B) still writes to host stdout (no
+            // capture yet — that's stage 5b). To avoid every print-call
+            // input becoming a false positive, only diff the stdout fields
+            // when BOTH sides produced non-empty output. When one side is
+            // empty, fall back to exit-code-only diff (the historical
+            // contract).
+            let stdout_diff_eligible =
+                !mir_out.stdout.is_empty() && !native_out.stdout.is_empty();
+            let exit_mismatch = mir_out.exit_code != native_out.exit_code;
+            let stdout_mismatch = stdout_diff_eligible && mir_out.stdout != native_out.stdout;
+
+            if exit_mismatch || stdout_mismatch {
                 panic!(
                     "MIR/native diff detected!\n\
                      source:\n{}\n\
                      MIR    exit={} stdout={:?}\n\
-                     native exit={} stdout={:?}",
+                     native exit={} stdout={:?}\n\
+                     (exit_mismatch={}, stdout_mismatch={}, stdout_diff_eligible={})",
                     source,
                     mir_out.exit_code,
                     mir_out.stdout,
                     native_out.exit_code,
                     native_out.stdout,
+                    exit_mismatch,
+                    stdout_mismatch,
+                    stdout_diff_eligible,
                 );
             }
         }

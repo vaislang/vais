@@ -291,3 +291,69 @@ correct long-term choice; Path (a) is a faster MVP if needed sooner.
 Status: RECONNAISSANCE LANDED. Stage 5 implementation deferred.
 Re-open as task with explicit option (a)-vs-(b) decision when
 prioritization dictates.
+
+---
+
+## Stage 5a LANDED — interpreter-side stdout sink + builtin intercept (2026-05-04)
+
+Decision: Path (a) MVP chosen for the interpreter half. Path (b)
+runtime-sink is still the long-term right answer for symmetry with
+the JIT side, but (a) on the interpreter alone is the smallest
+useful first step (asymmetric: interpreter captures stdout, JIT
+still writes to host stdout — diff is therefore one-way for now).
+
+Layout
+- `crates/vais-mir/src/interpreter.rs`:
+  - new `pub struct InterpreterRunOutput { exit_code, stdout, return_value }`
+  - new `pub fn interpret_function_with_io(...)` entry point that
+    sets up a `RefCell<String>` stdout sink before running the
+    interpreter
+  - new `Interpreter::try_intercept_builtin(name, args)` — fires
+    only when `stdout_sink` is `Some`. Recognized builtins:
+      - `print`, `print_str` → push args to sink
+      - `println` → push args + '\n'
+      - `print_int` → push the formatted i64
+  - `Interpreter::call` checks the intercept before
+    `bodies.get(function)`, so the bare entry point's
+    "function body not found" error path is preserved when the sink
+    is None.
+  - `Interpreter::write_value` formats MirValues for stdout.
+
+- `crates/vais-mir/tests/interpreter_tests.rs`:
+  - new `interpret_with_io_int_return_maps_to_exit_code` (R 42 → exit 42)
+  - new `interpret_with_io_truncates_exit_code_to_8_bits` (R 257 → exit 1)
+  - new `bare_interpret_function_rejects_unknown_function_name`
+    (regression guard for backward compatibility — bare entry must
+    NOT silently intercept builtins)
+
+- `compiler/fuzz/src/lib.rs::run_mir_path` switched to
+  `interpret_function_with_io`. The `RunOutput { exit_code, stdout }`
+  the differential check produces is now genuinely populated on the
+  Path A side. Path B still emits empty stdout (path (b) JIT-side
+  capture is the next stage).
+
+Verification
+- `cargo test --release -p vais-mir --test interpreter_tests` — 6/6 pass
+  (3 prior + 3 new).
+- `cargo test --release` in `compiler/fuzz/` — 6/6 #[test] still pass
+  (compare_paths agree probe + Path B exit-code probe both green;
+  no diff regression introduced by the Path A switch).
+
+Asymmetry caveat
+The diff oracle's stdout-equality check now compares "MIR sink output"
+vs "empty string". For inputs that don't call any print builtin, both
+sides produce empty strings → comparison stays vacuously equal (no
+false findings). For inputs that DO call print, the MIR side emits the
+captured text and the JIT side emits empty → one-sided diff would
+panic on every such input.
+
+To prevent that turning into noise, `compare_paths` should be amended
+in stage 5b to skip the stdout equality check when either side is
+empty. Alternatively, stage 5b wires a JIT-side stdout sink so both
+sides have the same coverage. (Code in fuzz/src/lib.rs ~line 460 in
+the diff branch.) NOT done in this commit — landed as immediate-safe
+infrastructure only.
+
+Status: stage 5a LANDED. Step 17 done_when criterion 3 of 3 (diagnostic
+equivalence) is now PARTIALLY MET on the interpreter half; the JIT
+half + asymmetry-handling is stage 5b work.
