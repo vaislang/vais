@@ -1081,6 +1081,65 @@ is a separate follow-up. After step 1, multi-impl dyn dispatch users
 can either refactor to fn-pointer params (A2-05, certified subset)
 or wait for step 2's vtable indirection.
 
+### F-23 step 2 reconnaissance (2026-05-05, A4-12 step 2 attempt)
+
+Goal: replace the codegen guard's `CodegenError::Unsupported` with
+real vtable-indirected dispatch via vtable.rs::generate_dynamic_call.
+
+Empirical finding from `grep -nE "generate_dyn_method_call|generate_dynamic_call"
+compiler/crates/vais-codegen/src/`:
+
+| caller of TraitDispatcher::generate_dyn_method_call | hit count |
+|---|---|
+| inkwell backend (default for `vaisc build`) | **0** |
+| text-IR backend | **0** |
+
+`vtable_generator` field is held by the text-IR `CodeGenerator` struct
+(lib.rs:227) but no method-dispatch site invokes
+`TraitDispatcher::generate_dyn_method_call`. The vtable infrastructure
+is fully written (vtable.rs ~415 LOC, trait_dispatch.rs ~250 LOC) but
+**dead** — no caller in the production dispatch path.
+
+Inkwell backend has no vtable infrastructure at all. The text-IR
+infrastructure cannot be reused as-is because it emits string IR
+incompatible with inkwell's builder API.
+
+Step 2 proper scope is therefore TWO independent wirings:
+
+a) **text-IR side**: invoke `TraitDispatcher::generate_dyn_method_call`
+   from `expr_helpers_call/method_call.rs::generate_method_call_expr`
+   when receiver type is `ResolvedType::DynTrait` / `Ref(DynTrait)`.
+   Requires plumbing TraitDispatcher into the generate_method_call_expr
+   call path (TraitDispatcher is in CodeGenerator but accessing it from
+   the inner method-call dispatcher needs ergonomic access). Estimated
+   ~50-100 LOC + tests.
+
+b) **inkwell side (default backend)**: NEW vtable infrastructure using
+   inkwell's BuilderValue / StructType / GlobalValue APIs, mirroring
+   text-IR vtable.rs's behavior. ~400-600 LOC + integration tests +
+   careful trait/method discovery from CodeGenerator state.
+
+(b) is the larger work and is the user-facing impact (default backend).
+(a) is the smaller work but vais users by default won't see it.
+
+### Decision (2026-05-05)
+
+Step 2 splits into two sub-tasks:
+
+- **2a (text-IR side, smaller)**: ~50-100 LOC, single-session
+  candidate but value to users is opt-in only (`vaisc check` /
+  emit-ir; inkwell-default `vaisc build` unaffected).
+- **2b (inkwell side, larger)**: 400-600 LOC, multi-iter, real user
+  impact.
+
+Both deferred. The current step 1 LANDED state is sufficient for L-002
+north star (silent → loud); production users get a clear error
+instead of wrong values. step 2 lifts the restriction to allow
+multi-impl dyn dispatch to actually work.
+
+Status: step 2 reconnaissance LANDED. step 2 implementation deferred
+into 2 sub-tasks (DEFERRED_TASKS.md to be updated).
+
 Status: A2-03 promotion BLOCKED. F-23 logged as NEW A4 candidate.
 Master plan v17 Step 9 status retained at "A2-03 DEFERRED" (now with
 explicit silent-surface evidence rather than just parser/resolver
