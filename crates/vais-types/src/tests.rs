@@ -245,20 +245,28 @@ fn test_logical_op_on_non_bool() {
 }
 
 #[test]
-fn test_if_condition_lenient_integer_truthy() {
+fn test_if_condition_strict_integer_truthy_rejected() {
     let source = "F f()->i64=I 42{1}E{0}";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
-    // Phase 254: lenient `I`/`LW` conditions — integer truthy is accepted
-    // alongside Bool. This diverges from Phase 158's bool↔i64 prohibition,
-    // which applies to *value contexts* (let, return, etc.), not condition
-    // position. vaisdb has pervasive `I x != 0 { }` and `I count { }` usage
-    // that predates the strict rule; Phase 254 was a deliberate relaxation
-    // scoped to control-flow predicate slots only.
+    // Master Plan v17 §A4-06 (Step 13 stage 1, LANDED 2026-05-04): integer
+    // truthy in `I`/`LW`/ternary/while conditions is now rejected by
+    // default. The Phase 254 lenient relaxation was reverted because every
+    // baseline use site (vaisdb `I x != 0 { }`, `I count != 0 { }`, etc.)
+    // already uses the explicit `!= 0` form — the lenient rule was a
+    // silent surface per L-002 north star.
     //
-    // A program like `F f() -> i64 = 42 == true` still fails (Phase 158).
-    // Renamed from test_if_condition_non_bool (pre-254 expectation).
-    assert!(checker.check_module(&module).is_ok());
+    // Negative form: `I 42 { ... }` (integer literal as condition) must
+    // fail at vaisc check with a "expected bool" type error. Previously
+    // this test asserted is_ok() under Phase 254; that was renamed and
+    // inverted on the strict-default LANDED commit (master plan v17).
+    //
+    // Legacy lenient mode is still reachable via VAIS_REJECT_A4_06=0 escape
+    // hatch (control_flow.rs:195,250,282,407).
+    assert!(
+        checker.check_module(&module).is_err(),
+        "A4-06 strict default must reject integer truthy in `I` condition"
+    );
 }
 
 #[test]
