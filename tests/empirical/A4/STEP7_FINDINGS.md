@@ -759,3 +759,56 @@ type mismatch. Multi-iter codemod required.
 Status: A4-07 stays Stage 0 (opt-in via VAIS_REJECT_A4_07=1) until
 vaisdb codemod completes. Strict default flip is multi-iter follow-up.
 
+
+---
+
+### F-21 — A4-07 strict scope is broader than master-plan v16 estimated (2026-05-04)
+
+Continuing from F-20: vaisdb codemod attempt for A4-07 surfaced a
+deeper problem than the v1 master-plan entry described.
+
+The unification.rs site (line 351) is `(a, b) if is_integer_type(a)
+&& is_integer_type(b)`. Strict mode rejects ANY integer-to-integer
+unification regardless of whether one side is a literal.
+
+Vais integer literals default to i64. So under strict A4-07, EVERY
+literal in a non-i64 context (struct fields, function calls, atomic
+stores, bit operations, etc.) becomes a hard error:
+
+  x: u32 = 100        → expected u32, found i64
+  y := x & 255        → expected u32, found i64
+  buf.push(0)         → expected u8, found i64 (Vec<u8>)
+  txn_id_field: u64   → expected u64, found i64 (literal init)
+
+This is far more pervasive than "implicit widening at function call
+sites" (master-plan v1 description). The vaisdb count (216 files /
+~213 sites) reflects literal sites, not just call-site widenings.
+
+Two viable paths
+
+(a) **Refined strict mode**: distinguish literal types from concrete
+    types in unification. Allow `Literal(i64) ⇄ uN/iN` (the literal
+    adopts the context type) while rejecting `Concrete(i64) ⇄ Concrete(uN)`.
+    Requires plumbing literal-ness through ResolvedType or a parallel
+    inference channel. Substantial work (estimated 500-1000 LOC across
+    ast / types / inference), comparable to a Stage B refactor.
+
+(b) **Reclassify A4-07 to Controlled**: admit default-i64-literal
+    promotion as a documented well-defined behavior (matches Rust's
+    `0` literal in `let x: u32 = 0` — Rust integer literals are
+    polymorphic, but Vais literals are concrete i64 so the analogue
+    is leaky). EXCLUDED_FEATURES.md §Controlled coercions gets a new
+    entry; A4-07 inventory shrinks to "non-literal call-site widening
+    only", which is the std-side scope (already LANDED).
+
+Path (a) is the L-002-pure choice but expensive. Path (b) is the
+pragmatic ship-now choice and aligns with how A4-03 / A4-05 already
+got reclassified (F-16 / F-17). 
+
+Recommendation: Path (b) reclass — but only after path (a) is
+estimated against current AI-multi-session capacity. Master-plan v17
+should make this decision explicitly.
+
+Status: A4-07 vaisdb codemod paused. std side (6 files / 9 sites)
+LANDED. Strict default flip pending the (a)-vs-(b) decision.
+
