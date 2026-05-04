@@ -13,24 +13,25 @@ description = "Result<i64,str>-typed inner; outer also Result<i64,str>; ? early-
 
 [negative]
 probe = "probe_neg.vais"
-expected_behavior = "rejection at some pipeline stage (currently clang IR — A2-NEG-DRIFT)"
-description = "outer's return type is i64 not Result; predicate violated; should reject."
+expected_behavior = "vaisc check rejects with E001 'expected Result<_,_> or Option<_>, found <ret>'"
+description = "outer's return type is i64 not Result; predicate violated; type checker rejects at vaisc check since A4-11 strict default landed (Step 13 stage 1, commit 204a6a03)."
 
 [a2_neg_drift_finding]
+status = "RESOLVED 2026-05-04"
 note = """
-Type checker currently ACCEPTS `?` in a non-Result function (probe_neg
-exits 0 at `vaisc check`). The defect surfaces at clang IR generation
-— missing the early-return Err sugar generates malformed IR. Future
-iteration should move the rejection forward to type-check, with a
-stable error code (proposal: E_TRY_REQUIRES_MATCHING_RETURN).
-
-Until then the runner accepts clang failure as evidence the predicate
-violation is bounded — but this is a known weak point.
+Originally noted that the type checker accepted `?` in a non-Result
+function and the defect surfaced only at clang IR generation. Step 13
+A4-11 (commit 204a6a03) added an enclosing-fn-return check inside
+vais-types/src/checker_expr/special.rs Expr::Try. Default-mode strict
+since 2026-05-04: the negative probe is now caught at vaisc check
+with TypeError::Mismatch ("expected Result<_,_> or Option<_>, found
+<ret>"). The runner has been migrated to a check_fails-shaped
+two-probe runner (positive: exit 43; negative: vaisc check non-zero
++ Result|Option pattern in stderr).
 """
 
 [assertion_kind]
-kind = "exact_exit"
-expected_exit = 43
-
-[migration]
-post_tighten = "When type checker tightens, update probe_neg expected to check_fails with stable error code."
+kind_positive = "exact_exit"
+expected_exit_positive = 43
+kind_negative = "check_fails"
+required_stderr_patterns_negative = ["expected", "Result|Option"]

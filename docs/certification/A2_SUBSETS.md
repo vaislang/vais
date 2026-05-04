@@ -16,10 +16,10 @@ shows INTEGRITY OK with no baseline regression.
 
 | ID | Surface | Status |
 |---|---|---|
-| A2-01 | `?` operator on Result/Option (Core-typed, single-module) | LANDED 2026-05-03 |
+| A2-01 | `?` operator on Result/Option (Core-typed, single-module) | LANDED 2026-05-03 (A2-NEG-DRIFT RESOLVED 2026-05-04 via A4-11 fix) |
 | A2-02 | `?` operator cross-module (vaisdb baseline path) | DEFERRED — needs working module-import resolution beyond std/ (cf. STEP11_FINDINGS F-A3-02) |
 | A2-03 | `dyn` / trait object dispatch (narrow subset) | DEFERRED — surface deferred from Step 7 Controlled iteration; reuse that probe work |
-| A2-04 | Closures (no escape, inline-only) | DEFERRED — needs escape-analysis predicate |
+| A2-04 | Closures (no escape, inline-only) | LANDED 2026-05-04 (positive inline closure exit 42; negative escape closure F-18 silent corruption — exit_not [42]) |
 | A2-05 | Function-pointer types in std API (bounded) | DEFERRED — Vais parser does not currently accept `f: F(i64) -> i64` parameter syntax (Step 7 Controlled-04) |
 
 Four candidates are deferred because they depend on either a parser

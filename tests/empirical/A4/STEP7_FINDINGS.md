@@ -557,3 +557,45 @@ Recommendation:
 
 Status: A4-03 stays Stage 0 opt-in. master-plan §A4-03 candidate for
 Controlled reclassification.
+
+---
+
+### F-18 — Escape closure silent capture loss (NEW A4 candidate, 2026-05-04)
+
+Discovered during Step 9 A2-04 promotion empirical work. Escape
+closure (closure returned from a function and called later) passes
+type-check, builds, runs — but produces a wrong runtime result.
+Captured environment is not preserved across the call boundary.
+
+Probe (compiler/tests/empirical/A2/A2-04_inline_closure/probe_neg.vais):
+```vais
+F make_adder(x: i64) -> |i64| -> i64 {
+    |n| n + x
+}
+F main() -> i64 {
+    add5 := make_adder(5)
+    R add5(37)
+}
+```
+
+Build: macOS arm64, vaisc release, 2026-05-04.
+Expected (well-typed): 42 (= 37 + 5).
+Observed: 245 / 69 (varies by build cache).
+
+Different runs produce different numbers — classic escape-capture
+silent corruption (capture frame is freed, the closure reads stale
+stack memory).
+
+assertion_kind = "exit_not", forbidden_set = [42].
+
+Status: NEW A4 candidate ("A4-12 Escape-closure capture loss"). Not
+yet in master-plan.toml [[phase.A4.runtime_silent]]. Empirical
+fixture LANDED at compiler/tests/empirical/A2/A2-04_inline_closure/
+(double duty: A2 promotion fixture for inline subset + A4 evidence
+for escape surface). Master-plan v17+ inventory expansion
+candidate.
+
+Inline closure pattern (A2-04 positive) works correctly: `apply(|n|
+n + 1, 41)` returns 42 deterministically. The split between safe
+inline use and unsafe escape mirrors the predicate proposed in
+A2_SUBSETS.md §A2-04.

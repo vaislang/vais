@@ -6,13 +6,10 @@
 # Two-probe runner:
 #   probe_pos.vais  must compile + run + exit 43.
 #   probe_neg.vais  uses `?` in a function whose return type is plain
-#                    i64 (predicate violation). Currently the type
-#                    checker accepts this and the failure surfaces at
-#                    clang IR generation. That itself is a finding —
-#                    A2-NEG-DRIFT — but it does prove the use is
-#                    rejected somewhere in the build pipeline. Future
-#                    iteration should tighten this to a type-check
-#                    rejection.
+#                    i64 (predicate violation). Type checker rejects
+#                    at vaisc check with E001 since the A4-11 fix
+#                    landed (commit 204a6a03 / Step 13 stage 1).
+#                    A2-NEG-DRIFT is RESOLVED.
 
 set -euo pipefail
 
@@ -52,24 +49,22 @@ fi
 # ── Negative probe ────────────────────────────────────────────────────────
 cp "$DIR/probe_neg.vais" "$WORK/probe_neg.vais"
 
-# Currently type-check passes (A2-NEG-DRIFT finding). Build must fail.
-BUILD_OUT="$( cd "$WORK" && "$VAISC" probe_neg.vais 2>&1 || true )"
-BUILD_EXIT=0
-( cd "$WORK" && "$VAISC" probe_neg.vais >/dev/null 2>&1 ) || BUILD_EXIT=$?
+# A2-NEG-DRIFT was resolved when Step 13 A4-11 (`?` in non-Result function)
+# landed strict default. The negative probe is now caught at vaisc check
+# rather than at clang.
+NEG_OUT="$( "$VAISC" check "$WORK/probe_neg.vais" 2>&1 || true )"
+NEG_EXIT=0
+"$VAISC" check "$WORK/probe_neg.vais" >/dev/null 2>&1 || NEG_EXIT=$?
 
-if [[ "$BUILD_EXIT" == "0" ]]; then
-  echo "DRIFT: A2-01 negative probe built successfully — predicate" >&2
-  echo "  violation should be rejected somewhere in the pipeline." >&2
+if [[ "$NEG_EXIT" == "0" ]]; then
+  echo "DRIFT: A2-01 negative probe now type-checks — A4-11 may have regressed." >&2
   exit 1
 fi
 
-# Confirm clang failure (current behaviour). When the type checker is
-# tightened to reject this earlier, change the assertion to look for
-# `vaisc check` exit non-zero with a stable error code.
-if ! grep -qE "clang compilation failed|error" <<< "$BUILD_OUT"; then
-  echo "DRIFT: A2-01 negative build failed but stderr unfamiliar:" >&2
-  echo "$BUILD_OUT" >&2
+if ! grep -qE "Result|Option|expected" <<< "$NEG_OUT"; then
+  echo "DRIFT: A2-01 negative check failed but stderr unfamiliar:" >&2
+  echo "$NEG_OUT" >&2
   exit 1
 fi
 
-echo "A2-01 OK: positive exits 43; negative is rejected (currently at clang stage — see A2_SUBSETS.md A2-NEG-DRIFT)."
+echo "A2-01 OK: positive exits 43; negative rejected at vaisc check (A2-NEG-DRIFT resolved via A4-11)."
