@@ -9,7 +9,7 @@ classification = "A4-runtime-silent (NEW candidate, pending master-plan registra
 surface = "Struct constructor accepts partial init; missing required fields silently zero-initialize at runtime"
 site = "TBD"
 site_full_path = "TBD — needs codebase grep for the struct constructor type-check site (likely vais-types/src/checker_expr/ or check_struct_literal)"
-master_plan_version = 16
+master_plan_version = 17
 discovery_context = "Step 8 stage 5 negative-gate construction; STEP7_FINDINGS F-15"
 
 [v1_evidence]

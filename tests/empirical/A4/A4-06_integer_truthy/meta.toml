@@ -7,7 +7,7 @@ classification = "A4-runtime-silent (REMOVED — strict default 2026-05-04)"
 surface = "Integer i64 silently treated as bool in if/else-if/ternary/while conditions"
 site = "control_flow.rs:195,250,282,407 (4 sites; strict default flipped 2026-05-04)"
 site_full_path = "compiler/crates/vais-types/src/checker_expr/control_flow.rs"
-master_plan_version = 16
+master_plan_version = 17
 landed = "2026-05-04"
 
 [v1_evidence]

@@ -7,7 +7,7 @@ classification = "A4-late-codegen-silent"
 surface = "Function defined with lifetime param emits symbol with one mangling, called with plain reference uses different mangling — linker fails."
 site = "unification.rs:450"
 site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:450"
-master_plan_version = 16
+master_plan_version = 17
 
 [v1_evidence]
 probe_summary = "F take_lifetime_ref<'a>(r: &'a i64) -> i64 { R 42 }; main calls with &i64"

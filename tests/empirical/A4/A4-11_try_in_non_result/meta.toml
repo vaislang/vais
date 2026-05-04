@@ -7,7 +7,7 @@ id = "A4-11"
 classification = "A4-late-codegen-silent (NEW candidate, pending master-plan registration)"
 surface = "`?` operator in a function whose return type is not Result<_,_>/Option<_> — type-check accepts, codegen emits Result-shaped return into i64 signature, clang rejects"
 site = "TBD — vais-types/src/checker_expr/ try-operator handler"
-master_plan_version = 16
+master_plan_version = 17
 discovery_context = "Step 9 A2-01 promotion negative fixture (A2_SUBSETS.md §A2-NEG-DRIFT)"
 
 [v1_evidence]

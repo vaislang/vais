@@ -2,11 +2,11 @@
 
 [entry]
 id = "A4-05"
-classification = "A4-runtime-silent"
+classification = "Controlled (IR-internal lowering, reclass v17 per F-22; opt-in strict via VAIS_REJECT_A4_NN=1)"
 surface = "Array silently coerced to pointer, then pointer unified with i64 in function call"
 site = "unification.rs:424"
 site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:424"
-master_plan_version = 16
+master_plan_version = 17
 
 [v1_evidence]
 probe_summary = "arr[0] through *i64 cast: take_i64(&arr as *i64)"

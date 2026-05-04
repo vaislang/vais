@@ -812,3 +812,50 @@ should make this decision explicitly.
 Status: A4-07 vaisdb codemod paused. std side (6 files / 9 sites)
 LANDED. Strict default flip pending the (a)-vs-(b) decision.
 
+---
+
+### F-22 — A4-03 / A4-05 / A4-07 reclass to Controlled LANDED in master-plan v17 (2026-05-04)
+
+Decision: **Path (b)** — reclassify all three to Controlled per the
+LESSONS L-002 §Scope clause ("compiler-internal IR lowering coercions
+are out of scope of 'implicit anything is a defect'"). Empirical
+baseline footprints re-measured 2026-05-04:
+
+| Site | std impact | vaisdb impact | Root cause |
+|---|---|---|---|
+| A4-03 (`VAIS_REJECT_A4_03=1`) | -4 / 82 | -150 / 261 | Generic-inference produces `Ref(Var)` intermediate; legacy `(Ref, _)` arm fires before typed `(Ref, Ref)` arm (F-17 confirmed) |
+| A4-05 (`VAIS_REJECT_A4_05=1`) | 0 / 82 | -1 / 261 | ConstArray field initialization via function-return: array literal lowers to `Pointer<T>` at IR boundary, struct-init unify routes through Array↔Pointer arm (F-16 + this iter's standalone repro `S Foo { arr: [i64;3] } F mk() -> [i64;3] { [1,2,3] } F main() { Foo { arr: mk() } }`) |
+| A4-07 (`VAIS_REJECT_A4_07=1`) | 0 / 82 | -216 / 261 | Default-i64 literal in any non-i64 context (struct fields, `Vec<u8>.push(0)`, bit-ops, atomic stores) — pervasive (F-21 confirmed) |
+
+All three sites remain in `unification.rs` with strict-mode escape
+hatch (`VAIS_REJECT_A4_{03,05,07}=1` → fail; default unset → preserve
+legacy unify). Users who want to surface the actual user-level
+patterns can opt in.
+
+Path (a) (refined strict mode with literal-ness propagation, ~500-1000
+LOC across ast/types/inference) is documented but deferred — Path (b)
+ships value now, and a future iteration may revisit (a) when MIR
+borrow / Step 16 work creates broader leverage on the inference layer.
+
+Master-plan deltas:
+- `meta.version`: 16 → 17
+- `[phase.A4]`: total 9 → 6 (runtime_silent 7 → 4)
+- `[controlled]`: total 9 → 12 (added 3 entries)
+- ROADMAP / EXCLUDED_FEATURES re-rendered; check-plan-consistency.sh PASS
+- INTEGRITY OK preserved (toml/doc/comment-only changes; no compiler logic delta)
+
+Status: A4-03 / A4-05 / A4-07 reclass complete. A4 inventory now
+6 entries — all already strict-default (verified via grep
+`VAIS_REJECT_A4_*.as_deref\(\) (==|!=) Ok\("0"\)`):
+- runtime-silent 4: A4-01, A4-02 (`unification.rs:381,461`),
+  A4-04 (`unification.rs:481`), A4-06 (`control_flow.rs:195,250,282,407`)
+- late-codegen-silent 2: A4-08 (`unification.rs:416`),
+  A4-09 (`unification.rs:538,550`)
+- additional already-LANDED strict defaults outside the 6-entry inventory:
+  A4-10 (`collections.rs:885`), A4-11 (`special.rs:30`)
+
+This means **Step 13 (A4 removals) is now substantively complete**.
+Remaining work: ROADMAP Step 13 status string update + permanent
+fixture audit per master-plan §Empirical protocol step (positive
+post-migration + negative pre-migration rejected per entry).
+

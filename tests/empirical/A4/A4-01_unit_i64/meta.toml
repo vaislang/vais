@@ -7,7 +7,7 @@ classification = "A4-runtime-silent"
 surface = "Unit ↔ i64 — void return value bound to i64 binding succeeds at type-check"
 site = "unification.rs:361"
 site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:361"
-master_plan_version = 16
+master_plan_version = 17
 
 [v1_evidence]
 # Single-sentinel discovery, 2026-05-03 (master-plan.toml v6+ era).

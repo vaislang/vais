@@ -3,11 +3,11 @@
 
 [entry]
 id = "A4-07"
-classification = "A4-runtime-silent (design pending)"
+classification = "Controlled (IR-internal lowering — default-i64 literal, reclass v17 per F-22; opt-in strict via VAIS_REJECT_A4_07=1)"
 surface = "i32 silently widened to i64 at function call site without explicit `as i64`"
 site = "unification.rs:346"
 site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:346"
-master_plan_version = 16
+master_plan_version = 17
 
 [v1_evidence]
 probe_summary = "take_i64(small) where small: i32"

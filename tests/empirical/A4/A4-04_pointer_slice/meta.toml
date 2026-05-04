@@ -6,7 +6,7 @@ classification = "A4-runtime-silent"
 surface = "Raw pointer *u8 silently unified with &[u8] slice in function call (auto-coercion added in Phase 162)"
 site = "unification.rs:417"
 site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:417"
-master_plan_version = 16
+master_plan_version = 17
 
 [v1_evidence]
 probe_summary = "take_slice(p as *u8) where slice expected"

@@ -7,7 +7,7 @@ classification = "A4-runtime-silent"
 surface = "Raw pointer *i64 silently unified with i64 in function call"
 site = "unification.rs:410"
 site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:410"
-master_plan_version = 16
+master_plan_version = 17
 
 [v1_evidence]
 probe_summary = "take_i64(p) where p: *i64 = &val"

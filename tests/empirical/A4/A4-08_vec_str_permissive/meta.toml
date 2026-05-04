@@ -6,7 +6,7 @@ classification = "A4-late-codegen-silent (per master-plan.toml; symptom drifted 
 surface = "Vec<T> silently unifies with &T (non-Slice reference types) at unification.rs:384 'Permissive: allow Vec ↔ &T'"
 site = "unification.rs:384"
 site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:384"
-master_plan_version = 16
+master_plan_version = 17
 
 [v1_evidence]
 probe_summary = "take_str_ref(v) where v: Vec<i64>"
