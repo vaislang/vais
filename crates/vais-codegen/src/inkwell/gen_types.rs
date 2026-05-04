@@ -204,6 +204,26 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Type::SliceMut(inner) => {
                 ResolvedType::SliceMut(Box::new(self.ast_type_to_resolved(&inner.node)))
             }
+            // F-23 / A4-12 step 1 fix (2026-05-04): preserve dyn-trait info
+            // through ast→resolved conversion. Previously fell into the
+            // I64 fallback below (Type::DynTrait was implicitly an `_` arm),
+            // which made `var_resolved_types["g"] = Some(Ref(I64))` for
+            // `g: &dyn Greeter` parameters. That defeated the codegen-side
+            // F-23 GUARD (gen_aggregate.rs:854-889) which checks for
+            // ResolvedType::DynTrait. With this arm in place, the guard
+            // activates correctly: cross-impl dyn dispatch now hits a
+            // hard CodegenError::Unsupported instead of silently binding
+            // to the alphabetically-first impl. STEP7_FINDINGS F-23.
+            Type::DynTrait { trait_name, generics } => {
+                let resolved_generics: Vec<ResolvedType> = generics
+                    .iter()
+                    .map(|g| self.ast_type_to_resolved(&g.node))
+                    .collect();
+                ResolvedType::DynTrait {
+                    trait_name: trait_name.clone(),
+                    generics: resolved_generics,
+                }
+            }
             _ => ResolvedType::I64, // Fallback for Infer, ConstArray, etc.
         }
     }
