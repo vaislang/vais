@@ -599,3 +599,47 @@ Inline closure pattern (A2-04 positive) works correctly: `apply(|n|
 n + 1, 41)` returns 42 deterministically. The split between safe
 inline use and unsafe escape mirrors the predicate proposed in
 A2_SUBSETS.md §A2-04.
+
+---
+
+### F-19 — A4-06 strict mode emits "expected i64, found bool" in std/args.vais (2026-05-04)
+
+Discovered while reconning strict-default flip cost for A4-06
+(integer-as-truthy in if/else-if/ternary cond positions).
+
+Setup: env `VAIS_REJECT_A4_06=1` switches the four sites in
+crates/vais-types/src/checker_expr/control_flow.rs from lenient to
+strict — cond expressions of integer type are unified against
+`Bool` instead of being accepted as truthy.
+
+Baseline cost (`bash scripts/check-integrity.sh` with env on):
+- std_files: 82 → 73 (delta=-9)
+- vaisdb_files: 261 → 236 (delta=-25)
+- vaisdb runtime smoke: 28 → 23 (5 new failures)
+
+Per-file probe of the 9 std failures shows two distinct error
+shapes:
+
+1. `expected bool, found i64` — the expected A4-06 surface. Cond
+   site receives an i64 expression and is rejected. Migration:
+   add explicit `!= 0`. Files: std/async.vais, std/fmt.vais,
+   std/http.vais, std/http_server.vais, std/runtime.vais
+   (5 of 9).
+
+2. `expected i64, found bool` — REVERSE direction. Files:
+   std/args.vais, std/path.vais, std/proptest.vais, std/url.vais
+   (4 of 9). All cond sites in std/args.vais are pure
+   comparisons (`>=`, `==`, `<`) which already produce bool, so
+   this error cannot be a cond-site mismatch. The strict A4-06
+   path appears to perturb downstream type inference such that
+   some i64-consuming context now sees a bool.
+
+Implication: A4-06 strict flip is NOT a pure tightening — it
+introduces type-inference side effects in a subset of baseline
+files. Naive codemod (add `!= 0` to cond positions) will not
+clear category 2.
+
+Status: A4-06 reclassification or strict-implementation refinement
+required before strict default flip. A4-06 stays Stage 0 (opt-in)
+in Step 13 status. Recorded as F-19 finding for codemod planning.
+
