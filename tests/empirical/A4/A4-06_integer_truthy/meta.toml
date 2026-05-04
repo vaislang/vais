@@ -1,13 +1,14 @@
-# A4-06 — Integer truthy
+# A4-06 — Integer truthy (LANDED 2026-05-04, Step 13 stage 1)
 # Empirical fixture metadata.
 
 [entry]
 id = "A4-06"
-classification = "A4-runtime-silent"
+classification = "A4-runtime-silent (REMOVED — strict default 2026-05-04)"
 surface = "Integer i64 silently treated as bool in if/else-if/ternary/while conditions"
-site = "control_flow.rs:188,243,273,396 (4 sites)"
+site = "control_flow.rs:195,250,282,407 (4 sites; strict default flipped 2026-05-04)"
 site_full_path = "compiler/crates/vais-types/src/checker_expr/control_flow.rs"
 master_plan_version = 16
+landed = "2026-05-04"
 
 [v1_evidence]
 probe_summary = "I x { 100 } EL { 200 } where x: i64"
@@ -17,25 +18,34 @@ verified_date = "2026-05-03"
 
 [v2_evidence]
 # Multi-sentinel retro-validation (Step 7 contract).
-# v2 status: v1_reverified — environment-stable (unlike A4-02/03).
-probes = [
-  { vais = "I x { 100 } EL { 200 } where x: i64 = 5", method = "if-else", exit_observed = 100 },
-]
-status = "v1_reverified"
+status = "v1_reverified_then_removed"
 notes = """
-v1 evidence reproduces exactly on macOS arm64 release build, 2026-05-03.
-Surface is stable across environments because the runtime observable is
-the expected branch value (100), not a memory-layout artifact (unlike
-A4-02 Pointer↔i64 / A4-03 Auto-deref where exit is corrupted memory).
+v1 evidence reproduced exactly on macOS arm64 release build, 2026-05-03
+(type-checks, runs, exits 100). v2 contract pending probes (else-if / ternary
+/ while sites) were not added before removal — strict default makes those
+sites all reject equivalently, so per-site v2 disambiguation is moot now.
 
-v2 contract requires 3 distinct probes for HARD v2 status. Pending probes:
-  - else-if branch (control_flow.rs:243 site)
-  - ternary expression (control_flow.rs:273 site)
-  - while loop condition (control_flow.rs:396 site)
-Add when Step 7 second iteration runs.
+Removal landed 2026-05-04 in compiler commit (this commit). Fixture migrated
+to two-probe LANDED form: positive (explicit `!= 0`) keeps working; negative
+(integer-as-truthy) is rejected at vaisc check with E001.
 """
 
+[positive]
+probe = "probe_pos.vais"
+expected_exit = 100
+description = "I x != 0 cond — explicit boolean form must keep type-checking and run to exit 100."
+
+[negative]
+probe = "probe_neg.vais"
+expected_behavior = "vaisc check rejection (E001 type mismatch)"
+description = "I x cond where x: i64 — strict default rejects integer-as-truthy."
+
 [migration]
-# When A4-06 is removed (Step 13), this fixture migrates to negative form.
-post_removal_expected = "vaisc check exits non-zero with stable error code (TBD; current proposal: E_TYPE_BOOL_REQUIRED)"
-post_removal_action = "Replace probe.vais with a negative fixture; update run.sh to expect non-zero exit on `vaisc check`. Add positive companion fixture using explicit `x != 0` to confirm the explicit form is accepted."
+# When the legacy escape hatch (VAIS_REJECT_A4_06=0) is removed:
+post_escape_hatch_removal = "Negative probe stays rejected; legacy-mode sanity probe in run.sh becomes vacuously OK or is dropped."
+
+[assertion_kind]
+kind_positive = "exact_exit"
+expected_exit_positive = 100
+kind_negative = "check_fails"
+required_stderr_patterns_negative = ["expected", "bool"]

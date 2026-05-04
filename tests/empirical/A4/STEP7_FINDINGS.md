@@ -681,3 +681,43 @@ follow-up iter; the std-only commit is a clean intermediate
 checkpoint where the std slice is strict-ready and the strict default
 flip can land after vaisdb migrates.
 
+
+---
+
+### F-19 — A4-06 strict default LANDED 2026-05-04 (Step 13 stage 1)
+
+After std codemod (commit 965fdaae) and vaisdb codemod (lang commit
+4c9400f, 22 files / 43 sites), all 4 strict-mode sites in
+crates/vais-types/src/checker_expr/control_flow.rs were flipped from
+opt-in `VAIS_REJECT_A4_06=1` to strict default with legacy escape
+hatch `VAIS_REJECT_A4_06=0`.
+
+Verification
+
+  bash scripts/check-integrity.sh:
+    INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok
+    ecosystem=ok (std=82/82 vaisdb=261/261) backend=ok
+    http_client_runtime=ok (smoke=1/1) vaisdb_runtime=ok (smoke=28/28)
+    server_runtime=ok (smoke=13/13) web_runtime=ok (smoke=23/23)
+    cross_package_schema=ok (gate=2/2)
+
+  bash scripts/check-empirical.sh:
+    EMPIRICAL FIXTURES: 28 pass / 0 drift / 0 broken / 0 skipped.
+
+Fixture migration
+
+  compiler/tests/empirical/A4/A4-06_integer_truthy/ migrated from
+  v1 retro-validation form (probe.vais + expected.txt) to two-probe
+  LANDED form:
+    probe_pos.vais — `I x != 0 { 100 } EL { 200 }` exits 100.
+    probe_neg.vais — `I x { 100 } EL { 200 }` rejected at vaisc check
+                      (E001 type mismatch).
+    run.sh         — two-probe runner.
+    meta.toml      — assertion_kind kind_negative=check_fails.
+
+Impact
+
+  A4-06 surface formally CLOSED. 8/11 A4 strict-default + 2/11
+  reclassified (A4-03/05) + 1/11 remaining (A4-07 numeric widening,
+  scope ~221 sites — significantly larger than A4-06's 75 total).
+

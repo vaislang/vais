@@ -1,26 +1,31 @@
 #!/usr/bin/env bash
-# A4-06 Integer truthy — empirical fixture runner.
+# A4-06 Integer truthy — empirical fixture runner (Step 13 stage 1 LANDED).
 #
-# Surface (per master-plan.toml [[order.A4.runtime_silent]] entry id="A4-06"):
-#   site:    control_flow.rs:188,243,273,396 (vais-types/src/checker_expr/control_flow.rs)
-#   probe:   I x { 100 } EL { 200 } where x: i64
-#   expected (correct semantics): type-check rejects implicit i64-as-bool
-#   actual   (current behavior):  type-checks, runs, takes the truthy branch
-#                                  for non-zero i64, exits 100.
+# Original surface (master-plan.toml v16 §A4 runtime_silent A4-06):
+#   site:    control_flow.rs:195,250,282,407 (4 sites in vais-types/src/
+#            checker_expr/control_flow.rs).
+#   defect:  Integer i64 in `I cond {}` / `EL I cond {}` / `cond ? a : b` /
+#            `LW cond {}` was silently treated as bool — non-zero ⇒ truthy.
+#            Per L-002 (no implicit behavior in user-facing semantics) the
+#            type checker must require explicit `cond != 0` (or any bool
+#            expression).
 #
-# Per L-002 design (no implicit behavior in user-facing semantics): integer
-# values must require explicit `!= 0` to be used as booleans.  Currently
-# the type checker silently treats any non-zero i64 as `true` — the runtime
-# observable is "correct" in the obvious sense but the design is violated.
+# Step 13 stage 1 status (compiler commit landing this fixture migration):
+#   strict default ON. Legacy lenient mode opt-in via VAIS_REJECT_A4_06=0
+#   escape hatch (kept for one cycle in case downstream finds a missed
+#   migration site; will be removed once telemetry confirms no usage).
 #
-# This runner pins the CURRENT (defective by design) behavior.  When A4-06
-# is removed in Step 13, the compiler will reject the probe at type-check
-# time and this fixture migrates to a negative form.
+# Two-probe form:
+#   probe_pos.vais  uses `I x != 0` — explicit form must keep working.
+#                    Expected: vaisc check ok, binary exits 100.
+#   probe_neg.vais  uses `I x` (the original integer-as-truthy form) —
+#                    must be rejected at vaisc check with E001 type
+#                    mismatch (expected bool, found i64 / vice versa).
 #
 # Exit codes from this runner:
-#   0 — surface still has the v1-documented behavior.
-#   1 — runtime exit code does not match expected.txt — surface DRIFTED.
-#   2 — fixture itself broken.
+#   0 — both probes behave per spec (positive ok, negative rejected).
+#   1 — DRIFT: positive failed OR negative now accepted.
+#   2 — fixture broken.
 
 set -euo pipefail
 
@@ -28,41 +33,49 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPILER_ROOT="$(cd "$DIR/../../../.." && pwd)"
 VAISC="${VAISC:-${COMPILER_ROOT}/target/release/vaisc}"
 
-if [[ ! -x "$VAISC" ]]; then
-  echo "FIXTURE_BROKEN: vaisc not found at $VAISC" >&2
-  echo "  Build with: cd compiler && cargo build --release --bin vaisc" >&2
-  exit 2
-fi
+[[ -x "$VAISC" ]] || { echo "FIXTURE_BROKEN: vaisc not found at $VAISC" >&2; exit 2; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-cp "$DIR/probe.vais" "$WORK/probe.vais"
+# ── Positive probe — explicit `!= 0` cond ─────────────────────────────────
+cp "$DIR/probe_pos.vais" "$WORK/probe_pos.vais"
+"$VAISC" check "$WORK/probe_pos.vais" >/dev/null 2>&1 || {
+    echo "DRIFT: A4-06 positive probe (explicit != 0) no longer type-checks." >&2
+    exit 1
+}
+( cd "$WORK" && "$VAISC" probe_pos.vais >/dev/null 2>&1 )
+[[ -x "$WORK/probe_pos" ]] || { echo "FIXTURE_BROKEN: vaisc did not produce probe_pos" >&2; exit 2; }
 
-if ! "$VAISC" check "$WORK/probe.vais" >/dev/null 2>&1; then
-  echo "DRIFT: probe no longer type-checks." >&2
-  echo "  This may mean A4-06 has been removed.  Update the fixture per" >&2
-  echo "  compiler/tests/empirical/A4/README.md migration guidance." >&2
-  exit 1
+POS_EXIT=0
+"$WORK/probe_pos" || POS_EXIT=$?
+if [[ "$POS_EXIT" != "100" ]]; then
+    echo "DRIFT: A4-06 positive exit=${POS_EXIT}, expected 100" >&2
+    exit 1
 fi
 
-( cd "$WORK" && "$VAISC" probe.vais >/dev/null 2>&1 )
-
-if [[ ! -x "$WORK/probe" ]]; then
-  echo "FIXTURE_BROKEN: vaisc did not produce $WORK/probe" >&2
-  exit 2
+# ── Negative probe — original integer-as-truthy form ──────────────────────
+# Strict default rejects this at vaisc check. Legacy escape hatch
+# VAIS_REJECT_A4_06=0 still accepts it (kept for one cycle).
+cp "$DIR/probe_neg.vais" "$WORK/probe_neg.vais"
+NEG_CHECK_EXIT=0
+"$VAISC" check "$WORK/probe_neg.vais" >/dev/null 2>&1 || NEG_CHECK_EXIT=$?
+if [[ "$NEG_CHECK_EXIT" == "0" ]]; then
+    echo "DRIFT: A4-06 negative probe now accepted at strict default." >&2
+    echo "  Expected: vaisc check rejects integer-as-truthy with E001." >&2
+    echo "  Strict default flip may have been reverted; investigate." >&2
+    exit 1
 fi
 
-ACTUAL_EXIT=0
-"$WORK/probe" || ACTUAL_EXIT=$?
-
-EXPECTED_EXIT="$(cat "$DIR/expected.txt" | tr -d '[:space:]')"
-
-if [[ "$ACTUAL_EXIT" != "$EXPECTED_EXIT" ]]; then
-  echo "DRIFT: A4-06 exit code changed." >&2
-  echo "  expected: $EXPECTED_EXIT (per expected.txt)" >&2
-  echo "  actual:   $ACTUAL_EXIT" >&2
-  exit 1
+# Optional sanity: legacy escape hatch must still accept the negative form
+# while the escape hatch exists.
+LEGACY_CHECK_EXIT=0
+VAIS_REJECT_A4_06=0 "$VAISC" check "$WORK/probe_neg.vais" >/dev/null 2>&1 || LEGACY_CHECK_EXIT=$?
+if [[ "$LEGACY_CHECK_EXIT" != "0" ]]; then
+    echo "INFO: A4-06 legacy escape hatch (VAIS_REJECT_A4_06=0) no longer accepts" >&2
+    echo "  the negative probe. This is fine if the escape hatch was removed in a" >&2
+    echo "  later cycle; otherwise update the fixture." >&2
+    # Don't fail on this — escape-hatch removal is expected and benign.
 fi
 
-echo "A4-06 OK: probe type-checks, compiles, runs, exits ${ACTUAL_EXIT} (matches expected — design violated, runtime stable)."
+echo "A4-06 OK: positive (explicit != 0) exits 100; negative (integer-as-truthy) rejected at vaisc check."
