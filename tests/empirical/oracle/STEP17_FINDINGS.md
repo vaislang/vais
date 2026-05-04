@@ -64,3 +64,29 @@ they were removed in commit <pending> after this finding.
 
 The latter is simpler today; the former is the right structural
 fix for stage 2+ when more shared logic accumulates.
+
+---
+
+## F-MIR-01 RESOLVED — 2026-05-04 re-fuzz shows no panic
+
+Stage 1 commit 309b3f47 removed the only `.unwrap()` in vais-mir
+(lower.rs:892 enum_pattern_discriminant). At the time of that commit
+we conservatively assumed remaining panics would surface from
+upstream parser/types crates.
+
+Re-running fuzz_mir_native_diff for 60 seconds (~75K iterations) on
+2026-05-04 found **zero panics**. The source-level audit also shows
+the panic surface in vais-mir is now empty (only test-only panic!
+patterns remain). vais-types contains exactly 1 `unreachable!` in
+checker_module/mod.rs:234 with a guard "ownership_errors was verified
+non-empty"; that path is invariant-safe.
+
+Conclusion: the oracle is panic-free under the current default-mode
+strict A4 surface. Stage 2 dependency on F-MIR-01 is satisfied.
+
+Remaining stage 2+ work (separate from panic-freedom):
+- Wire Path B (native LLVM/clang execution) for actual differential
+  finding capability (currently both paths short-circuit on
+  parse/type errors, so the oracle never reports a diff).
+- Refactor compare_paths into a vais-fuzz-core lib so unit tests are
+  reachable under cargo test (per F-MIR-02).
