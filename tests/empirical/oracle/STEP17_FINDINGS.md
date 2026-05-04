@@ -90,3 +90,36 @@ Remaining stage 2+ work (separate from panic-freedom):
   parse/type errors, so the oracle never reports a diff).
 - Refactor compare_paths into a vais-fuzz-core lib so unit tests are
   reachable under cargo test (per F-MIR-02).
+
+---
+
+## F-MIR-02 RESOLVED — 2026-05-04 lib refactor LANDED
+
+Refactored `compiler/fuzz/` into a Rust crate with both a library
+target and a thin binary target. Layout:
+
+  fuzz/Cargo.toml — adds `[lib]` (implicitly via src/lib.rs) plus the
+                     existing `[[bin]]` entries.
+  fuzz/src/lib.rs — moved from fuzz_targets/fuzz_mir_native_diff.rs.
+                     Contains VaisProgram + compare_paths + run_mir_path
+                     + run_native_path + RunOutput + PathOutcome with
+                     `pub` visibility. Plus unit tests at the bottom.
+  fuzz/fuzz_targets/fuzz_mir_native_diff.rs — 20-line shim that
+                     delegates to vais_fuzz::compare_paths.
+
+`cargo test --lib -p vais-fuzz` now runs 4 #[test] functions (basic
+compare_paths smoke + RunOutput equality). All pass. The original
+F-MIR-02 problem (libFuzzer's main hijacking cargo test) is gone
+because the lib has no main.
+
+Verification
+
+  cargo test --lib -p vais-fuzz:
+    test tests::run_output_eq_basic ... ok
+    test tests::compare_paths_invalid_source_does_not_panic ... ok
+    test tests::compare_paths_empty_does_not_panic ... ok
+    test tests::compare_paths_simple_main_does_not_panic ... ok
+    4 passed; 0 failed.
+
+  cargo check --bin fuzz_mir_native_diff: success.
+  bash compiler/scripts/check-integrity.sh: INTEGRITY OK.
