@@ -3,6 +3,38 @@
 This file records what the first iteration of Order Step 7 retro-validation
 empirically discovered. It complements the per-A4 fixture directories.
 
+## Index (F-NN → 한 줄 요약)
+
+| ID | 한 줄 요약 |
+|---|---|
+| F-01 | A4-01 Unit ↔ i64 v1 sentinel reproduces (exit 96) |
+| F-02 | A4-02 Pointer<T> ↔ i64 v1 expected drifted by environment |
+| F-02b | A4-03 Auto-deref &T ↔ T same env drift as A4-02 |
+| F-02c | A4-06 Integer truthy v1 sentinel reproduces (exit 100) |
+| F-02d | A4-07 Numeric widening v1 sentinel reproduces (exit 42, runtime correct) |
+| F-02e | A4-09 Lifetime ref erasure v1 sentinel reproduces (linker fail) |
+| F-03 | `compiler/tests/empirical/` directory did not exist before this iteration |
+| F-04 | A4 site paths are unique by filename in the codebase |
+| F-05 | Environment-stability classification of A4 surfaces |
+| F-06 | A4-08 Vec ↔ &T permissive v1 sentinel symptom drifted, surface persists |
+| F-07 | Controlled-06 (Vec ↔ Slice .len() path) NOT actually controlled |
+| F-08 | Several Controlled probes fail to construct in current parser |
+| F-09 | Controlled fixtures LANDED this iteration |
+| F-10 | Rejected-01 LANDED (Box raw generic) |
+| F-11 | Rejected-02 (Box ↔ T) v1 sentinel does NOT reproduce |
+| F-12 | Rejected-03 LANDED (Optional ↔ T, bare i64) |
+| F-13 | Untested-01 (Result ↔ Unit auto Ok wrap) → RECLASSIFY to Rejected |
+| F-14 | `check_fails` assertion kind added (5th form) |
+| F-15 | NEW A4 candidate: struct partial-init silent acceptance |
+| F-16 | A4-05 Array→Pointer is structural, not user-level (2026-05-04) |
+| F-17 | A4-03 Auto-deref &T↔T also IR-lowering glue (2026-05-04) |
+| F-18 | Escape closure silent capture loss (NEW A4 candidate, 2026-05-04) |
+| F-19 | A4-06 strict mode emits "expected i64, found bool" + std codemod LANDED + strict default LANDED |
+| F-20 | A4-07 std codemod LANDED (Step 13 stage 0 std slice) |
+| F-21 | A4-07 strict scope is broader than master-plan v16 estimated |
+| F-22 | A4-03 / A4-05 / A4-07 reclass to Controlled LANDED (master-plan v17) |
+| F-23 | A2-03 dyn dispatch silently calls first impl (NEW A4 candidate, A4-12) — root cause vais-types `&dyn → &i64` reduce |
+
 ## Findings
 
 ### F-01 — A4-01 Unit ↔ i64: v1 sentinel reproduces (exit 96)

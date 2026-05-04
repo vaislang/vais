@@ -4,6 +4,15 @@ This file records empirical findings from the first iteration of
 Order Step 11 (A3 quarantine). Mirrors `compiler/tests/empirical/A4/
 STEP7_FINDINGS.md`.
 
+## Index (F-A3-NN → 한 줄 요약)
+
+| ID | 한 줄 요약 |
+|---|---|
+| F-A3-01 | vaisc import resolution falls back SILENTLY on missing modules |
+| F-A3-02 | `lang/packages/<name>` cannot be imported via the toml-declared path |
+| F-A3-03 | VAIS_STRICT_IMPORTS=1 introduced (compiler-side fix for F-A3-01) |
+| F-A3-04 | A3 fixtures use `required_env` in meta.toml |
+
 ## Context
 
 Master Plan v16 declares A3 (Quarantine intended-but-unfinished public

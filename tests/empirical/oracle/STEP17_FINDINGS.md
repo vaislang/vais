@@ -3,6 +3,21 @@
 This file records empirical findings from Step 17 fuzz_mir_native_diff
 work. Mirrors STEP7_FINDINGS / STEP11_FINDINGS structure.
 
+## Index (findings + stage milestones)
+
+| ID / Stage | 한 줄 요약 |
+|---|---|
+| F-MIR-01 | vais-mir interpreter panics on Arbitrary-derived corrupted input (RESOLVED stage 2) |
+| F-MIR-02 | `cargo test --bin fuzz` launches libFuzzer main (RESOLVED stage 2 lib refactor) |
+| Stage 2 Path B LANDED | vais-jit Cranelift in-process — both arms live |
+| Stage 3 LANDED | fuzz_mir_native_diff promoted to nightly + tracked corpus seeds |
+| Stage 4a LANDED | sanitizer PR-blocking supersession documented (asan.yml/tsan.yml 이미 활성) |
+| Stage 4b DEFERRED | Miri PR-blocking 7-day plan (이후 LANDED 섹션으로 reframe) |
+| Stage 5 RECONNAISSANCE | diagnostic equivalence — Path A/B blocker 식별 + 2 design option |
+| Stage 5a LANDED | interpreter-side stdout sink + 4 builtin intercept (print/println/print_int/print_str) |
+| Stage 5a B.5 | builtin intercept 확장 4 → 8 (+ print_float/print_bool/eprint/eprintln) |
+| **Stage 4b LANDED** | **Miri PR-blocking 승격 (B+D path, fresh nightly 1.97 4/4 green)** |
+
 ## F-MIR-01 — vais-mir interpreter panics on Arbitrary-derived corrupted input
 
 Discovered during Step 17 stage 1 (commit <pending>). Wiring Path A
