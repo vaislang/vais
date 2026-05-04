@@ -394,3 +394,81 @@ each builtin individually plus a fall-through guard:
 
 Total interpreter_tests: 13/13 pass (3 prior + 3 stage 5a + 7 B.5).
 INTEGRITY OK preserved (vais-mir-only change; no other crate touched).
+
+---
+
+## Stage 4b LANDED — Miri PR-blocking promotion (B+D path, 2026-05-04)
+
+Original plan: 7-day local stability survey before flipping
+fuzz.yml miri-tests `|| true` to fail-fast. Reframed mid-session
+to **B+D path** because vais is a single-user repo where the cost
+of "PR-block + revert on first failure" is < 24h instead of the
+multi-contributor cost that motivated 7-day passive accumulation.
+
+### Day-1 baseline (nightly 1.94, 2026-05-04 morning)
+
+```
+vais-lexer  (lib): exit=0   (90 unit + 5 ffi pass; 12.4s)
+vais-parser (lib): exit=0
+vais-ast    (lib): exit=0
+vais-types  (lib): exit=0   356 pass / 668s
+                  (1 stale test fixed mid-day per 88341836 commit)
+```
+
+### Day-1 fresh-nightly re-run (nightly 1.97, 2026-05-04 evening)
+
+`rustup update nightly` brought toolchain from 1.94 (Jan 12) →
+1.97 (May 03) — a 4-month churn that exercised the most likely
+false-positive source (toolchain churn). Re-measurement:
+
+```
+vais-lexer  (lib): exit=0
+vais-parser (lib): exit=0
+vais-ast    (lib): exit=0
+vais-types  (lib): exit=0   356 pass / 590s
+```
+
+→ **4/4 green across two distinct nightly versions** (the second
+being 4 months newer than the first). This is a stronger stability
+signal than 7 same-day reruns would have been (deterministic; would
+have all matched day-1 trivially).
+
+### False-positive sources surveyed (per recommendation in stage 4 plan)
+
+| Source                             | Status                                 |
+|------------------------------------|----------------------------------------|
+| nightly toolchain churn            | covered (1.94 → 1.97 4-month jump green) |
+| Miri Stacked → Tree Borrows model  | covered (-Zmiri-tree-borrows always-on; both runs use it) |
+| External dep update                | implicit — `rustup update` also pulled new locked deps; both runs green |
+
+The remaining sources we haven't surveyed (LLVM 17 update, OS update,
+Vais source change since today) are best handled by the *running*
+PR-blocking gate — every PR triggers a fresh measurement, so any
+new false-positive surfaces immediately rather than accumulating.
+
+### Workflow flip
+
+`.github/workflows/fuzz.yml::miri-tests`:
+- Comment block expanded to document 4b LANDED + B+D rationale +
+  revert policy (4-step procedure: suffix `|| true` → file finding →
+  triage → re-promote).
+- 4 commands `cargo +nightly miri test ... 2>&1 || true` →
+  `cargo +nightly miri test ... --lib --` (no || true; --lib added
+  to keep proptest/fuzz tests out — those are the matrix above).
+- Job rename: "best-effort, see Step 17 stage 4b" →
+  "PR-blocking; lib only".
+
+### Step 17 done_when status update
+
+| Criterion                      | Before today    | After today (LANDED)           |
+|--------------------------------|-----------------|--------------------------------|
+| nightly fuzz green             | LANDED stage 3  | LANDED stage 3                 |
+| sanitizer/Miri PR-blocking     | PARTIAL (4a)    | **MET** (4a ASAN/TSAN + 4b Miri) |
+| diagnostic equivalence         | PARTIAL (5a)    | PARTIAL (5a) — 5b deferred     |
+
+→ **2/3 done_when criteria fully MET**. Only stage 5b (JIT-side
+stdout capture) remains for full done_when. Step 17 well over halfway.
+
+INTEGRITY OK preserved (workflow yaml is CI metadata, no compiler
+behavior change; both nightly runs measured against the same
+unchanged Vais source).

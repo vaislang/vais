@@ -99,23 +99,23 @@ jobs:
           path: fuzz/corpus/${{ matrix.target }}/
           retention-days: 7
 
-  # NOTE: workspace-wide sanitizer + miri jobs in this workflow are
-  # SUPERSEDED by the dedicated workflows .github/workflows/asan.yml
-  # and .github/workflows/tsan.yml, which already gate on push/pull_request
-  # with continue-on-error: false (PR-blocking) on the targeted packages
-  # (vais-lexer / vais-parser / vais-ast / vais-types).
+  # NOTE: workspace-wide ASAN/UBSAN job below is best-effort SUPERSEDED
+  # by the dedicated .github/workflows/asan.yml + tsan.yml workflows,
+  # which already gate on push/pull_request with continue-on-error: false
+  # (PR-blocking) on the targeted packages (vais-lexer / vais-parser /
+  # vais-ast / vais-types).
   #
-  # The blocks below remain as best-effort coverage for the broader
-  # workspace and Miri. Master Plan v17 §I-6 Step 17 stage 4:
-  #   - sub-step 4a (LANDED 2026-05-04): Per-package ASAN/TSAN PR-blocking
-  #     gates already exist in asan.yml/tsan.yml. This file's broader
-  #     workspace ASAN/UBSAN remain best-effort to avoid double-running
-  #     the same coverage with different timeouts.
-  #   - sub-step 4b (DEFERRED): Miri PR-blocking promotion. Requires a
-  #     multi-day stability run on the 4 core crates (lexer/parser/ast/
-  #     types) with -Zmiri-disable-isolation -Zmiri-tree-borrows to
-  #     surface and fix any false-positive borrow-stack violations
-  #     before PR-blocking is safe.
+  # Master Plan v17 §I-6 Step 17 stage 4:
+  #   - 4a (LANDED 2026-05-04): Per-package ASAN/TSAN PR-blocking gates
+  #     already exist in asan.yml/tsan.yml.
+  #   - 4b (LANDED 2026-05-04): Miri PR-blocking promoted from best-effort
+  #     after empirical day-1 baseline + fresh nightly 1.97 re-measurement
+  #     (single-user vais repo policy: PR-block + revert on first failure
+  #     rather than 7-day passive accumulation). See miri-tests job below
+  #     for the comment block + revert policy.
+  #
+  # The workspace-wide sanitizer-tests block remains best-effort to avoid
+  # double-running the same coverage with different timeouts than asan.yml.
   sanitizer-tests:
     name: Sanitizer Tests (workspace, best-effort)
     runs-on: ubuntu-latest
@@ -146,7 +146,28 @@ jobs:
         continue-on-error: true
 
   miri-tests:
-    name: Miri Undefined Behavior Check (best-effort, see Step 17 stage 4b)
+    # Step 17 stage 4b LANDED 2026-05-04 (B+D path):
+    #
+    # Promoted from best-effort (`|| true`) to PR-blocking after empirical
+    # day-1 baseline confirmed false-positive 0 across 4 core crates
+    # (lib-only) under fresh nightly 1.97 + Miri Tree-Borrows. See
+    # STEP17_FINDINGS Stage 4b LANDED section for the empirical evidence
+    # + 3 false-positive sources we surveyed (toolchain churn, Miri model
+    # change, dep update). single-user vais repo policy: PR-block + revert
+    # on first failure rather than 7-day passive accumulation.
+    #
+    # Lib-only is intentional — proptest fuzz tests are NOT included
+    # here; they belong to the matrix above (fuzz_lexer / fuzz_parser /
+    # etc.) which has its own runtime budget.
+    #
+    # Revert policy if Miri ever turns up red:
+    # 1. Suffix the failing line with ` || true` to immediately unblock
+    #    PRs (commit message: "phase2-step17-stage4b-revert: ...").
+    # 2. File STEP17_FINDINGS finding F-MIR-NN with the Miri output.
+    # 3. Triage as either real UB (compiler fix) or Miri false-positive
+    #    (toolchain pin / sanitizer narrow scope).
+    # 4. Re-promote after fix.
+    name: Miri Undefined Behavior Check (PR-blocking; lib only)
     runs-on: ubuntu-latest
 
     steps:
@@ -163,12 +184,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y llvm-17-dev libpolly-17-dev
 
-      - name: Run miri on core crates
+      - name: Run miri on core crates (lib-only, fail-fast)
         run: |
-          cargo +nightly miri test -p vais-lexer -- --test-threads=1 2>&1 || true
-          cargo +nightly miri test -p vais-parser -- --test-threads=1 2>&1 || true
-          cargo +nightly miri test -p vais-ast -- --test-threads=1 2>&1 || true
-          cargo +nightly miri test -p vais-types -- --test-threads=1 2>&1 || true
+          cargo +nightly miri test -p vais-lexer  --lib -- --test-threads=1
+          cargo +nightly miri test -p vais-parser --lib -- --test-threads=1
+          cargo +nightly miri test -p vais-ast    --lib -- --test-threads=1
+          cargo +nightly miri test -p vais-types  --lib -- --test-threads=1
         env:
           MIRIFLAGS: "-Zmiri-disable-isolation -Zmiri-tree-borrows"
 
