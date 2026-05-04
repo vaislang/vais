@@ -847,6 +847,42 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
+        // F-23 GUARD step 1 (A4-12 candidate, STEP7_FINDINGS): if the
+        // receiver is an Ident whose `var_resolved_types` entry is
+        // `DynTrait` / `Ref(DynTrait)` / `RefMut(DynTrait)`, then ANY
+        // method dispatch — including the bare-method-name fallback below
+        // and the broader sorted-iteration fallback further down — is
+        // unsafe (silent corruption: binds to one impl regardless of
+        // runtime type). Convert to a hard codegen error per L-002 north
+        // star. Real vtable-indirected dispatch via
+        // vtable.rs::generate_dynamic_call is step 2 (separate task).
+        if let Expr::Ident(name) = receiver {
+            let receiver_is_dyn = self
+                .var_resolved_types
+                .get(name)
+                .map(|rt| {
+                    matches!(rt, vais_types::ResolvedType::DynTrait { .. })
+                        || matches!(
+                            rt,
+                            vais_types::ResolvedType::Ref(inner)
+                                | vais_types::ResolvedType::RefMut(inner)
+                                if matches!(inner.as_ref(), vais_types::ResolvedType::DynTrait { .. })
+                        )
+                })
+                .unwrap_or(false);
+            if receiver_is_dyn {
+                return Err(CodegenError::Unsupported(format!(
+                    "dyn trait method call `.{}` on `&dyn`/`&mut dyn` receiver `{}`: \
+                     vtable-indirected dispatch is not yet wired (F-23, A4-12 candidate, \
+                     STEP7_FINDINGS). The previous silent fallback bound the call to one \
+                     impl regardless of runtime type, producing wrong values across \
+                     cross-impl dispatch. Use a concrete type or refactor to fn-pointer \
+                     parameters (A2-05) for now.",
+                    method, name
+                )));
+            }
+        }
+
         // Try qualified name: TypeName_method
         let qualified_name = struct_name.as_ref().map(|sn| format!("{}_{}", sn, method));
 
@@ -881,19 +917,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             )));
         } else {
             // Struct name unknown — scan all registered structs for a matching method.
+            // (F-23 dyn-receiver case is rejected earlier — see the F-23 GUARD
+            // block before the qualified_name lookup. By the time we reach this
+            // arm the receiver is guaranteed to NOT be `&dyn`/`&mut dyn`/`dyn`.)
             // Collect into a sorted Vec first to make the search order deterministic.
-            //
-            // F-23 BUG (STEP7_FINDINGS, 2026-05-04): when the receiver is a
-            // `&dyn Trait` / `&mut dyn Trait` parameter, this loop silently
-            // binds to the alphabetically-first impl whose method name
-            // matches, producing wrong runtime values across cross-impl
-            // dispatch. The intended behavior is vtable-indirected dispatch
-            // via vtable.rs::generate_dynamic_call; that integration is the
-            // A4-12 reclass round work. A guard for this site was prototyped
-            // but did not trigger because dyn-parameter receivers don't
-            // populate `var_resolved_types` consistently; the proper fix
-            // requires plumbing receiver-type info from the type checker.
-            // See STEP7_FINDINGS F-23 for empirical evidence.
             let mut candidates: Vec<String> = self.generated_structs.keys().cloned().collect();
             candidates.sort();
             let mut found = None;

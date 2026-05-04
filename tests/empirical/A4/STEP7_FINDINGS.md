@@ -949,6 +949,44 @@ Root cause line, identified during A4-12 reconnaissance (2026-05-04):
   must therefore extend the type checker to surface dyn receiver
   info to codegen before the dispatcher can branch on it.
 
+### F-23 step 1 reconnaissance result (2026-05-04, A4-12 attempt)
+
+`vaisc --inkwell build` with debug instrumentation in
+`gen_aggregate.rs::generate_method_call` revealed the actual content
+of `var_resolved_types["g"]` for the Hello/World probe:
+
+```
+[F23-GUARD-INKWELL] method='greet' receiver=Ident("g")
+                   var_resolved_types[receiver]=Some(Ref(I64))
+```
+
+i.e. **the type-checker is reducing `&dyn Greeter` to `&i64` before
+the parameter is registered into codegen's `var_resolved_types`**.
+Codegen's guard cannot trigger because it sees `Ref(I64)`, not
+`Ref(DynTrait { ... })`. This identifies the precise step-1 fix
+location (in vais-types substitution / parameter-binding paths) and
+confirms why the prototype guard at the codegen layer was
+necessarily dead.
+
+Risk evaluation for landing step 1 in this session:
+- vais-types changes that preserve `DynTrait` through parameter
+  resolution have potentially broad reach (vaisdb sql/executor
+  `Box<dyn Executor>`, vector/hnsw `&mut dyn NodeStore`, vais-server
+  middleware traits). INTEGRITY breakage probability is non-trivial.
+- step 1 must be carefully scoped: only stop reducing `&dyn T` to
+  `&i64`; downstream codegen sites that *intentionally* consume the
+  i64-shape (Box<dyn> as a fat pointer i64) must keep working.
+- Recommendation: defer step 1 to a plan-driven session with explicit
+  vais-types reading + INTEGRITY-after-each-edit measurement, rather
+  than a single-session fix attempt.
+
+Status: F-23 step 1 root cause CONFIRMED in vais-types parameter
+resolution. Codegen guard remains in place (currently dead because
+preceding type-checker output never satisfies the predicate; once
+step 1 lands, the guard activates and converts silent corruption to
+loud CodegenError::Unsupported). Step 1 implementation deferred —
+DEFERRED_TASKS.md #15 next_check 2026-05-05.
+
 Status: A2-03 promotion BLOCKED. F-23 logged as NEW A4 candidate.
 Master plan v17 Step 9 status retained at "A2-03 DEFERRED" (now with
 explicit silent-surface evidence rather than just parser/resolver
