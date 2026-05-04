@@ -634,12 +634,50 @@ shapes:
    path appears to perturb downstream type inference such that
    some i64-consuming context now sees a bool.
 
-Implication: A4-06 strict flip is NOT a pure tightening — it
-introduces type-inference side effects in a subset of baseline
-files. Naive codemod (add `!= 0` to cond positions) will not
-clear category 2.
+Implication (revised 2026-05-04): The two error directions are a
+unify-orientation artefact of `unify(cond_type, Bool)` —  when
+cond_type is concrete `i64` (e.g. function call returning i64) the
+TypeError::Mismatch fields land as `expected: i64, found: bool`.
+Concrete example std/args.vais:141:
+  `I @.str_eq_internal(spec_long, long_name) { R i }`
+where `F str_eq_internal(...) -> i64`. Migration: `... != 0`.
 
-Status: A4-06 reclassification or strict-implementation refinement
-required before strict default flip. A4-06 stays Stage 0 (opt-in)
-in Step 13 status. Recorded as F-19 finding for codemod planning.
+Both error directions describe the SAME A4-06 surface. No separate
+inference side-effect. Codemod plan: rewrite each call-cond /
+identifier-cond of i64 type to explicit `!= 0`. Tractable.
+
+Status: A4-06 stays Stage 0 (opt-in via VAIS_REJECT_A4_06=1) until
+codemod lands across baseline (std 9 + vaisdb 25). Strict default
+flip is a follow-up commit after codemod completes.
+
+---
+
+### F-19 std codemod LANDED — 2026-05-04
+
+All 9 failing std files migrated and re-verified strict-clean.
+Baseline (default mode) integrity preserved.
+
+Migration patterns applied:
+- `LW 1 { ... }` → `LW true { ... }` (12 sites across async,
+  fmt, http, http_server, runtime — canonical infinite loop).
+- `I <i64-call>(...)` → `I <i64-call>(...) != 0` (10 sites
+  across args:141, url:127–198, proptest:379, path:214).
+- `I <i64-var>` → `I <i64-var> != 0` (6 sites across path —
+  `ends_with_slash` and `needs_sep` flag vars).
+
+Verification (per-file):
+  for f in args async fmt http http_server path proptest runtime url; do
+    VAIS_REJECT_A4_06=1 vaisc check std/$f.vais
+  done
+  → 9/9 OK No errors found.
+
+Default-mode (baseline) integrity preserved (re-run via
+scripts/check-integrity.sh — INTEGRITY OK).
+
+Strict default flip still NOT enabled — `VAIS_REJECT_A4_06=1` opt-in
+remains the gate. Reason: vaisdb baseline still has 25 sites failing
+strict (per F-19 pre-codemod recon). vaisdb codemod is a separate
+follow-up iter; the std-only commit is a clean intermediate
+checkpoint where the std slice is strict-ready and the strict default
+flip can land after vaisdb migrates.
 

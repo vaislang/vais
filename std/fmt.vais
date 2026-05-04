@@ -205,7 +205,7 @@ F strlen(s: i64) -> i64 {
 # Copy string to buffer
 F strcpy(dst: i64, src: i64) -> i64 {
     i := mut 0
-    LW 1 {
+    LW true {
         ch := load_i64(src + i)
         store_i64(dst + i, ch)
         LW ch == 0 {
@@ -269,7 +269,7 @@ X FormatBuilder {
     # Write a string
     F write_str(&self, s: i64) -> i64 {
         i := mut 0
-        LW 1 {
+        LW true {
             ch := load_i64(s + i)
             LW ch == 0 {
                 R 0

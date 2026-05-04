@@ -53,7 +53,7 @@ X Path {
 
         # Calculate new length
         new_len := mut 0
-        I ends_with_slash {
+        I ends_with_slash != 0 {
             new_len = self.len + other_len
         } EL {
             new_len = self.len + 1 + other_len
@@ -63,7 +63,7 @@ X Path {
         data := malloc(new_len + 1)
         memcpy(data, self.data, self.len)
 
-        I ends_with_slash {
+        I ends_with_slash != 0 {
             memcpy(data + self.len, other_ptr, other_len + 1)
         } EL {
             store_byte(data + self.len, 47)
@@ -211,7 +211,7 @@ X Path {
 
     # Check if path is relative (not absolute)
     F is_relative(&self) -> i64 {
-        I @.is_absolute() { 0 } EL { 1 }
+        I @.is_absolute() != 0 { 0 } EL { 1 }
     }
 
     # Free the path memory
@@ -272,7 +272,7 @@ X PathBuf {
 
         # Calculate required size
         new_len := mut 0
-        I needs_sep {
+        I needs_sep != 0 {
             new_len = self.len + 1 + comp_len
         } EL {
             new_len = self.len + comp_len
@@ -293,7 +293,7 @@ X PathBuf {
         }
 
         # Append separator if needed
-        I needs_sep {
+        I needs_sep != 0 {
             store_byte(self.data + self.len, 47)
             self.len = self.len + 1
         }
@@ -421,7 +421,7 @@ F path_join(a: str, b: str) -> i64 {
 
     # Calculate new length
     new_len := mut 0
-    I ends_with_slash {
+    I ends_with_slash != 0 {
         new_len = a_len + b_len
     } EL {
         new_len = a_len + 1 + b_len
@@ -431,7 +431,7 @@ F path_join(a: str, b: str) -> i64 {
     result := malloc(new_len + 1)
     memcpy(result, a_ptr, a_len)
 
-    I ends_with_slash {
+    I ends_with_slash != 0 {
         memcpy(result + a_len, b_ptr, b_len + 1)
     } EL {
         store_byte(result + a_len, 47)

@@ -539,7 +539,7 @@ X Client {
         total_recv := mut 0
 
         # Read response
-        LW 1 {
+        LW true {
             n := __tcp_recv(fd, recv_buffer + total_recv, HTTP_DEFAULT_BUFFER)
             LW n <= 0 {
                 B
@@ -749,7 +749,7 @@ X Server {
         buffer := __malloc(HTTP_MAX_HEADER_SIZE)
         total := mut 0
 
-        LW 1 {
+        LW true {
             n := __tcp_recv(fd, buffer + total, HTTP_DEFAULT_BUFFER)
             LW n <= 0 {
                 B

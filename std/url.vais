@@ -124,17 +124,17 @@ X Url {
 
     # Get default port for scheme
     F default_port(&self) -> i64 {
-        I str_eq_cstr(self.scheme, "http") {
+        I str_eq_cstr(self.scheme, "http") != 0 {
             80
-        } EL I str_eq_cstr(self.scheme, "https") {
+        } EL I str_eq_cstr(self.scheme, "https") != 0 {
             443
-        } EL I str_eq_cstr(self.scheme, "ftp") {
+        } EL I str_eq_cstr(self.scheme, "ftp") != 0 {
             21
-        } EL I str_eq_cstr(self.scheme, "ssh") {
+        } EL I str_eq_cstr(self.scheme, "ssh") != 0 {
             22
-        } EL I str_eq_cstr(self.scheme, "telnet") {
+        } EL I str_eq_cstr(self.scheme, "telnet") != 0 {
             23
-        } EL I str_eq_cstr(self.scheme, "smtp") {
+        } EL I str_eq_cstr(self.scheme, "smtp") != 0 {
             25
         } EL {
             0
@@ -152,11 +152,11 @@ X Url {
 
     # Check if URL uses secure scheme
     F is_secure(&self) -> i64 {
-        I str_eq_cstr(self.scheme, "https") {
+        I str_eq_cstr(self.scheme, "https") != 0 {
             1
-        } EL I str_eq_cstr(self.scheme, "ftps") {
+        } EL I str_eq_cstr(self.scheme, "ftps") != 0 {
             1
-        } EL I str_eq_cstr(self.scheme, "wss") {
+        } EL I str_eq_cstr(self.scheme, "wss") != 0 {
             1
         } EL {
             0

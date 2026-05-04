@@ -376,7 +376,7 @@ F prop_check(name: str, test_fn: i64, gen: Generator) -> PropertyResult {
 partial F prop_assert(name: str, test_fn: i64, gen: Generator) -> i64 {
     result := prop_check(name, test_fn, gen)
 
-    I result.is_failed() {
+    I result.is_failed() != 0 {
         # Print failure info
         puts_str("Property failed: ")
         puts_str(name)

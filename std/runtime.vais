@@ -166,7 +166,7 @@ X Runtime {
     # Block on a single future until completion
     F block_on(&self, future_ptr: i64, poll_fn: i64) -> i64 {
         # Simple busy-poll loop
-        LW 1 {
+        LW true {
             poll_result := call_poll(poll_fn, future_ptr)
             poll_status := extract_poll_status(poll_result)
             poll_value := extract_poll_value(poll_result)
@@ -1004,7 +1004,7 @@ X SelectResult {
 
 # select2: wait for the first of 2 futures to complete
 F select2(fp1: i64, pf1: i64, fp2: i64, pf2: i64) -> SelectResult {
-    LW 1 {
+    LW true {
         # Poll future 1
         r1 := call_poll(pf1, fp1)
         s1 := extract_poll_status(r1)
@@ -1022,7 +1022,7 @@ F select2(fp1: i64, pf1: i64, fp2: i64, pf2: i64) -> SelectResult {
 
 # select3: wait for the first of 3 futures to complete
 F select3(fp1: i64, pf1: i64, fp2: i64, pf2: i64, fp3: i64, pf3: i64) -> SelectResult {
-    LW 1 {
+    LW true {
         r1 := call_poll(pf1, fp1)
         s1 := extract_poll_status(r1)
         v1 := extract_poll_value(r1)
@@ -1043,7 +1043,7 @@ F select3(fp1: i64, pf1: i64, fp2: i64, pf2: i64, fp3: i64, pf3: i64) -> SelectR
 
 # select4: wait for the first of 4 futures to complete
 F select4(fp1: i64, pf1: i64, fp2: i64, pf2: i64, fp3: i64, pf3: i64, fp4: i64, pf4: i64) -> SelectResult {
-    LW 1 {
+    LW true {
         r1 := call_poll(pf1, fp1)
         s1 := extract_poll_status(r1)
         v1 := extract_poll_value(r1)
@@ -1152,7 +1152,7 @@ F join3(fp1: i64, pf1: i64, fp2: i64, pf2: i64, fp3: i64, pf3: i64) -> JoinResul
     v2 := mut 0
     v3 := mut 0
 
-    LW 1 {
+    LW true {
         I done1 == 0 {
             r1 := call_poll(pf1, fp1)
             s1 := extract_poll_status(r1)

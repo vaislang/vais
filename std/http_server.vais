@@ -1139,7 +1139,7 @@ X App {
         buffer := __malloc(8192 + 1048576)  # header + body max
         total := mut 0
 
-        LW 1 {
+        LW true {
             n := __tcp_recv(fd, buffer + total, 4096)
             I n <= 0 {
                 B
@@ -1200,7 +1200,7 @@ X App {
         buffer := __malloc(8192 + 1048576)
         total := mut 0
 
-        LW 1 {
+        LW true {
             n := __tls_read(tls, buffer + total, 4096)
             I n <= 0 {
                 B

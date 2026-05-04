@@ -138,7 +138,7 @@ X ArgParser {
             I i >= self.spec_count { R -1 }
             spec_ptr := self.specs + i * 40
             spec_long := load_i64(spec_ptr + 8)
-            I @.str_eq_internal(spec_long, long_name) { R i }
+            I @.str_eq_internal(spec_long, long_name) != 0 { R i }
             i = i + 1
         }
         -1

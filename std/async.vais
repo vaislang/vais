@@ -824,7 +824,7 @@ X StreamFilter {
 
     # Get next value that passes the filter
     F next(&self) -> i64 {
-        LW 1 {
+        LW true {
             value := self.source.next()
             LW value == 0 - 1 {
                 R 0 - 1
