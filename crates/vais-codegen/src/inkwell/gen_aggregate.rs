@@ -882,6 +882,18 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         } else {
             // Struct name unknown — scan all registered structs for a matching method.
             // Collect into a sorted Vec first to make the search order deterministic.
+            //
+            // F-23 BUG (STEP7_FINDINGS, 2026-05-04): when the receiver is a
+            // `&dyn Trait` / `&mut dyn Trait` parameter, this loop silently
+            // binds to the alphabetically-first impl whose method name
+            // matches, producing wrong runtime values across cross-impl
+            // dispatch. The intended behavior is vtable-indirected dispatch
+            // via vtable.rs::generate_dynamic_call; that integration is the
+            // A4-12 reclass round work. A guard for this site was prototyped
+            // but did not trigger because dyn-parameter receivers don't
+            // populate `var_resolved_types` consistently; the proper fix
+            // requires plumbing receiver-type info from the type checker.
+            // See STEP7_FINDINGS F-23 for empirical evidence.
             let mut candidates: Vec<String> = self.generated_structs.keys().cloned().collect();
             candidates.sort();
             let mut found = None;

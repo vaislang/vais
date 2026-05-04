@@ -911,10 +911,43 @@ Recommendation:
   next master plan revision after v17 (reclass round), with this
   finding as the v1 evidence + the Hello/World probe as the
   permanent fixture.
-- Investigate root cause: `crates/vais-codegen/src/inkwell/`
-  trait-object lowering. Likely the vtable lookup is constant-folded
-  to the first impl during monomorphization rather than indirected
-  through the fat-pointer's vtable slot.
+
+Root cause line, identified during A4-12 reconnaissance (2026-05-04):
+
+  `compiler/crates/vais-codegen/src/inkwell/gen_aggregate.rs:885-899`
+
+  When `infer_struct_name(receiver)` returns Err (the case for
+  `g: &dyn Greeter` parameters because `extract_struct_type_name`
+  in gen_special.rs:145 has no `Type::DynTrait` arm and falls
+  through to `_ => None`), method dispatch enters a fallback that
+  iterates `generated_structs.keys()` sorted alphabetically and
+  picks the first `<StructName>_<method_name>` that exists. For
+  the Hello/World probe:
+
+    candidates (sorted) = ["Hello", "World"]
+    first match for "_greet" = "Hello_greet"  ← bound regardless of receiver
+
+  IR confirmation (vaisc --emit-ir on the probe):
+
+    define i64 @call_dyn(ptr %g) {
+      ...
+      %method_call = call i64 @Hello_greet(ptr %g1)   ← static, not vtable-indirect
+      ret i64 %method_call
+    }
+
+  The vtable infrastructure already exists
+  (`vais-codegen/src/vtable.rs::generate_dynamic_call` +
+  `trait_dispatch.rs::generate_dyn_method_call`) but is not invoked
+  from the method-call dispatcher. Wiring that path is the A4-12
+  fix scope.
+
+  A non-corrupting guard was prototyped (refuse with
+  CodegenError::Unsupported when `var_resolved_types[name]` is
+  DynTrait/Ref(DynTrait)) but did not trigger because the
+  type-checker does not populate `var_resolved_types` for dyn
+  parameters reliably. The first deliverable of the A4-12 fix
+  must therefore extend the type checker to surface dyn receiver
+  info to codegen before the dispatcher can branch on it.
 
 Status: A2-03 promotion BLOCKED. F-23 logged as NEW A4 candidate.
 Master plan v17 Step 9 status retained at "A2-03 DEFERRED" (now with

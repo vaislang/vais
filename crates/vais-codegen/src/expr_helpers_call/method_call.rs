@@ -1007,7 +1007,11 @@ impl CodeGenerator {
                 }
             }
         } else {
-            // Receiver type is not Named (e.g., I64 from fallback inference).
+            // Receiver type is not Named (e.g., I64 from fallback inference,
+            // or `&dyn Trait`/`&mut dyn Trait` parameter — see STEP7_FINDINGS
+            // F-23 for the silent-corruption case the latter triggers in the
+            // text-IR path; the inkwell-path twin is in inkwell/gen_aggregate.rs).
+            //
             // Try to find the correct struct-qualified method name by searching
             // self.types.functions for any `StructName_method` that matches.
             let method_suffix = format!("_{}", method_name);
