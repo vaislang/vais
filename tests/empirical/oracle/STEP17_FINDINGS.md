@@ -357,3 +357,40 @@ infrastructure only.
 Status: stage 5a LANDED. Step 17 done_when criterion 3 of 3 (diagnostic
 equivalence) is now PARTIALLY MET on the interpreter half; the JIT
 half + asymmetry-handling is stage 5b work.
+
+---
+
+## Stage 5a B.5 — interpreter builtin intercept expansion (2026-05-04)
+
+Stage 5a's `try_intercept_builtin` initially recognized 4 names
+(print, print_str, println, print_int). Expanded to 8 to cover the
+wider Vais print API surface that real programs are likely to call:
+
+| name        | aliases                  | newline | typed |
+|-------------|--------------------------|---------|-------|
+| print       | print_str, eprint        | no      | any   |
+| println     | eprintln                 | yes     | any   |
+| print_int   | —                        | no      | i64   |
+| print_float | —                        | no      | f64   |
+| print_bool  | —                        | no      | bool  |
+
+Stage 5a does not split stdout vs stderr — `eprint`/`eprintln` route
+to the same sink as `print`/`println`. A future stage may add a
+separate `stderr_sink` if the differential oracle gains finer
+diagnostic equivalence requirements; until then both channels are
+"captured output" symmetrically (path B JIT side will mirror).
+
+Tests: 7 new unit tests in vais-mir/tests/interpreter_tests.rs cover
+each builtin individually plus a fall-through guard:
+- intercept_print_str_captures_string
+- intercept_println_appends_newline
+- intercept_print_int_formats_integer
+- intercept_print_float_formats_double
+- intercept_print_bool_formats_true_false
+- intercept_eprint_eprintln_route_to_same_sink_as_print
+- intercept_unknown_builtin_falls_through_to_body_lookup_error
+  (regression guard: the intercept must not silently swallow
+  arbitrary unknown function names)
+
+Total interpreter_tests: 13/13 pass (3 prior + 3 stage 5a + 7 B.5).
+INTEGRITY OK preserved (vais-mir-only change; no other crate touched).

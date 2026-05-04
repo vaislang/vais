@@ -155,17 +155,35 @@ impl<'a> Interpreter<'a> {
     /// is active, push the formatted args into the sink and return
     /// `Some(MirValue::Unit)`. Returns `None` if the call should not be
     /// intercepted.
+    ///
+    /// Recognized builtins (Step 17 stage 5a + B.5 expansion):
+    ///
+    /// | builtin       | behavior                                       | newline |
+    /// |---------------|------------------------------------------------|---------|
+    /// | print         | each arg formatted via write_value             | no      |
+    /// | print_str     | alias of print (legacy std API)                | no      |
+    /// | print_int     | first arg as i64 only                          | no      |
+    /// | print_float   | first arg as f64 only                          | no      |
+    /// | print_bool    | first arg as bool only ("true"/"false")        | no      |
+    /// | println       | each arg formatted via write_value             | yes     |
+    /// | eprint        | same as print but reserved for stderr later    | no      |
+    /// | eprintln      | same as println but reserved for stderr later  | yes     |
+    ///
+    /// Note: eprint/eprintln currently route to the same sink as print —
+    /// stage 5a does not split stdout vs stderr. A future stage may add a
+    /// separate stderr_sink; until then differential oracle treats both as
+    /// "captured output". JIT-side stage 5b will mirror the same model.
     fn try_intercept_builtin(&self, function: &str, args: &[MirValue]) -> Option<MirValue> {
         let sink = self.stdout_sink.as_ref()?;
         let mut buf = sink.borrow_mut();
         match function {
-            "print" | "print_str" => {
+            "print" | "print_str" | "eprint" => {
                 for arg in args {
                     Self::write_value(&mut buf, arg);
                 }
                 Some(MirValue::Unit)
             }
-            "println" => {
+            "println" | "eprintln" => {
                 for arg in args {
                     Self::write_value(&mut buf, arg);
                 }
@@ -176,6 +194,19 @@ impl<'a> Interpreter<'a> {
                 if let Some(MirValue::Int(n)) = args.first() {
                     use std::fmt::Write;
                     let _ = write!(&mut *buf, "{}", n);
+                }
+                Some(MirValue::Unit)
+            }
+            "print_float" => {
+                if let Some(MirValue::Float(f)) = args.first() {
+                    use std::fmt::Write;
+                    let _ = write!(&mut *buf, "{}", f);
+                }
+                Some(MirValue::Unit)
+            }
+            "print_bool" => {
+                if let Some(MirValue::Bool(b)) = args.first() {
+                    buf.push_str(if *b { "true" } else { "false" });
                 }
                 Some(MirValue::Unit)
             }
