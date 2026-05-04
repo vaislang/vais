@@ -721,3 +721,41 @@ Impact
   reclassified (A4-03/05) + 1/11 remaining (A4-07 numeric widening,
   scope ~221 sites — significantly larger than A4-06's 75 total).
 
+
+---
+
+### F-20 — A4-07 std codemod LANDED 2026-05-04 (Step 13 stage 0 std slice)
+
+Recon for A4-07 strict-default flip cost. Probing std and vaisdb with
+`VAIS_REJECT_A4_07=1` shows std 82→76 (-6) and vaisdb 261→45 (-216).
+
+The vaisdb scope (216 files) is significantly larger than A4-06's
+25 files — the master-plan v16 estimate of "std 6 + vaisdb 215"
+is confirmed. This is the bulk of the remaining §A4 timeline.
+
+Migration patterns (from std)
+
+  exit(1)                      → exit(1 as i32)
+  setenv(name, value, 1)       → setenv(name, value, 1 as i32)
+  srand(seed)                  → srand(seed as i32)
+  puts_ptr(self.data)          → puts_ptr(self.data) as i64
+  rand()                       → rand() as i64
+  usleep(micros)               → usleep(micros) as i64
+
+Common cause: builtin extern functions (`exit`, `setenv`, `srand`,
+`usleep`, `rand`, `puts_ptr`) take or return i32 per C ABI, but Vais
+literal integers default to i64 and call sites unify silently. Fix
+is explicit `as iN` cast at call site OR (for return-position) cast
+the call expression result.
+
+Std side LANDED (6 files / 8 sites): std/contract.vais, std/env.vais,
+std/random.vais, std/string.vais, std/owned_string.vais, std/time.vais.
+
+Vaisdb side DEFERRED (216 files / ~213 sites estimated). Heterogeneous
+patterns include: u32 vs i64 (atomic store sites: `active_writer.store(txn_id)`),
+function return widening, struct field assignment, comparison RHS
+type mismatch. Multi-iter codemod required.
+
+Status: A4-07 stays Stage 0 (opt-in via VAIS_REJECT_A4_07=1) until
+vaisdb codemod completes. Strict default flip is multi-iter follow-up.
+

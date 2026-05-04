@@ -71,7 +71,7 @@ C LCG_M: i64 = 2147483648       # Modulus (2^31)
 # Set the random seed for the LCG
 F random_seed(seed: i64) -> i64 {
     rng_state = seed
-    srand(seed)  # Also seed C rand() for compatibility
+    srand(seed as i32)  # Also seed C rand() for compatibility
     0
 }
 
@@ -92,7 +92,7 @@ F random_i64() -> i64 {
 # Generate a random i64 using C rand()
 # Returns a random number from C stdlib
 F random_c() -> i64 {
-    rand()
+    rand() as i64
 }
 
 # Generate a random number in range [min, max] (inclusive)

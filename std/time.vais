@@ -239,7 +239,7 @@ F sleep_millis(millis: i64) -> i64 {
         0
     } EL {
         micros := millis * 1000
-        usleep(micros)
+        usleep(micros) as i64
     }
 }
 
@@ -248,7 +248,7 @@ F sleep_micros(micros: i64) -> i64 {
     I micros <= 0 {
         0
     } EL {
-        usleep(micros)
+        usleep(micros) as i64
     }
 }
 
@@ -257,7 +257,7 @@ F sleep_secs(secs: i64) -> i64 {
     I secs <= 0 {
         0
     } EL {
-        usleep(secs * 1000000)
+        usleep(secs * 1000000) as i64
     }
 }
 

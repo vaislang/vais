@@ -31,7 +31,7 @@ F __contract_fail(kind: i64, condition: str, file: str, line: i64, func: str) ->
     }
     printf("  Condition: %s\n", condition)
     printf("  Location: %s:%d in function '%s'\n", file, line, func)
-    exit(1)
+    exit(1 as i32)
     0
 }
 
@@ -39,6 +39,6 @@ F __contract_fail(kind: i64, condition: str, file: str, line: i64, func: str) ->
 # msg: error message to display
 F __panic(msg: str) -> i64 {
     printf("panic: %s\n", msg)
-    exit(1)
+    exit(1 as i32)
     0
 }

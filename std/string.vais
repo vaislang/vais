@@ -163,7 +163,7 @@ X String {
 
     # Print the string
     F print(&self) -> i64 {
-        puts_ptr(self.data)
+        puts_ptr(self.data) as i64
     }
 
     # ===== Additional String Methods =====
