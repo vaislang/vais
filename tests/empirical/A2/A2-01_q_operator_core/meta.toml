@@ -3,7 +3,7 @@ id = "A2-01"
 classification = "A2 certified subset"
 surface = "`?` operator on Result/Option (Core-typed, single-module)"
 predicate = "see compiler/docs/certification/A2_SUBSETS.md §A2-01"
-master_plan_version = 16
+master_plan_version = 17
 landed = "2026-05-03"
 
 [positive]

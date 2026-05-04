@@ -1,0 +1,14 @@
+U inner
+
+F outer() -> Result<i64, str> {
+    x: i64 = inner_call()?
+    R Ok(x + 1)
+}
+
+F main() -> i64 {
+    res := outer()
+    M res {
+        Ok(v) => v,
+        Err(_) => -1,
+    }
+}

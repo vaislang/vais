@@ -3,7 +3,7 @@ id = "A2-04"
 classification = "A2 certified subset (inline-only)"
 surface = "Closures: closure literal passed directly to a closure-typed parameter without escape"
 predicate = "see compiler/docs/certification/A2_SUBSETS.md §A2-04 — inline-only closure use"
-master_plan_version = 16
+master_plan_version = 17
 landed = "2026-05-04"
 
 [positive]
