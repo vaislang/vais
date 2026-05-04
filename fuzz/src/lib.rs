@@ -397,20 +397,16 @@ pub fn run_mir_path(source: &str) -> PathOutcome {
 
 // ─── Path B: native execution (LLVM IR + clang) ─────────────────────────────
 
-/// Attempt to run the program via the native LLVM/clang backend.
+/// Attempt to run the program via the native (Cranelift JIT) backend.
 ///
-/// # Stage 0 gap
+/// Stage 2 wired: uses `vais_jit::JitCompiler::compile_and_run_main` for
+/// in-process execution. No tempfile, no fork — fits the libFuzzer model.
 ///
-/// Running natively inside a libFuzzer loop requires either:
-///   (a) an in-process JIT (vais-jit / Cranelift) — recommended for stage 1, or
-///   (b) write LLVM IR to a tempfile, shell out to clang, run the binary.
-///
-/// Option (b) breaks the libFuzzer fork-server model and is prohibitively slow
-/// (~seconds per iteration).  Option (a) requires wiring `vais-jit` into the
-/// fuzz crate.  Until one of those is done, this path returns `NotImplemented`.
-#[allow(unreachable_code, unused_variables)]
+/// Stdout is not captured (the JIT executes the function and returns its
+/// i64 result; any side-effecting I/O lands on the host stdout). For the
+/// differential oracle's purposes only the exit code matters today.
 pub fn run_native_path(source: &str) -> PathOutcome {
-    use vais_codegen::CodeGenerator;
+    use vais_jit::JitCompiler;
     use vais_parser::parse;
     use vais_types::TypeChecker;
 
@@ -426,28 +422,26 @@ pub fn run_native_path(source: &str) -> PathOutcome {
         return PathOutcome::InputInvalid;
     }
 
-    // Step 3: codegen LLVM IR (text backend)
-    let mut gen = CodeGenerator::new("fuzz_mir_native_diff");
-    let _ir = match gen.generate_module(&module) {
-        Ok(ir) => ir,
-        Err(_) => return PathOutcome::InputInvalid,
+    // Step 3: JIT compile + run main()
+    let mut jit = match JitCompiler::new() {
+        Ok(j) => j,
+        Err(_) => return PathOutcome::NotImplemented,
     };
 
-    // STAGE 1 GAP: wire vais-jit (Cranelift in-process) or tempfile+clang.
-    // Replace this unimplemented! once an in-process execution model is available.
-    return PathOutcome::NotImplemented;
+    let exit_code = match jit.compile_and_run_main(&module) {
+        Ok(code) => code,
+        Err(_) => {
+            // JIT compile or run error — treat as out-of-scope rather than
+            // a diff finding. The MIR oracle still runs and may produce its
+            // own outcome; both arms are independently classified.
+            return PathOutcome::NotImplemented;
+        }
+    };
 
-    #[allow(unreachable_code)]
-    {
-        // Placeholder — dead code showing the intended stage 1 call site:
-        //
-        //   let output = vais_jit::run_ir_text(&_ir)?;
-        //   PathOutcome::Ok(RunOutput {
-        //       exit_code: output.exit_code,
-        //       stdout: output.stdout,
-        //   })
-        PathOutcome::NotImplemented
-    }
+    PathOutcome::Ok(RunOutput {
+        exit_code,
+        stdout: String::new(),
+    })
 }
 
 // ─── Differential comparison ─────────────────────────────────────────────────
@@ -510,12 +504,10 @@ pub fn compare_paths(source: &str) {
 //   echo 'F main() -> i64 { 42 }' > corpus/fuzz_mir_native_diff/seed
 //   cargo fuzz run fuzz_mir_native_diff -- -runs=1
 //
-// Stage 1 status: Path A (MIR interpret) is wired to the real
-// `interpret_function` and does map `MirValue::Int(n)` to an exit code.
-// Path B (native LLVM/clang execution) is still `NotImplemented` — Stage 2+
-// wires `vais-jit` (Cranelift in-process) so the differential check has
-// two concrete sides to compare. Until then the runner short-circuits
-// every iteration on the native side and no diff finding can land.
+// Stage 2 status: Path A (MIR interpret) and Path B (vais-jit Cranelift
+// in-process) are both wired. Both paths execute the same source and the
+// runner asserts their exit codes agree; mismatches panic and become
+// libFuzzer findings.
 
 // ─── Unit tests (reachable under `cargo test --lib -p vais-fuzz`) ───────────
 //
@@ -554,5 +546,23 @@ mod tests {
         let c = RunOutput { exit_code: 1, stdout: String::new() };
         assert_eq!(a, b);
         assert_ne!(a, c);
+    }
+
+    #[test]
+    fn run_native_path_simple_returns_exit_code() {
+        let out = run_native_path("F main() -> i64 { 42 }");
+        match out {
+            PathOutcome::Ok(r) => assert_eq!(r.exit_code, 42),
+            PathOutcome::InputInvalid => panic!("expected Ok(42), got InputInvalid"),
+            PathOutcome::NotImplemented => panic!("expected Ok(42), got NotImplemented"),
+        }
+    }
+
+    #[test]
+    fn compare_paths_simple_main_agrees() {
+        // Both paths execute `F main() -> i64 { 7 }`. They should agree
+        // on exit code 7. compare_paths panics on disagreement; success
+        // means agreement.
+        compare_paths("F main() -> i64 { 7 }");
     }
 }

@@ -123,3 +123,45 @@ Verification
 
   cargo check --bin fuzz_mir_native_diff: success.
   bash compiler/scripts/check-integrity.sh: INTEGRITY OK.
+
+---
+
+## Stage 2 Path B LANDED — vais-jit Cranelift in-process (2026-05-04)
+
+`run_native_path` now uses `vais_jit::JitCompiler::compile_and_run_main`
+to execute the program in-process via Cranelift. No tempfile, no fork
+— fits the libFuzzer model that previously blocked option (b).
+
+Layout
+
+  fuzz/Cargo.toml         — added `vais-jit = { path = "..." }` dependency.
+  fuzz/src/lib.rs:run_native_path
+                          — parse → type-check → JitCompiler::new →
+                            compile_and_run_main(&module). Returns
+                            PathOutcome::Ok(RunOutput { exit_code, ... }).
+                            JIT init/compile errors map to NotImplemented
+                            (out-of-scope, same as before — no false
+                            findings). stdout is empty (JIT writes to
+                            host stdout; oracle compares exit code only).
+
+Verification
+
+  cargo test --lib -p vais-fuzz: 6/6 passed.
+    - 4 prior (compare_paths_*, run_output_eq_basic) — still green.
+    - 2 NEW:
+        run_native_path_simple_returns_exit_code: probes
+          `F main() -> i64 { 42 }` via Path B and asserts exit=42.
+        compare_paths_simple_main_agrees: probes
+          `F main() -> i64 { 7 }` through both paths and asserts no
+          divergence panic.
+
+  bash scripts/check-integrity.sh: INTEGRITY OK (no regression).
+
+Stage 2 deliverables now complete:
+  - F-MIR-01 RESOLVED (panic-free oracle)
+  - F-MIR-02 RESOLVED (lib refactor; tests reachable)
+  - Path B wired (this section)
+
+Real differential findings can now land. The fuzz binary
+fuzz_mir_native_diff is ready to run as `cargo fuzz run` for finding
+discovery work in stage 3+.

@@ -18,6 +18,7 @@ vais-parser = { path = "../crates/vais-parser" }
 vais-types = { path = "../crates/vais-types" }
 vais-codegen = { path = "../crates/vais-codegen" }
 vais-mir = { path = "../crates/vais-mir" }
+vais-jit = { path = "../crates/vais-jit" }
 
 [[bin]]
 name = "fuzz_lexer"
