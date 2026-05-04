@@ -502,3 +502,58 @@ Recommendation:
 Status: A4-05 fixture continues to use the override-via-A4-02 path
 (probe trips A4-02 first); no user-level migration was needed and
 none is recommended.
+
+---
+
+### F-17 — A4-03 Auto-deref &T↔T also IR-lowering glue (2026-05-04)
+
+Stage 1 attempt for A4-03 (Auto-deref &T ↔ T) found that strict mode
+fires not just on the user-level "ptr-as-value" case but also on
+generic-method receivers where inference produces `Ref(Var)`
+intermediate types. Repro:
+
+```vais
+F take_i64(x: i64) -> i64 { R x }
+F main() -> i64 {
+    val: i64 = 42
+    r: &i64 = &val
+    R take_i64(r)            # this IS the A4-03 surface — should reject
+}
+
+# but also:
+S ByteBuffer { ... }
+X ByteBuffer {
+    F from_buf(other: &ByteBuffer) -> ByteBuffer { ... }
+    F clone(self) -> ByteBuffer {
+        ByteBuffer.from_buf(&self)   # this is NOT a user-level coercion —
+                                      # both sides are Ref. But strict A4-03
+                                      # still rejects because inference
+                                      # produces Ref(Var) intermediate that
+                                      # routes through the (Ref, *) arm before
+                                      # the (Ref, Ref) arm at line 252 fires.
+    }
+}
+```
+
+Strict-mode footprint reflects this: 4 std + 149 vaisdb files. The
+vast majority are Ref(X) ↔ Ref(Var) generic-inference unifications,
+not the actual implicit-deref pattern.
+
+Tightening attempt (only fire strict when other is NOT a Ref) was
+implemented and reverted — it produced identical footprint (still
+4/149) because the offending paths use `Var` inner types that do
+match the legacy `Ref(_), other` arm before reaching the typed
+(Ref, Ref) arm.
+
+Recommendation:
+- Reclassify A4-03 from A4-runtime-silent to **Controlled
+  (compiler-internal IR lowering)**, joining A4-05 per F-16. Both
+  are unifier glue rather than user-level implicit coercions.
+- Keep VAIS_REJECT_A4_03=1 as an opt-in for users who want to
+  surface the actual ptr-as-value cases (probe runs prove strict
+  mode catches `take_i64(r)` where `r: &i64`).
+- Decision deferred to next master-plan revision; no compiler change
+  in this commit.
+
+Status: A4-03 stays Stage 0 opt-in. master-plan §A4-03 candidate for
+Controlled reclassification.

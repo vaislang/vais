@@ -672,6 +672,15 @@ impl TypeChecker {
             // A4-03 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode
             // via VAIS_REJECT_A4_03=1. Default preserves the legacy silent
             // coercion so the baseline does not move.
+            //
+            // 2026-05-04 NOTE: strict mode also fires on (Ref(X), Ref(Var))
+            // generic-inference unifications because Var sides do NOT match
+            // the (Ref(a), Ref(b)) arm at line 252 cleanly under all paths.
+            // This makes A4-03 strict mode produce false positives in
+            // generic-method receivers (e.g. ByteBuffer.from_buf(&self)
+            // where the param is `other: &ByteBuffer` but inference produces
+            // `Ref(Var)` first). Treating A4-03 as a reclass candidate
+            // (Controlled, IR-internal) per F-17 — see STEP7_FINDINGS.
             (ResolvedType::Ref(inner), other) | (other, ResolvedType::Ref(inner)) => {
                 if std::env::var("VAIS_REJECT_A4_03").as_deref() == Ok("1") {
                     Err(crate::TypeError::Mismatch {
