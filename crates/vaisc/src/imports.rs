@@ -148,7 +148,10 @@ pub(crate) fn load_module_with_imports_internal(
     // Collect items, processing imports, and build modules_map for per-module codegen
     let mut all_items = Vec::new();
     let mut modules_map: HashMap<PathBuf, Vec<usize>> = HashMap::new();
-    let base_dir = path.parent().unwrap_or(Path::new("."));
+    let base_dir = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => Path::new("."),
+    };
 
     for item in ast.items.iter() {
         match &item.node {
@@ -282,7 +285,10 @@ pub(crate) fn load_module_with_imports_parallel(
         println!("  {} items", ast.items.len());
     }
 
-    let base_dir = path.parent().unwrap_or(Path::new("."));
+    let base_dir = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => Path::new("."),
+    };
 
     // Phase 1: Collect all import paths first
     let mut import_paths: Vec<PathBuf> = Vec::new();
