@@ -859,3 +859,64 @@ Remaining work: ROADMAP Step 13 status string update + permanent
 fixture audit per master-plan §Empirical protocol step (positive
 post-migration + negative pre-migration rejected per entry).
 
+---
+
+### F-23 — A2-03 dyn dispatch silently calls first impl (NEW A4 candidate, 2026-05-04)
+
+Discovered during A2-03 (dyn / trait object dispatch) promotion
+attempt for Step 9. Probe:
+
+```vais
+W Greeter { F greet(self) -> i64 }
+S Hello {}
+S World {}
+X Hello: Greeter { F greet(self) -> i64 { R 42 } }
+X World: Greeter { F greet(self) -> i64 { R  7 } }
+
+F call_dyn(g: &dyn Greeter) -> i64 { g.greet() }
+
+F main() -> i64 {
+    w := World {}
+    call_dyn(&w)         # expected 7, observed 42
+}
+```
+
+Direct dispatch (`World{}.greet()`) returns 7 — correct. Cross-impl
+dyn dispatch routes to the FIRST registered impl method (Hello.greet),
+ignoring the runtime type. Silent corruption.
+
+vaisdb impact (potential): `lang/packages/vaisdb/src/sql/executor/
+sort_agg.vais` uses `Box<dyn Executor>` chains for SortExecutor /
+DistinctExecutor / etc. Each `.next()` call on the dyn-boxed inner
+executor may dispatch to the wrong impl. **vaisdb runtime smoke 28/28
+masks this** because the smoke fixtures may not exercise the multi-
+impl-per-trait paths that surface the bug. Step 18 product-broad
+fuzzing or a dedicated runtime probe would surface real downstream
+defects.
+
+vector/hnsw also uses `&mut dyn NodeStore` (delete.vais:106,248,460;
+insert.vais:258). Probability of cross-impl in same binary unknown
+without further recon.
+
+Implications:
+- A2-03 promotion is BLOCKED. No predicate over the current dispatch
+  surface is honest until the impl-selection bug is fixed.
+- This is a TRUE silent surface (type-checks, runs, returns wrong
+  value). Per L-002 it qualifies for A4 inventory expansion.
+
+Recommendation:
+- Defer A2-03 promotion until the dyn-dispatch bug is fixed in
+  codegen / vtable lowering.
+- Add candidate **A4-12: dyn dispatch impl-selection bug** to the
+  master plan v18 reclass round, with this finding as the v1
+  evidence + the Hello/World probe as the permanent fixture.
+- Investigate root cause: `crates/vais-codegen/src/inkwell/`
+  trait-object lowering. Likely the vtable lookup is constant-folded
+  to the first impl during monomorphization rather than indirected
+  through the fat-pointer's vtable slot.
+
+Status: A2-03 promotion BLOCKED. F-23 logged as NEW A4 candidate.
+Master plan v17 Step 9 status retained at "A2-03 DEFERRED" (now with
+explicit silent-surface evidence rather than just parser/resolver
+hand-wave).
+
