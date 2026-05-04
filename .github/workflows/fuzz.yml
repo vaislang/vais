@@ -99,8 +99,25 @@ jobs:
           path: fuzz/corpus/${{ matrix.target }}/
           retention-days: 7
 
+  # NOTE: workspace-wide sanitizer + miri jobs in this workflow are
+  # SUPERSEDED by the dedicated workflows .github/workflows/asan.yml
+  # and .github/workflows/tsan.yml, which already gate on push/pull_request
+  # with continue-on-error: false (PR-blocking) on the targeted packages
+  # (vais-lexer / vais-parser / vais-ast / vais-types).
+  #
+  # The blocks below remain as best-effort coverage for the broader
+  # workspace and Miri. Master Plan v17 §I-6 Step 17 stage 4:
+  #   - sub-step 4a (LANDED 2026-05-04): Per-package ASAN/TSAN PR-blocking
+  #     gates already exist in asan.yml/tsan.yml. This file's broader
+  #     workspace ASAN/UBSAN remain best-effort to avoid double-running
+  #     the same coverage with different timeouts.
+  #   - sub-step 4b (DEFERRED): Miri PR-blocking promotion. Requires a
+  #     multi-day stability run on the 4 core crates (lexer/parser/ast/
+  #     types) with -Zmiri-disable-isolation -Zmiri-tree-borrows to
+  #     surface and fix any false-positive borrow-stack violations
+  #     before PR-blocking is safe.
   sanitizer-tests:
-    name: Sanitizer Tests
+    name: Sanitizer Tests (workspace, best-effort)
     runs-on: ubuntu-latest
 
     steps:
@@ -129,7 +146,7 @@ jobs:
         continue-on-error: true
 
   miri-tests:
-    name: Miri Undefined Behavior Check
+    name: Miri Undefined Behavior Check (best-effort, see Step 17 stage 4b)
     runs-on: ubuntu-latest
 
     steps:
