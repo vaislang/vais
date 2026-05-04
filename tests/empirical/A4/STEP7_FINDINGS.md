@@ -908,8 +908,9 @@ Recommendation:
 - Defer A2-03 promotion until the dyn-dispatch bug is fixed in
   codegen / vtable lowering.
 - Add candidate **A4-12: dyn dispatch impl-selection bug** to the
-  master plan v18 reclass round, with this finding as the v1
-  evidence + the Hello/World probe as the permanent fixture.
+  next master plan revision after v17 (reclass round), with this
+  finding as the v1 evidence + the Hello/World probe as the
+  permanent fixture.
 - Investigate root cause: `crates/vais-codegen/src/inkwell/`
   trait-object lowering. Likely the vtable lookup is constant-folded
   to the first impl during monomorphization rather than indirected

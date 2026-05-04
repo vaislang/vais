@@ -1,0 +1,50 @@
+[entry]
+id = "A2-05"
+classification = "A2 certified subset"
+surface = "fn-pointer parameter types in std API (bounded to existing std use; multi-impl dispatch verified non-silent)"
+predicate = "see compiler/docs/certification/A2_SUBSETS.md §A2-05 (TBD)"
+master_plan_version = 17
+landed = "2026-05-04"
+
+[positive]
+probe = "probe_pos.vais"
+expected_exit = 50
+description = """
+F apply(f: fn(i64) -> i64, n: i64) -> i64 { f(n) }
+F main() -> i64 { apply(double, 10) + apply(triple, 10) }
+
+Multi-impl dispatch verified: 20 + 30 = 50. Different fn-pointer
+arguments produce different runtime results, proving the dispatch is
+genuinely indirected (not constant-folded to one impl).
+
+This stands in contrast to A2-03 dyn dispatch, which IS silently
+constant-folded to the first impl (STEP7_FINDINGS F-23). The fn-pointer
+path uses LLVM's plain function-pointer indirection without vtable
+lookup, which is why the bug present in dyn dispatch does not surface
+here.
+"""
+
+[negative]
+probe = "probe_neg.vais"
+expected_behavior = "vaisc check rejects with E001 'expected fn(i64)->i64, found i64'"
+description = "i64 literal passed where fn(i64) -> i64 expected; type checker rejects at vaisc check before any link/build step."
+
+[verification]
+verified_date = "2026-05-04"
+verifier_command = "bash run.sh"
+verifier_expected_stdout_substring = "A2-05 OK: positive multi-impl fn-pointer dispatch exits 50"
+
+[baseline_uses]
+# Real-world fn-pointer parameter call sites that this fixture protects.
+std = [
+  "compiler/std/proptest.vais:334 call_test_fn(fn_ptr: i64, ...)",
+]
+vaisdb = [
+  "lang/packages/vaisdb/src/server/connection.vais:361 fn(&mut Connection) -> T",
+  "lang/packages/vaisdb/src/server/connection.vais:374 fn(&Connection) -> T",
+  "lang/packages/vaisdb/src/fulltext/integration/sql.vais:119 predicate_fn: fn(&FullTextMatchResult) -> bool",
+  "lang/packages/vaisdb/src/storage/page/manager.vais:227 set_migration_hook(hook: fn(&Vec<u8>, u8) -> Result<(), VaisError>)",
+]
+
+[migration]
+post_predicate_change = "If A2-05 ever tightens (e.g. limit fn-pointer to specific arity / types), update probe_pos to test the freshly-narrowed surface."
