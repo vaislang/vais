@@ -11,7 +11,7 @@ on:
         required: false
         default: '300'
       target:
-        description: 'Fuzz target (fuzz_lexer, fuzz_parser, fuzz_type_checker, fuzz_codegen, fuzz_full_pipeline, all)'
+        description: 'Fuzz target (fuzz_lexer, fuzz_parser, fuzz_type_checker, fuzz_codegen, fuzz_full_pipeline, fuzz_mir_native_diff, all)'
         required: false
         default: 'all'
 
@@ -25,7 +25,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [fuzz_lexer, fuzz_parser, fuzz_type_checker, fuzz_codegen]
+        # fuzz_mir_native_diff (Master Plan v17 §I-6 Step 17 stage 3): the
+        # MIR-vs-native differential oracle. Path A (MIR interpreter) and
+        # Path B (vais-jit Cranelift in-process) both LANDED 2026-05-04.
+        # Nightly runs surface diff findings if the two arms disagree.
+        target: [fuzz_lexer, fuzz_parser, fuzz_type_checker, fuzz_codegen, fuzz_mir_native_diff]
 
     steps:
       - name: Checkout repository
@@ -48,6 +52,19 @@ jobs:
           key: fuzz-corpus-${{ matrix.target }}-${{ github.sha }}
           restore-keys: |
             fuzz-corpus-${{ matrix.target }}-
+
+      - name: Seed corpus from tracked seeds
+        # corpus/ is gitignored; cached corpus may be empty on first run.
+        # corpus_seeds/<target>/ is the tracked initial seed set. Copy any
+        # missing seeds into corpus/<target>/ before fuzzing.
+        run: |
+          if [ -d "fuzz/corpus_seeds/${{ matrix.target }}" ]; then
+            mkdir -p "fuzz/corpus/${{ matrix.target }}"
+            cp -n fuzz/corpus_seeds/${{ matrix.target }}/* fuzz/corpus/${{ matrix.target }}/ 2>/dev/null || true
+            echo "Seeded $(ls fuzz/corpus/${{ matrix.target }} | wc -l) entries"
+          else
+            echo "No tracked seeds for ${{ matrix.target }}; relying on cache + libFuzzer mutation"
+          fi
 
       - name: Run fuzzer
         working-directory: fuzz
