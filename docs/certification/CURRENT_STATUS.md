@@ -39,6 +39,30 @@ current Core contract and promoted smoke gates pass with the evidence below.
 | Full Rust-hosted compiler test run | Last completed RC baseline: `cargo test --release` exit code `0`; latest current-batch attempt was interrupted after e2e/integrity passed because `registry_e2e_tests` hung at dyld start |
 | Diff whitespace check | `git diff --check` clean |
 
+## Canonical Gate Baseline
+
+The table below is **auto-generated** from `GATE_MANIFEST.toml` by
+`scripts/render-gate-tables.py` (Master Plan v17 §I-2 Step 12). The
+free-form §Verified Gates table above intentionally retains narrative
+context per row; the canonical baseline below is the machine-readable
+single source for current pass counts. CI fails on drift.
+
+<!-- gate-table:auto-start -->
+| Gate | Current status |
+|---|---|
+| Core certification | `CORE_CERTIFICATION pass=16 fail=0 total=16` |
+| MIR strict gate | `MIR OK` |
+| Codegen invariant gate | `CODEGEN OK` |
+| Unsafe documentation audit | `UNSAFE AUDIT OK: vais-codegen undocumented_unsafe_blocks=0` |
+| Ecosystem package codegen | `std=82/82`, `vaisdb=261/261` |
+| Backend smoke | `phase158=18/18` |
+| std/http_client runtime | `smoke=1/1` |
+| VaisDB runtime | `smoke=28/28` |
+| vais-server runtime | `smoke=13/13` |
+| vais-web runtime | `smoke=23/23` |
+| Cross-package schema gate | `gate=2/2` |
+<!-- gate-table:auto-end -->
+
 ## Meaning of the Result
 
 The compiler is currently certified only for the explicit Core surface described
