@@ -62,10 +62,12 @@ pub enum Token {
     #[token("L", priority = 3)]
     Loop,
     #[token("M", priority = 3)]
+    #[token("match", priority = 3)]
     Match,
     #[token("A", priority = 3)]
     Async,
     #[token("R", priority = 3)]
+    #[token("return", priority = 3)]
     Return,
     #[token("B", priority = 3)]
     Break,
@@ -97,6 +99,7 @@ pub enum Token {
     #[token("EN", priority = 4)]
     EnumKeyword, // Unambiguous enum (replaces contextual E)
     #[token("EL", priority = 4)]
+    #[token("else", priority = 4)]
     Else, // Unambiguous else (replaces contextual E after if)
     #[token("LF", priority = 4)]
     ForEach, // Unambiguous for-each loop (replaces contextual L pattern:iter)

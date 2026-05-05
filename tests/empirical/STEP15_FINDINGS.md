@@ -15,6 +15,8 @@ the prerequisite.
 | ID | 한 줄 요약 |
 |---|---|
 | F-15-01 | `vaisc fmt --rename-keyword-collisions` skeleton LANDED + 13-keyword baseline scan: 106 collisions total (2026-05-05) |
+| F-15-02 | Stage 1 first wave LANDED: 5 zero-collision multi-char keywords as Logos token aliases (2026-05-05) |
+| F-15-03 | Stage 1 second wave first sub-batch LANDED: else / match / return aliases + bare keyword shadow gate (2026-05-05) |
 
 ## Findings
 
@@ -170,3 +172,89 @@ remaining 8 keywords (now safe). Multi-iter.
 
 Status: Step 15 stage 1 first wave LANDED. master-plan v26 → v27.
 Stage 1.2+ remains IN_PROGRESS.
+
+### F-15-03 — Stage 1 second wave first sub-batch LANDED (2026-05-05)
+
+3 multi-char keywords added as Logos token aliases on top of v27's
+5-keyword first wave:
+
+```rust
+#[token("EL", priority = 4)]
+#[token("else", priority = 4)]
+Else,
+
+#[token("M", priority = 3)]
+#[token("match", priority = 3)]
+Match,
+
+#[token("R", priority = 3)]
+#[token("return", priority = 3)]
+Return,
+```
+
+`const` itself was already a lexer keyword from before Step 15. The
+LIVING_SPEC `const_*` collisions in
+`docs/language/LIVING_SPEC/01_keywords/comptime_function_body.vais`
+(6 sites: 3 function names + 3 call sites of `const_thirtytwo` /
+`const_sum` / `const_branch`) were renamed to `_const_*` so the file
+no longer trips Logos longest-match. No lexer change needed.
+
+Per-keyword cost (manual identifier renames before lexer alias):
+- else: 0 renames. `else_result` and `else_expr` are use-site
+  identifiers that Logos longest-match resolves as `Token::Ident`
+  even after `else` becomes a keyword (verified: integrity green
+  immediately after adding `#[token("else", priority = 4)]`).
+- match: 3 renames in `compiler/std/url.vais` (line 321/325/330,
+  bare `match := mut 1`, `match = 0`, `I match == 1` → `_match`).
+  Without the rename, `cargo build` succeeded but `vaisc check
+  std/url.vais` failed `error[P001] Unexpected token ColonEq`
+  because the bare identifier exactly equals the new keyword and
+  is no longer an Ident — Logos picks the keyword variant.
+- return: 0 renames. Baseline grep `\breturn\b\s*(:=|=)` returns
+  zero across compiler/std + lang/packages + LIVING_SPEC.
+
+INTEGRITY OK preserved post-batch (std=82/82, vaisdb=261/261,
+runtime smokes all green).
+
+#### Empirical lesson — bare keyword shadow gate
+
+The AST-level F-15-01 baseline (`is_collision` predicate counting
+declaration-position only) is correct for `else_result`-style
+**use-site prefix collisions**: Logos longest-match handles them
+because the identifier is *longer* than the keyword. But that gate
+**misses bare keyword shadows** — identifiers that equal the keyword
+exactly, in any position. Example: `match := mut 1` in url.vais.
+
+Wave 2 protocol must therefore add a complementary raw-grep gate:
+
+```bash
+grep -rEn '\b<kw>\b\s*(:=|=)' \
+    compiler/std/ \
+    lang/packages/ \
+    docs/language/LIVING_SPEC/ \
+    --include='*.vais'
+```
+
+If the grep hits any line, that bare identifier needs to be renamed
+to `_<kw>` before the lexer alias is added. Otherwise `vaisc check`
+on that file fails with P001 Unexpected token at the `:=` position.
+
+The full Wave 2 protocol is now:
+1. AST-level codemod gate (F-15-01) — counts declaration-position
+   collisions; gives a ceiling on AST-aware rename work.
+2. **Bare keyword shadow gate (F-15-03)** — `\b<kw>\b\s*(:=|=)` raw
+   grep; catches identifiers that equal the keyword exactly.
+3. Lexer alias addition.
+4. INTEGRITY measurement; revert per CLAUDE rule 4 if any decrease.
+
+#### Stage 1 second wave remainder (deferred)
+
+The remaining 4 collision keywords still need stage 1 rename:
+- fn 9 (declaration-position) + raw-grep TBD
+- mod 24 (declaration-position) + raw-grep TBD
+- type 10 (declaration-position) + raw-grep TBD
+- use 56 (declaration-position) + raw-grep TBD — largest surface
+
+Status: Step 15 stage 1 second wave first sub-batch LANDED.
+master-plan v27 → v28. Stage 1 remainder + stage 3 (vaisc fmt
+--to= flags + selfhost migration) remain IN_PROGRESS.
