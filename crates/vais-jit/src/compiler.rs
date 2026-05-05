@@ -672,6 +672,62 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
 
     /// Compiles a function call.
     fn compile_call(&mut self, name: &str, args: &[Spanned<Expr>]) -> Result<Value, JitError> {
+        // 5b-3 (DEFERRED #16, Step 17): intercept Vais print builtins
+        // and lower to vais_runtime_print(ptr, len) — a thunk registered
+        // by JitRuntime::register_stdlib (5b-2) that appends to
+        // STDOUT_SINK (5b-1). This restores the asymmetry guard's
+        // semantic precondition: JIT-compiled `print("x")` produces
+        // observable stdout that fuzz drivers can compare against the
+        // MIR-interpreter side.
+        //
+        // Currently only `print`/`println` with a single string-literal
+        // argument is handled; richer forms (interpolation,
+        // print_i64/print_f64) fall through to the generic call path
+        // (which won't capture into the sink — registered as a separate
+        // refinement task once the basic path is verified).
+        if (name == "print" || name == "println") && args.len() == 1 {
+            if let Expr::String(s) = &args[0].node {
+                let payload: String = if name == "println" {
+                    let mut owned = s.clone();
+                    owned.push('\n');
+                    owned
+                } else {
+                    s.clone()
+                };
+                let ptr = self.compile_string_literal(&payload)?;
+                let len = self
+                    .builder
+                    .ins()
+                    .iconst(types::I64, payload.len() as i64);
+
+                let mut sig = self.module.make_signature();
+                sig.params.push(AbiParam::new(self.type_mapper.pointer_type()));
+                sig.params.push(AbiParam::new(types::I64));
+                // Return type: void — represented as no returns in Cranelift sig.
+
+                let func_id = if let Some(&id) = self.external_functions.get("vais_runtime_print")
+                {
+                    id
+                } else {
+                    let id = self.module.declare_function(
+                        "vais_runtime_print",
+                        Linkage::Import,
+                        &sig,
+                    )?;
+                    self.external_functions
+                        .insert(String::from("vais_runtime_print"), id);
+                    id
+                };
+
+                let func_ref = self.module.declare_func_in_func(func_id, self.builder.func);
+                let _call = self.builder.ins().call(func_ref, &[ptr, len]);
+                // print/println return Unit in Vais; the JIT call ABI
+                // surfaces this as i64 0 to the caller (matches existing
+                // `iconst(I64, 0)` convention used elsewhere in this fn).
+                return Ok(self.builder.ins().iconst(types::I64, 0));
+            }
+        }
+
         // Compile arguments
         let mut arg_values = Vec::new();
         for arg in args {
