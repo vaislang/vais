@@ -1,10 +1,11 @@
 [entry]
 id = "A2-03"
 classification = "A2 certified subset"
-surface = "dyn / trait object dispatch (multi-impl, fat-pointer indirected via vtable)"
+surface = "dyn / trait object dispatch (multi-impl, fat-pointer indirected via vtable; both inkwell + text-IR backends)"
 predicate = "see compiler/docs/certification/A2_SUBSETS.md §A2-03 (TBD)"
-master_plan_version = 18
+master_plan_version = 22
 landed = "2026-05-05"
+dual_backend_landed = "2026-05-05"  # text-IR side via DEFERRED #19 (commits 70655014 + 48e9b848)
 
 [positive]
 probe = "probe_pos.vais"
@@ -44,7 +45,7 @@ description = "i64 passed where dyn Greet expected. The type checker currently a
 [verification]
 verified_date = "2026-05-05"
 verifier_command = "bash run.sh"
-verifier_expected_stdout_substring = "A2-03 OK: multi-impl dyn dispatch exits 49"
+verifier_expected_stdout_substring = "A2-03 OK: multi-impl dyn dispatch exits 49 on inkwell + text-IR"
 
 [baseline_uses]
 # Real-world dyn Trait call sites this fixture protects (subset; vaisdb
