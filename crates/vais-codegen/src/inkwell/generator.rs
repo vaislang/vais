@@ -420,6 +420,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 ast::Item::Global(global_def) => {
                     self.define_global(global_def)?;
                 }
+                ast::Item::Trait(t) => {
+                    // 2b-5a: register trait for inkwell-side vtable generation.
+                    // Dead until 2b-5b/2b-5c wire call sites.
+                    self.register_trait_from_ast_inkwell(t);
+                }
                 _ => {}
             }
         }
@@ -472,6 +477,23 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                     }
                                 }
                             }
+                            // 2b-5a: register trait impl for inkwell-side
+                            // vtable generation. method_impls maps each
+                            // trait method to the mangled inherent fn name
+                            // `<Type>_<method>` (matches declare_method
+                            // mangling). Default methods get
+                            // `<Trait>_<method>_default`.
+                            let mut method_impls = std::collections::HashMap::new();
+                            for method in &impl_block.methods {
+                                let fn_name =
+                                    format!("{}_{}", type_name, method.node.name.node);
+                                method_impls.insert(method.node.name.node.clone(), fn_name);
+                            }
+                            self.register_trait_impl_inkwell(
+                                &type_name,
+                                &trait_name.node,
+                                method_impls,
+                            );
                         }
                     }
                 }

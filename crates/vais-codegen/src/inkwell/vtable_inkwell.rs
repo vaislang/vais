@@ -20,7 +20,8 @@ use inkwell::module::Linkage;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};
 use inkwell::values::{BasicValueEnum, GlobalValue, StructValue};
 use inkwell::AddressSpace;
-use vais_types::TraitDef;
+use vais_types::{ResolvedType, TraitDef, TraitMethodSig, AssociatedTypeDef};
+use vais_ast::Trait as AstTrait;
 
 use super::generator::InkwellCodeGenerator;
 
@@ -82,10 +83,95 @@ impl InkwellVtableGenerator {
 #[allow(dead_code)] // Activated in 2b-5.
 impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Register a trait definition for inkwell-side vtable generation.
-    /// Mirrors text-IR `register_trait`. Inkwell-side does not currently
-    /// auto-call this from the AST first pass — 2b-5 will wire it.
+    /// Mirrors text-IR `register_trait`. Wired in 2b-5a.
     pub(super) fn register_trait_inkwell(&mut self, trait_def: TraitDef) {
         self.trait_defs.insert(trait_def.name.clone(), trait_def);
+    }
+
+    /// Build a `TraitDef` from an AST `Trait` node and register it.
+    /// Mirrors text-IR `register_trait_from_ast` (trait_dispatch.rs:15).
+    /// Wired in 2b-5a from `generate_module` Item::Trait handling.
+    pub(super) fn register_trait_from_ast_inkwell(&mut self, t: &AstTrait) {
+        let mut methods = std::collections::HashMap::new();
+        for m in &t.methods {
+            let params: Vec<(String, ResolvedType, bool)> = m
+                .params
+                .iter()
+                .map(|p| {
+                    let ty = if p.name.node == "self" {
+                        // self parameter is a pointer to the implementing type;
+                        // resolved at call site. Match text-IR placeholder.
+                        ResolvedType::I64
+                    } else {
+                        self.ast_type_to_resolved(&p.ty.node)
+                    };
+                    (p.name.node.clone(), ty, p.is_mut)
+                })
+                .collect();
+
+            let ret = m
+                .ret_type
+                .as_ref()
+                .map(|t| self.ast_type_to_resolved(&t.node))
+                .unwrap_or(ResolvedType::Unit);
+
+            let meth_name = m.name.node.clone();
+            methods.insert(
+                meth_name.clone(),
+                TraitMethodSig {
+                    name: meth_name,
+                    generics: m.generics.iter().map(|g| g.name.node.clone()).collect(),
+                    params,
+                    ret,
+                    has_default: m.default_body.is_some(),
+                    is_async: m.is_async,
+                    is_const: m.is_const,
+                },
+            );
+        }
+
+        // Associated types (mirror text-IR shape).
+        let mut associated_types = std::collections::HashMap::new();
+        for assoc in &t.associated_types {
+            let generics = assoc.generics.iter().map(|g| g.name.node.clone()).collect();
+
+            let mut generic_bounds = std::collections::HashMap::new();
+            for gen_param in &assoc.generics {
+                if !gen_param.bounds.is_empty() {
+                    generic_bounds.insert(
+                        gen_param.name.node.clone(),
+                        gen_param.bounds.iter().map(|b| b.node.clone()).collect(),
+                    );
+                }
+            }
+
+            let bounds = assoc.bounds.iter().map(|b| b.node.clone()).collect();
+            let default = assoc
+                .default
+                .as_ref()
+                .map(|d| self.ast_type_to_resolved(&d.node));
+
+            let assoc_name = assoc.name.node.clone();
+            associated_types.insert(
+                assoc_name.clone(),
+                AssociatedTypeDef {
+                    name: assoc_name,
+                    generics,
+                    generic_bounds,
+                    bounds,
+                    default,
+                },
+            );
+        }
+
+        let trait_def = TraitDef {
+            name: t.name.node.clone(),
+            generics: t.generics.iter().map(|g| g.name.node.clone()).collect(),
+            super_traits: t.super_traits.iter().map(|s| s.node.clone()).collect(),
+            associated_types,
+            methods,
+        };
+        self.register_trait_inkwell(trait_def);
     }
 
     /// Register a trait implementation: maps (impl_type, trait_name) to
