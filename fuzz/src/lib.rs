@@ -391,10 +391,15 @@ pub fn run_mir_path(source: &str) -> PathOutcome {
 /// Stage 2 wired: uses `vais_jit::JitCompiler::compile_and_run_main` for
 /// in-process execution. No tempfile, no fork — fits the libFuzzer model.
 ///
-/// Stdout is not captured (the JIT executes the function and returns its
-/// i64 result; any side-effecting I/O lands on the host stdout). For the
-/// differential oracle's purposes only the exit code matters today.
+/// 5b-4 (DEFERRED #16, Step 17): stdout capture is now wired. Vais
+/// `print`/`println` builtins inside JIT-compiled code call into
+/// `vais_runtime_print` (registered by JitRuntime in 5b-2), which appends
+/// the byte slice to a thread-local `STDOUT_SINK` (5b-1). After the JIT
+/// run we drain that sink via `take_stdout_sink` and return it as
+/// `RunOutput.stdout`. Both arms (MIR and JIT) now produce comparable
+/// stdout, which lets `compare_paths` drop the 5a asymmetry guard.
 pub fn run_native_path(source: &str) -> PathOutcome {
+    use vais_jit::runtime::take_stdout_sink;
     use vais_jit::JitCompiler;
     use vais_parser::parse;
     use vais_types::TypeChecker;
@@ -417,20 +422,26 @@ pub fn run_native_path(source: &str) -> PathOutcome {
         Err(_) => return PathOutcome::NotImplemented,
     };
 
+    // Drain any leftover sink content from a prior run (defensive — the
+    // sink is thread-local and prior fuzz iterations may have left bytes
+    // behind if a test hit an early-return path).
+    let _ = take_stdout_sink();
+
     let exit_code = match jit.compile_and_run_main(&module) {
         Ok(code) => code,
         Err(_) => {
             // JIT compile or run error — treat as out-of-scope rather than
             // a diff finding. The MIR oracle still runs and may produce its
             // own outcome; both arms are independently classified.
+            //
+            // Drain the sink so the next run starts clean.
+            let _ = take_stdout_sink();
             return PathOutcome::NotImplemented;
         }
     };
 
-    PathOutcome::Ok(RunOutput {
-        exit_code,
-        stdout: String::new(),
-    })
+    let stdout = take_stdout_sink();
+    PathOutcome::Ok(RunOutput { exit_code, stdout })
 }
 
 // ─── Differential comparison ─────────────────────────────────────────────────
@@ -451,18 +462,24 @@ pub fn compare_paths(source: &str) {
     match (mir_result, native_result) {
         // Both implemented and both succeeded — check for divergence.
         (PathOutcome::Ok(mir_out), PathOutcome::Ok(native_out)) => {
-            // Step 17 stage 5a asymmetry guard: the interpreter side
-            // (Path A) now captures stdout via the builtin print intercept,
-            // but the JIT side (Path B) still writes to host stdout (no
-            // capture yet — that's stage 5b). To avoid every print-call
-            // input becoming a false positive, only diff the stdout fields
-            // when BOTH sides produced non-empty output. When one side is
-            // empty, fall back to exit-code-only diff (the historical
-            // contract).
-            let stdout_diff_eligible =
-                !mir_out.stdout.is_empty() && !native_out.stdout.is_empty();
+            // 5b-4 (DEFERRED #16, Step 17): the 5a asymmetry guard is
+            // now removed. With JIT-side print capture wired in 5b-1
+            // /5b-2/5b-3 (vais_runtime_print thunk → STDOUT_SINK), both
+            // arms produce comparable stdout in all cases. Diagnostic
+            // equivalence is restored: any stdout divergence is a real
+            // finding.
+            //
+            // Caveat: only `print`/`println` with a single string-literal
+            // argument flows through the thunk today (5b-3). Richer
+            // forms (interpolation, print_i64/print_f64) still bypass
+            // the sink and fall back to host stdout. For those forms
+            // the JIT side will produce empty stdout while MIR captures
+            // the formatted output — a real (transitional) diff. We
+            // accept this as a known follow-up; the alternative is to
+            // re-introduce the 5a guard which permanently masks the
+            // categories of diffs we actually want this oracle to find.
             let exit_mismatch = mir_out.exit_code != native_out.exit_code;
-            let stdout_mismatch = stdout_diff_eligible && mir_out.stdout != native_out.stdout;
+            let stdout_mismatch = mir_out.stdout != native_out.stdout;
 
             if exit_mismatch || stdout_mismatch {
                 panic!(
@@ -470,7 +487,7 @@ pub fn compare_paths(source: &str) {
                      source:\n{}\n\
                      MIR    exit={} stdout={:?}\n\
                      native exit={} stdout={:?}\n\
-                     (exit_mismatch={}, stdout_mismatch={}, stdout_diff_eligible={})",
+                     (exit_mismatch={}, stdout_mismatch={})",
                     source,
                     mir_out.exit_code,
                     mir_out.stdout,
@@ -478,7 +495,6 @@ pub fn compare_paths(source: &str) {
                     native_out.stdout,
                     exit_mismatch,
                     stdout_mismatch,
-                    stdout_diff_eligible,
                 );
             }
         }
