@@ -29,5 +29,6 @@ mod gen_match;
 mod gen_special;
 mod gen_stmt;
 mod gen_types;
+mod vtable_inkwell;
 
 pub use generator::InkwellCodeGenerator;
