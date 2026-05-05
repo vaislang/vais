@@ -1,0 +1,63 @@
+[entry]
+id = "A4-13"
+classification = "A4 silent surface (Box<T> auto-unwraps to T at type-check call site)"
+surface = "Box<T> ↔ T auto-unwrap (call site)"
+site = "vais-types/checker_expr/calls.rs (Box<T> arg accepted where T expected)"
+master_plan_version = 23
+proposed_reclassification = "from [phase.rejected] (Rejected-02 Box ↔ T) to [phase.A4] A4-13"
+
+[v1_evidence]
+probe_summary = "F take_i64(x: i64) -> i64 { R x }; F take_box(b: Box<i64>) -> i64 { R take_i64(b) }"
+expected_per_design = "vaisc check rejects with stable error[E001] Type mismatch — Box<i64> is not i64. Master-plan v23 [phase.rejected] currently classifies this surface as rejected (E001)."
+actual_observed = "exit 0, OK No errors found (silent accept; type checker auto-unwraps Box<T> to T at the call site)"
+verified_date = "2026-05-05"
+
+[v2_evidence]
+status = "v1_verified_silent_accept"
+notes = """
+Multi-form probe pending (this fixture covers the function-call form).
+Other forms to probe in future iterations:
+  - assignment: `x: i64 = b` where b: Box<i64>
+  - return: `F f() -> i64 { R b }` where b: Box<i64>
+  - binary op: `b + 1` where b: Box<i64>
+
+History: F-11 (STEP7_FINDINGS, 2026-05-03) reported "v1 sentinel does
+NOT reproduce"; F-24 (2026-05-05) corrected this — the earlier negative
+result was a probe formulation issue (`L b: Box<i64>` let-binding form
+trips a parser P001 before the type checker runs). With the function-call
+form (this fixture's probe), the silent accept reproduces cleanly.
+
+Runtime probe (taking the silent accept and observing wrong runtime
+behavior) requires synthesizing a Box value. `Box::new(42)` is currently
+C002 Undefined function (no Box constructor in std). Runtime probe
+deferred until either Box::new lands in std or an extern shim path is
+defined.
+"""
+
+[migration]
+proposal = """
+Master-plan v24 (next revision) should:
+  1. Remove "Box ↔ T (auto-unwrap of Box content)" from [[phase.rejected]] —
+     it is empirically a silent A4 surface, not a Rejected one.
+  2. Add A4-13 entry to [[phase.A4.runtime_silent]] (or, if the silent path
+     is at the type-check layer rather than runtime, a new
+     [[phase.A4.typecheck_silent]] subgroup may be introduced).
+  3. Bump [phase.A4] {runtime_silent_count, total} or add the new subgroup
+     and total accordingly.
+
+Codemod (Step 13 stage 1+ when reached): wrap Box auto-unwrap call sites
+with explicit `*b` deref (the auto-unwrap site), then tighten the type
+checker to reject the implicit form.
+"""
+
+[assertion_kind]
+kind = "check_succeeds"
+required_stdout_patterns = ["OK No errors found"]
+rationale = """
+This fixture asserts the *current silent acceptance* (so a regression
+that adds the rejection without a master-plan flip is caught). When the
+A4 hard-block phase lands and the surface is rejected, this fixture's
+assertion_kind flips from `check_succeeds` to `check_fails` with
+required_stderr_patterns = ["E001", "Box"]. The presence of the
+rationale paragraph in this meta.toml makes the future flip auditable.
+"""
