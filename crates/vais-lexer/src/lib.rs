@@ -52,8 +52,10 @@ pub enum Token {
     #[token("F", priority = 3)]
     Function,
     #[token("S", priority = 3)]
+    #[token("struct", priority = 3)]
     Struct,
     #[token("E", priority = 3)]
+    #[token("enum", priority = 3)]
     Enum,
     #[token("I", priority = 3)]
     If,
@@ -74,10 +76,13 @@ pub enum Token {
     #[token("U", priority = 3)]
     Use,
     #[token("P", priority = 3)]
+    #[token("pub", priority = 3)]
     Pub,
     #[token("W", priority = 3)]
+    #[token("trait", priority = 3)]
     Trait,
     #[token("X", priority = 3)]
+    #[token("impl", priority = 3)]
     Impl,
     #[token("D", priority = 3)]
     Defer,

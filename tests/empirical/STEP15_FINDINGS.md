@@ -95,3 +95,78 @@ first.
 
 Status: Step 15 BLOCKED → IN_PROGRESS (master-plan v25 → v26). Stage
 0 (skeleton + baseline) LANDED. Stage 1+ tracked as multi-iter.
+
+### F-15-02 — Stage 1 first wave LANDED (2026-05-05)
+
+5 zero-collision multi-char keywords added to lexer as Logos token
+aliases. Both syntaxes work:
+
+```vais
+struct Point { x: i64, y: i64 }    # multi-char form
+trait Display { F show(self) -> i64 }
+impl Point: Display { F show(self) -> i64 { self.x + self.y } }
+enum Color { Red, Green, Blue }
+pub F main() -> i64 { Point { x: 3, y: 4 }.show() }
+```
+
+```vais
+S Point { x: i64, y: i64 }         # single-char form
+W Display { F show(self) -> i64 }
+X Point: Display { F show(self) -> i64 { self.x + self.y } }
+E Color { Red, Green, Blue }
+P F main() -> i64 { Point { x: 3, y: 4 }.show() }
+```
+
+Both probes type-check with exit 0, OK No errors found.
+
+Lexer changes (crates/vais-lexer/src/lib.rs):
+
+```rust
+#[token("S", priority = 3)]
+#[token("struct", priority = 3)]
+Struct,
+
+#[token("E", priority = 3)]
+#[token("enum", priority = 3)]
+Enum,
+
+#[token("P", priority = 3)]
+#[token("pub", priority = 3)]
+Pub,
+
+#[token("W", priority = 3)]
+#[token("trait", priority = 3)]
+Trait,
+
+#[token("X", priority = 3)]
+#[token("impl", priority = 3)]
+Impl,
+```
+
+Logos derive macro produces a single matcher that accepts either
+literal and emits the same Token variant. No parser change needed —
+parser sees Token::Struct (etc.) and operates identically regardless
+of source spelling.
+
+INTEGRITY OK preserved (no baseline regression). The F-15-01
+prediction (zero AST-level collisions across baseline) was validated
+empirically by INTEGRITY survival.
+
+### Stage 1 second wave (deferred — needs rename codemod first)
+
+The remaining 8 collision keywords cannot be added the same way:
+- use 56 collisions
+- mod 24
+- type 10
+- fn 9
+- return 3
+- match 2
+- const 1
+- else 1
+
+Stage 1.2 = `vaisc fmt --rename-keyword-collisions` apply mode (rewrite
+identifiers `<colliding>` → `_<colliding>`). Stage 1.3 = lexer adds the
+remaining 8 keywords (now safe). Multi-iter.
+
+Status: Step 15 stage 1 first wave LANDED. master-plan v26 → v27.
+Stage 1.2+ remains IN_PROGRESS.
