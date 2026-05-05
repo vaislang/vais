@@ -74,8 +74,10 @@ pub enum Token {
     #[token("C", priority = 3)]
     Continue,
     #[token("T", priority = 3)]
+    #[token("type", priority = 3)]
     TypeKeyword,
     #[token("U", priority = 3)]
+    #[token("use", priority = 3)]
     Use,
     #[token("P", priority = 3)]
     #[token("pub", priority = 3)]

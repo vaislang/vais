@@ -17,6 +17,7 @@ the prerequisite.
 | F-15-01 | `vaisc fmt --rename-keyword-collisions` skeleton LANDED + 13-keyword baseline scan: 106 collisions total (2026-05-05) |
 | F-15-02 | Stage 1 first wave LANDED: 5 zero-collision multi-char keywords as Logos token aliases (2026-05-05) |
 | F-15-03 | Stage 1 second wave first sub-batch LANDED: else / match / return aliases + bare keyword shadow gate (2026-05-05) |
+| F-15-04 | Stage 1 second wave second sub-batch LANDED (use / type) + fn deferred + mod out-of-scope (2026-05-06) |
 
 ## Findings
 
@@ -258,3 +259,93 @@ The remaining 4 collision keywords still need stage 1 rename:
 Status: Step 15 stage 1 second wave first sub-batch LANDED.
 master-plan v27 → v28. Stage 1 remainder + stage 3 (vaisc fmt
 --to= flags + selfhost migration) remain IN_PROGRESS.
+
+### F-15-04 — Stage 1 second wave second sub-batch LANDED (2026-05-06)
+
+2 more multi-char keyword aliases on top of v28's batch:
+
+```rust
+#[token("U", priority = 3)]
+#[token("use", priority = 3)]
+Use,
+
+#[token("T", priority = 3)]
+#[token("type", priority = 3)]
+TypeKeyword,
+```
+
+Total dual-syntax keywords now 10/13.
+
+Per-keyword cost:
+- use: 0 manual renames. Raw grep `\buse\b\s*(:=|=|:)` returned 0
+  hits (no bare-keyword shadow). The 56 `use_*` use-site
+  identifiers are all longer than `use`, so Logos longest-match
+  resolves them as `Token::Ident` — verified empirically by the
+  green INTEGRITY measurement immediately after the alias add.
+- type: 0 manual renames. Raw grep `\btype\b\s*(:=|=)` returned
+  only string-literal / comment hits (e.g. `"...sqlite_master
+  WHERE type='table'..."`, `# type=END`, `"NestedLoopJoin
+  type="`), none of which are bare identifiers. AST-level
+  collisions were 10 in F-15-01 — all `type_*` longer-form
+  identifiers handled by longest-match.
+
+INTEGRITY OK preserved post-batch.
+
+#### Scope decision: fn alias deferred (multi-iter)
+
+Adding `#[token("fn", priority = 3)]` to `Token::Function`
+(alongside `"F"`) breaks 5+ negative parser fixtures plus core
+certification (16/16 → 15/16):
+
+- `syntax_type_fn_pointer` (positive, line 1180): `F takes_fn(f:
+  fn(i64) -> i64) -> i64 { f(0) }` — expects parse OK. Fails when
+  `fn` is a Token::Function because the function-pointer type
+  syntax `fn(i64) -> i64` is currently parsed via the Token::Ident
+  path with a parser-level special-case for the literal text `fn`.
+  Promoting `fn` to a real keyword changes which parser branch
+  fires.
+- `syntax_neg_mod_missing_fn_keyword` (line 655): `P main() ...`
+  expected NOT to parse without `F`. With `fn` as a keyword the
+  parser may accept it on a different path.
+- `syntax_neg_trait_missing_fn_keyword` (line 1679), `syntax_
+  closure_in_variable` (line 1879), `syntax_extra_fn_as_arg`
+  (line 2257) — same family.
+
+Resolution requires a parser refactor that distinguishes:
+1. `fn` as function-declaration head (multi-char alias of `F`).
+2. `fn` as type-position function-pointer head (`fn(...) -> T`).
+
+Both forms are syntactically `fn` + `(`, disambiguated only by
+context (statement vs type position). The current parser handles
+case 2 by recognizing the lexeme `"fn"` inside Token::Ident; once
+`fn` becomes its own token, case 2 needs a parser-side rewire to
+accept Token::Function in type position too. Multi-iter; deferred
+to a follow-up wave.
+
+#### Scope decision: mod removed from wave 2
+
+`mod` has no Vais single-char counterpart. Lexer has `U` for `use`
+but no separate `mod` keyword — Vais uses a single use+module-path
+syntax. The 24 `mod_*` collisions in
+F-15-01 are user identifiers in vaisdb modules
+(`mod_load`, `mod_register`, etc.), not a dual-syntax target.
+Removing `mod` from wave 2 leaves it as an A1-class candidate (if
+ever reserved) but not part of Step 15 dual-syntax work.
+
+#### Wave 2 final state
+
+| keyword | status | sub-batch | renames |
+|---|---|---|---|
+| else | LANDED | v28 | 0 |
+| match | LANDED | v28 | 3 (url.vais) |
+| return | LANDED | v28 | 0 |
+| const | already-keyword | v28 (cleanup only) | 6 (LIVING_SPEC) |
+| use | LANDED | v29 | 0 |
+| type | LANDED | v29 | 0 |
+| fn | DEFERRED (multi-iter parser refactor) | — | TBD |
+| mod | OUT OF SCOPE (no single-char counterpart) | — | — |
+
+Status: Step 15 stage 1 wave 2 second sub-batch LANDED.
+master-plan v28 → v29. fn alias deferred. mod removed from
+scope. Stage 3 (vaisc fmt --to= flags + selfhost migration) still
+ahead — selfhost migration cannot fully complete until fn lands.
