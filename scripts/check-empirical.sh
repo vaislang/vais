@@ -17,7 +17,7 @@
 #
 # Usage:
 #   bash compiler/scripts/check-empirical.sh [class]
-#     class: optional, one of A4 / A3 / Controlled / Rejected / Untested.
+#     class: optional, one of A4 / A3 / A2 / A1 / Controlled / Rejected / Untested.
 #            If omitted, runs all classes.
 
 set -u
@@ -34,8 +34,8 @@ fi
 CLASS_FILTER="${1:-}"
 if [[ -n "$CLASS_FILTER" ]]; then
   case "$CLASS_FILTER" in
-    A4|A3|A2|Controlled|Rejected|Untested) ;;
-    *) echo "Usage: $0 [A4|A3|A2|Controlled|Rejected|Untested]" >&2; exit 2 ;;
+    A4|A3|A2|A1|Controlled|Rejected|Untested) ;;
+    *) echo "Usage: $0 [A4|A3|A2|A1|Controlled|Rejected|Untested]" >&2; exit 2 ;;
   esac
 fi
 
@@ -75,7 +75,7 @@ for class_dir in "$EMPIRICAL"/*/; do
   [[ -d "$class_dir" ]] || continue
   class_name="$(basename "$class_dir")"
   case "$class_name" in
-    A4|A3|A2|Controlled|Rejected|Untested) ;;
+    A4|A3|A2|A1|Controlled|Rejected|Untested) ;;
     cross_package_schema) continue ;;  # has its own gate.sh, run separately
     *) continue ;;
   esac

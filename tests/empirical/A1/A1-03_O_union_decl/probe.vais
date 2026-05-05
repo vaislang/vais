@@ -1,0 +1,8 @@
+O Either {
+    A: i64,
+    B: i64,
+}
+
+F main() -> i64 {
+    R 0
+}

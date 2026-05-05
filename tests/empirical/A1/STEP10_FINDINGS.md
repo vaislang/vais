@@ -69,3 +69,27 @@ Recommendation:
 Status: Step 10 first iteration RECONNAISSANCE LANDED. 4 A1 candidate
 documented. master-plan inventory update + syntax-aware preflight per
 candidate is next-iteration scope.
+
+### F-A1-02 — A1 hard-block first iteration (2026-05-05)
+
+Master Plan v23. F-A1-01의 4 candidate를 hard-block으로 진행한 결과:
+
+| keyword | result | notes |
+|---|---|---|
+| `effect` | A1-LANDED | parser top-level에서 이미 P001 reject. compiler 변경 0, fixture만 (compiler/tests/empirical/A1/A1-01_effect_keyword/). |
+| `O` (union) | A1-LANDED | silent accept 발견. parser site item/mod.rs:88 Token::Union arm을 ParseError + 'A1 hard block' marker로 전환. fixture A1-03_O_union_decl/. |
+| `macro` | A1-LANDED | silent accept (`macro foo!{...}`) 발견. parser site item/mod.rs:109 Token::Macro arm 동일 패턴. fixture A1-04_macro_decl/. |
+| `affine` | A1→A2 RECLASSIFY | hard-block 시도 → INTEGRITY LIVING_SPEC pass=116/117 regression → CLAUDE 규칙 4 revert. baseline 사용 발견: docs/language/LIVING_SPEC/01_keywords/linear_affine_annotation.vais (test_affine_var, x := affine 100). master-plan.toml에 A2-06으로 등록. |
+
+**LESSON L-008 신설**: F-A1-01 grep methodology가 `compiler/std/` + `lang/packages/`만
+검사하고 `docs/language/LIVING_SPEC/`을 누락했다. CLAUDE 규칙 2가 LIVING_SPEC을
+"executable authoritative spec"으로 명시함에도 정찰 grep 누락. 향후 A1 candidate
+측정 시 3 location 모두 grep 의무.
+
+**Infrastructure**:
+- `compiler/scripts/check-empirical.sh`: A1 class 추가 (case statement 3 사이트 + usage doc).
+- 3 A1 fixture PASS (`bash scripts/check-empirical.sh A1` → 3/0/0/0).
+- 전체 empirical: 31 → 34 PASS.
+
+Status: Step 10 PARTIAL_DONE. 3/4 candidate LANDED + 1 candidate (affine A2-06) reclassified.
+다음 iteration scope: A2-06 affine lifecycle (promote-then-block, multi-iter — A2 일반 절차에 따라 진행).

@@ -1,0 +1,5 @@
+effect Logger {}
+
+F main() -> i64 {
+    R 0
+}
