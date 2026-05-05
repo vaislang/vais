@@ -24,6 +24,27 @@ use vais_types::{ResolvedType, TraitDef};
 /// LLVM IR type for trait object (fat pointer)
 pub const TRAIT_OBJECT_TYPE: &str = "{ i8*, i8* }";
 
+/// Stable, deterministic method ordering for vtable layout
+/// (DEFERRED #19 step 2a-C-1 audit finding).
+///
+/// trait_def.methods is a HashMap — iteration order is non-deterministic
+/// across separate calls. Three sites need to agree on the slot order:
+///   1. generate_vtable (info.methods Vec)
+///   2. generate_vtable_global / _typed (slot emission)
+///   3. generate_dynamic_call / _typed via trait_dispatch::generate_dyn_method_call
+///      (slot indexing at dispatch site)
+///
+/// If any site iterates `trait_def.methods` directly, two sites can pick
+/// different orders → mis-indexed vtable slots → wrong method dispatched
+/// at runtime (silent corruption of single-impl baselines that happen to
+/// be correct under static fallback). Inkwell side already does this via
+/// `vtable_inkwell::method_order`; text-IR side now mirrors that.
+pub(crate) fn sorted_method_names(trait_def: &TraitDef) -> Vec<String> {
+    let mut names: Vec<String> = trait_def.methods.keys().cloned().collect();
+    names.sort();
+    names
+}
+
 /// Static (string-only) vtable return type — used by call sites that
 /// do not have access to a CodeGenerator (e.g. inkwell-side which has
 /// its own type mapper). For the text-IR backend prefer
@@ -152,10 +173,14 @@ done:
 
         let global_name = format!("@vtable_{}_{}", impl_type, trait_def.name);
 
-        // Collect methods in declaration order
+        // Collect methods in deterministic alphabetical order
+        // (DEFERRED #19 step 2a-C-1 audit fix). Previously iterated
+        // HashMap directly, which produced non-deterministic slot
+        // ordering — see `sorted_method_names` doc.
         let mut methods = Vec::new();
-        for (method_name, method_sig) in &trait_def.methods {
-            if let Some(impl_name) = method_impls.get(method_name) {
+        for method_name in sorted_method_names(trait_def) {
+            let method_sig = &trait_def.methods[&method_name];
+            if let Some(impl_name) = method_impls.get(&method_name) {
                 methods.push((method_name.clone(), impl_name.clone()));
             } else if method_sig.has_default {
                 // Method has default implementation, use the default
@@ -222,6 +247,11 @@ done:
         // - size: i64              ; size of concrete type
         // - align: i64             ; alignment of concrete type
         // - methods: fn_ptr*...    ; method function pointers
+        //
+        // Methods are emitted in alphabetical order (sorted_method_names)
+        // to match the slot order produced by `generate_vtable` and the
+        // index used by `generate_dyn_method_call`. See DEFERRED #19
+        // step 2a-C-1 audit.
 
         let mut fields = vec![
             "i8*".to_string(), // drop function or null
@@ -229,8 +259,9 @@ done:
             "i64".to_string(), // align
         ];
 
-        // Add method function pointer types
-        for method_sig in trait_def.methods.values() {
+        // Add method function pointer types in deterministic order.
+        for method_name in sorted_method_names(trait_def) {
+            let method_sig = &trait_def.methods[&method_name];
             // Method signature: (self: i8*, params...) -> ret
             let mut param_types = vec!["i8*".to_string()]; // self pointer
             for (_param_name, _param_ty, _) in &method_sig.params[1..] {

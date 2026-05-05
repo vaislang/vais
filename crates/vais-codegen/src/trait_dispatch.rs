@@ -168,12 +168,13 @@ impl CodeGenerator {
                 let type_size = 8;
                 let type_align = 8;
 
-                // Build per-method (arg_tys, ret_ty) in trait_def.methods's
-                // iteration order — must match info.methods order.
-                let methods_typed: Vec<(Vec<String>, String)> = trait_def
-                    .methods
-                    .iter()
-                    .map(|(_name, sig)| {
+                // Build per-method (arg_tys, ret_ty) in deterministic
+                // alphabetical order — must match info.methods order
+                // (now also sorted; DEFERRED #19 2a-C-1 audit fix).
+                let methods_typed: Vec<(Vec<String>, String)> = super::vtable::sorted_method_names(trait_def)
+                    .into_iter()
+                    .map(|name| {
+                        let sig = &trait_def.methods[&name];
                         let arg_tys: Vec<String> = sig
                             .params
                             .iter()
@@ -253,14 +254,13 @@ impl CodeGenerator {
             })?;
 
         // Method dispatch index — must match the slot order used by
-        // generate_vtable_global. text-IR vtable_generator stores the
-        // methods Vec in declaration order; we use the same iteration
-        // here. (The inkwell side enforces alphabetical sort
-        // independently — see vtable_inkwell.rs::method_order.)
-        let method_names: Vec<&String> = trait_def.methods.keys().collect();
-        let method_index = method_names
+        // generate_vtable / generate_vtable_global. All sites use
+        // `sorted_method_names` (alphabetical) for determinism per
+        // DEFERRED #19 step 2a-C-1 audit fix.
+        let sorted = super::vtable::sorted_method_names(trait_def);
+        let method_index = sorted
             .iter()
-            .position(|&n| n == method_name)
+            .position(|n| n == method_name)
             .ok_or_else(|| {
                 CodegenError::Unsupported(format!(
                     "Method {} not found in trait {}",
@@ -301,13 +301,14 @@ impl CodeGenerator {
             })
             .collect();
 
-        // 2a-A: per-trait-method (arg_tys, ret_ty) — must match the
-        // shape used by `generate_vtable_globals` so the
-        // bitcast-at-emission and bitcast-at-dispatch sides agree.
-        let methods_typed: Vec<(Vec<String>, String)> = trait_def
-            .methods
-            .iter()
-            .map(|(_name, sig)| {
+        // 2a-A: per-trait-method (arg_tys, ret_ty) in deterministic
+        // alphabetical order — must match the shape used by
+        // `generate_vtable_globals` so emission/dispatch sides agree
+        // (DEFERRED #19 2a-C-1 audit fix).
+        let methods_typed: Vec<(Vec<String>, String)> = super::vtable::sorted_method_names(trait_def)
+            .into_iter()
+            .map(|name| {
+                let sig = &trait_def.methods[&name];
                 let arg_tys: Vec<String> = sig
                     .params
                     .iter()
