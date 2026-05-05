@@ -601,7 +601,14 @@ fn topo_sort(decls: Vec<TsDecl>) -> Vec<TsDecl> {
 
     // Re-assemble in sorted order.  We must consume `decls` so use indices.
     let mut decls_opt: Vec<Option<TsDecl>> = decls.into_iter().map(Some).collect();
-    order.into_iter().map(|i| decls_opt[i].take().unwrap()).collect()
+    order
+        .into_iter()
+        .map(|i| {
+            decls_opt[i]
+                .take()
+                .expect("invariant: topo order is a permutation of 0..n; each index taken exactly once")
+        })
+        .collect()
 }
 
 /// Collect all type names that a `TsDecl` references by examining its rendered

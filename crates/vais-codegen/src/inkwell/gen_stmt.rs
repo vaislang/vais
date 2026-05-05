@@ -954,9 +954,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let current_fn = self
             .builder
             .get_insert_block()
-            .unwrap()
+            .expect("invariant: builder positioned in a basic block before deferred-free codegen")
             .get_parent()
-            .unwrap();
+            .expect("invariant: basic block owned by a function during deferred-free codegen");
         let free_block = self.context.append_basic_block(current_fn, "ifr_free");
         let after = self.context.append_basic_block(current_fn, "ifr_after");
         self.builder
@@ -1104,9 +1104,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             let current_fn = self
                 .builder
                 .get_insert_block()
-                .unwrap()
+                .expect("invariant: builder positioned in a basic block before alloc-cleanup codegen")
                 .get_parent()
-                .unwrap();
+                .expect("invariant: basic block owned by a function during alloc-cleanup codegen");
             let free_block = self.context.append_basic_block(current_fn, "free_alloc");
             let skip_block = self.context.append_basic_block(current_fn, "skip_free");
             self.builder

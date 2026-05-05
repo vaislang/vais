@@ -439,7 +439,7 @@ impl CodeGenerator {
                             enum_hint_ref,
                             &requested,
                         )
-                        .unwrap();
+                        .expect("invariant: resolve_enum_struct_variant is_some() confirmed in enclosing else-if guard");
 
                     // Tag check
                     let tag_ptr = self.next_temp(counter);

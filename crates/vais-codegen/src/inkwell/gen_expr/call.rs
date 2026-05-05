@@ -508,7 +508,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             let malloc_ty = i8_ptr_ty.fn_type(&[i64_ty.into()], false);
                             Some(self.module.add_function("malloc", malloc_ty, None))
                         })
-                        .unwrap();
+                        .expect("invariant: malloc function available after or_else declaration");
                     let size_val = i64_ty.const_int(size_bytes, false);
                     let heap_ptr = self
                         .builder
@@ -516,7 +516,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                         .try_as_basic_value()
                         .left()
-                        .unwrap()
+                        .expect("invariant: malloc returns LLVM pointer value, not void")
                         .into_pointer_value();
                     let typed_ptr = self
                         .builder
@@ -582,7 +582,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                     let malloc_ty = i8_ptr_ty.fn_type(&[i64_ty.into()], false);
                                     Some(self.module.add_function("malloc", malloc_ty, None))
                                 })
-                                .unwrap();
+                                .expect("invariant: malloc function available after or_else declaration");
                             let size_val = i64_ty.const_int(size_bytes, false);
                             let heap_ptr = self
                                 .builder
@@ -590,7 +590,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                                 .try_as_basic_value()
                                 .left()
-                                .unwrap()
+                                .expect("invariant: malloc returns LLVM pointer value, not void")
                                 .into_pointer_value();
                             // Store struct into heap memory
                             let typed_ptr = self
@@ -921,7 +921,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                     .try_as_basic_value()
                     .left()
-                    .unwrap()
+                    .expect("invariant: malloc returns LLVM pointer value, not void")
                     .into_pointer_value();
                 let typed_ptr = self
                     .builder

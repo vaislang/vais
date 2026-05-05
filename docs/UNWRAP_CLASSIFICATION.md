@@ -2,7 +2,9 @@
 
 Production `.unwrap()` audit for the certified Core compiler crates.
 
-- Last verified: 2026-05-03
+- Last verified: 2026-05-05 (re-audit during Category C → expect() conversion;
+  Category C count corrected 37 → 23 after per-site re-classification of 14
+  sites that turned out to live inside `#[cfg(test)]` blocks).
 - Scope: `crates/{vais-codegen,vais-types,vais-parser,vais-lexer,vais-mir,vaisc}/src/**`
 - Tests, benches, doc-tests outside `src/` are not in scope (panic on test
   failure is acceptable).
@@ -26,11 +28,18 @@ Production `.unwrap()` audit for the certified Core compiler crates.
 
 | Category | Sites | Share |
 |---|---|---|
-| A — Test/Doc | 287 | 88.6% |
+| A — Test/Doc | 301 | 92.9% |
 | B — Infallible by construction | 0 | 0.0% |
-| C — Infallible by invariant | 37 | 11.4% |
+| C — Infallible by invariant | 23 | 7.1% |
 | **D — User-input reachable** | **0** | **0.0%** |
 | Total | 324 | 100% |
+
+The 2026-05-05 re-audit reclassified 14 sites that were originally counted
+under Category C (in files like `index_access.rs`, `method_returns.rs`,
+`bounds_check_elim.rs`, `alias_analysis.rs`, `data_layout.rs`,
+`ir_passes/mod.rs`, `inlining.rs`) as Category A, because the unwrap sites
+all live inside `#[cfg(test)] mod tests` blocks. The total of 324 is
+unchanged.
 
 `B = 0` is a definitional consequence of the spot-checks: every site that
 could have qualified as B was already inside a `#[cfg(test)]` block (so it
@@ -38,15 +47,19 @@ was counted as A).
 
 ## Category C distribution
 
-37 sites, all inside the certified compiler invariants.
+23 sites, all inside the certified compiler invariants. All sites converted
+to `.expect("invariant: ...")` on 2026-05-05.
 
 | File | Sites | Invariant |
 |---|---|---|
-| `crates/vais-codegen/src/inkwell/gen_*.rs` | 19 | LLVM builder/block state established earlier in the same function |
-| `crates/vais-types/src/checker_expr/calls.rs` | 6 | Type inference cache populated by the preceding resolution step |
-| `crates/vais-codegen/src/index_access.rs` | 6 | `AccessKind` already proven valid for the resolved element type |
-| `crates/vais-lexer/src/lib.rs` | 2 | Token stream non-empty by parser contract |
-| (others) | 4 | Local invariants in codegen helpers |
+| `crates/vais-codegen/src/inkwell/gen_stmt.rs` | 4 | builder positioned in basic block before deferred-free / alloc-cleanup codegen |
+| `crates/vais-codegen/src/inkwell/gen_match.rs` | 2 | builder positioned before/after variant pattern branch |
+| `crates/vais-codegen/src/inkwell/gen_aggregate.rs` | 4 | builder/function/entry-block valid during struct-malloc setup; malloc returns pointer |
+| `crates/vais-codegen/src/inkwell/gen_expr/binary.rs` | 4 | builder/function/entry-block valid during string-concat alloca-slot setup |
+| `crates/vais-codegen/src/inkwell/gen_expr/call.rs` | 5 | malloc fn available after or_else insert; malloc returns pointer value |
+| `crates/vais-codegen/src/expr_helpers_call/method_call.rs` | 2 | len==1 guard; contains_key checked before get |
+| `crates/vais-codegen/src/control_flow/pattern.rs` | 1 | is_some() confirmed in enclosing else-if guard |
+| `crates/vais-types/src/checker_expr/control_flow.rs` | 1 | is_empty() guard above |
 
 ## Category D — none
 
@@ -87,9 +100,9 @@ already-met invariant rather than a fix for an open vulnerability.
 ## Action items
 
 - None blocking. The certified Core has no Category D unwrap.
-- Optional, non-blocking: convert the 37 Category C sites to
-  `expect("invariant: ...")` so the panic message documents the invariant.
-  Track per-file under a future cleanup pass; do not mix with feature work.
+- ~~Optional, non-blocking: convert the 23 Category C sites to
+  `expect("invariant: ...")` so the panic message documents the invariant.~~
+  **DONE 2026-05-05** (all 23 sites converted; INTEGRITY OK preserved).
 - Optional, non-blocking: add `#![warn(clippy::unwrap_used)]` to the in-scope
   crates so any new Category D site is rejected at review time. Scope this
   separately from the existing 287 Category A sites (which would need

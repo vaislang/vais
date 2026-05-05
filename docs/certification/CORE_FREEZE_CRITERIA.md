@@ -48,9 +48,42 @@ Core freeze:
 | VaisDB runtime smoke | `bash scripts/check-integrity.sh` reports `VAISDB RUNTIME OK: smoke=28/28` |
 | Whitespace sanity | `git diff --check` is clean in `compiler/` and `lang/` |
 
-If any number changes because a fixture is intentionally promoted, this document
-and the stale guard in `crates/vaisc/tests/core_certification.rs` must be
-updated in the same change.
+The narrative table above documents *what* each gate reports. The exact
+pass/total numbers are *also* sourced from `GATE_MANIFEST.toml` and rendered
+into the canonical baseline below by `python3 scripts/render-gate-tables.py`.
+The narrative table above is the human-readable form (kept stable for the
+`crates/vaisc/tests/core_certification.rs::core_freeze_criteria_doc_is_current`
+freeze guard); the canonical baseline below is the machine-readable form
+enforced by `bash scripts/check-gate-manifest.sh` M4. Both must agree — if
+a count drifts in only one place, the freeze guard or M4 will fail.
+
+### Canonical Gate Baseline
+
+The table below between `gate-table:auto-start` / `gate-table:auto-end`
+markers is generated from `GATE_MANIFEST.toml` by
+`python3 scripts/render-gate-tables.py`. Do not hand-edit.
+
+<!-- gate-table:auto-start -->
+| Gate | Current status |
+|---|---|
+| Core certification | `CORE_CERTIFICATION pass=16 fail=0 total=16` |
+| MIR strict gate | `MIR OK` |
+| Codegen invariant gate | `CODEGEN OK` |
+| Unsafe documentation audit | `UNSAFE AUDIT OK: vais-codegen undocumented_unsafe_blocks=0` |
+| Ecosystem package codegen | `std=82/82`, `vaisdb=261/261` |
+| Backend smoke | `phase158=18/18` |
+| std/http_client runtime | `smoke=1/1` |
+| VaisDB runtime | `smoke=28/28` |
+| vais-server runtime | `smoke=13/13` |
+| vais-web runtime | `smoke=23/23` |
+| Cross-package schema gate | `gate=2/2` |
+<!-- gate-table:auto-end -->
+
+If any number changes because a fixture is intentionally promoted, update
+`GATE_MANIFEST.toml` (and the corresponding `INTEGRITY_*_MIN` threshold in
+`scripts/check-integrity.sh`), then re-render. The stale guard in
+`crates/vaisc/tests/core_certification.rs` must also be updated in the same
+change when the Core certification count changes.
 
 ## Freeze Blockers
 

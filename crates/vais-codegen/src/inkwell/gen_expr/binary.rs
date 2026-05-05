@@ -240,11 +240,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 let current_fn = self
                     .builder
                     .get_insert_block()
-                    .unwrap()
+                    .expect("invariant: builder positioned in a basic block before string-concat alloca-slot setup")
                     .get_parent()
-                    .unwrap();
-                let entry_block = current_fn.get_first_basic_block().unwrap();
-                let current_block = self.builder.get_insert_block().unwrap();
+                    .expect("invariant: basic block owned by a function during string-concat alloca-slot setup");
+                let entry_block = current_fn.get_first_basic_block().expect("invariant: function has at least one basic block (entry) when placing string-concat alloca slot");
+                let current_block = self.builder.get_insert_block().expect("invariant: builder still positioned in a basic block after retrieving entry block for string-concat");
                 // Position at end of entry block (before terminator if exists)
                 if let Some(terminator) = entry_block.get_terminator() {
                     self.builder.position_before(&terminator);

@@ -987,7 +987,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 })?;
                 let then_blk = self.context.append_basic_block(fn_value, "variant_inner");
                 let join_blk = self.context.append_basic_block(fn_value, "variant_join");
-                let entry_blk = self.builder.get_insert_block().unwrap();
+                let entry_blk = self.builder.get_insert_block().expect("invariant: builder positioned in a basic block before variant pattern short-circuit branch");
                 self.builder
                     .build_conditional_branch(tag_match, then_blk, join_blk)
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
@@ -1046,7 +1046,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if pushed {
                     self.match_scrutinee_type_stack.pop();
                 }
-                let then_end = self.builder.get_insert_block().unwrap();
+                let then_end = self.builder.get_insert_block().expect("invariant: builder positioned in a basic block after generating inner pattern check");
                 self.builder
                     .build_unconditional_branch(join_blk)
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;

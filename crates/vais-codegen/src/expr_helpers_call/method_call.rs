@@ -1029,7 +1029,7 @@ impl CodeGenerator {
             }
             // If exactly one struct provides this method, use it unambiguously
             if candidates.len() == 1 {
-                candidates.into_iter().next().unwrap()
+                candidates.into_iter().next().expect("invariant: candidates.len() == 1 checked immediately before iteration")
             } else {
                 method_name.clone()
             }
@@ -2423,7 +2423,7 @@ impl CodeGenerator {
                 .fn_instantiations
                 .get(&base_method_name)
                 .cloned()
-                .unwrap();
+                .expect("invariant: fn_instantiations contains_key checked immediately before get");
             let arg_types: Vec<ResolvedType> =
                 args.iter().map(|a| self.infer_expr_type(a)).collect();
             let resolved = self.resolve_generic_call_with_hint(

@@ -628,11 +628,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             let current_fn = self
                 .builder
                 .get_insert_block()
-                .unwrap()
+                .expect("invariant: builder positioned in a basic block before struct-malloc alloca-slot setup")
                 .get_parent()
-                .unwrap();
-            let entry_block = current_fn.get_first_basic_block().unwrap();
-            let current_block = self.builder.get_insert_block().unwrap();
+                .expect("invariant: basic block owned by a function during struct-malloc alloca-slot setup");
+            let entry_block = current_fn.get_first_basic_block().expect("invariant: function has at least one basic block (entry) when placing alloca slot");
+            let current_block = self.builder.get_insert_block().expect("invariant: builder still positioned in a basic block after retrieving entry block");
             if let Some(terminator) = entry_block.get_terminator() {
                 self.builder.position_before(&terminator);
             } else {
@@ -1692,7 +1692,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
             .try_as_basic_value()
             .left()
-            .unwrap()
+            .expect("invariant: malloc returns LLVM pointer value, not void")
             .into_pointer_value();
         let typed_ptr = self
             .builder

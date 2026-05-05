@@ -2,6 +2,11 @@
 //!
 //! Recursive descent parser for AI-optimized syntax.
 
+#![cfg_attr(not(test), warn(clippy::unwrap_used))]
+// Warn on `.unwrap()` in non-test code so any new Category D site
+// (user-input reachable panic) is rejected at review time. See
+// `docs/UNWRAP_CLASSIFICATION.md`. Test code is exempt.
+
 mod error_display;
 mod expr;
 mod ffi;

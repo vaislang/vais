@@ -643,10 +643,6 @@ impl CodeGenerator {
         // Generate string constants (after processing functions to collect all strings)
         let mut body_ir = String::new();
         // Generate specialized functions from instantiations
-        eprintln!(
-            "[P1.7] generating {} specialized functions",
-            instantiations.len()
-        );
         for inst in instantiations {
             if let vais_types::InstantiationKind::Function = inst.kind {
                 // Phase 0 bug C14 fix: skip instantiations whose type args

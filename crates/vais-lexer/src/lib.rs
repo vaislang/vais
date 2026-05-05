@@ -2,6 +2,12 @@
 //!
 //! Token-efficient lexer using single-letter keywords for AI optimization.
 
+// Warn on `.unwrap()` in non-test code so any new Category D site
+// (user-input reachable panic) is rejected at review time. See
+// `docs/UNWRAP_CLASSIFICATION.md`. The `not(test)` gate keeps test
+// code idiomatic — tests are allowed to panic on assertion failure.
+#![cfg_attr(not(test), warn(clippy::unwrap_used))]
+
 use logos::Logos;
 use std::fmt;
 
