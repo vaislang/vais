@@ -847,39 +847,88 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
-        // F-23 GUARD step 1 (A4-12 candidate, STEP7_FINDINGS): if the
-        // receiver is an Ident whose `var_resolved_types` entry is
-        // `DynTrait` / `Ref(DynTrait)` / `RefMut(DynTrait)`, then ANY
-        // method dispatch — including the bare-method-name fallback below
-        // and the broader sorted-iteration fallback further down — is
-        // unsafe (silent corruption: binds to one impl regardless of
-        // runtime type). Convert to a hard codegen error per L-002 north
-        // star. Real vtable-indirected dispatch via
-        // vtable.rs::generate_dynamic_call is step 2 (separate task).
+        // F-23 dispatch (A4-12 step 2b-5c — DEFERRED #18): if the receiver
+        // is an Ident whose `var_resolved_types` entry is `DynTrait` /
+        // `Ref(DynTrait)` / `RefMut(DynTrait)`, route the method call
+        // through vtable indirection. The receiver value (already
+        // generated above as `receiver_val`) is the fat pointer
+        // { data_ptr, vtable_ptr } emitted by the caller (2b-5b
+        // create_trait_object_inkwell wrapping).
+        //
+        // If the receiver is dyn but `receiver_val` is NOT a fat-pointer
+        // struct value (e.g. caller failed to wrap because impl_type
+        // could not be inferred), fall back to the original L-002
+        // hard-error to preserve the silent → loud invariant.
         if let Expr::Ident(name) = receiver {
-            let receiver_is_dyn = self
-                .var_resolved_types
-                .get(name)
-                .map(|rt| {
-                    matches!(rt, vais_types::ResolvedType::DynTrait { .. })
-                        || matches!(
-                            rt,
-                            vais_types::ResolvedType::Ref(inner)
-                                | vais_types::ResolvedType::RefMut(inner)
-                                if matches!(inner.as_ref(), vais_types::ResolvedType::DynTrait { .. })
-                        )
-                })
-                .unwrap_or(false);
-            if receiver_is_dyn {
-                return Err(CodegenError::Unsupported(format!(
-                    "dyn trait method call `.{}` on `&dyn`/`&mut dyn` receiver `{}`: \
-                     vtable-indirected dispatch is not yet wired (F-23, A4-12 candidate, \
-                     STEP7_FINDINGS). The previous silent fallback bound the call to one \
-                     impl regardless of runtime type, producing wrong values across \
-                     cross-impl dispatch. Use a concrete type or refactor to fn-pointer \
-                     parameters (A2-05) for now.",
-                    method, name
-                )));
+            let dyn_trait_name = self.var_resolved_types.get(name).and_then(|rt| {
+                use vais_types::ResolvedType;
+                match rt {
+                    ResolvedType::DynTrait { trait_name, .. } => Some(trait_name.clone()),
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                        if let ResolvedType::DynTrait { trait_name, .. } = inner.as_ref() {
+                            Some(trait_name.clone())
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                }
+            });
+
+            if let Some(trait_name) = dyn_trait_name {
+                // Check that receiver_val is the expected fat pointer
+                // { i8*, i8* } shape. If not, the caller didn't wrap
+                // (impl_type inference failed) — preserve loud rejection.
+                let is_fat = if let BasicValueEnum::StructValue(sv) = receiver_val {
+                    let st = sv.get_type();
+                    st.count_fields() == 2
+                        && st
+                            .get_field_type_at_index(0)
+                            .map(|t| t.is_pointer_type())
+                            .unwrap_or(false)
+                        && st
+                            .get_field_type_at_index(1)
+                            .map(|t| t.is_pointer_type())
+                            .unwrap_or(false)
+                } else {
+                    false
+                };
+
+                if !is_fat {
+                    return Err(CodegenError::Unsupported(format!(
+                        "dyn trait method call `.{}` on receiver `{}`: receiver \
+                         was not wrapped as a fat pointer (caller failed to \
+                         infer concrete impl type at the call site). \
+                         L-002 north star: refusing silent dispatch.",
+                        method, name
+                    )));
+                }
+
+                // Generate args (widen each non-i64 IntValue to i64 to
+                // match the simplified vtable ABI from 2b-4).
+                let mut arg_values: Vec<BasicValueEnum<'ctx>> = Vec::with_capacity(args.len());
+                for a in args {
+                    arg_values.push(self.generate_expr(&a.node)?);
+                }
+
+                let trait_obj = receiver_val.into_struct_value();
+                match self.generate_dynamic_call_inkwell(
+                    trait_obj,
+                    &trait_name,
+                    method,
+                    &arg_values,
+                ) {
+                    Some(Some(ret_val)) => return Ok(ret_val),
+                    Some(None) => return Ok(self.unit_value()),
+                    None => {
+                        return Err(CodegenError::Unsupported(format!(
+                            "dyn trait method call `.{}` on `{}` (trait `{}`): \
+                             vtable lookup failed — trait not registered, \
+                             method unknown, or builder error.",
+                            method, name, trait_name
+                        )));
+                    }
+                }
             }
         }
 
