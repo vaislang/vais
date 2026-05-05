@@ -116,3 +116,41 @@ makes the inventory a poor planning tool for future work.
 Status: Step 13 inventory drift identified. Inventory rewrite is a
 multi-iter master-plan revision (would land as v25 or later). No compiler
 change in this finding; informational only.
+
+### F-13-03 — A4 inventory rewrite LANDED (master-plan v25, 2026-05-05)
+
+F-13-02 reported the drift between master-plan v24 [[phase.A4]] inventory
+and the compiler's actual default-mode behavior. This finding records the
+close.
+
+Empirical re-audit results — all 12 A4 fixtures run from
+`compiler/tests/empirical/A4/`:
+
+| Fixture | Result line (last line of run.sh output) |
+|---|---|
+| A4-01_unit_i64 | rejects probe with E001 (silent surface removed; default-mode strict) |
+| A4-02_pointer_i64 | rejects probe with E001 (silent surface removed; default-mode strict) |
+| A4-03_auto_deref | type-checks, compiles, runs, exits 168 (≠ forbidden 42 — silent corruption confirmed) |
+| A4-04_pointer_slice | rejects probe with E001 (silent surface removed; default-mode strict) |
+| A4-05_array_pointer_decay | rejects probe with E001 (Pointer→i64 caught at type-check; A4-05's own surface still opt-in pending hnsw/cow.vais migration) |
+| A4-06_integer_truthy | positive (`!= 0`) exits 100; negative (integer-as-truthy) rejected at vaisc check |
+| A4-07_numeric_widening | type-checks, compiles, runs, exits 42 (runtime correct, design pending) |
+| A4-08_vec_str_permissive | rejects probe with E001 (silent surface removed; default-mode strict) |
+| A4-09_lifetime_ref_erasure | rejects probe with E001 (silent surface removed; default-mode strict) |
+| A4-10_struct_partial_init | rejects probe with 'missing fields: age' (silent surface removed; default-mode strict) |
+| A4-11_try_in_non_result | rejects probe with E001 'expected Result<_,_> or Option<_>' (silent surface removed; default-mode strict) |
+| A4-13_box_t_auto_unwrap | silently accepts Box<i64> where i64 expected (call site) |
+
+Classification (informational schema additions in v25):
+
+- strict_default_landed (8): A4-01, A4-02, A4-04, A4-06, A4-08, A4-09,
+  A4-10, A4-11.
+- still_silent (1): A4-13.
+- controlled (3): A4-03, A4-05, A4-07 — already moved out of A4 in v17.
+
+Schema changes in master-plan v25 (informational, no checker impact):
+per-entry current_status + current_evidence; [phase.A4] gains
+strict_default_landed_count + still_silent_count; A4-10 / A4-11 added.
+
+Result: PLAN CONSISTENCY OK; INTEGRITY OK; check-empirical 35 PASS;
+DEFERRED #23 closed.
