@@ -104,6 +104,12 @@ impl JitRuntime {
         self.register("exit", libc::exit as *const u8);
         self.register("abort", libc::abort as *const u8);
 
+        // 5b-2 (DEFERRED #16, Step 17): Vais print thunk — JIT-emitted
+        // print/println/print_int builtins indirectly call this symbol
+        // to forward output into STDOUT_SINK (5b-1). Dead until 5b-3
+        // wires the call sites in JIT codegen.
+        self.register("vais_runtime_print", vais_runtime_print as *const u8);
+
         // Math functions (from libm)
         self.register("sqrt", libm::sqrt as *const u8);
         self.register("sin", libm::sin as *const u8);
