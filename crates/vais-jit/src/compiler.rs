@@ -228,6 +228,13 @@ impl JitCompiler {
             compiled_functions: &self.compiled_functions,
         };
 
+        // 5b-5 (DEFERRED #16): track whether the body terminated the
+        // current block via Stmt::Return. The original `unwrap_or_else`
+        // path eagerly emitted an `iconst(I64, 0)` placeholder when no
+        // tail expression existed, but that path is also taken when the
+        // last stmt is `Stmt::Return` — by which time the block is
+        // already filled and cranelift panics on the placeholder iconst.
+        let mut block_terminated = false;
         let result = match &func.body {
             FunctionBody::Expr(expr) => compiler.compile_expr(&expr.node)?,
             FunctionBody::Block(stmts) => {
@@ -239,20 +246,55 @@ impl JitCompiler {
                             last_val = Some(compiler.compile_expr(&expr.node)?);
                         } else {
                             compiler.compile_stmt(&stmt.node)?;
+                            if matches!(&stmt.node, Stmt::Return(_)) {
+                                block_terminated = true;
+                            }
                         }
                     } else {
                         compiler.compile_stmt(&stmt.node)?;
                     }
                 }
-                last_val.unwrap_or_else(|| builder.ins().iconst(types::I64, 0))
+                if block_terminated {
+                    // Block is already filled; produce a dummy value
+                    // that will be discarded by the auto-return guard
+                    // below. We can't call iconst here either (same
+                    // panic), so synthesize an i64 0 by reusing a
+                    // pre-existing constant if available, else emit a
+                    // placeholder via a fresh unreachable-but-typed
+                    // value. Cranelift's `block_params` of an unfilled
+                    // block isn't applicable; return a zero literal
+                    // produced via a const_i64 helper would still call
+                    // iconst. Cleanest: just skip producing a `result`
+                    // by panicking-by-design only if reached — we won't
+                    // be: the auto-return guard suppresses use of
+                    // `result`. Use std::mem::zeroed via a typed proxy.
+                    Value::with_number(0).expect("cranelift Value::with_number(0)")
+                } else {
+                    last_val.unwrap_or_else(|| builder.ins().iconst(types::I64, 0))
+                }
             }
         };
 
-        // Return the result
-        if !matches!(ret_ty, ResolvedType::Unit) {
-            builder.ins().return_(&[result]);
+        // Return the result.
+        //
+        // 5b-5 (DEFERRED #16, Step 17) defensive: skip the auto-return
+        // emission if the body's last statement was already a `Stmt::Return`
+        // (which emitted `builder.ins().return_(...)` and filled the
+        // current block). Without this guard cranelift panics with
+        // "you cannot add an instruction to a block already filled" —
+        // the exact error 5b-5 unit tests surfaced when the test source
+        // contained an explicit `R 0` after a `print(...)` statement.
+        let body_already_returned = block_terminated;
+
+        if !body_already_returned {
+            if !matches!(ret_ty, ResolvedType::Unit) {
+                builder.ins().return_(&[result]);
+            } else {
+                builder.ins().return_(&[]);
+            }
         } else {
-            builder.ins().return_(&[]);
+            // Body already returned; suppress the unused `result`.
+            let _ = result;
         }
 
         // Finalize the function

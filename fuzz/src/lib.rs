@@ -587,4 +587,57 @@ mod tests {
         // means agreement.
         compare_paths("F main() -> i64 { 7 }");
     }
+
+    /// 5b-5 (DEFERRED #16, Step 17): JIT-side print capture verification.
+    /// `print("hi")` must appear in `RunOutput.stdout` after the JIT run
+    /// (vais_runtime_print thunk → STDOUT_SINK → take_stdout_sink). This
+    /// test exercises 5b-1..5b-4 end-to-end on the JIT path alone (no
+    /// MIR side comparison — that's `compare_paths_print_agrees` below).
+    #[test]
+    fn run_native_path_captures_print_stdout() {
+        let out = run_native_path(
+            "F main() -> i64 { print(\"hi\") R 0 }",
+        );
+        match out {
+            PathOutcome::Ok(r) => {
+                assert_eq!(r.exit_code, 0, "expected exit 0; got {}", r.exit_code);
+                assert_eq!(
+                    r.stdout, "hi",
+                    "expected stdout \"hi\" via vais_runtime_print thunk; got {:?}",
+                    r.stdout
+                );
+            }
+            PathOutcome::InputInvalid => panic!("parse/TC rejected `F main() -> i64 {{ print(...) R 0 }}`; cannot test 5b-5"),
+            PathOutcome::NotImplemented => panic!("JIT NotImplemented on simple print case — 5b-3 wiring regression"),
+        }
+    }
+
+    /// 5b-5 (DEFERRED #16): println variant (trailing '\n' added).
+    #[test]
+    fn run_native_path_captures_println_stdout() {
+        let out = run_native_path(
+            "F main() -> i64 { println(\"line\") R 0 }",
+        );
+        match out {
+            PathOutcome::Ok(r) => {
+                assert_eq!(r.exit_code, 0);
+                assert_eq!(r.stdout, "line\n");
+            }
+            other => panic!("expected Ok with stdout \"line\\n\"; got {:?} (5b-3 println suffix wiring may have regressed)", match other {
+                PathOutcome::Ok(_) => "Ok",
+                PathOutcome::InputInvalid => "InputInvalid",
+                PathOutcome::NotImplemented => "NotImplemented",
+            }),
+        }
+    }
+
+    /// 5b-5 (DEFERRED #16): MIR/JIT diagnostic equivalence — both arms
+    /// must agree on exit code AND stdout. This is the criterion that
+    /// the 5a asymmetry guard masked; with 5b-4 removing it, this test
+    /// is a real diff oracle. If MIR captures "hi" but JIT captures
+    /// nothing (or vice versa), compare_paths panics.
+    #[test]
+    fn compare_paths_print_agrees() {
+        compare_paths("F main() -> i64 { print(\"hi\") R 0 }");
+    }
 }
