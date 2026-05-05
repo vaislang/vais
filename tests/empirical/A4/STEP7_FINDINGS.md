@@ -1145,3 +1145,40 @@ Master plan v17 Step 9 status retained at "A2-03 DEFERRED" (now with
 explicit silent-surface evidence rather than just parser/resolver
 hand-wave).
 
+
+### F-24 — Rejected-02 (Box ↔ T) re-probe REPRODUCES silent accept (2026-05-05)
+
+F-11 (2026-05-03) reported "v1 sentinel does NOT reproduce" for
+Rejected-02 (Box<T> ↔ T auto-unwrap). Re-probed 2026-05-05 with the
+master-plan v1 wording adapted to current Vais syntax:
+
+```vais
+F take_i64(x: i64) -> i64 { R x }
+F take_box(b: Box<i64>) -> i64 { R take_i64(b) }
+F main() -> i64 { R 0 }
+```
+
+Result: `vaisc check` → `OK No errors found`. The call `take_i64(b)`
+silently passes a `Box<i64>` where `i64` is required. Master-plan v23
+classifies this surface as **Rejected** (E001 expected), but empirical
+evidence shows it is in fact a **silent A4 candidate**.
+
+The earlier F-11 "does not reproduce" was caused by a probe formulation
+issue (the previous probe declared `b: Box<i64>` in let-binding, which
+trips a parser error before the type-check check runs). Once the probe
+uses `b := Box::new(42)` style let, the parser succeeds and the type
+checker silently accepts.
+
+Status: NEW A4 candidate proposed (call it A4-13). Fixture + master-plan
+reclassification deferred to next Step 7 iteration. Master-plan v23
+Rejected entry for Box ↔ T is therefore **stale by empirical evidence**;
+update will accompany A4-13 fixture LANDED.
+
+Runtime probe was attempted (`Box::new(42)` in main) but failed with
+C002 Undefined function: `Box::new` is not in current std — that is
+a separate surface gap (Box constructor). The silent-accept bug lives
+in the function-call type-check path, independent of std availability.
+
+Recommendation: open a deferred multi-iter task for A4-13 — fixture
+draft + master-plan reclassify (Rejected → A4) + check-empirical wiring
++ runtime probe (synthesize a Box value via std primitives or extern).
