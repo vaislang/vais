@@ -1,6 +1,73 @@
 //! JIT runtime management for external function resolution.
+//!
+//! # Stage 5b-impl (DEFERRED #16, Step 17)
+//!
+//! This module hosts the JIT-side stdout capture infrastructure required by
+//! the MIR/native asymmetry guard in `compiler/fuzz/src/lib.rs`. The
+//! reconnaissance pass (commit 4fc8f937) established that JIT didn't
+//! register a Vais print builtin at all — the asymmetry guard was dead.
+//!
+//! 5b-impl restores semantics to that guard via three layers:
+//!   - `STDOUT_SINK`: thread-local `RefCell<String>` (this file, 5b-1)
+//!   - `vais_runtime_print(ptr, len)` extern "C" thunk (this file, 5b-1)
+//!   - `register_stdlib` registers the thunk under the same symbol the
+//!     JIT codegen emits (5b-2)
+//!   - JIT codegen lowers Vais print/println/print_int builtin calls to
+//!     indirect calls into the thunk (5b-3, separate file)
+//!   - `compiler/fuzz/src/lib.rs::run_native_path` reads `STDOUT_SINK::take()`
+//!     to populate `RunOutput.stdout`; asymmetry guard removed (5b-4)
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+
+thread_local! {
+    /// JIT-execution stdout capture buffer. Each thread running JIT-emitted
+    /// code accumulates print output here; tests / fuzz drivers call
+    /// `take_stdout_sink()` after the run to retrieve and reset.
+    ///
+    /// 5b-1: dead until 5b-3 wires `vais_runtime_print` calls into emitted
+    /// JIT code.
+    static STDOUT_SINK: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+/// Take the accumulated JIT-execution stdout buffer for the current thread,
+/// resetting it to empty. Used by fuzz drivers and unit tests that compare
+/// MIR-interpreted vs JIT-compiled execution side-by-side.
+///
+/// 5b-1: dead until 5b-4 wires this into the fuzz path.
+#[allow(dead_code)]
+pub fn take_stdout_sink() -> String {
+    STDOUT_SINK.with(|sink| std::mem::take(&mut *sink.borrow_mut()))
+}
+
+/// `vais_runtime_print(ptr, len)` — JIT-callable thunk that appends a UTF-8
+/// byte slice to the thread-local STDOUT_SINK. Matches the C ABI the JIT
+/// codegen emits for Vais print/println/print_int builtins.
+///
+/// 5b-1: dead until 5b-2 registers it in `JitRuntime::register_stdlib` and
+/// 5b-3 emits indirect calls.
+///
+/// # Safety
+///
+/// `ptr` must be a valid pointer to `len` bytes of UTF-8-encoded data.
+/// `len` must be non-negative; behavior is undefined on negative inputs.
+/// Caller (JIT codegen) is responsible for ensuring `ptr`+`len` lifetime
+/// covers the call.
+#[allow(dead_code)]
+#[no_mangle]
+pub unsafe extern "C" fn vais_runtime_print(ptr: *const u8, len: i64) {
+    if ptr.is_null() || len <= 0 {
+        return;
+    }
+    // SAFETY: caller asserts `ptr`..`ptr+len` is a valid UTF-8 byte slice
+    // for the duration of this call.
+    let slice = std::slice::from_raw_parts(ptr, len as usize);
+    let s = match std::str::from_utf8(slice) {
+        Ok(s) => s,
+        Err(_) => return, // silently drop non-UTF-8 (matches Vais spec contract)
+    };
+    STDOUT_SINK.with(|sink| sink.borrow_mut().push_str(s));
+}
 
 /// JIT runtime for managing external function pointers.
 pub struct JitRuntime {
