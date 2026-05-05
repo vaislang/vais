@@ -9,6 +9,24 @@ use super::super::generator::InkwellCodeGenerator;
 use crate::{CodegenError, CodegenResult};
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
+    /// 2b-5b helper: if `ty` is `dyn Trait` / `&dyn Trait` / `&mut dyn Trait`,
+    /// return the trait name. Otherwise None. Used by call-site fat-pointer
+    /// wrapping (DEFERRED #18 sub-task 2b-5b).
+    fn dyn_trait_name(ty: &vais_types::ResolvedType) -> Option<String> {
+        use vais_types::ResolvedType;
+        match ty {
+            ResolvedType::DynTrait { trait_name, .. } => Some(trait_name.clone()),
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                if let ResolvedType::DynTrait { trait_name, .. } = inner.as_ref() {
+                    Some(trait_name.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
     pub(super) fn generate_call(
         &mut self,
         callee: &Expr,
@@ -669,8 +687,24 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Generate arguments, coercing types to match function parameter expectations.
         // - String fat pointers { ptr, i64 } → extract raw ptr for extern C (printf/puts)
         // - Integer values (i64) → inttoptr when function expects ptr (free/realloc)
+        // - dyn Trait params → wrap concrete arg in fat pointer { data_ptr, vtable_ptr }
+        //   (DEFERRED #18 sub-task 2b-5b — F-23 root cause fix).
         let fn_type = fn_value.get_type();
         let param_types: Vec<_> = fn_type.get_param_types();
+
+        // 2b-5b: look up callee's semantic param types from resolved_function_sigs.
+        // If a param is dyn Trait, we need to wrap the arg in a fat pointer.
+        let semantic_param_dyn: Vec<Option<String>> = self
+            .resolved_function_sigs
+            .get(&fn_name)
+            .map(|sig| {
+                sig.params
+                    .iter()
+                    .map(|(_n, ty, _mut)| Self::dyn_trait_name(ty))
+                    .collect()
+            })
+            .unwrap_or_else(|| vec![None; args.len()]);
+
         let mut arg_values: Vec<BasicMetadataValueEnum> = Vec::with_capacity(args.len());
         for (i, arg) in args.iter().enumerate() {
             // Implicit error propagation (Phase 4b.1 / #7): wrap the arg in
@@ -680,6 +714,30 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             } else {
                 self.generate_expr(&arg.node)?
             };
+
+            // 2b-5b: dyn Trait wrapping check, takes precedence over generic
+            // pointer/struct coercions below. We must know the concrete impl
+            // type to pick the right vtable; recover it via infer_struct_name.
+            if let Some(trait_name) = semantic_param_dyn.get(i).and_then(|x| x.as_ref()) {
+                // Try to recover the concrete impl type from the arg AST.
+                // For the F-23 baseline (Ident receivers like `use_dyn(h)`),
+                // var_struct_types["h"] gives the struct name. For
+                // struct-literal args (`use_dyn(H{})`) infer_struct_name
+                // walks the StructLit. Other shapes fall through with no
+                // wrapping — gen_aggregate F-23 GUARD will catch silent
+                // dispatch attempts at the method call site.
+                if let Ok(impl_type) = self.infer_struct_name(&arg.node) {
+                    if let Some(fat) = self.create_trait_object_inkwell(val, &impl_type, trait_name)
+                    {
+                        arg_values.push(fat.into());
+                        continue;
+                    }
+                }
+                // If we couldn't determine the concrete type or the vtable
+                // generation failed, fall through to standard coercion;
+                // the F-23 GUARD downstream will catch it as needed.
+            }
+
             let coerced: BasicMetadataValueEnum = if let Some(param_ty) = param_types.get(i) {
                 if param_ty.is_pointer_type() && val.is_struct_value() {
                     // Fat string { ptr, i64 } → extract raw ptr
