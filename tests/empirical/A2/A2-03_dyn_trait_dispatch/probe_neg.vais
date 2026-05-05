@@ -1,0 +1,15 @@
+# A2-03 negative probe — bare i64 cannot satisfy `dyn Greet`.
+#
+# vaisc check must reject (E001 type mismatch) — verifies the
+# downstream defense that prevents non-trait-implementing values
+# from being passed to a `dyn Trait` parameter.
+
+W Greet {
+    F greet(self) -> i64
+}
+
+F use_dyn(g: dyn Greet) -> i64 { g.greet() }
+
+F main() -> i64 {
+    use_dyn(123)
+}

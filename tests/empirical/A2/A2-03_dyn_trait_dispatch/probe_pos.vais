@@ -1,0 +1,32 @@
+# A2-03 positive probe — multi-impl dyn Trait dispatch.
+#
+# Two impls of Greet (H.greet → 42, Wd.greet → 7). use_dyn calls the
+# method through a `dyn Greet` parameter. If dispatch is silently
+# bound to one impl (F-23 silent corruption), both calls return the
+# same value; if dispatch is real (vtable indirection per A4-12 step
+# 2b), they return different values and main returns 42 + 7 = 49.
+
+W Greet {
+    F greet(self) -> i64
+}
+
+S H { v: i64 }
+S Wd { v: i64 }
+
+X H: Greet {
+    F greet(self) -> i64 { 42 }
+}
+
+X Wd: Greet {
+    F greet(self) -> i64 { 7 }
+}
+
+F use_dyn(g: dyn Greet) -> i64 { g.greet() }
+
+F main() -> i64 {
+    h := H { v: 0 }
+    w := Wd { v: 0 }
+    a := use_dyn(h)
+    b := use_dyn(w)
+    a + b
+}

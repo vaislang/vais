@@ -1,0 +1,61 @@
+[entry]
+id = "A2-03"
+classification = "A2 certified subset"
+surface = "dyn / trait object dispatch (multi-impl, fat-pointer indirected via vtable)"
+predicate = "see compiler/docs/certification/A2_SUBSETS.md §A2-03 (TBD)"
+master_plan_version = 18
+landed = "2026-05-05"
+
+[positive]
+probe = "probe_pos.vais"
+expected_exit = 49
+description = """
+W Greet { F greet(self) -> i64 }
+X H: Greet { F greet(self) -> i64 { 42 } }
+X Wd: Greet { F greet(self) -> i64 { 7 } }
+F use_dyn(g: dyn Greet) -> i64 { g.greet() }
+F main() -> i64 { use_dyn(H{v:0}) + use_dyn(Wd{v:0}) }
+
+Multi-impl dispatch verified: 42 + 7 = 49. The two `use_dyn` calls
+must return DIFFERENT values, proving each is dispatched to the
+correct impl per the receiver's runtime type — not silently
+constant-folded to one impl as in F-23 silent corruption.
+
+The fix landed in A4-12 step 2b (DEFERRED #18, 2026-05-05):
+  - 2b-1..2b-4: vtable_inkwell.rs infrastructure (vtable struct,
+    global emit, fat-pointer creation, indirect call).
+  - 2b-5a: trait/impl registration hook in generate_module.
+  - 2b-5b: call-site fat-pointer wrapping (caller emits
+    {data_ptr, vtable_ptr} when callee param is dyn Trait).
+  - 2b-5c: F-23 GUARD replaced with real dispatch via
+    generate_dynamic_call_inkwell.
+
+If exit ≠ 49, regression. Two specific drift signatures:
+  - exit 84 (= 42+42): dispatch always picks H impl (silent again).
+  - exit 14 (= 7+7):   dispatch always picks Wd impl (silent again).
+  - exit 9  (= 7+2 etc):  uninitialized vtable / wrong slot.
+"""
+
+[negative]
+probe = "probe_neg.vais"
+expected_behavior = "build succeeds (TC currently silent), runtime crashes (SIGSEGV / non-zero exit). Once TC-level rejection lands as a follow-up silent-surface fix, tighten to check_fails."
+description = "i64 passed where dyn Greet expected. The type checker currently accepts this silently (separate surface, not in #18 scope), but runtime crashes because the bare i64 has no vtable. The negative probe asserts the runtime defense."
+
+[verification]
+verified_date = "2026-05-05"
+verifier_command = "bash run.sh"
+verifier_expected_stdout_substring = "A2-03 OK: multi-impl dyn dispatch exits 49"
+
+[baseline_uses]
+# Real-world dyn Trait call sites this fixture protects (subset; vaisdb
+# uses 39 dyn sites total per STEP7_FINDINGS F-23, all single-impl-per-
+# trait so the silent vs. real distinction did not surface there).
+vaisdb = [
+  "many — see grep -rn 'dyn ' lang/packages/vaisdb/src/  (~39 sites)",
+]
+spec = [
+  "compiler/docs/language/LIVING_SPEC/01_keywords/dyn_trait_param.vais",
+]
+
+[migration]
+post_predicate_change = "If A2-03 ever tightens (e.g. require explicit `as dyn`), update probe_pos to use the new surface."
