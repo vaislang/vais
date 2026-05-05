@@ -246,6 +246,132 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         Some(full.into_struct_value())
     }
+
+    /// Indirect dispatch through a trait object's vtable
+    /// (DEFERRED #18 sub-task 2b-4).
+    ///
+    /// Strategy (matches text-IR `generate_dynamic_call` shape):
+    ///   1. extractvalue 0 → data_ptr (i8*)
+    ///   2. extractvalue 1 → vtable_ptr_i8 (i8*)
+    ///   3. bitcast vtable_ptr_i8 to <VTableTy>*
+    ///   4. GEP slot index = method_index + 3 (skip drop/size/align)
+    ///   5. load i8* from slot, then bitcast to fn-ptr
+    ///   6. call fn(data_ptr, args...)
+    ///
+    /// Simplified ABI (matches text-IR side):
+    /// - self → i8*
+    /// - every additional arg → i64
+    /// - return type → i64 / void / { i8*, i64 } per `vtable_ret_type` rules
+    ///
+    /// Returns the call result as `Option<BasicValueEnum>` (None for void).
+    /// Outer `Option` wraps build-error / lookup-error.
+    pub(super) fn generate_dynamic_call_inkwell(
+        &mut self,
+        trait_object: StructValue<'ctx>,
+        trait_name: &str,
+        method_name: &str,
+        args: &[BasicValueEnum<'ctx>],
+    ) -> Option<Option<BasicValueEnum<'ctx>>> {
+        let trait_def = self.trait_defs.get(trait_name)?.clone();
+        let order = InkwellVtableGenerator::method_order(&trait_def);
+        let method_index = order.iter().position(|n| n == method_name)?;
+
+        let i8_ptr_ty = self.context.i8_type().ptr_type(AddressSpace::default());
+        let i64_ty = self.context.i64_type();
+        let vtable_ty = InkwellVtableGenerator::vtable_struct_type(self.context, &trait_def);
+
+        // 1. extract data_ptr (i8*).
+        let data_ptr = self
+            .builder
+            .build_extract_value(trait_object, 0, "dyn.data")
+            .ok()?
+            .into_pointer_value();
+
+        // 2. extract vtable_ptr (i8*).
+        let vtable_i8 = self
+            .builder
+            .build_extract_value(trait_object, 1, "dyn.vtable")
+            .ok()?
+            .into_pointer_value();
+
+        // 3. cast vtable_ptr to <VTableTy>*.
+        let vtable_ptr_ty = vtable_ty.ptr_type(AddressSpace::default());
+        let vtable_typed = self
+            .builder
+            .build_bitcast(vtable_i8, vtable_ptr_ty, "dyn.vtable_typed")
+            .ok()?
+            .into_pointer_value();
+
+        // 4. GEP into slot (method_index + 3).
+        let slot_index = method_index as u32 + 3;
+        let fn_ptr_ptr = self
+            .builder
+            .build_struct_gep(vtable_ty, vtable_typed, slot_index, "dyn.fn_ptr_ptr")
+            .ok()?;
+
+        // 5. Load i8* from slot, then bitcast to concrete fn-ptr type.
+        let raw_fn_ptr = self
+            .builder
+            .build_load(i8_ptr_ty, fn_ptr_ptr, "dyn.fn_ptr_raw")
+            .ok()?
+            .into_pointer_value();
+
+        // Build fn type: ret(i8*, i64*) where additional args are widened to i64.
+        let method_sig = trait_def.methods.get(method_name)?;
+        let ret_ty_str = super::super::vtable::vtable_ret_type(&method_sig.ret, method_sig.is_async);
+
+        let mut param_types: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> =
+            vec![i8_ptr_ty.into()];
+        for _ in args {
+            param_types.push(i64_ty.into());
+        }
+
+        let fn_type = match ret_ty_str {
+            "void" => self.context.void_type().fn_type(&param_types, false),
+            "i64" => i64_ty.fn_type(&param_types, false),
+            "{ i8*, i64 }" => {
+                // String fat-pointer return — build matching struct type.
+                let fat = self
+                    .context
+                    .struct_type(&[i8_ptr_ty.into(), i64_ty.into()], false);
+                fat.fn_type(&param_types, false)
+            }
+            _ => i64_ty.fn_type(&param_types, false),
+        };
+        let fn_ptr_typed = self
+            .builder
+            .build_bitcast(
+                raw_fn_ptr,
+                fn_type.ptr_type(AddressSpace::default()),
+                "dyn.fn_ptr",
+            )
+            .ok()?
+            .into_pointer_value();
+
+        // 6. Call (data_ptr, args...).
+        let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
+            vec![data_ptr.into()];
+        for arg in args {
+            // Widen any non-i64 args to i64 (simplification matching text-IR).
+            let widened = match *arg {
+                BasicValueEnum::IntValue(iv) if iv.get_type() != i64_ty => self
+                    .builder
+                    .build_int_z_extend_or_bit_cast(iv, i64_ty, "dyn.arg.zext")
+                    .ok()?
+                    .into(),
+                BasicValueEnum::IntValue(iv) => iv.into(),
+                other => other.into(),
+            };
+            call_args.push(widened);
+        }
+
+        let call_site =
+            self.builder
+                .build_indirect_call(fn_type, fn_ptr_typed, &call_args, "dyn.call")
+                .ok()?;
+
+        Some(call_site.try_as_basic_value().left())
+    }
 }
 
 #[cfg(test)]
