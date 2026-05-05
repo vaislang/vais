@@ -226,6 +226,26 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// `generate_match` around arm generation; stack-shaped so nested matches
     /// work.
     pub(super) match_scrutinee_type_stack: Vec<vais_types::ResolvedType>,
+
+    /// Trait definitions registered for vtable generation (DEFERRED #18 sub-task 2b-2).
+    /// Mirrors `crates/vais-codegen/src/state.rs::trait_defs` (text-IR side).
+    /// Populated by `register_trait_from_ast_inkwell` from `Item::Trait` AST nodes.
+    /// Used by 2b-2 `generate_vtable_global` and 2b-4 `generate_dynamic_call`.
+    /// Dead until 2b-5 wires call sites in gen_aggregate.rs.
+    pub(super) trait_defs: HashMap<String, vais_types::TraitDef>,
+
+    /// Trait implementation method maps:
+    /// (impl_type, trait_name) -> { method_name -> mangled_function_name }.
+    /// Mirrors text-IR `trait_impl_methods`. Populated by
+    /// `register_trait_impl_inkwell` from `Item::Impl` AST nodes with a
+    /// declared trait. Dead until 2b-5.
+    pub(super) trait_impl_methods:
+        HashMap<(String, String), HashMap<String, String>>,
+
+    /// Cached vtable globals: (impl_type, trait_name) -> emitted GlobalValue.
+    /// Populated lazily by `get_or_generate_vtable_inkwell` in 2b-2.
+    /// Dead until 2b-5.
+    pub(super) vtable_globals: HashMap<(String, String), GlobalValue<'ctx>>,
 }
 
 /// Tail Call Optimization state for loop-based tail recursion elimination.
@@ -301,6 +321,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             type_aliases: HashMap::new(),
             implicit_try_sites: HashSet::new(),
             match_scrutinee_type_stack: Vec::new(),
+            trait_defs: HashMap::new(),
+            trait_impl_methods: HashMap::new(),
+            vtable_globals: HashMap::new(),
         };
 
         // Declare built-in functions
