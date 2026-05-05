@@ -17,8 +17,8 @@
 
 use inkwell::context::Context;
 use inkwell::module::Linkage;
-use inkwell::types::{BasicTypeEnum, StructType};
-use inkwell::values::{BasicValueEnum, GlobalValue};
+use inkwell::types::{BasicType, BasicTypeEnum, StructType};
+use inkwell::values::{BasicValueEnum, GlobalValue, StructValue};
 use inkwell::AddressSpace;
 use vais_types::TraitDef;
 
@@ -176,6 +176,75 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         self.vtable_globals.insert(key, global);
         Some(global)
+    }
+
+    /// Create a trait object value: `{ data_ptr, vtable_ptr }` fat pointer
+    /// (DEFERRED #18 sub-task 2b-3).
+    ///
+    /// Strategy (matches text-IR `create_trait_object` shape):
+    ///   1. malloc(8) for the data slot (placeholder size; refined later).
+    ///   2. store concrete_value into the alloc'd slot (via bitcast).
+    ///   3. cast vtable global pointer to i8*.
+    ///   4. insertvalue into `{ i8*, i8* }` undef.
+    ///
+    /// Returns the trait object as a StructValue. None if vtable cannot be
+    /// generated (caller should have already validated the trait/impl pair).
+    ///
+    /// Pre-conditions: builder must be positioned at a valid insertion point
+    /// (i.e. inside a function body). 2b-5 ensures this.
+    pub(super) fn create_trait_object_inkwell(
+        &mut self,
+        concrete_value: BasicValueEnum<'ctx>,
+        impl_type: &str,
+        trait_name: &str,
+    ) -> Option<StructValue<'ctx>> {
+        let vtable_global = self.get_or_generate_vtable_inkwell(impl_type, trait_name)?;
+        let i8_ptr_ty = self.context.i8_type().ptr_type(AddressSpace::default());
+        let i64_ty = self.context.i64_type();
+
+        // 1. Allocate data slot via malloc(8).
+        let malloc_fn = self.module.get_function("malloc")?;
+        let size_arg = i64_ty.const_int(8, false);
+        let data_ptr_call = self
+            .builder
+            .build_call(malloc_fn, &[size_arg.into()], "trait_data")
+            .ok()?;
+        let data_ptr = data_ptr_call
+            .try_as_basic_value()
+            .left()?
+            .into_pointer_value();
+
+        // 2. Bitcast data_ptr to <concrete_value type>* and store.
+        let concrete_ty = concrete_value.get_type();
+        let typed_ptr_ty = concrete_ty.ptr_type(AddressSpace::default());
+        let typed_ptr = self
+            .builder
+            .build_bitcast(data_ptr, typed_ptr_ty, "trait_cast")
+            .ok()?
+            .into_pointer_value();
+        self.builder.build_store(typed_ptr, concrete_value).ok()?;
+
+        // 3. Cast vtable global pointer to i8*.
+        let vtable_raw_ptr = vtable_global.as_pointer_value();
+        let vtable_i8_ptr = self
+            .builder
+            .build_bitcast(vtable_raw_ptr, i8_ptr_ty, "vtable_cast")
+            .ok()?
+            .into_pointer_value();
+
+        // 4. Build `{ i8*, i8* }` via insertvalue.
+        let to_ty = InkwellVtableGenerator::trait_object_type(self.context);
+        let undef = to_ty.get_undef();
+        let with_data = self
+            .builder
+            .build_insert_value(undef, data_ptr, 0, "trait_obj.data")
+            .ok()?;
+        let full = self
+            .builder
+            .build_insert_value(with_data, vtable_i8_ptr, 1, "trait_obj.vtable")
+            .ok()?;
+
+        Some(full.into_struct_value())
     }
 }
 
