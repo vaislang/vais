@@ -486,6 +486,21 @@ enum Commands {
         /// Indentation size (default: 4)
         #[arg(long, default_value = "4")]
         indent: usize,
+
+        /// Step 15 stage 0 codemod: scan for identifiers that would
+        /// collide with proposed multi-character keywords (fn / struct /
+        /// match / etc.). When set, ignores `check` and `indent`.
+        #[arg(long)]
+        rename_keyword_collisions: bool,
+
+        /// Limit `--rename-keyword-collisions` to a single keyword.
+        #[arg(long)]
+        keyword: Option<String>,
+
+        /// `--rename-keyword-collisions` mode: report only (default true
+        /// in stage 0).
+        #[arg(long, default_value = "true")]
+        dry_run: bool,
     },
 
     /// Automatically fix code issues (unused vars, imports, or A4 explicit-typing)
@@ -1054,7 +1069,21 @@ fn main_inner() {
             input,
             check,
             indent,
-        }) => commands::simple::cmd_fmt(&input, check, indent),
+            rename_keyword_collisions,
+            keyword,
+            dry_run,
+        }) => {
+            if rename_keyword_collisions {
+                let opts = commands::fmt_rename::RenameOptions {
+                    dry_run,
+                    keyword,
+                    rename_prefix: "_".to_string(),
+                };
+                commands::fmt_rename::cmd_fmt_rename_keywords(&input, &opts)
+            } else {
+                commands::simple::cmd_fmt(&input, check, indent)
+            }
+        }
         Some(Commands::Fix {
             input,
             dry_run,
