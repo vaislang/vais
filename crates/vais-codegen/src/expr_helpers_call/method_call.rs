@@ -1979,6 +1979,78 @@ impl CodeGenerator {
             }
         }
 
+        // F-23 dispatch (text-IR side, A4-12 step 2a-C-3 — DEFERRED #19):
+        // if the receiver was originally `dyn Trait` / `&dyn Trait` /
+        // `&mut dyn Trait`, dispatch through the vtable instead of the
+        // static @<MangledName> emit below.
+        //
+        // This is now safe (DEFERRED #19 2a-C-1 fix established):
+        //   - sorted_method_names ensures emission/dispatch slot order
+        //     agreement across vtable_struct_type / generate_vtable /
+        //     generate_dyn_method_call.
+        //   - typed ABI (2a-A) ensures Result/Option/struct returns
+        //     lower precisely (no i64 widening).
+        // Together these remove the regression risks that revert-ed
+        // earlier wiring attempts.
+        //
+        // recv_is_dyn_trait was decided from var_resolved_types — the
+        // type checker's source-level view. The lowered LLVM type for
+        // `dyn Trait` / `&dyn Trait` / `&mut dyn Trait` is the fat
+        // pointer { i8*, i8* } per type_to_llvm. Trust the type-checker
+        // view; an LLVM-shape guard would miss cases where the
+        // recv_val was loaded directly from a function-parameter
+        // alloca without going through record_emitted_type (verified
+        // empirically on LIVING_SPEC dyn_trait_param.vais).
+        if recv_is_dyn_trait {
+            let trait_name_opt = match &recv_type {
+                ResolvedType::DynTrait { trait_name, .. } => Some(trait_name.clone()),
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                    if let ResolvedType::DynTrait { trait_name, .. } = inner.as_ref() {
+                        Some(trait_name.clone())
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+            if let Some(trait_name) = trait_name_opt {
+                // Re-evaluate receiver to recover the original fat
+                // pointer (recv_val above may have been bitcast to a
+                // typed pointer earlier in this function).
+                let (fat_val, fat_ir) = self.generate_expr(receiver, counter)?;
+                ir.push_str(&fat_ir);
+
+                // arg_vals[0] is recv (formatted "<ty> <val>"); skip
+                // it. Remaining values are also "<ty> <val>"; strip the
+                // type prefix. trait_dispatch::generate_dyn_method_call
+                // re-derives types from method_sig (typed ABI 2a-A).
+                let dyn_args: Vec<String> = arg_vals
+                    .iter()
+                    .skip(1)
+                    .map(|av| {
+                        av.split_once(' ')
+                            .map(|(_, v)| v.to_string())
+                            .unwrap_or_else(|| av.clone())
+                    })
+                    .collect();
+
+                let (call_ir, call_val) = self.generate_dyn_method_call(
+                    &fat_val,
+                    &trait_name,
+                    method_name,
+                    &dyn_args,
+                    counter,
+                )?;
+                ir.push_str(&call_ir);
+
+                if call_val.is_empty() {
+                    return Ok(("void".to_string(), ir));
+                }
+                self.fn_ctx.register_temp_type(&call_val, ret_resolved);
+                return Ok((call_val, ir));
+            }
+        }
+
         if ret_type == "void" {
             write_ir!(
                 ir,
