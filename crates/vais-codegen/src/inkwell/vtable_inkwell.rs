@@ -402,27 +402,34 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .ok()?
             .into_pointer_value();
 
-        // Build fn type: ret(i8*, i64*) where additional args are widened to i64.
+        // 2a-B (DEFERRED #17): build fn type with ResolvedType-precise
+        // params and return — avoids the legacy 4-bucket vtable_ret_type
+        // approximation that misclassified Result/Option/struct returns
+        // as i64. Mirrors the typed path on the text-IR side
+        // (generate_dynamic_call_typed in vtable.rs).
         let method_sig = trait_def.methods.get(method_name)?;
-        let ret_ty_str = super::super::vtable::vtable_ret_type(&method_sig.ret, method_sig.is_async);
 
+        // Param types from method_sig.params[1..] (skip self) using the
+        // type_mapper. Async paths still use i64 handle (Future).
         let mut param_types: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> =
             vec![i8_ptr_ty.into()];
-        for _ in args {
-            param_types.push(i64_ty.into());
+        for (i, _arg) in args.iter().enumerate() {
+            let pty = method_sig
+                .params
+                .get(i + 1)
+                .map(|(_n, ty, _mut)| ty.clone())
+                .unwrap_or(vais_types::ResolvedType::I64);
+            let llvm_pty = self.type_mapper.map_type(&pty);
+            param_types.push(llvm_pty.into());
         }
 
-        let fn_type = match ret_ty_str {
-            "void" => self.context.void_type().fn_type(&param_types, false),
-            "i64" => i64_ty.fn_type(&param_types, false),
-            "{ i8*, i64 }" => {
-                // String fat-pointer return — build matching struct type.
-                let fat = self
-                    .context
-                    .struct_type(&[i8_ptr_ty.into(), i64_ty.into()], false);
-                fat.fn_type(&param_types, false)
-            }
-            _ => i64_ty.fn_type(&param_types, false),
+        let fn_type = if method_sig.is_async {
+            i64_ty.fn_type(&param_types, false)
+        } else if matches!(method_sig.ret, vais_types::ResolvedType::Unit) {
+            self.context.void_type().fn_type(&param_types, false)
+        } else {
+            let llvm_ret = self.type_mapper.map_type(&method_sig.ret);
+            llvm_ret.fn_type(&param_types, false)
         };
         let fn_ptr_typed = self
             .builder
@@ -435,20 +442,16 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .into_pointer_value();
 
         // 6. Call (data_ptr, args...).
+        // 2a-B: pass args as-is — no implicit widening to i64. The
+        // caller already evaluated args according to their declared
+        // semantic types; method_sig.params[i+1] determines the
+        // expected LLVM type which we matched in fn_type above.
+        // If a mismatch surfaces, that's a caller-side bug to fix
+        // (not a hidden coercion in the dispatch helper).
         let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
             vec![data_ptr.into()];
         for arg in args {
-            // Widen any non-i64 args to i64 (simplification matching text-IR).
-            let widened = match *arg {
-                BasicValueEnum::IntValue(iv) if iv.get_type() != i64_ty => self
-                    .builder
-                    .build_int_z_extend_or_bit_cast(iv, i64_ty, "dyn.arg.zext")
-                    .ok()?
-                    .into(),
-                BasicValueEnum::IntValue(iv) => iv.into(),
-                other => other.into(),
-            };
-            call_args.push(widened);
+            call_args.push((*arg).into());
         }
 
         let call_site =
