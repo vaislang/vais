@@ -501,6 +501,16 @@ enum Commands {
         /// in stage 0).
         #[arg(long, default_value = "true")]
         dry_run: bool,
+
+        /// Step 15 stage 3 dual-syntax round-trip codemod. Convert the
+        /// input file between Vais's two surface forms. Accepts `multi`
+        /// (use long-form keywords like `fn`, `struct`, `match`) or
+        /// `single` (use the canonical single-character keywords like
+        /// `F`, `S`, `M`). Without `--check` the file is rewritten in
+        /// place. Round-trip is invariant: `--to=multi` then
+        /// `--to=single` produces byte-identical output.
+        #[arg(long, value_name = "FORM")]
+        to: Option<String>,
     },
 
     /// Automatically fix code issues (unused vars, imports, or A4 explicit-typing)
@@ -1072,8 +1082,17 @@ fn main_inner() {
             rename_keyword_collisions,
             keyword,
             dry_run,
+            to,
         }) => {
-            if rename_keyword_collisions {
+            if let Some(to_form) = to {
+                match commands::fmt_dual::DualForm::parse(&to_form) {
+                    Ok(target) => {
+                        let opts = commands::fmt_dual::DualOptions { target, check };
+                        commands::fmt_dual::cmd_fmt_dual(&input, &opts)
+                    }
+                    Err(e) => Err(e),
+                }
+            } else if rename_keyword_collisions {
                 let opts = commands::fmt_rename::RenameOptions {
                     dry_run,
                     keyword,

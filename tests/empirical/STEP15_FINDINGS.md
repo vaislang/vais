@@ -19,6 +19,7 @@ the prerequisite.
 | F-15-03 | Stage 1 second wave first sub-batch LANDED: else / match / return aliases + bare keyword shadow gate (2026-05-05) |
 | F-15-04 | Stage 1 second wave second sub-batch LANDED (use / type) + fn deferred + mod out-of-scope (2026-05-06) |
 | F-15-05 | fn alias LANDED via single-iter parser refactor (refute F-15-04 multi-iter prediction) (2026-05-06) |
+| F-15-06 | Stage 3 round-trip codemod LANDED (`vaisc fmt --to=multi|single`) + 266/266 selfhost-roundtrip gate (2026-05-06) |
 
 ## Findings
 
@@ -456,3 +457,104 @@ green at v30 because the parser now handles both Token forms.
 Status: Step 15 stage 1 wave 2 closed (modulo mod out-of-scope).
 master-plan v29 → v30. Stage 3 (vaisc fmt --to= flags + selfhost
 migration) unblocked.
+
+### F-15-06 — Stage 3 round-trip codemod LANDED (2026-05-06)
+
+#### Implementation
+
+New CLI form on the existing `vaisc fmt` command:
+
+```
+vaisc fmt --to=multi  [--check] <input>
+vaisc fmt --to=single [--check] <input>
+```
+
+Implementation: `compiler/crates/vaisc/src/commands/fmt_dual.rs`
+(~280 LOC). Algorithm: re-lex the source via `vais_lexer::tokenize`,
+walk tokens in order, and for each token whose span text equals one
+of the 11 dual-syntax keyword pairs (`F`↔`fn`, `S`↔`struct`,
+`E`↔`enum`, `EL`↔`else`, `M`↔`match`, `R`↔`return`, `T`↔`type`,
+`U`↔`use`, `P`↔`pub`, `W`↔`trait`, `X`↔`impl`) substitute the
+canonical form for the target. Non-keyword bytes (whitespace,
+comments, string literals, identifiers) are copied through verbatim
+by tracking the byte cursor between adjacent token spans.
+
+Why span-based and not AST-based: AST round-trip from token to text
+loses formatting (whitespace inside expressions, trailing commas,
+comment placement). Span-based substitution preserves the input
+byte-for-byte except where a keyword spelling actually changed.
+
+9 unit tests in `fmt_dual::tests`:
+- dual_form_parse — `multi` / `multi-char` / `single` / `single-char`
+  CLI form recognition.
+- replacement_table — 11 pairs map both directions; identifiers like
+  `fn_handler` and `else_result` do NOT trigger.
+- convert_simple_function — `F double(...) → fn double(...)` round-trip.
+- convert_struct_and_match — multi-keyword + nested match arms.
+- convert_else_and_return — keywords with no multi-char counterpart
+  (here: `I` → no change) stay put.
+- preserves_string_literal_with_keyword_word — `"fn or struct"`
+  inside a string is untouched.
+- preserves_comment_with_keyword_word — `# this F is a struct` inside
+  a comment is untouched.
+- ident_starting_with_keyword_unchanged — `call_test_fn(fn_ptr: i64)`
+  round-trips bit-exact.
+- round_trip_use_and_type — wave 2 keywords.
+
+#### `selfhost-roundtrip.sh` invariant gate
+
+New `scripts/selfhost-roundtrip.sh`. Two-pass protocol per file:
+
+1. canonical = vaisc fmt --to=single <file>
+2. multi     = vaisc fmt --to=multi  canonical
+3. back      = vaisc fmt --to=single multi
+4. assert canonical == back
+
+Empirical baseline: **266/266 .vais files round-trip clean** across
+`compiler/selfhost` + `compiler/std` +
+`compiler/docs/language/LIVING_SPEC`.
+
+#### Why two-pass instead of one-pass
+
+A naive one-pass round-trip (input → multi → single == input)
+fails on the existing baseline because **the baseline mixes forms
+at write time**. Concrete example:
+
+```vais
+# compiler/std/result.vais line ~84
+F map(&self, f: fn(T) -> T) -> Result<T, E> { ... }
+```
+
+This declares the method head with the single-form keyword `F` but
+types its function-pointer parameter with the multi-form `fn(T) ->
+T`. Both spellings lex to the same `Token::Function` so the parser
+is happy and runtime is correct, but the file is "mixed" at the
+byte level. A naive round-trip would diff because the codemod
+normalizes everything to one canonical form on the first pass.
+
+The fix: pass 1 picks the canonical form (single by default). Pass
+2 then validates the round-trip on that canonical baseline. This
+is the correct invariant — what we want to assert is that *once
+the source is canonicalized, the dual-syntax codemod is bijective
+at the byte level*. The fact that real-world source can be mixed
+at write time is a normal consequence of `fn` and `F` aliasing the
+same Token.
+
+#### Status
+
+Stage 3 partial close. The remaining sub-step is selfhost
+migration: rewriting `compiler/std/` (and possibly
+`compiler/selfhost/`) in canonical multi form and verifying that
+the resulting binary is bit-identical to the current baseline. The
+migration is now mechanically routine via:
+
+```bash
+find compiler/std -name '*.vais' \
+  -exec ./target/release/vaisc fmt --to=multi {} \;
+bash compiler/scripts/check-integrity.sh
+```
+
+Selfhost migration is deferred to a follow-up entry because it
+changes ~80 files and benefits from a separate review surface.
+
+master-plan v30 → v31.
