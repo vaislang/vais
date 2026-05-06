@@ -18,6 +18,7 @@ the prerequisite.
 | F-15-02 | Stage 1 first wave LANDED: 5 zero-collision multi-char keywords as Logos token aliases (2026-05-05) |
 | F-15-03 | Stage 1 second wave first sub-batch LANDED: else / match / return aliases + bare keyword shadow gate (2026-05-05) |
 | F-15-04 | Stage 1 second wave second sub-batch LANDED (use / type) + fn deferred + mod out-of-scope (2026-05-06) |
+| F-15-05 | fn alias LANDED via single-iter parser refactor (refute F-15-04 multi-iter prediction) (2026-05-06) |
 
 ## Findings
 
@@ -349,3 +350,109 @@ Status: Step 15 stage 1 wave 2 second sub-batch LANDED.
 master-plan v28 → v29. fn alias deferred. mod removed from
 scope. Stage 3 (vaisc fmt --to= flags + selfhost migration) still
 ahead — selfhost migration cannot fully complete until fn lands.
+
+### F-15-05 — fn alias LANDED via single-iter parser refactor (2026-05-06)
+
+F-15-04's deferred-as-multi-iter classification of fn was empirically
+refuted. Actual cost: 1 commit, ~15 LOC parser change + 1 lexer line.
+
+#### Lexer change
+
+```rust
+#[token("F", priority = 3)]
+#[token("fn", priority = 3)]
+Function,
+```
+
+Total dual-syntax keywords now 11/13.
+
+#### Parser change
+
+`vais-parser/src/types.rs::parse_base_type` (the type-position
+dispatch that recognizes `fn(...) -> T` as a fn-pointer type) was
+reading only `Token::Ident("fn")`. After the lexer change, the
+input lexes as `Token::Function` instead, so the dispatch missed.
+
+Fix: add a second arm next to the existing one. Both paths reach
+the same `parse_fn_ptr_type` continuation:
+
+```rust
+if let Token::Ident(s) = &tok.token {
+    if s == "fn" {
+        self.advance();
+        return Ok(Spanned::new(
+            self.parse_fn_ptr_type()?,
+            Span::new(start, self.prev_span().end),
+        ));
+    }
+}
+if matches!(tok.token, Token::Function) {
+    let next_is_lparen = self
+        .peek_next()
+        .map(|t| matches!(t.token, Token::LParen))
+        .unwrap_or(false);
+    if next_is_lparen {
+        self.advance();
+        return Ok(Spanned::new(
+            self.parse_fn_ptr_type()?,
+            Span::new(start, self.prev_span().end),
+        ));
+    }
+}
+```
+
+The LParen lookahead is the disambiguator: a bare Token::Function
+in type position without `(` is malformed and should fall through
+to the regular type-name path so the existing error reporting
+stays intact. This avoids accidentally consuming an fn-decl head
+when the user mistypes a type.
+
+The fn-decl path (item/declarations.rs `parse_function_decl` and
+the 20+ other Token::Function uses across parser modules) is
+unchanged. Function declarations still recognize Token::Function
+unambiguously because they appear at item-statement position, not
+in a type slot.
+
+#### Empirical learning — L-005 8th instance
+
+F-15-04 predicted 'multi-iter parser refactor (decl head vs
+pointer-type head 구분)'. The actual conflict was a single
+dispatch site that needed Token::Function added next to the
+existing Ident("fn") match. v29 deferred-as-multi-iter
+classification was over-conservative.
+
+Pattern repeats from prior L-005 instances: pre-empirical risk
+estimate cites "광범위 사용처 영향" (here: 5+ broken negative
+fixtures + core_certification fail) as multi-iter justification,
+but the true root cause is *narrower* than the symptom surface.
+
+Mitigation for future Step 15 / similar refactor: when a lexer
+change breaks N parser fixtures, grep for the Token enum variant
+in parser source first. If the broken fixtures all hit the same
+variant, the fix is likely a single-arm addition, not a
+multi-iter refactor. Distinguish "many broken tests" from
+"many fix sites".
+
+#### Wave 2 final state (v30)
+
+| keyword | status | sub-batch |
+|---|---|---|
+| else | LANDED | v28 |
+| match | LANDED | v28 |
+| return | LANDED | v28 |
+| const | already-keyword | v28 cleanup |
+| use | LANDED | v29 |
+| type | LANDED | v29 |
+| fn | LANDED | v30 |
+| mod | OUT OF SCOPE | — |
+
+INTEGRITY OK preserved at v30 (std=82/82, vaisdb=261/261, runtime
+smokes all green, core_certification 16/16). Negative fixtures
+that broke at the v29 fn-attempt (syntax_extra_fn_as_arg /
+syntax_closure_in_variable / syntax_neg_mod_missing_fn_keyword /
+syntax_neg_trait_missing_fn_keyword / syntax_type_fn_pointer) all
+green at v30 because the parser now handles both Token forms.
+
+Status: Step 15 stage 1 wave 2 closed (modulo mod out-of-scope).
+master-plan v29 → v30. Stage 3 (vaisc fmt --to= flags + selfhost
+migration) unblocked.

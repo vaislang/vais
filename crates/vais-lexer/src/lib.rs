@@ -50,6 +50,7 @@ pub enum Token {
     // === Keywords (single-letter for token efficiency) ===
     // Higher priority than identifiers
     #[token("F", priority = 3)]
+    #[token("fn", priority = 3)]
     Function,
     #[token("S", priority = 3)]
     #[token("struct", priority = 3)]

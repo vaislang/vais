@@ -623,9 +623,32 @@ impl Parser {
             }
         } else if let Some(tok) = self.peek() {
             // Check for function pointer type: fn(...) -> T
+            // Two paths: (a) Token::Ident("fn") — pre-Step-15 path when
+            // `fn` was not a lexer keyword; (b) Token::Function — post
+            // Step 15 wave 2 fn-alias once the lexer recognizes `fn` as
+            // the multi-char form of `F`. Both must reach
+            // `parse_fn_ptr_type` so existing `fn(i64) -> i64` syntax
+            // keeps working under either lexer state.
             if let Token::Ident(s) = &tok.token {
                 if s == "fn" {
                     self.advance(); // consume 'fn'
+                    return Ok(Spanned::new(
+                        self.parse_fn_ptr_type()?,
+                        Span::new(start, self.prev_span().end),
+                    ));
+                }
+            }
+            if matches!(tok.token, Token::Function) {
+                // Disambiguate: only treat as fn-pointer type if the next
+                // token is `(`. Otherwise this is a malformed type and we
+                // fall through to the regular type-name path so the
+                // existing error reporting stays intact.
+                let next_is_lparen = self
+                    .peek_next()
+                    .map(|t| matches!(t.token, Token::LParen))
+                    .unwrap_or(false);
+                if next_is_lparen {
+                    self.advance(); // consume `fn` (Token::Function)
                     return Ok(Spanned::new(
                         self.parse_fn_ptr_type()?,
                         Span::new(start, self.prev_span().end),
