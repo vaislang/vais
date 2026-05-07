@@ -254,6 +254,21 @@ pub(crate) fn cmd_build(
     let main_source = fs::read_to_string(input)
         .map_err(|e| format!("Cannot read '{}': {}", input.display(), e))?;
 
+    // Step 19 P1 (2026-05-07): emit single-char keyword deprecation
+    // warnings. The lex is a pre-pass that does not affect parser output;
+    // the parser will lex independently. Cost is small (Phase 129 baseline:
+    // 50K LOC ≈ 3.4ms lex), and suppressed via VAIS_SUPPRESS_SINGLE_CHAR_WARN=1.
+    if let Ok((_tokens, deprecation_warnings)) =
+        vais_lexer::tokenize_with_warnings(&main_source)
+    {
+        crate::utils::emit_deprecation_warnings(
+            &deprecation_warnings,
+            &input.display().to_string(),
+        );
+    }
+    // Note: if lex fails here, the parser will report the same error
+    // shortly with a richer span. Don't double-report.
+
     // Initialize query database for memoized parsing
     let mut query_db = QueryDatabase::new();
 

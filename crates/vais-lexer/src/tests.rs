@@ -1065,3 +1065,96 @@ fn test_single_quote_es_module_import() {
         tokens
     );
 }
+
+// === Step 19 P1 — single-char keyword deprecation warnings ===
+
+#[test]
+fn test_deprecation_no_warnings_when_all_multichar() {
+    let source = "fn main() -> i64 { return 0 }";
+    let (_tokens, warnings) = tokenize_with_warnings(source).unwrap();
+    assert!(warnings.is_empty(), "multi-char form should produce 0 warnings, got: {:?}", warnings);
+}
+
+#[test]
+fn test_deprecation_single_warning_for_F() {
+    let source = "F main() -> i64 { return 0 }";
+    let (_tokens, warnings) = tokenize_with_warnings(source).unwrap();
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(warnings[0].spelling, "F");
+    assert_eq!(warnings[0].canonical, "fn");
+    assert_eq!(warnings[0].line, 1);
+    assert_eq!(warnings[0].column, 1);
+}
+
+#[test]
+fn test_deprecation_two_warnings_for_F_and_R() {
+    let source = "F main() -> i64 { R 0 }";
+    let (_tokens, warnings) = tokenize_with_warnings(source).unwrap();
+    assert_eq!(warnings.len(), 2);
+    assert_eq!(warnings[0].spelling, "F");
+    assert_eq!(warnings[1].spelling, "R");
+    assert_eq!(warnings[1].canonical, "return");
+}
+
+#[test]
+fn test_deprecation_all_11_retired_forms() {
+    // Each retired form lexes to a recognized token with the documented
+    // canonical replacement.
+    let cases: &[(&str, &str, &str)] = &[
+        ("F main() {}",         "F",  "fn"),
+        ("S Foo {}",            "S",  "struct"),
+        ("EN E { A, B }",       "EN", "enum"),
+        ("fn x() { I 1 { 1 } EL { 0 } }", "EL", "else"),
+        ("fn x() -> i64 { M 1 { _ => 0 } }", "M",  "match"),
+        ("fn x() -> i64 { R 0 }", "R",  "return"),
+        ("T MyInt = i64",       "T",  "type"),
+        ("U std::io",           "U",  "use"),
+        ("P fn x() {}",         "P",  "pub"),
+        ("W Foo {}",            "W",  "trait"),
+        ("X Foo {}",            "X",  "impl"),
+    ];
+    for (src, expected_spelling, expected_canonical) in cases {
+        let (_tokens, warnings) = tokenize_with_warnings(src).unwrap();
+        let hit = warnings.iter().find(|w| w.spelling == *expected_spelling);
+        assert!(
+            hit.is_some(),
+            "expected `{}` warning for source `{}`, got warnings: {:?}",
+            expected_spelling, src, warnings,
+        );
+        assert_eq!(hit.unwrap().canonical, *expected_canonical);
+    }
+}
+
+#[test]
+fn test_deprecation_line_column_multiline() {
+    // Line/column tracking through newlines.
+    let source = "fn main() {\n  R 0\n}";
+    let (_tokens, warnings) = tokenize_with_warnings(source).unwrap();
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(warnings[0].spelling, "R");
+    assert_eq!(warnings[0].line, 2);
+    assert_eq!(warnings[0].column, 3); // 1-indexed: "  R" → R at column 3
+}
+
+#[test]
+fn test_deprecation_warning_display_format() {
+    let source = "F x() {}";
+    let (_tokens, warnings) = tokenize_with_warnings(source).unwrap();
+    let display = format!("{}", warnings[0]);
+    assert!(display.contains("deprecated single-char keyword `F`"));
+    assert!(display.contains("use `fn` instead"));
+    assert!(display.contains("line 1:1"));
+}
+
+#[test]
+fn test_deprecation_e_alone_is_not_warned() {
+    // `E` alone is a contextual single-char (parses as identifier in many
+    // positions). The 11 retired forms are F/S/EN/EL/M/R/T/U/P/W/X — `E`
+    // is not in the list because it is also a generic-param identifier
+    // shape. `EN` (priority 4) is the explicit enum keyword form.
+    let source = "fn x<E>(e: E) -> E { e }";
+    let (_tokens, warnings) = tokenize_with_warnings(source).unwrap();
+    // No retired-form warnings expected; E is a generic-param identifier here.
+    let retired_hits: Vec<_> = warnings.iter().filter(|w| w.spelling == "E").collect();
+    assert!(retired_hits.is_empty(), "E used as generic-param should not warn, got: {:?}", warnings);
+}

@@ -4,14 +4,14 @@ use crate::commands::build::cmd_build;
 use crate::configure_type_checker;
 use crate::error_formatter;
 use crate::imports::load_module_with_imports_internal;
-use crate::utils::{print_plugin_diagnostics, walkdir};
+use crate::utils::{emit_deprecation_warnings, print_plugin_diagnostics, walkdir};
 use colored::Colorize;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use vais_codegen::TargetTriple;
-use vais_lexer::tokenize;
+use vais_lexer::tokenize_with_warnings;
 use vais_parser::parse;
 use vais_plugin::{DiagnosticLevel, PluginRegistry};
 use vais_query::QueryDatabase;
@@ -180,8 +180,11 @@ pub(crate) fn cmd_check(
         println!("{} {}", "Checking".green().bold(), input.display());
     }
 
-    // Tokenize (quick syntax check)
-    let _tokens = tokenize(&source).map_err(|e| format!("Lexer error: {}", e))?;
+    // Tokenize (quick syntax check) + collect single-char keyword
+    // deprecation warnings (Step 19 P1, 2026-05-07).
+    let (_tokens, deprecation_warnings) =
+        tokenize_with_warnings(&source).map_err(|e| format!("Lexer error: {}", e))?;
+    emit_deprecation_warnings(&deprecation_warnings, &input.display().to_string());
 
     // Parse with import resolution — load all imported modules into a merged AST
     let mut query_db = QueryDatabase::new();
@@ -593,3 +596,6 @@ description = "CLI for {name}"
 
     Ok(())
 }
+
+// Note: emit_deprecation_warnings() lives in
+// crate::utils::deprecation to be sharable across cmd_check and cmd_build.
