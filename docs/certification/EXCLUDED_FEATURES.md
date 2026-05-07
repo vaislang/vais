@@ -56,7 +56,7 @@ out of this document and into the Core proof.
 
 ## Active promotion candidates
 
-Active promotion candidates are tracked exclusively in ROADMAP Master Plan v32 §Phase A2 with formal subset predicates. Each requires lifecycle stage 1 (impact preflight) before assignment.
+Active promotion candidates are tracked exclusively in ROADMAP Master Plan v31 §Phase A2 with formal subset predicates. Each requires lifecycle stage 1 (impact preflight) before assignment.
 
 As of this plan revision the A2 candidates are:
 
