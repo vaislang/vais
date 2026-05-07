@@ -34,25 +34,25 @@ fn gen_err(source: &str) -> String {
 
 #[test]
 fn test_call_print_i64() {
-    let ir = gen_ok(r#"F test() -> i64 { println(42) R 0 }"#);
+    let ir = gen_ok(r#"fn test() -> i64 { println(42) return 0 }"#);
     assert!(ir.contains("42") || ir.contains("print"));
 }
 
 #[test]
 fn test_call_print_string() {
-    let ir = gen_ok(r#"F test() -> i64 { println("hello") R 0 }"#);
+    let ir = gen_ok(r#"fn test() -> i64 { println("hello") return 0 }"#);
     assert!(ir.contains("hello"));
 }
 
 #[test]
 fn test_call_print_multiple_args() {
-    let ir = gen_ok(r#"F test() -> i64 { println(1, 2, 3) R 0 }"#);
+    let ir = gen_ok(r#"fn test() -> i64 { println(1, 2, 3) return 0 }"#);
     assert!(!ir.is_empty());
 }
 
 #[test]
 fn test_call_format_builtin() {
-    let result = gen_result(r#"F test() -> str { format("value: {}", 42) }"#);
+    let result = gen_result(r#"fn test() -> str { format("value: {}", 42) }"#);
     assert!(result.is_ok() || result.is_err());
 }
 
@@ -60,7 +60,7 @@ fn test_call_format_builtin() {
 fn test_call_str_to_ptr() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             s := "hello"
             str_to_ptr(s)
         }
@@ -73,7 +73,7 @@ fn test_call_str_to_ptr() {
 fn test_call_str_to_ptr_wrong_args() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             str_to_ptr("a", "b")
         }
     "#,
@@ -86,8 +86,8 @@ fn test_call_str_to_ptr_wrong_args() {
 fn test_call_regular_function() {
     let ir = gen_ok(
         r#"
-        F add(a: i64, b: i64) -> i64 = a + b
-        F test() -> i64 = add(10, 20)
+        fn add(a: i64, b: i64) -> i64 = a + b
+        fn test() -> i64 = add(10, 20)
     "#,
     );
     assert!(ir.contains("call"));
@@ -97,9 +97,9 @@ fn test_call_regular_function() {
 fn test_call_function_chain() {
     let ir = gen_ok(
         r#"
-        F double(x: i64) -> i64 = x * 2
-        F inc(x: i64) -> i64 = x + 1
-        F test() -> i64 = inc(double(5))
+        fn double(x: i64) -> i64 = x * 2
+        fn inc(x: i64) -> i64 = x + 1
+        fn test() -> i64 = inc(double(5))
     "#,
     );
     assert!(ir.contains("@double"));
@@ -116,11 +116,11 @@ fn test_call_undefined_function() {
 fn test_call_struct_constructor() {
     let ir = gen_ok(
         r#"
-        S Pair {
+        struct Pair {
             a: i64,
             b: i64
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             p := Pair { a: 1, b: 2 }
             p.a
         }
@@ -137,7 +137,7 @@ fn test_call_enum_variant_constructor() {
             Some(i64),
             None
         }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#,
     );
     assert!(result.is_ok() || result.is_err());
@@ -151,11 +151,11 @@ fn test_call_enum_variant_constructor() {
 fn test_method_call_simple() {
     let ir = gen_ok(
         r#"
-        S Vec2 { x: i64, y: i64 }
-        X Vec2 {
-            F sum(self) -> i64 = self.x + self.y
+        struct Vec2 { x: i64, y: i64 }
+        impl Vec2 {
+            fn sum(self) -> i64 = self.x + self.y
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             v := Vec2 { x: 3, y: 4 }
             v.sum()
         }
@@ -168,11 +168,11 @@ fn test_method_call_simple() {
 fn test_method_call_with_args() {
     let ir = gen_ok(
         r#"
-        S Calc { base: i64 }
-        X Calc {
-            F add(self, n: i64) -> i64 = self.base + n
+        struct Calc { base: i64 }
+        impl Calc {
+            fn add(self, n: i64) -> i64 = self.base + n
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             c := Calc { base: 10 }
             c.add(5)
         }
@@ -185,11 +185,11 @@ fn test_method_call_with_args() {
 fn test_method_call_chained_access() {
     let ir = gen_ok(
         r#"
-        S Holder { val: i64 }
-        X Holder {
-            F get(self) -> i64 = self.val
+        struct Holder { val: i64 }
+        impl Holder {
+            fn get(self) -> i64 = self.val
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             h := Holder { val: 42 }
             h.get()
         }
@@ -212,7 +212,7 @@ fn test_stmt_let_binding() {
 fn test_stmt_let_mut_binding() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             x = 10
             x = 20
@@ -227,7 +227,7 @@ fn test_stmt_let_mut_binding() {
 fn test_stmt_multiple_bindings() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             a := 1
             b := 2
             c := 3
@@ -242,7 +242,7 @@ fn test_stmt_multiple_bindings() {
 fn test_stmt_compound_assignment_add() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 10
             x = x + 5
             x
@@ -256,7 +256,7 @@ fn test_stmt_compound_assignment_add() {
 fn test_stmt_nested_scopes() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 1
             y := {
                 z := x + 2
@@ -283,9 +283,9 @@ fn test_stmt_explicit_return() {
 fn test_stmt_early_return() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             I x < 0 {
-                R 0
+                return 0
             }
             x * 2
         }
@@ -298,7 +298,7 @@ fn test_stmt_early_return() {
 fn test_stmt_void_return() {
     let result = gen_result(
         r#"
-        F test() {
+        fn test() {
             x := 42
             R
         }
@@ -316,9 +316,9 @@ fn test_ffi_extern_simple_function() {
     let ir = gen_ok(
         r#"
         N {
-            F abs(x: i64) -> i64
+            fn abs(x: i64) -> i64
         }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#,
     );
     assert!(ir.contains("declare") || ir.contains("abs"));
@@ -329,10 +329,10 @@ fn test_ffi_extern_multiple_functions() {
     let ir = gen_ok(
         r#"
         N {
-            F malloc(size: i64) -> i64
-            F free(ptr: i64)
+            fn malloc(size: i64) -> i64
+            fn free(ptr: i64)
         }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#,
     );
     assert!(ir.contains("malloc") || ir.contains("declare"));
@@ -343,9 +343,9 @@ fn test_ffi_extern_void_return() {
     let ir = gen_ok(
         r#"
         N {
-            F exit(code: i64)
+            fn exit(code: i64)
         }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#,
     );
     assert!(!ir.is_empty());
@@ -356,9 +356,9 @@ fn test_ffi_extern_no_params() {
     let ir = gen_ok(
         r#"
         N {
-            F getpid() -> i64
+            fn getpid() -> i64
         }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#,
     );
     assert!(!ir.is_empty());
@@ -369,9 +369,9 @@ fn test_ffi_extern_str_param() {
     let ir = gen_ok(
         r#"
         N {
-            F puts(s: str) -> i64
+            fn puts(s: str) -> i64
         }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#,
     );
     assert!(!ir.is_empty());
@@ -401,7 +401,7 @@ fn test_infer_bool_literal() {
 
 #[test]
 fn test_infer_string_literal() {
-    let ir = gen_ok(r#"F test() -> str = "hello""#);
+    let ir = gen_ok(r#"fn test() -> str = "hello""#);
     assert!(!ir.is_empty());
 }
 
@@ -421,7 +421,7 @@ fn test_infer_binary_comparison() {
 fn test_infer_if_else_type() {
     let ir = gen_ok(
         r#"
-        F test(b: bool) -> i64 {
+        fn test(b: bool) -> i64 {
             I b { 1 } E { 2 }
         }
     "#,
@@ -433,7 +433,7 @@ fn test_infer_if_else_type() {
 fn test_infer_block_type_from_last_stmt() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 1
             y := 2
             x + y
@@ -447,8 +447,8 @@ fn test_infer_block_type_from_last_stmt() {
 fn test_infer_match_result_type() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 0 => 100,
                 1 => 200,
                 _ => 300
@@ -467,8 +467,8 @@ fn test_infer_match_result_type() {
 fn test_infer_struct_lit_pointer() {
     let ir = gen_ok(
         r#"
-        S Pt { x: i64, y: i64 }
-        F test() -> i64 {
+        struct Pt { x: i64, y: i64 }
+        fn test() -> i64 {
             p := Pt { x: 1, y: 2 }
             p.x
         }
@@ -481,8 +481,8 @@ fn test_infer_struct_lit_pointer() {
 fn test_infer_struct_field_access() {
     let ir = gen_ok(
         r#"
-        S Data { a: i64, b: i64, c: i64 }
-        F test() -> i64 {
+        struct Data { a: i64, b: i64, c: i64 }
+        fn test() -> i64 {
             d := Data { a: 10, b: 20, c: 30 }
             d.a + d.b + d.c
         }
@@ -499,7 +499,7 @@ fn test_infer_struct_field_access() {
 fn test_lambda_no_capture() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             f := |x: i64| -> i64 { x + 1 }
             f(5)
         }
@@ -512,7 +512,7 @@ fn test_lambda_no_capture() {
 fn test_lambda_with_capture() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             base := 10
             f := |x: i64| -> i64 { x + base }
             f(5)
@@ -526,7 +526,7 @@ fn test_lambda_with_capture() {
 fn test_lambda_multiple_captures() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             a := 1
             b := 2
             c := 3
@@ -542,7 +542,7 @@ fn test_lambda_multiple_captures() {
 fn test_lambda_nested() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             outer := |x: i64| -> i64 {
                 inner := |y: i64| -> i64 { y * 2 }
                 inner(x) + 1
@@ -558,8 +558,8 @@ fn test_lambda_nested() {
 fn test_lambda_passed_as_arg() {
     let result = gen_result(
         r#"
-        F apply(f: |i64| -> i64, x: i64) -> i64 = f(x)
-        F test() -> i64 {
+        fn apply(f: |i64| -> i64, x: i64) -> i64 = f(x)
+        fn test() -> i64 {
             apply(|x: i64| -> i64 { x * 3 }, 7)
         }
     "#,
@@ -575,7 +575,7 @@ fn test_lambda_passed_as_arg() {
 fn test_string_concat_codegen() {
     let ir = gen_ok(
         r#"
-        F test() -> str {
+        fn test() -> str {
             a := "hello"
             b := " world"
             a + b
@@ -589,7 +589,7 @@ fn test_string_concat_codegen() {
 fn test_string_equality_codegen() {
     let ir = gen_ok(
         r#"
-        F test() -> bool {
+        fn test() -> bool {
             a := "abc"
             b := "abc"
             a == b
@@ -603,7 +603,7 @@ fn test_string_equality_codegen() {
 fn test_string_inequality_codegen() {
     let ir = gen_ok(
         r#"
-        F test() -> bool {
+        fn test() -> bool {
             a := "abc"
             b := "xyz"
             a != b
@@ -621,7 +621,7 @@ fn test_string_inequality_codegen() {
 fn test_ternary_expression() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             x > 0 ? x : 0 - x
         }
     "#,
@@ -633,7 +633,7 @@ fn test_ternary_expression() {
 fn test_nested_ternary() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             x > 0 ? 1 : (x < 0 ? 0 - 1 : 0)
         }
     "#,
@@ -645,7 +645,7 @@ fn test_nested_ternary() {
 fn test_if_without_else() {
     let result = gen_result(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             I x > 0 {
                 println(x)
             }
@@ -660,8 +660,8 @@ fn test_if_without_else() {
 fn test_match_with_guard() {
     let result = gen_result(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 n I n > 10 => n * 2,
                 n I n > 0 => n,
                 _ => 0
@@ -676,8 +676,8 @@ fn test_match_with_guard() {
 fn test_match_wildcard_only() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 _ => 42
             }
         }
@@ -694,7 +694,7 @@ fn test_match_wildcard_only() {
 fn test_array_literal() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr := [1, 2, 3, 4, 5]
             arr[0]
         }
@@ -707,8 +707,8 @@ fn test_array_literal() {
 fn test_struct_update_syntax() {
     let result = gen_result(
         r#"
-        S Config { width: i64, height: i64, depth: i64 }
-        F test() -> i64 {
+        struct Config { width: i64, height: i64, depth: i64 }
+        fn test() -> i64 {
             c := Config { width: 100, height: 200, depth: 300 }
             c.width
         }
@@ -721,10 +721,10 @@ fn test_struct_update_syntax() {
 fn test_nested_field_access() {
     let ir = gen_ok(
         r#"
-        S Inner { value: i64 }
-        S Middle { inner: Inner }
-        S Outer { middle: Middle }
-        F test() -> i64 {
+        struct Inner { value: i64 }
+        struct Middle { inner: Inner }
+        struct Outer { middle: Middle }
+        fn test() -> i64 {
             o := Outer { middle: Middle { inner: Inner { value: 99 } } }
             o.middle.inner.value
         }
@@ -737,8 +737,8 @@ fn test_nested_field_access() {
 fn test_struct_three_fields() {
     let ir = gen_ok(
         r#"
-        S Triple { a: i64, b: i64, c: i64 }
-        F test() -> i64 {
+        struct Triple { a: i64, b: i64, c: i64 }
+        fn test() -> i64 {
             t := Triple { a: 1, b: 2, c: 3 }
             t.a + t.b + t.c
         }
@@ -755,7 +755,7 @@ fn test_struct_three_fields() {
 fn test_block_expression() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             result := {
                 a := 10
                 b := 20
@@ -772,7 +772,7 @@ fn test_block_expression() {
 fn test_multiple_expressions_in_block() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 1
             y := x + 2
             z := y * 3
@@ -787,8 +787,8 @@ fn test_multiple_expressions_in_block() {
 fn test_expression_as_statement() {
     let ir = gen_ok(
         r#"
-        F side_effect(x: i64) -> i64 = x
-        F test() -> i64 {
+        fn side_effect(x: i64) -> i64 = x
+        fn test() -> i64 {
             side_effect(1)
             side_effect(2)
             side_effect(3)
@@ -806,15 +806,15 @@ fn test_expression_as_statement() {
 fn test_complex_struct_with_methods() {
     let ir = gen_ok(
         r#"
-        S Rectangle {
+        struct Rectangle {
             width: i64,
             height: i64
         }
-        X Rectangle {
-            F area(self) -> i64 = self.width * self.height
-            F perimeter(self) -> i64 = 2 * (self.width + self.height)
+        impl Rectangle {
+            fn area(self) -> i64 = self.width * self.height
+            fn perimeter(self) -> i64 = 2 * (self.width + self.height)
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             r := Rectangle { width: 5, height: 3 }
             r.area() + r.perimeter()
         }
@@ -827,15 +827,15 @@ fn test_complex_struct_with_methods() {
 fn test_complex_nested_if_match() {
     let ir = gen_ok(
         r#"
-        F classify(x: i64) -> i64 {
+        fn classify(x: i64) -> i64 {
             I x > 0 {
-                M x {
+                match x {
                     1 => 10,
                     2 => 20,
                     _ => 30
                 }
             } E {
-                M x {
+                match x {
                     0 => 0,
                     _ => 0 - 1
                 }
@@ -850,7 +850,7 @@ fn test_complex_nested_if_match() {
 fn test_complex_loop_with_accumulator() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := mut 0
             i := mut 1
             L i <= 100 {
@@ -868,9 +868,9 @@ fn test_complex_loop_with_accumulator() {
 fn test_complex_multiple_structs() {
     let ir = gen_ok(
         r#"
-        S Point { x: i64, y: i64 }
-        S Line { start: Point, end: Point }
-        F test() -> i64 {
+        struct Point { x: i64, y: i64 }
+        struct Line { start: Point, end: Point }
+        fn test() -> i64 {
             l := Line {
                 start: Point { x: 0, y: 0 },
                 end: Point { x: 10, y: 10 }
@@ -886,8 +886,8 @@ fn test_complex_multiple_structs() {
 fn test_complex_function_as_value() {
     let result = gen_result(
         r#"
-        F square(x: i64) -> i64 = x * x
-        F test() -> i64 = square(square(3))
+        fn square(x: i64) -> i64 = x * x
+        fn test() -> i64 = square(square(3))
     "#,
     );
     assert!(result.is_ok());
@@ -897,7 +897,7 @@ fn test_complex_function_as_value() {
 fn test_complex_deeply_nested_arithmetic() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             ((1 + 2) * (3 + 4)) - ((5 - 6) * (7 + 8))
         }
     "#,
@@ -909,12 +909,12 @@ fn test_complex_deeply_nested_arithmetic() {
 fn test_complex_multiple_returns() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            I x < 0 { R 0 - 1 }
-            I x == 0 { R 0 }
-            I x < 10 { R 1 }
-            I x < 100 { R 2 }
-            R 3
+        fn test(x: i64) -> i64 {
+            I x < 0 { return 0 - 1 }
+            I x == 0 { return 0 }
+            I x < 10 { return 1 }
+            I x < 100 { return 2 }
+            return 3
         }
     "#,
     );
@@ -925,7 +925,7 @@ fn test_complex_multiple_returns() {
 fn test_complex_bool_chain() {
     let ir = gen_ok(
         r#"
-        F test(a: i64, b: i64, c: i64) -> bool {
+        fn test(a: i64, b: i64, c: i64) -> bool {
             (a > 0 && b > 0) || (c > 0 && a < 100)
         }
     "#,
@@ -938,7 +938,7 @@ fn test_global_declaration() {
     let result = gen_result(
         r#"
         G MAX_SIZE: i64 = 1024
-        F test() -> i64 = MAX_SIZE
+        fn test() -> i64 = MAX_SIZE
     "#,
     );
     assert!(result.is_ok() || result.is_err());
@@ -948,8 +948,8 @@ fn test_global_declaration() {
 fn test_type_alias_codegen() {
     let result = gen_result(
         r#"
-        T Num = i64
-        F test(x: Num) -> Num = x + 1
+        type Num = i64
+        fn test(x: Num) -> Num = x + 1
     "#,
     );
     assert!(result.is_ok() || result.is_err());
@@ -959,7 +959,7 @@ fn test_type_alias_codegen() {
 fn test_defer_statement() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             D { x = x + 1 }
             x = 42
@@ -974,7 +974,7 @@ fn test_defer_statement() {
 fn test_for_loop_range() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             total := mut 0
             L i: 1..11 {
                 total = total + i
@@ -990,7 +990,7 @@ fn test_for_loop_range() {
 fn test_for_loop_nested() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := mut 0
             L i: 0..5 {
                 L j: 0..5 {
@@ -1008,7 +1008,7 @@ fn test_for_loop_nested() {
 fn test_bitwise_not() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 255
             !x
         }
@@ -1021,7 +1021,7 @@ fn test_bitwise_not() {
 fn test_logical_not() {
     let ir = gen_ok(
         r#"
-        F test() -> bool {
+        fn test() -> bool {
             x := true
             !x
         }
@@ -1040,7 +1040,7 @@ fn test_unary_minus() {
 fn test_multiline_function() {
     let ir = gen_ok(
         r#"
-        F compute(x: i64, y: i64, z: i64) -> i64 {
+        fn compute(x: i64, y: i64, z: i64) -> i64 {
             a := x * y
             b := y * z
             c := x * z
@@ -1060,12 +1060,12 @@ fn test_multiline_function() {
 fn test_mutual_recursion() {
     let ir = gen_ok(
         r#"
-        F is_even(n: i64) -> bool {
-            I n == 0 { R true }
+        fn is_even(n: i64) -> bool {
+            I n == 0 { return true }
             is_odd(n - 1)
         }
-        F is_odd(n: i64) -> bool {
-            I n == 0 { R false }
+        fn is_odd(n: i64) -> bool {
+            I n == 0 { return false }
             is_even(n - 1)
         }
     "#,
@@ -1078,8 +1078,8 @@ fn test_mutual_recursion() {
 fn test_match_multiple_arms() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 0 => 0,
                 1 => 10,
                 2 => 20,
@@ -1098,8 +1098,8 @@ fn test_match_multiple_arms() {
 fn test_match_bool() {
     let ir = gen_ok(
         r#"
-        F test(b: bool) -> i64 {
-            M b {
+        fn test(b: bool) -> i64 {
+            match b {
                 true => 1,
                 false => 0
             }
@@ -1113,11 +1113,11 @@ fn test_match_bool() {
 fn test_struct_method_returning_struct() {
     let ir = gen_ok(
         r#"
-        S Vec2 { x: i64, y: i64 }
-        X Vec2 {
-            F mag_sq(self) -> i64 = self.x * self.x + self.y * self.y
+        struct Vec2 { x: i64, y: i64 }
+        impl Vec2 {
+            fn mag_sq(self) -> i64 = self.x * self.x + self.y * self.y
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             v := Vec2 { x: 3, y: 4 }
             v.mag_sq()
         }
@@ -1130,7 +1130,7 @@ fn test_struct_method_returning_struct() {
 fn test_shadowing() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 1
             x := 2
             x := x + 3
@@ -1145,7 +1145,7 @@ fn test_shadowing() {
 fn test_complex_boolean_short_circuit() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> bool {
+        fn test(x: i64) -> bool {
             x > 0 && x < 100 && x != 50
         }
     "#,
@@ -1157,7 +1157,7 @@ fn test_complex_boolean_short_circuit() {
 fn test_complex_or_short_circuit() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> bool {
+        fn test(x: i64) -> bool {
             x == 0 || x == 1 || x == 2
         }
     "#,
@@ -1169,8 +1169,8 @@ fn test_complex_or_short_circuit() {
 fn test_zero_division_guard() {
     let ir = gen_ok(
         r#"
-        F safe_div(a: i64, b: i64) -> i64 {
-            I b == 0 { R 0 }
+        fn safe_div(a: i64, b: i64) -> i64 {
+            I b == 0 { return 0 }
             a / b
         }
     "#,
@@ -1182,8 +1182,8 @@ fn test_zero_division_guard() {
 fn test_fibonacci_iterative() {
     let ir = gen_ok(
         r#"
-        F fib(n: i64) -> i64 {
-            I n <= 1 { R n }
+        fn fib(n: i64) -> i64 {
+            I n <= 1 { return n }
             a := mut 0
             b := mut 1
             i := mut 2
@@ -1204,8 +1204,8 @@ fn test_fibonacci_iterative() {
 fn test_gcd() {
     let ir = gen_ok(
         r#"
-        F gcd(a: i64, b: i64) -> i64 {
-            I b == 0 { R a }
+        fn gcd(a: i64, b: i64) -> i64 {
+            I b == 0 { return a }
             gcd(b, a % b)
         }
     "#,
@@ -1217,8 +1217,8 @@ fn test_gcd() {
 fn test_power_function() {
     let ir = gen_ok(
         r#"
-        F pow(base: i64, exp: i64) -> i64 {
-            I exp == 0 { R 1 }
+        fn pow(base: i64, exp: i64) -> i64 {
+            I exp == 0 { return 1 }
             base * pow(base, exp - 1)
         }
     "#,
@@ -1230,12 +1230,12 @@ fn test_power_function() {
 fn test_multiple_struct_methods() {
     let ir = gen_ok(
         r#"
-        S Account { balance: i64 }
-        X Account {
-            F get_balance(self) -> i64 = self.balance
-            F is_positive(self) -> bool = self.balance > 0
+        struct Account { balance: i64 }
+        impl Account {
+            fn get_balance(self) -> i64 = self.balance
+            fn is_positive(self) -> bool = self.balance > 0
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             a := Account { balance: 100 }
             I a.is_positive() {
                 a.get_balance()
@@ -1252,8 +1252,8 @@ fn test_multiple_struct_methods() {
 fn test_empty_struct() {
     let result = gen_result(
         r#"
-        S Unit {}
-        F test() -> i64 {
+        struct Unit {}
+        fn test() -> i64 {
             u := Unit {}
             0
         }
@@ -1266,8 +1266,8 @@ fn test_empty_struct() {
 fn test_struct_single_field() {
     let ir = gen_ok(
         r#"
-        S Wrapper { value: i64 }
-        F test() -> i64 {
+        struct Wrapper { value: i64 }
+        fn test() -> i64 {
             w := Wrapper { value: 42 }
             w.value
         }
@@ -1280,10 +1280,10 @@ fn test_struct_single_field() {
 fn test_multi_param_function() {
     let ir = gen_ok(
         r#"
-        F sum5(a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 {
+        fn sum5(a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 {
             a + b + c + d + e
         }
-        F test() -> i64 = sum5(1, 2, 3, 4, 5)
+        fn test() -> i64 = sum5(1, 2, 3, 4, 5)
     "#,
     );
     assert!(!ir.is_empty());
@@ -1293,7 +1293,7 @@ fn test_multi_param_function() {
 fn test_division_and_modulo() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             a := 100 / 3
             b := 100 % 3
             a + b
@@ -1307,13 +1307,13 @@ fn test_division_and_modulo() {
 fn test_complex_struct_arithmetic() {
     let ir = gen_ok(
         r#"
-        S Vec3 { x: i64, y: i64, z: i64 }
-        X Vec3 {
-            F dot(self, other: Vec3) -> i64 {
+        struct Vec3 { x: i64, y: i64, z: i64 }
+        impl Vec3 {
+            fn dot(self, other: Vec3) -> i64 {
                 self.x * other.x + self.y * other.y + self.z * other.z
             }
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             a := Vec3 { x: 1, y: 2, z: 3 }
             b := Vec3 { x: 4, y: 5, z: 6 }
             a.dot(b)
@@ -1327,10 +1327,10 @@ fn test_complex_struct_arithmetic() {
 fn test_match_nested_in_loop() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := mut 0
             L i: 0..10 {
-                val := M i {
+                val := match i {
                     0 => 0,
                     1 => 1,
                     _ => i * 2
@@ -1348,7 +1348,7 @@ fn test_match_nested_in_loop() {
 fn test_loop_with_break_value() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             i := mut 0
             L {
                 I i >= 10 {
@@ -1385,14 +1385,14 @@ fn test_negative_via_subtraction() {
 fn test_trait_impl() {
     let ir = gen_ok(
         r#"
-        W Describable {
-            F describe(self) -> i64
+        trait Describable {
+            fn describe(self) -> i64
         }
-        S Item { id: i64 }
-        X Item: Describable {
-            F describe(self) -> i64 = self.id
+        struct Item { id: i64 }
+        impl Item: Describable {
+            fn describe(self) -> i64 = self.id
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             item := Item { id: 42 }
             item.describe()
         }
@@ -1405,8 +1405,8 @@ fn test_trait_impl() {
 fn test_generic_function() {
     let result = gen_result(
         r#"
-        F identity<T>(x: T) -> T = x
-        F test() -> i64 = identity(42)
+        fn identity<T>(x: T) -> type = x
+        fn test() -> i64 = identity(42)
     "#,
     );
     assert!(result.is_ok() || result.is_err());
@@ -1416,7 +1416,7 @@ fn test_generic_function() {
 fn test_while_loop_countdown() {
     let ir = gen_ok(
         r#"
-        F countdown(n: i64) -> i64 {
+        fn countdown(n: i64) -> i64 {
             count := mut n
             L count > 0 {
                 count = count - 1
@@ -1438,7 +1438,7 @@ fn test_i32_function() {
 fn test_bool_to_int() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             b := true
             I b { 1 } E { 0 }
         }
@@ -1451,8 +1451,8 @@ fn test_bool_to_int() {
 fn test_multiple_match_arms_with_same_value() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 1 => 0,
                 2 => 0,
                 3 => 0,
@@ -1468,7 +1468,7 @@ fn test_multiple_match_arms_with_same_value() {
 fn test_deeply_nested_blocks() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             a := {
                 b := {
                     c := {
@@ -1489,8 +1489,8 @@ fn test_deeply_nested_blocks() {
 fn test_struct_with_bool_field() {
     let ir = gen_ok(
         r#"
-        S Flags { active: bool, count: i64 }
-        F test() -> i64 {
+        struct Flags { active: bool, count: i64 }
+        fn test() -> i64 {
             f := Flags { active: true, count: 5 }
             f.count
         }
@@ -1503,9 +1503,9 @@ fn test_struct_with_bool_field() {
 fn test_comparison_chain() {
     let ir = gen_ok(
         r#"
-        F clamp(x: i64, lo: i64, hi: i64) -> i64 {
-            I x < lo { R lo }
-            I x > hi { R hi }
+        fn clamp(x: i64, lo: i64, hi: i64) -> i64 {
+            I x < lo { return lo }
+            I x > hi { return hi }
             x
         }
     "#,
@@ -1517,7 +1517,7 @@ fn test_comparison_chain() {
 fn test_max_function() {
     let ir = gen_ok(
         r#"
-        F max(a: i64, b: i64) -> i64 {
+        fn max(a: i64, b: i64) -> i64 {
             I a > b { a } E { b }
         }
     "#,
@@ -1529,7 +1529,7 @@ fn test_max_function() {
 fn test_min_function() {
     let ir = gen_ok(
         r#"
-        F min(a: i64, b: i64) -> i64 {
+        fn min(a: i64, b: i64) -> i64 {
             I a < b { a } E { b }
         }
     "#,
@@ -1541,7 +1541,7 @@ fn test_min_function() {
 fn test_abs_function() {
     let ir = gen_ok(
         r#"
-        F abs(x: i64) -> i64 {
+        fn abs(x: i64) -> i64 {
             I x < 0 { 0 - x } E { x }
         }
     "#,
@@ -1553,7 +1553,7 @@ fn test_abs_function() {
 fn test_sign_function() {
     let ir = gen_ok(
         r#"
-        F sign(x: i64) -> i64 {
+        fn sign(x: i64) -> i64 {
             I x > 0 { 1 }
             E I x < 0 { 0 - 1 }
             E { 0 }

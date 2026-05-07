@@ -127,7 +127,7 @@ impl SourceGenerator {
         // Generate functions with pattern matching
         for i in 0..self.function_count {
             source.push_str(&format!(
-                r#"F unwrap_or{}(opt: Option<i64>, default: i64) -> i64 = M opt {{
+                r#"fn unwrap_or{}(opt: Option<i64>, default: i64) -> i64 = match opt {{
     Option::Some(x) -> x,
     Option::None -> default
 }}

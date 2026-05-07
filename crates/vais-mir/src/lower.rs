@@ -1568,7 +1568,7 @@ mod tests {
     #[test]
     fn test_lower_with_let() {
         let source = r#"
-            F compute(x: i64) -> i64 = {
+            fn compute(x: i64) -> i64 = {
                 a := x + 1
                 b := a * 2
                 b
@@ -1584,7 +1584,7 @@ mod tests {
     #[test]
     fn test_lower_and_optimize() {
         let source = r#"
-            F dead_code(x: i64) -> i64 = {
+            fn dead_code(x: i64) -> i64 = {
                 unused := 42
                 result := x + 1
                 result
@@ -1641,7 +1641,7 @@ mod tests {
     #[test]
     fn test_lower_match_expression() {
         let source = r#"
-            F classify(x: i64) -> i64 = M x {
+            fn classify(x: i64) -> i64 = match x {
                 0 => 100,
                 1 => 200,
                 _ => 999
@@ -1685,8 +1685,8 @@ mod tests {
     #[test]
     fn test_lower_multiple_functions() {
         let source = r#"
-            F double(x: i64) -> i64 = x * 2
-            F triple(x: i64) -> i64 = x * 3
+            fn double(x: i64) -> i64 = x * 2
+            fn triple(x: i64) -> i64 = x * 3
         "#;
         let module = vais_parser::parse(source).expect("Parse failed");
         let mir = lower_module(&module);
@@ -1712,7 +1712,7 @@ mod tests {
     #[test]
     fn test_move_type_operand() {
         // String type uses Copy (str is Copy since Phase 13)
-        let source = r#"F take_string(s: str) -> str = s"#;
+        let source = r#"fn take_string(s: str) -> str = s"#;
         let module = vais_parser::parse(source).expect("Parse failed");
         let mir = lower_module(&module);
 
@@ -1725,7 +1725,7 @@ mod tests {
     fn test_drop_insertion() {
         // Copy types (including str) should NOT have Drop statements
         let source = r#"
-            F use_string() -> i64 {
+            fn use_string() -> i64 {
                 s: str = "hello"
                 42
             }
@@ -1742,7 +1742,7 @@ mod tests {
     fn test_no_drop_for_copy_types() {
         // Copy types should NOT have Drop statements
         let source = r#"
-            F use_int() -> i64 = {
+            fn use_int() -> i64 = {
                 x := 42
                 y := 100
                 x + y
@@ -1759,7 +1759,7 @@ mod tests {
     #[test]
     fn test_move_prevents_drop() {
         // str is Copy, so it uses Copy instead of Move
-        let source = r#"F return_string(s: str) -> str = s"#;
+        let source = r#"fn return_string(s: str) -> str = s"#;
         let module = vais_parser::parse(source).expect("Parse failed");
         let mir = lower_module(&module);
 

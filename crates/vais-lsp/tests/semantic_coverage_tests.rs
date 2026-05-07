@@ -52,7 +52,7 @@ fn test_semantic_tokens_loop_keyword() {
 #[test]
 fn test_semantic_tokens_match_keyword() {
     let tokens = tokens_for(
-        r#"F f(x: i64) -> i64 = M x {
+        r#"fn f(x: i64) -> i64 = match x {
         0 => 1,
         _ => 0
     }"#,
@@ -88,8 +88,8 @@ fn test_semantic_tokens_trait_keyword() {
 fn test_semantic_tokens_impl_keyword() {
     let tokens = tokens_for(
         r#"
-        S P { x: i64 }
-        X P { F get(self) -> i64 = self.x }
+        struct pub { x: i64 }
+        impl pub { fn get(self) -> i64 = self.x }
     "#,
     );
     assert!(!tokens.is_empty());
@@ -128,7 +128,7 @@ fn test_semantic_tokens_i64_type() {
 fn test_semantic_tokens_various_types() {
     let tokens = tokens_for(
         r#"
-        F f(a: i8, b: i16, c: i32, d: i64, e: f32, g: f64, h: bool, i: str) -> i64 = 0
+        fn f(a: i8, b: i16, c: i32, d: i64, e: f32, g: f64, h: bool, i: str) -> i64 = 0
     "#,
     );
     assert!(!tokens.is_empty());
@@ -164,7 +164,7 @@ fn test_semantic_tokens_float() {
 
 #[test]
 fn test_semantic_tokens_string() {
-    let tokens = tokens_for(r#"F f() -> str = "hello world""#);
+    let tokens = tokens_for(r#"fn f() -> str = "hello world""#);
     assert!(!tokens.is_empty());
 }
 
@@ -228,9 +228,9 @@ fn test_semantic_tokens_parameter_in_function() {
 fn test_semantic_tokens_multiline() {
     let tokens = tokens_for(
         r#"
-        F add(a: i64, b: i64) -> i64 {
+        fn add(a: i64, b: i64) -> i64 {
             result := a + b
-            R result
+            return result
         }
     "#,
     );
@@ -248,15 +248,15 @@ fn test_semantic_tokens_multiline() {
 fn test_semantic_tokens_complex_program() {
     let tokens = tokens_for(
         r#"
-        S Point { x: i64, y: i64 }
+        struct Point { x: i64, y: i64 }
         E Direction { North, South }
-        W Movable {
-            F move_to(self, x: i64) -> i64
+        trait Movable {
+            fn move_to(self, x: i64) -> i64
         }
-        X Movable for Point {
-            F move_to(self, x: i64) -> i64 = self.x + x
+        impl Movable for Point {
+            fn move_to(self, x: i64) -> i64 = self.x + x
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             p := Point { x: 10, y: 20 }
             d := Direction::North
             result := p.move_to(5)
@@ -295,7 +295,7 @@ fn test_semantic_tokens_invalid_syntax() {
 fn test_semantic_tokens_async_spawn_keywords() {
     let tokens = tokens_for(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := mut 0
             x = 42
             x
@@ -310,7 +310,7 @@ fn test_semantic_tokens_global_defer() {
     let tokens = tokens_for(
         r#"
         G counter: i64 = 0
-        F f() -> i64 {
+        fn f() -> i64 {
             D { counter }
             0
         }

@@ -82,7 +82,7 @@ fn test_many_parameters() {
 fn test_large_string_literal() {
     // Reduced size to avoid stack overflow in debug builds
     let content = "a".repeat(5_000);
-    let source = format!(r#"F large() -> str = "{}""#, content);
+    let source = format!(r#"fn large() -> str = "{}""#, content);
 
     let result = tokenize(&source);
     assert!(result.is_ok());
@@ -94,7 +94,7 @@ fn test_large_string_literal() {
 #[ignore]
 fn test_very_large_string_literal() {
     let content = "a".repeat(100_000);
-    let source = format!(r#"F large() -> str = "{}""#, content);
+    let source = format!(r#"fn large() -> str = "{}""#, content);
 
     let result = tokenize(&source);
     assert!(result.is_ok());
@@ -104,12 +104,12 @@ fn test_very_large_string_literal() {
 #[test]
 fn test_unicode_edge_cases() {
     let test_cases = [
-        r#"F test() -> str = "Hello World""#, // ASCII
-        r#"F test() -> str = "안녕하세요""#,  // Korean
-        r#"F test() -> str = "日本語""#,      // Japanese
-        r#"F test() -> str = "中文""#,        // Chinese
-        r#"F test() -> str = "العربية""#,     // Arabic (RTL)
-        r#"F test() -> str = "Привет""#,      // Cyrillic
+        r#"fn test() -> str = "Hello World""#, // ASCII
+        r#"fn test() -> str = "안녕하세요""#,  // Korean
+        r#"fn test() -> str = "日本語""#,      // Japanese
+        r#"fn test() -> str = "中文""#,        // Chinese
+        r#"fn test() -> str = "العربية""#,     // Arabic (RTL)
+        r#"fn test() -> str = "Привет""#,      // Cyrillic
     ];
 
     for source in test_cases {
@@ -247,7 +247,7 @@ fn test_repeated_operators() {
 #[test]
 fn test_multiple_strings() {
     let source = r#"
-        F strings() -> str {
+        fn strings() -> str {
             a := "first"
             b := "second"
             c := "third"
@@ -265,10 +265,10 @@ fn test_multiple_strings() {
 #[test]
 fn test_type_checker_recursive() {
     let source = r#"
-        S Node {
+        struct Node {
             value: i64
         }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#;
 
     let module = parse(source).unwrap();
@@ -343,7 +343,7 @@ fn test_many_string_allocations() {
 #[test]
 fn test_array_allocations() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr1 := [1, 2, 3, 4, 5]
             arr2 := [10, 20, 30, 40, 50]
             arr3 := [100, 200, 300, 400, 500]
@@ -359,11 +359,11 @@ fn test_array_allocations() {
 #[test]
 fn test_struct_allocations() {
     let source = r#"
-        S Point { x: i64, y: i64 }
-        S Rectangle { p1: Point, p2: Point }
-        S Circle { center: Point, radius: i64 }
+        struct Point { x: i64, y: i64 }
+        struct Rectangle { p1: Point, p2: Point }
+        struct Circle { center: Point, radius: i64 }
 
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#;
 
     let result = parse(source);
@@ -378,9 +378,9 @@ fn test_struct_allocations() {
 #[test]
 fn test_complex_nested_allocations() {
     let source = r#"
-        S Node { value: i64 }
+        struct Node { value: i64 }
 
-        F test() -> i64 {
+        fn test() -> i64 {
             a := Node { value: 1 }
             b := Node { value: 2 }
             c := Node { value: 3 }
@@ -436,9 +436,9 @@ fn test_tokenization_patterns() {
 #[test]
 fn test_type_checking_complex() {
     let source = r#"
-        S Container<T> { value: T }
+        struct Container<T> { value: type }
 
-        F test() -> i64 {
+        fn test() -> i64 {
             c1 := Container { value: 42 }
             c2 := Container { value: "hello" }
             0
@@ -457,11 +457,11 @@ fn test_type_checking_complex() {
 #[test]
 fn test_special_characters_in_strings() {
     let test_cases = [
-        r#"F f() -> str = "hello\nworld""#,
-        r#"F f() -> str = "tab\there""#,
-        r#"F f() -> str = "quote\"test""#,
-        r#"F f() -> str = "backslash\\test""#,
-        r#"F f() -> str = "unicode\u{1F600}""#,
+        r#"fn f() -> str = "hello\nworld""#,
+        r#"fn f() -> str = "tab\there""#,
+        r#"fn f() -> str = "quote\"test""#,
+        r#"fn f() -> str = "backslash\\test""#,
+        r#"fn f() -> str = "unicode\u{1F600}""#,
     ];
 
     for source in test_cases {
@@ -494,9 +494,9 @@ fn test_stressful_sequential_parsing() {
     for i in 0..50 {
         let source = format!(
             r#"
-            S Data{} {{ value: i64 }}
+            struct Data{} {{ value: i64 }}
 
-            F process{}(x: i64) -> i64 {{
+            fn process{}(x: i64) -> i64 {{
                 y := x + {}
                 z := y * 2
                 z
@@ -517,15 +517,15 @@ fn test_stressful_sequential_parsing() {
 #[test]
 fn test_string_length_boundaries() {
     // Empty string
-    let source = r#"F f() -> str = """#;
+    let source = r#"fn f() -> str = """#;
     let _ = parse(source);
 
     // Single character
-    let source = r#"F f() -> str = "a""#;
+    let source = r#"fn f() -> str = "a""#;
     let _ = parse(source);
 
     // Medium string
-    let source = format!(r#"F f() -> str = "{}""#, "a".repeat(100));
+    let source = format!(r#"fn f() -> str = "{}""#, "a".repeat(100));
     let _ = parse(&source);
 }
 
@@ -533,7 +533,7 @@ fn test_string_length_boundaries() {
 #[test]
 fn test_collection_operations() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr := [1, 2, 3, 4, 5]
             sum := 0
             i := 0
@@ -550,10 +550,10 @@ fn test_collection_operations() {
 #[test]
 fn test_multiple_errors_recovery() {
     let source = r#"
-        F bad1(
-        F bad2() ->
-        F good() -> i64 = 42
-        F bad3() -> i64 =
+        fn bad1(
+        fn bad2() ->
+        fn good() -> i64 = 42
+        fn bad3() -> i64 =
     "#;
 
     // Should not panic or leak memory
@@ -564,13 +564,13 @@ fn test_multiple_errors_recovery() {
 #[test]
 fn test_deeply_nested_types() {
     let source = r#"
-        S Level1 { value: i64 }
-        S Level2 { l1: Level1 }
-        S Level3 { l2: Level2 }
-        S Level4 { l3: Level3 }
-        S Level5 { l4: Level4 }
+        struct Level1 { value: i64 }
+        struct Level2 { l1: Level1 }
+        struct Level3 { l2: Level2 }
+        struct Level4 { l3: Level3 }
+        struct Level5 { l4: Level4 }
 
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#;
 
     let result = parse(source);
@@ -583,7 +583,7 @@ fn test_pattern_matching_safety() {
     let source = r#"
         E Option { Some(i64), None }
 
-        F test(opt: Option) -> i64 {
+        fn test(opt: Option) -> i64 {
             match opt {
                 Some(x) => x,
                 None => 0

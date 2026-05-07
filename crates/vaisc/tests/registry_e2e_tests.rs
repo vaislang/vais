@@ -2444,7 +2444,7 @@ version = "0.1.0"
     fs::write(
         project_dir.join("build.vais"),
         r#"# Build script that verifies environment variables
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#,
@@ -2454,7 +2454,7 @@ F main() -> i64 {
     // Create main.vais
     fs::write(
         project_dir.join("src").join("main.vais"),
-        r#"F main() -> i64 {
+        r#"fn main() -> i64 {
     0
 }
 "#,
@@ -2527,7 +2527,7 @@ version = "0.1.0"
     // Only lib.vais, no main.vais
     fs::write(
         project_dir.join("src").join("lib.vais"),
-        r#"F add(a: i64, b: i64) -> i64 {
+        r#"fn add(a: i64, b: i64) -> i64 {
     a + b
 }
 "#,
@@ -2593,7 +2593,7 @@ version = "1.0.0"
 
     fs::write(
         project_dir.join("src").join("main.vais"),
-        r#"F main() -> i64 {
+        r#"fn main() -> i64 {
     42
 }
 "#,

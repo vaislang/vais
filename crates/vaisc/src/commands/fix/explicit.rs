@@ -373,13 +373,13 @@ mod tests {
 
     #[test]
     fn a4_01_detects_void_binding() {
-        let source = r#"F void_fn() {
+        let source = r#"fn void_fn() {
     R
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     x: i64 = void_fn()
-    R x
+    return x
 }
 "#;
         let ast = vais_parser::parse(source).expect("parse failed");
@@ -393,13 +393,13 @@ F main() -> i64 {
 
     #[test]
     fn a4_01_no_finding_for_i64_returning_fn() {
-        let source = r#"F returns_i64() -> i64 {
+        let source = r#"fn returns_i64() -> i64 {
     42
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     x: i64 = returns_i64()
-    R x
+    return x
 }
 "#;
         let ast = vais_parser::parse(source).expect("parse failed");
@@ -412,11 +412,11 @@ F main() -> i64 {
 
     #[test]
     fn a4_01_no_finding_without_type_annotation() {
-        let source = r#"F void_fn() {
+        let source = r#"fn void_fn() {
     R
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     x := void_fn()
     0
 }

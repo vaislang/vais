@@ -175,8 +175,8 @@ fn test_parse_const() {
 fn test_parse_extern_block() {
     let source = r#"
         N {
-            F malloc(size: i64) -> i64
-            F free(ptr: i64) -> i64
+            fn malloc(size: i64) -> i64
+            fn free(ptr: i64) -> i64
         }
     "#;
     let module = parse_ok(source);
@@ -197,10 +197,10 @@ fn test_parse_use_statement() {
 #[test]
 fn test_parse_struct_with_methods() {
     let source = r#"
-        S Point { x: i64, y: i64 }
-        X Point {
-            F new(x: i64, y: i64) -> Point {
-                R Point { x: x, y: y }
+        struct Point { x: i64, y: i64 }
+        impl Point {
+            fn new(x: i64, y: i64) -> Point {
+                return Point { x: x, y: y }
             }
         }
     "#;
@@ -228,8 +228,8 @@ fn test_parse_enum_with_variants() {
 #[test]
 fn test_parse_trait() {
     let source = r#"
-        W Printable {
-            F print(self) -> i64
+        trait Printable {
+            fn print(self) -> i64
         }
     "#;
     let module = parse_ok(source);
@@ -239,12 +239,12 @@ fn test_parse_trait() {
 #[test]
 fn test_parse_trait_impl() {
     let source = r#"
-        W Printable {
-            F print(self) -> i64
+        trait Printable {
+            fn print(self) -> i64
         }
-        S Point { x: i64 }
-        X Point: Printable {
-            F print(self) -> i64 = self.x
+        struct Point { x: i64 }
+        impl Point: Printable {
+            fn print(self) -> i64 = self.x
         }
     "#;
     let module = parse_ok(source);
@@ -258,8 +258,8 @@ fn test_parse_trait_impl() {
 #[test]
 fn test_parse_match_expression() {
     let source = r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 0 => 10,
                 1 => 20,
                 _ => 30
@@ -273,13 +273,13 @@ fn test_parse_match_expression() {
 #[test]
 fn test_parse_if_else_chain() {
     let source = r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             I x > 10 {
-                R 1
+                return 1
             } E I x > 5 {
-                R 2
+                return 2
             } E {
-                R 3
+                return 3
             }
         }
     "#;
@@ -290,12 +290,12 @@ fn test_parse_if_else_chain() {
 #[test]
 fn test_parse_loop_with_range() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := 0
             L i:0..10 {
                 sum = sum + i
             }
-            R sum
+            return sum
         }
     "#;
     let module = parse_ok(source);
@@ -332,7 +332,7 @@ fn test_parse_self_recursion() {
 
 #[test]
 fn test_parse_string_interpolation() {
-    let source = r#"F test(name: str) -> str = ~"Hello, {name}!""#;
+    let source = r#"fn test(name: str) -> str = ~"Hello, {name}!""#;
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -340,8 +340,8 @@ fn test_parse_string_interpolation() {
 #[test]
 fn test_parse_struct_literal() {
     let source = r#"
-        S Point { x: i64, y: i64 }
-        F test() -> Point = Point { x: 1, y: 2 }
+        struct Point { x: i64, y: i64 }
+        fn test() -> Point = Point { x: 1, y: 2 }
     "#;
     let module = parse_ok(source);
     assert!(module.items.len() >= 2);
@@ -350,9 +350,9 @@ fn test_parse_struct_literal() {
 #[test]
 fn test_parse_defer() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             D free(ptr)
-            R 0
+            return 0
         }
     "#;
     let module = parse_ok(source);
@@ -373,8 +373,8 @@ fn test_parse_comptime() {
 #[test]
 fn test_parse_where_clause() {
     let source = r#"
-        F print_it<T>(x: T) -> i64 where T: Printable {
-            R x.print()
+        fn print_it<T>(x: T) -> i64 where T: Printable {
+            return x.print()
         }
     "#;
     let module = parse_ok(source);
@@ -391,7 +391,7 @@ fn test_parse_where_clause() {
 fn test_parse_cfg_attribute() {
     let source = r#"
         #[cfg(target_os = "linux")]
-        F linux_only() -> i64 = 0
+        fn linux_only() -> i64 = 0
     "#;
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
@@ -401,7 +401,7 @@ fn test_parse_cfg_attribute() {
 fn test_parse_wasm_attribute() {
     let source = r#"
         #[wasm_export("add")]
-        F add(a: i64, b: i64) -> i64 = a + b
+        fn add(a: i64, b: i64) -> i64 = a + b
     "#;
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
@@ -414,8 +414,8 @@ fn test_parse_wasm_attribute() {
 #[test]
 fn test_parse_pattern_wildcard() {
     let source = r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 _ => 0
             }
         }
@@ -427,8 +427,8 @@ fn test_parse_pattern_wildcard() {
 #[test]
 fn test_parse_pattern_literal() {
     let source = r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 42 => 1,
                 _ => 0
             }
@@ -441,8 +441,8 @@ fn test_parse_pattern_literal() {
 #[test]
 fn test_parse_or_pattern() {
     let source = r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 1 | 2 | 3 => 10,
                 _ => 0
             }
@@ -455,8 +455,8 @@ fn test_parse_or_pattern() {
 #[test]
 fn test_parse_guard_pattern() {
     let source = r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 n I n > 0 => n,
                 _ => 0
             }
@@ -489,9 +489,9 @@ fn test_parse_union() {
 #[test]
 fn test_parse_multiple_functions() {
     let source = r#"
-        F add(a: i64, b: i64) -> i64 = a + b
-        F sub(a: i64, b: i64) -> i64 = a - b
-        F mul(a: i64, b: i64) -> i64 = a * b
+        fn add(a: i64, b: i64) -> i64 = a + b
+        fn sub(a: i64, b: i64) -> i64 = a - b
+        fn mul(a: i64, b: i64) -> i64 = a * b
     "#;
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 3);

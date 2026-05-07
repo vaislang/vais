@@ -225,7 +225,7 @@ fn test_error_invalid_operator_sequence() {
 #[test]
 fn test_error_unclosed_string_literal() {
     // String literal without closing quote (lexer should catch this)
-    let source = r#"F test() -> str = "unclosed"#;
+    let source = r#"fn test() -> str = "unclosed"#;
     let result = parse(source);
     assert!(
         result.is_err(),
@@ -248,7 +248,7 @@ fn test_error_missing_semicolon_in_block() {
     // Missing semicolon between statements might be allowed in some cases
     // but this tests that the parser handles it consistently
     let source = r#"
-F test() -> i64 {
+fn test() -> i64 {
     x := 1
     y := 2
     x + y
@@ -339,8 +339,8 @@ fn test_error_function_type_invalid() {
 fn test_recovery_continues_after_broken_function() {
     // Broken function followed by valid struct
     let source = r#"
-F broken(x: i64
-S Valid { x: i64 }
+fn broken(x: i64
+struct Valid { x: i64 }
 "#;
     let (module, errors) = parse_with_recovery(source);
 
@@ -362,12 +362,12 @@ S Valid { x: i64 }
 fn test_recovery_multiple_errors() {
     // Multiple broken items with valid items in between
     let source = r#"
-F broken1(
-F good1() -> i64 = 1
-S Broken2{x
-F good2() -> i64 = 2
+fn broken1(
+fn good1() -> i64 = 1
+struct Broken2{x
+fn good2() -> i64 = 2
 E Broken3{A(
-F good3() -> i64 = 3
+fn good3() -> i64 = 3
 "#;
     let (module, errors) = parse_with_recovery(source);
 
@@ -400,11 +400,11 @@ F good3() -> i64 = 3
 fn test_recovery_error_then_valid_sequence() {
     // Error followed by multiple valid items
     let source = r#"
-F broken(;
-F valid1() -> i64 = 1
-S ValidStruct { x: i64 }
+fn broken(;
+fn valid1() -> i64 = 1
+struct ValidStruct { x: i64 }
 E ValidEnum { A, B }
-W ValidTrait { F method() -> i64 }
+trait ValidTrait { fn method() -> i64 }
 "#;
     let (module, errors) = parse_with_recovery(source);
 
@@ -428,7 +428,7 @@ W ValidTrait { F method() -> i64 }
 fn test_recovery_block_statement_errors() {
     // Function with errors in block statements
     let source = r#"
-F test() -> i64 {
+fn test() -> i64 {
     x := 1
     y :=
     z := 3
@@ -457,9 +457,9 @@ F test() -> i64 {
 fn test_recovery_preserves_error_spans() {
     // Verify that error recovery preserves span information
     let source = r#"
-F broken1(
-F good() -> i64 = 42
-F broken2{
+fn broken1(
+fn good() -> i64 = 42
+fn broken2{
 "#;
     let (module, errors) = parse_with_recovery(source);
 
@@ -492,8 +492,8 @@ F broken2{
 fn test_recovery_synchronizes_to_item_boundary() {
     // Test that recovery synchronizes to the next item keyword
     let source = r#"
-F broken(x: i64, invalid tokens here
-F recovered() -> i64 = 100
+fn broken(x: i64, invalid tokens here
+fn recovered() -> i64 = 100
 "#;
     let (module, errors) = parse_with_recovery(source);
 
@@ -515,7 +515,7 @@ F recovered() -> i64 = 100
 fn test_recovery_handles_nested_errors() {
     // Nested errors within a block
     let source = r#"
-F outer() -> i64 {
+fn outer() -> i64 {
     I true {
         x :=
         y := 1
@@ -540,8 +540,8 @@ F outer() -> i64 {
 fn test_recovery_error_nodes_in_ast() {
     // Verify that Error nodes are inserted into AST
     let source = r#"
-F broken(
-S Valid { x: i64 }
+fn broken(
+struct Valid { x: i64 }
 "#;
     let (module, errors) = parse_with_recovery(source);
 
@@ -566,7 +566,7 @@ S Valid { x: i64 }
 fn test_recovery_cascading_errors() {
     // Test that cascading errors are handled
     let source = r#"
-F cascade() -> i64 {
+fn cascade() -> i64 {
     a := (1 +
     b := (2 *
     c := 3
@@ -617,8 +617,8 @@ fn test_recovery_error_message_quality() {
 fn test_recovery_continues_after_struct_error() {
     // Struct error followed by function - recovery may be challenging here
     let source = r#"
-S Broken { x: i64,
-F recovered() -> i64 = 42
+struct Broken { x: i64,
+fn recovered() -> i64 = 42
 "#;
     let (module, errors) = parse_with_recovery(source);
 
@@ -637,7 +637,7 @@ fn test_recovery_continues_after_enum_error() {
     // Enum error followed by struct
     let source = r#"
 E Broken { A(i64
-S Valid { x: i64 }
+struct Valid { x: i64 }
 "#;
     let (module, errors) = parse_with_recovery(source);
 
@@ -658,9 +658,9 @@ S Valid { x: i64 }
 fn test_recovery_all_errors_collected() {
     // Verify that multiple errors are collected (not just the first one)
     let source = r#"
-F error1(
-F error2{
-F error3(x: i64
+fn error1(
+fn error2{
+fn error3(x: i64
 "#;
     let (_, errors) = parse_with_recovery(source);
 
@@ -675,8 +675,8 @@ F error3(x: i64
 fn test_recovery_without_recovery_mode_fails_fast() {
     // Without recovery mode, parsing should fail on first error
     let source = r#"
-F broken(
-F good() -> i64 = 42
+fn broken(
+fn good() -> i64 = 42
 "#;
     let result = parse(source);
 
@@ -690,7 +690,7 @@ F good() -> i64 = 42
 fn test_error_statement_recovery_in_block() {
     // Test statement-level error recovery within function blocks
     let source = r#"
-F test_stmt_recovery() -> i64 {
+fn test_stmt_recovery() -> i64 {
     valid1 := 1
     broken :=
     valid2 := 2
@@ -738,11 +738,11 @@ F test_stmt_recovery() -> i64 {
 fn test_error_mixed_valid_and_invalid_items() {
     // Alternating valid and invalid items
     let source = r#"
-F valid1() -> i64 = 1
-F invalid1(
-S Valid1 { x: i64 }
+fn valid1() -> i64 = 1
+fn invalid1(
+struct Valid1 { x: i64 }
 E Invalid2 { A(
-F valid2() -> i64 = 2
+fn valid2() -> i64 = 2
 "#;
     let (module, errors) = parse_with_recovery(source);
 

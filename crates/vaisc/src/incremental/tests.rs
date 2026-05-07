@@ -93,11 +93,11 @@ fn test_dirty_set_detection() {
 #[test]
 fn test_definition_extractor_functions() {
     let source = r#"
-F add(a: i32, b: i32) -> i32 {
-    R a + b
+fn add(a: i32, b: i32) -> i32 {
+    return a + b
 }
 
-F main() {
+fn main() {
     V x = add(1, 2)
     print(x)
 }
@@ -117,18 +117,18 @@ F main() {
 #[test]
 fn test_definition_extractor_structs() {
     let source = r#"
-S Point {
+struct Point {
     x: i32,
     y: i32,
 }
 
-S Line {
+struct Line {
     start: Point,
     end: Point,
 }
 
-F distance(p1: Point, p2: Point) -> f64 {
-    R 0.0
+fn distance(p1: Point, p2: Point) -> f64 {
+    return 0.0
 }
 "#;
     let mut extractor = DefinitionExtractor::new();
@@ -170,20 +170,20 @@ E Shape {
 #[test]
 fn test_function_change_detection() {
     let source1 = r#"
-F add(a: i32, b: i32) -> i32 {
-    R a + b
+fn add(a: i32, b: i32) -> i32 {
+    return a + b
 }
 
-F main() {
+fn main() {
     V x = add(1, 2)
 }
 "#;
     let source2 = r#"
-F add(a: i32, b: i32) -> i32 {
-    R a + b + 1
+fn add(a: i32, b: i32) -> i32 {
+    return a + b + 1
 }
 
-F main() {
+fn main() {
     V x = add(1, 2)
 }
 "#;
@@ -207,16 +207,16 @@ F main() {
 #[test]
 fn test_function_addition_detection() {
     let source1 = r#"
-F main() {
+fn main() {
     V x = 1
 }
 "#;
     let source2 = r#"
-F helper() -> i32 {
-    R 42
+fn helper() -> i32 {
+    return 42
 }
 
-F main() {
+fn main() {
     V x = 1
 }
 "#;
@@ -236,16 +236,16 @@ F main() {
 #[test]
 fn test_function_removal_detection() {
     let source1 = r#"
-F helper() -> i32 {
-    R 42
+fn helper() -> i32 {
+    return 42
 }
 
-F main() {
+fn main() {
     V x = helper()
 }
 "#;
     let source2 = r#"
-F main() {
+fn main() {
     V x = 1
 }
 "#;
@@ -299,15 +299,15 @@ fn test_fine_grained_change_detection() {
     let source_file = temp_dir.path().join("test.vais");
 
     // Initial source with multiple functions
-    let source1 = r#"F add(a: i32, b: i32) -> i32 {
-    R a + b
+    let source1 = r#"fn add(a: i32, b: i32) -> i32 {
+    return a + b
 }
 
-F sub(a: i32, b: i32) -> i32 {
-    R a - b
+fn sub(a: i32, b: i32) -> i32 {
+    return a - b
 }
 
-F main() {
+fn main() {
     V x = add(1, 2)
     V y = sub(3, 1)
 }"#;
@@ -330,15 +330,15 @@ F main() {
     assert_eq!(meta.functions.len(), 3);
 
     // Modify only the add function
-    let source2 = r#"F add(a: i32, b: i32) -> i32 {
-    R a + b + 1
+    let source2 = r#"fn add(a: i32, b: i32) -> i32 {
+    return a + b + 1
 }
 
-F sub(a: i32, b: i32) -> i32 {
-    R a - b
+fn sub(a: i32, b: i32) -> i32 {
+    return a - b
 }
 
-F main() {
+fn main() {
     V x = add(1, 2)
     V y = sub(3, 1)
 }"#;
@@ -508,8 +508,8 @@ fn test_signature_based_skip() {
     let source_file = temp_dir.path().join("test.vais");
 
     // Initial source with a function
-    let source1 = r#"F add(a: i32, b: i32) -> i32 {
-    R a + b
+    let source1 = r#"fn add(a: i32, b: i32) -> i32 {
+    return a + b
 }"#;
     fs::write(&source_file, source1).unwrap();
 
@@ -530,9 +530,9 @@ fn test_signature_based_skip() {
     let initial_hash = initial_func_meta.hash.clone();
 
     // Modify only the function body (signature unchanged)
-    let source2 = r#"F add(a: i32, b: i32) -> i32 {
+    let source2 = r#"fn add(a: i32, b: i32) -> i32 {
     V result = a + b
-    R result
+    return result
 }"#;
     fs::write(&source_file, source2).unwrap();
 

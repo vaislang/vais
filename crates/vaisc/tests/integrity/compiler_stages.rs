@@ -44,7 +44,7 @@ fn test_lex_gate_unterminated_string() {
     // Unterminated string literal — should fail at lex/parse stage.
     let (_d, p) = write_tmp(
         "lex_unterm_str.vais",
-        r#"F main() -> i64 { _s := "unterminated }"#,
+        r#"fn main() -> i64 { _s := "unterminated }"#,
     );
     assert!(
         !ok_parse(&p),
@@ -71,8 +71,8 @@ fn test_lex_gate_invalid_char() {
 #[test]
 fn test_parse_gate_valid() {
     let src = r#"
-F add(a: i64, b: i64) -> i64 { a + b }
-F main() -> i64 { add(1, 2) }
+fn add(a: i64, b: i64) -> i64 { a + b }
+fn main() -> i64 { add(1, 2) }
 "#;
     let (_d, p) = write_tmp("parse_valid.vais", src);
     assert!(
@@ -112,8 +112,8 @@ fn test_parse_gate_missing_brace() {
 #[test]
 fn test_tc_gate_valid() {
     let src = r#"
-F double(x: i64) -> i64 { x * 2 }
-F main() -> i64 { double(21) }
+fn double(x: i64) -> i64 { x * 2 }
+fn main() -> i64 { double(21) }
 "#;
     let (_d, p) = write_tmp("tc_valid.vais", src);
     assert!(
@@ -126,7 +126,7 @@ F main() -> i64 { double(21) }
 #[test]
 fn test_tc_gate_type_mismatch() {
     // Returning a bool where i64 is expected → E001 type mismatch.
-    let src = r#"F main() -> i64 { true }"#;
+    let src = r#"fn main() -> i64 { true }"#;
     let (_d, p) = write_tmp("tc_mismatch.vais", src);
     assert!(
         !ok_tc(&p),
@@ -138,7 +138,7 @@ fn test_tc_gate_type_mismatch() {
 #[test]
 fn test_tc_gate_undefined_var() {
     // Reference to undeclared variable → E002.
-    let src = r#"F main() -> i64 { undefined_var }"#;
+    let src = r#"fn main() -> i64 { undefined_var }"#;
     let (_d, p) = write_tmp("tc_undef_var.vais", src);
     assert!(
         !ok_tc(&p),
@@ -155,8 +155,8 @@ fn test_tc_gate_undefined_var() {
 fn test_codegen_gate_valid() {
     // Minimal codegen-clean source — no features that trigger C-class errors.
     let src = r#"
-F square(n: i64) -> i64 { n * n }
-F main() -> i64 { square(6) }
+fn square(n: i64) -> i64 { n * n }
+fn main() -> i64 { square(6) }
 "#;
     let (_d, p) = write_tmp("codegen_valid.vais", src);
     assert!(
@@ -170,7 +170,7 @@ F main() -> i64 { square(6) }
 fn test_codegen_gate_char_at_b2() {
     // B2 promoted: str.char_at codegen dispatch is part of the active stage gate.
     let src = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "hello"
     c := s.char_at(0)
     0
@@ -189,7 +189,7 @@ fn test_codegen_gate_tuple_field_access() {
     // B3 promoted: tuple field access lowers through tuple extractvalue, not
     // struct-name field inference.
     let src = r#"
-F main() -> i64 {
+fn main() -> i64 {
     t := (10, 20)
     t.0
 }

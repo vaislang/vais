@@ -30,7 +30,7 @@ fn gen_result(source: &str) -> Result<String, String> {
 
 #[test]
 fn test_call_println_string_literal() {
-    let ir = gen_ok(r#"F main() -> i64 { println("hello"); R 0 }"#);
+    let ir = gen_ok(r#"fn main() -> i64 { println("hello"); return 0 }"#);
     assert!(
         ir.contains("call") || ir.contains("puts") || ir.contains("printf") || ir.contains("print")
     );
@@ -38,31 +38,31 @@ fn test_call_println_string_literal() {
 
 #[test]
 fn test_call_println_integer() {
-    let ir = gen_ok(r#"F main() -> i64 { println(42); R 0 }"#);
+    let ir = gen_ok(r#"fn main() -> i64 { println(42); return 0 }"#);
     assert!(ir.contains("call"));
 }
 
 #[test]
 fn test_call_print_string_literal() {
-    let ir = gen_ok(r#"F main() -> i64 { print("world"); R 0 }"#);
+    let ir = gen_ok(r#"fn main() -> i64 { print("world"); return 0 }"#);
     assert!(ir.contains("call"));
 }
 
 #[test]
 fn test_call_println_variable() {
-    let ir = gen_ok(r#"F main() -> i64 { x := 42; println(x); R 0 }"#);
+    let ir = gen_ok(r#"fn main() -> i64 { x := 42; println(x); return 0 }"#);
     assert!(ir.contains("call"));
 }
 
 #[test]
 fn test_call_println_expression() {
-    let ir = gen_ok(r#"F main() -> i64 { println(1 + 2); R 0 }"#);
+    let ir = gen_ok(r#"fn main() -> i64 { println(1 + 2); return 0 }"#);
     assert!(ir.contains("call"));
 }
 
 #[test]
 fn test_call_println_bool() {
-    let ir = gen_ok(r#"F main() -> i64 { println(true); R 0 }"#);
+    let ir = gen_ok(r#"fn main() -> i64 { println(true); return 0 }"#);
     assert!(ir.contains("call"));
 }
 
@@ -111,10 +111,10 @@ fn test_call_with_expression_args() {
 fn test_struct_literal_basic() {
     let ir = gen_ok(
         r#"
-        S Point { x: i64, y: i64 }
-        F main() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn main() -> i64 {
             p := Point { x: 10, y: 20 }
-            R p.x
+            return p.x
         }
     "#,
     );
@@ -125,10 +125,10 @@ fn test_struct_literal_basic() {
 fn test_struct_literal_single_field() {
     let ir = gen_ok(
         r#"
-        S Wrapper { value: i64 }
-        F main() -> i64 {
+        struct Wrapper { value: i64 }
+        fn main() -> i64 {
             w := Wrapper { value: 42 }
-            R w.value
+            return w.value
         }
     "#,
     );
@@ -139,10 +139,10 @@ fn test_struct_literal_single_field() {
 fn test_struct_literal_three_fields() {
     let ir = gen_ok(
         r#"
-        S Vec3 { x: i64, y: i64, z: i64 }
-        F main() -> i64 {
+        struct Vec3 { x: i64, y: i64, z: i64 }
+        fn main() -> i64 {
             v := Vec3 { x: 1, y: 2, z: 3 }
-            R v.x + v.y + v.z
+            return v.x + v.y + v.z
         }
     "#,
     );
@@ -157,13 +157,13 @@ fn test_struct_literal_three_fields() {
 fn test_method_call_basic() {
     let ir = gen_ok(
         r#"
-        S Counter { count: i64 }
-        X Counter {
-            F get(self) -> i64 = self.count
+        struct Counter { count: i64 }
+        impl Counter {
+            fn get(self) -> i64 = self.count
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             c := Counter { count: 42 }
-            R c.get()
+            return c.get()
         }
     "#,
     );
@@ -174,13 +174,13 @@ fn test_method_call_basic() {
 fn test_method_call_with_args() {
     let ir = gen_ok(
         r#"
-        S Calc { base: i64 }
-        X Calc {
-            F add(self, x: i64) -> i64 = self.base + x
+        struct Calc { base: i64 }
+        impl Calc {
+            fn add(self, x: i64) -> i64 = self.base + x
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             c := Calc { base: 10 }
-            R c.add(5)
+            return c.add(5)
         }
     "#,
     );
@@ -191,14 +191,14 @@ fn test_method_call_with_args() {
 fn test_method_chained_call() {
     let ir = gen_ok(
         r#"
-        S Num { val: i64 }
-        X Num {
-            F get(self) -> i64 = self.val
+        struct Num { val: i64 }
+        impl Num {
+            fn get(self) -> i64 = self.val
         }
-        F double(x: i64) -> i64 = x * 2
-        F main() -> i64 {
+        fn double(x: i64) -> i64 = x * 2
+        fn main() -> i64 {
             n := Num { val: 5 }
-            R double(n.get())
+            return double(n.get())
         }
     "#,
     );
@@ -230,8 +230,8 @@ fn test_enum_unit_variant() {
     let ir = gen_ok(
         r#"
         E Direction { North, South, East, West }
-        F test(d: Direction) -> i64 {
-            M d {
+        fn test(d: Direction) -> i64 {
+            match d {
                 North => 0,
                 _ => 1
             }
@@ -296,8 +296,8 @@ fn test_ternary_with_call() {
 fn test_closure_as_arg() {
     let ir = gen_ok(
         r#"
-        F apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)
-        F main() -> i64 = apply(|x| x + 1, 10)
+        fn apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)
+        fn main() -> i64 = apply(|x| x + 1, 10)
     "#,
     );
     assert!(ir.contains("call"));
@@ -311,11 +311,11 @@ fn test_closure_as_arg() {
 fn test_call_in_if_branches() {
     let ir = gen_ok(
         r#"
-        F inc(x: i64) -> i64 = x + 1
-        F dec(x: i64) -> i64 = x - 1
-        F main() -> i64 {
+        fn inc(x: i64) -> i64 = x + 1
+        fn dec(x: i64) -> i64 = x - 1
+        fn main() -> i64 {
             x := 5
-            R I x > 3 { inc(x) } E { dec(x) }
+            return I x > 3 { inc(x) } E { dec(x) }
         }
     "#,
     );
@@ -326,11 +326,11 @@ fn test_call_in_if_branches() {
 fn test_call_in_match() {
     let ir = gen_ok(
         r#"
-        F double(x: i64) -> i64 = x * 2
-        F triple(x: i64) -> i64 = x * 3
-        F main() -> i64 {
+        fn double(x: i64) -> i64 = x * 2
+        fn triple(x: i64) -> i64 = x * 3
+        fn main() -> i64 {
             n := 2
-            M n {
+            match n {
                 1 => double(n),
                 _ => triple(n)
             }

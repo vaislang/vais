@@ -52,7 +52,7 @@ fn test_unify_f64_same() {
 
 #[test]
 fn test_unify_str_same() {
-    tc_ok(r#"F test() -> str { x := "hello"; R x }"#);
+    tc_ok(r#"fn test() -> str { x := "hello"; return x }"#);
 }
 
 // ============================================================================
@@ -219,10 +219,10 @@ fn test_unify_affine_type() {
 fn test_unify_dyn_trait() {
     tc_ok(
         r#"
-        W Show { F show(self) -> i64 }
-        S Num { v: i64 }
-        X Num: Show { F show(self) -> i64 = self.v }
-        F test() -> i64 { n := Num { v: 42 }; R n.show() }
+        trait Show { fn show(self) -> i64 }
+        struct Num { v: i64 }
+        impl Num: Show { fn show(self) -> i64 = self.v }
+        fn test() -> i64 { n := Num { v: 42 }; return n.show() }
     "#,
     );
 }
@@ -239,7 +239,7 @@ fn test_unify_bool_i64_rejected() {
 
 #[test]
 fn test_unify_mismatch_str_i64() {
-    tc_err(r#"F test() -> i64 { R "hello" }"#);
+    tc_err(r#"fn test() -> i64 { return "hello" }"#);
 }
 
 #[test]
@@ -313,10 +313,10 @@ fn test_bidirectional_array_element_type() {
 fn test_substitution_generic_struct() {
     tc_ok(
         r#"
-        S Wrapper<T> { value: T }
-        F test() -> i64 {
+        struct Wrapper<T> { value: type }
+        fn test() -> i64 {
             w := Wrapper { value: 42 }
-            R w.value
+            return w.value
         }
     "#,
     );
@@ -326,9 +326,9 @@ fn test_substitution_generic_struct() {
 fn test_substitution_nested_generic() {
     tc_ok(
         r#"
-        F outer<T>(x: T) -> T = x
-        F inner<U>(y: U) -> U = outer(y)
-        F test() -> i64 = inner(99)
+        fn outer<T>(x: T) -> type = x
+        fn inner<U>(y: U) -> use = outer(y)
+        fn test() -> i64 = inner(99)
     "#,
     );
 }
@@ -342,10 +342,10 @@ fn test_substitution_multiple_type_params() {
 fn test_substitution_with_trait_impl() {
     tc_ok(
         r#"
-        W Valued { F val(self) -> i64 }
-        S Box { n: i64 }
-        X Box: Valued { F val(self) -> i64 = self.n }
-        F test() -> i64 { b := Box { n: 42 }; R b.val() }
+        trait Valued { fn val(self) -> i64 }
+        struct Box { n: i64 }
+        impl Box: Valued { fn val(self) -> i64 = self.n }
+        fn test() -> i64 { b := Box { n: 42 }; return b.val() }
     "#,
     );
 }
@@ -359,8 +359,8 @@ fn test_unify_enum_variant() {
     tc_ok(
         r#"
         E Color { Red, Green, Blue }
-        F test(c: Color) -> i64 {
-            M c {
+        fn test(c: Color) -> i64 {
+            match c {
                 Red => 1,
                 Green => 2,
                 Blue => 3,
@@ -385,11 +385,11 @@ fn test_unify_closure_capture() {
 fn test_unify_nested_struct_access() {
     tc_ok(
         r#"
-        S Inner { val: i64 }
-        S Outer { inner: Inner }
-        F test() -> i64 {
+        struct Inner { val: i64 }
+        struct Outer { inner: Inner }
+        fn test() -> i64 {
             o := Outer { inner: Inner { val: 42 } }
-            R o.inner.val
+            return o.inner.val
         }
     "#,
     );
@@ -454,12 +454,12 @@ fn test_unify_match_with_guard_like() {
 fn test_unify_struct_method_chain() {
     tc_ok(
         r#"
-        S Num { v: i64 }
-        X Num {
-            F get(self) -> i64 = self.v
-            F add(self, x: i64) -> i64 = self.v + x
+        struct Num { v: i64 }
+        impl Num {
+            fn get(self) -> i64 = self.v
+            fn add(self, x: i64) -> i64 = self.v + x
         }
-        F test() -> i64 { n := Num { v: 10 }; R n.add(5) }
+        fn test() -> i64 { n := Num { v: 10 }; return n.add(5) }
     "#,
     );
 }
@@ -468,9 +468,9 @@ fn test_unify_struct_method_chain() {
 fn test_unify_multiple_struct_fields() {
     tc_ok(
         r#"
-        S Rect { w: i64, h: i64 }
-        F area(r: Rect) -> i64 = r.w * r.h
-        F test() -> i64 = area(Rect { w: 3, h: 4 })
+        struct Rect { w: i64, h: i64 }
+        fn area(r: Rect) -> i64 = r.w * r.h
+        fn test() -> i64 = area(Rect { w: 3, h: 4 })
     "#,
     );
 }

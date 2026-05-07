@@ -66,25 +66,25 @@ Type annotations are optional when the type can be inferred:
                 content: r#"
 Functions are declared using the 'F' keyword:
 
-    F greet() {
+    fn greet() {
         puts("Hello, world!")
     }
 
 Functions can take parameters and return values:
 
-    F add(a: i64, b: i64) -> i64 {
+    fn add(a: i64, b: i64) -> i64 {
         a + b
     }
 
 The last expression in a function is automatically returned:
 
-    F double(x: i64) -> i64 {
+    fn double(x: i64) -> i64 {
         x * 2
     }
 
 Single-expression functions use '=':
 
-    F triple(x: i64) -> i64 = x * 3
+    fn triple(x: i64) -> i64 = x * 3
 "#
                 .to_string(),
                 code_template:
@@ -92,7 +92,7 @@ Single-expression functions use '=':
 # Your code here
 "#
                     .to_string(),
-                solution: r#"F square(x: i64) -> i64 {
+                solution: r#"fn square(x: i64) -> i64 {
     x * x
 }
 "#
@@ -198,8 +198,8 @@ You can also use the ternary operator:
 # Your code here
 "#
                     .to_string(),
-                solution: r#"F max(a: i64, b: i64) -> i64 {
-    I a > b { R a } E { R b }
+                solution: r#"fn max(a: i64, b: i64) -> i64 {
+    I a > b { return a } E { return b }
 }
 "#
                 .to_string(),
@@ -249,7 +249,7 @@ Use 'B' to break and 'C' to continue:
 # Your code here
 "#
                 .to_string(),
-                solution: r#"F sum_range(n: i64) -> i64 {
+                solution: r#"fn sum_range(n: i64) -> i64 {
     sum := mut 0
     L i:1..n {
         sum = sum + i
@@ -277,7 +277,7 @@ Use 'B' to break and 'C' to continue:
                 content: r#"
 In Vais, 'M' is the match keyword:
 
-    M value {
+    match value {
         1 => puts("one"),
         2 => puts("two"),
         _ => puts("other")
@@ -285,14 +285,14 @@ In Vais, 'M' is the match keyword:
 
 Match must be exhaustive (cover all cases):
 
-    M option {
+    match option {
         Some(x) => x,
         None => 0
     }
 
 You can use guards with 'I' (if):
 
-    M age {
+    match age {
         0 => "baby",
         x I x > 0 => "positive",
         _ => "negative"
@@ -304,12 +304,12 @@ You can use guards with 'I' (if):
 # - "zero" if 0
 # - "positive" if > 0
 # - "negative" if < 0
-# Use M (match)
+# Use match (match)
 # Your code here
 "#
                     .to_string(),
-                solution: r#"F describe_number(n: i64) -> str {
-    M n {
+                solution: r#"fn describe_number(n: i64) -> str {
+    match n {
         0 => "zero",
         x I x > 0 => "positive",
         _ => "negative"
@@ -358,7 +358,7 @@ Using pointer arithmetic:
     val := load_byte(buf, 0)
 
 Array with explicit size:
-    F sum(arr: [i64; 5]) -> i64 {
+    fn sum(arr: [i64; 5]) -> i64 {
         result := mut 0
         L i:0..5 {
             result = result + arr[i]
@@ -372,7 +372,7 @@ Array with explicit size:
 # Your code here
 "#
                 .to_string(),
-                solution: r#"F sum_array(arr: [i64; 5]) -> i64 {
+                solution: r#"fn sum_array(arr: [i64; 5]) -> i64 {
     result := mut 0
     L i:0..5 {
         result = result + arr[i]
@@ -423,7 +423,7 @@ real Vais programs.
 # Your code here
 "#
                 .to_string(),
-                solution: r#"F create_scores() -> HashMap<str, i64> {
+                solution: r#"fn create_scores() -> HashMap<str, i64> {
     scores := HashMap<str, i64>::new()
     scores.insert("Alice", 95)
     scores.insert("Bob", 87)
@@ -451,7 +451,7 @@ real Vais programs.
 Vais provides low-level memory operations:
 
 Allocating memory:
-    N "C" { F malloc(size: i64) -> i64 }
+    N "C" { fn malloc(size: i64) -> i64 }
     buf := malloc(64)
 
 Storing and loading bytes:
@@ -459,7 +459,7 @@ Storing and loading bytes:
     val := load_byte(buf, 0) # read byte at offset 0
 
 Freeing memory:
-    N "C" { F free(ptr: i64) -> i64 }
+    N "C" { fn free(ptr: i64) -> i64 }
     free(buf)
 
 String interpolation with ~{}:
@@ -473,9 +473,9 @@ String interpolation with ~{}:
 # Your code here
 "#
                 .to_string(),
-                solution: r#"F store_and_read() -> i64 {
-    N "C" { F malloc(size: i64) -> i64 }
-    N "C" { F free(ptr: i64) -> i64 }
+                solution: r#"fn store_and_read() -> i64 {
+    N "C" { fn malloc(size: i64) -> i64 }
+    N "C" { fn free(ptr: i64) -> i64 }
     buf := malloc(8)
     store_byte(buf, 0, 10)
     store_byte(buf, 1, 20)
@@ -527,7 +527,7 @@ Creating Options:
     no_number: Option<i64> = None
 
 Pattern matching with M:
-    M some_number {
+    match some_number {
         Some(x) => puts("~{x}"),
         None => puts("no value")
     }
@@ -541,11 +541,11 @@ The ! operator unwraps an Option (returns value or panics):
 # Your code here
 "#
                 .to_string(),
-                solution: r#"F safe_divide(a: i64, b: i64) -> i64 {
+                solution: r#"fn safe_divide(a: i64, b: i64) -> i64 {
     I b == 0 {
-        R -1
+        return -1
     }
-    R a / b
+    return a / b
 }
 "#
                 .to_string(),
@@ -578,13 +578,13 @@ Creating Results:
     failure: Result<i64, str> = Err("error")
 
 Pattern matching:
-    M result {
+    match result {
         Ok(value) => puts("Success: ~{value}"),
         Err(e) => puts("Error")
     }
 
 The ? operator propagates errors:
-    F try_operation() -> Result<i64, str> {
+    fn try_operation() -> Result<i64, str> {
         x := might_fail()?   # returns early if Err
         Ok(x * 2)
     }
@@ -598,11 +598,11 @@ The ! operator unwraps (panics on Err):
 # Your code here
 "#
                 .to_string(),
-                solution: r#"F check_positive(n: i64) -> i64 {
+                solution: r#"fn check_positive(n: i64) -> i64 {
     I n > 0 {
-        R n
+        return n
     } E {
-        R -1
+        return -1
     }
 }
 "#
@@ -635,7 +635,7 @@ The pipe operator |> chains function calls:
     # result = 11
 
 Multi-step pipeline:
-    F process(x: i64) -> i64 {
+    fn process(x: i64) -> i64 {
         x |> |n| n * 3 |> |n| n + 10
     }
 
@@ -649,7 +649,7 @@ Closures can capture outer variables:
 # Your code here
 "#
                 .to_string(),
-                solution: r#"F double_and_add(x: i64) -> i64 {
+                solution: r#"fn double_and_add(x: i64) -> i64 {
     x |> |n| n * 2 |> |n| n + 10
 }
 "#
@@ -683,7 +683,7 @@ fn create_chapter5_structs_traits() -> Chapter {
                 content: r#"
 Structs group related data using 'S':
 
-    S Point {
+    struct Point {
         x: i64
         y: i64
     }
@@ -695,8 +695,8 @@ Accessing fields:
     x_coord := p.x
 
 Methods are defined in 'X' (impl) blocks:
-    X Point {
-        F sum(&self) -> i64 {
+    impl Point {
+        fn sum(&self) -> i64 {
             self.x + self.y
         }
     }
@@ -710,13 +710,13 @@ Method call:
 # Your code here
 "#
                 .to_string(),
-                solution: r#"S Rectangle {
+                solution: r#"struct Rectangle {
     width: i64
     height: i64
 }
 
-X Rectangle {
-    F area(&self) -> i64 {
+impl Rectangle {
+    fn area(&self) -> i64 {
         self.width * self.height
     }
 }
@@ -741,20 +741,20 @@ X Rectangle {
                 content: r#"
 Traits define shared behavior using 'W':
 
-    W Printable {
-        F show(&self) -> i64
+    trait Printable {
+        fn show(&self) -> i64
     }
 
 Implementing traits with 'X ... : Trait':
-    X Point: Printable {
-        F show(&self) -> i64 {
+    impl Point: Printable {
+        fn show(&self) -> i64 {
             puts("Point: ~{self.x}, ~{self.y}")
             0
         }
     }
 
 Trait bounds constrain generics:
-    F print_item<T: Printable>(item: T) -> i64 {
+    fn print_item<T: Printable>(item: T) -> i64 {
         item.show()
     }
 "#
@@ -764,16 +764,16 @@ Trait bounds constrain generics:
 # Your code here
 "#
                 .to_string(),
-                solution: r#"W Shape {
-    F area(&self) -> i64
+                solution: r#"trait Shape {
+    fn area(&self) -> i64
 }
 
-S Circle {
+struct Circle {
     radius: i64
 }
 
-X Circle: Shape {
-    F area(&self) -> i64 {
+impl Circle: Shape {
+    fn area(&self) -> i64 {
         self.radius * self.radius * 3
     }
 }
@@ -799,14 +799,14 @@ X Circle: Shape {
 Generics allow code reuse across types:
 
 Generic functions:
-    F identity<T>(x: T) -> T = x
+    fn identity<T>(x: T) -> type = x
 
-    F max<T>(a: T, b: T) -> T {
-        I a > b { R a } E { R b }
+    fn max<T>(a: T, b: T) -> type {
+        I a > b { return a } E { return b }
     }
 
 Generic structs:
-    S Pair<T, U> {
+    struct Pair<T, U> {
         first: T
         second: U
     }
@@ -814,12 +814,12 @@ Generic structs:
     pair := Pair<i64, str> { first: 1, second: "hello" }
 
 Generic implementations:
-    X Pair<T, U> {
-        F get_first(&self) -> T = self.first
+    impl Pair<T, U> {
+        fn get_first(&self) -> type = self.first
     }
 
 Self-recursion with generics:
-    F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
+    fn fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
 "#
                 .to_string(),
                 code_template: r#"# Write a generic function 'first_or_second' that takes
@@ -828,8 +828,8 @@ Self-recursion with generics:
 # Your code here
 "#
                 .to_string(),
-                solution: r#"F first_or_second<T>(a: T, b: T, flag: bool) -> T {
-    I flag { R a } E { R b }
+                solution: r#"fn first_or_second<T>(a: T, b: T, flag: bool) -> type {
+    I flag { return a } E { return b }
 }
 "#
                 .to_string(),
@@ -873,14 +873,14 @@ Multi-line closures:
     }
 
 Passing closures to functions:
-    F apply(f: |i64| -> i64, val: i64) -> i64 {
+    fn apply(f: |i64| -> i64, val: i64) -> i64 {
         f(val)
     }
 
     result := apply(|x| x * 3, 5)  # result = 15
 
 Returning closures:
-    F make_adder(n: i64) -> |i64| -> i64 {
+    fn make_adder(n: i64) -> |i64| -> i64 {
         |x| x + n
     }
     add5 := make_adder(5)
@@ -893,7 +893,7 @@ Returning closures:
 # Your code here
 "#
                 .to_string(),
-                solution: r#"F make_multiplier(factor: i64) -> |i64| -> i64 {
+                solution: r#"fn make_multiplier(factor: i64) -> |i64| -> i64 {
     |x| x * factor
 }
 "#
@@ -917,14 +917,14 @@ Returning closures:
                 content: r#"
 Higher-order functions take or return other functions:
 
-    F twice(f: |i64| -> i64, x: i64) -> i64 {
+    fn twice(f: |i64| -> i64, x: i64) -> i64 {
         f(f(x))
     }
 
     result := twice(|x| x + 1, 5)  # result = 7
 
 Composing functions:
-    F compose(f: |i64| -> i64, g: |i64| -> i64) -> |i64| -> i64 {
+    fn compose(f: |i64| -> i64, g: |i64| -> i64) -> |i64| -> i64 {
         |x| f(g(x))
     }
 
@@ -944,7 +944,7 @@ The pipe operator chains transformations:
 # Your code here
 "#
                     .to_string(),
-                solution: r#"F apply_twice(f: |i64| -> i64, x: i64) -> i64 {
+                solution: r#"fn apply_twice(f: |i64| -> i64, x: i64) -> i64 {
     f(f(x))
 }
 "#
@@ -969,7 +969,7 @@ The pipe operator chains transformations:
 Vais uses loop + closure patterns for iteration:
 
 Summing with accumulation:
-    F fold(arr: [i64; 5], init: i64, f: |i64, i64| -> i64) -> i64 {
+    fn fold(arr: [i64; 5], init: i64, f: |i64, i64| -> i64) -> i64 {
         acc := mut init
         L i:0..5 {
             acc = f(acc, arr[i])
@@ -981,7 +981,7 @@ Summing with accumulation:
     sum := fold(nums, 0, |acc, x| acc + x)  # 15
 
 Mapping over arrays:
-    F map5(arr: [i64; 5], f: |i64| -> i64) -> [i64; 5] {
+    fn map5(arr: [i64; 5], f: |i64| -> i64) -> [i64; 5] {
         result := mut [0, 0, 0, 0, 0]
         L i:0..5 {
             result[i] = f(arr[i])
@@ -990,7 +990,7 @@ Mapping over arrays:
     }
 
 Filtering with predicates:
-    F count_if(arr: [i64; 5], pred: |i64| -> bool) -> i64 {
+    fn count_if(arr: [i64; 5], pred: |i64| -> bool) -> i64 {
         count := mut 0
         L i:0..5 {
             I pred(arr[i]) { count = count + 1 }
@@ -1006,7 +1006,7 @@ Filtering with predicates:
 # Your code here
 "#
                 .to_string(),
-                solution: r#"F sum_mapped(arr: [i64; 5], f: |i64| -> i64) -> i64 {
+                solution: r#"fn sum_mapped(arr: [i64; 5], f: |i64| -> i64) -> i64 {
     total := mut 0
     L i:0..5 {
         total = total + f(arr[i])
@@ -1044,13 +1044,13 @@ fn create_chapter7_async_concurrency() -> Chapter {
                 content: r#"
 Async functions use 'A' (async) and 'Y' (await):
 
-    A F fetch_data() -> i64 {
+    A fn fetch_data() -> i64 {
         # Simulated async work
         result := Y compute_value()
         result * 2
     }
 
-    A F compute_value() -> i64 {
+    A fn compute_value() -> i64 {
         42
     }
 
@@ -1070,11 +1070,11 @@ Key rules:
 # Your code here
 "#
                 .to_string(),
-                solution: r#"A F async_add(a: i64, b: i64) -> i64 {
+                solution: r#"A fn async_add(a: i64, b: i64) -> i64 {
     a + b
 }
 
-A F double_add(a: i64, b: i64) -> i64 {
+A fn double_add(a: i64, b: i64) -> i64 {
     sum := Y async_add(a, b)
     sum * 2
 }
@@ -1100,7 +1100,7 @@ A F double_add(a: i64, b: i64) -> i64 {
 Async tasks can communicate through return values and shared state:
 
 Using return values (recommended):
-    A F fan_out(inputs: [i64; 3]) -> i64 {
+    A fn fan_out(inputs: [i64; 3]) -> i64 {
         r0 := Y process(inputs[0])
         r1 := Y process(inputs[1])
         r2 := Y process(inputs[2])
@@ -1108,14 +1108,14 @@ Using return values (recommended):
     }
 
 Defer for cleanup (like Go's defer):
-    F with_resource() -> i64 {
+    fn with_resource() -> i64 {
         res := acquire()
         D release(res)    # runs when function exits
         use_resource(res)
     }
 
 Yield for cooperative multitasking:
-    A F generator() -> i64 {
+    A fn generator() -> i64 {
         yield 1
         yield 2
         yield 3
@@ -1135,10 +1135,10 @@ Common patterns:
 # Your code here
 "#
                 .to_string(),
-                solution: r#"F acquire() -> i64 { 42 }
-F release(r: i64) -> i64 { r }
+                solution: r#"fn acquire() -> i64 { 42 }
+fn release(r: i64) -> i64 { r }
 
-F with_cleanup() -> i64 {
+fn with_cleanup() -> i64 {
     res := acquire()
     D release(res)
     res * 2
@@ -1176,27 +1176,27 @@ The 'N' (extern) keyword declares foreign functions:
 
 Calling C standard library:
     N "C" {
-        F malloc(size: i64) -> i64
-        F free(ptr: i64) -> i64
-        F printf(fmt: str) -> i64
+        fn malloc(size: i64) -> i64
+        fn free(ptr: i64) -> i64
+        fn printf(fmt: str) -> i64
     }
 
 Using extern functions:
-    F allocate_buffer(size: i64) -> i64 {
+    fn allocate_buffer(size: i64) -> i64 {
         buf := malloc(size)
         I buf == 0 {
-            R -1   # allocation failed
+            return -1   # allocation failed
         }
         buf
     }
 
 Calling math functions:
     N "C" {
-        F abs(x: i64) -> i64
-        F sqrt(x: f64) -> f64
+        fn abs(x: i64) -> i64
+        fn sqrt(x: f64) -> f64
     }
 
-    F distance(x: f64, y: f64) -> f64 {
+    fn distance(x: f64, y: f64) -> f64 {
         sqrt(x * x + y * y)
     }
 
@@ -1216,11 +1216,11 @@ FFI guidelines:
 "#
                 .to_string(),
                 solution: r#"N "C" {
-    F malloc(size: i64) -> i64
-    F free(ptr: i64) -> i64
+    fn malloc(size: i64) -> i64
+    fn free(ptr: i64) -> i64
 }
 
-F alloc_and_read() -> i64 {
+fn alloc_and_read() -> i64 {
     buf := malloc(16)
     store_byte(buf, 0, 99)
     val := load_byte(buf, 0)
@@ -1252,13 +1252,13 @@ Vais can compile to WebAssembly (WASM):
 
 Exporting functions to WASM:
     #[wasm_export("add")]
-    F add(a: i64, b: i64) -> i64 {
+    fn add(a: i64, b: i64) -> i64 {
         a + b
     }
 
 Importing from the WASM host:
     #[wasm_import("env", "log")]
-    N "C" { F log(value: i64) -> i64 }
+    N "C" { fn log(value: i64) -> i64 }
 
 WASM constraints:
 - No direct filesystem access
@@ -1268,12 +1268,12 @@ WASM constraints:
 
 A minimal WASM module:
     #[wasm_export("main")]
-    F main() -> i64 {
+    fn main() -> i64 {
         result := compute(10, 20)
         result
     }
 
-    F compute(a: i64, b: i64) -> i64 {
+    fn compute(a: i64, b: i64) -> i64 {
         a * b + a + b
     }
 "#
@@ -1284,8 +1284,8 @@ A minimal WASM module:
 "#
                 .to_string(),
                 solution: r#"#[wasm_export("fibonacci")]
-F fibonacci(n: i64) -> i64 {
-    I n < 2 { R n }
+fn fibonacci(n: i64) -> i64 {
+    I n < 2 { return n }
     a := mut 0
     b := mut 1
     L i:2..n {
@@ -1320,7 +1320,7 @@ Vais can also compile to JavaScript ESM:
 
 JavaScript codegen produces clean ESM modules:
     # Vais source:
-    F add(a: i64, b: i64) -> i64 = a + b
+    fn add(a: i64, b: i64) -> i64 = a + b
 
     // Generated JavaScript (myfile.mjs):
     // export function add(a, b) { return a + b; }
@@ -1328,10 +1328,10 @@ JavaScript codegen produces clean ESM modules:
 WASM + JS bridging pattern:
     # math.vais
     #[wasm_export("multiply")]
-    F multiply(a: i64, b: i64) -> i64 = a * b
+    fn multiply(a: i64, b: i64) -> i64 = a * b
 
     #[wasm_export("power")]
-    F power(base: i64, exp: i64) -> i64 {
+    fn power(base: i64, exp: i64) -> i64 {
         result := mut 1
         L i:0..exp {
             result = result * base
@@ -1346,7 +1346,7 @@ WASM + JS bridging pattern:
 
 Import functions from JS host:
     #[wasm_import("env", "console_log")]
-    N "C" { F console_log(val: i64) -> i64 }
+    N "C" { fn console_log(val: i64) -> i64 }
 "#
                 .to_string(),
                 code_template: r#"# Write two WASM-exportable functions:
@@ -1356,10 +1356,10 @@ Import functions from JS host:
 "#
                 .to_string(),
                 solution: r#"#[wasm_export("square")]
-F square(x: i64) -> i64 = x * x
+fn square(x: i64) -> i64 = x * x
 
 #[wasm_export("sum_of_squares")]
-F sum_of_squares(n: i64) -> i64 {
+fn sum_of_squares(n: i64) -> i64 {
     total := mut 0
     L i:1..n {
         total = total + i * i

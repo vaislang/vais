@@ -10,9 +10,9 @@ use tempfile::NamedTempFile;
 use vais_codegen::TargetTriple;
 use vais_query::{QueryDatabase, QueryError};
 
-const SIMPLE_SOURCE: &str = r#"F main() -> i64 { 42 }"#;
-const MODIFIED_SOURCE: &str = r#"F main() -> i64 { 100 }"#;
-const LARGE_SOURCE_TEMPLATE: &str = r#"F func{idx}() -> i64 {{ {idx} }}"#;
+const SIMPLE_SOURCE: &str = r#"fn main() -> i64 { 42 }"#;
+const MODIFIED_SOURCE: &str = r#"fn main() -> i64 { 100 }"#;
+const LARGE_SOURCE_TEMPLATE: &str = r#"fn func{idx}() -> i64 {{ {idx} }}"#;
 
 // ─── Task 1: File I/O Integration (3 tests) ──────────────────────────
 
@@ -121,11 +121,11 @@ fn test_full_pipeline_tokenize_to_ir() {
 fn test_pipeline_valid_source_ir_content() {
     // Test that valid Vais source produces correct LLVM IR
     let source = r#"
-F add(a: i64, b: i64) -> i64 {
+fn add(a: i64, b: i64) -> i64 {
     a + b
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     add(10, 20)
 }
 "#;
@@ -293,12 +293,12 @@ fn test_cfg_values_affect_parsing() {
     // Set cfg values and verify they affect parsing behavior
     let source = r#"
 #[cfg(feature = "enabled")]
-F enabled_func() -> i64 { 1 }
+fn enabled_func() -> i64 { 1 }
 
 #[cfg(feature = "disabled")]
-F disabled_func() -> i64 { 2 }
+fn disabled_func() -> i64 { 2 }
 
-F always_present() -> i64 { 3 }
+fn always_present() -> i64 { 3 }
 "#;
 
     // Test 1: With "enabled" feature
@@ -338,10 +338,10 @@ fn test_cfg_change_invalidates_parsing() {
     // Change cfg values and verify parsing result changes
     let source = r#"
 #[cfg(target_os = "linux")]
-F linux_specific() -> i64 { 1 }
+fn linux_specific() -> i64 { 1 }
 
 #[cfg(target_os = "windows")]
-F windows_specific() -> i64 { 2 }
+fn windows_specific() -> i64 { 2 }
 "#;
 
     // Initial parse with linux target

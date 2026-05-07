@@ -9,7 +9,7 @@ fn test_extract_doc_comments() {
     let source = r#"
 /// This is a function
 /// that adds two numbers
-F add(a:i64,b:i64)->i64=a+b
+fn add(a:i64,b:i64)->i64=a+b
 "#;
     let lines: Vec<&str> = source.lines().collect();
     let docs = extract_doc_comments(&lines, 50); // Position of F
@@ -254,11 +254,11 @@ fn test_extract_enum_doc_pub() {
 
 #[test]
 fn test_extract_documentation_full() {
-    let source = r#"F add(a: i64, b: i64) -> i64 {
+    let source = r#"fn add(a: i64, b: i64) -> i64 {
     a + b
 }
 
-S Point { x: i64, y: i64 }
+struct Point { x: i64, y: i64 }
 
 E Color { Red, Green, Blue }
 "#;

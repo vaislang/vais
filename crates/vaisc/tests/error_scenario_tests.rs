@@ -121,19 +121,19 @@ fn error_undefined_function_call() {
 #[test]
 fn error_type_mismatch_return_type() {
     // Return string where i64 expected
-    assert_error_contains(r#"F main() -> i64 = "hello""#, "Mismatch");
+    assert_error_contains(r#"fn main() -> i64 = "hello""#, "Mismatch");
 }
 
 #[test]
 fn error_invalid_binary_operator() {
     // Cannot add string and number
-    assert_error_contains(r#"F main() -> i64 = "hello" + 42"#, "Mismatch");
+    assert_error_contains(r#"fn main() -> i64 = "hello" + 42"#, "Mismatch");
 }
 
 #[test]
 fn error_invalid_comparison_types() {
     // Cannot compare string to number
-    assert_error_contains(r#"F main() -> bool = "hello" > 42"#, "Mismatch");
+    assert_error_contains(r#"fn main() -> bool = "hello" > 42"#, "Mismatch");
 }
 
 // ==================== Function Signature Errors ====================
@@ -141,8 +141,8 @@ fn error_invalid_comparison_types() {
 #[test]
 fn error_wrong_argument_count() {
     let source = r#"
-F add(a: i64, b: i64) -> i64 = a + b
-F main() -> i64 = add(1)
+fn add(a: i64, b: i64) -> i64 = a + b
+fn main() -> i64 = add(1)
 "#;
     assert_error_contains(source, "ArgCount");
 }
@@ -151,8 +151,8 @@ F main() -> i64 = add(1)
 fn error_duplicate_function_definition() {
     // Phase 73: TC now detects duplicate function definitions (E034/Duplicate)
     let source = r#"
-F main() -> i64 = 0
-F main() -> i64 = 1
+fn main() -> i64 = 0
+fn main() -> i64 = 1
 "#;
     assert_error_contains(source, "Duplicate");
 }
@@ -180,9 +180,9 @@ fn error_recursive_without_return_type() {
 #[test]
 fn error_struct_field_access_on_non_struct() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 42
-    R x.field
+    return x.field
 }
 "#;
     assert_error_contains(source, "field");
@@ -200,10 +200,10 @@ fn error_unknown_struct_type() {
 fn error_missing_struct_field() {
     // Note: Current implementation may auto-initialize missing fields or have different behavior
     let source = r#"
-S Point { x: i64, y: i64 }
-F main() -> i64 {
+struct Point { x: i64, y: i64 }
+fn main() -> i64 {
     p := Point { x: 1 }
-    R 0
+    return 0
 }
 "#;
     // Check if this compiles - implementation may vary
@@ -220,10 +220,10 @@ F main() -> i64 {
 #[test]
 fn error_unknown_struct_field() {
     let source = r#"
-S Point { x: i64, y: i64 }
-F main() -> i64 {
+struct Point { x: i64, y: i64 }
+fn main() -> i64 {
     p := Point { x: 1, y: 2, z: 3 }
-    R 0
+    return 0
 }
 "#;
     assert_compile_error(source);
@@ -244,10 +244,10 @@ fn error_continue_outside_loop() {
 #[test]
 fn error_assignment_to_immutable() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 5
     x = 10
-    R x
+    return x
 }
 "#;
     assert_error_contains(source, "ImmutableAssign");
@@ -284,8 +284,8 @@ fn positive_constrained_type_inference() {
     // add(1, 2) = 3, so exit code is 3
     assert_exit_code(
         r#"
-F add(a: i64, b: i64) -> i64 = a + b
-F main() -> i64 = add(1, 2)
+fn add(a: i64, b: i64) -> i64 = a + b
+fn main() -> i64 = add(1, 2)
 "#,
         3,
     );
@@ -308,9 +308,9 @@ fn error_unknown_enum_variant() {
     // Note: This tests enum variant validation
     let source = r#"
 E Color { Red, Blue }
-F main() -> i64 {
+fn main() -> i64 {
     c := Red
-    M c {
+    match c {
         Red => 1,
         Green => 0
     }

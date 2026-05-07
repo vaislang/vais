@@ -36,8 +36,8 @@ fn check_result(source: &str) -> Result<(), String> {
 fn test_exhaustive_match_wildcard() {
     check_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 _ => 0
             }
         }
@@ -49,8 +49,8 @@ fn test_exhaustive_match_wildcard() {
 fn test_exhaustive_match_bool() {
     check_ok(
         r#"
-        F test(b: bool) -> i64 {
-            M b {
+        fn test(b: bool) -> i64 {
+            match b {
                 true => 1,
                 false => 0
             }
@@ -63,8 +63,8 @@ fn test_exhaustive_match_bool() {
 fn test_exhaustive_match_int_with_wildcard() {
     check_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 0 => 0,
                 1 => 1,
                 _ => 2
@@ -78,8 +78,8 @@ fn test_exhaustive_match_int_with_wildcard() {
 fn test_exhaustive_match_single_arm() {
     check_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 _ => 42
             }
         }
@@ -91,8 +91,8 @@ fn test_exhaustive_match_single_arm() {
 fn test_exhaustive_match_many_arms() {
     check_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 0 => 0,
                 1 => 1,
                 2 => 2,
@@ -110,8 +110,8 @@ fn test_exhaustive_match_enum_all_variants() {
     check_ok(
         r#"
         E Color { Red, Green, Blue }
-        F test(c: Color) -> i64 {
-            M c {
+        fn test(c: Color) -> i64 {
+            match c {
                 Red => 1,
                 Green => 2,
                 Blue => 3
@@ -126,8 +126,8 @@ fn test_exhaustive_match_enum_with_wildcard() {
     check_ok(
         r#"
         E Dir { North, South, East, West }
-        F test(d: Dir) -> i64 {
-            M d {
+        fn test(d: Dir) -> i64 {
+            match d {
                 North => 0,
                 _ => 1
             }
@@ -140,9 +140,9 @@ fn test_exhaustive_match_enum_with_wildcard() {
 fn test_exhaustive_match_nested() {
     check_ok(
         r#"
-        F test(x: i64, y: i64) -> i64 {
-            M x {
-                0 => M y {
+        fn test(x: i64, y: i64) -> i64 {
+            match x {
+                0 => match y {
                     0 => 0,
                     _ => 1
                 },
@@ -161,8 +161,8 @@ fn test_exhaustive_match_nested() {
 fn test_non_exhaustive_bool_missing_false() {
     let result = check_result(
         r#"
-        F test(b: bool) -> i64 {
-            M b {
+        fn test(b: bool) -> i64 {
+            match b {
                 true => 1
             }
         }
@@ -181,8 +181,8 @@ fn test_non_exhaustive_bool_missing_false() {
 fn test_ownership_simple_move() {
     check_ok(
         r#"
-        S Data { val: i64 }
-        F test() -> i64 {
+        struct Data { val: i64 }
+        fn test() -> i64 {
             d := Data { val: 42 }
             d.val
         }
@@ -194,7 +194,7 @@ fn test_ownership_simple_move() {
 fn test_ownership_copy_primitive() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 42
             y := x
             x + y
@@ -207,7 +207,7 @@ fn test_ownership_copy_primitive() {
 fn test_ownership_copy_bool() {
     check_ok(
         r#"
-        F test() -> bool {
+        fn test() -> bool {
             a := true
             b := a
             a && b
@@ -220,7 +220,7 @@ fn test_ownership_copy_bool() {
 fn test_ownership_string_comparison() {
     check_ok(
         r#"
-        F test() -> bool {
+        fn test() -> bool {
             a := "hello"
             b := "world"
             a == b
@@ -233,8 +233,8 @@ fn test_ownership_string_comparison() {
 fn test_ownership_struct_field_access() {
     check_ok(
         r#"
-        S Pair { a: i64, b: i64 }
-        F test() -> i64 {
+        struct Pair { a: i64, b: i64 }
+        fn test() -> i64 {
             p := Pair { a: 1, b: 2 }
             p.a + p.b
         }
@@ -246,7 +246,7 @@ fn test_ownership_struct_field_access() {
 fn test_ownership_mutable_rebinding() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             x = 1
             x = 2
@@ -260,7 +260,7 @@ fn test_ownership_mutable_rebinding() {
 fn test_ownership_loop_variable() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := mut 0
             L i: 0..10 {
                 sum = sum + i
@@ -279,7 +279,7 @@ fn test_ownership_loop_variable() {
 fn test_lookup_local_variable() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 42
             x
         }
@@ -301,7 +301,7 @@ fn test_lookup_multiple_params() {
 fn test_lookup_nested_scope() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 1
             y := {
                 z := x + 2
@@ -317,8 +317,8 @@ fn test_lookup_nested_scope() {
 fn test_lookup_function_call() {
     check_ok(
         r#"
-        F helper() -> i64 = 42
-        F test() -> i64 = helper()
+        fn helper() -> i64 = 42
+        fn test() -> i64 = helper()
     "#,
     );
 }
@@ -327,8 +327,8 @@ fn test_lookup_function_call() {
 fn test_lookup_struct_name() {
     check_ok(
         r#"
-        S MyStruct { x: i64 }
-        F test() -> i64 {
+        struct MyStruct { x: i64 }
+        fn test() -> i64 {
             s := MyStruct { x: 10 }
             s.x
         }
@@ -341,7 +341,7 @@ fn test_lookup_enum_name() {
     check_ok(
         r#"
         E Fruit { Apple, Banana }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#,
     );
 }
@@ -350,11 +350,11 @@ fn test_lookup_enum_name() {
 fn test_lookup_method() {
     check_ok(
         r#"
-        S Counter { n: i64 }
-        X Counter {
-            F get(self) -> i64 = self.n
+        struct Counter { n: i64 }
+        impl Counter {
+            fn get(self) -> i64 = self.n
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             c := Counter { n: 5 }
             c.get()
         }
@@ -366,14 +366,14 @@ fn test_lookup_method() {
 fn test_lookup_trait_method() {
     check_ok(
         r#"
-        W Greetable {
-            F greet(self) -> i64
+        trait Greetable {
+            fn greet(self) -> i64
         }
-        S Person { age: i64 }
-        X Person: Greetable {
-            F greet(self) -> i64 = self.age
+        struct Person { age: i64 }
+        impl Person: Greetable {
+            fn greet(self) -> i64 = self.age
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             p := Person { age: 30 }
             p.greet()
         }
@@ -419,7 +419,7 @@ fn test_lookup_undefined_type() {
 fn test_error_type_mismatch() {
     let err = check_err(
         r#"
-        F test() -> i64 = "hello"
+        fn test() -> i64 = "hello"
     "#,
     );
     assert!(!err.is_empty());
@@ -429,8 +429,8 @@ fn test_error_type_mismatch() {
 fn test_error_wrong_arg_count() {
     let err = check_err(
         r#"
-        F add(a: i64, b: i64) -> i64 = a + b
-        F test() -> i64 = add(1)
+        fn add(a: i64, b: i64) -> i64 = a + b
+        fn test() -> i64 = add(1)
     "#,
     );
     assert!(!err.is_empty());
@@ -440,8 +440,8 @@ fn test_error_wrong_arg_count() {
 fn test_error_wrong_arg_count_too_many() {
     let err = check_err(
         r#"
-        F add(a: i64, b: i64) -> i64 = a + b
-        F test() -> i64 = add(1, 2, 3)
+        fn add(a: i64, b: i64) -> i64 = a + b
+        fn test() -> i64 = add(1, 2, 3)
     "#,
     );
     assert!(!err.is_empty());
@@ -451,8 +451,8 @@ fn test_error_wrong_arg_count_too_many() {
 fn test_error_struct_missing_field() {
     let result = check_result(
         r#"
-        S Point { x: i64, y: i64 }
-        F test() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn test() -> i64 {
             p := Point { x: 1 }
             p.x
         }
@@ -466,8 +466,8 @@ fn test_error_struct_missing_field() {
 fn test_error_struct_unknown_field() {
     let err = check_err(
         r#"
-        S Point { x: i64, y: i64 }
-        F test() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn test() -> i64 {
             p := Point { x: 1, y: 2, z: 3 }
             p.x
         }
@@ -492,8 +492,8 @@ fn test_error_method_on_non_struct() {
 fn test_error_duplicate_function() {
     let result = check_result(
         r#"
-        F foo() -> i64 = 1
-        F foo() -> i64 = 2
+        fn foo() -> i64 = 1
+        fn foo() -> i64 = 2
     "#,
     );
     // May or may not be an error depending on implementation
@@ -508,10 +508,10 @@ fn test_error_duplicate_function() {
 fn test_trait_simple_definition() {
     check_ok(
         r#"
-        W Showable {
-            F show(self) -> i64
+        trait Showable {
+            fn show(self) -> i64
         }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#,
     );
 }
@@ -520,14 +520,14 @@ fn test_trait_simple_definition() {
 fn test_trait_implementation() {
     check_ok(
         r#"
-        W HasArea {
-            F area(self) -> i64
+        trait HasArea {
+            fn area(self) -> i64
         }
-        S Square { side: i64 }
-        X Square: HasArea {
-            F area(self) -> i64 = self.side * self.side
+        struct Square { side: i64 }
+        impl Square: HasArea {
+            fn area(self) -> i64 = self.side * self.side
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             s := Square { side: 5 }
             s.area()
         }
@@ -539,16 +539,16 @@ fn test_trait_implementation() {
 fn test_trait_multiple_methods() {
     check_ok(
         r#"
-        W Shape {
-            F area(self) -> i64
-            F perimeter(self) -> i64
+        trait Shape {
+            fn area(self) -> i64
+            fn perimeter(self) -> i64
         }
-        S Rect { w: i64, h: i64 }
-        X Rect: Shape {
-            F area(self) -> i64 = self.w * self.h
-            F perimeter(self) -> i64 = 2 * (self.w + self.h)
+        struct Rect { w: i64, h: i64 }
+        impl Rect: Shape {
+            fn area(self) -> i64 = self.w * self.h
+            fn perimeter(self) -> i64 = 2 * (self.w + self.h)
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             r := Rect { w: 3, h: 4 }
             r.area() + r.perimeter()
         }
@@ -560,18 +560,18 @@ fn test_trait_multiple_methods() {
 fn test_trait_multiple_impls() {
     check_ok(
         r#"
-        W Describable {
-            F describe(self) -> i64
+        trait Describable {
+            fn describe(self) -> i64
         }
-        S Cat { lives: i64 }
-        S Dog { tricks: i64 }
-        X Cat: Describable {
-            F describe(self) -> i64 = self.lives
+        struct Cat { lives: i64 }
+        struct Dog { tricks: i64 }
+        impl Cat: Describable {
+            fn describe(self) -> i64 = self.lives
         }
-        X Dog: Describable {
-            F describe(self) -> i64 = self.tricks
+        impl Dog: Describable {
+            fn describe(self) -> i64 = self.tricks
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             c := Cat { lives: 9 }
             d := Dog { tricks: 5 }
             c.describe() + d.describe()
@@ -584,11 +584,11 @@ fn test_trait_multiple_impls() {
 fn test_trait_impl_without_trait() {
     check_ok(
         r#"
-        S Widget { id: i64 }
-        X Widget {
-            F get_id(self) -> i64 = self.id
+        struct Widget { id: i64 }
+        impl Widget {
+            fn get_id(self) -> i64 = self.id
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             w := Widget { id: 42 }
             w.get_id()
         }
@@ -604,7 +604,7 @@ fn test_trait_impl_without_trait() {
 fn test_scope_variable_shadowing() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 1
             x := 2
             x
@@ -617,7 +617,7 @@ fn test_scope_variable_shadowing() {
 fn test_scope_nested_block_shadow() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 10
             y := {
                 x := 20
@@ -633,7 +633,7 @@ fn test_scope_nested_block_shadow() {
 fn test_scope_if_else_separate_scopes() {
     check_ok(
         r#"
-        F test(b: bool) -> i64 {
+        fn test(b: bool) -> i64 {
             I b {
                 x := 1
                 x
@@ -650,7 +650,7 @@ fn test_scope_if_else_separate_scopes() {
 fn test_scope_loop_variable() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := mut 0
             L i: 0..5 {
                 sum = sum + i
@@ -665,8 +665,8 @@ fn test_scope_loop_variable() {
 fn test_scope_function_params_dont_leak() {
     check_ok(
         r#"
-        F helper(x: i64) -> i64 = x + 1
-        F test() -> i64 = helper(5)
+        fn helper(x: i64) -> i64 = x + 1
+        fn test() -> i64 = helper(5)
     "#,
     );
 }
@@ -679,7 +679,7 @@ fn test_scope_function_params_dont_leak() {
 fn test_free_vars_no_captures() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             f := |x: i64| x + 1
             f(5)
         }
@@ -691,7 +691,7 @@ fn test_free_vars_no_captures() {
 fn test_free_vars_single_capture() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             base := 10
             f := |x: i64| x + base
             f(5)
@@ -704,7 +704,7 @@ fn test_free_vars_single_capture() {
 fn test_free_vars_multiple_captures() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             a := 1
             b := 2
             f := |x: i64| x + a + b
@@ -718,7 +718,7 @@ fn test_free_vars_multiple_captures() {
 fn test_free_vars_nested_lambda() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             outer := 10
             f := |x: i64| {
                 g := |y: i64| y + outer
@@ -751,7 +751,7 @@ fn test_tc_bool_operations() {
 
 #[test]
 fn test_tc_string_literal() {
-    check_ok(r#"F test() -> str = "hello""#);
+    check_ok(r#"fn test() -> str = "hello""#);
 }
 
 #[test]
@@ -763,7 +763,7 @@ fn test_tc_f64_arithmetic() {
 fn test_tc_recursive_function() {
     check_ok(
         r#"
-        F fib(n: i64) -> i64 {
+        fn fib(n: i64) -> i64 {
             I n <= 1 { n }
             E { fib(n - 1) + fib(n - 2) }
         }
@@ -775,12 +775,12 @@ fn test_tc_recursive_function() {
 fn test_tc_mutual_recursion() {
     check_ok(
         r#"
-        F is_even(n: i64) -> bool {
-            I n == 0 { R true }
+        fn is_even(n: i64) -> bool {
+            I n == 0 { return true }
             is_odd(n - 1)
         }
-        F is_odd(n: i64) -> bool {
-            I n == 0 { R false }
+        fn is_odd(n: i64) -> bool {
+            I n == 0 { return false }
             is_even(n - 1)
         }
     "#,
@@ -791,12 +791,12 @@ fn test_tc_mutual_recursion() {
 fn test_tc_struct_with_methods() {
     check_ok(
         r#"
-        S Stack { top: i64 }
-        X Stack {
-            F peek(self) -> i64 = self.top
-            F is_empty(self) -> bool = self.top == 0
+        struct Stack { top: i64 }
+        impl Stack {
+            fn peek(self) -> i64 = self.top
+            fn is_empty(self) -> bool = self.top == 0
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             s := Stack { top: 5 }
             I s.is_empty() { 0 } E { s.peek() }
         }
@@ -808,8 +808,8 @@ fn test_tc_struct_with_methods() {
 fn test_tc_type_alias() {
     let result = check_result(
         r#"
-        T Number = i64
-        F test(x: Number) -> Number = x + 1
+        type Number = i64
+        fn test(x: Number) -> Number = x + 1
     "#,
     );
     assert!(result.is_ok() || result.is_err());
@@ -820,7 +820,7 @@ fn test_tc_enum_basic() {
     check_ok(
         r#"
         E Status { Active, Inactive, Pending }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#,
     );
 }
@@ -830,8 +830,8 @@ fn test_tc_enum_match() {
     check_ok(
         r#"
         E Light { Red, Yellow, Green }
-        F test(l: Light) -> i64 {
-            M l {
+        fn test(l: Light) -> i64 {
+            match l {
                 Red => 0,
                 Yellow => 1,
                 Green => 2
@@ -846,10 +846,10 @@ fn test_tc_extern_block() {
     check_ok(
         r#"
         N {
-            F puts(s: str) -> i64
-            F getpid() -> i64
+            fn puts(s: str) -> i64
+            fn getpid() -> i64
         }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#,
     );
 }
@@ -858,9 +858,9 @@ fn test_tc_extern_block() {
 fn test_tc_nested_struct() {
     check_ok(
         r#"
-        S Inner { val: i64 }
-        S Outer { inner: Inner, extra: i64 }
-        F test() -> i64 {
+        struct Inner { val: i64 }
+        struct Outer { inner: Inner, extra: i64 }
+        fn test() -> i64 {
             o := Outer { inner: Inner { val: 42 }, extra: 10 }
             o.inner.val + o.extra
         }
@@ -872,7 +872,7 @@ fn test_tc_nested_struct() {
 fn test_tc_deeply_nested_expressions() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             ((1 + 2) * (3 - 4)) + ((5 * 6) - (7 + 8))
         }
     "#,
@@ -883,10 +883,10 @@ fn test_tc_deeply_nested_expressions() {
 fn test_tc_multiple_return_paths() {
     check_ok(
         r#"
-        F classify(x: i64) -> i64 {
-            I x < 0 { R 0 - 1 }
-            I x == 0 { R 0 }
-            R 1
+        fn classify(x: i64) -> i64 {
+            I x < 0 { return 0 - 1 }
+            I x == 0 { return 0 }
+            return 1
         }
     "#,
     );
@@ -896,12 +896,12 @@ fn test_tc_multiple_return_paths() {
 fn test_tc_complex_struct_hierarchy() {
     check_ok(
         r#"
-        S Point { x: i64, y: i64 }
-        S Rect { origin: Point, size: Point }
-        X Rect {
-            F area(self) -> i64 = self.size.x * self.size.y
+        struct Point { x: i64, y: i64 }
+        struct Rect { origin: Point, size: Point }
+        impl Rect {
+            fn area(self) -> i64 = self.size.x * self.size.y
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             r := Rect {
                 origin: Point { x: 0, y: 0 },
                 size: Point { x: 10, y: 5 }
@@ -916,7 +916,7 @@ fn test_tc_complex_struct_hierarchy() {
 fn test_tc_loop_with_break_continue() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             result := mut 0
             i := mut 0
             L i < 100 {
@@ -940,7 +940,7 @@ fn test_tc_loop_with_break_continue() {
 fn test_tc_ternary_operator() {
     check_ok(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             x > 0 ? x : 0 - x
         }
     "#,
@@ -951,7 +951,7 @@ fn test_tc_ternary_operator() {
 fn test_tc_self_recursion_operator() {
     check_ok(
         r#"
-        F fact(n: i64) -> i64 {
+        fn fact(n: i64) -> i64 {
             I n <= 1 { 1 }
             E { n * @(n - 1) }
         }
@@ -963,7 +963,7 @@ fn test_tc_self_recursion_operator() {
 fn test_tc_for_range_loop() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := mut 0
             L i: 1..11 {
                 sum = sum + i
@@ -978,7 +978,7 @@ fn test_tc_for_range_loop() {
 fn test_tc_while_loop() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             i := mut 10
             L i > 0 {
                 i = i - 1
@@ -993,8 +993,8 @@ fn test_tc_while_loop() {
 fn test_tc_complex_match_with_nested_if() {
     check_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 0 => 0,
                 _ => {
                     I x > 100 {
@@ -1013,13 +1013,13 @@ fn test_tc_complex_match_with_nested_if() {
 fn test_tc_impl_multiple_methods() {
     check_ok(
         r#"
-        S Calculator { value: i64 }
-        X Calculator {
-            F get(self) -> i64 = self.value
-            F is_zero(self) -> bool = self.value == 0
-            F is_positive(self) -> bool = self.value > 0
+        struct Calculator { value: i64 }
+        impl Calculator {
+            fn get(self) -> i64 = self.value
+            fn is_zero(self) -> bool = self.value == 0
+            fn is_positive(self) -> bool = self.value > 0
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             c := Calculator { value: 42 }
             I c.is_positive() {
                 c.get()
@@ -1035,20 +1035,20 @@ fn test_tc_impl_multiple_methods() {
 fn test_tc_multiple_traits_same_struct() {
     check_ok(
         r#"
-        W HasId {
-            F id(self) -> i64
+        trait HasId {
+            fn id(self) -> i64
         }
-        W HasName {
-            F name_len(self) -> i64
+        trait HasName {
+            fn name_len(self) -> i64
         }
-        S Entity { eid: i64, nlen: i64 }
-        X Entity: HasId {
-            F id(self) -> i64 = self.eid
+        struct Entity { eid: i64, nlen: i64 }
+        impl Entity: HasId {
+            fn id(self) -> i64 = self.eid
         }
-        X Entity: HasName {
-            F name_len(self) -> i64 = self.nlen
+        impl Entity: HasName {
+            fn name_len(self) -> i64 = self.nlen
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             e := Entity { eid: 1, nlen: 5 }
             e.id() + e.name_len()
         }
@@ -1145,7 +1145,7 @@ fn test_tc_bool_negation() {
 fn test_tc_comparison_operators() {
     check_ok(
         r#"
-        F test() -> bool {
+        fn test() -> bool {
             a := 1 < 2
             b := 3 > 2
             c := 4 <= 4
@@ -1172,7 +1172,7 @@ fn test_tc_division_operator() {
 fn test_tc_bitwise_operators() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             a := 255 & 15
             b := a | 48
             c := b ^ 16
@@ -1188,11 +1188,11 @@ fn test_tc_bitwise_operators() {
 fn test_tc_struct_many_fields() {
     check_ok(
         r#"
-        S BigStruct {
+        struct BigStruct {
             a: i64, b: i64, c: i64, d: i64,
             e: i64, f: i64, g: i64, h: i64
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             s := BigStruct { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7, h: 8 }
             s.a + s.h
         }
@@ -1206,7 +1206,7 @@ fn test_tc_multiple_enums() {
         r#"
         E Season { Spring, Summer, Fall, Winter }
         E Day { Mon, Tue, Wed, Thu, Fri, Sat, Sun }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#,
     );
 }

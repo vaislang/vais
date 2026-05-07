@@ -186,19 +186,36 @@ pub fn convert_source(source: &str, target: DualForm) -> Result<String, String> 
 }
 
 /// True if `lexeme` is a single-letter retired keyword that could plausibly
-/// be a generic-parameter identifier (e.g., `T`, `E`, `S`, `R`, `M`, etc.).
-/// Multi-letter retired forms (`EN`, `EL`) and long forms are excluded.
+/// be a generic-parameter identifier (e.g., `T`, `E`).
+///
+/// Step 19 P3 (2026-05-08, augment-2): narrowed to `T` and `E` only.
+/// In practice these are the only retired single-letter forms that
+/// commonly collide with generic-param identifiers (Result<T, E>,
+/// Option<T>, Vec<T>, ...). The other retired forms (F/S/M/R/U/P/W/X)
+/// are declaration / statement keywords whose source positions never
+/// overlap with generic-param identifier positions in well-formed Vais
+/// code; preserving them in type-position turned out to misclassify
+/// match expressions like `default_value: M &col.default_value { ... }`
+/// where `M` is statement-leading-after-colon (a value position) and
+/// not actually a generic-param identifier.
 fn is_single_letter_retired(lexeme: &str) -> bool {
-    matches!(
-        lexeme,
-        "F" | "S" | "E" | "M" | "R" | "T" | "U" | "P" | "W" | "X"
-    )
+    matches!(lexeme, "T" | "E")
 }
 
 /// Look backwards from token index `i` for the most recent meaningful
 /// (non-trivia) token. Returns true if it indicates a type-position
-/// context: `<`, `,`, `:`, `->`, `&`, or `(`. Trivia (comments,
-/// whitespace) are already filtered out by the lexer.
+/// context: `<`, `,`, `:`, `->`, or `(`. Trivia (comments, whitespace)
+/// are already filtered out by the lexer.
+///
+/// Step 19 P3 (2026-05-08, augment-2): removed `&` from the marker set —
+/// `&` is value-prefix in expression position (`M &x` for `match &x`)
+/// just as often as it is type-prefix in type position (`&T` reference
+/// type). Without `&`, the heuristic is more conservative: T/E after
+/// `&` may be misclassified as keyword and rewritten, which is fine
+/// because `T`/`E` after `&` is rarely a generic-param identifier in
+/// well-formed Vais code (it would have to be something like
+/// `&T` as a return type, which the codemod handles correctly because
+/// the *prior* token would be `->`, not `&`).
 fn preceded_by_type_marker(tokens: &[vais_lexer::SpannedToken], i: usize) -> bool {
     if i == 0 {
         return false;
@@ -207,7 +224,7 @@ fn preceded_by_type_marker(tokens: &[vais_lexer::SpannedToken], i: usize) -> boo
     use vais_lexer::Token;
     matches!(
         prev,
-        Token::Lt | Token::Comma | Token::Colon | Token::Arrow | Token::Amp | Token::LParen
+        Token::Lt | Token::Comma | Token::Colon | Token::Arrow | Token::LParen
     )
 }
 

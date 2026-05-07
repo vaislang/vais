@@ -22,9 +22,9 @@ fn gen_js(source: &str) -> String {
 fn test_js_bitwise_ops() {
     let js = gen_js(
         r#"
-        F bit_and(a: i64, b: i64) -> i64 = a & b
-        F bit_or(a: i64, b: i64) -> i64 = a | b
-        F bit_xor(a: i64, b: i64) -> i64 = a ^ b
+        fn bit_and(a: i64, b: i64) -> i64 = a & b
+        fn bit_or(a: i64, b: i64) -> i64 = a | b
+        fn bit_xor(a: i64, b: i64) -> i64 = a ^ b
     "#,
     );
     assert!(!js.is_empty());
@@ -34,8 +34,8 @@ fn test_js_bitwise_ops() {
 fn test_js_shift_ops() {
     let js = gen_js(
         r#"
-        F shl(a: i64, b: i64) -> i64 = a << b
-        F shr(a: i64, b: i64) -> i64 = a >> b
+        fn shl(a: i64, b: i64) -> i64 = a << b
+        fn shr(a: i64, b: i64) -> i64 = a >> b
     "#,
     );
     assert!(!js.is_empty());
@@ -45,12 +45,12 @@ fn test_js_shift_ops() {
 fn test_js_comparison_ops() {
     let js = gen_js(
         r#"
-        F eq(a: i64, b: i64) -> bool = a == b
-        F neq(a: i64, b: i64) -> bool = a != b
-        F lt(a: i64, b: i64) -> bool = a < b
-        F lte(a: i64, b: i64) -> bool = a <= b
-        F gt(a: i64, b: i64) -> bool = a > b
-        F gte(a: i64, b: i64) -> bool = a >= b
+        fn eq(a: i64, b: i64) -> bool = a == b
+        fn neq(a: i64, b: i64) -> bool = a != b
+        fn lt(a: i64, b: i64) -> bool = a < b
+        fn lte(a: i64, b: i64) -> bool = a <= b
+        fn gt(a: i64, b: i64) -> bool = a > b
+        fn gte(a: i64, b: i64) -> bool = a >= b
     "#,
     );
     assert!(!js.is_empty());
@@ -66,8 +66,8 @@ fn test_js_modulo() {
 fn test_js_logical_ops() {
     let js = gen_js(
         r#"
-        F logical_and(a: bool, b: bool) -> bool = a && b
-        F logical_or(a: bool, b: bool) -> bool = a || b
+        fn logical_and(a: bool, b: bool) -> bool = a && b
+        fn logical_or(a: bool, b: bool) -> bool = a || b
     "#,
     );
     assert!(!js.is_empty());
@@ -103,7 +103,7 @@ fn test_js_ternary() {
 fn test_js_match_with_wildcard() {
     let js = gen_js(
         r#"
-        F classify(x: i64) -> i64 = M x {
+        fn classify(x: i64) -> i64 = match x {
             0 => 100,
             1 => 200,
             2 => 300,
@@ -118,7 +118,7 @@ fn test_js_match_with_wildcard() {
 fn test_js_match_with_binding() {
     let js = gen_js(
         r#"
-        F identity(x: i64) -> i64 = M x {
+        fn identity(x: i64) -> i64 = match x {
             n => n
         }
     "#,
@@ -134,7 +134,7 @@ fn test_js_match_with_binding() {
 fn test_js_while_loop() {
     let js = gen_js(
         r#"
-        F countdown(n: i64) -> i64 = {
+        fn countdown(n: i64) -> i64 = {
             x := mut n
             L x > 0 {
                 x = x - 1
@@ -150,7 +150,7 @@ fn test_js_while_loop() {
 fn test_js_loop_with_break() {
     let js = gen_js(
         r#"
-        F find_limit() -> i64 = {
+        fn find_limit() -> i64 = {
             x := mut 0
             L {
                 x = x + 1
@@ -167,7 +167,7 @@ fn test_js_loop_with_break() {
 fn test_js_for_loop() {
     let js = gen_js(
         r#"
-        F sum_range() -> i64 = {
+        fn sum_range() -> i64 = {
             total := mut 0
             L i:0..10 {
                 total = total + i
@@ -193,8 +193,8 @@ fn test_js_float_literal() {
 fn test_js_bool_literals() {
     let js = gen_js(
         r#"
-        F truth() -> bool = true
-        F falsehood() -> bool = false
+        fn truth() -> bool = true
+        fn falsehood() -> bool = false
     "#,
     );
     assert!(js.contains("true") || js.contains("false"));
@@ -202,7 +202,7 @@ fn test_js_bool_literals() {
 
 #[test]
 fn test_js_string_literal() {
-    let js = gen_js(r#"F greeting() -> str = "hello world""#);
+    let js = gen_js(r#"fn greeting() -> str = "hello world""#);
     assert!(js.contains("hello world"));
 }
 
@@ -214,9 +214,9 @@ fn test_js_string_literal() {
 fn test_js_struct_with_methods() {
     let js = gen_js(
         r#"
-        S Vec2 { x: f64, y: f64 }
-        X Vec2 {
-            F length(self) -> f64 = self.x * self.x + self.y * self.y
+        struct Vec2 { x: f64, y: f64 }
+        impl Vec2 {
+            fn length(self) -> f64 = self.x * self.x + self.y * self.y
         }
     "#,
     );
@@ -227,8 +227,8 @@ fn test_js_struct_with_methods() {
 fn test_js_struct_field_access() {
     let js = gen_js(
         r#"
-        S Pair { first: i64, second: i64 }
-        F sum_pair(p: Pair) -> i64 = p.first + p.second
+        struct Pair { first: i64, second: i64 }
+        fn sum_pair(p: Pair) -> i64 = p.first + p.second
     "#,
     );
     assert!(js.contains("first") || js.contains("second"));
@@ -243,7 +243,7 @@ fn test_js_enum_with_data() {
     let js = gen_js(
         r#"
         E Shape { Circle(f64), Rectangle(f64, f64) }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#,
     );
     assert!(!js.is_empty());
@@ -269,7 +269,7 @@ fn test_js_no_params() {
 fn test_js_block_body() {
     let js = gen_js(
         r#"
-        F compute(x: i64) -> i64 = {
+        fn compute(x: i64) -> i64 = {
             a := x + 1
             b := a * 2
             c := b - 3
@@ -284,8 +284,8 @@ fn test_js_block_body() {
 fn test_js_early_return() {
     let js = gen_js(
         r#"
-        F abs(x: i64) -> i64 = {
-            I x < 0 { R -x }
+        fn abs(x: i64) -> i64 = {
+            I x < 0 { return -x }
             x
         }
     "#,
@@ -307,8 +307,8 @@ fn test_js_generic_function() {
 fn test_js_type_alias() {
     let js = gen_js(
         r#"
-        T Int = i64
-        F double(x: Int) -> Int = x * 2
+        type Int = i64
+        fn double(x: Int) -> Int = x * 2
     "#,
     );
     assert!(!js.is_empty());
@@ -322,7 +322,7 @@ fn test_js_type_alias() {
 fn test_js_lambda_expression() {
     let js = gen_js(
         r#"
-        F test() -> i64 = {
+        fn test() -> i64 = {
             f := |x| x * 2
             f(21)
         }
@@ -339,7 +339,7 @@ fn test_js_lambda_expression() {
 fn test_js_string_concat() {
     let js = gen_js(
         r#"
-        F greet(name: str) -> str = "Hello, " + name
+        fn greet(name: str) -> str = "Hello, " + name
     "#,
     );
     assert!(!js.is_empty());
@@ -365,9 +365,9 @@ fn test_js_chained_comparisons() {
 fn test_js_multiple_structs() {
     let js = gen_js(
         r#"
-        S Point { x: i64, y: i64 }
-        S Line { start: Point, end: Point }
-        F test() -> i64 = 0
+        struct Point { x: i64, y: i64 }
+        struct Line { start: Point, end: Point }
+        fn test() -> i64 = 0
     "#,
     );
     assert!(js.contains("Point") || js.contains("Line"));
@@ -377,9 +377,9 @@ fn test_js_multiple_structs() {
 fn test_js_function_calls() {
     let js = gen_js(
         r#"
-        F double(x: i64) -> i64 = x * 2
-        F triple(x: i64) -> i64 = x * 3
-        F compute(x: i64) -> i64 = double(x) + triple(x)
+        fn double(x: i64) -> i64 = x * 2
+        fn triple(x: i64) -> i64 = x * 3
+        fn compute(x: i64) -> i64 = double(x) + triple(x)
     "#,
     );
     assert!(!js.is_empty());
@@ -399,7 +399,7 @@ fn test_js_recursive_fibonacci() {
 fn test_js_mutable_variable() {
     let js = gen_js(
         r#"
-        F increment(x: i64) -> i64 = {
+        fn increment(x: i64) -> i64 = {
             result := mut x
             result = result + 1
             result
@@ -413,7 +413,7 @@ fn test_js_mutable_variable() {
 fn test_js_multiple_variables() {
     let js = gen_js(
         r#"
-        F multi() -> i64 = {
+        fn multi() -> i64 = {
             a := 1
             b := 2
             c := 3
@@ -439,7 +439,7 @@ fn test_js_empty_block() {
 fn test_js_nested_blocks() {
     let js = gen_js(
         r#"
-        F nested() -> i64 = {
+        fn nested() -> i64 = {
             a := {
                 b := 1
                 b + 2
@@ -455,7 +455,7 @@ fn test_js_nested_blocks() {
 fn test_js_deeply_nested_if() {
     let js = gen_js(
         r#"
-        F deep(x: i64) -> i64 = I x > 0 {
+        fn deep(x: i64) -> i64 = I x > 0 {
             I x > 10 {
                 I x > 100 { 3 } E { 2 }
             } E { 1 }
@@ -475,8 +475,8 @@ fn test_js_pub_function() {
 fn test_js_trait_definition() {
     let js = gen_js(
         r#"
-        W Addable {
-            F add(self, other: i64) -> i64
+        trait Addable {
+            fn add(self, other: i64) -> i64
         }
     "#,
     );

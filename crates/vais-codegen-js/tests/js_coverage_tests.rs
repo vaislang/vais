@@ -28,8 +28,8 @@ fn test_js_function() {
 fn test_js_struct() {
     let js = gen_js(
         r#"
-        S Point { x: i64, y: i64 }
-        F test() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn test() -> i64 {
             p := Point { x: 1, y: 2 }
             p.x + p.y
         }
@@ -43,9 +43,9 @@ fn test_js_enum() {
     let js = gen_js(
         r#"
         E Color { Red, Green, Blue }
-        F test() -> i64 {
+        fn test() -> i64 {
             c := Red
-            M c {
+            match c {
                 Red => 1,
                 _ => 0
             }
@@ -59,9 +59,9 @@ fn test_js_enum() {
 fn test_js_if_else() {
     let js = gen_js(
         r#"
-        F abs(x: i64) -> i64 {
-            I x < 0 { R -x }
-            R x
+        fn abs(x: i64) -> i64 {
+            I x < 0 { return -x }
+            return x
         }
     "#,
     );
@@ -72,7 +72,7 @@ fn test_js_if_else() {
 fn test_js_for_loop() {
     let js = gen_js(
         r#"
-        F sum() -> i64 {
+        fn sum() -> i64 {
             s := mut 0
             L i:0..10 { s = s + i }
             s
@@ -86,7 +86,7 @@ fn test_js_for_loop() {
 fn test_js_while_loop() {
     let js = gen_js(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             L x < 10 { x = x + 1 }
             x
@@ -100,8 +100,8 @@ fn test_js_while_loop() {
 fn test_js_match() {
     let js = gen_js(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 0 => 100,
                 1 => 200,
                 _ => 0
@@ -122,11 +122,11 @@ fn test_js_lambda() {
 fn test_js_method_call() {
     let js = gen_js(
         r#"
-        S Counter { value: i64 }
-        X Counter {
-            F get(self) -> i64 = self.value
+        struct Counter { value: i64 }
+        impl Counter {
+            fn get(self) -> i64 = self.value
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             c := Counter { value: 42 }
             c.get()
         }
@@ -143,9 +143,9 @@ fn test_js_method_call() {
 fn test_js_tree_shake_unused_function() {
     let js = gen_js(
         r#"
-        F used() -> i64 = 42
-        F unused() -> i64 = 99
-        F main() -> i64 = used()
+        fn used() -> i64 = 42
+        fn unused() -> i64 = 99
+        fn main() -> i64 = used()
     "#,
     );
     // Main and used should be present
@@ -156,9 +156,9 @@ fn test_js_tree_shake_unused_function() {
 fn test_js_tree_shake_transitive() {
     let js = gen_js(
         r#"
-        F helper() -> i64 = 1
-        F middle() -> i64 = helper()
-        F main() -> i64 = middle()
+        fn helper() -> i64 = 1
+        fn middle() -> i64 = helper()
+        fn main() -> i64 = middle()
     "#,
     );
     assert!(js.contains("helper") || js.contains("middle") || js.contains("main"));
@@ -168,12 +168,12 @@ fn test_js_tree_shake_transitive() {
 fn test_js_tree_shake_struct_methods() {
     let js = gen_js(
         r#"
-        S Foo { x: i64 }
-        X Foo {
-            F get(self) -> i64 = self.x
-            F unused(self) -> i64 = 0
+        struct Foo { x: i64 }
+        impl Foo {
+            fn get(self) -> i64 = self.x
+            fn unused(self) -> i64 = 0
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             f := Foo { x: 42 }
             f.get()
         }
@@ -188,7 +188,7 @@ fn test_js_tree_shake_struct_methods() {
 
 #[test]
 fn test_js_string_literal() {
-    let js = gen_js(r#"F test() -> str = "hello world""#);
+    let js = gen_js(r#"fn test() -> str = "hello world""#);
     assert!(js.contains("hello world"));
 }
 
@@ -226,7 +226,7 @@ fn test_js_ternary() {
 fn test_js_assign_ops() {
     let js = gen_js(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 10
             x += 5
             x -= 1
@@ -244,7 +244,7 @@ fn test_js_assign_ops() {
 fn test_js_bitwise_assign_ops() {
     let js = gen_js(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 255
             x &= 15
             x |= 48
@@ -262,7 +262,7 @@ fn test_js_bitwise_assign_ops() {
 fn test_js_range_for_loop() {
     let js = gen_js(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := mut 0
             L i:0..10 {
                 sum = sum + i
@@ -278,9 +278,9 @@ fn test_js_range_for_loop() {
 fn test_js_self_recursion() {
     let js = gen_js(
         r#"
-        F fact(n: i64) -> i64 {
-            I n <= 1 { R 1 }
-            R n * @(n - 1)
+        fn fact(n: i64) -> i64 {
+            I n <= 1 { return 1 }
+            return n * @(n - 1)
         }
     "#,
     );
@@ -297,7 +297,7 @@ fn test_js_cast() {
 fn test_js_block() {
     let js = gen_js(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := {
                 a := 10
                 b := 20
@@ -314,8 +314,8 @@ fn test_js_block() {
 fn test_js_generic_function() {
     let js = gen_js(
         r#"
-        F id<T>(x: T) -> T = x
-        F main() -> i64 = id(42)
+        fn id<T>(x: T) -> type = x
+        fn main() -> i64 = id(42)
     "#,
     );
     assert!(js.contains("42") || js.contains("id"));
@@ -325,12 +325,12 @@ fn test_js_generic_function() {
 fn test_js_trait_impl() {
     let js = gen_js(
         r#"
-        W Show { F show(self) -> str }
-        S Dog { name: str }
-        X Dog: Show {
-            F show(self) -> str = "dog"
+        trait Show { fn show(self) -> str }
+        struct Dog { name: str }
+        impl Dog: Show {
+            fn show(self) -> str = "dog"
         }
-        F main() -> str {
+        fn main() -> str {
             d := Dog { name: "Rex" }
             d.show()
         }
@@ -343,8 +343,8 @@ fn test_js_trait_impl() {
 fn test_js_type_alias() {
     let js = gen_js(
         r#"
-        T Num = i64
-        F double(x: Num) -> Num = x * 2
+        type Num = i64
+        fn double(x: Num) -> Num = x * 2
     "#,
     );
     assert!(js.contains("double") || js.contains("2"));
@@ -366,9 +366,9 @@ fn test_js_pub_function() {
 fn test_js_multiple_functions() {
     let js = gen_js(
         r#"
-        F a() -> i64 = 1
-        F b() -> i64 = 2
-        F c() -> i64 = a() + b()
+        fn a() -> i64 = 1
+        fn b() -> i64 = 2
+        fn c() -> i64 = a() + b()
     "#,
     );
     assert!(js.contains("function") || js.contains("=>"));
@@ -382,9 +382,9 @@ fn test_js_multiple_functions() {
 fn test_js_fibonacci() {
     let js = gen_js(
         r#"
-        F fib(n: i64) -> i64 {
-            I n <= 1 { R n }
-            R @(n - 1) + @(n - 2)
+        fn fib(n: i64) -> i64 {
+            I n <= 1 { return n }
+            return @(n - 1) + @(n - 2)
         }
     "#,
     );
@@ -395,12 +395,12 @@ fn test_js_fibonacci() {
 fn test_js_complex_struct() {
     let js = gen_js(
         r#"
-        S Person { name: str, age: i64 }
-        X Person {
-            F new(name: str, age: i64) -> Person = Person { name: name, age: age }
-            F greet(self) -> str = "hello"
+        struct Person { name: str, age: i64 }
+        impl Person {
+            fn new(name: str, age: i64) -> Person = Person { name: name, age: age }
+            fn greet(self) -> str = "hello"
         }
-        F main() -> str {
+        fn main() -> str {
             p := Person::new("Alice", 30)
             p.greet()
         }
@@ -418,8 +418,8 @@ fn test_js_tree_shake_enum_with_match() {
     let js = gen_js(
         r#"
         E Direction { North, South, East, West }
-        F go(d: Direction) -> i64 {
-            M d {
+        fn go(d: Direction) -> i64 {
+            match d {
                 North => 1,
                 South => 2,
                 East => 3,
@@ -427,7 +427,7 @@ fn test_js_tree_shake_enum_with_match() {
                 _ => 0
             }
         }
-        F main() -> i64 = go(North)
+        fn main() -> i64 = go(North)
     "#,
     );
     assert!(js.contains("Direction") || js.contains("North"));
@@ -439,9 +439,9 @@ fn test_js_tree_shake_unused_enum() {
         r#"
         E Used { Aa, Bb }
         E Unused { Cc, Dd }
-        F main() -> i64 {
+        fn main() -> i64 {
             x := Aa
-            M x {
+            match x {
                 Aa => 1,
                 _ => 0
             }
@@ -455,9 +455,9 @@ fn test_js_tree_shake_unused_enum() {
 fn test_js_tree_shake_unused_struct() {
     let js = gen_js(
         r#"
-        S Used { x: i64 }
-        S Unused { y: i64 }
-        F main() -> i64 {
+        struct Used { x: i64 }
+        struct Unused { y: i64 }
+        fn main() -> i64 {
             u := Used { x: 42 }
             u.x
         }
@@ -470,8 +470,8 @@ fn test_js_tree_shake_unused_struct() {
 fn test_js_tree_shake_pub_always_included() {
     let js = gen_js(
         r#"
-        P F public_fn() -> i64 = 42
-        F unused() -> i64 = 99
+        pub fn public_fn() -> i64 = 42
+        fn unused() -> i64 = 99
     "#,
     );
     assert!(js.contains("public_fn") || js.contains("export"));
@@ -481,10 +481,10 @@ fn test_js_tree_shake_pub_always_included() {
 fn test_js_tree_shake_deep_call_chain() {
     let js = gen_js(
         r#"
-        F level3() -> i64 = 42
-        F level2() -> i64 = level3()
-        F level1() -> i64 = level2()
-        F main() -> i64 = level1()
+        fn level3() -> i64 = 42
+        fn level2() -> i64 = level3()
+        fn level1() -> i64 = level2()
+        fn main() -> i64 = level1()
     "#,
     );
     assert!(js.contains("level3") || js.contains("level2") || js.contains("level1"));
@@ -494,14 +494,14 @@ fn test_js_tree_shake_deep_call_chain() {
 fn test_js_tree_shake_impl_methods() {
     let js = gen_js(
         r#"
-        S Calculator { value: i64 }
-        X Calculator {
-            F new() -> Calculator = Calculator { value: 0 }
-            F add(self, n: i64) -> Calculator = Calculator { value: self.value + n }
-            F get(self) -> i64 = self.value
-            F unused_method(self) -> i64 = 0
+        struct Calculator { value: i64 }
+        impl Calculator {
+            fn new() -> Calculator = Calculator { value: 0 }
+            fn add(self, n: i64) -> Calculator = Calculator { value: self.value + n }
+            fn get(self) -> i64 = self.value
+            fn unused_method(self) -> i64 = 0
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             c := Calculator::new()
             c2 := c.add(42)
             c2.get()
@@ -517,7 +517,7 @@ fn test_js_tree_shake_const() {
         r#"
         C pi: i64 = 3
         C unused: i64 = 99
-        F main() -> i64 = pi
+        fn main() -> i64 = pi
     "#,
     );
     assert!(js.contains("3") || js.contains("pi"));
@@ -527,10 +527,10 @@ fn test_js_tree_shake_const() {
 fn test_js_tree_shake_type_alias() {
     let js = gen_js(
         r#"
-        T Num = i64
-        T Unused = str
-        F double(x: Num) -> Num = x * 2
-        F main() -> i64 = double(21)
+        type Num = i64
+        type Unused = str
+        fn double(x: Num) -> Num = x * 2
+        fn main() -> i64 = double(21)
     "#,
     );
     assert!(js.contains("double") || js.contains("21"));
@@ -540,12 +540,12 @@ fn test_js_tree_shake_type_alias() {
 fn test_js_tree_shake_trait_impl() {
     let js = gen_js(
         r#"
-        W Eval { F eval(self) -> i64 }
-        S Lit { val: i64 }
-        X Lit: Eval {
-            F eval(self) -> i64 = self.val
+        trait Eval { fn eval(self) -> i64 }
+        struct Lit { val: i64 }
+        impl Lit: Eval {
+            fn eval(self) -> i64 = self.val
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             l := Lit { val: 42 }
             l.eval()
         }
@@ -558,9 +558,9 @@ fn test_js_tree_shake_trait_impl() {
 fn test_js_tree_shake_generic_function() {
     let js = gen_js(
         r#"
-        F id<T>(x: T) -> T = x
-        F unused_generic<T>(x: T) -> T = x
-        F main() -> i64 = id(42)
+        fn id<T>(x: T) -> type = x
+        fn unused_generic<T>(x: T) -> type = x
+        fn main() -> i64 = id(42)
     "#,
     );
     assert!(js.contains("id") || js.contains("42"));
@@ -586,7 +586,7 @@ fn test_js_unary_not() {
 fn test_js_comparison_ops() {
     let js = gen_js(
         r#"
-        F test() -> bool {
+        fn test() -> bool {
             a := 1 < 2
             b := 2 > 1
             c := 1 <= 2
@@ -604,7 +604,7 @@ fn test_js_comparison_ops() {
 fn test_js_logical_ops() {
     let js = gen_js(
         r#"
-        F test() -> bool {
+        fn test() -> bool {
             a := true && false
             b := true || false
             a || b
@@ -618,12 +618,12 @@ fn test_js_logical_ops() {
 fn test_js_nested_if() {
     let js = gen_js(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             I x > 10 {
-                I x > 20 { R 3 }
-                R 2
+                I x > 20 { return 3 }
+                return 2
             }
-            R 1
+            return 1
         }
     "#,
     );
@@ -634,10 +634,10 @@ fn test_js_nested_if() {
 fn test_js_else_if() {
     let js = gen_js(
         r#"
-        F test(x: i64) -> i64 {
-            I x > 20 { R 3 }
-            E I x > 10 { R 2 }
-            E { R 1 }
+        fn test(x: i64) -> i64 {
+            I x > 20 { return 3 }
+            E I x > 10 { return 2 }
+            E { return 1 }
         }
     "#,
     );
@@ -648,7 +648,7 @@ fn test_js_else_if() {
 fn test_js_infinite_loop() {
     let js = gen_js(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             L {
                 x = x + 1
@@ -665,8 +665,8 @@ fn test_js_infinite_loop() {
 fn test_js_match_with_guard() {
     let js = gen_js(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 0 => 100,
                 1 => 200,
                 _ => 0
@@ -681,13 +681,13 @@ fn test_js_match_with_guard() {
 fn test_js_struct_method_chain() {
     let js = gen_js(
         r#"
-        S Builder { val: i64 }
-        X Builder {
-            F new() -> Builder = Builder { val: 0 }
-            F inc(self) -> Builder = Builder { val: self.val + 1 }
-            F get(self) -> i64 = self.val
+        struct Builder { val: i64 }
+        impl Builder {
+            fn new() -> Builder = Builder { val: 0 }
+            fn inc(self) -> Builder = Builder { val: self.val + 1 }
+            fn get(self) -> i64 = self.val
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             b := Builder::new()
             b2 := b.inc()
             b3 := b2.inc()
@@ -702,7 +702,7 @@ fn test_js_struct_method_chain() {
 fn test_js_block_expression() {
     let js = gen_js(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := {
                 a := 10
                 b := 32
@@ -719,10 +719,10 @@ fn test_js_block_expression() {
 fn test_js_early_return() {
     let js = gen_js(
         r#"
-        F test(x: i64) -> i64 {
-            I x == 0 { R 99 }
-            I x == 1 { R 42 }
-            R 0
+        fn test(x: i64) -> i64 {
+            I x == 0 { return 99 }
+            I x == 1 { return 42 }
+            return 0
         }
     "#,
     );
@@ -737,14 +737,14 @@ fn test_js_complex_enum() {
             Lit(i64),
             Add(i64, i64)
         }
-        F eval(e: Expr) -> i64 {
-            M e {
+        fn eval(e: Expr) -> i64 {
+            match e {
                 Lit(n) => n,
                 Add(a, b) => a + b,
                 _ => 0
             }
         }
-        F main() -> i64 = eval(Add(20, 22))
+        fn main() -> i64 = eval(Add(20, 22))
     "#,
     );
     assert!(js.contains("Expr") || js.contains("eval") || js.contains("Lit"));
@@ -754,9 +754,9 @@ fn test_js_complex_enum() {
 fn test_js_multiple_structs() {
     let js = gen_js(
         r#"
-        S Inner { x: i64 }
-        S Outer { inner: Inner, y: i64 }
-        F main() -> i64 {
+        struct Inner { x: i64 }
+        struct Outer { inner: Inner, y: i64 }
+        fn main() -> i64 {
             o := Outer { inner: Inner { x: 40 }, y: 2 }
             o.inner.x + o.y
         }
@@ -770,9 +770,9 @@ fn test_js_extern_block() {
     let js = gen_js(
         r#"
         N "C" {
-            F puts(s: i64) -> i64
+            fn puts(s: i64) -> i64
         }
-        F main() -> i64 = 42
+        fn main() -> i64 = 42
     "#,
     );
     assert!(js.contains("42") || js.contains("main"));
@@ -782,8 +782,8 @@ fn test_js_extern_block() {
 fn test_js_where_clause() {
     let js = gen_js(
         r#"
-        F identity<T>(x: T) -> T = x
-        F main() -> i64 = identity(42)
+        fn identity<T>(x: T) -> type = x
+        fn main() -> i64 = identity(42)
     "#,
     );
     assert!(js.contains("42") || js.contains("identity"));
@@ -793,7 +793,7 @@ fn test_js_where_clause() {
 fn test_js_defer() {
     let js = gen_js(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             D { x = x + 1 }
             x = 41
@@ -808,15 +808,15 @@ fn test_js_defer() {
 fn test_js_mutual_recursion() {
     let js = gen_js(
         r#"
-        F is_even(n: i64) -> i64 {
-            I n == 0 { R 1 }
+        fn is_even(n: i64) -> i64 {
+            I n == 0 { return 1 }
             is_odd(n - 1)
         }
-        F is_odd(n: i64) -> i64 {
-            I n == 0 { R 0 }
+        fn is_odd(n: i64) -> i64 {
+            I n == 0 { return 0 }
             is_even(n - 1)
         }
-        F main() -> i64 = is_even(10)
+        fn main() -> i64 = is_even(10)
     "#,
     );
     assert!(js.contains("is_even") || js.contains("is_odd"));
@@ -826,8 +826,8 @@ fn test_js_mutual_recursion() {
 fn test_js_many_parameters() {
     let js = gen_js(
         r#"
-        F add5(a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 = a + b + c + d + e
-        F main() -> i64 = add5(1, 2, 3, 4, 5)
+        fn add5(a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 = a + b + c + d + e
+        fn main() -> i64 = add5(1, 2, 3, 4, 5)
     "#,
     );
     assert!(js.contains("add5") || js.contains("function"));

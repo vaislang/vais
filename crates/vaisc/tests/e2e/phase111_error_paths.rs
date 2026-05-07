@@ -29,9 +29,9 @@ fn error_break_outside_loop() {
     // Parser may catch this before codegen; either way it should fail
     assert_compile_error(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     B
-    R 0
+    return 0
 }
 "#,
     );
@@ -41,9 +41,9 @@ F main() -> i64 {
 fn error_continue_outside_loop() {
     assert_error_contains(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     C
-    R 0
+    return 0
 }
 "#,
         "continue",
@@ -54,11 +54,11 @@ F main() -> i64 {
 fn error_break_in_if_outside_loop() {
     assert_error_contains(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     I true {
         B
     }
-    R 0
+    return 0
 }
 "#,
         "break",
@@ -74,9 +74,9 @@ fn error_non_exhaustive_match_compiles() {
     let result = compile_to_ir(
         r#"
 E Color { Red, Blue, Green }
-F main() -> i64 {
+fn main() -> i64 {
     c := Red
-    M c {
+    match c {
         Red => 1,
         _ => 0
     }
@@ -94,10 +94,10 @@ fn error_assign_to_immutable_without_mut() {
     // This test documents the current behavior
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 5
     x = 10
-    R x
+    return x
 }
 "#,
         10,
@@ -108,10 +108,10 @@ F main() -> i64 {
 fn error_assign_to_mut_variable() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 5
     x = 10
-    R x
+    return x
 }
 "#,
         10,
@@ -125,9 +125,9 @@ fn error_method_on_non_struct() {
     // Calling a method on a non-struct produces UndefinedFunction error
     assert_error_contains(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 42
-    R x.unknown_method()
+    return x.unknown_method()
 }
 "#,
         "undefined",
@@ -140,9 +140,9 @@ F main() -> i64 {
 fn error_index_non_array() {
     assert_error_contains(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 42
-    R x[0]
+    return x[0]
 }
 "#,
         "index",
@@ -151,38 +151,38 @@ F main() -> i64 {
 
 #[test]
 fn error_return_type_mismatch_string_for_int() {
-    assert_error_contains(r#"F main() -> i64 = "hello""#, "mismatch");
+    assert_error_contains(r#"fn main() -> i64 = "hello""#, "mismatch");
 }
 
 #[test]
 fn error_binary_op_type_mismatch() {
-    assert_error_contains(r#"F main() -> i64 = "hello" + 42"#, "mismatch");
+    assert_error_contains(r#"fn main() -> i64 = "hello" + 42"#, "mismatch");
 }
 
 #[test]
 fn error_comparison_type_mismatch() {
-    assert_error_contains(r#"F main() -> bool = "hello" > 42"#, "mismatch");
+    assert_error_contains(r#"fn main() -> bool = "hello" > 42"#, "mismatch");
 }
 
 // ==================== F. Undefined Symbol Errors ====================
 
 #[test]
 fn error_undefined_variable() {
-    assert_error_contains(r#"F main() -> i64 = unknown_var"#, "undefined");
+    assert_error_contains(r#"fn main() -> i64 = unknown_var"#, "undefined");
 }
 
 #[test]
 fn error_undefined_function() {
-    assert_error_contains(r#"F main() -> i64 = unknown_func(42)"#, "undefined");
+    assert_error_contains(r#"fn main() -> i64 = unknown_func(42)"#, "undefined");
 }
 
 #[test]
 fn error_undefined_struct_type() {
     assert_error_contains(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     p := UnknownStruct { x: 1 }
-    R 0
+    return 0
 }
 "#,
         "unknown",
@@ -193,10 +193,10 @@ F main() -> i64 {
 fn error_unknown_struct_field_access() {
     assert_error_contains(
         r#"
-S Point { x: i64, y: i64 }
-F main() -> i64 {
+struct Point { x: i64, y: i64 }
+fn main() -> i64 {
     p := Point { x: 1, y: 2 }
-    R p.z
+    return p.z
 }
 "#,
         "field",
@@ -207,10 +207,10 @@ F main() -> i64 {
 fn error_extra_struct_field() {
     assert_compile_error(
         r#"
-S Point { x: i64, y: i64 }
-F main() -> i64 {
+struct Point { x: i64, y: i64 }
+fn main() -> i64 {
     p := Point { x: 1, y: 2, z: 3 }
-    R 0
+    return 0
 }
 "#,
     );
@@ -222,8 +222,8 @@ F main() -> i64 {
 fn error_wrong_arg_count_too_few() {
     assert_error_contains(
         r#"
-F add(a: i64, b: i64) -> i64 = a + b
-F main() -> i64 = add(1)
+fn add(a: i64, b: i64) -> i64 = a + b
+fn main() -> i64 = add(1)
 "#,
         "arg",
     );
@@ -233,8 +233,8 @@ F main() -> i64 = add(1)
 fn error_wrong_arg_count_too_many() {
     assert_error_contains(
         r#"
-F add(a: i64, b: i64) -> i64 = a + b
-F main() -> i64 = add(1, 2, 3)
+fn add(a: i64, b: i64) -> i64 = a + b
+fn main() -> i64 = add(1, 2, 3)
 "#,
         "arg",
     );
@@ -244,9 +244,9 @@ F main() -> i64 = add(1, 2, 3)
 fn error_duplicate_function() {
     assert_error_contains(
         r#"
-F foo() -> i64 = 1
-F foo() -> i64 = 2
-F main() -> i64 = foo()
+fn foo() -> i64 = 1
+fn foo() -> i64 = 2
+fn main() -> i64 = foo()
 "#,
         "duplicate",
     );
@@ -259,7 +259,7 @@ fn error_self_call_outside_function() {
     // @ (self-recursion) needs a function context
     assert_compile_error(
         r#"
-F main() -> i64 = @(5)
+fn main() -> i64 = @(5)
 "#,
     );
 }
@@ -284,13 +284,13 @@ fn error_empty_source_compiles() {
 fn positive_break_inside_loop() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 0
     L {
         I x > 5 { B }
         x = x + 1
     }
-    R x
+    return x
 }
 "#,
         6,
@@ -301,13 +301,13 @@ F main() -> i64 {
 fn positive_continue_inside_loop() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     L i:0..10 {
         I i % 2 == 0 { C }
         sum = sum + 1
     }
-    R sum
+    return sum
 }
 "#,
         5,
@@ -318,7 +318,7 @@ F main() -> i64 {
 fn positive_nested_loop_break() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     count := mut 0
     L i:0..5 {
         L j:0..5 {
@@ -326,7 +326,7 @@ F main() -> i64 {
             count = count + 1
         }
     }
-    R count
+    return count
 }
 "#,
         15,
@@ -337,9 +337,9 @@ F main() -> i64 {
 fn positive_match_with_default() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 42
-    M x {
+    match x {
         1 => 10,
         2 => 20,
         _ => 99
@@ -354,10 +354,10 @@ F main() -> i64 {
 fn positive_struct_field_access() {
     assert_exit_code(
         r#"
-S Point { x: i64, y: i64 }
-F main() -> i64 {
+struct Point { x: i64, y: i64 }
+fn main() -> i64 {
     p := Point { x: 10, y: 20 }
-    R p.x + p.y
+    return p.x + p.y
 }
 "#,
         30,
@@ -369,9 +369,9 @@ fn positive_enum_match() {
     assert_exit_code(
         r#"
 E Color { Red, Blue, Green }
-F main() -> i64 {
+fn main() -> i64 {
     c := Blue
-    M c {
+    match c {
         Red => 1,
         Blue => 2,
         Green => 3,
@@ -387,11 +387,11 @@ F main() -> i64 {
 fn positive_recursive_function() {
     assert_exit_code(
         r#"
-F fib(n: i64) -> i64 {
-    I n < 2 { R n }
-    R @(n - 1) + @(n - 2)
+fn fib(n: i64) -> i64 {
+    I n < 2 { return n }
+    return @(n - 1) + @(n - 2)
 }
-F main() -> i64 = fib(10)
+fn main() -> i64 = fib(10)
 "#,
         55,
     );
@@ -401,9 +401,9 @@ F main() -> i64 = fib(10)
 fn positive_closure_basic() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     double := |x| x * 2
-    R double(21)
+    return double(21)
 }
 "#,
         42,
@@ -414,9 +414,9 @@ F main() -> i64 {
 fn positive_array_index() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     arr := [10, 20, 30]
-    R arr[1]
+    return arr[1]
 }
 "#,
         20,

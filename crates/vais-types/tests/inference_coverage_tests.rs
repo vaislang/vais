@@ -68,7 +68,7 @@ fn test_infer_bool_literal() {
 
 #[test]
 fn test_infer_string_literal() {
-    let source = r#"F test() -> str = "hello""#;
+    let source = r#"fn test() -> str = "hello""#;
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     assert!(tc.check_module(&module).is_ok());
@@ -121,7 +121,7 @@ fn test_infer_unary_op_not() {
 #[test]
 fn test_infer_if_expression() {
     let source = r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             result := I x > 0 { x } E { -x }
             result
         }
@@ -134,8 +134,8 @@ fn test_infer_if_expression() {
 #[test]
 fn test_infer_match_expression() {
     let source = r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 0 => 100,
                 1 => 200,
                 _ => 300
@@ -150,7 +150,7 @@ fn test_infer_match_expression() {
 #[test]
 fn test_infer_block_expression() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             result := {
                 a := 10
                 b := 20
@@ -167,9 +167,9 @@ fn test_infer_block_expression() {
 #[test]
 fn test_infer_nested_function_call() {
     let source = r#"
-        F add(x: i64, y: i64) -> i64 = x + y
-        F mul(x: i64, y: i64) -> i64 = x * y
-        F test() -> i64 = add(mul(2, 3), mul(4, 5))
+        fn add(x: i64, y: i64) -> i64 = x + y
+        fn mul(x: i64, y: i64) -> i64 = x * y
+        fn test() -> i64 = add(mul(2, 3), mul(4, 5))
     "#;
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
@@ -179,8 +179,8 @@ fn test_infer_nested_function_call() {
 #[test]
 fn test_infer_generic_identity() {
     let source = r#"
-        F id<T>(x: T) -> T = x
-        F test() -> i64 = id(42)
+        fn id<T>(x: T) -> type = x
+        fn test() -> i64 = id(42)
     "#;
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
@@ -190,8 +190,8 @@ fn test_infer_generic_identity() {
 #[test]
 fn test_infer_generic_pair() {
     let source = r#"
-        S Pair<T> { first: T, second: T }
-        F test() -> i64 {
+        struct Pair<T> { first: T, second: type }
+        fn test() -> i64 {
             p := Pair { first: 1, second: 2 }
             p.first + p.second
         }
@@ -205,7 +205,7 @@ fn test_infer_generic_pair() {
 fn test_infer_closure_type() {
     // Closures used as higher-order function params
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             f := |x: i64| x * 2
             f(21)
         }
@@ -226,9 +226,9 @@ fn test_infer_ternary() {
 #[test]
 fn test_infer_tuple() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             t := (1, 2, 3)
-            R 0
+            return 0
         }
     "#;
     let module = parse(source).unwrap();
@@ -239,9 +239,9 @@ fn test_infer_tuple() {
 #[test]
 fn test_infer_array() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr := [1, 2, 3]
-            R 0
+            return 0
         }
     "#;
     let module = parse(source).unwrap();
@@ -258,9 +258,9 @@ fn test_type_mismatch_error() {
     // Phase 160-A: bool↔i64 numeric promotion is now allowed.
     // Use str→i64 mismatch which is still forbidden.
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x: str = 42
-            R 0
+            return 0
         }
     "#;
     let module = parse(source).unwrap();
@@ -274,7 +274,7 @@ fn test_type_mismatch_error() {
 fn test_return_type_mismatch() {
     // Phase 160-A: bool↔i64 numeric promotion is now allowed.
     // Use str→i64 mismatch which is still forbidden.
-    let source = r#"F test() -> i64 = "hello""#;
+    let source = r#"fn test() -> i64 = "hello""#;
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     let result = tc.check_module(&module);
@@ -288,8 +288,8 @@ fn test_return_type_mismatch() {
 #[test]
 fn test_infer_struct_construction() {
     let source = r#"
-        S Point { x: i64, y: i64 }
-        F test() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn test() -> i64 {
             p := Point { x: 1, y: 2 }
             p.x + p.y
         }
@@ -303,9 +303,9 @@ fn test_infer_struct_construction() {
 fn test_infer_enum_variant() {
     let source = r#"
         E MyOpt { MySome(i64), MyNone }
-        F test() -> i64 {
+        fn test() -> i64 {
             x := MySome(42)
-            M x {
+            match x {
                 MySome(v) => v,
                 MyNone => 0,
                 _ => 0
@@ -324,14 +324,14 @@ fn test_infer_enum_variant() {
 #[test]
 fn test_trait_method_inference() {
     let source = r#"
-        W Describable {
-            F describe(self) -> str
+        trait Describable {
+            fn describe(self) -> str
         }
-        S Circle { radius: i64 }
-        X Circle: Describable {
-            F describe(self) -> str = "circle"
+        struct Circle { radius: i64 }
+        impl Circle: Describable {
+            fn describe(self) -> str = "circle"
         }
-        F test() -> str {
+        fn test() -> str {
             c := Circle { radius: 5 }
             c.describe()
         }
@@ -348,7 +348,7 @@ fn test_trait_method_inference() {
 #[test]
 fn test_infer_assign_op() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 10
             x += 5
             x -= 1
@@ -365,7 +365,7 @@ fn test_infer_assign_op() {
 #[test]
 fn test_infer_cast() {
     let source = r#"
-        F test() -> f64 {
+        fn test() -> f64 {
             x := 42
             x as f64
         }
@@ -378,11 +378,11 @@ fn test_infer_cast() {
 #[test]
 fn test_infer_range() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             L i:0..10 {
                 C
             }
-            R 0
+            return 0
         }
     "#;
     let module = parse(source).unwrap();
@@ -393,12 +393,12 @@ fn test_infer_range() {
 #[test]
 fn test_infer_method_chain() {
     let source = r#"
-        S Builder { value: i64 }
-        X Builder {
-            F set(self, v: i64) -> Builder = Builder { value: v }
-            F get(self) -> i64 = self.value
+        struct Builder { value: i64 }
+        impl Builder {
+            fn set(self, v: i64) -> Builder = Builder { value: v }
+            fn get(self) -> i64 = self.value
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             b := Builder { value: 0 }
             b.set(42).get()
         }
@@ -411,9 +411,9 @@ fn test_infer_method_chain() {
 #[test]
 fn test_infer_recursive_function() {
     let source = r#"
-        F factorial(n: i64) -> i64 {
-            I n <= 1 { R 1 }
-            R n * @(n - 1)
+        fn factorial(n: i64) -> i64 {
+            I n <= 1 { return 1 }
+            return n * @(n - 1)
         }
     "#;
     let module = parse(source).unwrap();
@@ -424,9 +424,9 @@ fn test_infer_recursive_function() {
 #[test]
 fn test_infer_mutually_independent_functions() {
     let source = r#"
-        F is_even(n: i64) -> bool = n % 2 == 0
-        F is_odd(n: i64) -> bool = !is_even(n)
-        F test() -> bool = is_odd(3)
+        fn is_even(n: i64) -> bool = n % 2 == 0
+        fn is_odd(n: i64) -> bool = !is_even(n)
+        fn test() -> bool = is_odd(3)
     "#;
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
@@ -448,7 +448,7 @@ fn test_infer_empty_function_body() {
 #[test]
 fn test_infer_unit_function() {
     let source = r#"
-        F test() {
+        fn test() {
             x := 42
         }
     "#;
@@ -460,8 +460,8 @@ fn test_infer_unit_function() {
 #[test]
 fn test_infer_nested_generics() {
     let source = r#"
-        F first<T>(x: T, y: T) -> T = x
-        F test() -> i64 = first(first(1, 2), first(3, 4))
+        fn first<T>(x: T, y: T) -> type = x
+        fn test() -> i64 = first(first(1, 2), first(3, 4))
     "#;
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
@@ -471,8 +471,8 @@ fn test_infer_nested_generics() {
 #[test]
 fn test_infer_multiple_type_params() {
     let source = r#"
-        F pick_first<A, B>(a: A, b: B) -> A = a
-        F test() -> i64 = pick_first(42, true)
+        fn pick_first<A, B>(a: A, b: B) -> A = a
+        fn test() -> i64 = pick_first(42, true)
     "#;
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
@@ -482,8 +482,8 @@ fn test_infer_multiple_type_params() {
 #[test]
 fn test_infer_with_where_clause() {
     let source = r#"
-        W Printable { F to_str(self) -> str }
-        F show<T>(x: T) -> str where T: Printable = x.to_str()
+        trait Printable { fn to_str(self) -> str }
+        fn show<T>(x: T) -> str where T: Printable = x.to_str()
     "#;
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
@@ -493,7 +493,7 @@ fn test_infer_with_where_clause() {
 #[test]
 fn test_infer_bitwise_ops() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             a := 255
             b := 15
             x := a & b
@@ -516,9 +516,9 @@ fn test_infer_bitwise_ops() {
 #[test]
 fn test_resolve_nested_generic_struct() {
     let source = r#"
-        S Inner<T> { value: T }
-        S Outer<T> { inner: Inner<T> }
-        F test() -> i64 {
+        struct Inner<T> { value: type }
+        struct Outer<T> { inner: Inner<T> }
+        fn test() -> i64 {
             o := Outer { inner: Inner { value: 42 } }
             o.inner.value
         }
@@ -531,9 +531,9 @@ fn test_resolve_nested_generic_struct() {
 #[test]
 fn test_resolve_type_alias_in_struct() {
     let source = r#"
-        T Number = i64
-        S Container { value: Number }
-        F test() -> Number {
+        type Number = i64
+        struct Container { value: Number }
+        fn test() -> Number {
             c := Container { value: 42 }
             c.value
         }
@@ -551,8 +551,8 @@ fn test_resolve_enum_with_complex_variants() {
             Add(i64, i64),
             Neg(i64)
         }
-        F eval(e: Expr) -> i64 {
-            M e {
+        fn eval(e: Expr) -> i64 {
+            match e {
                 Num(n) => n,
                 Add(a, b) => a + b,
                 Neg(n) => 0 - n,

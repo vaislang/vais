@@ -140,8 +140,8 @@ fn test_unary_neg_f64() {
 fn test_field_access_simple() {
     check_ok(
         r#"
-        S Point { x: i64, y: i64 }
-        F f() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn f() -> i64 {
             p := Point { x: 10, y: 20 }
             p.x
         }
@@ -153,9 +153,9 @@ fn test_field_access_simple() {
 fn test_field_access_nested() {
     check_ok(
         r#"
-        S Inner { val: i64 }
-        S Outer { inner: Inner }
-        F f() -> i64 {
+        struct Inner { val: i64 }
+        struct Outer { inner: Inner }
+        fn f() -> i64 {
             o := Outer { inner: Inner { val: 99 } }
             o.inner.val
         }
@@ -167,8 +167,8 @@ fn test_field_access_nested() {
 fn test_field_access_bool_field() {
     check_ok(
         r#"
-        S Flags { enabled: bool }
-        F f() -> bool {
+        struct Flags { enabled: bool }
+        fn f() -> bool {
             fl := Flags { enabled: true }
             fl.enabled
         }
@@ -184,7 +184,7 @@ fn test_field_access_bool_field() {
 fn test_index_array_i64() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             arr := [10, 20, 30]
             arr[0]
         }
@@ -196,7 +196,7 @@ fn test_index_array_i64() {
 fn test_index_nested_array() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             arr := [1, 2, 3, 4, 5]
             x := arr[2]
             x + 1
@@ -227,7 +227,7 @@ fn test_ternary_bool() {
 fn test_if_no_else_unit() {
     check_ok(
         r#"
-        F f(x: i64) -> i64 {
+        fn f(x: i64) -> i64 {
             I x > 0 { }
             0
         }
@@ -239,7 +239,7 @@ fn test_if_no_else_unit() {
 fn test_if_else_same_type() {
     check_ok(
         r#"
-        F f(x: i64) -> i64 {
+        fn f(x: i64) -> i64 {
             I x > 0 { 1 } E { 2 }
         }
     "#,
@@ -254,7 +254,7 @@ fn test_if_else_same_type() {
 fn test_closure_basic() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             add := |a: i64, b: i64| a + b
             add(3, 4)
         }
@@ -266,7 +266,7 @@ fn test_closure_basic() {
 fn test_closure_no_capture() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             sq := |x: i64| x * x
             sq(5)
         }
@@ -287,7 +287,7 @@ fn test_try_on_non_result_is_lenient() {
     // inference. See `checker_expr/special.rs` Expr::Try arm.
     check_ok(
         r#"
-        F f(x: i64) -> i64 = x?
+        fn f(x: i64) -> i64 = x?
     "#,
     );
 }
@@ -298,8 +298,8 @@ fn test_unwrap_option_type() {
     // `partial`. E034 was added in Phase 195 P195-3.
     check_ok(
         r#"
-        F wrap(x: i64) -> Option<i64> = Some(x)
-        partial F f() -> i64 {
+        fn wrap(x: i64) -> Option<i64> = Some(x)
+        partial fn f() -> i64 {
             v := wrap(42)
             v!
         }
@@ -315,7 +315,7 @@ fn test_unwrap_option_type() {
 fn test_deref_non_ref_errors() {
     check_err(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := 42
             *x
         }
@@ -336,8 +336,8 @@ fn test_match_enum_variants() {
     check_ok(
         r#"
         E Color { Red, Green, Blue }
-        F f(c: Color) -> i64 {
-            M c {
+        fn f(c: Color) -> i64 {
+            match c {
                 Red => 0,
                 Green => 1,
                 Blue => 2,
@@ -351,8 +351,8 @@ fn test_match_enum_variants() {
 fn test_match_wildcard() {
     check_ok(
         r#"
-        F f(x: i64) -> i64 {
-            M x {
+        fn f(x: i64) -> i64 {
+            match x {
                 0 => 100,
                 _ => 0,
             }
@@ -365,8 +365,8 @@ fn test_match_wildcard() {
 fn test_match_bool() {
     check_ok(
         r#"
-        F f(b: bool) -> i64 {
-            M b {
+        fn f(b: bool) -> i64 {
+            match b {
                 true => 1,
                 false => 0,
             }
@@ -383,7 +383,7 @@ fn test_match_bool() {
 fn test_loop_with_break() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := mut 0
             L {
                 x = x + 1
@@ -399,7 +399,7 @@ fn test_loop_with_break() {
 fn test_for_range_loop() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             s := mut 0
             L i: 0..5 {
                 s = s + i
@@ -418,9 +418,9 @@ fn test_for_range_loop() {
 fn test_pipe_operator() {
     check_ok(
         r#"
-        F double(x: i64) -> i64 = x * 2
-        F inc(x: i64) -> i64 = x + 1
-        F f() -> i64 = 5 |> double |> inc
+        fn double(x: i64) -> i64 = x * 2
+        fn inc(x: i64) -> i64 = x + 1
+        fn f() -> i64 = 5 |> double |> inc
     "#,
     );
 }
@@ -433,7 +433,7 @@ fn test_pipe_operator() {
 fn test_cast_i64_to_f64() {
     check_ok(
         r#"
-        F f(x: i64) -> f64 = x as f64
+        fn f(x: i64) -> f64 = x as f64
     "#,
     );
 }
@@ -442,7 +442,7 @@ fn test_cast_i64_to_f64() {
 fn test_cast_f64_to_i64() {
     check_ok(
         r#"
-        F f(x: f64) -> i64 = x as i64
+        fn f(x: f64) -> i64 = x as i64
     "#,
     );
 }
@@ -451,7 +451,7 @@ fn test_cast_f64_to_i64() {
 fn test_cast_i64_to_i32() {
     check_ok(
         r#"
-        F f(x: i64) -> i32 = x as i32
+        fn f(x: i64) -> i32 = x as i32
     "#,
     );
 }
@@ -464,8 +464,8 @@ fn test_cast_i64_to_i32() {
 fn test_struct_literal_all_fields() {
     check_ok(
         r#"
-        S Vec2 { x: f64, y: f64 }
-        F f() -> f64 {
+        struct Vec2 { x: f64, y: f64 }
+        fn f() -> f64 {
             v := Vec2 { x: 1.0, y: 2.0 }
             v.x + v.y
         }
@@ -481,7 +481,7 @@ fn test_struct_literal_all_fields() {
 fn test_some_constructor() {
     check_ok(
         r#"
-        F f() -> Option<i64> = Some(42)
+        fn f() -> Option<i64> = Some(42)
     "#,
     );
 }
@@ -490,7 +490,7 @@ fn test_some_constructor() {
 fn test_none_literal() {
     check_ok(
         r#"
-        F f() -> Option<i64> = None
+        fn f() -> Option<i64> = None
     "#,
     );
 }
@@ -503,7 +503,7 @@ fn test_none_literal() {
 fn test_ok_constructor() {
     check_ok(
         r#"
-        F f() -> Result<i64, str> = Ok(42)
+        fn f() -> Result<i64, str> = Ok(42)
     "#,
     );
 }
@@ -512,7 +512,7 @@ fn test_ok_constructor() {
 fn test_err_constructor() {
     check_ok(
         r#"
-        F f() -> Result<i64, str> = Err("oops")
+        fn f() -> Result<i64, str> = Err("oops")
     "#,
     );
 }
@@ -523,7 +523,7 @@ fn test_err_constructor() {
 
 #[test]
 fn test_fn_return_type_mismatch_str_vs_i64() {
-    check_err(r#"F f() -> i64 = "hello""#);
+    check_err(r#"fn f() -> i64 = "hello""#);
 }
 
 #[test]
@@ -551,7 +551,7 @@ fn test_recursive_fn_needs_explicit_return_type() {
     // Using @ (self-recursion) without annotated return type should error
     check_err(
         r#"
-        F countdown(n: i64) = I n <= 0 { 0 } E { @(n - 1) }
+        fn countdown(n: i64) = I n <= 0 { 0 } E { @(n - 1) }
     "#,
     );
 }
@@ -560,7 +560,7 @@ fn test_recursive_fn_needs_explicit_return_type() {
 fn test_recursive_fn_with_explicit_return_type() {
     check_ok(
         r#"
-        F factorial(n: i64) -> i64 = I n <= 1 { 1 } E { n * @(n - 1) }
+        fn factorial(n: i64) -> i64 = I n <= 1 { 1 } E { n * @(n - 1) }
     "#,
     );
 }
@@ -573,9 +573,9 @@ fn test_recursive_fn_with_explicit_return_type() {
 fn test_impl_method_self_access() {
     check_ok(
         r#"
-        S Circle { radius: f64 }
-        X Circle {
-            F area(self) -> f64 = self.radius * self.radius * 3.14
+        struct Circle { radius: f64 }
+        impl Circle {
+            fn area(self) -> f64 = self.radius * self.radius * 3.14
         }
     "#,
     );
@@ -585,9 +585,9 @@ fn test_impl_method_self_access() {
 fn test_impl_method_with_param() {
     check_ok(
         r#"
-        S Counter { count: i64 }
-        X Counter {
-            F add(self, n: i64) -> i64 = self.count + n
+        struct Counter { count: i64 }
+        impl Counter {
+            fn add(self, n: i64) -> i64 = self.count + n
         }
     "#,
     );
@@ -597,9 +597,9 @@ fn test_impl_method_with_param() {
 fn test_impl_method_return_type_mismatch() {
     check_err(
         r#"
-        S Foo { x: i64 }
-        X Foo {
-            F get_str(self) -> str = self.x
+        struct Foo { x: i64 }
+        impl Foo {
+            fn get_str(self) -> str = self.x
         }
     "#,
     );
@@ -613,8 +613,8 @@ fn test_impl_method_return_type_mismatch() {
 fn test_generic_fn_identity() {
     check_ok(
         r#"
-        F id<T>(x: T) -> T = x
-        F test() -> i64 = id(42)
+        fn id<T>(x: T) -> type = x
+        fn test() -> i64 = id(42)
     "#,
     );
 }
@@ -623,8 +623,8 @@ fn test_generic_fn_identity() {
 fn test_generic_fn_two_params() {
     check_ok(
         r#"
-        F first<A, B>(a: A, b: B) -> A = a
-        F test() -> i64 = first(10, true)
+        fn first<A, B>(a: A, b: B) -> A = a
+        fn test() -> i64 = first(10, true)
     "#,
     );
 }
@@ -641,10 +641,10 @@ fn test_generic_fn_two_params() {
 fn test_multiple_early_returns_same_type() {
     check_ok(
         r#"
-        F sign(x: i64) -> i64 {
-            I x > 0 { R 1 }
-            I x < 0 { R -1 }
-            R 0
+        fn sign(x: i64) -> i64 {
+            I x > 0 { return 1 }
+            I x < 0 { return -1 }
+            return 0
         }
     "#,
     );
@@ -658,7 +658,7 @@ fn test_multiple_early_returns_same_type() {
 fn test_infer_var_from_assignment() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := 42
             x
         }
@@ -670,7 +670,7 @@ fn test_infer_var_from_assignment() {
 fn test_infer_var_reused_in_expression() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             a := 10
             b := 20
             a + b
@@ -683,7 +683,7 @@ fn test_infer_var_reused_in_expression() {
 fn test_infer_var_bool() {
     check_ok(
         r#"
-        F f() -> bool {
+        fn f() -> bool {
             flag := true
             flag
         }
@@ -695,7 +695,7 @@ fn test_infer_var_bool() {
 fn test_infer_var_str() {
     check_ok(
         r#"
-        F f() -> str {
+        fn f() -> str {
             s := "hello"
             s
         }
@@ -707,7 +707,7 @@ fn test_infer_var_str() {
 fn test_infer_chained_let() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             a := 1
             b := a + 2
             c := b * 3
@@ -725,7 +725,7 @@ fn test_infer_chained_let() {
 fn test_mut_var_reassign_same_type() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := mut 0
             x = 5
             x
@@ -756,7 +756,7 @@ fn test_undefined_function_errors() {
 fn test_option_none_unifies_with_some() {
     check_ok(
         r#"
-        F maybe(flag: bool) -> Option<i64> = flag ? Some(1) : None
+        fn maybe(flag: bool) -> Option<i64> = flag ? Some(1) : None
     "#,
     );
 }
@@ -769,7 +769,7 @@ fn test_option_none_unifies_with_some() {
 fn test_result_ok_err_same_wrapper() {
     check_ok(
         r#"
-        F try_it(flag: bool) -> Result<i64, str> =
+        fn try_it(flag: bool) -> Result<i64, str> =
             flag ? Ok(1) : Err("failed")
     "#,
     );
@@ -817,7 +817,7 @@ fn test_ownership_checker_take_errors_clears() {
 #[test]
 fn test_strict_ownership_copy_types_ok() {
     let src = r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := 10
             y := x
             x + y
@@ -842,8 +842,8 @@ fn test_struct_registration_basic() {
 fn test_struct_registration_with_fields() {
     check_ok(
         r#"
-        S Person { name: str, age: i64 }
-        F f() -> i64 {
+        struct Person { name: str, age: i64 }
+        fn f() -> i64 {
             p := Person { name: "Alice", age: 30 }
             p.age
         }
@@ -855,8 +855,8 @@ fn test_struct_registration_with_fields() {
 fn test_struct_generic() {
     check_ok(
         r#"
-        S Pair<A, B> { first: A, second: B }
-        F f() -> i64 {
+        struct Pair<A, B> { first: A, second: B }
+        fn f() -> i64 {
             p := Pair { first: 1, second: true }
             p.first
         }
@@ -873,7 +873,7 @@ fn test_enum_unit_variants() {
     check_ok(
         r#"
         E Direction { North, South, East, West }
-        F f() -> i64 {
+        fn f() -> i64 {
             d := Direction::North
             0
         }
@@ -886,8 +886,8 @@ fn test_enum_tuple_variant() {
     check_ok(
         r#"
         E Shape { Circle(f64), Square(f64) }
-        F area(s: Shape) -> f64 {
-            M s {
+        fn area(s: Shape) -> f64 {
+            match s {
                 Circle(r) => r * r * 3.14,
                 Square(side) => side * side,
             }
@@ -901,8 +901,8 @@ fn test_enum_match_all_variants() {
     check_ok(
         r#"
         E Coin { Penny, Nickel, Dime, Quarter }
-        F value(c: Coin) -> i64 {
-            M c {
+        fn value(c: Coin) -> i64 {
+            match c {
                 Penny => 1,
                 Nickel => 5,
                 Dime => 10,
@@ -921,8 +921,8 @@ fn test_enum_match_all_variants() {
 fn test_type_alias_simple() {
     check_ok(
         r#"
-        T Num = i64
-        F f(x: Num) -> Num = x + 1
+        type Num = i64
+        fn f(x: Num) -> Num = x + 1
     "#,
     );
 }
@@ -931,8 +931,8 @@ fn test_type_alias_simple() {
 fn test_type_alias_str() {
     check_ok(
         r#"
-        T Name = str
-        F greet(n: Name) -> str = n
+        type Name = str
+        fn greet(n: Name) -> str = n
     "#,
     );
 }
@@ -946,7 +946,7 @@ fn test_global_constant_i64() {
     check_ok(
         r#"
         G MAX: i64 = 100
-        F f() -> i64 = MAX
+        fn f() -> i64 = MAX
     "#,
     );
 }
@@ -956,7 +956,7 @@ fn test_global_constant_bool() {
     check_ok(
         r#"
         G FLAG: bool = true
-        F f() -> bool = FLAG
+        fn f() -> bool = FLAG
     "#,
     );
 }
@@ -973,7 +973,7 @@ fn test_global_constant_bool() {
 fn test_compound_assign_add() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := mut 10
             x += 5
             x
@@ -986,7 +986,7 @@ fn test_compound_assign_add() {
 fn test_compound_assign_sub() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := mut 20
             x -= 8
             x
@@ -999,7 +999,7 @@ fn test_compound_assign_sub() {
 fn test_compound_assign_mul() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := mut 3
             x *= 7
             x
@@ -1016,9 +1016,9 @@ fn test_compound_assign_mul() {
 fn test_tuple_two_elements() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             t := (1, 2)
-            R 0
+            return 0
         }
     "#,
     );
@@ -1028,9 +1028,9 @@ fn test_tuple_two_elements() {
 fn test_tuple_three_elements_mixed() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             t := (42, true, "hi")
-            R 0
+            return 0
         }
     "#,
     );
@@ -1071,7 +1071,7 @@ fn test_inferred_return_type_bool() {
 
 #[test]
 fn test_inferred_return_type_str() {
-    check_ok(r#"F f() = "hello""#);
+    check_ok(r#"fn f() = "hello""#);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1087,7 +1087,7 @@ fn test_unit_literal() {
 fn test_nested_block_scopes() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := 1
             y := {
                 a := x + 1
@@ -1103,7 +1103,7 @@ fn test_nested_block_scopes() {
 fn test_variable_shadowing() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := 1
             x := x + 1
             x
@@ -1120,9 +1120,9 @@ fn test_variable_shadowing() {
 fn test_multiple_functions_call_each_other() {
     check_ok(
         r#"
-        F square(x: i64) -> i64 = x * x
-        F cube(x: i64) -> i64 = x * square(x)
-        F test() -> i64 = cube(3)
+        fn square(x: i64) -> i64 = x * x
+        fn cube(x: i64) -> i64 = x * square(x)
+        fn test() -> i64 = cube(3)
     "#,
     );
 }
@@ -1132,8 +1132,8 @@ fn test_mutual_forward_declaration() {
     // In Vais two-pass TC, functions are registered before bodies are checked
     check_ok(
         r#"
-        F is_even(n: i64) -> bool = I n == 0 { true } E { is_odd(n - 1) }
-        F is_odd(n: i64) -> bool = I n == 0 { false } E { is_even(n - 1) }
+        fn is_even(n: i64) -> bool = I n == 0 { true } E { is_odd(n - 1) }
+        fn is_odd(n: i64) -> bool = I n == 0 { false } E { is_even(n - 1) }
     "#,
     );
 }
@@ -1160,8 +1160,8 @@ fn test_bool_not_chain() {
 fn test_where_clause_basic() {
     check_ok(
         r#"
-        W Describable { F describe(self) -> str }
-        F show<T>(x: T) -> str where T: Describable = x.describe()
+        trait Describable { fn describe(self) -> str }
+        fn show<T>(x: T) -> str where T: Describable = x.describe()
     "#,
     );
 }
@@ -1174,7 +1174,7 @@ fn test_where_clause_basic() {
 fn test_range_for_loop_sum() {
     check_ok(
         r#"
-        F sum_to(n: i64) -> i64 {
+        fn sum_to(n: i64) -> i64 {
             s := mut 0
             L i: 0..n {
                 s = s + i
@@ -1193,12 +1193,12 @@ fn test_range_for_loop_sum() {
 fn test_method_chain() {
     check_ok(
         r#"
-        S Builder { value: i64 }
-        X Builder {
-            F set(self, v: i64) -> Builder = Builder { value: v }
-            F build(self) -> i64 = self.value
+        struct Builder { value: i64 }
+        impl Builder {
+            fn set(self, v: i64) -> Builder = Builder { value: v }
+            fn build(self) -> i64 = self.value
         }
-        F f() -> i64 {
+        fn f() -> i64 {
             b := Builder { value: 0 }
             b.set(42).build()
         }

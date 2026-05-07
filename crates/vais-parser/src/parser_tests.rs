@@ -249,9 +249,9 @@ fn test_deeply_nested_arrays() {
 #[test]
 fn test_multiple_items() {
     let source = r#"
-S Point{x:f64,y:f64}
-F new_point(x:f64,y:f64)->Point=Point{x:x,y:y}
-F origin()->Point=new_point(0.0,0.0)
+struct Point{x:f64,y:f64}
+fn new_point(x:f64,y:f64)->Point=Point{x:x,y:y}
+fn origin()->Point=new_point(0.0,0.0)
 "#;
     let module = parse(source).unwrap();
     assert_eq!(module.items.len(), 3);
@@ -272,8 +272,8 @@ fn test_trait_definition() {
 #[test]
 fn test_impl_block() {
     let source = r#"
-S Point{x:f64,y:f64}
-X Point{F new(x:f64,y:f64)->Point=Point{x:x,y:y}}
+struct Point{x:f64,y:f64}
+impl Point{F new(x:f64,y:f64)->Point=Point{x:x,y:y}}
 "#;
     let module = parse(source).unwrap();
     assert_eq!(module.items.len(), 2);
@@ -729,12 +729,12 @@ fn test_array_with_values() {
 #[test]
 fn test_multiline_function() {
     let source = r#"
-F calculate(a: i64,
+fn calculate(a: i64,
             b: i64,
             c: i64) -> i64 {
     x := a + b;
     y := x * c;
-    R y
+    return y
 }
 "#;
     let module = parse(source).unwrap();
@@ -747,7 +747,7 @@ F calculate(a: i64,
 #[test]
 fn test_all_primitive_types() {
     let source = r#"
-F test(
+fn test(
     a:i8,b:i16,c:i32,d:i64,e:i128,
     f:u8,g:u16,h:u32,i:u64,j:u128,
     k:f32,l:f64,m:bool,n:str
@@ -763,7 +763,7 @@ F test(
 #[test]
 fn test_pattern_in_match() {
     let source = r#"
-F f(opt:Option<i64>)->i64=M opt{
+fn f(opt:Option<i64>)->i64=M opt{
     Some(x)=>x,
     None=>0
 }
@@ -791,8 +791,8 @@ fn test_tuple_parameter() {
 fn test_basic_struct_with_methods() {
     // Test struct with impl block using regular param names
     let source = r#"
-S Counter{value:i64}
-X Counter{F inc(c:&Counter)->i64=c.value+1}
+struct Counter{value:i64}
+impl Counter{F inc(c:&Counter)->i64=c.value+1}
 "#;
     let module = parse(source).unwrap();
     assert_eq!(module.items.len(), 2);
@@ -803,7 +803,7 @@ fn test_enum_pattern_match() {
     // Test enum variant matching
     let source = r#"
 E Result{Ok(i64),Err(str)}
-F handle(r:Result)->i64=M r{Ok(v)=>v,Err(_)=>0}
+fn handle(r:Result)->i64=M r{Ok(v)=>v,Err(_)=>0}
 "#;
     let module = parse(source).unwrap();
     assert_eq!(module.items.len(), 2);
@@ -827,7 +827,7 @@ fn test_nested_generic_vec_hashmap() {
 #[test]
 fn test_option_of_vec_generic() {
     // Test Option<Vec<T> > combination with spaces (need space before =)
-    let source = r#"F get_items<T>()->Option<Vec<T> > ="""#;
+    let source = r#"fn get_items<T>()->Option<Vec<T> > ="""#;
     let module = parse(source).unwrap();
 
     let Item::Function(f) = &module.items[0].node else {
@@ -877,7 +877,7 @@ fn test_pattern_match_with_guard() {
 fn test_pattern_match_guard_complex() {
     // Test pattern match with complex guard
     let source = r#"
-F filter(opt:Option<i64>)->i64=M opt{
+fn filter(opt:Option<i64>)->i64=M opt{
     Some(x) I x>0&&x<100=>x,
     Some(x) I x>=100=>100,
     Some(_)=>0,
@@ -897,7 +897,7 @@ fn test_nested_pattern_destructuring() {
     // Test nested destructuring in pattern match
     let source = r#"
 E Nested{Pair((i64,i64)),Single(i64),None}
-F sum(n:Nested)->i64=M n{
+fn sum(n:Nested)->i64=M n{
     Pair((a,b))=>a+b,
     Single(x)=>x,
     None=>0
@@ -928,7 +928,7 @@ fn test_pattern_guard_with_multiple_conditions() {
 fn test_nested_option_pattern() {
     // Test nested Option patterns: Option<Option<T> > with spaces
     let source = r#"
-F unwrap_twice(opt:Option<Option<i64> >)->i64=M opt{
+fn unwrap_twice(opt:Option<Option<i64> >)->i64=M opt{
     Some(Some(x))=>x,
     Some(None)=>-1,
     None=>-2
@@ -946,8 +946,8 @@ F unwrap_twice(opt:Option<Option<i64> >)->i64=M opt{
 fn test_mutual_recursion_type_inference() {
     // Test mutual recursion: two functions calling each other
     let source = r#"
-F is_even(n:i64)->bool=n==0?true:is_odd(n-1)
-F is_odd(n:i64)->bool=n==0?false:is_even(n-1)
+fn is_even(n:i64)->bool=n==0?true:is_odd(n-1)
+fn is_odd(n:i64)->bool=n==0?false:is_even(n-1)
 "#;
     let module = parse(source).unwrap();
 
@@ -966,9 +966,9 @@ F is_odd(n:i64)->bool=n==0?false:is_even(n-1)
 fn test_three_way_mutual_recursion() {
     // Test three functions in mutual recursion
     let source = r#"
-F a(n:i64)->i64=n<1?0:b(n-1)+1
-F b(n:i64)->i64=n<1?0:c(n-1)+1
-F c(n:i64)->i64=n<1?0:a(n-1)+1
+fn a(n:i64)->i64=n<1?0:b(n-1)+1
+fn b(n:i64)->i64=n<1?0:c(n-1)+1
+fn c(n:i64)->i64=n<1?0:a(n-1)+1
 "#;
     let module = parse(source).unwrap();
 
@@ -979,7 +979,7 @@ F c(n:i64)->i64=n<1?0:a(n-1)+1
 fn test_indirect_recursion_through_lambda() {
     // Test recursion through lambda (advanced case)
     let source = r#"
-F outer(n:i64)->i64{
+fn outer(n:i64)->i64{
     helper:=|x:i64|x<1?0:outer(x-1)+1;
     helper(n)
 }
@@ -996,8 +996,8 @@ F outer(n:i64)->i64{
 fn test_generic_mutual_recursion() {
     // Test mutual recursion with generics
     let source = r#"
-F transform_a<T>(x:T)->T=transform_b(x)
-F transform_b<T>(x:T)->T=x
+fn transform_a<T>(x:T)->T=transform_b(x)
+fn transform_b<T>(x:T)->T=x
 "#;
     let module = parse(source).unwrap();
 
@@ -1044,7 +1044,7 @@ fn test_i64_max_parsing() {
 fn test_pattern_with_range() {
     // Test pattern matching with ranges
     let source = r#"
-F grade(score:i64)->str=M score{
+fn grade(score:i64)->str=M score{
     x I x>=90=>"A",
     x I x>=80=>"B",
     x I x>=70=>"C",
@@ -1064,9 +1064,9 @@ F grade(score:i64)->str=M score{
 fn test_destructure_nested_struct() {
     // Test destructuring nested structs in pattern match
     let source = r#"
-S Point{x:i64,y:i64}
-S Line{start:Point,end:Point}
-F length(line:Line)->i64=line.end.x-line.start.x
+struct Point{x:i64,y:i64}
+struct Line{start:Point,end:Point}
+fn length(line:Line)->i64=line.end.x-line.start.x
 "#;
     let module = parse(source).unwrap();
 
@@ -1118,7 +1118,7 @@ fn test_enum_with_generic_variants() {
 fn test_deeply_nested_if_else() {
     // Test deeply nested if-else chains
     let source = r#"
-F classify(n:i64)->str{
+fn classify(n:i64)->str{
     I n>1000{
         I n>10000{"huge"}E{"large"}
     }E{
@@ -1142,7 +1142,7 @@ F classify(n:i64)->str{
 fn test_pattern_with_multiple_bindings() {
     // Test pattern with multiple variable bindings and guards
     let source = r#"
-F process(a:i64,b:i64)->i64=M (a,b){
+fn process(a:i64,b:i64)->i64=M (a,b){
     (x,y) I x>0&&y>0=>x+y,
     (x,y) I x<0&&y<0=>x-y,
     (x,y) I x==0||y==0=>0,
@@ -1178,10 +1178,10 @@ fn test_error_recovery_multiple_items() {
     // The broken function has an incomplete parameter list followed by a semicolon,
     // which allows the parser to recover and continue.
     let source = r#"
-F good1()->i64=1
-F broken(;
-F good2()->i64=2
-S ValidStruct{x:i64}
+fn good1()->i64=1
+fn broken(;
+fn good2()->i64=2
+struct ValidStruct{x:i64}
 "#;
     let (module, errors) = parse_with_recovery(source);
 
@@ -1221,7 +1221,7 @@ S ValidStruct{x:i64}
 fn test_error_recovery_block_statements() {
     // Test error recovery within block statements
     let source = r#"
-F test_block()->i64{
+fn test_block()->i64{
     x := 1
     y :=
     z := 3
@@ -1282,8 +1282,8 @@ fn test_error_recovery_preserves_span() {
 fn test_error_recovery_synchronize_to_next_function() {
     // Test that parser synchronizes correctly to next function keyword
     let source = r#"
-F broken(x:i64 y:i64)->i64
-F good(a:i64,b:i64)->i64=a+b
+fn broken(x:i64 y:i64)->i64
+fn good(a:i64,b:i64)->i64=a+b
 "#;
     let (module, errors) = parse_with_recovery(source);
 
@@ -1306,8 +1306,8 @@ fn test_error_recovery_synchronize_to_struct() {
     // Test synchronization to struct keyword
     // Use semicolon to help parser recognize the error boundary
     let source = r#"
-F broken(;
-S Point{x:f64,y:f64}
+fn broken(;
+struct Point{x:f64,y:f64}
 "#;
     let (module, errors) = parse_with_recovery(source);
 
@@ -1376,11 +1376,11 @@ E Good{X,Y}
 fn test_error_recovery_mixed_items() {
     // Test recovery with various item types
     let source = r#"
-F func1()->i64=1
-S Broken{x
+fn func1()->i64=1
+struct Broken{x
 E MyEnum{A,B}
-F func2()->i64=2
-W MyTrait{F method()->i64}
+fn func2()->i64=2
+trait MyTrait{F method()->i64}
 "#;
     let (module, errors) = parse_with_recovery(source);
 
@@ -1414,8 +1414,8 @@ W MyTrait{F method()->i64}
 #[test]
 fn test_error_recovery_missing_closing_paren() {
     let source = r#"
-F broken(x: i64, y: i64 -> i64 = x + y
-F good() -> i64 = 42
+fn broken(x: i64, y: i64 -> i64 = x + y
+fn good() -> i64 = 42
 "#;
     let (module, errors) = parse_with_recovery(source);
     assert!(!errors.is_empty(), "Expected error for missing ')'");
@@ -1434,11 +1434,11 @@ F good() -> i64 = 42
 #[test]
 fn test_error_recovery_missing_closing_brace() {
     let source = r#"
-F broken() -> i64 {
+fn broken() -> i64 {
     x := 1
     y := 2
 
-F good() -> i64 = 42
+fn good() -> i64 = 42
 "#;
     let (module, errors) = parse_with_recovery(source);
     assert!(!errors.is_empty(), "Expected error for missing '}}'");
@@ -1456,8 +1456,8 @@ F good() -> i64 = 42
 #[test]
 fn test_error_recovery_generic_missing_closing_angle() {
     let source = r#"
-F broken<T(x: T) -> T = x
-F good() -> i64 = 42
+fn broken<T(x: T) -> type = x
+fn good() -> i64 = 42
 "#;
     let (module, errors) = parse_with_recovery(source);
     assert!(!errors.is_empty(), "Expected error for missing '>'");
@@ -1475,8 +1475,8 @@ F good() -> i64 = 42
 #[test]
 fn test_error_recovery_generic_invalid_param() {
     let source = r#"
-F broken<T, 123, U>(x: T) -> T = x
-F good() -> i64 = 42
+fn broken<T, 123, U>(x: T) -> type = x
+fn good() -> i64 = 42
 "#;
     let (module, errors) = parse_with_recovery(source);
     assert!(
@@ -1497,11 +1497,11 @@ F good() -> i64 = 42
 #[test]
 fn test_error_recovery_mismatched_brackets() {
     let source = r#"
-F broken() -> i64 {
+fn broken() -> i64 {
     x := [1, 2, 3}
     x
 }
-F good() -> i64 = 42
+fn good() -> i64 = 42
 "#;
     let (module, errors) = parse_with_recovery(source);
     assert!(!errors.is_empty(), "Expected error for mismatched brackets");

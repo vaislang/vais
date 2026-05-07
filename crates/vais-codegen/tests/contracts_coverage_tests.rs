@@ -27,7 +27,7 @@ fn gen_result(source: &str) -> Result<String, String> {
 #[test]
 fn test_contract_declarations_no_contracts() {
     // Without contracts, declarations should still be generated (or be empty)
-    let ir = gen_ok(r#"F main() -> i64 { R 0 }"#);
+    let ir = gen_ok(r#"fn main() -> i64 { return 0 }"#);
     // Should compile without issue
     assert!(!ir.is_empty());
 }
@@ -36,9 +36,9 @@ fn test_contract_declarations_no_contracts() {
 fn test_contract_declarations_with_assert() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             assert(1 == 1)
-            R 0
+            return 0
         }
     "#,
     );
@@ -54,9 +54,9 @@ fn test_contract_declarations_with_assert() {
 fn test_contract_string_simple_message() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             assert(1 == 1)
-            R 0
+            return 0
         }
     "#,
     );
@@ -68,9 +68,9 @@ fn test_contract_string_with_special_chars() {
     // Triggers escape_string_for_llvm with backslash and quotes
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             assert(1 > 0)
-            R 0
+            return 0
         }
     "#,
     );
@@ -85,9 +85,9 @@ fn test_contract_string_with_special_chars() {
 fn test_assert_true_condition() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             assert(1 == 1)
-            R 42
+            return 42
         }
     "#,
     );
@@ -98,9 +98,9 @@ fn test_assert_true_condition() {
 fn test_assert_variable_condition() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             assert(x > 0)
-            R x
+            return x
         }
     "#,
     );
@@ -111,9 +111,9 @@ fn test_assert_variable_condition() {
 fn test_assert_with_complex_expr() {
     let ir = gen_ok(
         r#"
-        F test(a: i64, b: i64) -> i64 {
+        fn test(a: i64, b: i64) -> i64 {
             assert(a + b > 0)
-            R a + b
+            return a + b
         }
     "#,
     );
@@ -124,9 +124,9 @@ fn test_assert_with_complex_expr() {
 fn test_assert_generates_failure_path() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             assert(1 == 1)
-            R 0
+            return 0
         }
     "#,
     );
@@ -138,9 +138,9 @@ fn test_assert_generates_failure_path() {
 fn test_assume_basic() {
     let result = gen_result(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             assume(x > 0)
-            R x
+            return x
         }
     "#,
     );
@@ -152,10 +152,10 @@ fn test_assume_basic() {
 fn test_multiple_asserts() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             assert(x > 0)
             assert(x < 100)
-            R x
+            return x
         }
     "#,
     );
@@ -171,7 +171,7 @@ fn test_function_no_contract_attr() {
     // Normal function without #[contract] should skip auto checks
     let ir = gen_ok(
         r#"
-        F add(a: i64, b: i64) -> i64 = a + b
+        fn add(a: i64, b: i64) -> i64 = a + b
     "#,
     );
     // Should NOT contain contract check IR
@@ -183,7 +183,7 @@ fn test_function_with_integer_params() {
     // Division by integer param — auto_checks should detect if #[contract] is present
     let ir = gen_ok(
         r#"
-        F divide(a: i64, b: i64) -> i64 = a / b
+        fn divide(a: i64, b: i64) -> i64 = a / b
     "#,
     );
     assert!(ir.contains("sdiv") || ir.contains("div"));
@@ -193,8 +193,8 @@ fn test_function_with_integer_params() {
 fn test_function_division_basic() {
     let ir = gen_ok(
         r#"
-        F safe_div(a: i64, b: i64) -> i64 {
-            R a / b
+        fn safe_div(a: i64, b: i64) -> i64 {
+            return a / b
         }
     "#,
     );
@@ -205,8 +205,8 @@ fn test_function_division_basic() {
 fn test_function_modulo_basic() {
     let ir = gen_ok(
         r#"
-        F modulo(a: i64, b: i64) -> i64 {
-            R a % b
+        fn modulo(a: i64, b: i64) -> i64 {
+            return a % b
         }
     "#,
     );
@@ -221,7 +221,7 @@ fn test_function_modulo_basic() {
 fn test_function_without_requires() {
     let ir = gen_ok(
         r#"
-        F add(a: i64, b: i64) -> i64 = a + b
+        fn add(a: i64, b: i64) -> i64 = a + b
     "#,
     );
     // No requires attributes, should skip
@@ -236,7 +236,7 @@ fn test_function_without_requires() {
 fn test_function_without_ensures() {
     let ir = gen_ok(
         r#"
-        F double(x: i64) -> i64 = x * 2
+        fn double(x: i64) -> i64 = x * 2
     "#,
     );
     // No ensures attributes, should skip
@@ -251,11 +251,11 @@ fn test_function_without_ensures() {
 fn test_recursive_function_without_decreases() {
     let ir = gen_ok(
         r#"
-        F factorial(n: i64) -> i64 {
+        fn factorial(n: i64) -> i64 {
             I n <= 1 {
-                R 1
+                return 1
             }
-            R n * factorial(n - 1)
+            return n * factorial(n - 1)
         }
     "#,
     );
@@ -267,11 +267,11 @@ fn test_recursive_function_without_decreases() {
 fn test_simple_recursion() {
     let ir = gen_ok(
         r#"
-        F countdown(n: i64) -> i64 {
+        fn countdown(n: i64) -> i64 {
             I n <= 0 {
-                R 0
+                return 0
             }
-            R countdown(n - 1)
+            return countdown(n - 1)
         }
     "#,
     );
@@ -286,10 +286,10 @@ fn test_simple_recursion() {
 fn test_struct_without_invariants() {
     let ir = gen_ok(
         r#"
-        S Point { x: i64, y: i64 }
-        F test() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn test() -> i64 {
             p := Point { x: 1, y: 2 }
-            R p.x
+            return p.x
         }
     "#,
     );
@@ -304,10 +304,10 @@ fn test_struct_without_invariants() {
 fn test_contract_string_constants_with_assert() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             assert(1 > 0)
             assert(2 > 0)
-            R 0
+            return 0
         }
     "#,
     );
@@ -320,11 +320,11 @@ fn test_contract_string_deduplication() {
     // Same assert message should be deduplicated
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             assert(1 > 0)
             assert(2 > 0)
             assert(3 > 0)
-            R 0
+            return 0
         }
     "#,
     );
@@ -339,12 +339,12 @@ fn test_contract_string_deduplication() {
 fn test_assert_in_nested_if() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             I x > 0 {
                 assert(x > 0)
-                R x
+                return x
             }
-            R 0
+            return 0
         }
     "#,
     );
@@ -355,9 +355,9 @@ fn test_assert_in_nested_if() {
 fn test_assert_with_binary_comparison() {
     let ir = gen_ok(
         r#"
-        F test(a: i64, b: i64) -> i64 {
+        fn test(a: i64, b: i64) -> i64 {
             assert(a != b)
-            R a - b
+            return a - b
         }
     "#,
     );
@@ -368,10 +368,10 @@ fn test_assert_with_binary_comparison() {
 fn test_assert_with_equality() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 42
             assert(x == 42)
-            R x
+            return x
         }
     "#,
     );
@@ -382,11 +382,11 @@ fn test_assert_with_equality() {
 fn test_assert_preserves_control_flow() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             assert(x >= 0)
             y := x * 2
             assert(y >= 0)
-            R y
+            return y
         }
     "#,
     );
@@ -399,9 +399,9 @@ fn test_assert_returns_unit() {
     // assert returns unit (0), so using it in an expression should be valid
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             assert(1 == 1)
-            R 0
+            return 0
         }
     "#,
     );
@@ -412,11 +412,11 @@ fn test_assert_returns_unit() {
 fn test_contract_in_function_with_multiple_params() {
     let ir = gen_ok(
         r#"
-        F clamp(val: i64, lo: i64, hi: i64) -> i64 {
+        fn clamp(val: i64, lo: i64, hi: i64) -> i64 {
             assert(lo <= hi)
-            I val < lo { R lo }
-            I val > hi { R hi }
-            R val
+            I val < lo { return lo }
+            I val > hi { return hi }
+            return val
         }
     "#,
     );

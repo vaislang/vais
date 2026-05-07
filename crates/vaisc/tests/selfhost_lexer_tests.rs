@@ -187,11 +187,11 @@ fn selfhost_lexer_module_compiles() {
     // may not resolve. We test individual lexer helper functions instead.
     // Test that the core helper functions from the lexer compile as standalone Vais.
     let helpers = r#"
-F is_digit(c: i64) -> i64 {
+fn is_digit(c: i64) -> i64 {
     I c >= 48 && c <= 57 { 1 } E { 0 }
 }
 
-F is_ident_start(c: i64) -> i64 {
+fn is_ident_start(c: i64) -> i64 {
     I (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95 {
         1
     } E {
@@ -199,19 +199,19 @@ F is_ident_start(c: i64) -> i64 {
     }
 }
 
-F is_ident_char(c: i64) -> i64 {
+fn is_ident_char(c: i64) -> i64 {
     I is_ident_start(c) == 1 || is_digit(c) == 1 { 1 } E { 0 }
 }
 
-F is_whitespace(c: i64) -> i64 {
+fn is_whitespace(c: i64) -> i64 {
     I c == 32 || c == 9 || c == 10 || c == 13 { 1 } E { 0 }
 }
 
-F is_hex_digit(c: i64) -> i64 {
+fn is_hex_digit(c: i64) -> i64 {
     I is_digit(c) == 1 || (c >= 65 && c <= 70) || (c >= 97 && c <= 102) { 1 } E { 0 }
 }
 
-F hex_digit_value(c: i64) -> i64 {
+fn hex_digit_value(c: i64) -> i64 {
     I c >= 48 && c <= 57 {
         c - 48
     } E I c >= 65 && c <= 70 {
@@ -223,7 +223,7 @@ F hex_digit_value(c: i64) -> i64 {
     }
 }
 
-F main() -> i64 = 0
+fn main() -> i64 = 0
 "#;
     // All mock functions, main returns 0
     assert_exit_code(helpers, 0);
@@ -239,26 +239,26 @@ F main() -> i64 = 0
 fn selfhost_token_ids_keywords() {
     // Keyword tokens (1-19) as defined in selfhost/token.vais
     let source = r#"
-F TOK_KW_F() -> i64 = 1
-F TOK_KW_S() -> i64 = 2
-F TOK_KW_E() -> i64 = 3
-F TOK_KW_I() -> i64 = 4
-F TOK_KW_L() -> i64 = 5
-F TOK_KW_M() -> i64 = 6
-F TOK_KW_W() -> i64 = 7
-F TOK_KW_X() -> i64 = 8
-F TOK_KW_T() -> i64 = 9
-F TOK_KW_U() -> i64 = 10
-F TOK_KW_P() -> i64 = 11
-F TOK_KW_A() -> i64 = 12
-F TOK_KW_R() -> i64 = 13
-F TOK_KW_B() -> i64 = 14
-F TOK_KW_C() -> i64 = 15
-F TOK_KW_TRUE() -> i64 = 16
-F TOK_KW_FALSE() -> i64 = 17
-F TOK_KW_MUT() -> i64 = 18
-F TOK_KW_ELSE() -> i64 = 19
-F main() -> i64 = TOK_KW_F()
+fn TOK_KW_F() -> i64 = 1
+fn TOK_KW_S() -> i64 = 2
+fn TOK_KW_E() -> i64 = 3
+fn TOK_KW_I() -> i64 = 4
+fn TOK_KW_L() -> i64 = 5
+fn TOK_KW_M() -> i64 = 6
+fn TOK_KW_W() -> i64 = 7
+fn TOK_KW_X() -> i64 = 8
+fn TOK_KW_T() -> i64 = 9
+fn TOK_KW_U() -> i64 = 10
+fn TOK_KW_P() -> i64 = 11
+fn TOK_KW_A() -> i64 = 12
+fn TOK_KW_R() -> i64 = 13
+fn TOK_KW_B() -> i64 = 14
+fn TOK_KW_C() -> i64 = 15
+fn TOK_KW_TRUE() -> i64 = 16
+fn TOK_KW_FALSE() -> i64 = 17
+fn TOK_KW_MUT() -> i64 = 18
+fn TOK_KW_ELSE() -> i64 = 19
+fn main() -> i64 = TOK_KW_F()
 "#;
     let ir = compile_to_ir(source).expect("Token ID keyword source should compile");
     // The IR should define all these functions with correct return values
@@ -280,21 +280,21 @@ F main() -> i64 = TOK_KW_F()
 fn selfhost_token_ids_types() {
     // Type keyword tokens (31-44)
     let source = r#"
-F TOK_TY_I8() -> i64 = 31
-F TOK_TY_I16() -> i64 = 32
-F TOK_TY_I32() -> i64 = 33
-F TOK_TY_I64() -> i64 = 34
-F TOK_TY_I128() -> i64 = 35
-F TOK_TY_U8() -> i64 = 36
-F TOK_TY_U16() -> i64 = 37
-F TOK_TY_U32() -> i64 = 38
-F TOK_TY_U64() -> i64 = 39
-F TOK_TY_U128() -> i64 = 40
-F TOK_TY_F32() -> i64 = 41
-F TOK_TY_F64() -> i64 = 42
-F TOK_TY_BOOL() -> i64 = 43
-F TOK_TY_STR() -> i64 = 44
-F main() -> i64 = TOK_TY_I64()
+fn TOK_TY_I8() -> i64 = 31
+fn TOK_TY_I16() -> i64 = 32
+fn TOK_TY_I32() -> i64 = 33
+fn TOK_TY_I64() -> i64 = 34
+fn TOK_TY_I128() -> i64 = 35
+fn TOK_TY_U8() -> i64 = 36
+fn TOK_TY_U16() -> i64 = 37
+fn TOK_TY_U32() -> i64 = 38
+fn TOK_TY_U64() -> i64 = 39
+fn TOK_TY_U128() -> i64 = 40
+fn TOK_TY_F32() -> i64 = 41
+fn TOK_TY_F64() -> i64 = 42
+fn TOK_TY_BOOL() -> i64 = 43
+fn TOK_TY_STR() -> i64 = 44
+fn main() -> i64 = TOK_TY_I64()
 "#;
     let ir = compile_to_ir(source).expect("Token ID type source should compile");
     assert!(
@@ -311,11 +311,11 @@ F main() -> i64 = TOK_TY_I64()
 fn selfhost_token_ids_literals() {
     // Literal tokens (51-54)
     let source = r#"
-F TOK_INT() -> i64 = 51
-F TOK_FLOAT() -> i64 = 52
-F TOK_STRING() -> i64 = 53
-F TOK_IDENT() -> i64 = 54
-F main() -> i64 = TOK_INT()
+fn TOK_INT() -> i64 = 51
+fn TOK_FLOAT() -> i64 = 52
+fn TOK_STRING() -> i64 = 53
+fn TOK_IDENT() -> i64 = 54
+fn main() -> i64 = TOK_INT()
 "#;
     let ir = compile_to_ir(source).expect("Token ID literal source should compile");
     assert!(
@@ -340,27 +340,27 @@ F main() -> i64 = TOK_INT()
 fn selfhost_token_ids_operators() {
     // Operator tokens (61-80)
     let source = r#"
-F TOK_PLUS() -> i64 = 61
-F TOK_MINUS() -> i64 = 62
-F TOK_STAR() -> i64 = 63
-F TOK_SLASH() -> i64 = 64
-F TOK_PERCENT() -> i64 = 65
-F TOK_LT() -> i64 = 66
-F TOK_GT() -> i64 = 67
-F TOK_LT_EQ() -> i64 = 68
-F TOK_GT_EQ() -> i64 = 69
-F TOK_EQ_EQ() -> i64 = 70
-F TOK_NOT_EQ() -> i64 = 71
-F TOK_AMP() -> i64 = 72
-F TOK_PIPE() -> i64 = 73
-F TOK_CARET() -> i64 = 74
-F TOK_TILDE() -> i64 = 75
-F TOK_SHL() -> i64 = 76
-F TOK_SHR() -> i64 = 77
-F TOK_BANG() -> i64 = 78
-F TOK_AND() -> i64 = 79
-F TOK_OR() -> i64 = 80
-F main() -> i64 = TOK_PLUS()
+fn TOK_PLUS() -> i64 = 61
+fn TOK_MINUS() -> i64 = 62
+fn TOK_STAR() -> i64 = 63
+fn TOK_SLASH() -> i64 = 64
+fn TOK_PERCENT() -> i64 = 65
+fn TOK_LT() -> i64 = 66
+fn TOK_GT() -> i64 = 67
+fn TOK_LT_EQ() -> i64 = 68
+fn TOK_GT_EQ() -> i64 = 69
+fn TOK_EQ_EQ() -> i64 = 70
+fn TOK_NOT_EQ() -> i64 = 71
+fn TOK_AMP() -> i64 = 72
+fn TOK_PIPE() -> i64 = 73
+fn TOK_CARET() -> i64 = 74
+fn TOK_TILDE() -> i64 = 75
+fn TOK_SHL() -> i64 = 76
+fn TOK_SHR() -> i64 = 77
+fn TOK_BANG() -> i64 = 78
+fn TOK_AND() -> i64 = 79
+fn TOK_OR() -> i64 = 80
+fn main() -> i64 = TOK_PLUS()
 "#;
     let ir = compile_to_ir(source).expect("Token ID operator source should compile");
     assert!(
@@ -374,13 +374,13 @@ F main() -> i64 = TOK_PLUS()
 fn selfhost_token_ids_assignments() {
     // Assignment tokens (81-86)
     let source = r#"
-F TOK_EQ() -> i64 = 81
-F TOK_COLON_EQ() -> i64 = 82
-F TOK_PLUS_EQ() -> i64 = 83
-F TOK_MINUS_EQ() -> i64 = 84
-F TOK_STAR_EQ() -> i64 = 85
-F TOK_SLASH_EQ() -> i64 = 86
-F main() -> i64 = TOK_EQ()
+fn TOK_EQ() -> i64 = 81
+fn TOK_COLON_EQ() -> i64 = 82
+fn TOK_PLUS_EQ() -> i64 = 83
+fn TOK_MINUS_EQ() -> i64 = 84
+fn TOK_STAR_EQ() -> i64 = 85
+fn TOK_SLASH_EQ() -> i64 = 86
+fn main() -> i64 = TOK_EQ()
 "#;
     let ir = compile_to_ir(source).expect("Token ID assignment source should compile");
     assert!(ir.contains("TOK_EQ"), "IR should contain TOK_EQ definition");
@@ -394,13 +394,13 @@ F main() -> i64 = TOK_EQ()
 fn selfhost_token_ids_delimiters() {
     // Delimiter tokens (91-96)
     let source = r#"
-F TOK_LPAREN() -> i64 = 91
-F TOK_RPAREN() -> i64 = 92
-F TOK_LBRACE() -> i64 = 93
-F TOK_RBRACE() -> i64 = 94
-F TOK_LBRACKET() -> i64 = 95
-F TOK_RBRACKET() -> i64 = 96
-F main() -> i64 = TOK_LPAREN()
+fn TOK_LPAREN() -> i64 = 91
+fn TOK_RPAREN() -> i64 = 92
+fn TOK_LBRACE() -> i64 = 93
+fn TOK_RBRACE() -> i64 = 94
+fn TOK_LBRACKET() -> i64 = 95
+fn TOK_RBRACKET() -> i64 = 96
+fn main() -> i64 = TOK_LPAREN()
 "#;
     let ir = compile_to_ir(source).expect("Token ID delimiter source should compile");
     assert!(
@@ -417,19 +417,19 @@ F main() -> i64 = TOK_LPAREN()
 fn selfhost_token_ids_punctuation() {
     // Punctuation tokens (101-112)
     let source = r#"
-F TOK_COMMA() -> i64 = 101
-F TOK_COLON() -> i64 = 102
-F TOK_SEMI() -> i64 = 103
-F TOK_DOT() -> i64 = 104
-F TOK_DOT_DOT() -> i64 = 105
-F TOK_DOT_DOT_EQ() -> i64 = 106
-F TOK_ARROW() -> i64 = 107
-F TOK_FAT_ARROW() -> i64 = 108
-F TOK_COLON_COLON() -> i64 = 109
-F TOK_QUESTION() -> i64 = 110
-F TOK_AT() -> i64 = 111
-F TOK_HASH() -> i64 = 112
-F main() -> i64 = TOK_COMMA()
+fn TOK_COMMA() -> i64 = 101
+fn TOK_COLON() -> i64 = 102
+fn TOK_SEMI() -> i64 = 103
+fn TOK_DOT() -> i64 = 104
+fn TOK_DOT_DOT() -> i64 = 105
+fn TOK_DOT_DOT_EQ() -> i64 = 106
+fn TOK_ARROW() -> i64 = 107
+fn TOK_FAT_ARROW() -> i64 = 108
+fn TOK_COLON_COLON() -> i64 = 109
+fn TOK_QUESTION() -> i64 = 110
+fn TOK_AT() -> i64 = 111
+fn TOK_HASH() -> i64 = 112
+fn main() -> i64 = TOK_COMMA()
 "#;
     let ir = compile_to_ir(source).expect("Token ID punctuation source should compile");
     assert!(
@@ -446,9 +446,9 @@ F main() -> i64 = TOK_COMMA()
 fn selfhost_token_ids_special() {
     // Special tokens
     let source = r#"
-F TOK_EOF() -> i64 = 200
-F TOK_ERROR() -> i64 = 201
-F main() -> i64 = TOK_EOF()
+fn TOK_EOF() -> i64 = 200
+fn TOK_ERROR() -> i64 = 201
+fn main() -> i64 = TOK_EOF()
 "#;
     let ir = compile_to_ir(source).expect("Token ID special source should compile");
     assert!(
@@ -469,7 +469,7 @@ F main() -> i64 = TOK_EOF()
 #[test]
 fn selfhost_token_struct_compiles() {
     let source = r#"
-S Token {
+struct Token {
     kind: i64,
     value: i64,
     str_ptr: i64,
@@ -478,7 +478,7 @@ S Token {
     span_end: i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     tok := Token { kind: 1, value: 0, str_ptr: 0, str_len: 0, span_start: 0, span_end: 0 }
     tok.kind
 }
@@ -489,10 +489,10 @@ F main() -> i64 {
 #[test]
 fn selfhost_token_struct_methods_compile() {
     let source = r#"
-F TOK_KW_F() -> i64 = 1
-F TOK_EOF() -> i64 = 200
+fn TOK_KW_F() -> i64 = 1
+fn TOK_EOF() -> i64 = 200
 
-S Token {
+struct Token {
     kind: i64,
     value: i64,
     str_ptr: i64,
@@ -501,8 +501,8 @@ S Token {
     span_end: i64
 }
 
-X Token {
-    F simple(kind: i64, start: i64, end: i64) -> Token = Token {
+impl Token {
+    fn simple(kind: i64, start: i64, end: i64) -> Token = Token {
         kind: kind,
         value: 0,
         str_ptr: 0,
@@ -511,28 +511,28 @@ X Token {
         span_end: end
     }
 
-    F is_keyword(&self) -> i64 {
+    fn is_keyword(&self) -> i64 {
         I self.kind >= 1 && self.kind <= 30 { 1 } E { 0 }
     }
 
-    F is_type_keyword(&self) -> i64 {
+    fn is_type_keyword(&self) -> i64 {
         I self.kind >= 31 && self.kind <= 50 { 1 } E { 0 }
     }
 
-    F is_literal(&self) -> i64 {
+    fn is_literal(&self) -> i64 {
         I self.kind >= 51 && self.kind <= 60 { 1 } E { 0 }
     }
 
-    F is_operator(&self) -> i64 {
+    fn is_operator(&self) -> i64 {
         I self.kind >= 61 && self.kind <= 80 { 1 } E { 0 }
     }
 
-    F is_eof(&self) -> i64 {
+    fn is_eof(&self) -> i64 {
         I self.kind == TOK_EOF() { 1 } E { 0 }
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     tok := Token.simple(TOK_KW_F(), 0, 1)
     tok.is_keyword()
 }
@@ -559,8 +559,8 @@ fn selfhost_verify_single_char_keywords_f_function() {
 fn selfhost_verify_single_char_keywords_s_struct() {
     // S keyword = struct declaration
     let source = r#"
-S Point { x: i64, y: i64 }
-F main() -> i64 {
+struct Point { x: i64, y: i64 }
+fn main() -> i64 {
     p := Point { x: 10, y: 20 }
     p.x + p.y
 }
@@ -573,7 +573,7 @@ F main() -> i64 {
 fn selfhost_verify_single_char_keywords_i_e_if_else() {
     // I keyword = if, E keyword = else
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 5
     I x > 3 { 1 } E { 0 }
 }
@@ -586,7 +586,7 @@ F main() -> i64 {
 fn selfhost_verify_single_char_keywords_l_loop() {
     // L keyword = loop
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 0
     L {
         I x >= 10 { B }
@@ -603,9 +603,9 @@ F main() -> i64 {
 fn selfhost_verify_single_char_keywords_m_match() {
     // M keyword = match
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 2
-    M x {
+    match x {
         1 => 10,
         2 => 20,
         _ => 0
@@ -620,11 +620,11 @@ F main() -> i64 {
 fn selfhost_verify_single_char_keywords_r_return() {
     // R keyword = return
     let source = r#"
-F foo(x: i64) -> i64 {
-    I x > 0 { R x }
+fn foo(x: i64) -> i64 {
+    I x > 0 { return x }
     0
 }
-F main() -> i64 = foo(42)
+fn main() -> i64 = foo(42)
 "#;
     // foo(42): x=42 > 0 → R 42
     assert_exit_code(source, 42);
@@ -634,7 +634,7 @@ F main() -> i64 = foo(42)
 fn selfhost_verify_single_char_keywords_b_break() {
     // B keyword = break
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 0
     L {
         x = x + 1
@@ -651,7 +651,7 @@ F main() -> i64 {
 fn selfhost_verify_single_char_keywords_c_continue() {
     // C keyword = continue
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 0
     count := mut 0
     L {
@@ -671,11 +671,11 @@ F main() -> i64 {
 fn selfhost_verify_single_char_keywords_x_impl() {
     // X keyword = impl block
     let source = r#"
-S Num { val: i64 }
-X Num {
-    F get(&self) -> i64 = self.val
+struct Num { val: i64 }
+impl Num {
+    fn get(&self) -> i64 = self.val
 }
-F main() -> i64 {
+fn main() -> i64 {
     n := Num { val: 7 }
     n.get()
 }
@@ -688,10 +688,10 @@ F main() -> i64 {
 fn selfhost_verify_single_char_keywords_w_trait() {
     // W keyword = trait (With)
     let source = r#"
-W Printable {
-    F display(&self) -> i64
+trait Printable {
+    fn display(&self) -> i64
 }
-F main() -> i64 = 0
+fn main() -> i64 = 0
 "#;
     assert_exit_code(source, 0);
 }
@@ -700,8 +700,8 @@ F main() -> i64 = 0
 fn selfhost_verify_single_char_keywords_t_type() {
     // T keyword = type alias
     let source = r#"
-T MyInt = i64
-F main() -> i64 = 0
+type MyInt = i64
+fn main() -> i64 = 0
 "#;
     assert_exit_code(source, 0);
 }
@@ -710,8 +710,8 @@ F main() -> i64 = 0
 fn selfhost_verify_single_char_keywords_p_pub() {
     // P keyword = pub (public visibility)
     let source = r#"
-P F add(a: i64, b: i64) -> i64 = a + b
-F main() -> i64 = add(1, 2)
+pub fn add(a: i64, b: i64) -> i64 = a + b
+fn main() -> i64 = add(1, 2)
 "#;
     // add(1,2) = 3
     assert_exit_code(source, 3);
@@ -721,8 +721,8 @@ F main() -> i64 = add(1, 2)
 fn selfhost_verify_single_char_keywords_a_async() {
     // A keyword = async
     let source = r#"
-A F async_val() -> i64 = 42
-F main() -> i64 = 0
+A fn async_val() -> i64 = 42
+fn main() -> i64 = 0
 "#;
     assert_exit_code(source, 0);
 }
@@ -734,7 +734,7 @@ F main() -> i64 = 0
 #[test]
 fn selfhost_verify_keyword_mut() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 0
     x = 42
     x
@@ -746,7 +746,7 @@ F main() -> i64 {
 #[test]
 fn selfhost_verify_keyword_true_false() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := true
     b := false
     I a { 1 } E { 0 }
@@ -838,8 +838,8 @@ fn selfhost_verify_type_bool() {
 
 #[test]
 fn selfhost_verify_type_str() {
-    let source = r#"F foo() -> str = "hello"
-F main() -> i64 = 0"#;
+    let source = r#"fn foo() -> str = "hello"
+fn main() -> i64 = 0"#;
     assert_exit_code(source, 0);
 }
 
@@ -867,16 +867,16 @@ fn selfhost_verify_integer_hex_constants_compile() {
     // However, the selfhost lexer DOES support hex. We verify the selfhost
     // hex parsing logic compiles correctly as a standalone function.
     let source = r#"
-F is_hex_digit(c: i64) -> i64 {
+fn is_hex_digit(c: i64) -> i64 {
     I (c >= 48 && c <= 57) || (c >= 65 && c <= 70) || (c >= 97 && c <= 102) { 1 } E { 0 }
 }
-F hex_digit_value(c: i64) -> i64 {
+fn hex_digit_value(c: i64) -> i64 {
     I c >= 48 && c <= 57 { c - 48 }
     E I c >= 65 && c <= 70 { c - 55 }
     E I c >= 97 && c <= 102 { c - 87 }
     E { 0 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     # Verify hex digit classification: '0'=48, 'F'=70, 'f'=102, 'G'=71
     a := is_hex_digit(48)
     b := is_hex_digit(70)
@@ -907,14 +907,14 @@ fn selfhost_verify_float_scientific_logic() {
     // The selfhost lexer handles it by checking for 'e'/'E' after digits.
     // We verify the logic compiles by testing the exponent detection pattern.
     let source = r#"
-F is_digit(c: i64) -> i64 {
+fn is_digit(c: i64) -> i64 {
     I c >= 48 && c <= 57 { 1 } E { 0 }
 }
-F is_exponent_char(c: i64) -> i64 {
+fn is_exponent_char(c: i64) -> i64 {
     # 'e' = 101, 'E' = 69
     I c == 101 || c == 69 { 1 } E { 0 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     a := is_exponent_char(101)
     b := is_exponent_char(69)
     c := is_exponent_char(48)
@@ -939,19 +939,19 @@ fn selfhost_verify_float_zero_point() {
 
 #[test]
 fn selfhost_verify_string_literal() {
-    let source = r#"F main() -> i64 { x := "hello"; 0 }"#;
+    let source = r#"fn main() -> i64 { x := "hello"; 0 }"#;
     assert_exit_code(source, 0);
 }
 
 #[test]
 fn selfhost_verify_string_empty() {
-    let source = r#"F main() -> i64 { x := ""; 0 }"#;
+    let source = r#"fn main() -> i64 { x := ""; 0 }"#;
     assert_exit_code(source, 0);
 }
 
 #[test]
 fn selfhost_verify_string_with_spaces() {
-    let source = r#"F main() -> i64 { x := "hello world"; 0 }"#;
+    let source = r#"fn main() -> i64 { x := "hello world"; 0 }"#;
     assert_exit_code(source, 0);
 }
 
@@ -1093,8 +1093,8 @@ fn selfhost_verify_delimiters_parens() {
 fn selfhost_verify_delimiters_braces() {
     // Braces in blocks and structs
     let source = r#"
-S Pair { a: i64, b: i64 }
-F main() -> i64 {
+struct Pair { a: i64, b: i64 }
+fn main() -> i64 {
     p := Pair { a: 1, b: 2 }
     p.a + p.b
 }
@@ -1107,7 +1107,7 @@ F main() -> i64 {
 fn selfhost_verify_delimiters_brackets() {
     // Brackets in array access
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     arr := [1, 2, 3]
     arr[0]
 }
@@ -1146,8 +1146,8 @@ fn selfhost_verify_punct_semicolon() {
 fn selfhost_verify_punct_dot() {
     // Dot for field access
     let source = r#"
-S Point { x: i64, y: i64 }
-F main() -> i64 {
+struct Point { x: i64, y: i64 }
+fn main() -> i64 {
     p := Point { x: 10, y: 20 }
     p.x
 }
@@ -1159,7 +1159,7 @@ F main() -> i64 {
 fn selfhost_verify_punct_dot_dot() {
     // Range operator ..
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     r := 0..10
     0
 }
@@ -1178,9 +1178,9 @@ fn selfhost_verify_punct_arrow() {
 fn selfhost_verify_punct_fat_arrow() {
     // Fat arrow => in match arms
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 1
-    M x {
+    match x {
         1 => 10,
         _ => 0
     }
@@ -1201,11 +1201,11 @@ fn selfhost_verify_punct_question_ternary() {
 fn selfhost_verify_punct_at_self_recursion() {
     // @ for self-recursion
     let source = r#"
-F factorial(n: i64) -> i64 {
-    I n <= 1 { R 1 }
+fn factorial(n: i64) -> i64 {
+    I n <= 1 { return 1 }
     n * @(n - 1)
 }
-F main() -> i64 = factorial(5)
+fn main() -> i64 = factorial(5)
 "#;
     // 5! = 120
     assert_exit_code(source, 120);
@@ -1218,7 +1218,7 @@ F main() -> i64 = factorial(5)
 #[test]
 fn selfhost_verify_assign_eq() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 0
     x = 42
     x
@@ -1237,7 +1237,7 @@ fn selfhost_verify_assign_colon_eq() {
 #[test]
 fn selfhost_verify_assign_plus_eq() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 0
     x += 42
     x
@@ -1250,7 +1250,7 @@ F main() -> i64 {
 #[test]
 fn selfhost_verify_assign_minus_eq() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 50
     x -= 8
     x
@@ -1263,7 +1263,7 @@ F main() -> i64 {
 #[test]
 fn selfhost_verify_assign_star_eq() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 6
     x *= 7
     x
@@ -1276,7 +1276,7 @@ F main() -> i64 {
 #[test]
 fn selfhost_verify_assign_slash_eq() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 84
     x /= 2
     x
@@ -1295,7 +1295,7 @@ fn selfhost_verify_line_comment() {
     // # is the line comment character in Vais
     let source = r#"
 # This is a comment
-F main() -> i64 = 42 # trailing comment
+fn main() -> i64 = 42 # trailing comment
 "#;
     assert_exit_code(source, 42);
 }
@@ -1306,7 +1306,7 @@ fn selfhost_verify_comment_only_lines() {
 # comment line 1
 # comment line 2
 # comment line 3
-F main() -> i64 = 0
+fn main() -> i64 = 0
 "#;
     assert_exit_code(source, 0);
 }
@@ -1323,15 +1323,15 @@ fn selfhost_verify_complex_function_with_all_constructs() {
     // Counter starts at 0, limit is 10: increment() runs 10 times returning 1 each
     // time, then returns 0 when value >= limit, triggering break. main returns 10.
     let source = r#"
-S Counter {
+struct Counter {
     value: i64,
     limit: i64
 }
 
-X Counter {
-    F new(limit: i64) -> Counter = Counter { value: 0, limit: limit }
+impl Counter {
+    fn new(limit: i64) -> Counter = Counter { value: 0, limit: limit }
 
-    F increment(&self) -> i64 {
+    fn increment(&self) -> i64 {
         I self.value < self.limit {
             self.value = self.value + 1
             1
@@ -1340,10 +1340,10 @@ X Counter {
         }
     }
 
-    F get(&self) -> i64 = self.value
+    fn get(&self) -> i64 = self.value
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c := Counter.new(10)
     # Increment in a loop
     total := mut 0
@@ -1361,7 +1361,7 @@ F main() -> i64 {
 fn selfhost_verify_complex_arithmetic_expression() {
     // Exercises multiple operators with precedence
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := 10
     b := 20
     c := 3
@@ -1377,14 +1377,14 @@ F main() -> i64 {
 fn selfhost_verify_complex_control_flow() {
     // Multiple if/else chains, loops, break, continue, return
     let source = r#"
-F classify(n: i64) -> i64 {
-    I n < 0 { R 0 }
-    I n == 0 { R 1 }
-    I n > 100 { R 3 }
-    R 2
+fn classify(n: i64) -> i64 {
+    I n < 0 { return 0 }
+    I n == 0 { return 1 }
+    I n > 100 { return 3 }
+    return 2
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     i := mut 0
     L {
@@ -1405,15 +1405,15 @@ F main() -> i64 {
 fn selfhost_verify_complex_nested_structs_and_methods() {
     // Tests struct field access, impl methods, and method chaining
     let source = r#"
-S Vec2 { x: i64, y: i64 }
+struct Vec2 { x: i64, y: i64 }
 
-X Vec2 {
-    F new(x: i64, y: i64) -> Vec2 = Vec2 { x: x, y: y }
-    F dot(&self, other: Vec2) -> i64 = self.x * other.x + self.y * other.y
-    F mag_squared(&self) -> i64 = self.x * self.x + self.y * self.y
+impl Vec2 {
+    fn new(x: i64, y: i64) -> Vec2 = Vec2 { x: x, y: y }
+    fn dot(&self, other: Vec2) -> i64 = self.x * other.x + self.y * other.y
+    fn mag_squared(&self) -> i64 = self.x * self.x + self.y * self.y
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := Vec2.new(3, 4)
     b := Vec2.new(1, 2)
     d := a.dot(b)
@@ -1429,8 +1429,8 @@ F main() -> i64 {
 fn selfhost_verify_complex_match_with_multiple_arms() {
     // Match expression with several arms
     let source = r#"
-F day_type(day: i64) -> i64 {
-    M day {
+fn day_type(day: i64) -> i64 {
+    match day {
         1 => 0,
         2 => 0,
         3 => 0,
@@ -1442,7 +1442,7 @@ F day_type(day: i64) -> i64 {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := day_type(1)
     b := day_type(6)
     c := day_type(99)
@@ -1628,10 +1628,10 @@ fn selfhost_rust_lexer_cross_check_assignment() {
 #[test]
 fn selfhost_verify_is_digit_logic() {
     let source = r#"
-F is_digit(c: i64) -> i64 {
+fn is_digit(c: i64) -> i64 {
     I c >= 48 && c <= 57 { 1 } E { 0 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     # '0' = 48, '9' = 57, 'A' = 65
     a := is_digit(48)
     b := is_digit(57)
@@ -1646,14 +1646,14 @@ F main() -> i64 {
 #[test]
 fn selfhost_verify_is_ident_start_logic() {
     let source = r#"
-F is_ident_start(c: i64) -> i64 {
+fn is_ident_start(c: i64) -> i64 {
     I (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95 {
         1
     } E {
         0
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     # 'A'=65, 'z'=122, '_'=95, '0'=48
     a := is_ident_start(65)
     b := is_ident_start(122)
@@ -1668,10 +1668,10 @@ F main() -> i64 {
 #[test]
 fn selfhost_verify_is_whitespace_logic() {
     let source = r#"
-F is_whitespace(c: i64) -> i64 {
+fn is_whitespace(c: i64) -> i64 {
     I c == 32 || c == 9 || c == 10 || c == 13 { 1 } E { 0 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     # space=32, tab=9, newline=10, cr=13, 'A'=65
     a := is_whitespace(32)
     b := is_whitespace(9)
@@ -1687,7 +1687,7 @@ F main() -> i64 {
 #[test]
 fn selfhost_verify_hex_digit_value_logic() {
     let source = r#"
-F hex_digit_value(c: i64) -> i64 {
+fn hex_digit_value(c: i64) -> i64 {
     I c >= 48 && c <= 57 {
         c - 48
     } E I c >= 65 && c <= 70 {
@@ -1698,7 +1698,7 @@ F hex_digit_value(c: i64) -> i64 {
         0
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     # '0'=48 -> 0, 'A'=65 -> 10, 'f'=102 -> 15
     a := hex_digit_value(48)
     b := hex_digit_value(65)

@@ -65,7 +65,7 @@ fn test_format_bool_expressions() {
 
 #[test]
 fn test_format_string_expressions() {
-    let output = format_source(r#"F test() -> str = "hello""#);
+    let output = format_source(r#"fn test() -> str = "hello""#);
     assert!(output.contains("hello"));
 }
 
@@ -122,11 +122,11 @@ fn test_format_ternary() {
 fn test_format_if_else() {
     let output = format_source(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             I x > 0 {
-                R x
+                return x
             } E {
-                R 0
+                return 0
             }
         }
     "#,
@@ -139,13 +139,13 @@ fn test_format_if_else() {
 fn test_format_if_elseif_else() {
     let output = format_source(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             I x > 0 {
-                R 1
+                return 1
             } E I x < 0 {
-                R -1
+                return -1
             } E {
-                R 0
+                return 0
             }
         }
     "#,
@@ -157,11 +157,11 @@ fn test_format_if_elseif_else() {
 fn test_format_for_loop() {
     let output = format_source(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             L i:0..10 {
                 C
             }
-            R 0
+            return 0
         }
     "#,
     );
@@ -172,7 +172,7 @@ fn test_format_for_loop() {
 fn test_format_while_loop() {
     let output = format_source(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             L x < 10 {
                 x = x + 1
@@ -188,8 +188,8 @@ fn test_format_while_loop() {
 fn test_format_match() {
     let output = format_source(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 0 => 100,
                 1 => 200,
                 _ => 0
@@ -205,8 +205,8 @@ fn test_format_match() {
 fn test_format_function_call() {
     let output = format_source(
         r#"
-        F add(x: i64, y: i64) -> i64 = x + y
-        F test() -> i64 = add(1, 2)
+        fn add(x: i64, y: i64) -> i64 = x + y
+        fn test() -> i64 = add(1, 2)
     "#,
     );
     assert!(output.contains("add("));
@@ -216,9 +216,9 @@ fn test_format_function_call() {
 fn test_format_method_call() {
     let output = format_source(
         r#"
-        S Foo { value: i64 }
-        X Foo {
-            F get(self) -> i64 = self.value
+        struct Foo { value: i64 }
+        impl Foo {
+            fn get(self) -> i64 = self.value
         }
     "#,
     );
@@ -229,8 +229,8 @@ fn test_format_method_call() {
 fn test_format_field_access() {
     let output = format_source(
         r#"
-        S Point { x: i64, y: i64 }
-        F test() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn test() -> i64 {
             p := Point { x: 1, y: 2 }
             p.x
         }
@@ -243,7 +243,7 @@ fn test_format_field_access() {
 fn test_format_index_access() {
     let output = format_source(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr := [1, 2, 3]
             arr[0]
         }
@@ -268,10 +268,10 @@ fn test_format_tuple_literal() {
 fn test_format_struct_literal() {
     let output = format_source(
         r#"
-        S Point { x: i64, y: i64 }
-        F test() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn test() -> i64 {
             p := Point { x: 1, y: 2 }
-            R 0
+            return 0
         }
     "#,
     );
@@ -294,7 +294,7 @@ fn test_format_inclusive_range() {
 fn test_format_block() {
     let output = format_source(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := {
                 a := 10
                 a + 1
@@ -316,7 +316,7 @@ fn test_format_cast() {
 fn test_format_assign() {
     let output = format_source(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             x = 42
             x
@@ -330,7 +330,7 @@ fn test_format_assign() {
 fn test_format_assign_op() {
     let output = format_source(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 10
             x += 5
             x -= 1
@@ -348,7 +348,7 @@ fn test_format_assign_op() {
 fn test_format_assign_op_bitwise() {
     let output = format_source(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 255
             x &= 15
             x |= 48
@@ -378,7 +378,7 @@ fn test_format_self_recursion() {
 fn test_format_try() {
     let output = format_source(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             v := x + 1
             v
         }
@@ -391,7 +391,7 @@ fn test_format_try() {
 fn test_format_unwrap() {
     let output = format_source(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             x
         }
     "#,
@@ -409,7 +409,7 @@ fn test_format_ref_deref() {
 fn test_format_lazy_force() {
     let output = format_source(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := lazy 42
             force x
         }
@@ -503,9 +503,9 @@ fn test_format_trait_declaration() {
 fn test_format_impl_block() {
     let output = format_source(
         r#"
-        S Foo { value: i64 }
-        X Foo {
-            F new() -> Foo = Foo { value: 0 }
+        struct Foo { value: i64 }
+        impl Foo {
+            fn new() -> Foo = Foo { value: 0 }
         }
     "#,
     );
@@ -516,10 +516,10 @@ fn test_format_impl_block() {
 fn test_format_trait_impl() {
     let output = format_source(
         r#"
-        W Show { F show(self) -> str }
-        S Foo { value: i64 }
-        X Foo: Show {
-            F show(self) -> str = "foo"
+        trait Show { fn show(self) -> str }
+        struct Foo { value: i64 }
+        impl Foo: Show {
+            fn show(self) -> str = "foo"
         }
     "#,
     );
@@ -549,7 +549,7 @@ fn test_format_extern_function() {
     let output = format_source(
         r#"
         N "C" {
-            F malloc(size: i64) -> i64
+            fn malloc(size: i64) -> i64
         }
     "#,
     );
@@ -646,9 +646,9 @@ fn test_format_macro_invocation() {
 fn test_format_fibonacci() {
     let output = format_source(
         r#"
-        F fib(n: i64) -> i64 {
-            I n <= 1 { R n }
-            R @(n - 1) + @(n - 2)
+        fn fib(n: i64) -> i64 {
+            I n <= 1 { return n }
+            return @(n - 1) + @(n - 2)
         }
     "#,
     );
@@ -660,12 +660,12 @@ fn test_format_fibonacci() {
 fn test_format_complete_program() {
     let output = format_source(
         r#"
-        S Point { x: i64, y: i64 }
-        X Point {
-            F new(x: i64, y: i64) -> Point = Point { x: x, y: y }
-            F distance(self) -> i64 = self.x * self.x + self.y * self.y
+        struct Point { x: i64, y: i64 }
+        impl Point {
+            fn new(x: i64, y: i64) -> Point = Point { x: x, y: y }
+            fn distance(self) -> i64 = self.x * self.x + self.y * self.y
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             p := Point::new(3, 4)
             p.distance()
         }
@@ -707,8 +707,8 @@ fn test_format_with_tabs() {
 fn test_format_match_with_guard() {
     let output = format_source(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 n I n > 0 => n,
                 _ => 0
             }
@@ -722,9 +722,9 @@ fn test_format_match_with_guard() {
 fn test_format_multiple_items() {
     let output = format_source(
         r#"
-        F foo() -> i64 = 1
-        F bar() -> i64 = 2
-        F baz() -> i64 = 3
+        fn foo() -> i64 = 1
+        fn bar() -> i64 = 2
+        fn baz() -> i64 = 3
     "#,
     );
     assert!(output.contains("foo"));
@@ -736,8 +736,8 @@ fn test_format_multiple_items() {
 fn test_format_where_clause() {
     let output = format_source(
         r#"
-        W Show { F show(self) -> str }
-        F display<T>(x: T) -> str where T: Show = x.show()
+        trait Show { fn show(self) -> str }
+        fn display<T>(x: T) -> str where T: Show = x.show()
     "#,
     );
     assert!(output.contains("where") || output.contains("Show"));

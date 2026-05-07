@@ -78,7 +78,7 @@ fn test_semantic_tokens_integer_literal() {
 
 #[test]
 fn test_semantic_tokens_string_literal() {
-    let tokens = get_semantic_tokens(r#"F test() -> str = "hello""#);
+    let tokens = get_semantic_tokens(r#"fn test() -> str = "hello""#);
     assert!(!tokens.is_empty());
 }
 
@@ -121,14 +121,14 @@ fn test_semantic_tokens_multiline() {
 #[test]
 fn test_semantic_tokens_complex_program() {
     let source = r#"
-        S Point { x: i64, y: i64 }
-        F add(a: Point, b: Point) -> i64 {
-            R a.x + b.x + a.y + b.y
+        struct Point { x: i64, y: i64 }
+        fn add(a: Point, b: Point) -> i64 {
+            return a.x + b.x + a.y + b.y
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             p1 := Point { x: 1, y: 2 }
             p2 := Point { x: 3, y: 4 }
-            R add(p1, p2)
+            return add(p1, p2)
         }
     "#;
     let tokens = get_semantic_tokens(source);

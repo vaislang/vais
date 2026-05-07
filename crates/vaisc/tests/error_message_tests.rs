@@ -109,13 +109,13 @@ fn error_type_mismatch_help_suggests_cast() {
 #[test]
 fn error_type_mismatch_str_to_i64() {
     // String where i64 expected should suggest conversion
-    let error = type_check_error(r#"F main() -> i64 = "hello""#);
+    let error = type_check_error(r#"fn main() -> i64 = "hello""#);
     assert!(
         error.contains("Type mismatch"),
         "Error should mention type mismatch: got '{}'",
         error
     );
-    let help = type_check_help(r#"F main() -> i64 = "hello""#);
+    let help = type_check_help(r#"fn main() -> i64 = "hello""#);
     assert!(
         help.is_some(),
         "Should provide help for str to i64 mismatch"

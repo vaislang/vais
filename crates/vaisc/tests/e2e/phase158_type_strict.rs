@@ -35,27 +35,27 @@ fn assert_error_contains(source: &str, expected: &str) {
 /// Phase 158: bool→i64 implicit coercion is FORBIDDEN (requires `as i64`).
 #[test]
 fn e2e_phase158_strict_bool_to_i64_return() {
-    assert_error_contains(r#"F main() -> i64 = true"#, "mismatch");
+    assert_error_contains(r#"fn main() -> i64 = true"#, "mismatch");
 }
 
 /// Phase 158: i64→bool implicit coercion is FORBIDDEN (requires comparison).
 #[test]
 fn e2e_phase158_strict_i64_to_bool_return() {
-    assert_error_contains(r#"F main() -> bool = 42"#, "mismatch");
+    assert_error_contains(r#"fn main() -> bool = 42"#, "mismatch");
 }
 
 /// Phase 160-A: int→float implicit coercion is allowed (numeric promotion).
 /// Phase 191: main() float return with integer body now passes through as i64.
 #[test]
 fn e2e_phase158_strict_int_to_f64_return() {
-    assert_exit_code(r#"F main() -> f64 = 42"#, 42);
+    assert_exit_code(r#"fn main() -> f64 = 42"#, 42);
 }
 
 /// Phase 160-A: float→int implicit coercion is allowed (numeric promotion).
 /// Phase 191: float literal in i64 return now emits fptosi.
 #[test]
 fn e2e_phase158_strict_f64_to_i64_return() {
-    assert_exit_code(r#"F main() -> i64 = 3.14"#, 3);
+    assert_exit_code(r#"fn main() -> i64 = 3.14"#, 3);
 }
 
 /// Float literal inference: f32 ↔ f64 unification is now allowed.
@@ -65,8 +65,8 @@ fn e2e_phase158_strict_f64_to_i64_return() {
 fn e2e_phase158_strict_f32_to_f64_return() {
     // f32 ↔ f64 unification is permitted — float literal inference
     let source = r#"
-F widen(x: f32) -> f64 { x }
-F main() -> i64 { widen(1.0 as f32) as i64 }
+fn widen(x: f32) -> f64 { x }
+fn main() -> i64 { widen(1.0 as f32) as i64 }
 "#;
     assert_exit_code(source, 1);
 }
@@ -77,7 +77,7 @@ F main() -> i64 { widen(1.0 as f32) as i64 }
 fn e2e_phase158_strict_f64_to_f32_return() {
     // f64 literal adapts to f32 context via float literal inference
     let source = r#"
-F main() -> f32 { x := 1.0; x }
+fn main() -> f32 { x := 1.0; x }
 "#;
     assert_compiles(source);
 }
@@ -86,14 +86,14 @@ F main() -> f32 { x := 1.0; x }
 #[test]
 fn e2e_phase158_strict_str_to_i64_return() {
     // A string literal cannot be returned where i64 is expected
-    assert_error_contains(r#"F main() -> i64 = "hello""#, "mismatch");
+    assert_error_contains(r#"fn main() -> i64 = "hello""#, "mismatch");
 }
 
 /// Bool arithmetic still requires numeric type — `+` operator requires numeric, not bool.
 #[test]
 fn e2e_phase158_strict_bool_in_arithmetic() {
     let source = r#"
-F main() -> i64 { x := true; x + 1 }
+fn main() -> i64 { x := true; x + 1 }
 "#;
     assert_error_contains(source, "numeric");
 }
@@ -106,7 +106,7 @@ fn e2e_phase158_strict_i32_to_i64_widening() {
     // A variable declared as i32 can be returned as i64 via widening
     assert_exit_code(
         r#"
-F main() -> i64 { x:i32 = 1; x }
+fn main() -> i64 { x:i32 = 1; x }
 "#,
         1,
     );
@@ -117,7 +117,7 @@ F main() -> i64 { x:i32 = 1; x }
 fn e2e_phase158_strict_i8_to_i64_widening() {
     assert_exit_code(
         r#"
-F main() -> i64 { x:i8 = 5; x }
+fn main() -> i64 { x:i8 = 5; x }
 "#,
         5,
     );
@@ -128,7 +128,7 @@ F main() -> i64 { x:i8 = 5; x }
 fn e2e_phase158_strict_u8_to_i64_widening() {
     assert_exit_code(
         r#"
-F main() -> i64 { x:u8 = 3; x }
+fn main() -> i64 { x:u8 = 3; x }
 "#,
         3,
     );
@@ -137,7 +137,7 @@ F main() -> i64 { x:u8 = 3; x }
 /// Baseline: plain i64 integer literal return is always valid.
 #[test]
 fn e2e_phase158_strict_i64_literal_return() {
-    assert_exit_code(r#"F main() -> i64 = 42"#, 42);
+    assert_exit_code(r#"fn main() -> i64 = 42"#, 42);
 }
 
 /// Phase 158 rule: typed integer literal (i32 suffix) is valid — inferred as i32, widened to i64.
@@ -146,7 +146,7 @@ fn e2e_phase158_strict_typed_int_literal_i32() {
     // `1i32` is a typed integer literal; widening to i64 return is permitted
     assert_exit_code(
         r#"
-F main() -> i64 { x := 1i32; x }
+fn main() -> i64 { x := 1i32; x }
 "#,
         1,
     );
@@ -160,7 +160,7 @@ fn e2e_phase158_strict_explicit_cast_bool_to_i64() {
     // `true as i64` produces 1; explicit casts always bypass the implicit-coercion ban
     assert_exit_code(
         r#"
-F main() -> i64 { x := true as i64; x }
+fn main() -> i64 { x := true as i64; x }
 "#,
         1,
     );
@@ -172,7 +172,7 @@ F main() -> i64 { x := true as i64; x }
 fn e2e_phase158_strict_explicit_cast_f64_to_i64() {
     assert_exit_code(
         r#"
-F main() -> i64 { x := 3.14; y := x as i64; y }
+fn main() -> i64 { x := 3.14; y := x as i64; y }
 "#,
         3,
     );
@@ -181,7 +181,7 @@ F main() -> i64 { x := 3.14; y := x as i64; y }
 /// Sanity check: assert_compiles helper works for a trivially valid program.
 #[test]
 fn e2e_phase158_strict_trivial_compile() {
-    assert_exit_code(r#"F main() -> i64 = 0"#, 0);
+    assert_exit_code(r#"fn main() -> i64 = 0"#, 0);
 }
 
 // ==================== E. Phase 158 CI Gate (source-level) ====================

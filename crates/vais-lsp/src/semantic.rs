@@ -212,11 +212,11 @@ mod tests {
     fn test_semantic_tokens_comprehensive() {
         let source = r#"
 /// This is a doc comment
-F add(x: i64, y: i64) -> i64 {
-    R x + y
+fn add(x: i64, y: i64) -> i64 {
+    return x + y
 }
 
-S Point {
+struct Point {
     x: i64,
     y: i64,
 }
@@ -226,10 +226,10 @@ E Option<T> {
     None,
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := add(1, 2)
     p := Point { x: 10, y: 20 }
-    R result
+    return result
 }
 "#;
         let tokens = get_semantic_tokens(source);
@@ -277,10 +277,10 @@ F main() -> i64 {
     #[test]
     fn test_function_call_vs_definition() {
         let source = r#"
-F foo(x: i64) -> i64 { R x }
-F main() -> i64 {
+fn foo(x: i64) -> i64 { return x }
+fn main() -> i64 {
     result := foo(42)
-    R result
+    return result
 }
 "#;
         let tokens = get_semantic_tokens(source);
@@ -300,10 +300,10 @@ F main() -> i64 {
     #[test]
     fn test_struct_name_detection() {
         let source = r#"
-S MyStruct { x: i64 }
-F main() -> i64 {
+struct MyStruct { x: i64 }
+fn main() -> i64 {
     obj := MyStruct { x: 10 }
-    R obj.x
+    return obj.x
 }
 "#;
         let tokens = get_semantic_tokens(source);
@@ -407,7 +407,7 @@ F main() -> i64 {
 
     #[test]
     fn test_semantic_tokens_string_literal() {
-        let source = r#"F main() -> i64 { puts("hello") }"#;
+        let source = r#"fn main() -> i64 { puts("hello") }"#;
         let tokens = get_semantic_tokens(source);
         let string_tokens: Vec<_> = tokens
             .iter()
