@@ -1,5 +1,5 @@
 # Hello World #6: while loop + accumulator
-F main() -> i64 {
+fn main() -> i64 {
     n: i64 := 7
     sum: i64 := mut 0
     i: i64 := mut 1
@@ -7,5 +7,5 @@ F main() -> i64 {
         sum = sum + i
         i = i + 1
     }
-    R sum    # exit 28 (1+2+...+7)
+    return sum    # exit 28 (1+2+...+7)
 }

@@ -3,20 +3,20 @@
 # Vec<Struct{str}> + closure (non-async variant) + async aggregation.
 # Hypothesis: 가장 가능성 높은 failure — 여러 Phase 191/192 fix 영역 교차.
 
-U std/vec
+use std/vec
 
-S Person {
+struct Person {
     name: str,
     age: i64
 }
 
-A F sum_ages(v: Vec<Person>) -> i64 {
+A fn sum_ages(v: Vec<Person>) -> i64 {
     # Async takes Vec (generic struct) + iterates str-containing struct.
     total := mut 0
     n := v.len()
     LF i:0..n {
         opt := v.get(i)
-        M opt {
+        match opt {
             Some(p) => { total = total + p.age },
             None    => {}
         }
@@ -24,7 +24,7 @@ A F sum_ages(v: Vec<Person>) -> i64 {
     total
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec.with_capacity(4)
     v.push(Person { name: "Alice", age: 30 })
     v.push(Person { name: "Bob",   age: 25 })
@@ -41,5 +41,5 @@ F main() -> i64 {
     puts("S5: total ages = {total}")
 
     # Expected: total=95, exit 0
-    I total == 95 { 0 } EL { 1 }
+    I total == 95 { 0 } else { 1 }
 }

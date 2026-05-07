@@ -1,6 +1,6 @@
 # Match expression test
-F describe(n: i64) -> i64 {
-    M n {
+fn describe(n: i64) -> i64 {
+    match n {
         0 => 0,
         1 => 1,
         2 => 2,
@@ -8,7 +8,7 @@ F describe(n: i64) -> i64 {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     r := mut describe(0)
     puts("Testing match with 0:")
     putchar(r + 48)  # print '0'

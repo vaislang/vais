@@ -1,8 +1,8 @@
 # Comprehensive pattern matching test
 
 # Test integer literals
-F match_int(n: i64) -> i64 {
-    M n {
+fn match_int(n: i64) -> i64 {
+    match n {
         0 => 0,
         1 => 10,
         2 => 20,
@@ -12,9 +12,9 @@ F match_int(n: i64) -> i64 {
 }
 
 # Test boolean patterns
-F match_bool(b: i64) -> i64 {
+fn match_bool(b: i64) -> i64 {
     # b: 0=false, 1=true
-    M b {
+    match b {
         0 => 100,  # false case
         1 => 200,  # true case
         _ => 300
@@ -22,8 +22,8 @@ F match_bool(b: i64) -> i64 {
 }
 
 # Test range patterns
-F match_range(n: i64) -> i64 {
-    M n {
+fn match_range(n: i64) -> i64 {
+    match n {
         0..5 => 1,      # 0 to 4
         5..10 => 2,     # 5 to 9
         10..=20 => 3,   # 10 to 20 inclusive
@@ -32,8 +32,8 @@ F match_range(n: i64) -> i64 {
 }
 
 # Test or patterns
-F match_or(n: i64) -> i64 {
-    M n {
+fn match_or(n: i64) -> i64 {
+    match n {
         1 | 2 | 3 => 10,
         4 | 5 => 20,
         _ => 0
@@ -41,8 +41,8 @@ F match_or(n: i64) -> i64 {
 }
 
 # Test with guards
-F match_guard(n: i64) -> i64 {
-    M n {
+fn match_guard(n: i64) -> i64 {
+    match n {
         x I x > 50 => 100,  # if x > 50
         x I x > 20 => 50,   # else if x > 20
         x => x              # else return x
@@ -50,14 +50,14 @@ F match_guard(n: i64) -> i64 {
 }
 
 # Test variable binding
-F match_bind(n: i64) -> i64 {
-    M n {
+fn match_bind(n: i64) -> i64 {
+    match n {
         0 => 0,
         x => x * 2
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Pattern Matching Tests ===")
     putchar(10)
 

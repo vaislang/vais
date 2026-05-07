@@ -1,14 +1,14 @@
 # Struct method test
-S Point {
+struct Point {
     x: i64,
     y: i64,
 
     F sum(&self) -> i64 = self.x + self.y
 
-    F scale(&self, factor: i64) -> i64 = (self.x + self.y) * factor
+    fn scale(&self, factor: i64) -> i64 = (self.x + self.y) * factor
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Testing struct methods:")
 
     p := Point { x: 10, y: 20 }

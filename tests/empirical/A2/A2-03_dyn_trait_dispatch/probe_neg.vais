@@ -4,12 +4,12 @@
 # downstream defense that prevents non-trait-implementing values
 # from being passed to a `dyn Trait` parameter.
 
-W Greet {
-    F greet(self) -> i64
+trait Greet {
+    fn greet(self) -> i64
 }
 
-F use_dyn(g: dyn Greet) -> i64 { g.greet() }
+fn use_dyn(g: dyn Greet) -> i64 { g.greet() }
 
-F main() -> i64 {
+fn main() -> i64 {
     use_dyn(123)
 }

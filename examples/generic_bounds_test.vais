@@ -1,15 +1,15 @@
 # Test generic functions with trait bounds
 
 # Simple generic function without bounds
-F identity<T>(x: T) -> T = x
+fn identity<T>(x: T) -> T = x
 
 # Generic function with multiple type params
-F pair<A, B>(a: A, b: B) -> A = a
+fn pair<A, B>(a: A, b: B) -> A = a
 
 # Struct for testing
-S Point { x: i64, y: i64 }
+struct Point { x: i64, y: i64 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Generic Bounds Test ===")
     putchar(10)
 

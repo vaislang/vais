@@ -1,7 +1,7 @@
-F take_str(s: str) -> i64 {
-    R 7
+fn take_str(s: str) -> i64 {
+    return 7
 }
 
-F main() -> i64 {
-    R take_str("hello")
+fn main() -> i64 {
+    return take_str("hello")
 }

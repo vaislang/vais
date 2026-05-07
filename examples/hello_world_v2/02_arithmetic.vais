@@ -1,8 +1,8 @@
 # Hello World #2: integer arithmetic
-F main() -> i64 {
+fn main() -> i64 {
     a: i64 := 12
     b: i64 := 7
     diff: i64 := a - b
     # Exit with the result so a shell can see it: $? == 5
-    R diff
+    return diff
 }

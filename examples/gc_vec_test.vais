@@ -1,18 +1,18 @@
 # GC Vector Test - Demonstrates GC with dynamic data structures
 # Run with: vaisc build gc_vec_test.vais --gc
 
-U std/gc
-U std/vec
+use std/gc
+use std/vec
 
 # Simple GC-managed vector
-S GcVec {
+struct GcVec {
     data: i64,     # Pointer to data (GC-managed)
     len: i64,
     cap: i64
 }
 
-X GcVec {
-    F new() -> GcVec {
+impl GcVec {
+    fn new() -> GcVec {
         # Initialize GC if not already done
         gc_init()
 
@@ -32,7 +32,7 @@ X GcVec {
         }
     }
 
-    F push(&self, value: i64) -> i64 {
+    fn push(&self, value: i64) -> i64 {
         # Check if we need to grow
         LW self.len >= self.cap {
             self.grow()
@@ -47,9 +47,9 @@ X GcVec {
         0
     }
 
-    F get(&self, index: i64) -> i64 {
+    fn get(&self, index: i64) -> i64 {
         LW index >= self.len {
-            R 0  # Out of bounds
+            return 0  # Out of bounds
         }
 
         offset := index * 8
@@ -57,7 +57,7 @@ X GcVec {
         load_i64(ptr)
     }
 
-    F grow(&self) -> i64 {
+    fn grow(&self) -> i64 {
         # Double capacity
         new_cap := self.cap * 2
         new_size := new_cap * 8
@@ -86,11 +86,11 @@ X GcVec {
         0
     }
 
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.len
     }
 
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         # Unregister root - GC will collect
         gc_remove_root(self.data)
         0
@@ -98,10 +98,10 @@ X GcVec {
 }
 
 # Memory helper functions
-X F store_i64(ptr: i64, value: i64) -> i64
-X F load_i64(ptr: i64) -> i64
+impl fn store_i64(ptr: i64, value: i64) -> i64
+impl fn load_i64(ptr: i64) -> i64
 
-F test_gc_vec() -> i64 {
+fn test_gc_vec() -> i64 {
     puts("Testing GC-managed vector...")
 
     vec := GcVec::new()
@@ -139,7 +139,7 @@ F test_gc_vec() -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== GC Vector Test ===\n")
 
     gc_init()

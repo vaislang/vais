@@ -16,30 +16,30 @@ G memory: i64 = 0
 
 # Basic arithmetic operations
 #[wasm_export("add")]
-F add(a: i64, b: i64) -> i64 {
+fn add(a: i64, b: i64) -> i64 {
     result := a + b
     memory = result
     result
 }
 
 #[wasm_export("subtract")]
-F subtract(a: i64, b: i64) -> i64 {
+fn subtract(a: i64, b: i64) -> i64 {
     result := a - b
     memory = result
     result
 }
 
 #[wasm_export("multiply")]
-F multiply(a: i64, b: i64) -> i64 {
+fn multiply(a: i64, b: i64) -> i64 {
     result := a * b
     memory = result
     result
 }
 
 #[wasm_export("divide")]
-F divide(a: i64, b: i64) -> i64 {
+fn divide(a: i64, b: i64) -> i64 {
     I b == 0 {
-        R -1  # Error: division by zero
+        return -1  # Error: division by zero
     }
     result := a / b
     memory = result
@@ -48,13 +48,13 @@ F divide(a: i64, b: i64) -> i64 {
 
 # Advanced operations
 #[wasm_export("power")]
-F power(base: i64, exp: i64) -> i64 {
+fn power(base: i64, exp: i64) -> i64 {
     I exp < 0 {
-        R -1  # Error: negative exponent not supported
+        return -1  # Error: negative exponent not supported
     }
     I exp == 0 {
         memory = 1
-        R 1
+        return 1
     }
 
     result := mut base
@@ -68,12 +68,12 @@ F power(base: i64, exp: i64) -> i64 {
 }
 
 #[wasm_export("sqrt")]
-F sqrt(n: i64) -> i64 {
+fn sqrt(n: i64) -> i64 {
     I n < 0 {
-        R -1  # Error: negative input
+        return -1  # Error: negative input
     }
     I n == 0 {
-        R 0
+        return 0
     }
 
     # Integer square root using Newton's method
@@ -89,13 +89,13 @@ F sqrt(n: i64) -> i64 {
 }
 
 #[wasm_export("factorial")]
-F factorial(n: i64) -> i64 {
+fn factorial(n: i64) -> i64 {
     I n < 0 {
-        R -1  # Error: negative input
+        return -1  # Error: negative input
     }
     I n <= 1 {
         memory = 1
-        R 1
+        return 1
     }
 
     result := mut 1
@@ -109,9 +109,9 @@ F factorial(n: i64) -> i64 {
 }
 
 #[wasm_export("mod_op")]
-F mod_op(a: i64, b: i64) -> i64 {
+fn mod_op(a: i64, b: i64) -> i64 {
     I b == 0 {
-        R -1  # Error: modulo by zero
+        return -1  # Error: modulo by zero
     }
     result := a % b
     memory = result
@@ -119,8 +119,8 @@ F mod_op(a: i64, b: i64) -> i64 {
 }
 
 #[wasm_export("abs_val")]
-F abs_val(n: i64) -> i64 {
-    result := I n < 0 { -n } EL { n }
+fn abs_val(n: i64) -> i64 {
+    result := I n < 0 { -n } else { n }
     memory = result
     result
 }
@@ -128,8 +128,8 @@ F abs_val(n: i64) -> i64 {
 # Generic calculation interface
 # op codes: 1=add, 2=subtract, 3=multiply, 4=divide, 5=power, 6=mod
 #[wasm_export("calculate")]
-F calculate(op: i64, a: i64, b: i64) -> i64 {
-    M op {
+fn calculate(op: i64, a: i64, b: i64) -> i64 {
+    match op {
         1 => add(a, b),
         2 => subtract(a, b),
         3 => multiply(a, b),
@@ -142,21 +142,21 @@ F calculate(op: i64, a: i64, b: i64) -> i64 {
 
 # Memory operations
 #[wasm_export("get_memory")]
-F get_memory() -> i64 = memory
+fn get_memory() -> i64 = memory
 
 #[wasm_export("set_memory")]
-F set_memory(value: i64) -> i64 {
+fn set_memory(value: i64) -> i64 {
     memory = value
     0
 }
 
 #[wasm_export("clear_memory")]
-F clear_memory() -> i64 {
+fn clear_memory() -> i64 {
     memory = 0
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # Test basic operations
     _ := add(10, 5)
     _ := multiply(4, 7)

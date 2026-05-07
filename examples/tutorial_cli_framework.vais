@@ -6,18 +6,18 @@
 #   clang -o mycli tutorial_cli_framework.ll
 
 N "C" {
-    F __get_argc() -> i64
-    F __get_argv(index: i64) -> str
-    F __strlen(s: str) -> i64
-    F __strcmp(a: str, b: str) -> i64
-    F __atoi(s: str) -> i64
+    fn __get_argc() -> i64
+    fn __get_argv(index: i64) -> str
+    fn __strlen(s: str) -> i64
+    fn __strcmp(a: str, b: str) -> i64
+    fn __atoi(s: str) -> i64
 }
 
 G verbose: i64 = 0
 
-F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
 
-F cmd_help() -> i64 {
+fn cmd_help() -> i64 {
     puts("mycli v1.0 — Vais CLI Framework Demo")
     puts("")
     puts("Commands:")
@@ -31,25 +31,25 @@ F cmd_help() -> i64 {
     0
 }
 
-F cmd_greet(argc: i64) -> i64 {
+fn cmd_greet(argc: i64) -> i64 {
     I argc < 3 {
         puts("Error: greet requires a name")
-        R 1
+        return 1
     }
     name := __get_argv(2)
     puts("Hello, {name}!")
     0
 }
 
-F cmd_count(argc: i64) -> i64 {
+fn cmd_count(argc: i64) -> i64 {
     I argc < 3 {
         puts("Error: count requires a number")
-        R 1
+        return 1
     }
     n := __atoi(__get_argv(2))
     I n <= 0 {
         puts("Error: n must be positive")
-        R 1
+        return 1
     }
     total := mut 0
     LF i:1..n+1 {
@@ -59,10 +59,10 @@ F cmd_count(argc: i64) -> i64 {
     0
 }
 
-F cmd_fib(argc: i64) -> i64 {
+fn cmd_fib(argc: i64) -> i64 {
     I argc < 3 {
         puts("Error: fib requires a number")
-        R 1
+        return 1
     }
     n := __atoi(__get_argv(2))
     result := fib(n)
@@ -70,21 +70,21 @@ F cmd_fib(argc: i64) -> i64 {
     0
 }
 
-F dispatch(cmd: str, argc: i64) -> i64 {
+fn dispatch(cmd: str, argc: i64) -> i64 {
     I verbose == 1 {
         puts("[verbose] command: {cmd}")
     }
-    I __strcmp(cmd, "help") == 0 { R cmd_help() }
-    I __strcmp(cmd, "greet") == 0 { R cmd_greet(argc) }
-    I __strcmp(cmd, "count") == 0 { R cmd_count(argc) }
-    I __strcmp(cmd, "fib") == 0 { R cmd_fib(argc) }
+    I __strcmp(cmd, "help") == 0 { return cmd_help() }
+    I __strcmp(cmd, "greet") == 0 { return cmd_greet(argc) }
+    I __strcmp(cmd, "count") == 0 { return cmd_count(argc) }
+    I __strcmp(cmd, "fib") == 0 { return cmd_fib(argc) }
 
     puts("Unknown command: {cmd}")
     puts("Try: mycli help")
     1
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     argc := __get_argc()
 
     # Check for --verbose flag
@@ -96,12 +96,12 @@ F main() -> i64 {
     }
 
     I argc < 2 {
-        R cmd_help()
+        return cmd_help()
     }
 
-    cmd_idx := I verbose == 1 { 2 } EL { 1 }
+    cmd_idx := I verbose == 1 { 2 } else { 1 }
     I cmd_idx >= argc {
-        R cmd_help()
+        return cmd_help()
     }
 
     cmd := __get_argv(cmd_idx)

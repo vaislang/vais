@@ -6,14 +6,14 @@
 # 2x2 matrix stored as [a, b, c, d] = | a b |
 #                                       | c d |
 
-F mat_add(a: *i64, b: *i64, out: *i64) -> i64 {
+fn mat_add(a: *i64, b: *i64, out: *i64) -> i64 {
     LF i:0..4 {
         out[i] = a[i] + b[i]
     }
     0
 }
 
-F mat_mul(a: *i64, b: *i64, out: *i64) -> i64 {
+fn mat_mul(a: *i64, b: *i64, out: *i64) -> i64 {
     # out[0] = a[0]*b[0] + a[1]*b[2]
     # out[1] = a[0]*b[1] + a[1]*b[3]
     # out[2] = a[2]*b[0] + a[3]*b[2]
@@ -25,18 +25,18 @@ F mat_mul(a: *i64, b: *i64, out: *i64) -> i64 {
     0
 }
 
-F mat_det(m: *i64) -> i64 = m[0]*m[3] - m[1]*m[2]
+fn mat_det(m: *i64) -> i64 = m[0]*m[3] - m[1]*m[2]
 
-F mat_trace(m: *i64) -> i64 = m[0] + m[3]
+fn mat_trace(m: *i64) -> i64 = m[0] + m[3]
 
-F mat_print(name: str, m: *i64) -> i64 {
+fn mat_print(name: str, m: *i64) -> i64 {
     puts("{name}:")
     puts("  | {m[0]} {m[1]} |")
     puts("  | {m[2]} {m[3]} |")
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Matrix Operations ===")
 
     a: *i64 = [1, 2, 3, 4]
@@ -74,7 +74,7 @@ F main() -> i64 {
     I det_ab == det_a * det_b {
         puts("Verified: det(A*B) = det(A) * det(B)")
         0
-    } EL {
+    } else {
         puts("Verification failed!")
         1
     }

@@ -3,21 +3,21 @@
 
 # Function with lifetime annotation (parsed correctly)
 # This demonstrates the lifetime syntax is properly handled
-F identity<'a>(x: &'a i64) -> &'a i64 {
-    R x
+fn identity<'a>(x: &'a i64) -> &'a i64 {
+    return x
 }
 
 # Simple reference without lifetime (implicit)
-F get_ref(x: &i64) -> &i64 {
-    R x
+fn get_ref(x: &i64) -> &i64 {
+    return x
 }
 
 # Function using lifetime-annotated types in parameter
-F test_lifetime_type(x: &i64) -> i64 {
-    R *x
+fn test_lifetime_type(x: &i64) -> i64 {
+    return *x
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Lifetime syntax test passed!")
-    R 0
+    return 0
 }

@@ -4,7 +4,7 @@
 
 # DJB2 hash over an array of i64 values
 # Classic hash: hash = hash * 33 + value
-F djb2_hash(arr: *i64, len: i64) -> i64 {
+fn djb2_hash(arr: *i64, len: i64) -> i64 {
     hash := mut 5381
     i := mut 0
     L {
@@ -19,7 +19,7 @@ F djb2_hash(arr: *i64, len: i64) -> i64 {
 
 # FNV-1a hash over an array of i64 values
 # Uses FNV offset basis and prime (scaled for i64)
-F fnv1a_hash(arr: *i64, len: i64) -> i64 {
+fn fnv1a_hash(arr: *i64, len: i64) -> i64 {
     hash := mut 2166136261
     i := mut 0
     L {
@@ -34,7 +34,7 @@ F fnv1a_hash(arr: *i64, len: i64) -> i64 {
 }
 
 # Simple modular hash: sum of values mod table_size
-F simple_hash(arr: *i64, len: i64, table_size: i64) -> i64 {
+fn simple_hash(arr: *i64, len: i64, table_size: i64) -> i64 {
     sum := mut 0
     i := mut 0
     L {
@@ -48,7 +48,7 @@ F simple_hash(arr: *i64, len: i64, table_size: i64) -> i64 {
 }
 
 # Helper: print a number digit by digit (for values up to 9999999999)
-F print_num(n: i64) -> i64 {
+fn print_num(n: i64) -> i64 {
     I n == 0 {
         putchar(48)
         putchar(10)
@@ -79,7 +79,7 @@ F print_num(n: i64) -> i64 {
 
 # --- Demo main ---
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== crypto-hash demo ===")
 
     # Hash the sequence [72, 101, 108, 108, 111] = "Hello" as ASCII values

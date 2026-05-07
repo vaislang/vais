@@ -7,109 +7,109 @@
 # === Core Math Functions ===
 
 # Fibonacci with self-recursion operator @
-F fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
 
 # Factorial using self-recursion
-F factorial(n: i64) -> i64 = n < 2 ? 1 : n * @(n - 1)
+fn factorial(n: i64) -> i64 = n < 2 ? 1 : n * @(n - 1)
 
 # Greatest Common Divisor (Euclidean algorithm)
-F gcd(a: i64, b: i64) -> i64 = I b == 0 { a } EL { gcd(b, a % b) }
+fn gcd(a: i64, b: i64) -> i64 = I b == 0 { a } else { gcd(b, a % b) }
 
 # Least Common Multiple
-F lcm(a: i64, b: i64) -> i64 = a / gcd(a, b) * b
+fn lcm(a: i64, b: i64) -> i64 = a / gcd(a, b) * b
 
 # Absolute value
-F abs(x: i64) -> i64 = I x < 0 { 0 - x } EL { x }
+fn abs(x: i64) -> i64 = I x < 0 { 0 - x } else { x }
 
 # Power function (base^exp)
-F power(base: i64, exp: i64) -> i64 =
+fn power(base: i64, exp: i64) -> i64 =
     I exp == 0 { 1 }
-    EL I exp == 1 { base }
-    EL { base * @(base, exp - 1) }
+    else I exp == 1 { base }
+    else { base * @(base, exp - 1) }
 
 # Integer square root (Newton's method, iterative via recursion)
-F isqrt_helper(n: i64, guess: i64) -> i64 {
+fn isqrt_helper(n: i64, guess: i64) -> i64 {
     next := (guess + n / guess) / 2
     I next == guess { guess }
-    EL I next > guess { guess }
-    EL { @(n, next) }
+    else I next > guess { guess }
+    else { @(n, next) }
 }
 
-F isqrt(n: i64) -> i64 = I n < 2 { n } EL { isqrt_helper(n, n / 2) }
+fn isqrt(n: i64) -> i64 = I n < 2 { n } else { isqrt_helper(n, n / 2) }
 
 # === Prime Number Functions ===
 
 # Check if n is divisible by d
-F is_divisible(n: i64, d: i64) -> i64 = n % d == 0 ? 1 : 0
+fn is_divisible(n: i64, d: i64) -> i64 = n % d == 0 ? 1 : 0
 
 # Trial division primality test helper
-F is_prime_helper(n: i64, d: i64) -> i64 =
+fn is_prime_helper(n: i64, d: i64) -> i64 =
     I d * d > n { 1 }
-    EL I n % d == 0 { 0 }
-    EL { @(n, d + 2) }
+    else I n % d == 0 { 0 }
+    else { @(n, d + 2) }
 
 # Check if n is prime (returns 1 for prime, 0 for not)
-F is_prime(n: i64) -> i64 =
+fn is_prime(n: i64) -> i64 =
     I n < 2 { 0 }
-    EL I n < 4 { 1 }
-    EL I n % 2 == 0 { 0 }
-    EL { is_prime_helper(n, 3) }
+    else I n < 4 { 1 }
+    else I n % 2 == 0 { 0 }
+    else { is_prime_helper(n, 3) }
 
 # Count primes up to n (prime counting function)
-F count_primes_helper(n: i64, current: i64, count: i64) -> i64 =
+fn count_primes_helper(n: i64, current: i64, count: i64) -> i64 =
     I current > n { count }
-    EL { @(n, current + 1, count + is_prime(current)) }
+    else { @(n, current + 1, count + is_prime(current)) }
 
-F count_primes(n: i64) -> i64 = count_primes_helper(n, 2, 0)
+fn count_primes(n: i64) -> i64 = count_primes_helper(n, 2, 0)
 
 # Nth prime number
-F nth_prime_helper(target: i64, current: i64, found: i64) -> i64 =
+fn nth_prime_helper(target: i64, current: i64, found: i64) -> i64 =
     I found == target { current - 1 }
-    EL I is_prime(current) == 1 { @(target, current + 1, found + 1) }
-    EL { @(target, current + 1, found) }
+    else I is_prime(current) == 1 { @(target, current + 1, found + 1) }
+    else { @(target, current + 1, found) }
 
-F nth_prime(n: i64) -> i64 = nth_prime_helper(n, 2, 0)
+fn nth_prime(n: i64) -> i64 = nth_prime_helper(n, 2, 0)
 
 # === Sequence Functions ===
 
 # Sum of first n natural numbers (tail recursive)
-F sum_to(n: i64) -> i64 = sum_to_acc(n, 0)
-F sum_to_acc(n: i64, acc: i64) -> i64 =
-    I n == 0 { acc } EL { @(n - 1, acc + n) }
+fn sum_to(n: i64) -> i64 = sum_to_acc(n, 0)
+fn sum_to_acc(n: i64, acc: i64) -> i64 =
+    I n == 0 { acc } else { @(n - 1, acc + n) }
 
 # Triangular number
-F triangular(n: i64) -> i64 = n * (n + 1) / 2
+fn triangular(n: i64) -> i64 = n * (n + 1) / 2
 
 # === Output Helpers ===
 
 # Print a single digit (0-9)
-F print_digit(d: i64) -> i64 {
+fn print_digit(d: i64) -> i64 {
     putchar(d + 48)
     0
 }
 
 # Print a number (positive integers, handles multi-digit)
-F print_num_helper(n: i64) -> i64 =
+fn print_num_helper(n: i64) -> i64 =
     I n < 10 { print_digit(n) }
-    EL { print_num_helper(n / 10); print_digit(n % 10) }
+    else { print_num_helper(n / 10); print_digit(n % 10) }
 
-F print_num(n: i64) -> i64 =
+fn print_num(n: i64) -> i64 =
     I n < 0 { putchar(45); print_num_helper(0 - n) }
-    EL I n == 0 { print_digit(0) }
-    EL { print_num_helper(n) }
+    else I n == 0 { print_digit(0) }
+    else { print_num_helper(n) }
 
 # Print newline
-F newline() -> i64 { putchar(10); 0 }
+fn newline() -> i64 { putchar(10); 0 }
 
 # Print a labeled result: "label: value\n"
-F print_result(value: i64) -> i64 {
+fn print_result(value: i64) -> i64 {
     print_num(value)
     newline()
 }
 
 # === Test & Demo Suite ===
 
-F demo_fibonacci() -> i64 {
+fn demo_fibonacci() -> i64 {
     puts("=== Fibonacci ===")
     puts("fib(0) = "); print_result(fib(0))
     puts("fib(1) = "); print_result(fib(1))
@@ -119,7 +119,7 @@ F demo_fibonacci() -> i64 {
     0
 }
 
-F demo_factorial() -> i64 {
+fn demo_factorial() -> i64 {
     puts("=== Factorial ===")
     puts("fact(0) = "); print_result(factorial(0))
     puts("fact(1) = "); print_result(factorial(1))
@@ -128,7 +128,7 @@ F demo_factorial() -> i64 {
     0
 }
 
-F demo_primes() -> i64 {
+fn demo_primes() -> i64 {
     puts("=== Prime Numbers ===")
     puts("is_prime(2) = "); print_result(is_prime(2))
     puts("is_prime(7) = "); print_result(is_prime(7))
@@ -139,7 +139,7 @@ F demo_primes() -> i64 {
     0
 }
 
-F demo_math() -> i64 {
+fn demo_math() -> i64 {
     puts("=== Math Operations ===")
     puts("gcd(48, 18) = "); print_result(gcd(48, 18))
     puts("lcm(12, 8) = "); print_result(lcm(12, 8))
@@ -153,7 +153,7 @@ F demo_math() -> i64 {
 
 # === Main Entry Point ===
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Math CLI Tool v1.0 - Written in Vais")
     puts("")
     demo_fibonacci()

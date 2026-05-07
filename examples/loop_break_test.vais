@@ -1,6 +1,6 @@
 # Test loop with break in if-else
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Loop Break Test ===")
 
     # Test 1: Simple loop with break

@@ -1,5 +1,5 @@
 # Printf test - simple format string
-F main() -> i64 {
+fn main() -> i64 {
     x := 42
     puts("Hello from Vais!")
     printf("The answer is: ")

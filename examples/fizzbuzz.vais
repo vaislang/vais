@@ -3,22 +3,22 @@
 #
 # Run: vaisc run examples/fizzbuzz.vais
 
-F fizzbuzz(n: i64) -> i64 {
+fn fizzbuzz(n: i64) -> i64 {
     LF i:1..n+1 {
         I i % 15 == 0 {
             puts("FizzBuzz")
-        } EL I i % 3 == 0 {
+        } else I i % 3 == 0 {
             puts("Fizz")
-        } EL I i % 5 == 0 {
+        } else I i % 5 == 0 {
             puts("Buzz")
-        } EL {
+        } else {
             puts("{i}")
         }
     }
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== FizzBuzz 1..20 ===")
     fizzbuzz(20)
 }

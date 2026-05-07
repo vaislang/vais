@@ -1,17 +1,17 @@
 # String type test
 
-S String {
+struct String {
     data: i64,
     len: i64,
     cap: i64
 }
 
-X String {
-    F len(&self) -> i64 {
+impl String {
+    fn len(&self) -> i64 {
         self.len
     }
 
-    F push_char(&self, c: i64) -> i64 {
+    fn push_char(&self, c: i64) -> i64 {
         ptr := self.data + self.len
         store_byte(ptr, c)
         self.len = self.len + 1
@@ -19,13 +19,13 @@ X String {
         self.len
     }
 
-    F print(&self) -> i64 {
+    fn print(&self) -> i64 {
         puts_ptr(self.data)
         0
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Testing String type:")
 
     # Allocate and create string

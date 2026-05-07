@@ -2,60 +2,60 @@
 # Tests ALL core Vais language features in one file
 
 # ===== 1. ENUM DEFINITION =====
-EN Status {
+enum Status {
     Pending,
     Active,
     Done
 }
 
-EN Result {
+enum Result {
     Success(i64),
     Error
 }
 
 # ===== 2. STRUCT DEFINITIONS =====
-S Point {
+struct Point {
     x: i64,
     y: i64
 }
 
-X Point {
-    F sum(&self) -> i64 = self.x + self.y
+impl Point {
+    fn sum(&self) -> i64 = self.x + self.y
 
-    F scale(&self, factor: i64) -> i64 = (self.x + self.y) * factor
+    fn scale(&self, factor: i64) -> i64 = (self.x + self.y) * factor
 }
 
 # ===== 3. GENERIC STRUCT =====
-S Pair<T> {
+struct Pair<T> {
     first: T,
     second: T
 }
 
-X Pair {
-    F sum(&self) -> i64 = self.first + self.second
+impl Pair {
+    fn sum(&self) -> i64 = self.first + self.second
 }
 
 # ===== 4. RECURSIVE FUNCTION (using @) =====
-F factorial(n: i64) -> i64 = n <= 1 ? 1 : n * @(n - 1)
+fn factorial(n: i64) -> i64 = n <= 1 ? 1 : n * @(n - 1)
 
 # ===== 5. PATTERN MATCHING HELPER =====
-F status_code(s: Status) -> i64 {
-    M s {
+fn status_code(s: Status) -> i64 {
+    match s {
         Pending => 0,
         Active => 1,
         Done => 2
     }
 }
 
-F result_value(r: Result) -> i64 {
-    M r {
+fn result_value(r: Result) -> i64 {
+    match r {
         Success(v) => v,
         Error => -1
     }
 }
 
 # ===== MAIN TEST SUITE =====
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== VAIS PROTOTYPE VERIFICATION ===")
     putchar(10)
 
@@ -205,7 +205,7 @@ F main() -> i64 {
     # ===== TEST 9: IF-ELSE EXPRESSIONS =====
     puts("Test 9: If-Else Expressions")
     num := 8
-    result := I num > 5 { 1 } EL { 0 }
+    result := I num > 5 { 1 } else { 0 }
 
     puts("  (8 > 5) ? 1 : 0 = 1")
     putchar(result + 48)

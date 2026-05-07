@@ -1,19 +1,19 @@
 # BTreeMap test
 
-U std/btreemap
+use std/btreemap
 
-F verify_keys(map: i64) -> i64 {
+fn verify_keys(map: i64) -> i64 {
     I btreemap_get(map, 1) != 10 { 0 }
-    EL I btreemap_get(map, 5) != 50 { 0 }
-    EL I btreemap_get(map, 8) != 80 { 0 }
-    EL I btreemap_get(map, 15) != 150 { 0 }
-    EL I btreemap_get(map, 20) != 200 { 0 }
-    EL I btreemap_get(map, 25) != 250 { 0 }
-    EL I btreemap_get(map, 30) != 300 { 0 }
-    EL { 1 }
+    else I btreemap_get(map, 5) != 50 { 0 }
+    else I btreemap_get(map, 8) != 80 { 0 }
+    else I btreemap_get(map, 15) != 150 { 0 }
+    else I btreemap_get(map, 20) != 200 { 0 }
+    else I btreemap_get(map, 25) != 250 { 0 }
+    else I btreemap_get(map, 30) != 300 { 0 }
+    else { 1 }
 }
 
-F print_num(n: i64) -> i64 {
+fn print_num(n: i64) -> i64 {
     I n >= 100 {
         putchar((n / 100) % 10 + 48)
     }
@@ -24,7 +24,7 @@ F print_num(n: i64) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== BTreeMap Test ===")
 
     # Test 1: Create and basic operations
@@ -112,7 +112,7 @@ F main() -> i64 {
     I ok == 1 {
         puts("  All keys verified: OK")
         0
-    } EL {
+    } else {
         puts("  Verification FAILED")
         0
     }

@@ -1,13 +1,13 @@
 # Test - no impl methods, just enum and main function use
 
-EN SimpleOption<T> {
+enum SimpleOption<T> {
     None,
     Some(T)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     x := Some(42)
-    M x {
+    match x {
         Some(v) => v,
         None => 0
     }

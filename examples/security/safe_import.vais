@@ -2,13 +2,13 @@
 # This file demonstrates proper import usage
 
 # Import from standard library - SAFE
-U std/vec
+use std/vec
 
 # Import from local module - SAFE (when module exists)
 # U utils
 
 # Function that uses imported functionality
-F main() -> () {
+fn main() -> () {
     # Use vec functionality (when std/vec is properly implemented)
     ()
 }

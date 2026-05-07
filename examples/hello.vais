@@ -1,2 +1,2 @@
 # Main function that returns exit code
-F main()->i64 = 42
+fn main()->i64 = 42

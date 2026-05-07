@@ -5,43 +5,43 @@
 # - Shared state across reloads
 # - Dynamic behavior changes
 
-U std/option
+use std/option
 
-S Vec2 {
+struct Vec2 {
     x: f64,
     y: f64,
 }
 
-S Particle {
+struct Particle {
     pos: Vec2,
     vel: Vec2,
     life: f64,
 }
 
-S ParticleSystem {
+struct ParticleSystem {
     count: i64
 }
 
 # Simplified functions
-F update_physics(dt: f64) -> i64 {
+fn update_physics(dt: f64) -> i64 {
     0
 }
 
-F render_particle(index: i64) -> i64 {
+fn render_particle(index: i64) -> i64 {
     printf("  P%02ld\n", index)
     0
 }
 
-F spawn_particle(index: i64) -> i64 {
+fn spawn_particle(index: i64) -> i64 {
     0
 }
 
 N "C" {
-    F printf(fmt: *i8, ...) -> i64;
-    F usleep(usec: i64) -> i64;
+    fn printf(fmt: *i8, ...) -> i64;
+    fn usleep(usec: i64) -> i64;
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     system := ParticleSystem {
         count: 5
     }

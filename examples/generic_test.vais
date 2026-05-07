@@ -1,7 +1,7 @@
 # Generic function test (simple identity)
-F identity<T>(x: T) -> T = x
+fn identity<T>(x: T) -> T = x
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Testing generics:")
 
     a := identity(42)

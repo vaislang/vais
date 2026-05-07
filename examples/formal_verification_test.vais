@@ -3,40 +3,40 @@
 
 # Test 1: Basic requires (precondition)
 #[requires(x > 0)]
-F abs_positive(x: i64) -> i64 {
+fn abs_positive(x: i64) -> i64 {
     x
 }
 
 # Test 2: Basic ensures (postcondition)
 #[ensures(return >= 0)]
-F abs_simple(x: i64) -> i64 {
-    I x < 0 { -x } EL { x }
+fn abs_simple(x: i64) -> i64 {
+    I x < 0 { -x } else { x }
 }
 
 # Test 3: Both requires and ensures
 #[requires(n >= 0)]
 #[ensures(return >= 1)]
-F factorial(n: i64) -> i64 {
-    I n <= 1 { R 1 }
-    R n * factorial(n - 1)
+fn factorial(n: i64) -> i64 {
+    I n <= 1 { return 1 }
+    return n * factorial(n - 1)
 }
 
 # Test 4: Multiple requires clauses
 #[requires(a > 0)]
 #[requires(b > 0)]
 #[ensures(return > 0)]
-F multiply_positive(a: i64, b: i64) -> i64 {
+fn multiply_positive(a: i64, b: i64) -> i64 {
     a * b
 }
 
 # Test 5: Assert expression
-partial F test_assert(x: i64) -> i64 {
+partial fn test_assert(x: i64) -> i64 {
     assert(x >= 0)
     x * 2
 }
 
 # Test 6: Assume expression
-F test_assume(x: i64) -> i64 {
+fn test_assume(x: i64) -> i64 {
     assume(x > 0)
     x - 1
 }
@@ -44,19 +44,19 @@ F test_assume(x: i64) -> i64 {
 # Test 7: Decreases for termination
 #[requires(n >= 0)]
 #[decreases(n)]
-F factorial_decreases(n: i64) -> i64 {
-    I n <= 1 { R 1 }
-    R n * factorial_decreases(n - 1)
+fn factorial_decreases(n: i64) -> i64 {
+    I n <= 1 { return 1 }
+    return n * factorial_decreases(n - 1)
 }
 
 # Test 8: old() in ensures clause
 #[ensures(return == old(x) + 1)]
-F increment(x: i64) -> i64 {
+fn increment(x: i64) -> i64 {
     x + 1
 }
 
 # Main function for testing
-partial F main() -> i64 {
+partial fn main() -> i64 {
     result1 := abs_positive(5)
     result2 := abs_simple(-3)
     result3 := factorial(5)

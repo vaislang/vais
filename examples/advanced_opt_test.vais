@@ -2,7 +2,7 @@
 # Tests for alias analysis, auto-vectorization, and cache-friendly data layout
 
 # Test struct for data layout optimization
-S Point {
+struct Point {
     x: i64,
     y: i64,
 
@@ -10,7 +10,7 @@ S Point {
 }
 
 # Struct with suboptimal layout (padding between fields)
-S MixedLayout {
+struct MixedLayout {
     flag: i64,
     value: i64,
     small: i64,
@@ -19,7 +19,7 @@ S MixedLayout {
 }
 
 # Function with non-escaping pointers (should benefit from alias analysis)
-F local_computation(x: i64, y: i64) -> i64 {
+fn local_computation(x: i64, y: i64) -> i64 {
     a := x + y
     b := x * 2
     c := y * 3
@@ -27,7 +27,7 @@ F local_computation(x: i64, y: i64) -> i64 {
 }
 
 # Simple vectorizable loop pattern (unit stride access)
-F vector_add(a: *i64, b: *i64, result: *i64, n: i64) -> i64 {
+fn vector_add(a: *i64, b: *i64, result: *i64, n: i64) -> i64 {
     i := mut 0
     L {
         I i >= n { B 0 }
@@ -38,7 +38,7 @@ F vector_add(a: *i64, b: *i64, result: *i64, n: i64) -> i64 {
 }
 
 # Vectorizable reduction pattern
-F sum_array(arr: *i64, n: i64) -> i64 {
+fn sum_array(arr: *i64, n: i64) -> i64 {
     sum := mut 0
     i := mut 0
     L {
@@ -50,8 +50,8 @@ F sum_array(arr: *i64, n: i64) -> i64 {
 }
 
 # Non-vectorizable due to loop-carried dependency
-F fibonacci_array(arr: *i64, n: i64) -> i64 {
-    I n < 2 { R 0 }
+fn fibonacci_array(arr: *i64, n: i64) -> i64 {
+    I n < 2 { return 0 }
     arr[0] = 0
     arr[1] = 1
     i := mut 2
@@ -63,21 +63,21 @@ F fibonacci_array(arr: *i64, n: i64) -> i64 {
     0
 }
 
-F print_i64(x: i64) -> i64 {
+fn print_i64(x: i64) -> i64 {
     I x >= 100 {
         putchar(x / 100 + 48)
         putchar((x / 10) % 10 + 48)
         putchar(x % 10 + 48)
-    } EL I x >= 10 {
+    } else I x >= 10 {
         putchar(x / 10 + 48)
         putchar(x % 10 + 48)
-    } EL {
+    } else {
         putchar(x + 48)
     }
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Advanced Optimization Test ===")
 
     # Test local computation

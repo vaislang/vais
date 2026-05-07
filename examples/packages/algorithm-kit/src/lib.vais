@@ -3,7 +3,7 @@
 # Provides fibonacci, power, integer square root (Newton), and Collatz utilities.
 
 # Fibonacci (iterative, O(n))
-F fibonacci(n: i64) -> i64 {
+fn fibonacci(n: i64) -> i64 {
     I n < 2 { ret n; }
     a := mut 0
     b := mut 1
@@ -20,7 +20,7 @@ F fibonacci(n: i64) -> i64 {
 
 # Integer power: base^exp (exp >= 0)
 # Uses fast exponentiation (exponentiation by squaring)
-F power(base: i64, exp: i64) -> i64 {
+fn power(base: i64, exp: i64) -> i64 {
     I exp == 0 { ret 1; }
     I exp == 1 { ret base; }
     result := mut 1
@@ -39,7 +39,7 @@ F power(base: i64, exp: i64) -> i64 {
 
 # Integer square root using Newton's method
 # Returns floor(sqrt(n)) for n >= 0
-F newton_sqrt(n: i64) -> i64 {
+fn newton_sqrt(n: i64) -> i64 {
     I n <= 1 { ret n; }
     x := mut n / 2
     L {
@@ -52,7 +52,7 @@ F newton_sqrt(n: i64) -> i64 {
 
 # Collatz steps: count steps until n reaches 1
 # The Collatz conjecture: if even -> n/2, if odd -> 3n+1
-F collatz_steps(n: i64) -> i64 {
+fn collatz_steps(n: i64) -> i64 {
     I n <= 1 { ret 0; }
     steps := mut 0
     val := mut n
@@ -60,7 +60,7 @@ F collatz_steps(n: i64) -> i64 {
         I val <= 1 { B 0 }
         I val % 2 == 0 {
             val = val / 2
-        } EL {
+        } else {
             val = val * 3 + 1
         }
         steps = steps + 1
@@ -69,10 +69,10 @@ F collatz_steps(n: i64) -> i64 {
 }
 
 # Absolute value (re-exported concept from math-utils dependency)
-F abs(x: i64) -> i64 = x < 0 ? 0 - x : x
+fn abs(x: i64) -> i64 = x < 0 ? 0 - x : x
 
 # Helper: print a number
-F print_num(n: i64) -> i64 {
+fn print_num(n: i64) -> i64 {
     I n == 0 {
         putchar(48)
         putchar(10)
@@ -101,7 +101,7 @@ F print_num(n: i64) -> i64 {
 
 # --- Demo main ---
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== algorithm-kit demo ===")
 
     # Fibonacci

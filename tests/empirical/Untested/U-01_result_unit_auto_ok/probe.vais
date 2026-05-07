@@ -1,9 +1,9 @@
-F do_nothing() {
-    R
+fn do_nothing() {
+    return
 }
-F take_result() -> Result<i64, str> {
-    R do_nothing()
+fn take_result() -> Result<i64, str> {
+    return do_nothing()
 }
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }

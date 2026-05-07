@@ -1,6 +1,6 @@
 # Hello World #8: match expression on integer
-F grade(score: i64) -> i64 {
-    M score {
+fn grade(score: i64) -> i64 {
+    match score {
         90..=100 => 4,    # A
         80..=89  => 3,    # B
         70..=79  => 2,    # C
@@ -9,6 +9,6 @@ F grade(score: i64) -> i64 {
     }
 }
 
-F main() -> i64 {
-    R grade(85)    # exit 3 (B)
+fn main() -> i64 {
+    return grade(85)    # exit 3 (B)
 }

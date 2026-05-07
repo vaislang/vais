@@ -8,7 +8,7 @@
 #   0 = noop (returns 1)
 #   1 = fib(20)
 #   2 = sum 1..100
-F run_iterations(n: i64, func_id: i64) -> i64 {
+fn run_iterations(n: i64, func_id: i64) -> i64 {
     acc := mut 0
     i := mut 0
     L {
@@ -28,10 +28,10 @@ F run_iterations(n: i64, func_id: i64) -> i64 {
 }
 
 # Internal: fibonacci for benchmarking
-F bench_fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
+fn bench_fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
 
 # Internal: sum from 1 to n
-F bench_sum(n: i64) -> i64 {
+fn bench_sum(n: i64) -> i64 {
     total := mut 0
     i := mut 1
     L {
@@ -44,7 +44,7 @@ F bench_sum(n: i64) -> i64 {
 
 # Accumulate: apply a simple fold over a range [0, n)
 # Returns sum of f(i) where f(i) = i * i (square each index)
-F accumulate_squares(n: i64) -> i64 {
+fn accumulate_squares(n: i64) -> i64 {
     acc := mut 0
     i := mut 0
     L {
@@ -57,10 +57,10 @@ F accumulate_squares(n: i64) -> i64 {
 
 # Black hole: consume a value to prevent dead-code elimination
 # Just returns the value (identity), but the call itself is a barrier.
-F black_hole(x: i64) -> i64 = x
+fn black_hole(x: i64) -> i64 = x
 
 # Helper: print a number
-F print_num(n: i64) -> i64 {
+fn print_num(n: i64) -> i64 {
     I n == 0 {
         putchar(48)
         putchar(10)
@@ -89,7 +89,7 @@ F print_num(n: i64) -> i64 {
 
 # --- Demo main ---
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== benchmark-utils demo ===")
 
     # Run noop 1000 times

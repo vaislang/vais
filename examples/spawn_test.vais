@@ -2,22 +2,22 @@
 # (Phase 195: spawn keyword removed in ROADMAP #15; migrated to plain async/await)
 
 # Async computation that simulates work
-A F slow_compute(x: i64) -> i64 {
+A fn slow_compute(x: i64) -> i64 {
     x * 2
 }
 
-A F fast_compute(x: i64) -> i64 {
+A fn fast_compute(x: i64) -> i64 {
     x + 1
 }
 
 # Chain of async operations
-A F chain_compute(x: i64) -> i64 {
+A fn chain_compute(x: i64) -> i64 {
     a := slow_compute(x).await
     b := fast_compute(a).await
     a + b
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Spawn Test ===")
     putchar(10)
 

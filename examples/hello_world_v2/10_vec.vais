@@ -1,7 +1,7 @@
 # Hello World #10: Vec<i64> push, len, index
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     LF i: 1..=5 {
         v.push(i)
@@ -10,5 +10,5 @@ F main() -> i64 {
     LF i: 0..v.len() {
         sum = sum + v[i]
     }
-    R sum    # exit 15 (1+2+3+4+5)
+    return sum    # exit 15 (1+2+3+4+5)
 }

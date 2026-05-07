@@ -2,21 +2,21 @@
 # Tests the unified Reactor API that wraps kqueue/epoll/IOCP
 
 # Import platform detection
-X F async_platform() -> i64
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F store_i64(ptr: i64, value: i64) -> i64
-X F load_i64(ptr: i64) -> i64
-X F time_now_ms() -> i64
-X F kqueue() -> i64
-X F kevent_register(kq: i64, fd: i64, filter: i64, flags: i64) -> i64
-X F kevent_wait(kq: i64, events_buf: i64, max_events: i64, timeout_ms: i64) -> i64
-X F kevent_get_fd(events_buf: i64, index: i64) -> i64
-X F kevent_get_filter(events_buf: i64, index: i64) -> i64
-X F close(fd: i64) -> i64
-X F pipe(fds_buf: i64) -> i64
-X F write_byte(fd: i64, value: i64) -> i64
-X F read_byte(fd: i64) -> i64
+impl fn async_platform() -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn store_i64(ptr: i64, value: i64) -> i64
+impl fn load_i64(ptr: i64) -> i64
+impl fn time_now_ms() -> i64
+impl fn kqueue() -> i64
+impl fn kevent_register(kq: i64, fd: i64, filter: i64, flags: i64) -> i64
+impl fn kevent_wait(kq: i64, events_buf: i64, max_events: i64, timeout_ms: i64) -> i64
+impl fn kevent_get_fd(events_buf: i64, index: i64) -> i64
+impl fn kevent_get_filter(events_buf: i64, index: i64) -> i64
+impl fn close(fd: i64) -> i64
+impl fn pipe(fds_buf: i64) -> i64
+impl fn write_byte(fd: i64, value: i64) -> i64
+impl fn read_byte(fd: i64) -> i64
 
 # Platform constants
 C PLATFORM_MACOS: i64 = 1
@@ -29,7 +29,7 @@ C EVFILT_WRITE: i64 = -2
 C EV_ADD: i64 = 1
 C EV_DELETE: i64 = 2
 
-F main() -> i64 {
+fn main() -> i64 {
     # Test 1: Platform detection
     platform := async_platform()
     puts("=== Async Reactor Cross-Platform Test ===")
@@ -45,14 +45,14 @@ F main() -> i64 {
     }
     LW platform == 0 {
         puts("Platform: Unknown")
-        R 1
+        return 1
     }
 
     # Test 2: Create event backend
     kq := kqueue()
     LW kq < 0 {
         puts("FAIL: Could not create event backend")
-        R 1
+        return 1
     }
     puts("PASS: Event backend created")
 
@@ -65,7 +65,7 @@ F main() -> i64 {
 
     LW read_fd < 0 {
         puts("FAIL: Could not create pipe")
-        R 1
+        return 1
     }
     puts("PASS: Pipe created")
 

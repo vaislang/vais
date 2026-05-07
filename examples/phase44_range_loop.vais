@@ -1,7 +1,7 @@
 # Phase 44 Cross-verify: Range struct & for loops (Phase 41)
 # Tests exclusive range, inclusive range, and nested loops
 
-F main() -> i64 {
+fn main() -> i64 {
     # Exclusive range: 0..5 => 0+1+2+3+4 = 10
     sum := mut 0
     LF i:0..5 {

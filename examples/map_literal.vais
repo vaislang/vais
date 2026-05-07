@@ -1,7 +1,7 @@
 # Map literal syntax test
 # {key: value, ...} creates a map (parallel arrays)
 
-F main() -> i64 {
+fn main() -> i64 {
     # Simple integer map
     m := {1: 10, 2: 20, 3: 30}
 

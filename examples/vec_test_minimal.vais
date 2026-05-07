@@ -1,7 +1,7 @@
 # Minimal vec test
-U std/vec
+use std/vec
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Creating vec...")
     v := vec_new()
 

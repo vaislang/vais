@@ -1,2 +1,2 @@
-F id<T>(x: T) -> T { R x }
-F main() -> i64 { R id(11) }
+fn id<T>(x: T) -> T { return x }
+fn main() -> i64 { return id(11) }

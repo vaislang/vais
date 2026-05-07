@@ -7,7 +7,7 @@
 # 4. The running program will automatically reload the new code
 
 # Game state structure
-S GameState {
+struct GameState {
     frame: i64,
     x: i64,
     y: i64,
@@ -15,19 +15,19 @@ S GameState {
 
 # Hot-reloadable game update function
 # Try changing the logic here while the program runs!
-F game_update(state: &GameState) -> i64 {
+fn game_update(state: &GameState) -> i64 {
     puts("Game update called")
     0
 }
 
 # External C functions
 N "C" {
-    F printf(fmt: *i8, ...) -> i64;
-    F usleep(usec: i64) -> i64;
+    fn printf(fmt: *i8, ...) -> i64;
+    fn usleep(usec: i64) -> i64;
 }
 
 # Main function (not hot-reloadable as it holds state)
-F main() -> i64 {
+fn main() -> i64 {
     # Initialize game state
     state := GameState { frame: 0, x: 0, y: 0 }
 

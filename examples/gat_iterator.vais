@@ -1,23 +1,23 @@
 # GAT Iterator pattern
 # Demonstrates Generic Associated Types with iterator-like trait
 
-W Iterable {
-    T Item
-    F iter(&self) -> i64
+trait Iterable {
+    type Item
+    fn iter(&self) -> i64
 }
 
-S Numbers {
+struct Numbers {
     count: i64
 }
 
-X Numbers: Iterable {
-    T Item = i64
-    F iter(&self) -> i64 {
+impl Numbers: Iterable {
+    type Item = i64
+    fn iter(&self) -> i64 {
         self.count
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     n := Numbers { count: 42 }
     n.iter()
 }

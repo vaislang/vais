@@ -1,5 +1,5 @@
 # Phase 84: Bitwise operations
-F main() -> i64 {
+fn main() -> i64 {
     a := 255   # 0xFF
     b := 15    # 0x0F
 

@@ -1,9 +1,9 @@
 # Pattern alias (@) syntax examples
 
 # Basic alias with tuple pattern
-F test_tuple_alias() -> i64 {
+fn test_tuple_alias() -> i64 {
     x := (1, 2, 3)
-    M x {
+    match x {
         t @ (a, b, c) => {
             # t is bound to the whole tuple (1, 2, 3)
             # a, b, c are bound to individual elements
@@ -13,14 +13,14 @@ F test_tuple_alias() -> i64 {
 }
 
 # Alias with enum variant pattern
-EN Option<T> {
+enum Option<T> {
     Some(T),
     None
 }
 
-F test_option_alias() -> i64 {
+fn test_option_alias() -> i64 {
     opt := Some(42)
-    M opt {
+    match opt {
         whole @ Some(val) => {
             # whole is bound to Some(42)
             # val is bound to 42
@@ -31,9 +31,9 @@ F test_option_alias() -> i64 {
 }
 
 # Alias with literal pattern
-F test_literal_alias() -> i64 {
+fn test_literal_alias() -> i64 {
     x := 30
-    M x {
+    match x {
         n @ 30 => {
             # n is bound to the matched value
             n  # Returns 30
@@ -43,9 +43,9 @@ F test_literal_alias() -> i64 {
 }
 
 # Nested alias patterns
-F test_nested_alias() -> i64 {
+fn test_nested_alias() -> i64 {
     x := (Some(5), Some(10))
-    M x {
+    match x {
         both @ (first @ Some(a), second @ Some(b)) => {
             # both is bound to the whole tuple
             # first is bound to Some(5), second to Some(10)
@@ -57,9 +57,9 @@ F test_nested_alias() -> i64 {
 }
 
 # Alias with wildcard (always matches)
-F test_wildcard_alias() -> i64 {
+fn test_wildcard_alias() -> i64 {
     x := 20
-    M x {
+    match x {
         n @ _ => {
             # n is bound to the matched value
             n  # Returns 20
@@ -68,7 +68,7 @@ F test_wildcard_alias() -> i64 {
 }
 
 # Main function to test all cases
-F main() -> i64 {
+fn main() -> i64 {
     t := test_tuple_alias()
     o := test_option_alias()
     l := test_literal_alias()

@@ -3,6 +3,6 @@ O Either {
     B: i64,
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }

@@ -1,14 +1,14 @@
 # Hello World #9: Result<T, E> + match
-F safe_div(a: i64, b: i64) -> Result<i64, i64> {
-    I b == 0 { R Err(0) }
+fn safe_div(a: i64, b: i64) -> Result<i64, i64> {
+    I b == 0 { return Err(0) }
     Ok(a / b)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     r: Result<i64, i64> := safe_div(20, 4)
-    out: i64 := M r {
+    out: i64 := match r {
         Ok(v)  => v,
         Err(_) => 99,
     }
-    R out    # exit 5
+    return out    # exit 5
 }

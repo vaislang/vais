@@ -1,10 +1,10 @@
-F double(x: i64) -> i64 { x * 2 }
+fn double(x: i64) -> i64 { x * 2 }
 
-F apply(f: fn(i64) -> i64, n: i64) -> i64 {
+fn apply(f: fn(i64) -> i64, n: i64) -> i64 {
     f(n)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # Predicate violation: pass an i64 literal where fn(i64) -> i64
     # is expected. Type checker rejects with E001 'expected fn(i64)->i64,
     # found i64'.

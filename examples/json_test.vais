@@ -2,9 +2,9 @@
 # Note: json_parse requires i64 pointer, which cannot be directly created
 # from string literals in user code. Use the builder API instead.
 
-U std/json
+use std/json
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== JSON Module Test ===")
 
     # Test 1: Create and stringify primitives

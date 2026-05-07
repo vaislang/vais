@@ -3,25 +3,25 @@
 
 # Example 1: Basic function
 # Code Action: "Import sqrt from std/math"
-F add_numbers(x: i64, y: i64) -> i64 = x + y
+fn add_numbers(x: i64, y: i64) -> i64 = x + y
 
 # Example 2: Simple multiplication
 # Code Action: "Cast to f64"
-F double_number(n: i64) -> i64 = n * 2
+fn double_number(n: i64) -> i64 = n * 2
 
 # Print a number using putchar
-F print_num(n: i64) -> i64 {
+fn print_num(n: i64) -> i64 {
     I n >= 10 {
         print_num(n / 10)
         0
-    } EL {
+    } else {
         0
     }
     putchar(n % 10 + 48)
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # Select '42' and apply code action to cast to i64
     result: i64 = double_number(42)
 

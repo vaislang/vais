@@ -1,10 +1,10 @@
 # Chat Room Management
 # Handles client list and message broadcasting
 
-X F __malloc(size: i64) -> i64
-X F __free(ptr: i64) -> i64
-X F __tcp_send(fd: i64, data: i64, len: i64) -> i64
-X F puts(s: str) -> i64
+impl fn __malloc(size: i64) -> i64
+impl fn __free(ptr: i64) -> i64
+impl fn __tcp_send(fd: i64, data: i64, len: i64) -> i64
+impl fn puts(s: str) -> i64
 
 # ChatRoom struct layout:
 # - clients_ptr: i64 (pointer to client fd array)
@@ -12,7 +12,7 @@ X F puts(s: str) -> i64
 # - max_clients: i64
 
 # Add a client to the room
-F add_client(room_ptr: i64, fd: i64) -> i64 {
+fn add_client(room_ptr: i64, fd: i64) -> i64 {
     clients_ptr := load_i64(room_ptr)
     count := load_i64(room_ptr + 8)
     max_clients := load_i64(room_ptr + 16)
@@ -20,7 +20,7 @@ F add_client(room_ptr: i64, fd: i64) -> i64 {
     # Check if room is full
     I count >= max_clients {
         puts("ERROR: Chat room is full!")
-        R 0
+        return 0
     }
 
     # Add client fd to array
@@ -35,7 +35,7 @@ F add_client(room_ptr: i64, fd: i64) -> i64 {
 }
 
 # Remove a client from the room
-F remove_client(room_ptr: i64, fd: i64) -> i64 {
+fn remove_client(room_ptr: i64, fd: i64) -> i64 {
     clients_ptr := load_i64(room_ptr)
     count := load_i64(room_ptr + 8)
 
@@ -55,7 +55,7 @@ F remove_client(room_ptr: i64, fd: i64) -> i64 {
     }
 
     # If not found, return 0
-    I found_idx < 0 { R 0 }
+    I found_idx < 0 { return 0 }
 
     # Shift remaining clients down
     shift_idx := mut found_idx
@@ -78,7 +78,7 @@ F remove_client(room_ptr: i64, fd: i64) -> i64 {
 
 # Broadcast message to all clients except sender
 # Takes message as raw pointer and length to avoid ownership issues
-F broadcast(room_ptr: i64, msg_ptr: i64, msg_len: i64, sender_fd: i64) -> i64 {
+fn broadcast(room_ptr: i64, msg_ptr: i64, msg_len: i64, sender_fd: i64) -> i64 {
     clients_ptr := load_i64(room_ptr)
     count := load_i64(room_ptr + 8)
 

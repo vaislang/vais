@@ -2,7 +2,7 @@
 # Tests circular buffer operations using low-level primitives
 
 # Helper: print a number (up to 3 digits)
-F print_num(n: i64) -> i64 {
+fn print_num(n: i64) -> i64 {
     I n >= 100 {
         d1 := n / 100
         putchar(d1 + 48)
@@ -24,7 +24,7 @@ F print_num(n: i64) -> i64 {
 # cap: capacity
 
 # Create a new deque with given capacity
-F deque_create(capacity: i64) -> i64 {
+fn deque_create(capacity: i64) -> i64 {
     # Allocate deque struct: 5 fields * 8 bytes = 40 bytes
     dq := malloc(40)
     data := malloc(capacity * 8)
@@ -39,22 +39,22 @@ F deque_create(capacity: i64) -> i64 {
 }
 
 # Get deque length
-F deque_len(dq: i64) -> i64 {
+fn deque_len(dq: i64) -> i64 {
     load_i64(dq + 24)
 }
 
 # Get deque capacity
-F deque_cap(dq: i64) -> i64 {
+fn deque_cap(dq: i64) -> i64 {
     load_i64(dq + 32)
 }
 
 # Check if deque is empty
-F deque_is_empty(dq: i64) -> i64 {
-    I deque_len(dq) == 0 { 1 } EL { 0 }
+fn deque_is_empty(dq: i64) -> i64 {
+    I deque_len(dq) == 0 { 1 } else { 0 }
 }
 
 # Push element to back
-F deque_push_back(dq: i64, value: i64) -> i64 {
+fn deque_push_back(dq: i64, value: i64) -> i64 {
     data := load_i64(dq)
     tail := load_i64(dq + 16)
     len := load_i64(dq + 24)
@@ -65,7 +65,7 @@ F deque_push_back(dq: i64, value: i64) -> i64 {
 
     # Update tail (wrap around)
     new_tail := tail + 1
-    wrapped_tail := I new_tail >= cap { 0 } EL { new_tail }
+    wrapped_tail := I new_tail >= cap { 0 } else { new_tail }
     store_i64(dq + 16, wrapped_tail)
 
     # Update length
@@ -75,14 +75,14 @@ F deque_push_back(dq: i64, value: i64) -> i64 {
 }
 
 # Push element to front
-F deque_push_front(dq: i64, value: i64) -> i64 {
+fn deque_push_front(dq: i64, value: i64) -> i64 {
     data := load_i64(dq)
     head := load_i64(dq + 8)
     len := load_i64(dq + 24)
     cap := load_i64(dq + 32)
 
     # Move head back (wrap around)
-    new_head := I head == 0 { cap - 1 } EL { head - 1 }
+    new_head := I head == 0 { cap - 1 } else { head - 1 }
     store_i64(dq + 8, new_head)
 
     # Store value at new head position
@@ -95,17 +95,17 @@ F deque_push_front(dq: i64, value: i64) -> i64 {
 }
 
 # Pop element from back
-F deque_pop_back(dq: i64) -> i64 {
+fn deque_pop_back(dq: i64) -> i64 {
     len := load_i64(dq + 24)
     I len == 0 {
         0  # Return 0 if empty
-    } EL {
+    } else {
         data := load_i64(dq)
         tail := load_i64(dq + 16)
         cap := load_i64(dq + 32)
 
         # Move tail back (wrap around)
-        new_tail := I tail == 0 { cap - 1 } EL { tail - 1 }
+        new_tail := I tail == 0 { cap - 1 } else { tail - 1 }
         store_i64(dq + 16, new_tail)
 
         # Get value at new tail
@@ -119,11 +119,11 @@ F deque_pop_back(dq: i64) -> i64 {
 }
 
 # Pop element from front
-F deque_pop_front(dq: i64) -> i64 {
+fn deque_pop_front(dq: i64) -> i64 {
     len := load_i64(dq + 24)
     I len == 0 {
         0  # Return 0 if empty
-    } EL {
+    } else {
         data := load_i64(dq)
         head := load_i64(dq + 8)
         cap := load_i64(dq + 32)
@@ -133,7 +133,7 @@ F deque_pop_front(dq: i64) -> i64 {
 
         # Move head forward (wrap around)
         new_head := head + 1
-        wrapped_head := I new_head >= cap { 0 } EL { new_head }
+        wrapped_head := I new_head >= cap { 0 } else { new_head }
         store_i64(dq + 8, wrapped_head)
 
         # Update length
@@ -144,11 +144,11 @@ F deque_pop_front(dq: i64) -> i64 {
 }
 
 # Get front element without removing
-F deque_front(dq: i64) -> i64 {
+fn deque_front(dq: i64) -> i64 {
     len := load_i64(dq + 24)
     I len == 0 {
         0
-    } EL {
+    } else {
         data := load_i64(dq)
         head := load_i64(dq + 8)
         load_i64(data + head * 8)
@@ -156,20 +156,20 @@ F deque_front(dq: i64) -> i64 {
 }
 
 # Get back element without removing
-F deque_back(dq: i64) -> i64 {
+fn deque_back(dq: i64) -> i64 {
     len := load_i64(dq + 24)
     I len == 0 {
         0
-    } EL {
+    } else {
         data := load_i64(dq)
         tail := load_i64(dq + 16)
         cap := load_i64(dq + 32)
-        back_idx := I tail == 0 { cap - 1 } EL { tail - 1 }
+        back_idx := I tail == 0 { cap - 1 } else { tail - 1 }
         load_i64(data + back_idx * 8)
     }
 }
 
-F test_push_back() -> i64 {
+fn test_push_back() -> i64 {
     puts("Test 1: Push Back Operations")
 
     dq := deque_create(8)
@@ -199,10 +199,10 @@ F test_push_back() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } EL { 0 } } EL { 0 } } EL { 0 }
+    } else { 0 } } else { 0 } } else { 0 }
 }
 
-F test_push_front() -> i64 {
+fn test_push_front() -> i64 {
     puts("Test 2: Push Front Operations")
 
     dq := deque_create(8)
@@ -232,10 +232,10 @@ F test_push_front() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } EL { 0 } } EL { 0 } } EL { 0 }
+    } else { 0 } } else { 0 } } else { 0 }
 }
 
-F test_pop_operations() -> i64 {
+fn test_pop_operations() -> i64 {
     puts("Test 3: Pop Operations")
 
     dq := deque_create(8)
@@ -266,10 +266,10 @@ F test_pop_operations() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } EL { 0 } } EL { 0 } } EL { 0 }
+    } else { 0 } } else { 0 } } else { 0 }
 }
 
-F test_wrap_around() -> i64 {
+fn test_wrap_around() -> i64 {
     puts("Test 4: Circular Wrap-around")
 
     dq := deque_create(4)  # Small capacity to test wrap
@@ -307,10 +307,10 @@ F test_wrap_around() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } EL { 0 } } EL { 0 } } EL { 0 }
+    } else { 0 } } else { 0 } } else { 0 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Deque Collection Test ===")
     putchar(10)
 
@@ -323,16 +323,16 @@ F main() -> i64 {
     I r1 == 1 { I r2 == 1 { I r3 == 1 { I r4 == 1 {
         puts("=== All Deque Tests PASSED ===")
         0
-    } EL {
+    } else {
         puts("=== Some Tests FAILED ===")
         1
-    } } EL {
+    } } else {
         puts("=== Some Tests FAILED ===")
         1
-    } } EL {
+    } } else {
         puts("=== Some Tests FAILED ===")
         1
-    } } EL {
+    } } else {
         puts("=== Some Tests FAILED ===")
         1
     }

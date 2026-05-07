@@ -1,6 +1,6 @@
 # S3c: Closure with int capture only (isolate str-vs-int capture).
 
-F main() -> i64 {
+fn main() -> i64 {
     n := 42
     show := || puts("n = {n}")
     show()

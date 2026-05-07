@@ -1,21 +1,21 @@
 # Template engine example - demonstrates template rendering with variables,
 # conditionals, loops, filters, and HTML escaping.
 
-U std/template
+use std/template
 
-X F puts(s: str) -> i64
-X F putchar(c: i64) -> i64
-X F free(ptr: i64) -> i64
+impl fn puts(s: str) -> i64
+impl fn putchar(c: i64) -> i64
+impl fn free(ptr: i64) -> i64
 
 # Helper: print a string from a pointer (for rendered results)
-F print_result(label: str, result: str) -> i64 {
+fn print_result(label: str, result: str) -> i64 {
     puts(label)
     puts(result)
     putchar(10)
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Vais Template Engine Example ===\n")
 
     # ------------------------------------------

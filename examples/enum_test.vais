@@ -1,16 +1,16 @@
 # Enum test
-EN Color {
+enum Color {
     Red,
     Green,
     Blue
 }
 
-EN Option {
+enum Option {
     None,
     Some(i64)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Enum types defined!")
     0
 }

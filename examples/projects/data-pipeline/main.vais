@@ -2,21 +2,21 @@
 # CSV → Transform → SQLite ETL Pipeline
 
 # External declarations for file I/O
-X F fopen(path: str, mode: str) -> i64
-X F fprintf(file: i64, fmt: str, arg: i64) -> i64
-X F fprintf_3(file: i64, fmt: str, arg1: str, arg2: i64, arg3: i64) -> i64
-X F fclose(file: i64) -> i64
+impl fn fopen(path: str, mode: str) -> i64
+impl fn fprintf(file: i64, fmt: str, arg: i64) -> i64
+impl fn fprintf_3(file: i64, fmt: str, arg1: str, arg2: i64, arg3: i64) -> i64
+impl fn fclose(file: i64) -> i64
 
 # Import modules (simplified - in real Vais use U directive)
 # For this example, we inline the necessary struct definitions
 
-S CsvRow {
+struct CsvRow {
     name: str,
     age: i64,
     score: i64,
 }
 
-S TransformResult {
+struct TransformResult {
     filtered_rows: i64,
     filtered_count: i64,
     avg_score: i64,
@@ -24,13 +24,13 @@ S TransformResult {
 }
 
 # Module function declarations
-X F read_csv(path: str) -> i64
-X F transform_data(rows: i64, count: i64) -> i64
-X F load_to_database(rows: i64, count: i64, db_path: str) -> i64
-X F write_csv(rows: i64, count: i64, out_path: str)
+impl fn read_csv(path: str) -> i64
+impl fn transform_data(rows: i64, count: i64) -> i64
+impl fn load_to_database(rows: i64, count: i64, db_path: str) -> i64
+impl fn write_csv(rows: i64, count: i64, out_path: str)
 
 # Print pipeline banner
-F print_banner() {
+fn print_banner() {
     puts("=" * 50)
     puts("  DATA PIPELINE - CSV to SQLite ETL")
     puts("=" * 50)
@@ -38,7 +38,7 @@ F print_banner() {
 }
 
 # Print step header
-F print_step(step_num: i64, description: str) {
+fn print_step(step_num: i64, description: str) {
     puts("")
     printf("Step %d: ", step_num)
     puts(description)
@@ -46,14 +46,14 @@ F print_step(step_num: i64, description: str) {
 }
 
 # Error handler
-F handle_error(message: str) {
+fn handle_error(message: str) {
     puts("")
     puts("ERROR: " + message)
     puts("Pipeline aborted.")
 }
 
 # Main pipeline orchestrator
-F main() -> i64 {
+fn main() -> i64 {
     print_banner()
 
     # Configuration
@@ -67,7 +67,7 @@ F main() -> i64 {
     csv_result := read_csv(input_file)
     I csv_result == 0 {
         handle_error("Failed to read CSV file")
-        R 1
+        return 1
     }
 
     row_count := load_i64(csv_result)
@@ -81,7 +81,7 @@ F main() -> i64 {
     transform_result := transform_data(rows, row_count)
     I transform_result == 0 {
         handle_error("Failed to transform data")
-        R 1
+        return 1
     }
 
     filtered_rows := load_i64(transform_result)
@@ -100,7 +100,7 @@ F main() -> i64 {
     db_status := load_to_database(filtered_rows, filtered_count, output_db)
     I db_status == 0 {
         handle_error("Failed to load data to database")
-        R 1
+        return 1
     }
 
     # Also write to CSV for verification
@@ -117,5 +117,5 @@ F main() -> i64 {
     printf("  - CSV: %s\n", output_csv)
     puts("")
 
-    R 0
+    return 0
 }

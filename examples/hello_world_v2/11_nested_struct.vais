@@ -1,30 +1,30 @@
 # Hello World #11: nested structs + accessor methods
-S Point {
+struct Point {
     x: i64,
     y: i64,
 }
 
-S Rect {
+struct Rect {
     top_left: Point,
     bottom_right: Point,
 }
 
-X Rect {
-    F width(self) -> i64 {
+impl Rect {
+    fn width(self) -> i64 {
         self.bottom_right.x - self.top_left.x
     }
-    F height(self) -> i64 {
+    fn height(self) -> i64 {
         self.bottom_right.y - self.top_left.y
     }
-    F area(self) -> i64 {
+    fn area(self) -> i64 {
         self.width() * self.height()
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     r: Rect := Rect {
         top_left:     Point { x: 0, y: 0 },
         bottom_right: Point { x: 4, y: 5 },
     }
-    R r.area()    # exit 20
+    return r.area()    # exit 20
 }

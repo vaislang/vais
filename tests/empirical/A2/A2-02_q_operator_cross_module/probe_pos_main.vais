@@ -1,13 +1,13 @@
-U inner
+use inner
 
-F outer() -> Result<i64, str> {
+fn outer() -> Result<i64, str> {
     x: i64 = inner_call()?
-    R Ok(x + 1)
+    return Ok(x + 1)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     res := outer()
-    M res {
+    match res {
         Ok(v) => v,
         Err(_) => -1,
     }

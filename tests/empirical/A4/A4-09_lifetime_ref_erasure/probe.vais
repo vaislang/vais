@@ -1,9 +1,9 @@
-F take_lifetime_ref<'a>(r: &'a i64) -> i64 {
-    R 42
+fn take_lifetime_ref<'a>(r: &'a i64) -> i64 {
+    return 42
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     val: i64 = 100
     r: &i64 = &val
-    R take_lifetime_ref(r)
+    return take_lifetime_ref(r)
 }

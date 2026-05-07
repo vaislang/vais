@@ -2,30 +2,30 @@
 # Provides common math operations as pure functions.
 
 # Absolute value of an integer
-F abs(x: i64) -> i64 = x < 0 ? 0 - x : x
+fn abs(x: i64) -> i64 = x < 0 ? 0 - x : x
 
 # Minimum of two integers
-F min(a: i64, b: i64) -> i64 = a < b ? a : b
+fn min(a: i64, b: i64) -> i64 = a < b ? a : b
 
 # Maximum of two integers
-F max(a: i64, b: i64) -> i64 = a > b ? a : b
+fn max(a: i64, b: i64) -> i64 = a > b ? a : b
 
 # Clamp a value between lo and hi (inclusive)
-F clamp(x: i64, lo: i64, hi: i64) -> i64 {
+fn clamp(x: i64, lo: i64, hi: i64) -> i64 {
     I x < lo { ret lo; }
     I x > hi { ret hi; }
     x
 }
 
 # Greatest common divisor using Euclidean algorithm (recursive)
-F gcd(a: i64, b: i64) -> i64 = b == 0 ? a : gcd(b, a % b)
+fn gcd(a: i64, b: i64) -> i64 = b == 0 ? a : gcd(b, a % b)
 
 # Least common multiple
-F lcm(a: i64, b: i64) -> i64 = a / gcd(a, b) * b
+fn lcm(a: i64, b: i64) -> i64 = a / gcd(a, b) * b
 
 # Check if a number is prime
 # Returns 1 if prime, 0 otherwise
-F is_prime(n: i64) -> i64 {
+fn is_prime(n: i64) -> i64 {
     I n < 2 { ret 0; }
     I n < 4 { ret 1; }
     I n % 2 == 0 { ret 0; }
@@ -39,11 +39,11 @@ F is_prime(n: i64) -> i64 {
 }
 
 # Factorial (recursive)
-F factorial(n: i64) -> i64 = n < 2 ? 1 : n * @(n - 1)
+fn factorial(n: i64) -> i64 = n < 2 ? 1 : n * @(n - 1)
 
 # --- Demo main ---
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== math-utils demo ===")
 
     # abs

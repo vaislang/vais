@@ -1,5 +1,5 @@
 # Malloc/Free test
-F main() -> i64 {
+fn main() -> i64 {
     ptr := malloc(100)  # allocate 100 bytes
     puts("Memory allocated!")
     free(ptr)

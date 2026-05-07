@@ -29,7 +29,7 @@ C NODE_SLOTS: i64 = 128
 C NODE_CHILDREN: i64 = 184
 
 # Allocate and initialize a new node
-F btree_new_node(is_leaf: i64) -> i64 {
+fn btree_new_node(is_leaf: i64) -> i64 {
     node := malloc(BTREE_NODE_SIZE)
     store_i64(node + NODE_IS_LEAF, is_leaf)
     store_i64(node + NODE_NUM_KEYS, 0)
@@ -44,56 +44,56 @@ F btree_new_node(is_leaf: i64) -> i64 {
 }
 
 # Get key at index
-F btree_get_key(node: i64, idx: i64) -> i64 {
+fn btree_get_key(node: i64, idx: i64) -> i64 {
     load_i64(node + NODE_KEYS + idx * 8)
 }
 
 # Set key at index
-F btree_set_key(node: i64, idx: i64, key: i64) -> i64 {
+fn btree_set_key(node: i64, idx: i64, key: i64) -> i64 {
     store_i64(node + NODE_KEYS + idx * 8, key)
     0
 }
 
 # Get value (page_id) at index
-F btree_get_value(node: i64, idx: i64) -> i64 {
+fn btree_get_value(node: i64, idx: i64) -> i64 {
     load_i64(node + NODE_VALUES + idx * 8)
 }
 
 # Get slot index at index
-F btree_get_slot(node: i64, idx: i64) -> i64 {
+fn btree_get_slot(node: i64, idx: i64) -> i64 {
     load_i64(node + NODE_SLOTS + idx * 8)
 }
 
 # Get child pointer at index
-F btree_get_child(node: i64, idx: i64) -> i64 {
+fn btree_get_child(node: i64, idx: i64) -> i64 {
     load_i64(node + NODE_CHILDREN + idx * 8)
 }
 
 # B-Tree structure
-S BTree {
+struct BTree {
     root: i64,        # Root node pointer
     num_entries: i64   # Total number of entries
 }
 
-X BTree {
-    F new() -> BTree {
+impl BTree {
+    fn new() -> BTree {
         root := btree_new_node(1)  # Start with empty leaf
         BTree { root: root, num_entries: 0 }
     }
 
     # Search for a key, returns page_id (or 0 if not found)
-    F search(&self, key: i64) -> i64 {
+    fn search(&self, key: i64) -> i64 {
         btree_search_node(self.root, key)
     }
 
     # Search returning both page_id and slot_idx
     # Stores slot_idx at out_slot_ptr
-    F search_full(&self, key: i64, out_slot_ptr: i64) -> i64 {
+    fn search_full(&self, key: i64, out_slot_ptr: i64) -> i64 {
         btree_search_node_full(self.root, key, out_slot_ptr)
     }
 
     # Insert a key -> (page_id, slot_idx) mapping
-    F insert(&self, key: i64, page_id: i64, slot_idx: i64) -> i64 {
+    fn insert(&self, key: i64, page_id: i64, slot_idx: i64) -> i64 {
         # Check if root needs splitting
         root_nk := load_i64(self.root + NODE_NUM_KEYS)
         I root_nk >= BTREE_MAX_KEYS {
@@ -108,13 +108,13 @@ X BTree {
         0
     }
 
-    F len(&self) -> i64 = self.num_entries
+    fn len(&self) -> i64 = self.num_entries
 
     # Range scan: find all keys in [lo, hi]
     # Calls callback-style: stores results in output arrays
     # out_keys, out_pages, out_slots: pre-allocated arrays
     # Returns number of results
-    F range_scan(&self, lo: i64, hi: i64, out_keys: i64, out_pages: i64, out_slots: i64, max_results: i64) -> i64 {
+    fn range_scan(&self, lo: i64, hi: i64, out_keys: i64, out_pages: i64, out_slots: i64, max_results: i64) -> i64 {
         count_ptr := malloc(8)
         store_i64(count_ptr, 0)
         btree_range_scan_node(self.root, lo, hi, out_keys, out_pages, out_slots, max_results, count_ptr)
@@ -123,7 +123,7 @@ X BTree {
         result
     }
 
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         btree_free_node(self.root)
         self.root = 0
         0
@@ -131,8 +131,8 @@ X BTree {
 }
 
 # Search recursively
-F btree_search_node(node: i64, key: i64) -> i64 {
-    I node == 0 { R 0 }
+fn btree_search_node(node: i64, key: i64) -> i64 {
+    I node == 0 { return 0 }
     is_leaf := load_i64(node + NODE_IS_LEAF)
     nk := load_i64(node + NODE_NUM_KEYS)
 
@@ -143,11 +143,11 @@ F btree_search_node(node: i64, key: i64) -> i64 {
     I pos < nk {
         k := btree_get_key(node, pos)
         I k == key {
-            R btree_get_value(node, pos)
+            return btree_get_value(node, pos)
         }
     }
 
-    I is_leaf == 1 { R 0 }
+    I is_leaf == 1 { return 0 }
 
     # Descend to child
     child := btree_get_child(node, pos)
@@ -155,8 +155,8 @@ F btree_search_node(node: i64, key: i64) -> i64 {
 }
 
 # Search returning full info (page_id + slot)
-F btree_search_node_full(node: i64, key: i64, out_slot_ptr: i64) -> i64 {
-    I node == 0 { R 0 }
+fn btree_search_node_full(node: i64, key: i64, out_slot_ptr: i64) -> i64 {
+    I node == 0 { return 0 }
     is_leaf := load_i64(node + NODE_IS_LEAF)
     nk := load_i64(node + NODE_NUM_KEYS)
 
@@ -166,26 +166,26 @@ F btree_search_node_full(node: i64, key: i64, out_slot_ptr: i64) -> i64 {
         k := btree_get_key(node, pos)
         I k == key {
             store_i64(out_slot_ptr, btree_get_slot(node, pos))
-            R btree_get_value(node, pos)
+            return btree_get_value(node, pos)
         }
     }
 
-    I is_leaf == 1 { R 0 }
+    I is_leaf == 1 { return 0 }
 
     child := btree_get_child(node, pos)
     btree_search_node_full(child, key, out_slot_ptr)
 }
 
 # Find position where key should be (binary search simplified to linear)
-F btree_find_pos(node: i64, key: i64, idx: i64, nk: i64) -> i64 {
-    I idx >= nk { R idx }
+fn btree_find_pos(node: i64, key: i64, idx: i64, nk: i64) -> i64 {
+    I idx >= nk { return idx }
     k := btree_get_key(node, idx)
     I key <= k { idx }
-    EL { btree_find_pos(node, key, idx + 1, nk) }
+    else { btree_find_pos(node, key, idx + 1, nk) }
 }
 
 # Insert into non-full node
-F btree_insert_nonfull(node: i64, key: i64, page_id: i64, slot_idx: i64) -> i64 {
+fn btree_insert_nonfull(node: i64, key: i64, page_id: i64, slot_idx: i64) -> i64 {
     is_leaf := load_i64(node + NODE_IS_LEAF)
     nk := load_i64(node + NODE_NUM_KEYS)
 
@@ -199,7 +199,7 @@ F btree_insert_nonfull(node: i64, key: i64, page_id: i64, slot_idx: i64) -> i64 
             I existing == key {
                 store_i64(node + NODE_VALUES + pos * 8, page_id)
                 store_i64(node + NODE_SLOTS + pos * 8, slot_idx)
-                R 0
+                return 0
             }
         }
 
@@ -212,7 +212,7 @@ F btree_insert_nonfull(node: i64, key: i64, page_id: i64, slot_idx: i64) -> i64 
         store_i64(node + NODE_SLOTS + pos * 8, slot_idx)
         store_i64(node + NODE_NUM_KEYS, nk + 1)
         0
-    } EL {
+    } else {
         # Internal node — find child and recurse
         pos := btree_find_pos(node, key, 0, nk)
         child := mut btree_get_child(node, pos)
@@ -226,7 +226,7 @@ F btree_insert_nonfull(node: i64, key: i64, page_id: i64, slot_idx: i64) -> i64 
             _ := I key > mid_key {
                 child = btree_get_child(node, pos + 1)
                 0
-            } EL { 0 }
+            } else { 0 }
         }
 
         btree_insert_nonfull(child, key, page_id, slot_idx)
@@ -234,8 +234,8 @@ F btree_insert_nonfull(node: i64, key: i64, page_id: i64, slot_idx: i64) -> i64 
 }
 
 # Shift keys/values/slots right from pos to nk-1
-F btree_shift_right(node: i64, pos: i64, nk: i64) -> i64 {
-    I nk <= pos { R 0 }
+fn btree_shift_right(node: i64, pos: i64, nk: i64) -> i64 {
+    I nk <= pos { return 0 }
     i := mut nk
     L {
         I i <= pos { B }
@@ -249,7 +249,7 @@ F btree_shift_right(node: i64, pos: i64, nk: i64) -> i64 {
 }
 
 # Split child node at parent's position idx
-F btree_split_child(parent: i64, idx: i64, child: i64) -> i64 {
+fn btree_split_child(parent: i64, idx: i64, child: i64) -> i64 {
     is_leaf := load_i64(child + NODE_IS_LEAF)
     mid := BTREE_MAX_KEYS / 2  # = 3
 
@@ -291,13 +291,13 @@ F btree_split_child(parent: i64, idx: i64, child: i64) -> i64 {
 }
 
 # Copy keys/values/slots from src[start..end) to dst[0..end-start)
-F btree_copy_half(src: i64, dst: i64, start: i64, end: i64) -> i64 {
+fn btree_copy_half(src: i64, dst: i64, start: i64, end: i64) -> i64 {
     btree_copy_half_loop(src, dst, start, end, 0)
 }
 
-F btree_copy_half_loop(src: i64, dst: i64, start: i64, end: i64, di: i64) -> i64 {
+fn btree_copy_half_loop(src: i64, dst: i64, start: i64, end: i64, di: i64) -> i64 {
     si := start + di
-    I si >= end { R 0 }
+    I si >= end { return 0 }
     btree_set_key(dst, di, btree_get_key(src, si))
     store_i64(dst + NODE_VALUES + di * 8, load_i64(src + NODE_VALUES + si * 8))
     store_i64(dst + NODE_SLOTS + di * 8, load_i64(src + NODE_SLOTS + si * 8))
@@ -305,20 +305,20 @@ F btree_copy_half_loop(src: i64, dst: i64, start: i64, end: i64, di: i64) -> i64
 }
 
 # Copy children from src[start..end) to dst[0..end-start)
-F btree_copy_children(src: i64, dst: i64, start: i64, end: i64) -> i64 {
+fn btree_copy_children(src: i64, dst: i64, start: i64, end: i64) -> i64 {
     btree_copy_children_loop(src, dst, start, end, 0)
 }
 
-F btree_copy_children_loop(src: i64, dst: i64, start: i64, end: i64, di: i64) -> i64 {
+fn btree_copy_children_loop(src: i64, dst: i64, start: i64, end: i64, di: i64) -> i64 {
     si := start + di
-    I si >= end { R 0 }
+    I si >= end { return 0 }
     store_i64(dst + NODE_CHILDREN + di * 8, load_i64(src + NODE_CHILDREN + si * 8))
     btree_copy_children_loop(src, dst, start, end, di + 1)
 }
 
 # Shift children right from pos
-F btree_shift_children_right(node: i64, pos: i64, total: i64) -> i64 {
-    I total <= pos { R 0 }
+fn btree_shift_children_right(node: i64, pos: i64, total: i64) -> i64 {
+    I total <= pos { return 0 }
     i := mut total
     L {
         I i <= pos { B }
@@ -329,10 +329,10 @@ F btree_shift_children_right(node: i64, pos: i64, total: i64) -> i64 {
 }
 
 # Range scan over a subtree
-F btree_range_scan_node(node: i64, lo: i64, hi: i64, out_keys: i64, out_pages: i64, out_slots: i64, max_results: i64, count_ptr: i64) -> i64 {
-    I node == 0 { R 0 }
+fn btree_range_scan_node(node: i64, lo: i64, hi: i64, out_keys: i64, out_pages: i64, out_slots: i64, max_results: i64, count_ptr: i64) -> i64 {
+    I node == 0 { return 0 }
     count := load_i64(count_ptr)
-    I count >= max_results { R 0 }
+    I count >= max_results { return 0 }
 
     is_leaf := load_i64(node + NODE_IS_LEAF)
     nk := load_i64(node + NODE_NUM_KEYS)
@@ -340,19 +340,19 @@ F btree_range_scan_node(node: i64, lo: i64, hi: i64, out_keys: i64, out_pages: i
     I is_leaf == 1 {
         # Scan leaf entries
         btree_scan_leaf(node, lo, hi, out_keys, out_pages, out_slots, max_results, count_ptr, 0, nk)
-    } EL {
+    } else {
         # Scan internal node: recurse into children
         btree_scan_internal(node, lo, hi, out_keys, out_pages, out_slots, max_results, count_ptr, 0, nk)
     }
 }
 
-F btree_scan_leaf(node: i64, lo: i64, hi: i64, out_keys: i64, out_pages: i64, out_slots: i64, max_results: i64, count_ptr: i64, idx: i64, nk: i64) -> i64 {
-    I idx >= nk { R 0 }
+fn btree_scan_leaf(node: i64, lo: i64, hi: i64, out_keys: i64, out_pages: i64, out_slots: i64, max_results: i64, count_ptr: i64, idx: i64, nk: i64) -> i64 {
+    I idx >= nk { return 0 }
     count := load_i64(count_ptr)
-    I count >= max_results { R 0 }
+    I count >= max_results { return 0 }
 
     key := btree_get_key(node, idx)
-    I key > hi { R 0 }
+    I key > hi { return 0 }
     I key >= lo {
         store_i64(out_keys + count * 8, key)
         store_i64(out_pages + count * 8, btree_get_value(node, idx))
@@ -362,12 +362,12 @@ F btree_scan_leaf(node: i64, lo: i64, hi: i64, out_keys: i64, out_pages: i64, ou
     btree_scan_leaf(node, lo, hi, out_keys, out_pages, out_slots, max_results, count_ptr, idx + 1, nk)
 }
 
-F btree_scan_internal(node: i64, lo: i64, hi: i64, out_keys: i64, out_pages: i64, out_slots: i64, max_results: i64, count_ptr: i64, idx: i64, nk: i64) -> i64 {
+fn btree_scan_internal(node: i64, lo: i64, hi: i64, out_keys: i64, out_pages: i64, out_slots: i64, max_results: i64, count_ptr: i64, idx: i64, nk: i64) -> i64 {
     I idx >= nk {
         # Last child
         child := btree_get_child(node, idx)
         btree_range_scan_node(child, lo, hi, out_keys, out_pages, out_slots, max_results, count_ptr)
-    } EL {
+    } else {
         key := btree_get_key(node, idx)
 
         # Visit left child if lo <= key
@@ -392,7 +392,7 @@ F btree_scan_internal(node: i64, lo: i64, hi: i64, out_keys: i64, out_pages: i64
         # Continue scanning if hi > key
         I hi > key {
             btree_scan_internal(node, lo, hi, out_keys, out_pages, out_slots, max_results, count_ptr, idx + 1, nk)
-        } EL { 0 }
+        } else { 0 }
     }
 }
 
@@ -400,8 +400,8 @@ F btree_scan_internal(node: i64, lo: i64, hi: i64, out_keys: i64, out_pages: i64
 # Composite key encoding: combine multiple i64 keys into a single hash.
 # Accepts a pointer to key parts and a count, produces a combined key.
 # Uses Vais's raw-pointer convention (i64 = pointer) matching VaisDB style.
-F encode_composite_key(parts: i64, count: i64) -> i64 {
-    I count <= 0 { R 0 }
+fn encode_composite_key(parts: i64, count: i64) -> i64 {
+    I count <= 0 { return 0 }
     result := mut 0
     idx := mut 0
     L {
@@ -413,8 +413,8 @@ F encode_composite_key(parts: i64, count: i64) -> i64 {
     result
 }
 
-F btree_free_node(node: i64) -> i64 {
-    I node == 0 { R 0 }
+fn btree_free_node(node: i64) -> i64 {
+    I node == 0 { return 0 }
     is_leaf := load_i64(node + NODE_IS_LEAF)
     I is_leaf == 0 {
         nk := load_i64(node + NODE_NUM_KEYS)
@@ -424,8 +424,8 @@ F btree_free_node(node: i64) -> i64 {
     0
 }
 
-F btree_free_children(node: i64, idx: i64, limit: i64) -> i64 {
-    I idx >= limit { R 0 }
+fn btree_free_children(node: i64, idx: i64, limit: i64) -> i64 {
+    I idx >= limit { return 0 }
     child := btree_get_child(node, idx)
     btree_free_node(child)
     btree_free_children(node, idx + 1, limit)

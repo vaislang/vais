@@ -1,9 +1,9 @@
 # Simple GC Demo - Minimal example showing GC functionality
 # Compile with: vaisc build gc_simple_demo.vais --gc
 
-U std/gc
+use std/gc
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Simple GC Demo ===\n")
 
     # Initialize GC

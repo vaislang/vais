@@ -1,7 +1,7 @@
-F make_adder(x: i64) -> |i64| -> i64 {
+fn make_adder(x: i64) -> |i64| -> i64 {
     |n| n + x
 }
-F main() -> i64 {
+fn main() -> i64 {
     add5 := make_adder(5)
-    R add5(37)
+    return add5(37)
 }

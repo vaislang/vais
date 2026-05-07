@@ -1,10 +1,10 @@
 # Phase 84: Struct creation and field access
-S Point {
+struct Point {
     x: i64,
     y: i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Point { x: 10, y: 20 }
     puts("struct created")
     p.x + p.y

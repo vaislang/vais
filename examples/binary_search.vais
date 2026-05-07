@@ -3,24 +3,24 @@
 #
 # Run: vaisc run examples/binary_search.vais
 
-F binary_search(arr: *i64, len: i64, target: i64) -> i64 {
+fn binary_search(arr: *i64, len: i64, target: i64) -> i64 {
     lo := mut 0
     hi := mut len - 1
 
     LW lo <= hi {
         mid := lo + (hi - lo) / 2
         I arr[mid] == target {
-            R mid
-        } EL I arr[mid] < target {
+            return mid
+        } else I arr[mid] < target {
             lo = mid + 1
-        } EL {
+        } else {
             hi = mid - 1
         }
     }
     -1   # not found
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # Sorted array
     arr: *i64 = [2, 5, 8, 12, 16, 23, 38, 56, 72, 91]
     len := 10
@@ -47,7 +47,7 @@ F main() -> i64 {
     I idx1 == 5 & idx2 == -1 & idx3 == 0 & idx4 == 9 {
         puts("All tests passed!")
         0
-    } EL {
+    } else {
         puts("Test failed!")
         1
     }

@@ -1,4 +1,4 @@
-F take_opt(x: Option<i64>) -> i64 { R 1 }
-F main() -> i64 {
-    R take_opt(42)
+fn take_opt(x: Option<i64>) -> i64 { return 1 }
+fn main() -> i64 {
+    return take_opt(42)
 }

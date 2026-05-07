@@ -6,29 +6,29 @@
 # Node: { value: i64, next: i64 (pointer to next node, 0 = null) }
 # Layout: [value:i64][next:i64] — 16 bytes per node
 
-F node_new(value: i64) -> i64 {
+fn node_new(value: i64) -> i64 {
     ptr := malloc(16)
     store_i64(ptr, value)       # value field
     store_i64(ptr + 8, 0)      # next = null
     ptr
 }
 
-F node_value(node: i64) -> i64 = load_i64(node)
-F node_next(node: i64) -> i64 = load_i64(node + 8)
-F node_set_next(node: i64, next: i64) -> i64 {
+fn node_value(node: i64) -> i64 = load_i64(node)
+fn node_next(node: i64) -> i64 = load_i64(node + 8)
+fn node_set_next(node: i64, next: i64) -> i64 {
     store_i64(node + 8, next)
     0
 }
 
 # Push value to front of list, return new head
-F list_push(head: i64, value: i64) -> i64 {
+fn list_push(head: i64, value: i64) -> i64 {
     new_node := node_new(value)
     node_set_next(new_node, head)
     new_node
 }
 
 # Count elements
-F list_len(head: i64) -> i64 {
+fn list_len(head: i64) -> i64 {
     count := mut 0
     cur := mut head
     LW cur != 0 {
@@ -39,7 +39,7 @@ F list_len(head: i64) -> i64 {
 }
 
 # Sum all values
-F list_sum(head: i64) -> i64 {
+fn list_sum(head: i64) -> i64 {
     total := mut 0
     cur := mut head
     LW cur != 0 {
@@ -50,7 +50,7 @@ F list_sum(head: i64) -> i64 {
 }
 
 # Print all values
-F list_print(head: i64) -> i64 {
+fn list_print(head: i64) -> i64 {
     cur := mut head
     LW cur != 0 {
         v := node_value(cur)
@@ -61,7 +61,7 @@ F list_print(head: i64) -> i64 {
 }
 
 # Free all nodes
-F list_free(head: i64) -> i64 {
+fn list_free(head: i64) -> i64 {
     cur := mut head
     LW cur != 0 {
         next := node_next(cur)
@@ -71,7 +71,7 @@ F list_free(head: i64) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # Build list: 5 -> 4 -> 3 -> 2 -> 1
     head := mut 0
     LF i:1..6 {
@@ -92,5 +92,5 @@ F main() -> i64 {
     puts("List freed")
 
     # 5+4+3+2+1 = 15
-    I total == 15 & len == 5 { 0 } EL { 1 }
+    I total == 15 & len == 5 { 0 } else { 1 }
 }

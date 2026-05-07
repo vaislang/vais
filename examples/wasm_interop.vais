@@ -4,25 +4,25 @@
 
 # Import JS functions via WASM
 #[wasm_import("env", "console_log")]
-N F console_log(ptr: i64, len: i64) -> i64
+N fn console_log(ptr: i64, len: i64) -> i64
 
 #[wasm_import("env", "get_time")]
-N F get_time() -> f64
+N fn get_time() -> f64
 
 # Export Vais functions to JS
 #[wasm_export("add")]
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 
 #[wasm_export("fibonacci")]
-F fib(n: i64) -> i64 {
+fn fib(n: i64) -> i64 {
     I n <= 1 { n }
-    EL { @(n - 1) + @(n - 2) }
+    else { @(n - 1) + @(n - 2) }
 }
 
 #[wasm_export("factorial")]
-F factorial(n: i64) -> i64 = I n <= 1 { 1 } EL { n * @(n - 1) }
+fn factorial(n: i64) -> i64 = I n <= 1 { 1 } else { n * @(n - 1) }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := add(10, 20)
     f := fib(10)
     0

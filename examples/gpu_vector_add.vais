@@ -14,19 +14,19 @@ C GPU_CAP_GRAPHICS: i64 = 2
 C GPU_CAP_TENSOR: i64 = 4
 
 # Check GPU capability
-F has_gpu_cap(caps: i64, cap: i64) -> i64 {
-    I (caps & cap) != 0 { 1 } EL { 0 }
+fn has_gpu_cap(caps: i64, cap: i64) -> i64 {
+    I (caps & cap) != 0 { 1 } else { 0 }
 }
 
 # Simulate GPU device info
-S GpuDeviceInfo {
+struct GpuDeviceInfo {
     id: i64,
     max_threads: i64,
     max_blocks: i64,
     capabilities: i64
 }
 
-F create_device_info(id: i64) -> GpuDeviceInfo {
+fn create_device_info(id: i64) -> GpuDeviceInfo {
     GpuDeviceInfo {
         id: id,
         max_threads: 1024,
@@ -36,25 +36,25 @@ F create_device_info(id: i64) -> GpuDeviceInfo {
 }
 
 # Calculate number of blocks needed
-F calc_blocks(n: i64, block_size: i64) -> i64 {
+fn calc_blocks(n: i64, block_size: i64) -> i64 {
     (n + block_size - 1) / block_size
 }
 
 # Validate launch configuration
-F validate_launch(device: GpuDeviceInfo, threads: i64, blocks: i64) -> i64 {
+fn validate_launch(device: GpuDeviceInfo, threads: i64, blocks: i64) -> i64 {
     I threads > device.max_threads {
         0
-    } EL {
+    } else {
         I blocks > device.max_blocks {
             0
-        } EL {
+        } else {
             1
         }
     }
 }
 
 # Main function for testing (CPU side)
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== GPU Vector Add Example ===")
     puts("")
 
@@ -62,7 +62,7 @@ F main() -> i64 {
     device := create_device_info(0)
     I device.max_threads != 1024 {
         puts("FAIL: max_threads")
-        R 1
+        return 1
     }
     puts("Device info OK")
 
@@ -70,29 +70,29 @@ F main() -> i64 {
     blocks := calc_blocks(1000, 256)
     I blocks != 4 {
         puts("FAIL: calc_blocks")
-        R 1
+        return 1
     }
     puts("Block calculation OK")
 
     # Test capability check
     I has_gpu_cap(device.capabilities, GPU_CAP_COMPUTE) != 1 {
         puts("FAIL: compute capability")
-        R 1
+        return 1
     }
     I has_gpu_cap(device.capabilities, GPU_CAP_TENSOR) != 1 {
         puts("FAIL: tensor capability")
-        R 1
+        return 1
     }
     puts("Capability check OK")
 
     # Test launch validation
     I validate_launch(device, 256, 4) != 1 {
         puts("FAIL: valid launch config")
-        R 1
+        return 1
     }
     I validate_launch(device, 2048, 1) != 0 {
         puts("FAIL: invalid threads should fail")
-        R 1
+        return 1
     }
     puts("Launch validation OK")
 

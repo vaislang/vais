@@ -1,6 +1,6 @@
 # Lambda expression test
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Testing lambda expressions:")
 
     # Create a simple lambda that adds 1

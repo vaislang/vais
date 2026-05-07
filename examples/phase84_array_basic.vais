@@ -1,7 +1,7 @@
 # Phase 84: Array literal and indexing
-F sum3(a: i64, b: i64, c: i64) -> i64 = a + b + c
+fn sum3(a: i64, b: i64, c: i64) -> i64 = a + b + c
 
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
     y := 20
     z := 30

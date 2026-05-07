@@ -13,25 +13,25 @@
 #   ./postgres_example
 
 # Extern declarations for the PostgreSQL runtime
-X F __pg_connect(conninfo: str) -> i64
-X F __pg_finish(handle: i64) -> i64
-X F __pg_exec(handle: i64, sql: str) -> i64
-X F __pg_exec_params(handle: i64, sql: str, nparams: i64, param_values: i64) -> i64
-X F __pg_prepare(handle: i64, name: str, sql: str, nparams: i64) -> i64
-X F __pg_exec_prepared(handle: i64, name: str, nparams: i64, param_values: i64) -> i64
-X F __pg_ntuples(result: i64) -> i64
-X F __pg_nfields(result: i64) -> i64
-X F __pg_getvalue(result: i64, row: i64, col: i64) -> str
-X F __pg_getisnull(result: i64, row: i64, col: i64) -> i64
-X F __pg_clear(result: i64) -> i64
-X F __pg_status(handle: i64) -> i64
-X F __pg_error_message(handle: i64) -> str
-X F __pg_result_status(result: i64) -> i64
-X F __malloc(size: i64) -> i64
-X F __free(ptr: i64) -> i64
-X F puts(s: str) -> i64
+impl fn __pg_connect(conninfo: str) -> i64
+impl fn __pg_finish(handle: i64) -> i64
+impl fn __pg_exec(handle: i64, sql: str) -> i64
+impl fn __pg_exec_params(handle: i64, sql: str, nparams: i64, param_values: i64) -> i64
+impl fn __pg_prepare(handle: i64, name: str, sql: str, nparams: i64) -> i64
+impl fn __pg_exec_prepared(handle: i64, name: str, nparams: i64, param_values: i64) -> i64
+impl fn __pg_ntuples(result: i64) -> i64
+impl fn __pg_nfields(result: i64) -> i64
+impl fn __pg_getvalue(result: i64, row: i64, col: i64) -> str
+impl fn __pg_getisnull(result: i64, row: i64, col: i64) -> i64
+impl fn __pg_clear(result: i64) -> i64
+impl fn __pg_status(handle: i64) -> i64
+impl fn __pg_error_message(handle: i64) -> str
+impl fn __pg_result_status(result: i64) -> i64
+impl fn __malloc(size: i64) -> i64
+impl fn __free(ptr: i64) -> i64
+impl fn puts(s: str) -> i64
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Vais PostgreSQL Example ===")
     puts("")
 
@@ -43,7 +43,7 @@ F main() -> i64 {
 
     I handle == 0 {
         puts("ERROR: Failed to create connection (null handle)")
-        R 1
+        return 1
     }
 
     status := __pg_status(handle)
@@ -52,7 +52,7 @@ F main() -> i64 {
         msg := __pg_error_message(handle)
         puts(msg)
         __pg_finish(handle)
-        R 1
+        return 1
     }
     puts("  Connected successfully!")
     puts("")
@@ -70,7 +70,7 @@ F main() -> i64 {
 
     I res_status == 1 {
         puts("  Table created successfully!")
-    } EL {
+    } else {
         puts("  ERROR: Failed to create table")
         msg := __pg_error_message(handle)
         puts(msg)
@@ -121,7 +121,7 @@ F main() -> i64 {
 
             i = i + 1
         }
-    } EL {
+    } else {
         puts("  ERROR: Query failed")
         msg := __pg_error_message(handle)
         puts(msg)
@@ -152,7 +152,7 @@ F main() -> i64 {
             puts(age_val)
             i = i + 1
         }
-    } EL {
+    } else {
         puts("  ERROR: Parameterized query failed")
     }
     __pg_clear(res)
@@ -179,10 +179,10 @@ F main() -> i64 {
             puts(__pg_getvalue(res, 0, 0))
             puts(__pg_getvalue(res, 0, 1))
             puts(__pg_getvalue(res, 0, 2))
-        } EL {
+        } else {
             puts("  Bob not found")
         }
-    } EL {
+    } else {
         puts("  ERROR: Prepared statement failed")
     }
     __pg_clear(res)
@@ -241,7 +241,7 @@ F main() -> i64 {
         is_null := __pg_getisnull(res, 0, 1)
         I is_null == 1 {
             puts("  Eve's age is NULL (correct)")
-        } EL {
+        } else {
             puts("  Eve's age is not NULL (unexpected)")
         }
     }

@@ -1,36 +1,36 @@
 # Test Iterator trait pattern
 
-W Iterator {
-    F next(&self) -> i64
+trait Iterator {
+    fn next(&self) -> i64
 }
 
-S Range {
+struct Range {
     current: i64,
     end: i64,
     step: i64
 }
 
 # Simple impl block (no trait)
-X Range {
-    F has_next(&self) -> i64 {
-        I self.current < self.end { 1 } EL { 0 }
+impl Range {
+    fn has_next(&self) -> i64 {
+        I self.current < self.end { 1 } else { 0 }
     }
 }
 
 # Implement Iterator trait
-X Range: Iterator {
-    F next(&self) -> i64 {
+impl Range: Iterator {
+    fn next(&self) -> i64 {
         I self.current < self.end {
             value := self.current
             self.current = self.current + self.step
             value
-        } EL {
+        } else {
             0 - 1
         }
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Testing iterator trait:")
 
     r := Range { current: 0, end: 5, step: 1 }

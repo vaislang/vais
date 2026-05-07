@@ -6,31 +6,31 @@
 # Usage: vaisc stress_memory.vais && ./stress_memory
 
 # External C functions for memory management
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F print_i64(val: i64) -> i64
-X F print_str(s: str) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn print_i64(val: i64) -> i64
+impl fn print_str(s: str) -> i64
 
 # Perform a single allocation and free cycle
-F alloc_and_free_cycle(size: i64) -> i64 {
+fn alloc_and_free_cycle(size: i64) -> i64 {
     # Allocate memory
     ptr := malloc(size)
 
     # Check if allocation succeeded
     I ptr == 0 {
         print_str("ERROR: malloc failed\n")
-        R 0
+        return 0
     }
 
     # Immediately free it
     result := free(ptr)
 
     # Return success
-    R 1
+    return 1
 }
 
 # Test pattern 1: Small allocations (8-64 bytes)
-F test_small_allocations(iterations: i64) -> i64 {
+fn test_small_allocations(iterations: i64) -> i64 {
     print_str("\n--- Test 1: Small Allocations ---\n")
     print_str("Iterations: ")
     print_i64(iterations)
@@ -58,11 +58,11 @@ F test_small_allocations(iterations: i64) -> i64 {
     print_i64(iterations)
     print_str("\n")
 
-    R success_count
+    return success_count
 }
 
 # Test pattern 2: Medium allocations (1KB-16KB)
-F test_medium_allocations(iterations: i64) -> i64 {
+fn test_medium_allocations(iterations: i64) -> i64 {
     print_str("\n--- Test 2: Medium Allocations ---\n")
     print_str("Iterations: ")
     print_i64(iterations)
@@ -90,11 +90,11 @@ F test_medium_allocations(iterations: i64) -> i64 {
     print_i64(iterations)
     print_str("\n")
 
-    R success_count
+    return success_count
 }
 
 # Test pattern 3: Large allocations (64KB-1MB)
-F test_large_allocations(iterations: i64) -> i64 {
+fn test_large_allocations(iterations: i64) -> i64 {
     print_str("\n--- Test 3: Large Allocations ---\n")
     print_str("Iterations: ")
     print_i64(iterations)
@@ -122,11 +122,11 @@ F test_large_allocations(iterations: i64) -> i64 {
     print_i64(iterations)
     print_str("\n")
 
-    R success_count
+    return success_count
 }
 
 # Test pattern 4: Mixed allocation sizes
-F test_mixed_allocations(iterations: i64) -> i64 {
+fn test_mixed_allocations(iterations: i64) -> i64 {
     print_str("\n--- Test 4: Mixed Allocations ---\n")
     print_str("Iterations: ")
     print_i64(iterations)
@@ -143,11 +143,11 @@ F test_mixed_allocations(iterations: i64) -> i64 {
         # Mix of small, medium, and large
         pattern := i % 3
         size := I pattern == 0 {
-            R 64
-        } EL I pattern == 1 {
-            R 4096
-        } EL {
-            R 131072
+            return 64
+        } else I pattern == 1 {
+            return 4096
+        } else {
+            return 131072
         }
 
         result := alloc_and_free_cycle(size)
@@ -162,11 +162,11 @@ F test_mixed_allocations(iterations: i64) -> i64 {
     print_i64(iterations)
     print_str("\n")
 
-    R success_count
+    return success_count
 }
 
 # Main function
-F main() -> i64 {
+fn main() -> i64 {
     print_str("=========================\n")
     print_str("Memory Stress Test\n")
     print_str("=========================\n")
@@ -190,9 +190,9 @@ F main() -> i64 {
 
     I total == expected {
         print_str("SUCCESS: All allocations successful\n")
-        R 0
-    } EL {
+        return 0
+    } else {
         print_str("FAILURE: Some allocations failed\n")
-        R 1
+        return 1
     }
 }

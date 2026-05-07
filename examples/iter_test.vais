@@ -1,41 +1,41 @@
 # Iterator test - with loop break
 
 # Range struct for iteration
-S Range {
+struct Range {
     current: i64,
     end: i64,
     step: i64
 }
 
-X Range {
-    F has_next(&self) -> i64 {
-        I self.current < self.end { 1 } EL { 0 }
+impl Range {
+    fn has_next(&self) -> i64 {
+        I self.current < self.end { 1 } else { 0 }
     }
 
-    F next(&self) -> i64 {
+    fn next(&self) -> i64 {
         I self.current < self.end {
             value := self.current
             self.current = self.current + self.step
             value
-        } EL {
+        } else {
             0 - 1
         }
     }
 }
 
 # Print a number (works for 0-99)
-F print_num(n: i64) -> i64 {
+fn print_num(n: i64) -> i64 {
     I n >= 10 {
         putchar(n / 10 + 48)
         0
-    } EL {
+    } else {
         0
     }
     putchar(n % 10 + 48)
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Iterator Test ===")
 
     # Test Range iterator using loop with break

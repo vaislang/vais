@@ -1,24 +1,24 @@
 N "C" {
-    F printf(fmt: str, ...) -> i64
+    fn printf(fmt: str, ...) -> i64
 }
 
-partial F main() -> i64 {
+partial fn main() -> i64 {
     x := 5
 
     # if-else with assert (Unit type) in both branches
     I x > 3 {
         assert(x > 0)
-    } EL {
+    } else {
         assert(x >= 0)
     }
 
     # Nested case
     I x > 10 {
         assert(x > 10)
-    } EL {
+    } else {
         I x > 0 {
             assert(x > 0)
-        } EL {
+        } else {
             assert(x >= 0)
         }
     }

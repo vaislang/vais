@@ -10,20 +10,20 @@
 #   ./sqlite_example
 
 # External function declarations
-X F __sqlite_open(path: str) -> i64
-X F __sqlite_close(handle: i64) -> i64
-X F __sqlite_exec(handle: i64, sql: str, callback: i64) -> i64
-X F __sqlite_prepare(handle: i64, sql: str) -> i64
-X F __sqlite_bind_int(stmt: i64, index: i64, value: i64) -> i64
-X F __sqlite_bind_text(stmt: i64, index: i64, text: str) -> i64
-X F __sqlite_step(stmt: i64) -> i64
-X F __sqlite_column_int(stmt: i64, index: i64) -> i64
-X F __sqlite_column_text(stmt: i64, index: i64) -> str
-X F __sqlite_column_count(stmt: i64) -> i64
-X F __sqlite_finalize(stmt: i64) -> i64
-X F __sqlite_errmsg(handle: i64) -> str
-X F __sqlite_last_insert_rowid(handle: i64) -> i64
-X F __sqlite_changes(handle: i64) -> i64
+impl fn __sqlite_open(path: str) -> i64
+impl fn __sqlite_close(handle: i64) -> i64
+impl fn __sqlite_exec(handle: i64, sql: str, callback: i64) -> i64
+impl fn __sqlite_prepare(handle: i64, sql: str) -> i64
+impl fn __sqlite_bind_int(stmt: i64, index: i64, value: i64) -> i64
+impl fn __sqlite_bind_text(stmt: i64, index: i64, text: str) -> i64
+impl fn __sqlite_step(stmt: i64) -> i64
+impl fn __sqlite_column_int(stmt: i64, index: i64) -> i64
+impl fn __sqlite_column_text(stmt: i64, index: i64) -> str
+impl fn __sqlite_column_count(stmt: i64) -> i64
+impl fn __sqlite_finalize(stmt: i64) -> i64
+impl fn __sqlite_errmsg(handle: i64) -> str
+impl fn __sqlite_last_insert_rowid(handle: i64) -> i64
+impl fn __sqlite_changes(handle: i64) -> i64
 
 # SQLite step result codes
 C SQLITE_OK: i64 = 0
@@ -31,13 +31,13 @@ C SQLITE_ROW: i64 = 100
 C SQLITE_DONE: i64 = 101
 
 # Helper: print an integer value with a label
-F print_int(label: str, value: i64) -> i64 {
+fn print_int(label: str, value: i64) -> i64 {
     puts(label)
     printf("%lld\n", value)
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Vais SQLite Example ===")
     puts("")
 
@@ -46,7 +46,7 @@ F main() -> i64 {
     db := __sqlite_open(":memory:")
     I db == 0 {
         puts("ERROR: Failed to open database")
-        R 1
+        return 1
     }
     puts("Database opened successfully.")
     puts("")
@@ -58,7 +58,7 @@ F main() -> i64 {
         puts("ERROR: Failed to create table")
         puts(__sqlite_errmsg(db))
         __sqlite_close(db)
-        R 1
+        return 1
     }
     puts("Table created.")
     puts("")
@@ -72,7 +72,7 @@ F main() -> i64 {
         puts("ERROR: Failed to prepare insert statement")
         puts(__sqlite_errmsg(db))
         __sqlite_close(db)
-        R 1
+        return 1
     }
     __sqlite_bind_text(stmt, 1, "Alice")
     __sqlite_bind_text(stmt, 2, "alice@example.com")
@@ -113,7 +113,7 @@ F main() -> i64 {
         puts("ERROR: Failed to prepare select statement")
         puts(__sqlite_errmsg(db))
         __sqlite_close(db)
-        R 1
+        return 1
     }
 
     LW __sqlite_step(stmt) == SQLITE_ROW {

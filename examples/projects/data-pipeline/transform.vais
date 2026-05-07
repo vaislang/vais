@@ -1,13 +1,13 @@
 # Data Transformation Module
 # Filters, aggregates, and transforms CSV data
 
-S CsvRow {
+struct CsvRow {
     name: str,
     age: i64,
     score: i64,
 }
 
-S TransformResult {
+struct TransformResult {
     filtered_rows: i64,  # Pointer to filtered array
     filtered_count: i64,
     avg_score: i64,
@@ -15,7 +15,7 @@ S TransformResult {
 }
 
 # Filter rows where score >= threshold
-F filter_by_score(rows: i64, count: i64, threshold: i64) -> i64 {
+fn filter_by_score(rows: i64, count: i64, threshold: i64) -> i64 {
     # Allocate result array (worst case: all pass)
     filtered := malloc(count * 24)
     filtered_idx := mut 0
@@ -43,11 +43,11 @@ F filter_by_score(rows: i64, count: i64, threshold: i64) -> i64 {
     result := malloc(16)
     store_i64(result, filtered_idx)
     store_i64(result + 8, filtered)
-    R result
+    return result
 }
 
 # Calculate statistics
-F calculate_stats(rows: i64, count: i64) -> i64 {
+fn calculate_stats(rows: i64, count: i64) -> i64 {
     total := mut 0
     i := mut 0
 
@@ -59,17 +59,17 @@ F calculate_stats(rows: i64, count: i64) -> i64 {
         i := i + 1
     }
 
-    avg := I count > 0 { total / count } EL { 0 }
+    avg := I count > 0 { total / count } else { 0 }
 
     # Return [avg, total]
     result := malloc(16)
     store_i64(result, avg)
     store_i64(result + 8, total)
-    R result
+    return result
 }
 
 # Main transform function
-F transform_data(rows: i64, count: i64) -> i64 {
+fn transform_data(rows: i64, count: i64) -> i64 {
     puts("Transforming data...")
 
     # Filter: only rows with score >= 85
@@ -94,11 +94,11 @@ F transform_data(rows: i64, count: i64) -> i64 {
     store_i64(result + 16, avg_score)      # avg_score
     store_i64(result + 24, total_score)    # total_score
 
-    R result
+    return result
 }
 
 # Print row for debugging
-F print_row(row: i64) {
+fn print_row(row: i64) {
     name := load_i64(row)
     age := load_i64(row + 8)
     score := load_i64(row + 16)

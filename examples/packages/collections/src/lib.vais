@@ -2,7 +2,7 @@
 # Arrays are represented as *i64 pointers with explicit length.
 
 # Linear search: returns index of target or -1 if not found
-F linear_search(arr: *i64, len: i64, target: i64) -> i64 {
+fn linear_search(arr: *i64, len: i64, target: i64) -> i64 {
     i := mut 0
     L {
         I i >= len { B 0 }
@@ -13,7 +13,7 @@ F linear_search(arr: *i64, len: i64, target: i64) -> i64 {
 }
 
 # Binary search on a sorted array: returns index of target or -1
-F binary_search(arr: *i64, len: i64, target: i64) -> i64 {
+fn binary_search(arr: *i64, len: i64, target: i64) -> i64 {
     lo := mut 0
     hi := mut len - 1
     L {
@@ -22,7 +22,7 @@ F binary_search(arr: *i64, len: i64, target: i64) -> i64 {
         I arr[mid] == target { ret mid; }
         I arr[mid] < target {
             lo = mid + 1
-        } EL {
+        } else {
             hi = mid - 1
         }
     }
@@ -30,7 +30,7 @@ F binary_search(arr: *i64, len: i64, target: i64) -> i64 {
 }
 
 # Bubble sort (in-place, ascending)
-F bubble_sort(arr: *i64, len: i64) -> i64 {
+fn bubble_sort(arr: *i64, len: i64) -> i64 {
     i := mut 0
     L {
         I i >= len - 1 { B 0 }
@@ -50,7 +50,7 @@ F bubble_sort(arr: *i64, len: i64) -> i64 {
 }
 
 # Selection sort (in-place, ascending)
-F selection_sort(arr: *i64, len: i64) -> i64 {
+fn selection_sort(arr: *i64, len: i64) -> i64 {
     i := mut 0
     L {
         I i >= len - 1 { B 0 }
@@ -74,7 +74,7 @@ F selection_sort(arr: *i64, len: i64) -> i64 {
 }
 
 # Helper: print an array of single-digit numbers
-F print_arr(arr: *i64, len: i64) -> i64 {
+fn print_arr(arr: *i64, len: i64) -> i64 {
     i := mut 0
     L {
         I i >= len { B 0 }
@@ -88,7 +88,7 @@ F print_arr(arr: *i64, len: i64) -> i64 {
 
 # --- Demo main ---
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== collections demo ===")
 
     arr: *i64 = [5, 3, 8, 1, 9, 2, 7, 4, 6]

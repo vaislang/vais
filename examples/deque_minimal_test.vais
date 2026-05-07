@@ -1,7 +1,7 @@
 # Minimal deque test
-U std/deque
+use std/deque
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Creating deque...")
     dq := Deque.with_capacity(8)
 

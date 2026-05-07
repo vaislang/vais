@@ -1,8 +1,8 @@
 # Test Option and Result error handling - simplified
-U std/vec
-U std/hashmap
+use std/vec
+use std/hashmap
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("===================================")
     puts("Option/Result Error Handling Tests")
     puts("===================================")

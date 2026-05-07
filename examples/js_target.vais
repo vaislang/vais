@@ -3,38 +3,38 @@
 # Compile: vaisc --target js js_target.vais -o output.mjs
 
 # Struct → JS class
-S Point {
+struct Point {
     x: f64,
     y: f64
 }
 
 # Enum → tagged union
-EN Shape {
+enum Shape {
     Circle(f64),
     Rect(f64, f64)
 }
 
 # Functions → exported JS functions
-F distance(p: Point) -> f64 {
+fn distance(p: Point) -> f64 {
     sqrt(p.x * p.x + p.y * p.y)
 }
 
-F area(s: Shape) -> f64 {
-    M s {
+fn area(s: Shape) -> f64 {
+    match s {
         Circle(r) => 3.14159 * r * r,
         Rect(w, h) => w * h,
         _ => 0.0
     }
 }
 
-F classify(s: Shape) -> i64 {
+fn classify(s: Shape) -> i64 {
     a := area(s)
     I a > 100.0 { 2 }
-    EL I a > 10.0 { 1 }
-    EL { 0 }
+    else I a > 10.0 { 1 }
+    else { 0 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Point { x: 3.0, y: 4.0 }
     d := distance(p)
 

@@ -1,8 +1,8 @@
-F void_fn() {
-    R
+fn void_fn() {
+    return
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     x: i64 = void_fn()
-    R x
+    return x
 }

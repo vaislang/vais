@@ -1,6 +1,6 @@
 # File I/O test - simple write and read
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== File I/O Test ===")
 
     # Write test
@@ -11,7 +11,7 @@ F main() -> i64 {
         fclose(h)
         puts("Write OK!")
         0
-    } EL {
+    } else {
         puts("Write FAILED!")
         0
     }
@@ -26,13 +26,13 @@ F main() -> i64 {
             putchar(c)
             putchar(10)
             0
-        } EL {
+        } else {
             0
         }
         fclose(h2)
         puts("Read OK!")
         0
-    } EL {
+    } else {
         puts("Read FAILED!")
         0
     }

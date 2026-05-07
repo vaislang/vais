@@ -5,15 +5,15 @@
 # schema + consumer at gate time. The semantic intent is identical: a
 # consumer references the schema's User type and its `email` field.)
 
-F build_user(id: i64, email: str, name: str) -> User {
-    R User { id: id, email: email, name: name }
+fn build_user(id: i64, email: str, name: str) -> User {
+    return User { id: id, email: email, name: name }
 }
 
-F lookup_email(u: User) -> str {
-    R u.email
+fn lookup_email(u: User) -> str {
+    return u.email
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     u: User = build_user(1, "a@b.c", "alice")
-    R 0
+    return 0
 }
