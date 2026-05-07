@@ -7,117 +7,117 @@
 # ============================================================================
 
 # Binary operators for LLVM
-F OP_ADD() -> i64 = 1
-F OP_SUB() -> i64 = 2
-F OP_MUL() -> i64 = 3
-F OP_DIV() -> i64 = 4
-F OP_MOD() -> i64 = 5
-F OP_LT() -> i64 = 6
-F OP_LTE() -> i64 = 7
-F OP_GT() -> i64 = 8
-F OP_GTE() -> i64 = 9
-F OP_EQ() -> i64 = 10
-F OP_NEQ() -> i64 = 11
-F OP_AND() -> i64 = 12
-F OP_OR() -> i64 = 13
-F OP_BIT_AND() -> i64 = 14
-F OP_BIT_OR() -> i64 = 15
-F OP_BIT_XOR() -> i64 = 16
-F OP_SHL() -> i64 = 17
-F OP_SHR() -> i64 = 18
+fn OP_ADD() -> i64 = 1
+fn OP_SUB() -> i64 = 2
+fn OP_MUL() -> i64 = 3
+fn OP_DIV() -> i64 = 4
+fn OP_MOD() -> i64 = 5
+fn OP_LT() -> i64 = 6
+fn OP_LTE() -> i64 = 7
+fn OP_GT() -> i64 = 8
+fn OP_GTE() -> i64 = 9
+fn OP_EQ() -> i64 = 10
+fn OP_NEQ() -> i64 = 11
+fn OP_AND() -> i64 = 12
+fn OP_OR() -> i64 = 13
+fn OP_BIT_AND() -> i64 = 14
+fn OP_BIT_OR() -> i64 = 15
+fn OP_BIT_XOR() -> i64 = 16
+fn OP_SHL() -> i64 = 17
+fn OP_SHR() -> i64 = 18
 
 # Unary operators
-F UOP_NEG() -> i64 = 1
-F UOP_NOT() -> i64 = 2
-F UOP_BITNOT() -> i64 = 3
+fn UOP_NEG() -> i64 = 1
+fn UOP_NOT() -> i64 = 2
+fn UOP_BITNOT() -> i64 = 3
 
 # Type kinds for LLVM mapping
-F LLVM_VOID() -> i64 = 0
-F LLVM_I1() -> i64 = 1
-F LLVM_I8() -> i64 = 2
-F LLVM_I16() -> i64 = 3
-F LLVM_I32() -> i64 = 4
-F LLVM_I64() -> i64 = 5
-F LLVM_I128() -> i64 = 6
-F LLVM_FLOAT() -> i64 = 7
-F LLVM_DOUBLE() -> i64 = 8
-F LLVM_PTR() -> i64 = 9
-F LLVM_STRUCT() -> i64 = 10
+fn LLVM_VOID() -> i64 = 0
+fn LLVM_I1() -> i64 = 1
+fn LLVM_I8() -> i64 = 2
+fn LLVM_I16() -> i64 = 3
+fn LLVM_I32() -> i64 = 4
+fn LLVM_I64() -> i64 = 5
+fn LLVM_I128() -> i64 = 6
+fn LLVM_FLOAT() -> i64 = 7
+fn LLVM_DOUBLE() -> i64 = 8
+fn LLVM_PTR() -> i64 = 9
+fn LLVM_STRUCT() -> i64 = 10
 
 # ============================================================================
 # String Buffer for IR Output
 # ============================================================================
 
-S StringBuffer {
+struct StringBuffer {
     data: i64,       # Pointer to string data
     len: i64,        # Current length
     cap: i64         # Capacity
 }
 
-X StringBuffer {
-    F new(initial_cap: i64) -> StringBuffer {
+impl StringBuffer {
+    fn new(initial_cap: i64) -> StringBuffer {
         data := malloc(initial_cap)
         StringBuffer { data: data, len: 0, cap: initial_cap }
     }
 
-    F append_byte(&self, byte: i64) -> i64 {
+    fn append_byte(&self, byte: i64) -> i64 {
         I self.len >= self.cap {
             @.grow()
             0
-        } EL { 0 }
+        } else { 0 }
         store_byte(self.data + self.len, byte)
         self.len = self.len + 1
         1
     }
 
-    F append_ptr(&self, ptr: i64, len: i64) -> i64 {
+    fn append_ptr(&self, ptr: i64, len: i64) -> i64 {
         I self.len + len > self.cap {
             @.grow_to(self.len + len + 1024)
             0
-        } EL { 0 }
+        } else { 0 }
         memcpy(self.data + self.len, ptr, len)
         self.len = self.len + len
         1
     }
 
-    F append_cstr(&self, s: str) -> i64 {
+    fn append_cstr(&self, s: str) -> i64 {
         len := strlen(s)
         I self.len + len > self.cap {
             @.grow_to(self.len + len + 1024)
             0
-        } EL { 0 }
+        } else { 0 }
         memcpy_str(self.data + self.len, s, len)
         self.len = self.len + len
         1
     }
 
-    F append_i64(&self, value: i64) -> i64 {
+    fn append_i64(&self, value: i64) -> i64 {
         # Convert i64 to string and append
         I value == 0 {
             @.append_byte(48)  # '0'
             1
-        } EL I value < 0 {
+        } else I value < 0 {
             @.append_byte(45)  # '-'
             @.append_i64(0 - value)
-        } EL {
+        } else {
             # Recursively build digits
             I value >= 10 {
                 @.append_i64(value / 10)
                 0
-            } EL { 0 }
+            } else { 0 }
             digit := (value % 10) + 48
             @.append_byte(digit)
             1
         }
     }
 
-    F append_newline(&self) -> i64 = @.append_byte(10)
+    fn append_newline(&self) -> i64 = @.append_byte(10)
 
-    F grow(&self) -> i64 {
+    fn grow(&self) -> i64 {
         @.grow_to(self.cap * 2)
     }
 
-    F grow_to(&self, new_cap: i64) -> i64 {
+    fn grow_to(&self, new_cap: i64) -> i64 {
         new_data := malloc(new_cap)
         memcpy(new_data, self.data, self.len)
         free(self.data)
@@ -126,15 +126,15 @@ X StringBuffer {
         1
     }
 
-    F get_ptr(&self) -> i64 = self.data
-    F get_len(&self) -> i64 = self.len
+    fn get_ptr(&self) -> i64 = self.data
+    fn get_len(&self) -> i64 = self.len
 
-    F clear(&self) -> i64 {
+    fn clear(&self) -> i64 {
         self.len = 0
         1
     }
 
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         free(self.data)
         1
     }
@@ -144,7 +144,7 @@ X StringBuffer {
 # Local Variable Info
 # ============================================================================
 
-S LocalVar {
+struct LocalVar {
     name_idx: i64,       # String pool index
     llvm_name_ptr: i64,  # LLVM register name (e.g., "%x", "%1")
     llvm_name_len: i64,
@@ -153,10 +153,10 @@ S LocalVar {
     is_alloca: i64       # 1 if stack allocated (has pointer semantics)
 }
 
-X LocalVar {
-    F size() -> i64 = 48
+impl LocalVar {
+    fn size() -> i64 = 48
 
-    F new(name_idx: i64, llvm_ptr: i64, llvm_len: i64, type_kind: i64, is_param: i64) -> LocalVar = LocalVar {
+    fn new(name_idx: i64, llvm_ptr: i64, llvm_len: i64, type_kind: i64, is_param: i64) -> LocalVar = LocalVar {
         name_idx: name_idx,
         llvm_name_ptr: llvm_ptr,
         llvm_name_len: llvm_len,
@@ -170,7 +170,7 @@ X LocalVar {
 # Function Info
 # ============================================================================
 
-S FunctionInfo {
+struct FunctionInfo {
     name_idx: i64,
     params_ptr: i64,      # Array of (name_idx, type_kind) pairs
     params_len: i64,
@@ -178,10 +178,10 @@ S FunctionInfo {
     is_extern: i64
 }
 
-X FunctionInfo {
-    F size() -> i64 = 40
+impl FunctionInfo {
+    fn size() -> i64 = 40
 
-    F new(name_idx: i64) -> FunctionInfo = FunctionInfo {
+    fn new(name_idx: i64) -> FunctionInfo = FunctionInfo {
         name_idx: name_idx,
         params_ptr: 0, params_len: 0,
         ret_type: LLVM_VOID(),
@@ -193,27 +193,27 @@ X FunctionInfo {
 # Struct Info
 # ============================================================================
 
-S StructFieldInfo {
+struct StructFieldInfo {
     name_idx: i64,
     type_kind: i64,
     offset: i64
 }
 
-X StructFieldInfo {
-    F size() -> i64 = 24
+impl StructFieldInfo {
+    fn size() -> i64 = 24
 }
 
-S StructTypeInfo {
+struct StructTypeInfo {
     name_idx: i64,
     fields_ptr: i64,
     fields_len: i64,
     total_size: i64
 }
 
-X StructTypeInfo {
-    F size() -> i64 = 32
+impl StructTypeInfo {
+    fn size() -> i64 = 32
 
-    F new(name_idx: i64) -> StructTypeInfo = StructTypeInfo {
+    fn new(name_idx: i64) -> StructTypeInfo = StructTypeInfo {
         name_idx: name_idx,
         fields_ptr: 0, fields_len: 0,
         total_size: 0
@@ -224,22 +224,22 @@ X StructTypeInfo {
 # Loop Context (for break/continue)
 # ============================================================================
 
-S LoopContext {
+struct LoopContext {
     break_label_ptr: i64,
     break_label_len: i64,
     continue_label_ptr: i64,
     continue_label_len: i64
 }
 
-X LoopContext {
-    F size() -> i64 = 32
+impl LoopContext {
+    fn size() -> i64 = 32
 }
 
 # ============================================================================
 # VTable Entry (for trait dispatch)
 # ============================================================================
 
-S VtableEntry {
+struct VtableEntry {
     impl_type_idx: i64,     # Name index of the implementing type
     trait_name_idx: i64,    # Name index of the trait
     methods_ptr: i64,       # Array of method name_idx (in trait declaration order)
@@ -248,15 +248,15 @@ S VtableEntry {
     vtable_name_len: i64    # Length of vtable name string
 }
 
-X VtableEntry {
-    F size() -> i64 = 48
+impl VtableEntry {
+    fn size() -> i64 = 48
 }
 
 # ============================================================================
 # Code Generator
 # ============================================================================
 
-S CodeGenerator {
+struct CodeGenerator {
     # Output buffer
     output: i64,         # Pointer to StringBuffer
 
@@ -356,8 +356,8 @@ S CodeGenerator {
     defer_stack_cap: i64
 }
 
-X CodeGenerator {
-    F new() -> CodeGenerator {
+impl CodeGenerator {
+    fn new() -> CodeGenerator {
         output_buf := malloc(88)  # StringBuffer size (approximated)
         temp := StringBuffer.new(8192)
         store_i64(output_buf, temp.data)
@@ -420,27 +420,27 @@ X CodeGenerator {
 
     # ========== String Pool Access ==========
 
-    F set_string_pool(&self, sp_data: i64, sp_offsets: i64, sp_count: i64) -> i64 {
+    fn set_string_pool(&self, sp_data: i64, sp_offsets: i64, sp_count: i64) -> i64 {
         self.sp_data = sp_data
         self.sp_offsets = sp_offsets
         self.sp_count = sp_count
         1
     }
 
-    F get_string_ptr(&self, idx: i64) -> i64 {
+    fn get_string_ptr(&self, idx: i64) -> i64 {
         entry_ptr := self.sp_offsets + idx * 16
         offset := load_i64(entry_ptr)
         self.sp_data + offset
     }
 
-    F get_string_len(&self, idx: i64) -> i64 {
+    fn get_string_len(&self, idx: i64) -> i64 {
         entry_ptr := self.sp_offsets + idx * 16
         load_i64(entry_ptr + 8)
     }
 
     # ========== Output Methods ==========
 
-    F emit_ptr(&self, ptr: i64, len: i64) -> i64 {
+    fn emit_ptr(&self, ptr: i64, len: i64) -> i64 {
         buf_data: mut i64 = load_i64(self.output)
         buf_len := load_i64(self.output + 8)
         buf_cap := load_i64(self.output + 16)
@@ -454,16 +454,16 @@ X CodeGenerator {
             store_i64(self.output + 16, new_cap)
             buf_data = new_data
             0
-        } EL { 0 }
+        } else { 0 }
 
         memcpy(buf_data + buf_len, ptr, len)
         store_i64(self.output + 8, buf_len + len)
         1
     }
 
-    F emit(&self, ptr: i64, len: i64) -> i64 = @.emit_ptr(ptr, len)
+    fn emit(&self, ptr: i64, len: i64) -> i64 = @.emit_ptr(ptr, len)
 
-    F emit_cstr(&self, s: str) -> i64 {
+    fn emit_cstr(&self, s: str) -> i64 {
         len := strlen(s)
         buf_data: mut i64 = load_i64(self.output)
         buf_len := load_i64(self.output + 8)
@@ -478,14 +478,14 @@ X CodeGenerator {
             store_i64(self.output + 16, new_cap)
             buf_data = new_data
             0
-        } EL { 0 }
+        } else { 0 }
 
         memcpy_str(buf_data + buf_len, s, len)
         store_i64(self.output + 8, buf_len + len)
         1
     }
 
-    F emit_i64(&self, value: i64) -> i64 {
+    fn emit_i64(&self, value: i64) -> i64 {
         # Clear temp buffer
         store_i64(self.temp_buf + 8, 0)
         tb_data := load_i64(self.temp_buf)
@@ -493,17 +493,17 @@ X CodeGenerator {
         I value == 0 {
             store_byte(tb_data, 48)
             @.emit_ptr(tb_data, 1)
-        } EL I value < 0 {
+        } else I value < 0 {
             store_byte(tb_data, 45)
             @.emit_ptr(tb_data, 1)
             @.emit_i64(0 - value)
-        } EL {
+        } else {
             @.emit_positive_i64(value)
         }
     }
 
-    F emit_positive_i64(&self, value: i64) -> i64 {
-        I value == 0 { R 1 }
+    fn emit_positive_i64(&self, value: i64) -> i64 {
+        I value == 0 { return 1 }
         @.emit_positive_i64(value / 10)
         digit := (value % 10) + 48
         tb_data := load_i64(self.temp_buf)
@@ -511,13 +511,13 @@ X CodeGenerator {
         @.emit_ptr(tb_data, 1)
     }
 
-    F emit_newline(&self) -> i64 {
+    fn emit_newline(&self) -> i64 {
         tb_data := load_i64(self.temp_buf)
         store_byte(tb_data, 10)
         @.emit_ptr(tb_data, 1)
     }
 
-    F emit_string_idx(&self, idx: i64) -> i64 {
+    fn emit_string_idx(&self, idx: i64) -> i64 {
         ptr := @.get_string_ptr(idx)
         len := @.get_string_len(idx)
         @.emit_ptr(ptr, len)
@@ -525,71 +525,71 @@ X CodeGenerator {
 
     # ========== Register/Label Generation ==========
 
-    F fresh_reg(&self) -> i64 {
+    fn fresh_reg(&self) -> i64 {
         n := self.reg_counter
         self.reg_counter = self.reg_counter + 1
         n
     }
 
-    F fresh_label(&self) -> i64 {
+    fn fresh_label(&self) -> i64 {
         n := self.label_counter
         self.label_counter = self.label_counter + 1
         n
     }
 
-    F emit_reg(&self, n: i64) -> i64 {
+    fn emit_reg(&self, n: i64) -> i64 {
         @.emit_cstr("%")
         @.emit_i64(n)
     }
 
-    F emit_label(&self, prefix: str, n: i64) -> i64 {
+    fn emit_label(&self, prefix: str, n: i64) -> i64 {
         @.emit_cstr(prefix)
         @.emit_i64(n)
     }
 
     # ========== Type Conversion ==========
 
-    F type_to_llvm_str(&self, type_kind: i64) -> i64 {
+    fn type_to_llvm_str(&self, type_kind: i64) -> i64 {
         I type_kind == LLVM_VOID() { @.emit_cstr("void") }
-        EL I type_kind == LLVM_I1() { @.emit_cstr("i1") }
-        EL I type_kind == LLVM_I8() { @.emit_cstr("i8") }
-        EL I type_kind == LLVM_I16() { @.emit_cstr("i16") }
-        EL I type_kind == LLVM_I32() { @.emit_cstr("i32") }
-        EL I type_kind == LLVM_I64() { @.emit_cstr("i64") }
-        EL I type_kind == LLVM_I128() { @.emit_cstr("i128") }
-        EL I type_kind == LLVM_FLOAT() { @.emit_cstr("float") }
-        EL I type_kind == LLVM_DOUBLE() { @.emit_cstr("double") }
-        EL I type_kind == LLVM_PTR() { @.emit_cstr("i8*") }
-        EL { @.emit_cstr("i64") }  # Default
+        else I type_kind == LLVM_I1() { @.emit_cstr("i1") }
+        else I type_kind == LLVM_I8() { @.emit_cstr("i8") }
+        else I type_kind == LLVM_I16() { @.emit_cstr("i16") }
+        else I type_kind == LLVM_I32() { @.emit_cstr("i32") }
+        else I type_kind == LLVM_I64() { @.emit_cstr("i64") }
+        else I type_kind == LLVM_I128() { @.emit_cstr("i128") }
+        else I type_kind == LLVM_FLOAT() { @.emit_cstr("float") }
+        else I type_kind == LLVM_DOUBLE() { @.emit_cstr("double") }
+        else I type_kind == LLVM_PTR() { @.emit_cstr("i8*") }
+        else { @.emit_cstr("i64") }  # Default
     }
 
-    F resolved_type_to_llvm(&self, resolved_kind: i64) -> i64 {
+    fn resolved_type_to_llvm(&self, resolved_kind: i64) -> i64 {
         # Map ResolvedType kind to LLVM type kind
         # TY_I8 = 1, TY_I16 = 2, TY_I32 = 3, TY_I64 = 4, etc.
         I resolved_kind == 1 { LLVM_I8() }
-        EL I resolved_kind == 2 { LLVM_I16() }
-        EL I resolved_kind == 3 { LLVM_I32() }
-        EL I resolved_kind == 4 { LLVM_I64() }
-        EL I resolved_kind == 5 { LLVM_I128() }
-        EL I resolved_kind == 6 { LLVM_I8() }   # u8
-        EL I resolved_kind == 7 { LLVM_I16() }  # u16
-        EL I resolved_kind == 8 { LLVM_I32() }  # u32
-        EL I resolved_kind == 9 { LLVM_I64() }  # u64
-        EL I resolved_kind == 10 { LLVM_I128() } # u128
-        EL I resolved_kind == 11 { LLVM_FLOAT() }
-        EL I resolved_kind == 12 { LLVM_DOUBLE() }
-        EL I resolved_kind == 13 { LLVM_I1() }  # bool
-        EL I resolved_kind == 14 { LLVM_PTR() } # str
-        EL I resolved_kind == 15 { LLVM_VOID() } # unit
-        EL I resolved_kind == 21 { LLVM_PTR() } # pointer
-        EL I resolved_kind == 22 { LLVM_PTR() } # ref
-        EL I resolved_kind == 23 { LLVM_PTR() } # ref_mut
-        EL { LLVM_I64() }
+        else I resolved_kind == 2 { LLVM_I16() }
+        else I resolved_kind == 3 { LLVM_I32() }
+        else I resolved_kind == 4 { LLVM_I64() }
+        else I resolved_kind == 5 { LLVM_I128() }
+        else I resolved_kind == 6 { LLVM_I8() }   # u8
+        else I resolved_kind == 7 { LLVM_I16() }  # u16
+        else I resolved_kind == 8 { LLVM_I32() }  # u32
+        else I resolved_kind == 9 { LLVM_I64() }  # u64
+        else I resolved_kind == 10 { LLVM_I128() } # u128
+        else I resolved_kind == 11 { LLVM_FLOAT() }
+        else I resolved_kind == 12 { LLVM_DOUBLE() }
+        else I resolved_kind == 13 { LLVM_I1() }  # bool
+        else I resolved_kind == 14 { LLVM_PTR() } # str
+        else I resolved_kind == 15 { LLVM_VOID() } # unit
+        else I resolved_kind == 21 { LLVM_PTR() } # pointer
+        else I resolved_kind == 22 { LLVM_PTR() } # ref
+        else I resolved_kind == 23 { LLVM_PTR() } # ref_mut
+        else { LLVM_I64() }
     }
 
     # ========== Local Variables ==========
 
-    F add_local(&self, name_idx: i64, llvm_ptr: i64, llvm_len: i64, type_kind: i64, is_param: i64) -> i64 {
+    fn add_local(&self, name_idx: i64, llvm_ptr: i64, llvm_len: i64, type_kind: i64, is_param: i64) -> i64 {
         I self.locals_len >= self.locals_cap {
             new_cap := self.locals_cap * 2
             new_ptr := malloc(new_cap * LocalVar.size())
@@ -598,7 +598,7 @@ X CodeGenerator {
             self.locals_ptr = new_ptr
             self.locals_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         ptr := self.locals_ptr + self.locals_len * LocalVar.size()
         store_i64(ptr, name_idx)
@@ -612,27 +612,27 @@ X CodeGenerator {
         self.locals_len - 1
     }
 
-    F find_local(&self, name_idx: i64) -> i64 {
+    fn find_local(&self, name_idx: i64) -> i64 {
         i: mut i64 = self.locals_len
         L { I i == 0 { B }
             i = i - 1
             ptr := self.locals_ptr + i * LocalVar.size()
             local_name := load_i64(ptr)
             I local_name == name_idx {
-                R ptr
-            } EL { 0 }
+                return ptr
+            } else { 0 }
         }
         0  # Not found
     }
 
-    F clear_locals(&self) -> i64 {
+    fn clear_locals(&self) -> i64 {
         self.locals_len = 0
         1
     }
 
     # ========== Function Registration ==========
 
-    F add_function(&self, name_idx: i64, ret_type: i64, is_extern: i64) -> i64 {
+    fn add_function(&self, name_idx: i64, ret_type: i64, is_extern: i64) -> i64 {
         I self.functions_len >= self.functions_cap {
             new_cap := self.functions_cap * 2
             new_ptr := malloc(new_cap * FunctionInfo.size())
@@ -641,7 +641,7 @@ X CodeGenerator {
             self.functions_ptr = new_ptr
             self.functions_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         ptr := self.functions_ptr + self.functions_len * FunctionInfo.size()
         store_i64(ptr, name_idx)
@@ -654,14 +654,14 @@ X CodeGenerator {
         ptr
     }
 
-    F find_function(&self, name_idx: i64) -> i64 {
+    fn find_function(&self, name_idx: i64) -> i64 {
         i: mut i64 = 0
         L { I i >= self.functions_len { B }
             ptr := self.functions_ptr + i * FunctionInfo.size()
             fn_name := load_i64(ptr)
             I fn_name == name_idx {
-                R ptr
-            } EL {
+                return ptr
+            } else {
                 i = i + 1
             }
         }
@@ -670,7 +670,7 @@ X CodeGenerator {
 
     # ========== Struct Registration ==========
 
-    F add_struct(&self, name_idx: i64) -> i64 {
+    fn add_struct(&self, name_idx: i64) -> i64 {
         I self.structs_len >= self.structs_cap {
             new_cap := self.structs_cap * 2
             new_ptr := malloc(new_cap * StructTypeInfo.size())
@@ -679,7 +679,7 @@ X CodeGenerator {
             self.structs_ptr = new_ptr
             self.structs_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         ptr := self.structs_ptr + self.structs_len * StructTypeInfo.size()
         store_i64(ptr, name_idx)
@@ -691,14 +691,14 @@ X CodeGenerator {
         ptr
     }
 
-    F find_struct(&self, name_idx: i64) -> i64 {
+    fn find_struct(&self, name_idx: i64) -> i64 {
         i: mut i64 = 0
         L { I i >= self.structs_len { B }
             ptr := self.structs_ptr + i * StructTypeInfo.size()
             struct_name := load_i64(ptr)
             I struct_name == name_idx {
-                R ptr
-            } EL {
+                return ptr
+            } else {
                 i = i + 1
             }
         }
@@ -707,7 +707,7 @@ X CodeGenerator {
 
     # ========== Loop Stack ==========
 
-    F push_loop(&self, break_ptr: i64, break_len: i64, continue_ptr: i64, continue_len: i64) -> i64 {
+    fn push_loop(&self, break_ptr: i64, break_len: i64, continue_ptr: i64, continue_len: i64) -> i64 {
         I self.loop_stack_len >= self.loop_stack_cap {
             new_cap := self.loop_stack_cap * 2
             new_ptr := malloc(new_cap * LoopContext.size())
@@ -716,7 +716,7 @@ X CodeGenerator {
             self.loop_stack_ptr = new_ptr
             self.loop_stack_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         ptr := self.loop_stack_ptr + self.loop_stack_len * LoopContext.size()
         store_i64(ptr, break_ptr)
@@ -728,22 +728,22 @@ X CodeGenerator {
         1
     }
 
-    F pop_loop(&self) -> i64 {
+    fn pop_loop(&self) -> i64 {
         I self.loop_stack_len > 0 {
             self.loop_stack_len = self.loop_stack_len - 1
             1
-        } EL { 0 }
+        } else { 0 }
     }
 
-    F current_loop(&self) -> i64 {
+    fn current_loop(&self) -> i64 {
         I self.loop_stack_len == 0 { 0 }
-        EL { self.loop_stack_ptr + (self.loop_stack_len - 1) * LoopContext.size() }
+        else { self.loop_stack_ptr + (self.loop_stack_len - 1) * LoopContext.size() }
     }
 
     # ========== Monomorphization Support ==========
 
     # Save a generic function's AST pointer for later specialization
-    F save_generic_fn(&self, fn_ptr: i64) -> i64 {
+    fn save_generic_fn(&self, fn_ptr: i64) -> i64 {
         I self.generic_fns_len >= self.generic_fns_cap {
             new_cap := self.generic_fns_cap * 2
             new_ptr := malloc(new_cap * 8)
@@ -752,7 +752,7 @@ X CodeGenerator {
             self.generic_fns_ptr = new_ptr
             self.generic_fns_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         store_i64(self.generic_fns_ptr + self.generic_fns_len * 8, fn_ptr)
         self.generic_fns_len = self.generic_fns_len + 1
@@ -760,14 +760,14 @@ X CodeGenerator {
     }
 
     # Find a saved generic function by name_idx
-    F find_generic_fn(&self, name_idx: i64) -> i64 {
+    fn find_generic_fn(&self, name_idx: i64) -> i64 {
         i: mut i64 = 0
         L { I i >= self.generic_fns_len { B }
             fn_ptr := load_i64(self.generic_fns_ptr + i * 8)
             fn_name := load_i64(fn_ptr)
             I fn_name == name_idx {
-                R fn_ptr
-            } EL { 0 }
+                return fn_ptr
+            } else { 0 }
             i = i + 1
         }
         0
@@ -775,7 +775,7 @@ X CodeGenerator {
 
     # Add a monomorphization entry
     # Each entry: fn_name_idx(8) + type_args_ptr(8) + type_args_len(8) = 24 bytes
-    F add_mono_entry(&self, fn_name_idx: i64, type_args_ptr: i64, type_args_len: i64) -> i64 {
+    fn add_mono_entry(&self, fn_name_idx: i64, type_args_ptr: i64, type_args_len: i64) -> i64 {
         # Check for duplicate
         i: mut i64 = 0
         L { I i >= self.mono_entries_len { B }
@@ -791,12 +791,12 @@ X CodeGenerator {
                     I load_i64(entry_args + j * 8) != load_i64(type_args_ptr + j * 8) {
                         same = 0
                         B
-                    } EL { 0 }
+                    } else { 0 }
                     j = j + 1
                 }
-                I same == 1 { R 1 }  # Already exists
-                EL { 0 }
-            } EL { 0 }
+                I same == 1 { return 1 }  # Already exists
+                else { 0 }
+            } else { 0 }
             i = i + 1
         }
 
@@ -809,7 +809,7 @@ X CodeGenerator {
             self.mono_entries_ptr = new_ptr
             self.mono_entries_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         entry_ptr := self.mono_entries_ptr + self.mono_entries_len * 24
         store_i64(entry_ptr, fn_name_idx)
@@ -822,7 +822,7 @@ X CodeGenerator {
     # Import monomorphization entries from type checker
     # tc_mono_ptr: pointer to type checker's mono_entries array
     # tc_mono_len: number of entries
-    F import_mono_entries(&self, tc_mono_ptr: i64, tc_mono_len: i64) -> i64 {
+    fn import_mono_entries(&self, tc_mono_ptr: i64, tc_mono_len: i64) -> i64 {
         i: mut i64 = 0
         L { I i >= tc_mono_len { B }
             entry_ptr := tc_mono_ptr + i * 24
@@ -848,7 +848,7 @@ X CodeGenerator {
     }
 
     # Import struct monomorphization entries from type checker
-    F import_struct_mono_entries(&self, tc_mono_ptr: i64, tc_mono_len: i64) -> i64 {
+    fn import_struct_mono_entries(&self, tc_mono_ptr: i64, tc_mono_len: i64) -> i64 {
         i: mut i64 = 0
         L { I i >= tc_mono_len { B }
             entry_ptr := tc_mono_ptr + i * 24
@@ -874,7 +874,7 @@ X CodeGenerator {
     }
 
     # Set generic binding for monomorphization
-    F set_mono_binding(&self, name_idx: i64, llvm_type_kind: i64) -> i64 {
+    fn set_mono_binding(&self, name_idx: i64, llvm_type_kind: i64) -> i64 {
         I self.mono_bind_len >= self.mono_bind_cap {
             new_cap := self.mono_bind_cap * 2
             new_keys := malloc(new_cap * 8)
@@ -887,7 +887,7 @@ X CodeGenerator {
             self.mono_bind_values_ptr = new_vals
             self.mono_bind_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         store_i64(self.mono_bind_keys_ptr + self.mono_bind_len * 8, name_idx)
         store_i64(self.mono_bind_values_ptr + self.mono_bind_len * 8, llvm_type_kind)
@@ -896,20 +896,20 @@ X CodeGenerator {
     }
 
     # Get generic binding (returns LLVM type kind, or -1 if not found)
-    F get_mono_binding(&self, name_idx: i64) -> i64 {
+    fn get_mono_binding(&self, name_idx: i64) -> i64 {
         i: mut i64 = self.mono_bind_len
         L { I i == 0 { B }
             i = i - 1
             key := load_i64(self.mono_bind_keys_ptr + i * 8)
             I key == name_idx {
-                R load_i64(self.mono_bind_values_ptr + i * 8)
-            } EL { 0 }
+                return load_i64(self.mono_bind_values_ptr + i * 8)
+            } else { 0 }
         }
         0 - 1  # Not found
     }
 
     # Clear all generic bindings
-    F clear_mono_bindings(&self) -> i64 {
+    fn clear_mono_bindings(&self) -> i64 {
         self.mono_bind_len = 0
         1
     }
@@ -917,7 +917,7 @@ X CodeGenerator {
     # ========== Generic Struct Monomorphization ==========
 
     # Save a generic struct's AST pointer for later specialization
-    F save_generic_struct(&self, struct_ptr: i64) -> i64 {
+    fn save_generic_struct(&self, struct_ptr: i64) -> i64 {
         I self.generic_structs_len >= self.generic_structs_cap {
             new_cap := self.generic_structs_cap * 2
             new_ptr := malloc(new_cap * 8)
@@ -926,7 +926,7 @@ X CodeGenerator {
             self.generic_structs_ptr = new_ptr
             self.generic_structs_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         store_i64(self.generic_structs_ptr + self.generic_structs_len * 8, struct_ptr)
         self.generic_structs_len = self.generic_structs_len + 1
@@ -934,21 +934,21 @@ X CodeGenerator {
     }
 
     # Find a saved generic struct by name_idx
-    F find_generic_struct(&self, name_idx: i64) -> i64 {
+    fn find_generic_struct(&self, name_idx: i64) -> i64 {
         i: mut i64 = 0
         L { I i >= self.generic_structs_len { B }
             struct_ptr := load_i64(self.generic_structs_ptr + i * 8)
             struct_name := load_i64(struct_ptr)  # StructDef.name_idx at offset 0
             I struct_name == name_idx {
-                R struct_ptr
-            } EL { 0 }
+                return struct_ptr
+            } else { 0 }
             i = i + 1
         }
         0
     }
 
     # Add a struct monomorphization entry
-    F add_struct_mono_entry(&self, struct_name_idx: i64, type_kinds_ptr: i64, type_kinds_len: i64) -> i64 {
+    fn add_struct_mono_entry(&self, struct_name_idx: i64, type_kinds_ptr: i64, type_kinds_len: i64) -> i64 {
         # Check for duplicate
         i: mut i64 = 0
         L { I i >= self.struct_mono_len { B }
@@ -964,12 +964,12 @@ X CodeGenerator {
                     I load_i64(entry_args + j * 8) != load_i64(type_kinds_ptr + j * 8) {
                         same = 0
                         B
-                    } EL { 0 }
+                    } else { 0 }
                     j = j + 1
                 }
-                I same == 1 { R 1 }  # Already exists
-                EL { 0 }
-            } EL { 0 }
+                I same == 1 { return 1 }  # Already exists
+                else { 0 }
+            } else { 0 }
             i = i + 1
         }
 
@@ -982,7 +982,7 @@ X CodeGenerator {
             self.struct_mono_ptr = new_ptr
             self.struct_mono_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         # Copy type args
         args_copy := malloc(type_kinds_len * 8)
@@ -997,8 +997,8 @@ X CodeGenerator {
     }
 
     # Generate all monomorphized struct type definitions
-    F generate_mono_struct_types(&self) -> i64 {
-        I self.struct_mono_len == 0 { R 1 }
+    fn generate_mono_struct_types(&self) -> i64 {
+        I self.struct_mono_len == 0 { return 1 }
 
         @.emit_cstr("\n; ========== Monomorphized Struct Types ==========\n")
 
@@ -1014,7 +1014,7 @@ X CodeGenerator {
             I struct_ptr != 0 {
                 @.generate_mono_struct_type(struct_ptr, type_kinds_ptr, type_kinds_len)
                 0
-            } EL { 0 }
+            } else { 0 }
 
             i = i + 1
         }
@@ -1022,7 +1022,7 @@ X CodeGenerator {
     }
 
     # Generate a single monomorphized struct type definition
-    F generate_mono_struct_type(&self, struct_ptr: i64, type_kinds_ptr: i64, type_kinds_len: i64) -> i64 {
+    fn generate_mono_struct_type(&self, struct_ptr: i64, type_kinds_ptr: i64, type_kinds_len: i64) -> i64 {
         name_idx := load_i64(struct_ptr)
         # StructDef: name_idx(0), generics_ptr(8), generics_len(16), fields_ptr(24), fields_len(32)
         generics_ptr := load_i64(struct_ptr + 8)
@@ -1032,7 +1032,7 @@ X CodeGenerator {
 
         # Set up generic bindings
         @.clear_mono_bindings()
-        bind_count := I generics_len < type_kinds_len { generics_len } EL { type_kinds_len }
+        bind_count := I generics_len < type_kinds_len { generics_len } else { type_kinds_len }
         j: mut i64 = 0
         L { I j >= bind_count { B }
             # GenericParam.name_idx is at offset 0, GenericParam.size() = 40
@@ -1054,7 +1054,7 @@ X CodeGenerator {
         # Emit field types (all fields are i64 in our simplified model, but resolve generics)
         i: mut i64 = 0
         L { I i >= fields_len { B }
-            I i > 0 { @.emit_cstr(", ") } EL { 0 }
+            I i > 0 { @.emit_cstr(", ") } else { 0 }
 
             # FieldDef: name_idx(0), type_ptr(8), ... - FieldDef.size() = 40
             field_ptr := fields_ptr + i * 40
@@ -1062,7 +1062,7 @@ X CodeGenerator {
 
             field_llvm := I field_type_ptr == 0 {
                 LLVM_I64()
-            } EL {
+            } else {
                 @.resolve_mono_type(field_type_ptr)
             }
             @.type_to_llvm_str(field_llvm)
@@ -1083,7 +1083,7 @@ X CodeGenerator {
     # ========== VTable / Trait Dispatch ==========
 
     # Register a trait definition (called during first pass)
-    F register_trait_def(&self, trait_name_idx: i64, methods_ptr: i64, methods_len: i64) -> i64 {
+    fn register_trait_def(&self, trait_name_idx: i64, methods_ptr: i64, methods_len: i64) -> i64 {
         I self.trait_defs_len >= self.trait_defs_cap {
             new_cap := self.trait_defs_cap * 2
             new_ptr := malloc(new_cap * 24)
@@ -1092,7 +1092,7 @@ X CodeGenerator {
             self.trait_defs_ptr = new_ptr
             self.trait_defs_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         ptr := self.trait_defs_ptr + self.trait_defs_len * 24
         store_i64(ptr, trait_name_idx)
@@ -1103,12 +1103,12 @@ X CodeGenerator {
     }
 
     # Find a trait definition by name_idx
-    F find_trait_def(&self, trait_name_idx: i64) -> i64 {
+    fn find_trait_def(&self, trait_name_idx: i64) -> i64 {
         i: mut i64 = 0
         L { I i >= self.trait_defs_len { B }
             ptr := self.trait_defs_ptr + i * 24
             name := load_i64(ptr)
-            I name == trait_name_idx { R ptr } EL { 0 }
+            I name == trait_name_idx { return ptr } else { 0 }
             i = i + 1
         }
         0
@@ -1116,7 +1116,7 @@ X CodeGenerator {
 
     # Register a vtable for a (type, trait) pair
     # impl_methods_ptr: array of method name_idx in trait declaration order
-    F add_vtable(&self, impl_type_idx: i64, trait_name_idx: i64,
+    fn add_vtable(&self, impl_type_idx: i64, trait_name_idx: i64,
                  impl_methods_ptr: i64, impl_methods_len: i64) -> i64 {
         I self.vtables_len >= self.vtables_cap {
             new_cap := self.vtables_cap * 2
@@ -1126,7 +1126,7 @@ X CodeGenerator {
             self.vtables_ptr = new_ptr
             self.vtables_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         # Build vtable name: __vtable_TypeName_TraitName
         store_i64(self.temp_buf + 8, 0)  # Clear temp buffer
@@ -1145,7 +1145,7 @@ X CodeGenerator {
             store_i64(self.temp_buf + 16, needed * 2)
             tb_data = new_data
             0
-        } EL { 0 }
+        } else { 0 }
 
         # "__vtable_"
         memcpy_str(tb_data, "__vtable_", 9)
@@ -1174,23 +1174,23 @@ X CodeGenerator {
     }
 
     # Find vtable for a (type, trait) pair
-    F find_vtable(&self, impl_type_idx: i64, trait_name_idx: i64) -> i64 {
+    fn find_vtable(&self, impl_type_idx: i64, trait_name_idx: i64) -> i64 {
         i: mut i64 = 0
         L { I i >= self.vtables_len { B }
             ptr := self.vtables_ptr + i * VtableEntry.size()
             vt_type := load_i64(ptr)
             vt_trait := load_i64(ptr + 8)
             I vt_type == impl_type_idx && vt_trait == trait_name_idx {
-                R ptr
-            } EL { 0 }
+                return ptr
+            } else { 0 }
             i = i + 1
         }
         0
     }
 
     # Emit all vtable globals as LLVM IR constants
-    F emit_vtable_globals(&self) -> i64 {
-        I self.vtables_len == 0 { R 1 }
+    fn emit_vtable_globals(&self) -> i64 {
+        I self.vtables_len == 0 { return 1 }
 
         @.emit_cstr("\n; ========== VTable Globals ==========\n")
 
@@ -1215,7 +1215,7 @@ X CodeGenerator {
 
             j: mut i64 = 0
             L { I j >= methods_len { B }
-                I j > 0 { @.emit_cstr(",\n") } EL { 0 }
+                I j > 0 { @.emit_cstr(",\n") } else { 0 }
 
                 method_name_idx := load_i64(methods_ptr + j * 8)
                 @.emit_cstr("  i64 ptrtoint (i64 (i64)* @")
@@ -1237,7 +1237,7 @@ X CodeGenerator {
     # vtable_reg: register holding the vtable pointer
     # method_index: index of method in vtable
     # args_ptr/args_len: additional argument registers
-    F generate_dyn_call(&self, data_reg: i64, vtable_reg: i64, method_index: i64,
+    fn generate_dyn_call(&self, data_reg: i64, vtable_reg: i64, method_index: i64,
                         args_ptr: i64, args_len: i64) -> i64 {
         # Load function pointer from vtable at method_index
         # vtable is an array of i64 function pointers
@@ -1295,7 +1295,7 @@ X CodeGenerator {
 
     # Build monomorphized function name: "fn_name_T1_T2"
     # Returns (name_ptr, name_len) via temp buffer
-    F build_mono_name(&self, fn_name_idx: i64, type_kinds_ptr: i64, type_kinds_len: i64) -> i64 {
+    fn build_mono_name(&self, fn_name_idx: i64, type_kinds_ptr: i64, type_kinds_len: i64) -> i64 {
         # Clear temp buffer
         store_i64(self.temp_buf + 8, 0)  # len = 0
 
@@ -1317,7 +1317,7 @@ X CodeGenerator {
             store_i64(self.temp_buf + 16, new_cap)
             tb_data = new_data
             0
-        } EL { 0 }
+        } else { 0 }
 
         # Copy base name
         memcpy(tb_data, base_ptr, base_len)
@@ -1344,7 +1344,7 @@ X CodeGenerator {
                 store_byte(tb_data + pos, 95)  # _
                 pos = pos + 1
                 0
-            } EL { 0 }
+            } else { 0 }
 
             kind := load_i64(type_kinds_ptr + i * 8)
             # Write kind as digits
@@ -1354,7 +1354,7 @@ X CodeGenerator {
                 store_byte(tb_data + pos, 48 + kind % 10)
                 pos = pos + 1
                 0
-            } EL {
+            } else {
                 store_byte(tb_data + pos, 48 + kind)
                 pos = pos + 1
                 0
@@ -1368,8 +1368,8 @@ X CodeGenerator {
     }
 
     # Generate all monomorphized function specializations
-    F generate_mono_functions(&self) -> i64 {
-        I self.mono_entries_len == 0 { R 1 }
+    fn generate_mono_functions(&self) -> i64 {
+        I self.mono_entries_len == 0 { return 1 }
 
         @.emit_cstr("\n; ========== Monomorphized Functions ==========\n")
 
@@ -1385,7 +1385,7 @@ X CodeGenerator {
             I fn_ptr != 0 {
                 @.generate_mono_function(fn_ptr, type_kinds_ptr, type_kinds_len)
                 0
-            } EL { 0 }
+            } else { 0 }
 
             i = i + 1
         }
@@ -1393,7 +1393,7 @@ X CodeGenerator {
     }
 
     # Generate a single monomorphized function
-    F generate_mono_function(&self, fn_ptr: i64, type_kinds_ptr: i64, type_kinds_len: i64) -> i64 {
+    fn generate_mono_function(&self, fn_ptr: i64, type_kinds_ptr: i64, type_kinds_len: i64) -> i64 {
         name_idx := load_i64(fn_ptr)
         generics_ptr := load_i64(fn_ptr + 8)
         generics_len := load_i64(fn_ptr + 16)
@@ -1407,7 +1407,7 @@ X CodeGenerator {
 
         # Set up generic bindings
         @.clear_mono_bindings()
-        bind_count := I generics_len < type_kinds_len { generics_len } EL { type_kinds_len }
+        bind_count := I generics_len < type_kinds_len { generics_len } else { type_kinds_len }
         j: mut i64 = 0
         L { I j >= bind_count { B }
             # GenericParam.name_idx is at offset 0, GenericParam.size() = 40
@@ -1427,7 +1427,7 @@ X CodeGenerator {
         ret_llvm := I ret_type_ptr == 0 {
             self.current_fn_ret_type = LLVM_VOID()
             LLVM_VOID()
-        } EL {
+        } else {
             ret_kind := load_i64(ret_type_ptr)
             llvm_kind := @.resolve_mono_type(ret_type_ptr)
             self.current_fn_ret_type = llvm_kind
@@ -1451,7 +1451,7 @@ X CodeGenerator {
         # Emit parameters (resolve generic types)
         k: mut i64 = 0
         L { I k >= params_len { B }
-            I k > 0 { @.emit_cstr(", ") } EL { 0 }
+            I k > 0 { @.emit_cstr(", ") } else { 0 }
 
             param_ptr := params_ptr + k * 40  # Param.size() = 40
             param_name_idx := load_i64(param_ptr)
@@ -1459,7 +1459,7 @@ X CodeGenerator {
 
             param_llvm := I param_type_ptr == 0 {
                 LLVM_I64()
-            } EL {
+            } else {
                 @.resolve_mono_type(param_type_ptr)
             }
 
@@ -1483,20 +1483,20 @@ X CodeGenerator {
             result_reg := @.generate_expr(body_expr_ptr)
             I ret_llvm == LLVM_VOID() {
                 @.emit_cstr("  ret void\n")
-            } EL {
+            } else {
                 @.emit_cstr("  ret ")
                 @.type_to_llvm_str(ret_llvm)
                 @.emit_cstr(" ")
                 @.emit_reg(result_reg)
                 @.emit_cstr("\n")
             }
-        } EL {
+        } else {
             @.generate_stmts(body_stmts_ptr, body_stmts_len)
             # Execute deferred expressions at function end
             @.emit_defer_cleanup()
             I ret_llvm == LLVM_VOID() {
                 @.emit_cstr("  ret void\n")
-            } EL {
+            } else {
                 @.emit_cstr("  ret ")
                 @.type_to_llvm_str(ret_llvm)
                 @.emit_cstr(" 0 ; implicit return\n")
@@ -1515,8 +1515,8 @@ X CodeGenerator {
 
     # Resolve a type pointer considering current mono bindings
     # If the type is a generic parameter, look up the concrete type
-    F resolve_mono_type(&self, type_ptr: i64) -> i64 {
-        I type_ptr == 0 { R LLVM_I64() }
+    fn resolve_mono_type(&self, type_ptr: i64) -> i64 {
+        I type_ptr == 0 { return LLVM_I64() }
 
         type_kind := load_i64(type_ptr)
 
@@ -1526,22 +1526,22 @@ X CodeGenerator {
             bound := @.get_mono_binding(gen_name)
             I bound != 0 - 1 {
                 bound  # Return the concrete LLVM type kind
-            } EL {
+            } else {
                 LLVM_I64()  # Fallback
             }
         }
         # TY_NAMED = 25 - check if it has generic args
-        EL I type_kind == 25 {
+        else I type_kind == 25 {
             LLVM_I64()  # Named types default to pointer-sized
         }
-        EL {
+        else {
             @.resolved_type_to_llvm(type_kind)
         }
     }
 
     # ========== String Constants ==========
 
-    F add_string_constant(&self, value_ptr: i64, value_len: i64) -> i64 {
+    fn add_string_constant(&self, value_ptr: i64, value_len: i64) -> i64 {
         # Returns the string constant name index
         idx := self.strings_len
 
@@ -1553,7 +1553,7 @@ X CodeGenerator {
             self.strings_ptr = new_ptr
             self.strings_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         # Store: name will be ".str.N", value is the string content
         ptr := self.strings_ptr + self.strings_len * 32
@@ -1567,7 +1567,7 @@ X CodeGenerator {
 
     # ========== Code Generation Entry Point ==========
 
-    F generate_module(&self, module_ptr: i64) -> i64 {
+    fn generate_module(&self, module_ptr: i64) -> i64 {
         # Get module data
         items_ptr := load_i64(module_ptr)
         items_len := load_i64(module_ptr + 8)
@@ -1594,14 +1594,14 @@ X CodeGenerator {
                 @.register_function_decl(data_ptr)
             }
             # ITEM_STRUCT = 2
-            EL I kind == 2 {
+            else I kind == 2 {
                 @.register_struct_decl(data_ptr)
             }
             # ITEM_TRAIT = 6
-            EL I kind == 6 {
+            else I kind == 6 {
                 @.register_trait_decl(data_ptr)
             }
-            EL { 0 }
+            else { 0 }
 
             i = i + 1
         }
@@ -1632,10 +1632,10 @@ X CodeGenerator {
                 @.generate_function(data_ptr)
             }
             # ITEM_IMPL = 7
-            EL I kind == 7 {
+            else I kind == 7 {
                 @.generate_impl(data_ptr)
             }
-            EL { 0 }
+            else { 0 }
 
             i = i + 1
         }
@@ -1664,13 +1664,13 @@ X CodeGenerator {
         1
     }
 
-    F register_function_decl(&self, fn_ptr: i64) -> i64 {
+    fn register_function_decl(&self, fn_ptr: i64) -> i64 {
         name_idx := load_i64(fn_ptr)
         ret_type_ptr := load_i64(fn_ptr + 40)
 
         ret_llvm := I ret_type_ptr == 0 {
             LLVM_VOID()
-        } EL {
+        } else {
             ret_kind := load_i64(ret_type_ptr)
             @.resolved_type_to_llvm(ret_kind)
         }
@@ -1678,7 +1678,7 @@ X CodeGenerator {
         @.add_function(name_idx, ret_llvm, 0)
     }
 
-    F register_struct_decl(&self, struct_ptr: i64) -> i64 {
+    fn register_struct_decl(&self, struct_ptr: i64) -> i64 {
         name_idx := load_i64(struct_ptr)
         # StructDef: name_idx(0), generics_ptr(8), generics_len(16)
         generics_len := load_i64(struct_ptr + 16)
@@ -1686,12 +1686,12 @@ X CodeGenerator {
         # Save generic structs for monomorphization, register non-generic normally
         I generics_len > 0 {
             @.save_generic_struct(struct_ptr)
-        } EL {
+        } else {
             @.add_struct(name_idx)
         }
     }
 
-    F register_trait_decl(&self, trait_ptr: i64) -> i64 {
+    fn register_trait_decl(&self, trait_ptr: i64) -> i64 {
         # TraitDef: name_idx(0), generics_ptr(8), generics_len(16),
         #           super_traits_ptr(24), super_traits_len(32),
         #           methods_ptr(40), methods_len(48)
@@ -1710,12 +1710,12 @@ X CodeGenerator {
                 mi = mi + 1
             }
             @.register_trait_def(name_idx, method_names, methods_len)
-        } EL {
+        } else {
             @.register_trait_def(name_idx, 0, 0)
         }
     }
 
-    F emit_struct_type(&self, struct_info_ptr: i64) -> i64 {
+    fn emit_struct_type(&self, struct_info_ptr: i64) -> i64 {
         name_idx := load_i64(struct_info_ptr)
         fields_ptr := load_i64(struct_info_ptr + 8)
         fields_len := load_i64(struct_info_ptr + 16)
@@ -1726,7 +1726,7 @@ X CodeGenerator {
 
         i: mut i64 = 0
         L { I i >= fields_len { B }
-            I i > 0 { @.emit_cstr(", ") } EL { 0 }
+            I i > 0 { @.emit_cstr(", ") } else { 0 }
 
             field_ptr := fields_ptr + i * StructFieldInfo.size()
             field_type := load_i64(field_ptr + 8)
@@ -1739,7 +1739,7 @@ X CodeGenerator {
         1
     }
 
-    F emit_extern_declarations(&self) -> i64 {
+    fn emit_extern_declarations(&self) -> i64 {
         # Emit built-in extern functions
         @.emit_cstr("\n; External declarations\n")
         @.emit_cstr("declare i8* @malloc(i64)\n")
@@ -1752,8 +1752,8 @@ X CodeGenerator {
         1
     }
 
-    F emit_string_constants(&self) -> i64 {
-        I self.strings_len == 0 { R 1 }
+    fn emit_string_constants(&self) -> i64 {
+        I self.strings_len == 0 { return 1 }
 
         @.emit_cstr("\n; String constants\n")
 
@@ -1776,15 +1776,15 @@ X CodeGenerator {
                 c := load_byte(value_ptr + j)
                 I c == 10 {
                     @.emit_cstr("\\0A")
-                } EL I c == 13 {
+                } else I c == 13 {
                     @.emit_cstr("\\0D")
-                } EL I c == 34 {
+                } else I c == 34 {
                     @.emit_cstr("\\22")
-                } EL I c == 92 {
+                } else I c == 92 {
                     @.emit_cstr("\\5C")
-                } EL I c == 0 {
+                } else I c == 0 {
                     @.emit_cstr("\\00")
-                } EL {
+                } else {
                     tb_data := load_i64(self.temp_buf)
                     store_byte(tb_data, c)
                     @.emit(tb_data, 1)
@@ -1798,7 +1798,7 @@ X CodeGenerator {
         1
     }
 
-    F emit_helper_functions(&self) -> i64 {
+    fn emit_helper_functions(&self) -> i64 {
         @.emit_cstr("\n; Helper functions for memory operations\n")
 
         # load_byte
@@ -1840,7 +1840,7 @@ X CodeGenerator {
 
     # ========== Function Generation ==========
 
-    F generate_function(&self, fn_ptr: i64) -> i64 {
+    fn generate_function(&self, fn_ptr: i64) -> i64 {
         name_idx := load_i64(fn_ptr)
         generics_ptr := load_i64(fn_ptr + 8)
         generics_len := load_i64(fn_ptr + 16)
@@ -1858,7 +1858,7 @@ X CodeGenerator {
         # Save generic functions for monomorphization, don't generate them directly
         I generics_len > 0 {
             @.save_generic_fn(fn_ptr)
-            R 1
+            return 1
         }
 
         # Reset state
@@ -1871,7 +1871,7 @@ X CodeGenerator {
         ret_llvm := I ret_type_ptr == 0 {
             self.current_fn_ret_type = LLVM_VOID()
             LLVM_VOID()
-        } EL {
+        } else {
             ret_kind := load_i64(ret_type_ptr)
             llvm_kind := @.resolved_type_to_llvm(ret_kind)
             self.current_fn_ret_type = llvm_kind
@@ -1887,14 +1887,14 @@ X CodeGenerator {
             @.emit_string_idx(self.current_impl_type_idx)
             @.emit_cstr("_")
             0
-        } EL { 0 }
+        } else { 0 }
         @.emit_string_idx(name_idx)
         @.emit_cstr("(")
 
         # Emit parameters
         i: mut i64 = 0
         L { I i >= params_len { B }
-            I i > 0 { @.emit_cstr(", ") } EL { 0 }
+            I i > 0 { @.emit_cstr(", ") } else { 0 }
 
             param_ptr := params_ptr + i * 40  # Param.size() = 40
             param_name_idx := load_i64(param_ptr)
@@ -1902,7 +1902,7 @@ X CodeGenerator {
 
             param_llvm := I param_type_ptr == 0 {
                 LLVM_I64()
-            } EL {
+            } else {
                 type_kind := load_i64(param_type_ptr)
                 @.resolved_type_to_llvm(type_kind)
             }
@@ -1929,28 +1929,28 @@ X CodeGenerator {
 
             I ret_llvm == LLVM_VOID() {
                 @.emit_cstr("  ret void\n")
-            } EL {
+            } else {
                 @.emit_cstr("  ret ")
                 @.type_to_llvm_str(ret_llvm)
                 @.emit_cstr(" ")
                 @.emit_reg(result_reg)
                 @.emit_cstr("\n")
             }
-        } EL {
+        } else {
             # Block body
             @.generate_stmts(body_stmts_ptr, body_stmts_len)
 
             # Add implicit return if needed
             I ret_llvm == LLVM_VOID() {
                 @.emit_cstr("  ret void\n")
-            } EL { 0 }
+            } else { 0 }
         }
 
         @.emit_cstr("}\n\n")
         1
     }
 
-    F generate_impl(&self, impl_ptr: i64) -> i64 {
+    fn generate_impl(&self, impl_ptr: i64) -> i64 {
         # ImplDef: target_type_ptr(0), trait_name_idx(8), generics_ptr(16), generics_len(24),
         #          methods_ptr(32), methods_len(40)
         target_type_ptr := load_i64(impl_ptr)
@@ -1963,7 +1963,7 @@ X CodeGenerator {
         I target_type_ptr != 0 {
             self.current_impl_type_idx = load_i64(target_type_ptr + 24)  # TypeNode.field0 = name_idx
             0
-        } EL {
+        } else {
             self.current_impl_type_idx = 0 - 1
             0
         }
@@ -1984,7 +1984,7 @@ X CodeGenerator {
             # Get target type name_idx from TypeNode (kind at 0, name_idx at field0 = 24)
             impl_type_idx := I target_type_ptr != 0 {
                 load_i64(target_type_ptr + 24)  # TypeNode.field0 = name_idx for NAMED type
-            } EL { 0 }
+            } else { 0 }
 
             I impl_type_idx != 0 {
                 # Build method name_idx array for vtable (in declaration order)
@@ -1998,15 +1998,15 @@ X CodeGenerator {
                 }
                 @.add_vtable(impl_type_idx, trait_name_idx, method_names, methods_len)
                 0
-            } EL { 0 }
-        } EL { 0 }
+            } else { 0 }
+        } else { 0 }
 
         1
     }
 
     # ========== Statement Generation ==========
 
-    F generate_stmts(&self, stmts_ptr: i64, stmts_len: i64) -> i64 {
+    fn generate_stmts(&self, stmts_ptr: i64, stmts_len: i64) -> i64 {
         i: mut i64 = 0
         L { I i >= stmts_len { B }
             stmt_ptr := load_i64(stmts_ptr + i * 8)
@@ -2016,7 +2016,7 @@ X CodeGenerator {
         1
     }
 
-    F generate_stmt(&self, stmt_ptr: i64) -> i64 {
+    fn generate_stmt(&self, stmt_ptr: i64) -> i64 {
         kind := load_i64(stmt_ptr)
 
         # STMT_LET = 10
@@ -2024,32 +2024,32 @@ X CodeGenerator {
             @.generate_let_stmt(stmt_ptr)
         }
         # STMT_EXPR = 11
-        EL I kind == 11 {
+        else I kind == 11 {
             expr_ptr := load_i64(stmt_ptr + 24)
             @.generate_expr(expr_ptr)
             1
         }
         # STMT_RETURN = 12
-        EL I kind == 12 {
+        else I kind == 12 {
             @.generate_return_stmt(stmt_ptr)
         }
         # STMT_BREAK = 13
-        EL I kind == 13 {
+        else I kind == 13 {
             @.generate_break_stmt()
         }
         # STMT_CONTINUE = 14
-        EL I kind == 14 {
+        else I kind == 14 {
             @.generate_continue_stmt()
         }
         # STMT_DEFER = 15
-        EL I kind == 15 {
+        else I kind == 15 {
             @.push_defer(stmt_ptr)
         }
-        EL { 1 }
+        else { 1 }
     }
 
     # Push a defer statement's expression pointer onto the defer stack
-    F push_defer(&self, stmt_ptr: i64) -> i64 {
+    fn push_defer(&self, stmt_ptr: i64) -> i64 {
         expr_ptr := load_i64(stmt_ptr + 24)
         I self.defer_stack_len >= self.defer_stack_cap {
             new_cap := self.defer_stack_cap * 2
@@ -2059,14 +2059,14 @@ X CodeGenerator {
             self.defer_stack_ptr = new_ptr
             self.defer_stack_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
         store_i64(self.defer_stack_ptr + self.defer_stack_len * 8, expr_ptr)
         self.defer_stack_len = self.defer_stack_len + 1
         1
     }
 
     # Emit code for all deferred expressions in LIFO order
-    F emit_defer_cleanup(&self) -> i64 {
+    fn emit_defer_cleanup(&self) -> i64 {
         I self.defer_stack_len > 0 {
             i := mut self.defer_stack_len - 1
             done := mut 0
@@ -2075,15 +2075,15 @@ X CodeGenerator {
                 @.generate_expr(expr_ptr)
                 I i == 0 {
                     done = 1
-                } EL {
+                } else {
                     i = i - 1
                 }
             }
             0
-        } EL { 0 }
+        } else { 0 }
     }
 
-    F generate_let_stmt(&self, stmt_ptr: i64) -> i64 {
+    fn generate_let_stmt(&self, stmt_ptr: i64) -> i64 {
         name_idx := load_i64(stmt_ptr + 24)
         type_ptr := load_i64(stmt_ptr + 32)
         value_ptr := load_i64(stmt_ptr + 40)
@@ -2093,7 +2093,7 @@ X CodeGenerator {
         var_type := I type_ptr != 0 {
             type_kind := load_i64(type_ptr)
             @.resolved_type_to_llvm(type_kind)
-        } EL {
+        } else {
             LLVM_I64()  # Default
         }
 
@@ -2118,7 +2118,7 @@ X CodeGenerator {
             @.emit_reg(alloca_reg)
             @.emit_cstr("\n")
             0
-        } EL { 0 }
+        } else { 0 }
 
         # Register local variable (store alloca register as name)
         name_ptr := @.get_string_ptr(name_idx)
@@ -2133,7 +2133,7 @@ X CodeGenerator {
         1
     }
 
-    F generate_return_stmt(&self, stmt_ptr: i64) -> i64 {
+    fn generate_return_stmt(&self, stmt_ptr: i64) -> i64 {
         expr_ptr := load_i64(stmt_ptr + 24)
 
         # Execute deferred expressions before returning
@@ -2141,7 +2141,7 @@ X CodeGenerator {
 
         I expr_ptr == 0 || self.current_fn_ret_type == LLVM_VOID() {
             @.emit_cstr("  ret void\n")
-        } EL {
+        } else {
             value_reg := @.generate_expr(expr_ptr)
             @.emit_cstr("  ret ")
             @.type_to_llvm_str(self.current_fn_ret_type)
@@ -2152,7 +2152,7 @@ X CodeGenerator {
         1
     }
 
-    F generate_break_stmt(&self) -> i64 {
+    fn generate_break_stmt(&self) -> i64 {
         loop_ctx := @.current_loop()
         I loop_ctx != 0 {
             break_label := load_i64(loop_ctx)
@@ -2160,10 +2160,10 @@ X CodeGenerator {
             @.emit_i64(break_label)
             @.emit_cstr("\n")
             1
-        } EL { 0 }
+        } else { 0 }
     }
 
-    F generate_continue_stmt(&self) -> i64 {
+    fn generate_continue_stmt(&self) -> i64 {
         loop_ctx := @.current_loop()
         I loop_ctx != 0 {
             continue_label := load_i64(loop_ctx + 16)
@@ -2171,13 +2171,13 @@ X CodeGenerator {
             @.emit_i64(continue_label)
             @.emit_cstr("\n")
             1
-        } EL { 0 }
+        } else { 0 }
     }
 
     # ========== Expression Generation ==========
 
-    F generate_expr(&self, expr_ptr: i64) -> i64 {
-        I expr_ptr == 0 { R 0 }
+    fn generate_expr(&self, expr_ptr: i64) -> i64 {
+        I expr_ptr == 0 { return 0 }
 
         kind := load_i64(expr_ptr)
 
@@ -2193,7 +2193,7 @@ X CodeGenerator {
             result
         }
         # EXPR_FLOAT = 21
-        EL I kind == 21 {
+        else I kind == 21 {
             # For now, emit as i64 (float bits)
             value := load_i64(expr_ptr + 24)
             result := @.fresh_reg()
@@ -2205,18 +2205,18 @@ X CodeGenerator {
             result
         }
         # EXPR_BOOL = 22
-        EL I kind == 22 {
+        else I kind == 22 {
             value := load_i64(expr_ptr + 24)
             result := @.fresh_reg()
             @.emit_cstr("  ")
             @.emit_reg(result)
             @.emit_cstr(" = add i64 0, ")
-            I value != 0 { @.emit_cstr("1") } EL { @.emit_cstr("0") }
+            I value != 0 { @.emit_cstr("1") } else { @.emit_cstr("0") }
             @.emit_cstr("\n")
             result
         }
         # EXPR_STRING = 23
-        EL I kind == 23 {
+        else I kind == 23 {
             str_idx := load_i64(expr_ptr + 24)
             str_ptr := @.get_string_ptr(str_idx)
             str_len := @.get_string_len(str_idx)
@@ -2247,7 +2247,7 @@ X CodeGenerator {
             result2
         }
         # EXPR_UNIT = 24
-        EL I kind == 24 {
+        else I kind == 24 {
             result := @.fresh_reg()
             @.emit_cstr("  ")
             @.emit_reg(result)
@@ -2255,16 +2255,16 @@ X CodeGenerator {
             result
         }
         # EXPR_IDENT = 25
-        EL I kind == 25 {
+        else I kind == 25 {
             name_idx := load_i64(expr_ptr + 24)
             @.generate_ident(name_idx)
         }
         # EXPR_SELF_CALL = 26
-        EL I kind == 26 {
+        else I kind == 26 {
             @.generate_self_call(expr_ptr)
         }
         # EXPR_BINARY = 27
-        EL I kind == 27 {
+        else I kind == 27 {
             # Try constant folding first
             left_ptr := load_i64(expr_ptr + 24)
             right_ptr := load_i64(expr_ptr + 32)
@@ -2278,11 +2278,11 @@ X CodeGenerator {
                 op := load_i64(expr_ptr + 40)
 
                 folded := I op == OP_ADD() { left_val + right_val }
-                          EL I op == OP_SUB() { left_val - right_val }
-                          EL I op == OP_MUL() { left_val * right_val }
-                          EL I op == OP_DIV() && right_val != 0 { left_val / right_val }
-                          EL I op == OP_MOD() && right_val != 0 { left_val % right_val }
-                          EL { 0 - 1 }  # sentinel: can't fold
+                          else I op == OP_SUB() { left_val - right_val }
+                          else I op == OP_MUL() { left_val * right_val }
+                          else I op == OP_DIV() && right_val != 0 { left_val / right_val }
+                          else I op == OP_MOD() && right_val != 0 { left_val % right_val }
+                          else { 0 - 1 }  # sentinel: can't fold
 
                 I folded != 0 - 1 {
                     result := @.fresh_reg()
@@ -2292,15 +2292,15 @@ X CodeGenerator {
                     @.emit_i64(folded)
                     @.emit_cstr(" ; constant fold\n")
                     result
-                } EL {
+                } else {
                     @.generate_binary(expr_ptr)
                 }
-            } EL {
+            } else {
                 @.generate_binary(expr_ptr)
             }
         }
         # EXPR_UNARY = 28
-        EL I kind == 28 {
+        else I kind == 28 {
             # Try constant folding first
             inner_ptr := load_i64(expr_ptr + 24)
             inner_kind := load_i64(inner_ptr)
@@ -2311,8 +2311,8 @@ X CodeGenerator {
                 op := load_i64(expr_ptr + 32)
 
                 folded := I op == UOP_NEG() { 0 - inner_val }
-                          EL I op == UOP_BITNOT() { 0 - 1 - inner_val }  # ~x = -1 - x
-                          EL { 0 - 1 }  # sentinel: can't fold
+                          else I op == UOP_BITNOT() { 0 - 1 - inner_val }  # ~x = -1 - x
+                          else { 0 - 1 }  # sentinel: can't fold
 
                 I folded != 0 - 1 {
                     result := @.fresh_reg()
@@ -2322,103 +2322,103 @@ X CodeGenerator {
                     @.emit_i64(folded)
                     @.emit_cstr(" ; constant fold\n")
                     result
-                } EL {
+                } else {
                     @.generate_unary(expr_ptr)
                 }
-            } EL {
+            } else {
                 @.generate_unary(expr_ptr)
             }
         }
         # EXPR_IF = 30
-        EL I kind == 30 {
+        else I kind == 30 {
             @.generate_if(expr_ptr)
         }
         # EXPR_LOOP = 31
-        EL I kind == 31 {
+        else I kind == 31 {
             @.generate_loop(expr_ptr)
         }
         # EXPR_WHILE = 52
-        EL I kind == 52 {
+        else I kind == 52 {
             @.generate_while(expr_ptr)
         }
         # EXPR_CALL = 33
-        EL I kind == 33 {
+        else I kind == 33 {
             @.generate_call(expr_ptr)
         }
         # EXPR_INDEX = 37
-        EL I kind == 37 {
+        else I kind == 37 {
             @.generate_index(expr_ptr)
         }
         # EXPR_ARRAY = 38
-        EL I kind == 38 {
+        else I kind == 38 {
             @.generate_array(expr_ptr)
         }
         # EXPR_BLOCK = 42
-        EL I kind == 42 {
+        else I kind == 42 {
             @.generate_block_expr(expr_ptr)
         }
         # EXPR_TERNARY = 29
-        EL I kind == 29 {
+        else I kind == 29 {
             @.generate_ternary(expr_ptr)
         }
         # EXPR_MATCH = 32
-        EL I kind == 32 {
+        else I kind == 32 {
             @.generate_match(expr_ptr)
         }
         # EXPR_METHOD_CALL = 34
-        EL I kind == 34 {
+        else I kind == 34 {
             @.generate_method_call(expr_ptr)
         }
         # EXPR_STATIC_CALL = 35
-        EL I kind == 35 {
+        else I kind == 35 {
             @.generate_static_call(expr_ptr)
         }
         # EXPR_FIELD = 36
-        EL I kind == 36 {
+        else I kind == 36 {
             @.generate_field_access(expr_ptr)
         }
         # EXPR_TUPLE = 39
-        EL I kind == 39 {
+        else I kind == 39 {
             @.generate_tuple(expr_ptr)
         }
         # EXPR_STRUCT_LIT = 40
-        EL I kind == 40 {
+        else I kind == 40 {
             @.generate_struct_lit(expr_ptr)
         }
         # EXPR_RANGE = 41
-        EL I kind == 41 {
+        else I kind == 41 {
             @.generate_range(expr_ptr)
         }
         # EXPR_TRY = 44
-        EL I kind == 44 {
+        else I kind == 44 {
             @.generate_try(expr_ptr)
         }
         # EXPR_UNWRAP = 45
-        EL I kind == 45 {
+        else I kind == 45 {
             @.generate_unwrap(expr_ptr)
         }
         # EXPR_REF = 46
-        EL I kind == 46 {
+        else I kind == 46 {
             @.generate_ref(expr_ptr)
         }
         # EXPR_DEREF = 47
-        EL I kind == 47 {
+        else I kind == 47 {
             @.generate_deref(expr_ptr)
         }
         # EXPR_ASSIGN = 48
-        EL I kind == 48 {
+        else I kind == 48 {
             @.generate_assign(expr_ptr)
         }
         # EXPR_ASSIGN_OP = 49
-        EL I kind == 49 {
+        else I kind == 49 {
             @.generate_assign_op(expr_ptr)
         }
         # EXPR_LAMBDA = 50
-        EL I kind == 50 {
+        else I kind == 50 {
             @.generate_lambda(expr_ptr)
         }
         # EXPR_AWAIT = 43
-        EL I kind == 43 {
+        else I kind == 43 {
             inner_ptr := load_i64(expr_ptr + 24)  # field0: Future expression
             inner_reg := @.generate_expr(inner_ptr)
 
@@ -2435,7 +2435,7 @@ X CodeGenerator {
             result
         }
         # EXPR_SPAWN = 51
-        EL I kind == 51 {
+        else I kind == 51 {
             inner_ptr := load_i64(expr_ptr + 24)  # field0: expression to spawn
             inner_reg := @.generate_expr(inner_ptr)
 
@@ -2449,7 +2449,7 @@ X CodeGenerator {
             @.emit_cstr(" ; spawn\n")
             result
         }
-        EL {
+        else {
             # Unknown expression, return 0
             result := @.fresh_reg()
             @.emit_cstr("  ")
@@ -2461,7 +2461,7 @@ X CodeGenerator {
         }
     }
 
-    F generate_ident(&self, name_idx: i64) -> i64 {
+    fn generate_ident(&self, name_idx: i64) -> i64 {
         local_ptr := @.find_local(name_idx)
         I local_ptr != 0 {
             is_alloca := load_i64(local_ptr + 40)
@@ -2481,7 +2481,7 @@ X CodeGenerator {
                 @.emit_reg(alloca_reg)
                 @.emit_cstr("\n")
                 result
-            } EL {
+            } else {
                 # Direct use of parameter
                 result := @.fresh_reg()
                 @.emit_cstr("  ")
@@ -2493,7 +2493,7 @@ X CodeGenerator {
                 @.emit_cstr("\n")
                 result
             }
-        } EL {
+        } else {
             # Unknown variable
             result := @.fresh_reg()
             @.emit_cstr("  ; unknown var: ")
@@ -2506,7 +2506,7 @@ X CodeGenerator {
         }
     }
 
-    F generate_binary(&self, expr_ptr: i64) -> i64 {
+    fn generate_binary(&self, expr_ptr: i64) -> i64 {
         left_ptr := load_i64(expr_ptr + 24)
         right_ptr := load_i64(expr_ptr + 32)
         op := load_i64(expr_ptr + 40)
@@ -2520,24 +2520,24 @@ X CodeGenerator {
         @.emit_cstr(" = ")
 
         I op == OP_ADD() { @.emit_cstr("add i64 ") }
-        EL I op == OP_SUB() { @.emit_cstr("sub i64 ") }
-        EL I op == OP_MUL() { @.emit_cstr("mul i64 ") }
-        EL I op == OP_DIV() { @.emit_cstr("sdiv i64 ") }
-        EL I op == OP_MOD() { @.emit_cstr("srem i64 ") }
-        EL I op == OP_LT() { @.emit_cstr("icmp slt i64 ") }
-        EL I op == OP_LTE() { @.emit_cstr("icmp sle i64 ") }
-        EL I op == OP_GT() { @.emit_cstr("icmp sgt i64 ") }
-        EL I op == OP_GTE() { @.emit_cstr("icmp sge i64 ") }
-        EL I op == OP_EQ() { @.emit_cstr("icmp eq i64 ") }
-        EL I op == OP_NEQ() { @.emit_cstr("icmp ne i64 ") }
-        EL I op == OP_AND() { @.emit_cstr("and i64 ") }
-        EL I op == OP_OR() { @.emit_cstr("or i64 ") }
-        EL I op == OP_BIT_AND() { @.emit_cstr("and i64 ") }
-        EL I op == OP_BIT_OR() { @.emit_cstr("or i64 ") }
-        EL I op == OP_BIT_XOR() { @.emit_cstr("xor i64 ") }
-        EL I op == OP_SHL() { @.emit_cstr("shl i64 ") }
-        EL I op == OP_SHR() { @.emit_cstr("ashr i64 ") }
-        EL { @.emit_cstr("add i64 ") }
+        else I op == OP_SUB() { @.emit_cstr("sub i64 ") }
+        else I op == OP_MUL() { @.emit_cstr("mul i64 ") }
+        else I op == OP_DIV() { @.emit_cstr("sdiv i64 ") }
+        else I op == OP_MOD() { @.emit_cstr("srem i64 ") }
+        else I op == OP_LT() { @.emit_cstr("icmp slt i64 ") }
+        else I op == OP_LTE() { @.emit_cstr("icmp sle i64 ") }
+        else I op == OP_GT() { @.emit_cstr("icmp sgt i64 ") }
+        else I op == OP_GTE() { @.emit_cstr("icmp sge i64 ") }
+        else I op == OP_EQ() { @.emit_cstr("icmp eq i64 ") }
+        else I op == OP_NEQ() { @.emit_cstr("icmp ne i64 ") }
+        else I op == OP_AND() { @.emit_cstr("and i64 ") }
+        else I op == OP_OR() { @.emit_cstr("or i64 ") }
+        else I op == OP_BIT_AND() { @.emit_cstr("and i64 ") }
+        else I op == OP_BIT_OR() { @.emit_cstr("or i64 ") }
+        else I op == OP_BIT_XOR() { @.emit_cstr("xor i64 ") }
+        else I op == OP_SHL() { @.emit_cstr("shl i64 ") }
+        else I op == OP_SHR() { @.emit_cstr("ashr i64 ") }
+        else { @.emit_cstr("add i64 ") }
 
         @.emit_reg(left_reg)
         @.emit_cstr(", ")
@@ -2553,12 +2553,12 @@ X CodeGenerator {
             @.emit_reg(result)
             @.emit_cstr(" to i64\n")
             ext_result
-        } EL {
+        } else {
             result
         }
     }
 
-    F generate_unary(&self, expr_ptr: i64) -> i64 {
+    fn generate_unary(&self, expr_ptr: i64) -> i64 {
         inner_ptr := load_i64(expr_ptr + 24)
         op := load_i64(expr_ptr + 32)
 
@@ -2573,17 +2573,17 @@ X CodeGenerator {
             @.emit_cstr("sub i64 0, ")
             @.emit_reg(inner_reg)
         }
-        EL I op == UOP_NOT() {
+        else I op == UOP_NOT() {
             @.emit_cstr("xor i64 ")
             @.emit_reg(inner_reg)
             @.emit_cstr(", 1")
         }
-        EL I op == UOP_BITNOT() {
+        else I op == UOP_BITNOT() {
             @.emit_cstr("xor i64 ")
             @.emit_reg(inner_reg)
             @.emit_cstr(", -1")
         }
-        EL {
+        else {
             @.emit_cstr("add i64 0, ")
             @.emit_reg(inner_reg)
         }
@@ -2592,7 +2592,7 @@ X CodeGenerator {
         result
     }
 
-    F generate_if(&self, expr_ptr: i64) -> i64 {
+    fn generate_if(&self, expr_ptr: i64) -> i64 {
         cond_ptr := load_i64(expr_ptr + 24)
         then_stmts := load_i64(expr_ptr + 32)
         then_len := load_i64(expr_ptr + 40)
@@ -2636,7 +2636,7 @@ X CodeGenerator {
         I else_ptr != 0 {
             @.generate_else(else_ptr)
             0
-        } EL { 0 }
+        } else { 0 }
         @.emit_cstr("  br label %end")
         @.emit_i64(label_id)
         @.emit_cstr("\n")
@@ -2654,14 +2654,14 @@ X CodeGenerator {
         result
     }
 
-    F generate_else(&self, else_ptr: i64) -> i64 {
+    fn generate_else(&self, else_ptr: i64) -> i64 {
         kind := load_i64(else_ptr)
         I kind == 0 {
             # else block
             stmts_ptr := load_i64(else_ptr + 16)
             stmts_len := load_i64(else_ptr + 24)
             @.generate_stmts(stmts_ptr, stmts_len)
-        } EL {
+        } else {
             # else-if
             cond_ptr := load_i64(else_ptr + 8)
             stmts_ptr := load_i64(else_ptr + 16)
@@ -2700,7 +2700,7 @@ X CodeGenerator {
             I next_ptr != 0 {
                 @.generate_else(next_ptr)
                 0
-            } EL { 0 }
+            } else { 0 }
             @.emit_cstr("  br label %elseif_end")
             @.emit_i64(label_id)
             @.emit_cstr("\n")
@@ -2712,7 +2712,7 @@ X CodeGenerator {
         1
     }
 
-    F generate_loop(&self, expr_ptr: i64) -> i64 {
+    fn generate_loop(&self, expr_ptr: i64) -> i64 {
         body_stmts := load_i64(expr_ptr + 40)
         body_len := load_i64(expr_ptr + 48)
 
@@ -2759,7 +2759,7 @@ X CodeGenerator {
         result
     }
 
-    F generate_while(&self, expr_ptr: i64) -> i64 {
+    fn generate_while(&self, expr_ptr: i64) -> i64 {
         cond_ptr := load_i64(expr_ptr + 24)   # field0: condition
         body_stmts := load_i64(expr_ptr + 32) # field1: body stmts
         body_len := load_i64(expr_ptr + 40)   # field2: body len
@@ -2818,7 +2818,7 @@ X CodeGenerator {
         result
     }
 
-    F generate_call(&self, expr_ptr: i64) -> i64 {
+    fn generate_call(&self, expr_ptr: i64) -> i64 {
         func_ptr := load_i64(expr_ptr + 24)
         args_ptr := load_i64(expr_ptr + 32)
         args_len := load_i64(expr_ptr + 40)
@@ -2831,7 +2831,7 @@ X CodeGenerator {
             @.emit_cstr("  ")
             @.emit_reg(result)
             @.emit_cstr(" = add i64 0, 0 ; non-ident call\n")
-            R result
+            return result
         }
 
         func_name_idx := load_i64(func_ptr + 24)
@@ -2840,7 +2840,7 @@ X CodeGenerator {
         fn_info := @.find_function(func_name_idx)
         ret_type := I fn_info != 0 {
             load_i64(fn_info + 24)
-        } EL {
+        } else {
             LLVM_I64()  # Default
         }
 
@@ -2859,7 +2859,7 @@ X CodeGenerator {
 
         I ret_type == LLVM_VOID() {
             @.emit_cstr("  call void @")
-        } EL {
+        } else {
             @.emit_cstr("  ")
             @.emit_reg(result)
             @.emit_cstr(" = call ")
@@ -2872,7 +2872,7 @@ X CodeGenerator {
 
         i = 0
         L { I i >= args_len { B }
-            I i > 0 { @.emit_cstr(", ") } EL { 0 }
+            I i > 0 { @.emit_cstr(", ") } else { 0 }
             @.emit_cstr("i64 ")
             arg_reg := load_i64(arg_regs_ptr + i * 8)
             @.emit_reg(arg_reg)
@@ -2889,12 +2889,12 @@ X CodeGenerator {
             @.emit_reg(zero)
             @.emit_cstr(" = add i64 0, 0\n")
             zero
-        } EL {
+        } else {
             result
         }
     }
 
-    F generate_array(&self, expr_ptr: i64) -> i64 {
+    fn generate_array(&self, expr_ptr: i64) -> i64 {
         # Get elements array and length
         elements_ptr := load_i64(expr_ptr + 24)
         elements_len := load_i64(expr_ptr + 32)
@@ -2905,7 +2905,7 @@ X CodeGenerator {
             @.emit_cstr("  ")
             @.emit_reg(result)
             @.emit_cstr(" = inttoptr i64 0 to i64*\n")
-            R result
+            return result
         }
 
         # Allocate array on the stack (elements_len * 8 bytes for i64)
@@ -2948,7 +2948,7 @@ X CodeGenerator {
         alloca_reg
     }
 
-    F generate_index(&self, expr_ptr: i64) -> i64 {
+    fn generate_index(&self, expr_ptr: i64) -> i64 {
         # Get base and index expressions
         base_expr := load_i64(expr_ptr + 24)
         index_expr := load_i64(expr_ptr + 32)
@@ -2981,7 +2981,7 @@ X CodeGenerator {
         result
     }
 
-    F generate_block_expr(&self, expr_ptr: i64) -> i64 {
+    fn generate_block_expr(&self, expr_ptr: i64) -> i64 {
         stmts_ptr := load_i64(expr_ptr + 24)
         stmts_len := load_i64(expr_ptr + 32)
 
@@ -2995,7 +2995,7 @@ X CodeGenerator {
         result
     }
 
-    F generate_assign(&self, expr_ptr: i64) -> i64 {
+    fn generate_assign(&self, expr_ptr: i64) -> i64 {
         target_ptr := load_i64(expr_ptr + 24)
         value_ptr := load_i64(expr_ptr + 32)
 
@@ -3011,12 +3011,12 @@ X CodeGenerator {
             @.emit_cstr(", i64 ")
             @.emit_reg(value_reg)
             @.emit_cstr(")\n")
-            R value_reg
+            return value_reg
         }
 
         I target_kind != 25 {
             # Not an identifier target, just evaluate value
-            R @.generate_expr(value_ptr)
+            return @.generate_expr(value_ptr)
         }
 
         target_name_idx := load_i64(target_ptr + 24)
@@ -3024,7 +3024,7 @@ X CodeGenerator {
 
         I local_ptr == 0 {
             # Unknown variable
-            R @.generate_expr(value_ptr)
+            return @.generate_expr(value_ptr)
         }
 
         is_alloca := load_i64(local_ptr + 40)
@@ -3032,7 +3032,7 @@ X CodeGenerator {
 
         I is_alloca != 1 {
             # Can't assign to parameter (for now)
-            R @.generate_expr(value_ptr)
+            return @.generate_expr(value_ptr)
         }
 
         value_reg := @.generate_expr(value_ptr)
@@ -3053,7 +3053,7 @@ X CodeGenerator {
 
     # ========== Self Call (@ operator) ==========
 
-    F generate_self_call(&self, expr_ptr: i64) -> i64 {
+    fn generate_self_call(&self, expr_ptr: i64) -> i64 {
         # @ = recursive call to current function
         # Self call has no explicit data; it refers to the current function
         # Emit a call to the current function with no args (caller will wrap with method_call)
@@ -3068,14 +3068,14 @@ X CodeGenerator {
 
     # ========== Tuple ==========
 
-    F generate_tuple(&self, expr_ptr: i64) -> i64 {
+    fn generate_tuple(&self, expr_ptr: i64) -> i64 {
         # TUPLE: field0 = elements_ptr, field1 = len
         elements_ptr := load_i64(expr_ptr + 24)
         elements_len := load_i64(expr_ptr + 32)
 
         # Allocate memory for tuple (elements_len * 8 bytes)
         size := mut elements_len * 8
-        I size == 0 { size = 8 } EL { 0 }
+        I size == 0 { size = 8 } else { 0 }
 
         size_reg := @.fresh_reg()
         @.emit_cstr("  ")
@@ -3127,7 +3127,7 @@ X CodeGenerator {
 
     # ========== Range ==========
 
-    F generate_range(&self, expr_ptr: i64) -> i64 {
+    fn generate_range(&self, expr_ptr: i64) -> i64 {
         # RANGE: field0 = start_ptr, field1 = end_ptr, field2 = inclusive
         start_ptr := load_i64(expr_ptr + 24)
         end_ptr := load_i64(expr_ptr + 32)
@@ -3147,7 +3147,7 @@ X CodeGenerator {
         @.emit_cstr(" to i64\n")
 
         # Store start
-        start_reg := I start_ptr != 0 { @.generate_expr(start_ptr) } EL {
+        start_reg := I start_ptr != 0 { @.generate_expr(start_ptr) } else {
             zero := @.fresh_reg()
             @.emit_cstr("  ")
             @.emit_reg(zero)
@@ -3168,7 +3168,7 @@ X CodeGenerator {
         @.emit_reg(range_ptr)
         @.emit_cstr(", 8\n")
 
-        end_reg := I end_ptr != 0 { @.generate_expr(end_ptr) } EL {
+        end_reg := I end_ptr != 0 { @.generate_expr(end_ptr) } else {
             max := @.fresh_reg()
             @.emit_cstr("  ")
             @.emit_reg(max)
@@ -3199,7 +3199,7 @@ X CodeGenerator {
 
     # ========== Lambda Helpers ==========
 
-    F lambda_emit_cstr(&self, s: str) -> i64 {
+    fn lambda_emit_cstr(&self, s: str) -> i64 {
         len := strlen(s)
         lb_data: mut i64 = load_i64(self.lambda_buf)
         lb_len := load_i64(self.lambda_buf + 8)
@@ -3214,14 +3214,14 @@ X CodeGenerator {
             store_i64(self.lambda_buf + 16, new_cap)
             lb_data = new_data
             0
-        } EL { 0 }
+        } else { 0 }
 
         memcpy_str(lb_data + lb_len, s, len)
         store_i64(self.lambda_buf + 8, lb_len + len)
         1
     }
 
-    F lambda_emit_i64(&self, value: i64) -> i64 {
+    fn lambda_emit_i64(&self, value: i64) -> i64 {
         # Write i64 to lambda buffer using temp buf
         store_i64(self.temp_buf + 8, 0)
         tb_data := load_i64(self.temp_buf)
@@ -3229,17 +3229,17 @@ X CodeGenerator {
         I value == 0 {
             store_byte(tb_data, 48)
             @.lambda_emit_ptr(tb_data, 1)
-        } EL I value < 0 {
+        } else I value < 0 {
             store_byte(tb_data, 45)
             @.lambda_emit_ptr(tb_data, 1)
             @.lambda_emit_i64(0 - value)
-        } EL {
+        } else {
             @.lambda_emit_positive_i64(value)
         }
     }
 
-    F lambda_emit_positive_i64(&self, value: i64) -> i64 {
-        I value == 0 { R 1 }
+    fn lambda_emit_positive_i64(&self, value: i64) -> i64 {
+        I value == 0 { return 1 }
         @.lambda_emit_positive_i64(value / 10)
         digit := (value % 10) + 48
         tb_data := load_i64(self.temp_buf)
@@ -3247,7 +3247,7 @@ X CodeGenerator {
         @.lambda_emit_ptr(tb_data, 1)
     }
 
-    F lambda_emit_ptr(&self, ptr: i64, len: i64) -> i64 {
+    fn lambda_emit_ptr(&self, ptr: i64, len: i64) -> i64 {
         lb_data: mut i64 = load_i64(self.lambda_buf)
         lb_len := load_i64(self.lambda_buf + 8)
         lb_cap := load_i64(self.lambda_buf + 16)
@@ -3261,21 +3261,21 @@ X CodeGenerator {
             store_i64(self.lambda_buf + 16, new_cap)
             lb_data = new_data
             0
-        } EL { 0 }
+        } else { 0 }
 
         memcpy(lb_data + lb_len, ptr, len)
         store_i64(self.lambda_buf + 8, lb_len + len)
         1
     }
 
-    F lambda_emit_reg(&self, n: i64) -> i64 {
+    fn lambda_emit_reg(&self, n: i64) -> i64 {
         @.lambda_emit_cstr("%")
         @.lambda_emit_i64(n)
     }
 
-    F emit_lambda_functions(&self) -> i64 {
+    fn emit_lambda_functions(&self) -> i64 {
         lb_len := load_i64(self.lambda_buf + 8)
-        I lb_len == 0 { R 1 }
+        I lb_len == 0 { return 1 }
 
         @.emit_cstr("\n; Lambda functions\n")
         lb_data := load_i64(self.lambda_buf)
@@ -3291,7 +3291,7 @@ X CodeGenerator {
     #   Each entry is 16 bytes: (name_idx: i64, capture_mode: i64)
     #   capture_mode: 0 = Move (value copy), 1 = Ref (pointer pass)
     # Returns the number of captured variables found
-    F collect_captures(&self, body_ptr: i64, params_ptr: i64, params_len: i64,
+    fn collect_captures(&self, body_ptr: i64, params_ptr: i64, params_len: i64,
                        captures_ptr: i64, captures_len: i64, captures_cap: i64) -> i64 {
         body_kind := load_i64(body_ptr)
 
@@ -3308,50 +3308,50 @@ X CodeGenerator {
                 I param_name == name_idx {
                     is_lambda_param = 1
                     B
-                } EL { 0 }
+                } else { 0 }
                 pi = pi + 1
             }
-            I is_lambda_param == 1 { R captures_len }
+            I is_lambda_param == 1 { return captures_len }
 
             # Check if it exists in outer locals (is a capture candidate)
             local_ptr := @.find_local(name_idx)
-            I local_ptr == 0 { R captures_len }  # Not in scope, skip
+            I local_ptr == 0 { return captures_len }  # Not in scope, skip
 
             # Check for duplicate
             ci: mut i64 = 0
             L { I ci >= captures_len { B }
                 I load_i64(captures_ptr + ci * 16) == name_idx {
-                    R captures_len  # Already captured
-                } EL { 0 }
+                    return captures_len  # Already captured
+                } else { 0 }
                 ci = ci + 1
             }
 
             # Determine capture mode: Ref for mutable locals (alloca), Move for params
             is_alloca := load_i64(local_ptr + 40)
-            cap_mode := I is_alloca == 1 { 1 } EL { 0 }  # 1=Ref, 0=Move
+            cap_mode := I is_alloca == 1 { 1 } else { 0 }  # 1=Ref, 0=Move
 
             # Add capture with mode
             I captures_len < captures_cap {
                 store_i64(captures_ptr + captures_len * 16, name_idx)
                 store_i64(captures_ptr + captures_len * 16 + 8, cap_mode)
-                R captures_len + 1
-            } EL { R captures_len }
+                return captures_len + 1
+            } else { return captures_len }
         }
 
         # EXPR_BINARY = 27: recurse into left and right
-        EL I body_kind == 27 {
+        else I body_kind == 27 {
             left_ptr := load_i64(body_ptr + 24)
             right_ptr := load_i64(body_ptr + 32)
             len1 := @.collect_captures(left_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
             @.collect_captures(right_ptr, params_ptr, params_len, captures_ptr, len1, captures_cap)
         }
         # EXPR_UNARY = 28: recurse into operand
-        EL I body_kind == 28 {
+        else I body_kind == 28 {
             inner_ptr := load_i64(body_ptr + 24)
             @.collect_captures(inner_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
         }
         # EXPR_CALL = 33: recurse into func and args
-        EL I body_kind == 33 {
+        else I body_kind == 33 {
             func_ptr := load_i64(body_ptr + 24)
             args_ptr := load_i64(body_ptr + 32)
             args_len := load_i64(body_ptr + 40)
@@ -3365,7 +3365,7 @@ X CodeGenerator {
             cur_len
         }
         # EXPR_IF = 30: cond, then stmts, else ptr
-        EL I body_kind == 30 {
+        else I body_kind == 30 {
             cond_ptr := load_i64(body_ptr + 24)
             cur_len: mut i64 = @.collect_captures(cond_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
             # then block stmts
@@ -3380,7 +3380,7 @@ X CodeGenerator {
                 I stmt_expr != 0 {
                     cur_len = @.collect_captures(stmt_expr, params_ptr, params_len, captures_ptr, cur_len, captures_cap)
                     0
-                } EL { 0 }
+                } else { 0 }
                 si = si + 1
             }
             # else branch
@@ -3388,11 +3388,11 @@ X CodeGenerator {
             I else_ptr != 0 {
                 cur_len = @.collect_captures(else_ptr, params_ptr, params_len, captures_ptr, cur_len, captures_cap)
                 0
-            } EL { 0 }
+            } else { 0 }
             cur_len
         }
         # EXPR_BLOCK = 42: stmts
-        EL I body_kind == 42 {
+        else I body_kind == 42 {
             stmts_ptr := load_i64(body_ptr + 24)
             stmts_len := load_i64(body_ptr + 32)
             cur_len: mut i64 = captures_len
@@ -3403,13 +3403,13 @@ X CodeGenerator {
                 I stmt_expr != 0 {
                     cur_len = @.collect_captures(stmt_expr, params_ptr, params_len, captures_ptr, cur_len, captures_cap)
                     0
-                } EL { 0 }
+                } else { 0 }
                 si = si + 1
             }
             cur_len
         }
         # EXPR_METHOD_CALL = 34: receiver + args
-        EL I body_kind == 34 {
+        else I body_kind == 34 {
             recv_ptr := load_i64(body_ptr + 24)
             args_ptr := load_i64(body_ptr + 40)
             args_len := load_i64(body_ptr + 48)
@@ -3423,19 +3423,19 @@ X CodeGenerator {
             cur_len
         }
         # EXPR_FIELD = 36: inner expr
-        EL I body_kind == 36 {
+        else I body_kind == 36 {
             inner_ptr := load_i64(body_ptr + 24)
             @.collect_captures(inner_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
         }
         # EXPR_INDEX = 37: expr + index
-        EL I body_kind == 37 {
+        else I body_kind == 37 {
             base_ptr := load_i64(body_ptr + 24)
             idx_ptr := load_i64(body_ptr + 32)
             len1 := @.collect_captures(base_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
             @.collect_captures(idx_ptr, params_ptr, params_len, captures_ptr, len1, captures_cap)
         }
         # EXPR_TERNARY = 29: cond, then, else
-        EL I body_kind == 29 {
+        else I body_kind == 29 {
             cond_ptr := load_i64(body_ptr + 24)
             then_ptr := load_i64(body_ptr + 32)
             else_ptr := load_i64(body_ptr + 40)
@@ -3443,7 +3443,7 @@ X CodeGenerator {
             len2 := @.collect_captures(then_ptr, params_ptr, params_len, captures_ptr, len1, captures_cap)
             @.collect_captures(else_ptr, params_ptr, params_len, captures_ptr, len2, captures_cap)
         }
-        EL {
+        else {
             # For literal types (INT, FLOAT, BOOL, STRING, UNIT) - no captures
             captures_len
         }
@@ -3451,7 +3451,7 @@ X CodeGenerator {
 
     # ========== Lambda Codegen ==========
 
-    F generate_lambda(&self, expr_ptr: i64) -> i64 {
+    fn generate_lambda(&self, expr_ptr: i64) -> i64 {
         # LAMBDA: field0 = params_ptr, field1 = params_len, field2 = body_ptr
         params_ptr := load_i64(expr_ptr + 24)
         params_len := load_i64(expr_ptr + 32)
@@ -3481,7 +3481,7 @@ X CodeGenerator {
                     @.emit_reg(alloca_reg)
                     @.emit_cstr(" to i64 ; ref capture\n")
                     store_i64(capture_regs + ci * 8, cap_reg)
-                } EL I is_param == 1 {
+                } else I is_param == 1 {
                     # Move capture of parameter: copy value
                     cap_reg := @.fresh_reg()
                     @.emit_cstr("  ")
@@ -3492,7 +3492,7 @@ X CodeGenerator {
                     @.emit_ptr(cap_name_ptr, cap_name_len)
                     @.emit_cstr(", 0 ; move capture\n")
                     store_i64(capture_regs + ci * 8, cap_reg)
-                } EL {
+                } else {
                     # Move capture of local: load value from alloca
                     alloca_reg := load_i64(local_ptr + 8)
                     cap_reg := @.fresh_reg()
@@ -3503,7 +3503,7 @@ X CodeGenerator {
                     @.emit_cstr(" ; move capture\n")
                     store_i64(capture_regs + ci * 8, cap_reg)
                 }
-            } EL {
+            } else {
                 store_i64(capture_regs + ci * 8, 0)
             }
             ci = ci + 1
@@ -3533,7 +3533,7 @@ X CodeGenerator {
         total_params: mut i64 = 0
         ci = 0
         L { I ci >= num_captures { B }
-            I total_params > 0 { @.lambda_emit_cstr(", ") } EL { 0 }
+            I total_params > 0 { @.lambda_emit_cstr(", ") } else { 0 }
 
             cap_name_idx := load_i64(capture_buf + ci * 16)
             cap_mode := load_i64(capture_buf + ci * 16 + 8)
@@ -3549,12 +3549,12 @@ X CodeGenerator {
                 # directly register with alloca flag so reads/writes go through it
                 @.lambda_emit_cstr("_ptr")
                 # We'll create an alloca in the lambda body for ref captures
-            } EL { 0 }
+            } else { 0 }
 
             # Register capture as local parameter (Move captures are direct params)
             I cap_mode == 0 {
                 @.add_local(cap_name_idx, pname_ptr, pname_len, LLVM_I64(), 1)
-            } EL { 0 }
+            } else { 0 }
 
             total_params = total_params + 1
             ci = ci + 1
@@ -3563,7 +3563,7 @@ X CodeGenerator {
         # Emit regular parameters
         i: mut i64 = 0
         L { I i >= params_len { B }
-            I total_params > 0 { @.lambda_emit_cstr(", ") } EL { 0 }
+            I total_params > 0 { @.lambda_emit_cstr(", ") } else { 0 }
 
             param_ptr := params_ptr + i * 40  # Param.size() = 40
             param_name_idx := load_i64(param_ptr)
@@ -3615,7 +3615,7 @@ X CodeGenerator {
                 local_ptr := self.locals_ptr + local_idx * LocalVar.size()
                 store_i64(local_ptr + 8, ptr_reg)  # llvm_name_ptr = reg number
                 store_i64(local_ptr + 40, 1)  # is_alloca = 1 (pointer semantics)
-            } EL { 0 }
+            } else { 0 }
             ci = ci + 1
         }
 
@@ -3647,7 +3647,7 @@ X CodeGenerator {
         # Emit parameter types for function pointer type (captures + params)
         j: mut i64 = 0
         L { I j >= num_captures + params_len { B }
-            I j > 0 { @.emit_cstr(", ") } EL { 0 }
+            I j > 0 { @.emit_cstr(", ") } else { 0 }
             @.emit_cstr("i64")
             j = j + 1
         }
@@ -3664,7 +3664,7 @@ X CodeGenerator {
 
     # ========== Ref (& operator) ==========
 
-    F generate_ref(&self, expr_ptr: i64) -> i64 {
+    fn generate_ref(&self, expr_ptr: i64) -> i64 {
         # REF: field0 = inner expr
         inner_ptr := load_i64(expr_ptr + 24)
 
@@ -3685,11 +3685,11 @@ X CodeGenerator {
                     @.emit_cstr(" = ptrtoint i64* ")
                     @.emit_reg(alloca_reg)
                     @.emit_cstr(" to i64\n")
-                    R result
-                } EL { 0 }
-            } EL { 0 }
+                    return result
+                } else { 0 }
+            } else { 0 }
             0
-        } EL { 0 }
+        } else { 0 }
 
         # Fallback: generate expr and store it on stack, return pointer
         inner_reg := @.generate_expr(inner_ptr)
@@ -3714,7 +3714,7 @@ X CodeGenerator {
 
     # ========== Deref (* operator) ==========
 
-    F generate_deref(&self, expr_ptr: i64) -> i64 {
+    fn generate_deref(&self, expr_ptr: i64) -> i64 {
         # DEREF: field0 = inner expr (pointer value)
         inner_ptr := load_i64(expr_ptr + 24)
         ptr_reg := @.generate_expr(inner_ptr)
@@ -3731,7 +3731,7 @@ X CodeGenerator {
 
     # ========== Try (? operator) ==========
 
-    F generate_try(&self, expr_ptr: i64) -> i64 {
+    fn generate_try(&self, expr_ptr: i64) -> i64 {
         # TRY: field0 = inner expr (Result value)
         # Result layout: first i64 is tag (0=Ok, 1=Err), second i64 is value
         inner_ptr := load_i64(expr_ptr + 24)
@@ -3795,7 +3795,7 @@ X CodeGenerator {
 
     # ========== Unwrap (! operator) ==========
 
-    F generate_unwrap(&self, expr_ptr: i64) -> i64 {
+    fn generate_unwrap(&self, expr_ptr: i64) -> i64 {
         # UNWRAP: field0 = inner expr (Optional/Result value)
         # Simply extract the value (second field), assume it's valid
         inner_ptr := load_i64(expr_ptr + 24)
@@ -3821,7 +3821,7 @@ X CodeGenerator {
 
     # ========== Assign Op (+=, -=, *=, /=) ==========
 
-    F generate_assign_op(&self, expr_ptr: i64) -> i64 {
+    fn generate_assign_op(&self, expr_ptr: i64) -> i64 {
         # ASSIGN_OP: field0 = target, field1 = value, field2 = op
         target_ptr := load_i64(expr_ptr + 24)
         value_ptr := load_i64(expr_ptr + 32)
@@ -3830,21 +3830,21 @@ X CodeGenerator {
         target_kind := load_i64(target_ptr)
         I target_kind != 25 {
             # Not an identifier target
-            R @.generate_expr(value_ptr)
+            return @.generate_expr(value_ptr)
         }
 
         target_name_idx := load_i64(target_ptr + 24)
         local_ptr := @.find_local(target_name_idx)
 
         I local_ptr == 0 {
-            R @.generate_expr(value_ptr)
+            return @.generate_expr(value_ptr)
         }
 
         is_alloca := load_i64(local_ptr + 40)
         type_kind := load_i64(local_ptr + 24)
 
         I is_alloca != 1 {
-            R @.generate_expr(value_ptr)
+            return @.generate_expr(value_ptr)
         }
 
         # Load current value
@@ -3870,11 +3870,11 @@ X CodeGenerator {
         @.emit_cstr(" = ")
 
         I op == OP_ADD() { @.emit_cstr("add i64 ") }
-        EL I op == OP_SUB() { @.emit_cstr("sub i64 ") }
-        EL I op == OP_MUL() { @.emit_cstr("mul i64 ") }
-        EL I op == OP_DIV() { @.emit_cstr("sdiv i64 ") }
-        EL I op == OP_MOD() { @.emit_cstr("srem i64 ") }
-        EL { @.emit_cstr("add i64 ") }
+        else I op == OP_SUB() { @.emit_cstr("sub i64 ") }
+        else I op == OP_MUL() { @.emit_cstr("mul i64 ") }
+        else I op == OP_DIV() { @.emit_cstr("sdiv i64 ") }
+        else I op == OP_MOD() { @.emit_cstr("srem i64 ") }
+        else { @.emit_cstr("add i64 ") }
 
         @.emit_reg(current_reg)
         @.emit_cstr(", ")
@@ -3897,7 +3897,7 @@ X CodeGenerator {
 
     # ========== Match Expression ==========
 
-    F generate_match(&self, expr_ptr: i64) -> i64 {
+    fn generate_match(&self, expr_ptr: i64) -> i64 {
         # MATCH: field0 = scrutinee expr, field1 = arms ptr, field2 = arms_len
         scrutinee_ptr := load_i64(expr_ptr + 24)
         arms_ptr := load_i64(expr_ptr + 32)
@@ -3919,7 +3919,7 @@ X CodeGenerator {
             body_ptr := load_i64(arm_ptr + 16)
 
             arm_label := @.fresh_label()
-            next_label := I i + 1 < arms_len { @.fresh_label() } EL { merge_label }
+            next_label := I i + 1 < arms_len { @.fresh_label() } else { merge_label }
 
             # Pattern matching: compare scrutinee against pattern
             pat_kind := load_i64(pattern_ptr)
@@ -3945,13 +3945,13 @@ X CodeGenerator {
                     local_ptr := self.locals_ptr + local_idx * 48  # LocalVar.size()
                     store_i64(local_ptr + 40, 1)  # is_alloca = 1
                     0
-                } EL { 0 }
+                } else { 0 }
                 @.emit_cstr("  br label %arm")
                 @.emit_i64(arm_label)
                 @.emit_cstr("\n")
             }
             # PAT_LITERAL = 82
-            EL I pat_kind == 82 {
+            else I pat_kind == 82 {
                 lit_value := load_i64(pattern_ptr + 24)
                 cmp_reg := @.fresh_reg()
                 @.emit_cstr("  ")
@@ -3970,7 +3970,7 @@ X CodeGenerator {
                 @.emit_cstr("\n")
             }
             # PAT_VARIANT = 85 (enum variant: compare tag)
-            EL I pat_kind == 85 {
+            else I pat_kind == 85 {
                 variant_name_idx := load_i64(pattern_ptr + 24)
                 # Compare tag (treat variant name as tag index for now)
                 cmp_reg := @.fresh_reg()
@@ -3990,7 +3990,7 @@ X CodeGenerator {
                 @.emit_cstr("\n")
             }
             # PAT_RANGE = 86
-            EL I pat_kind == 86 {
+            else I pat_kind == 86 {
                 range_start_pat := load_i64(pattern_ptr + 24)
                 range_end_pat := load_i64(pattern_ptr + 32)
                 range_inclusive := load_i64(pattern_ptr + 40)
@@ -4013,7 +4013,7 @@ X CodeGenerator {
                 @.emit_reg(le_reg)
                 I range_inclusive == 1 {
                     @.emit_cstr(" = icmp sle i64 ")
-                } EL {
+                } else {
                     @.emit_cstr(" = icmp slt i64 ")
                 }
                 @.emit_reg(scrutinee_reg)
@@ -4040,7 +4040,7 @@ X CodeGenerator {
                 @.emit_cstr("\n")
             }
             # PAT_OR = 87
-            EL I pat_kind == 87 {
+            else I pat_kind == 87 {
                 or_pats_ptr := load_i64(pattern_ptr + 24)
                 or_pats_len := load_i64(pattern_ptr + 32)
 
@@ -4049,7 +4049,7 @@ X CodeGenerator {
                 L { I k >= or_pats_len { B }
                     sub_pat := load_i64(or_pats_ptr + k * 8)
                     sub_kind := load_i64(sub_pat)
-                    or_next := I k + 1 < or_pats_len { @.fresh_label() } EL { next_label }
+                    or_next := I k + 1 < or_pats_len { @.fresh_label() } else { next_label }
 
                     I sub_kind == 82 {
                         # Literal sub-pattern
@@ -4073,8 +4073,8 @@ X CodeGenerator {
                             @.emit_cstr("or_next")
                             @.emit_i64(or_next)
                             @.emit_cstr(":\n")
-                        } EL { 0 }
-                    } EL {
+                        } else { 0 }
+                    } else {
                         # Wildcard/ident in or-pattern: always matches
                         @.emit_cstr("  br label %arm")
                         @.emit_i64(arm_label)
@@ -4085,7 +4085,7 @@ X CodeGenerator {
                 }
                 0
             }
-            EL {
+            else {
                 # Other patterns: default to always-match
                 @.emit_cstr("  br label %arm")
                 @.emit_i64(arm_label)
@@ -4118,7 +4118,7 @@ X CodeGenerator {
                 @.emit_i64(guard_pass_label)
                 @.emit_cstr(":\n")
                 0
-            } EL { 0 }
+            } else { 0 }
 
             arm_result := @.generate_expr(body_ptr)
 
@@ -4135,7 +4135,7 @@ X CodeGenerator {
                 @.emit_cstr("next")
                 @.emit_i64(next_label)
                 @.emit_cstr(":\n")
-            } EL { 0 }
+            } else { 0 }
 
             i = i + 1
         }
@@ -4152,7 +4152,7 @@ X CodeGenerator {
             @.emit_cstr(" = phi i64 ")
             j: mut i64 = 0
             L { I j >= arms_len { B }
-                I j > 0 { @.emit_cstr(", ") } EL { 0 }
+                I j > 0 { @.emit_cstr(", ") } else { 0 }
                 arm_label := load_i64(arm_results_ptr + j * 16)
                 arm_result := load_i64(arm_results_ptr + j * 16 + 8)
                 @.emit_cstr("[ ")
@@ -4163,7 +4163,7 @@ X CodeGenerator {
                 j = j + 1
             }
             @.emit_cstr("\n")
-        } EL {
+        } else {
             @.emit_cstr("  ")
             @.emit_reg(result)
             @.emit_cstr(" = add i64 0, 0\n")
@@ -4175,7 +4175,7 @@ X CodeGenerator {
 
     # ========== Ternary Expression ==========
 
-    F generate_ternary(&self, expr_ptr: i64) -> i64 {
+    fn generate_ternary(&self, expr_ptr: i64) -> i64 {
         # TERNARY: field0 = cond, field1 = then_expr, field2 = else_expr
         cond_ptr := load_i64(expr_ptr + 24)
         then_ptr := load_i64(expr_ptr + 32)
@@ -4244,8 +4244,8 @@ X CodeGenerator {
 
     # Infer the struct name_idx from a receiver expression
     # Returns -1 if cannot determine
-    F infer_receiver_type(&self, expr_ptr: i64) -> i64 {
-        I expr_ptr == 0 { R 0 - 1 }
+    fn infer_receiver_type(&self, expr_ptr: i64) -> i64 {
+        I expr_ptr == 0 { return 0 - 1 }
         kind := load_i64(expr_ptr)
 
         # EXPR_IDENT = 25: look up variable's struct type
@@ -4259,26 +4259,26 @@ X CodeGenerator {
                 # If the variable was initialized from a struct literal or static call,
                 # we can't easily determine the struct name from LLVM type alone
                 0 - 1
-            } EL { 0 - 1 }
+            } else { 0 - 1 }
         }
         # EXPR_STRUCT_LIT = 40: struct name is directly available
-        EL I kind == 40 {
+        else I kind == 40 {
             load_i64(expr_ptr + 24)  # field0 = name_idx
         }
         # EXPR_STATIC_CALL = 35: type_idx is the struct name
-        EL I kind == 35 {
+        else I kind == 35 {
             load_i64(expr_ptr + 24)  # field0 = type_idx
         }
         # EXPR_SELF_CALL = 26: use current impl type
-        EL I kind == 26 {
+        else I kind == 26 {
             self.current_impl_type_idx
         }
-        EL {
+        else {
             0 - 1
         }
     }
 
-    F generate_method_call(&self, expr_ptr: i64) -> i64 {
+    fn generate_method_call(&self, expr_ptr: i64) -> i64 {
         # METHOD_CALL: field0 = receiver, field1 = method_idx, field2 = args_ptr, field3 = args_len
         receiver_ptr := load_i64(expr_ptr + 24)
         method_idx := load_i64(expr_ptr + 32)
@@ -4311,13 +4311,13 @@ X CodeGenerator {
             @.emit_string_idx(recv_type_idx)
             @.emit_cstr("_")
             0
-        } EL { 0 }
+        } else { 0 }
         @.emit_string_idx(method_idx)
         @.emit_cstr("(")
 
         j: mut i64 = 0
         L { I j >= total_args { B }
-            I j > 0 { @.emit_cstr(", ") } EL { 0 }
+            I j > 0 { @.emit_cstr(", ") } else { 0 }
             @.emit_cstr("i64 ")
             arg_reg := load_i64(arg_regs_ptr + j * 8)
             @.emit_reg(arg_reg)
@@ -4331,7 +4331,7 @@ X CodeGenerator {
 
     # ========== Static Call ==========
 
-    F generate_static_call(&self, expr_ptr: i64) -> i64 {
+    fn generate_static_call(&self, expr_ptr: i64) -> i64 {
         # STATIC_CALL: field0 = type_idx, field1 = method_idx, field2 = args_ptr, field3 = args_len
         type_idx := load_i64(expr_ptr + 24)
         method_idx := load_i64(expr_ptr + 32)
@@ -4360,7 +4360,7 @@ X CodeGenerator {
 
         j: mut i64 = 0
         L { I j >= args_len { B }
-            I j > 0 { @.emit_cstr(", ") } EL { 0 }
+            I j > 0 { @.emit_cstr(", ") } else { 0 }
             @.emit_cstr("i64 ")
             arg_reg := load_i64(arg_regs_ptr + j * 8)
             @.emit_reg(arg_reg)
@@ -4374,7 +4374,7 @@ X CodeGenerator {
 
     # ========== Field Access ==========
 
-    F generate_field_access(&self, expr_ptr: i64) -> i64 {
+    fn generate_field_access(&self, expr_ptr: i64) -> i64 {
         # FIELD: field0 = expr_ptr, field1 = field_idx
         obj_expr := load_i64(expr_ptr + 24)
         field_idx := load_i64(expr_ptr + 32)
@@ -4406,7 +4406,7 @@ X CodeGenerator {
 
     # ========== Struct Literal ==========
 
-    F generate_struct_lit(&self, expr_ptr: i64) -> i64 {
+    fn generate_struct_lit(&self, expr_ptr: i64) -> i64 {
         # STRUCT_LIT: field0 = name_idx, field1 = fields_ptr, field2 = fields_len
         name_idx := load_i64(expr_ptr + 24)
         fields_ptr := load_i64(expr_ptr + 32)
@@ -4414,7 +4414,7 @@ X CodeGenerator {
 
         # Allocate memory for the struct (fields_len * 8 bytes)
         size := mut fields_len * 8
-        I size == 0 { size = 8 } EL { 0 }  # Minimum 8 bytes
+        I size == 0 { size = 8 } else { 0 }  # Minimum 8 bytes
 
         # Call malloc
         size_reg := @.fresh_reg()
@@ -4476,11 +4476,11 @@ X CodeGenerator {
     # Two-pass algorithm:
     #   Pass 1: Collect all %N definitions and %N uses
     #   Pass 2: Remove definitions where %N is never used (side-effect-free only)
-    F optimize_dce(&self) -> i64 {
+    fn optimize_dce(&self) -> i64 {
         ir_data := load_i64(self.output)
         ir_len := load_i64(self.output + 8)
 
-        I ir_len == 0 { R 1 }
+        I ir_len == 0 { return 1 }
 
         # Allocate usage tracking arrays
         # We track registers %0 .. %(reg_counter_max-1)
@@ -4511,16 +4511,16 @@ X CodeGenerator {
             L { I pos >= ir_len { B }
                 ch := load_byte(ir_data + pos)
                 I ch == 10 { B }  # newline
-                EL { pos = pos + 1 }
+                else { pos = pos + 1 }
             }
             line_len := pos - line_start
 
             # Skip newline
-            I pos < ir_len { pos = pos + 1 } EL { 0 }
+            I pos < ir_len { pos = pos + 1 } else { 0 }
 
             # Skip empty lines, comments, labels
             I line_len == 0 { 0 }
-            EL {
+            else {
                 @.dce_scan_line(ir_data + line_start, line_len, defined, used, side_effect, max_regs)
             }
         }
@@ -4536,12 +4536,12 @@ X CodeGenerator {
             L { I pos >= ir_len { B }
                 ch := load_byte(ir_data + pos)
                 I ch == 10 { B }
-                EL { pos = pos + 1 }
+                else { pos = pos + 1 }
             }
             line_len := pos - line_start
 
             # Skip newline
-            I pos < ir_len { pos = pos + 1 } EL { 0 }
+            I pos < ir_len { pos = pos + 1 } else { 0 }
 
             # Check if this line defines an unused register
             should_remove := @.dce_should_remove(ir_data + line_start, line_len, defined, used, side_effect, max_regs)
@@ -4554,12 +4554,12 @@ X CodeGenerator {
                 new_len = new_len + dce_len
                 store_byte(new_buf + new_len, 10)
                 new_len = new_len + 1
-            } EL {
+            } else {
                 # Copy line as-is
                 I line_len > 0 {
                     memcpy(new_buf + new_len, ir_data + line_start, line_len)
                     new_len = new_len + line_len
-                } EL { 0 }
+                } else { 0 }
                 store_byte(new_buf + new_len, 10)
                 new_len = new_len + 1
             }
@@ -4580,21 +4580,21 @@ X CodeGenerator {
     }
 
     # Scan a single IR line to collect definitions, uses, and side effects
-    F dce_scan_line(&self, line_ptr: i64, line_len: i64, defined: i64, used: i64, side_effect: i64, max_regs: i64) -> i64 {
+    fn dce_scan_line(&self, line_ptr: i64, line_len: i64, defined: i64, used: i64, side_effect: i64, max_regs: i64) -> i64 {
         # Skip leading whitespace
         start: mut i64 = 0
         L { I start >= line_len { B }
             ch := load_byte(line_ptr + start)
-            I ch == 32 || ch == 9 { start = start + 1 } EL { B }
+            I ch == 32 || ch == 9 { start = start + 1 } else { B }
         }
-        I start >= line_len { R 0 }
+        I start >= line_len { return 0 }
 
         first_ch := load_byte(line_ptr + start)
 
         # Skip comments (;) and labels (line ending with :)
-        I first_ch == 59 { R 0 }  # ';'
+        I first_ch == 59 { return 0 }  # ';'
         last_ch := load_byte(line_ptr + line_len - 1)
-        I last_ch == 58 { R 0 }  # ':'
+        I last_ch == 58 { return 0 }  # ':'
 
         # Check if line is a definition: %N = ...
         # Find the pattern: %<digits> = or %<name> =
@@ -4607,14 +4607,14 @@ X CodeGenerator {
             has_side := @.dce_has_side_effect(line_ptr, line_len)
             I has_side == 1 {
                 store_byte(side_effect + def_reg, 1)
-            } EL { 0 }
+            } else { 0 }
 
             # Scan for used registers in the RHS (after " = ")
             eq_pos := @.dce_find_equals(line_ptr, line_len)
             I eq_pos > 0 {
                 @.dce_scan_uses(line_ptr + eq_pos, line_len - eq_pos, used, max_regs)
-            } EL { 0 }
-        } EL {
+            } else { 0 }
+        } else {
             # Not a definition line - all %N references are uses
             # This covers: ret, br, store, call without result, etc.
             @.dce_scan_uses(line_ptr, line_len, used, max_regs)
@@ -4625,11 +4625,11 @@ X CodeGenerator {
 
     # Extract definition register number from a line like "  %5 = add i64 ..."
     # Returns register number or -1 if not a definition
-    F dce_extract_def_reg(&self, line_ptr: i64, line_len: i64, start: i64) -> i64 {
-        I start >= line_len { R 0 - 1 }
+    fn dce_extract_def_reg(&self, line_ptr: i64, line_len: i64, start: i64) -> i64 {
+        I start >= line_len { return 0 - 1 }
 
         ch := load_byte(line_ptr + start)
-        I ch != 37 { R 0 - 1 }  # Not '%'
+        I ch != 37 { return 0 - 1 }  # Not '%'
 
         # Read digits after %
         pos: mut i64 = start + 1
@@ -4642,10 +4642,10 @@ X CodeGenerator {
                 num = num * 10 + (d - 48)
                 has_digit = 1
                 pos = pos + 1
-            } EL { B }
+            } else { B }
         }
 
-        I has_digit == 0 { R 0 - 1 }
+        I has_digit == 0 { return 0 - 1 }
 
         # Check that next chars are " = "
         I pos + 3 <= line_len {
@@ -4654,19 +4654,19 @@ X CodeGenerator {
             c3 := load_byte(line_ptr + pos + 2)
             I c1 == 32 && c2 == 61 && c3 == 32 {
                 num
-            } EL { 0 - 1 }
-        } EL { 0 - 1 }
+            } else { 0 - 1 }
+        } else { 0 - 1 }
     }
 
     # Find the position of " = " in a line, returns position after " = " or -1
-    F dce_find_equals(&self, line_ptr: i64, line_len: i64) -> i64 {
+    fn dce_find_equals(&self, line_ptr: i64, line_len: i64) -> i64 {
         i: mut i64 = 0
         L { I i + 2 >= line_len { B }
             c1 := load_byte(line_ptr + i)
             c2 := load_byte(line_ptr + i + 1)
             c3 := load_byte(line_ptr + i + 2)
             I c1 == 32 && c2 == 61 && c3 == 32 {
-                R i + 3
+                return i + 3
             }
             i = i + 1
         }
@@ -4675,23 +4675,23 @@ X CodeGenerator {
 
     # Check if line contains a side-effectful instruction
     # Side effects: call, invoke (function calls have side effects)
-    F dce_has_side_effect(&self, line_ptr: i64, line_len: i64) -> i64 {
+    fn dce_has_side_effect(&self, line_ptr: i64, line_len: i64) -> i64 {
         # Find the RHS after " = "
         eq_pos := @.dce_find_equals(line_ptr, line_len)
-        rhs_start := I eq_pos > 0 { eq_pos } EL { 0 }
+        rhs_start := I eq_pos > 0 { eq_pos } else { 0 }
         rhs_ptr := line_ptr + rhs_start
         rhs_len := line_len - rhs_start
 
         # Check for "call " (bytes: 99 97 108 108 32)
-        I @.dce_contains_5bytes(rhs_ptr, rhs_len, 99, 97, 108, 108, 32) == 1 { R 1 }
+        I @.dce_contains_5bytes(rhs_ptr, rhs_len, 99, 97, 108, 108, 32) == 1 { return 1 }
         # Check for "invoke " - just check "invok" (105 110 118 111 107)
-        I @.dce_contains_5bytes(rhs_ptr, rhs_len, 105, 110, 118, 111, 107) == 1 { R 1 }
+        I @.dce_contains_5bytes(rhs_ptr, rhs_len, 105, 110, 118, 111, 107) == 1 { return 1 }
         0
     }
 
     # Check if a region contains 5 consecutive bytes matching the given values
-    F dce_contains_5bytes(&self, data: i64, data_len: i64, b0: i64, b1: i64, b2: i64, b3: i64, b4: i64) -> i64 {
-        I data_len < 5 { R 0 }
+    fn dce_contains_5bytes(&self, data: i64, data_len: i64, b0: i64, b1: i64, b2: i64, b3: i64, b4: i64) -> i64 {
+        I data_len < 5 { return 0 }
         i: mut i64 = 0
         L { I i + 5 > data_len { B }
             c0 := load_byte(data + i)
@@ -4700,7 +4700,7 @@ X CodeGenerator {
                 c2 := load_byte(data + i + 2)
                 c3 := load_byte(data + i + 3)
                 c4 := load_byte(data + i + 4)
-                I c1 == b1 && c2 == b2 && c3 == b3 && c4 == b4 { R 1 }
+                I c1 == b1 && c2 == b2 && c3 == b3 && c4 == b4 { return 1 }
             }
             i = i + 1
         }
@@ -4708,7 +4708,7 @@ X CodeGenerator {
     }
 
     # Scan a region for %N register uses and mark them
-    F dce_scan_uses(&self, data: i64, data_len: i64, used: i64, max_regs: i64) -> i64 {
+    fn dce_scan_uses(&self, data: i64, data_len: i64, used: i64, max_regs: i64) -> i64 {
         i: mut i64 = 0
         L { I i >= data_len { B }
             ch := load_byte(data + i)
@@ -4723,13 +4723,13 @@ X CodeGenerator {
                         num = num * 10 + (d - 48)
                         has_digit = 1
                         j = j + 1
-                    } EL { B }
+                    } else { B }
                 }
                 I has_digit == 1 && num < max_regs {
                     store_byte(used + num, 1)
-                } EL { 0 }
+                } else { 0 }
                 i = j
-            } EL {
+            } else {
                 i = i + 1
             }
         }
@@ -4737,18 +4737,18 @@ X CodeGenerator {
     }
 
     # Determine if a line should be removed by DCE
-    F dce_should_remove(&self, line_ptr: i64, line_len: i64, defined: i64, used: i64, side_effect: i64, max_regs: i64) -> i64 {
+    fn dce_should_remove(&self, line_ptr: i64, line_len: i64, defined: i64, used: i64, side_effect: i64, max_regs: i64) -> i64 {
         # Skip leading whitespace
         start: mut i64 = 0
         L { I start >= line_len { B }
             ch := load_byte(line_ptr + start)
-            I ch == 32 || ch == 9 { start = start + 1 } EL { B }
+            I ch == 32 || ch == 9 { start = start + 1 } else { B }
         }
-        I start >= line_len { R 0 }
+        I start >= line_len { return 0 }
 
         # Extract definition register
         def_reg := @.dce_extract_def_reg(line_ptr, line_len, start)
-        I def_reg < 0 || def_reg >= max_regs { R 0 }
+        I def_reg < 0 || def_reg >= max_regs { return 0 }
 
         # Check: is it defined but not used, and has no side effects?
         is_defined := load_byte(defined + def_reg)
@@ -4756,7 +4756,7 @@ X CodeGenerator {
         has_side := load_byte(side_effect + def_reg)
 
         I is_defined == 1 && is_used == 0 && has_side == 0 { 1 }
-        EL { 0 }
+        else { 0 }
     }
 
     # ========== Basic Inlining ==========
@@ -4782,10 +4782,10 @@ X CodeGenerator {
     #   offset 40: ret_type (i64)       - 0=void, 1=i64
     #   offset 48: max_reg (i64)        - highest register number used in body
 
-    F optimize_inline(&self) -> i64 {
+    fn optimize_inline(&self) -> i64 {
         ir_data := load_i64(self.output)
         ir_len := load_i64(self.output + 8)
-        I ir_len == 0 { R 1 }
+        I ir_len == 0 { return 1 }
 
         # Find inline candidates
         max_candidates := 256
@@ -4796,7 +4796,7 @@ X CodeGenerator {
 
         I num_candidates == 0 {
             free(candidates)
-            R 1
+            return 1
         }
 
         # Apply inlining for each candidate
@@ -4814,11 +4814,11 @@ X CodeGenerator {
                 new_buf := load_i64(new_data)       # stored at offset 0
                 I cur_data != ir_data {
                     free(cur_data)
-                } EL { 0 }
+                } else { 0 }
                 cur_data = new_buf
                 cur_len = new_len
                 free(new_data)
-            } EL { 0 }
+            } else { 0 }
 
             ci = ci + 1
         }
@@ -4828,16 +4828,16 @@ X CodeGenerator {
             free(ir_data)
             store_i64(self.output, cur_data)
             store_i64(self.output + 8, cur_len)
-        } EL { 0 }
+        } else { 0 }
 
         # Free candidate body buffers
         ci = 0
         L { I ci >= num_candidates { B }
             cand_ptr := candidates + ci * 56
             body_ptr := load_i64(cand_ptr + 24)
-            I body_ptr != 0 { free(body_ptr) } EL { 0 }
+            I body_ptr != 0 { free(body_ptr) } else { 0 }
             name_ptr := load_i64(cand_ptr)
-            I name_ptr != 0 { free(name_ptr) } EL { 0 }
+            I name_ptr != 0 { free(name_ptr) } else { 0 }
             ci = ci + 1
         }
         free(candidates)
@@ -4846,7 +4846,7 @@ X CodeGenerator {
     }
 
     # Find small functions that are candidates for inlining
-    F inline_find_candidates(&self, ir_data: i64, ir_len: i64, candidates: i64, num_ptr: i64, max_cand: i64) -> i64 {
+    fn inline_find_candidates(&self, ir_data: i64, ir_len: i64, candidates: i64, num_ptr: i64, max_cand: i64) -> i64 {
         pos: mut i64 = 0
 
         L { I pos >= ir_len { B }
@@ -4854,10 +4854,10 @@ X CodeGenerator {
             line_start := pos
             L { I pos >= ir_len { B }
                 ch := load_byte(ir_data + pos)
-                I ch == 10 { B } EL { pos = pos + 1 }
+                I ch == 10 { B } else { pos = pos + 1 }
             }
             line_len := pos - line_start
-            I pos < ir_len { pos = pos + 1 } EL { 0 }
+            I pos < ir_len { pos = pos + 1 } else { 0 }
 
             # Check if line starts with "define " (100 101 102 105 110 101 32)
             I line_len > 8 {
@@ -4873,34 +4873,34 @@ X CodeGenerator {
                             result := @.inline_parse_function(ir_data, ir_len, line_start, cand_ptr)
                             I result == 1 {
                                 store_i64(num_ptr, num + 1)
-                            } EL { 0 }
-                        } EL { 0 }
-                    } EL { 0 }
-                } EL { 0 }
-            } EL { 0 }
+                            } else { 0 }
+                        } else { 0 }
+                    } else { 0 }
+                } else { 0 }
+            } else { 0 }
         }
         1
     }
 
     # Parse a function definition and decide if it's an inline candidate
     # Returns 1 if candidate was stored, 0 if not eligible
-    F inline_parse_function(&self, ir_data: i64, ir_len: i64, def_start: i64, cand_ptr: i64) -> i64 {
+    fn inline_parse_function(&self, ir_data: i64, ir_len: i64, def_start: i64, cand_ptr: i64) -> i64 {
         # Find the function name: look for '@' then read until '('
         pos: mut i64 = def_start
         L { I pos >= ir_len { B }
             ch := load_byte(ir_data + pos)
             I ch == 64 { B }  # '@'
-            EL { pos = pos + 1 }
+            else { pos = pos + 1 }
         }
-        I pos >= ir_len { R 0 }
+        I pos >= ir_len { return 0 }
 
         name_start := pos + 1  # skip '@'
         L { I pos >= ir_len { B }
             ch := load_byte(ir_data + pos)
             I ch == 40 { B }  # '('
-            EL { pos = pos + 1 }
+            else { pos = pos + 1 }
         }
-        I pos >= ir_len { R 0 }
+        I pos >= ir_len { return 0 }
         name_end := pos
         name_len := name_end - name_start
 
@@ -4909,10 +4909,10 @@ X CodeGenerator {
             c0 := load_byte(ir_data + name_start)
             c1 := load_byte(ir_data + name_start + 1)
             # Skip "main"
-            I c0 == 109 && c1 == 97 && name_len == 4 { R 0 }
+            I c0 == 109 && c1 == 97 && name_len == 4 { return 0 }
             # Skip "__" prefix (internal/lambda)
-            I c0 == 95 && c1 == 95 { R 0 }
-        } EL { 0 }
+            I c0 == 95 && c1 == 95 { return 0 }
+        } else { 0 }
 
         # Count parameters (count commas + 1 if non-empty, 0 if empty)
         paren_start := pos  # position of '('
@@ -4924,26 +4924,26 @@ X CodeGenerator {
         L { I pos >= ir_len || paren_depth == 0 { B }
             ch := load_byte(ir_data + pos)
             I ch == 40 { paren_depth = paren_depth + 1 }
-            EL I ch == 41 { paren_depth = paren_depth - 1 }
-            EL I ch == 44 && paren_depth == 1 { param_count = param_count + 1 }
-            EL I ch != 32 && ch != 41 && paren_depth == 1 { has_params = 1 }
+            else I ch == 41 { paren_depth = paren_depth - 1 }
+            else I ch == 44 && paren_depth == 1 { param_count = param_count + 1 }
+            else I ch != 32 && ch != 41 && paren_depth == 1 { has_params = 1 }
             pos = pos + 1
         }
-        I has_params == 1 { param_count = param_count + 1 } EL { 0 }
+        I has_params == 1 { param_count = param_count + 1 } else { 0 }
 
         # Find opening '{' and then scan body lines until '}'
         L { I pos >= ir_len { B }
             ch := load_byte(ir_data + pos)
             I ch == 123 { B }  # '{'
-            EL { pos = pos + 1 }
+            else { pos = pos + 1 }
         }
-        I pos >= ir_len { R 0 }
+        I pos >= ir_len { return 0 }
         pos = pos + 1  # skip '{'
 
         # Skip to next line
         L { I pos >= ir_len { B }
             ch := load_byte(ir_data + pos)
-            I ch == 10 { pos = pos + 1; B } EL { pos = pos + 1 }
+            I ch == 10 { pos = pos + 1; B } else { pos = pos + 1 }
         }
 
         # Collect body lines and count instructions
@@ -4958,25 +4958,25 @@ X CodeGenerator {
             ls := pos
             L { I pos >= ir_len { B }
                 ch := load_byte(ir_data + pos)
-                I ch == 10 { B } EL { pos = pos + 1 }
+                I ch == 10 { B } else { pos = pos + 1 }
             }
             ll := pos - ls
-            I pos < ir_len { pos = pos + 1 } EL { 0 }
+            I pos < ir_len { pos = pos + 1 } else { 0 }
 
             # Check for closing '}'
             I ll >= 1 {
                 fc := load_byte(ir_data + ls)
                 I fc == 125 { B }  # '}'
-            } EL { 0 }
+            } else { 0 }
 
             # Skip labels and empty lines
             I ll == 0 { 0 }
-            EL {
+            else {
                 # Skip leading whitespace
                 ws: mut i64 = 0
                 L { I ws >= ll { B }
                     wc := load_byte(ir_data + ls + ws)
-                    I wc == 32 || wc == 9 { ws = ws + 1 } EL { B }
+                    I wc == 32 || wc == 9 { ws = ws + 1 } else { B }
                 }
 
                 I ws < ll {
@@ -4985,7 +4985,7 @@ X CodeGenerator {
 
                     # Skip comments and labels
                     I tc == 59 || lc == 58 { 0 }
-                    EL {
+                    else {
                         instruction_count = instruction_count + 1
 
                         # Check for call instructions
@@ -4994,8 +4994,8 @@ X CodeGenerator {
                             # Check if recursive (calls own function name)
                             I @.inline_contains_name(ir_data + ls, ll, ir_data + name_start, name_len) == 1 {
                                 is_recursive = 1
-                            } EL { 0 }
-                        } EL { 0 }
+                            } else { 0 }
+                        } else { 0 }
 
                         # Track max register number
                         @.inline_scan_max_reg(ir_data + ls, ll, &max_reg)
@@ -5004,9 +5004,9 @@ X CodeGenerator {
                         # "ret i64" → bytes 114 101 116 32 105 54 52
                         I @.dce_contains_5bytes(ir_data + ls + ws, ll - ws, 114, 101, 116, 32, 105) == 1 {
                             ret_type = 1
-                        } EL { 0 }
+                        } else { 0 }
                     }
-                } EL { 0 }
+                } else { 0 }
             }
         }
 
@@ -5015,9 +5015,9 @@ X CodeGenerator {
         body_len := body_end - body_start
 
         # Filter: only inline small, non-recursive, call-free functions
-        I instruction_count > 10 || instruction_count == 0 { R 0 }
-        I is_recursive == 1 { R 0 }
-        I has_call == 1 { R 0 }
+        I instruction_count > 10 || instruction_count == 0 { return 0 }
+        I is_recursive == 1 { return 0 }
+        I has_call == 1 { return 0 }
 
         # Store candidate
         name_copy := malloc(name_len)
@@ -5037,8 +5037,8 @@ X CodeGenerator {
     }
 
     # Check if a region contains a function name (after '@')
-    F inline_contains_name(&self, data: i64, data_len: i64, name_ptr: i64, name_len: i64) -> i64 {
-        I data_len < name_len + 1 { R 0 }
+    fn inline_contains_name(&self, data: i64, data_len: i64, name_ptr: i64, name_len: i64) -> i64 {
+        I data_len < name_len + 1 { return 0 }
         i: mut i64 = 0
         L { I i + name_len + 1 > data_len { B }
             ch := load_byte(data + i)
@@ -5056,17 +5056,17 @@ X CodeGenerator {
                     # Verify name ends (next char is '(' or non-alphanumeric)
                     I i + 1 + name_len < data_len {
                         nc := load_byte(data + i + 1 + name_len)
-                        I nc == 40 { R 1 }  # '('
-                    } EL { R 1 }
-                } EL { 0 }
-            } EL { 0 }
+                        I nc == 40 { return 1 }  # '('
+                    } else { return 1 }
+                } else { 0 }
+            } else { 0 }
             i = i + 1
         }
         0
     }
 
     # Scan a line for register numbers and track the maximum
-    F inline_scan_max_reg(&self, data: i64, data_len: i64, max_ptr: i64) -> i64 {
+    fn inline_scan_max_reg(&self, data: i64, data_len: i64, max_ptr: i64) -> i64 {
         i: mut i64 = 0
         L { I i >= data_len { B }
             ch := load_byte(data + i)
@@ -5080,14 +5080,14 @@ X CodeGenerator {
                         num = num * 10 + (d - 48)
                         has_digit = 1
                         j = j + 1
-                    } EL { B }
+                    } else { B }
                 }
                 I has_digit == 1 {
                     cur_max := load_i64(max_ptr)
-                    I num > cur_max { store_i64(max_ptr, num) } EL { 0 }
-                } EL { 0 }
+                    I num > cur_max { store_i64(max_ptr, num) } else { 0 }
+                } else { 0 }
                 i = j
-            } EL {
+            } else {
                 i = i + 1
             }
         }
@@ -5096,7 +5096,7 @@ X CodeGenerator {
 
     # Apply inlining for one candidate across the IR
     # Returns pointer to (buf_ptr, buf_len) struct or 0 if no changes
-    F inline_apply_candidate(&self, ir_data: i64, ir_len: i64, cand_ptr: i64, counter_ptr: i64) -> i64 {
+    fn inline_apply_candidate(&self, ir_data: i64, ir_len: i64, cand_ptr: i64, counter_ptr: i64) -> i64 {
         cand_name := load_i64(cand_ptr)
         cand_name_len := load_i64(cand_ptr + 8)
         cand_params := load_i64(cand_ptr + 16)
@@ -5107,7 +5107,7 @@ X CodeGenerator {
 
         # Build the call pattern: "call i64 @funcname("
         # We only handle i64 return for now
-        I cand_ret != 1 { R 0 }
+        I cand_ret != 1 { return 0 }
 
         # Scan for call sites
         new_buf := malloc(ir_len * 2)  # Generous allocation
@@ -5119,10 +5119,10 @@ X CodeGenerator {
             line_start := pos
             L { I pos >= ir_len { B }
                 ch := load_byte(ir_data + pos)
-                I ch == 10 { B } EL { pos = pos + 1 }
+                I ch == 10 { B } else { pos = pos + 1 }
             }
             line_len := pos - line_start
-            I pos < ir_len { pos = pos + 1 } EL { 0 }
+            I pos < ir_len { pos = pos + 1 } else { 0 }
 
             # Check if this line calls our candidate
             # Pattern: "call i64 @name("
@@ -5140,7 +5140,7 @@ X CodeGenerator {
                 ws: mut i64 = 0
                 L { I ws >= line_len { B }
                     wc := load_byte(ir_data + line_start + ws)
-                    I wc == 32 || wc == 9 { ws = ws + 1 } EL { B }
+                    I wc == 32 || wc == 9 { ws = ws + 1 } else { B }
                 }
 
                 # Extract call arguments
@@ -5149,7 +5149,7 @@ X CodeGenerator {
                 L { I arg_start >= line_len { B }
                     ac := load_byte(ir_data + line_start + arg_start)
                     I ac == 40 { arg_start = arg_start + 1; B }  # '('
-                    EL { arg_start = arg_start + 1 }
+                    else { arg_start = arg_start + 1 }
                 }
 
                 # Parse argument values (comma-separated, each has "i64 %N" or "i64 N")
@@ -5171,12 +5171,12 @@ X CodeGenerator {
 
                 free(arg_values)
                 did_inline = 1
-            } EL {
+            } else {
                 # Copy line as-is
                 I line_len > 0 {
                     memcpy(new_buf + new_len, ir_data + line_start, line_len)
                     new_len = new_len + line_len
-                } EL { 0 }
+                } else { 0 }
                 store_byte(new_buf + new_len, 10)
                 new_len = new_len + 1
             }
@@ -5187,16 +5187,16 @@ X CodeGenerator {
             store_i64(result, new_buf)
             store_i64(result + 8, new_len)
             result
-        } EL {
+        } else {
             free(new_buf)
             0
         }
     }
 
     # Find "call i64 @name(" in a line, returns position of "call" or -1
-    F inline_find_call(&self, line: i64, line_len: i64, name: i64, name_len: i64) -> i64 {
+    fn inline_find_call(&self, line: i64, line_len: i64, name: i64, name_len: i64) -> i64 {
         # Look for "call i64 @" (99 97 108 108 32 105 54 52 32 64)
-        I line_len < 10 + name_len { R 0 - 1 }
+        I line_len < 10 + name_len { return 0 - 1 }
         i: mut i64 = 0
         L { I i + 10 + name_len > line_len { B }
             # Check "call " prefix
@@ -5221,11 +5221,11 @@ X CodeGenerator {
                         # Verify followed by '('
                         I i + 10 + name_len < line_len {
                             pc := load_byte(line + i + 10 + name_len)
-                            I pc == 40 { R i }
-                        } EL { 0 }
-                    } EL { 0 }
-                } EL { 0 }
-            } EL { 0 }
+                            I pc == 40 { return i }
+                        } else { 0 }
+                    } else { 0 }
+                } else { 0 }
+            } else { 0 }
             i = i + 1
         }
         0 - 1
@@ -5233,7 +5233,7 @@ X CodeGenerator {
 
     # Parse call arguments into an array of register numbers
     # Each arg is "i64 %N" or "i64 N" format
-    F inline_parse_args(&self, data: i64, data_len: i64, arg_values: i64, max_args: i64) -> i64 {
+    fn inline_parse_args(&self, data: i64, data_len: i64, arg_values: i64, max_args: i64) -> i64 {
         arg_idx: mut i64 = 0
         i: mut i64 = 0
 
@@ -5251,23 +5251,23 @@ X CodeGenerator {
                         num = num * 10 + (d - 48)
                         has_digit = 1
                         j = j + 1
-                    } EL { B }
+                    } else { B }
                 }
                 I has_digit == 1 {
                     store_i64(arg_values + arg_idx * 8, num)
                     arg_idx = arg_idx + 1
-                } EL { 0 }
+                } else { 0 }
                 i = j
             }
             # Handle named parameters (%name) - skip for now, only numeric
-            EL I ch == 41 { B }  # ')' end of args
-            EL { i = i + 1 }
+            else I ch == 41 { B }  # ')' end of args
+            else { i = i + 1 }
         }
         arg_idx
     }
 
     # Emit inlined function body with register renaming
-    F inline_emit_body(&self, out: i64, out_len_ptr: i64, body: i64, body_len: i64, arg_values: i64, param_count: i64, reg_offset: i64, dest_reg: i64, ret_type: i64) -> i64 {
+    fn inline_emit_body(&self, out: i64, out_len_ptr: i64, body: i64, body_len: i64, arg_values: i64, param_count: i64, reg_offset: i64, dest_reg: i64, ret_type: i64) -> i64 {
         out_len: mut i64 = load_i64(out_len_ptr)
         pos: mut i64 = 0
 
@@ -5275,39 +5275,39 @@ X CodeGenerator {
             line_start := pos
             L { I pos >= body_len { B }
                 ch := load_byte(body + pos)
-                I ch == 10 { B } EL { pos = pos + 1 }
+                I ch == 10 { B } else { pos = pos + 1 }
             }
             line_len := pos - line_start
-            I pos < body_len { pos = pos + 1 } EL { 0 }
+            I pos < body_len { pos = pos + 1 } else { 0 }
 
             # Skip empty lines and labels
             I line_len == 0 { 0 }
-            EL {
+            else {
                 # Skip whitespace
                 ws: mut i64 = 0
                 L { I ws >= line_len { B }
                     wc := load_byte(body + line_start + ws)
-                    I wc == 32 || wc == 9 { ws = ws + 1 } EL { B }
+                    I wc == 32 || wc == 9 { ws = ws + 1 } else { B }
                 }
 
                 I ws >= line_len { 0 }
-                EL {
+                else {
                     fc := load_byte(body + line_start + ws)
                     lc := load_byte(body + line_start + line_len - 1)
 
                     # Skip comments and labels
                     I fc == 59 || lc == 58 { 0 }
                     # Handle return: "ret i64 %N" → "%dest = add i64 0, %N_renamed"
-                    EL I @.dce_contains_5bytes(body + line_start + ws, line_len - ws, 114, 101, 116, 32, 105) == 1 {
+                    else I @.dce_contains_5bytes(body + line_start + ws, line_len - ws, 114, 101, 116, 32, 105) == 1 {
                         # Extract return value register
                         ret_val := @.inline_extract_ret_value(body + line_start + ws, line_len - ws)
                         I dest_reg >= 0 && ret_type == 1 {
                             # Map the return value (apply register offset)
                             mapped_val := I ret_val >= 0 && ret_val < param_count {
                                 load_i64(arg_values + ret_val * 8)
-                            } EL I ret_val >= 0 {
+                            } else I ret_val >= 0 {
                                 ret_val + reg_offset
-                            } EL { ret_val }
+                            } else { ret_val }
 
                             memcpy_str(out + out_len, "  %", 3)
                             out_len = out_len + 3
@@ -5317,10 +5317,10 @@ X CodeGenerator {
                             out_len = out_len + @.inline_write_i64(out + out_len, mapped_val)
                             memcpy_str(out + out_len, " ; inlined ret\n", 15)
                             out_len = out_len + 15
-                        } EL { 0 }
+                        } else { 0 }
                     }
                     # Regular instruction: copy with register renaming
-                    EL {
+                    else {
                         memcpy_str(out + out_len, "  ", 2)
                         out_len = out_len + 2
                         # Copy line byte by byte, renaming %N to %(N+offset) or to arg value
@@ -5338,25 +5338,25 @@ X CodeGenerator {
                                         rnum = rnum * 10 + (rd - 48)
                                         rdig = 1
                                         bj = bj + 1
-                                    } EL { B }
+                                    } else { B }
                                 }
                                 I rdig == 1 {
                                     # Map register: param regs → arg values, others → offset
                                     mapped := I rnum < param_count {
                                         load_i64(arg_values + rnum * 8)
-                                    } EL {
+                                    } else {
                                         rnum + reg_offset
                                     }
                                     store_byte(out + out_len, 37)  # '%'
                                     out_len = out_len + 1
                                     out_len = out_len + @.inline_write_i64(out + out_len, mapped)
-                                } EL {
+                                } else {
                                     # Not a numeric reg, copy '%' and continue
                                     store_byte(out + out_len, 37)
                                     out_len = out_len + 1
                                 }
                                 bi = bj
-                            } EL {
+                            } else {
                                 store_byte(out + out_len, bc)
                                 out_len = out_len + 1
                                 bi = bi + 1
@@ -5374,7 +5374,7 @@ X CodeGenerator {
     }
 
     # Extract return value register number from "ret i64 %N"
-    F inline_extract_ret_value(&self, data: i64, data_len: i64) -> i64 {
+    fn inline_extract_ret_value(&self, data: i64, data_len: i64) -> i64 {
         # Find '%'
         i: mut i64 = 0
         L { I i >= data_len { B }
@@ -5389,9 +5389,9 @@ X CodeGenerator {
                         num = num * 10 + (d - 48)
                         has_digit = 1
                         j = j + 1
-                    } EL { B }
+                    } else { B }
                 }
-                I has_digit == 1 { R num }
+                I has_digit == 1 { return num }
             }
             i = i + 1
         }
@@ -5399,22 +5399,22 @@ X CodeGenerator {
     }
 
     # Write i64 as decimal to buffer, return bytes written
-    F inline_write_i64(&self, out: i64, value: i64) -> i64 {
+    fn inline_write_i64(&self, out: i64, value: i64) -> i64 {
         I value < 0 {
             store_byte(out, 45)  # '-'
             1 + @.inline_write_i64(out + 1, 0 - value)
-        } EL I value == 0 {
+        } else I value == 0 {
             store_byte(out, 48)  # '0'
             1
-        } EL {
+        } else {
             # Count digits
             len := @.inline_write_positive(out, value, 0)
             len
         }
     }
 
-    F inline_write_positive(&self, out: i64, value: i64, depth: i64) -> i64 {
-        I value == 0 { R depth }
+    fn inline_write_positive(&self, out: i64, value: i64, depth: i64) -> i64 {
+        I value == 0 { return depth }
         written := @.inline_write_positive(out, value / 10, depth + 1)
         digit := (value % 10) + 48
         pos := written - depth - 1
@@ -5424,10 +5424,10 @@ X CodeGenerator {
 
     # ========== Output ==========
 
-    F get_output(&self) -> i64 = load_i64(self.output)
-    F get_output_len(&self) -> i64 = load_i64(self.output + 8)
+    fn get_output(&self) -> i64 = load_i64(self.output)
+    fn get_output_len(&self) -> i64 = load_i64(self.output + 8)
 
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         # Free output buffer
         buf_data := load_i64(self.output)
         free(buf_data)
@@ -5464,7 +5464,7 @@ X CodeGenerator {
 # Test function (renamed from main to allow module import)
 # ============================================================================
 
-F test_codegen_main() -> i64 {
+fn test_codegen_main() -> i64 {
     puts("Code generator module loaded")
 
     # Test StringBuffer
@@ -5473,14 +5473,14 @@ F test_codegen_main() -> i64 {
     buf.append_cstr("World!")
     I buf.len == 13 {
         puts("StringBuffer append: OK")
-    } EL {
+    } else {
         puts("StringBuffer append: FAIL")
     }
 
     buf.append_i64(42)
     I buf.len == 15 {
         puts("StringBuffer append_i64: OK")
-    } EL {
+    } else {
         puts("StringBuffer append_i64: FAIL")
     }
 
@@ -5490,7 +5490,7 @@ F test_codegen_main() -> i64 {
     gen := CodeGenerator.new()
     I gen.functions_cap == 128 {
         puts("CodeGenerator creation: OK")
-    } EL {
+    } else {
         puts("CodeGenerator creation: FAIL")
     }
 
@@ -5499,7 +5499,7 @@ F test_codegen_main() -> i64 {
     reg2 := gen.fresh_reg()
     I reg1 == 0 && reg2 == 1 {
         puts("Register generation: OK")
-    } EL {
+    } else {
         puts("Register generation: FAIL")
     }
 
@@ -5508,7 +5508,7 @@ F test_codegen_main() -> i64 {
     label2 := gen.fresh_label()
     I label1 == 0 && label2 == 1 {
         puts("Label generation: OK")
-    } EL {
+    } else {
         puts("Label generation: FAIL")
     }
 
@@ -5517,20 +5517,20 @@ F test_codegen_main() -> i64 {
     found := gen.find_local(0)
     I found != 0 {
         puts("Local variable: OK")
-    } EL {
+    } else {
         puts("Local variable: FAIL")
     }
 
     # Test type conversion
     I gen.resolved_type_to_llvm(4) == LLVM_I64() {
         puts("Type conversion i64: OK")
-    } EL {
+    } else {
         puts("Type conversion i64: FAIL")
     }
 
     I gen.resolved_type_to_llvm(13) == LLVM_I1() {
         puts("Type conversion bool: OK")
-    } EL {
+    } else {
         puts("Type conversion bool: FAIL")
     }
 

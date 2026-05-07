@@ -9,23 +9,23 @@
 # ============================================================================
 
 # Entry states
-F MAP_EMPTY() -> i64 = 0
-F MAP_OCCUPIED() -> i64 = 1
-F MAP_TOMBSTONE() -> i64 = 2
+fn MAP_EMPTY() -> i64 = 0
+fn MAP_OCCUPIED() -> i64 = 1
+fn MAP_TOMBSTONE() -> i64 = 2
 
 # Default initial capacity (must be power of 2)
-F MAP_DEFAULT_CAP() -> i64 = 16
+fn MAP_DEFAULT_CAP() -> i64 = 16
 
 # ============================================================================
 # Hash Function (FNV-1a variant for i64)
 # ============================================================================
 
-F map_hash(key: i64) -> i64 {
+fn map_hash(key: i64) -> i64 {
     # Mix bits of key using multiply-xor-shift
     h := mut key
     h = h * 6364136223846793005 + 1442695040888963407
     # Make positive
-    I h < 0 { h = 0 - h; 0 } EL { 0 }
+    I h < 0 { h = 0 - h; 0 } else { 0 }
     h
 }
 
@@ -34,7 +34,7 @@ F map_hash(key: i64) -> i64 {
 # ============================================================================
 
 # Create new empty hashmap with default capacity
-F map_new() -> i64 {
+fn map_new() -> i64 {
     m := malloc(32)
     cap := MAP_DEFAULT_CAP()
     entries := malloc(cap * 24)
@@ -55,7 +55,7 @@ F map_new() -> i64 {
 }
 
 # Create new hashmap with specified capacity
-F map_with_cap(cap: i64) -> i64 {
+fn map_with_cap(cap: i64) -> i64 {
     m := malloc(32)
     entries := malloc(cap * 24)
     i := mut 0
@@ -77,13 +77,13 @@ F map_with_cap(cap: i64) -> i64 {
 # Accessors
 # ============================================================================
 
-F map_entries(m: i64) -> i64 = load_i64(m)
-F map_cap(m: i64) -> i64 = load_i64(m + 8)
-F map_len(m: i64) -> i64 = load_i64(m + 16)
-F map_tombstones(m: i64) -> i64 = load_i64(m + 24)
+fn map_entries(m: i64) -> i64 = load_i64(m)
+fn map_cap(m: i64) -> i64 = load_i64(m + 8)
+fn map_len(m: i64) -> i64 = load_i64(m + 16)
+fn map_tombstones(m: i64) -> i64 = load_i64(m + 24)
 
-F map_is_empty(m: i64) -> i64 {
-    I map_len(m) == 0 { 1 } EL { 0 }
+fn map_is_empty(m: i64) -> i64 {
+    I map_len(m) == 0 { 1 } else { 0 }
 }
 
 # ============================================================================
@@ -93,7 +93,7 @@ F map_is_empty(m: i64) -> i64 {
 # Find slot for key. Returns entry offset (not index).
 # If found: state = OCCUPIED at that offset
 # If not found: state = EMPTY (first available slot for insertion)
-F map_find_slot(m: i64, key: i64) -> i64 {
+fn map_find_slot(m: i64, key: i64) -> i64 {
     entries := load_i64(m)
     cap := load_i64(m + 8)
     h := map_hash(key)
@@ -109,25 +109,25 @@ F map_find_slot(m: i64, key: i64) -> i64 {
             # Empty slot — key not in map
             I first_tombstone >= 0 {
                 result = first_tombstone * 24
-            } EL {
+            } else {
                 result = offset
             }
             probes = cap  # break
-        } EL I state == 2 {
+        } else I state == 2 {
             # Tombstone — remember first one for insertion
             I first_tombstone < 0 {
                 first_tombstone = idx
                 0
-            } EL { 0 }
+            } else { 0 }
             idx = (idx + 1) % cap
             probes = probes + 1
-        } EL {
+        } else {
             # Occupied — check key
             k := load_i64(entries + offset)
             I k == key {
                 result = offset
                 probes = cap  # break
-            } EL {
+            } else {
                 idx = (idx + 1) % cap
                 probes = probes + 1
             }
@@ -140,7 +140,7 @@ F map_find_slot(m: i64, key: i64) -> i64 {
 # Resize
 # ============================================================================
 
-F map_resize(m: i64) -> i64 {
+fn map_resize(m: i64) -> i64 {
     old_entries := load_i64(m)
     old_cap := load_i64(m + 8)
     new_cap := old_cap * 2
@@ -171,7 +171,7 @@ F map_resize(m: i64) -> i64 {
             value := load_i64(old_entries + offset + 8)
             map_put(m, key, value)
             0
-        } EL { 0 }
+        } else { 0 }
         i = i + 1
     }
 
@@ -184,7 +184,7 @@ F map_resize(m: i64) -> i64 {
 # ============================================================================
 
 # Put key-value pair. Overwrites if key exists. Returns previous value or 0.
-F map_put(m: i64, key: i64, value: i64) -> i64 {
+fn map_put(m: i64, key: i64, value: i64) -> i64 {
     # Check load factor
     len := load_i64(m + 16)
     tombstones := load_i64(m + 24)
@@ -194,7 +194,7 @@ F map_put(m: i64, key: i64, value: i64) -> i64 {
     I load >= threshold {
         map_resize(m)
         0
-    } EL { 0 }
+    } else { 0 }
 
     offset := map_find_slot(m, key)
     entries := load_i64(m)
@@ -204,14 +204,14 @@ F map_put(m: i64, key: i64, value: i64) -> i64 {
         old_val := load_i64(entries + offset + 8)
         store_i64(entries + offset + 8, value)
         old_val
-    } EL {
+    } else {
         # New entry
         I state == 2 {
             # Reusing tombstone
             ts := load_i64(m + 24)
             store_i64(m + 24, ts - 1)
             0
-        } EL { 0 }
+        } else { 0 }
         store_i64(entries + offset, key)
         store_i64(entries + offset + 8, value)
         store_i64(entries + offset + 16, 1)
@@ -222,7 +222,7 @@ F map_put(m: i64, key: i64, value: i64) -> i64 {
 }
 
 # Get value for key. Returns Option-style: opt_some(value) or opt_none()
-F map_get(m: i64, key: i64) -> i64 {
+fn map_get(m: i64, key: i64) -> i64 {
     offset := map_find_slot(m, key)
     entries := load_i64(m)
     state := load_i64(entries + offset + 16)
@@ -235,13 +235,13 @@ F map_get(m: i64, key: i64) -> i64 {
             store_i64(opt, 0)
             store_i64(opt + 8, value)
             opt
-        } EL {
+        } else {
             opt := malloc(16)
             store_i64(opt, 1)
             store_i64(opt + 8, 0)
             opt
         }
-    } EL {
+    } else {
         opt := malloc(16)
         store_i64(opt, 1)
         store_i64(opt + 8, 0)
@@ -250,7 +250,7 @@ F map_get(m: i64, key: i64) -> i64 {
 }
 
 # Get value directly (returns 0 if not found, use map_has to distinguish)
-F map_get_or(m: i64, key: i64, default: i64) -> i64 {
+fn map_get_or(m: i64, key: i64, default: i64) -> i64 {
     offset := map_find_slot(m, key)
     entries := load_i64(m)
     state := load_i64(entries + offset + 16)
@@ -258,29 +258,29 @@ F map_get_or(m: i64, key: i64, default: i64) -> i64 {
         k := load_i64(entries + offset)
         I k == key {
             load_i64(entries + offset + 8)
-        } EL {
+        } else {
             default
         }
-    } EL {
+    } else {
         default
     }
 }
 
 # Check if key exists
-F map_has(m: i64, key: i64) -> i64 {
+fn map_has(m: i64, key: i64) -> i64 {
     offset := map_find_slot(m, key)
     entries := load_i64(m)
     state := load_i64(entries + offset + 16)
     I state == 1 {
         k := load_i64(entries + offset)
-        I k == key { 1 } EL { 0 }
-    } EL {
+        I k == key { 1 } else { 0 }
+    } else {
         0
     }
 }
 
 # Remove key. Returns removed value or 0.
-F map_remove(m: i64, key: i64) -> i64 {
+fn map_remove(m: i64, key: i64) -> i64 {
     offset := map_find_slot(m, key)
     entries := load_i64(m)
     state := load_i64(entries + offset + 16)
@@ -294,12 +294,12 @@ F map_remove(m: i64, key: i64) -> i64 {
             ts := load_i64(m + 24)
             store_i64(m + 24, ts + 1)
             value
-        } EL { 0 }
-    } EL { 0 }
+        } else { 0 }
+    } else { 0 }
 }
 
 # Clear all entries
-F map_clear(m: i64) -> i64 {
+fn map_clear(m: i64) -> i64 {
     entries := load_i64(m)
     cap := load_i64(m + 8)
     i := mut 0
@@ -321,7 +321,7 @@ F map_clear(m: i64) -> i64 {
 
 # Get all keys as a Vec (returns vec pointer, caller must vec_drop)
 # Requires vec.vais to be imported (U vec)
-F map_keys(m: i64) -> i64 {
+fn map_keys(m: i64) -> i64 {
     entries := load_i64(m)
     cap := load_i64(m + 8)
     keys := vec_new()
@@ -333,14 +333,14 @@ F map_keys(m: i64) -> i64 {
             key := load_i64(entries + offset)
             vec_push(keys, key)
             0
-        } EL { 0 }
+        } else { 0 }
         i = i + 1
     }
     keys
 }
 
 # Get all values as a Vec
-F map_values(m: i64) -> i64 {
+fn map_values(m: i64) -> i64 {
     entries := load_i64(m)
     cap := load_i64(m + 8)
     vals := vec_new()
@@ -352,7 +352,7 @@ F map_values(m: i64) -> i64 {
             value := load_i64(entries + offset + 8)
             vec_push(vals, value)
             0
-        } EL { 0 }
+        } else { 0 }
         i = i + 1
     }
     vals
@@ -363,7 +363,7 @@ F map_values(m: i64) -> i64 {
 # ============================================================================
 
 # Hash for string keys (FNV-1a on bytes)
-F map_hash_str(data_ptr: i64, len: i64) -> i64 {
+fn map_hash_str(data_ptr: i64, len: i64) -> i64 {
     h := mut 2166136261
     i := mut 0
     LW i < len {
@@ -375,7 +375,7 @@ F map_hash_str(data_ptr: i64, len: i64) -> i64 {
         h = h + b
         i = i + 1
     }
-    I h < 0 { h = 0 - h; 0 } EL { 0 }
+    I h < 0 { h = 0 - h; 0 } else { 0 }
     h
 }
 
@@ -384,7 +384,7 @@ F map_hash_str(data_ptr: i64, len: i64) -> i64 {
 # ============================================================================
 
 # Free hashmap and its entries buffer
-F map_drop(m: i64) -> i64 {
+fn map_drop(m: i64) -> i64 {
     entries := load_i64(m)
     free(entries)
     free(m)
@@ -396,7 +396,7 @@ F map_drop(m: i64) -> i64 {
 # ============================================================================
 
 # Print hashmap contents: {key1: val1, key2: val2}
-F map_print(m: i64) -> i64 {
+fn map_print(m: i64) -> i64 {
     entries := load_i64(m)
     cap := load_i64(m + 8)
     putchar(123)  # {
@@ -410,7 +410,7 @@ F map_print(m: i64) -> i64 {
                 putchar(44)  # ,
                 putchar(32)  # space
                 0
-            } EL { 0 }
+            } else { 0 }
             key := load_i64(entries + offset)
             value := load_i64(entries + offset + 8)
             printf("%ld", key)
@@ -419,7 +419,7 @@ F map_print(m: i64) -> i64 {
             printf("%ld", value)
             first = 0
             0
-        } EL { 0 }
+        } else { 0 }
         i = i + 1
     }
     putchar(125)  # }

@@ -3,7 +3,7 @@
 # ✅ DO: "hello {name}" — 가독성 높음, 파싱 에러 방지.
 # ❌ DON'T: "hello " + name — 일부 언어와 달리 명시적 변환 필요.
 
-F main() -> i64 {
+fn main() -> i64 {
     name := "world"
     msg := "hello {name}"
     msg.len()

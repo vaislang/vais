@@ -4,7 +4,7 @@
 
 # ─── Token type enum ───────────────────────────────────────────────────────────
 
-EN TokenKind {
+enum TokenKind {
     TInt,    # integer literal
     TPlus,
     TMinus,
@@ -16,7 +16,7 @@ EN TokenKind {
 }
 
 # A single token: kind + integer value (only meaningful for TInt)
-S Token {
+struct Token {
     kind: TokenKind,
     value: i64
 }
@@ -24,33 +24,33 @@ S Token {
 # ─── Tokenizer ─────────────────────────────────────────────────────────────────
 # Tokenizes a Vec<i64> of ASCII codepoints. pos tracks the read position.
 
-S Tokenizer {
+struct Tokenizer {
     chars: Vec<i64>,
     pos:   i64
 }
 
-X Tokenizer {
-    F new(chars: Vec<i64>) -> Tokenizer {
+impl Tokenizer {
+    fn new(chars: Vec<i64>) -> Tokenizer {
         Tokenizer { chars: chars, pos: 0 }
     }
 
     # Peek at current char (returns 0 at end-of-input)
-    F peek(&self) -> i64 {
-        M self.chars.get(self.pos) {
+    fn peek(&self) -> i64 {
+        match self.chars.get(self.pos) {
             Some(c) => c,
             None    => 0
         }
     }
 
     # Consume current char and advance position
-    F advance(&mut self) -> i64 {
+    fn advance(&mut self) -> i64 {
         c := self.peek()
         self.pos = self.pos + 1
         c
     }
 
     # Skip ASCII space characters (codepoint 32)
-    F skip_ws(&mut self) -> i64 {
+    fn skip_ws(&mut self) -> i64 {
         L {
             I self.peek() != 32 { B }
             self.advance()
@@ -59,12 +59,12 @@ X Tokenizer {
     }
 
     # Lex and return the next token
-    F next_token(&mut self) -> Token {
+    fn next_token(&mut self) -> Token {
         self.skip_ws()
         c := self.peek()
         # End of input
         I c == 0 {
-            R Token { kind: TEof, value: 0 }
+            return Token { kind: TEof, value: 0 }
         }
         # Digit range 48..57  ('0'..'9')
         I c >= 48 & c <= 57 {
@@ -74,11 +74,11 @@ X Tokenizer {
                 I d < 48 | d > 57 { B }
                 num = num * 10 + (self.advance() - 48)
             }
-            R Token { kind: TInt, value: num }
+            return Token { kind: TInt, value: num }
         }
         # Single-char operators
         self.advance()
-        M c {
+        match c {
             43 => Token { kind: TPlus,   value: 0 },   # +
             45 => Token { kind: TMinus,  value: 0 },   # -
             42 => Token { kind: TStar,   value: 0 },   # *
@@ -97,35 +97,35 @@ X Tokenizer {
 #   term   = factor ( ('*' | '/') factor )*
 #   factor = INT | '(' expr ')'
 
-S Parser {
+struct Parser {
     tokens: Vec<Token>,
     pos:    i64
 }
 
-X Parser {
-    F new(tokens: Vec<Token>) -> Parser {
+impl Parser {
+    fn new(tokens: Vec<Token>) -> Parser {
         Parser { tokens: tokens, pos: 0 }
     }
 
     # Return current token without consuming it
-    F current(&self) -> Token {
-        M self.tokens.get(self.pos) {
+    fn current(&self) -> Token {
+        match self.tokens.get(self.pos) {
             Some(t) => t,
             None    => Token { kind: TEof, value: 0 }
         }
     }
 
     # Consume and return the current token
-    F eat(&mut self) -> Token {
+    fn eat(&mut self) -> Token {
         t := self.current()
         self.pos = self.pos + 1
         t
     }
 
     # factor = INT | '(' expr ')'
-    F factor(&mut self) -> i64 {
+    fn factor(&mut self) -> i64 {
         t := self.eat()
-        M t.kind {
+        match t.kind {
             TInt    => t.value,
             TLParen => {
                 v := self.expr()
@@ -137,11 +137,11 @@ X Parser {
     }
 
     # term = factor ( ('*' | '/') factor )*
-    F term(&mut self) -> i64 {
+    fn term(&mut self) -> i64 {
         left := mut self.factor()
         L {
             k := self.current().kind
-            M k {
+            match k {
                 TStar  => {
                     self.eat()
                     left = left * self.factor()
@@ -151,7 +151,7 @@ X Parser {
                     r := self.factor()
                     I r == 0 {
                         puts("Error: divide by zero")
-                    } EL {
+                    } else {
                         left = left / r
                     }
                 },
@@ -162,11 +162,11 @@ X Parser {
     }
 
     # expr = term ( ('+' | '-') term )*
-    F expr(&mut self) -> i64 {
+    fn expr(&mut self) -> i64 {
         left := mut self.term()
         L {
             k := self.current().kind
-            M k {
+            match k {
                 TPlus  => {
                     self.eat()
                     left = left + self.term()
@@ -186,7 +186,7 @@ X Parser {
 # Build Vec<i64> of ASCII codepoints for each demo expression.
 
 # "2 + 3 * 4"  (expected result: 14)
-F chars_expr1() -> Vec<i64> {
+fn chars_expr1() -> Vec<i64> {
     v: Vec<i64> = Vec::new()
     v.push(50)   # '2'
     v.push(32)   # ' '
@@ -201,7 +201,7 @@ F chars_expr1() -> Vec<i64> {
 }
 
 # "10 - (2 + 3)"  (expected result: 5)
-F chars_expr2() -> Vec<i64> {
+fn chars_expr2() -> Vec<i64> {
     v: Vec<i64> = Vec::new()
     v.push(49)   # '1'
     v.push(48)   # '0'
@@ -219,7 +219,7 @@ F chars_expr2() -> Vec<i64> {
 }
 
 # "(4 + 6) / 2"  (expected result: 5)
-F chars_expr3() -> Vec<i64> {
+fn chars_expr3() -> Vec<i64> {
     v: Vec<i64> = Vec::new()
     v.push(40)   # '('
     v.push(52)   # '4'
@@ -236,12 +236,12 @@ F chars_expr3() -> Vec<i64> {
 }
 
 # Tokenize a Vec<i64> char buffer into a Vec<Token>
-F tokenize(chars: Vec<i64>) -> Vec<Token> {
+fn tokenize(chars: Vec<i64>) -> Vec<Token> {
     tz := mut Tokenizer::new(chars)
     tokens: Vec<Token> = Vec::new()
     L {
         tok := tz.next_token()
-        M tok.kind {
+        match tok.kind {
             TEof => { tokens.push(tok); B },
             _    => tokens.push(tok)
         }
@@ -250,7 +250,7 @@ F tokenize(chars: Vec<i64>) -> Vec<Token> {
 }
 
 # Evaluate an expression given as a char Vec
-F calc(chars: Vec<i64>) -> i64 {
+fn calc(chars: Vec<i64>) -> i64 {
     tokens := tokenize(chars)
     p := mut Parser::new(tokens)
     p.expr()
@@ -258,7 +258,7 @@ F calc(chars: Vec<i64>) -> i64 {
 
 # ─── main ──────────────────────────────────────────────────────────────────────
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Vais Calculator ===")
 
     r1 := calc(chars_expr1())
@@ -273,5 +273,5 @@ F main() -> i64 {
     puts("Expected: 14, 5, 5")
 
     ok := r1 == 14 & r2 == 5 & r3 == 5
-    I ok { puts("All correct!"); 0 } EL { puts("FAIL"); 1 }
+    I ok { puts("All correct!"); 0 } else { puts("FAIL"); 1 }
 }

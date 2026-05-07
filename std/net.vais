@@ -71,7 +71,7 @@
 # Host addresses are passed as null-terminated strings (e.g., "127.0.0.1")
 # Ports are i64 integers.
 
-U std/result
+use std/result
 
 # ============================================================================
 # Constants
@@ -155,34 +155,34 @@ C NET_DEFAULT_BACKLOG: i64 = 128
 # type: socket type (SOCK_STREAM, SOCK_DGRAM)
 # protocol: protocol (0 for default)
 # Returns: socket file descriptor, or -1 on error
-X F socket(domain: i64, type: i64, protocol: i64) -> i64
+impl fn socket(domain: i64, type: i64, protocol: i64) -> i64
 
 # Bind socket to address
 # sockfd: socket file descriptor
 # addr: pointer to sockaddr structure
 # addrlen: size of sockaddr structure
 # Returns: 0 on success, -1 on error
-X F bind(sockfd: i64, addr: i64, addrlen: i64) -> i64
+impl fn bind(sockfd: i64, addr: i64, addrlen: i64) -> i64
 
 # Listen for connections
 # sockfd: socket file descriptor
 # backlog: maximum pending connections
 # Returns: 0 on success, -1 on error
-X F listen(sockfd: i64, backlog: i64) -> i64
+impl fn listen(sockfd: i64, backlog: i64) -> i64
 
 # Accept a connection
 # sockfd: socket file descriptor
 # addr: pointer to sockaddr for client address (can be 0)
 # addrlen: pointer to addrlen (can be 0)
 # Returns: new socket fd, or -1 on error
-X F accept(sockfd: i64, addr: i64, addrlen: i64) -> i64
+impl fn accept(sockfd: i64, addr: i64, addrlen: i64) -> i64
 
 # Connect to remote host
 # sockfd: socket file descriptor
 # addr: pointer to sockaddr structure
 # addrlen: size of sockaddr structure
 # Returns: 0 on success, -1 on error
-X F connect(sockfd: i64, addr: i64, addrlen: i64) -> i64
+impl fn connect(sockfd: i64, addr: i64, addrlen: i64) -> i64
 
 # Send data
 # sockfd: socket file descriptor
@@ -190,7 +190,7 @@ X F connect(sockfd: i64, addr: i64, addrlen: i64) -> i64
 # len: length of data
 # flags: send flags (usually 0)
 # Returns: bytes sent, or -1 on error
-X F send(sockfd: i64, buf: i64, len: i64, flags: i64) -> i64
+impl fn send(sockfd: i64, buf: i64, len: i64, flags: i64) -> i64
 
 # Receive data
 # sockfd: socket file descriptor
@@ -198,7 +198,7 @@ X F send(sockfd: i64, buf: i64, len: i64, flags: i64) -> i64
 # len: buffer length
 # flags: recv flags (usually 0)
 # Returns: bytes received, 0 on connection closed, -1 on error
-X F recv(sockfd: i64, buf: i64, len: i64, flags: i64) -> i64
+impl fn recv(sockfd: i64, buf: i64, len: i64, flags: i64) -> i64
 
 # Send data to specific address (UDP)
 # sockfd: socket file descriptor
@@ -208,7 +208,7 @@ X F recv(sockfd: i64, buf: i64, len: i64, flags: i64) -> i64
 # dest_addr: pointer to destination sockaddr
 # addrlen: size of sockaddr
 # Returns: bytes sent, or -1 on error
-X F sendto(sockfd: i64, buf: i64, len: i64, flags: i64, dest_addr: i64, addrlen: i64) -> i64
+impl fn sendto(sockfd: i64, buf: i64, len: i64, flags: i64, dest_addr: i64, addrlen: i64) -> i64
 
 # Receive data with source address (UDP)
 # sockfd: socket file descriptor
@@ -218,12 +218,12 @@ X F sendto(sockfd: i64, buf: i64, len: i64, flags: i64, dest_addr: i64, addrlen:
 # src_addr: pointer to sockaddr for source address
 # addrlen: pointer to addrlen
 # Returns: bytes received, or -1 on error
-X F recvfrom(sockfd: i64, buf: i64, len: i64, flags: i64, src_addr: i64, addrlen: i64) -> i64
+impl fn recvfrom(sockfd: i64, buf: i64, len: i64, flags: i64, src_addr: i64, addrlen: i64) -> i64
 
 # Close socket
 # fd: socket file descriptor
 # Returns: 0 on success, -1 on error
-X F close(fd: i64) -> i64
+impl fn close(fd: i64) -> i64
 
 # Set socket options
 # sockfd: socket file descriptor
@@ -232,14 +232,14 @@ X F close(fd: i64) -> i64
 # optval: pointer to option value
 # optlen: length of option value
 # Returns: 0 on success, -1 on error
-X F setsockopt(sockfd: i64, level: i64, optname: i64, optval: i64, optlen: i64) -> i64
+impl fn setsockopt(sockfd: i64, level: i64, optname: i64, optval: i64, optlen: i64) -> i64
 
 # Convert host string to network address
 # af: address family
 # src: source string (e.g., "127.0.0.1")
 # dst: destination buffer for binary address
 # Returns: 1 on success, 0 on invalid, -1 on error
-X F inet_pton(af: i64, src: i64, dst: i64) -> i64
+impl fn inet_pton(af: i64, src: i64, dst: i64) -> i64
 
 # Convert network address to string
 # af: address family
@@ -247,22 +247,22 @@ X F inet_pton(af: i64, src: i64, dst: i64) -> i64
 # dst: destination string buffer
 # size: buffer size
 # Returns: pointer to dst on success, 0 on error
-X F inet_ntop(af: i64, src: i64, dst: i64, size: i64) -> i64
+impl fn inet_ntop(af: i64, src: i64, dst: i64, size: i64) -> i64
 
 # Convert port to network byte order
-X F htons(hostshort: i64) -> i64
+impl fn htons(hostshort: i64) -> i64
 
 # Convert port from network byte order
-X F ntohs(netshort: i64) -> i64
+impl fn ntohs(netshort: i64) -> i64
 
 # Convert address to network byte order
-X F htonl(hostlong: i64) -> i64
+impl fn htonl(hostlong: i64) -> i64
 
 # Convert address from network byte order
-X F ntohl(netlong: i64) -> i64
+impl fn ntohl(netlong: i64) -> i64
 
 # Memory functions
-X F memset(ptr: i64, value: i64, size: i64) -> i64
+impl fn memset(ptr: i64, value: i64, size: i64) -> i64
 
 # ============================================================================
 # Sockaddr_in structure helper
@@ -293,15 +293,15 @@ C SOCKADDR_IN6_SIZE: i64 = 28
 
 # Create sockaddr_in6 structure for IPv6 address
 # Returns pointer to allocated sockaddr_in6 (caller must free)
-F make_sockaddr_in6(host: i64, port: i64) -> i64 {
+fn make_sockaddr_in6(host: i64, port: i64) -> i64 {
     # Validate port range
     I port < MIN_PORT | port > MAX_PORT {
         0
-    } EL {
+    } else {
         addr := malloc(SOCKADDR_IN6_SIZE)
         I addr == 0 {
             0
-        } EL {
+        } else {
             memset(addr, 0, SOCKADDR_IN6_SIZE)
 
             # sin6_family (2 bytes at offset 0) - use store_i16
@@ -320,12 +320,12 @@ F make_sockaddr_in6(host: i64, port: i64) -> i64 {
                 I result <= 0 {
                     free(addr)
                     0
-                } EL {
+                } else {
                     # sin6_scope_id (4 bytes at offset 24) - set to 0
                     store_i32(addr + 24, 0)
                     addr
                 }
-            } EL {
+            } else {
                 # IN6ADDR_ANY (::)
                 # sin6_addr is already zeroed by memset
                 # sin6_scope_id (4 bytes at offset 24) - set to 0
@@ -337,7 +337,7 @@ F make_sockaddr_in6(host: i64, port: i64) -> i64 {
 }
 
 # Create sockaddr_in6 for any address (::)
-F make_sockaddr_any6(port: i64) -> i64 {
+fn make_sockaddr_any6(port: i64) -> i64 {
     make_sockaddr_in6(0, port)
 }
 
@@ -347,15 +347,15 @@ F make_sockaddr_any6(port: i64) -> i64 {
 
 # Create sockaddr_in structure for IPv4 address
 # Returns pointer to allocated sockaddr_in (caller must free)
-F make_sockaddr_in(host: i64, port: i64) -> i64 {
+fn make_sockaddr_in(host: i64, port: i64) -> i64 {
     # Validate port range
     I port < MIN_PORT | port > MAX_PORT {
         0
-    } EL {
+    } else {
         addr := malloc(SOCKADDR_IN_SIZE)
         I addr == 0 {
             0
-        } EL {
+        } else {
             memset(addr, 0, SOCKADDR_IN_SIZE)
 
             # sin_family (2 bytes at offset 0) - use store_i16
@@ -371,10 +371,10 @@ F make_sockaddr_in(host: i64, port: i64) -> i64 {
                 I result <= 0 {
                     free(addr)
                     0
-                } EL {
+                } else {
                     addr
                 }
-            } EL {
+            } else {
                 # INADDR_ANY (0.0.0.0)
                 store_i32(addr + 4, 0)
                 addr
@@ -384,7 +384,7 @@ F make_sockaddr_in(host: i64, port: i64) -> i64 {
 }
 
 # Create sockaddr_in for any address (0.0.0.0)
-F make_sockaddr_any(port: i64) -> i64 {
+fn make_sockaddr_any(port: i64) -> i64 {
     make_sockaddr_in(0, port)
 }
 
@@ -392,24 +392,24 @@ F make_sockaddr_any(port: i64) -> i64 {
 # TcpListener - TCP server socket
 # ============================================================================
 
-S TcpListener {
+struct TcpListener {
     fd: i64,        # Socket file descriptor (-1 if invalid)
     port: i64       # Listening port
 }
 
-X TcpListener {
+impl TcpListener {
     # Create and bind a TCP listener on the specified port (IPv4)
     # Returns TcpListener with fd=-1 on error
-    F bind(port: i64) -> TcpListener {
+    fn bind(port: i64) -> TcpListener {
         # Validate port range
         I port < MIN_PORT | port > MAX_PORT {
             TcpListener { fd: -1, port: 0 }
-        } EL {
+        } else {
             # Create socket
             fd := socket(AF_INET, SOCK_STREAM, 0)
             I fd < 0 {
                 TcpListener { fd: -1, port: 0 }
-            } EL {
+            } else {
                 # Set SO_REUSEADDR option
                 optval := malloc(4)
                 store_i32(optval, 1)
@@ -421,7 +421,7 @@ X TcpListener {
                 I addr == 0 {
                     close(fd)
                     TcpListener { fd: -1, port: 0 }
-                } EL {
+                } else {
                     # Bind socket
                     result := bind(fd, addr, SOCKADDR_IN_SIZE)
                     free(addr)
@@ -429,13 +429,13 @@ X TcpListener {
                     I result < 0 {
                         close(fd)
                         TcpListener { fd: -1, port: 0 }
-                    } EL {
+                    } else {
                         # Listen for connections
                         result2 := listen(fd, NET_DEFAULT_BACKLOG)
                         I result2 < 0 {
                             close(fd)
                             TcpListener { fd: -1, port: 0 }
-                        } EL {
+                        } else {
                             TcpListener { fd: fd, port: port }
                         }
                     }
@@ -446,16 +446,16 @@ X TcpListener {
 
     # Create and bind a TCP listener on the specified port (IPv6)
     # Returns TcpListener with fd=-1 on error
-    F bind6(port: i64) -> TcpListener {
+    fn bind6(port: i64) -> TcpListener {
         # Validate port range
         I port < MIN_PORT | port > MAX_PORT {
             TcpListener { fd: -1, port: 0 }
-        } EL {
+        } else {
             # Create socket
             fd := socket(AF_INET6, SOCK_STREAM, 0)
             I fd < 0 {
                 TcpListener { fd: -1, port: 0 }
-            } EL {
+            } else {
                 # Set SO_REUSEADDR option
                 optval := malloc(4)
                 store_i32(optval, 1)
@@ -467,7 +467,7 @@ X TcpListener {
                 I addr == 0 {
                     close(fd)
                     TcpListener { fd: -1, port: 0 }
-                } EL {
+                } else {
                     # Bind socket
                     result := bind(fd, addr, SOCKADDR_IN6_SIZE)
                     free(addr)
@@ -475,13 +475,13 @@ X TcpListener {
                     I result < 0 {
                         close(fd)
                         TcpListener { fd: -1, port: 0 }
-                    } EL {
+                    } else {
                         # Listen for connections
                         result2 := listen(fd, NET_DEFAULT_BACKLOG)
                         I result2 < 0 {
                             close(fd)
                             TcpListener { fd: -1, port: 0 }
-                        } EL {
+                        } else {
                             TcpListener { fd: fd, port: port }
                         }
                     }
@@ -491,32 +491,32 @@ X TcpListener {
     }
 
     # Check if listener is valid
-    F is_valid(&self) -> i64 {
-        I self.fd >= 0 { 1 } EL { 0 }
+    fn is_valid(&self) -> i64 {
+        I self.fd >= 0 { 1 } else { 0 }
     }
 
     # Accept incoming connection
     # Returns TcpStream with fd=-1 on error
-    F accept(&self) -> TcpStream {
+    fn accept(&self) -> TcpStream {
         I self.fd < 0 {
             TcpStream { fd: -1 }
-        } EL {
+        } else {
             client_fd := accept(self.fd, 0, 0)
             I client_fd < 0 {
                 TcpStream { fd: -1 }
-            } EL {
+            } else {
                 TcpStream { fd: client_fd }
             }
         }
     }
 
     # Get the listening port
-    F get_port(&self) -> i64 {
+    fn get_port(&self) -> i64 {
         self.port
     }
 
     # Close the listener
-    F close(&self) -> i64 {
+    fn close(&self) -> i64 {
         I self.fd >= 0 {
             close(self.fd)
             self.fd = -1
@@ -525,7 +525,7 @@ X TcpListener {
     }
 
     # Alias for close (RAII pattern)
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         @.close()
     }
 }
@@ -534,33 +534,33 @@ X TcpListener {
 # TcpStream - TCP connection (client or accepted)
 # ============================================================================
 
-S TcpStream {
+struct TcpStream {
     fd: i64         # Socket file descriptor (-1 if invalid)
 }
 
-X TcpStream {
+impl TcpStream {
     # Connect to a remote host (IPv4)
     # host: IP address string (e.g., "127.0.0.1")
     # port: port number
     # Returns TcpStream with fd=-1 on error
-    F connect(host: i64, port: i64) -> TcpStream {
+    fn connect(host: i64, port: i64) -> TcpStream {
         # Validate inputs
         I host == 0 {
             TcpStream { fd: -1 }
-        } EL I port < MIN_PORT | port > MAX_PORT {
+        } else I port < MIN_PORT | port > MAX_PORT {
             TcpStream { fd: -1 }
-        } EL {
+        } else {
             # Create socket
             fd := socket(AF_INET, SOCK_STREAM, 0)
             I fd < 0 {
                 TcpStream { fd: -1 }
-            } EL {
+            } else {
                 # Create address structure
                 addr := make_sockaddr_in(host, port)
                 I addr == 0 {
                     close(fd)
                     TcpStream { fd: -1 }
-                } EL {
+                } else {
                     # Connect to server
                     result := connect(fd, addr, SOCKADDR_IN_SIZE)
                     free(addr)
@@ -568,7 +568,7 @@ X TcpStream {
                     I result < 0 {
                         close(fd)
                         TcpStream { fd: -1 }
-                    } EL {
+                    } else {
                         TcpStream { fd: fd }
                     }
                 }
@@ -580,24 +580,24 @@ X TcpStream {
     # host: IP address string (e.g., "::1", "fe80::1")
     # port: port number
     # Returns TcpStream with fd=-1 on error
-    F connect6(host: i64, port: i64) -> TcpStream {
+    fn connect6(host: i64, port: i64) -> TcpStream {
         # Validate inputs
         I host == 0 {
             TcpStream { fd: -1 }
-        } EL I port < MIN_PORT | port > MAX_PORT {
+        } else I port < MIN_PORT | port > MAX_PORT {
             TcpStream { fd: -1 }
-        } EL {
+        } else {
             # Create socket
             fd := socket(AF_INET6, SOCK_STREAM, 0)
             I fd < 0 {
                 TcpStream { fd: -1 }
-            } EL {
+            } else {
                 # Create address structure
                 addr := make_sockaddr_in6(host, port)
                 I addr == 0 {
                     close(fd)
                     TcpStream { fd: -1 }
-                } EL {
+                } else {
                     # Connect to server
                     result := connect(fd, addr, SOCKADDR_IN6_SIZE)
                     free(addr)
@@ -605,7 +605,7 @@ X TcpStream {
                     I result < 0 {
                         close(fd)
                         TcpStream { fd: -1 }
-                    } EL {
+                    } else {
                         TcpStream { fd: fd }
                     }
                 }
@@ -614,48 +614,48 @@ X TcpStream {
     }
 
     # Check if stream is valid
-    F is_valid(&self) -> i64 {
-        I self.fd >= 0 { 1 } EL { 0 }
+    fn is_valid(&self) -> i64 {
+        I self.fd >= 0 { 1 } else { 0 }
     }
 
     # Read data into buffer
     # Returns number of bytes read, 0 on connection closed, -1 on error
-    F read(&self, buffer: i64, len: i64) -> i64 {
+    fn read(&self, buffer: i64, len: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EL I buffer == 0 {
+        } else I buffer == 0 {
             -1
-        } EL I len <= 0 {
+        } else I len <= 0 {
             -1
-        } EL {
+        } else {
             recv(self.fd, buffer, len, 0)
         }
     }
 
     # Write data from buffer
     # Returns number of bytes written, -1 on error
-    F write(&self, data: i64, len: i64) -> i64 {
+    fn write(&self, data: i64, len: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EL I data == 0 {
+        } else I data == 0 {
             -1
-        } EL I len <= 0 {
+        } else I len <= 0 {
             -1
-        } EL {
+        } else {
             send(self.fd, data, len, 0)
         }
     }
 
     # Write all data (loops until complete)
     # Returns total bytes written, -1 on error
-    F write_all(&self, data: i64, len: i64) -> i64 {
+    fn write_all(&self, data: i64, len: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EL I data == 0 {
+        } else I data == 0 {
             -1
-        } EL I len <= 0 {
+        } else I len <= 0 {
             -1
-        } EL {
+        } else {
             total := mut 0
             LW total < len {
                 sent := send(self.fd, data + total, len - total, 0)
@@ -669,12 +669,12 @@ X TcpStream {
     }
 
     # Get the file descriptor
-    F get_fd(&self) -> i64 {
+    fn get_fd(&self) -> i64 {
         self.fd
     }
 
     # Close the stream
-    F close(&self) -> i64 {
+    fn close(&self) -> i64 {
         I self.fd >= 0 {
             close(self.fd)
             self.fd = -1
@@ -683,7 +683,7 @@ X TcpStream {
     }
 
     # Alias for close (RAII pattern)
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         @.close()
     }
 }
@@ -692,42 +692,42 @@ X TcpStream {
 # UdpSocket - UDP socket
 # ============================================================================
 
-S UdpSocket {
+struct UdpSocket {
     fd: i64,        # Socket file descriptor (-1 if invalid)
     port: i64       # Bound port (0 if not bound)
 }
 
-X UdpSocket {
+impl UdpSocket {
     # Create an unbound UDP socket (IPv4)
-    F new() -> UdpSocket {
+    fn new() -> UdpSocket {
         fd := socket(AF_INET, SOCK_DGRAM, 0)
         I fd < 0 {
             UdpSocket { fd: -1, port: 0 }
-        } EL {
+        } else {
             UdpSocket { fd: fd, port: 0 }
         }
     }
 
     # Create an unbound UDP socket (IPv6)
-    F new6() -> UdpSocket {
+    fn new6() -> UdpSocket {
         fd := socket(AF_INET6, SOCK_DGRAM, 0)
         I fd < 0 {
             UdpSocket { fd: -1, port: 0 }
-        } EL {
+        } else {
             UdpSocket { fd: fd, port: 0 }
         }
     }
 
     # Create and bind a UDP socket to a port (IPv4)
-    F bind(port: i64) -> UdpSocket {
+    fn bind(port: i64) -> UdpSocket {
         # Validate port range
         I port < MIN_PORT | port > MAX_PORT {
             UdpSocket { fd: -1, port: 0 }
-        } EL {
+        } else {
             fd := socket(AF_INET, SOCK_DGRAM, 0)
             I fd < 0 {
                 UdpSocket { fd: -1, port: 0 }
-            } EL {
+            } else {
                 # Set SO_REUSEADDR option
                 optval := malloc(4)
                 store_i32(optval, 1)
@@ -739,7 +739,7 @@ X UdpSocket {
                 I addr == 0 {
                     close(fd)
                     UdpSocket { fd: -1, port: 0 }
-                } EL {
+                } else {
                     # Bind socket
                     result := bind(fd, addr, SOCKADDR_IN_SIZE)
                     free(addr)
@@ -747,7 +747,7 @@ X UdpSocket {
                     I result < 0 {
                         close(fd)
                         UdpSocket { fd: -1, port: 0 }
-                    } EL {
+                    } else {
                         UdpSocket { fd: fd, port: port }
                     }
                 }
@@ -756,15 +756,15 @@ X UdpSocket {
     }
 
     # Create and bind a UDP socket to a port (IPv6)
-    F bind6(port: i64) -> UdpSocket {
+    fn bind6(port: i64) -> UdpSocket {
         # Validate port range
         I port < MIN_PORT | port > MAX_PORT {
             UdpSocket { fd: -1, port: 0 }
-        } EL {
+        } else {
             fd := socket(AF_INET6, SOCK_DGRAM, 0)
             I fd < 0 {
                 UdpSocket { fd: -1, port: 0 }
-            } EL {
+            } else {
                 # Set SO_REUSEADDR option
                 optval := malloc(4)
                 store_i32(optval, 1)
@@ -776,7 +776,7 @@ X UdpSocket {
                 I addr == 0 {
                     close(fd)
                     UdpSocket { fd: -1, port: 0 }
-                } EL {
+                } else {
                     # Bind socket
                     result := bind(fd, addr, SOCKADDR_IN6_SIZE)
                     free(addr)
@@ -784,7 +784,7 @@ X UdpSocket {
                     I result < 0 {
                         close(fd)
                         UdpSocket { fd: -1, port: 0 }
-                    } EL {
+                    } else {
                         UdpSocket { fd: fd, port: port }
                     }
                 }
@@ -793,28 +793,28 @@ X UdpSocket {
     }
 
     # Check if socket is valid
-    F is_valid(&self) -> i64 {
-        I self.fd >= 0 { 1 } EL { 0 }
+    fn is_valid(&self) -> i64 {
+        I self.fd >= 0 { 1 } else { 0 }
     }
 
     # Send data to specific address (IPv4)
     # Returns number of bytes sent, -1 on error
-    F send_to(&self, data: i64, len: i64, host: i64, port: i64) -> i64 {
+    fn send_to(&self, data: i64, len: i64, host: i64, port: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EL I data == 0 {
+        } else I data == 0 {
             -1
-        } EL I len <= 0 {
+        } else I len <= 0 {
             -1
-        } EL I host == 0 {
+        } else I host == 0 {
             -1
-        } EL I port < MIN_PORT | port > MAX_PORT {
+        } else I port < MIN_PORT | port > MAX_PORT {
             -1
-        } EL {
+        } else {
             addr := make_sockaddr_in(host, port)
             I addr == 0 {
                 -1
-            } EL {
+            } else {
                 result := sendto(self.fd, data, len, 0, addr, SOCKADDR_IN_SIZE)
                 free(addr)
                 result
@@ -824,22 +824,22 @@ X UdpSocket {
 
     # Send data to specific address (IPv6)
     # Returns number of bytes sent, -1 on error
-    F send_to6(&self, data: i64, len: i64, host: i64, port: i64) -> i64 {
+    fn send_to6(&self, data: i64, len: i64, host: i64, port: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EL I data == 0 {
+        } else I data == 0 {
             -1
-        } EL I len <= 0 {
+        } else I len <= 0 {
             -1
-        } EL I host == 0 {
+        } else I host == 0 {
             -1
-        } EL I port < MIN_PORT | port > MAX_PORT {
+        } else I port < MIN_PORT | port > MAX_PORT {
             -1
-        } EL {
+        } else {
             addr := make_sockaddr_in6(host, port)
             I addr == 0 {
                 -1
-            } EL {
+            } else {
                 result := sendto(self.fd, data, len, 0, addr, SOCKADDR_IN6_SIZE)
                 free(addr)
                 result
@@ -849,14 +849,14 @@ X UdpSocket {
 
     # Receive data (simple version without source address)
     # Returns number of bytes received, -1 on error
-    F recv(&self, buffer: i64, len: i64) -> i64 {
+    fn recv(&self, buffer: i64, len: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EL I buffer == 0 {
+        } else I buffer == 0 {
             -1
-        } EL I len <= 0 {
+        } else I len <= 0 {
             -1
-        } EL {
+        } else {
             recvfrom(self.fd, buffer, len, 0, 0, 0)
         }
     }
@@ -865,14 +865,14 @@ X UdpSocket {
     # src_addr_out: pointer to buffer for source IP string (at least 16 bytes)
     # src_port_out: pointer to i64 for source port
     # Returns number of bytes received, -1 on error
-    F recv_from(&self, buffer: i64, len: i64, src_addr_out: i64, src_port_out: i64) -> i64 {
+    fn recv_from(&self, buffer: i64, len: i64, src_addr_out: i64, src_port_out: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EL I buffer == 0 {
+        } else I buffer == 0 {
             -1
-        } EL I len <= 0 {
+        } else I len <= 0 {
             -1
-        } EL {
+        } else {
             # Allocate sockaddr_in for source address
             src_addr := malloc(SOCKADDR_IN_SIZE)
             addrlen := malloc(8)
@@ -902,14 +902,14 @@ X UdpSocket {
     # src_addr_out: pointer to buffer for source IP string (at least 46 bytes for IPv6)
     # src_port_out: pointer to i64 for source port
     # Returns number of bytes received, -1 on error
-    F recv_from6(&self, buffer: i64, len: i64, src_addr_out: i64, src_port_out: i64) -> i64 {
+    fn recv_from6(&self, buffer: i64, len: i64, src_addr_out: i64, src_port_out: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EL I buffer == 0 {
+        } else I buffer == 0 {
             -1
-        } EL I len <= 0 {
+        } else I len <= 0 {
             -1
-        } EL {
+        } else {
             # Allocate sockaddr_in6 for source address
             src_addr := malloc(SOCKADDR_IN6_SIZE)
             addrlen := malloc(8)
@@ -936,17 +936,17 @@ X UdpSocket {
     }
 
     # Get the bound port
-    F get_port(&self) -> i64 {
+    fn get_port(&self) -> i64 {
         self.port
     }
 
     # Get the file descriptor
-    F get_fd(&self) -> i64 {
+    fn get_fd(&self) -> i64 {
         self.fd
     }
 
     # Close the socket
-    F close(&self) -> i64 {
+    fn close(&self) -> i64 {
         I self.fd >= 0 {
             close(self.fd)
             self.fd = -1
@@ -955,7 +955,7 @@ X UdpSocket {
     }
 
     # Alias for close (RAII pattern)
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         @.close()
     }
 }
@@ -968,67 +968,67 @@ X UdpSocket {
 
 # Create a TCP listener on the specified port (IPv4)
 # Returns socket fd on success, -1 on error
-F tcp_listen(port: i64) -> i64 {
+fn tcp_listen(port: i64) -> i64 {
     listener := TcpListener.bind(port)
     listener.fd
 }
 
 # Create a TCP listener (IPv4) using Result type
 # Returns Ok(fd) on success, Err(error_code) on failure
-F tcp_listen_result(port: i64) -> Result<i64, i64> {
+fn tcp_listen_result(port: i64) -> Result<i64, i64> {
     listener := TcpListener.bind(port)
     I listener.fd < 0 {
         Err(ERR_IO())
-    } EL {
+    } else {
         Ok(listener.fd)
     }
 }
 
 # Create a TCP listener on the specified port (IPv6)
 # Returns socket fd on success, -1 on error
-F tcp_listen6(port: i64) -> i64 {
+fn tcp_listen6(port: i64) -> i64 {
     listener := TcpListener.bind6(port)
     listener.fd
 }
 
 # Create a TCP listener (IPv6) using Result type
 # Returns Ok(fd) on success, Err(error_code) on failure
-F tcp_listen6_result(port: i64) -> Result<i64, i64> {
+fn tcp_listen6_result(port: i64) -> Result<i64, i64> {
     listener := TcpListener.bind6(port)
     I listener.fd < 0 {
         Err(ERR_IO())
-    } EL {
+    } else {
         Ok(listener.fd)
     }
 }
 
 # Accept a connection on a listener socket
 # Returns client socket fd on success, -1 on error
-F tcp_accept(listener_fd: i64) -> i64 {
+fn tcp_accept(listener_fd: i64) -> i64 {
     I listener_fd < 0 {
         -1
-    } EL {
+    } else {
         accept(listener_fd, 0, 0)
     }
 }
 
 # Accept a connection using Result type
 # Returns Ok(client_fd) on success, Err(error_code) on failure
-F tcp_accept_result(listener_fd: i64) -> Result<i64, i64> {
+fn tcp_accept_result(listener_fd: i64) -> Result<i64, i64> {
     I listener_fd < 0 {
         Err(ERR_INVALID())
-    } EL {
+    } else {
         client_fd := accept(listener_fd, 0, 0)
         I client_fd < 0 {
             Err(ERR_IO())
-        } EL {
+        } else {
             Ok(client_fd)
         }
     }
 }
 
 # Close a TCP listener
-F tcp_close_listener(listener_fd: i64) -> i64 {
+fn tcp_close_listener(listener_fd: i64) -> i64 {
     I listener_fd >= 0 {
         close(listener_fd)
     }
@@ -1039,70 +1039,70 @@ F tcp_close_listener(listener_fd: i64) -> i64 {
 
 # Connect to a remote TCP server (IPv4)
 # Returns socket fd on success, -1 on error
-F tcp_connect(host: i64, port: i64) -> i64 {
+fn tcp_connect(host: i64, port: i64) -> i64 {
     stream := TcpStream.connect(host, port)
     stream.fd
 }
 
 # Connect to a remote TCP server (IPv4) using Result type
 # Returns Ok(fd) on success, Err(error_code) on failure
-F tcp_connect_result(host: i64, port: i64) -> Result<i64, i64> {
+fn tcp_connect_result(host: i64, port: i64) -> Result<i64, i64> {
     stream := TcpStream.connect(host, port)
     I stream.fd < 0 {
         Err(ERR_IO())
-    } EL {
+    } else {
         Ok(stream.fd)
     }
 }
 
 # Connect to a remote TCP server (IPv6)
 # Returns socket fd on success, -1 on error
-F tcp_connect6(host: i64, port: i64) -> i64 {
+fn tcp_connect6(host: i64, port: i64) -> i64 {
     stream := TcpStream.connect6(host, port)
     stream.fd
 }
 
 # Connect to a remote TCP server (IPv6) using Result type
 # Returns Ok(fd) on success, Err(error_code) on failure
-F tcp_connect6_result(host: i64, port: i64) -> Result<i64, i64> {
+fn tcp_connect6_result(host: i64, port: i64) -> Result<i64, i64> {
     stream := TcpStream.connect6(host, port)
     I stream.fd < 0 {
         Err(ERR_IO())
-    } EL {
+    } else {
         Ok(stream.fd)
     }
 }
 
 # Read from a TCP socket
 # Returns bytes read, 0 on connection closed, -1 on error
-F tcp_read(stream_fd: i64, buffer: i64, len: i64) -> i64 {
+fn tcp_read(stream_fd: i64, buffer: i64, len: i64) -> i64 {
     I stream_fd < 0 {
         -1
-    } EL I buffer == 0 {
+    } else I buffer == 0 {
         -1
-    } EL I len <= 0 {
+    } else I len <= 0 {
         -1
-    } EL {
+    } else {
         recv(stream_fd, buffer, len, 0)
     }
 }
 
 # Write to a TCP socket
 # Returns bytes written, -1 on error
-F tcp_write(stream_fd: i64, data: i64, len: i64) -> i64 {
+fn tcp_write(stream_fd: i64, data: i64, len: i64) -> i64 {
     I stream_fd < 0 {
         -1
-    } EL I data == 0 {
+    } else I data == 0 {
         -1
-    } EL I len <= 0 {
+    } else I len <= 0 {
         -1
-    } EL {
+    } else {
         send(stream_fd, data, len, 0)
     }
 }
 
 # Close a TCP stream
-F tcp_close(stream_fd: i64) -> i64 {
+fn tcp_close(stream_fd: i64) -> i64 {
     I stream_fd >= 0 {
         close(stream_fd)
     }
@@ -1113,36 +1113,36 @@ F tcp_close(stream_fd: i64) -> i64 {
 
 # Create and bind a UDP socket (IPv4)
 # Returns socket fd on success, -1 on error
-F udp_bind(port: i64) -> i64 {
+fn udp_bind(port: i64) -> i64 {
     sock := UdpSocket.bind(port)
     sock.fd
 }
 
 # Create and bind a UDP socket (IPv6)
 # Returns socket fd on success, -1 on error
-F udp_bind6(port: i64) -> i64 {
+fn udp_bind6(port: i64) -> i64 {
     sock := UdpSocket.bind6(port)
     sock.fd
 }
 
 # Send data via UDP to specific address (IPv4)
 # Returns bytes sent, -1 on error
-F udp_send_to(socket_fd: i64, data: i64, len: i64, host: i64, port: i64) -> i64 {
+fn udp_send_to(socket_fd: i64, data: i64, len: i64, host: i64, port: i64) -> i64 {
     I socket_fd < 0 {
         -1
-    } EL I data == 0 {
+    } else I data == 0 {
         -1
-    } EL I len <= 0 {
+    } else I len <= 0 {
         -1
-    } EL I host == 0 {
+    } else I host == 0 {
         -1
-    } EL I port < MIN_PORT | port > MAX_PORT {
+    } else I port < MIN_PORT | port > MAX_PORT {
         -1
-    } EL {
+    } else {
         addr := make_sockaddr_in(host, port)
         I addr == 0 {
             -1
-        } EL {
+        } else {
             result := sendto(socket_fd, data, len, 0, addr, SOCKADDR_IN_SIZE)
             free(addr)
             result
@@ -1152,22 +1152,22 @@ F udp_send_to(socket_fd: i64, data: i64, len: i64, host: i64, port: i64) -> i64 
 
 # Send data via UDP to specific address (IPv6)
 # Returns bytes sent, -1 on error
-F udp_send_to6(socket_fd: i64, data: i64, len: i64, host: i64, port: i64) -> i64 {
+fn udp_send_to6(socket_fd: i64, data: i64, len: i64, host: i64, port: i64) -> i64 {
     I socket_fd < 0 {
         -1
-    } EL I data == 0 {
+    } else I data == 0 {
         -1
-    } EL I len <= 0 {
+    } else I len <= 0 {
         -1
-    } EL I host == 0 {
+    } else I host == 0 {
         -1
-    } EL I port < MIN_PORT | port > MAX_PORT {
+    } else I port < MIN_PORT | port > MAX_PORT {
         -1
-    } EL {
+    } else {
         addr := make_sockaddr_in6(host, port)
         I addr == 0 {
             -1
-        } EL {
+        } else {
             result := sendto(socket_fd, data, len, 0, addr, SOCKADDR_IN6_SIZE)
             free(addr)
             result
@@ -1177,20 +1177,20 @@ F udp_send_to6(socket_fd: i64, data: i64, len: i64, host: i64, port: i64) -> i64
 
 # Receive data via UDP
 # Returns bytes received, -1 on error
-F udp_recv_from(socket_fd: i64, buffer: i64, len: i64) -> i64 {
+fn udp_recv_from(socket_fd: i64, buffer: i64, len: i64) -> i64 {
     I socket_fd < 0 {
         -1
-    } EL I buffer == 0 {
+    } else I buffer == 0 {
         -1
-    } EL I len <= 0 {
+    } else I len <= 0 {
         -1
-    } EL {
+    } else {
         recvfrom(socket_fd, buffer, len, 0, 0, 0)
     }
 }
 
 # Close a UDP socket
-F udp_close(socket_fd: i64) -> i64 {
+fn udp_close(socket_fd: i64) -> i64 {
     I socket_fd >= 0 {
         close(socket_fd)
     }
@@ -1203,36 +1203,36 @@ F udp_close(socket_fd: i64) -> i64 {
 
 # Check if an IPv4 address string is valid
 # Returns 1 if valid, 0 otherwise
-F is_valid_ip(host: i64) -> i64 {
+fn is_valid_ip(host: i64) -> i64 {
     tmp := malloc(4)
     result := inet_pton(AF_INET, host, tmp)
     free(tmp)
-    I result == 1 { 1 } EL { 0 }
+    I result == 1 { 1 } else { 0 }
 }
 
 # Check if an IPv6 address string is valid
 # Returns 1 if valid, 0 otherwise
-F is_valid_ip6(host: i64) -> i64 {
+fn is_valid_ip6(host: i64) -> i64 {
     tmp := malloc(16)
     result := inet_pton(AF_INET6, host, tmp)
     free(tmp)
-    I result == 1 { 1 } EL { 0 }
+    I result == 1 { 1 } else { 0 }
 }
 
 # Convert error code to string (returns static string pointer)
-F net_error_string(err: i64) -> str {
+fn net_error_string(err: i64) -> str {
     I err == NET_ERR_NONE { "Success" }
-    EL I err == NET_ERR_SOCKET { "Socket creation failed" }
-    EL I err == NET_ERR_BIND { "Bind failed" }
-    EL I err == NET_ERR_LISTEN { "Listen failed" }
-    EL I err == NET_ERR_ACCEPT { "Accept failed" }
-    EL I err == NET_ERR_CONNECT { "Connect failed" }
-    EL I err == NET_ERR_SEND { "Send failed" }
-    EL I err == NET_ERR_RECV { "Receive failed" }
-    EL I err == NET_ERR_CLOSE { "Close failed" }
-    EL I err == NET_ERR_INVALID { "Invalid argument" }
-    EL I err == NET_ERR_RESOLVE { "Address resolution failed" }
-    EL I err == NET_ERR_INVALID_PORT { "Invalid port number (must be 0-65535)" }
-    EL I err == NET_ERR_INVALID_BUFFER { "Invalid buffer (null or negative size)" }
-    EL { "Unknown error" }
+    else I err == NET_ERR_SOCKET { "Socket creation failed" }
+    else I err == NET_ERR_BIND { "Bind failed" }
+    else I err == NET_ERR_LISTEN { "Listen failed" }
+    else I err == NET_ERR_ACCEPT { "Accept failed" }
+    else I err == NET_ERR_CONNECT { "Connect failed" }
+    else I err == NET_ERR_SEND { "Send failed" }
+    else I err == NET_ERR_RECV { "Receive failed" }
+    else I err == NET_ERR_CLOSE { "Close failed" }
+    else I err == NET_ERR_INVALID { "Invalid argument" }
+    else I err == NET_ERR_RESOLVE { "Address resolution failed" }
+    else I err == NET_ERR_INVALID_PORT { "Invalid port number (must be 0-65535)" }
+    else I err == NET_ERR_INVALID_BUFFER { "Invalid buffer (null or negative size)" }
+    else { "Unknown error" }
 }

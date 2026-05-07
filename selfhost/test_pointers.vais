@@ -8,36 +8,36 @@
 # Test Helpers
 # ============================================================================
 
-F print_i64(val: i64) -> i64 {
+fn print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
         0
-    } EL I val < 0 {
+    } else I val < 0 {
         putchar(45)
         print_i64(0 - val)
-    } EL {
+    } else {
         I val >= 10 {
             print_i64(val / 10)
             0
-        } EL { 0 }
+        } else { 0 }
         putchar(48 + (val % 10))
         0
     }
 }
 
-F println_i64(val: i64) -> i64 {
+fn println_i64(val: i64) -> i64 {
     print_i64(val)
     putchar(10)
     0
 }
 
-F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
+fn assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
     I actual == expected {
         puts("[PASS] ")
         puts(test_name)
         putchar(10)
         1
-    } EL {
+    } else {
         puts("[FAIL] ")
         puts(test_name)
         putchar(10)
@@ -53,7 +53,7 @@ F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
 # Test: Basic reference and dereference
 # ============================================================================
 
-F test_basic_ref() -> i64 {
+fn test_basic_ref() -> i64 {
     x := 42
     p := &x
     val := *p
@@ -64,12 +64,12 @@ F test_basic_ref() -> i64 {
 # Test: Deref assignment (*ptr = val)
 # ============================================================================
 
-F set_via_ptr(ptr: &i64, val: i64) -> i64 {
+fn set_via_ptr(ptr: &i64, val: i64) -> i64 {
     *ptr = val
     0
 }
 
-F test_deref_assign() -> i64 {
+fn test_deref_assign() -> i64 {
     x := mut 0
     set_via_ptr(&x, 99)
     assert_eq(x, 99, "deref assignment via function")
@@ -79,7 +79,7 @@ F test_deref_assign() -> i64 {
 # Test: Pointer type annotation
 # ============================================================================
 
-F test_pointer_type() -> i64 {
+fn test_pointer_type() -> i64 {
     buf := malloc(16)
     store_i64(buf, 123)
     val := load_i64(buf)
@@ -90,7 +90,7 @@ F test_pointer_type() -> i64 {
 # Test: Multiple references
 # ============================================================================
 
-F test_multi_ref() -> i64 {
+fn test_multi_ref() -> i64 {
     a := 10
     b := 20
     pa := &a
@@ -103,9 +103,9 @@ F test_multi_ref() -> i64 {
 # Test: Ref to expression (spill to stack)
 # ============================================================================
 
-F identity(x: i64) -> i64 = x
+fn identity(x: i64) -> i64 = x
 
-F test_ref_spill() -> i64 {
+fn test_ref_spill() -> i64 {
     x := 50
     # &x should get alloca address
     p := &x
@@ -117,7 +117,7 @@ F test_ref_spill() -> i64 {
 # Test: Nested deref
 # ============================================================================
 
-F test_nested_deref() -> i64 {
+fn test_nested_deref() -> i64 {
     x := 77
     p := &x
     # read *p twice
@@ -130,7 +130,7 @@ F test_nested_deref() -> i64 {
 # Main test runner
 # ============================================================================
 
-F main() -> i64 {
+fn main() -> i64 {
     passed: mut i64 = 0
 
     puts("=== Pointer/Reference Type Tests ===\n")
@@ -146,5 +146,5 @@ F main() -> i64 {
     print_i64(passed)
     puts("/6 passed\n")
 
-    I passed == 6 { 0 } EL { 1 }
+    I passed == 6 { 0 } else { 1 }
 }

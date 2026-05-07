@@ -1,7 +1,7 @@
 # LIVING_SPEC/04_stdlib/range_inclusive_exclusive.vais
 # Key concept: `0..5` 배타(0~4), `0..=5` 포함(0~5).
 
-F sum_exclusive() -> i64 {
+fn sum_exclusive() -> i64 {
     s := mut 0
     LF i: 0..5 {
         s = s + i
@@ -9,7 +9,7 @@ F sum_exclusive() -> i64 {
     s  # 0+1+2+3+4 = 10
 }
 
-F sum_inclusive() -> i64 {
+fn sum_inclusive() -> i64 {
     s := mut 0
     LF i: 0..=5 {
         s = s + i
@@ -17,6 +17,6 @@ F sum_inclusive() -> i64 {
     s  # 0+1+2+3+4+5 = 15
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     sum_exclusive() + sum_inclusive()
 }

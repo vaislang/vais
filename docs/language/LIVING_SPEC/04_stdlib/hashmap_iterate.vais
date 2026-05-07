@@ -1,14 +1,14 @@
 # LIVING_SPEC/04_stdlib/hashmap_iterate.vais
 # Key concept: HashMap의 key/value를 get으로 개별 접근. 전체 순회는 std API 문서 참조.
 
-F main() -> i64 {
+fn main() -> i64 {
     m: HashMap<i64, i64> = HashMap::new()
     m.insert(1, 10)
     m.insert(2, 20)
     m.insert(3, 30)
     sum := mut 0
     LF k: 1..=3 {
-        M m.get(k) {
+        match m.get(k) {
             Some(v) => { sum = sum + v },
             None => {}
         }

@@ -53,6 +53,15 @@ struct KeywordPair {
 /// - keywords with no multi-char form yet (I / L / B / C / D / O / N
 ///   / G / A / Y are single-char-only at the lexer level)
 const DUAL_PAIRS: &[KeywordPair] = &[
+    // Step 19 P3 augment (2026-05-07): list `EN` first so that
+    // `replacement_for(target=Single)` walks the table in order and picks
+    // `enum → EN` (the unambiguous 2-char form) before `enum → E` (the
+    // contextual single-char form). This makes round-trip stable: any
+    // source containing `EN` or `enum` normalizes to `EN` in the
+    // single-form canonical pass. The contextual `E` remains in the table
+    // so that legacy sources written with `E Foo {}` still convert to
+    // `enum Foo {}` under `--to=multi`. Step 19 P4 retires both.
+    KeywordPair { single: "EN", multi: "enum" },
     // wave 1 (v27)
     KeywordPair { single: "S",  multi: "struct" },
     KeywordPair { single: "E",  multi: "enum" },
@@ -120,6 +129,21 @@ pub fn run_dual(input: &Path, options: &DualOptions) -> Result<String, String> {
 /// Pure conversion. Re-lex the source, then for each token whose span
 /// content is a dual-syntax keyword, substitute the canonical form for
 /// `target`. All non-keyword bytes are passed through verbatim.
+///
+/// Step 19 P3 (2026-05-07) guard: when `target == Multi`, single-letter
+/// tokens that lex as a retired keyword *but appear in type position* are
+/// kept as-is (treated as generic-parameter identifiers, not as keywords).
+/// Without this guard, `EN Result<T, E> { Ok(T), Err(E) }` would convert
+/// to `enum Result<type, enum> { Ok(type), Err(enum) }` (LESSONS L-009),
+/// which is round-trip-clean but readability-regressed and may collide
+/// with codegen monomorphization (LESSONS L-011).
+///
+/// The position heuristic: a single-letter token (`T`, `E`, `M`, etc.) is
+/// a generic-parameter identifier when the immediately preceding meaningful
+/// token is `<`, `,`, `:`, `->`, `&`, or `(`. The 12 retired forms include
+/// multi-letter keywords (`EN`, `EL`) that cannot collide with generic
+/// param identifiers (which are conventionally single-letter), so the
+/// guard only applies to single-letter retired forms.
 pub fn convert_source(source: &str, target: DualForm) -> Result<String, String> {
     let tokens = tokenize(source)
         .map_err(|e| format!("lex error: {:?}", e))?;
@@ -127,7 +151,7 @@ pub fn convert_source(source: &str, target: DualForm) -> Result<String, String> 
     let mut out = String::with_capacity(source.len());
     let mut cursor = 0usize;
 
-    for tok in &tokens {
+    for (i, tok) in tokens.iter().enumerate() {
         let span = &tok.span;
         if span.start < cursor {
             // Defensive: tokens should be ordered. Skip overlap rather
@@ -139,7 +163,13 @@ pub fn convert_source(source: &str, target: DualForm) -> Result<String, String> 
             out.push_str(&source[cursor..span.start]);
         }
         let lexeme = &source[span.start..span.end];
-        if let Some(replacement) = replacement_for(lexeme, target) {
+        let in_type_position = matches!(target, DualForm::Multi)
+            && is_single_letter_retired(lexeme)
+            && preceded_by_type_marker(&tokens, i);
+        if in_type_position {
+            // Generic-parameter identifier — preserve verbatim.
+            out.push_str(lexeme);
+        } else if let Some(replacement) = replacement_for(lexeme, target) {
             out.push_str(replacement);
         } else {
             out.push_str(lexeme);
@@ -153,6 +183,32 @@ pub fn convert_source(source: &str, target: DualForm) -> Result<String, String> 
     }
 
     Ok(converted_post_check(out, target))
+}
+
+/// True if `lexeme` is a single-letter retired keyword that could plausibly
+/// be a generic-parameter identifier (e.g., `T`, `E`, `S`, `R`, `M`, etc.).
+/// Multi-letter retired forms (`EN`, `EL`) and long forms are excluded.
+fn is_single_letter_retired(lexeme: &str) -> bool {
+    matches!(
+        lexeme,
+        "F" | "S" | "E" | "M" | "R" | "T" | "U" | "P" | "W" | "X"
+    )
+}
+
+/// Look backwards from token index `i` for the most recent meaningful
+/// (non-trivia) token. Returns true if it indicates a type-position
+/// context: `<`, `,`, `:`, `->`, `&`, or `(`. Trivia (comments,
+/// whitespace) are already filtered out by the lexer.
+fn preceded_by_type_marker(tokens: &[vais_lexer::SpannedToken], i: usize) -> bool {
+    if i == 0 {
+        return false;
+    }
+    let prev = &tokens[i - 1].token;
+    use vais_lexer::Token;
+    matches!(
+        prev,
+        Token::Lt | Token::Comma | Token::Colon | Token::Arrow | Token::Amp | Token::LParen
+    )
 }
 
 /// Post-check hook for future invariants. For now it is the identity;

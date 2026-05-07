@@ -2,23 +2,23 @@
 # Key concept: X Type { F method(self, ...) -> T } 고유 메서드 구현.
 # 트레이트 없이 타입에 직접 메서드를 붙이는 inherent impl.
 
-S Counter {
+struct Counter {
     value: i64
 }
 
-X Counter {
-    F new() -> Counter {
+impl Counter {
+    fn new() -> Counter {
         Counter { value: 0 }
     }
-    F increment(self) -> i64 {
+    fn increment(self) -> i64 {
         self.value + 1
     }
-    F get(self) -> i64 {
+    fn get(self) -> i64 {
         self.value
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c := Counter::new()
     c.increment()
 }

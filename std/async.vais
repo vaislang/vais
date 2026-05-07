@@ -81,15 +81,15 @@
 # Timeout - wraps a future with a deadline
 # ============================================
 
-S TimeoutFuture {
+struct TimeoutFuture {
     inner_ptr: i64,     # Inner future pointer
     inner_poll: i64,    # Inner future poll function
     deadline: i64,      # Maximum ticks before timeout
     elapsed: i64        # Current tick count
 }
 
-X TimeoutFuture {
-    F new(inner_ptr: i64, inner_poll: i64, deadline: i64) -> TimeoutFuture {
+impl TimeoutFuture {
+    fn new(inner_ptr: i64, inner_poll: i64, deadline: i64) -> TimeoutFuture {
         TimeoutFuture {
             inner_ptr: inner_ptr,
             inner_poll: inner_poll,
@@ -101,7 +101,7 @@ X TimeoutFuture {
 
 # Create a timeout wrapper
 # Returns -1 if the inner future doesn't complete within deadline ticks
-F timeout(inner_ptr: i64, inner_poll: i64, deadline: i64) -> TimeoutFuture {
+fn timeout(inner_ptr: i64, inner_poll: i64, deadline: i64) -> TimeoutFuture {
     TimeoutFuture::new(inner_ptr, inner_poll, deadline)
 }
 
@@ -109,7 +109,7 @@ F timeout(inner_ptr: i64, inner_poll: i64, deadline: i64) -> TimeoutFuture {
 # Retry - retries a future on failure
 # ============================================
 
-S RetryConfig {
+struct RetryConfig {
     max_retries: i64,       # Maximum number of retries
     backoff_base: i64,      # Base delay between retries (in ticks)
     backoff_factor: i64,    # Multiplier for exponential backoff (x100, so 200 = 2x)
@@ -117,8 +117,8 @@ S RetryConfig {
     current_delay: i64      # Current backoff delay
 }
 
-X RetryConfig {
-    F new(max_retries: i64) -> RetryConfig {
+impl RetryConfig {
+    fn new(max_retries: i64) -> RetryConfig {
         RetryConfig {
             max_retries: max_retries,
             backoff_base: 1,
@@ -128,7 +128,7 @@ X RetryConfig {
         }
     }
 
-    F with_backoff(max_retries: i64, base: i64, factor: i64) -> RetryConfig {
+    fn with_backoff(max_retries: i64, base: i64, factor: i64) -> RetryConfig {
         RetryConfig {
             max_retries: max_retries,
             backoff_base: base,
@@ -139,24 +139,24 @@ X RetryConfig {
     }
 
     # Check if we should retry
-    F should_retry(&self) -> i64 {
+    fn should_retry(&self) -> i64 {
         self.current_retry < self.max_retries
     }
 
     # Record a retry attempt
-    F record_retry(&self) -> i64 {
+    fn record_retry(&self) -> i64 {
         self.current_retry = self.current_retry + 1
         self.current_delay = self.current_delay * self.backoff_factor / 100
         self.current_delay
     }
 
     # Get current retry count
-    F retries(&self) -> i64 {
+    fn retries(&self) -> i64 {
         self.current_retry
     }
 
     # Get remaining retries
-    F remaining(&self) -> i64 {
+    fn remaining(&self) -> i64 {
         self.max_retries - self.current_retry
     }
 }
@@ -165,14 +165,14 @@ X RetryConfig {
 # Race - returns first completed future's result
 # ============================================
 
-S RaceFuture {
+struct RaceFuture {
     futures: i64,       # Pointer to array of (future_ptr, poll_fn) pairs
     count: i64,         # Number of futures
     completed: i64      # Index of completed future (-1 = none)
 }
 
-X RaceFuture {
-    F new(count: i64) -> RaceFuture {
+impl RaceFuture {
+    fn new(count: i64) -> RaceFuture {
         futures := malloc(count * 16)  # Each entry: 8 bytes ptr + 8 bytes poll_fn
         RaceFuture {
             futures: futures,
@@ -182,18 +182,18 @@ X RaceFuture {
     }
 
     # Add a future to the race (0-indexed)
-    F add(&self, index: i64, future_ptr: i64, poll_fn: i64) -> i64 {
+    fn add(&self, index: i64, future_ptr: i64, poll_fn: i64) -> i64 {
         store_i64(self.futures + index * 16, future_ptr)
         store_i64(self.futures + index * 16 + 8, poll_fn)
         0
     }
 
     # Get which future completed first
-    F winner(&self) -> i64 {
+    fn winner(&self) -> i64 {
         self.completed
     }
 
-    F cleanup(&self) -> i64 {
+    fn cleanup(&self) -> i64 {
         free(self.futures)
         0
     }
@@ -203,15 +203,15 @@ X RaceFuture {
 # AsyncMutex - async-aware mutual exclusion
 # ============================================
 
-S AsyncMutex {
+struct AsyncMutex {
     locked: i64,        # 1 if locked, 0 if unlocked
     value: i64,         # Protected value
     waiters: i64,       # Number of waiting tasks
     waiter_head: i64    # Linked list of waiting futures
 }
 
-X AsyncMutex {
-    F new(value: i64) -> AsyncMutex {
+impl AsyncMutex {
+    fn new(value: i64) -> AsyncMutex {
         AsyncMutex {
             locked: 0,
             value: value,
@@ -222,16 +222,16 @@ X AsyncMutex {
 
     # Try to acquire the lock (non-blocking)
     # Returns 1 if acquired, 0 if already locked
-    F try_lock(&self) -> i64 {
+    fn try_lock(&self) -> i64 {
         LW self.locked == 0 {
             self.locked = 1
-            R 1
+            return 1
         }
         0
     }
 
     # Release the lock
-    F unlock(&self) -> i64 {
+    fn unlock(&self) -> i64 {
         self.locked = 0
         # Wake first waiter if any
         LW self.waiter_head != 0 {
@@ -241,18 +241,18 @@ X AsyncMutex {
     }
 
     # Get the protected value (must be locked)
-    F get(&self) -> i64 {
+    fn get(&self) -> i64 {
         self.value
     }
 
     # Set the protected value (must be locked)
-    F set(&self, value: i64) -> i64 {
+    fn set(&self, value: i64) -> i64 {
         self.value = value
         0
     }
 
     # Check if locked
-    F is_locked(&self) -> i64 {
+    fn is_locked(&self) -> i64 {
         self.locked
     }
 }
@@ -261,7 +261,7 @@ X AsyncMutex {
 # AsyncChannel - async-aware bounded channel
 # ============================================
 
-S AsyncChannel {
+struct AsyncChannel {
     buffer: i64,        # Ring buffer for messages
     capacity: i64,
     head: i64,          # Read position
@@ -270,8 +270,8 @@ S AsyncChannel {
     closed: i64         # 1 if channel is closed
 }
 
-X AsyncChannel {
-    F new(capacity: i64) -> AsyncChannel {
+impl AsyncChannel {
+    fn new(capacity: i64) -> AsyncChannel {
         buffer := malloc(capacity * 8)
         AsyncChannel {
             buffer: buffer,
@@ -285,12 +285,12 @@ X AsyncChannel {
 
     # Try to send a message (non-blocking)
     # Returns 0 on success, 1 if full, 2 if closed
-    F try_send(&self, value: i64) -> i64 {
+    fn try_send(&self, value: i64) -> i64 {
         LW self.closed == 1 {
-            R 2
+            return 2
         }
         LW self.len == self.capacity {
-            R 1
+            return 1
         }
         store_i64(self.buffer + self.tail * 8, value)
         self.tail = (self.tail + 1) % self.capacity
@@ -300,12 +300,12 @@ X AsyncChannel {
 
     # Try to receive a message (non-blocking)
     # Returns the value, or -1 if empty, -2 if closed
-    F try_recv(&self) -> i64 {
+    fn try_recv(&self) -> i64 {
         LW self.len == 0 {
             LW self.closed == 1 {
-                R 0 - 2
+                return 0 - 2
             }
-            R 0 - 1
+            return 0 - 1
         }
         value := load_i64(self.buffer + self.head * 8)
         self.head = (self.head + 1) % self.capacity
@@ -314,32 +314,32 @@ X AsyncChannel {
     }
 
     # Close the channel
-    F close(&self) -> i64 {
+    fn close(&self) -> i64 {
         self.closed = 1
         0
     }
 
     # Check if channel is empty
-    F is_empty(&self) -> i64 {
+    fn is_empty(&self) -> i64 {
         self.len == 0
     }
 
     # Check if channel is full
-    F is_full(&self) -> i64 {
+    fn is_full(&self) -> i64 {
         self.len == self.capacity
     }
 
     # Get number of pending messages
-    F pending(&self) -> i64 {
+    fn pending(&self) -> i64 {
         self.len
     }
 
     # Check if closed
-    F is_closed(&self) -> i64 {
+    fn is_closed(&self) -> i64 {
         self.closed
     }
 
-    F cleanup(&self) -> i64 {
+    fn cleanup(&self) -> i64 {
         free(self.buffer)
         0
     }
@@ -349,14 +349,14 @@ X AsyncChannel {
 # Debounce - delays execution until input settles
 # ============================================
 
-S Debounce {
+struct Debounce {
     delay: i64,         # Delay in ticks before executing
     last_trigger: i64,  # Tick count of last trigger
     pending: i64        # 1 if there's a pending execution
 }
 
-X Debounce {
-    F new(delay: i64) -> Debounce {
+impl Debounce {
+    fn new(delay: i64) -> Debounce {
         Debounce {
             delay: delay,
             last_trigger: 0,
@@ -365,18 +365,18 @@ X Debounce {
     }
 
     # Trigger the debounce (resets timer)
-    F trigger(&self, current_tick: i64) -> i64 {
+    fn trigger(&self, current_tick: i64) -> i64 {
         self.last_trigger = current_tick
         self.pending = 1
         0
     }
 
     # Check if the debounced action should execute
-    F should_execute(&self, current_tick: i64) -> i64 {
+    fn should_execute(&self, current_tick: i64) -> i64 {
         LW self.pending == 1 {
             LW current_tick - self.last_trigger >= self.delay {
                 self.pending = 0
-                R 1
+                return 1
             }
         }
         0
@@ -387,13 +387,13 @@ X Debounce {
 # Throttle - limits execution rate
 # ============================================
 
-S Throttle {
+struct Throttle {
     interval: i64,      # Minimum interval between executions
     last_exec: i64      # Tick count of last execution
 }
 
-X Throttle {
-    F new(interval: i64) -> Throttle {
+impl Throttle {
+    fn new(interval: i64) -> Throttle {
         Throttle {
             interval: interval,
             last_exec: 0
@@ -401,10 +401,10 @@ X Throttle {
     }
 
     # Check if action is allowed (and record execution if so)
-    F try_execute(&self, current_tick: i64) -> i64 {
+    fn try_execute(&self, current_tick: i64) -> i64 {
         LW current_tick - self.last_exec >= self.interval {
             self.last_exec = current_tick
-            R 1
+            return 1
         }
         0
     }
@@ -415,22 +415,22 @@ X Throttle {
 # ============================================
 
 # Create a timeout for a future
-F with_timeout(inner_ptr: i64, inner_poll: i64, deadline: i64) -> TimeoutFuture {
+fn with_timeout(inner_ptr: i64, inner_poll: i64, deadline: i64) -> TimeoutFuture {
     TimeoutFuture::new(inner_ptr, inner_poll, deadline)
 }
 
 # Create a retry config with default backoff
-F retry(max_retries: i64) -> RetryConfig {
+fn retry(max_retries: i64) -> RetryConfig {
     RetryConfig::new(max_retries)
 }
 
 # Create an async mutex
-F async_mutex(value: i64) -> AsyncMutex {
+fn async_mutex(value: i64) -> AsyncMutex {
     AsyncMutex::new(value)
 }
 
 # Create an async channel
-F async_channel(capacity: i64) -> AsyncChannel {
+fn async_channel(capacity: i64) -> AsyncChannel {
     AsyncChannel::new(capacity)
 }
 
@@ -438,7 +438,7 @@ F async_channel(capacity: i64) -> AsyncChannel {
 # AsyncTaskPool - worker pool for task scheduling
 # ============================================
 
-S AsyncTaskPool {
+struct AsyncTaskPool {
     task_ptrs: i64,         # Array of task pointers
     capacity: i64,          # Maximum number of tasks
     active_count: i64,      # Currently executing tasks
@@ -446,8 +446,8 @@ S AsyncTaskPool {
     tail: i64               # Next slot to add task
 }
 
-X AsyncTaskPool {
-    F new(capacity: i64) -> AsyncTaskPool {
+impl AsyncTaskPool {
+    fn new(capacity: i64) -> AsyncTaskPool {
         task_ptrs := malloc(capacity * 8)
         AsyncTaskPool {
             task_ptrs: task_ptrs,
@@ -460,9 +460,9 @@ X AsyncTaskPool {
 
     # Submit a task to the pool
     # Returns 0 on success, 1 if pool is full
-    F submit(&self, task_ptr: i64) -> i64 {
+    fn submit(&self, task_ptr: i64) -> i64 {
         LW self.active_count == self.capacity {
-            R 1
+            return 1
         }
         store_i64(self.task_ptrs + self.tail * 8, task_ptr)
         self.tail = (self.tail + 1) % self.capacity
@@ -472,9 +472,9 @@ X AsyncTaskPool {
 
     # Get next task to execute
     # Returns task pointer or 0 if empty
-    F next_task(&self) -> i64 {
+    fn next_task(&self) -> i64 {
         LW self.active_count == 0 {
-            R 0
+            return 0
         }
         task := load_i64(self.task_ptrs + self.head * 8)
         self.head = (self.head + 1) % self.capacity
@@ -483,21 +483,21 @@ X AsyncTaskPool {
     }
 
     # Check if pool is empty
-    F is_empty(&self) -> i64 {
+    fn is_empty(&self) -> i64 {
         self.active_count == 0
     }
 
     # Check if pool is full
-    F is_full(&self) -> i64 {
+    fn is_full(&self) -> i64 {
         self.active_count == self.capacity
     }
 
     # Get number of pending tasks
-    F pending(&self) -> i64 {
+    fn pending(&self) -> i64 {
         self.active_count
     }
 
-    F cleanup(&self) -> i64 {
+    fn cleanup(&self) -> i64 {
         free(self.task_ptrs)
         0
     }
@@ -507,15 +507,15 @@ X AsyncTaskPool {
 # Barrier - synchronization point for N tasks
 # ============================================
 
-S Barrier {
+struct Barrier {
     threshold: i64,         # Number of tasks required
     arrived: i64,           # Number of tasks that arrived
     generation: i64,        # Current generation (for reuse)
     waiters: i64            # Linked list of waiting tasks
 }
 
-X Barrier {
-    F new(threshold: i64) -> Barrier {
+impl Barrier {
+    fn new(threshold: i64) -> Barrier {
         Barrier {
             threshold: threshold,
             arrived: 0,
@@ -526,34 +526,34 @@ X Barrier {
 
     # Wait at the barrier
     # Returns 1 when all tasks arrived, 0 if still waiting
-    F wait(&self) -> i64 {
+    fn wait(&self) -> i64 {
         self.arrived = self.arrived + 1
         LW self.arrived == self.threshold {
             # Reset for next use
             self.arrived = 0
             self.generation = self.generation + 1
-            R 1
+            return 1
         }
         0
     }
 
     # Get number of waiting tasks
-    F waiting(&self) -> i64 {
+    fn waiting(&self) -> i64 {
         self.arrived
     }
 
     # Get number of tasks still needed
-    F remaining(&self) -> i64 {
+    fn remaining(&self) -> i64 {
         self.threshold - self.arrived
     }
 
     # Check if barrier is ready
-    F is_ready(&self) -> i64 {
+    fn is_ready(&self) -> i64 {
         self.arrived == self.threshold
     }
 
     # Get current generation
-    F current_generation(&self) -> i64 {
+    fn current_generation(&self) -> i64 {
         self.generation
     }
 }
@@ -562,19 +562,19 @@ X Barrier {
 # Semaphore - limits concurrent access
 # ============================================
 
-S SemaphoreWaiter {
+struct SemaphoreWaiter {
     next: i64               # Next waiter in linked list
 }
 
-S Semaphore {
+struct Semaphore {
     permits: i64,           # Available permits
     max_permits: i64,       # Maximum permits
     waiters_head: i64,      # First waiter
     waiters_tail: i64       # Last waiter
 }
 
-X Semaphore {
-    F new(max_permits: i64) -> Semaphore {
+impl Semaphore {
+    fn new(max_permits: i64) -> Semaphore {
         Semaphore {
             permits: max_permits,
             max_permits: max_permits,
@@ -585,16 +585,16 @@ X Semaphore {
 
     # Try to acquire a permit (non-blocking)
     # Returns 1 if acquired, 0 if unavailable
-    F try_acquire(&self) -> i64 {
+    fn try_acquire(&self) -> i64 {
         LW self.permits > 0 {
             self.permits = self.permits - 1
-            R 1
+            return 1
         }
         0
     }
 
     # Release a permit
-    F release(&self) -> i64 {
+    fn release(&self) -> i64 {
         LW self.permits < self.max_permits {
             self.permits = self.permits + 1
         }
@@ -602,19 +602,19 @@ X Semaphore {
     }
 
     # Get available permits
-    F available(&self) -> i64 {
+    fn available(&self) -> i64 {
         self.permits
     }
 
     # Check if semaphore is full
-    F is_full(&self) -> i64 {
+    fn is_full(&self) -> i64 {
         self.permits == 0
     }
 
     # Get number of waiting tasks
-    F waiters(&self) -> i64 {
+    fn waiters(&self) -> i64 {
         LW self.waiters_head == 0 {
-            R 0
+            return 0
         }
         1
     }
@@ -624,14 +624,14 @@ X Semaphore {
 # WaitGroup - wait for all tasks to complete
 # ============================================
 
-S WaitGroup {
+struct WaitGroup {
     counter: i64,           # Number of pending tasks
     done: i64,              # 1 when all tasks complete
     generation: i64         # For reuse
 }
 
-X WaitGroup {
-    F new() -> WaitGroup {
+impl WaitGroup {
+    fn new() -> WaitGroup {
         WaitGroup {
             counter: 0,
             done: 0,
@@ -640,14 +640,14 @@ X WaitGroup {
     }
 
     # Add N tasks to wait for
-    F add(&self, count: i64) -> i64 {
+    fn add(&self, count: i64) -> i64 {
         self.counter = self.counter + count
         self.done = 0
         0
     }
 
     # Mark one task as done
-    F done(&self) -> i64 {
+    fn done(&self) -> i64 {
         LW self.counter > 0 {
             self.counter = self.counter - 1
             LW self.counter == 0 {
@@ -658,17 +658,17 @@ X WaitGroup {
     }
 
     # Check if all tasks are done
-    F is_done(&self) -> i64 {
+    fn is_done(&self) -> i64 {
         self.done
     }
 
     # Get remaining task count
-    F remaining(&self) -> i64 {
+    fn remaining(&self) -> i64 {
         self.counter
     }
 
     # Reset for reuse
-    F reset(&self) -> i64 {
+    fn reset(&self) -> i64 {
         self.counter = 0
         self.done = 0
         self.generation = self.generation + 1
@@ -680,13 +680,13 @@ X WaitGroup {
 # OnceCell - initialize once, read many
 # ============================================
 
-S OnceCell {
+struct OnceCell {
     initialized: i64,       # 1 if value is set
     value: i64              # The stored value
 }
 
-X OnceCell {
-    F new() -> OnceCell {
+impl OnceCell {
+    fn new() -> OnceCell {
         OnceCell {
             initialized: 0,
             value: 0
@@ -695,9 +695,9 @@ X OnceCell {
 
     # Set the value (only works once)
     # Returns 1 if set successfully, 0 if already initialized
-    F set(&self, value: i64) -> i64 {
+    fn set(&self, value: i64) -> i64 {
         LW self.initialized == 1 {
-            R 0
+            return 0
         }
         self.value = value
         self.initialized = 1
@@ -706,22 +706,22 @@ X OnceCell {
 
     # Get the value
     # Returns the value or 0 if not initialized
-    F get(&self) -> i64 {
+    fn get(&self) -> i64 {
         LW self.initialized == 1 {
-            R self.value
+            return self.value
         }
         0
     }
 
     # Check if initialized
-    F is_initialized(&self) -> i64 {
+    fn is_initialized(&self) -> i64 {
         self.initialized
     }
 
     # Get or initialize with default
-    F get_or_init(&self, default: i64) -> i64 {
+    fn get_or_init(&self, default: i64) -> i64 {
         LW self.initialized == 1 {
-            R self.value
+            return self.value
         }
         self.value = default
         self.initialized = 1
@@ -733,14 +733,14 @@ X OnceCell {
 # AsyncStream - lazy async value generator
 # ============================================
 
-S AsyncStream {
+struct AsyncStream {
     state_ptr: i64,         # Pointer to stream state
     next_fn: i64,           # Function to get next value
     done: i64               # 1 when stream is exhausted
 }
 
-X AsyncStream {
-    F new(state_ptr: i64, next_fn: i64) -> AsyncStream {
+impl AsyncStream {
+    fn new(state_ptr: i64, next_fn: i64) -> AsyncStream {
         AsyncStream {
             state_ptr: state_ptr,
             next_fn: next_fn,
@@ -750,9 +750,9 @@ X AsyncStream {
 
     # Get next value from stream
     # Returns the value or -1 if stream is done
-    F next(&self) -> i64 {
+    fn next(&self) -> i64 {
         LW self.done == 1 {
-            R 0 - 1
+            return 0 - 1
         }
         # Call next_fn with state_ptr
         # In real implementation, would invoke function pointer
@@ -760,12 +760,12 @@ X AsyncStream {
     }
 
     # Check if stream is done
-    F is_done(&self) -> i64 {
+    fn is_done(&self) -> i64 {
         self.done
     }
 
     # Mark stream as exhausted
-    F close(&self) -> i64 {
+    fn close(&self) -> i64 {
         self.done = 1
         0
     }
@@ -775,13 +775,13 @@ X AsyncStream {
 # StreamMap - transform stream values
 # ============================================
 
-S StreamMap {
+struct StreamMap {
     source: AsyncStream,    # Source stream
     map_fn: i64             # Function to transform values
 }
 
-X StreamMap {
-    F new(source: AsyncStream, map_fn: i64) -> StreamMap {
+impl StreamMap {
+    fn new(source: AsyncStream, map_fn: i64) -> StreamMap {
         StreamMap {
             source: source,
             map_fn: map_fn
@@ -789,10 +789,10 @@ X StreamMap {
     }
 
     # Get next transformed value
-    F next(&self) -> i64 {
+    fn next(&self) -> i64 {
         value := self.source.next()
         LW value == 0 - 1 {
-            R 0 - 1
+            return 0 - 1
         }
         # Apply map_fn to value
         # In real implementation, would invoke function pointer
@@ -800,7 +800,7 @@ X StreamMap {
     }
 
     # Check if stream is done
-    F is_done(&self) -> i64 {
+    fn is_done(&self) -> i64 {
         self.source.is_done()
     }
 }
@@ -809,13 +809,13 @@ X StreamMap {
 # StreamFilter - filter stream values
 # ============================================
 
-S StreamFilter {
+struct StreamFilter {
     source: AsyncStream,    # Source stream
     filter_fn: i64          # Function to test values (returns 1/0)
 }
 
-X StreamFilter {
-    F new(source: AsyncStream, filter_fn: i64) -> StreamFilter {
+impl StreamFilter {
+    fn new(source: AsyncStream, filter_fn: i64) -> StreamFilter {
         StreamFilter {
             source: source,
             filter_fn: filter_fn
@@ -823,22 +823,22 @@ X StreamFilter {
     }
 
     # Get next value that passes the filter
-    F next(&self) -> i64 {
+    fn next(&self) -> i64 {
         LW true {
             value := self.source.next()
             LW value == 0 - 1 {
-                R 0 - 1
+                return 0 - 1
             }
             # Check filter_fn(value)
             # In real implementation, would invoke function pointer
             # For now, return first value
-            R value
+            return value
         }
         0
     }
 
     # Check if stream is done
-    F is_done(&self) -> i64 {
+    fn is_done(&self) -> i64 {
         self.source.is_done()
     }
 }
@@ -848,39 +848,39 @@ X StreamFilter {
 # ============================================
 
 # Create a task pool
-F task_pool(capacity: i64) -> AsyncTaskPool {
+fn task_pool(capacity: i64) -> AsyncTaskPool {
     AsyncTaskPool::new(capacity)
 }
 
 # Create a barrier
-F barrier(threshold: i64) -> Barrier {
+fn barrier(threshold: i64) -> Barrier {
     Barrier::new(threshold)
 }
 
 # Create a semaphore
-F semaphore(max_permits: i64) -> Semaphore {
+fn semaphore(max_permits: i64) -> Semaphore {
     Semaphore::new(max_permits)
 }
 
 # Create a wait group
-F wait_group() -> WaitGroup {
+fn wait_group() -> WaitGroup {
     WaitGroup::new()
 }
 
 # Create a once cell
-F once_cell() -> OnceCell {
+fn once_cell() -> OnceCell {
     OnceCell::new()
 }
 
 # Create an async stream
-F async_stream(state_ptr: i64, next_fn: i64) -> AsyncStream {
+fn async_stream(state_ptr: i64, next_fn: i64) -> AsyncStream {
     AsyncStream::new(state_ptr, next_fn)
 }
 
 # ============================================
 # Memory helpers (extern)
 # ============================================
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F store_i64(ptr: i64, value: i64) -> i64
-X F load_i64(ptr: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn store_i64(ptr: i64, value: i64) -> i64
+impl fn load_i64(ptr: i64) -> i64

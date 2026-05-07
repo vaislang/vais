@@ -1,7 +1,7 @@
 # LIVING_SPEC/01_keywords/B_break_continue.vais
 # Key concept: B로 loop 탈출, C로 다음 iteration.
 
-F find_first_even(limit: i64) -> i64 {
+fn find_first_even(limit: i64) -> i64 {
     result := mut -1
     LF i: 0..limit {
         I i % 2 != 0 { C }
@@ -11,6 +11,6 @@ F find_first_even(limit: i64) -> i64 {
     result
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     find_first_even(10)  # 0
 }

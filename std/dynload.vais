@@ -17,22 +17,22 @@
 # path: Path to the library (null-terminated string)
 # flags: Loading flags (RTLD_NOW = 2, RTLD_LAZY = 1)
 # Returns: Handle to the library, or 0 on error
-X F dlopen(path: i64, flags: i64) -> i64
+impl fn dlopen(path: i64, flags: i64) -> i64
 
 # dlclose: Close a dynamic library
 # handle: Handle from dlopen
 # Returns: 0 on success, non-zero on error
-X F dlclose(handle: i64) -> i64
+impl fn dlclose(handle: i64) -> i64
 
 # dlsym: Get symbol address from a library
 # handle: Handle from dlopen
 # symbol: Symbol name (null-terminated string)
 # Returns: Address of the symbol, or 0 if not found
-X F dlsym(handle: i64, symbol: i64) -> i64
+impl fn dlsym(handle: i64, symbol: i64) -> i64
 
 # dlerror: Get last error message
 # Returns: Pointer to error string, or 0 if no error
-X F dlerror() -> i64
+impl fn dlerror() -> i64
 
 # ============================================================================
 # Loading flags
@@ -52,7 +52,7 @@ C RTLD_GLOBAL: i64 = 256
 # ============================================================================
 
 # Represents a loaded dynamic module
-S ModuleHandle {
+struct ModuleHandle {
     handle: i64,      # dlopen handle
     path: i64,        # Path to the module (string pointer)
     version: i64,     # Module version (incremented on reload)
@@ -60,7 +60,7 @@ S ModuleHandle {
 }
 
 # Create a new empty module handle
-F module_handle_new() -> ModuleHandle {
+fn module_handle_new() -> ModuleHandle {
     ModuleHandle {
         handle: 0,
         path: 0,
@@ -70,12 +70,12 @@ F module_handle_new() -> ModuleHandle {
 }
 
 # Check if module is loaded
-F module_is_loaded(m: ModuleHandle) -> i64 {
+fn module_is_loaded(m: ModuleHandle) -> i64 {
     m.loaded
 }
 
 # Get module version
-F module_version(m: ModuleHandle) -> i64 {
+fn module_version(m: ModuleHandle) -> i64 {
     m.version
 }
 
@@ -86,12 +86,12 @@ F module_version(m: ModuleHandle) -> i64 {
 # Load a dynamic library module
 # path: Path to the library file (dylib/so/dll)
 # Returns: ModuleHandle with the loaded module, or empty handle on error
-F load_module(path: i64) -> ModuleHandle {
+fn load_module(path: i64) -> ModuleHandle {
     handle := dlopen(path, RTLD_NOW)
     I handle == 0 {
         # Loading failed
         module_handle_new()
-    } EL {
+    } else {
         ModuleHandle {
             handle: handle,
             path: path,
@@ -104,11 +104,11 @@ F load_module(path: i64) -> ModuleHandle {
 # Load a module with lazy binding
 # path: Path to the library file
 # Returns: ModuleHandle
-F load_module_lazy(path: i64) -> ModuleHandle {
+fn load_module_lazy(path: i64) -> ModuleHandle {
     handle := dlopen(path, RTLD_LAZY)
     I handle == 0 {
         module_handle_new()
-    } EL {
+    } else {
         ModuleHandle {
             handle: handle,
             path: path,
@@ -121,14 +121,14 @@ F load_module_lazy(path: i64) -> ModuleHandle {
 # Unload a module
 # m: ModuleHandle to unload
 # Returns: 1 on success, 0 on error
-F unload_module(m: ModuleHandle) -> i64 {
+fn unload_module(m: ModuleHandle) -> i64 {
     I m.loaded == 0 {
         0
-    } EL {
+    } else {
         result := dlclose(m.handle)
         I result == 0 {
             1
-        } EL {
+        } else {
             0
         }
     }
@@ -137,11 +137,11 @@ F unload_module(m: ModuleHandle) -> i64 {
 # Reload a module (unload and load again)
 # m: ModuleHandle to reload
 # Returns: New ModuleHandle with incremented version
-F reload_module(m: ModuleHandle) -> ModuleHandle {
+fn reload_module(m: ModuleHandle) -> ModuleHandle {
     I m.loaded == 0 {
         # Not loaded, just try to load
         load_module(m.path)
-    } EL {
+    } else {
         # Unload first
         dlclose(m.handle)
 
@@ -149,7 +149,7 @@ F reload_module(m: ModuleHandle) -> ModuleHandle {
         handle := dlopen(m.path, RTLD_NOW)
         I handle == 0 {
             module_handle_new()
-        } EL {
+        } else {
             ModuleHandle {
                 handle: handle,
                 path: m.path,
@@ -164,17 +164,17 @@ F reload_module(m: ModuleHandle) -> ModuleHandle {
 # m: ModuleHandle
 # name: Function name (null-terminated string)
 # Returns: Function pointer, or 0 if not found
-F get_function(m: ModuleHandle, name: i64) -> i64 {
+fn get_function(m: ModuleHandle, name: i64) -> i64 {
     I m.loaded == 0 {
         0
-    } EL {
+    } else {
         dlsym(m.handle, name)
     }
 }
 
 # Get last error message from dynamic loading
 # Returns: Error string pointer, or 0 if no error
-F get_load_error() -> i64 {
+fn get_load_error() -> i64 {
     dlerror()
 }
 
@@ -183,7 +183,7 @@ F get_load_error() -> i64 {
 # ============================================================================
 
 # Resource limits for sandboxed execution
-S ResourceLimits {
+struct ResourceLimits {
     max_memory_bytes: i64,     # Maximum memory in bytes
     max_time_ms: i64,          # Maximum execution time in milliseconds
     max_stack_bytes: i64,      # Maximum stack size
@@ -191,7 +191,7 @@ S ResourceLimits {
 }
 
 # Create default resource limits
-F default_limits() -> ResourceLimits {
+fn default_limits() -> ResourceLimits {
     ResourceLimits {
         max_memory_bytes: 67108864,  # 64 MB
         max_time_ms: 5000,           # 5 seconds
@@ -201,7 +201,7 @@ F default_limits() -> ResourceLimits {
 }
 
 # Create restrictive limits for untrusted code
-F restrictive_limits() -> ResourceLimits {
+fn restrictive_limits() -> ResourceLimits {
     ResourceLimits {
         max_memory_bytes: 16777216,  # 16 MB
         max_time_ms: 1000,           # 1 second
@@ -211,7 +211,7 @@ F restrictive_limits() -> ResourceLimits {
 }
 
 # Create permissive limits for trusted code
-F permissive_limits() -> ResourceLimits {
+fn permissive_limits() -> ResourceLimits {
     ResourceLimits {
         max_memory_bytes: 268435456,  # 256 MB
         max_time_ms: 60000,           # 60 seconds
@@ -241,10 +241,10 @@ C CAP_GPU: i64         = 512     # GPU/compute access
 # caps: Capability flags
 # required: Required capability
 # Returns: 1 if granted, 0 if not
-F has_capability(caps: i64, required: i64) -> i64 {
+fn has_capability(caps: i64, required: i64) -> i64 {
     I (caps & required) != 0 {
         1
-    } EL {
+    } else {
         0
     }
 }
@@ -253,7 +253,7 @@ F has_capability(caps: i64, required: i64) -> i64 {
 # caps: Current capability flags
 # cap: Capability to add
 # Returns: New capability flags
-F add_capability(caps: i64, cap: i64) -> i64 {
+fn add_capability(caps: i64, cap: i64) -> i64 {
     caps | cap
 }
 
@@ -261,12 +261,12 @@ F add_capability(caps: i64, cap: i64) -> i64 {
 # caps: Current capability flags
 # cap: Capability to remove
 # Returns: New capability flags
-F remove_capability(caps: i64, cap: i64) -> i64 {
+fn remove_capability(caps: i64, cap: i64) -> i64 {
     caps & (~cap)
 }
 
 # Check if any dangerous capabilities are present
-F has_dangerous_capabilities(caps: i64) -> i64 {
+fn has_dangerous_capabilities(caps: i64) -> i64 {
     dangerous := CAP_FS_WRITE | CAP_NETWORK | CAP_PROCESS | CAP_ENV
     has_capability(caps, dangerous)
 }
@@ -278,15 +278,15 @@ F has_dangerous_capabilities(caps: i64) -> i64 {
 # Get user plugin directory path
 # Returns: Pointer to path string, or 0 if not available
 # Note: This would typically be ~/.vais/plugins/
-X F vais_get_user_plugin_dir() -> i64
+impl fn vais_get_user_plugin_dir() -> i64
 
 # Get system plugin directory path
 # Returns: Pointer to path string, or 0 if not available
 # Note: This would typically be /usr/local/lib/vais/plugins/
-X F vais_get_system_plugin_dir() -> i64
+impl fn vais_get_system_plugin_dir() -> i64
 
 # Get VAIS_PLUGIN_PATH environment variable
-X F getenv(name: i64) -> i64
+impl fn getenv(name: i64) -> i64
 
 # ============================================================================
 # WASM Sandbox External Functions
@@ -296,48 +296,48 @@ X F getenv(name: i64) -> i64
 
 # Create a new WASM sandbox
 # Returns: Sandbox handle
-X F vais_wasm_sandbox_create() -> i64
+impl fn vais_wasm_sandbox_create() -> i64
 
 # Create sandbox with restrictive limits
-X F vais_wasm_sandbox_create_restrictive() -> i64
+impl fn vais_wasm_sandbox_create_restrictive() -> i64
 
 # Destroy a WASM sandbox
-X F vais_wasm_sandbox_destroy(sandbox: i64) -> i64
+impl fn vais_wasm_sandbox_destroy(sandbox: i64) -> i64
 
 # Load WASM bytes into sandbox
 # sandbox: Sandbox handle
 # bytes: Pointer to WASM bytes
 # len: Length of bytes
 # Returns: Instance handle, or 0 on error
-X F vais_wasm_load(sandbox: i64, bytes: i64, len: i64) -> i64
+impl fn vais_wasm_load(sandbox: i64, bytes: i64, len: i64) -> i64
 
 # Call a WASM function (no args, i64 return)
-X F vais_wasm_call_i64(instance: i64, name: i64) -> i64
+impl fn vais_wasm_call_i64(instance: i64, name: i64) -> i64
 
 # Call a WASM function (i64 arg, i64 return)
-X F vais_wasm_call_i64_i64(instance: i64, name: i64, arg: i64) -> i64
+impl fn vais_wasm_call_i64_i64(instance: i64, name: i64, arg: i64) -> i64
 
 # Call a WASM function (two i64 args, i64 return)
-X F vais_wasm_call_i64_i64_i64(instance: i64, name: i64, arg1: i64, arg2: i64) -> i64
+impl fn vais_wasm_call_i64_i64_i64(instance: i64, name: i64, arg1: i64, arg2: i64) -> i64
 
 # Grant capability to sandbox
-X F vais_wasm_grant_capability(sandbox: i64, cap: i64) -> i64
+impl fn vais_wasm_grant_capability(sandbox: i64, cap: i64) -> i64
 
 # Revoke capability from sandbox
-X F vais_wasm_revoke_capability(sandbox: i64, cap: i64) -> i64
+impl fn vais_wasm_revoke_capability(sandbox: i64, cap: i64) -> i64
 
 # ============================================================================
 # High-Level WASM Sandbox API
 # ============================================================================
 
 # WASM sandbox handle
-S WasmSandbox {
+struct WasmSandbox {
     handle: i64,
     capabilities: i64
 }
 
 # Create a new WASM sandbox with default settings
-F sandbox_new() -> WasmSandbox {
+fn sandbox_new() -> WasmSandbox {
     handle := vais_wasm_sandbox_create()
     WasmSandbox {
         handle: handle,
@@ -346,7 +346,7 @@ F sandbox_new() -> WasmSandbox {
 }
 
 # Create a restrictive sandbox for untrusted plugins
-F sandbox_restrictive() -> WasmSandbox {
+fn sandbox_restrictive() -> WasmSandbox {
     handle := vais_wasm_sandbox_create_restrictive()
     WasmSandbox {
         handle: handle,
@@ -355,12 +355,12 @@ F sandbox_restrictive() -> WasmSandbox {
 }
 
 # Destroy a sandbox
-F sandbox_destroy(s: WasmSandbox) -> i64 {
+fn sandbox_destroy(s: WasmSandbox) -> i64 {
     vais_wasm_sandbox_destroy(s.handle)
 }
 
 # Grant a capability to the sandbox
-F sandbox_grant(s: WasmSandbox, cap: i64) -> WasmSandbox {
+fn sandbox_grant(s: WasmSandbox, cap: i64) -> WasmSandbox {
     vais_wasm_grant_capability(s.handle, cap)
     WasmSandbox {
         handle: s.handle,
@@ -369,7 +369,7 @@ F sandbox_grant(s: WasmSandbox, cap: i64) -> WasmSandbox {
 }
 
 # Revoke a capability from the sandbox
-F sandbox_revoke(s: WasmSandbox, cap: i64) -> WasmSandbox {
+fn sandbox_revoke(s: WasmSandbox, cap: i64) -> WasmSandbox {
     vais_wasm_revoke_capability(s.handle, cap)
     WasmSandbox {
         handle: s.handle,
@@ -378,13 +378,13 @@ F sandbox_revoke(s: WasmSandbox, cap: i64) -> WasmSandbox {
 }
 
 # WASM instance handle
-S WasmInstance {
+struct WasmInstance {
     handle: i64,
     sandbox: i64
 }
 
 # Load a WASM module into a sandbox
-F sandbox_load(s: WasmSandbox, bytes: i64, len: i64) -> WasmInstance {
+fn sandbox_load(s: WasmSandbox, bytes: i64, len: i64) -> WasmInstance {
     handle := vais_wasm_load(s.handle, bytes, len)
     WasmInstance {
         handle: handle,
@@ -393,25 +393,25 @@ F sandbox_load(s: WasmSandbox, bytes: i64, len: i64) -> WasmInstance {
 }
 
 # Call a function in a WASM instance (no args)
-F wasm_call(inst: WasmInstance, name: i64) -> i64 {
+fn wasm_call(inst: WasmInstance, name: i64) -> i64 {
     vais_wasm_call_i64(inst.handle, name)
 }
 
 # Call a function with one i64 argument
-F wasm_call1(inst: WasmInstance, name: i64, arg: i64) -> i64 {
+fn wasm_call1(inst: WasmInstance, name: i64, arg: i64) -> i64 {
     vais_wasm_call_i64_i64(inst.handle, name, arg)
 }
 
 # Call a function with two i64 arguments
-F wasm_call2(inst: WasmInstance, name: i64, arg1: i64, arg2: i64) -> i64 {
+fn wasm_call2(inst: WasmInstance, name: i64, arg1: i64, arg2: i64) -> i64 {
     vais_wasm_call_i64_i64_i64(inst.handle, name, arg1, arg2)
 }
 
 # Check if instance is valid
-F wasm_is_valid(inst: WasmInstance) -> i64 {
+fn wasm_is_valid(inst: WasmInstance) -> i64 {
     I inst.handle != 0 {
         1
-    } EL {
+    } else {
         0
     }
 }
@@ -425,7 +425,7 @@ F wasm_is_valid(inst: WasmInstance) -> i64 {
 # Note: In Vais, this is just a function pointer
 
 # Hot reload configuration
-S HotReloadConfig {
+struct HotReloadConfig {
     source_path: i64,      # Path to source file
     output_dir: i64,       # Output directory for compiled modules
     debounce_ms: i64,      # Debounce time for file changes
@@ -433,7 +433,7 @@ S HotReloadConfig {
 }
 
 # Create default hot reload configuration
-F hot_reload_config(source_path: i64) -> HotReloadConfig {
+fn hot_reload_config(source_path: i64) -> HotReloadConfig {
     HotReloadConfig {
         source_path: source_path,
         output_dir: 0,  # Same directory as source
@@ -443,14 +443,14 @@ F hot_reload_config(source_path: i64) -> HotReloadConfig {
 }
 
 # External hot reload functions
-X F vais_hot_reload_create(config: i64) -> i64
-X F vais_hot_reload_start(handle: i64) -> i64
-X F vais_hot_reload_stop(handle: i64) -> i64
-X F vais_hot_reload_check(handle: i64) -> i64
-X F vais_hot_reload_get_version(handle: i64) -> i64
+impl fn vais_hot_reload_create(config: i64) -> i64
+impl fn vais_hot_reload_start(handle: i64) -> i64
+impl fn vais_hot_reload_stop(handle: i64) -> i64
+impl fn vais_hot_reload_check(handle: i64) -> i64
+impl fn vais_hot_reload_get_version(handle: i64) -> i64
 
 # Hot reloader handle
-S HotReloader {
+struct HotReloader {
     handle: i64,
     version: i64,
     running: i64
@@ -458,7 +458,7 @@ S HotReloader {
 
 # Create a new hot reloader
 # Note: This requires the config to be passed as a pointer
-F hot_reloader_new(source_path: i64) -> HotReloader {
+fn hot_reloader_new(source_path: i64) -> HotReloader {
     # For simplicity, create with default config
     handle := vais_hot_reload_create(source_path)
     HotReloader {
@@ -469,7 +469,7 @@ F hot_reloader_new(source_path: i64) -> HotReloader {
 }
 
 # Start hot reloading
-F hot_reloader_start(r: HotReloader) -> HotReloader {
+fn hot_reloader_start(r: HotReloader) -> HotReloader {
     vais_hot_reload_start(r.handle)
     HotReloader {
         handle: r.handle,
@@ -479,7 +479,7 @@ F hot_reloader_start(r: HotReloader) -> HotReloader {
 }
 
 # Stop hot reloading
-F hot_reloader_stop(r: HotReloader) -> HotReloader {
+fn hot_reloader_stop(r: HotReloader) -> HotReloader {
     vais_hot_reload_stop(r.handle)
     HotReloader {
         handle: r.handle,
@@ -490,16 +490,16 @@ F hot_reloader_stop(r: HotReloader) -> HotReloader {
 
 # Check for changes and reload if necessary
 # Returns: 1 if reloaded, 0 if no change
-F hot_reloader_check(r: HotReloader) -> i64 {
+fn hot_reloader_check(r: HotReloader) -> i64 {
     I r.running == 0 {
         0
-    } EL {
+    } else {
         vais_hot_reload_check(r.handle)
     }
 }
 
 # Get current version
-F hot_reloader_version(r: HotReloader) -> i64 {
+fn hot_reloader_version(r: HotReloader) -> i64 {
     vais_hot_reload_get_version(r.handle)
 }
 
@@ -510,7 +510,7 @@ F hot_reloader_version(r: HotReloader) -> i64 {
 # Get platform-specific library extension
 # Returns: Pointer to extension string ("dylib", "so", or "dll")
 # STUB: not implemented - returns placeholder value
-F get_library_extension() -> i64 {
+fn get_library_extension() -> i64 {
     # This would be implemented based on compile-time target
     # For now, return a placeholder
     # macOS: "dylib", Linux: "so", Windows: "dll"
@@ -521,7 +521,7 @@ F get_library_extension() -> i64 {
 # path: File path (null-terminated string)
 # Returns: 1 if it's a plugin library, 0 otherwise
 # STUB: not implemented - returns placeholder value
-F is_plugin_library(path: i64) -> i64 {
+fn is_plugin_library(path: i64) -> i64 {
     # Check file extension
     # This is a simplified check - real implementation would parse the path
     0  # Placeholder

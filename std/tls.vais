@@ -72,15 +72,15 @@ C TLS_MAX_HOSTNAME: i64 = 256
 # TLS Context (wraps SSL_CTX)
 # ============================================
 
-S TlsContext {
+struct TlsContext {
     handle: i64,       # Opaque pointer to SSL_CTX
     mode: i64,         # TLS_MODE_CLIENT or TLS_MODE_SERVER
     verify: i64        # TLS_VERIFY_NONE or TLS_VERIFY_PEER
 }
 
-X TlsContext {
+impl TlsContext {
     # Create a client TLS context
-    F client() -> TlsContext {
+    fn client() -> TlsContext {
         h := __tls_ctx_new(TLS_MODE_CLIENT)
         ctx := TlsContext {
             handle: h,
@@ -95,7 +95,7 @@ X TlsContext {
     }
 
     # Create a server TLS context
-    F server() -> TlsContext {
+    fn server() -> TlsContext {
         h := __tls_ctx_new(TLS_MODE_SERVER)
         TlsContext {
             handle: h,
@@ -105,36 +105,36 @@ X TlsContext {
     }
 
     # Check if context was created successfully
-    F is_valid(&self) -> i64 {
-        I self.handle != 0 { 1 } EL { 0 }
+    fn is_valid(&self) -> i64 {
+        I self.handle != 0 { 1 } else { 0 }
     }
 
     # Load certificate from PEM file
-    F load_cert(&self, path: str) -> i64 {
-        I self.handle == 0 { R TLS_ERR_CTX }
+    fn load_cert(&self, path: str) -> i64 {
+        I self.handle == 0 { return TLS_ERR_CTX }
         __tls_ctx_load_cert(self.handle, path)
     }
 
     # Load private key from PEM file
-    F load_key(&self, path: str) -> i64 {
-        I self.handle == 0 { R TLS_ERR_CTX }
+    fn load_key(&self, path: str) -> i64 {
+        I self.handle == 0 { return TLS_ERR_CTX }
         __tls_ctx_load_key(self.handle, path)
     }
 
     # Load CA certificate file for verification
-    F load_ca(&self, path: str) -> i64 {
-        I self.handle == 0 { R TLS_ERR_CTX }
+    fn load_ca(&self, path: str) -> i64 {
+        I self.handle == 0 { return TLS_ERR_CTX }
         __tls_ctx_load_ca(self.handle, path)
     }
 
     # Load CA certificates from a directory
-    F load_ca_dir(&self, path: str) -> i64 {
-        I self.handle == 0 { R TLS_ERR_CTX }
+    fn load_ca_dir(&self, path: str) -> i64 {
+        I self.handle == 0 { return TLS_ERR_CTX }
         __tls_ctx_load_ca_dir(self.handle, path)
     }
 
     # Set verify mode (TLS_VERIFY_NONE or TLS_VERIFY_PEER)
-    F set_verify(&self, mode: i64) -> TlsContext {
+    fn set_verify(&self, mode: i64) -> TlsContext {
         self.verify = mode
         I self.handle != 0 {
             __tls_ctx_set_verify(self.handle, mode)
@@ -143,12 +143,12 @@ X TlsContext {
     }
 
     # Disable certificate verification (use with caution)
-    F insecure(&self) -> TlsContext {
+    fn insecure(&self) -> TlsContext {
         self.set_verify(TLS_VERIFY_NONE)
     }
 
     # Free the context
-    F free(&self) -> i64 {
+    fn free(&self) -> i64 {
         I self.handle != 0 {
             __tls_ctx_free(self.handle)
             self.handle = 0
@@ -161,7 +161,7 @@ X TlsContext {
 # TLS Connection (wraps SSL)
 # ============================================
 
-S TlsConn {
+struct TlsConn {
     handle: i64,       # Opaque pointer to SSL
     fd: i64,           # Underlying TCP socket fd
     ctx: i64,          # Reference to SSL_CTX handle
@@ -170,9 +170,9 @@ S TlsConn {
     last_error: i64    # Last error code
 }
 
-X TlsConn {
+impl TlsConn {
     # Create a new TLS connection wrapping a TCP socket
-    F new(fd: i64, ctx_handle: i64) -> TlsConn {
+    fn new(fd: i64, ctx_handle: i64) -> TlsConn {
         ssl := __tls_new(ctx_handle, fd)
         TlsConn {
             handle: ssl,
@@ -185,12 +185,12 @@ X TlsConn {
     }
 
     # Check if connection handle is valid
-    F is_valid(&self) -> i64 {
-        I self.handle != 0 { 1 } EL { 0 }
+    fn is_valid(&self) -> i64 {
+        I self.handle != 0 { 1 } else { 0 }
     }
 
     # Set SNI hostname (must be called before handshake for clients)
-    F set_hostname(&self, hostname: str) -> TlsConn {
+    fn set_hostname(&self, hostname: str) -> TlsConn {
         self.hostname = hostname
         I self.handle != 0 {
             __tls_set_hostname(self.handle, hostname)
@@ -199,26 +199,26 @@ X TlsConn {
     }
 
     # Perform TLS client handshake (connect)
-    F handshake(&self) -> i64 {
-        I self.handle == 0 { R TLS_ERR_INIT }
+    fn handshake(&self) -> i64 {
+        I self.handle == 0 { return TLS_ERR_INIT }
         result := __tls_connect(self.handle)
         I result == 0 {
             self.connected = 1
             self.last_error = TLS_OK
-        } EL {
+        } else {
             self.last_error = TLS_ERR_HANDSHAKE
         }
         result
     }
 
     # Perform TLS server handshake (accept)
-    F accept(&self) -> i64 {
-        I self.handle == 0 { R TLS_ERR_INIT }
+    fn accept(&self) -> i64 {
+        I self.handle == 0 { return TLS_ERR_INIT }
         result := __tls_accept(self.handle)
         I result == 0 {
             self.connected = 1
             self.last_error = TLS_OK
-        } EL {
+        } else {
             self.last_error = TLS_ERR_HANDSHAKE
         }
         result
@@ -226,9 +226,9 @@ X TlsConn {
 
     # Read encrypted data into buffer
     # Returns number of bytes read, or negative error code
-    F read(&self, buf: i64, len: i64) -> i64 {
+    fn read(&self, buf: i64, len: i64) -> i64 {
         I self.handle == 0 | self.connected == 0 {
-            R TLS_ERR_READ
+            return TLS_ERR_READ
         }
         n := __tls_read(self.handle, buf, len)
         I n < 0 {
@@ -239,9 +239,9 @@ X TlsConn {
 
     # Write data through TLS encryption
     # Returns number of bytes written, or negative error code
-    F write(&self, data: i64, len: i64) -> i64 {
+    fn write(&self, data: i64, len: i64) -> i64 {
         I self.handle == 0 | self.connected == 0 {
-            R TLS_ERR_WRITE
+            return TLS_ERR_WRITE
         }
         n := __tls_write(self.handle, data, len)
         I n < 0 {
@@ -251,43 +251,43 @@ X TlsConn {
     }
 
     # Write a string through TLS
-    F write_str(&self, s: str) -> i64 {
+    fn write_str(&self, s: str) -> i64 {
         self.write(s as i64, __strlen(s))
     }
 
     # Read into a newly allocated buffer, returns the data as string
-    F read_str(&self, max_len: i64) -> str {
+    fn read_str(&self, max_len: i64) -> str {
         buf := __malloc(max_len + 1)
         n := self.read(buf, max_len)
         I n > 0 {
             __store_byte(buf + n, 0)  # null terminate
             buf as str
-        } EL {
+        } else {
             __free(buf)
             ""
         }
     }
 
     # Get peer certificate info (subject CN)
-    F peer_cn(&self) -> str {
-        I self.handle == 0 { R "" }
+    fn peer_cn(&self) -> str {
+        I self.handle == 0 { return "" }
         __tls_peer_cn(self.handle)
     }
 
     # Get TLS protocol version string
-    F protocol_version(&self) -> str {
-        I self.handle == 0 { R "" }
+    fn protocol_version(&self) -> str {
+        I self.handle == 0 { return "" }
         __tls_version(self.handle)
     }
 
     # Get cipher suite name
-    F cipher_name(&self) -> str {
-        I self.handle == 0 { R "" }
+    fn cipher_name(&self) -> str {
+        I self.handle == 0 { return "" }
         __tls_cipher(self.handle)
     }
 
     # Shutdown TLS connection (does not close the underlying socket)
-    F shutdown(&self) -> i64 {
+    fn shutdown(&self) -> i64 {
         I self.handle != 0 {
             __tls_shutdown(self.handle)
             __tls_free(self.handle)
@@ -298,7 +298,7 @@ X TlsConn {
     }
 
     # Shutdown TLS and close the underlying TCP socket
-    F close(&self) -> i64 {
+    fn close(&self) -> i64 {
         self.shutdown()
         I self.fd >= 0 {
             __tcp_close(self.fd)
@@ -314,11 +314,11 @@ X TlsConn {
 
 # Connect to a host via TLS (one-shot helper)
 # Returns a TlsConn with completed handshake, or invalid conn on failure
-F tls_connect(host: str, port: i64) -> TlsConn {
+fn tls_connect(host: str, port: i64) -> TlsConn {
     # Create TCP connection
     fd := __hc_tcp_connect(host as i64, port, 30000)
     I fd < 0 {
-        R TlsConn {
+        return TlsConn {
             handle: 0,
             fd: -1,
             ctx: 0,
@@ -332,7 +332,7 @@ F tls_connect(host: str, port: i64) -> TlsConn {
     ctx := TlsContext::client()
     I ctx.handle == 0 {
         __tcp_close(fd)
-        R TlsConn {
+        return TlsConn {
             handle: 0,
             fd: -1,
             ctx: 0,
@@ -348,7 +348,7 @@ F tls_connect(host: str, port: i64) -> TlsConn {
     I result != 0 {
         conn.close()
         ctx.free()
-        R TlsConn {
+        return TlsConn {
             handle: 0,
             fd: -1,
             ctx: 0,
@@ -362,10 +362,10 @@ F tls_connect(host: str, port: i64) -> TlsConn {
 }
 
 # Connect to host:port via TLS with timeout
-F tls_connect_timeout(host: str, port: i64, timeout_ms: i64) -> TlsConn {
+fn tls_connect_timeout(host: str, port: i64, timeout_ms: i64) -> TlsConn {
     fd := __hc_tcp_connect(host as i64, port, timeout_ms)
     I fd < 0 {
-        R TlsConn {
+        return TlsConn {
             handle: 0,
             fd: -1,
             ctx: 0,
@@ -378,7 +378,7 @@ F tls_connect_timeout(host: str, port: i64, timeout_ms: i64) -> TlsConn {
     ctx := TlsContext::client()
     I ctx.handle == 0 {
         __tcp_close(fd)
-        R TlsConn {
+        return TlsConn {
             handle: 0,
             fd: -1,
             ctx: 0,
@@ -394,7 +394,7 @@ F tls_connect_timeout(host: str, port: i64, timeout_ms: i64) -> TlsConn {
     I result != 0 {
         conn.close()
         ctx.free()
-        R TlsConn {
+        return TlsConn {
             handle: 0,
             fd: -1,
             ctx: 0,
@@ -411,8 +411,8 @@ F tls_connect_timeout(host: str, port: i64, timeout_ms: i64) -> TlsConn {
 # Error description helper
 # ============================================
 
-F tls_error_text(code: i64) -> str {
-    M code {
+fn tls_error_text(code: i64) -> str {
+    match code {
         0 => "Success",
         -1 => "TLS initialization failed",
         -2 => "TLS context error",
@@ -436,36 +436,36 @@ F tls_error_text(code: i64) -> str {
 # ============================================
 
 # TLS context management (from tls_runtime.c)
-X F __tls_ctx_new(mode: i64) -> i64
-X F __tls_ctx_free(handle: i64) -> i64
-X F __tls_ctx_load_cert(handle: i64, path: str) -> i64
-X F __tls_ctx_load_key(handle: i64, path: str) -> i64
-X F __tls_ctx_load_ca(handle: i64, path: str) -> i64
-X F __tls_ctx_load_ca_dir(handle: i64, path: str) -> i64
-X F __tls_ctx_set_verify(handle: i64, mode: i64) -> i64
-X F __tls_ctx_set_default_verify(handle: i64) -> i64
+impl fn __tls_ctx_new(mode: i64) -> i64
+impl fn __tls_ctx_free(handle: i64) -> i64
+impl fn __tls_ctx_load_cert(handle: i64, path: str) -> i64
+impl fn __tls_ctx_load_key(handle: i64, path: str) -> i64
+impl fn __tls_ctx_load_ca(handle: i64, path: str) -> i64
+impl fn __tls_ctx_load_ca_dir(handle: i64, path: str) -> i64
+impl fn __tls_ctx_set_verify(handle: i64, mode: i64) -> i64
+impl fn __tls_ctx_set_default_verify(handle: i64) -> i64
 
 # TLS connection management (from tls_runtime.c)
-X F __tls_new(ctx: i64, fd: i64) -> i64
-X F __tls_free(handle: i64) -> i64
-X F __tls_set_hostname(handle: i64, hostname: str) -> i64
-X F __tls_connect(handle: i64) -> i64
-X F __tls_accept(handle: i64) -> i64
-X F __tls_read(handle: i64, buf: i64, len: i64) -> i64
-X F __tls_write(handle: i64, data: i64, len: i64) -> i64
-X F __tls_shutdown(handle: i64) -> i64
+impl fn __tls_new(ctx: i64, fd: i64) -> i64
+impl fn __tls_free(handle: i64) -> i64
+impl fn __tls_set_hostname(handle: i64, hostname: str) -> i64
+impl fn __tls_connect(handle: i64) -> i64
+impl fn __tls_accept(handle: i64) -> i64
+impl fn __tls_read(handle: i64, buf: i64, len: i64) -> i64
+impl fn __tls_write(handle: i64, data: i64, len: i64) -> i64
+impl fn __tls_shutdown(handle: i64) -> i64
 
 # TLS info (from tls_runtime.c)
-X F __tls_peer_cn(handle: i64) -> str
-X F __tls_version(handle: i64) -> str
-X F __tls_cipher(handle: i64) -> str
+impl fn __tls_peer_cn(handle: i64) -> str
+impl fn __tls_version(handle: i64) -> str
+impl fn __tls_cipher(handle: i64) -> str
 
 # TCP operations (from http_runtime.c / http_client_runtime.c)
-X F __tcp_close(fd: i64) -> i64
-X F __hc_tcp_connect(host: i64, port: i64, timeout_ms: i64) -> i64
+impl fn __tcp_close(fd: i64) -> i64
+impl fn __hc_tcp_connect(host: i64, port: i64, timeout_ms: i64) -> i64
 
 # String/memory operations (shared)
-X F __strlen(s: str) -> i64
-X F __malloc(size: i64) -> i64
-X F __free(ptr: i64) -> i64
-X F __store_byte(ptr: i64, value: i64) -> i64
+impl fn __strlen(s: str) -> i64
+impl fn __malloc(size: i64) -> i64
+impl fn __free(ptr: i64) -> i64
+impl fn __store_byte(ptr: i64, value: i64) -> i64

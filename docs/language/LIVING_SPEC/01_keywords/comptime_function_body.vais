@@ -7,11 +7,11 @@
 # parse error (Phase B.3 에서 해결 예정). 이 파일은 function-body 형태
 # 만 실증.
 
-F _const_thirtytwo() -> i64 = comptime { 4 * 8 }
-F _const_sum() -> i64 = comptime { 10 + 20 }
-F _const_branch() -> i64 = comptime { I 5 > 3 { 1 } EL { 0 } }
+fn _const_thirtytwo() -> i64 = comptime { 4 * 8 }
+fn _const_sum() -> i64 = comptime { 10 + 20 }
+fn _const_branch() -> i64 = comptime { I 5 > 3 { 1 } else { 0 } }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := _const_thirtytwo()   # 32
     b := _const_sum()         # 30
     c := _const_branch()      # 1

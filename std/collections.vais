@@ -25,26 +25,26 @@
 # ============================================
 
 # Node for the linked list
-S LinkedListNode {
+struct LinkedListNode {
     value: i64,
     prev: i64,      # Pointer to previous node (0 = none)
     next: i64       # Pointer to next node (0 = none)
 }
 
 # Doubly-linked list
-S LinkedList {
+struct LinkedList {
     head: i64,      # Pointer to first node
     tail: i64,      # Pointer to last node
     len: i64        # Number of elements
 }
 
-X LinkedList {
-    F new() -> LinkedList {
+impl LinkedList {
+    fn new() -> LinkedList {
         LinkedList { head: 0, tail: 0, len: 0 }
     }
 
     # Push to front
-    partial F push_front(&self, value: i64) -> i64 {
+    partial fn push_front(&self, value: i64) -> i64 {
         node_ptr := malloc(24)  # 3 fields * 8 bytes
         store_i64(node_ptr, value)       # value
         store_i64(node_ptr + 8, 0)       # prev = null
@@ -64,7 +64,7 @@ X LinkedList {
     }
 
     # Push to back
-    partial F push_back(&self, value: i64) -> i64 {
+    partial fn push_back(&self, value: i64) -> i64 {
         node_ptr := malloc(24)
         store_i64(node_ptr, value)
         store_i64(node_ptr + 8, self.tail)  # prev = current tail
@@ -82,9 +82,9 @@ X LinkedList {
     }
 
     # Pop from front (returns value, or 0 if empty)
-    partial F pop_front(&self) -> i64 {
+    partial fn pop_front(&self) -> i64 {
         LW self.head == 0 {
-            R 0
+            return 0
         }
 
         value := load_i64(self.head)
@@ -103,9 +103,9 @@ X LinkedList {
     }
 
     # Pop from back (returns value, or 0 if empty)
-    partial F pop_back(&self) -> i64 {
+    partial fn pop_back(&self) -> i64 {
         LW self.tail == 0 {
-            R 0
+            return 0
         }
 
         value := load_i64(self.tail)
@@ -124,33 +124,33 @@ X LinkedList {
     }
 
     # Peek at front value
-    F front(&self) -> i64 {
+    fn front(&self) -> i64 {
         LW self.head == 0 {
-            R 0
+            return 0
         }
         load_i64(self.head)
     }
 
     # Peek at back value
-    F back(&self) -> i64 {
+    fn back(&self) -> i64 {
         LW self.tail == 0 {
-            R 0
+            return 0
         }
         load_i64(self.tail)
     }
 
     # Get length
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.len
     }
 
     # Check if empty
-    F is_empty(&self) -> i64 {
+    fn is_empty(&self) -> i64 {
         self.len == 0
     }
 
     # Clear all elements
-    F clear(&self) -> i64 {
+    fn clear(&self) -> i64 {
         current := mut self.head
         LW current != 0 {
             next := load_i64(current + 16)
@@ -164,11 +164,11 @@ X LinkedList {
     }
 
     # Check if value exists in list
-    F contains(&self, value: i64) -> i64 {
+    fn contains(&self, value: i64) -> i64 {
         current := mut self.head
         LW current != 0 {
             LW load_i64(current) == value {
-                R 1
+                return 1
             }
             current = load_i64(current + 16)
         }
@@ -180,7 +180,7 @@ X LinkedList {
 # RingBuffer - Fixed-capacity circular buffer
 # ============================================
 
-S RingBuffer {
+struct RingBuffer {
     data: i64,          # Pointer to data array
     capacity: i64,
     head: i64,          # Read position
@@ -188,8 +188,8 @@ S RingBuffer {
     len: i64
 }
 
-X RingBuffer {
-    F new(capacity: i64) -> RingBuffer {
+impl RingBuffer {
+    fn new(capacity: i64) -> RingBuffer {
         data := malloc(capacity * 8)
         RingBuffer {
             data: data,
@@ -201,9 +201,9 @@ X RingBuffer {
     }
 
     # Push value to back (returns 0 on success, 1 if full)
-    F push(&self, value: i64) -> i64 {
+    fn push(&self, value: i64) -> i64 {
         LW self.len == self.capacity {
-            R 1  # Full
+            return 1  # Full
         }
         store_i64(self.data + self.tail * 8, value)
         self.tail = (self.tail + 1) % self.capacity
@@ -212,9 +212,9 @@ X RingBuffer {
     }
 
     # Pop value from front (returns value, 0 if empty)
-    F pop(&self) -> i64 {
+    fn pop(&self) -> i64 {
         LW self.len == 0 {
-            R 0  # Empty
+            return 0  # Empty
         }
         value := load_i64(self.data + self.head * 8)
         self.head = (self.head + 1) % self.capacity
@@ -223,30 +223,30 @@ X RingBuffer {
     }
 
     # Peek at front
-    F front(&self) -> i64 {
+    fn front(&self) -> i64 {
         LW self.len == 0 {
-            R 0
+            return 0
         }
         load_i64(self.data + self.head * 8)
     }
 
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.len
     }
 
-    F is_empty(&self) -> i64 {
+    fn is_empty(&self) -> i64 {
         self.len == 0
     }
 
-    F is_full(&self) -> i64 {
+    fn is_full(&self) -> i64 {
         self.len == self.capacity
     }
 
-    F capacity(&self) -> i64 {
+    fn capacity(&self) -> i64 {
         self.capacity
     }
 
-    F clear(&self) -> i64 {
+    fn clear(&self) -> i64 {
         self.head = 0
         self.tail = 0
         self.len = 0
@@ -257,7 +257,7 @@ X RingBuffer {
 # ============================================
 # Memory helpers (extern)
 # ============================================
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F store_i64(ptr: i64, value: i64) -> i64
-X F load_i64(ptr: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn store_i64(ptr: i64, value: i64) -> i64
+impl fn load_i64(ptr: i64) -> i64

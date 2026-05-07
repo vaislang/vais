@@ -3,7 +3,7 @@
 # Useful for temporary allocations with same lifetime
 
 # Arena - region-based memory allocator
-S Arena {
+struct Arena {
     chunks: i64,        # Pointer to list of chunk pointers
     chunk_count: i64,   # Number of chunks
     chunk_size: i64,    # Size of each chunk
@@ -12,16 +12,16 @@ S Arena {
 }
 
 # Default chunk size (64KB)
-F ARENA_DEFAULT_CHUNK_SIZE() -> i64 { 65536 }
+fn ARENA_DEFAULT_CHUNK_SIZE() -> i64 { 65536 }
 
-X Arena {
+impl Arena {
     # Create new arena with default chunk size
-    F new() -> Arena {
+    fn new() -> Arena {
         Arena.with_chunk_size(ARENA_DEFAULT_CHUNK_SIZE())
     }
 
     # Create arena with custom chunk size
-    F with_chunk_size(size: i64) -> Arena {
+    fn with_chunk_size(size: i64) -> Arena {
         # Allocate initial chunk list (capacity for 16 chunks)
         chunks := malloc(128)  # 16 * 8 bytes for pointers
 
@@ -39,7 +39,7 @@ X Arena {
     }
 
     # Allocate memory from arena (8-byte aligned)
-    F alloc(&self, size: i64) -> i64 {
+    fn alloc(&self, size: i64) -> i64 {
         # Align size to 8 bytes
         aligned_size := (size + 7) / 8 * 8
 
@@ -57,7 +57,7 @@ X Arena {
     }
 
     # Allocate and zero-initialize
-    F alloc_zeroed(&self, size: i64) -> i64 {
+    fn alloc_zeroed(&self, size: i64) -> i64 {
         ptr := @.alloc(size)
         # Zero out the memory
         i := mut 0
@@ -70,12 +70,12 @@ X Arena {
     }
 
     # Allocate space for n items of given size
-    F alloc_array(&self, count: i64, item_size: i64) -> i64 {
+    fn alloc_array(&self, count: i64, item_size: i64) -> i64 {
         @.alloc(count * item_size)
     }
 
     # Add a new chunk
-    F grow(&self) -> i64 {
+    fn grow(&self) -> i64 {
         # Allocate new chunk
         new_chunk := malloc(self.chunk_size)
 
@@ -91,26 +91,26 @@ X Arena {
     }
 
     # Reset arena (keep chunks but reset offset)
-    F reset(&self) -> i64 {
+    fn reset(&self) -> i64 {
         self.current = load_i64(self.chunks)
         self.offset = 0
         0
     }
 
     # Get total allocated size
-    F total_allocated(&self) -> i64 {
+    fn total_allocated(&self) -> i64 {
         # Full chunks + current offset
         full_chunks := self.chunk_count - 1
         full_chunks * self.chunk_size + self.offset
     }
 
     # Get total capacity
-    F total_capacity(&self) -> i64 {
+    fn total_capacity(&self) -> i64 {
         self.chunk_count * self.chunk_size
     }
 
     # Free all memory
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         # Free all chunks
         i := mut 0
         L {
@@ -132,18 +132,18 @@ X Arena {
 }
 
 # Convenience functions
-F arena_new() -> Arena {
+fn arena_new() -> Arena {
     Arena.new()
 }
 
-F arena_alloc(arena: Arena, size: i64) -> i64 {
+fn arena_alloc(arena: Arena, size: i64) -> i64 {
     arena.alloc(size)
 }
 
-F arena_reset(arena: Arena) -> i64 {
+fn arena_reset(arena: Arena) -> i64 {
     arena.reset()
 }
 
-F arena_drop(arena: Arena) -> i64 {
+fn arena_drop(arena: Arena) -> i64 {
     arena.drop()
 }

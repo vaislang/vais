@@ -2,7 +2,7 @@
 # Key concept: 문자열 길이 비교로 간단한 존재성 체크.
 # 본격적인 substring 탐색은 std/string API 참조.
 
-F main() -> i64 {
+fn main() -> i64 {
     s := "hello world"
-    I s.len() > 5 { 1 } EL { 0 }
+    I s.len() > 5 { 1 } else { 0 }
 }

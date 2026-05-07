@@ -6,13 +6,13 @@
 # semantics — yielded value 를 collect 하지 않고 함수는 trailing 값 반환.
 # 완전한 coroutine desugar 는 Phase 4.22 SCOPED.
 
-F counter(max: i64) -> i64 {
+fn counter(max: i64) -> i64 {
     L i: 0..max {
         yield i
     }
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     counter(3)
 }

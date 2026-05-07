@@ -2,19 +2,19 @@
 # Tests array indexing with the new parser and codegen
 
 # Test 1: Basic array indexing
-F test_basic_index(arr: *i64, idx: i64) -> i64 {
+fn test_basic_index(arr: *i64, idx: i64) -> i64 {
     arr[idx]
 }
 
 # Test 2: Nested indexing in expressions
-F test_expression_index(arr: *i64) -> i64 {
+fn test_expression_index(arr: *i64) -> i64 {
     arr[0] + arr[1] + arr[2]
 }
 
 # Test 3: Index as function argument
-F get_element(arr: *i64, i: i64) -> i64 = arr[i]
+fn get_element(arr: *i64, i: i64) -> i64 = arr[i]
 
-F main() -> i64 {
+fn main() -> i64 {
     # Create test array using array literal
     arr: *i64 = [10, 20, 30, 40, 50]
 

@@ -2,19 +2,19 @@
 # Key concept: 실행 가능한 TODO 저장소 — S/X/Vec/HashMap/Option 종합.
 # Target concepts: S, X, Vec<T>, Option, M, LF
 
-S Todo {
+struct Todo {
     id: i64,
     title: i64,  # string hashcode로 단순화
     done: i64    # 1=완료, 0=미완료
 }
 
-S TodoStore {
+struct TodoStore {
     items: Vec<Todo>,
     next_id: i64
 }
 
-X TodoStore {
-    F add_todo(self, title: i64) -> TodoStore {
+impl TodoStore {
+    fn add_todo(self, title: i64) -> TodoStore {
         # 새 TodoStore 반환 (불변 스타일)
         new_todo := Todo { id: self.next_id, title: title, done: 0 }
         new_items := self.items
@@ -22,10 +22,10 @@ X TodoStore {
         TodoStore { items: new_items, next_id: self.next_id + 1 }
     }
 
-    F count_pending(self) -> i64 {
+    fn count_pending(self) -> i64 {
         count := mut 0
         LF i: 0..self.items.len() {
-            M self.items.get(i) {
+            match self.items.get(i) {
                 Some(t) => {
                     I t.done == 0 { count = count + 1 }
                 },
@@ -35,17 +35,17 @@ X TodoStore {
         count
     }
 
-    F count_total(self) -> i64 {
+    fn count_total(self) -> i64 {
         self.items.len()
     }
 }
 
-F make_empty_store() -> TodoStore {
+fn make_empty_store() -> TodoStore {
     empty: Vec<Todo> = Vec::new()
     TodoStore { items: empty, next_id: 1 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     s := mut make_empty_store()
     s = s.add_todo(100)
     s = s.add_todo(200)

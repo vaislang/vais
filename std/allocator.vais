@@ -1,32 +1,32 @@
 # std/allocator.vais - Custom Memory Allocator Traits and Implementations
 # Provides flexible memory allocation strategies with pointer-based state mutation
 
-U std/memory
+use std/memory
 
 # ============================================================================
 # Allocator Types
 # ============================================================================
 
 # Allocation result with pointer and actual size
-S Allocation {
+struct Allocation {
     ptr: i64,         # Pointer to allocated memory (0 if failed)
     size: i64         # Actual allocated size (may be >= requested)
 }
 
 # Layout describes memory requirements
-S Layout {
+struct Layout {
     size: i64,        # Required size in bytes
     align: i64        # Required alignment (must be power of 2)
 }
 
 # Layout constructors
-F layout_new(size: i64, align: i64) -> Layout = Layout { size: size, align: align }
-F layout_for_i64() -> Layout = Layout { size: 8, align: 8 }
-F layout_for_i32() -> Layout = Layout { size: 4, align: 4 }
-F layout_for_ptr() -> Layout = Layout { size: 8, align: 8 }
+fn layout_new(size: i64, align: i64) -> Layout = Layout { size: size, align: align }
+fn layout_for_i64() -> Layout = Layout { size: 8, align: 8 }
+fn layout_for_i32() -> Layout = Layout { size: 4, align: 4 }
+fn layout_for_ptr() -> Layout = Layout { size: 8, align: 8 }
 
 # Create layout for an array of elements
-F layout_array(elem_size: i64, elem_align: i64, count: i64) -> Layout {
+fn layout_array(elem_size: i64, elem_align: i64, count: i64) -> Layout {
     Layout {
         size: elem_size * count,
         align: elem_align
@@ -34,11 +34,11 @@ F layout_array(elem_size: i64, elem_align: i64, count: i64) -> Layout {
 }
 
 # Extend layout to include another layout
-F layout_extend(base: Layout, ext: Layout) -> Layout {
+fn layout_extend(base: Layout, ext: Layout) -> Layout {
     offset := ptr_align_up(base.size, ext.align)
     Layout {
         size: offset + ext.size,
-        align: I base.align > ext.align { base.align } EL { ext.align }
+        align: I base.align > ext.align { base.align } else { ext.align }
     }
 }
 
@@ -47,14 +47,14 @@ F layout_extend(base: Layout, ext: Layout) -> Layout {
 # ============================================================================
 
 # Allocate memory using global allocator
-F global_alloc(layout: Layout) -> Allocation {
+fn global_alloc(layout: Layout) -> Allocation {
     aligned_size := ptr_align_up(layout.size, layout.align)
     ptr := malloc(aligned_size)
-    Allocation { ptr: ptr, size: I ptr != 0 { aligned_size } EL { 0 } }
+    Allocation { ptr: ptr, size: I ptr != 0 { aligned_size } else { 0 } }
 }
 
 # Allocate zeroed memory using global allocator
-F global_alloc_zeroed(layout: Layout) -> Allocation {
+fn global_alloc_zeroed(layout: Layout) -> Allocation {
     alloc := global_alloc(layout)
     I alloc.ptr != 0 {
         mem_zero(alloc.ptr, alloc.size)
@@ -63,17 +63,17 @@ F global_alloc_zeroed(layout: Layout) -> Allocation {
 }
 
 # Free memory allocated by global allocator
-F global_dealloc(ptr: i64, layout: Layout) -> () {
+fn global_dealloc(ptr: i64, layout: Layout) -> () {
     free(ptr)
     ()
 }
 
 # Reallocate memory using global allocator
-F global_realloc(ptr: i64, old_layout: Layout, new_layout: Layout) -> Allocation {
+fn global_realloc(ptr: i64, old_layout: Layout, new_layout: Layout) -> Allocation {
     new_ptr := mem_realloc(ptr, old_layout.size, new_layout.size)
     Allocation {
         ptr: new_ptr,
-        size: I new_ptr != 0 { new_layout.size } EL { 0 }
+        size: I new_ptr != 0 { new_layout.size } else { 0 }
     }
 }
 
@@ -83,27 +83,27 @@ F global_realloc(ptr: i64, old_layout: Layout, new_layout: Layout) -> Allocation
 
 # A simple bump allocator that allocates linearly from a buffer
 # Extremely fast allocation, but can only free all at once
-S BumpAllocator {
+struct BumpAllocator {
     buffer: i64,      # Start of buffer
     capacity: i64,    # Total capacity
     offset: i64,      # Current allocation offset
     allocated: i64    # Total bytes allocated (for stats)
 }
 
-X BumpAllocator {
+impl BumpAllocator {
     # Create a new bump allocator with given capacity
-    F new(capacity: i64) -> BumpAllocator {
+    fn new(capacity: i64) -> BumpAllocator {
         buffer := malloc(capacity)
         BumpAllocator {
             buffer: buffer,
-            capacity: I buffer != 0 { capacity } EL { 0 },
+            capacity: I buffer != 0 { capacity } else { 0 },
             offset: 0,
             allocated: 0
         }
     }
 
     # Create a bump allocator from existing buffer (doesn't own memory)
-    F from_buffer(buffer: i64, capacity: i64) -> BumpAllocator {
+    fn from_buffer(buffer: i64, capacity: i64) -> BumpAllocator {
         BumpAllocator {
             buffer: buffer,
             capacity: capacity,
@@ -113,13 +113,13 @@ X BumpAllocator {
     }
 
     # Allocate memory from bump allocator
-    F alloc(&self, layout: Layout) -> Allocation {
+    fn alloc(&self, layout: Layout) -> Allocation {
         # Align current offset
         aligned_offset := ptr_align_up(self.offset, layout.align)
         new_offset := aligned_offset + layout.size
 
         I new_offset > self.capacity {
-            R Allocation { ptr: 0, size: 0 }
+            return Allocation { ptr: 0, size: 0 }
         }
 
         ptr := self.buffer + aligned_offset
@@ -129,7 +129,7 @@ X BumpAllocator {
     }
 
     # Allocate zeroed memory from bump allocator
-    F alloc_zeroed(&self, layout: Layout) -> Allocation {
+    fn alloc_zeroed(&self, layout: Layout) -> Allocation {
         result := @.alloc(layout)
         I result.ptr != 0 {
             mem_zero(result.ptr, result.size)
@@ -138,20 +138,20 @@ X BumpAllocator {
     }
 
     # Reset bump allocator to beginning (frees all allocations)
-    F reset(&self) -> i64 {
+    fn reset(&self) -> i64 {
         self.offset = 0
         self.allocated = 0
         0
     }
 
     # Get remaining capacity
-    F remaining(&self) -> i64 = self.capacity - self.offset
+    fn remaining(&self) -> i64 = self.capacity - self.offset
 
     # Get total allocated bytes
-    F total_allocated(&self) -> i64 = self.allocated
+    fn total_allocated(&self) -> i64 = self.allocated
 
     # Free the bump allocator's buffer
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         I self.buffer != 0 { free(self.buffer) }
         self.buffer = 0
         self.capacity = 0
@@ -167,7 +167,7 @@ X BumpAllocator {
 
 # A pool allocator for fixed-size objects
 # Very fast allocation/deallocation with no fragmentation
-S PoolAllocator {
+struct PoolAllocator {
     buffer: i64,       # Start of buffer
     capacity: i64,     # Total capacity in bytes
     block_size: i64,   # Size of each block
@@ -176,16 +176,16 @@ S PoolAllocator {
     num_free: i64      # Number of free blocks
 }
 
-X PoolAllocator {
+impl PoolAllocator {
     # Create a new pool allocator
-    F new(block_size: i64, num_blocks: i64) -> PoolAllocator {
+    fn new(block_size: i64, num_blocks: i64) -> PoolAllocator {
         # Ensure block size is at least pointer-sized for free list
-        actual_block_size := I block_size < 8 { 8 } EL { block_size }
+        actual_block_size := I block_size < 8 { 8 } else { block_size }
         capacity := actual_block_size * num_blocks
         buffer := malloc(capacity)
 
         I buffer == 0 {
-            R PoolAllocator {
+            return PoolAllocator {
                 buffer: 0, capacity: 0, block_size: 0,
                 free_list: 0, num_blocks: 0, num_free: 0
             }
@@ -214,8 +214,8 @@ X PoolAllocator {
     }
 
     # Allocate a block from the pool
-    F alloc(&self) -> i64 {
-        I self.free_list == 0 { R 0 }
+    fn alloc(&self) -> i64 {
+        I self.free_list == 0 { return 0 }
 
         # Pop from free list
         block := self.free_list
@@ -226,8 +226,8 @@ X PoolAllocator {
     }
 
     # Free a block back to the pool
-    F dealloc(&self, ptr: i64) -> i64 {
-        I ptr == 0 { R 0 }
+    fn dealloc(&self, ptr: i64) -> i64 {
+        I ptr == 0 { return 0 }
 
         # Push onto free list
         store_i64(ptr, self.free_list)
@@ -237,13 +237,13 @@ X PoolAllocator {
     }
 
     # Get number of free blocks
-    F num_free_blocks(&self) -> i64 = self.num_free
+    fn num_free_blocks(&self) -> i64 = self.num_free
 
     # Get number of allocated blocks
-    F num_allocated(&self) -> i64 = self.num_blocks - self.num_free
+    fn num_allocated(&self) -> i64 = self.num_blocks - self.num_free
 
     # Free the pool allocator's buffer
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         I self.buffer != 0 { free(self.buffer) }
         self.buffer = 0
         self.capacity = 0
@@ -258,7 +258,7 @@ X PoolAllocator {
 # ============================================================================
 
 # Block header for free list allocator
-S FreeBlock {
+struct FreeBlock {
     size: i64,        # Size of this block (including header)
     next: i64         # Pointer to next free block
 }
@@ -267,20 +267,20 @@ S FreeBlock {
 G HEADER_SIZE: i64 = 16
 
 # A general-purpose free list allocator
-S FreeListAllocator {
+struct FreeListAllocator {
     buffer: i64,      # Start of buffer
     capacity: i64,    # Total capacity
     free_list: i64,   # Pointer to first free block
     allocated: i64    # Total bytes currently allocated
 }
 
-X FreeListAllocator {
+impl FreeListAllocator {
     # Create a new free list allocator
-    F new(capacity: i64) -> FreeListAllocator {
+    fn new(capacity: i64) -> FreeListAllocator {
         buffer := malloc(capacity)
 
         I buffer == 0 {
-            R FreeListAllocator {
+            return FreeListAllocator {
                 buffer: 0, capacity: 0, free_list: 0, allocated: 0
             }
         }
@@ -299,10 +299,10 @@ X FreeListAllocator {
     }
 
     # Allocate memory from free list allocator (first-fit)
-    F alloc(&self, layout: Layout) -> Allocation {
+    fn alloc(&self, layout: Layout) -> Allocation {
         # Minimum block size is header size
         min_size := layout.size + HEADER_SIZE
-        min_size := I min_size < 32 { 32 } EL { min_size }
+        min_size := I min_size < 32 { 32 } else { min_size }
 
         # Align size
         aligned_size := ptr_align_up(min_size, 8)
@@ -330,14 +330,14 @@ X FreeListAllocator {
                 # Remove from free list
                 I prev == 0 {
                     self.free_list = next
-                } EL {
+                } else {
                     store_i64(prev + 8, next)
                 }
 
                 self.allocated = self.allocated + aligned_size
 
                 # Return pointer after header
-                R Allocation { ptr: curr + HEADER_SIZE, size: aligned_size - HEADER_SIZE }
+                return Allocation { ptr: curr + HEADER_SIZE, size: aligned_size - HEADER_SIZE }
             }
 
             prev = curr
@@ -349,8 +349,8 @@ X FreeListAllocator {
     }
 
     # Free memory back to free list allocator
-    F dealloc(&self, ptr: i64) -> i64 {
-        I ptr == 0 { R 0 }
+    fn dealloc(&self, ptr: i64) -> i64 {
+        I ptr == 0 { return 0 }
 
         # Get block header
         block := ptr - HEADER_SIZE
@@ -365,13 +365,13 @@ X FreeListAllocator {
     }
 
     # Get allocated bytes
-    F total_allocated(&self) -> i64 = self.allocated
+    fn total_allocated(&self) -> i64 = self.allocated
 
     # Get remaining (approximate - doesn't account for fragmentation)
-    F remaining(&self) -> i64 = self.capacity - self.allocated
+    fn remaining(&self) -> i64 = self.capacity - self.allocated
 
     # Free the allocator's buffer
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         I self.buffer != 0 { free(self.buffer) }
         self.buffer = 0
         self.capacity = 0
@@ -386,34 +386,34 @@ X FreeListAllocator {
 # ============================================================================
 
 # A stack-based allocator (LIFO allocation pattern)
-S StackAllocator {
+struct StackAllocator {
     buffer: i64,      # Start of buffer
     capacity: i64,    # Total capacity
     offset: i64,      # Current stack top
     prev_offset: i64  # Previous allocation offset (for pop)
 }
 
-X StackAllocator {
+impl StackAllocator {
     # Create a new stack allocator
-    F new(capacity: i64) -> StackAllocator {
+    fn new(capacity: i64) -> StackAllocator {
         buffer := malloc(capacity)
         StackAllocator {
             buffer: buffer,
-            capacity: I buffer != 0 { capacity } EL { 0 },
+            capacity: I buffer != 0 { capacity } else { 0 },
             offset: 0,
             prev_offset: 0
         }
     }
 
     # Allocate from stack
-    F alloc(&self, layout: Layout) -> Allocation {
+    fn alloc(&self, layout: Layout) -> Allocation {
         # Store header with previous offset
         header_size := 8
         aligned_offset := ptr_align_up(self.offset + header_size, layout.align)
         new_offset := aligned_offset + layout.size
 
         I new_offset > self.capacity {
-            R Allocation { ptr: 0, size: 0 }
+            return Allocation { ptr: 0, size: 0 }
         }
 
         # Store previous offset in header
@@ -425,8 +425,8 @@ X StackAllocator {
     }
 
     # Pop the most recent allocation
-    F pop(&self) -> i64 {
-        I self.offset == 0 { R 0 }
+    fn pop(&self) -> i64 {
+        I self.offset == 0 { return 0 }
 
         # Read previous offset from stored header
         self.offset = self.prev_offset
@@ -434,17 +434,17 @@ X StackAllocator {
     }
 
     # Reset stack to beginning
-    F reset(&self) -> i64 {
+    fn reset(&self) -> i64 {
         self.offset = 0
         self.prev_offset = 0
         0
     }
 
     # Get remaining capacity
-    F remaining(&self) -> i64 = self.capacity - self.offset
+    fn remaining(&self) -> i64 = self.capacity - self.offset
 
     # Free the allocator's buffer
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         I self.buffer != 0 { free(self.buffer) }
         self.buffer = 0
         self.capacity = 0
@@ -458,14 +458,14 @@ X StackAllocator {
 # Convenience Functions (backward compatibility)
 # ============================================================================
 
-F bump_new(capacity: i64) -> BumpAllocator = BumpAllocator.new(capacity)
-F bump_free(alloc: BumpAllocator) -> i64 = alloc.drop()
+fn bump_new(capacity: i64) -> BumpAllocator = BumpAllocator.new(capacity)
+fn bump_free(alloc: BumpAllocator) -> i64 = alloc.drop()
 
-F pool_new(block_size: i64, num_blocks: i64) -> PoolAllocator = PoolAllocator.new(block_size, num_blocks)
-F pool_free(alloc: PoolAllocator) -> i64 = alloc.drop()
+fn pool_new(block_size: i64, num_blocks: i64) -> PoolAllocator = PoolAllocator.new(block_size, num_blocks)
+fn pool_free(alloc: PoolAllocator) -> i64 = alloc.drop()
 
-F freelist_new(capacity: i64) -> FreeListAllocator = FreeListAllocator.new(capacity)
-F freelist_free(alloc: FreeListAllocator) -> i64 = alloc.drop()
+fn freelist_new(capacity: i64) -> FreeListAllocator = FreeListAllocator.new(capacity)
+fn freelist_free(alloc: FreeListAllocator) -> i64 = alloc.drop()
 
-F stack_new(capacity: i64) -> StackAllocator = StackAllocator.new(capacity)
-F stack_free(alloc: StackAllocator) -> i64 = alloc.drop()
+fn stack_new(capacity: i64) -> StackAllocator = StackAllocator.new(capacity)
+fn stack_free(alloc: StackAllocator) -> i64 = alloc.drop()

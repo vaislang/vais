@@ -1,20 +1,20 @@
 # LIVING_SPEC/02_patterns/pattern_exhaustive.vais
 # Key concept: 모든 variant를 명시 → exhaustive check 통과. `_` 불필요.
 
-EN Color {
+enum Color {
     Red,
     Green,
     Blue
 }
 
-F code(c: Color) -> i64 {
-    M c {
+fn code(c: Color) -> i64 {
+    match c {
         Red => 1,
         Green => 2,
         Blue => 3
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     code(Red) + code(Green) + code(Blue)
 }

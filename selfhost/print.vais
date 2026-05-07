@@ -2,11 +2,11 @@
 # Provides formatted output utilities for integers, booleans, hex, pointers, and bytes
 
 # Helper: calculate string length from str pointer
-F str_len(ptr: i64) -> i64 {
+fn str_len(ptr: i64) -> i64 {
     len := mut 0
     L {
         ch := load_byte(ptr + len)
-        I ch == 0 { B } EL { 0 }
+        I ch == 0 { B } else { 0 }
         len = len + 1
         0
     }
@@ -14,31 +14,31 @@ F str_len(ptr: i64) -> i64 {
 }
 
 # Helper: print integer digits recursively
-F print_i64_digits(n: i64) -> i64 {
+fn print_i64_digits(n: i64) -> i64 {
     I n >= 10 {
         print_i64_digits(n / 10)
         0
-    } EL { 0 }
+    } else { 0 }
     putchar((n % 10) + 48)
 }
 
 # 1. Print signed integer
-F print_i64(n: i64) -> i64 {
+fn print_i64(n: i64) -> i64 {
     I n == 0 {
         putchar(48)
         0
-    } EL I n < 0 {
+    } else I n < 0 {
         putchar(45)
         print_i64_digits(0 - n)
         0
-    } EL {
+    } else {
         print_i64_digits(n)
         0
     }
 }
 
 # 2. Print boolean
-F print_bool(b: i64) -> i64 {
+fn print_bool(b: i64) -> i64 {
     I b == 0 {
         putchar(102)  # f
         putchar(97)   # a
@@ -46,7 +46,7 @@ F print_bool(b: i64) -> i64 {
         putchar(115)  # s
         putchar(101)  # e
         0
-    } EL {
+    } else {
         putchar(116)  # t
         putchar(114)  # r
         putchar(117)  # u
@@ -56,19 +56,19 @@ F print_bool(b: i64) -> i64 {
 }
 
 # Helper: print hex digit (0-15 -> 0-9,a-f)
-F print_hex_digit(digit: i64) -> i64 {
+fn print_hex_digit(digit: i64) -> i64 {
     I digit < 10 {
         putchar(digit + 48)
         0
-    } EL {
+    } else {
         putchar(digit - 10 + 97)
         0
     }
 }
 
 # Helper: print hex digits recursively
-F print_hex_digits(n: i64, pos: i64) -> i64 {
-    I pos < 0 { R 0 } EL { 0 }
+fn print_hex_digits(n: i64, pos: i64) -> i64 {
+    I pos < 0 { return 0 } else { 0 }
 
     shift := pos * 4
     digit := (n >> shift) & 15
@@ -77,40 +77,40 @@ F print_hex_digits(n: i64, pos: i64) -> i64 {
     I digit == 0 {
         I pos > 0 {
             print_hex_digits(n, pos - 1)
-        } EL {
+        } else {
             putchar(48)
             0
         }
-    } EL {
+    } else {
         print_hex_digit(digit)
         I pos > 0 {
             print_hex_digits(n, pos - 1)
-        } EL { 0 }
+        } else { 0 }
         0
     }
 }
 
 # 3. Print hex number (0x prefix)
-F print_hex(n: i64) -> i64 {
+fn print_hex(n: i64) -> i64 {
     putchar(48)   # 0
     putchar(120)  # x
 
     I n == 0 {
         putchar(48)
         0
-    } EL {
+    } else {
         # Print up to 16 hex digits (64 bits = 16 nibbles)
         print_hex_digits(n, 15)
     }
 }
 
 # 4. Print pointer (0x prefix + hex)
-F print_ptr(p: i64) -> i64 {
+fn print_ptr(p: i64) -> i64 {
     print_hex(p)
 }
 
 # Helper: print single hex byte (2 digits)
-F print_byte_hex(byte: i64) -> i64 {
+fn print_byte_hex(byte: i64) -> i64 {
     high := (byte >> 4) & 15
     low := byte & 15
     print_hex_digit(high)
@@ -118,10 +118,10 @@ F print_byte_hex(byte: i64) -> i64 {
 }
 
 # 5. Print byte array as hex
-F print_bytes(data_ptr: i64, len: i64) -> i64 {
+fn print_bytes(data_ptr: i64, len: i64) -> i64 {
     i := mut 0
     L {
-        I i >= len { B } EL { 0 }
+        I i >= len { B } else { 0 }
 
         byte := load_byte(data_ptr + i)
         print_byte_hex(byte)
@@ -130,7 +130,7 @@ F print_bytes(data_ptr: i64, len: i64) -> i64 {
         I i < len - 1 {
             putchar(32)
             0
-        } EL { 0 }
+        } else { 0 }
 
         i = i + 1
         0
@@ -139,20 +139,20 @@ F print_bytes(data_ptr: i64, len: i64) -> i64 {
 }
 
 # 6. Print integer + newline
-F println_i64(n: i64) -> i64 {
+fn println_i64(n: i64) -> i64 {
     print_i64(n)
     putchar(10)
     0
 }
 
 # 7. Print string + newline
-F println_str(s: str) -> i64 {
+fn println_str(s: str) -> i64 {
     ptr := str_to_ptr(s)
     len := str_len(ptr)
 
     i := mut 0
     L {
-        I i >= len { B } EL { 0 }
+        I i >= len { B } else { 0 }
         ch := load_byte(ptr + i)
         putchar(ch)
         i = i + 1
@@ -163,20 +163,20 @@ F println_str(s: str) -> i64 {
 }
 
 # 8. Print single character
-F print_char(ch: i64) -> i64 {
+fn print_char(ch: i64) -> i64 {
     putchar(ch)
     0
 }
 
 # 9. Print to stderr
 # Note: stderr not available in current builtins, printing to stdout instead
-F eprint_str(s: str) -> i64 {
+fn eprint_str(s: str) -> i64 {
     ptr := str_to_ptr(s)
     len := str_len(ptr)
 
     i := mut 0
     L {
-        I i >= len { B } EL { 0 }
+        I i >= len { B } else { 0 }
         ch := load_byte(ptr + i)
         putchar(ch)
         i = i + 1
@@ -186,10 +186,10 @@ F eprint_str(s: str) -> i64 {
 }
 
 # 10. Print character repeated count times
-F print_repeat(ch: i64, count: i64) -> i64 {
+fn print_repeat(ch: i64, count: i64) -> i64 {
     i := mut 0
     L {
-        I i >= count { B } EL { 0 }
+        I i >= count { B } else { 0 }
         putchar(ch)
         i = i + 1
         0
@@ -198,19 +198,19 @@ F print_repeat(ch: i64, count: i64) -> i64 {
 }
 
 # Bonus: Print newline
-F println() -> i64 {
+fn println() -> i64 {
     putchar(10)
     0
 }
 
 # Bonus: Print string (no newline)
-F print_str(s: str) -> i64 {
+fn print_str(s: str) -> i64 {
     ptr := str_to_ptr(s)
     len := str_len(ptr)
 
     i := mut 0
     L {
-        I i >= len { B } EL { 0 }
+        I i >= len { B } else { 0 }
         ch := load_byte(ptr + i)
         putchar(ch)
         i = i + 1
@@ -221,14 +221,14 @@ F print_str(s: str) -> i64 {
 
 # Bonus: Print to stderr with newline
 # Note: stderr not available, printing to stdout instead
-F eprintln_str(s: str) -> i64 {
+fn eprintln_str(s: str) -> i64 {
     eprint_str(s)
     putchar(10)
     0
 }
 
 # Bonus: Print labeled integer (e.g., "count: 42\n")
-F print_label_i64(label: str, value: i64) -> i64 {
+fn print_label_i64(label: str, value: i64) -> i64 {
     print_str(label)
     putchar(58)   # :
     putchar(32)   # space
@@ -236,6 +236,6 @@ F print_label_i64(label: str, value: i64) -> i64 {
 }
 
 # Bonus: Print indentation (spaces)
-F print_indent(level: i64) -> i64 {
+fn print_indent(level: i64) -> i64 {
     print_repeat(32, level * 2)
 }

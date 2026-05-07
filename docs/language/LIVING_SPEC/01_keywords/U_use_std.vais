@@ -4,7 +4,7 @@
 
 # U std::io    # 이 예제에선 생략 (self-contained)
 
-F main() -> i64 {
+fn main() -> i64 {
     # puts는 std 없이도 쓸 수 있는 builtin
     puts("use import demonstration")
     0

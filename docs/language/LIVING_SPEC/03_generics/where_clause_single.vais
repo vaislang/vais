@@ -2,23 +2,23 @@
 # Key concept: F f<T>(x: T) where T: Trait 단일 where 절 트레이트 바운드.
 # where 절은 시그니처 뒤에 위치하며 trait bound를 분리해서 표현.
 
-W Printable {
-    F value(&self) -> i64
+trait Printable {
+    fn value(&self) -> i64
 }
 
-S Score {
+struct Score {
     pts: i64
 }
 
-X Score: Printable {
-    F value(&self) -> i64 = self.pts
+impl Score: Printable {
+    fn value(&self) -> i64 = self.pts
 }
 
-F show<T>(item: T) -> i64 where T: Printable {
+fn show<T>(item: T) -> i64 where type: Printable {
     item.value()
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     s := Score { pts: 100 }
     show(s)
 }

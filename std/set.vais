@@ -3,30 +3,30 @@
 # Each value is stored as both key and value in the underlying HashMap
 
 # Helper function to initialize buckets recursively
-F set_init_buckets(buckets: i64, cap: i64, i: i64) -> i64 {
-    I i >= cap { 0 } EL {
+fn set_init_buckets(buckets: i64, cap: i64, i: i64) -> i64 {
+    I i >= cap { 0 } else {
         store_i64(buckets + i * 8, 0)
         set_init_buckets(buckets, cap, i + 1)
     }
 }
 
 # Set structure
-S Set {
+struct Set {
     buckets: i64,   # Pointer to array of bucket heads (Entry pointers)
     size: i64,      # Number of elements
     cap: i64        # Number of buckets
 }
 
 # Entry node for linked list in each bucket
-S SetEntry {
+struct SetEntry {
     value: i64,     # The value stored in the set
     next: i64       # Pointer to next SetEntry (0 if none)
 }
 
-X Set {
+impl Set {
     # Create a new Set with given capacity
-    F with_capacity(capacity: i64) -> Set {
-        cap := I capacity < 8 { 8 } EL { capacity }
+    fn with_capacity(capacity: i64) -> Set {
+        cap := I capacity < 8 { 8 } else { capacity }
         # Allocate bucket array (array of pointers, each 8 bytes)
         buckets := malloc(cap * 8)
         # Initialize all buckets to null (0)
@@ -35,30 +35,30 @@ X Set {
     }
 
     # Get number of elements
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.size
     }
 
     # Get capacity (number of buckets)
-    F capacity(&self) -> i64 {
+    fn capacity(&self) -> i64 {
         self.cap
     }
 
     # Check if empty
-    F is_empty(&self) -> i64 {
-        I self.size == 0 { 1 } EL { 0 }
+    fn is_empty(&self) -> i64 {
+        I self.size == 0 { 1 } else { 0 }
     }
 
     # Hash function for i64 value
-    F hash(&self, value: i64) -> i64 {
+    fn hash(&self, value: i64) -> i64 {
         # Simple hash: multiply by golden ratio prime and take modulo
         h := value * 2654435769
-        abs_h := I h < 0 { 0 - h } EL { h }
+        abs_h := I h < 0 { 0 - h } else { h }
         abs_h % self.cap
     }
 
     # Check if value exists in set
-    F contains(&self, value: i64) -> i64 {
+    fn contains(&self, value: i64) -> i64 {
         idx := @.hash(value)
         entry_ptr := mut load_i64(self.buckets + idx * 8)
 
@@ -72,9 +72,9 @@ X Set {
 
     # Insert value into set
     # Returns 1 if value was newly inserted, 0 if already existed
-    F insert(&self, value: i64) -> i64 {
+    fn insert(&self, value: i64) -> i64 {
         # Check if value already exists
-        I @.contains(value) == 1 { R 0 }
+        I @.contains(value) == 1 { return 0 }
 
         idx := @.hash(value)
         entry_ptr := load_i64(self.buckets + idx * 8)
@@ -96,7 +96,7 @@ X Set {
 
     # Remove value from set
     # Returns 1 if value was removed, 0 if not found
-    F remove(&self, value: i64) -> i64 {
+    fn remove(&self, value: i64) -> i64 {
         idx := @.hash(value)
         entry_ptr := mut load_i64(self.buckets + idx * 8)
         prev_ptr := mut 0
@@ -110,7 +110,7 @@ X Set {
                 I prev_ptr == 0 {
                     # Removing head of list
                     store_i64(self.buckets + idx * 8, next)
-                } EL {
+                } else {
                     # Removing from middle/end
                     store_i64(prev_ptr + 8, next)
                 }
@@ -125,7 +125,7 @@ X Set {
     }
 
     # Rehash to double capacity
-    F rehash(&self) -> i64 {
+    fn rehash(&self) -> i64 {
         old_buckets := self.buckets
         old_cap := self.cap
         new_cap := old_cap * 2
@@ -166,7 +166,7 @@ X Set {
     }
 
     # Clear all elements
-    F clear(&self) -> i64 {
+    fn clear(&self) -> i64 {
         i := mut 0
         L {
             I i >= self.cap { B 0 }
@@ -186,7 +186,7 @@ X Set {
 
     # Create a new set containing the union of this set and another
     # Returns a new Set containing all elements from both sets
-    F union(&self, other: Set) -> Set {
+    fn union(&self, other: Set) -> Set {
         result := Set.with_capacity(self.size + other.size)
 
         # Add all elements from self
@@ -222,7 +222,7 @@ X Set {
 
     # Create a new set containing the intersection of this set and another
     # Returns a new Set containing only elements present in both sets
-    F intersection(&self, other: Set) -> Set {
+    fn intersection(&self, other: Set) -> Set {
         result := Set.with_capacity(8)
 
         # Iterate through smaller set and check if elements exist in larger set
@@ -253,7 +253,7 @@ X Set {
 
     # Create a new set containing the difference (self - other)
     # Returns a new Set containing elements in self but not in other
-    F difference(&self, other: Set) -> Set {
+    fn difference(&self, other: Set) -> Set {
         result := Set.with_capacity(self.size)
 
         # Add elements from self that are not in other
@@ -277,7 +277,7 @@ X Set {
 
     # Create a new set containing the symmetric difference
     # Returns a new Set containing elements in either set but not both
-    F symmetric_difference(&self, other: Set) -> Set {
+    fn symmetric_difference(&self, other: Set) -> Set {
         result := Set.with_capacity(self.size + other.size)
 
         # Add elements from self that are not in other
@@ -317,12 +317,12 @@ X Set {
 
     # Check if this set is a subset of another
     # Returns 1 if all elements in self are in other, 0 otherwise
-    F is_subset(&self, other: Set) -> i64 {
+    fn is_subset(&self, other: Set) -> i64 {
         # Empty set is subset of any set
-        I self.size == 0 { R 1 }
+        I self.size == 0 { return 1 }
 
         # If self is larger, it cannot be a subset
-        I self.size > other.size { R 0 }
+        I self.size > other.size { return 0 }
 
         # Check if all elements in self exist in other
         i := mut 0
@@ -345,13 +345,13 @@ X Set {
 
     # Check if this set is a superset of another
     # Returns 1 if all elements in other are in self, 0 otherwise
-    F is_superset(&self, other: Set) -> i64 {
+    fn is_superset(&self, other: Set) -> i64 {
         other.is_subset(self)
     }
 
     # Check if this set is disjoint from another (no common elements)
     # Returns 1 if sets have no elements in common, 0 otherwise
-    F is_disjoint(&self, other: Set) -> i64 {
+    fn is_disjoint(&self, other: Set) -> i64 {
         # Iterate through smaller set for efficiency
         smaller := mut self
         larger := mut other
@@ -379,7 +379,7 @@ X Set {
     }
 
     # Free all memory
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         @.clear()
         free(self.buckets)
         self.buckets = 0
@@ -389,6 +389,6 @@ X Set {
 }
 
 # Create new Set with default capacity
-F set_new() -> Set {
+fn set_new() -> Set {
     Set.with_capacity(16)
 }

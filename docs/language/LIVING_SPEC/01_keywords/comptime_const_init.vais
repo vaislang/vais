@@ -11,6 +11,6 @@
 const ALPHA: i64 = comptime { 2 * 10 }
 const BETA: i64 = comptime { 100 - 1 }
 
-F main() -> i64 {
+fn main() -> i64 {
     ALPHA + BETA
 }

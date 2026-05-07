@@ -11,7 +11,7 @@
 # ============================================================================
 
 # Create an empty string with default capacity
-F string_new() -> i64 {
+fn string_new() -> i64 {
     s := malloc(24)
     data := malloc(32)
     store_byte(data, 0)    # null terminator
@@ -22,7 +22,7 @@ F string_new() -> i64 {
 }
 
 # Create an empty string with specified capacity
-F string_with_cap(cap: i64) -> i64 {
+fn string_with_cap(cap: i64) -> i64 {
     s := malloc(24)
     data := malloc(cap)
     store_byte(data, 0)
@@ -33,7 +33,7 @@ F string_with_cap(cap: i64) -> i64 {
 }
 
 # Create string from str literal (copies bytes)
-F string_from(src: str) -> i64 {
+fn string_from(src: str) -> i64 {
     slen := strlen(src)
     cap := slen + 16
     s := malloc(24)
@@ -47,7 +47,7 @@ F string_from(src: str) -> i64 {
 }
 
 # Create string from raw pointer + length (copies bytes)
-F string_from_ptr(src: i64, slen: i64) -> i64 {
+fn string_from_ptr(src: i64, slen: i64) -> i64 {
     cap := slen + 16
     s := malloc(24)
     data := malloc(cap)
@@ -63,16 +63,16 @@ F string_from_ptr(src: i64, slen: i64) -> i64 {
 # Accessors
 # ============================================================================
 
-F string_data(s: i64) -> i64 = load_i64(s)
-F string_len(s: i64) -> i64 = load_i64(s + 8)
-F string_cap(s: i64) -> i64 = load_i64(s + 16)
+fn string_data(s: i64) -> i64 = load_i64(s)
+fn string_len(s: i64) -> i64 = load_i64(s + 8)
+fn string_cap(s: i64) -> i64 = load_i64(s + 16)
 
-F string_is_empty(s: i64) -> i64 {
-    I string_len(s) == 0 { 1 } EL { 0 }
+fn string_is_empty(s: i64) -> i64 {
+    I string_len(s) == 0 { 1 } else { 0 }
 }
 
 # Get byte at index
-F string_byte_at(s: i64, idx: i64) -> i64 {
+fn string_byte_at(s: i64, idx: i64) -> i64 {
     data := load_i64(s)
     load_byte(data + idx)
 }
@@ -81,7 +81,7 @@ F string_byte_at(s: i64, idx: i64) -> i64 {
 # Growth (internal)
 # ============================================================================
 
-F string_grow_to(s: i64, new_cap: i64) -> i64 {
+fn string_grow_to(s: i64, new_cap: i64) -> i64 {
     old_data := load_i64(s)
     old_len := load_i64(s + 8)
     new_data := malloc(new_cap)
@@ -93,11 +93,11 @@ F string_grow_to(s: i64, new_cap: i64) -> i64 {
     0
 }
 
-F string_ensure_cap(s: i64, needed: i64) -> i64 {
+fn string_ensure_cap(s: i64, needed: i64) -> i64 {
     cap := load_i64(s + 16)
     I needed + 1 > cap {
         string_grow_to(s, needed * 2 + 1)
-    } EL { 0 }
+    } else { 0 }
 }
 
 # ============================================================================
@@ -105,7 +105,7 @@ F string_ensure_cap(s: i64, needed: i64) -> i64 {
 # ============================================================================
 
 # Append a single byte
-F string_push_byte(s: i64, byte: i64) -> i64 {
+fn string_push_byte(s: i64, byte: i64) -> i64 {
     len := load_i64(s + 8)
     string_ensure_cap(s, len + 1)
     data := load_i64(s)
@@ -116,7 +116,7 @@ F string_push_byte(s: i64, byte: i64) -> i64 {
 }
 
 # Append a str literal
-F string_push_str(s: i64, src: str) -> i64 {
+fn string_push_str(s: i64, src: str) -> i64 {
     slen := strlen(src)
     len := load_i64(s + 8)
     string_ensure_cap(s, len + slen)
@@ -129,7 +129,7 @@ F string_push_str(s: i64, src: str) -> i64 {
 }
 
 # Append bytes from pointer
-F string_push_ptr(s: i64, src: i64, slen: i64) -> i64 {
+fn string_push_ptr(s: i64, src: i64, slen: i64) -> i64 {
     len := load_i64(s + 8)
     string_ensure_cap(s, len + slen)
     data := load_i64(s)
@@ -141,30 +141,30 @@ F string_push_ptr(s: i64, src: i64, slen: i64) -> i64 {
 }
 
 # Append another string
-F string_push_string(dst: i64, src: i64) -> i64 {
+fn string_push_string(dst: i64, src: i64) -> i64 {
     src_data := load_i64(src)
     src_len := load_i64(src + 8)
     string_push_ptr(dst, src_data, src_len)
 }
 
 # Append integer as decimal string
-F string_push_i64(s: i64, value: i64) -> i64 {
+fn string_push_i64(s: i64, value: i64) -> i64 {
     I value == 0 {
         string_push_byte(s, 48)
-    } EL I value < 0 {
+    } else I value < 0 {
         string_push_byte(s, 45)
         string_push_i64(s, 0 - value)
-    } EL {
+    } else {
         I value >= 10 {
             string_push_i64(s, value / 10)
             0
-        } EL { 0 }
+        } else { 0 }
         string_push_byte(s, (value % 10) + 48)
     }
 }
 
 # Clear string contents (does not free memory)
-F string_clear(s: i64) -> i64 {
+fn string_clear(s: i64) -> i64 {
     data := load_i64(s)
     store_byte(data, 0)
     store_i64(s + 8, 0)
@@ -175,7 +175,7 @@ F string_clear(s: i64) -> i64 {
 # Internal: byte-by-byte comparison (avoids memcmp i32/i64 mismatch)
 # ============================================================================
 
-F bytes_equal(a_ptr: i64, b_ptr: i64, len: i64) -> i64 {
+fn bytes_equal(a_ptr: i64, b_ptr: i64, len: i64) -> i64 {
     i := mut 0
     equal := mut 1
     LW i < len {
@@ -184,14 +184,14 @@ F bytes_equal(a_ptr: i64, b_ptr: i64, len: i64) -> i64 {
         I ab != bb {
             equal = 0
             i = len  # break
-        } EL {
+        } else {
             i = i + 1
         }
     }
     equal
 }
 
-F bytes_cmp(a_ptr: i64, b_ptr: i64, len: i64) -> i64 {
+fn bytes_cmp(a_ptr: i64, b_ptr: i64, len: i64) -> i64 {
     i := mut 0
     result := mut 0
     found := mut 0
@@ -202,13 +202,13 @@ F bytes_cmp(a_ptr: i64, b_ptr: i64, len: i64) -> i64 {
             I ab < bb {
                 result = 0 - 1
                 found = 1
-            } EL I ab > bb {
+            } else I ab > bb {
                 result = 1
                 found = 1
-            } EL {
+            } else {
                 i = i + 1
             }
-        } EL {
+        } else {
             i = len  # break
         }
     }
@@ -220,12 +220,12 @@ F bytes_cmp(a_ptr: i64, b_ptr: i64, len: i64) -> i64 {
 # ============================================================================
 
 # Compare two strings for equality
-F string_eq(a: i64, b: i64) -> i64 {
+fn string_eq(a: i64, b: i64) -> i64 {
     a_len := load_i64(a + 8)
     b_len := load_i64(b + 8)
     I a_len != b_len {
         0
-    } EL {
+    } else {
         a_data := load_i64(a)
         b_data := load_i64(b)
         bytes_equal(a_data, b_data, a_len)
@@ -233,7 +233,7 @@ F string_eq(a: i64, b: i64) -> i64 {
 }
 
 # Compare string with str literal
-F string_eq_str(s: i64, lit: str) -> i64 {
+fn string_eq_str(s: i64, lit: str) -> i64 {
     lit_ptr := str_to_ptr(lit)
     lit_len := mut 0
     LW load_byte(lit_ptr + lit_len) != 0 {
@@ -242,14 +242,14 @@ F string_eq_str(s: i64, lit: str) -> i64 {
     s_len := load_i64(s + 8)
     I s_len != lit_len {
         0
-    } EL {
+    } else {
         s_data := load_i64(s)
         bytes_equal(s_data, lit_ptr, s_len)
     }
 }
 
 # Lexicographic comparison: -1, 0, +1
-F string_cmp(a: i64, b: i64) -> i64 {
+fn string_cmp(a: i64, b: i64) -> i64 {
     a_len := load_i64(a + 8)
     b_len := load_i64(b + 8)
     a_data := load_i64(a)
@@ -258,15 +258,15 @@ F string_cmp(a: i64, b: i64) -> i64 {
     I b_len < min_len {
         min_len = b_len
         0
-    } EL { 0 }
+    } else { 0 }
     result := bytes_cmp(a_data, b_data, min_len)
     I result != 0 {
         result
-    } EL I a_len < b_len {
+    } else I a_len < b_len {
         0 - 1
-    } EL I a_len > b_len {
+    } else I a_len > b_len {
         1
-    } EL {
+    } else {
         0
     }
 }
@@ -276,7 +276,7 @@ F string_cmp(a: i64, b: i64) -> i64 {
 # ============================================================================
 
 # Create new string from slice [start..end)
-F string_slice(s: i64, start: i64, end: i64) -> i64 {
+fn string_slice(s: i64, start: i64, end: i64) -> i64 {
     data := load_i64(s)
     slen := end - start
     string_from_ptr(data + start, slen)
@@ -287,7 +287,7 @@ F string_slice(s: i64, start: i64, end: i64) -> i64 {
 # ============================================================================
 
 # Find first occurrence of byte, returns index or -1
-F string_find_byte(s: i64, byte: i64) -> i64 {
+fn string_find_byte(s: i64, byte: i64) -> i64 {
     len := load_i64(s + 8)
     data := load_i64(s)
     i := mut 0
@@ -297,7 +297,7 @@ F string_find_byte(s: i64, byte: i64) -> i64 {
         I b == byte {
             result = i
             i = len  # break
-        } EL {
+        } else {
             i = i + 1
         }
     }
@@ -305,7 +305,7 @@ F string_find_byte(s: i64, byte: i64) -> i64 {
 }
 
 # Find last occurrence of byte, returns index or -1
-F string_rfind_byte(s: i64, byte: i64) -> i64 {
+fn string_rfind_byte(s: i64, byte: i64) -> i64 {
     len := load_i64(s + 8)
     data := load_i64(s)
     i := mut len - 1
@@ -315,7 +315,7 @@ F string_rfind_byte(s: i64, byte: i64) -> i64 {
         I b == byte {
             result = i
             i = 0 - 1  # break
-        } EL {
+        } else {
             i = i - 1
         }
     }
@@ -323,7 +323,7 @@ F string_rfind_byte(s: i64, byte: i64) -> i64 {
 }
 
 # Check if string starts with str literal
-F string_starts_with(s: i64, prefix: str) -> i64 {
+fn string_starts_with(s: i64, prefix: str) -> i64 {
     p_ptr := str_to_ptr(prefix)
     p_len := mut 0
     LW load_byte(p_ptr + p_len) != 0 {
@@ -332,14 +332,14 @@ F string_starts_with(s: i64, prefix: str) -> i64 {
     s_len := load_i64(s + 8)
     I p_len > s_len {
         0
-    } EL {
+    } else {
         s_data := load_i64(s)
         bytes_equal(s_data, p_ptr, p_len)
     }
 }
 
 # Check if string ends with str literal
-F string_ends_with(s: i64, suffix: str) -> i64 {
+fn string_ends_with(s: i64, suffix: str) -> i64 {
     sf_ptr := str_to_ptr(suffix)
     # Compute suffix length via load_byte (str_to_ptr already consumed suffix)
     sf_len := mut 0
@@ -349,7 +349,7 @@ F string_ends_with(s: i64, suffix: str) -> i64 {
     s_len := load_i64(s + 8)
     I sf_len > s_len {
         0
-    } EL {
+    } else {
         s_data := load_i64(s)
         offset := s_len - sf_len
         bytes_equal(s_data + offset, sf_ptr, sf_len)
@@ -361,14 +361,14 @@ F string_ends_with(s: i64, suffix: str) -> i64 {
 # ============================================================================
 
 # Clone string (deep copy)
-F string_clone(s: i64) -> i64 {
+fn string_clone(s: i64) -> i64 {
     len := load_i64(s + 8)
     data := load_i64(s)
     string_from_ptr(data, len)
 }
 
 # Concatenate two strings, returns new string
-F string_concat(a: i64, b: i64) -> i64 {
+fn string_concat(a: i64, b: i64) -> i64 {
     a_len := load_i64(a + 8)
     b_len := load_i64(b + 8)
     a_data := load_i64(a)
@@ -384,16 +384,16 @@ F string_concat(a: i64, b: i64) -> i64 {
 }
 
 # Helper: check if byte is whitespace (space, tab, newline, cr)
-F is_whitespace(b: i64) -> i64 {
+fn is_whitespace(b: i64) -> i64 {
     I b == 32 { 1 }
-    EL I b == 9 { 1 }
-    EL I b == 10 { 1 }
-    EL I b == 13 { 1 }
-    EL { 0 }
+    else I b == 9 { 1 }
+    else I b == 10 { 1 }
+    else I b == 13 { 1 }
+    else { 0 }
 }
 
 # Trim leading and trailing whitespace, returns new string
-F string_trim(s: i64) -> i64 {
+fn string_trim(s: i64) -> i64 {
     len := load_i64(s + 8)
     data := load_i64(s)
     # Find first non-whitespace
@@ -402,11 +402,11 @@ F string_trim(s: i64) -> i64 {
     LW found_start == 0 {
         I start >= len {
             found_start = 1
-        } EL {
+        } else {
             b := load_byte(data + start)
             I is_whitespace(b) == 1 {
                 start = start + 1
-            } EL {
+            } else {
                 found_start = 1
             }
         }
@@ -417,11 +417,11 @@ F string_trim(s: i64) -> i64 {
     LW found_end == 0 {
         I end <= start {
             found_end = 1
-        } EL {
+        } else {
             b := load_byte(data + end - 1)
             I is_whitespace(b) == 1 {
                 end = end - 1
-            } EL {
+            } else {
                 found_end = 1
             }
         }
@@ -434,7 +434,7 @@ F string_trim(s: i64) -> i64 {
 # ============================================================================
 
 # Free string and its data buffer
-F string_drop(s: i64) -> i64 {
+fn string_drop(s: i64) -> i64 {
     data := load_i64(s)
     free(data)
     free(s)
@@ -446,7 +446,7 @@ F string_drop(s: i64) -> i64 {
 # ============================================================================
 
 # Print string contents to stdout
-F string_print(s: i64) -> i64 {
+fn string_print(s: i64) -> i64 {
     data := load_i64(s)
     len := load_i64(s + 8)
     i := mut 0
@@ -459,7 +459,7 @@ F string_print(s: i64) -> i64 {
 }
 
 # Print string with newline
-F string_println(s: i64) -> i64 {
+fn string_println(s: i64) -> i64 {
     string_print(s)
     putchar(10)
     0

@@ -8,16 +8,16 @@
 #     → Option<Option<T>> 파라미터 lowering 또한 Phase 3.14/3.15 gap 에
 #       해당. LIVING_SPEC TC-only 카운트에서만 pass.
 
-F flat(oo: Option<Option<i64>>) -> Option<i64> {
-    M oo {
+fn flat(oo: Option<Option<i64>>) -> Option<i64> {
+    match oo {
         Some(inner) => inner,
         None => None,
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     x: Option<Option<i64>> := Some(Some(100))
-    M flat(x) {
+    match flat(x) {
         Some(v) => v,
         None => -1,
     }

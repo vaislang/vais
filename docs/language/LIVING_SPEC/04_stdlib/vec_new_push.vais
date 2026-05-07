@@ -2,7 +2,7 @@
 # Key concept: Vec::new()로 빈 벡터 생성 후 .push(val)로 원소 추가.
 # push는 필요 시 내부 버퍼를 2배 확장한다.
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> = Vec::new()
     v.push(10)
     v.push(20)

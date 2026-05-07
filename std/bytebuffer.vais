@@ -1,9 +1,9 @@
 # ByteBuffer - Growable byte buffer for binary serialization/deserialization
 # Essential for database page management, WAL records, and network protocols
 
-U std/vec
+use std/vec
 
-S ByteBuffer {
+struct ByteBuffer {
     data: i64,      # Pointer to heap-allocated buffer
     len: i64,       # Current write position / bytes written
     cap: i64,       # Allocated capacity
@@ -11,37 +11,37 @@ S ByteBuffer {
     write_pos: i64  # Current write position
 }
 
-X ByteBuffer {
+impl ByteBuffer {
     # Create with given capacity
-    F with_capacity(capacity: i64) -> ByteBuffer {
-        cap := I capacity < 16 { 16 } EL { capacity }
+    fn with_capacity(capacity: i64) -> ByteBuffer {
+        cap := I capacity < 16 { 16 } else { capacity }
         data := malloc(cap)
         ByteBuffer { data: data, len: 0, cap: cap, pos: 0, write_pos: 0 }
     }
 
     # Getters
-    F len(&self) -> i64 = self.len
-    F capacity(&self) -> i64 = self.cap
-    F position(&self) -> i64 = self.pos
-    F data_ptr(&self) -> i64 = self.data
-    F remaining(&self) -> i64 { self.len - self.pos }
+    fn len(&self) -> i64 = self.len
+    fn capacity(&self) -> i64 = self.cap
+    fn position(&self) -> i64 = self.pos
+    fn data_ptr(&self) -> i64 = self.data
+    fn remaining(&self) -> i64 { self.len - self.pos }
 
     # Seek to position
-    F seek(&self, pos: i64) -> i64 {
+    fn seek(&self, pos: i64) -> i64 {
         self.pos = pos
         self.write_pos = pos
         pos
     }
 
     # Reset for re-reading
-    F rewind(&self) -> i64 {
+    fn rewind(&self) -> i64 {
         self.pos = 0
         0
     }
 
     # Ensure capacity
-    F ensure_capacity(&self, needed: i64) -> i64 {
-        I needed <= self.cap { R self.cap }
+    fn ensure_capacity(&self, needed: i64) -> i64 {
+        I needed <= self.cap { return self.cap }
         new_cap := mut self.cap
         L {
             I new_cap >= needed { B 0 }
@@ -56,7 +56,7 @@ X ByteBuffer {
     }
 
     # Write a single byte at the current cursor position.
-    F write_u8(&self, value: i64) -> i64 {
+    fn write_u8(&self, value: i64) -> i64 {
         @.ensure_capacity(self.write_pos + 1)
         store_byte(self.data + self.write_pos, value & 255)
         self.write_pos = self.write_pos + 1
@@ -67,15 +67,15 @@ X ByteBuffer {
     }
 
     # Read a single byte
-    F read_u8(&self) -> i64 {
-        I self.pos >= self.len { R 0 - 1 }
+    fn read_u8(&self) -> i64 {
+        I self.pos >= self.len { return 0 - 1 }
         val := load_byte(self.data + self.pos)
         self.pos = self.pos + 1
         val
     }
 
     # Write i32 in little-endian (4 bytes)
-    F write_i32_le(&self, value: i64) -> i64 {
+    fn write_i32_le(&self, value: i64) -> i64 {
         @.ensure_capacity(self.write_pos + 4)
         store_byte(self.data + self.write_pos, value & 255)
         store_byte(self.data + self.write_pos + 1, (value >> 8) & 255)
@@ -89,8 +89,8 @@ X ByteBuffer {
     }
 
     # Read i32 little-endian
-    F read_i32_le(&self) -> i64 {
-        I self.pos + 4 > self.len { R 0 - 1 }
+    fn read_i32_le(&self) -> i64 {
+        I self.pos + 4 > self.len { return 0 - 1 }
         b0 := load_byte(self.data + self.pos)
         b1 := load_byte(self.data + self.pos + 1)
         b2 := load_byte(self.data + self.pos + 2)
@@ -100,7 +100,7 @@ X ByteBuffer {
     }
 
     # Write i64 in little-endian (8 bytes)
-    F write_i64_le(&self, value: i64) -> i64 {
+    fn write_i64_le(&self, value: i64) -> i64 {
         @.ensure_capacity(self.write_pos + 8)
         store_byte(self.data + self.write_pos, value & 255)
         store_byte(self.data + self.write_pos + 1, (value >> 8) & 255)
@@ -118,8 +118,8 @@ X ByteBuffer {
     }
 
     # Read i64 little-endian
-    F read_i64_le(&self) -> i64 {
-        I self.pos + 8 > self.len { R 0 - 1 }
+    fn read_i64_le(&self) -> i64 {
+        I self.pos + 8 > self.len { return 0 - 1 }
         b0 := load_byte(self.data + self.pos)
         b1 := load_byte(self.data + self.pos + 1)
         b2 := load_byte(self.data + self.pos + 2)
@@ -133,7 +133,7 @@ X ByteBuffer {
     }
 
     # Write raw bytes from pointer
-    F write_bytes(&self, src: i64, count: i64) -> i64 {
+    fn write_bytes(&self, src: i64, count: i64) -> i64 {
         @.ensure_capacity(self.write_pos + count)
         memcpy(self.data + self.write_pos, src, count)
         self.write_pos = self.write_pos + count
@@ -144,15 +144,15 @@ X ByteBuffer {
     }
 
     # Read raw bytes into destination pointer
-    F read_bytes(&self, dst: i64, count: i64) -> i64 {
-        I self.pos + count > self.len { R 0 - 1 }
+    fn read_bytes(&self, dst: i64, count: i64) -> i64 {
+        I self.pos + count > self.len { return 0 - 1 }
         memcpy(dst, self.data + self.pos, count)
         self.pos = self.pos + count
         count
     }
 
     # Write a null-terminated string (length-prefixed: i32 len + bytes)
-    F write_str(&self, s: str) -> i64 {
+    fn write_str(&self, s: str) -> i64 {
         p := str_to_ptr(s)
         # Calculate string length manually to avoid use-after-move
         slen := mut 0
@@ -172,7 +172,7 @@ X ByteBuffer {
     }
 
     # Clear buffer
-    F clear(&self) -> i64 {
+    fn clear(&self) -> i64 {
         self.len = 0
         self.pos = 0
         self.write_pos = 0
@@ -182,7 +182,7 @@ X ByteBuffer {
     # Write unsigned varint (LEB128 encoding)
     # Each byte stores 7 bits of data + 1 continuation bit (MSB)
     # Returns number of bytes written
-    F write_varint(&self, value: i64) -> i64 {
+    fn write_varint(&self, value: i64) -> i64 {
         count := mut 0
         v := mut value
         L {
@@ -190,7 +190,7 @@ X ByteBuffer {
             v = v >> 7
             I v > 0 {
                 @.write_u8(byte | 128)  # set continuation bit
-            } EL {
+            } else {
                 @.write_u8(byte)
             }
             count = count + 1
@@ -201,23 +201,23 @@ X ByteBuffer {
 
     # Read unsigned varint (LEB128 decoding)
     # Returns the decoded value, or -1 on error
-    F read_varint(&self) -> i64 {
+    fn read_varint(&self) -> i64 {
         result := mut 0
         shift := mut 0
         L {
-            I self.pos >= self.len { R 0 - 1 }
+            I self.pos >= self.len { return 0 - 1 }
             byte := @.read_u8()
-            I byte < 0 { R 0 - 1 }
+            I byte < 0 { return 0 - 1 }
             result = result | ((byte & 127) << shift)
             I (byte & 128) == 0 { B }
             shift = shift + 7
-            I shift >= 64 { R 0 - 1 }  # overflow protection
+            I shift >= 64 { return 0 - 1 }  # overflow protection
         }
         result
     }
 
     # Write u16 in little-endian (2 bytes)
-    F write_u16_le(&self, value: i64) -> i64 {
+    fn write_u16_le(&self, value: i64) -> i64 {
         @.ensure_capacity(self.write_pos + 2)
         store_byte(self.data + self.write_pos, value & 255)
         store_byte(self.data + self.write_pos + 1, (value >> 8) & 255)
@@ -229,8 +229,8 @@ X ByteBuffer {
     }
 
     # Read u16 little-endian
-    F read_u16_le(&self) -> i64 {
-        I self.pos + 2 > self.len { R 0 - 1 }
+    fn read_u16_le(&self) -> i64 {
+        I self.pos + 2 > self.len { return 0 - 1 }
         b0 := load_byte(self.data + self.pos)
         b1 := load_byte(self.data + self.pos + 1)
         self.pos = self.pos + 2
@@ -239,23 +239,23 @@ X ByteBuffer {
 
     # Write f64 value (stored as 8-byte little-endian, same bit pattern as i64)
     # Caller should use f64_to_bits() to convert f64 to i64 before calling
-    F write_f64_le(&self, bits: i64) -> i64 {
+    fn write_f64_le(&self, bits: i64) -> i64 {
         @.write_i64_le(bits)
     }
 
     # Read f64 value (returns i64 bit pattern)
     # Caller should use bits_to_f64() to convert back to f64
-    F read_f64_le(&self) -> i64 {
+    fn read_f64_le(&self) -> i64 {
         @.read_i64_le()
     }
 
     # Write f32 value (caller passes i32 bit pattern). Phase 228.
-    F write_f32_le(&self, bits: i64) -> i64 {
+    fn write_f32_le(&self, bits: i64) -> i64 {
         @.write_i32_le(bits)
     }
 
     # Read f32 value as i32 bit pattern. Phase 228.
-    F read_f32_le(&self) -> i64 {
+    fn read_f32_le(&self) -> i64 {
         @.read_i32_le()
     }
 
@@ -263,51 +263,51 @@ X ByteBuffer {
     # get_u8/get_u16_le/get_i32_le etc. naming convention.
 
     # u64/u32 as i64 bit pattern. Phase 234.
-    F write_u64_le(&self, value: i64) -> i64 {
+    fn write_u64_le(&self, value: i64) -> i64 {
         @.write_i64_le(value)
     }
 
-    F read_u64_le(&self) -> i64 {
+    fn read_u64_le(&self) -> i64 {
         @.read_i64_le()
     }
 
-    F write_u32_le(&self, value: i64) -> i64 {
+    fn write_u32_le(&self, value: i64) -> i64 {
         @.write_i32_le(value)
     }
 
-    F read_u32_le(&self) -> i64 {
+    fn read_u32_le(&self) -> i64 {
         @.read_i32_le()
     }
 
-    F get_u8(&self) -> i64 {
+    fn get_u8(&self) -> i64 {
         @.read_u8()
     }
 
-    F get_u16_le(&self) -> i64 {
+    fn get_u16_le(&self) -> i64 {
         @.read_u16_le()
     }
 
-    F get_u32_le(&self) -> i64 {
+    fn get_u32_le(&self) -> i64 {
         @.read_i32_le()
     }
 
-    F get_u64_le(&self) -> i64 {
+    fn get_u64_le(&self) -> i64 {
         @.read_i64_le()
     }
 
-    F get_i32_le(&self) -> i64 {
+    fn get_i32_le(&self) -> i64 {
         @.read_i32_le()
     }
 
-    F get_i64_le(&self) -> i64 {
+    fn get_i64_le(&self) -> i64 {
         @.read_i64_le()
     }
 
-    F get_f32_le(&self) -> i64 {
+    fn get_f32_le(&self) -> i64 {
         @.read_i32_le()
     }
 
-    F get_f64_le(&self) -> i64 {
+    fn get_f64_le(&self) -> i64 {
         @.read_f64_le()
     }
 
@@ -315,11 +315,11 @@ X ByteBuffer {
     # Format: [i32 length (LE)] [bytes]
     # Returns a new heap-allocated null-terminated string as i64 pointer
     # Returns 0 on error (insufficient data)
-    F read_str(&self) -> i64 {
-        I self.pos + 4 > self.len { R 0 }
+    fn read_str(&self) -> i64 {
+        I self.pos + 4 > self.len { return 0 }
         slen := @.read_i32_le()
-        I slen < 0 { R 0 }
-        I self.pos + slen > self.len { R 0 }
+        I slen < 0 { return 0 }
+        I self.pos + slen > self.len { return 0 }
         buf := malloc(slen + 1)
         memcpy(buf, self.data + self.pos, slen)
         store_byte(buf + slen, 0)  # null terminator
@@ -328,7 +328,7 @@ X ByteBuffer {
     }
 
     # Free memory
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         I self.data != 0 { free(self.data) }
         self.data = 0
         self.len = 0
@@ -339,21 +339,21 @@ X ByteBuffer {
     }
 
     # Create empty ByteBuffer with default capacity
-    F new() -> ByteBuffer {
+    fn new() -> ByteBuffer {
         ByteBuffer.with_capacity(64)
     }
 
     # Wrap existing byte slice as mutable ByteBuffer (shares data pointer; writes
     # happen at the current cursor and update the underlying slice).
     # Accepts &[u8], &Vec<u8> (via coercion), or any slice reference.
-    F wrap(data: &[u8]) -> ByteBuffer {
+    fn wrap(data: &[u8]) -> ByteBuffer {
         ptr := slice_data_ptr(data)
         length := data.len()
         ByteBuffer { data: ptr, len: length, cap: length, pos: 0, write_pos: 0 }
     }
 
     # Wrap existing byte slice as read-only ByteBuffer (copies data into new buffer)
-    F wrap_readonly(data: &[u8]) -> ByteBuffer {
+    fn wrap_readonly(data: &[u8]) -> ByteBuffer {
         ptr := slice_data_ptr(data)
         length := data.len()
         buf := malloc(length)
@@ -362,24 +362,24 @@ X ByteBuffer {
     }
 
     # Wrap raw pointer and length directly (low-level, use wrap/wrap_readonly instead)
-    F wrap_raw(data: i64, len: i64) -> ByteBuffer {
+    fn wrap_raw(data: i64, len: i64) -> ByteBuffer {
         ByteBuffer { data: data, len: len, cap: len, pos: 0, write_pos: 0 }
     }
 
     # Create ByteBuffer by copying from another ByteBuffer
-    F from_buf(other: &ByteBuffer) -> ByteBuffer {
+    fn from_buf(other: &ByteBuffer) -> ByteBuffer {
         buf := malloc(other.len)
         memcpy(buf, other.data, other.len)
         ByteBuffer { data: buf, len: other.len, cap: other.len, pos: 0, write_pos: other.len }
     }
 
     # Get raw data pointer (for FFI). Use as_bytes for safe slice access.
-    F as_ptr(&self) -> i64 {
+    fn as_ptr(&self) -> i64 {
         self.data
     }
 
     # Convert to Vec<u8> (copies data into a new Vec)
-    F to_vec(&self) -> Vec<u8> {
+    fn to_vec(&self) -> Vec<u8> {
         result := mut Vec.with_capacity(self.len)
         i := mut 0
         LW i < self.len {
@@ -390,12 +390,12 @@ X ByteBuffer {
     }
 
     # Alias for to_vec — vaisdb uses into_vec name. Phase 244.
-    F into_vec(&self) -> Vec<u8> {
+    fn into_vec(&self) -> Vec<u8> {
         @.to_vec()
     }
 
     # Clone the ByteBuffer (deep copy)
-    F clone(&self) -> ByteBuffer {
+    fn clone(&self) -> ByteBuffer {
         ByteBuffer.from_buf(&self)
     }
 }

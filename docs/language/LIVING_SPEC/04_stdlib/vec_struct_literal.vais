@@ -4,11 +4,11 @@
 # 의 ptr 을 value 로 오인해서 `store %Point <ptr>` 타입 미스매치로
 # clang 거부. F.1 (2026-04-21) 에서 struct 원소일 때 load 를 먼저 삽입.
 
-U std/vec
+use std/vec
 
-S Point { x: i64, y: i64 }
+struct Point { x: i64, y: i64 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<Point> := [Point{x:1, y:2}, Point{x:3, y:4}]
-    R v[0].x + v[1].x
+    return v[0].x + v[1].x
 }

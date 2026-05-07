@@ -40,12 +40,12 @@ C SIG_IGN: i64 = 1    # Ignore signal
 
 # Register a signal handler
 # Returns previous handler (0 for default, 1 for ignore)
-F signal_handle(signum: i32, handler: i64) -> i64 {
+fn signal_handle(signum: i32, handler: i64) -> i64 {
     signal(signum, handler)
 }
 
 # Send a signal to the current process
 # Returns 0 on success, -1 on error
-F signal_raise(signum: i32) -> i32 {
+fn signal_raise(signum: i32) -> i32 {
     raise(signum)
 }

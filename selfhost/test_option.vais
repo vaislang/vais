@@ -4,42 +4,42 @@
 # Tests all functions in option.vais
 # ============================================================================
 
-U option
+use option
 
 # ============================================================================
 # Test Helpers
 # ============================================================================
 
-F print_i64(val: i64) -> i64 {
+fn print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
         0
-    } EL I val < 0 {
+    } else I val < 0 {
         putchar(45)
         print_i64(0 - val)
-    } EL {
+    } else {
         I val >= 10 {
             print_i64(val / 10)
             0
-        } EL { 0 }
+        } else { 0 }
         putchar(48 + (val % 10))
         0
     }
 }
 
-F println_i64(val: i64) -> i64 {
+fn println_i64(val: i64) -> i64 {
     print_i64(val)
     putchar(10)
     0
 }
 
-F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
+fn assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
     I actual == expected {
         puts("[PASS] ")
         puts(test_name)
         putchar(10)
         1
-    } EL {
+    } else {
         puts("[FAIL] ")
         puts(test_name)
         putchar(10)
@@ -55,7 +55,7 @@ F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
 # Option Tests
 # ============================================================================
 
-F test_option_some() -> i64 {
+fn test_option_some() -> i64 {
     puts("=== Testing Option::Some ===")
 
     # Create Some(42)
@@ -83,7 +83,7 @@ F test_option_some() -> i64 {
     passes
 }
 
-F test_option_none() -> i64 {
+fn test_option_none() -> i64 {
     puts("=== Testing Option::None ===")
 
     # Create None
@@ -105,7 +105,7 @@ F test_option_none() -> i64 {
     passes
 }
 
-F test_option_map() -> i64 {
+fn test_option_map() -> i64 {
     puts("=== Testing Option::map ===")
 
     # Test map on Some
@@ -125,7 +125,7 @@ F test_option_map() -> i64 {
     passes
 }
 
-F test_option_edge_cases() -> i64 {
+fn test_option_edge_cases() -> i64 {
     puts("=== Testing Option Edge Cases ===")
 
     # Test Some(0) - zero is a valid value
@@ -146,7 +146,7 @@ F test_option_edge_cases() -> i64 {
 # Result Tests
 # ============================================================================
 
-F test_result_ok() -> i64 {
+fn test_result_ok() -> i64 {
     puts("=== Testing Result::Ok ===")
 
     # Create Ok(100)
@@ -174,7 +174,7 @@ F test_result_ok() -> i64 {
     passes
 }
 
-F test_result_err() -> i64 {
+fn test_result_err() -> i64 {
     puts("=== Testing Result::Err ===")
 
     # Create Err(404)
@@ -202,7 +202,7 @@ F test_result_err() -> i64 {
     passes
 }
 
-F test_result_edge_cases() -> i64 {
+fn test_result_edge_cases() -> i64 {
     puts("=== Testing Result Edge Cases ===")
 
     # Test Ok(0) - zero is a valid success value
@@ -224,7 +224,7 @@ F test_result_edge_cases() -> i64 {
 # Main Test Runner
 # ============================================================================
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("============================================================================")
     puts("Option/Result Test Suite")
     puts("============================================================================")
@@ -258,5 +258,5 @@ F main() -> i64 {
     puts("============================================================================")
 
     # Return 0 if all passed, 1 if any failed
-    I total_passes == 32 { 0 } EL { 1 }
+    I total_passes == 32 { 0 } else { 1 }
 }

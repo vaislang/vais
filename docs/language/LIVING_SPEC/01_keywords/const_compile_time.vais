@@ -4,10 +4,10 @@
 
 const MAX: i64 = 100
 
-F clamp(x: i64) -> i64 {
-    I x > MAX { MAX } EL { x }
+fn clamp(x: i64) -> i64 {
+    I x > MAX { MAX } else { x }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     clamp(150) + clamp(50)  # 100 + 50 = 150
 }

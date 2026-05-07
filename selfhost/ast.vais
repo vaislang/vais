@@ -60,111 +60,111 @@
 # ============================================================================
 
 # Item types (top-level declarations)
-F ITEM_FUNCTION() -> i64 = 1
-F ITEM_STRUCT() -> i64 = 2
-F ITEM_ENUM() -> i64 = 3
-F ITEM_TYPE_ALIAS() -> i64 = 4
-F ITEM_USE() -> i64 = 5
-F ITEM_TRAIT() -> i64 = 6
-F ITEM_IMPL() -> i64 = 7
+fn ITEM_FUNCTION() -> i64 = 1
+fn ITEM_STRUCT() -> i64 = 2
+fn ITEM_ENUM() -> i64 = 3
+fn ITEM_TYPE_ALIAS() -> i64 = 4
+fn ITEM_USE() -> i64 = 5
+fn ITEM_TRAIT() -> i64 = 6
+fn ITEM_IMPL() -> i64 = 7
 
 # Statement types
-F STMT_LET() -> i64 = 10
-F STMT_EXPR() -> i64 = 11
-F STMT_RETURN() -> i64 = 12
-F STMT_BREAK() -> i64 = 13
-F STMT_CONTINUE() -> i64 = 14
-F STMT_DEFER() -> i64 = 15
+fn STMT_LET() -> i64 = 10
+fn STMT_EXPR() -> i64 = 11
+fn STMT_RETURN() -> i64 = 12
+fn STMT_BREAK() -> i64 = 13
+fn STMT_CONTINUE() -> i64 = 14
+fn STMT_DEFER() -> i64 = 15
 
 # Expression types
-F EXPR_INT() -> i64 = 20
-F EXPR_FLOAT() -> i64 = 21
-F EXPR_BOOL() -> i64 = 22
-F EXPR_STRING() -> i64 = 23
-F EXPR_UNIT() -> i64 = 24
-F EXPR_IDENT() -> i64 = 25
-F EXPR_SELF_CALL() -> i64 = 26
-F EXPR_BINARY() -> i64 = 27
-F EXPR_UNARY() -> i64 = 28
-F EXPR_TERNARY() -> i64 = 29
-F EXPR_IF() -> i64 = 30
-F EXPR_LOOP() -> i64 = 31
-F EXPR_MATCH() -> i64 = 32
-F EXPR_CALL() -> i64 = 33
-F EXPR_METHOD_CALL() -> i64 = 34
-F EXPR_STATIC_CALL() -> i64 = 35
-F EXPR_FIELD() -> i64 = 36
-F EXPR_INDEX() -> i64 = 37
-F EXPR_ARRAY() -> i64 = 38
-F EXPR_TUPLE() -> i64 = 39
-F EXPR_STRUCT_LIT() -> i64 = 40
-F EXPR_RANGE() -> i64 = 41
-F EXPR_BLOCK() -> i64 = 42
-F EXPR_AWAIT() -> i64 = 43
-F EXPR_TRY() -> i64 = 44
-F EXPR_UNWRAP() -> i64 = 45
-F EXPR_REF() -> i64 = 46
-F EXPR_DEREF() -> i64 = 47
-F EXPR_ASSIGN() -> i64 = 48
-F EXPR_ASSIGN_OP() -> i64 = 49
-F EXPR_LAMBDA() -> i64 = 50
-F EXPR_SPAWN() -> i64 = 51
-F EXPR_WHILE() -> i64 = 52
+fn EXPR_INT() -> i64 = 20
+fn EXPR_FLOAT() -> i64 = 21
+fn EXPR_BOOL() -> i64 = 22
+fn EXPR_STRING() -> i64 = 23
+fn EXPR_UNIT() -> i64 = 24
+fn EXPR_IDENT() -> i64 = 25
+fn EXPR_SELF_CALL() -> i64 = 26
+fn EXPR_BINARY() -> i64 = 27
+fn EXPR_UNARY() -> i64 = 28
+fn EXPR_TERNARY() -> i64 = 29
+fn EXPR_IF() -> i64 = 30
+fn EXPR_LOOP() -> i64 = 31
+fn EXPR_MATCH() -> i64 = 32
+fn EXPR_CALL() -> i64 = 33
+fn EXPR_METHOD_CALL() -> i64 = 34
+fn EXPR_STATIC_CALL() -> i64 = 35
+fn EXPR_FIELD() -> i64 = 36
+fn EXPR_INDEX() -> i64 = 37
+fn EXPR_ARRAY() -> i64 = 38
+fn EXPR_TUPLE() -> i64 = 39
+fn EXPR_STRUCT_LIT() -> i64 = 40
+fn EXPR_RANGE() -> i64 = 41
+fn EXPR_BLOCK() -> i64 = 42
+fn EXPR_AWAIT() -> i64 = 43
+fn EXPR_TRY() -> i64 = 44
+fn EXPR_UNWRAP() -> i64 = 45
+fn EXPR_REF() -> i64 = 46
+fn EXPR_DEREF() -> i64 = 47
+fn EXPR_ASSIGN() -> i64 = 48
+fn EXPR_ASSIGN_OP() -> i64 = 49
+fn EXPR_LAMBDA() -> i64 = 50
+fn EXPR_SPAWN() -> i64 = 51
+fn EXPR_WHILE() -> i64 = 52
 
 # Type node types
-F TYPE_NAMED() -> i64 = 60
-F TYPE_ARRAY() -> i64 = 61
-F TYPE_MAP() -> i64 = 62
-F TYPE_TUPLE() -> i64 = 63
-F TYPE_OPTIONAL() -> i64 = 64
-F TYPE_RESULT() -> i64 = 65
-F TYPE_POINTER() -> i64 = 66
-F TYPE_REF() -> i64 = 67
-F TYPE_REF_MUT() -> i64 = 68
-F TYPE_FN() -> i64 = 69
-F TYPE_UNIT() -> i64 = 70
-F TYPE_INFER() -> i64 = 71
+fn TYPE_NAMED() -> i64 = 60
+fn TYPE_ARRAY() -> i64 = 61
+fn TYPE_MAP() -> i64 = 62
+fn TYPE_TUPLE() -> i64 = 63
+fn TYPE_OPTIONAL() -> i64 = 64
+fn TYPE_RESULT() -> i64 = 65
+fn TYPE_POINTER() -> i64 = 66
+fn TYPE_REF() -> i64 = 67
+fn TYPE_REF_MUT() -> i64 = 68
+fn TYPE_FN() -> i64 = 69
+fn TYPE_UNIT() -> i64 = 70
+fn TYPE_INFER() -> i64 = 71
 
 # Pattern types
-F PAT_WILDCARD() -> i64 = 80
-F PAT_IDENT() -> i64 = 81
-F PAT_LITERAL() -> i64 = 82
-F PAT_TUPLE() -> i64 = 83
-F PAT_STRUCT() -> i64 = 84
-F PAT_VARIANT() -> i64 = 85
-F PAT_RANGE() -> i64 = 86
-F PAT_OR() -> i64 = 87
+fn PAT_WILDCARD() -> i64 = 80
+fn PAT_IDENT() -> i64 = 81
+fn PAT_LITERAL() -> i64 = 82
+fn PAT_TUPLE() -> i64 = 83
+fn PAT_STRUCT() -> i64 = 84
+fn PAT_VARIANT() -> i64 = 85
+fn PAT_RANGE() -> i64 = 86
+fn PAT_OR() -> i64 = 87
 
 # Binary operators
-F BINOP_ADD() -> i64 = 1
-F BINOP_SUB() -> i64 = 2
-F BINOP_MUL() -> i64 = 3
-F BINOP_DIV() -> i64 = 4
-F BINOP_MOD() -> i64 = 5
-F BINOP_LT() -> i64 = 6
-F BINOP_LTE() -> i64 = 7
-F BINOP_GT() -> i64 = 8
-F BINOP_GTE() -> i64 = 9
-F BINOP_EQ() -> i64 = 10
-F BINOP_NEQ() -> i64 = 11
-F BINOP_AND() -> i64 = 12
-F BINOP_OR() -> i64 = 13
-F BINOP_BIT_AND() -> i64 = 14
-F BINOP_BIT_OR() -> i64 = 15
-F BINOP_BIT_XOR() -> i64 = 16
-F BINOP_SHL() -> i64 = 17
-F BINOP_SHR() -> i64 = 18
+fn BINOP_ADD() -> i64 = 1
+fn BINOP_SUB() -> i64 = 2
+fn BINOP_MUL() -> i64 = 3
+fn BINOP_DIV() -> i64 = 4
+fn BINOP_MOD() -> i64 = 5
+fn BINOP_LT() -> i64 = 6
+fn BINOP_LTE() -> i64 = 7
+fn BINOP_GT() -> i64 = 8
+fn BINOP_GTE() -> i64 = 9
+fn BINOP_EQ() -> i64 = 10
+fn BINOP_NEQ() -> i64 = 11
+fn BINOP_AND() -> i64 = 12
+fn BINOP_OR() -> i64 = 13
+fn BINOP_BIT_AND() -> i64 = 14
+fn BINOP_BIT_OR() -> i64 = 15
+fn BINOP_BIT_XOR() -> i64 = 16
+fn BINOP_SHL() -> i64 = 17
+fn BINOP_SHR() -> i64 = 18
 
 # Unary operators
-F UNOP_NEG() -> i64 = 1
-F UNOP_NOT() -> i64 = 2
-F UNOP_BIT_NOT() -> i64 = 3
+fn UNOP_NEG() -> i64 = 1
+fn UNOP_NOT() -> i64 = 2
+fn UNOP_BIT_NOT() -> i64 = 3
 
 # ============================================================================
 # String Interning - Store strings in a pool and reference by index
 # ============================================================================
 
-S StringPool {
+struct StringPool {
     data: i64,       # Pointer to concatenated string data
     offsets: i64,    # Array of (offset, len) pairs
     data_len: i64,   # Current data length
@@ -173,8 +173,8 @@ S StringPool {
     offset_cap: i64  # Offsets capacity
 }
 
-X StringPool {
-    F new(data_cap: i64, string_cap: i64) -> StringPool {
+impl StringPool {
+    fn new(data_cap: i64, string_cap: i64) -> StringPool {
         data := malloc(data_cap)
         offsets := malloc(string_cap * 16)
         StringPool {
@@ -187,7 +187,7 @@ X StringPool {
         }
     }
 
-    F intern(&self, ptr: i64, len: i64) -> i64 {
+    fn intern(&self, ptr: i64, len: i64) -> i64 {
         # Grow data if needed
         I self.data_len + len > self.data_cap {
             new_cap := (self.data_cap + len) * 2
@@ -197,7 +197,7 @@ X StringPool {
             self.data = new_data
             self.data_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         # Grow offsets if needed
         I self.count >= self.offset_cap {
@@ -208,7 +208,7 @@ X StringPool {
             self.offsets = new_offsets
             self.offset_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         # Copy string data
         memcpy(self.data + self.data_len, ptr, len)
@@ -224,18 +224,18 @@ X StringPool {
         idx
     }
 
-    F get_ptr(&self, idx: i64) -> i64 {
+    fn get_ptr(&self, idx: i64) -> i64 {
         entry_ptr := self.offsets + idx * 16
         offset := load_i64(entry_ptr)
         self.data + offset
     }
 
-    F get_len(&self, idx: i64) -> i64 {
+    fn get_len(&self, idx: i64) -> i64 {
         entry_ptr := self.offsets + idx * 16
         load_i64(entry_ptr + 8)
     }
 
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         free(self.data)
         free(self.offsets)
         1
@@ -246,7 +246,7 @@ X StringPool {
 # Expression Node (Flattened - all data fields inline)
 # ============================================================================
 
-S ExprNode {
+struct ExprNode {
     kind: i64,
     span_start: i64,
     span_end: i64,
@@ -277,167 +277,167 @@ S ExprNode {
     field5: i64
 }
 
-X ExprNode {
+impl ExprNode {
     # Size: 9 * 8 = 72 bytes
-    F size() -> i64 = 72
+    fn size() -> i64 = 72
 
     # Constructors for different expression types
-    F int_lit(value: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn int_lit(value: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_INT(), span_start: start, span_end: end,
         field0: value, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F float_lit(bits: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn float_lit(bits: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_FLOAT(), span_start: start, span_end: end,
         field0: bits, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F bool_lit(value: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn bool_lit(value: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_BOOL(), span_start: start, span_end: end,
         field0: value, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F string_lit(str_idx: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn string_lit(str_idx: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_STRING(), span_start: start, span_end: end,
         field0: str_idx, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F unit_lit(start: i64, end: i64) -> ExprNode = ExprNode {
+    fn unit_lit(start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_UNIT(), span_start: start, span_end: end,
         field0: 0, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F ident(str_idx: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn ident(str_idx: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_IDENT(), span_start: start, span_end: end,
         field0: str_idx, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F self_call(start: i64, end: i64) -> ExprNode = ExprNode {
+    fn self_call(start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_SELF_CALL(), span_start: start, span_end: end,
         field0: 0, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F binary(left: i64, right: i64, op: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn binary(left: i64, right: i64, op: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_BINARY(), span_start: start, span_end: end,
         field0: left, field1: right, field2: op, field3: 0, field4: 0, field5: 0
     }
 
-    F unary(expr: i64, op: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn unary(expr: i64, op: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_UNARY(), span_start: start, span_end: end,
         field0: expr, field1: op, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F call(func: i64, args: i64, args_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn call(func: i64, args: i64, args_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_CALL(), span_start: start, span_end: end,
         field0: func, field1: args, field2: args_len, field3: 0, field4: 0, field5: 0
     }
 
-    F method_call(recv: i64, method: i64, args: i64, args_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn method_call(recv: i64, method: i64, args: i64, args_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_METHOD_CALL(), span_start: start, span_end: end,
         field0: recv, field1: method, field2: args, field3: args_len, field4: 0, field5: 0
     }
 
-    F static_call(type_idx: i64, method: i64, args: i64, args_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn static_call(type_idx: i64, method: i64, args: i64, args_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_STATIC_CALL(), span_start: start, span_end: end,
         field0: type_idx, field1: method, field2: args, field3: args_len, field4: 0, field5: 0
     }
 
-    F field_access(expr: i64, field_idx: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn field_access(expr: i64, field_idx: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_FIELD(), span_start: start, span_end: end,
         field0: expr, field1: field_idx, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F index(expr: i64, index_expr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn index(expr: i64, index_expr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_INDEX(), span_start: start, span_end: end,
         field0: expr, field1: index_expr, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F if_expr(cond: i64, then_stmts: i64, then_len: i64, else_ptr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn if_expr(cond: i64, then_stmts: i64, then_len: i64, else_ptr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_IF(), span_start: start, span_end: end,
         field0: cond, field1: then_stmts, field2: then_len, field3: else_ptr, field4: 0, field5: 0
     }
 
-    F loop_expr(pattern: i64, iter: i64, body: i64, body_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn loop_expr(pattern: i64, iter: i64, body: i64, body_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_LOOP(), span_start: start, span_end: end,
         field0: pattern, field1: iter, field2: body, field3: body_len, field4: 0, field5: 0
     }
 
-    F while_expr(cond: i64, body: i64, body_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn while_expr(cond: i64, body: i64, body_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_WHILE(), span_start: start, span_end: end,
         field0: cond, field1: body, field2: body_len, field3: 0, field4: 0, field5: 0
     }
 
-    F match_expr(expr: i64, arms: i64, arms_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn match_expr(expr: i64, arms: i64, arms_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_MATCH(), span_start: start, span_end: end,
         field0: expr, field1: arms, field2: arms_len, field3: 0, field4: 0, field5: 0
     }
 
-    F assign(target: i64, value: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn assign(target: i64, value: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_ASSIGN(), span_start: start, span_end: end,
         field0: target, field1: value, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F assign_op(target: i64, value: i64, op: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn assign_op(target: i64, value: i64, op: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_ASSIGN_OP(), span_start: start, span_end: end,
         field0: target, field1: value, field2: op, field3: 0, field4: 0, field5: 0
     }
 
-    F array_lit(elements: i64, len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn array_lit(elements: i64, len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_ARRAY(), span_start: start, span_end: end,
         field0: elements, field1: len, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F tuple_lit(elements: i64, len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn tuple_lit(elements: i64, len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_TUPLE(), span_start: start, span_end: end,
         field0: elements, field1: len, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F struct_lit(name_idx: i64, fields: i64, fields_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn struct_lit(name_idx: i64, fields: i64, fields_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_STRUCT_LIT(), span_start: start, span_end: end,
         field0: name_idx, field1: fields, field2: fields_len, field3: 0, field4: 0, field5: 0
     }
 
-    F block_expr(stmts: i64, stmts_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn block_expr(stmts: i64, stmts_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_BLOCK(), span_start: start, span_end: end,
         field0: stmts, field1: stmts_len, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F range_expr(start_expr: i64, end_expr: i64, inclusive: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn range_expr(start_expr: i64, end_expr: i64, inclusive: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_RANGE(), span_start: start, span_end: end,
         field0: start_expr, field1: end_expr, field2: inclusive, field3: 0, field4: 0, field5: 0
     }
 
-    F await_expr(expr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn await_expr(expr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_AWAIT(), span_start: start, span_end: end,
         field0: expr, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F try_expr(expr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn try_expr(expr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_TRY(), span_start: start, span_end: end,
         field0: expr, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F unwrap_expr(expr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn unwrap_expr(expr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_UNWRAP(), span_start: start, span_end: end,
         field0: expr, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F ref_expr(expr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn ref_expr(expr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_REF(), span_start: start, span_end: end,
         field0: expr, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F deref_expr(expr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn deref_expr(expr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_DEREF(), span_start: start, span_end: end,
         field0: expr, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
     }
 
-    F lambda(params: i64, params_len: i64, body: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn lambda(params: i64, params_len: i64, body: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_LAMBDA(), span_start: start, span_end: end,
         field0: params, field1: params_len, field2: body, field3: 0, field4: 0, field5: 0
     }
 
-    F spawn_expr(expr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+    fn spawn_expr(expr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_SPAWN(), span_start: start, span_end: end,
         field0: expr, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
     }
@@ -447,7 +447,7 @@ X ExprNode {
 # Statement Node (Flattened)
 # ============================================================================
 
-S StmtNode {
+struct StmtNode {
     kind: i64,
     span_start: i64,
     span_end: i64,
@@ -463,30 +463,30 @@ S StmtNode {
     field3: i64
 }
 
-X StmtNode {
-    F size() -> i64 = 56
+impl StmtNode {
+    fn size() -> i64 = 56
 
-    F let_stmt(name_idx: i64, type_ptr: i64, value_ptr: i64, is_mut: i64, start: i64, end: i64) -> StmtNode = StmtNode {
+    fn let_stmt(name_idx: i64, type_ptr: i64, value_ptr: i64, is_mut: i64, start: i64, end: i64) -> StmtNode = StmtNode {
         kind: STMT_LET(), span_start: start, span_end: end,
         field0: name_idx, field1: type_ptr, field2: value_ptr, field3: is_mut
     }
 
-    F expr_stmt(expr_ptr: i64, start: i64, end: i64) -> StmtNode = StmtNode {
+    fn expr_stmt(expr_ptr: i64, start: i64, end: i64) -> StmtNode = StmtNode {
         kind: STMT_EXPR(), span_start: start, span_end: end,
         field0: expr_ptr, field1: 0, field2: 0, field3: 0
     }
 
-    F return_stmt(expr_ptr: i64, start: i64, end: i64) -> StmtNode = StmtNode {
+    fn return_stmt(expr_ptr: i64, start: i64, end: i64) -> StmtNode = StmtNode {
         kind: STMT_RETURN(), span_start: start, span_end: end,
         field0: expr_ptr, field1: 0, field2: 0, field3: 0
     }
 
-    F break_stmt(expr_ptr: i64, start: i64, end: i64) -> StmtNode = StmtNode {
+    fn break_stmt(expr_ptr: i64, start: i64, end: i64) -> StmtNode = StmtNode {
         kind: STMT_BREAK(), span_start: start, span_end: end,
         field0: expr_ptr, field1: 0, field2: 0, field3: 0
     }
 
-    F continue_stmt(start: i64, end: i64) -> StmtNode = StmtNode {
+    fn continue_stmt(start: i64, end: i64) -> StmtNode = StmtNode {
         kind: STMT_CONTINUE(), span_start: start, span_end: end,
         field0: 0, field1: 0, field2: 0, field3: 0
     }
@@ -496,7 +496,7 @@ X StmtNode {
 # Type Node (Flattened)
 # ============================================================================
 
-S TypeNode {
+struct TypeNode {
     kind: i64,
     span_start: i64,
     span_end: i64,
@@ -512,65 +512,65 @@ S TypeNode {
     field3: i64
 }
 
-X TypeNode {
-    F size() -> i64 = 56
+impl TypeNode {
+    fn size() -> i64 = 56
 
-    F named(name_idx: i64, generics_ptr: i64, generics_len: i64, start: i64, end: i64) -> TypeNode = TypeNode {
+    fn named(name_idx: i64, generics_ptr: i64, generics_len: i64, start: i64, end: i64) -> TypeNode = TypeNode {
         kind: TYPE_NAMED(), span_start: start, span_end: end,
         field0: name_idx, field1: generics_ptr, field2: generics_len, field3: 0
     }
 
-    F array(inner: i64, start: i64, end: i64) -> TypeNode = TypeNode {
+    fn array(inner: i64, start: i64, end: i64) -> TypeNode = TypeNode {
         kind: TYPE_ARRAY(), span_start: start, span_end: end,
         field0: inner, field1: 0, field2: 0, field3: 0
     }
 
-    F map(key: i64, value: i64, start: i64, end: i64) -> TypeNode = TypeNode {
+    fn map(key: i64, value: i64, start: i64, end: i64) -> TypeNode = TypeNode {
         kind: TYPE_MAP(), span_start: start, span_end: end,
         field0: key, field1: value, field2: 0, field3: 0
     }
 
-    F tuple(types_ptr: i64, types_len: i64, start: i64, end: i64) -> TypeNode = TypeNode {
+    fn tuple(types_ptr: i64, types_len: i64, start: i64, end: i64) -> TypeNode = TypeNode {
         kind: TYPE_TUPLE(), span_start: start, span_end: end,
         field0: types_ptr, field1: types_len, field2: 0, field3: 0
     }
 
-    F optional(inner: i64, start: i64, end: i64) -> TypeNode = TypeNode {
+    fn optional(inner: i64, start: i64, end: i64) -> TypeNode = TypeNode {
         kind: TYPE_OPTIONAL(), span_start: start, span_end: end,
         field0: inner, field1: 0, field2: 0, field3: 0
     }
 
-    F result(inner: i64, start: i64, end: i64) -> TypeNode = TypeNode {
+    fn result(inner: i64, start: i64, end: i64) -> TypeNode = TypeNode {
         kind: TYPE_RESULT(), span_start: start, span_end: end,
         field0: inner, field1: 0, field2: 0, field3: 0
     }
 
-    F pointer(inner: i64, start: i64, end: i64) -> TypeNode = TypeNode {
+    fn pointer(inner: i64, start: i64, end: i64) -> TypeNode = TypeNode {
         kind: TYPE_POINTER(), span_start: start, span_end: end,
         field0: inner, field1: 0, field2: 0, field3: 0
     }
 
-    F ref_type(inner: i64, start: i64, end: i64) -> TypeNode = TypeNode {
+    fn ref_type(inner: i64, start: i64, end: i64) -> TypeNode = TypeNode {
         kind: TYPE_REF(), span_start: start, span_end: end,
         field0: inner, field1: 0, field2: 0, field3: 0
     }
 
-    F ref_mut(inner: i64, start: i64, end: i64) -> TypeNode = TypeNode {
+    fn ref_mut(inner: i64, start: i64, end: i64) -> TypeNode = TypeNode {
         kind: TYPE_REF_MUT(), span_start: start, span_end: end,
         field0: inner, field1: 0, field2: 0, field3: 0
     }
 
-    F fn_type(params_ptr: i64, params_len: i64, ret_ptr: i64, start: i64, end: i64) -> TypeNode = TypeNode {
+    fn fn_type(params_ptr: i64, params_len: i64, ret_ptr: i64, start: i64, end: i64) -> TypeNode = TypeNode {
         kind: TYPE_FN(), span_start: start, span_end: end,
         field0: params_ptr, field1: params_len, field2: ret_ptr, field3: 0
     }
 
-    F unit_type(start: i64, end: i64) -> TypeNode = TypeNode {
+    fn unit_type(start: i64, end: i64) -> TypeNode = TypeNode {
         kind: TYPE_UNIT(), span_start: start, span_end: end,
         field0: 0, field1: 0, field2: 0, field3: 0
     }
 
-    F infer_type(start: i64, end: i64) -> TypeNode = TypeNode {
+    fn infer_type(start: i64, end: i64) -> TypeNode = TypeNode {
         kind: TYPE_INFER(), span_start: start, span_end: end,
         field0: 0, field1: 0, field2: 0, field3: 0
     }
@@ -580,7 +580,7 @@ X TypeNode {
 # Pattern Node (for match arms and destructuring)
 # ============================================================================
 
-S PatternNode {
+struct PatternNode {
     kind: i64,
     span_start: i64,
     span_end: i64,
@@ -599,45 +599,45 @@ S PatternNode {
     field3: i64
 }
 
-X PatternNode {
-    F size() -> i64 = 56
+impl PatternNode {
+    fn size() -> i64 = 56
 
-    F wildcard(start: i64, end: i64) -> PatternNode = PatternNode {
+    fn wildcard(start: i64, end: i64) -> PatternNode = PatternNode {
         kind: PAT_WILDCARD(), span_start: start, span_end: end,
         field0: 0, field1: 0, field2: 0, field3: 0
     }
 
-    F ident(name_idx: i64, start: i64, end: i64) -> PatternNode = PatternNode {
+    fn ident(name_idx: i64, start: i64, end: i64) -> PatternNode = PatternNode {
         kind: PAT_IDENT(), span_start: start, span_end: end,
         field0: name_idx, field1: 0, field2: 0, field3: 0
     }
 
-    F int_literal(value: i64, start: i64, end: i64) -> PatternNode = PatternNode {
+    fn int_literal(value: i64, start: i64, end: i64) -> PatternNode = PatternNode {
         kind: PAT_LITERAL(), span_start: start, span_end: end,
         field0: value, field1: 0, field2: 0, field3: 0
     }
 
-    F tuple_pat(patterns_ptr: i64, patterns_len: i64, start: i64, end: i64) -> PatternNode = PatternNode {
+    fn tuple_pat(patterns_ptr: i64, patterns_len: i64, start: i64, end: i64) -> PatternNode = PatternNode {
         kind: PAT_TUPLE(), span_start: start, span_end: end,
         field0: patterns_ptr, field1: patterns_len, field2: 0, field3: 0
     }
 
-    F struct_pat(name_idx: i64, fields_ptr: i64, fields_len: i64, start: i64, end: i64) -> PatternNode = PatternNode {
+    fn struct_pat(name_idx: i64, fields_ptr: i64, fields_len: i64, start: i64, end: i64) -> PatternNode = PatternNode {
         kind: PAT_STRUCT(), span_start: start, span_end: end,
         field0: name_idx, field1: fields_ptr, field2: fields_len, field3: 0
     }
 
-    F variant(name_idx: i64, patterns_ptr: i64, patterns_len: i64, start: i64, end: i64) -> PatternNode = PatternNode {
+    fn variant(name_idx: i64, patterns_ptr: i64, patterns_len: i64, start: i64, end: i64) -> PatternNode = PatternNode {
         kind: PAT_VARIANT(), span_start: start, span_end: end,
         field0: name_idx, field1: patterns_ptr, field2: patterns_len, field3: 0
     }
 
-    F range_pat(start_ptr: i64, end_ptr: i64, inclusive: i64, start: i64, end: i64) -> PatternNode = PatternNode {
+    fn range_pat(start_ptr: i64, end_ptr: i64, inclusive: i64, start: i64, end: i64) -> PatternNode = PatternNode {
         kind: PAT_RANGE(), span_start: start, span_end: end,
         field0: start_ptr, field1: end_ptr, field2: inclusive, field3: 0
     }
 
-    F or_pat(patterns_ptr: i64, patterns_len: i64, start: i64, end: i64) -> PatternNode = PatternNode {
+    fn or_pat(patterns_ptr: i64, patterns_len: i64, start: i64, end: i64) -> PatternNode = PatternNode {
         kind: PAT_OR(), span_start: start, span_end: end,
         field0: patterns_ptr, field1: patterns_len, field2: 0, field3: 0
     }
@@ -647,7 +647,7 @@ X PatternNode {
 # Function Parameter
 # ============================================================================
 
-S Param {
+struct Param {
     name_idx: i64,
     type_ptr: i64,
     is_mut: i64,
@@ -655,19 +655,19 @@ S Param {
     span_end: i64
 }
 
-X Param {
-    F new(name_idx: i64, type_ptr: i64, is_mut: i64, start: i64, end: i64) -> Param = Param {
+impl Param {
+    fn new(name_idx: i64, type_ptr: i64, is_mut: i64, start: i64, end: i64) -> Param = Param {
         name_idx: name_idx, type_ptr: type_ptr, is_mut: is_mut, span_start: start, span_end: end
     }
 
-    F size() -> i64 = 40
+    fn size() -> i64 = 40
 }
 
 # ============================================================================
 # Generic Parameter
 # ============================================================================
 
-S GenericParam {
+struct GenericParam {
     name_idx: i64,
     bounds_ptr: i64,
     bounds_len: i64,
@@ -675,19 +675,19 @@ S GenericParam {
     span_end: i64
 }
 
-X GenericParam {
-    F new(name_idx: i64, start: i64, end: i64) -> GenericParam = GenericParam {
+impl GenericParam {
+    fn new(name_idx: i64, start: i64, end: i64) -> GenericParam = GenericParam {
         name_idx: name_idx, bounds_ptr: 0, bounds_len: 0, span_start: start, span_end: end
     }
 
-    F size() -> i64 = 40
+    fn size() -> i64 = 40
 }
 
 # ============================================================================
 # Struct Field
 # ============================================================================
 
-S Field {
+struct Field {
     name_idx: i64,
     type_ptr: i64,
     is_pub: i64,
@@ -695,19 +695,19 @@ S Field {
     span_end: i64
 }
 
-X Field {
-    F new(name_idx: i64, type_ptr: i64, is_pub: i64, start: i64, end: i64) -> Field = Field {
+impl Field {
+    fn new(name_idx: i64, type_ptr: i64, is_pub: i64, start: i64, end: i64) -> Field = Field {
         name_idx: name_idx, type_ptr: type_ptr, is_pub: is_pub, span_start: start, span_end: end
     }
 
-    F size() -> i64 = 40
+    fn size() -> i64 = 40
 }
 
 # ============================================================================
 # Function Definition
 # ============================================================================
 
-S FunctionDef {
+struct FunctionDef {
     name_idx: i64,
     generics_ptr: i64,
     generics_len: i64,
@@ -724,8 +724,8 @@ S FunctionDef {
     span_end: i64
 }
 
-X FunctionDef {
-    F new(name_idx: i64, start: i64, end: i64) -> FunctionDef = FunctionDef {
+impl FunctionDef {
+    fn new(name_idx: i64, start: i64, end: i64) -> FunctionDef = FunctionDef {
         name_idx: name_idx,
         generics_ptr: 0, generics_len: 0,
         params_ptr: 0, params_len: 0,
@@ -735,14 +735,14 @@ X FunctionDef {
         span_start: start, span_end: end
     }
 
-    F size() -> i64 = 112
+    fn size() -> i64 = 112
 }
 
 # ============================================================================
 # Struct Definition
 # ============================================================================
 
-S StructDef {
+struct StructDef {
     name_idx: i64,
     generics_ptr: i64,
     generics_len: i64,
@@ -753,8 +753,8 @@ S StructDef {
     span_end: i64
 }
 
-X StructDef {
-    F new(name_idx: i64, start: i64, end: i64) -> StructDef = StructDef {
+impl StructDef {
+    fn new(name_idx: i64, start: i64, end: i64) -> StructDef = StructDef {
         name_idx: name_idx,
         generics_ptr: 0, generics_len: 0,
         fields_ptr: 0, fields_len: 0,
@@ -762,14 +762,14 @@ X StructDef {
         span_start: start, span_end: end
     }
 
-    F size() -> i64 = 64
+    fn size() -> i64 = 64
 }
 
 # ============================================================================
 # Enum Variant
 # ============================================================================
 
-S Variant {
+struct Variant {
     name_idx: i64,
     fields_kind: i64,  # 0 = unit, 1 = tuple, 2 = struct
     fields_ptr: i64,
@@ -778,21 +778,21 @@ S Variant {
     span_end: i64
 }
 
-X Variant {
-    F new(name_idx: i64, start: i64, end: i64) -> Variant = Variant {
+impl Variant {
+    fn new(name_idx: i64, start: i64, end: i64) -> Variant = Variant {
         name_idx: name_idx,
         fields_kind: 0, fields_ptr: 0, fields_len: 0,
         span_start: start, span_end: end
     }
 
-    F size() -> i64 = 48
+    fn size() -> i64 = 48
 }
 
 # ============================================================================
 # Enum Definition
 # ============================================================================
 
-S EnumDef {
+struct EnumDef {
     name_idx: i64,
     generics_ptr: i64,
     generics_len: i64,
@@ -803,8 +803,8 @@ S EnumDef {
     span_end: i64
 }
 
-X EnumDef {
-    F new(name_idx: i64, start: i64, end: i64) -> EnumDef = EnumDef {
+impl EnumDef {
+    fn new(name_idx: i64, start: i64, end: i64) -> EnumDef = EnumDef {
         name_idx: name_idx,
         generics_ptr: 0, generics_len: 0,
         variants_ptr: 0, variants_len: 0,
@@ -812,14 +812,14 @@ X EnumDef {
         span_start: start, span_end: end
     }
 
-    F size() -> i64 = 64
+    fn size() -> i64 = 64
 }
 
 # ============================================================================
 # Impl Block
 # ============================================================================
 
-S ImplDef {
+struct ImplDef {
     target_type_ptr: i64,
     trait_name_idx: i64,   # -1 if no trait
     generics_ptr: i64,
@@ -830,8 +830,8 @@ S ImplDef {
     span_end: i64
 }
 
-X ImplDef {
-    F new(target_type_ptr: i64, start: i64, end: i64) -> ImplDef = ImplDef {
+impl ImplDef {
+    fn new(target_type_ptr: i64, start: i64, end: i64) -> ImplDef = ImplDef {
         target_type_ptr: target_type_ptr,
         trait_name_idx: 0 - 1,
         generics_ptr: 0, generics_len: 0,
@@ -839,14 +839,14 @@ X ImplDef {
         span_start: start, span_end: end
     }
 
-    F size() -> i64 = 64
+    fn size() -> i64 = 64
 }
 
 # ============================================================================
 # Trait Definition
 # ============================================================================
 
-S TraitDef {
+struct TraitDef {
     name_idx: i64,
     generics_ptr: i64,
     generics_len: i64,
@@ -859,8 +859,8 @@ S TraitDef {
     span_end: i64
 }
 
-X TraitDef {
-    F new(name_idx: i64, start: i64, end: i64) -> TraitDef = TraitDef {
+impl TraitDef {
+    fn new(name_idx: i64, start: i64, end: i64) -> TraitDef = TraitDef {
         name_idx: name_idx,
         generics_ptr: 0, generics_len: 0,
         super_traits_ptr: 0, super_traits_len: 0,
@@ -869,14 +869,14 @@ X TraitDef {
         span_start: start, span_end: end
     }
 
-    F size() -> i64 = 80
+    fn size() -> i64 = 80
 }
 
 # ============================================================================
 # Use Statement
 # ============================================================================
 
-S UseDef {
+struct UseDef {
     path_ptr: i64,
     path_len: i64,
     alias_idx: i64,   # -1 if no alias
@@ -884,21 +884,21 @@ S UseDef {
     span_end: i64
 }
 
-X UseDef {
-    F new(start: i64, end: i64) -> UseDef = UseDef {
+impl UseDef {
+    fn new(start: i64, end: i64) -> UseDef = UseDef {
         path_ptr: 0, path_len: 0,
         alias_idx: 0 - 1,
         span_start: start, span_end: end
     }
 
-    F size() -> i64 = 40
+    fn size() -> i64 = 40
 }
 
 # ============================================================================
 # Type Alias
 # ============================================================================
 
-S TypeAliasDef {
+struct TypeAliasDef {
     name_idx: i64,
     generics_ptr: i64,
     generics_len: i64,
@@ -908,8 +908,8 @@ S TypeAliasDef {
     span_end: i64
 }
 
-X TypeAliasDef {
-    F new(name_idx: i64, start: i64, end: i64) -> TypeAliasDef = TypeAliasDef {
+impl TypeAliasDef {
+    fn new(name_idx: i64, start: i64, end: i64) -> TypeAliasDef = TypeAliasDef {
         name_idx: name_idx,
         generics_ptr: 0, generics_len: 0,
         type_ptr: 0,
@@ -917,14 +917,14 @@ X TypeAliasDef {
         span_start: start, span_end: end
     }
 
-    F size() -> i64 = 56
+    fn size() -> i64 = 56
 }
 
 # ============================================================================
 # Attribute
 # ============================================================================
 
-S Attribute {
+struct Attribute {
     name_idx: i64,
     args_ptr: i64,     # Pointer to array of arg string indices
     args_len: i64,
@@ -932,39 +932,39 @@ S Attribute {
     span_end: i64
 }
 
-X Attribute {
-    F new(name_idx: i64, start: i64, end: i64) -> Attribute = Attribute {
+impl Attribute {
+    fn new(name_idx: i64, start: i64, end: i64) -> Attribute = Attribute {
         name_idx: name_idx, args_ptr: 0, args_len: 0,
         span_start: start, span_end: end
     }
 
-    F size() -> i64 = 40
+    fn size() -> i64 = 40
 }
 
 # ============================================================================
 # Top-level Item
 # ============================================================================
 
-S Item {
+struct Item {
     kind: i64,
     data_ptr: i64,
     span_start: i64,
     span_end: i64
 }
 
-X Item {
-    F new(kind: i64, data_ptr: i64, start: i64, end: i64) -> Item = Item {
+impl Item {
+    fn new(kind: i64, data_ptr: i64, start: i64, end: i64) -> Item = Item {
         kind: kind, data_ptr: data_ptr, span_start: start, span_end: end
     }
 
-    F size() -> i64 = 32
+    fn size() -> i64 = 32
 }
 
 # ============================================================================
 # Match Arm
 # ============================================================================
 
-S MatchArm {
+struct MatchArm {
     pattern_ptr: i64,
     guard_ptr: i64,
     body_ptr: i64,
@@ -972,20 +972,20 @@ S MatchArm {
     span_end: i64
 }
 
-X MatchArm {
-    F new(pattern_ptr: i64, body_ptr: i64, start: i64, end: i64) -> MatchArm = MatchArm {
+impl MatchArm {
+    fn new(pattern_ptr: i64, body_ptr: i64, start: i64, end: i64) -> MatchArm = MatchArm {
         pattern_ptr: pattern_ptr, guard_ptr: 0, body_ptr: body_ptr,
         span_start: start, span_end: end
     }
 
-    F size() -> i64 = 40
+    fn size() -> i64 = 40
 }
 
 # ============================================================================
 # If-Else chain
 # ============================================================================
 
-S IfElse {
+struct IfElse {
     kind: i64,           # 0 = else, 1 = else-if
     cond_ptr: i64,
     stmts_ptr: i64,
@@ -993,35 +993,35 @@ S IfElse {
     next_ptr: i64
 }
 
-X IfElse {
-    F else_block(stmts_ptr: i64, stmts_len: i64) -> IfElse = IfElse {
+impl IfElse {
+    fn else_block(stmts_ptr: i64, stmts_len: i64) -> IfElse = IfElse {
         kind: 0, cond_ptr: 0, stmts_ptr: stmts_ptr, stmts_len: stmts_len, next_ptr: 0
     }
 
-    F else_if(cond_ptr: i64, stmts_ptr: i64, stmts_len: i64, next_ptr: i64) -> IfElse = IfElse {
+    fn else_if(cond_ptr: i64, stmts_ptr: i64, stmts_len: i64, next_ptr: i64) -> IfElse = IfElse {
         kind: 1, cond_ptr: cond_ptr, stmts_ptr: stmts_ptr, stmts_len: stmts_len, next_ptr: next_ptr
     }
 
-    F size() -> i64 = 40
+    fn size() -> i64 = 40
 }
 
 # ============================================================================
 # Struct Field Initializer
 # ============================================================================
 
-S FieldInit {
+struct FieldInit {
     name_idx: i64,
     value_ptr: i64,
     span_start: i64,
     span_end: i64
 }
 
-X FieldInit {
-    F new(name_idx: i64, value_ptr: i64, start: i64, end: i64) -> FieldInit = FieldInit {
+impl FieldInit {
+    fn new(name_idx: i64, value_ptr: i64, start: i64, end: i64) -> FieldInit = FieldInit {
         name_idx: name_idx, value_ptr: value_ptr, span_start: start, span_end: end
     }
 
-    F size() -> i64 = 32
+    fn size() -> i64 = 32
 }
 
 # ============================================================================
@@ -1029,7 +1029,7 @@ X FieldInit {
 # Uses StringPool stored as raw pointer to avoid nested struct field access
 # ============================================================================
 
-S Module {
+struct Module {
     items_ptr: i64,
     items_len: i64,
     items_cap: i64,
@@ -1042,8 +1042,8 @@ S Module {
     sp_offset_cap: i64
 }
 
-X Module {
-    F new(item_cap: i64) -> Module {
+impl Module {
+    fn new(item_cap: i64) -> Module {
         items_ptr := malloc(item_cap * 32)
         sp_data := malloc(4096)
         sp_offsets := malloc(256 * 16)
@@ -1061,7 +1061,7 @@ X Module {
     }
 
     # Add item by passing fields directly (avoids struct parameter bug)
-    F add_item_fields(&self, kind: i64, data_ptr: i64, span_start: i64, span_end: i64) -> i64 {
+    fn add_item_fields(&self, kind: i64, data_ptr: i64, span_start: i64, span_end: i64) -> i64 {
         I self.items_len >= self.items_cap {
             new_cap := self.items_cap * 2
             new_ptr := malloc(new_cap * 32)
@@ -1070,7 +1070,7 @@ X Module {
             self.items_ptr = new_ptr
             self.items_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         ptr := self.items_ptr + self.items_len * 32
         store_i64(ptr + 0, kind)
@@ -1083,7 +1083,7 @@ X Module {
         idx
     }
 
-    F get_item(&self, idx: i64) -> Item {
+    fn get_item(&self, idx: i64) -> Item {
         ptr := self.items_ptr + idx * 32
         Item {
             kind: load_i64(ptr + 0),
@@ -1093,7 +1093,7 @@ X Module {
         }
     }
 
-    F intern_string(&self, ptr: i64, len: i64) -> i64 {
+    fn intern_string(&self, ptr: i64, len: i64) -> i64 {
         # Grow data if needed
         I self.sp_data_len + len > self.sp_data_cap {
             new_cap := (self.sp_data_cap + len) * 2
@@ -1103,7 +1103,7 @@ X Module {
             self.sp_data = new_data
             self.sp_data_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         # Grow offsets if needed
         I self.sp_count >= self.sp_offset_cap {
@@ -1114,7 +1114,7 @@ X Module {
             self.sp_offsets = new_offsets
             self.sp_offset_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         # Copy string data
         memcpy(self.sp_data + self.sp_data_len, ptr, len)
@@ -1130,18 +1130,18 @@ X Module {
         idx
     }
 
-    F get_string_ptr(&self, idx: i64) -> i64 {
+    fn get_string_ptr(&self, idx: i64) -> i64 {
         entry_ptr := self.sp_offsets + idx * 16
         offset := load_i64(entry_ptr)
         self.sp_data + offset
     }
 
-    F get_string_len(&self, idx: i64) -> i64 {
+    fn get_string_len(&self, idx: i64) -> i64 {
         entry_ptr := self.sp_offsets + idx * 16
         load_i64(entry_ptr + 8)
     }
 
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         free(self.items_ptr)
         free(self.sp_data)
         free(self.sp_offsets)
@@ -1153,7 +1153,7 @@ X Module {
 # Trait Bound (for generic constraints)
 # ============================================================================
 
-S TraitBound {
+struct TraitBound {
     trait_name_idx: i64,
     generics_ptr: i64,    # Pointer to array of generic type indices
     generics_len: i64,
@@ -1161,20 +1161,20 @@ S TraitBound {
     span_end: i64
 }
 
-X TraitBound {
-    F new(trait_name_idx: i64, start: i64, end: i64) -> TraitBound = TraitBound {
+impl TraitBound {
+    fn new(trait_name_idx: i64, start: i64, end: i64) -> TraitBound = TraitBound {
         trait_name_idx: trait_name_idx, generics_ptr: 0, generics_len: 0,
         span_start: start, span_end: end
     }
 
-    F size() -> i64 = 40
+    fn size() -> i64 = 40
 }
 
 # ============================================================================
 # Where Clause (additional trait constraints)
 # ============================================================================
 
-S WhereClause {
+struct WhereClause {
     type_param_idx: i64,   # Index of the type parameter being constrained
     bounds_ptr: i64,        # Pointer to array of TraitBound
     bounds_len: i64,
@@ -1182,13 +1182,13 @@ S WhereClause {
     span_end: i64
 }
 
-X WhereClause {
-    F new(type_param_idx: i64, start: i64, end: i64) -> WhereClause = WhereClause {
+impl WhereClause {
+    fn new(type_param_idx: i64, start: i64, end: i64) -> WhereClause = WhereClause {
         type_param_idx: type_param_idx, bounds_ptr: 0, bounds_len: 0,
         span_start: start, span_end: end
     }
 
-    F size() -> i64 = 40
+    fn size() -> i64 = 40
 }
 
 # ============================================================================
@@ -1196,7 +1196,7 @@ X WhereClause {
 # ============================================================================
 
 # Print indentation
-F print_indent(depth: i64) -> i64 {
+fn print_indent(depth: i64) -> i64 {
     i := 0
     LW i < depth {
         puts("  ")
@@ -1206,94 +1206,94 @@ F print_indent(depth: i64) -> i64 {
 }
 
 # Print expression kind name
-F print_expr_kind(kind: i64) -> i64 {
+fn print_expr_kind(kind: i64) -> i64 {
     I kind == EXPR_INT() { puts("INT") }
-    EL I kind == EXPR_FLOAT() { puts("FLOAT") }
-    EL I kind == EXPR_BOOL() { puts("BOOL") }
-    EL I kind == EXPR_STRING() { puts("STRING") }
-    EL I kind == EXPR_UNIT() { puts("UNIT") }
-    EL I kind == EXPR_IDENT() { puts("IDENT") }
-    EL I kind == EXPR_SELF_CALL() { puts("SELF_CALL") }
-    EL I kind == EXPR_BINARY() { puts("BINARY") }
-    EL I kind == EXPR_UNARY() { puts("UNARY") }
-    EL I kind == EXPR_TERNARY() { puts("TERNARY") }
-    EL I kind == EXPR_IF() { puts("IF") }
-    EL I kind == EXPR_LOOP() { puts("LOOP") }
-    EL I kind == EXPR_WHILE() { puts("WHILE") }
-    EL I kind == EXPR_MATCH() { puts("MATCH") }
-    EL I kind == EXPR_CALL() { puts("CALL") }
-    EL I kind == EXPR_METHOD_CALL() { puts("METHOD_CALL") }
-    EL I kind == EXPR_STATIC_CALL() { puts("STATIC_CALL") }
-    EL I kind == EXPR_FIELD() { puts("FIELD") }
-    EL I kind == EXPR_INDEX() { puts("INDEX") }
-    EL I kind == EXPR_ARRAY() { puts("ARRAY") }
-    EL I kind == EXPR_TUPLE() { puts("TUPLE") }
-    EL I kind == EXPR_STRUCT_LIT() { puts("STRUCT_LIT") }
-    EL I kind == EXPR_RANGE() { puts("RANGE") }
-    EL I kind == EXPR_BLOCK() { puts("BLOCK") }
-    EL I kind == EXPR_AWAIT() { puts("AWAIT") }
-    EL I kind == EXPR_TRY() { puts("TRY") }
-    EL I kind == EXPR_UNWRAP() { puts("UNWRAP") }
-    EL I kind == EXPR_REF() { puts("REF") }
-    EL I kind == EXPR_DEREF() { puts("DEREF") }
-    EL I kind == EXPR_ASSIGN() { puts("ASSIGN") }
-    EL I kind == EXPR_ASSIGN_OP() { puts("ASSIGN_OP") }
-    EL I kind == EXPR_LAMBDA() { puts("LAMBDA") }
-    EL I kind == EXPR_SPAWN() { puts("SPAWN") }
-    EL { puts("UNKNOWN") }
+    else I kind == EXPR_FLOAT() { puts("FLOAT") }
+    else I kind == EXPR_BOOL() { puts("BOOL") }
+    else I kind == EXPR_STRING() { puts("STRING") }
+    else I kind == EXPR_UNIT() { puts("UNIT") }
+    else I kind == EXPR_IDENT() { puts("IDENT") }
+    else I kind == EXPR_SELF_CALL() { puts("SELF_CALL") }
+    else I kind == EXPR_BINARY() { puts("BINARY") }
+    else I kind == EXPR_UNARY() { puts("UNARY") }
+    else I kind == EXPR_TERNARY() { puts("TERNARY") }
+    else I kind == EXPR_IF() { puts("IF") }
+    else I kind == EXPR_LOOP() { puts("LOOP") }
+    else I kind == EXPR_WHILE() { puts("WHILE") }
+    else I kind == EXPR_MATCH() { puts("MATCH") }
+    else I kind == EXPR_CALL() { puts("CALL") }
+    else I kind == EXPR_METHOD_CALL() { puts("METHOD_CALL") }
+    else I kind == EXPR_STATIC_CALL() { puts("STATIC_CALL") }
+    else I kind == EXPR_FIELD() { puts("FIELD") }
+    else I kind == EXPR_INDEX() { puts("INDEX") }
+    else I kind == EXPR_ARRAY() { puts("ARRAY") }
+    else I kind == EXPR_TUPLE() { puts("TUPLE") }
+    else I kind == EXPR_STRUCT_LIT() { puts("STRUCT_LIT") }
+    else I kind == EXPR_RANGE() { puts("RANGE") }
+    else I kind == EXPR_BLOCK() { puts("BLOCK") }
+    else I kind == EXPR_AWAIT() { puts("AWAIT") }
+    else I kind == EXPR_TRY() { puts("TRY") }
+    else I kind == EXPR_UNWRAP() { puts("UNWRAP") }
+    else I kind == EXPR_REF() { puts("REF") }
+    else I kind == EXPR_DEREF() { puts("DEREF") }
+    else I kind == EXPR_ASSIGN() { puts("ASSIGN") }
+    else I kind == EXPR_ASSIGN_OP() { puts("ASSIGN_OP") }
+    else I kind == EXPR_LAMBDA() { puts("LAMBDA") }
+    else I kind == EXPR_SPAWN() { puts("SPAWN") }
+    else { puts("UNKNOWN") }
     0
 }
 
 # Print statement kind name
-F print_stmt_kind(kind: i64) -> i64 {
+fn print_stmt_kind(kind: i64) -> i64 {
     I kind == STMT_LET() { puts("LET") }
-    EL I kind == STMT_EXPR() { puts("EXPR") }
-    EL I kind == STMT_RETURN() { puts("RETURN") }
-    EL I kind == STMT_BREAK() { puts("BREAK") }
-    EL I kind == STMT_CONTINUE() { puts("CONTINUE") }
-    EL { puts("UNKNOWN") }
+    else I kind == STMT_EXPR() { puts("EXPR") }
+    else I kind == STMT_RETURN() { puts("RETURN") }
+    else I kind == STMT_BREAK() { puts("BREAK") }
+    else I kind == STMT_CONTINUE() { puts("CONTINUE") }
+    else { puts("UNKNOWN") }
     0
 }
 
 # Print item kind name
-F print_item_kind(kind: i64) -> i64 {
+fn print_item_kind(kind: i64) -> i64 {
     I kind == ITEM_FUNCTION() { puts("FUNCTION") }
-    EL I kind == ITEM_STRUCT() { puts("STRUCT") }
-    EL I kind == ITEM_ENUM() { puts("ENUM") }
-    EL I kind == ITEM_TYPE_ALIAS() { puts("TYPE_ALIAS") }
-    EL I kind == ITEM_USE() { puts("USE") }
-    EL I kind == ITEM_TRAIT() { puts("TRAIT") }
-    EL I kind == ITEM_IMPL() { puts("IMPL") }
-    EL { puts("UNKNOWN") }
+    else I kind == ITEM_STRUCT() { puts("STRUCT") }
+    else I kind == ITEM_ENUM() { puts("ENUM") }
+    else I kind == ITEM_TYPE_ALIAS() { puts("TYPE_ALIAS") }
+    else I kind == ITEM_USE() { puts("USE") }
+    else I kind == ITEM_TRAIT() { puts("TRAIT") }
+    else I kind == ITEM_IMPL() { puts("IMPL") }
+    else { puts("UNKNOWN") }
     0
 }
 
 # Print binary operator name
-F print_binop(op: i64) -> i64 {
+fn print_binop(op: i64) -> i64 {
     I op == BINOP_ADD() { puts("+") }
-    EL I op == BINOP_SUB() { puts("-") }
-    EL I op == BINOP_MUL() { puts("*") }
-    EL I op == BINOP_DIV() { puts("/") }
-    EL I op == BINOP_MOD() { puts("%") }
-    EL I op == BINOP_LT() { puts("<") }
-    EL I op == BINOP_LTE() { puts("<=") }
-    EL I op == BINOP_GT() { puts(">") }
-    EL I op == BINOP_GTE() { puts(">=") }
-    EL I op == BINOP_EQ() { puts("==") }
-    EL I op == BINOP_NEQ() { puts("!=") }
-    EL I op == BINOP_AND() { puts("&&") }
-    EL I op == BINOP_OR() { puts("||") }
-    EL I op == BINOP_BIT_AND() { puts("&") }
-    EL I op == BINOP_BIT_OR() { puts("|") }
-    EL I op == BINOP_BIT_XOR() { puts("^") }
-    EL I op == BINOP_SHL() { puts("<<") }
-    EL I op == BINOP_SHR() { puts(">>") }
-    EL { puts("?") }
+    else I op == BINOP_SUB() { puts("-") }
+    else I op == BINOP_MUL() { puts("*") }
+    else I op == BINOP_DIV() { puts("/") }
+    else I op == BINOP_MOD() { puts("%") }
+    else I op == BINOP_LT() { puts("<") }
+    else I op == BINOP_LTE() { puts("<=") }
+    else I op == BINOP_GT() { puts(">") }
+    else I op == BINOP_GTE() { puts(">=") }
+    else I op == BINOP_EQ() { puts("==") }
+    else I op == BINOP_NEQ() { puts("!=") }
+    else I op == BINOP_AND() { puts("&&") }
+    else I op == BINOP_OR() { puts("||") }
+    else I op == BINOP_BIT_AND() { puts("&") }
+    else I op == BINOP_BIT_OR() { puts("|") }
+    else I op == BINOP_BIT_XOR() { puts("^") }
+    else I op == BINOP_SHL() { puts("<<") }
+    else I op == BINOP_SHR() { puts(">>") }
+    else { puts("?") }
     0
 }
 
 # Print ExprNode (simplified, for debugging)
-F print_expr(expr_ptr: i64, pool_ptr: i64, depth: i64) -> i64 {
+fn print_expr(expr_ptr: i64, pool_ptr: i64, depth: i64) -> i64 {
     print_indent(depth)
     expr_kind := load_i64(expr_ptr)
     print_expr_kind(expr_kind)
@@ -1318,7 +1318,7 @@ F print_expr(expr_ptr: i64, pool_ptr: i64, depth: i64) -> i64 {
         puts("right:\n")
         print_expr(right_ptr, pool_ptr, depth + 2)
         0
-    } EL { 0 }
+    } else { 0 }
 
     0
 }
@@ -1331,7 +1331,7 @@ F print_expr(expr_ptr: i64, pool_ptr: i64, depth: i64) -> i64 {
 # Context pointer can be used to accumulate results or carry state
 
 # Visit all items in a module
-F visit_module_items(mod_ptr: i64, visitor_fn: i64, ctx: i64) -> i64 {
+fn visit_module_items(mod_ptr: i64, visitor_fn: i64, ctx: i64) -> i64 {
     items_ptr := load_i64(mod_ptr)
     items_len := load_i64(mod_ptr + 8)
 
@@ -1346,7 +1346,7 @@ F visit_module_items(mod_ptr: i64, visitor_fn: i64, ctx: i64) -> i64 {
 }
 
 # Visit all expressions in a tree (depth-first)
-F visit_expr_tree(expr_ptr: i64, visitor_fn: i64, ctx: i64) -> i64 {
+fn visit_expr_tree(expr_ptr: i64, visitor_fn: i64, ctx: i64) -> i64 {
     # Call visitor on current node
     # Then recursively visit children based on expression kind
 
@@ -1359,14 +1359,14 @@ F visit_expr_tree(expr_ptr: i64, visitor_fn: i64, ctx: i64) -> i64 {
         visit_expr_tree(left_ptr, visitor_fn, ctx)
         visit_expr_tree(right_ptr, visitor_fn, ctx)
         0
-    } EL { 0 }
+    } else { 0 }
 
     # Visit unary expression child
     I expr_kind == EXPR_UNARY() {
         child_ptr := load_i64(expr_ptr + 24)
         visit_expr_tree(child_ptr, visitor_fn, ctx)
         0
-    } EL { 0 }
+    } else { 0 }
 
     # Visit call arguments
     I expr_kind == EXPR_CALL() {
@@ -1383,7 +1383,7 @@ F visit_expr_tree(expr_ptr: i64, visitor_fn: i64, ctx: i64) -> i64 {
             i = i + 1
         }
         0
-    } EL { 0 }
+    } else { 0 }
 
     0
 }
@@ -1392,25 +1392,25 @@ F visit_expr_tree(expr_ptr: i64, visitor_fn: i64, ctx: i64) -> i64 {
 # Binary operator precedence
 # ============================================================================
 
-F binop_precedence(op: i64) -> i64 {
+fn binop_precedence(op: i64) -> i64 {
     I op == BINOP_OR() { 1 }
-    EL I op == BINOP_AND() { 2 }
-    EL I op == BINOP_BIT_OR() { 3 }
-    EL I op == BINOP_BIT_XOR() { 4 }
-    EL I op == BINOP_BIT_AND() { 5 }
-    EL I op == BINOP_EQ() || op == BINOP_NEQ() { 6 }
-    EL I op == BINOP_LT() || op == BINOP_LTE() || op == BINOP_GT() || op == BINOP_GTE() { 7 }
-    EL I op == BINOP_SHL() || op == BINOP_SHR() { 8 }
-    EL I op == BINOP_ADD() || op == BINOP_SUB() { 9 }
-    EL I op == BINOP_MUL() || op == BINOP_DIV() || op == BINOP_MOD() { 10 }
-    EL { 0 }
+    else I op == BINOP_AND() { 2 }
+    else I op == BINOP_BIT_OR() { 3 }
+    else I op == BINOP_BIT_XOR() { 4 }
+    else I op == BINOP_BIT_AND() { 5 }
+    else I op == BINOP_EQ() || op == BINOP_NEQ() { 6 }
+    else I op == BINOP_LT() || op == BINOP_LTE() || op == BINOP_GT() || op == BINOP_GTE() { 7 }
+    else I op == BINOP_SHL() || op == BINOP_SHR() { 8 }
+    else I op == BINOP_ADD() || op == BINOP_SUB() { 9 }
+    else I op == BINOP_MUL() || op == BINOP_DIV() || op == BINOP_MOD() { 10 }
+    else { 0 }
 }
 
 # ============================================================================
 # Test function (renamed from main to allow module import)
 # ============================================================================
 
-F test_ast_main() -> i64 {
+fn test_ast_main() -> i64 {
     puts("AST module loaded")
 
     # Test Module creation
@@ -1427,7 +1427,7 @@ F test_ast_main() -> i64 {
     idx := m.intern_string(test_str, 5)
     I idx == 0 {
         puts("String interning: OK")
-    } EL {
+    } else {
         puts("String interning: FAIL")
     }
 
@@ -1436,7 +1436,7 @@ F test_ast_main() -> i64 {
     len := m.get_string_len(0)
     I len == 5 {
         puts("String retrieval: OK")
-    } EL {
+    } else {
         puts("String retrieval: FAIL")
     }
 
@@ -1444,7 +1444,7 @@ F test_ast_main() -> i64 {
     expr := ExprNode.int_lit(42, 0, 2)
     I expr.kind == EXPR_INT() && expr.field0 == 42 {
         puts("ExprNode int_lit: OK")
-    } EL {
+    } else {
         puts("ExprNode int_lit: FAIL")
     }
 
@@ -1452,7 +1452,7 @@ F test_ast_main() -> i64 {
     bin_expr := ExprNode.binary(0, 0, BINOP_ADD(), 0, 5)
     I bin_expr.kind == EXPR_BINARY() && bin_expr.field2 == BINOP_ADD() {
         puts("ExprNode binary: OK")
-    } EL {
+    } else {
         puts("ExprNode binary: FAIL")
     }
 
@@ -1460,7 +1460,7 @@ F test_ast_main() -> i64 {
     stmt := StmtNode.return_stmt(0, 0, 1)
     I stmt.kind == STMT_RETURN() {
         puts("StmtNode return: OK")
-    } EL {
+    } else {
         puts("StmtNode return: FAIL")
     }
 
@@ -1468,7 +1468,7 @@ F test_ast_main() -> i64 {
     ty := TypeNode.named(0, 0, 0, 0, 3)
     I ty.kind == TYPE_NAMED() {
         puts("TypeNode named: OK")
-    } EL {
+    } else {
         puts("TypeNode named: FAIL")
     }
 
@@ -1476,7 +1476,7 @@ F test_ast_main() -> i64 {
     func := FunctionDef.new(0, 0, 10)
     I func.name_idx == 0 && func.span_end == 10 {
         puts("FunctionDef: OK")
-    } EL {
+    } else {
         puts("FunctionDef: FAIL")
     }
 
@@ -1484,7 +1484,7 @@ F test_ast_main() -> i64 {
     m.add_item_fields(ITEM_FUNCTION(), 0, 0, 10)
     I m.items_len == 1 {
         puts("Module.add_item_fields: OK")
-    } EL {
+    } else {
         puts("Module.add_item_fields: FAIL")
     }
 
@@ -1492,14 +1492,14 @@ F test_ast_main() -> i64 {
     pat := PatternNode.wildcard(0, 1)
     I pat.kind == PAT_WILDCARD() {
         puts("PatternNode wildcard: OK")
-    } EL {
+    } else {
         puts("PatternNode wildcard: FAIL")
     }
 
     # Test binop_precedence
     I binop_precedence(BINOP_MUL()) > binop_precedence(BINOP_ADD()) {
         puts("Operator precedence: OK")
-    } EL {
+    } else {
         puts("Operator precedence: FAIL")
     }
 
@@ -1507,7 +1507,7 @@ F test_ast_main() -> i64 {
     trait_bound := TraitBound.new(0, 0, 5)
     I trait_bound.trait_name_idx == 0 && trait_bound.span_end == 5 {
         puts("TraitBound: OK")
-    } EL {
+    } else {
         puts("TraitBound: FAIL")
     }
 
@@ -1515,7 +1515,7 @@ F test_ast_main() -> i64 {
     where_clause := WhereClause.new(0, 0, 10)
     I where_clause.type_param_idx == 0 && where_clause.span_end == 10 {
         puts("WhereClause: OK")
-    } EL {
+    } else {
         puts("WhereClause: FAIL")
     }
 

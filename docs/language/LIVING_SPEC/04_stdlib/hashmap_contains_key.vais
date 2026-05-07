@@ -1,11 +1,11 @@
 # LIVING_SPEC/04_stdlib/hashmap_contains_key.vais
 # Key concept: HashMap.get(k)이 Some/None 반환하는지로 key 존재 확인.
 
-F main() -> i64 {
+fn main() -> i64 {
     m: HashMap<i64, i64> = HashMap::new()
     m.insert(1, 100)
     m.insert(2, 200)
-    M m.get(1) {
+    match m.get(1) {
         Some(v) => v,
         None => -1
     }

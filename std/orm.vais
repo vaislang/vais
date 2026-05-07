@@ -35,7 +35,7 @@ C SQL_MAX_VALUES: i64 = 64
 # Column Definition
 # ============================================
 
-S Column {
+struct Column {
     name: str,
     col_type: i64,
     is_primary: i64,
@@ -43,8 +43,8 @@ S Column {
     default_value: str
 }
 
-X Column {
-    F new(name: str, col_type: i64) -> Column {
+impl Column {
+    fn new(name: str, col_type: i64) -> Column {
         Column {
             name: name,
             col_type: col_type,
@@ -54,29 +54,29 @@ X Column {
         }
     }
 
-    F integer(name: str) -> Column {
+    fn integer(name: str) -> Column {
         Column::new(name, COL_INTEGER)
     }
 
-    F text(name: str) -> Column {
+    fn text(name: str) -> Column {
         Column::new(name, COL_TEXT)
     }
 
-    F real(name: str) -> Column {
+    fn real(name: str) -> Column {
         Column::new(name, COL_REAL)
     }
 
-    F blob(name: str) -> Column {
+    fn blob(name: str) -> Column {
         Column::new(name, COL_BLOB)
     }
 
-    F boolean(name: str) -> Column {
+    fn boolean(name: str) -> Column {
         Column::new(name, COL_BOOLEAN)
     }
 
     # Get SQL type string for this column type
-    F type_str(&self) -> str {
-        M self.col_type {
+    fn type_str(&self) -> str {
+        match self.col_type {
             1 => "INTEGER",
             2 => "TEXT",
             3 => "REAL",
@@ -87,7 +87,7 @@ X Column {
     }
 
     # Write column definition SQL to buffer at pos, returns new pos
-    F write_def(&self, buf: i64, pos: i64) -> i64 {
+    fn write_def(&self, buf: i64, pos: i64) -> i64 {
         p := mut pos
         p = p + __str_copy_to(buf + p, self.name)
         store_byte(buf + p, 32)  # space
@@ -116,14 +116,14 @@ X Column {
 # Schema Definition
 # ============================================
 
-S Schema {
+struct Schema {
     table_name: str,
     columns: i64,        # Pointer to array of Column data
     column_count: i64
 }
 
-X Schema {
-    F new(table_name: str) -> Schema {
+impl Schema {
+    fn new(table_name: str) -> Schema {
         # Allocate space for column array (each column: 5 fields * 8 bytes = 40 bytes)
         columns := __malloc(SQL_MAX_COLUMNS * 40)
         Schema {
@@ -134,9 +134,9 @@ X Schema {
     }
 
     # Add a column to the schema
-    F add_column(&self, name: str, col_type: i64) -> Schema {
+    fn add_column(&self, name: str, col_type: i64) -> Schema {
         I self.column_count >= SQL_MAX_COLUMNS {
-            R self
+            return self
         }
         offset := self.column_count * 40
         __store_ptr(self.columns + offset, name as i64)
@@ -149,7 +149,7 @@ X Schema {
     }
 
     # Mark the last added column as primary key
-    F primary_key(&self) -> Schema {
+    fn primary_key(&self) -> Schema {
         I self.column_count > 0 {
             offset := (self.column_count - 1) * 40
             __store_i64(self.columns + offset + 16, 1)
@@ -158,7 +158,7 @@ X Schema {
     }
 
     # Mark the last added column as nullable
-    F nullable(&self) -> Schema {
+    fn nullable(&self) -> Schema {
         I self.column_count > 0 {
             offset := (self.column_count - 1) * 40
             __store_i64(self.columns + offset + 24, 1)
@@ -167,7 +167,7 @@ X Schema {
     }
 
     # Set default value on the last added column
-    F with_default(&self, val: str) -> Schema {
+    fn with_default(&self, val: str) -> Schema {
         I self.column_count > 0 {
             offset := (self.column_count - 1) * 40
             __store_ptr(self.columns + offset + 32, val as i64)
@@ -176,8 +176,8 @@ X Schema {
     }
 
     # Get column type string from type id
-    F col_type_str(col_type: i64) -> str {
-        M col_type {
+    fn col_type_str(col_type: i64) -> str {
+        match col_type {
             1 => "INTEGER",
             2 => "TEXT",
             3 => "REAL",
@@ -188,7 +188,7 @@ X Schema {
     }
 
     # Generate CREATE TABLE SQL
-    F create_table(&self) -> str {
+    fn create_table(&self) -> str {
         buf := __malloc(SQL_BUFFER_SIZE)
         pos := mut 0
 
@@ -242,7 +242,7 @@ X Schema {
     }
 
     # Generate DROP TABLE SQL
-    F drop_table(&self) -> str {
+    fn drop_table(&self) -> str {
         buf := __malloc(SQL_BUFFER_SIZE)
         pos := mut 0
         pos = pos + __str_copy_to(buf + pos, "DROP TABLE IF EXISTS ")
@@ -254,12 +254,12 @@ X Schema {
     }
 
     # Get column count
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.column_count
     }
 
     # Free memory
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         I self.columns != 0 {
             __free(self.columns)
         }
@@ -271,14 +271,14 @@ X Schema {
 # WhereClause - condition storage
 # ============================================
 
-S WhereClause {
+struct WhereClause {
     items: i64,        # Pointer to array: [connector, column, operator, value]
     count: i64,
     capacity: i64
 }
 
-X WhereClause {
-    F new() -> WhereClause {
+impl WhereClause {
+    fn new() -> WhereClause {
         capacity := SQL_MAX_WHERE
         items := __malloc(capacity * 32)  # 4 pointers * 8 bytes = 32 per clause
         WhereClause {
@@ -290,9 +290,9 @@ X WhereClause {
 
     # Add a where condition
     # connector: "AND", "OR", "" (first)
-    F add(&self, connector: str, column: str, operator: str, value: str) -> i64 {
+    fn add(&self, connector: str, column: str, operator: str, value: str) -> i64 {
         I self.count >= self.capacity {
-            R -1
+            return -1
         }
         offset := self.count * 32
         __store_ptr(self.items + offset, connector as i64)
@@ -304,9 +304,9 @@ X WhereClause {
     }
 
     # Write WHERE clause to buffer, returns new pos
-    F write_to(&self, buf: i64, pos: i64) -> i64 {
+    fn write_to(&self, buf: i64, pos: i64) -> i64 {
         I self.count == 0 {
-            R pos
+            return pos
         }
 
         p := mut pos
@@ -346,7 +346,7 @@ X WhereClause {
     }
 
     # Free memory
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         I self.items != 0 {
             __free(self.items)
         }
@@ -358,7 +358,7 @@ X WhereClause {
 # QueryBuilder - Fluent SQL Query Construction
 # ============================================
 
-S QueryBuilder {
+struct QueryBuilder {
     query_type: i64,
     table: str,
     columns: i64,        # Pointer to column name array
@@ -372,8 +372,8 @@ S QueryBuilder {
     offset_val: i64
 }
 
-X QueryBuilder {
-    F new() -> QueryBuilder {
+impl QueryBuilder {
+    fn new() -> QueryBuilder {
         columns := __malloc(SQL_MAX_COLUMNS * 8)
         values := __malloc(SQL_MAX_VALUES * 8)
         QueryBuilder {
@@ -392,7 +392,7 @@ X QueryBuilder {
     }
 
     # Set table and query type to SELECT, with column list
-    F select(cols: str) -> QueryBuilder {
+    fn select(cols: str) -> QueryBuilder {
         qb := QueryBuilder::new()
         qb.query_type = QUERY_SELECT
         # Store columns string as the first entry for simple usage
@@ -402,68 +402,68 @@ X QueryBuilder {
     }
 
     # Set the FROM table
-    F from(&self, table: str) -> QueryBuilder {
+    fn from(&self, table: str) -> QueryBuilder {
         self.table = table
         self
     }
 
     # WHERE column = value
-    F where_eq(&self, column: str, value: str) -> QueryBuilder {
+    fn where_eq(&self, column: str, value: str) -> QueryBuilder {
         I self.where_clause.count == 0 {
             self.where_clause.add("", column, "=", value)
-        } EL {
+        } else {
             self.where_clause.add("AND", column, "=", value)
         }
         self
     }
 
     # WHERE column > value
-    F where_gt(&self, column: str, value: str) -> QueryBuilder {
+    fn where_gt(&self, column: str, value: str) -> QueryBuilder {
         I self.where_clause.count == 0 {
             self.where_clause.add("", column, ">", value)
-        } EL {
+        } else {
             self.where_clause.add("AND", column, ">", value)
         }
         self
     }
 
     # WHERE column < value
-    F where_lt(&self, column: str, value: str) -> QueryBuilder {
+    fn where_lt(&self, column: str, value: str) -> QueryBuilder {
         I self.where_clause.count == 0 {
             self.where_clause.add("", column, "<", value)
-        } EL {
+        } else {
             self.where_clause.add("AND", column, "<", value)
         }
         self
     }
 
     # AND column = value
-    F and_eq(&self, column: str, value: str) -> QueryBuilder {
+    fn and_eq(&self, column: str, value: str) -> QueryBuilder {
         self.where_clause.add("AND", column, "=", value)
         self
     }
 
     # OR column = value
-    F or_eq(&self, column: str, value: str) -> QueryBuilder {
+    fn or_eq(&self, column: str, value: str) -> QueryBuilder {
         self.where_clause.add("OR", column, "=", value)
         self
     }
 
     # ORDER BY column direction
-    F order_by(&self, column: str, direction: str) -> QueryBuilder {
+    fn order_by(&self, column: str, direction: str) -> QueryBuilder {
         self.order_col = column
         self.order_dir = direction
         self
     }
 
     # LIMIT n
-    F limit(&self, n: i64) -> QueryBuilder {
+    fn limit(&self, n: i64) -> QueryBuilder {
         self.limit_val = n
         self
     }
 
     # OFFSET n
-    F offset(&self, n: i64) -> QueryBuilder {
+    fn offset(&self, n: i64) -> QueryBuilder {
         self.offset_val = n
         self
     }
@@ -471,7 +471,7 @@ X QueryBuilder {
     # Build an INSERT query
     # cols: comma-separated column names
     # vals: comma-separated values (will be quoted)
-    F insert(table: str, cols: str, vals: str) -> QueryBuilder {
+    fn insert(table: str, cols: str, vals: str) -> QueryBuilder {
         qb := QueryBuilder::new()
         qb.query_type = QUERY_INSERT
         qb.table = table
@@ -484,7 +484,7 @@ X QueryBuilder {
 
     # Build an UPDATE query
     # set_clause: e.g. "name = 'Alice', age = 30"
-    F update(table: str, set_clause: str) -> QueryBuilder {
+    fn update(table: str, set_clause: str) -> QueryBuilder {
         qb := QueryBuilder::new()
         qb.query_type = QUERY_UPDATE
         qb.table = table
@@ -494,7 +494,7 @@ X QueryBuilder {
     }
 
     # Build a DELETE query
-    F delete(table: str) -> QueryBuilder {
+    fn delete(table: str) -> QueryBuilder {
         qb := QueryBuilder::new()
         qb.query_type = QUERY_DELETE
         qb.table = table
@@ -502,18 +502,18 @@ X QueryBuilder {
     }
 
     # Build the final SQL string
-    F build(&self) -> str {
+    fn build(&self) -> str {
         buf := __malloc(SQL_BUFFER_SIZE)
         pos := mut 0
 
-        M self.query_type {
+        match self.query_type {
             1 => {
                 # SELECT
                 pos = pos + __str_copy_to(buf + pos, "SELECT ")
                 I self.column_count > 0 {
                     col_str := __load_ptr(self.columns) as str
                     pos = pos + __str_copy_to(buf + pos, col_str)
-                } EL {
+                } else {
                     store_byte(buf + pos, 42)  # *
                     pos = pos + 1
                 }
@@ -599,7 +599,7 @@ X QueryBuilder {
     }
 
     # Free memory
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         I self.columns != 0 {
             __free(self.columns)
         }
@@ -615,15 +615,15 @@ X QueryBuilder {
 # Migration Support (placeholders)
 # ============================================
 
-S Migration {
+struct Migration {
     version: i64,
     name: str,
     up_sql: str,
     down_sql: str
 }
 
-X Migration {
-    F new(version: i64, name: str, up_sql: str, down_sql: str) -> Migration {
+impl Migration {
+    fn new(version: i64, name: str, up_sql: str, down_sql: str) -> Migration {
         Migration {
             version: version,
             name: name,
@@ -633,24 +633,24 @@ X Migration {
     }
 
     # Get the up migration SQL
-    F migrate_up(&self) -> str {
+    fn migrate_up(&self) -> str {
         self.up_sql
     }
 
     # Get the down migration SQL
-    F migrate_down(&self) -> str {
+    fn migrate_down(&self) -> str {
         self.down_sql
     }
 }
 
-S MigrationRunner {
+struct MigrationRunner {
     migrations: i64,     # Pointer to array of Migration pointers
     count: i64,
     capacity: i64
 }
 
-X MigrationRunner {
-    F new() -> MigrationRunner {
+impl MigrationRunner {
+    fn new() -> MigrationRunner {
         capacity := 64
         migrations := __malloc(capacity * 8)
         MigrationRunner {
@@ -661,9 +661,9 @@ X MigrationRunner {
     }
 
     # Add a migration
-    F add(&self, migration: Migration) -> MigrationRunner {
+    fn add(&self, migration: Migration) -> MigrationRunner {
         I self.count >= self.capacity {
-            R self
+            return self
         }
         # Store migration data (copy the 4 fields = 32 bytes)
         m_ptr := __malloc(32)
@@ -677,7 +677,7 @@ X MigrationRunner {
     }
 
     # Get all up-migration SQL statements concatenated
-    F migrate_up_all(&self) -> str {
+    fn migrate_up_all(&self) -> str {
         buf := __malloc(SQL_BUFFER_SIZE * 4)
         pos := mut 0
         i := mut 0
@@ -696,7 +696,7 @@ X MigrationRunner {
     }
 
     # Get all down-migration SQL statements (in reverse order)
-    F migrate_down_all(&self) -> str {
+    fn migrate_down_all(&self) -> str {
         buf := __malloc(SQL_BUFFER_SIZE * 4)
         pos := mut 0
         i := mut self.count - 1
@@ -715,12 +715,12 @@ X MigrationRunner {
     }
 
     # Get migration count
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.count
     }
 
     # Free memory
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         i := mut 0
         LW i < self.count {
             m_ptr := __load_ptr(self.migrations + i * 8)
@@ -741,37 +741,37 @@ X MigrationRunner {
 # ============================================
 
 # Create a new schema for a table
-F schema(table_name: str) -> Schema {
+fn schema(table_name: str) -> Schema {
     Schema::new(table_name)
 }
 
 # Create a SELECT query builder
-F select_from(columns: str, table: str) -> QueryBuilder {
+fn select_from(columns: str, table: str) -> QueryBuilder {
     QueryBuilder::select(columns).from(table)
 }
 
 # Create an INSERT query builder
-F insert_into(table: str, cols: str, vals: str) -> QueryBuilder {
+fn insert_into(table: str, cols: str, vals: str) -> QueryBuilder {
     QueryBuilder::insert(table, cols, vals)
 }
 
 # Create an UPDATE query builder
-F update_table(table: str, set_clause: str) -> QueryBuilder {
+fn update_table(table: str, set_clause: str) -> QueryBuilder {
     QueryBuilder::update(table, set_clause)
 }
 
 # Create a DELETE query builder
-F delete_from(table: str) -> QueryBuilder {
+fn delete_from(table: str) -> QueryBuilder {
     QueryBuilder::delete(table)
 }
 
 # Create a new migration
-F migration(version: i64, name: str, up_sql: str, down_sql: str) -> Migration {
+fn migration(version: i64, name: str, up_sql: str, down_sql: str) -> Migration {
     Migration::new(version, name, up_sql, down_sql)
 }
 
 # Create a new migration runner
-F migration_runner() -> MigrationRunner {
+fn migration_runner() -> MigrationRunner {
     MigrationRunner::new()
 }
 
@@ -780,25 +780,25 @@ F migration_runner() -> MigrationRunner {
 # ============================================
 
 # SQL string helpers (from orm_runtime.c)
-X F __sql_escape(input: str) -> str
-X F __sql_quote(input: str) -> str
-X F __sql_build_select(table: str, columns: str, where_clause: str, order: str, limit_val: i64) -> str
-X F __sql_build_insert(table: str, columns: str, values: str) -> str
-X F __sql_build_update(table: str, set_clause: str, where_clause: str) -> str
-X F __sql_build_delete(table: str, where_clause: str) -> str
-X F __sql_build_create_table(table: str, column_defs: str) -> str
+impl fn __sql_escape(input: str) -> str
+impl fn __sql_quote(input: str) -> str
+impl fn __sql_build_select(table: str, columns: str, where_clause: str, order: str, limit_val: i64) -> str
+impl fn __sql_build_insert(table: str, columns: str, values: str) -> str
+impl fn __sql_build_update(table: str, set_clause: str, where_clause: str) -> str
+impl fn __sql_build_delete(table: str, where_clause: str) -> str
+impl fn __sql_build_create_table(table: str, column_defs: str) -> str
 
 # String operations
-X F __strlen(s: str) -> i64
-X F __str_copy_to(dst: i64, src: str) -> i64
-X F __str_eq(a: str, b: str) -> i64
-X F __i64_to_str(dst: i64, value: i64) -> i64
+impl fn __strlen(s: str) -> i64
+impl fn __str_copy_to(dst: i64, src: str) -> i64
+impl fn __str_eq(a: str, b: str) -> i64
+impl fn __i64_to_str(dst: i64, value: i64) -> i64
 
 # Memory operations
-X F __malloc(size: i64) -> i64
-X F __free(ptr: i64) -> i64
-X F __memcpy(dst: i64, src: i64, len: i64) -> i64
-X F __store_ptr(ptr: i64, value: i64) -> i64
-X F __store_i64(ptr: i64, value: i64) -> i64
-X F __load_ptr(ptr: i64) -> i64
-X F __load_i64(ptr: i64) -> i64
+impl fn __malloc(size: i64) -> i64
+impl fn __free(ptr: i64) -> i64
+impl fn __memcpy(dst: i64, src: i64, len: i64) -> i64
+impl fn __store_ptr(ptr: i64, value: i64) -> i64
+impl fn __store_i64(ptr: i64, value: i64) -> i64
+impl fn __load_ptr(ptr: i64) -> i64
+impl fn __load_i64(ptr: i64) -> i64

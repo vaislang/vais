@@ -1,22 +1,22 @@
 # LIVING_SPEC/01_keywords/W_trait_default_method.vais
 # Key concept: W trait에 default 구현 포함 — impl에서 override 가능.
 
-W Describable {
-    F describe(self) -> i64 {
+trait Describable {
+    fn describe(self) -> i64 {
         # default: 0 반환
         0
     }
 }
 
-S Thing { id: i64 }
+struct Thing { id: i64 }
 
-X Thing: Describable {
-    F describe(self) -> i64 {
+impl Thing: Describable {
+    fn describe(self) -> i64 {
         self.id * 2
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     t := Thing { id: 5 }
     t.describe()  # 10
 }

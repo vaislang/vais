@@ -2,7 +2,7 @@
 # Key concept: Phase 3.13 / B.2 — `s.char_at(i)` returns `u8` (byte at index).
 # Resolved via inkwell str-method dispatch (B.2, 2026-04-21).
 
-F main() -> i64 {
+fn main() -> i64 {
     s := "hello"
     s.char_at(1) as i64
 }

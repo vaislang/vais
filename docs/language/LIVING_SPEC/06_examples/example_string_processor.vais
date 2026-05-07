@@ -2,34 +2,34 @@
 # Key concept: 문자열 분석 apps — Vec<str>, Option, LF 순회.
 # Target concepts: Vec<str>, Option, LF, M, F/S/X
 
-S StringStats {
+struct StringStats {
     total_count: i64,
     total_len: i64,
     max_len: i64,
     min_len: i64
 }
 
-X StringStats {
-    F empty(self) -> StringStats {
+impl StringStats {
+    fn empty(self) -> StringStats {
         StringStats { total_count: 0, total_len: 0, max_len: 0, min_len: 999999 }
     }
 }
 
-F empty_stats() -> StringStats {
+fn empty_stats() -> StringStats {
     StringStats { total_count: 0, total_len: 0, max_len: 0, min_len: 999999 }
 }
 
-F analyze(strs: Vec<str>) -> StringStats {
+fn analyze(strs: Vec<str>) -> StringStats {
     stats := mut empty_stats()
     LF i: 0..strs.len() {
-        M strs.get(i) {
+        match strs.get(i) {
             Some(s) => {
                 len := s.len()
                 stats = StringStats {
                     total_count: stats.total_count + 1,
                     total_len: stats.total_len + len,
-                    max_len: I len > stats.max_len { len } EL { stats.max_len },
-                    min_len: I len < stats.min_len { len } EL { stats.min_len }
+                    max_len: I len > stats.max_len { len } else { stats.max_len },
+                    min_len: I len < stats.min_len { len } else { stats.min_len }
                 }
             },
             None => {}
@@ -38,16 +38,16 @@ F analyze(strs: Vec<str>) -> StringStats {
     stats
 }
 
-F count_strings(strs: Vec<str>) -> i64 {
+fn count_strings(strs: Vec<str>) -> i64 {
     strs.len()
 }
 
-F avg_len(strs: Vec<str>) -> i64 {
+fn avg_len(strs: Vec<str>) -> i64 {
     n := strs.len()
-    I n == 0 { R 0 }
+    I n == 0 { return 0 }
     total := mut 0
     LF i: 0..n {
-        M strs.get(i) {
+        match strs.get(i) {
             Some(s) => { total = total + s.len() },
             None => {}
         }
@@ -55,7 +55,7 @@ F avg_len(strs: Vec<str>) -> i64 {
     total / n
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     strs: Vec<str> = Vec::new()
     strs.push("hello")
     strs.push("world")

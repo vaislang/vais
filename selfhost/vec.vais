@@ -10,7 +10,7 @@
 # ============================================================================
 
 # Create a new empty Vec with default capacity 8
-F vec_new() -> i64 {
+fn vec_new() -> i64 {
     v := malloc(24)
     data := malloc(64)    # 8 * 8 bytes
     store_i64(v, data)
@@ -20,7 +20,7 @@ F vec_new() -> i64 {
 }
 
 # Create a new Vec with specified initial capacity
-F vec_with_cap(cap: i64) -> i64 {
+fn vec_with_cap(cap: i64) -> i64 {
     v := malloc(24)
     data := malloc(cap * 8)
     store_i64(v, data)
@@ -33,12 +33,12 @@ F vec_with_cap(cap: i64) -> i64 {
 # Accessors
 # ============================================================================
 
-F vec_data(v: i64) -> i64 = load_i64(v)
-F vec_len(v: i64) -> i64 = load_i64(v + 8)
-F vec_cap(v: i64) -> i64 = load_i64(v + 16)
+fn vec_data(v: i64) -> i64 = load_i64(v)
+fn vec_len(v: i64) -> i64 = load_i64(v + 8)
+fn vec_cap(v: i64) -> i64 = load_i64(v + 16)
 
-F vec_is_empty(v: i64) -> i64 {
-    I vec_len(v) == 0 { 1 } EL { 0 }
+fn vec_is_empty(v: i64) -> i64 {
+    I vec_len(v) == 0 { 1 } else { 0 }
 }
 
 # ============================================================================
@@ -46,20 +46,20 @@ F vec_is_empty(v: i64) -> i64 {
 # ============================================================================
 
 # Get element at index (no bounds check)
-F vec_get(v: i64, idx: i64) -> i64 {
+fn vec_get(v: i64, idx: i64) -> i64 {
     data := load_i64(v)
     load_i64(data + idx * 8)
 }
 
 # Set element at index (no bounds check)
-F vec_set(v: i64, idx: i64, val: i64) -> i64 {
+fn vec_set(v: i64, idx: i64, val: i64) -> i64 {
     data := load_i64(v)
     store_i64(data + idx * 8, val)
     0
 }
 
 # Get element with bounds check, returns Option (opt_some/opt_none)
-F vec_get_checked(v: i64, idx: i64) -> i64 {
+fn vec_get_checked(v: i64, idx: i64) -> i64 {
     len := vec_len(v)
     I idx >= 0 {
         I idx < len {
@@ -70,14 +70,14 @@ F vec_get_checked(v: i64, idx: i64) -> i64 {
             store_i64(opt, 0)
             store_i64(opt + 8, val)
             opt
-        } EL {
+        } else {
             # Return opt_none inline
             opt := malloc(16)
             store_i64(opt, 1)
             store_i64(opt + 8, 0)
             opt
         }
-    } EL {
+    } else {
         opt := malloc(16)
         store_i64(opt, 1)
         store_i64(opt + 8, 0)
@@ -86,10 +86,10 @@ F vec_get_checked(v: i64, idx: i64) -> i64 {
 }
 
 # Get first element
-F vec_first(v: i64) -> i64 = vec_get(v, 0)
+fn vec_first(v: i64) -> i64 = vec_get(v, 0)
 
 # Get last element
-F vec_last(v: i64) -> i64 {
+fn vec_last(v: i64) -> i64 {
     len := vec_len(v)
     vec_get(v, len - 1)
 }
@@ -98,7 +98,7 @@ F vec_last(v: i64) -> i64 {
 # Growth
 # ============================================================================
 
-F vec_grow(v: i64) -> i64 {
+fn vec_grow(v: i64) -> i64 {
     old_data := load_i64(v)
     old_len := load_i64(v + 8)
     old_cap := load_i64(v + 16)
@@ -111,7 +111,7 @@ F vec_grow(v: i64) -> i64 {
     0
 }
 
-F vec_ensure_cap(v: i64, needed: i64) -> i64 {
+fn vec_ensure_cap(v: i64, needed: i64) -> i64 {
     cap := load_i64(v + 16)
     I needed > cap {
         old_data := load_i64(v)
@@ -123,7 +123,7 @@ F vec_ensure_cap(v: i64, needed: i64) -> i64 {
         store_i64(v, new_data)
         store_i64(v + 16, new_cap)
         0
-    } EL { 0 }
+    } else { 0 }
 }
 
 # ============================================================================
@@ -131,13 +131,13 @@ F vec_ensure_cap(v: i64, needed: i64) -> i64 {
 # ============================================================================
 
 # Push element to end
-F vec_push(v: i64, val: i64) -> i64 {
+fn vec_push(v: i64, val: i64) -> i64 {
     len := load_i64(v + 8)
     cap := load_i64(v + 16)
     I len >= cap {
         vec_grow(v)
         0
-    } EL { 0 }
+    } else { 0 }
     data := load_i64(v)
     store_i64(data + len * 8, val)
     store_i64(v + 8, len + 1)
@@ -145,27 +145,27 @@ F vec_push(v: i64, val: i64) -> i64 {
 }
 
 # Pop element from end, returns the value (undefined if empty)
-F vec_pop(v: i64) -> i64 {
+fn vec_pop(v: i64) -> i64 {
     len := load_i64(v + 8)
     I len > 0 {
         new_len := len - 1
         store_i64(v + 8, new_len)
         data := load_i64(v)
         load_i64(data + new_len * 8)
-    } EL {
+    } else {
         puts("panic: vec_pop on empty vec")
         0
     }
 }
 
 # Insert element at index, shifting subsequent elements right
-F vec_insert(v: i64, idx: i64, val: i64) -> i64 {
+fn vec_insert(v: i64, idx: i64, val: i64) -> i64 {
     len := load_i64(v + 8)
     cap := load_i64(v + 16)
     I len >= cap {
         vec_grow(v)
         0
-    } EL { 0 }
+    } else { 0 }
     data := load_i64(v)
     # Shift elements right from end to idx
     i := mut len
@@ -180,7 +180,7 @@ F vec_insert(v: i64, idx: i64, val: i64) -> i64 {
 }
 
 # Remove element at index, shifting subsequent elements left
-F vec_remove(v: i64, idx: i64) -> i64 {
+fn vec_remove(v: i64, idx: i64) -> i64 {
     len := load_i64(v + 8)
     data := load_i64(v)
     val := load_i64(data + idx * 8)
@@ -196,7 +196,7 @@ F vec_remove(v: i64, idx: i64) -> i64 {
 }
 
 # Swap remove: O(1) removal by swapping with last element
-F vec_swap_remove(v: i64, idx: i64) -> i64 {
+fn vec_swap_remove(v: i64, idx: i64) -> i64 {
     len := load_i64(v + 8)
     data := load_i64(v)
     val := load_i64(data + idx * 8)
@@ -205,24 +205,24 @@ F vec_swap_remove(v: i64, idx: i64) -> i64 {
         last := load_i64(data + new_len * 8)
         store_i64(data + idx * 8, last)
         0
-    } EL { 0 }
+    } else { 0 }
     store_i64(v + 8, new_len)
     val
 }
 
 # Clear all elements (does not free memory)
-F vec_clear(v: i64) -> i64 {
+fn vec_clear(v: i64) -> i64 {
     store_i64(v + 8, 0)
     0
 }
 
 # Truncate to len elements
-F vec_truncate(v: i64, new_len: i64) -> i64 {
+fn vec_truncate(v: i64, new_len: i64) -> i64 {
     len := load_i64(v + 8)
     I new_len < len {
         store_i64(v + 8, new_len)
         0
-    } EL { 0 }
+    } else { 0 }
 }
 
 # ============================================================================
@@ -230,7 +230,7 @@ F vec_truncate(v: i64, new_len: i64) -> i64 {
 # ============================================================================
 
 # Find index of value, returns -1 if not found
-F vec_index_of(v: i64, val: i64) -> i64 {
+fn vec_index_of(v: i64, val: i64) -> i64 {
     len := vec_len(v)
     data := load_i64(v)
     i := mut 0
@@ -240,7 +240,7 @@ F vec_index_of(v: i64, val: i64) -> i64 {
         I elem == val {
             result = i
             i = len  # break
-        } EL {
+        } else {
             i = i + 1
         }
     }
@@ -248,9 +248,9 @@ F vec_index_of(v: i64, val: i64) -> i64 {
 }
 
 # Check if value exists in vec
-F vec_contains(v: i64, val: i64) -> i64 {
+fn vec_contains(v: i64, val: i64) -> i64 {
     idx := vec_index_of(v, val)
-    I idx >= 0 { 1 } EL { 0 }
+    I idx >= 0 { 1 } else { 0 }
 }
 
 # ============================================================================
@@ -258,7 +258,7 @@ F vec_contains(v: i64, val: i64) -> i64 {
 # ============================================================================
 
 # Extend vec with elements from another vec
-F vec_extend(dst: i64, src: i64) -> i64 {
+fn vec_extend(dst: i64, src: i64) -> i64 {
     src_len := vec_len(src)
     dst_len := vec_len(dst)
     vec_ensure_cap(dst, dst_len + src_len)
@@ -270,7 +270,7 @@ F vec_extend(dst: i64, src: i64) -> i64 {
 }
 
 # Clone vec (deep copy of data array)
-F vec_clone(v: i64) -> i64 {
+fn vec_clone(v: i64) -> i64 {
     len := vec_len(v)
     cap := vec_cap(v)
     data := load_i64(v)
@@ -284,7 +284,7 @@ F vec_clone(v: i64) -> i64 {
 }
 
 # Reverse vec in-place
-F vec_reverse(v: i64) -> i64 {
+fn vec_reverse(v: i64) -> i64 {
     len := vec_len(v)
     data := load_i64(v)
     i := mut 0
@@ -304,7 +304,7 @@ F vec_reverse(v: i64) -> i64 {
 # Sorting (insertion sort — good for small arrays)
 # ============================================================================
 
-F vec_sort(v: i64) -> i64 {
+fn vec_sort(v: i64) -> i64 {
     len := vec_len(v)
     data := load_i64(v)
     i := mut 1
@@ -318,10 +318,10 @@ F vec_sort(v: i64) -> i64 {
                 I elem > key {
                     store_i64(data + (j + 1) * 8, elem)
                     j = j - 1
-                } EL {
+                } else {
                     done = 1
                 }
-            } EL {
+            } else {
                 done = 1
             }
         }
@@ -336,7 +336,7 @@ F vec_sort(v: i64) -> i64 {
 # ============================================================================
 
 # Free vec and its data buffer
-F vec_drop(v: i64) -> i64 {
+fn vec_drop(v: i64) -> i64 {
     data := load_i64(v)
     free(data)
     free(v)
@@ -344,7 +344,7 @@ F vec_drop(v: i64) -> i64 {
 }
 
 # Free vec, data buffer, and each element (if elements are malloc'd pointers)
-F vec_drop_deep(v: i64) -> i64 {
+fn vec_drop_deep(v: i64) -> i64 {
     len := vec_len(v)
     data := load_i64(v)
     i := mut 0
@@ -353,7 +353,7 @@ F vec_drop_deep(v: i64) -> i64 {
         I elem != 0 {
             free(elem)
             0
-        } EL { 0 }
+        } else { 0 }
         i = i + 1
     }
     free(data)
@@ -366,7 +366,7 @@ F vec_drop_deep(v: i64) -> i64 {
 # ============================================================================
 
 # Print vec contents: [1, 2, 3]
-F vec_print(v: i64) -> i64 {
+fn vec_print(v: i64) -> i64 {
     len := vec_len(v)
     data := load_i64(v)
     putchar(91)  # [
@@ -376,7 +376,7 @@ F vec_print(v: i64) -> i64 {
             putchar(44)  # ,
             putchar(32)  # space
             0
-        } EL { 0 }
+        } else { 0 }
         val := load_i64(data + i * 8)
         printf("%ld", val)
         i = i + 1

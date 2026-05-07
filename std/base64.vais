@@ -2,8 +2,8 @@
 # Provides standard and URL-safe Base64 encoding and decoding
 # Follows RFC 4648 specification
 
-U std/string
-U std/vec
+use std/string
+use std/vec
 
 # Base64 alphabet (standard)
 C BASE64_ALPHABET: i64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
@@ -18,23 +18,23 @@ C BASE64_PAD: i64 = 61  # '='
 # data: pointer to binary data
 # len: length of data in bytes
 # url_safe: 1 for URL-safe encoding, 0 for standard
-F base64_encode_ex(data: i64, len: i64, url_safe: i64) -> String {
+fn base64_encode_ex(data: i64, len: i64, url_safe: i64) -> String {
     I data == 0 || len <= 0 {
         String.with_capacity(0)
-    } EL {
+    } else {
         # Calculate output length: (len + 2) / 3 * 4
         out_len := ((len + 2) / 3) * 4
         result := String.with_capacity(out_len + 1)
 
         # Choose alphabet
-        alphabet := I url_safe == 1 { BASE64_URL_ALPHABET } EL { BASE64_ALPHABET }
+        alphabet := I url_safe == 1 { BASE64_URL_ALPHABET } else { BASE64_ALPHABET }
 
         i := mut 0
         LW i < len {
             # Read up to 3 bytes
             b0 := load_byte(data + i)
-            b1 := I i + 1 < len { load_byte(data + i + 1) } EL { 0 }
-            b2 := I i + 2 < len { load_byte(data + i + 2) } EL { 0 }
+            b1 := I i + 1 < len { load_byte(data + i + 1) } else { 0 }
+            b2 := I i + 2 < len { load_byte(data + i + 2) } else { 0 }
 
             # Convert 3 bytes to 4 base64 characters
             # byte0: [7:2] -> char0, [1:0] -> char1[5:4]
@@ -53,13 +53,13 @@ F base64_encode_ex(data: i64, len: i64, url_safe: i64) -> String {
 
             I i + 1 < len {
                 result.push_char(load_byte(alphabet + c2))
-            } EL {
+            } else {
                 result.push_char(BASE64_PAD)
             }
 
             I i + 2 < len {
                 result.push_char(load_byte(alphabet + c3))
-            } EL {
+            } else {
                 result.push_char(BASE64_PAD)
             }
 
@@ -71,46 +71,46 @@ F base64_encode_ex(data: i64, len: i64, url_safe: i64) -> String {
 }
 
 # Encode binary data to standard Base64 string
-F base64_encode(data: i64, len: i64) -> String {
+fn base64_encode(data: i64, len: i64) -> String {
     base64_encode_ex(data, len, 0)
 }
 
 # Encode binary data to URL-safe Base64 string
-F base64_encode_url(data: i64, len: i64) -> String {
+fn base64_encode_url(data: i64, len: i64) -> String {
     base64_encode_ex(data, len, 1)
 }
 
 # Encode a C string to Base64
-F base64_encode_str(s_ptr: i64) -> String {
+fn base64_encode_str(s_ptr: i64) -> String {
     I s_ptr == 0 {
         String.with_capacity(0)
-    } EL {
+    } else {
         len := strlen(s_ptr)
         base64_encode(s_ptr, len)
     }
 }
 
 # Get value of base64 character, returns -1 if invalid
-F base64_decode_char(c: i64) -> i64 {
+fn base64_decode_char(c: i64) -> i64 {
     I c >= 65 && c <= 90 {
         # 'A'-'Z' -> 0-25
         c - 65
-    } EL I c >= 97 && c <= 122 {
+    } else I c >= 97 && c <= 122 {
         # 'a'-'z' -> 26-51
         c - 97 + 26
-    } EL I c >= 48 && c <= 57 {
+    } else I c >= 48 && c <= 57 {
         # '0'-'9' -> 52-61
         c - 48 + 52
-    } EL I c == 43 || c == 45 {
+    } else I c == 43 || c == 45 {
         # '+' or '-' -> 62
         62
-    } EL I c == 47 || c == 95 {
+    } else I c == 47 || c == 95 {
         # '/' or '_' -> 63
         63
-    } EL I c == 61 {
+    } else I c == 61 {
         # '=' padding
         0 - 2
-    } EL {
+    } else {
         # Invalid
         0 - 1
     }
@@ -119,10 +119,10 @@ F base64_decode_char(c: i64) -> i64 {
 # Decode Base64 string to binary data
 # encoded: Base64 encoded string
 # Returns Vec<u8> containing decoded bytes
-F base64_decode(encoded: String) -> Vec<i64> {
+fn base64_decode(encoded: String) -> Vec<i64> {
     I encoded.len == 0 {
         Vec.with_capacity(0)
-    } EL {
+    } else {
         # Calculate approximate output length
         out_len := (encoded.len / 4) * 3
 
@@ -173,7 +173,7 @@ F base64_decode(encoded: String) -> Vec<i64> {
 
 # Decode Base64 string and return as C string (null-terminated)
 # Caller must free the returned pointer
-F base64_decode_str(encoded: String) -> i64 {
+fn base64_decode_str(encoded: String) -> i64 {
     vec := base64_decode(encoded)
 
     I vec.len == 0 {
@@ -182,7 +182,7 @@ F base64_decode_str(encoded: String) -> i64 {
         store_byte(result, 0)
         vec.drop()
         result
-    } EL {
+    } else {
         # Allocate buffer with space for null terminator
         result := malloc(vec.len + 1)
 
@@ -203,10 +203,10 @@ F base64_decode_str(encoded: String) -> i64 {
 }
 
 # Decode Base64 C string to binary data
-F base64_decode_cstr(cstr: i64) -> Vec<i64> {
+fn base64_decode_cstr(cstr: i64) -> Vec<i64> {
     I cstr == 0 {
         Vec.with_capacity(0)
-    } EL {
+    } else {
         s := str_from(cstr)
         result := base64_decode(s)
         s.drop()
@@ -215,17 +215,17 @@ F base64_decode_cstr(cstr: i64) -> Vec<i64> {
 }
 
 # Check if character is valid base64
-F is_base64_char(c: i64) -> i64 {
+fn is_base64_char(c: i64) -> i64 {
     val := base64_decode_char(c)
-    I val >= 0 || val == 0 - 2 { 1 } EL { 0 }
+    I val >= 0 || val == 0 - 2 { 1 } else { 0 }
 }
 
 # Check if string is valid base64
-F is_base64(s: String) -> i64 {
+fn is_base64(s: String) -> i64 {
     # Base64 length must be multiple of 4
     I s.len % 4 != 0 {
         0
-    } EL {
+    } else {
         i := mut 0
         padding_count := mut 0
 
@@ -238,7 +238,7 @@ F is_base64(s: String) -> i64 {
                 I i < s.len - 2 {
                     B 0
                 }
-            } EL {
+            } else {
                 # No non-padding chars after padding
                 I padding_count > 0 {
                     B 0
@@ -252,34 +252,34 @@ F is_base64(s: String) -> i64 {
         }
 
         # Valid padding: 0, 1, or 2 '=' chars
-        I padding_count <= 2 { 1 } EL { 0 }
+        I padding_count <= 2 { 1 } else { 0 }
     }
 }
 
 # Get decoded length from base64 string length
-F base64_decoded_len(encoded_len: i64) -> i64 {
+fn base64_decoded_len(encoded_len: i64) -> i64 {
     I encoded_len <= 0 || encoded_len % 4 != 0 {
         0
-    } EL {
+    } else {
         # Basic length calculation
         (encoded_len / 4) * 3
     }
 }
 
 # Get encoded length for given data length
-F base64_encoded_len(data_len: i64) -> i64 {
+fn base64_encoded_len(data_len: i64) -> i64 {
     I data_len <= 0 {
         0
-    } EL {
+    } else {
         ((data_len + 2) / 3) * 4
     }
 }
 
 # Encode Vec<u8> to Base64 string
-F base64_encode_vec(vec: Vec<i64>) -> String {
+fn base64_encode_vec(vec: Vec<i64>) -> String {
     I vec.len == 0 {
         String.with_capacity(0)
-    } EL {
+    } else {
         # Vec stores i64 values, but we treat them as bytes
         # Allocate temporary buffer
         buffer := malloc(vec.len)

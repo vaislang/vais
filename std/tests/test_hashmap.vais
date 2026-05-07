@@ -3,33 +3,33 @@
 # function_gen/generics.rs, this file failed to link because the same
 # `StrHashMap_hash$i64` specialization was emitted in both std/hashmap and
 # the consumer module. linkonce_odr lets the linker dedupe equivalent copies.
-U std/hashmap
+use std/hashmap
 
-F main() -> i64 {
+fn main() -> i64 {
     m: StrHashMap<i64> := mut StrHashMap.with_capacity(16)
-    I m.len() != 0 { R 1 }
-    I m.is_empty() != 1 { R 2 }
+    I m.len() != 0 { return 1 }
+    I m.is_empty() != 1 { return 2 }
 
     # set + get
     m.set("alpha", 1)
     m.set("beta", 2)
     m.set("gamma", 3)
-    I m.len() != 3 { R 3 }
-    I m.is_empty() != 0 { R 4 }
+    I m.len() != 3 { return 3 }
+    I m.is_empty() != 0 { return 4 }
 
-    I m.get("alpha") != 1 { R 5 }
-    I m.get("beta") != 2 { R 6 }
-    I m.get("gamma") != 3 { R 7 }
+    I m.get("alpha") != 1 { return 5 }
+    I m.get("beta") != 2 { return 6 }
+    I m.get("gamma") != 3 { return 7 }
 
     # contains
-    I m.contains("alpha") != 1 { R 8 }
-    I m.contains("missing") != 0 { R 9 }
+    I m.contains("alpha") != 1 { return 8 }
+    I m.contains("missing") != 0 { return 9 }
 
     # update existing
     m.set("alpha", 100)
-    I m.get("alpha") != 100 { R 10 }
+    I m.get("alpha") != 100 { return 10 }
     # update should not increase size
-    I m.len() != 3 { R 11 }
+    I m.len() != 3 { return 11 }
 
     # many inserts to trigger rehash
     big: StrHashMap<i64> := mut StrHashMap.with_capacity(8)
@@ -43,11 +43,11 @@ F main() -> i64 {
     big.set("k7", 7)
     big.set("k8", 8)
     big.set("k9", 9)
-    I big.len() != 10 { R 12 }
-    I big.get("k0") != 0 { R 13 }
-    I big.get("k5") != 5 { R 14 }
-    I big.get("k9") != 9 { R 15 }
-    I big.contains("k7") != 1 { R 16 }
+    I big.len() != 10 { return 12 }
+    I big.get("k0") != 0 { return 13 }
+    I big.get("k5") != 5 { return 14 }
+    I big.get("k9") != 9 { return 15 }
+    I big.contains("k7") != 1 { return 16 }
 
-    R 0
+    return 0
 }

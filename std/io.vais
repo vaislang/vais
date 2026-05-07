@@ -60,8 +60,8 @@
 # - Buffers passed to read_line/prompt_line are pre-allocated with at least max_len bytes
 # - max_len values are positive and within reasonable bounds (1..=1048576)
 
-U std/option
-U std/result
+use std/option
+use std/result
 # U std/string  # Temporarily disabled due to String type issues
 
 # Buffer size for input operations
@@ -74,23 +74,23 @@ C INPUT_BUFFER_SIZE: i64 = 1024
 # to avoid type conflicts with builtin str-typed versions
 
 # Get stdin handle
-X F get_stdin() -> i64
+impl fn get_stdin() -> i64
 
 # fgets with pointer params (maps to C fgets)
-X F fgets_ptr(buffer: i64, size: i64, stream: i64) -> i64
+impl fn fgets_ptr(buffer: i64, size: i64, stream: i64) -> i64
 
 # atol with pointer param (maps to C atol)
-X F atol_ptr(s: i64) -> i64
+impl fn atol_ptr(s: i64) -> i64
 
 # atof with pointer param (maps to C atof)
-X F atof_ptr(s: i64) -> f64
+impl fn atof_ptr(s: i64) -> f64
 
 # Read a line from stdin into a buffer
 # Returns pointer to buffer on success, 0 on EOF/error
 # buffer: destination buffer (must be pre-allocated)
 # max_len: maximum length including null terminator (must be 1..=1048576)
 # SAFETY: Caller must ensure buffer has at least max_len bytes allocated
-F read_line(buffer: i64, mut max_len: i64) -> i64 {
+fn read_line(buffer: i64, mut max_len: i64) -> i64 {
     # Validate max_len range to prevent buffer overflow
     I max_len <= 0 {
         0
@@ -102,7 +102,7 @@ F read_line(buffer: i64, mut max_len: i64) -> i64 {
     result := fgets_ptr(buffer, max_len, stdin)
     I result == 0 {
         0
-    } EL {
+    } else {
         # Remove trailing newline if present
         i := mut 0
         LW i < max_len {
@@ -187,14 +187,14 @@ F read_line(buffer: i64, mut max_len: i64) -> i64 {
 
 # Read an i64 integer from stdin
 # Returns the integer value, or 0 if invalid input
-F read_i64() -> i64 {
+fn read_i64() -> i64 {
     buffer := malloc(64)
     result := read_line(buffer, 64)
 
     I result == 0 {
         free(buffer)
         0
-    } EL {
+    } else {
         value := atol_ptr(buffer)
         free(buffer)
         value
@@ -218,14 +218,14 @@ F read_i64() -> i64 {
 
 # Read a f64 floating-point number from stdin
 # Returns the float value, or 0.0 if invalid input
-F read_f64() -> f64 {
+fn read_f64() -> f64 {
     buffer := malloc(64)
     result := read_line(buffer, 64)
 
     I result == 0 {
         free(buffer)
         0.0
-    } EL {
+    } else {
         value := atof_ptr(buffer)
         free(buffer)
         value
@@ -276,29 +276,29 @@ F read_f64() -> f64 {
 
 # Read a single character from stdin
 # Returns the character as i64, or -1 on EOF
-X F getchar() -> i64
+impl fn getchar() -> i64
 
 # Read a character from stdin (wrapper)
-F read_char() -> i64 {
+fn read_char() -> i64 {
     getchar()
 }
 
 # Read a character from stdin using Result type
 # Returns Ok(char) on success, Err(ERR_IO()) on EOF/error
-F read_char_result() -> Result<i64, i64> {
+fn read_char_result() -> Result<i64, i64> {
     c := getchar()
-    I c < 0 { Err(ERR_IO()) } EL { Ok(c) }
+    I c < 0 { Err(ERR_IO()) } else { Ok(c) }
 }
 
 # Read an i64 integer using Result type
 # Returns Ok(value) on success, Err(ERR_IO()) on read failure
-F read_i64_result() -> Result<i64, i64> {
+fn read_i64_result() -> Result<i64, i64> {
     buffer := malloc(64)
     result := read_line(buffer, 64)
     I result == 0 {
         free(buffer)
         Err(ERR_IO())
-    } EL {
+    } else {
         value := atol_ptr(buffer)
         free(buffer)
         Ok(value)
@@ -310,7 +310,7 @@ F read_i64_result() -> Result<i64, i64> {
 # buffer: destination buffer
 # max_len: maximum length
 # Returns pointer to buffer on success, 0 on error
-F prompt_line(prompt: i64, buffer: i64, max_len: i64) -> i64 {
+fn prompt_line(prompt: i64, buffer: i64, max_len: i64) -> i64 {
     puts_ptr(prompt)
     read_line(buffer, max_len)
 }
@@ -318,7 +318,7 @@ F prompt_line(prompt: i64, buffer: i64, max_len: i64) -> i64 {
 # Print a prompt and read an i64
 # prompt: null-terminated string to display
 # Returns the integer value
-F prompt_i64(prompt: i64) -> i64 {
+fn prompt_i64(prompt: i64) -> i64 {
     puts_ptr(prompt)
     read_i64()
 }
@@ -326,7 +326,7 @@ F prompt_i64(prompt: i64) -> i64 {
 # Print a prompt and read a f64
 # prompt: null-terminated string to display
 # Returns the float value
-F prompt_f64(prompt: i64) -> f64 {
+fn prompt_f64(prompt: i64) -> f64 {
     puts_ptr(prompt)
     read_f64()
 }

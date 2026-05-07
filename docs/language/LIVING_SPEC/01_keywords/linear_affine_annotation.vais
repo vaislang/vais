@@ -5,23 +5,23 @@
 # Affine Types (Experimental)" 참고. 현재 annotation 은 type-carrier 로만 전달
 # 되고 "must-use / at-most-once" 제약은 런타임에서 검사하지 않음.
 
-F test_regular() -> i64 {
+fn test_regular() -> i64 {
     x := 42
     y := x + x
     y
 }
 
-F test_linear_var() -> i64 {
+fn test_linear_var() -> i64 {
     x := linear 42
     x
 }
 
-F test_affine_var() -> i64 {
+fn test_affine_var() -> i64 {
     x := affine 100
     x
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := test_regular()
     b := test_linear_var()
     c := test_affine_var()

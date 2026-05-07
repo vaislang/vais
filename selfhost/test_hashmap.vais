@@ -4,42 +4,42 @@
 # Tests for selfhost/hashmap.vais functions
 # ============================================================================
 
-U vec
-U hashmap
+use vec
+use hashmap
 
 # ============================================================================
 # Test Infrastructure
 # ============================================================================
 
-F print_i64(val: i64) -> i64 {
+fn print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
         0
-    } EL I val < 0 {
+    } else I val < 0 {
         putchar(45)
         print_i64(0 - val)
-    } EL {
+    } else {
         I val >= 10 {
             print_i64(val / 10)
             0
-        } EL { 0 }
+        } else { 0 }
         putchar(48 + (val % 10))
         0
     }
 }
 
-F println_i64(val: i64) -> i64 {
+fn println_i64(val: i64) -> i64 {
     print_i64(val)
     putchar(10)
     0
 }
 
-F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
+fn assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
     I actual == expected {
         puts("[PASS] ")
         puts(test_name)
         1
-    } EL {
+    } else {
         puts("[FAIL] ")
         puts(test_name)
         puts("  Expected: ")
@@ -54,7 +54,7 @@ F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
 # Test: Basic Construction and Accessors
 # ============================================================================
 
-F test_construction() -> i64 {
+fn test_construction() -> i64 {
     passed := mut 0
 
     # Test map_new()
@@ -78,7 +78,7 @@ F test_construction() -> i64 {
 # Test: Basic Put and Get
 # ============================================================================
 
-F test_basic_put_get() -> i64 {
+fn test_basic_put_get() -> i64 {
     passed := mut 0
     m := map_new()
 
@@ -124,7 +124,7 @@ F test_basic_put_get() -> i64 {
 # Test: Overwrite Existing Keys
 # ============================================================================
 
-F test_overwrite() -> i64 {
+fn test_overwrite() -> i64 {
     passed := mut 0
     m := map_new()
 
@@ -148,7 +148,7 @@ F test_overwrite() -> i64 {
 # Test: Multiple Keys
 # ============================================================================
 
-F test_multiple_keys() -> i64 {
+fn test_multiple_keys() -> i64 {
     passed := mut 0
     m := map_new()
 
@@ -174,7 +174,7 @@ F test_multiple_keys() -> i64 {
 # Test: Remove
 # ============================================================================
 
-F test_remove() -> i64 {
+fn test_remove() -> i64 {
     passed := mut 0
     m := map_new()
 
@@ -208,7 +208,7 @@ F test_remove() -> i64 {
 # Test: Clear
 # ============================================================================
 
-F test_clear() -> i64 {
+fn test_clear() -> i64 {
     passed := mut 0
     m := map_new()
 
@@ -238,7 +238,7 @@ F test_clear() -> i64 {
 # Test: Resize
 # ============================================================================
 
-F test_resize() -> i64 {
+fn test_resize() -> i64 {
     passed := mut 0
     m := map_new()
 
@@ -264,7 +264,7 @@ F test_resize() -> i64 {
         I val != j * 10 {
             all_found = 0
             0
-        } EL { 0 }
+        } else { 0 }
         j = j + 1
     }
     passed = passed + assert_eq(all_found, 1, "all keys present after resize")
@@ -277,7 +277,7 @@ F test_resize() -> i64 {
 # Test: Keys and Values
 # ============================================================================
 
-F test_keys_values() -> i64 {
+fn test_keys_values() -> i64 {
     passed := mut 0
     m := map_new()
 
@@ -306,11 +306,11 @@ F test_keys_values() -> i64 {
             I k0 != 30 {
                 all_valid = 0
                 0
-            } EL { 0 }
+            } else { 0 }
             0
-        } EL { 0 }
+        } else { 0 }
         0
-    } EL { 0 }
+    } else { 0 }
 
     passed = passed + assert_eq(all_valid, 1, "keys are valid")
 
@@ -324,7 +324,7 @@ F test_keys_values() -> i64 {
 # Test: Collision Handling
 # ============================================================================
 
-F test_collisions() -> i64 {
+fn test_collisions() -> i64 {
     passed := mut 0
     m := map_new()
 
@@ -345,7 +345,7 @@ F test_collisions() -> i64 {
         I val != j * 100 {
             all_ok = 0
             0
-        } EL { 0 }
+        } else { 0 }
         j = j + 1
     }
     passed = passed + assert_eq(all_ok, 1, "all keys retrievable despite collisions")
@@ -358,7 +358,7 @@ F test_collisions() -> i64 {
 # Test: Tombstone Reuse
 # ============================================================================
 
-F test_tombstone_reuse() -> i64 {
+fn test_tombstone_reuse() -> i64 {
     passed := mut 0
     m := map_new()
 
@@ -381,7 +381,7 @@ F test_tombstone_reuse() -> i64 {
 # Test: Zero Values
 # ============================================================================
 
-F test_zero_values() -> i64 {
+fn test_zero_values() -> i64 {
     passed := mut 0
     m := map_new()
 
@@ -408,7 +408,7 @@ F test_zero_values() -> i64 {
 # Main
 # ============================================================================
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("========================================")
     puts("HashMap Test Suite")
     puts("========================================")
@@ -467,5 +467,5 @@ F main() -> i64 {
     puts("========================================")
 
     # Return 0 for success, 1 for failure
-    I total >= 47 { 0 } EL { 1 }
+    I total >= 47 { 0 } else { 1 }
 }

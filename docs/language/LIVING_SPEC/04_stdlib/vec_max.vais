@@ -3,10 +3,10 @@
 # Phase 2.12: `.get(i)`의 Some(n)에서 n은 &i64지만 산술/비교 context에서
 # auto-deref. `*n` 수동 deref 불필요.
 
-F max_of(v: Vec<i64>) -> i64 {
+fn max_of(v: Vec<i64>) -> i64 {
     max := mut 0
     LF i: 0..v.len() {
-        M v.get(i) {
+        match v.get(i) {
             Some(n) => {
                 I n > max { max = n }
             },
@@ -16,7 +16,7 @@ F max_of(v: Vec<i64>) -> i64 {
     max
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> = Vec::new()
     v.push(3)
     v.push(7)

@@ -2,12 +2,12 @@
 # Provides URL parsing, validation, and string conversion
 # Supports common URL schemes (http, https, ftp, file, etc.)
 
-U std/string
-U std/option
+use std/string
+use std/option
 
 # URL structure - represents a parsed URL
 # Format: scheme://user:pass@host:port/path?query#fragment
-S Url {
+struct Url {
     scheme: String,     # Protocol (http, https, ftp, etc.)
     username: String,   # Optional username
     password: String,   # Optional password
@@ -18,9 +18,9 @@ S Url {
     fragment: String    # Fragment/anchor (without '#')
 }
 
-X Url {
+impl Url {
     # Create a new empty URL
-    F new() -> Url {
+    fn new() -> Url {
         Url {
             scheme: String.with_capacity(8),
             username: String.with_capacity(0),
@@ -34,7 +34,7 @@ X Url {
     }
 
     # Free all allocated memory
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         self.scheme.drop()
         self.username.drop()
         self.password.drop()
@@ -46,7 +46,7 @@ X Url {
     }
 
     # Convert URL back to string
-    F to_string(&self) -> String {
+    fn to_string(&self) -> String {
         result := String.with_capacity(256)
 
         # Scheme
@@ -100,12 +100,12 @@ X Url {
     }
 
     # Get the full path including query and fragment
-    F full_path(&self) -> String {
+    fn full_path(&self) -> String {
         result := String.with_capacity(128)
 
         I self.path.len > 0 {
             append_string(result, self.path)
-        } EL {
+        } else {
             result.push_char(47)  # '/'
         }
 
@@ -123,42 +123,42 @@ X Url {
     }
 
     # Get default port for scheme
-    F default_port(&self) -> i64 {
+    fn default_port(&self) -> i64 {
         I str_eq_cstr(self.scheme, "http") != 0 {
             80
-        } EL I str_eq_cstr(self.scheme, "https") != 0 {
+        } else I str_eq_cstr(self.scheme, "https") != 0 {
             443
-        } EL I str_eq_cstr(self.scheme, "ftp") != 0 {
+        } else I str_eq_cstr(self.scheme, "ftp") != 0 {
             21
-        } EL I str_eq_cstr(self.scheme, "ssh") != 0 {
+        } else I str_eq_cstr(self.scheme, "ssh") != 0 {
             22
-        } EL I str_eq_cstr(self.scheme, "telnet") != 0 {
+        } else I str_eq_cstr(self.scheme, "telnet") != 0 {
             23
-        } EL I str_eq_cstr(self.scheme, "smtp") != 0 {
+        } else I str_eq_cstr(self.scheme, "smtp") != 0 {
             25
-        } EL {
+        } else {
             0
         }
     }
 
     # Get effective port (specified port or default)
-    F effective_port(&self) -> i64 {
+    fn effective_port(&self) -> i64 {
         I self.port > 0 {
             self.port
-        } EL {
+        } else {
             @.default_port()
         }
     }
 
     # Check if URL uses secure scheme
-    F is_secure(&self) -> i64 {
+    fn is_secure(&self) -> i64 {
         I str_eq_cstr(self.scheme, "https") != 0 {
             1
-        } EL I str_eq_cstr(self.scheme, "ftps") != 0 {
+        } else I str_eq_cstr(self.scheme, "ftps") != 0 {
             1
-        } EL I str_eq_cstr(self.scheme, "wss") != 0 {
+        } else I str_eq_cstr(self.scheme, "wss") != 0 {
             1
-        } EL {
+        } else {
             0
         }
     }
@@ -166,10 +166,10 @@ X Url {
 
 # Parse a URL string into URL structure
 # Returns Some(Url) on success, None on parse error
-F url_parse(s: String) -> Option<Url> {
+fn url_parse(s: String) -> Option<Url> {
     I s.len == 0 {
         None
-    } EL {
+    } else {
         url := Url.new()
         pos := mut 0
 
@@ -178,10 +178,10 @@ F url_parse(s: String) -> Option<Url> {
         I scheme_end > 0 {
             url.scheme = str_substring(s, 0, scheme_end)
             pos = scheme_end + 3
-        } EL {
+        } else {
             # No scheme found
             url.drop()
-            R None
+            return None
         }
 
         # Find end of authority (before /, ?, or #)
@@ -201,7 +201,7 @@ F url_parse(s: String) -> Option<Url> {
 
         I result == 0 {
             url.drop()
-            R None
+            return None
         }
 
         pos = authority_end
@@ -242,10 +242,10 @@ F url_parse(s: String) -> Option<Url> {
 }
 
 # Parse authority component (user:pass@host:port)
-F parse_authority(url: Url, authority: String) -> i64 {
+fn parse_authority(url: Url, authority: String) -> i64 {
     I authority.len == 0 {
         0
-    } EL {
+    } else {
         # Check for user info (before @)
         at_pos := find_char(authority, 64, 0)  # '@'
         host_start := mut 0
@@ -258,7 +258,7 @@ F parse_authority(url: Url, authority: String) -> i64 {
             I colon_pos > 0 {
                 url.username = str_substring(userinfo, 0, colon_pos)
                 url.password = str_substring(userinfo, colon_pos + 1, userinfo.len)
-            } EL {
+            } else {
                 url.username = userinfo
             }
 
@@ -274,23 +274,23 @@ F parse_authority(url: Url, authority: String) -> i64 {
             port_str := str_substring(host_part, colon_pos + 1, host_part.len)
             url.port = string_to_i64(port_str)
             port_str.drop()
-        } EL {
+        } else {
             url.host = host_part
         }
 
         I url.host.len == 0 {
             0
-        } EL {
+        } else {
             1
         }
     }
 }
 
 # Parse URL from C string
-F url_parse_cstr(cstr: i64) -> Option<Url> {
+fn url_parse_cstr(cstr: i64) -> Option<Url> {
     I cstr == 0 {
         None
-    } EL {
+    } else {
         s := str_from(cstr)
         result := url_parse(s)
         s.drop()
@@ -299,7 +299,7 @@ F url_parse_cstr(cstr: i64) -> Option<Url> {
 }
 
 # Convert URL to C string (caller must free)
-F url_to_string(url: Url) -> i64 {
+fn url_to_string(url: Url) -> i64 {
     s := url.to_string()
     cstr := malloc(s.len + 1)
     memcpy(cstr, s.data, s.len)
@@ -310,12 +310,12 @@ F url_to_string(url: Url) -> i64 {
 
 # Helper: Find substring in string, returns position or -1
 # Accepts `str` literal for substr.
-F find_substr(s: String, substr_lit: str, start: i64) -> i64 {
+fn find_substr(s: String, substr_lit: str, start: i64) -> i64 {
     substr := str_to_ptr(substr_lit)
     substr_len := strlen(substr_lit)
     I substr_len == 0 || start >= s.len {
         0 - 1
-    } EL {
+    } else {
         i := mut start
         LW i <= s.len - substr_len {
             _match := mut 1
@@ -337,10 +337,10 @@ F find_substr(s: String, substr_lit: str, start: i64) -> i64 {
 }
 
 # Helper: Find character in string, returns position or -1
-F find_char(s: String, c: i64, start: i64) -> i64 {
+fn find_char(s: String, c: i64, start: i64) -> i64 {
     I start >= s.len {
         0 - 1
-    } EL {
+    } else {
         i := mut start
         LW i < s.len {
             I s.char_at(i) == c {
@@ -353,7 +353,7 @@ F find_char(s: String, c: i64, start: i64) -> i64 {
 }
 
 # Helper: Append string to another string
-F append_string(dest: String, src: String) -> i64 {
+fn append_string(dest: String, src: String) -> i64 {
     i := mut 0
     LW i < src.len {
         dest.push_char(src.char_at(i))
@@ -363,11 +363,11 @@ F append_string(dest: String, src: String) -> i64 {
 }
 
 # Helper: Append i64 as decimal string
-F append_i64(s: String, mut n: i64) -> i64 {
+fn append_i64(s: String, mut n: i64) -> i64 {
     I n == 0 {
         s.push_char(48)  # '0'
         0
-    } EL {
+    } else {
         # Handle negative numbers
         I n < 0 {
             s.push_char(45)  # '-'
@@ -406,10 +406,10 @@ F append_i64(s: String, mut n: i64) -> i64 {
 }
 
 # Helper: Convert string to i64
-F string_to_i64(s: String) -> i64 {
+fn string_to_i64(s: String) -> i64 {
     I s.len == 0 {
         0
-    } EL {
+    } else {
         # Use atol via C string
         cstr := malloc(s.len + 1)
         memcpy(cstr, s.data, s.len)
@@ -421,12 +421,12 @@ F string_to_i64(s: String) -> i64 {
 }
 
 # Helper: Compare String with C string literal
-F str_eq_cstr(s: String, cstr_lit: str) -> i64 {
+fn str_eq_cstr(s: String, cstr_lit: str) -> i64 {
     cstr := str_to_ptr(cstr_lit)
     len := strlen(cstr_lit)
     I s.len != len {
         0
-    } EL {
+    } else {
         i := mut 0
         LW i < len {
             I s.char_at(i) != load_byte(cstr + i) {
@@ -439,7 +439,7 @@ F str_eq_cstr(s: String, cstr_lit: str) -> i64 {
 }
 
 # URL encode a string (percent-encoding)
-F url_encode(s: String) -> String {
+fn url_encode(s: String) -> String {
     result := String.with_capacity(s.len * 3)
 
     i := mut 0
@@ -451,7 +451,7 @@ F url_encode(s: String) -> String {
            c == 45 || c == 46 || c == 95 || c == 126 {
             # A-Z, a-z, 0-9, -, ., _, ~
             result.push_char(c)
-        } EL {
+        } else {
             # Encode as %XX
             result.push_char(37)  # '%'
             result.push_char(nibble_to_hex_char((c >> 4) & 15))
@@ -465,7 +465,7 @@ F url_encode(s: String) -> String {
 }
 
 # URL decode a string (percent-decoding)
-F url_decode(s: String) -> String {
+fn url_decode(s: String) -> String {
     result := String.with_capacity(s.len)
 
     i := mut 0
@@ -493,23 +493,23 @@ F url_decode(s: String) -> String {
 }
 
 # Helper: Convert nibble to hex char (uppercase)
-F nibble_to_hex_char(n: i64) -> i64 {
+fn nibble_to_hex_char(n: i64) -> i64 {
     I n < 10 {
         48 + n  # '0' + n
-    } EL {
+    } else {
         65 + (n - 10)  # 'A' + (n - 10)
     }
 }
 
 # Helper: Convert hex char to nibble
-F hex_char_to_nibble(c: i64) -> i64 {
+fn hex_char_to_nibble(c: i64) -> i64 {
     I c >= 48 && c <= 57 {
         c - 48  # '0'-'9'
-    } EL I c >= 65 && c <= 70 {
+    } else I c >= 65 && c <= 70 {
         c - 65 + 10  # 'A'-'F'
-    } EL I c >= 97 && c <= 102 {
+    } else I c >= 97 && c <= 102 {
         c - 97 + 10  # 'a'-'f'
-    } EL {
+    } else {
         0 - 1
     }
 }

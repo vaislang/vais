@@ -2,13 +2,13 @@
 # Key concept: Vec에 map/filter 내장이 없으므로 LF 루프로 구현한다.
 # 짝수만 골라 2배한 새 Vec 생성 예제.
 
-F do_filter(src: Vec<i64>) -> Vec<i64> {
+fn do_filter(src: Vec<i64>) -> Vec<i64> {
     dst: Vec<i64> = Vec::new()
     i := mut 0
     L {
         I i >= src.len() { B }
         item := src.get(i)
-        M item {
+        match item {
             Some(x) => {
                 v := x as i64
                 I v % 2 == 0 { dst.push(v * 2) }
@@ -20,7 +20,7 @@ F do_filter(src: Vec<i64>) -> Vec<i64> {
     dst
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     src: Vec<i64> = Vec::new()
     src.push(1)
     src.push(2)

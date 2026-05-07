@@ -2,15 +2,15 @@
 # Key concept: Vec<T>가 비어있는지 .len() == 0으로 판별.
 # Phase 1.12: 타입 어노테이션이 있으면 `[]`, `[1,2,3]` 리터럴이 Vec<T>로 추론됨.
 
-F describe(v: Vec<i64>) -> i64 {
+fn describe(v: Vec<i64>) -> i64 {
     I v.len() == 0 {
         0
-    } EL {
+    } else {
         v.len()
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a: Vec<i64> := []
     b: Vec<i64> := [1, 2, 3]
     describe(a) + describe(b)

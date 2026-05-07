@@ -2,11 +2,11 @@
 # Key concept: F name<A, B>(a: A, b: B) 다중 타입 파라미터 제네릭 함수.
 # 각 파라미터가 독립적인 타입을 가짐.
 
-F pair<A, B>(a: A, b: B) -> A = a
+fn pair<A, B>(a: A, b: B) -> A = a
 
-F swap_ret<A, B>(a: A, b: B) -> B = b
+fn swap_ret<A, B>(a: A, b: B) -> B = b
 
-F main() -> i64 {
+fn main() -> i64 {
     x := pair(42, "world")
     y := swap_ret("ignored", 99)
     x + y

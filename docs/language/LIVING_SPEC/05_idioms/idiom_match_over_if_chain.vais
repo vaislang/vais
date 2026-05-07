@@ -3,10 +3,10 @@
 # ✅ DO: M으로 enum variant를 직접 분기 — 추가 variant 시 경고.
 # ❌ DON'T: I x == A { ... } EL I x == B { ... } — 매칭 누락 위험.
 
-EN Command { Start, Stop, Pause, Resume }
+enum Command { Start, Stop, Pause, Resume }
 
-F priority(c: Command) -> i64 {
-    M c {
+fn priority(c: Command) -> i64 {
+    match c {
         Start => 3,
         Resume => 2,
         Pause => 1,
@@ -14,6 +14,6 @@ F priority(c: Command) -> i64 {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     priority(Start) + priority(Stop)
 }

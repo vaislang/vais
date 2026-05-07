@@ -23,20 +23,20 @@
 #   mem_alloc_zeroed(n) -> i64     - n 바이트 할당 후 0 초기화
 
 # External C Functions
-N F memset(dest: i64, value: i64, n: i64) -> i64
-N F memmove(dest: i64, src: i64, n: i64) -> i64
+N fn memset(dest: i64, value: i64, n: i64) -> i64
+N fn memmove(dest: i64, src: i64, n: i64) -> i64
 
 # Memory Fill Operations
-F mem_set(dest: i64, value: i64, n: i64) -> i64 {
+fn mem_set(dest: i64, value: i64, n: i64) -> i64 {
     memset(dest, value, n)
 }
 
-F mem_zero(dest: i64, n: i64) -> i64 {
+fn mem_zero(dest: i64, n: i64) -> i64 {
     memset(dest, 0, n)
 }
 
 # Fill memory with a pattern (i64 value repeated)
-F mem_fill_i64(dest: i64, value: i64, count: i64) -> i64 {
+fn mem_fill_i64(dest: i64, value: i64, count: i64) -> i64 {
     i := mut 0
     LW i < count {
         store_i64(dest + i * 8, value)
@@ -46,16 +46,16 @@ F mem_fill_i64(dest: i64, value: i64, count: i64) -> i64 {
 }
 
 # Memory Copy Operations
-F mem_copy(dest: i64, src: i64, n: i64) -> i64 {
+fn mem_copy(dest: i64, src: i64, n: i64) -> i64 {
     memcpy(dest, src, n)
 }
 
-F mem_move(dest: i64, src: i64, n: i64) -> i64 {
+fn mem_move(dest: i64, src: i64, n: i64) -> i64 {
     memmove(dest, src, n)
 }
 
 # Copy n i64 values from src to dest
-F mem_copy_i64(dest: i64, src: i64, count: i64) -> i64 {
+fn mem_copy_i64(dest: i64, src: i64, count: i64) -> i64 {
     i := mut 0
     LW i < count {
         store_i64(dest + i * 8, load_i64(src + i * 8))
@@ -65,21 +65,21 @@ F mem_copy_i64(dest: i64, src: i64, count: i64) -> i64 {
 }
 
 # Memory Comparison Operations
-F mem_cmp(s1: i64, s2: i64, n: i64) -> i64 {
+fn mem_cmp(s1: i64, s2: i64, n: i64) -> i64 {
     memcmp(s1, s2, n)
 }
 
 # Returns 1 if n bytes are equal, else 0
-F mem_eq(s1: i64, s2: i64, n: i64) -> i64 {
-    I memcmp(s1, s2, n) == 0 { 1 } EL { 0 }
+fn mem_eq(s1: i64, s2: i64, n: i64) -> i64 {
+    I memcmp(s1, s2, n) == 0 { 1 } else { 0 }
 }
 
 # Find first occurrence of byte in memory; -1 if not found
-F mem_chr(ptr: i64, byte: i64, n: i64) -> i64 {
+fn mem_chr(ptr: i64, byte: i64, n: i64) -> i64 {
     i := mut 0
     LW i < n {
         I load_byte(ptr + i) == byte {
-            R i
+            return i
         }
         i = i + 1
     }
@@ -87,11 +87,11 @@ F mem_chr(ptr: i64, byte: i64, n: i64) -> i64 {
 }
 
 # Find last occurrence of byte in memory; -1 if not found
-F mem_rchr(ptr: i64, byte: i64, n: i64) -> i64 {
+fn mem_rchr(ptr: i64, byte: i64, n: i64) -> i64 {
     i := mut n - 1
     LW i >= 0 {
         I load_byte(ptr + i) == byte {
-            R i
+            return i
         }
         i = i - 1
     }
@@ -99,12 +99,12 @@ F mem_rchr(ptr: i64, byte: i64, n: i64) -> i64 {
 }
 
 # Find first occurrence of pattern in memory; -1 if not found
-F mem_find(haystack: i64, haystack_len: i64, needle: i64, needle_len: i64) -> i64 {
+fn mem_find(haystack: i64, haystack_len: i64, needle: i64, needle_len: i64) -> i64 {
     I needle_len == 0 {
-        R 0
+        return 0
     }
     I needle_len > haystack_len {
-        R -1
+        return -1
     }
 
     first_byte := load_byte(needle)
@@ -114,7 +114,7 @@ F mem_find(haystack: i64, haystack_len: i64, needle: i64, needle_len: i64) -> i6
     LW i <= max_start {
         I load_byte(haystack + i) == first_byte {
             I mem_eq(haystack + i, needle, needle_len) == 1 {
-                R i
+                return i
             }
         }
         i = i + 1
@@ -123,7 +123,7 @@ F mem_find(haystack: i64, haystack_len: i64, needle: i64, needle_len: i64) -> i6
 }
 
 # Memory Allocation Helpers
-F mem_alloc_zeroed(size: i64) -> i64 {
+fn mem_alloc_zeroed(size: i64) -> i64 {
     ptr := malloc(size)
     I ptr != 0 {
         mem_zero(ptr, size)
@@ -131,30 +131,30 @@ F mem_alloc_zeroed(size: i64) -> i64 {
     ptr
 }
 
-F mem_realloc(old_ptr: i64, old_size: i64, new_size: i64) -> i64 {
+fn mem_realloc(old_ptr: i64, old_size: i64, new_size: i64) -> i64 {
     I old_ptr == 0 {
-        R malloc(new_size)
+        return malloc(new_size)
     }
     I new_size == 0 {
         free(old_ptr)
-        R 0
+        return 0
     }
 
     new_ptr := malloc(new_size)
     I new_ptr != 0 {
-        copy_size := I old_size < new_size { old_size } EL { new_size }
+        copy_size := I old_size < new_size { old_size } else { new_size }
         mem_copy(new_ptr, old_ptr, copy_size)
         free(old_ptr)
     }
     new_ptr
 }
 
-F mem_dup(src: i64, size: i64) -> i64 {
+fn mem_dup(src: i64, size: i64) -> i64 {
     I src == 0 {
-        R 0
+        return 0
     }
     I size == 0 {
-        R 0
+        return 0
     }
 
     dst := malloc(size)
@@ -165,39 +165,39 @@ F mem_dup(src: i64, size: i64) -> i64 {
 }
 
 # Pointer Arithmetic Helpers
-F ptr_align_up(ptr: i64, alignment: i64) -> i64 {
+fn ptr_align_up(ptr: i64, alignment: i64) -> i64 {
     mask := alignment - 1
     (ptr + mask) & (~mask)
 }
 
-F ptr_align_down(ptr: i64, alignment: i64) -> i64 {
+fn ptr_align_down(ptr: i64, alignment: i64) -> i64 {
     mask := alignment - 1
     ptr & (~mask)
 }
 
-F ptr_is_aligned(ptr: i64, alignment: i64) -> i64 {
+fn ptr_is_aligned(ptr: i64, alignment: i64) -> i64 {
     mask := alignment - 1
-    I (ptr & mask) == 0 { 1 } EL { 0 }
+    I (ptr & mask) == 0 { 1 } else { 0 }
 }
 
-F ptr_diff(p1: i64, p2: i64) -> i64 {
+fn ptr_diff(p1: i64, p2: i64) -> i64 {
     p1 - p2
 }
 
-F ptr_offset(ptr: i64, offset: i64) -> i64 {
+fn ptr_offset(ptr: i64, offset: i64) -> i64 {
     ptr + offset
 }
 
-F ptr_offset_i64(ptr: i64, count: i64) -> i64 {
+fn ptr_offset_i64(ptr: i64, count: i64) -> i64 {
     ptr + count * 8
 }
 
 # Byte Swap Operations (Endianness)
-F bswap16(x: i64) -> i64 {
+fn bswap16(x: i64) -> i64 {
     ((x & 255) * 256) | ((x / 256) & 255)
 }
 
-F bswap32(x: i64) -> i64 {
+fn bswap32(x: i64) -> i64 {
     b0 := (x & 255) * 16777216
     b1 := ((x / 256) & 255) * 65536
     b2 := ((x / 65536) & 255) * 256
@@ -205,16 +205,16 @@ F bswap32(x: i64) -> i64 {
     b0 | b1 | b2 | b3
 }
 
-F bswap64(x: i64) -> i64 {
+fn bswap64(x: i64) -> i64 {
     low := bswap32(x & 4294967295)
     high := bswap32((x / 4294967296) & 4294967295)
     (low * 4294967296) | high
 }
 
 # Bit Manipulation
-F clz64(x: i64) -> i64 {
+fn clz64(x: i64) -> i64 {
     I x == 0 {
-        R 64
+        return 64
     }
     n := mut 0
     y := mut x
@@ -244,9 +244,9 @@ F clz64(x: i64) -> i64 {
     n
 }
 
-F ctz64(x: i64) -> i64 {
+fn ctz64(x: i64) -> i64 {
     I x == 0 {
-        R 64
+        return 64
     }
     n := mut 0
     y := mut x
@@ -276,7 +276,7 @@ F ctz64(x: i64) -> i64 {
     n
 }
 
-F popcount64(x: i64) -> i64 {
+fn popcount64(x: i64) -> i64 {
     count := mut 0
     y := mut x
     LW y != 0 {
@@ -286,20 +286,20 @@ F popcount64(x: i64) -> i64 {
     count
 }
 
-F is_power_of_2(x: i64) -> i64 {
+fn is_power_of_2(x: i64) -> i64 {
     I x > 0 {
-        I (x & (x - 1)) == 0 { 1 } EL { 0 }
-    } EL {
+        I (x & (x - 1)) == 0 { 1 } else { 0 }
+    } else {
         0
     }
 }
 
-F next_power_of_2(x: i64) -> i64 {
+fn next_power_of_2(x: i64) -> i64 {
     I x <= 0 {
-        R 1
+        return 1
     }
     I is_power_of_2(x) == 1 {
-        R x
+        return x
     }
-    R 1 * (1 << (64 - clz64(x)))
+    return 1 * (1 << (64 - clz64(x)))
 }

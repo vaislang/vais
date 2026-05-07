@@ -1,38 +1,38 @@
 # Stdlib self-test: Vec<i64> core operations
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F main() -> i64 {
+fn main() -> i64 {
     # Construction
     v: Vec<i64> := mut vec_new()
-    I v.len() != 0 { R 1 }
+    I v.len() != 0 { return 1 }
 
     # push + len
     v.push(10)
     v.push(20)
     v.push(30)
-    I v.len() != 3 { R 2 }
+    I v.len() != 3 { return 2 }
 
     # index read
-    I v[0] != 10 { R 3 }
-    I v[1] != 20 { R 4 }
-    I v[2] != 30 { R 5 }
+    I v[0] != 10 { return 3 }
+    I v[1] != 20 { return 4 }
+    I v[2] != 30 { return 5 }
 
     # iteration
     sum: i64 := mut 0
     LF i: 0..v.len() {
         sum = sum + v[i]
     }
-    I sum != 60 { R 6 }
+    I sum != 60 { return 6 }
 
     # large size
     big: Vec<i64> := mut vec_new()
     LF i: 0..100 {
         big.push(i)
     }
-    I big.len() != 100 { R 7 }
-    I big[0] != 0   { R 8 }
-    I big[50] != 50 { R 9 }
-    I big[99] != 99 { R 10 }
+    I big.len() != 100 { return 7 }
+    I big[0] != 0   { return 8 }
+    I big[50] != 50 { return 9 }
+    I big[99] != 99 { return 10 }
 
-    R 0
+    return 0
 }

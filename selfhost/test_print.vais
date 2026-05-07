@@ -1,32 +1,32 @@
 # test_print.vais - Test suite for print.vais utility functions
 # Tests string length calculation, integer/boolean/hex output, and formatting utilities
 
-U print
+use print
 
 # Test helpers — use puts for output to avoid depending on print.vais in assert
-F my_print_i64(val: i64) -> i64 {
+fn my_print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
         0
-    } EL I val < 0 {
+    } else I val < 0 {
         putchar(45)
         my_print_i64(0 - val)
-    } EL {
+    } else {
         I val >= 10 {
             my_print_i64(val / 10)
             0
-        } EL { 0 }
+        } else { 0 }
         putchar(48 + (val % 10))
         0
     }
 }
 
-F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
+fn assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
     I actual == expected {
         puts("[PASS] ")
         puts(test_name)
         1
-    } EL {
+    } else {
         puts("[FAIL] ")
         puts(test_name)
         puts("  Expected: ")
@@ -43,7 +43,7 @@ F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
 # Test: str_len
 # ============================================================================
 
-F test_str_len() -> i64 {
+fn test_str_len() -> i64 {
     puts("\n--- str_len Tests ---")
     passed := mut 0
 
@@ -66,7 +66,7 @@ F test_str_len() -> i64 {
 # Test: print_i64, println_i64
 # ============================================================================
 
-F test_print_i64() -> i64 {
+fn test_print_i64() -> i64 {
     puts("\n--- print_i64 Tests ---")
     passed := mut 0
 
@@ -96,7 +96,7 @@ F test_print_i64() -> i64 {
 # Test: print_bool
 # ============================================================================
 
-F test_print_bool() -> i64 {
+fn test_print_bool() -> i64 {
     puts("\n--- print_bool Tests ---")
     passed := mut 0
 
@@ -117,7 +117,7 @@ F test_print_bool() -> i64 {
 # Test: print_hex
 # ============================================================================
 
-F test_print_hex() -> i64 {
+fn test_print_hex() -> i64 {
     puts("\n--- print_hex Tests ---")
     passed := mut 0
 
@@ -143,7 +143,7 @@ F test_print_hex() -> i64 {
 # Test: print_bytes
 # ============================================================================
 
-F test_print_bytes() -> i64 {
+fn test_print_bytes() -> i64 {
     puts("\n--- print_bytes Tests ---")
     passed := mut 0
 
@@ -170,7 +170,7 @@ F test_print_bytes() -> i64 {
 # Test: print_str, println_str
 # ============================================================================
 
-F test_print_str() -> i64 {
+fn test_print_str() -> i64 {
     puts("\n--- print_str Tests ---")
     passed := mut 0
 
@@ -190,7 +190,7 @@ F test_print_str() -> i64 {
 # Test: print_char, print_repeat, println
 # ============================================================================
 
-F test_print_misc() -> i64 {
+fn test_print_misc() -> i64 {
     puts("\n--- Misc Tests ---")
     passed := mut 0
 
@@ -221,7 +221,7 @@ F test_print_misc() -> i64 {
 # Main Test Runner
 # ============================================================================
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("===========================================")
     puts("  Print Utility Test Suite")
     puts("===========================================")
@@ -263,7 +263,7 @@ F main() -> i64 {
     I passed == total {
         puts("\nAll tests PASSED!")
         0
-    } EL {
+    } else {
         puts("\nSome tests FAILED!")
         1
     }

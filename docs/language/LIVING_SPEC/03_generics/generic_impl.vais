@@ -2,19 +2,19 @@
 # Key concept: X Name<T> { F new(...) -> Self } 제네릭 impl 블록.
 # Self는 현재 타입을 가리킴; 생성자 패턴.
 
-S Box<T> {
+struct Box<T> {
     val: T
 }
 
-X Box<i64> {
-    F new(v: i64) -> Box<i64> = Box { val: v }
+impl Box<i64> {
+    fn new(v: i64) -> Box<i64> = Box { val: v }
 
-    F get(&self) -> i64 = self.val
+    fn get(&self) -> i64 = self.val
 
-    F doubled(&self) -> i64 = self.val * 2
+    fn doubled(&self) -> i64 = self.val * 2
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     b := Box::new(21)
     b.doubled()
 }

@@ -2,23 +2,23 @@
 # Key concept: 구조체 안에 구조체 필드를 중첩해서 사용.
 # 중첩 접근: outer.inner.field
 
-S Vec2 {
+struct Vec2 {
     x: i64,
     y: i64
 }
 
-S Line {
+struct Line {
     start: Vec2,
     end: Vec2
 }
 
-F length_squared(line: Line) -> i64 {
+fn length_squared(line: Line) -> i64 {
     dx := line.end.x - line.start.x
     dy := line.end.y - line.start.y
     dx * dx + dy * dy
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     s := Vec2 { x: 0, y: 0 }
     e := Vec2 { x: 3, y: 4 }
     ln := Line { start: s, end: e }

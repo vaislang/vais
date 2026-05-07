@@ -1,8 +1,8 @@
 # LIVING_SPEC/01_keywords/M_match_range.vais
 # Key concept: 범위 패턴 `a..=b`로 구간 매칭.
 
-F bucket(n: i64) -> i64 {
-    M n {
+fn bucket(n: i64) -> i64 {
+    match n {
         0..=9 => 1,
         10..=99 => 2,
         100..=999 => 3,
@@ -10,6 +10,6 @@ F bucket(n: i64) -> i64 {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     bucket(5) + bucket(50) + bucket(500)
 }

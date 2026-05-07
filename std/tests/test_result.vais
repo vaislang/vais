@@ -1,6 +1,6 @@
 # Stdlib self-test: Result<T, E> propagation patterns
-F parse_digit(s: str) -> Result<i64, i64> {
-    M s {
+fn parse_digit(s: str) -> Result<i64, i64> {
+    match s {
         "0" => Ok(0),
         "1" => Ok(1),
         "2" => Ok(2),
@@ -9,41 +9,41 @@ F parse_digit(s: str) -> Result<i64, i64> {
     }
 }
 
-F sum_digits(a: str, b: str) -> Result<i64, i64> {
+fn sum_digits(a: str, b: str) -> Result<i64, i64> {
     ar: Result<i64, i64> := parse_digit(a)
-    av: i64 := M ar { Ok(v) => v, Err(_) => -1 }
-    I av < 0 { R Err(1) }
+    av: i64 := match ar { Ok(v) => v, Err(_) => -1 }
+    I av < 0 { return Err(1) }
     br: Result<i64, i64> := parse_digit(b)
-    bv: i64 := M br { Ok(v) => v, Err(_) => -1 }
-    I bv < 0 { R Err(1) }
+    bv: i64 := match br { Ok(v) => v, Err(_) => -1 }
+    I bv < 0 { return Err(1) }
     Ok(av + bv)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # Ok path
     r1: Result<i64, i64> := sum_digits("2", "3")
-    v1: i64 := M r1 { Ok(v) => v, Err(_) => -1 }
-    I v1 != 5 { R 1 }
+    v1: i64 := match r1 { Ok(v) => v, Err(_) => -1 }
+    I v1 != 5 { return 1 }
 
     # Err path (first arg invalid)
     r2: Result<i64, i64> := sum_digits("x", "3")
-    is_err2: i64 := M r2 { Ok(_) => 0, Err(_) => 1 }
-    I is_err2 != 1 { R 2 }
+    is_err2: i64 := match r2 { Ok(_) => 0, Err(_) => 1 }
+    I is_err2 != 1 { return 2 }
 
     # Err path (second arg invalid)
     r3: Result<i64, i64> := sum_digits("1", "y")
-    is_err3: i64 := M r3 { Ok(_) => 0, Err(_) => 1 }
-    I is_err3 != 1 { R 3 }
+    is_err3: i64 := match r3 { Ok(_) => 0, Err(_) => 1 }
+    I is_err3 != 1 { return 3 }
 
     # Direct Ok/Err construction
     ok: Result<i64, i64> := Ok(99)
     er: Result<i64, i64> := Err(7)
 
-    okv: i64 := M ok { Ok(v) => v, Err(_) => 0 }
-    I okv != 99 { R 4 }
+    okv: i64 := match ok { Ok(v) => v, Err(_) => 0 }
+    I okv != 99 { return 4 }
 
-    ec: i64 := M er { Ok(_) => 0, Err(c) => c }
-    I ec != 7 { R 5 }
+    ec: i64 := match er { Ok(_) => 0, Err(c) => c }
+    I ec != 7 { return 5 }
 
-    R 0
+    return 0
 }

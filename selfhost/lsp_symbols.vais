@@ -1,22 +1,22 @@
 # Vais Self-Hosting LSP Server - Symbol Table & AST Traversal
 # Collects definitions and references from parsed AST
 
-U constants
-U stringbuffer_s1
-U helpers_s1
-U lsp_json
+use constants
+use stringbuffer_s1
+use helpers_s1
+use lsp_json
 
 # ============================================================================
 # Symbol Kind Constants
 # ============================================================================
-F SYM_FUNCTION() -> i64 = 1
-F SYM_STRUCT() -> i64 = 2
-F SYM_ENUM() -> i64 = 3
-F SYM_TRAIT() -> i64 = 4
-F SYM_FIELD() -> i64 = 5
-F SYM_PARAM() -> i64 = 6
-F SYM_VARIABLE() -> i64 = 7
-F SYM_METHOD() -> i64 = 8
+fn SYM_FUNCTION() -> i64 = 1
+fn SYM_STRUCT() -> i64 = 2
+fn SYM_ENUM() -> i64 = 3
+fn SYM_TRAIT() -> i64 = 4
+fn SYM_FIELD() -> i64 = 5
+fn SYM_PARAM() -> i64 = 6
+fn SYM_VARIABLE() -> i64 = 7
+fn SYM_METHOD() -> i64 = 8
 
 # ============================================================================
 # SymbolDef (48 bytes)
@@ -24,7 +24,7 @@ F SYM_METHOD() -> i64 = 8
 # Layout: kind(8) + name_ptr(8) + name_len(8) + span_start(8) + span_end(8) + extra(8)
 # extra: for functions, ptr to params info; for structs, ptr to fields info
 
-F symdef_new(kind: i64, name_ptr: i64, name_len: i64, span_start: i64, span_end: i64) -> i64 {
+fn symdef_new(kind: i64, name_ptr: i64, name_len: i64, span_start: i64, span_end: i64) -> i64 {
     s := malloc(48)
     store_i64(s + 0, kind)
     store_i64(s + 8, name_ptr)
@@ -35,20 +35,20 @@ F symdef_new(kind: i64, name_ptr: i64, name_len: i64, span_start: i64, span_end:
     s
 }
 
-F symdef_kind(s: i64) -> i64 = load_i64(s + 0)
-F symdef_name_ptr(s: i64) -> i64 = load_i64(s + 8)
-F symdef_name_len(s: i64) -> i64 = load_i64(s + 16)
-F symdef_span_start(s: i64) -> i64 = load_i64(s + 24)
-F symdef_span_end(s: i64) -> i64 = load_i64(s + 32)
-F symdef_extra(s: i64) -> i64 = load_i64(s + 40)
-F symdef_set_extra(s: i64, v: i64) -> i64 { store_i64(s + 40, v); 0 }
+fn symdef_kind(s: i64) -> i64 = load_i64(s + 0)
+fn symdef_name_ptr(s: i64) -> i64 = load_i64(s + 8)
+fn symdef_name_len(s: i64) -> i64 = load_i64(s + 16)
+fn symdef_span_start(s: i64) -> i64 = load_i64(s + 24)
+fn symdef_span_end(s: i64) -> i64 = load_i64(s + 32)
+fn symdef_extra(s: i64) -> i64 = load_i64(s + 40)
+fn symdef_set_extra(s: i64, v: i64) -> i64 { store_i64(s + 40, v); 0 }
 
 # ============================================================================
 # SymbolRef (32 bytes)
 # ============================================================================
 # Layout: name_ptr(8) + name_len(8) + span_start(8) + span_end(8)
 
-F symref_new(name_ptr: i64, name_len: i64, span_start: i64, span_end: i64) -> i64 {
+fn symref_new(name_ptr: i64, name_len: i64, span_start: i64, span_end: i64) -> i64 {
     r := malloc(32)
     store_i64(r + 0, name_ptr)
     store_i64(r + 8, name_len)
@@ -57,10 +57,10 @@ F symref_new(name_ptr: i64, name_len: i64, span_start: i64, span_end: i64) -> i6
     r
 }
 
-F symref_name_ptr(r: i64) -> i64 = load_i64(r + 0)
-F symref_name_len(r: i64) -> i64 = load_i64(r + 8)
-F symref_span_start(r: i64) -> i64 = load_i64(r + 16)
-F symref_span_end(r: i64) -> i64 = load_i64(r + 24)
+fn symref_name_ptr(r: i64) -> i64 = load_i64(r + 0)
+fn symref_name_len(r: i64) -> i64 = load_i64(r + 8)
+fn symref_span_start(r: i64) -> i64 = load_i64(r + 16)
+fn symref_span_end(r: i64) -> i64 = load_i64(r + 24)
 
 # ============================================================================
 # SymbolTable (dynamic arrays)
@@ -68,7 +68,7 @@ F symref_span_end(r: i64) -> i64 = load_i64(r + 24)
 # Layout: defs_ptr(8) + defs_count(8) + defs_cap(8) +
 #         refs_ptr(8) + refs_count(8) + refs_cap(8) = 48 bytes
 
-F symtable_new() -> i64 {
+fn symtable_new() -> i64 {
     st := malloc(48)
     store_i64(st + 0, malloc(256 * 8))   # defs array
     store_i64(st + 8, 0)                   # defs count
@@ -79,7 +79,7 @@ F symtable_new() -> i64 {
     st
 }
 
-F symtable_add_def(st: i64, def: i64) -> i64 {
+fn symtable_add_def(st: i64, def: i64) -> i64 {
     defs := load_i64(st + 0)
     count := load_i64(st + 8)
     cap := load_i64(st + 16)
@@ -92,13 +92,13 @@ F symtable_add_def(st: i64, def: i64) -> i64 {
         store_i64(st + 16, new_cap)
         defs = new_defs
         0
-    } EL { 0 }
+    } else { 0 }
     store_i64(defs + count * 8, def)
     store_i64(st + 8, count + 1)
     0
 }
 
-F symtable_add_ref(st: i64, ref: i64) -> i64 {
+fn symtable_add_ref(st: i64, ref: i64) -> i64 {
     refs := load_i64(st + 24)
     count := load_i64(st + 32)
     cap := load_i64(st + 40)
@@ -111,19 +111,19 @@ F symtable_add_ref(st: i64, ref: i64) -> i64 {
         store_i64(st + 40, new_cap)
         refs = new_refs
         0
-    } EL { 0 }
+    } else { 0 }
     store_i64(refs + count * 8, ref)
     store_i64(st + 32, count + 1)
     0
 }
 
-F symtable_defs_count(st: i64) -> i64 = load_i64(st + 8)
-F symtable_refs_count(st: i64) -> i64 = load_i64(st + 32)
-F symtable_get_def(st: i64, idx: i64) -> i64 {
+fn symtable_defs_count(st: i64) -> i64 = load_i64(st + 8)
+fn symtable_refs_count(st: i64) -> i64 = load_i64(st + 32)
+fn symtable_get_def(st: i64, idx: i64) -> i64 {
     defs := load_i64(st + 0)
     load_i64(defs + idx * 8)
 }
-F symtable_get_ref(st: i64, idx: i64) -> i64 {
+fn symtable_get_ref(st: i64, idx: i64) -> i64 {
     refs := load_i64(st + 24)
     load_i64(refs + idx * 8)
 }
@@ -135,18 +135,18 @@ F symtable_get_ref(st: i64, idx: i64) -> i64 {
 # Convert byte offset to (line, col) — 0-based
 # src: source code ptr, src_len: length, offset: byte offset
 # out: store line at out+0, col at out+8
-F offset_to_line_col(src: i64, src_len: i64, offset: i64, out: i64) -> i64 {
+fn offset_to_line_col(src: i64, src_len: i64, offset: i64, out: i64) -> i64 {
     line: mut i64 = 0
     col: mut i64 = 0
     i: mut i64 = 0
     L {
-        I i >= offset { B } EL { 0 }
-        I i >= src_len { B } EL { 0 }
+        I i >= offset { B } else { 0 }
+        I i >= src_len { B } else { 0 }
         I load_byte(src + i) == 10 {  # newline
             line = line + 1
             col = 0
             0
-        } EL {
+        } else {
             col = col + 1
             0
         }
@@ -158,20 +158,20 @@ F offset_to_line_col(src: i64, src_len: i64, offset: i64, out: i64) -> i64 {
 }
 
 # Convert (line, col) to byte offset — 0-based
-F line_col_to_offset(src: i64, src_len: i64, target_line: i64, target_col: i64) -> i64 {
+fn line_col_to_offset(src: i64, src_len: i64, target_line: i64, target_col: i64) -> i64 {
     line: mut i64 = 0
     col: mut i64 = 0
     i: mut i64 = 0
     L {
-        I i >= src_len { B } EL { 0 }
+        I i >= src_len { B } else { 0 }
         I line == target_line {
-            I col == target_col { R i } EL { 0 }
-        } EL { 0 }
+            I col == target_col { return i } else { 0 }
+        } else { 0 }
         I load_byte(src + i) == 10 {
             line = line + 1
             col = 0
             0
-        } EL {
+        } else {
             col = col + 1
             0
         }
@@ -186,12 +186,12 @@ F line_col_to_offset(src: i64, src_len: i64, target_line: i64, target_col: i64) 
 
 # Collect definitions from items array
 # items: pointer array, count: number of items
-F collect_definitions(st: i64, items: i64, count: i64) -> i64 {
+fn collect_definitions(st: i64, items: i64, count: i64) -> i64 {
     i: mut i64 = 0
     L {
-        I i >= count { B } EL { 0 }
+        I i >= count { B } else { 0 }
         item := load_i64(items + i * 8)
-        I item == 0 { i = i + 1; C } EL { 0 }
+        I item == 0 { i = i + 1; C } else { 0 }
         kind := item_get_kind(item)
         name_ptr := item_get_name_ptr(item)
         name_len := item_get_name_len(item)
@@ -206,7 +206,7 @@ F collect_definitions(st: i64, items: i64, count: i64) -> i64 {
             param_count := item_get_data1(item)
             pi: mut i64 = 0
             L {
-                I pi >= param_count { B } EL { 0 }
+                I pi >= param_count { B } else { 0 }
                 param := load_i64(params + pi * 8)
                 I param != 0 {
                     pn_ptr := param_get_name_ptr(param)
@@ -214,11 +214,11 @@ F collect_definitions(st: i64, items: i64, count: i64) -> i64 {
                     pdef := symdef_new(SYM_PARAM(), pn_ptr, pn_len, 0, 0)
                     symtable_add_def(st, pdef)
                     0
-                } EL { 0 }
+                } else { 0 }
                 pi = pi + 1
             }
             0
-        } EL I kind == ITEM_STRUCT() {
+        } else I kind == ITEM_STRUCT() {
             # Struct: data0=fields, data1=field_count
             def := symdef_new(SYM_STRUCT(), name_ptr, name_len, 0, 0)
             symdef_set_extra(def, item)
@@ -228,7 +228,7 @@ F collect_definitions(st: i64, items: i64, count: i64) -> i64 {
             field_count := item_get_data1(item)
             fi: mut i64 = 0
             L {
-                I fi >= field_count { B } EL { 0 }
+                I fi >= field_count { B } else { 0 }
                 field := load_i64(fields + fi * 8)
                 I field != 0 {
                     fn_ptr := field_get_name_ptr(field)
@@ -236,17 +236,17 @@ F collect_definitions(st: i64, items: i64, count: i64) -> i64 {
                     fdef := symdef_new(SYM_FIELD(), fn_ptr, fn_len, 0, 0)
                     symtable_add_def(st, fdef)
                     0
-                } EL { 0 }
+                } else { 0 }
                 fi = fi + 1
             }
             0
-        } EL I kind == 7 {  # ITEM_IMPL
+        } else I kind == 7 {  # ITEM_IMPL
             # Impl block: data0=methods, data1=method_count
             methods := item_get_data0(item)
             method_count := item_get_data1(item)
             mi: mut i64 = 0
             L {
-                I mi >= method_count { B } EL { 0 }
+                I mi >= method_count { B } else { 0 }
                 method := load_i64(methods + mi * 8)
                 I method != 0 {
                     mn_ptr := item_get_name_ptr(method)
@@ -255,11 +255,11 @@ F collect_definitions(st: i64, items: i64, count: i64) -> i64 {
                     symdef_set_extra(mdef, method)
                     symtable_add_def(st, mdef)
                     0
-                } EL { 0 }
+                } else { 0 }
                 mi = mi + 1
             }
             0
-        } EL { 0 }
+        } else { 0 }
 
         i = i + 1
     }
@@ -270,8 +270,8 @@ F collect_definitions(st: i64, items: i64, count: i64) -> i64 {
 # AST Reference Collection (recursive expr traversal)
 # ============================================================================
 
-F collect_refs_expr(st: i64, expr: i64) -> i64 {
-    I expr == 0 { R 0 } EL { 0 }
+fn collect_refs_expr(st: i64, expr: i64) -> i64 {
+    I expr == 0 { return 0 } else { 0 }
     kind := expr_get_kind(expr)
 
     I kind == EXPR_IDENT() {
@@ -281,7 +281,7 @@ F collect_refs_expr(st: i64, expr: i64) -> i64 {
         ref := symref_new(name_ptr, name_len, 0, 0)
         symtable_add_ref(st, ref)
         0
-    } EL I kind == EXPR_CALL() {
+    } else I kind == EXPR_CALL() {
         # field0=name_ptr, field1=name_len, field2=args, field3=arg_count
         name_ptr := expr_get_field0(expr)
         name_len := expr_get_field1(expr)
@@ -291,43 +291,43 @@ F collect_refs_expr(st: i64, expr: i64) -> i64 {
         argc := expr_get_field3(expr)
         ai: mut i64 = 0
         L {
-            I ai >= argc { B } EL { 0 }
+            I ai >= argc { B } else { 0 }
             arg := load_i64(args + ai * 8)
             collect_refs_expr(st, arg)
             ai = ai + 1
         }
         0
-    } EL I kind == EXPR_BINARY() {
+    } else I kind == EXPR_BINARY() {
         # field0=op, field1=lhs, field2=rhs
         collect_refs_expr(st, expr_get_field1(expr))
         collect_refs_expr(st, expr_get_field2(expr))
         0
-    } EL I kind == EXPR_UNARY() {
+    } else I kind == EXPR_UNARY() {
         # field0=op, field1=operand
         collect_refs_expr(st, expr_get_field1(expr))
         0
-    } EL I kind == EXPR_IF() {
+    } else I kind == EXPR_IF() {
         # field0=cond, field1=then, field2=else
         collect_refs_expr(st, expr_get_field0(expr))
         collect_refs_expr(st, expr_get_field1(expr))
         collect_refs_expr(st, expr_get_field2(expr))
         0
-    } EL I kind == EXPR_LOOP() {
+    } else I kind == EXPR_LOOP() {
         # field0=body (block expr)
         collect_refs_expr(st, expr_get_field0(expr))
         0
-    } EL I kind == EXPR_WHILE() {
+    } else I kind == EXPR_WHILE() {
         # field0=cond, field1=body
         collect_refs_expr(st, expr_get_field0(expr))
         collect_refs_expr(st, expr_get_field1(expr))
         0
-    } EL I kind == EXPR_BLOCK() {
+    } else I kind == EXPR_BLOCK() {
         # field0=stmts_ptr, field1=stmts_count
         stmts := expr_get_field0(expr)
         count := expr_get_field1(expr)
         collect_refs_stmts(st, stmts, count)
         0
-    } EL I kind == EXPR_METHOD_CALL() {
+    } else I kind == EXPR_METHOD_CALL() {
         # field0=receiver, field1=name_ptr, field2=name_len, field3=args, field4=argc
         collect_refs_expr(st, expr_get_field0(expr))
         name_ptr := expr_get_field1(expr)
@@ -338,34 +338,34 @@ F collect_refs_expr(st: i64, expr: i64) -> i64 {
         argc := expr_get_field4(expr)
         ai: mut i64 = 0
         L {
-            I ai >= argc { B } EL { 0 }
+            I ai >= argc { B } else { 0 }
             arg := load_i64(args + ai * 8)
             collect_refs_expr(st, arg)
             ai = ai + 1
         }
         0
-    } EL I kind == EXPR_FIELD() {
+    } else I kind == EXPR_FIELD() {
         # field0=receiver, field1=field_name_ptr, field2=field_name_len
         collect_refs_expr(st, expr_get_field0(expr))
         0
-    } EL I kind == EXPR_INDEX() {
+    } else I kind == EXPR_INDEX() {
         # field0=receiver, field1=index
         collect_refs_expr(st, expr_get_field0(expr))
         collect_refs_expr(st, expr_get_field1(expr))
         0
-    } EL I kind == EXPR_ARRAY() {
+    } else I kind == EXPR_ARRAY() {
         # field0=elements, field1=count
         elems := expr_get_field0(expr)
         count := expr_get_field1(expr)
         ei: mut i64 = 0
         L {
-            I ei >= count { B } EL { 0 }
+            I ei >= count { B } else { 0 }
             elem := load_i64(elems + ei * 8)
             collect_refs_expr(st, elem)
             ei = ei + 1
         }
         0
-    } EL I kind == EXPR_STRUCT_LIT() {
+    } else I kind == EXPR_STRUCT_LIT() {
         # field0=name_ptr, field1=name_len, field2=fields, field3=field_count
         name_ptr := expr_get_field0(expr)
         name_len := expr_get_field1(expr)
@@ -375,42 +375,42 @@ F collect_refs_expr(st: i64, expr: i64) -> i64 {
         fc := expr_get_field3(expr)
         fi: mut i64 = 0
         L {
-            I fi >= fc { B } EL { 0 }
+            I fi >= fc { B } else { 0 }
             # Each struct field init: value_expr at some offset
             fval := load_i64(fields + fi * 8)
             collect_refs_expr(st, fval)
             fi = fi + 1
         }
         0
-    } EL I kind == EXPR_ASSIGN() {
+    } else I kind == EXPR_ASSIGN() {
         # field0=target, field1=value
         collect_refs_expr(st, expr_get_field0(expr))
         collect_refs_expr(st, expr_get_field1(expr))
         0
-    } EL I kind == EXPR_MATCH() {
+    } else I kind == EXPR_MATCH() {
         # field0=scrutinee, field1=arms, field2=arm_count
         collect_refs_expr(st, expr_get_field0(expr))
         0
-    } EL I kind == EXPR_SELF_CALL() {
+    } else I kind == EXPR_SELF_CALL() {
         # field0=args, field1=arg_count
         args := expr_get_field0(expr)
         argc := expr_get_field1(expr)
         ai: mut i64 = 0
         L {
-            I ai >= argc { B } EL { 0 }
+            I ai >= argc { B } else { 0 }
             arg := load_i64(args + ai * 8)
             collect_refs_expr(st, arg)
             ai = ai + 1
         }
         0
-    } EL { 0 }
+    } else { 0 }
 }
 
 # Collect refs from statements (56-byte inline layout)
-F collect_refs_stmts(st: i64, stmts: i64, count: i64) -> i64 {
+fn collect_refs_stmts(st: i64, stmts: i64, count: i64) -> i64 {
     i: mut i64 = 0
     L {
-        I i >= count { B } EL { 0 }
+        I i >= count { B } else { 0 }
         # StmtNode: kind(8) + span_start(8) + span_end(8) + field0(8) + field1(8) + field2(8) + field3(8) = 56 bytes
         stmt_ptr := stmts + i * 56
         kind := load_i64(stmt_ptr + 0)
@@ -426,16 +426,16 @@ F collect_refs_stmts(st: i64, stmts: i64, count: i64) -> i64 {
             init := load_i64(stmt_ptr + 48)
             collect_refs_expr(st, init)
             0
-        } EL I kind == STMT_EXPR() {
+        } else I kind == STMT_EXPR() {
             # field0=expr
             expr := load_i64(stmt_ptr + 24)
             collect_refs_expr(st, expr)
             0
-        } EL I kind == STMT_RETURN() {
+        } else I kind == STMT_RETURN() {
             # field0=expr (may be 0)
             expr := load_i64(stmt_ptr + 24)
-            I expr != 0 { collect_refs_expr(st, expr); 0 } EL { 0 }
-        } EL { 0 }
+            I expr != 0 { collect_refs_expr(st, expr); 0 } else { 0 }
+        } else { 0 }
 
         i = i + 1
     }
@@ -443,34 +443,34 @@ F collect_refs_stmts(st: i64, stmts: i64, count: i64) -> i64 {
 }
 
 # Collect all refs from function bodies
-F collect_all_refs(st: i64, items: i64, count: i64) -> i64 {
+fn collect_all_refs(st: i64, items: i64, count: i64) -> i64 {
     i: mut i64 = 0
     L {
-        I i >= count { B } EL { 0 }
+        I i >= count { B } else { 0 }
         item := load_i64(items + i * 8)
-        I item == 0 { i = i + 1; C } EL { 0 }
+        I item == 0 { i = i + 1; C } else { 0 }
         kind := item_get_kind(item)
 
         I kind == ITEM_FUNCTION() {
             body := item_get_data3(item)
             collect_refs_expr(st, body)
             0
-        } EL I kind == 7 {  # ITEM_IMPL
+        } else I kind == 7 {  # ITEM_IMPL
             methods := item_get_data0(item)
             method_count := item_get_data1(item)
             mi: mut i64 = 0
             L {
-                I mi >= method_count { B } EL { 0 }
+                I mi >= method_count { B } else { 0 }
                 method := load_i64(methods + mi * 8)
                 I method != 0 {
                     body := item_get_data3(method)
                     collect_refs_expr(st, body)
                     0
-                } EL { 0 }
+                } else { 0 }
                 mi = mi + 1
             }
             0
-        } EL { 0 }
+        } else { 0 }
 
         i = i + 1
     }
@@ -483,12 +483,12 @@ F collect_all_refs(st: i64, items: i64, count: i64) -> i64 {
 
 # Find symbol at given byte offset in source
 # Returns name_ptr+name_len packed: result_ptr at out+0, result_len at out+8
-F find_symbol_at_offset(st: i64, src: i64, src_len: i64, offset: i64, out: i64) -> i64 {
+fn find_symbol_at_offset(st: i64, src: i64, src_len: i64, offset: i64, out: i64) -> i64 {
     # Check definitions first
     dc := symtable_defs_count(st)
     di: mut i64 = 0
     L {
-        I di >= dc { B } EL { 0 }
+        I di >= dc { B } else { 0 }
         def := symtable_get_def(st, di)
         np := symdef_name_ptr(def)
         nl := symdef_name_len(def)
@@ -501,64 +501,64 @@ F find_symbol_at_offset(st: i64, src: i64, src_len: i64, offset: i64, out: i64) 
 }
 
 # Find the identifier word at a given byte offset
-F find_word_at_offset(src: i64, src_len: i64, offset: i64, out: i64) -> i64 {
+fn find_word_at_offset(src: i64, src_len: i64, offset: i64, out: i64) -> i64 {
     I offset >= src_len {
         store_i64(out, 0)
         store_i64(out + 8, 0)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
     # Go back to start of word
     start: mut i64 = offset
     L {
-        I start <= 0 { B } EL { 0 }
+        I start <= 0 { B } else { 0 }
         ch := load_byte(src + start - 1)
-        I is_ident_char(ch) == 1 { start = start - 1; 0 } EL { B }
+        I is_ident_char(ch) == 1 { start = start - 1; 0 } else { B }
     }
     # Go forward to end of word
     end: mut i64 = offset
     L {
-        I end >= src_len { B } EL { 0 }
+        I end >= src_len { B } else { 0 }
         ch := load_byte(src + end)
-        I is_ident_char(ch) == 1 { end = end + 1; 0 } EL { B }
+        I is_ident_char(ch) == 1 { end = end + 1; 0 } else { B }
     }
     I end <= start {
         store_i64(out, 0)
         store_i64(out + 8, 0)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
     store_i64(out, src + start)
     store_i64(out + 8, end - start)
     1
 }
 
-F is_ident_char(ch: i64) -> i64 {
+fn is_ident_char(ch: i64) -> i64 {
     I ch >= 65 {
-        I ch <= 90 { R 1 } EL { 0 }  # A-Z
-    } EL { 0 }
+        I ch <= 90 { return 1 } else { 0 }  # A-Z
+    } else { 0 }
     I ch >= 97 {
-        I ch <= 122 { R 1 } EL { 0 }  # a-z
-    } EL { 0 }
+        I ch <= 122 { return 1 } else { 0 }  # a-z
+    } else { 0 }
     I ch >= 48 {
-        I ch <= 57 { R 1 } EL { 0 }  # 0-9
-    } EL { 0 }
-    I ch == 95 { R 1 } EL { 0 }  # _
+        I ch <= 57 { return 1 } else { 0 }  # 0-9
+    } else { 0 }
+    I ch == 95 { return 1 } else { 0 }  # _
     0
 }
 
 # Find definition by name
-F find_definition_by_name(st: i64, name_ptr: i64, name_len: i64) -> i64 {
+fn find_definition_by_name(st: i64, name_ptr: i64, name_len: i64) -> i64 {
     dc := symtable_defs_count(st)
     i: mut i64 = 0
     L {
-        I i >= dc { B } EL { 0 }
+        I i >= dc { B } else { 0 }
         def := symtable_get_def(st, i)
         np := symdef_name_ptr(def)
         nl := symdef_name_len(def)
         I nl == name_len {
             I lsp_memcmp(np, name_ptr, nl) == 0 {
-                R def
-            } EL { 0 }
-        } EL { 0 }
+                return def
+            } else { 0 }
+        } else { 0 }
         i = i + 1
     }
     0
@@ -567,13 +567,13 @@ F find_definition_by_name(st: i64, name_ptr: i64, name_len: i64) -> i64 {
 # Find all references matching name (returns count, fills result array)
 # results: pre-allocated array of i64 pointers to symref
 # Returns count of matches
-F find_all_references(st: i64, name_ptr: i64, name_len: i64, results: i64, max_results: i64) -> i64 {
+fn find_all_references(st: i64, name_ptr: i64, name_len: i64, results: i64, max_results: i64) -> i64 {
     rc := symtable_refs_count(st)
     found: mut i64 = 0
     i: mut i64 = 0
     L {
-        I i >= rc { B } EL { 0 }
-        I found >= max_results { B } EL { 0 }
+        I i >= rc { B } else { 0 }
+        I found >= max_results { B } else { 0 }
         ref := symtable_get_ref(st, i)
         np := symref_name_ptr(ref)
         nl := symref_name_len(ref)
@@ -582,8 +582,8 @@ F find_all_references(st: i64, name_ptr: i64, name_len: i64, results: i64, max_r
                 store_i64(results + found * 8, ref)
                 found = found + 1
                 0
-            } EL { 0 }
-        } EL { 0 }
+            } else { 0 }
+        } else { 0 }
         i = i + 1
     }
     found
@@ -592,7 +592,7 @@ F find_all_references(st: i64, name_ptr: i64, name_len: i64, results: i64, max_r
 # Build function signature string for hover
 # item: ITEM_FUNCTION item pointer
 # Returns sb (StringBuffer) with signature
-F build_function_signature(item: i64) -> i64 {
+fn build_function_signature(item: i64) -> i64 {
     sb := sb_new(256)
     sb_append_cstr(sb, "F ")
     name_ptr := item_get_name_ptr(item)
@@ -604,8 +604,8 @@ F build_function_signature(item: i64) -> i64 {
     param_count := item_get_data1(item)
     pi: mut i64 = 0
     L {
-        I pi >= param_count { B } EL { 0 }
-        I pi > 0 { sb_append_cstr(sb, ", "); 0 } EL { 0 }
+        I pi >= param_count { B } else { 0 }
+        I pi > 0 { sb_append_cstr(sb, ", "); 0 } else { 0 }
         param := load_i64(params + pi * 8)
         I param != 0 {
             pn_ptr := param_get_name_ptr(param)
@@ -617,11 +617,11 @@ F build_function_signature(item: i64) -> i64 {
             I pt_len > 0 {
                 sb_append_bytes(sb, pt_ptr, pt_len)
                 0
-            } EL {
+            } else {
                 sb_append_cstr(sb, "i64")
                 0
             }
-        } EL { 0 }
+        } else { 0 }
         pi = pi + 1
     }
     sb_append_byte(sb, 41)  # )
@@ -639,21 +639,21 @@ F build_function_signature(item: i64) -> i64 {
             I rt_len > 0 {
                 sb_append_bytes(sb, rt_ptr, rt_len)
                 0
-            } EL {
+            } else {
                 sb_append_cstr(sb, "i64")
                 0
             }
-        } EL {
+        } else {
             sb_append_cstr(sb, "i64")
             0
         }
-    } EL { 0 }
+    } else { 0 }
 
     sb
 }
 
 # Build struct info string for hover
-F build_struct_info(item: i64) -> i64 {
+fn build_struct_info(item: i64) -> i64 {
     sb := sb_new(256)
     sb_append_cstr(sb, "S ")
     name_ptr := item_get_name_ptr(item)
@@ -665,7 +665,7 @@ F build_struct_info(item: i64) -> i64 {
     field_count := item_get_data1(item)
     fi: mut i64 = 0
     L {
-        I fi >= field_count { B } EL { 0 }
+        I fi >= field_count { B } else { 0 }
         field := load_i64(fields + fi * 8)
         I field != 0 {
             sb_append_cstr(sb, "    ")
@@ -678,13 +678,13 @@ F build_struct_info(item: i64) -> i64 {
             I ft_len > 0 {
                 sb_append_bytes(sb, ft_ptr, ft_len)
                 0
-            } EL {
+            } else {
                 sb_append_cstr(sb, "i64")
                 0
             }
             sb_append_cstr(sb, "\\n")
             0
-        } EL { 0 }
+        } else { 0 }
         fi = fi + 1
     }
 

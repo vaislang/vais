@@ -3,10 +3,10 @@
 # ✅ DO: @(n - 1) — 이름 바뀌어도 안전.
 # ❌ DON'T: fact(n - 1) — 함수 rename 시 수동 수정 필요.
 
-F fact(n: i64) -> i64 {
-    I n <= 1 { 1 } EL { n * @(n - 1) }
+fn fact(n: i64) -> i64 {
+    I n <= 1 { 1 } else { n * @(n - 1) }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     fact(5)  # 120
 }

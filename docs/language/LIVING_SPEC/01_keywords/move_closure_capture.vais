@@ -5,7 +5,7 @@
 # 한정: 완전한 drop-on-move 추적은 Phase 4.23 SCOPED. 현재는 capture +
 # invoke 경로만 검증.
 
-F main() -> i64 {
+fn main() -> i64 {
     add_one := |x: i64| x + 1
     r1 := add_one(5)         # 6
 

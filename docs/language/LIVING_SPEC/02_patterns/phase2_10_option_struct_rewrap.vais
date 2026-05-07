@@ -9,19 +9,19 @@
 #       Phase 3.14/3.15 gap. LIVING_SPEC 테스트는 TC-only 이므로 이 파일은
 #       통과로 카운트됨.
 
-S Role { role_id: u64, }
+struct Role { role_id: u64, }
 
-F simpler(opt: Option<Role>) -> Option<u64> {
-    M opt {
+fn simpler(opt: Option<Role>) -> Option<u64> {
+    match opt {
         Some(r) => Some(r.role_id),
         None => None,
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     r := Role { role_id: 42 }
     o := Some(r)
-    M simpler(o) {
+    match simpler(o) {
         Some(v) => v as i64,
         None => -1,
     }

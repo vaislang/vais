@@ -2,13 +2,13 @@
 # Key concept: S Name<T> { field: T } 제네릭 구조체 선언.
 # 필드 타입이 타입 파라미터로 추상화됨.
 
-S Box<T> {
+struct Box<T> {
     val: T
 }
 
-F unwrap_i64(b: Box<i64>) -> i64 = b.val
+fn unwrap_i64(b: Box<i64>) -> i64 = b.val
 
-F main() -> i64 {
+fn main() -> i64 {
     b := Box { val: 55 }
     unwrap_i64(b)
 }

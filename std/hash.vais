@@ -3,24 +3,24 @@
 
 # Simple multiplicative hash (fast and good for integers)
 # Uses the golden ratio prime for good distribution
-F mult_hash(value: i64) -> i64 {
+fn mult_hash(value: i64) -> i64 {
     # Golden ratio prime constant: 2654435769 (well-known hash constant)
     h := value * 2654435769
-    I h < 0 { 0 - h } EL { h }
+    I h < 0 { 0 - h } else { h }
 }
 
 # Hash a string (char pointer) using DJB2 algorithm
 # This is a fast, simple hash with good distribution for strings
-F hash_string(str_ptr: i64) -> i64 {
+fn hash_string(str_ptr: i64) -> i64 {
     hash_string_djb2(str_ptr, 5381, 0)
 }
 
 # DJB2 hash helper (recursive)
-F hash_string_djb2(str_ptr: i64, hash: i64, idx: i64) -> i64 {
+fn hash_string_djb2(str_ptr: i64, hash: i64, idx: i64) -> i64 {
     byte := load_byte(str_ptr + idx)
     I byte == 0 {
-        I hash < 0 { 0 - hash } EL { hash }
-    } EL {
+        I hash < 0 { 0 - hash } else { hash }
+    } else {
         # hash * 33 + byte (DJB2 magic formula)
         new_hash := hash * 33 + byte
         hash_string_djb2(str_ptr, new_hash, idx + 1)
@@ -28,29 +28,29 @@ F hash_string_djb2(str_ptr: i64, hash: i64, idx: i64) -> i64 {
 }
 
 # Combine two hash values (useful for compound keys like tuples or structs)
-F combine_hash(h1: i64, h2: i64) -> i64 {
+fn combine_hash(h1: i64, h2: i64) -> i64 {
     # Simple combination: shift first hash and XOR with second
     combined := (h1 * 31) ^ h2
-    I combined < 0 { 0 - combined } EL { combined }
+    I combined < 0 { 0 - combined } else { combined }
 }
 
 # Hash i64 value (alias for mult_hash)
-F hash_i64(value: i64) -> i64 {
+fn hash_i64(value: i64) -> i64 {
     mult_hash(value)
 }
 
 # Hash bool value (0 or 1)
-F hash_bool(value: i64) -> i64 {
-    I value == 0 { 0 } EL { 1 }
+fn hash_bool(value: i64) -> i64 {
+    I value == 0 { 0 } else { 1 }
 }
 
 # Hash a pair of values (for tuple keys)
-F hash_pair(a: i64, b: i64) -> i64 {
+fn hash_pair(a: i64, b: i64) -> i64 {
     combine_hash(mult_hash(a), mult_hash(b))
 }
 
 # Hash three values (for 3-tuple keys)
-F hash_triple(a: i64, b: i64, c: i64) -> i64 {
+fn hash_triple(a: i64, b: i64, c: i64) -> i64 {
     h := combine_hash(mult_hash(a), mult_hash(b))
     combine_hash(h, mult_hash(c))
 }

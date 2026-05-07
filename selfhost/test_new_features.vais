@@ -5,18 +5,18 @@
 
 # Test 1: Attribute parsing
 #[inline]
-F test_attributes() -> i64 {
+fn test_attributes() -> i64 {
     puts("Attributes parsed!")
     0
 }
 
 # Test 2: Async function parsing
-A F async_compute(x: i64) -> i64 {
+A fn async_compute(x: i64) -> i64 {
     x * 2
 }
 
 # Test 3: Closure parsing
-F test_closures() -> i64 {
+fn test_closures() -> i64 {
     # Simple closure
     add_one := |x: i64| x + 1
     result := add_one(5)
@@ -34,7 +34,7 @@ F test_closures() -> i64 {
 }
 
 # Test 4: Await expression
-F test_await() -> i64 {
+fn test_await() -> i64 {
     result := async_compute(21).await
     puts("Await parsed!")
     result
@@ -43,40 +43,40 @@ F test_await() -> i64 {
 # ============ Phase 40-43 feature tests ============
 
 # Test 5: Trait + impl (Phase 40 — trait bounds)
-W Summable {
-    F sum(&self) -> i64
+trait Summable {
+    fn sum(&self) -> i64
 }
 
-S Pair { a: i64, b: i64 }
+struct Pair { a: i64, b: i64 }
 
-X Pair: Summable {
-    F sum(&self) -> i64 {
+impl Pair: Summable {
+    fn sum(&self) -> i64 {
         self.a + self.b
     }
 }
 
-F test_trait_bounds() -> i64 {
+fn test_trait_bounds() -> i64 {
     p := Pair { a: 20, b: 22 }
     result := p.sum()
     result - 42
 }
 
 # Test 6: Generic function (Phase 40 — generic substitution)
-F identity<T>(x: T) -> T {
+fn identity<T>(x: T) -> T {
     x
 }
 
-F test_generics() -> i64 {
+fn test_generics() -> i64 {
     x := identity(42)
     x - 42
 }
 
 # Test 7: Async function with chaining (Phase 43 — async/await)
-A F step1(x: i64) -> i64 {
+A fn step1(x: i64) -> i64 {
     x + 5
 }
 
-F test_async_chain() -> i64 {
+fn test_async_chain() -> i64 {
     result := step1(37).await
     result - 42
 }
@@ -102,7 +102,7 @@ F test_async_chain() -> i64 {
 # |&mut x| ByMutRef        | ❌           | ❌      | Missing
 # for-in loop (L i:0..5)   | ❌           | ❌      | Only infinite/while loops
 
-F main() -> i64 {
+fn main() -> i64 {
     test_attributes()
     test_closures()
     test_await()

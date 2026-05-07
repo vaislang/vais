@@ -1,68 +1,68 @@
 # Stdlib self-test: ByteBuffer write/read round-trips
-U std/bytebuffer
+use std/bytebuffer
 
-F main() -> i64 {
+fn main() -> i64 {
     buf: ByteBuffer := mut ByteBuffer.with_capacity(64)
-    I buf.len() != 0 { R 1 }
-    I buf.position() != 0 { R 2 }
-    I buf.capacity() < 16 { R 3 }
+    I buf.len() != 0 { return 1 }
+    I buf.position() != 0 { return 2 }
+    I buf.capacity() < 16 { return 3 }
 
     # write three bytes, then i32, then i64
     buf.write_u8(0x41)
     buf.write_u8(0x42)
     buf.write_u8(0x43)
-    I buf.len() != 3 { R 4 }
+    I buf.len() != 3 { return 4 }
 
     buf.write_i32_le(0x12345678)
-    I buf.len() != 7 { R 5 }
+    I buf.len() != 7 { return 5 }
 
     buf.write_i64_le(0x0123456789ABCDEF)
-    I buf.len() != 15 { R 6 }
+    I buf.len() != 15 { return 6 }
 
     # rewind and read back
     buf.rewind()
-    I buf.position() != 0 { R 7 }
+    I buf.position() != 0 { return 7 }
 
-    I buf.read_u8() != 0x41 { R 8 }
-    I buf.read_u8() != 0x42 { R 9 }
-    I buf.read_u8() != 0x43 { R 10 }
-    I buf.position() != 3 { R 11 }
+    I buf.read_u8() != 0x41 { return 8 }
+    I buf.read_u8() != 0x42 { return 9 }
+    I buf.read_u8() != 0x43 { return 10 }
+    I buf.position() != 3 { return 11 }
 
-    I buf.read_i32_le() != 0x12345678 { R 12 }
-    I buf.position() != 7 { R 13 }
+    I buf.read_i32_le() != 0x12345678 { return 12 }
+    I buf.position() != 7 { return 13 }
 
-    I buf.read_i64_le() != 0x0123456789ABCDEF { R 14 }
-    I buf.position() != 15 { R 15 }
+    I buf.read_i64_le() != 0x0123456789ABCDEF { return 14 }
+    I buf.position() != 15 { return 15 }
 
     # remaining should be 0 after reading everything
-    I buf.remaining() != 0 { R 16 }
+    I buf.remaining() != 0 { return 16 }
 
     # ensure_capacity grows buffer
     big: ByteBuffer := mut ByteBuffer.with_capacity(16)
     LF i: 0..200 {
         big.write_u8(i & 0xFF)
     }
-    I big.len() != 200 { R 17 }
-    I big.capacity() < 200 { R 18 }
+    I big.len() != 200 { return 17 }
+    I big.capacity() < 200 { return 18 }
 
     # spot-check round trip on grown buffer
     big.rewind()
-    I big.read_u8() != 0 { R 19 }
+    I big.read_u8() != 0 { return 19 }
     big.seek(100)
-    I big.read_u8() != 100 { R 20 }
+    I big.read_u8() != 100 { return 20 }
     big.seek(199)
-    I big.read_u8() != 199 { R 21 }
+    I big.read_u8() != 199 { return 21 }
 
     # wrapped buffers must write at the seek cursor, not append past len.
     page: Vec<u8> := mut Vec.repeat(0u8, 16)
     wrapped := mut ByteBuffer.wrap(&page)
     wrapped.seek(4)
     wrapped.write_u16_le(0x1234)
-    I page[4] != 0x34 { R 22 }
-    I page[5] != 0x12 { R 23 }
+    I page[4] != 0x34 { return 22 }
+    I page[5] != 0x12 { return 23 }
     wrapped.seek(0)
     wrapped.write_u8(0xAB)
-    I page[0] != 0xAB { R 24 }
+    I page[0] != 0xAB { return 24 }
 
-    R 0
+    return 0
 }

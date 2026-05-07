@@ -52,30 +52,30 @@
 # Option type - represents an optional value
 # Some(T) or None
 
-EN Option<T> {
+enum Option<T> {
     None,
     Some(T)
 }
 
 # Check if option contains a value
-X Option<T> {
-    F is_some(&self) -> i64 {
-        M self {
+impl Option<T> {
+    fn is_some(&self) -> i64 {
+        match self {
             Some(_) => 1,
             None => 0
         }
     }
 
-    F is_none(&self) -> i64 {
-        M self {
+    fn is_none(&self) -> i64 {
+        match self {
             Some(_) => 0,
             None => 1
         }
     }
 
     # Unwrap the value (returns default if None)
-    F unwrap_or(&self, default: T) -> T {
-        M self {
+    fn unwrap_or(&self, default: T) -> T {
+        match self {
             Some(v) => v,
             None => default
         }

@@ -3,16 +3,16 @@
 # ✅ DO: M opt { Some(r) => r.field, None => default } — 직접 반환.
 # ❌ DON'T: M opt { Some(r) => Some(r.field), None => None } — Phase 2.10 codegen 버그.
 
-S Profile { age: i64 }
+struct Profile { age: i64 }
 
-F get_age(p: Option<Profile>, def: i64) -> i64 {
-    M p {
+fn get_age(p: Option<Profile>, def: i64) -> i64 {
+    match p {
         Some(r) => r.age,
         None => def
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Profile { age: 25 }
     a := get_age(Some(p), 0)
     b := get_age(None, 99)

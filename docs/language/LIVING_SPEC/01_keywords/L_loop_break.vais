@@ -2,7 +2,7 @@
 # Key concept: L { ... B } 무한 루프 + break.
 # L 은 무한 반복. I 조건이 만족되면 B 로 탈출.
 
-F count_until(limit: i64) -> i64 {
+fn count_until(limit: i64) -> i64 {
     n := mut 0
     L {
         n = n + 1
@@ -13,6 +13,6 @@ F count_until(limit: i64) -> i64 {
     n
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     count_until(5)
 }

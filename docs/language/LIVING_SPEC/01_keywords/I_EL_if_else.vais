@@ -2,17 +2,17 @@
 # Key concept: I cond { ... } EL { ... } 조건 분기.
 # EL은 else를 의미. I/EL 체인도 가능: I ... { } EL I ... { } EL { }.
 
-F classify(n: i64) -> i64 {
+fn classify(n: i64) -> i64 {
     I n < 0 {
         -1
-    } EL I n == 0 {
+    } else I n == 0 {
         0
-    } EL {
+    } else {
         1
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := classify(-5)
     b := classify(0)
     c := classify(7)
