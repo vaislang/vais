@@ -3,26 +3,26 @@
 # cast loaded the field's value, so `&` then took the address of the loaded
 # value, breaking pointer-based FFI like `__atomic_*`.
 
-S Cell {
+struct Cell {
     value: i64
 }
 
-X Cell {
-    F new(v: i64) -> Cell {
+impl Cell {
+    fn new(v: i64) -> Cell {
         Cell { value: v }
     }
-    F addr_as_int(&self) -> i64 {
+    fn addr_as_int(&self) -> i64 {
         &self.value as i64
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c: Cell := mut Cell.new(42)
     p1: i64 := c.addr_as_int()
     p2: i64 := c.addr_as_int()
     # The two calls must return the same field address.
-    I p1 != p2 { R 1 }
+    I p1 != p2 { return 1 }
     # The address must NOT equal the field's value (42).
-    I p1 == 42 { R 2 }
-    R 0
+    I p1 == 42 { return 2 }
+    return 0
 }

@@ -1,26 +1,26 @@
 # CHECKS: calling a trait method via the concrete type's impl (no dyn).
-W Compute {
-    F compute(&self, x: i64) -> i64
+trait Compute {
+    fn compute(&self, x: i64) -> i64
 }
 
-S Adder { offset: i64 }
-S Multiplier { factor: i64 }
+struct Adder { offset: i64 }
+struct Multiplier { factor: i64 }
 
-X Adder: Compute {
-    F compute(&self, x: i64) -> i64 { x + self.offset }
+impl Adder: Compute {
+    fn compute(&self, x: i64) -> i64 { x + self.offset }
 }
 
-X Multiplier: Compute {
-    F compute(&self, x: i64) -> i64 { x * self.factor }
+impl Multiplier: Compute {
+    fn compute(&self, x: i64) -> i64 { x * self.factor }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a: Adder := Adder { offset: 10 }
     m: Multiplier := Multiplier { factor: 3 }
 
-    I a.compute(5) != 15 { R 1 }
-    I m.compute(5) != 15 { R 2 }
-    I a.compute(0) != 10 { R 3 }
-    I m.compute(0) != 0 { R 4 }
-    R 0
+    I a.compute(5) != 15 { return 1 }
+    I m.compute(5) != 15 { return 2 }
+    I a.compute(0) != 10 { return 3 }
+    I m.compute(0) != 0 { return 4 }
+    return 0
 }

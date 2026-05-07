@@ -1,10 +1,10 @@
-U vector/hnsw/types
-U vector/hnsw/bulk
-U vector/hnsw/search
-U vector/distance
-U storage/error
+use vector/hnsw/types
+use vector/hnsw/bulk
+use vector/hnsw/search
+use vector/distance
+use storage/error
 
-S MultiLayerStore {
+struct MultiLayerStore {
     n1: HnswNode,
     n2: HnswNode,
     n3: HnswNode,
@@ -19,8 +19,8 @@ S MultiLayerStore {
     has4: bool,
 }
 
-X MultiLayerStore {
-    F new(v1: Vec<f32>, v2: Vec<f32>, v3: Vec<f32>, v4: Vec<f32>) -> MultiLayerStore {
+impl MultiLayerStore {
+    fn new(v1: Vec<f32>, v2: Vec<f32>, v3: Vec<f32>, v4: Vec<f32>) -> MultiLayerStore {
         MultiLayerStore {
             n1: HnswNode.new(0, 0, 0, 0, 0, 0),
             n2: HnswNode.new(0, 0, 0, 0, 0, 0),
@@ -38,74 +38,74 @@ X MultiLayerStore {
     }
 }
 
-X MultiLayerStore : NodeStore {
-    F load_node(self, node_id: u64) -> Result<HnswNode, VaisError> {
-        I node_id == 1 && self.has1 { R Ok(self.n1.clone()) }
-        I node_id == 2 && self.has2 { R Ok(self.n2.clone()) }
-        I node_id == 3 && self.has3 { R Ok(self.n3.clone()) }
-        I node_id == 4 && self.has4 { R Ok(self.n4.clone()) }
+impl MultiLayerStore : NodeStore {
+    fn load_node(self, node_id: u64) -> Result<HnswNode, VaisError> {
+        I node_id == 1 && self.has1 { return Ok(self.n1.clone()) }
+        I node_id == 2 && self.has2 { return Ok(self.n2.clone()) }
+        I node_id == 3 && self.has3 { return Ok(self.n3.clone()) }
+        I node_id == 4 && self.has4 { return Ok(self.n4.clone()) }
         Err(err_internal("missing multilayer smoke node"))
     }
 
-    F load_vector(self, node_id: u64) -> Result<Vec<f32>, VaisError> {
-        I node_id == 1 && self.has1 { R Ok(self.v1.clone()) }
-        I node_id == 2 && self.has2 { R Ok(self.v2.clone()) }
-        I node_id == 3 && self.has3 { R Ok(self.v3.clone()) }
-        I node_id == 4 && self.has4 { R Ok(self.v4.clone()) }
+    fn load_vector(self, node_id: u64) -> Result<Vec<f32>, VaisError> {
+        I node_id == 1 && self.has1 { return Ok(self.v1.clone()) }
+        I node_id == 2 && self.has2 { return Ok(self.v2.clone()) }
+        I node_id == 3 && self.has3 { return Ok(self.v3.clone()) }
+        I node_id == 4 && self.has4 { return Ok(self.v4.clone()) }
         Err(err_internal("missing multilayer smoke vector"))
     }
 
-    F store_node(mut self, node: HnswNode) -> Result<(), VaisError> {
+    fn store_node(mut self, node: HnswNode) -> Result<(), VaisError> {
         I node.node_id == 1 {
             self.n1 = node
             self.has1 = true
-            R Ok(())
+            return Ok(())
         }
         I node.node_id == 2 {
             self.n2 = node
             self.has2 = true
-            R Ok(())
+            return Ok(())
         }
         I node.node_id == 3 {
             self.n3 = node
             self.has3 = true
-            R Ok(())
+            return Ok(())
         }
         I node.node_id == 4 {
             self.n4 = node
             self.has4 = true
-            R Ok(())
+            return Ok(())
         }
         Err(err_internal("unexpected multilayer smoke node"))
     }
 
-    F allocate_node_id(mut self) -> u64 {
+    fn allocate_node_id(mut self) -> u64 {
         5
     }
 
-    F get_file_page(self, node_id: u64) -> Result<(u8, u32), VaisError> {
+    fn get_file_page(self, node_id: u64) -> Result<(u8, u32), VaisError> {
         I node_id >= 1 && node_id <= 4 {
-            R Ok((1 as u8, node_id as u32))
+            return Ok((1 as u8, node_id as u32))
         }
         Err(err_internal("missing multilayer smoke node page"))
     }
 
-    F allocate_node_page(mut self, node_id: u64) -> Result<(u8, u32), VaisError> {
+    fn allocate_node_page(mut self, node_id: u64) -> Result<(u8, u32), VaisError> {
         Ok((1 as u8, node_id as u32))
     }
 }
 
-F vec2(a: f32, b: f32) -> Vec<f32> {
+fn vec2(a: f32, b: f32) -> Vec<f32> {
     values: Vec<f32> := mut Vec.with_capacity(2)
     values.push(a)
     values.push(b)
     values
 }
 
-F main() -> i64 {
-    hcfg := mut M HnswConfig.new(2 as u16, 4 as u16, 6 as u32, 6 as u32, 8 as u64, DISTANCE_L2) {
+fn main() -> i64 {
+    hcfg := mut match HnswConfig.new(2 as u16, 4 as u16, 6 as u32, 6 as u32, 8 as u64, DISTANCE_L2) {
         Ok(v) => v,
-        Err(_) => { R 1 },
+        Err(_) => { return 1 },
     }
     hcfg.dim = 2 as u32
     hcfg.metric = DISTANCE_L2
@@ -134,7 +134,7 @@ F main() -> i64 {
     bcfg := mut BulkLoadConfig.with_batch_size(4)
     bcfg = bcfg.with_wal_bypass()
 
-    meta = M bulk_insert_stored_vectors(
+    meta = match bulk_insert_stored_vectors(
         &bcfg,
         &vectors,
         &metas,
@@ -144,73 +144,73 @@ F main() -> i64 {
         900,
     ) {
         Ok(v) => v,
-        Err(_) => { R 2 },
+        Err(_) => { return 2 },
     }
 
-    I meta.total_nodes != 4 { R 3 }
-    I meta.max_layer != 2 as u8 { R 4 }
-    I meta.entry_point != 1 { R 5 }
+    I meta.total_nodes != 4 { return 3 }
+    I meta.max_layer != 2 as u8 { return 4 }
+    I meta.entry_point != 1 { return 5 }
 
-    stored1 := mut M store.load_node(1) {
+    stored1 := mut match store.load_node(1) {
         Ok(n) => n,
-        Err(_) => { R 6 },
+        Err(_) => { return 6 },
     }
-    stored2 := mut M store.load_node(2) {
+    stored2 := mut match store.load_node(2) {
         Ok(n) => n,
-        Err(_) => { R 7 },
+        Err(_) => { return 7 },
     }
-    stored3 := mut M store.load_node(3) {
+    stored3 := mut match store.load_node(3) {
         Ok(n) => n,
-        Err(_) => { R 8 },
+        Err(_) => { return 8 },
     }
-    stored4 := mut M store.load_node(4) {
+    stored4 := mut match store.load_node(4) {
         Ok(n) => n,
-        Err(_) => { R 9 },
+        Err(_) => { return 9 },
     }
 
-    I stored1.max_layer != 2 as u8 { R 10 }
-    I stored2.max_layer != 1 as u8 { R 11 }
-    I stored3.max_layer != 1 as u8 { R 12 }
-    I stored4.max_layer != 0 as u8 { R 13 }
+    I stored1.max_layer != 2 as u8 { return 10 }
+    I stored2.max_layer != 1 as u8 { return 11 }
+    I stored3.max_layer != 1 as u8 { return 12 }
+    I stored4.max_layer != 0 as u8 { return 13 }
 
-    n1_l1 := mut M stored1.get_neighbors(1) {
+    n1_l1 := mut match stored1.get_neighbors(1) {
         Ok(v) => v,
-        Err(_) => { R 14 },
+        Err(_) => { return 14 },
     }
-    n3_l1 := mut M stored3.get_neighbors(1) {
+    n3_l1 := mut match stored3.get_neighbors(1) {
         Ok(v) => v,
-        Err(_) => { R 15 },
+        Err(_) => { return 15 },
     }
-    n4_l0 := mut M stored4.get_neighbors(0) {
+    n4_l0 := mut match stored4.get_neighbors(0) {
         Ok(v) => v,
-        Err(_) => { R 16 },
+        Err(_) => { return 16 },
     }
 
-    I n1_l1.len() == 0 { R 17 }
-    I n3_l1.len() == 0 { R 18 }
-    I n4_l0.len() == 0 { R 19 }
+    I n1_l1.len() == 0 { return 17 }
+    I n3_l1.len() == 0 { return 18 }
+    I n4_l0.len() == 0 { return 19 }
 
     query := mut vec2(29.5 as f32, 0.0)
-    result := mut M knn_search(&query, 2, 6 as u32, &meta, &mut store, &distance) {
+    result := mut match knn_search(&query, 2, 6 as u32, &meta, &mut store, &distance) {
         Ok(v) => v,
         Err(e) => {
-            I e.code == "VE-02-03-001" { R 20 }
-            I e.code == "VE-02-03-002" { R 21 }
-            I e.code == "VE-02-03-003" { R 22 }
-            R 23
+            I e.code == "VE-02-03-001" { return 20 }
+            I e.code == "VE-02-03-002" { return 21 }
+            I e.code == "VE-02-03-003" { return 22 }
+            return 23
         },
     }
 
-    I result.results.len() != 2 { R 24 }
-    I result.distance_computations == 0 { R 25 }
-    I result.nodes_visited == 0 { R 26 }
+    I result.results.len() != 2 { return 24 }
+    I result.distance_computations == 0 { return 25 }
+    I result.nodes_visited == 0 { return 26 }
 
     first := mut &result.results[0]
     second := mut &result.results[1]
-    I first.node_id != 4 { R 27 }
-    I !approx_eq_f32(first.distance, 0.5 as f32, 0.0001 as f32) { R 28 }
-    I second.node_id != 3 { R 29 }
-    I !approx_eq_f32(second.distance, 9.5 as f32, 0.0001 as f32) { R 30 }
+    I first.node_id != 4 { return 27 }
+    I !approx_eq_f32(first.distance, 0.5 as f32, 0.0001 as f32) { return 28 }
+    I second.node_id != 3 { return 29 }
+    I !approx_eq_f32(second.distance, 9.5 as f32, 0.0001 as f32) { return 30 }
 
-    R 0
+    return 0
 }

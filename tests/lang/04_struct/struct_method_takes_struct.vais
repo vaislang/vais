@@ -1,12 +1,12 @@
 # CHECKS: method takes another struct as argument.
-S Vec2 { x: i64, y: i64 }
+struct Vec2 { x: i64, y: i64 }
 
-X Vec2 {
-    F new(x: i64, y: i64) -> Vec2 { Vec2 { x: x, y: y } }
-    F dot(&self, other: Vec2) -> i64 {
+impl Vec2 {
+    fn new(x: i64, y: i64) -> Vec2 { Vec2 { x: x, y: y } }
+    fn dot(&self, other: Vec2) -> i64 {
         self.x * other.x + self.y * other.y
     }
-    F manhattan(&self, other: Vec2) -> i64 {
+    fn manhattan(&self, other: Vec2) -> i64 {
         dx: i64 := mut self.x - other.x
         dy: i64 := mut self.y - other.y
         I dx < 0 { dx = 0 - dx }
@@ -15,12 +15,12 @@ X Vec2 {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a: Vec2 := mut Vec2.new(3, 4)
     b: Vec2 := mut Vec2.new(1, 2)
     # 3*1 + 4*2 = 11
-    I a.dot(b) != 11 { R 1 }
+    I a.dot(b) != 11 { return 1 }
     # |3-1| + |4-2| = 4
-    I a.manhattan(b) != 4 { R 2 }
-    R 0
+    I a.manhattan(b) != 4 { return 2 }
+    return 0
 }

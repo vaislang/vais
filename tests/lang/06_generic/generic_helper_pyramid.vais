@@ -1,12 +1,12 @@
 # CHECKS: pyramid of generic-fn instantiations (REGRESSION for bug C17).
-F id<T>(x: T) -> T { x }
-F twice<T>(x: T) -> T { id(id(x)) }
-F triple<T>(x: T) -> T { id(twice(x)) }
+fn id<T>(x: T) -> T { x }
+fn twice<T>(x: T) -> T { id(id(x)) }
+fn triple<T>(x: T) -> T { id(twice(x)) }
 
-F main() -> i64 {
-    I id(1) != 1 { R 1 }
-    I twice(2) != 2 { R 2 }
-    I triple(3) != 3 { R 3 }
-    I triple(triple(triple(7))) != 7 { R 4 }
-    R 0
+fn main() -> i64 {
+    I id(1) != 1 { return 1 }
+    I twice(2) != 2 { return 2 }
+    I triple(3) != 3 { return 3 }
+    I triple(triple(triple(7))) != 7 { return 4 }
+    return 0
 }

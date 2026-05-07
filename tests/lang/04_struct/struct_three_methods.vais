@@ -1,35 +1,35 @@
 # CHECKS: struct with three methods (constructor + 2 accessors).
-S Point3 {
+struct Point3 {
     x: i64,
     y: i64,
     z: i64
 }
 
-X Point3 {
-    F new(x: i64, y: i64, z: i64) -> Point3 {
+impl Point3 {
+    fn new(x: i64, y: i64, z: i64) -> Point3 {
         Point3 { x: x, y: y, z: z }
     }
 
-    F sum(&self) -> i64 {
+    fn sum(&self) -> i64 {
         self.x + self.y + self.z
     }
 
-    F product(&self) -> i64 {
+    fn product(&self) -> i64 {
         self.x * self.y * self.z
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p: Point3 := Point3.new(2, 3, 4)
-    I p.sum() != 9 { R 1 }
-    I p.product() != 24 { R 2 }
+    I p.sum() != 9 { return 1 }
+    I p.product() != 24 { return 2 }
 
     q: Point3 := Point3.new(0, 1, 0)
-    I q.sum() != 1 { R 3 }
-    I q.product() != 0 { R 4 }
+    I q.sum() != 1 { return 3 }
+    I q.product() != 0 { return 4 }
 
     r: Point3 := Point3.new(0 - 1, 0 - 2, 0 - 3)
-    I r.sum() != 0 - 6 { R 5 }
-    I r.product() != 0 - 6 { R 6 }
-    R 0
+    I r.sum() != 0 - 6 { return 5 }
+    I r.product() != 0 - 6 { return 6 }
+    return 0
 }

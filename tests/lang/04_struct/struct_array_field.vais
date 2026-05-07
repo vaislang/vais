@@ -7,16 +7,16 @@
 #     is an array and the supplied value is a pointer (`generate_array`
 #     returns the alloca pointer), so `Point3D { coords: [10,20,30] }` no
 #     longer fails IR verification with "ptr instead of [3 x i64]".
-S Point3D {
+struct Point3D {
     coords: [i64; 3]
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p: Point3D := Point3D { coords: [10, 20, 30] }
-    I p.coords[0] != 10 { R 1 }
-    I p.coords[1] != 20 { R 2 }
-    I p.coords[2] != 30 { R 3 }
+    I p.coords[0] != 10 { return 1 }
+    I p.coords[1] != 20 { return 2 }
+    I p.coords[2] != 30 { return 3 }
     sum: i64 := p.coords[0] + p.coords[1] + p.coords[2]
-    I sum != 60 { R 4 }
-    R 0
+    I sum != 60 { return 4 }
+    return 0
 }

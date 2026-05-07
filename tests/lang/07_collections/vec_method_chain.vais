@@ -1,22 +1,22 @@
 # CHECKS: Vec<i64> push, indexing, and len in sequence.
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     LF i: 0..20 {
         v.push(i * i)
     }
-    I v.len() != 20 { R 1 }
-    I v[0] != 0 { R 2 }
-    I v[5] != 25 { R 3 }
-    I v[10] != 100 { R 4 }
-    I v[19] != 361 { R 5 }
+    I v.len() != 20 { return 1 }
+    I v[0] != 0 { return 2 }
+    I v[5] != 25 { return 3 }
+    I v[10] != 100 { return 4 }
+    I v[19] != 361 { return 5 }
 
     sum: i64 := mut 0
     LF i: 0..v.len() {
         sum = sum + v[i]
     }
     # Sum of squares 0..20 = 19*20*39/6 = 2470
-    I sum != 2470 { R 6 }
-    R 0
+    I sum != 2470 { return 6 }
+    return 0
 }

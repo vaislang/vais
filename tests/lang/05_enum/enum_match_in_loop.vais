@@ -1,31 +1,31 @@
 # CHECKS: dispatch enum variants inside a loop.
-EN Op {
+enum Op {
     Add(i64),
     Sub(i64),
     Reset
 }
 
-F apply(state: i64, op: Op) -> i64 {
-    M op {
+fn apply(state: i64, op: Op) -> i64 {
+    match op {
         Add(x) => state + x,
         Sub(x) => state - x,
         Reset => 0
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     state: i64 := mut 0
 
     # Apply Add(10), Add(20), Sub(5), Reset, Add(7) in sequence
     state = apply(state, Add(10))
     state = apply(state, Add(20))
     state = apply(state, Sub(5))
-    I state != 25 { R 1 }
+    I state != 25 { return 1 }
 
     state = apply(state, Reset)
-    I state != 0 { R 2 }
+    I state != 0 { return 2 }
 
     state = apply(state, Add(7))
-    I state != 7 { R 3 }
-    R 0
+    I state != 7 { return 3 }
+    return 0
 }

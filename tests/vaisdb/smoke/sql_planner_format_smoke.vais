@@ -1,10 +1,10 @@
-U sql/parser/ast
-U sql/planner/mod
-U sql/catalog/manager
-U sql/catalog/schema
-U storage/btree/tree
+use sql/parser/ast
+use sql/planner/mod
+use sql/catalog/manager
+use sql/catalog/schema
+use storage/btree/tree
 
-F make_catalog() -> CatalogManager {
+fn make_catalog() -> CatalogManager {
     tree := mut BTree.new(1 as u32, 0 as u8, 4096 as u32)
     catalog := mut CatalogManager.new(tree)
 
@@ -27,21 +27,21 @@ F make_catalog() -> CatalogManager {
     catalog
 }
 
-F make_from_docs() -> Option<Vec<TableRef>> {
+fn make_from_docs() -> Option<Vec<TableRef>> {
     refs: Vec<TableRef> := mut Vec.with_capacity(1)
     refs.push(TableRef.Table { name: "docs", alias: None })
     Some(refs)
 }
 
-F make_column(name: str) -> Expr {
+fn make_column(name: str) -> Expr {
     Expr.ColumnRef { table: None, column: name }
 }
 
-F make_int(v: i64) -> Expr {
+fn make_int(v: i64) -> Expr {
     Expr.Literal { value: SqlValue.IntVal { v } }
 }
 
-F make_project_query() -> SelectQuery {
+fn make_project_query() -> SelectQuery {
     query := mut SelectQuery.empty()
     query.from = make_from_docs()
     query.select_list.push(SelectItem.Expr {
@@ -51,7 +51,7 @@ F make_project_query() -> SelectQuery {
     query
 }
 
-F check_project_limit_index_format(catalog: &CatalogManager) -> i64 {
+fn check_project_limit_index_format(catalog: &CatalogManager) -> i64 {
     query := mut make_project_query()
     query.where_clause = Some(Expr.BinaryOp {
         left: Box.new(make_column("id")),
@@ -60,24 +60,24 @@ F check_project_limit_index_format(catalog: &CatalogManager) -> i64 {
     })
     query.limit = Some(make_int(2))
 
-    plan := mut M build_plan(&query, catalog) {
+    plan := mut match build_plan(&query, catalog) {
         Ok(v) => v,
-        Err(_) => { R 1 },
+        Err(_) => { return 1 },
     }
 
     text := mut format_plan(&plan, 0)
-    I text == "Plan" { R 2 }
+    I text == "Plan" { return 2 }
     expected := mut "Project columns=1\n  Limit limit=2\n    IndexScan table=docs index=idx_docs_id residual=false"
-    I text != expected { R 3 }
+    I text != expected { return 3 }
 
     indented := mut format_plan(&plan, 1)
     expected_indented := mut "  Project columns=1\n    Limit limit=2\n      IndexScan table=docs index=idx_docs_id residual=false"
-    I indented != expected_indented { R 4 }
+    I indented != expected_indented { return 4 }
 
-    R 0
+    return 0
 }
 
-F check_sort_seqscan_format(catalog: &CatalogManager) -> i64 {
+fn check_sort_seqscan_format(catalog: &CatalogManager) -> i64 {
     query := mut make_project_query()
     query.order_by.push(OrderByItem {
         expr: make_column("title"),
@@ -85,19 +85,19 @@ F check_sort_seqscan_format(catalog: &CatalogManager) -> i64 {
         nulls_first: Some(true),
     })
 
-    plan := mut M build_plan(&query, catalog) {
+    plan := mut match build_plan(&query, catalog) {
         Ok(v) => v,
-        Err(_) => { R 10 },
+        Err(_) => { return 10 },
     }
 
     text := mut format_plan(&plan, 0)
     expected := mut "Project columns=1\n  Sort keys=1\n    SeqScan table=docs filter=false"
-    I text != expected { R 11 }
+    I text != expected { return 11 }
 
-    R 0
+    return 0
 }
 
-F check_aggregate_format(catalog: &CatalogManager) -> i64 {
+fn check_aggregate_format(catalog: &CatalogManager) -> i64 {
     query := mut SelectQuery.empty()
     query.from = make_from_docs()
     query.select_list.push(SelectItem.Expr {
@@ -116,43 +116,43 @@ F check_aggregate_format(catalog: &CatalogManager) -> i64 {
     })
     query.group_by.push(make_column("id"))
 
-    plan := mut M build_plan(&query, catalog) {
+    plan := mut match build_plan(&query, catalog) {
         Ok(v) => v,
-        Err(_) => { R 20 },
+        Err(_) => { return 20 },
     }
 
     text := mut format_plan(&plan, 0)
     expected := mut "Project columns=2\n  Aggregate groups=1 aggregates=1\n    SeqScan table=docs filter=false"
-    I text != expected { R 21 }
+    I text != expected { return 21 }
 
-    R 0
+    return 0
 }
 
-F check_leaf_format() -> i64 {
+fn check_leaf_format() -> i64 {
     empty_text := mut format_plan(&PlanNode.Empty, 1)
-    I empty_text != "  Empty" { R 30 }
+    I empty_text != "  Empty" { return 30 }
 
     rows: Vec<Vec<Expr>> := mut Vec.with_capacity(0)
     values_text := mut format_plan(&PlanNode.Values { rows }, 0)
-    I values_text != "Values rows=0" { R 31 }
+    I values_text != "Values rows=0" { return 31 }
 
-    R 0
+    return 0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     catalog := mut make_catalog()
 
     code := mut check_project_limit_index_format(&catalog)
-    I code != 0 { R code }
+    I code != 0 { return code }
 
     code = check_sort_seqscan_format(&catalog)
-    I code != 0 { R code }
+    I code != 0 { return code }
 
     code = check_aggregate_format(&catalog)
-    I code != 0 { R code }
+    I code != 0 { return code }
 
     code = check_leaf_format()
-    I code != 0 { R code }
+    I code != 0 { return code }
 
-    R 0
+    return 0
 }

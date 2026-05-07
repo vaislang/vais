@@ -1,16 +1,16 @@
 # CHECKS: generic with all T determined from first arg.
-F first_or_self<T>(opt: Option<T>, default: T) -> T {
-    M opt {
+fn first_or_self<T>(opt: Option<T>, default: T) -> T {
+    match opt {
         Some(v) => v,
         None => default
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a: Option<i64> := Some(42)
-    I first_or_self(a, 0) != 42 { R 1 }
+    I first_or_self(a, 0) != 42 { return 1 }
 
     b: Option<i64> := None
-    I first_or_self(b, 99) != 99 { R 2 }
-    R 0
+    I first_or_self(b, 99) != 99 { return 2 }
+    return 0
 }

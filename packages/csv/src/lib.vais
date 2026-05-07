@@ -11,14 +11,14 @@ C MAX_FIELDS: i64 = 100
 C MAX_FIELD_LEN: i64 = 1024
 
 # CsvRow - represents a parsed CSV row
-S CsvRow {
+struct CsvRow {
     fields: i64,      # Array of field pointers (i64*)
     field_count: i64, # Number of fields in this row
     capacity: i64     # Allocated capacity
 }
 
 # CsvReader - stateful CSV file reader
-S CsvReader {
+struct CsvReader {
     file_path: i64,   # Path to CSV file
     line_buf: i64,    # Buffer for current line
     buf_size: i64,    # Buffer size
@@ -26,9 +26,9 @@ S CsvReader {
 }
 
 # Implementation for CsvRow
-X CsvRow {
+impl CsvRow {
     # Create a new empty CsvRow
-    F new() -> CsvRow {
+    fn new() -> CsvRow {
         capacity := MAX_FIELDS
         fields := malloc(capacity * 8)  # Array of i64 pointers
 
@@ -37,16 +37,16 @@ X CsvRow {
 
     # Get field at index
     # Returns: Pointer to field string, or 0 if out of bounds
-    F get(&self, idx: i64) -> i64 {
-        I idx < 0 { R 0 }
-        I idx >= self.field_count { R 0 }
+    fn get(&self, idx: i64) -> i64 {
+        I idx < 0 { return 0 }
+        I idx >= self.field_count { return 0 }
 
         # Load pointer from array
         load_ptr(self.fields + (idx * 8))
     }
 
     # Free all allocated memory for this row
-    F free(&self) -> i64 {
+    fn free(&self) -> i64 {
         # Free each field string
         i := 0
         L i < self.field_count {
@@ -66,8 +66,8 @@ X CsvRow {
     }
 
     # Add a field to the row
-    F add_field(&self, field: i64) -> i64 {
-        I self.field_count >= self.capacity { R 0 }
+    fn add_field(&self, field: i64) -> i64 {
+        I self.field_count >= self.capacity { return 0 }
 
         # Store pointer at next position
         store_ptr(self.fields + (self.field_count * 8), field)
@@ -78,11 +78,11 @@ X CsvRow {
 }
 
 # Implementation for CsvReader
-X CsvReader {
+impl CsvReader {
     # Open a CSV file for reading
     # Args: path - file path
     # Returns: CsvReader instance
-    F open(path: i64) -> CsvReader {
+    fn open(path: i64) -> CsvReader {
         buf_size := 4096
         line_buf := malloc(buf_size)
 
@@ -97,7 +97,7 @@ X CsvReader {
     # Read next row from CSV file
     # Returns: CsvRow with parsed fields, or empty row on EOF
     # Note: This is a simplified implementation that reads from a string
-    F next_row(&self) -> CsvRow {
+    fn next_row(&self) -> CsvRow {
         # In a real implementation, this would read from the file
         # For now, return an empty row
         row := CsvRow.new()
@@ -106,7 +106,7 @@ X CsvReader {
     }
 
     # Close the reader and free resources
-    F close(&self) -> i64 {
+    fn close(&self) -> i64 {
         I self.line_buf != 0 {
             free(self.line_buf)
         }
@@ -117,12 +117,12 @@ X CsvReader {
 # Parse a CSV line into a CsvRow
 # Args: line - CSV line string
 # Returns: CsvRow with parsed fields
-F csv_parse_line(line: i64) -> CsvRow {
+fn csv_parse_line(line: i64) -> CsvRow {
     row := CsvRow.new()
-    I line == 0 { R row }
+    I line == 0 { return row }
 
     len := strlen(line)
-    I len == 0 { R row }
+    I len == 0 { return row }
 
     field_buf := malloc(MAX_FIELD_LEN)
     field_pos := 0
@@ -148,7 +148,7 @@ F csv_parse_line(line: i64) -> CsvRow {
         I c == 34 {  # ASCII '"'
             I in_quotes {
                 in_quotes = 0
-            } E {
+            } enum {
                 in_quotes = 1
             }
             i = i + 1
@@ -186,8 +186,8 @@ F csv_parse_line(line: i64) -> CsvRow {
 # Generate a CSV line from fields
 # Args: fields - array of field strings (i64*), count - number of fields
 # Returns: Allocated CSV line string (caller must free)
-F csv_write_row(fields: i64, count: i64) -> i64 {
-    I count == 0 { R str_alloc("") }
+fn csv_write_row(fields: i64, count: i64) -> i64 {
+    I count == 0 { return str_alloc("") }
 
     # Estimate size
     buf_size := count * MAX_FIELD_LEN
@@ -225,7 +225,7 @@ F csv_write_row(fields: i64, count: i64) -> i64 {
                     pos = pos + 1
                     store_byte(buf + pos, 34)
                     pos = pos + 1
-                } E {
+                } enum {
                     store_byte(buf + pos, c)
                     pos = pos + 1
                 }
@@ -247,8 +247,8 @@ F csv_write_row(fields: i64, count: i64) -> i64 {
 }
 
 # Check if a field needs quoting
-F csv_needs_quoting(field: i64) -> i64 {
-    I field == 0 { R 0 }
+fn csv_needs_quoting(field: i64) -> i64 {
+    I field == 0 { return 0 }
 
     i := 0
     L 1 {
@@ -256,10 +256,10 @@ F csv_needs_quoting(field: i64) -> i64 {
         I c == 0 { B }
 
         # Comma, quote, or newline requires quoting
-        I c == 44 { R 1 }  # ','
-        I c == 34 { R 1 }  # '"'
-        I c == 10 { R 1 }  # '\n'
-        I c == 13 { R 1 }  # '\r'
+        I c == 44 { return 1 }  # ','
+        I c == 34 { return 1 }  # '"'
+        I c == 10 { return 1 }  # '\n'
+        I c == 13 { return 1 }  # '\r'
 
         i = i + 1
     }
@@ -268,8 +268,8 @@ F csv_needs_quoting(field: i64) -> i64 {
 }
 
 # Helper: Allocate and copy string
-F str_alloc(s: i64) -> i64 {
-    I s == 0 { R 0 }
+fn str_alloc(s: i64) -> i64 {
+    I s == 0 { return 0 }
     len := strlen(s)
     buf := malloc(len + 1)
     memcpy(buf, s, len)
@@ -278,21 +278,21 @@ F str_alloc(s: i64) -> i64 {
 }
 
 # Helper: Load pointer from memory
-F load_ptr(addr: i64) -> i64 {
+fn load_ptr(addr: i64) -> i64 {
     # Load 64-bit pointer from address
     # This would use actual load instruction in real implementation
     load_byte(addr)  # Simplified - needs proper pointer load
 }
 
 # Helper: Store pointer to memory
-F store_ptr(addr: i64, value: i64) -> i64 {
+fn store_ptr(addr: i64, value: i64) -> i64 {
     # Store 64-bit pointer to address
     # This would use actual store instruction in real implementation
     store_byte(addr, value)  # Simplified - needs proper pointer store
 }
 
 # Extern functions
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F strlen(s: i64) -> i64
-X F memcpy(dest: i64, src: i64, n: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn strlen(s: i64) -> i64
+impl fn memcpy(dest: i64, src: i64, n: i64) -> i64

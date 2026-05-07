@@ -1,16 +1,16 @@
 # CHECKS: arithmetic sequences and progression formulas.
-F arith_sum(first: i64, last: i64, n: i64) -> i64 {
+fn arith_sum(first: i64, last: i64, n: i64) -> i64 {
     n * (first + last) / 2
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # 1+2+...+10 = 55
-    I arith_sum(1, 10, 10) != 55 { R 1 }
+    I arith_sum(1, 10, 10) != 55 { return 1 }
     # 0+2+4+...+18 = 90
-    I arith_sum(0, 18, 10) != 90 { R 2 }
+    I arith_sum(0, 18, 10) != 90 { return 2 }
     # single element
-    I arith_sum(7, 7, 1) != 7 { R 3 }
+    I arith_sum(7, 7, 1) != 7 { return 3 }
     # empty
-    I arith_sum(1, 10, 0) != 0 { R 4 }
-    R 0
+    I arith_sum(1, 10, 0) != 0 { return 4 }
+    return 0
 }

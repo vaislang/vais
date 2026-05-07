@@ -1,7 +1,7 @@
 # CHECKS: classic binary search over a sorted Vec<i64> (built inline).
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     LF i: 0..20 {
         v.push(i * 2)   # 0, 2, 4, ..., 38
@@ -19,11 +19,11 @@ F main() -> i64 {
         I midv == target { found = mid B }
         I midv < target {
             lo = mid + 1
-        } EL {
+        } else {
             hi = mid
         }
     }
-    I found != 9 { R 1 }
+    I found != 9 { return 1 }
 
     # second search, target = 0 (idx 0)
     target2: i64 := 0
@@ -37,11 +37,11 @@ F main() -> i64 {
         I midv == target2 { found2 = mid B }
         I midv < target2 {
             lo2 = mid + 1
-        } EL {
+        } else {
             hi2 = mid
         }
     }
-    I found2 != 0 { R 2 }
+    I found2 != 0 { return 2 }
 
     # third: missing target = 17 (between 16 and 18)
     target3: i64 := 17
@@ -55,10 +55,10 @@ F main() -> i64 {
         I midv == target3 { found3 = mid B }
         I midv < target3 {
             lo3 = mid + 1
-        } EL {
+        } else {
             hi3 = mid
         }
     }
-    I found3 != 0 - 1 { R 3 }
-    R 0
+    I found3 != 0 - 1 { return 3 }
+    return 0
 }

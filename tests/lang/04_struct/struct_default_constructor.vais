@@ -1,39 +1,39 @@
 # CHECKS: default constructor pattern.
-S Buffer {
+struct Buffer {
     capacity: i64,
     used: i64,
     flags: i64
 }
 
-X Buffer {
-    F default() -> Buffer {
+impl Buffer {
+    fn default() -> Buffer {
         Buffer { capacity: 64, used: 0, flags: 0 }
     }
-    F is_empty(&self) -> i64 {
-        I self.used == 0 { 1 } EL { 0 }
+    fn is_empty(&self) -> i64 {
+        I self.used == 0 { 1 } else { 0 }
     }
-    F is_full(&self) -> i64 {
-        I self.used >= self.capacity { 1 } EL { 0 }
+    fn is_full(&self) -> i64 {
+        I self.used >= self.capacity { 1 } else { 0 }
     }
-    F free_space(&self) -> i64 {
+    fn free_space(&self) -> i64 {
         self.capacity - self.used
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     b: Buffer := mut Buffer.default()
-    I b.capacity != 64 { R 1 }
-    I b.is_empty() != 1 { R 2 }
-    I b.is_full() != 0 { R 3 }
-    I b.free_space() != 64 { R 4 }
+    I b.capacity != 64 { return 1 }
+    I b.is_empty() != 1 { return 2 }
+    I b.is_full() != 0 { return 3 }
+    I b.free_space() != 64 { return 4 }
 
     b.used = 32
-    I b.is_empty() != 0 { R 5 }
-    I b.is_full() != 0 { R 6 }
-    I b.free_space() != 32 { R 7 }
+    I b.is_empty() != 0 { return 5 }
+    I b.is_full() != 0 { return 6 }
+    I b.free_space() != 32 { return 7 }
 
     b.used = 64
-    I b.is_full() != 1 { R 8 }
-    I b.free_space() != 0 { R 9 }
-    R 0
+    I b.is_full() != 1 { return 8 }
+    I b.free_space() != 0 { return 9 }
+    return 0
 }

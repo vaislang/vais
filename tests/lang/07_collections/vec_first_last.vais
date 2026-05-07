@@ -1,30 +1,30 @@
 # CHECKS: read first/last elements of a Vec.
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F first_or(v: &Vec<i64>, default: i64) -> i64 {
-    I v.len() == 0 { default } EL { v[0] }
+fn first_or(v: &Vec<i64>, default: i64) -> i64 {
+    I v.len() == 0 { default } else { v[0] }
 }
 
-F last_or(v: &Vec<i64>, default: i64) -> i64 {
-    I v.len() == 0 { default } EL { v[v.len() - 1] }
+fn last_or(v: &Vec<i64>, default: i64) -> i64 {
+    I v.len() == 0 { default } else { v[v.len() - 1] }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     v.push(10)
     v.push(20)
     v.push(30)
 
-    I first_or(&v, 0 - 1) != 10 { R 1 }
-    I last_or(&v, 0 - 1) != 30 { R 2 }
+    I first_or(&v, 0 - 1) != 10 { return 1 }
+    I last_or(&v, 0 - 1) != 30 { return 2 }
 
     e: Vec<i64> := mut vec_new()
-    I first_or(&e, 99) != 99 { R 3 }
-    I last_or(&e, 99) != 99 { R 4 }
+    I first_or(&e, 99) != 99 { return 3 }
+    I last_or(&e, 99) != 99 { return 4 }
 
     s: Vec<i64> := mut vec_new()
     s.push(42)
-    I first_or(&s, 0) != 42 { R 5 }
-    I last_or(&s, 0) != 42 { R 6 }
-    R 0
+    I first_or(&s, 0) != 42 { return 5 }
+    I last_or(&s, 0) != 42 { return 6 }
+    return 0
 }

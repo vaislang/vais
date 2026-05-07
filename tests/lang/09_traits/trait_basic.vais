@@ -1,23 +1,23 @@
 # CHECKS: trait definition + impl + dispatch via concrete type.
-W Greeter {
-    F greet(&self) -> i64
+trait Greeter {
+    fn greet(&self) -> i64
 }
 
-S English { id: i64 }
-S Korean { id: i64 }
+struct English { id: i64 }
+struct Korean { id: i64 }
 
-X English: Greeter {
-    F greet(&self) -> i64 { 1 }
+impl English: Greeter {
+    fn greet(&self) -> i64 { 1 }
 }
 
-X Korean: Greeter {
-    F greet(&self) -> i64 { 2 }
+impl Korean: Greeter {
+    fn greet(&self) -> i64 { 2 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     e: English := English { id: 100 }
     k: Korean := Korean { id: 200 }
-    I e.greet() != 1 { R 1 }
-    I k.greet() != 2 { R 2 }
-    R 0
+    I e.greet() != 1 { return 1 }
+    I k.greet() != 2 { return 2 }
+    return 0
 }

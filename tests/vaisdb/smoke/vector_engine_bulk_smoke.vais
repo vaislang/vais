@@ -1,52 +1,52 @@
-U vector/mod
-U vector/hnsw/types
-U vector/hnsw/bulk
-U vector/distance
-U storage/constants
-U storage/error
-U storage/file
-U storage/page/manager
-U storage/page/allocator
-U storage/page/freelist
-U storage/page/types
-U storage/buffer/pool
-U storage/wal/group_commit
-U storage/wal/writer
+use vector/mod
+use vector/hnsw/types
+use vector/hnsw/bulk
+use vector/distance
+use storage/constants
+use storage/error
+use storage/file
+use storage/page/manager
+use storage/page/allocator
+use storage/page/freelist
+use storage/page/types
+use storage/buffer/pool
+use storage/wal/group_commit
+use storage/wal/writer
 
-F engine_smoke_vec2(a: f32, b: f32) -> Vec<f32> {
+fn engine_smoke_vec2(a: f32, b: f32) -> Vec<f32> {
     values: Vec<f32> := mut Vec.with_capacity(2)
     values.push(a)
     values.push(b)
     values
 }
 
-F open_clean_file(path: str) -> Result<File, VaisError> {
+fn open_clean_file(path: str) -> Result<File, VaisError> {
     file := mut File.open(path, "rw+")?;
     file.truncate(0)?;
     Ok(file)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     files: Vec<File> := mut Vec.with_capacity(5)
-    data_file := mut M open_clean_file("/tmp/vais-smoke-vector-engine-bulk-data.vdb") {
+    data_file := mut match open_clean_file("/tmp/vais-smoke-vector-engine-bulk-data.vdb") {
         Ok(f) => f,
-        Err(_) => { R 1 },
+        Err(_) => { return 1 },
     }
-    vector_file := mut M open_clean_file("/tmp/vais-smoke-vector-engine-bulk-vectors.vdb") {
+    vector_file := mut match open_clean_file("/tmp/vais-smoke-vector-engine-bulk-vectors.vdb") {
         Ok(f) => f,
-        Err(_) => { R 2 },
+        Err(_) => { return 2 },
     }
-    graph_file := mut M open_clean_file("/tmp/vais-smoke-vector-engine-bulk-graph.vdb") {
+    graph_file := mut match open_clean_file("/tmp/vais-smoke-vector-engine-bulk-graph.vdb") {
         Ok(f) => f,
-        Err(_) => { R 3 },
+        Err(_) => { return 3 },
     }
-    fulltext_file := mut M open_clean_file("/tmp/vais-smoke-vector-engine-bulk-fulltext.vdb") {
+    fulltext_file := mut match open_clean_file("/tmp/vais-smoke-vector-engine-bulk-fulltext.vdb") {
         Ok(f) => f,
-        Err(_) => { R 4 },
+        Err(_) => { return 4 },
     }
-    undo_file := mut M open_clean_file("/tmp/vais-smoke-vector-engine-bulk-undo.vdb") {
+    undo_file := mut match open_clean_file("/tmp/vais-smoke-vector-engine-bulk-undo.vdb") {
         Ok(f) => f,
-        Err(_) => { R 5 },
+        Err(_) => { return 5 },
     }
 
     files.push(data_file)
@@ -56,13 +56,13 @@ F main() -> i64 {
     files.push(undo_file)
 
     page_manager := mut PageManager.new(files, PAGE_SIZE_8K)
-    M page_manager.allocate_page(FILE_ID_VECTORS, 2 as u32, PAGE_TYPE_VECTOR_DATA, ENGINE_TAG_VECTOR) {
+    match page_manager.allocate_page(FILE_ID_VECTORS, 2 as u32, PAGE_TYPE_VECTOR_DATA, ENGINE_TAG_VECTOR) {
         Ok(_) => {},
-        Err(_) => { R 6 },
+        Err(_) => { return 6 },
     }
-    M page_manager.allocate_page(FILE_ID_VECTORS, 3 as u32, PAGE_TYPE_VECTOR_DATA, ENGINE_TAG_VECTOR) {
+    match page_manager.allocate_page(FILE_ID_VECTORS, 3 as u32, PAGE_TYPE_VECTOR_DATA, ENGINE_TAG_VECTOR) {
         Ok(_) => {},
-        Err(_) => { R 7 },
+        Err(_) => { return 7 },
     }
 
     pool := mut BufferPool.new(page_manager, PAGE_SIZE_8K, 8 as u32)
@@ -72,22 +72,22 @@ F main() -> i64 {
     bitmap.set_bit(0 as u32, pages_per_bitmap, false)
     bitmap.set_bit(1 as u32, pages_per_bitmap, false)
 
-    config := mut M HnswConfig.new(2 as u16, 4 as u16, 4 as u32, 4 as u32, 8 as u64, DISTANCE_L2) {
+    config := mut match HnswConfig.new(2 as u16, 4 as u16, 4 as u32, 4 as u32, 8 as u64, DISTANCE_L2) {
         Ok(v) => v,
-        Err(_) => { R 8 },
+        Err(_) => { return 8 },
     }
     config.dim = 2 as u32
     config.metric = DISTANCE_L2
 
-    writer := mut M WalWriter.new("/tmp/vais-smoke-vector-engine-bulk-wal", 4096 as u32) {
+    writer := mut match WalWriter.new("/tmp/vais-smoke-vector-engine-bulk-wal", 4096 as u32) {
         Ok(w) => w,
-        Err(_) => { R 9 },
+        Err(_) => { return 9 },
     }
     gcm := mut GroupCommitManager.new(GroupCommitConfig.async_mode(), writer)
 
-    engine := mut M VectorEngine.new(config, 11 as u32, &pool, &allocator, &bitmap, &mut gcm) {
+    engine := mut match VectorEngine.new(config, 11 as u32, &pool, &allocator, &bitmap, &mut gcm) {
         Ok(e) => e,
-        Err(_) => { R 10 },
+        Err(_) => { return 10 },
     }
     engine.is_open = true
 
@@ -101,64 +101,64 @@ F main() -> i64 {
     load_config = load_config.with_wal_bypass()
     load_config = load_config.with_seed(42)
 
-    result := mut M engine.bulk_load(&vectors, load_config, 501) {
+    result := mut match engine.bulk_load(&vectors, load_config, 501) {
         Ok(r) => r,
         Err(e) => {
-            I e.code == "VAIS-0202004" { R 11 }
-            I e.code == "VAIS-0203001" { R 12 }
-            I e.code == "VAIS-0208001" { R 13 }
-            R 14
+            I e.code == "VAIS-0202004" { return 11 }
+            I e.code == "VAIS-0203001" { return 12 }
+            I e.code == "VAIS-0208001" { return 13 }
+            return 14
         },
     }
 
-    I result.vectors_inserted != 2 { R 15 }
-    I !result.wal_skipped { R 16 }
-    I engine.node_count() != 2 { R 17 }
-    I engine.meta.total_nodes != 2 { R 18 }
-    I engine.meta.entry_point != 1 { R 19 }
+    I result.vectors_inserted != 2 { return 15 }
+    I !result.wal_skipped { return 16 }
+    I engine.node_count() != 2 { return 17 }
+    I engine.meta.total_nodes != 2 { return 18 }
+    I engine.meta.entry_point != 1 { return 19 }
 
-    stored1 := mut M engine.node_store.load_node(1) {
+    stored1 := mut match engine.node_store.load_node(1) {
         Ok(n) => n,
-        Err(_) => { R 20 },
+        Err(_) => { return 20 },
     }
-    stored2 := mut M engine.node_store.load_node(2) {
+    stored2 := mut match engine.node_store.load_node(2) {
         Ok(n) => n,
-        Err(_) => { R 21 },
+        Err(_) => { return 21 },
     }
-    I stored1.vector_page_id != 2 as u32 { R 22 }
-    I stored2.vector_page_id != 3 as u32 { R 23 }
-    I stored1.vector_offset != 0 as u16 { R 24 }
-    I stored2.vector_offset != 0 as u16 { R 25 }
+    I stored1.vector_page_id != 2 as u32 { return 22 }
+    I stored2.vector_page_id != 3 as u32 { return 23 }
+    I stored1.vector_offset != 0 as u16 { return 24 }
+    I stored2.vector_offset != 0 as u16 { return 25 }
 
-    loaded1 := mut M engine.node_store.load_vector(1) {
+    loaded1 := mut match engine.node_store.load_vector(1) {
         Ok(v) => v,
-        Err(_) => { R 26 },
+        Err(_) => { return 26 },
     }
-    loaded2 := mut M engine.node_store.load_vector(2) {
+    loaded2 := mut match engine.node_store.load_vector(2) {
         Ok(v) => v,
-        Err(_) => { R 27 },
+        Err(_) => { return 27 },
     }
-    I loaded1.len() != 2 { R 28 }
-    I loaded2.len() != 2 { R 29 }
-    I !approx_eq_f32(loaded1[0], 0.0, 0.0001) { R 30 }
-    I !approx_eq_f32(loaded1[1], 0.0, 0.0001) { R 31 }
-    I !approx_eq_f32(loaded2[0], 1.0, 0.0001) { R 32 }
-    I !approx_eq_f32(loaded2[1], 0.0, 0.0001) { R 33 }
+    I loaded1.len() != 2 { return 28 }
+    I loaded2.len() != 2 { return 29 }
+    I !approx_eq_f32(loaded1[0], 0.0, 0.0001) { return 30 }
+    I !approx_eq_f32(loaded1[1], 0.0, 0.0001) { return 31 }
+    I !approx_eq_f32(loaded2[0], 1.0, 0.0001) { return 32 }
+    I !approx_eq_f32(loaded2[1], 0.0, 0.0001) { return 33 }
 
-    n1_neighbors := mut M stored1.get_neighbors(0) {
+    n1_neighbors := mut match stored1.get_neighbors(0) {
         Ok(v) => v,
-        Err(_) => { R 34 },
+        Err(_) => { return 34 },
     }
-    n2_neighbors := mut M stored2.get_neighbors(0) {
+    n2_neighbors := mut match stored2.get_neighbors(0) {
         Ok(v) => v,
-        Err(_) => { R 35 },
+        Err(_) => { return 35 },
     }
-    I n1_neighbors.len() != 1 { R 36 }
-    I n2_neighbors.len() != 1 { R 37 }
-    I n1_neighbors[0].node_id != 2 { R 38 }
-    I n2_neighbors[0].node_id != 1 { R 39 }
-    I !approx_eq_f32(n1_neighbors[0].distance, 1.0 as f32, 0.0001 as f32) { R 40 }
-    I !approx_eq_f32(n2_neighbors[0].distance, 1.0 as f32, 0.0001 as f32) { R 41 }
+    I n1_neighbors.len() != 1 { return 36 }
+    I n2_neighbors.len() != 1 { return 37 }
+    I n1_neighbors[0].node_id != 2 { return 38 }
+    I n2_neighbors[0].node_id != 1 { return 39 }
+    I !approx_eq_f32(n1_neighbors[0].distance, 1.0 as f32, 0.0001 as f32) { return 40 }
+    I !approx_eq_f32(n2_neighbors[0].distance, 1.0 as f32, 0.0001 as f32) { return 41 }
 
-    R 0
+    return 0
 }

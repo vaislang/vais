@@ -1,22 +1,22 @@
 # CHECKS: generic struct `Pair<A, B>` with method.
-S Pair<A, B> {
+struct Pair<A, B> {
     first: A,
     second: B
 }
 
-X Pair<A, B> {
-    F first(&self) -> A { self.first }
-    F second(&self) -> B { self.second }
+impl Pair<A, B> {
+    fn first(&self) -> A { self.first }
+    fn second(&self) -> B { self.second }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p: Pair<i64, i64> := Pair { first: 10, second: 20 }
-    I p.first() != 10 { R 1 }
-    I p.second() != 20 { R 2 }
-    I p.first() + p.second() != 30 { R 3 }
+    I p.first() != 10 { return 1 }
+    I p.second() != 20 { return 2 }
+    I p.first() + p.second() != 30 { return 3 }
 
     q: Pair<i64, i64> := Pair { first: 0 - 5, second: 100 }
-    I q.first() != 0 - 5 { R 4 }
-    I q.second() != 100 { R 5 }
-    R 0
+    I q.first() != 0 - 5 { return 4 }
+    I q.second() != 100 { return 5 }
+    return 0
 }

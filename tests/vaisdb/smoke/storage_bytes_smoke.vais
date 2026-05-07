@@ -1,21 +1,21 @@
-U storage/bytes
+use storage/bytes
 
-F main() -> i64 {
+fn main() -> i64 {
     tid := mut encode_tid(1234 as u32, 56 as u16)
     decoded_tid := mut decode_tid(tid)
-    I decoded_tid.page_id as i64 != 1234 { R 1 }
-    I decoded_tid.slot_id as i64 != 56 { R 2 }
+    I decoded_tid.page_id as i64 != 1234 { return 1 }
+    I decoded_tid.slot_id as i64 != 56 { return 2 }
 
     undo := mut encode_undo_ptr(7 as u8, 654321 as u32, 4096 as u16)
     decoded_undo := mut decode_undo_ptr(undo)
-    I decoded_undo.file_id as i64 != 7 { R 3 }
-    I decoded_undo.page_id as i64 != 654321 { R 4 }
-    I decoded_undo.offset as i64 != 4096 { R 5 }
+    I decoded_undo.file_id as i64 != 7 { return 3 }
+    I decoded_undo.page_id as i64 != 654321 { return 4 }
+    I decoded_undo.offset as i64 != 4096 { return 5 }
 
     lsn := mut encode_lsn(42 as u32, 9001 as u32)
     decoded_lsn := mut decode_lsn(lsn)
-    I decoded_lsn.segment_number as i64 != 42 { R 6 }
-    I decoded_lsn.offset as i64 != 9001 { R 7 }
+    I decoded_lsn.segment_number as i64 != 42 { return 6 }
+    I decoded_lsn.offset as i64 != 9001 { return 7 }
 
-    R 0
+    return 0
 }

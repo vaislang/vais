@@ -1,16 +1,16 @@
 # CHECKS: collect loop iterations into Vec.
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     LF i: 0..15 {
         I (i & 1) == 1 { v.push(i) }   # collect odd numbers
     }
     # 1,3,5,7,9,11,13 → 7 elements
-    I v.len() != 7 { R 1 }
-    I v[0] != 1 { R 2 }
-    I v[3] != 7 { R 3 }
-    I v[6] != 13 { R 4 }
+    I v.len() != 7 { return 1 }
+    I v[0] != 1 { return 2 }
+    I v[3] != 7 { return 3 }
+    I v[6] != 13 { return 4 }
 
     # sum
     s: i64 := mut 0
@@ -18,6 +18,6 @@ F main() -> i64 {
         s = s + v[i]
     }
     # 1+3+5+7+9+11+13 = 49
-    I s != 49 { R 5 }
-    R 0
+    I s != 49 { return 5 }
+    return 0
 }

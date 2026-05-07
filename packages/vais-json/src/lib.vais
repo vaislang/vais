@@ -22,27 +22,27 @@ C MAX_OBJECT_PAIRS: i64 = 256
 # ============================================================================
 
 # JsonValue - represents any JSON value
-S JsonValue {
+struct JsonValue {
     type: i64,      # JSON_TYPE_*
     data: i64,      # Pointer to type-specific data
     num_value: i64  # For numbers and booleans (0/1)
 }
 
 # JsonArray - dynamic array of JsonValue pointers
-S JsonArray {
+struct JsonArray {
     values: i64,    # Array of JsonValue* (i64*)
     count: i64,
     capacity: i64
 }
 
 # JsonPair - key-value pair for objects
-S JsonPair {
+struct JsonPair {
     key: i64,       # String pointer
     value: i64      # JsonValue pointer
 }
 
 # JsonObject - collection of key-value pairs
-S JsonObject {
+struct JsonObject {
     pairs: i64,     # Array of JsonPair (JsonPair*)
     count: i64,
     capacity: i64
@@ -53,7 +53,7 @@ S JsonObject {
 # ============================================================================
 
 # Create a null value
-F json_null() -> i64 {
+fn json_null() -> i64 {
     val := malloc(24)  # sizeof(JsonValue) = 3 * 8
     store_i64(val, JSON_TYPE_NULL)
     store_i64(val + 8, 0)
@@ -62,16 +62,16 @@ F json_null() -> i64 {
 }
 
 # Create a boolean value
-F json_bool(b: i64) -> i64 {
+fn json_bool(b: i64) -> i64 {
     val := malloc(24)
     store_i64(val, JSON_TYPE_BOOL)
     store_i64(val + 8, 0)
-    store_i64(val + 16, I b { 1 } E { 0 })
+    store_i64(val + 16, I b { 1 } enum { 0 })
     val
 }
 
 # Create a number value
-F json_number(n: i64) -> i64 {
+fn json_number(n: i64) -> i64 {
     val := malloc(24)
     store_i64(val, JSON_TYPE_NUMBER)
     store_i64(val + 8, 0)
@@ -80,7 +80,7 @@ F json_number(n: i64) -> i64 {
 }
 
 # Create a string value
-F json_string(s: i64) -> i64 {
+fn json_string(s: i64) -> i64 {
     val := malloc(24)
     len := strlen(s)
     str_copy := malloc(len + 1)
@@ -94,7 +94,7 @@ F json_string(s: i64) -> i64 {
 }
 
 # Create an empty array
-F json_array() -> i64 {
+fn json_array() -> i64 {
     arr := malloc(24)  # sizeof(JsonArray)
     capacity := MAX_ARRAY_SIZE
     values := malloc(capacity * 8)
@@ -111,7 +111,7 @@ F json_array() -> i64 {
 }
 
 # Create an empty object
-F json_object() -> i64 {
+fn json_object() -> i64 {
     obj := malloc(24)  # sizeof(JsonObject)
     capacity := MAX_OBJECT_PAIRS
     pairs := malloc(capacity * 16)  # sizeof(JsonPair) = 2 * 8
@@ -132,12 +132,12 @@ F json_object() -> i64 {
 # ============================================================================
 
 # Add value to array
-F json_array_push(arr_val: i64, item: i64) -> i64 {
+fn json_array_push(arr_val: i64, item: i64) -> i64 {
     arr := load_i64(arr_val + 8)
     count := load_i64(arr + 8)
     capacity := load_i64(arr + 16)
 
-    I count >= capacity { R 0 }  # Array full
+    I count >= capacity { return 0 }  # Array full
 
     values := load_i64(arr)
     store_i64(values + (count * 8), item)
@@ -146,19 +146,19 @@ F json_array_push(arr_val: i64, item: i64) -> i64 {
 }
 
 # Get value from array at index
-F json_array_get(arr_val: i64, idx: i64) -> i64 {
+fn json_array_get(arr_val: i64, idx: i64) -> i64 {
     arr := load_i64(arr_val + 8)
     count := load_i64(arr + 8)
 
-    I idx < 0 { R 0 }
-    I idx >= count { R 0 }
+    I idx < 0 { return 0 }
+    I idx >= count { return 0 }
 
     values := load_i64(arr)
     load_i64(values + (idx * 8))
 }
 
 # Get array length
-F json_array_len(arr_val: i64) -> i64 {
+fn json_array_len(arr_val: i64) -> i64 {
     arr := load_i64(arr_val + 8)
     load_i64(arr + 8)
 }
@@ -168,12 +168,12 @@ F json_array_len(arr_val: i64) -> i64 {
 # ============================================================================
 
 # Add key-value pair to object
-F json_object_set(obj_val: i64, key: i64, value: i64) -> i64 {
+fn json_object_set(obj_val: i64, key: i64, value: i64) -> i64 {
     obj := load_i64(obj_val + 8)
     count := load_i64(obj + 8)
     capacity := load_i64(obj + 16)
 
-    I count >= capacity { R 0 }  # Object full
+    I count >= capacity { return 0 }  # Object full
 
     # Copy key string
     key_len := strlen(key)
@@ -192,7 +192,7 @@ F json_object_set(obj_val: i64, key: i64, value: i64) -> i64 {
 }
 
 # Get value from object by key
-F json_object_get(obj_val: i64, key: i64) -> i64 {
+fn json_object_get(obj_val: i64, key: i64) -> i64 {
     obj := load_i64(obj_val + 8)
     count := load_i64(obj + 8)
     pairs := load_i64(obj)
@@ -203,7 +203,7 @@ F json_object_get(obj_val: i64, key: i64) -> i64 {
         pair_key := load_i64(pair_offset)
 
         I str_equal(pair_key, key) {
-            R load_i64(pair_offset + 8)
+            return load_i64(pair_offset + 8)
         }
 
         i = i + 1
@@ -213,7 +213,7 @@ F json_object_get(obj_val: i64, key: i64) -> i64 {
 }
 
 # Get object size
-F json_object_len(obj_val: i64) -> i64 {
+fn json_object_len(obj_val: i64) -> i64 {
     obj := load_i64(obj_val + 8)
     load_i64(obj + 8)
 }
@@ -223,33 +223,33 @@ F json_object_len(obj_val: i64) -> i64 {
 # ============================================================================
 
 # Get type of JSON value
-F json_type(val: i64) -> i64 {
+fn json_type(val: i64) -> i64 {
     load_i64(val)
 }
 
 # Get boolean value (0 or 1)
-F json_get_bool(val: i64) -> i64 {
+fn json_get_bool(val: i64) -> i64 {
     I load_i64(val) == JSON_TYPE_BOOL {
         load_i64(val + 16)
-    } E {
+    } enum {
         0
     }
 }
 
 # Get number value
-F json_get_number(val: i64) -> i64 {
+fn json_get_number(val: i64) -> i64 {
     I load_i64(val) == JSON_TYPE_NUMBER {
         load_i64(val + 16)
-    } E {
+    } enum {
         0
     }
 }
 
 # Get string value (pointer)
-F json_get_string(val: i64) -> i64 {
+fn json_get_string(val: i64) -> i64 {
     I load_i64(val) == JSON_TYPE_STRING {
         load_i64(val + 8)
-    } E {
+    } enum {
         0
     }
 }
@@ -259,7 +259,7 @@ F json_get_string(val: i64) -> i64 {
 # ============================================================================
 
 # Skip whitespace
-F skip_whitespace(input: i64, pos: i64) -> i64 {
+fn skip_whitespace(input: i64, pos: i64) -> i64 {
     p := mut pos
     L 1 {
         c := load_byte(input + p)
@@ -273,7 +273,7 @@ F skip_whitespace(input: i64, pos: i64) -> i64 {
 }
 
 # Parse JSON number
-F parse_number(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
+fn parse_number(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
     p := mut pos
     is_negative := mut 0
 
@@ -301,7 +301,7 @@ F parse_number(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
         B
     }
 
-    I has_digits == 0 { R 0 }  # No digits found
+    I has_digits == 0 { return 0 }  # No digits found
 
     I is_negative {
         num = 0 - num
@@ -313,11 +313,11 @@ F parse_number(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
 }
 
 # Parse JSON string
-F parse_string(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
+fn parse_string(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
     p := mut pos
 
     # Expect opening quote
-    I load_byte(input + p) != 34 { R 0 }  # '"'
+    I load_byte(input + p) != 34 { return 0 }  # '"'
     p = p + 1
 
     buf := malloc(MAX_STRING_LEN)
@@ -327,7 +327,7 @@ F parse_string(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
         c := load_byte(input + p)
 
         # End of string or input
-        I c == 0 { free(buf); R 0 }
+        I c == 0 { free(buf); return 0 }
 
         # Closing quote
         I c == 34 {  # '"'
@@ -336,7 +336,7 @@ F parse_string(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
             free(buf)
             store_i64(out_val, str_val)
             store_i64(out_pos, p + 1)
-            R 1
+            return 1
         }
 
         # Escape sequence
@@ -344,11 +344,11 @@ F parse_string(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
             p = p + 1
             next := load_byte(input + p)
             I next == 110 { store_byte(buf + buf_pos, 10); buf_pos = buf_pos + 1 }  # \n
-            E I next == 116 { store_byte(buf + buf_pos, 9); buf_pos = buf_pos + 1 }  # \t
-            E I next == 114 { store_byte(buf + buf_pos, 13); buf_pos = buf_pos + 1 }  # \r
-            E I next == 34 { store_byte(buf + buf_pos, 34); buf_pos = buf_pos + 1 }  # \"
-            E I next == 92 { store_byte(buf + buf_pos, 92); buf_pos = buf_pos + 1 }  # \\
-            E { store_byte(buf + buf_pos, next); buf_pos = buf_pos + 1 }
+            enum I next == 116 { store_byte(buf + buf_pos, 9); buf_pos = buf_pos + 1 }  # \t
+            enum I next == 114 { store_byte(buf + buf_pos, 13); buf_pos = buf_pos + 1 }  # \r
+            enum I next == 34 { store_byte(buf + buf_pos, 34); buf_pos = buf_pos + 1 }  # \"
+            enum I next == 92 { store_byte(buf + buf_pos, 92); buf_pos = buf_pos + 1 }  # \\
+            enum { store_byte(buf + buf_pos, next); buf_pos = buf_pos + 1 }
             p = p + 1
             C
         }
@@ -367,14 +367,14 @@ F parse_string(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
 }
 
 # Forward declaration for recursive parsing
-F parse_value(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64
+fn parse_value(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64
 
 # Parse JSON array
-F parse_array(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
+fn parse_array(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
     p := mut pos
 
     # Expect opening bracket
-    I load_byte(input + p) != 91 { R 0 }  # '['
+    I load_byte(input + p) != 91 { return 0 }  # '['
     p = p + 1
     p = skip_whitespace(input, p)
 
@@ -384,7 +384,7 @@ F parse_array(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
     I load_byte(input + p) == 93 {  # ']'
         store_i64(out_val, arr)
         store_i64(out_pos, p + 1)
-        R 1
+        return 1
     }
 
     # Parse elements
@@ -393,7 +393,7 @@ F parse_array(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
         elem_pos := mut 0
 
         success := parse_value(input, p, &elem_val, &elem_pos)
-        I success == 0 { R 0 }
+        I success == 0 { return 0 }
 
         json_array_push(arr, elem_val)
         p = elem_pos
@@ -408,20 +408,20 @@ F parse_array(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
         I c == 93 {  # ']'
             store_i64(out_val, arr)
             store_i64(out_pos, p + 1)
-            R 1
+            return 1
         }
-        R 0  # Invalid array syntax
+        return 0  # Invalid array syntax
     }
 
     0
 }
 
 # Parse JSON object
-F parse_object(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
+fn parse_object(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
     p := mut pos
 
     # Expect opening brace
-    I load_byte(input + p) != 123 { R 0 }  # '{'
+    I load_byte(input + p) != 123 { return 0 }  # '{'
     p = p + 1
     p = skip_whitespace(input, p)
 
@@ -431,7 +431,7 @@ F parse_object(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
     I load_byte(input + p) == 125 {  # '}'
         store_i64(out_val, obj)
         store_i64(out_pos, p + 1)
-        R 1
+        return 1
     }
 
     # Parse pairs
@@ -441,14 +441,14 @@ F parse_object(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
         key_pos := mut 0
 
         success := parse_string(input, p, &key_val, &key_pos)
-        I success == 0 { R 0 }
+        I success == 0 { return 0 }
 
         key_str := json_get_string(key_val)
         p = key_pos
         p = skip_whitespace(input, p)
 
         # Expect colon
-        I load_byte(input + p) != 58 { R 0 }  # ':'
+        I load_byte(input + p) != 58 { return 0 }  # ':'
         p = p + 1
         p = skip_whitespace(input, p)
 
@@ -457,7 +457,7 @@ F parse_object(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
         val_pos := mut 0
 
         success := parse_value(input, p, &val_val, &val_pos)
-        I success == 0 { R 0 }
+        I success == 0 { return 0 }
 
         json_object_set(obj, key_str, val_val)
         p = val_pos
@@ -472,16 +472,16 @@ F parse_object(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
         I c == 125 {  # '}'
             store_i64(out_val, obj)
             store_i64(out_pos, p + 1)
-            R 1
+            return 1
         }
-        R 0  # Invalid object syntax
+        return 0  # Invalid object syntax
     }
 
     0
 }
 
 # Parse JSON value (entry point for recursion)
-F parse_value(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
+fn parse_value(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
     p := skip_whitespace(input, pos)
     c := load_byte(input + p)
 
@@ -492,7 +492,7 @@ F parse_value(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
                 I load_byte(input + p + 3) == 108 {  # 'l'
                     store_i64(out_val, json_null())
                     store_i64(out_pos, p + 4)
-                    R 1
+                    return 1
                 }
             }
         }
@@ -505,7 +505,7 @@ F parse_value(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
                 I load_byte(input + p + 3) == 101 {  # 'e'
                     store_i64(out_val, json_bool(1))
                     store_i64(out_pos, p + 4)
-                    R 1
+                    return 1
                 }
             }
         }
@@ -519,7 +519,7 @@ F parse_value(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
                     I load_byte(input + p + 4) == 101 {  # 'e'
                         store_i64(out_val, json_bool(0))
                         store_i64(out_pos, p + 5)
-                        R 1
+                        return 1
                     }
                 }
             }
@@ -527,27 +527,27 @@ F parse_value(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
     }
 
     # string
-    I c == 34 { R parse_string(input, p, out_val, out_pos) }  # '"'
+    I c == 34 { return parse_string(input, p, out_val, out_pos) }  # '"'
 
     # array
-    I c == 91 { R parse_array(input, p, out_val, out_pos) }  # '['
+    I c == 91 { return parse_array(input, p, out_val, out_pos) }  # '['
 
     # object
-    I c == 123 { R parse_object(input, p, out_val, out_pos) }  # '{'
+    I c == 123 { return parse_object(input, p, out_val, out_pos) }  # '{'
 
     # number (including negative)
-    I c >= 48 { I c <= 57 { R parse_number(input, p, out_val, out_pos) } }  # '0'-'9'
-    I c == 45 { R parse_number(input, p, out_val, out_pos) }  # '-'
+    I c >= 48 { I c <= 57 { return parse_number(input, p, out_val, out_pos) } }  # '0'-'9'
+    I c == 45 { return parse_number(input, p, out_val, out_pos) }  # '-'
 
     0  # Parse failed
 }
 
 # Main JSON parse function
-F json_parse(input: i64) -> i64 {
+fn json_parse(input: i64) -> i64 {
     val := mut 0
     pos := mut 0
     success := parse_value(input, 0, &val, &pos)
-    I success { val } E { 0 }
+    I success { val } enum { 0 }
 }
 
 # ============================================================================
@@ -555,7 +555,7 @@ F json_parse(input: i64) -> i64 {
 # ============================================================================
 
 # Stringify a JSON value to buffer
-F stringify_value(val: i64, buf: i64, pos: i64) -> i64 {
+fn stringify_value(val: i64, buf: i64, pos: i64) -> i64 {
     p := mut pos
     type := json_type(val)
 
@@ -564,7 +564,7 @@ F stringify_value(val: i64, buf: i64, pos: i64) -> i64 {
         store_byte(buf + p, 117); p = p + 1  # 'u'
         store_byte(buf + p, 108); p = p + 1  # 'l'
         store_byte(buf + p, 108); p = p + 1  # 'l'
-        R p
+        return p
     }
 
     I type == JSON_TYPE_BOOL {
@@ -574,20 +574,20 @@ F stringify_value(val: i64, buf: i64, pos: i64) -> i64 {
             store_byte(buf + p, 114); p = p + 1  # 'r'
             store_byte(buf + p, 117); p = p + 1  # 'u'
             store_byte(buf + p, 101); p = p + 1  # 'e'
-        } E {
+        } enum {
             store_byte(buf + p, 102); p = p + 1  # 'f'
             store_byte(buf + p, 97); p = p + 1   # 'a'
             store_byte(buf + p, 108); p = p + 1  # 'l'
             store_byte(buf + p, 115); p = p + 1  # 's'
             store_byte(buf + p, 101); p = p + 1  # 'e'
         }
-        R p
+        return p
     }
 
     I type == JSON_TYPE_NUMBER {
         num := json_get_number(val)
         p = write_i64(buf, p, num)
-        R p
+        return p
     }
 
     I type == JSON_TYPE_STRING {
@@ -600,16 +600,16 @@ F stringify_value(val: i64, buf: i64, pos: i64) -> i64 {
             I c == 0 { B }
 
             I c == 34 { store_byte(buf + p, 92); p = p + 1; store_byte(buf + p, 34); p = p + 1 }  # \"
-            E I c == 92 { store_byte(buf + p, 92); p = p + 1; store_byte(buf + p, 92); p = p + 1 }  # \\
-            E I c == 10 { store_byte(buf + p, 92); p = p + 1; store_byte(buf + p, 110); p = p + 1 }  # \n
-            E I c == 9 { store_byte(buf + p, 92); p = p + 1; store_byte(buf + p, 116); p = p + 1 }  # \t
-            E { store_byte(buf + p, c); p = p + 1 }
+            enum I c == 92 { store_byte(buf + p, 92); p = p + 1; store_byte(buf + p, 92); p = p + 1 }  # \\
+            enum I c == 10 { store_byte(buf + p, 92); p = p + 1; store_byte(buf + p, 110); p = p + 1 }  # \n
+            enum I c == 9 { store_byte(buf + p, 92); p = p + 1; store_byte(buf + p, 116); p = p + 1 }  # \t
+            enum { store_byte(buf + p, c); p = p + 1 }
 
             i = i + 1
         }
 
         store_byte(buf + p, 34); p = p + 1  # '"'
-        R p
+        return p
     }
 
     I type == JSON_TYPE_ARRAY {
@@ -628,7 +628,7 @@ F stringify_value(val: i64, buf: i64, pos: i64) -> i64 {
         }
 
         store_byte(buf + p, 93); p = p + 1  # ']'
-        R p
+        return p
     }
 
     I type == JSON_TYPE_OBJECT {
@@ -666,14 +666,14 @@ F stringify_value(val: i64, buf: i64, pos: i64) -> i64 {
         }
 
         store_byte(buf + p, 125); p = p + 1  # '}'
-        R p
+        return p
     }
 
     p
 }
 
 # Convert JSON value to string
-F json_stringify(val: i64) -> i64 {
+fn json_stringify(val: i64) -> i64 {
     buf := malloc(16384)
     pos := stringify_value(val, buf, 0)
     store_byte(buf + pos, 0)
@@ -685,17 +685,17 @@ F json_stringify(val: i64) -> i64 {
 # ============================================================================
 
 # Compare two strings for equality
-F str_equal(a: i64, b: i64) -> i64 {
-    I a == 0 { I b == 0 { R 1 } E { R 0 } }
-    I b == 0 { R 0 }
+fn str_equal(a: i64, b: i64) -> i64 {
+    I a == 0 { I b == 0 { return 1 } enum { return 0 } }
+    I b == 0 { return 0 }
 
     i := mut 0
     L 1 {
         ca := load_byte(a + i)
         cb := load_byte(b + i)
 
-        I ca != cb { R 0 }
-        I ca == 0 { R 1 }
+        I ca != cb { return 0 }
+        I ca == 0 { return 1 }
 
         i = i + 1
     }
@@ -704,12 +704,12 @@ F str_equal(a: i64, b: i64) -> i64 {
 }
 
 # Write i64 to buffer as decimal string
-F write_i64(buf: i64, pos: i64, val: i64) -> i64 {
+fn write_i64(buf: i64, pos: i64, val: i64) -> i64 {
     p := mut pos
 
     I val == 0 {
         store_byte(buf + p, 48)  # '0'
-        R p + 1
+        return p + 1
     }
 
     I val < 0 {
@@ -742,11 +742,11 @@ F write_i64(buf: i64, pos: i64, val: i64) -> i64 {
 # Extern Declarations
 # ============================================================================
 
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F strlen(s: i64) -> i64
-X F memcpy(dest: i64, src: i64, n: i64) -> i64
-X F load_byte(ptr: i64) -> i64
-X F load_i64(ptr: i64) -> i64
-X F store_byte(ptr: i64, val: i64) -> i64
-X F store_i64(ptr: i64, val: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn strlen(s: i64) -> i64
+impl fn memcpy(dest: i64, src: i64, n: i64) -> i64
+impl fn load_byte(ptr: i64) -> i64
+impl fn load_i64(ptr: i64) -> i64
+impl fn store_byte(ptr: i64, val: i64) -> i64
+impl fn store_i64(ptr: i64, val: i64) -> i64

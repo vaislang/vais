@@ -1,14 +1,14 @@
 # CHECKS: `vec[i] = struct_value` writes the full struct into the slot
 # (REGRESSION Wave 4a — previously the store path coerced the struct value
 # to a ptr and clobbered adjacent cells).
-U std/vec.{vec_new_t};
+use std/vec.{vec_new_t};
 
-S Pt {
+struct Pt {
     x: i64,
     y: i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<Pt> := mut vec_new_t()
     v.push(Pt { x: 0, y: 0 })
     v.push(Pt { x: 0, y: 0 })
@@ -19,9 +19,9 @@ F main() -> i64 {
     a: Pt := mut v[0]
     b: Pt := mut v[1]
 
-    I a.x != 1 { R 1 }
-    I a.y != 2 { R 2 }
-    I b.x != 3 { R 3 }
-    I b.y != 4 { R 4 }
-    R 0
+    I a.x != 1 { return 1 }
+    I a.y != 2 { return 2 }
+    I b.x != 3 { return 3 }
+    I b.y != 4 { return 4 }
+    return 0
 }

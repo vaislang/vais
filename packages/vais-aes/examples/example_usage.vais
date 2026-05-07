@@ -1,17 +1,17 @@
 # Example usage of vais-aes library
 
 # Extern declarations
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F memset(dest: i64, val: i64, n: i64) -> i64
-X F memcpy(dest: i64, src: i64, n: i64) -> i64
-X F store_byte(ptr: i64, val: i64) -> i64
-X F load_byte(ptr: i64) -> i64
-X F puts(s: str) -> i64
-X F putchar(c: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn memset(dest: i64, val: i64, n: i64) -> i64
+impl fn memcpy(dest: i64, src: i64, n: i64) -> i64
+impl fn store_byte(ptr: i64, val: i64) -> i64
+impl fn load_byte(ptr: i64) -> i64
+impl fn puts(s: str) -> i64
+impl fn putchar(c: i64) -> i64
 
 # Example 1: Basic block encryption/decryption
-F example_basic_block() -> i64 {
+fn example_basic_block() -> i64 {
     puts("Example 1: Basic AES-256 Block Encryption")
     putchar(10)
 
@@ -20,7 +20,7 @@ F example_basic_block() -> i64 {
     I key == 0 {
         puts("Error: Failed to allocate key")
         putchar(10)
-        R -1
+        return -1
     }
 
     # Initialize key with pattern
@@ -36,7 +36,7 @@ F example_basic_block() -> i64 {
         puts("Error: Failed to allocate plaintext")
         putchar(10)
         free(key)
-        R -1
+        return -1
     }
 
     # Initialize plaintext with "Hello World!!!!!" (16 chars)
@@ -87,7 +87,7 @@ F example_basic_block() -> i64 {
     I match == 1 {
         puts("Success: Encryption/Decryption roundtrip OK")
         putchar(10)
-    } E {
+    } enum {
         puts("Error: Roundtrip failed")
         putchar(10)
     }
@@ -99,11 +99,11 @@ F example_basic_block() -> i64 {
     free(ciphertext)
 
     putchar(10)
-    R 0
+    return 0
 }
 
 # Example 2: CBC mode with IV
-F example_cbc_mode() -> i64 {
+fn example_cbc_mode() -> i64 {
     puts("Example 2: CBC Mode Encryption")
     putchar(10)
 
@@ -112,7 +112,7 @@ F example_cbc_mode() -> i64 {
     I key == 0 {
         puts("Error: Failed to allocate key")
         putchar(10)
-        R -1
+        return -1
     }
     i := mut 0
     L i < 32 {
@@ -126,7 +126,7 @@ F example_cbc_mode() -> i64 {
         puts("Error: Failed to allocate IV")
         putchar(10)
         free(key)
-        R -1
+        return -1
     }
     i = 0
     L i < 16 {
@@ -141,7 +141,7 @@ F example_cbc_mode() -> i64 {
         putchar(10)
         free(key)
         free(iv)
-        R -1
+        return -1
     }
     i = 0
     L i < 30 {
@@ -164,7 +164,7 @@ F example_cbc_mode() -> i64 {
         free(key)
         free(iv)
         free(plaintext)
-        R -1
+        return -1
     }
 
     # Decrypt with CBC
@@ -180,7 +180,7 @@ F example_cbc_mode() -> i64 {
         free(key)
         free(iv)
         free(plaintext)
-        R -1
+        return -1
     }
 
     # Verify roundtrip
@@ -197,11 +197,11 @@ F example_cbc_mode() -> i64 {
         I match == 1 {
             puts("Success: CBC roundtrip OK")
             putchar(10)
-        } E {
+        } enum {
             puts("Error: CBC roundtrip failed")
             putchar(10)
         }
-    } E {
+    } enum {
         puts("Error: Decrypted length mismatch")
         putchar(10)
     }
@@ -215,11 +215,11 @@ F example_cbc_mode() -> i64 {
     free(plaintext)
 
     putchar(10)
-    R 0
+    return 0
 }
 
 # Example 3: CTR mode (stream cipher)
-F example_ctr_mode() -> i64 {
+fn example_ctr_mode() -> i64 {
     puts("Example 3: CTR Mode Encryption (Stream Cipher)")
     putchar(10)
 
@@ -228,7 +228,7 @@ F example_ctr_mode() -> i64 {
     I key == 0 {
         puts("Error: Failed to allocate key")
         putchar(10)
-        R -1
+        return -1
     }
     i := mut 0
     L i < 32 {
@@ -242,7 +242,7 @@ F example_ctr_mode() -> i64 {
         puts("Error: Failed to allocate nonce")
         putchar(10)
         free(key)
-        R -1
+        return -1
     }
     i = 0
     L i < 8 {
@@ -257,7 +257,7 @@ F example_ctr_mode() -> i64 {
         putchar(10)
         free(key)
         free(nonce)
-        R -1
+        return -1
     }
     i = 0
     L i < 25 {
@@ -280,7 +280,7 @@ F example_ctr_mode() -> i64 {
         free(key)
         free(nonce)
         free(plaintext)
-        R -1
+        return -1
     }
 
     # Decrypt with CTR (same operation as encrypt)
@@ -296,7 +296,7 @@ F example_ctr_mode() -> i64 {
         free(key)
         free(nonce)
         free(plaintext)
-        R -1
+        return -1
     }
 
     # Verify roundtrip
@@ -313,11 +313,11 @@ F example_ctr_mode() -> i64 {
         I match == 1 {
             puts("Success: CTR roundtrip OK")
             putchar(10)
-        } E {
+        } enum {
             puts("Error: CTR roundtrip failed")
             putchar(10)
         }
-    } E {
+    } enum {
         puts("Error: Decrypted length mismatch")
         putchar(10)
     }
@@ -331,11 +331,11 @@ F example_ctr_mode() -> i64 {
     free(plaintext)
 
     putchar(10)
-    R 0
+    return 0
 }
 
 # Main function
-F main() -> i64 {
+fn main() -> i64 {
     puts("========================================")
     putchar(10)
     puts("vais-aes Usage Examples")
@@ -355,5 +355,5 @@ F main() -> i64 {
     puts("========================================")
     putchar(10)
 
-    R 0
+    return 0
 }

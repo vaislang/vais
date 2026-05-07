@@ -1,1 +1,1 @@
-F deep_func() -> i64 = 42
+fn deep_func() -> i64 = 42

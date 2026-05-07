@@ -1,22 +1,22 @@
 # Regex Library Tests
 
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F str_to_ptr(s: str) -> i64
-X F strlen(s: i64) -> i64
-X F load_i64(ptr: i64) -> i64
-X F print_str(s: str) -> i64
-X F print_i64(n: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn str_to_ptr(s: str) -> i64
+impl fn strlen(s: i64) -> i64
+impl fn load_i64(ptr: i64) -> i64
+impl fn print_str(s: str) -> i64
+impl fn print_i64(n: i64) -> i64
 
 # Import regex functions
-X F regex_compile(pattern: i64, pattern_len: i64) -> i64
-X F regex_match(regex: i64, text: i64, text_len: i64) -> i64
-X F regex_search(regex: i64, text: i64, text_len: i64) -> i64
-X F regex_find_all(regex: i64, text: i64, text_len: i64) -> i64
-X F regex_free(regex: i64) -> i64
+impl fn regex_compile(pattern: i64, pattern_len: i64) -> i64
+impl fn regex_match(regex: i64, text: i64, text_len: i64) -> i64
+impl fn regex_search(regex: i64, text: i64, text_len: i64) -> i64
+impl fn regex_find_all(regex: i64, text: i64, text_len: i64) -> i64
+impl fn regex_free(regex: i64) -> i64
 
 # Test 1: Literal match
-F test_literal_match() -> i64 {
+fn test_literal_match() -> i64 {
     print_str("Test 1: Literal match... ")
 
     pattern := str_to_ptr("hello")
@@ -25,7 +25,7 @@ F test_literal_match() -> i64 {
     regex := regex_compile(pattern, strlen(pattern))
     I regex == 0 {
         print_str("FAILED (compile)\n")
-        R 0
+        return 0
     }
 
     result := regex_match(regex, text, strlen(text))
@@ -33,15 +33,15 @@ F test_literal_match() -> i64 {
 
     I result == 1 {
         print_str("PASSED\n")
-        R 1
-    } E {
+        return 1
+    } enum {
         print_str("FAILED\n")
-        R 0
+        return 0
     }
 }
 
 # Test 2: Dot meta-character
-F test_dot() -> i64 {
+fn test_dot() -> i64 {
     print_str("Test 2: Dot meta-character... ")
 
     pattern := str_to_ptr("h.llo")
@@ -50,7 +50,7 @@ F test_dot() -> i64 {
     regex := regex_compile(pattern, strlen(pattern))
     I regex == 0 {
         print_str("FAILED (compile)\n")
-        R 0
+        return 0
     }
 
     result := regex_match(regex, text, strlen(text))
@@ -58,15 +58,15 @@ F test_dot() -> i64 {
 
     I result == 1 {
         print_str("PASSED\n")
-        R 1
-    } E {
+        return 1
+    } enum {
         print_str("FAILED\n")
-        R 0
+        return 0
     }
 }
 
 # Test 3: Star quantifier
-F test_star() -> i64 {
+fn test_star() -> i64 {
     print_str("Test 3: Star quantifier... ")
 
     pattern := str_to_ptr("ab*c")
@@ -76,7 +76,7 @@ F test_star() -> i64 {
     regex := regex_compile(pattern, strlen(pattern))
     I regex == 0 {
         print_str("FAILED (compile)\n")
-        R 0
+        return 0
     }
     result1 := regex_match(regex, text1, strlen(text1))
     regex_free(regex)
@@ -97,7 +97,7 @@ F test_star() -> i64 {
         I result2 == 1 {
             I result3 == 1 {
                 print_str("PASSED\n")
-                R 1
+                return 1
             }
         }
     }
@@ -107,7 +107,7 @@ F test_star() -> i64 {
 }
 
 # Test 4: Plus quantifier
-F test_plus() -> i64 {
+fn test_plus() -> i64 {
     print_str("Test 4: Plus quantifier... ")
 
     pattern := str_to_ptr("ab+c")
@@ -117,7 +117,7 @@ F test_plus() -> i64 {
     regex := regex_compile(pattern, strlen(pattern))
     I regex == 0 {
         print_str("FAILED (compile)\n")
-        R 0
+        return 0
     }
     result1 := regex_match(regex, text1, strlen(text1))
     regex_free(regex)
@@ -131,7 +131,7 @@ F test_plus() -> i64 {
     I result1 == 1 {
         I result2 == 0 {
             print_str("PASSED\n")
-            R 1
+            return 1
         }
     }
 
@@ -140,7 +140,7 @@ F test_plus() -> i64 {
 }
 
 # Test 5: Question quantifier
-F test_question() -> i64 {
+fn test_question() -> i64 {
     print_str("Test 5: Question quantifier... ")
 
     pattern := str_to_ptr("colou?r")
@@ -150,7 +150,7 @@ F test_question() -> i64 {
     regex := regex_compile(pattern, strlen(pattern))
     I regex == 0 {
         print_str("FAILED (compile)\n")
-        R 0
+        return 0
     }
     result1 := regex_match(regex, text1, strlen(text1))
     regex_free(regex)
@@ -164,7 +164,7 @@ F test_question() -> i64 {
     I result1 == 1 {
         I result2 == 1 {
             print_str("PASSED\n")
-            R 1
+            return 1
         }
     }
 
@@ -173,7 +173,7 @@ F test_question() -> i64 {
 }
 
 # Test 6: Alternation
-F test_alternation() -> i64 {
+fn test_alternation() -> i64 {
     print_str("Test 6: Alternation... ")
 
     pattern := str_to_ptr("cat|dog")
@@ -183,7 +183,7 @@ F test_alternation() -> i64 {
     regex := regex_compile(pattern, strlen(pattern))
     I regex == 0 {
         print_str("FAILED (compile)\n")
-        R 0
+        return 0
     }
     result1 := regex_match(regex, text1, strlen(text1))
     regex_free(regex)
@@ -197,7 +197,7 @@ F test_alternation() -> i64 {
     I result1 == 1 {
         I result2 == 1 {
             print_str("PASSED\n")
-            R 1
+            return 1
         }
     }
 
@@ -206,7 +206,7 @@ F test_alternation() -> i64 {
 }
 
 # Test 7: Start anchor
-F test_anchor_start() -> i64 {
+fn test_anchor_start() -> i64 {
     print_str("Test 7: Start anchor... ")
 
     pattern := str_to_ptr("^hello")
@@ -216,22 +216,22 @@ F test_anchor_start() -> i64 {
     regex := regex_compile(pattern, strlen(pattern))
     I regex == 0 {
         print_str("FAILED (compile)\n")
-        R 0
+        return 0
     }
     result1 := regex_match(regex, text1, strlen(text1))
     regex_free(regex)
 
     I result1 == 1 {
         print_str("PASSED\n")
-        R 1
-    } E {
+        return 1
+    } enum {
         print_str("FAILED\n")
-        R 0
+        return 0
     }
 }
 
 # Test 8: Character class
-F test_char_class() -> i64 {
+fn test_char_class() -> i64 {
     print_str("Test 8: Character class... ")
 
     pattern := str_to_ptr("[aeiou]")
@@ -241,7 +241,7 @@ F test_char_class() -> i64 {
     regex := regex_compile(pattern, strlen(pattern))
     I regex == 0 {
         print_str("FAILED (compile)\n")
-        R 0
+        return 0
     }
     result1 := regex_match(regex, text1, strlen(text1))
     regex_free(regex)
@@ -262,7 +262,7 @@ F test_char_class() -> i64 {
         I result2 == 1 {
             I result3 == 0 {
                 print_str("PASSED\n")
-                R 1
+                return 1
             }
         }
     }
@@ -272,7 +272,7 @@ F test_char_class() -> i64 {
 }
 
 # Test 9: Search (find position)
-F test_search() -> i64 {
+fn test_search() -> i64 {
     print_str("Test 9: Search... ")
 
     pattern := str_to_ptr("world")
@@ -281,7 +281,7 @@ F test_search() -> i64 {
     regex := regex_compile(pattern, strlen(pattern))
     I regex == 0 {
         print_str("FAILED (compile)\n")
-        R 0
+        return 0
     }
 
     pos := regex_search(regex, text, strlen(text))
@@ -289,17 +289,17 @@ F test_search() -> i64 {
 
     I pos == 6 {
         print_str("PASSED\n")
-        R 1
-    } E {
+        return 1
+    } enum {
         print_str("FAILED (found at: ")
         print_i64(pos)
         print_str(")\n")
-        R 0
+        return 0
     }
 }
 
 # Test 10: No match
-F test_no_match() -> i64 {
+fn test_no_match() -> i64 {
     print_str("Test 10: No match... ")
 
     pattern := str_to_ptr("xyz")
@@ -308,7 +308,7 @@ F test_no_match() -> i64 {
     regex := regex_compile(pattern, strlen(pattern))
     I regex == 0 {
         print_str("FAILED (compile)\n")
-        R 0
+        return 0
     }
 
     result := regex_match(regex, text, strlen(text))
@@ -318,7 +318,7 @@ F test_no_match() -> i64 {
     I result == 0 {
         I pos == 0 - 1 {
             print_str("PASSED\n")
-            R 1
+            return 1
         }
     }
 
@@ -327,7 +327,7 @@ F test_no_match() -> i64 {
 }
 
 # Test 11: Character range
-F test_char_range() -> i64 {
+fn test_char_range() -> i64 {
     print_str("Test 11: Character range... ")
 
     pattern := str_to_ptr("[a-z]")
@@ -337,7 +337,7 @@ F test_char_range() -> i64 {
     regex := regex_compile(pattern, strlen(pattern))
     I regex == 0 {
         print_str("FAILED (compile)\n")
-        R 0
+        return 0
     }
     result1 := regex_match(regex, text1, strlen(text1))
     regex_free(regex)
@@ -351,7 +351,7 @@ F test_char_range() -> i64 {
     I result1 == 1 {
         I result2 == 0 {
             print_str("PASSED\n")
-            R 1
+            return 1
         }
     }
 
@@ -360,7 +360,7 @@ F test_char_range() -> i64 {
 }
 
 # Test 12: Escape sequence \d
-F test_escape_digit() -> i64 {
+fn test_escape_digit() -> i64 {
     print_str("Test 12: Escape digit... ")
 
     pattern := str_to_ptr("\\d")
@@ -370,7 +370,7 @@ F test_escape_digit() -> i64 {
     regex := regex_compile(pattern, strlen(pattern))
     I regex == 0 {
         print_str("FAILED (compile)\n")
-        R 0
+        return 0
     }
     result1 := regex_match(regex, text1, strlen(text1))
     regex_free(regex)
@@ -384,7 +384,7 @@ F test_escape_digit() -> i64 {
     I result1 == 1 {
         I result2 == 0 {
             print_str("PASSED\n")
-            R 1
+            return 1
         }
     }
 
@@ -393,7 +393,7 @@ F test_escape_digit() -> i64 {
 }
 
 # Test 13: Multiple matches
-F test_find_all() -> i64 {
+fn test_find_all() -> i64 {
     print_str("Test 13: Find all... ")
 
     pattern := str_to_ptr("a")
@@ -402,7 +402,7 @@ F test_find_all() -> i64 {
     regex := regex_compile(pattern, strlen(pattern))
     I regex == 0 {
         print_str("FAILED (compile)\n")
-        R 0
+        return 0
     }
 
     result := regex_find_all(regex, text, strlen(text))
@@ -415,16 +415,16 @@ F test_find_all() -> i64 {
 
     I count == 3 {
         print_str("PASSED\n")
-        R 1
-    } E {
+        return 1
+    } enum {
         print_str("FAILED (found: ")
         print_i64(count)
         print_str(")\n")
-        R 0
+        return 0
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     print_str("=== Vais Regex Tests ===\n\n")
 
     passed := 0
@@ -479,9 +479,9 @@ F main() -> i64 {
 
     I passed == total {
         print_str("All tests PASSED!\n")
-        R 0
-    } E {
+        return 0
+    } enum {
         print_str("Some tests FAILED!\n")
-        R 1
+        return 1
     }
 }

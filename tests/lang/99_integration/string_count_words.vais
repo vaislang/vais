@@ -1,12 +1,12 @@
 # CHECKS: count whitespace-separated words via byte iteration.
-F count_words(p: i64, n: i64) -> i64 {
+fn count_words(p: i64, n: i64) -> i64 {
     count: i64 := mut 0
     in_word: i64 := mut 0
     LF i: 0..n {
         c: i64 := load_byte(p + i)
         I c == 32 {
             in_word = 0
-        } EL {
+        } else {
             I in_word == 0 {
                 count = count + 1
                 in_word = 1
@@ -16,20 +16,20 @@ F count_words(p: i64, n: i64) -> i64 {
     count
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p1: i64 := str_to_ptr("hello world")
-    I count_words(p1, strlen(p1)) != 2 { R 1 }
+    I count_words(p1, strlen(p1)) != 2 { return 1 }
 
     p2: i64 := str_to_ptr("a b c d e")
-    I count_words(p2, strlen(p2)) != 5 { R 2 }
+    I count_words(p2, strlen(p2)) != 5 { return 2 }
 
     p3: i64 := str_to_ptr("singleword")
-    I count_words(p3, strlen(p3)) != 1 { R 3 }
+    I count_words(p3, strlen(p3)) != 1 { return 3 }
 
     p4: i64 := str_to_ptr("")
-    I count_words(p4, 0) != 0 { R 4 }
+    I count_words(p4, 0) != 0 { return 4 }
 
     p5: i64 := str_to_ptr("   leading spaces")
-    I count_words(p5, strlen(p5)) != 2 { R 5 }
-    R 0
+    I count_words(p5, strlen(p5)) != 2 { return 5 }
+    return 0
 }

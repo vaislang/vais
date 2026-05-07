@@ -1,6 +1,6 @@
 # CHECKS: Result<T,E> propagation via match (manual ?-style)
-F parse_safe(s: str) -> Result<i64, i64> {
-    M s {
+fn parse_safe(s: str) -> Result<i64, i64> {
+    match s {
         "1" => Ok(1),
         "2" => Ok(2),
         "3" => Ok(3),
@@ -8,27 +8,27 @@ F parse_safe(s: str) -> Result<i64, i64> {
     }
 }
 
-F sum_two(a: str, b: str) -> Result<i64, i64> {
+fn sum_two(a: str, b: str) -> Result<i64, i64> {
     ar: Result<i64, i64> := parse_safe(a)
-    a_ok: bool := M ar { Ok(_) => true, Err(_) => false }
-    I !a_ok { R Err(0) }
-    av: i64 := M ar { Ok(v) => v, Err(_) => 0 }
+    a_ok: bool := match ar { Ok(_) => true, Err(_) => false }
+    I !a_ok { return Err(0) }
+    av: i64 := match ar { Ok(v) => v, Err(_) => 0 }
 
     br: Result<i64, i64> := parse_safe(b)
-    b_ok: bool := M br { Ok(_) => true, Err(_) => false }
-    I !b_ok { R Err(0) }
-    bv: i64 := M br { Ok(v) => v, Err(_) => 0 }
+    b_ok: bool := match br { Ok(_) => true, Err(_) => false }
+    I !b_ok { return Err(0) }
+    bv: i64 := match br { Ok(v) => v, Err(_) => 0 }
 
     Ok(av + bv)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     r1: Result<i64, i64> := sum_two("2", "3")
-    v1: i64 := M r1 { Ok(v) => v, Err(_) => -1 }
-    I v1 != 5 { R 1 }
+    v1: i64 := match r1 { Ok(v) => v, Err(_) => -1 }
+    I v1 != 5 { return 1 }
 
     r2: Result<i64, i64> := sum_two("2", "x")
-    is_err: i64 := M r2 { Ok(_) => 0, Err(_) => 1 }
-    I is_err != 1 { R 2 }
-    R 0
+    is_err: i64 := match r2 { Ok(_) => 0, Err(_) => 1 }
+    I is_err != 1 { return 2 }
+    return 0
 }

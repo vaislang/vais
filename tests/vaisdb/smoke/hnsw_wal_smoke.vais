@@ -1,13 +1,13 @@
-U vector/hnsw/types
-U vector/hnsw/wal
-U storage/wal/record_types
-U storage/wal/record_vector
-U storage/wal/group_commit
-U storage/wal/writer
-U storage/bytes
-U storage/error
+use vector/hnsw/types
+use vector/hnsw/wal
+use storage/wal/record_types
+use storage/wal/record_vector
+use storage/wal/group_commit
+use storage/wal/writer
+use storage/bytes
+use storage/error
 
-S WalSmokeStore {
+struct WalSmokeStore {
     n7: HnswNode,
     n8: HnswNode,
     has7: bool,
@@ -15,8 +15,8 @@ S WalSmokeStore {
     stored_count: u64,
 }
 
-X WalSmokeStore {
-    F new() -> WalSmokeStore {
+impl WalSmokeStore {
+    fn new() -> WalSmokeStore {
         WalSmokeStore {
             n7: HnswNode.new(0, 0, 0, 0, 0, 0),
             n8: HnswNode.new(0, 0, 0, 0, 0, 0),
@@ -27,55 +27,55 @@ X WalSmokeStore {
     }
 }
 
-X WalSmokeStore : NodeStore {
-    F load_node(self, node_id: u64) -> Result<HnswNode, VaisError> {
+impl WalSmokeStore : NodeStore {
+    fn load_node(self, node_id: u64) -> Result<HnswNode, VaisError> {
         I node_id == 7 && self.has7 {
-            R Ok(self.n7.clone())
+            return Ok(self.n7.clone())
         }
         I node_id == 8 && self.has8 {
-            R Ok(self.n8.clone())
+            return Ok(self.n8.clone())
         }
         Err(err_internal("missing smoke wal node"))
     }
 
-    F load_vector(self, node_id: u64) -> Result<Vec<f32>, VaisError> {
+    fn load_vector(self, node_id: u64) -> Result<Vec<f32>, VaisError> {
         values: Vec<f32> := mut Vec.with_capacity(2)
         values.push(node_id as f32)
         values.push(0.0)
         Ok(values)
     }
 
-    F store_node(mut self, node: HnswNode) -> Result<(), VaisError> {
+    fn store_node(mut self, node: HnswNode) -> Result<(), VaisError> {
         node_id := mut node.node_id
         I node_id == 7 {
             self.n7 = node
             self.has7 = true
             self.stored_count += 1
-            R Ok(())
+            return Ok(())
         }
         I node_id == 8 {
             self.n8 = node
             self.has8 = true
             self.stored_count += 1
-            R Ok(())
+            return Ok(())
         }
         Err(err_internal("unexpected smoke wal node"))
     }
 
-    F allocate_node_id(mut self) -> u64 {
+    fn allocate_node_id(mut self) -> u64 {
         7
     }
 
-    F get_file_page(self, node_id: u64) -> Result<(u8, u32), VaisError> {
+    fn get_file_page(self, node_id: u64) -> Result<(u8, u32), VaisError> {
         Ok((3 as u8, node_id as u32))
     }
 
-    F allocate_node_page(mut self, node_id: u64) -> Result<(u8, u32), VaisError> {
+    fn allocate_node_page(mut self, node_id: u64) -> Result<(u8, u32), VaisError> {
         Ok((3 as u8, node_id as u32))
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     neighbors: Vec<(u64, f32)> := mut Vec.with_capacity(2)
     neighbors.push((11, 1.25 as f32))
     neighbors.push((12, 2.5 as f32))
@@ -96,36 +96,36 @@ F main() -> i64 {
     insert_payload.serialize(&mut insert_buf)
     insert_bytes := mut insert_buf.to_vec()
     insert_read := mut ByteBuffer.wrap_readonly(&insert_bytes)
-    decoded_insert := mut M HnswInsertNodePayload.deserialize(&insert_read) {
+    decoded_insert := mut match HnswInsertNodePayload.deserialize(&insert_read) {
         Ok(v) => v,
-        Err(_) => { R 1 },
+        Err(_) => { return 1 },
     }
 
-    I decoded_insert.node_id != 7 { R 2 }
-    I decoded_insert.layer != 1 as u8 { R 3 }
-    I decoded_insert.neighbors.len() != 2 { R 4 }
-    I decoded_insert.neighbors[0].0 != 11 { R 5 }
-    I decoded_insert.file_id != 3 as u8 { R 6 }
-    I decoded_insert.affected_pages.len() != 1 { R 7 }
+    I decoded_insert.node_id != 7 { return 2 }
+    I decoded_insert.layer != 1 as u8 { return 3 }
+    I decoded_insert.neighbors.len() != 2 { return 4 }
+    I decoded_insert.neighbors[0].0 != 11 { return 5 }
+    I decoded_insert.file_id != 3 as u8 { return 6 }
+    I decoded_insert.affected_pages.len() != 1 { return 7 }
 
     store := mut WalSmokeStore.new()
-    M redo_hnsw_insert(&decoded_insert, &mut store) {
+    match redo_hnsw_insert(&decoded_insert, &mut store) {
         Ok(_) => {},
-        Err(_) => { R 8 },
+        Err(_) => { return 8 },
     }
 
-    inserted := mut M store.load_node(7) {
+    inserted := mut match store.load_node(7) {
         Ok(n) => n,
-        Err(_) => { R 9 },
+        Err(_) => { return 9 },
     }
-    I inserted.max_layer != 1 as u8 { R 10 }
-    I inserted.neighbors.len() != 2 { R 11 }
-    layer0 := mut M inserted.get_neighbors(0 as u8) {
+    I inserted.max_layer != 1 as u8 { return 10 }
+    I inserted.neighbors.len() != 2 { return 11 }
+    layer0 := mut match inserted.get_neighbors(0 as u8) {
         Ok(v) => v,
-        Err(_) => { R 12 },
+        Err(_) => { return 12 },
     }
-    I layer0.len() != 2 { R 13 }
-    I layer0[0].node_id != 11 { R 14 }
+    I layer0.len() != 2 { return 13 }
+    I layer0[0].node_id != 11 { return 14 }
 
     old_neighbors: Vec<u64> := mut Vec.with_capacity(2)
     old_neighbors.push(11)
@@ -145,36 +145,36 @@ F main() -> i64 {
     update_payload.serialize(&mut update_buf)
     update_bytes := mut update_buf.to_vec()
 
-    M redo_hnsw_update_edges(&update_payload, &mut store) {
+    match redo_hnsw_update_edges(&update_payload, &mut store) {
         Ok(_) => {},
-        Err(_) => { R 15 },
+        Err(_) => { return 15 },
     }
-    updated := mut M store.load_node(7) {
+    updated := mut match store.load_node(7) {
         Ok(n) => n,
-        Err(_) => { R 16 },
+        Err(_) => { return 16 },
     }
-    updated_layer0 := mut M updated.get_neighbors(0 as u8) {
+    updated_layer0 := mut match updated.get_neighbors(0 as u8) {
         Ok(v) => v,
-        Err(_) => { R 17 },
+        Err(_) => { return 17 },
     }
-    I updated_layer0.len() != 1 { R 18 }
-    I updated_layer0[0].node_id != 99 { R 19 }
-    I updated_layer0[0].distance != 0.0 as f32 { R 20 }
+    I updated_layer0.len() != 1 { return 18 }
+    I updated_layer0[0].node_id != 99 { return 19 }
+    I updated_layer0[0].distance != 0.0 as f32 { return 20 }
 
-    M dispatch_vector_undo(HNSW_UPDATE_EDGES, &update_bytes, &mut store) {
+    match dispatch_vector_undo(HNSW_UPDATE_EDGES, &update_bytes, &mut store) {
         Ok(_) => {},
-        Err(_) => { R 21 },
+        Err(_) => { return 21 },
     }
-    restored := mut M store.load_node(7) {
+    restored := mut match store.load_node(7) {
         Ok(n) => n,
-        Err(_) => { R 22 },
+        Err(_) => { return 22 },
     }
-    restored_layer0 := mut M restored.get_neighbors(0 as u8) {
+    restored_layer0 := mut match restored.get_neighbors(0 as u8) {
         Ok(v) => v,
-        Err(_) => { R 23 },
+        Err(_) => { return 23 },
     }
-    I restored_layer0.len() != 2 { R 24 }
-    I restored_layer0[1].node_id != 12 { R 25 }
+    I restored_layer0.len() != 2 { return 24 }
+    I restored_layer0[1].node_id != 12 { return 25 }
 
     promote_payload := mut HnswLayerPromotePayload {
         node_id: 7,
@@ -182,26 +182,26 @@ F main() -> i64 {
         file_id: 3 as u8,
         page_id: 77 as u32,
     }
-    M redo_hnsw_layer_promote(&promote_payload, &mut store) {
+    match redo_hnsw_layer_promote(&promote_payload, &mut store) {
         Ok(_) => {},
-        Err(_) => { R 26 },
+        Err(_) => { return 26 },
     }
-    promoted := mut M store.load_node(7) {
+    promoted := mut match store.load_node(7) {
         Ok(n) => n,
-        Err(_) => { R 27 },
+        Err(_) => { return 27 },
     }
-    I promoted.max_layer != 3 as u8 { R 28 }
-    I promoted.neighbors.len() != 4 { R 29 }
+    I promoted.max_layer != 3 as u8 { return 28 }
+    I promoted.neighbors.len() != 4 { return 29 }
 
-    M undo_hnsw_insert(&decoded_insert, &mut store) {
+    match undo_hnsw_insert(&decoded_insert, &mut store) {
         Ok(_) => {},
-        Err(_) => { R 30 },
+        Err(_) => { return 30 },
     }
-    deleted := mut M store.load_node(7) {
+    deleted := mut match store.load_node(7) {
         Ok(n) => n,
-        Err(_) => { R 31 },
+        Err(_) => { return 31 },
     }
-    I !deleted.is_deleted { R 32 }
+    I !deleted.is_deleted { return 32 }
 
     delete_layers: Vec<u8> := mut Vec.with_capacity(2)
     delete_layers.push(0 as u8)
@@ -212,27 +212,27 @@ F main() -> i64 {
         file_id: 3 as u8,
         page_id: 77 as u32,
     }
-    M undo_hnsw_delete(&delete_payload, &mut store) {
-        Ok(_) => { R 33 },
+    match undo_hnsw_delete(&delete_payload, &mut store) {
+        Ok(_) => { return 33 },
         Err(e) => {
-            I e.code != "VAIS-0209003" { R 34 }
+            I e.code != "VAIS-0209003" { return 34 }
         },
     }
 
-    writer := mut M WalWriter.new("/tmp/vais-smoke-hnsw-wal", 4096 as u32) {
+    writer := mut match WalWriter.new("/tmp/vais-smoke-hnsw-wal", 4096 as u32) {
         Ok(w) => w,
-        Err(_) => { R 35 },
+        Err(_) => { return 35 },
     }
     gcm := mut GroupCommitManager.new(GroupCommitConfig.async_mode(), writer)
     wal_mgr := mut HnswWalManager.new(&gcm)
     log_layers: Vec<u8> := mut Vec.with_capacity(2)
     log_layers.push(0 as u8)
     log_layers.push(1 as u8)
-    lsn := mut M wal_mgr.log_delete_node(700, 7, &log_layers, 3 as u8, 77 as u32) {
+    lsn := mut match wal_mgr.log_delete_node(700, 7, &log_layers, 3 as u8, 77 as u32) {
         Ok(v) => v,
-        Err(_) => { R 36 },
+        Err(_) => { return 36 },
     }
-    I lsn == 0 { R 37 }
+    I lsn == 0 { return 37 }
 
-    R 0
+    return 0
 }

@@ -1,17 +1,17 @@
 # CHECKS: pass struct by &ref/&mut to a method, mutate via field assign.
-S Stats { val: i64 }
+struct Stats { val: i64 }
 
-X Stats {
-    F bump(&self) {
+impl Stats {
+    fn bump(&self) {
         self.val = self.val + 1
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     s: Stats := mut Stats { val: 10 }
     s.bump()
     s.bump()
     s.bump()
-    I s.val != 13 { R 1 }
-    R 0
+    I s.val != 13 { return 1 }
+    return 0
 }

@@ -1,7 +1,7 @@
 # CHECKS: concatenate two Vec<i64> by repeated push.
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F main() -> i64 {
+fn main() -> i64 {
     a: Vec<i64> := mut vec_new()
     a.push(1)
     a.push(2)
@@ -16,17 +16,17 @@ F main() -> i64 {
     LF i: 0..a.len() { c.push(a[i]) }
     LF i: 0..b.len() { c.push(b[i]) }
 
-    I c.len() != 5 { R 1 }
-    I c[0] != 1 { R 2 }
-    I c[2] != 3 { R 3 }
-    I c[3] != 4 { R 4 }
-    I c[4] != 5 { R 5 }
+    I c.len() != 5 { return 1 }
+    I c[0] != 1 { return 2 }
+    I c[2] != 3 { return 3 }
+    I c[3] != 4 { return 4 }
+    I c[4] != 5 { return 5 }
 
     sum: i64 := mut 0
     LF i: 0..c.len() {
         sum = sum + c[i]
     }
     # 1+2+3+4+5 = 15
-    I sum != 15 { R 6 }
-    R 0
+    I sum != 15 { return 6 }
+    return 0
 }

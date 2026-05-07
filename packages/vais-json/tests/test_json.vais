@@ -19,7 +19,7 @@ C MAX_ARRAY_SIZE: i64 = 256
 C MAX_OBJECT_PAIRS: i64 = 256
 
 # JSON Value constructors (minimal inline version for tests)
-F json_null() -> i64 {
+fn json_null() -> i64 {
     val := malloc(24)
     store_i64(val, JSON_TYPE_NULL)
     store_i64(val + 8, 0)
@@ -27,15 +27,15 @@ F json_null() -> i64 {
     val
 }
 
-F json_bool(b: i64) -> i64 {
+fn json_bool(b: i64) -> i64 {
     val := malloc(24)
     store_i64(val, JSON_TYPE_BOOL)
     store_i64(val + 8, 0)
-    store_i64(val + 16, I b { 1 } E { 0 })
+    store_i64(val + 16, I b { 1 } enum { 0 })
     val
 }
 
-F json_number(n: i64) -> i64 {
+fn json_number(n: i64) -> i64 {
     val := malloc(24)
     store_i64(val, JSON_TYPE_NUMBER)
     store_i64(val + 8, 0)
@@ -43,7 +43,7 @@ F json_number(n: i64) -> i64 {
     val
 }
 
-F json_string(s: i64) -> i64 {
+fn json_string(s: i64) -> i64 {
     val := malloc(24)
     len := strlen(s)
     str_copy := malloc(len + 1)
@@ -55,30 +55,30 @@ F json_string(s: i64) -> i64 {
     val
 }
 
-F json_type(val: i64) -> i64 {
+fn json_type(val: i64) -> i64 {
     load_i64(val)
 }
 
-F json_get_bool(val: i64) -> i64 {
+fn json_get_bool(val: i64) -> i64 {
     I load_i64(val) == JSON_TYPE_BOOL {
         load_i64(val + 16)
-    } E {
+    } enum {
         0
     }
 }
 
-F json_get_number(val: i64) -> i64 {
+fn json_get_number(val: i64) -> i64 {
     I load_i64(val) == JSON_TYPE_NUMBER {
         load_i64(val + 16)
-    } E {
+    } enum {
         0
     }
 }
 
-F json_get_string(val: i64) -> i64 {
+fn json_get_string(val: i64) -> i64 {
     I load_i64(val) == JSON_TYPE_STRING {
         load_i64(val + 8)
-    } E {
+    } enum {
         0
     }
 }
@@ -87,16 +87,16 @@ F json_get_string(val: i64) -> i64 {
 # Test Helpers
 # ============================================================================
 
-F my_print_i64(val: i64) -> i64 {
+fn my_print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
-        R 0
+        return 0
     }
 
     I val < 0 {
         putchar(45)
         my_print_i64(0 - val)
-        R 0
+        return 0
     }
 
     I val >= 10 {
@@ -106,13 +106,13 @@ F my_print_i64(val: i64) -> i64 {
     0
 }
 
-F assert_eq(actual: i64, expected: i64, name: i64) -> i64 {
+fn assert_eq(actual: i64, expected: i64, name: i64) -> i64 {
     I actual == expected {
         puts("  PASS: ")
         puts(name)
         putchar(10)
         1
-    } E {
+    } enum {
         puts("  FAIL: ")
         puts(name)
         puts(" - expected ")
@@ -129,7 +129,7 @@ F assert_eq(actual: i64, expected: i64, name: i64) -> i64 {
 # ============================================================================
 
 # Test 1: Create and check null value
-F test_null_value() -> i64 {
+fn test_null_value() -> i64 {
     puts("\n[test_null_value]")
 
     val := json_null()
@@ -140,7 +140,7 @@ F test_null_value() -> i64 {
 }
 
 # Test 2: Create and check boolean values
-F test_bool_values() -> i64 {
+fn test_bool_values() -> i64 {
     puts("\n[test_bool_values]")
 
     val_true := json_bool(1)
@@ -165,7 +165,7 @@ F test_bool_values() -> i64 {
 }
 
 # Test 3: Create and check number value
-F test_number_value() -> i64 {
+fn test_number_value() -> i64 {
     puts("\n[test_number_value]")
 
     val := json_number(42)
@@ -182,7 +182,7 @@ F test_number_value() -> i64 {
 }
 
 # Test 4: Create and check string value
-F test_string_value() -> i64 {
+fn test_string_value() -> i64 {
     puts("\n[test_string_value]")
 
     val := json_string("hello")
@@ -205,7 +205,7 @@ F test_string_value() -> i64 {
 }
 
 # Test 5: Test negative number
-F test_negative_number() -> i64 {
+fn test_negative_number() -> i64 {
     puts("\n[test_negative_number]")
 
     val := json_number(0 - 100)
@@ -216,7 +216,7 @@ F test_negative_number() -> i64 {
 }
 
 # Test 6: Test zero
-F test_zero() -> i64 {
+fn test_zero() -> i64 {
     puts("\n[test_zero]")
 
     val := json_number(0)
@@ -227,7 +227,7 @@ F test_zero() -> i64 {
 }
 
 # Test 7: Test large number
-F test_large_number() -> i64 {
+fn test_large_number() -> i64 {
     puts("\n[test_large_number]")
 
     val := json_number(999999)
@@ -238,20 +238,20 @@ F test_large_number() -> i64 {
 }
 
 # Test 8: Test empty string
-F test_empty_string() -> i64 {
+fn test_empty_string() -> i64 {
     puts("\n[test_empty_string]")
 
     val := json_string("")
     str := json_get_string(val)
 
-    result := I str != 0 { I load_byte(str) == 0 { 1 } E { 0 } } E { 0 }
+    result := I str != 0 { I load_byte(str) == 0 { 1 } enum { 0 } } enum { 0 }
 
     free(val)
     assert_eq(result, 1, "empty string")
 }
 
 # Test 9: Test string with special characters
-F test_string_special() -> i64 {
+fn test_string_special() -> i64 {
     puts("\n[test_string_special]")
 
     val := json_string("a b c")
@@ -270,7 +270,7 @@ F test_string_special() -> i64 {
 }
 
 # Test 10: Test multiple value types
-F test_mixed_types() -> i64 {
+fn test_mixed_types() -> i64 {
     puts("\n[test_mixed_types]")
 
     val1 := json_null()
@@ -301,7 +301,7 @@ F test_mixed_types() -> i64 {
 # Main Test Runner
 # ============================================================================
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("===========================================")
     puts("\n  JSON Test Suite")
     puts("\n===========================================")
@@ -332,13 +332,13 @@ F main() -> i64 {
 # Extern Declarations
 # ============================================================================
 
-X F puts(s: str) -> i64
-X F putchar(c: i64) -> i64
-X F strlen(s: i64) -> i64
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F memcpy(dest: i64, src: i64, n: i64) -> i64
-X F load_byte(ptr: i64) -> i64
-X F load_i64(ptr: i64) -> i64
-X F store_byte(ptr: i64, val: i64) -> i64
-X F store_i64(ptr: i64, val: i64) -> i64
+impl fn puts(s: str) -> i64
+impl fn putchar(c: i64) -> i64
+impl fn strlen(s: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn memcpy(dest: i64, src: i64, n: i64) -> i64
+impl fn load_byte(ptr: i64) -> i64
+impl fn load_i64(ptr: i64) -> i64
+impl fn store_byte(ptr: i64, val: i64) -> i64
+impl fn store_i64(ptr: i64, val: i64) -> i64

@@ -1,14 +1,14 @@
 # CHECKS: same generic identity used 3 times — single specialization shared.
-F identity<T>(x: T) -> T { x }
+fn identity<T>(x: T) -> T { x }
 
-F main() -> i64 {
+fn main() -> i64 {
     a: i64 := identity(10)
     b: i64 := identity(20)
     c: i64 := identity(30)
-    I a + b + c != 60 { R 1 }
+    I a + b + c != 60 { return 1 }
 
     # nested
     d: i64 := identity(identity(identity(42)))
-    I d != 42 { R 2 }
-    R 0
+    I d != 42 { return 2 }
+    return 0
 }

@@ -5,9 +5,9 @@
 #   - Vec<T> push + len
 #   - Range expression (0..v.len()) producing a slice
 #   - &slice fat-pointer ABI matching the callee's `&[i64]` parameter
-U std/vec.{vec_new}
+use std/vec.{vec_new}
 
-F sum_slice(s: &[i64]) -> i64 {
+fn sum_slice(s: &[i64]) -> i64 {
     total: i64 := mut 0
     LF i: 0..s.len() {
         total = total + s[i]
@@ -15,13 +15,13 @@ F sum_slice(s: &[i64]) -> i64 {
     total
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     v.push(1)
     v.push(2)
     v.push(3)
     v.push(4)
     s: i64 := sum_slice(&v[0..v.len()])
-    I s != 10 { R 1 }
-    R 0
+    I s != 10 { return 1 }
+    return 0
 }

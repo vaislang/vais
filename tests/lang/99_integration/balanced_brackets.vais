@@ -1,5 +1,5 @@
 # CHECKS: classic balanced brackets check using counter.
-F is_balanced(p: i64, n: i64) -> i64 {
+fn is_balanced(p: i64, n: i64) -> i64 {
     depth: i64 := mut 0
     LF i: 0..n {
         c: i64 := load_byte(p + i)
@@ -7,29 +7,29 @@ F is_balanced(p: i64, n: i64) -> i64 {
         I c == 40 { depth = depth + 1 }
         I c == 41 {
             depth = depth - 1
-            I depth < 0 { R 0 }
+            I depth < 0 { return 0 }
         }
     }
-    I depth == 0 { 1 } EL { 0 }
+    I depth == 0 { 1 } else { 0 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p1: i64 := str_to_ptr("()")
-    I is_balanced(p1, strlen(p1)) != 1 { R 1 }
+    I is_balanced(p1, strlen(p1)) != 1 { return 1 }
 
     p2: i64 := str_to_ptr("(())")
-    I is_balanced(p2, strlen(p2)) != 1 { R 2 }
+    I is_balanced(p2, strlen(p2)) != 1 { return 2 }
 
     p3: i64 := str_to_ptr("(()")
-    I is_balanced(p3, strlen(p3)) != 0 { R 3 }
+    I is_balanced(p3, strlen(p3)) != 0 { return 3 }
 
     p4: i64 := str_to_ptr(")(")
-    I is_balanced(p4, strlen(p4)) != 0 { R 4 }
+    I is_balanced(p4, strlen(p4)) != 0 { return 4 }
 
     p5: i64 := str_to_ptr("")
-    I is_balanced(p5, 0) != 1 { R 5 }
+    I is_balanced(p5, 0) != 1 { return 5 }
 
     p6: i64 := str_to_ptr("(a(b)c)")
-    I is_balanced(p6, strlen(p6)) != 1 { R 6 }
-    R 0
+    I is_balanced(p6, strlen(p6)) != 1 { return 6 }
+    return 0
 }

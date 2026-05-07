@@ -4,7 +4,7 @@
 # subsequent load at loop end didn't dominate. Fixed by hoisting the alloca
 # in inkwell/gen_stmt.rs::generate_break (and the IR-string fallback in
 # generate_expr/loops.rs).
-F first_match(target: i64) -> i64 {
+fn first_match(target: i64) -> i64 {
     i := mut 0
     L {
         I i >= 10 { B 0 - 1 }
@@ -13,18 +13,18 @@ F first_match(target: i64) -> i64 {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # found at index 5
     a: i64 := first_match(5)
-    I a != 5 { R 1 }
+    I a != 5 { return 1 }
 
     # found at index 0
     b: i64 := first_match(0)
-    I b != 0 { R 2 }
+    I b != 0 { return 2 }
 
     # not found → -1
     c: i64 := first_match(99)
-    I c != 0 - 1 { R 3 }
+    I c != 0 - 1 { return 3 }
 
-    R 0
+    return 0
 }

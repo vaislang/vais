@@ -1,22 +1,22 @@
-U storage/recovery/truncation
-U storage/wal/segment
-U storage/wal/lsn
-U storage/bytes
-U storage/constants
-U storage/file
-U storage/error
+use storage/recovery/truncation
+use storage/wal/segment
+use storage/wal/lsn
+use storage/bytes
+use storage/constants
+use storage/file
+use storage/error
 
-F trunc_smoke_segment_path(wal_dir: str, segment_num: u32) -> str {
+fn trunc_smoke_segment_path(wal_dir: str, segment_num: u32) -> str {
     filename := mut WalSegmentHeader.segment_filename(segment_num)
     wal_dir.clone() + "/" + filename
 }
 
-F trunc_smoke_archive_path(archive_dir: str, segment_num: u32) -> str {
+fn trunc_smoke_archive_path(archive_dir: str, segment_num: u32) -> str {
     filename := mut WalSegmentHeader.segment_filename(segment_num)
     archive_dir.clone() + "/" + filename
 }
 
-F trunc_smoke_write_segment(wal_dir: str, segment_num: u32, last_lsn: u64) -> Result<(), VaisError> {
+fn trunc_smoke_write_segment(wal_dir: str, segment_num: u32, last_lsn: u64) -> Result<(), VaisError> {
     create_dir_all(&wal_dir)?;
     path := mut trunc_smoke_segment_path(wal_dir, segment_num)
     file := mut File.open(path, "rw+")?;
@@ -30,7 +30,7 @@ F trunc_smoke_write_segment(wal_dir: str, segment_num: u32, last_lsn: u64) -> Re
     file.fsync()
 }
 
-F trunc_smoke_write_segments(wal_dir: str) -> Result<(), VaisError> {
+fn trunc_smoke_write_segments(wal_dir: str) -> Result<(), VaisError> {
     trunc_smoke_write_segment(wal_dir.clone(), 1 as u32, encode_lsn(1 as u32, 128 as u32))?;
     trunc_smoke_write_segment(wal_dir.clone(), 2 as u32, encode_lsn(2 as u32, 128 as u32))?;
     trunc_smoke_write_segment(wal_dir.clone(), 3 as u32, encode_lsn(3 as u32, 128 as u32))?;
@@ -38,96 +38,96 @@ F trunc_smoke_write_segments(wal_dir: str) -> Result<(), VaisError> {
     Ok(())
 }
 
-F trunc_smoke_segment_exists(wal_dir: str, segment_num: u32) -> bool {
+fn trunc_smoke_segment_exists(wal_dir: str, segment_num: u32) -> bool {
     path := mut trunc_smoke_segment_path(wal_dir, segment_num)
     path_exists(&path)
 }
 
-F trunc_smoke_archive_exists(archive_dir: str, segment_num: u32) -> bool {
+fn trunc_smoke_archive_exists(archive_dir: str, segment_num: u32) -> bool {
     path := mut trunc_smoke_archive_path(archive_dir, segment_num)
     path_exists(&path)
 }
 
-F trunc_smoke_archive_size(archive_dir: str, segment_num: u32) -> Result<u64, VaisError> {
+fn trunc_smoke_archive_size(archive_dir: str, segment_num: u32) -> Result<u64, VaisError> {
     path := mut trunc_smoke_archive_path(archive_dir, segment_num)
     file_size(&path)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     wal_dir := mut "checkpoint_truncation_archive_wal"
     archive_dir := mut "checkpoint_truncation_archive_dir"
-    M create_dir_all(&wal_dir) {
+    match create_dir_all(&wal_dir) {
         Ok(_) => {},
-        Err(_) => { R 1 },
+        Err(_) => { return 1 },
     }
-    M create_dir_all(&archive_dir) {
+    match create_dir_all(&archive_dir) {
         Ok(_) => {},
-        Err(_) => { R 2 },
+        Err(_) => { return 2 },
     }
-    M trunc_smoke_write_segments(wal_dir.clone()) {
+    match trunc_smoke_write_segments(wal_dir.clone()) {
         Ok(_) => {},
-        Err(_) => { R 3 },
+        Err(_) => { return 3 },
     }
 
     cfg := mut TruncationConfig.with_archive(archive_dir.clone())
     cfg.min_segments_to_keep = 2 as u32
     mgr := mut TruncationManager.new(wal_dir.clone(), cfg)
-    result := mut M mgr.truncate(encode_lsn(4 as u32, 64 as u32), NULL_LSN) {
+    result := mut match mgr.truncate(encode_lsn(4 as u32, 64 as u32), NULL_LSN) {
         Ok(v) => v,
-        Err(_) => { R 4 },
+        Err(_) => { return 4 },
     }
 
-    I result.segments_deleted != 2 as u32 { R 5 }
-    I result.segments_archived != 2 as u32 { R 6 }
-    I result.oldest_remaining_segment != 3 as u32 { R 7 }
-    I trunc_smoke_segment_exists(wal_dir.clone(), 1 as u32) { R 8 }
-    I trunc_smoke_segment_exists(wal_dir.clone(), 2 as u32) { R 9 }
-    I !trunc_smoke_segment_exists(wal_dir.clone(), 3 as u32) { R 10 }
-    I !trunc_smoke_segment_exists(wal_dir.clone(), 4 as u32) { R 11 }
-    I !trunc_smoke_archive_exists(archive_dir.clone(), 1 as u32) { R 12 }
-    I !trunc_smoke_archive_exists(archive_dir.clone(), 2 as u32) { R 13 }
-    I trunc_smoke_archive_exists(archive_dir.clone(), 3 as u32) { R 14 }
-    archive_size := mut M trunc_smoke_archive_size(archive_dir.clone(), 1 as u32) {
+    I result.segments_deleted != 2 as u32 { return 5 }
+    I result.segments_archived != 2 as u32 { return 6 }
+    I result.oldest_remaining_segment != 3 as u32 { return 7 }
+    I trunc_smoke_segment_exists(wal_dir.clone(), 1 as u32) { return 8 }
+    I trunc_smoke_segment_exists(wal_dir.clone(), 2 as u32) { return 9 }
+    I !trunc_smoke_segment_exists(wal_dir.clone(), 3 as u32) { return 10 }
+    I !trunc_smoke_segment_exists(wal_dir.clone(), 4 as u32) { return 11 }
+    I !trunc_smoke_archive_exists(archive_dir.clone(), 1 as u32) { return 12 }
+    I !trunc_smoke_archive_exists(archive_dir.clone(), 2 as u32) { return 13 }
+    I trunc_smoke_archive_exists(archive_dir.clone(), 3 as u32) { return 14 }
+    archive_size := mut match trunc_smoke_archive_size(archive_dir.clone(), 1 as u32) {
         Ok(v) => v,
-        Err(_) => { R 15 },
+        Err(_) => { return 15 },
     }
-    I archive_size < WAL_SEGMENT_HEADER_SIZE as u64 { R 16 }
+    I archive_size < WAL_SEGMENT_HEADER_SIZE as u64 { return 16 }
 
     active_wal_dir := mut "checkpoint_truncation_active_wal"
     active_archive_dir := mut "checkpoint_truncation_active_archive"
-    M create_dir_all(&active_wal_dir) {
+    match create_dir_all(&active_wal_dir) {
         Ok(_) => {},
-        Err(_) => { R 17 },
+        Err(_) => { return 17 },
     }
-    M create_dir_all(&active_archive_dir) {
+    match create_dir_all(&active_archive_dir) {
         Ok(_) => {},
-        Err(_) => { R 18 },
+        Err(_) => { return 18 },
     }
-    M trunc_smoke_write_segments(active_wal_dir.clone()) {
+    match trunc_smoke_write_segments(active_wal_dir.clone()) {
         Ok(_) => {},
-        Err(_) => { R 19 },
+        Err(_) => { return 19 },
     }
 
     active_cfg := mut TruncationConfig.with_archive(active_archive_dir.clone())
     active_cfg.min_segments_to_keep = 1 as u32
     active_mgr := mut TruncationManager.new(active_wal_dir.clone(), active_cfg)
-    active_result := mut M active_mgr.truncate(
+    active_result := mut match active_mgr.truncate(
         encode_lsn(4 as u32, 64 as u32),
         encode_lsn(2 as u32, 0 as u32),
     ) {
         Ok(v) => v,
-        Err(_) => { R 20 },
+        Err(_) => { return 20 },
     }
 
-    I active_result.segments_deleted != 1 as u32 { R 21 }
-    I active_result.segments_archived != 1 as u32 { R 22 }
-    I active_result.oldest_remaining_segment != 2 as u32 { R 23 }
-    I trunc_smoke_segment_exists(active_wal_dir.clone(), 1 as u32) { R 24 }
-    I !trunc_smoke_segment_exists(active_wal_dir.clone(), 2 as u32) { R 25 }
-    I !trunc_smoke_segment_exists(active_wal_dir.clone(), 3 as u32) { R 26 }
-    I !trunc_smoke_segment_exists(active_wal_dir.clone(), 4 as u32) { R 27 }
-    I !trunc_smoke_archive_exists(active_archive_dir.clone(), 1 as u32) { R 28 }
-    I trunc_smoke_archive_exists(active_archive_dir.clone(), 2 as u32) { R 29 }
+    I active_result.segments_deleted != 1 as u32 { return 21 }
+    I active_result.segments_archived != 1 as u32 { return 22 }
+    I active_result.oldest_remaining_segment != 2 as u32 { return 23 }
+    I trunc_smoke_segment_exists(active_wal_dir.clone(), 1 as u32) { return 24 }
+    I !trunc_smoke_segment_exists(active_wal_dir.clone(), 2 as u32) { return 25 }
+    I !trunc_smoke_segment_exists(active_wal_dir.clone(), 3 as u32) { return 26 }
+    I !trunc_smoke_segment_exists(active_wal_dir.clone(), 4 as u32) { return 27 }
+    I !trunc_smoke_archive_exists(active_archive_dir.clone(), 1 as u32) { return 28 }
+    I trunc_smoke_archive_exists(active_archive_dir.clone(), 2 as u32) { return 29 }
 
-    R 0
+    return 0
 }

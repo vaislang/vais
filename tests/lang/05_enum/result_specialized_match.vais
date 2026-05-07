@@ -3,35 +3,35 @@
 # enum-payload decode for specialized Result<T, E> returned the universal
 # i64 slot value when T was a Named struct, yielding garbage struct fields.
 
-S Point {
+struct Point {
     x: i64,
     y: i64
 }
 
-F try_make(flag: i64) -> Result<Point, i64> {
+fn try_make(flag: i64) -> Result<Point, i64> {
     I flag > 0 {
         Ok(Point { x: 10, y: 20 })
-    } EL {
+    } else {
         Err(99)
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     r1: Result<Point, i64> := try_make(1)
-    M r1 {
+    match r1 {
         Ok(p) => {
-            I p.x != 10 { R 1 }
-            I p.y != 20 { R 2 }
+            I p.x != 10 { return 1 }
+            I p.y != 20 { return 2 }
         },
-        Err(_) => { R 3 }
+        Err(_) => { return 3 }
     }
 
     r2: Result<Point, i64> := try_make(0)
-    M r2 {
-        Ok(_) => { R 4 },
+    match r2 {
+        Ok(_) => { return 4 },
         Err(code) => {
-            I code != 99 { R 5 }
+            I code != 99 { return 5 }
         }
     }
-    R 0
+    return 0
 }

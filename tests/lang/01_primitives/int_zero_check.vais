@@ -1,24 +1,24 @@
 # CHECKS: zero detection across various contexts.
-F main() -> i64 {
+fn main() -> i64 {
     a: i64 := 0
-    I a != 0 { R 1 }
+    I a != 0 { return 1 }
 
     # multiply by zero
     b: i64 := 999 * 0
-    I b != 0 { R 2 }
+    I b != 0 { return 2 }
 
     # zero - zero
-    I 0 - 0 != 0 { R 3 }
+    I 0 - 0 != 0 { return 3 }
 
     # zero | zero
-    I (0 | 0) != 0 { R 4 }
+    I (0 | 0) != 0 { return 4 }
 
     # zero & anything
-    I (0 & 0xFFFF) != 0 { R 5 }
+    I (0 & 0xFFFF) != 0 { return 5 }
 
     # bit comparisons
-    I 0 < 1 {} EL { R 6 }
-    I 0 > 0 - 1 {} EL { R 7 }
+    I 0 < 1 {} else { return 6 }
+    I 0 > 0 - 1 {} else { return 7 }
 
-    R 0
+    return 0
 }

@@ -1,16 +1,16 @@
-EN Color {
+enum Color {
     Red,
     Green,
     Blue,
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c: Color := Green
-    value: i64 := M c {
+    value: i64 := match c {
         Red => 1,
         Green => 2,
         Blue => 3,
     }
-    I value != 2 { R 1 }
-    R 0
+    I value != 2 { return 1 }
+    return 0
 }

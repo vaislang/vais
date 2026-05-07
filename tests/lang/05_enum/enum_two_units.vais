@@ -2,31 +2,31 @@
 # `flip(t) -> Toggle` returns enum constructor from match arms — was the
 # original C18 dominance bug. Fix in inkwell/gen_match.rs treats unit-variant
 # idents as patterns (not bindings) in pattern bindings, matching TC behavior.
-EN Toggle {
+enum Toggle {
     On,
     Off
 }
 
-F flip(t: Toggle) -> Toggle {
-    M t {
+fn flip(t: Toggle) -> Toggle {
+    match t {
         On => Off,
         Off => On
     }
 }
 
-F to_int(t: Toggle) -> i64 {
-    M t {
+fn to_int(t: Toggle) -> i64 {
+    match t {
         On => 1,
         Off => 0
     }
 }
 
-F main() -> i64 {
-    I to_int(On) != 1 { R 1 }
-    I to_int(Off) != 0 { R 2 }
+fn main() -> i64 {
+    I to_int(On) != 1 { return 1 }
+    I to_int(Off) != 0 { return 2 }
 
-    I to_int(flip(On)) != 0 { R 3 }
-    I to_int(flip(Off)) != 1 { R 4 }
-    I to_int(flip(flip(On))) != 1 { R 5 }
-    R 0
+    I to_int(flip(On)) != 0 { return 3 }
+    I to_int(flip(Off)) != 1 { return 4 }
+    I to_int(flip(flip(On))) != 1 { return 5 }
+    return 0
 }

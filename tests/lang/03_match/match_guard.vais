@@ -1,7 +1,7 @@
 # CHECKS: match arm guards `pattern I expr => body` (note: vais uses single-char
 # `I` keyword for if/guard, not the spelled-out `if`).
-F classify(n: i64) -> i64 {
-    M n {
+fn classify(n: i64) -> i64 {
+    match n {
         x I x< 0 => 1,
         0          => 2,
         x I x< 10 => 3,
@@ -10,11 +10,11 @@ F classify(n: i64) -> i64 {
     }
 }
 
-F main() -> i64 {
-    I classify(0 - 5) != 1 { R 1 }
-    I classify(0) != 2 { R 2 }
-    I classify(7) != 3 { R 3 }
-    I classify(42) != 4 { R 4 }
-    I classify(500) != 5 { R 5 }
-    R 0
+fn main() -> i64 {
+    I classify(0 - 5) != 1 { return 1 }
+    I classify(0) != 2 { return 2 }
+    I classify(7) != 3 { return 3 }
+    I classify(42) != 4 { return 4 }
+    I classify(500) != 5 { return 5 }
+    return 0
 }

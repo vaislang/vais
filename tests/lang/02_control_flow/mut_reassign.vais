@@ -3,7 +3,7 @@
 # `i = i + 1` but codegen emitted i as SSA, so the load read constant 0 every
 # iteration. The TC fix in checker_expr/special.rs Expr::Assign now rejects
 # assignment to non-mut bindings; this test confirms the `mut` path still works.
-F sum_to_n(n: i64) -> i64 {
+fn sum_to_n(n: i64) -> i64 {
     sum: i64 := mut 0
     i: i64 := mut 0
     L {
@@ -13,18 +13,18 @@ F sum_to_n(n: i64) -> i64 {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # 0+1+2+3+4 = 10
     a: i64 := sum_to_n(5)
-    I a != 10 { R 1 }
+    I a != 10 { return 1 }
 
     # 0+1+...+9 = 45
     b: i64 := sum_to_n(10)
-    I b != 45 { R 2 }
+    I b != 45 { return 2 }
 
     # n=0 → empty sum
     c: i64 := sum_to_n(0)
-    I c != 0 { R 3 }
+    I c != 0 { return 3 }
 
-    R 0
+    return 0
 }

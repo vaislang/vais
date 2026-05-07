@@ -1,2 +1,2 @@
-U malicious.txt
-F main() -> () = ()
+use malicious.txt
+fn main() -> () = ()

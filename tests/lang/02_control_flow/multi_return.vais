@@ -1,37 +1,37 @@
 # CHECKS: function with multiple return points (early exits).
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F find_first_zero(v: &Vec<i64>) -> i64 {
+fn find_first_zero(v: &Vec<i64>) -> i64 {
     LF i: 0..v.len() {
-        I v[i] == 0 { R i }
+        I v[i] == 0 { return i }
     }
     0 - 1
 }
 
-F is_sorted(v: &Vec<i64>) -> i64 {
+fn is_sorted(v: &Vec<i64>) -> i64 {
     LF i: 1..v.len() {
-        I v[i] < v[i - 1] { R 0 }
+        I v[i] < v[i - 1] { return 0 }
     }
     1
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     v.push(3)
     v.push(0)
     v.push(7)
-    I find_first_zero(&v) != 1 { R 1 }
+    I find_first_zero(&v) != 1 { return 1 }
 
     w: Vec<i64> := mut vec_new()
     w.push(1)
     w.push(2)
     w.push(3)
-    I find_first_zero(&w) != 0 - 1 { R 2 }
-    I is_sorted(&w) != 1 { R 3 }
+    I find_first_zero(&w) != 0 - 1 { return 2 }
+    I is_sorted(&w) != 1 { return 3 }
 
     u: Vec<i64> := mut vec_new()
     u.push(3)
     u.push(1)
-    I is_sorted(&u) != 0 { R 4 }
-    R 0
+    I is_sorted(&u) != 0 { return 4 }
+    return 0
 }

@@ -1,8 +1,8 @@
 # CHECKS: max diff between consecutive elements in Vec<i64>.
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F max_diff(v: &Vec<i64>) -> i64 {
-    I v.len() < 2 { R 0 }
+fn max_diff(v: &Vec<i64>) -> i64 {
+    I v.len() < 2 { return 0 }
     best: i64 := mut 0
     LF i: 1..v.len() {
         d: i64 := mut v[i] - v[i - 1]
@@ -12,7 +12,7 @@ F max_diff(v: &Vec<i64>) -> i64 {
     best
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     v.push(1)
     v.push(5)
@@ -20,15 +20,15 @@ F main() -> i64 {
     v.push(10)
     v.push(3)
     # diffs: 4, 3, 8, 7 → max = 8
-    I max_diff(&v) != 8 { R 1 }
+    I max_diff(&v) != 8 { return 1 }
 
     w: Vec<i64> := mut vec_new()
     w.push(0)
     w.push(0)
     w.push(0)
-    I max_diff(&w) != 0 { R 2 }
+    I max_diff(&w) != 0 { return 2 }
 
     e: Vec<i64> := mut vec_new()
-    I max_diff(&e) != 0 { R 3 }
-    R 0
+    I max_diff(&e) != 0 { return 3 }
+    return 0
 }

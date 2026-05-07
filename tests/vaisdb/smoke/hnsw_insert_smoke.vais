@@ -1,11 +1,11 @@
-U vector/hnsw/types
-U vector/hnsw/insert
-U vector/distance
-U storage/error
-U storage/wal/group_commit
-U storage/wal/writer
+use vector/hnsw/types
+use vector/hnsw/insert
+use vector/distance
+use storage/error
+use storage/wal/group_commit
+use storage/wal/writer
 
-S SmokeNodeStore {
+struct SmokeNodeStore {
     n1: HnswNode,
     n2: HnswNode,
     has1: bool,
@@ -13,8 +13,8 @@ S SmokeNodeStore {
     allocated_pages: u64,
 }
 
-X SmokeNodeStore {
-    F new() -> SmokeNodeStore {
+impl SmokeNodeStore {
+    fn new() -> SmokeNodeStore {
         SmokeNodeStore {
             n1: HnswNode.new(0, 0, 0, 0, 0, 0),
             n2: HnswNode.new(0, 0, 0, 0, 0, 0),
@@ -25,81 +25,81 @@ X SmokeNodeStore {
     }
 }
 
-X SmokeNodeStore : NodeStore {
-    F load_node(self, node_id: u64) -> Result<HnswNode, VaisError> {
+impl SmokeNodeStore : NodeStore {
+    fn load_node(self, node_id: u64) -> Result<HnswNode, VaisError> {
         I node_id == 1 && self.has1 {
-            R Ok(self.n1.clone())
+            return Ok(self.n1.clone())
         }
         I node_id == 2 && self.has2 {
-            R Ok(self.n2.clone())
+            return Ok(self.n2.clone())
         }
         Err(err_internal("missing smoke insert node"))
     }
 
-    F load_vector(self, node_id: u64) -> Result<Vec<f32>, VaisError> {
+    fn load_vector(self, node_id: u64) -> Result<Vec<f32>, VaisError> {
         I node_id == 1 {
-            R Ok(vec2(0.0, 0.0))
+            return Ok(vec2(0.0, 0.0))
         }
         I node_id == 2 {
-            R Ok(vec2(1.0, 0.0))
+            return Ok(vec2(1.0, 0.0))
         }
         Err(err_internal("missing smoke insert vector"))
     }
 
-    F store_node(mut self, node: HnswNode) -> Result<(), VaisError> {
+    fn store_node(mut self, node: HnswNode) -> Result<(), VaisError> {
         node_id := mut node.node_id
         I node_id == 1 {
             self.n1 = node
             self.has1 = true
-            R Ok(())
+            return Ok(())
         }
         I node_id == 2 {
             self.n2 = node
             self.has2 = true
-            R Ok(())
+            return Ok(())
         }
         Err(err_internal("unexpected smoke insert node"))
     }
 
-    F allocate_node_id(mut self) -> u64 {
+    fn allocate_node_id(mut self) -> u64 {
         self.allocated_pages += 1
         self.allocated_pages
     }
 
-    F get_file_page(self, node_id: u64) -> Result<(u8, u32), VaisError> {
+    fn get_file_page(self, node_id: u64) -> Result<(u8, u32), VaisError> {
         Ok((7 as u8, node_id as u32))
     }
 
-    F allocate_node_page(mut self, node_id: u64) -> Result<(u8, u32), VaisError> {
+    fn allocate_node_page(mut self, node_id: u64) -> Result<(u8, u32), VaisError> {
         self.allocated_pages += 1
         Ok((7 as u8, node_id as u32))
     }
 }
 
-F vec2(a: f32, b: f32) -> Vec<f32> {
+fn vec2(a: f32, b: f32) -> Vec<f32> {
     values: Vec<f32> := mut Vec.with_capacity(2)
     values.push(a)
     values.push(b)
     values
 }
 
-F main() -> i64 {
-    config := mut M HnswConfig.new(2 as u16, 4 as u16, 4 as u32, 4 as u32, 8 as u64, DISTANCE_L2) {
+fn main() -> i64 {
+    config := mut match HnswConfig.new(2 as u16, 4 as u16, 4 as u32, 4 as u32, 8 as u64, DISTANCE_L2) {
         Ok(v) => v,
-        Err(_) => { R 1 },
+        Err(_) => { return 1 },
     }
     meta := mut HnswMeta.new(config, 9 as u32)
     store := mut SmokeNodeStore.new()
     distance := mut DistanceComputer.new(L2)
-    writer := mut M WalWriter.new("/tmp/vais-smoke-hnsw-insert", 4096 as u32) {
+    writer := mut match WalWriter.new("/tmp/vais-smoke-hnsw-insert", 4096 as u32) {
         Ok(w) => w,
-        Err(_) => { R 2 },
+        Err(_) => { return 2 },
     }
     gcm := mut GroupCommitManager.new(GroupCommitConfig.async_mode(), writer)
 
     v1 := mut vec2(0.0, 0.0)
     node1 := mut HnswNode.new(1, 0, 0, 0, 10, 1)
-    meta = M hnsw_insert(
+    meta = match hnsw_insert(
         node1,
         &v1,
         meta,
@@ -111,26 +111,26 @@ F main() -> i64 {
         1 as u32,
     ) {
         Ok(v) => v,
-        Err(_) => { R 3 },
+        Err(_) => { return 3 },
     }
 
-    I meta.entry_point != 1 { R 4 }
-    I meta.total_nodes != 1 { R 5 }
-    I !store.has1 { R 6 }
+    I meta.entry_point != 1 { return 4 }
+    I meta.total_nodes != 1 { return 5 }
+    I !store.has1 { return 6 }
 
-    stored1_initial := mut M store.load_node(1) {
+    stored1_initial := mut match store.load_node(1) {
         Ok(n) => n,
-        Err(_) => { R 7 },
+        Err(_) => { return 7 },
     }
-    initial_neighbors := mut M stored1_initial.get_neighbors(0) {
+    initial_neighbors := mut match stored1_initial.get_neighbors(0) {
         Ok(v) => v,
-        Err(_) => { R 8 },
+        Err(_) => { return 8 },
     }
-    I initial_neighbors.len() != 0 { R 9 }
+    I initial_neighbors.len() != 0 { return 9 }
 
     v2 := mut vec2(1.0, 0.0)
     node2 := mut HnswNode.new(2, 0, 0, 0, 11, 2)
-    meta = M hnsw_insert(
+    meta = match hnsw_insert(
         node2,
         &v2,
         meta,
@@ -143,46 +143,46 @@ F main() -> i64 {
     ) {
         Ok(v) => v,
         Err(e) => {
-            I e.code == "VAIS-0205001" { R 20 }
-            I e.code == "VAIS-0205002" { R 21 }
-            R 10
+            I e.code == "VAIS-0205001" { return 20 }
+            I e.code == "VAIS-0205002" { return 21 }
+            return 10
         },
     }
 
-    I meta.entry_point != 1 { R 11 }
-    I meta.total_nodes != 2 { R 12 }
-    I !store.has2 { R 13 }
-    I store.allocated_pages != 2 { R 14 }
+    I meta.entry_point != 1 { return 11 }
+    I meta.total_nodes != 2 { return 12 }
+    I !store.has2 { return 13 }
+    I store.allocated_pages != 2 { return 14 }
 
-    stored1 := mut M store.load_node(1) {
+    stored1 := mut match store.load_node(1) {
         Ok(n) => n,
-        Err(_) => { R 15 },
+        Err(_) => { return 15 },
     }
-    stored2 := mut M store.load_node(2) {
+    stored2 := mut match store.load_node(2) {
         Ok(n) => n,
-        Err(_) => { R 16 },
+        Err(_) => { return 16 },
     }
 
-    n1_neighbors := mut M stored1.get_neighbors(0) {
+    n1_neighbors := mut match stored1.get_neighbors(0) {
         Ok(v) => v,
-        Err(_) => { R 17 },
+        Err(_) => { return 17 },
     }
-    n2_neighbors := mut M stored2.get_neighbors(0) {
+    n2_neighbors := mut match stored2.get_neighbors(0) {
         Ok(v) => v,
-        Err(_) => { R 18 },
+        Err(_) => { return 18 },
     }
 
-    I n1_neighbors.len() != 1 { R 19 }
-    I n2_neighbors.len() != 1 { R 22 }
-    I n1_neighbors[0].node_id != 2 { R 23 }
-    I n2_neighbors[0].node_id != 1 { R 24 }
-    I !approx_eq_f32(n1_neighbors[0].distance, 1.0 as f32, 0.0001 as f32) { R 25 }
-    I !approx_eq_f32(n2_neighbors[0].distance, 1.0 as f32, 0.0001 as f32) { R 26 }
+    I n1_neighbors.len() != 1 { return 19 }
+    I n2_neighbors.len() != 1 { return 22 }
+    I n1_neighbors[0].node_id != 2 { return 23 }
+    I n2_neighbors[0].node_id != 1 { return 24 }
+    I !approx_eq_f32(n1_neighbors[0].distance, 1.0 as f32, 0.0001 as f32) { return 25 }
+    I !approx_eq_f32(n2_neighbors[0].distance, 1.0 as f32, 0.0001 as f32) { return 26 }
 
-    M store.load_node(99) {
-        Ok(_) => { R 27 },
+    match store.load_node(99) {
+        Ok(_) => { return 27 },
         Err(_) => {},
     }
 
-    R 0
+    return 0
 }

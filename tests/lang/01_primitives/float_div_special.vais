@@ -1,25 +1,25 @@
 # CHECKS: f64 division and reciprocal patterns.
-F main() -> i64 {
+fn main() -> i64 {
     # exact division
     a: f64 := 10.0
     b: f64 := 4.0
     q: f64 := a / b
-    I (q as i64) != 2 { R 1 }
+    I (q as i64) != 2 { return 1 }
 
     # multiplication by reciprocal
     r: f64 := 1.0 / 4.0
     p: f64 := a * r
-    I (p as i64) != 2 { R 2 }
+    I (p as i64) != 2 { return 2 }
 
     # negative result
     n: f64 := 0.0 - 10.0
-    I ((n / 4.0) as i64) != 0 - 2 { R 3 }
+    I ((n / 4.0) as i64) != 0 - 2 { return 3 }
 
     # whole division
-    I ((20.0 / 5.0) as i64) != 4 { R 4 }
-    I ((100.0 / 10.0) as i64) != 10 { R 5 }
+    I ((20.0 / 5.0) as i64) != 4 { return 4 }
+    I ((100.0 / 10.0) as i64) != 10 { return 5 }
 
     # zero numerator
-    I ((0.0 / 5.0) as i64) != 0 { R 6 }
-    R 0
+    I ((0.0 / 5.0) as i64) != 0 { return 6 }
+    return 0
 }

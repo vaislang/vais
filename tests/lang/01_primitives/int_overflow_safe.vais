@@ -1,8 +1,8 @@
 # CHECKS: large i64 arithmetic stays exact within range
-F main() -> i64 {
+fn main() -> i64 {
     big: i64 := 1000000
     sq: i64 := big * big
     # 10^12 fits in i64
-    I sq != 1000000000000 { R 1 }
-    R 0
+    I sq != 1000000000000 { return 1 }
+    return 0
 }

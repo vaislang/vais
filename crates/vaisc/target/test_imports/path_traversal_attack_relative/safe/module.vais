@@ -1,1 +1,1 @@
-F safe_func() -> i64 = 42
+fn safe_func() -> i64 = 42

@@ -1,23 +1,23 @@
 # CHECKS: method taking &self reads field; mut self mutates
-S Counter {
+struct Counter {
     n: i64,
 }
 
-X Counter {
-    F new() -> Counter { Counter { n: 0 } }
-    F get(&self) -> i64 { self.n }
-    F bump(mut self) -> i64 {
+impl Counter {
+    fn new() -> Counter { Counter { n: 0 } }
+    fn get(&self) -> i64 { self.n }
+    fn bump(mut self) -> i64 {
         self.n = self.n + 1
         self.n
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c: Counter := mut Counter.new()
-    I c.get() != 0 { R 1 }
+    I c.get() != 0 { return 1 }
     a: i64 := c.bump()
-    I a != 1 { R 2 }
+    I a != 1 { return 2 }
     b: i64 := c.bump()
-    I b != 2 { R 3 }
-    R 0
+    I b != 2 { return 3 }
+    return 0
 }

@@ -1,23 +1,23 @@
 # CHECKS: &self vs &mut self — read-only versus mutating methods.
-S Counter {
+struct Counter {
     n: i64
 }
 
-X Counter {
-    F new() -> Counter { Counter { n: 0 } }
-    F bump(&self) -> i64 { self.n = self.n + 1; self.n }
-    F peek(&self) -> i64 { self.n }
-    F reset(&self) { self.n = 0 }
+impl Counter {
+    fn new() -> Counter { Counter { n: 0 } }
+    fn bump(&self) -> i64 { self.n = self.n + 1; self.n }
+    fn peek(&self) -> i64 { self.n }
+    fn reset(&self) { self.n = 0 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c: Counter := mut Counter.new()
-    I c.peek() != 0 { R 1 }
-    I c.bump() != 1 { R 2 }
-    I c.bump() != 2 { R 3 }
-    I c.bump() != 3 { R 4 }
-    I c.peek() != 3 { R 5 }
+    I c.peek() != 0 { return 1 }
+    I c.bump() != 1 { return 2 }
+    I c.bump() != 2 { return 3 }
+    I c.bump() != 3 { return 4 }
+    I c.peek() != 3 { return 5 }
     c.reset()
-    I c.peek() != 0 { R 6 }
-    R 0
+    I c.peek() != 0 { return 6 }
+    return 0
 }

@@ -1,28 +1,28 @@
-U src/core/context
-U src/middleware/pipeline
+use src/core/context
+use src/middleware/pipeline
 
-F smoke_pipeline_registration() -> i64 {
+fn smoke_pipeline_registration() -> i64 {
     p := mut Pipeline.new()
     p = p.add("first")
     p = p.add("second")
 
     I p.len() != 2 {
         println("FAIL middleware len")
-        R 1
+        return 1
     }
     I p.name_at(0) != "first" {
         println("FAIL middleware first name")
-        R 2
+        return 2
     }
     I p.name_at(1) != "second" {
         println("FAIL middleware second name")
-        R 3
+        return 3
     }
 
     0
 }
 
-F smoke_before_passthrough() -> i64 {
+fn smoke_before_passthrough() -> i64 {
     p := mut Pipeline.new()
     p = p.add("unknown")
     p = p.add("after-a")
@@ -32,17 +32,17 @@ F smoke_before_passthrough() -> i64 {
 
     I output.short_circuit {
         println("FAIL passthrough short circuit")
-        R 10
+        return 10
     }
     I output.ctx.path != "/pipeline" {
         println("FAIL passthrough ctx")
-        R 11
+        return 11
     }
 
     0
 }
 
-F smoke_before_short_circuit() -> i64 {
+fn smoke_before_short_circuit() -> i64 {
     p := mut Pipeline.new()
     p = p.add("unknown")
     p = p.add("deny")
@@ -53,21 +53,21 @@ F smoke_before_short_circuit() -> i64 {
 
     I !output.short_circuit {
         println("FAIL deny did not short circuit")
-        R 20
+        return 20
     }
     I output.response.status != 401 {
         println("FAIL deny status")
-        R 21
+        return 21
     }
     I output.response.body != "middleware-denied" {
         println("FAIL deny body")
-        R 22
+        return 22
     }
 
     0
 }
 
-F smoke_after_reverse_order() -> i64 {
+fn smoke_after_reverse_order() -> i64 {
     p := mut Pipeline.new()
     p = p.add("after-a")
     p = p.add("after-b")
@@ -78,21 +78,21 @@ F smoke_after_reverse_order() -> i64 {
 
     I final.status != 200 {
         println("FAIL after status")
-        R 30
+        return 30
     }
     I final.body != "handler|b|a" {
         println("FAIL after reverse order")
-        R 31
+        return 31
     }
     I final.content_type != "text/plain; charset=utf-8" {
         println("FAIL after content type")
-        R 32
+        return 32
     }
 
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     failures := mut 0
     failures += smoke_pipeline_registration()
     failures += smoke_before_passthrough()
@@ -101,7 +101,7 @@ F main() -> i64 {
 
     I failures > 0 {
         println("VAIS_SERVER_MIDDLEWARE_PIPELINE_RUNTIME_FAIL")
-        R failures
+        return failures
     }
     println("VAIS_SERVER_MIDDLEWARE_PIPELINE_RUNTIME_OK")
     0

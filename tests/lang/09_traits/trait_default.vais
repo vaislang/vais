@@ -3,32 +3,32 @@
 # has a default body, codegen now synthesizes a method on the impl type
 # using the trait's default body, and TC also registers the synthesized sig
 # so call resolution finds it.
-W Counter {
-    F base(&self) -> i64
-    F doubled(&self) -> i64 {
+trait Counter {
+    fn base(&self) -> i64
+    fn doubled(&self) -> i64 {
         self.base() * 2
     }
 }
 
-S Plain { x: i64 }
-S Tripler { x: i64 }
+struct Plain { x: i64 }
+struct Tripler { x: i64 }
 
-X Plain: Counter {
-    F base(&self) -> i64 { self.x }
+impl Plain: Counter {
+    fn base(&self) -> i64 { self.x }
     # use default doubled()
 }
 
-X Tripler: Counter {
-    F base(&self) -> i64 { self.x }
-    F doubled(&self) -> i64 { self.base() * 3 }   # override
+impl Tripler: Counter {
+    fn base(&self) -> i64 { self.x }
+    fn doubled(&self) -> i64 { self.base() * 3 }   # override
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p: Plain := Plain { x: 7 }
     t: Tripler := Tripler { x: 7 }
-    I p.base() != 7 { R 1 }
-    I p.doubled() != 14 { R 2 }
-    I t.base() != 7 { R 3 }
-    I t.doubled() != 21 { R 4 }
-    R 0
+    I p.base() != 7 { return 1 }
+    I p.doubled() != 14 { return 2 }
+    I t.base() != 7 { return 3 }
+    I t.doubled() != 21 { return 4 }
+    return 0
 }

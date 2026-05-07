@@ -1,41 +1,41 @@
 # CHECKS: struct with two related methods that share state.
-S BankAccount {
+struct BankAccount {
     balance: i64,
     history_count: i64
 }
 
-X BankAccount {
-    F new() -> BankAccount {
+impl BankAccount {
+    fn new() -> BankAccount {
         BankAccount { balance: 0, history_count: 0 }
     }
-    F deposit(&self, amount: i64) {
+    fn deposit(&self, amount: i64) {
         self.balance = self.balance + amount
         self.history_count = self.history_count + 1
     }
-    F withdraw(&self, amount: i64) -> i64 {
-        I amount > self.balance { R 0 }
+    fn withdraw(&self, amount: i64) -> i64 {
+        I amount > self.balance { return 0 }
         self.balance = self.balance - amount
         self.history_count = self.history_count + 1
         1
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a: BankAccount := mut BankAccount.new()
-    I a.balance != 0 { R 1 }
+    I a.balance != 0 { return 1 }
 
     a.deposit(100)
     a.deposit(50)
-    I a.balance != 150 { R 2 }
-    I a.history_count != 2 { R 3 }
+    I a.balance != 150 { return 2 }
+    I a.history_count != 2 { return 3 }
 
-    I a.withdraw(80) != 1 { R 4 }
-    I a.balance != 70 { R 5 }
-    I a.history_count != 3 { R 6 }
+    I a.withdraw(80) != 1 { return 4 }
+    I a.balance != 70 { return 5 }
+    I a.history_count != 3 { return 6 }
 
     # overdraw fails
-    I a.withdraw(200) != 0 { R 7 }
-    I a.balance != 70 { R 8 }
-    I a.history_count != 3 { R 9 }   # not bumped on failure
-    R 0
+    I a.withdraw(200) != 0 { return 7 }
+    I a.balance != 70 { return 8 }
+    I a.history_count != 3 { return 9 }   # not bumped on failure
+    return 0
 }

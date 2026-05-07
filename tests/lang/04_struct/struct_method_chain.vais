@@ -1,35 +1,35 @@
 # CHECKS: struct method that returns the struct (or modifies it via &mut self).
-S Counter {
+struct Counter {
     count: i64
 }
 
-X Counter {
-    F new() -> Counter {
+impl Counter {
+    fn new() -> Counter {
         Counter { count: 0 }
     }
 
-    F bump(&self) -> i64 {
+    fn bump(&self) -> i64 {
         self.count = self.count + 1
         self.count
     }
 
-    F get(&self) -> i64 {
+    fn get(&self) -> i64 {
         self.count
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c: Counter := mut Counter.new()
-    I c.get() != 0 { R 1 }
+    I c.get() != 0 { return 1 }
 
-    I c.bump() != 1 { R 2 }
-    I c.bump() != 2 { R 3 }
-    I c.bump() != 3 { R 4 }
-    I c.get() != 3 { R 5 }
+    I c.bump() != 1 { return 2 }
+    I c.bump() != 2 { return 3 }
+    I c.bump() != 3 { return 4 }
+    I c.get() != 3 { return 5 }
 
     LF i: 0..7 {
         c.bump()
     }
-    I c.get() != 10 { R 6 }
-    R 0
+    I c.get() != 10 { return 6 }
+    return 0
 }

@@ -1,63 +1,63 @@
-U sql/catalog/schema
-U sql/types
-U storage/bytes
-U std/bytebuffer
+use sql/catalog/schema
+use sql/types
+use storage/bytes
+use std/bytebuffer
 
-F main() -> i64 {
+fn main() -> i64 {
     table := mut TableInfo.new(101 as u32, "docs", 2 as u16, 55 as u32)
     table.row_count_estimate = 9 as u64
 
     table_buf := mut ByteBuffer.new()
     table.serialize(&mut table_buf)
-    I table_buf.len() <= 0 { R 1 }
+    I table_buf.len() <= 0 { return 1 }
 
-    table_rt := mut M TableInfo.deserialize(&table_buf) {
+    table_rt := mut match TableInfo.deserialize(&table_buf) {
         Ok(v) => v,
-        Err(_) => { R 2 },
+        Err(_) => { return 2 },
     }
-    I table_rt.table_id as i64 != 101 { R 3 }
-    I table_rt.name != "docs" { R 4 }
-    I table_rt.column_count as i64 != 2 { R 5 }
-    I table_rt.is_system { R 6 }
-    I table_rt.first_page_id as i64 != 55 { R 7 }
-    I table_rt.row_count_estimate as i64 != 9 { R 8 }
+    I table_rt.table_id as i64 != 101 { return 3 }
+    I table_rt.name != "docs" { return 4 }
+    I table_rt.column_count as i64 != 2 { return 5 }
+    I table_rt.is_system { return 6 }
+    I table_rt.first_page_id as i64 != 55 { return 7 }
+    I table_rt.row_count_estimate as i64 != 9 { return 8 }
 
     table_key_bytes := mut table_rt.to_catalog_key()
-    I table_key_bytes.len() != 6 { R 9 }
-    I table_key_bytes[0] != 84 { R 10 }
-    I table_key_bytes[1] != 58 { R 11 }
-    I table_key_bytes[2] != 100 { R 12 }
+    I table_key_bytes.len() != 6 { return 9 }
+    I table_key_bytes[0] != 84 { return 10 }
+    I table_key_bytes[1] != 58 { return 11 }
+    I table_key_bytes[2] != 100 { return 12 }
 
     col := mut ColumnInfo.new_primary_key(101 as u32, 0 as u16, "id", SqlType.Int)
     col.default_value = Some("0")
 
     col_buf := mut ByteBuffer.new()
     col.serialize(&mut col_buf)
-    col_rt := mut M ColumnInfo.deserialize(&col_buf) {
+    col_rt := mut match ColumnInfo.deserialize(&col_buf) {
         Ok(v) => v,
-        Err(_) => { R 13 },
+        Err(_) => { return 13 },
     }
-    I col_rt.table_id as i64 != 101 { R 14 }
-    I col_rt.column_index as i64 != 0 { R 15 }
-    I col_rt.name != "id" { R 16 }
-    I col_rt.nullable { R 17 }
-    I !col_rt.is_primary_key { R 18 }
-    M col_rt.data_type {
+    I col_rt.table_id as i64 != 101 { return 14 }
+    I col_rt.column_index as i64 != 0 { return 15 }
+    I col_rt.name != "id" { return 16 }
+    I col_rt.nullable { return 17 }
+    I !col_rt.is_primary_key { return 18 }
+    match col_rt.data_type {
         Int => {},
-        _ => { R 19 },
+        _ => { return 19 },
     }
-    M col_rt.default_value {
+    match col_rt.default_value {
         Some(v) => {
-            I v != "0" { R 20 }
+            I v != "0" { return 20 }
         },
-        None => { R 21 },
+        None => { return 21 },
     }
 
     col_key_bytes := mut col_rt.to_catalog_key()
-    I col_key_bytes.len() != 9 { R 22 }
-    I col_key_bytes[0] != 67 { R 23 }
-    I col_key_bytes[1] != 58 { R 24 }
-    I col_key_bytes[5] != 101 { R 25 }
+    I col_key_bytes.len() != 9 { return 22 }
+    I col_key_bytes[0] != 67 { return 23 }
+    I col_key_bytes[1] != 58 { return 24 }
+    I col_key_bytes[5] != 101 { return 25 }
 
     idx_cols: Vec<str> := mut Vec.with_capacity(2)
     idx_cols.push("id")
@@ -66,32 +66,32 @@ F main() -> i64 {
 
     idx_buf := mut ByteBuffer.new()
     idx.serialize(&mut idx_buf)
-    idx_rt := mut M IndexInfo.deserialize(&idx_buf) {
+    idx_rt := mut match IndexInfo.deserialize(&idx_buf) {
         Ok(v) => v,
-        Err(_) => { R 26 },
+        Err(_) => { return 26 },
     }
-    I idx_rt.index_id as i64 != 201 { R 27 }
-    I idx_rt.name != "idx_docs_id" { R 28 }
-    I idx_rt.table_id as i64 != 101 { R 29 }
-    I idx_rt.columns.len() != 2 { R 30 }
-    I idx_rt.columns[0] != "id" { R 31 }
-    I idx_rt.columns[1] != "title" { R 32 }
-    I !idx_rt.is_unique { R 33 }
-    I !idx_rt.is_primary { R 34 }
-    I idx_rt.root_page_id as i64 != 77 { R 35 }
+    I idx_rt.index_id as i64 != 201 { return 27 }
+    I idx_rt.name != "idx_docs_id" { return 28 }
+    I idx_rt.table_id as i64 != 101 { return 29 }
+    I idx_rt.columns.len() != 2 { return 30 }
+    I idx_rt.columns[0] != "id" { return 31 }
+    I idx_rt.columns[1] != "title" { return 32 }
+    I !idx_rt.is_unique { return 33 }
+    I !idx_rt.is_primary { return 34 }
+    I idx_rt.root_page_id as i64 != 77 { return 35 }
 
     idx_key_bytes := mut idx_rt.to_catalog_key()
-    I idx_key_bytes.len() != 13 { R 36 }
-    I idx_key_bytes[0] != 73 { R 37 }
-    I idx_key_bytes[1] != 58 { R 38 }
+    I idx_key_bytes.len() != 13 { return 36 }
+    I idx_key_bytes[0] != 73 { return 37 }
+    I idx_key_bytes[1] != 58 { return 38 }
 
     idx_table_key := mut idx_rt.to_table_index_key()
-    I idx_table_key.len() != 19 { R 39 }
-    I idx_table_key[0] != 73 { R 40 }
-    I idx_table_key[1] != 84 { R 41 }
-    I idx_table_key[2] != 58 { R 42 }
-    I idx_table_key[6] != 101 { R 43 }
-    I idx_table_key[7] != 58 { R 44 }
+    I idx_table_key.len() != 19 { return 39 }
+    I idx_table_key[0] != 73 { return 40 }
+    I idx_table_key[1] != 84 { return 41 }
+    I idx_table_key[2] != 58 { return 42 }
+    I idx_table_key[6] != 101 { return 43 }
+    I idx_table_key[7] != 58 { return 44 }
 
-    R 0
+    return 0
 }

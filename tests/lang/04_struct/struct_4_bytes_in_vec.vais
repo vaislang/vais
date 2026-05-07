@@ -1,25 +1,25 @@
 # CHECKS: Vec<Tag> where Tag is a 4-byte struct (single i32-sized field).
 # REGRESSION Wave 4a — the narrow-store path used to write 8 bytes into a
 # 4-byte slot, corrupting adjacent cells.
-U std/vec.{vec_new_t};
+use std/vec.{vec_new_t};
 
-S Tag {
+struct Tag {
     code: i32
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<Tag> := mut vec_new_t()
     v.push(Tag { code: 7 })
     v.push(Tag { code: 13 })
     v.push(Tag { code: 21 })
 
-    I v.len() != 3 { R 1 }
+    I v.len() != 3 { return 1 }
 
     sum: i64 := mut 0
     LF i: 0..v.len() {
         t: Tag := mut v[i]
         sum = sum + (t.code as i64)
     }
-    I sum != 41 { R 2 }
-    R 0
+    I sum != 41 { return 2 }
+    return 0
 }

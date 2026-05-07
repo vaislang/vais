@@ -1,9 +1,9 @@
 # CHECKS: narrow integer literals + cross-width casts work
-F main() -> i64 {
+fn main() -> i64 {
     a: i8 := mut 100i8
     b: i16 := mut a as i16
     c: i32 := mut b as i32
     d: i64 := mut c as i64
-    I d != 100 { R 1 }
-    R 0
+    I d != 100 { return 1 }
+    return 0
 }

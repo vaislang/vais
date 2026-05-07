@@ -1,11 +1,11 @@
-F main() -> i64 {
+fn main() -> i64 {
     n: i64 := mut 0
     sum: i64 := mut 0
     LW n < 5 {
         sum = sum + n
         n = n + 1
     }
-    chosen: i64 := I sum == 10 { 7 } EL { 9 }
-    I chosen != 7 { R 1 }
-    R 0
+    chosen: i64 := I sum == 10 { 7 } else { 9 }
+    I chosen != 7 { return 1 }
+    return 0
 }

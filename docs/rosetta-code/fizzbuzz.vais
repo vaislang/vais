@@ -1,7 +1,7 @@
 // FizzBuzz
 // Classic FizzBuzz algorithm: print numbers 1-100 with special rules
 
-F fizzbuzz(n: i64) -> i64 {
+fn fizzbuzz(n: i64) -> i64 {
     L i := 1; i <= n; i := i + 1 {
         I i % 15 == 0 {
             puts("FizzBuzz")
@@ -13,10 +13,10 @@ F fizzbuzz(n: i64) -> i64 {
             println("{}", i)
         }
     }
-    R 0
+    return 0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     fizzbuzz(100)
-    R 0
+    return 0
 }

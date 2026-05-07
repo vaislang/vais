@@ -1,2 +1,2 @@
-U /etc/passwd
-F main() -> () = ()
+use /etc/passwd
+fn main() -> () = ()

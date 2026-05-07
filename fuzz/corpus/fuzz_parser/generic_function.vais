@@ -1,13 +1,13 @@
-F identity<T>(x: T) -> T = x
+fn identity<T>(x: T) -> T = x
 
-S Box<T> {
+struct Box<T> {
     value: T
 }
 
-F get_value<T>(b: Box<T>) -> T = b.value
+fn get_value<T>(b: Box<T>) -> T = b.value
 
-F map<A, B>(opt: Option<A>, f: F(A) -> B) -> Option<B> {
-    M opt {
+fn map<A, B>(opt: Option<A>, f: fn(A) -> B) -> Option<B> {
+    match opt {
         Some(x) => Some(f(x)),
         None => None
     }

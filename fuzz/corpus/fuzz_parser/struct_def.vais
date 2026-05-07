@@ -1,12 +1,12 @@
-S Point {
+struct Point {
     x: i64,
     y: i64
 }
 
-S Person {
+struct Person {
     name: str,
     age: i64,
     active: bool
 }
 
-S Empty {}
+struct Empty {}

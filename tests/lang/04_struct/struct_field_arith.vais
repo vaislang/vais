@@ -1,36 +1,36 @@
 # CHECKS: field arithmetic across multiple instances.
-S Money {
+struct Money {
     cents: i64
 }
 
-X Money {
-    F new(cents: i64) -> Money { Money { cents: cents } }
-    F dollars(&self) -> i64 { self.cents / 100 }
-    F add(&self, other: Money) -> Money {
+impl Money {
+    fn new(cents: i64) -> Money { Money { cents: cents } }
+    fn dollars(&self) -> i64 { self.cents / 100 }
+    fn add(&self, other: Money) -> Money {
         Money { cents: self.cents + other.cents }
     }
-    F sub(&self, other: Money) -> Money {
+    fn sub(&self, other: Money) -> Money {
         Money { cents: self.cents - other.cents }
     }
-    F mul(&self, factor: i64) -> Money {
+    fn mul(&self, factor: i64) -> Money {
         Money { cents: self.cents * factor }
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a: Money := Money.new(550)
-    I a.dollars() != 5 { R 1 }
+    I a.dollars() != 5 { return 1 }
 
     b: Money := Money.new(150)
     sum: Money := a.add(b)
-    I sum.cents != 700 { R 2 }
-    I sum.dollars() != 7 { R 3 }
+    I sum.cents != 700 { return 2 }
+    I sum.dollars() != 7 { return 3 }
 
     diff: Money := a.sub(b)
-    I diff.cents != 400 { R 4 }
+    I diff.cents != 400 { return 4 }
 
     tripled: Money := a.mul(3)
-    I tripled.cents != 1650 { R 5 }
-    I tripled.dollars() != 16 { R 6 }
-    R 0
+    I tripled.cents != 1650 { return 5 }
+    I tripled.dollars() != 16 { return 6 }
+    return 0
 }

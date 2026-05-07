@@ -1,12 +1,12 @@
 # main.vais - CSV data processing pipeline entry point
 
-X F strcmp(a: str, b: str) -> i64
-X F puts(text: str) -> i64
-X F printf(format: str, value: i64) -> i64
-X F exit_program(code: i64) -> i64
+impl fn strcmp(a: str, b: str) -> i64
+impl fn puts(text: str) -> i64
+impl fn printf(format: str, value: i64) -> i64
+impl fn exit_program(code: i64) -> i64
 
 # Display help message
-F display_help() -> i64 {
+fn display_help() -> i64 {
     puts("=== Vais Data Pipeline ===")
     puts("")
     puts("Usage:")
@@ -29,11 +29,11 @@ F display_help() -> i64 {
     puts("  vais-datapipe sales.csv report.json")
     puts("")
 
-    R 0
+    return 0
 }
 
 # Parse command-line arguments and create configuration
-F parse_arguments(argc: i64, argv: str) -> PipelineConfig {
+fn parse_arguments(argc: i64, argv: str) -> PipelineConfig {
     # Default configuration
     C default_config := pipeline_config_default()
 
@@ -74,24 +74,24 @@ F parse_arguments(argc: i64, argv: str) -> PipelineConfig {
                 skip_header: config.skip_header,
             }
 
-            R config2
+            return config2
         }
 
-        R config
+        return config
     }
 
-    R default_config
+    return default_config
 }
 
 # Main entry point
-F main(argc: i64, argv: str) -> i64 {
+fn main(argc: i64, argv: str) -> i64 {
     puts("=== Vais Data Pipeline v1.0 ===")
     puts("")
 
     # Check arguments
     I argc < 2 {
         display_help()
-        R 1
+        return 1
     }
 
     # Parse arguments
@@ -113,19 +113,19 @@ F main(argc: i64, argv: str) -> i64 {
 
     # Return success/failure
     I result.success == 1 {
-        R 0
-    } E {
-        R 1
+        return 0
+    } enum {
+        return 1
     }
 }
 
 # Entry point wrapper for testing
-F start() -> i64 {
+fn start() -> i64 {
     # Simulate command line arguments
     C argc := 3
     C argv := "vais-datapipe data.csv output.json"
 
     C result := main(argc, argv)
 
-    R result
+    return result
 }

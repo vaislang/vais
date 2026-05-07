@@ -1,12 +1,12 @@
 # CHECKS: continue from very first iteration.
-F main() -> i64 {
+fn main() -> i64 {
     sum: i64 := mut 0
     LF i: 0..10 {
         I i == 0 { C }
         sum = sum + i
     }
     # skip 0, sum 1..9 = 45
-    I sum != 45 { R 1 }
+    I sum != 45 { return 1 }
 
     # all continued
     nothing: i64 := mut 0
@@ -14,6 +14,6 @@ F main() -> i64 {
         C
         nothing = nothing + 1   # never reached
     }
-    I nothing != 0 { R 2 }
-    R 0
+    I nothing != 0 { return 2 }
+    return 0
 }

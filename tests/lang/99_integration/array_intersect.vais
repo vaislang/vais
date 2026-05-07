@@ -1,7 +1,7 @@
 # CHECKS: count common elements between two Vec<i64> (O(n²)).
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F intersect_count(a: &Vec<i64>, b: &Vec<i64>) -> i64 {
+fn intersect_count(a: &Vec<i64>, b: &Vec<i64>) -> i64 {
     count: i64 := mut 0
     LF i: 0..a.len() {
         LF j: 0..b.len() {
@@ -11,7 +11,7 @@ F intersect_count(a: &Vec<i64>, b: &Vec<i64>) -> i64 {
     count
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a: Vec<i64> := mut vec_new()
     a.push(1)
     a.push(2)
@@ -24,18 +24,18 @@ F main() -> i64 {
     b.push(5)
     b.push(6)
     # intersect: {3, 4} → 2
-    I intersect_count(&a, &b) != 2 { R 1 }
+    I intersect_count(&a, &b) != 2 { return 1 }
 
     # disjoint
     c: Vec<i64> := mut vec_new()
     c.push(100)
     c.push(200)
-    I intersect_count(&a, &c) != 0 { R 2 }
+    I intersect_count(&a, &c) != 0 { return 2 }
 
     # subset
     d: Vec<i64> := mut vec_new()
     d.push(1)
     d.push(2)
-    I intersect_count(&a, &d) != 2 { R 3 }
-    R 0
+    I intersect_count(&a, &d) != 2 { return 3 }
+    return 0
 }

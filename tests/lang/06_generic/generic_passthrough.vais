@@ -1,14 +1,14 @@
 # CHECKS: generic call with multiple instantiations of same fn.
-F id<T>(x: T) -> T { x }
+fn id<T>(x: T) -> T { x }
 
-F main() -> i64 {
+fn main() -> i64 {
     a: i64 := id(100)
-    I a != 100 { R 1 }
+    I a != 100 { return 1 }
 
     # All call sites resolve to id$i64 → linkonce_odr
     b: i64 := id(0)
     c: i64 := id(0 - 7)
     d: i64 := id(99999)
-    I b + c + d != 99992 { R 2 }
-    R 0
+    I b + c + d != 99992 { return 2 }
+    return 0
 }

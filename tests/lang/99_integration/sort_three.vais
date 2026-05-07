@@ -1,5 +1,5 @@
 # CHECKS: sort 3 ints to ascending order using swaps.
-F sort3(a: i64, b: i64, c: i64) -> i64 {
+fn sort3(a: i64, b: i64, c: i64) -> i64 {
     # encode result as a*10000 + b*100 + c after sort
     x: i64 := mut a
     y: i64 := mut b
@@ -11,11 +11,11 @@ F sort3(a: i64, b: i64, c: i64) -> i64 {
     x * 10000 + y * 100 + z
 }
 
-F main() -> i64 {
-    I sort3(3, 1, 2) != 10203 { R 1 }
-    I sort3(5, 5, 5) != 50505 { R 2 }
-    I sort3(9, 1, 5) != 10509 { R 3 }
-    I sort3(1, 2, 3) != 10203 { R 4 }
-    I sort3(7, 4, 6) != 40607 { R 5 }
-    R 0
+fn main() -> i64 {
+    I sort3(3, 1, 2) != 10203 { return 1 }
+    I sort3(5, 5, 5) != 50505 { return 2 }
+    I sort3(9, 1, 5) != 10509 { return 3 }
+    I sort3(1, 2, 3) != 10203 { return 4 }
+    I sort3(7, 4, 6) != 40607 { return 5 }
+    return 0
 }

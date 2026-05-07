@@ -1,22 +1,22 @@
 # CHECKS: find longest run of identical consecutive values.
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F longest_run(v: &Vec<i64>) -> i64 {
-    I v.len() == 0 { R 0 }
+fn longest_run(v: &Vec<i64>) -> i64 {
+    I v.len() == 0 { return 0 }
     best: i64 := mut 1
     cur: i64 := mut 1
     LF i: 1..v.len() {
         I v[i] == v[i - 1] {
             cur = cur + 1
             I cur > best { best = cur }
-        } EL {
+        } else {
             cur = 1
         }
     }
     best
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     v.push(1)
     v.push(1)
@@ -26,16 +26,16 @@ F main() -> i64 {
     v.push(3)
     v.push(1)
     # longest = 3 (the 2,2,2)
-    I longest_run(&v) != 3 { R 1 }
+    I longest_run(&v) != 3 { return 1 }
 
     w: Vec<i64> := mut vec_new()
     w.push(7)
     w.push(7)
     w.push(7)
     w.push(7)
-    I longest_run(&w) != 4 { R 2 }
+    I longest_run(&w) != 4 { return 2 }
 
     e: Vec<i64> := mut vec_new()
-    I longest_run(&e) != 0 { R 3 }
-    R 0
+    I longest_run(&e) != 0 { return 3 }
+    return 0
 }

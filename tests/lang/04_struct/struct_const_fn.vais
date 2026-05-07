@@ -1,18 +1,18 @@
 # CHECKS: pure read-only methods (no mutation).
-S Vec3 {
+struct Vec3 {
     x: i64,
     y: i64,
     z: i64
 }
 
-X Vec3 {
-    F len_sq(&self) -> i64 {
+impl Vec3 {
+    fn len_sq(&self) -> i64 {
         self.x * self.x + self.y * self.y + self.z * self.z
     }
-    F sum_components(&self) -> i64 {
+    fn sum_components(&self) -> i64 {
         self.x + self.y + self.z
     }
-    F max_component(&self) -> i64 {
+    fn max_component(&self) -> i64 {
         m: i64 := mut self.x
         I self.y > m { m = self.y }
         I self.z > m { m = self.z }
@@ -20,14 +20,14 @@ X Vec3 {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec3 := Vec3 { x: 3, y: 4, z: 0 }
-    I v.len_sq() != 25 { R 1 }
-    I v.sum_components() != 7 { R 2 }
-    I v.max_component() != 4 { R 3 }
+    I v.len_sq() != 25 { return 1 }
+    I v.sum_components() != 7 { return 2 }
+    I v.max_component() != 4 { return 3 }
 
     w: Vec3 := Vec3 { x: 0 - 1, y: 0 - 2, z: 5 }
-    I w.len_sq() != 30 { R 4 }
-    I w.max_component() != 5 { R 5 }
-    R 0
+    I w.len_sq() != 30 { return 4 }
+    I w.max_component() != 5 { return 5 }
+    return 0
 }

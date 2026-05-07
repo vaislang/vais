@@ -1,20 +1,20 @@
 # CHECKS: generic function with two type parameters where both are inferred.
-F first<A, B>(a: A, b: B) -> A {
+fn first<A, B>(a: A, b: B) -> A {
     a
 }
 
-F second<A, B>(a: A, b: B) -> B {
+fn second<A, B>(a: A, b: B) -> B {
     b
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a: i64 := first(42, 99)
-    I a != 42 { R 1 }
+    I a != 42 { return 1 }
     b: i64 := second(42, 99)
-    I b != 99 { R 2 }
+    I b != 99 { return 2 }
 
     # Reuse with different concrete types
     c: i64 := first(0 - 1, 1)
-    I c != 0 - 1 { R 3 }
-    R 0
+    I c != 0 - 1 { return 3 }
+    return 0
 }

@@ -1,9 +1,9 @@
 # CHECKS: f64 add and compare
-F main() -> i64 {
+fn main() -> i64 {
     a: f64 := 1.5
     b: f64 := 2.5
     sum: f64 := a + b
-    I sum < 3.999 { R 1 }
-    I sum > 4.001 { R 2 }
-    R 0
+    I sum < 3.999 { return 1 }
+    I sum > 4.001 { return 2 }
+    return 0
 }

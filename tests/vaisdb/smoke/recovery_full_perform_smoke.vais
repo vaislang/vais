@@ -1,22 +1,22 @@
-U storage/recovery/mod
-U storage/wal/writer
-U storage/wal/lsn
-U storage/wal/record_types
-U storage/constants
-U storage/error
-U storage/file
-U storage/page/manager
-U storage/page/types
-U storage/buffer/pool
-U storage/bytes
+use storage/recovery/mod
+use storage/wal/writer
+use storage/wal/lsn
+use storage/wal/record_types
+use storage/constants
+use storage/error
+use storage/file
+use storage/page/manager
+use storage/page/types
+use storage/buffer/pool
+use storage/bytes
 
-F recovery_full_open_clean(path: str) -> Result<File, VaisError> {
+fn recovery_full_open_clean(path: str) -> Result<File, VaisError> {
     file := mut File.open(path, "rw+")?;
     file.truncate(0)?;
     Ok(file)
 }
 
-F recovery_full_files_clean(prefix: str) -> Result<Vec<File>, VaisError> {
+fn recovery_full_files_clean(prefix: str) -> Result<Vec<File>, VaisError> {
     files: Vec<File> := mut Vec.with_capacity(5)
     data_file := mut recovery_full_open_clean(prefix + "_data.vdb")?;
     vector_file := mut recovery_full_open_clean(prefix + "_vectors.vdb")?;
@@ -31,64 +31,64 @@ F recovery_full_files_clean(prefix: str) -> Result<Vec<File>, VaisError> {
     Ok(files)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     prefix := mut "recovery_full_perform"
     wal_dir := mut "recovery_full_perform_wal"
 
-    files := mut M recovery_full_files_clean(prefix) {
+    files := mut match recovery_full_files_clean(prefix) {
         Ok(v) => v,
-        Err(_) => { R 1 },
+        Err(_) => { return 1 },
     }
     manager := mut PageManager.new(files, PAGE_SIZE_8K)
     pool := mut BufferPool.new(manager, PAGE_SIZE_8K, 4 as u32)
 
-    writer := mut M WalWriter.new(wal_dir, 4096 as u32) {
+    writer := mut match WalWriter.new(wal_dir, 4096 as u32) {
         Ok(w) => w,
-        Err(_) => { R 2 },
+        Err(_) => { return 2 },
     }
-    M writer.open() {
+    match writer.open() {
         Ok(_) => {},
-        Err(_) => { R 3 },
+        Err(_) => { return 3 },
     }
 
     begin_payload := mut TxnBeginPayload { isolation_level: 1 as u8 }
     begin_buf := mut ByteBuffer.with_capacity(8)
     begin_payload.serialize(&mut begin_buf)
     begin_bytes := mut begin_buf.to_vec()
-    begin_lsn := mut M writer.write_record(71001 as u64, TXN_BEGIN, ENGINE_META, &begin_bytes) {
+    begin_lsn := mut match writer.write_record(71001 as u64, TXN_BEGIN, ENGINE_META, &begin_bytes) {
         Ok(v) => v,
-        Err(_) => { R 4 },
+        Err(_) => { return 4 },
     }
-    I begin_lsn == NULL_LSN { R 5 }
-    M writer.close() {
+    I begin_lsn == NULL_LSN { return 5 }
+    match writer.close() {
         Ok(_) => {},
-        Err(_) => { R 6 },
+        Err(_) => { return 6 },
     }
 
-    recovery_writer := mut M WalWriter.new(wal_dir, 4096 as u32) {
+    recovery_writer := mut match WalWriter.new(wal_dir, 4096 as u32) {
         Ok(w) => w,
-        Err(_) => { R 7 },
+        Err(_) => { return 7 },
     }
-    M recovery_writer.open() {
+    match recovery_writer.open() {
         Ok(_) => {},
-        Err(_) => { R 8 },
+        Err(_) => { return 8 },
     }
 
-    result := mut M perform_recovery(&wal_dir, NULL_LSN, &mut recovery_writer, &mut pool) {
+    result := mut match perform_recovery(&wal_dir, NULL_LSN, &mut recovery_writer, &mut pool) {
         Ok(v) => v,
-        Err(_) => { R 9 },
+        Err(_) => { return 9 },
     }
 
-    I result.analysis_txns != 1 as u32 { R 10 }
-    I result.active_txns != 1 as u32 { R 11 }
-    I result.records_redone != 0 as u64 { R 12 }
-    I result.txns_undone != 1 as u32 { R 13 }
-    I result.records_undone != 0 as u64 { R 14 }
+    I result.analysis_txns != 1 as u32 { return 10 }
+    I result.active_txns != 1 as u32 { return 11 }
+    I result.records_redone != 0 as u64 { return 12 }
+    I result.txns_undone != 1 as u32 { return 13 }
+    I result.records_undone != 0 as u64 { return 14 }
 
-    M recovery_writer.close() {
+    match recovery_writer.close() {
         Ok(_) => {},
-        Err(_) => { R 15 },
+        Err(_) => { return 15 },
     }
 
-    R 0
+    return 0
 }

@@ -1,29 +1,29 @@
 # CHECKS: early `R` from inside nested loops bails out of the function entirely.
-F find_pair(target: i64) -> i64 {
+fn find_pair(target: i64) -> i64 {
     LF i: 0..10 {
         LF j: 0..10 {
-            I i + j == target { R i * 100 + j }
+            I i + j == target { return i * 100 + j }
         }
     }
     0 - 1
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # i=0, j=5 → 0*100 + 5 = 5
     a: i64 := find_pair(5)
-    I a != 5 { R 1 }
+    I a != 5 { return 1 }
 
     # i=4, j=0 → 4*100 + 0 = 400 (first occurrence is i=0,j=4)
     # actually with target=4: i=0,j=4 found → 4
     b: i64 := find_pair(4)
-    I b != 4 { R 2 }
+    I b != 4 { return 2 }
 
     # target=15: i=6,j=9 → 609 (first by iteration order)
     c: i64 := find_pair(15)
-    I c != 609 { R 3 }
+    I c != 609 { return 3 }
 
     # not found
     d: i64 := find_pair(50)
-    I d != 0 - 1 { R 4 }
-    R 0
+    I d != 0 - 1 { return 4 }
+    return 0
 }

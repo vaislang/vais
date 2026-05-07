@@ -5,16 +5,16 @@
 # Extern Functions
 # ============================================================================
 
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F strlen(s: i64) -> i64
-X F str_to_ptr(s: str) -> i64
-X F load_byte(ptr: i64) -> i64
-X F store_byte(ptr: i64, val: i64) -> i64
-X F load_i64(ptr: i64) -> i64
-X F store_i64(ptr: i64, val: i64) -> i64
-X F memcpy(dest: i64, src: i64, n: i64) -> i64
-X F memset(dest: i64, val: i64, n: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn strlen(s: i64) -> i64
+impl fn str_to_ptr(s: str) -> i64
+impl fn load_byte(ptr: i64) -> i64
+impl fn store_byte(ptr: i64, val: i64) -> i64
+impl fn load_i64(ptr: i64) -> i64
+impl fn store_i64(ptr: i64, val: i64) -> i64
+impl fn memcpy(dest: i64, src: i64, n: i64) -> i64
+impl fn memset(dest: i64, val: i64, n: i64) -> i64
 
 # ============================================================================
 # Constants
@@ -46,57 +46,57 @@ C MAX_CLASS_CHARS: i64 = 256
 # ============================================================================
 
 # Check if character is digit (0-9)
-F is_digit(c: i64) -> i64 {
+fn is_digit(c: i64) -> i64 {
     I c >= 48 {
         I c <= 57 {
-            R 1
+            return 1
         }
     }
     0
 }
 
 # Check if character is word character (a-z, A-Z, 0-9, _)
-F is_word(c: i64) -> i64 {
+fn is_word(c: i64) -> i64 {
     I c >= 97 {
         I c <= 122 {
-            R 1
+            return 1
         }
     }
     I c >= 65 {
         I c <= 90 {
-            R 1
+            return 1
         }
     }
     I c >= 48 {
         I c <= 57 {
-            R 1
+            return 1
         }
     }
     I c == 95 {
-        R 1
+        return 1
     }
     0
 }
 
 # Check if character is whitespace
-F is_whitespace(c: i64) -> i64 {
+fn is_whitespace(c: i64) -> i64 {
     I c == 32 {
-        R 1
+        return 1
     }
     I c == 9 {
-        R 1
+        return 1
     }
     I c == 10 {
-        R 1
+        return 1
     }
     I c == 13 {
-        R 1
+        return 1
     }
     0
 }
 
 # Create NFA node
-F create_node(node_type: i64, char_val: i64, out1: i64, out2: i64) -> i64 {
+fn create_node(node_type: i64, char_val: i64, out1: i64, out2: i64) -> i64 {
     node := malloc(32)
     store_i64(node, node_type)
     store_i64(node + 8, char_val)
@@ -106,24 +106,24 @@ F create_node(node_type: i64, char_val: i64, out1: i64, out2: i64) -> i64 {
 }
 
 # Get node field
-F get_node_type(node: i64) -> i64 {
+fn get_node_type(node: i64) -> i64 {
     load_i64(node)
 }
 
-F get_node_char(node: i64) -> i64 {
+fn get_node_char(node: i64) -> i64 {
     load_i64(node + 8)
 }
 
-F get_node_out1(node: i64) -> i64 {
+fn get_node_out1(node: i64) -> i64 {
     load_i64(node + 16)
 }
 
-F get_node_out2(node: i64) -> i64 {
+fn get_node_out2(node: i64) -> i64 {
     load_i64(node + 24)
 }
 
 # Create character class
-F create_char_class(negated: i64) -> i64 {
+fn create_char_class(negated: i64) -> i64 {
     class := malloc(24)
     chars := malloc(MAX_CLASS_CHARS)
     store_i64(class, chars)
@@ -133,11 +133,11 @@ F create_char_class(negated: i64) -> i64 {
 }
 
 # Add character to class
-F char_class_add(class: i64, c: i64) -> i64 {
+fn char_class_add(class: i64, c: i64) -> i64 {
     chars := load_i64(class)
     count := load_i64(class + 8)
     I count >= MAX_CLASS_CHARS {
-        R 0
+        return 0
     }
     store_byte(chars + count, c)
     store_i64(class + 8, count + 1)
@@ -145,7 +145,7 @@ F char_class_add(class: i64, c: i64) -> i64 {
 }
 
 # Check if character is in class
-F char_class_matches(class: i64, c: i64) -> i64 {
+fn char_class_matches(class: i64, c: i64) -> i64 {
     chars := load_i64(class)
     count := load_i64(class + 8)
     negated := load_i64(class + 16)
@@ -166,12 +166,12 @@ F char_class_matches(class: i64, c: i64) -> i64 {
 
     I negated == 1 {
         I found == 1 {
-            R 0
-        } E {
-            R 1
+            return 0
+        } enum {
+            return 1
         }
-    } E {
-        R found
+    } enum {
+        return found
     }
 }
 
@@ -180,7 +180,7 @@ F char_class_matches(class: i64, c: i64) -> i64 {
 # ============================================================================
 
 # Compile regex pattern to NFA
-F regex_compile(pattern: i64, pattern_len: i64) -> i64 {
+fn regex_compile(pattern: i64, pattern_len: i64) -> i64 {
     regex := malloc(24)
     nodes := malloc(MAX_NODES * 32)
     store_i64(regex, nodes)
@@ -193,7 +193,7 @@ F regex_compile(pattern: i64, pattern_len: i64) -> i64 {
     I result < 0 {
         free(nodes)
         free(regex)
-        R 0
+        return 0
     }
 
     # Add final MATCH node
@@ -216,14 +216,14 @@ F regex_compile(pattern: i64, pattern_len: i64) -> i64 {
 }
 
 # Compile expression (handles alternation |)
-F compile_expr(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64) -> i64 {
+fn compile_expr(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64) -> i64 {
     I depth > 32 {
-        R 0 - 1
+        return 0 - 1
     }
 
     start := compile_term(regex, pattern, pattern_len, pos, depth + 1)
     I start < 0 {
-        R start
+        return start
     }
 
     # Check for alternation
@@ -250,13 +250,13 @@ F compile_expr(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64)
             pos := pos + 1
             alt := compile_term(regex, pattern, pattern_len, pos, depth + 1)
             I alt < 0 {
-                R alt
+                return alt
             }
 
             # Patch SPLIT node's out2
             store_i64(nodes + (split_idx * 32) + 24, alt)
             start := split_idx
-        } E {
+        } enum {
             B
         }
     }
@@ -265,9 +265,9 @@ F compile_expr(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64)
 }
 
 # Compile term (sequence of factors)
-F compile_term(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64) -> i64 {
+fn compile_term(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64) -> i64 {
     I depth > 32 {
-        R 0 - 1
+        return 0 - 1
     }
 
     nodes := load_i64(regex)
@@ -288,14 +288,14 @@ F compile_term(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64)
 
         factor_result := compile_factor(regex, pattern, pattern_len, pos, depth + 1)
         I factor_result < 0 {
-            R factor_result
+            return factor_result
         }
 
         factor := factor_result
 
         I start < 0 {
             start := factor
-        } E {
+        } enum {
             # Connect last node to current factor
             I last >= 0 {
                 last_node_ptr := nodes + (last * 32)
@@ -306,25 +306,25 @@ F compile_term(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64)
     }
 
     I start < 0 {
-        R 0
+        return 0
     }
     start
 }
 
 # Compile factor (atom + quantifier)
-F compile_factor(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64) -> i64 {
+fn compile_factor(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64) -> i64 {
     I depth > 32 {
-        R 0 - 1
+        return 0 - 1
     }
 
     atom := compile_atom(regex, pattern, pattern_len, pos, depth + 1)
     I atom < 0 {
-        R atom
+        return atom
     }
 
     # Check for quantifier
     I pos >= pattern_len {
-        R atom
+        return atom
     }
 
     c := load_byte(pattern + pos)
@@ -347,7 +347,7 @@ F compile_factor(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i6
         store_i64(atom_node_ptr + 16, split_idx)
 
         pos := pos + 1
-        R split_idx
+        return split_idx
     }
 
     # + (one or more)
@@ -366,7 +366,7 @@ F compile_factor(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i6
         store_i64(atom_node_ptr + 16, split_idx)
 
         pos := pos + 1
-        R atom
+        return atom
     }
 
     # ? (zero or one)
@@ -381,19 +381,19 @@ F compile_factor(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i6
         store_i64(regex + 8, node_count + 1)
 
         pos := pos + 1
-        R split_idx
+        return split_idx
     }
 
     atom
 }
 
 # Compile atom (literal, dot, class, anchor, group)
-F compile_atom(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64) -> i64 {
+fn compile_atom(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64) -> i64 {
     I depth > 32 {
-        R 0 - 1
+        return 0 - 1
     }
     I pos >= pattern_len {
-        R 0 - 1
+        return 0 - 1
     }
 
     c := load_byte(pattern + pos)
@@ -410,7 +410,7 @@ F compile_atom(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64)
         free(node)
         store_i64(regex + 8, node_count + 1)
         pos := pos + 1
-        R node_count
+        return node_count
     }
 
     # Anchor: $
@@ -423,7 +423,7 @@ F compile_atom(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64)
         free(node)
         store_i64(regex + 8, node_count + 1)
         pos := pos + 1
-        R node_count
+        return node_count
     }
 
     # Dot: .
@@ -436,14 +436,14 @@ F compile_atom(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64)
         free(node)
         store_i64(regex + 8, node_count + 1)
         pos := pos + 1
-        R node_count
+        return node_count
     }
 
     # Character class: [...]
     I c == 91 {
         pos := pos + 1
         I pos >= pattern_len {
-            R 0 - 1
+            return 0 - 1
         }
 
         negated := 0
@@ -459,7 +459,7 @@ F compile_atom(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64)
             I pos >= pattern_len {
                 free(load_i64(class))
                 free(class)
-                R 0 - 1
+                return 0 - 1
             }
             ch := load_byte(pattern + pos)
             I ch == 93 {  # ']'
@@ -499,14 +499,14 @@ F compile_atom(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64)
         store_i64(regex + 8, node_count + 1)
 
         pos := pos + 1
-        R node_count
+        return node_count
     }
 
     # Escape sequences
     I c == 92 {  # '\'
         pos := pos + 1
         I pos >= pattern_len {
-            R 0 - 1
+            return 0 - 1
         }
         escape := load_byte(pattern + pos)
 
@@ -529,7 +529,7 @@ F compile_atom(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64)
             free(node)
             store_i64(regex + 8, node_count + 1)
             pos := pos + 1
-            R node_count
+            return node_count
         }
 
         # \w (word)
@@ -571,7 +571,7 @@ F compile_atom(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64)
             free(node)
             store_i64(regex + 8, node_count + 1)
             pos := pos + 1
-            R node_count
+            return node_count
         }
 
         # \s (whitespace)
@@ -589,7 +589,7 @@ F compile_atom(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64)
             free(node)
             store_i64(regex + 8, node_count + 1)
             pos := pos + 1
-            R node_count
+            return node_count
         }
 
         # Literal escaped character
@@ -614,16 +614,16 @@ F compile_atom(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64)
 # ============================================================================
 
 # Add state to state set
-F add_state(states: i64, count_ptr: i64, state: i64, visited: i64) -> i64 {
+fn add_state(states: i64, count_ptr: i64, state: i64, visited: i64) -> i64 {
     # Check if already visited
     I load_byte(visited + state) == 1 {
-        R 0
+        return 0
     }
     store_byte(visited + state, 1)
 
     count := load_i64(count_ptr)
     I count >= MAX_STATES {
-        R 0
+        return 0
     }
 
     store_i64(states + (count * 8), state)
@@ -632,7 +632,7 @@ F add_state(states: i64, count_ptr: i64, state: i64, visited: i64) -> i64 {
 }
 
 # Process epsilon transitions
-F add_state_eps(regex: i64, states: i64, count_ptr: i64, state: i64, visited: i64) -> i64 {
+fn add_state_eps(regex: i64, states: i64, count_ptr: i64, state: i64, visited: i64) -> i64 {
     nodes := load_i64(regex)
     node_ptr := nodes + (state * 32)
     node_type := load_i64(node_ptr)
@@ -648,7 +648,7 @@ F add_state_eps(regex: i64, states: i64, count_ptr: i64, state: i64, visited: i6
         I out2 >= 0 {
             add_state_eps(regex, states, count_ptr, out2, visited)
         }
-        R 1
+        return 1
     }
 
     # Non-epsilon node
@@ -656,7 +656,7 @@ F add_state_eps(regex: i64, states: i64, count_ptr: i64, state: i64, visited: i6
 }
 
 # Simulate NFA on input text
-F nfa_simulate(regex: i64, text: i64, text_len: i64, start_pos: i64) -> i64 {
+fn nfa_simulate(regex: i64, text: i64, text_len: i64, start_pos: i64) -> i64 {
     nodes := load_i64(regex)
     start_state := load_i64(regex + 16)
 
@@ -711,7 +711,7 @@ F nfa_simulate(regex: i64, text: i64, text_len: i64, start_pos: i64) -> i64 {
             free(current_count_ptr)
             free(next_count_ptr)
             free(visited)
-            R 1
+            return 1
         }
 
         # End of input
@@ -821,7 +821,7 @@ F nfa_simulate(regex: i64, text: i64, text_len: i64, start_pos: i64) -> i64 {
             free(current_count_ptr)
             free(next_count_ptr)
             free(visited)
-            R 1
+            return 1
         }
         i := i + 1
     }
@@ -839,19 +839,19 @@ F nfa_simulate(regex: i64, text: i64, text_len: i64, start_pos: i64) -> i64 {
 # ============================================================================
 
 # Full match
-F regex_match(regex: i64, text: i64, text_len: i64) -> i64 {
+fn regex_match(regex: i64, text: i64, text_len: i64) -> i64 {
     nfa_simulate(regex, text, text_len, 0)
 }
 
 # Find first match (search)
-F regex_search(regex: i64, text: i64, text_len: i64) -> i64 {
+fn regex_search(regex: i64, text: i64, text_len: i64) -> i64 {
     pos := 0
     L {
         I pos >= text_len {
             B
         }
         I nfa_simulate(regex, text, text_len, pos) == 1 {
-            R pos
+            return pos
         }
         pos := pos + 1
     }
@@ -859,7 +859,7 @@ F regex_search(regex: i64, text: i64, text_len: i64) -> i64 {
 }
 
 # Find all matches (returns {positions_ptr, count})
-F regex_find_all(regex: i64, text: i64, text_len: i64) -> i64 {
+fn regex_find_all(regex: i64, text: i64, text_len: i64) -> i64 {
     result := malloc(16)
     positions := malloc(text_len * 8)
     count := 0
@@ -882,9 +882,9 @@ F regex_find_all(regex: i64, text: i64, text_len: i64) -> i64 {
 }
 
 # Free compiled regex
-F regex_free(regex: i64) -> i64 {
+fn regex_free(regex: i64) -> i64 {
     I regex == 0 {
-        R 0
+        return 0
     }
 
     nodes := load_i64(regex)

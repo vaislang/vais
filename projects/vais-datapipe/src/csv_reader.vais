@@ -1,21 +1,21 @@
 # csv_reader.vais - CSV file parser with streaming read
 
-X F fopen(path: str, mode: str) -> i64
-X F fclose(file: i64) -> i64
-X F fgets(buffer: i64, size: i64, file: i64) -> i64
-X F malloc(size: i64) -> i64
-X F free_mem(ptr: i64) -> i64
-X F strlen(s: str) -> i64
-X F strchr(s: str, c: i64) -> i64
-X F strncpy(dest: i64, src: str, n: i64) -> i64
-X F memset(ptr: i64, value: i64, size: i64) -> i64
+impl fn fopen(path: str, mode: str) -> i64
+impl fn fclose(file: i64) -> i64
+impl fn fgets(buffer: i64, size: i64, file: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free_mem(ptr: i64) -> i64
+impl fn strlen(s: str) -> i64
+impl fn strchr(s: str, c: i64) -> i64
+impl fn strncpy(dest: i64, src: str, n: i64) -> i64
+impl fn memset(ptr: i64, value: i64, size: i64) -> i64
 
 C CSV_MAX_LINE_SIZE: i64 = 1024
 C CSV_MAX_FIELDS: i64 = 32
 C CSV_FIELD_SIZE: i64 = 256
 
 # CSV Reader structure
-S CsvReader {
+struct CsvReader {
     file_handle: i64,
     line_buffer: i64,
     field_count: i64,
@@ -23,14 +23,14 @@ S CsvReader {
 }
 
 # CSV Row structure
-S CsvRow {
+struct CsvRow {
     fields: i64,
     field_count: i64,
     line_number: i64,
 }
 
 # Create a new CSV reader for a file
-F csv_reader_new(path: str) -> CsvReader {
+fn csv_reader_new(path: str) -> CsvReader {
     C handle := fopen(path, "r")
     C buffer := malloc(CSV_MAX_LINE_SIZE)
 
@@ -41,11 +41,11 @@ F csv_reader_new(path: str) -> CsvReader {
         current_line: 0,
     }
 
-    R reader
+    return reader
 }
 
 # Free CSV reader resources
-F csv_reader_free(reader: CsvReader) -> i64 {
+fn csv_reader_free(reader: CsvReader) -> i64 {
     I reader.file_handle != 0 {
         fclose(reader.file_handle)
     }
@@ -54,13 +54,13 @@ F csv_reader_free(reader: CsvReader) -> i64 {
         free_mem(reader.line_buffer)
     }
 
-    R 0
+    return 0
 }
 
 # Read next line from CSV file
-F csv_reader_read_line(reader: CsvReader) -> i64 {
+fn csv_reader_read_line(reader: CsvReader) -> i64 {
     I reader.file_handle == 0 {
-        R 0
+        return 0
     }
 
     # Clear buffer
@@ -69,13 +69,13 @@ F csv_reader_read_line(reader: CsvReader) -> i64 {
     # Read line
     C result := fgets(reader.line_buffer, CSV_MAX_LINE_SIZE, reader.file_handle)
 
-    R result
+    return result
 }
 
 # Parse CSV line into fields
-F csv_parse_line(line: i64, fields: i64, max_fields: i64) -> i64 {
+fn csv_parse_line(line: i64, fields: i64, max_fields: i64) -> i64 {
     I line == 0 {
-        R 0
+        return 0
     }
 
     C field_count := 0
@@ -90,13 +90,13 @@ F csv_parse_line(line: i64, fields: i64, max_fields: i64) -> i64 {
     # Simplified: assume comma-separated fields
     C count := csv_count_fields(line)
 
-    R count
+    return count
 }
 
 # Count number of fields in a CSV line
-F csv_count_fields(line: i64) -> i64 {
+fn csv_count_fields(line: i64) -> i64 {
     I line == 0 {
-        R 0
+        return 0
     }
 
     # Start with 1 field
@@ -106,11 +106,11 @@ F csv_count_fields(line: i64) -> i64 {
     # For this implementation, return a fixed count
     # Real implementation would scan for commas
 
-    R count
+    return count
 }
 
 # Create a CSV row structure
-F csv_row_new(line_number: i64) -> CsvRow {
+fn csv_row_new(line_number: i64) -> CsvRow {
     C fields_buffer := malloc(CSV_MAX_FIELDS * CSV_FIELD_SIZE)
 
     C row := CsvRow {
@@ -119,47 +119,47 @@ F csv_row_new(line_number: i64) -> CsvRow {
         line_number: line_number,
     }
 
-    R row
+    return row
 }
 
 # Free CSV row resources
-F csv_row_free(row: CsvRow) -> i64 {
+fn csv_row_free(row: CsvRow) -> i64 {
     I row.fields != 0 {
         free_mem(row.fields)
     }
 
-    R 0
+    return 0
 }
 
 # Get field from CSV row by index
-F csv_row_get_field(row: CsvRow, index: i64) -> i64 {
+fn csv_row_get_field(row: CsvRow, index: i64) -> i64 {
     I index < 0 {
-        R 0
+        return 0
     }
 
     I index >= row.field_count {
-        R 0
+        return 0
     }
 
     # Calculate field offset
     C offset := index * CSV_FIELD_SIZE
     C field_ptr := row.fields + offset
 
-    R field_ptr
+    return field_ptr
 }
 
 # Check if CSV reader has more lines
-F csv_reader_has_more(reader: CsvReader) -> i64 {
+fn csv_reader_has_more(reader: CsvReader) -> i64 {
     I reader.file_handle == 0 {
-        R 0
+        return 0
     }
 
     # Simplified check
-    R 1
+    return 1
 }
 
 # Skip header row
-F csv_reader_skip_header(reader: CsvReader) -> i64 {
+fn csv_reader_skip_header(reader: CsvReader) -> i64 {
     C result := csv_reader_read_line(reader)
-    R result
+    return result
 }

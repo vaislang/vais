@@ -1,11 +1,11 @@
 # CHECKS: sum a Vec<i64> via two helper fns.
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F sum_one_to_n(n: i64) -> i64 {
+fn sum_one_to_n(n: i64) -> i64 {
     n * (n + 1) / 2
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     LF i: 1..=10 {
         v.push(i)
@@ -16,8 +16,8 @@ F main() -> i64 {
         direct = direct + v[i]
     }
     formula: i64 := sum_one_to_n(10)
-    I direct != formula { R 1 }
-    I direct != 55 { R 2 }
+    I direct != formula { return 1 }
+    I direct != 55 { return 2 }
 
     # smaller
     w: Vec<i64> := mut vec_new()
@@ -28,6 +28,6 @@ F main() -> i64 {
     LF i: 0..w.len() {
         s = s + w[i]
     }
-    I s != sum_one_to_n(5) { R 3 }
-    R 0
+    I s != sum_one_to_n(5) { return 3 }
+    return 0
 }

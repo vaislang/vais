@@ -1,18 +1,18 @@
 # CHECKS: check Vec contains at least N elements >= threshold.
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F has_at_least_n_above(v: &Vec<i64>, n: i64, threshold: i64) -> i64 {
+fn has_at_least_n_above(v: &Vec<i64>, n: i64, threshold: i64) -> i64 {
     count: i64 := mut 0
     LF i: 0..v.len() {
         I v[i] >= threshold {
             count = count + 1
-            I count >= n { R 1 }
+            I count >= n { return 1 }
         }
     }
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     v.push(5)
     v.push(2)
@@ -22,12 +22,12 @@ F main() -> i64 {
     v.push(3)
 
     # 3 elements >= 5: 5, 8, 7 → has at least 3? yes
-    I has_at_least_n_above(&v, 3, 5) != 1 { R 1 }
+    I has_at_least_n_above(&v, 3, 5) != 1 { return 1 }
     # 4 elements >= 5: only 3 → no
-    I has_at_least_n_above(&v, 4, 5) != 0 { R 2 }
+    I has_at_least_n_above(&v, 4, 5) != 0 { return 2 }
     # 6 elements >= 1: all 6 → yes
-    I has_at_least_n_above(&v, 6, 1) != 1 { R 3 }
+    I has_at_least_n_above(&v, 6, 1) != 1 { return 3 }
     # 7 >= 1: only 6 → no
-    I has_at_least_n_above(&v, 7, 1) != 0 { R 4 }
-    R 0
+    I has_at_least_n_above(&v, 7, 1) != 0 { return 4 }
+    return 0
 }

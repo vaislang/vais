@@ -1,33 +1,33 @@
 # CHECKS: Result<T, E> propagation via match — manual `?`-style patterns.
-F divide(a: i64, b: i64) -> Result<i64, i64> {
-    I b == 0 { R Err(0) }
+fn divide(a: i64, b: i64) -> Result<i64, i64> {
+    I b == 0 { return Err(0) }
     Ok(a / b)
 }
 
-F double_then_divide(a: i64, b: i64) -> Result<i64, i64> {
+fn double_then_divide(a: i64, b: i64) -> Result<i64, i64> {
     r1: Result<i64, i64> := divide(a * 2, b)
-    M r1 {
+    match r1 {
         Ok(v)  => Ok(v + 100),
         Err(e) => Err(e),
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a: Result<i64, i64> := divide(20, 4)
-    av: i64 := M a { Ok(v) => v, Err(_) => -1 }
-    I av != 5 { R 1 }
+    av: i64 := match a { Ok(v) => v, Err(_) => -1 }
+    I av != 5 { return 1 }
 
     b: Result<i64, i64> := divide(10, 0)
-    is_err: i64 := M b { Ok(_) => 0, Err(_) => 1 }
-    I is_err != 1 { R 2 }
+    is_err: i64 := match b { Ok(_) => 0, Err(_) => 1 }
+    I is_err != 1 { return 2 }
 
     c: Result<i64, i64> := double_then_divide(20, 5)
-    cv: i64 := M c { Ok(v) => v, Err(_) => -1 }
+    cv: i64 := match c { Ok(v) => v, Err(_) => -1 }
     # 40 / 5 = 8 + 100 = 108
-    I cv != 108 { R 3 }
+    I cv != 108 { return 3 }
 
     d: Result<i64, i64> := double_then_divide(10, 0)
-    is_err2: i64 := M d { Ok(_) => 0, Err(_) => 1 }
-    I is_err2 != 1 { R 4 }
-    R 0
+    is_err2: i64 := match d { Ok(_) => 0, Err(_) => 1 }
+    I is_err2 != 1 { return 4 }
+    return 0
 }

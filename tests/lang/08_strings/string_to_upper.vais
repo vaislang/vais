@@ -1,5 +1,5 @@
 # CHECKS: detect uppercase letters in a str via byte iteration.
-F count_upper(p: i64, n: i64) -> i64 {
+fn count_upper(p: i64, n: i64) -> i64 {
     count: i64 := mut 0
     LF i: 0..n {
         c: i64 := load_byte(p + i)
@@ -8,17 +8,17 @@ F count_upper(p: i64, n: i64) -> i64 {
     count
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p1: i64 := str_to_ptr("HELLO")
-    I count_upper(p1, strlen(p1)) != 5 { R 1 }
+    I count_upper(p1, strlen(p1)) != 5 { return 1 }
 
     p2: i64 := str_to_ptr("hello")
-    I count_upper(p2, strlen(p2)) != 0 { R 2 }
+    I count_upper(p2, strlen(p2)) != 0 { return 2 }
 
     p3: i64 := str_to_ptr("HelloWorld")
-    I count_upper(p3, strlen(p3)) != 2 { R 3 }
+    I count_upper(p3, strlen(p3)) != 2 { return 3 }
 
     p4: i64 := str_to_ptr("ABCdef123")
-    I count_upper(p4, strlen(p4)) != 3 { R 4 }
-    R 0
+    I count_upper(p4, strlen(p4)) != 3 { return 4 }
+    return 0
 }

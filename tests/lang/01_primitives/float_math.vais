@@ -1,26 +1,26 @@
 # CHECKS: f64 arithmetic — addition, subtraction, multiplication, division.
-F main() -> i64 {
+fn main() -> i64 {
     a: f64 := 1.5
     b: f64 := 2.5
 
     # 1.5 + 2.5 = 4.0
     s: f64 := a + b
-    I (s as i64) != 4 { R 1 }
+    I (s as i64) != 4 { return 1 }
 
     # 5.0 - 1.5 = 3.5
     d: f64 := 5.0 - a
-    I (d as i64) != 3 { R 2 }
+    I (d as i64) != 3 { return 2 }
 
     # 2.5 * 2.0 = 5.0
     m: f64 := b * 2.0
-    I (m as i64) != 5 { R 3 }
+    I (m as i64) != 5 { return 3 }
 
     # 10.0 / 4.0 = 2.5 → as i64 truncates to 2
     q: f64 := 10.0 / 4.0
-    I (q as i64) != 2 { R 4 }
+    I (q as i64) != 2 { return 4 }
 
     # negative float
     n: f64 := 0.0 - 3.7
-    I (n as i64) != 0 - 3 { R 5 }
-    R 0
+    I (n as i64) != 0 - 3 { return 5 }
+    return 0
 }

@@ -1,12 +1,12 @@
 # Nested pattern alias test
-EN Option<T> {
+enum Option<T> {
     Some(T),
     None
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     x := (Some(5), Some(10))
-    M x {
+    match x {
         both @ (first @ Some(a), second @ Some(b)) => a + b,
         _ => 0
     }

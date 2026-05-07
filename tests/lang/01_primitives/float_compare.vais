@@ -1,10 +1,10 @@
 # CHECKS: f64 comparison operators
-F main() -> i64 {
+fn main() -> i64 {
     a: f64 := 1.5
     b: f64 := 2.0
-    I !(a < b)   { R 1 }
-    I !(b > a)   { R 2 }
-    I !(a == 1.5){ R 3 }
-    I !(b != a)  { R 4 }
-    R 0
+    I !(a < b)   { return 1 }
+    I !(b > a)   { return 2 }
+    I !(a == 1.5){ return 3 }
+    I !(b != a)  { return 4 }
+    return 0
 }

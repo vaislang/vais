@@ -1,32 +1,32 @@
 # CHECKS: Vec<EnumType> push and iteration (REGRESSION C16).
-U std/vec.{vec_new_t};
+use std/vec.{vec_new_t};
 
-EN Color {
+enum Color {
     Red,
     Green,
     Blue
 }
 
-F color_code(c: Color) -> i64 {
-    M c {
+fn color_code(c: Color) -> i64 {
+    match c {
         Red => 1,
         Green => 2,
         Blue => 3
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<Color> := mut vec_new_t()
     v.push(Red)
     v.push(Green)
     v.push(Blue)
     v.push(Red)
-    I v.len() != 4 { R 1 }
+    I v.len() != 4 { return 1 }
 
     sum: i64 := mut 0
     LF i: 0..v.len() {
         sum = sum + color_code(v[i])
     }
-    I sum != 7 { R 2 }
-    R 0
+    I sum != 7 { return 2 }
+    return 0
 }

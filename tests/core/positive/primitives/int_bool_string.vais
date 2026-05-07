@@ -1,8 +1,8 @@
-F main() -> i64 {
+fn main() -> i64 {
     x: i64 := (1 + 2) * 3
     ok: bool := x == 9
     label: str := "core"
-    I !ok { R 1 }
-    I label != "core" { R 2 }
-    R 0
+    I !ok { return 1 }
+    I label != "core" { return 2 }
+    return 0
 }

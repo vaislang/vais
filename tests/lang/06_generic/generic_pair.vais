@@ -1,18 +1,18 @@
 # CHECKS: generic struct with two type parameters
-S Pair<A, B> {
+struct Pair<A, B> {
     first: A,
     second: B,
 }
 
-X Pair<A, B> {
-    F new(a: A, b: B) -> Pair<A, B> {
+impl Pair<A, B> {
+    fn new(a: A, b: B) -> Pair<A, B> {
         Pair { first: a, second: b }
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p: Pair<i64, i64> := Pair.new(3, 4)
-    I p.first != 3  { R 1 }
-    I p.second != 4 { R 2 }
-    R 0
+    I p.first != 3  { return 1 }
+    I p.second != 4 { return 2 }
+    return 0
 }

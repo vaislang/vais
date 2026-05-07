@@ -1,25 +1,25 @@
 # CHECKS: static method (no self) callable via Type.method().
-S Box {
+struct Box {
     val: i64
 }
 
-X Box {
-    F default_val() -> i64 { 42 }
+impl Box {
+    fn default_val() -> i64 { 42 }
 
-    F new_with_default() -> Box {
+    fn new_with_default() -> Box {
         Box { val: Box.default_val() }
     }
 
-    F new_zero() -> Box { Box { val: 0 } }
+    fn new_zero() -> Box { Box { val: 0 } }
 }
 
-F main() -> i64 {
-    I Box.default_val() != 42 { R 1 }
+fn main() -> i64 {
+    I Box.default_val() != 42 { return 1 }
 
     a: Box := Box.new_with_default()
-    I a.val != 42 { R 2 }
+    I a.val != 42 { return 2 }
 
     b: Box := Box.new_zero()
-    I b.val != 0 { R 3 }
-    R 0
+    I b.val != 0 { return 3 }
+    return 0
 }

@@ -1,15 +1,15 @@
 # CHECKS: i64 negative-minimum-ish values.
-F main() -> i64 {
+fn main() -> i64 {
     # i64::MAX = 9223372036854775807
     max: i64 := 9223372036854775807
-    I max != 9223372036854775807 { R 1 }
+    I max != 9223372036854775807 { return 1 }
 
     # max + 1 wraps to MIN (we don't actually compute that — just test boundary)
     near_max: i64 := max - 100
-    I near_max + 100 != max { R 2 }
+    I near_max + 100 != max { return 2 }
 
     # negative half
     neg_half: i64 := 0 - max / 2
-    I neg_half * 2 != 0 - max + 1 { R 3 }
-    R 0
+    I neg_half * 2 != 0 - max + 1 { return 3 }
+    return 0
 }

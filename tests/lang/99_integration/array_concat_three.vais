@@ -1,7 +1,7 @@
 # CHECKS: concatenate 3 Vec<i64> into one.
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F main() -> i64 {
+fn main() -> i64 {
     a: Vec<i64> := mut vec_new()
     a.push(1)
     a.push(2)
@@ -19,18 +19,18 @@ F main() -> i64 {
     LF i: 0..b.len() { out.push(b[i]) }
     LF i: 0..c.len() { out.push(c[i]) }
 
-    I out.len() != 6 { R 1 }
-    I out[0] != 1 { R 2 }
-    I out[1] != 2 { R 3 }
-    I out[2] != 10 { R 4 }
-    I out[4] != 30 { R 5 }
-    I out[5] != 100 { R 6 }
+    I out.len() != 6 { return 1 }
+    I out[0] != 1 { return 2 }
+    I out[1] != 2 { return 3 }
+    I out[2] != 10 { return 4 }
+    I out[4] != 30 { return 5 }
+    I out[5] != 100 { return 6 }
 
     sum: i64 := mut 0
     LF i: 0..out.len() {
         sum = sum + out[i]
     }
     # 1+2+10+20+30+100 = 163
-    I sum != 163 { R 7 }
-    R 0
+    I sum != 163 { return 7 }
+    return 0
 }

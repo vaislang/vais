@@ -1,13 +1,13 @@
 # CHECKS: chained boolean conditions in if
-F sign(n: i64) -> i64 {
-    I n > 0 { R 1 }
-    I n < 0 { R -1 }
+fn sign(n: i64) -> i64 {
+    I n > 0 { return 1 }
+    I n < 0 { return -1 }
     0
 }
 
-F main() -> i64 {
-    I sign(5)  != 1  { R 1 }
-    I sign(-3) != -1 { R 2 }
-    I sign(0)  != 0  { R 3 }
-    R 0
+fn main() -> i64 {
+    I sign(5)  != 1  { return 1 }
+    I sign(-3) != -1 { return 2 }
+    I sign(0)  != 0  { return 3 }
+    return 0
 }

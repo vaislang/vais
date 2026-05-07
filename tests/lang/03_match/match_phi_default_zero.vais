@@ -5,15 +5,15 @@
 #             unconditionally chose "null" for ResolvedType::Named, even
 #             when the actual phi LLVM type was a narrow integer.
 
-F main() -> i64 {
+fn main() -> i64 {
     x: i32 := mut 5
-    result: i64 := M x {
+    result: i64 := match x {
         1 => 100i64,
         2 => 200i64,
         _ => 0i64,
     }
     I result != 0 {
-        R 1
+        return 1
     }
-    R 0
+    return 0
 }

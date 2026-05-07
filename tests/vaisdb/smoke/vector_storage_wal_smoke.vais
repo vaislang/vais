@@ -1,50 +1,50 @@
-U vector/storage
-U vector/hnsw/wal
-U storage/constants
-U storage/error
-U storage/file
-U storage/page/manager
-U storage/page/allocator
-U storage/page/freelist
-U storage/page/types
-U storage/buffer/pool
-U storage/wal/group_commit
-U storage/wal/writer
+use vector/storage
+use vector/hnsw/wal
+use storage/constants
+use storage/error
+use storage/file
+use storage/page/manager
+use storage/page/allocator
+use storage/page/freelist
+use storage/page/types
+use storage/buffer/pool
+use storage/wal/group_commit
+use storage/wal/writer
 
-F storage_wal_vec2(a: f32, b: f32) -> Vec<f32> {
+fn storage_wal_vec2(a: f32, b: f32) -> Vec<f32> {
     values: Vec<f32> := mut Vec.with_capacity(2)
     values.push(a)
     values.push(b)
     values
 }
 
-F storage_wal_open_clean(path: str) -> Result<File, VaisError> {
+fn storage_wal_open_clean(path: str) -> Result<File, VaisError> {
     file := mut File.open(path, "rw+")?;
     file.truncate(0)?;
     Ok(file)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     files: Vec<File> := mut Vec.with_capacity(5)
-    data_file := mut M storage_wal_open_clean("vector_storage_wal_data.vdb") {
+    data_file := mut match storage_wal_open_clean("vector_storage_wal_data.vdb") {
         Ok(f) => f,
-        Err(_) => { R 1 },
+        Err(_) => { return 1 },
     }
-    vector_file := mut M storage_wal_open_clean("vector_storage_wal_vectors.vdb") {
+    vector_file := mut match storage_wal_open_clean("vector_storage_wal_vectors.vdb") {
         Ok(f) => f,
-        Err(_) => { R 2 },
+        Err(_) => { return 2 },
     }
-    graph_file := mut M storage_wal_open_clean("vector_storage_wal_graph.vdb") {
+    graph_file := mut match storage_wal_open_clean("vector_storage_wal_graph.vdb") {
         Ok(f) => f,
-        Err(_) => { R 3 },
+        Err(_) => { return 3 },
     }
-    fulltext_file := mut M storage_wal_open_clean("vector_storage_wal_fulltext.vdb") {
+    fulltext_file := mut match storage_wal_open_clean("vector_storage_wal_fulltext.vdb") {
         Ok(f) => f,
-        Err(_) => { R 4 },
+        Err(_) => { return 4 },
     }
-    undo_file := mut M storage_wal_open_clean("vector_storage_wal_undo.vdb") {
+    undo_file := mut match storage_wal_open_clean("vector_storage_wal_undo.vdb") {
         Ok(f) => f,
-        Err(_) => { R 5 },
+        Err(_) => { return 5 },
     }
 
     files.push(data_file)
@@ -54,9 +54,9 @@ F main() -> i64 {
     files.push(undo_file)
 
     page_manager := mut PageManager.new(files, PAGE_SIZE_8K)
-    M page_manager.allocate_page(FILE_ID_VECTORS, 2 as u32, PAGE_TYPE_VECTOR_DATA, ENGINE_TAG_VECTOR) {
+    match page_manager.allocate_page(FILE_ID_VECTORS, 2 as u32, PAGE_TYPE_VECTOR_DATA, ENGINE_TAG_VECTOR) {
         Ok(_) => {},
-        Err(_) => { R 6 },
+        Err(_) => { return 6 },
     }
 
     pool := mut BufferPool.new(page_manager, PAGE_SIZE_8K, 8 as u32)
@@ -66,9 +66,9 @@ F main() -> i64 {
     bitmap.set_bit(0 as u32, pages_per_bitmap, false)
     bitmap.set_bit(1 as u32, pages_per_bitmap, false)
 
-    writer := mut M WalWriter.new("vector_storage_wal", 262144 as u32) {
+    writer := mut match WalWriter.new("vector_storage_wal", 262144 as u32) {
         Ok(w) => w,
-        Err(_) => { R 7 },
+        Err(_) => { return 7 },
     }
     gcm := mut GroupCommitManager.new(GroupCommitConfig.async_mode(), writer)
     wal_mgr := mut HnswWalManager.new(&gcm)
@@ -77,7 +77,7 @@ F main() -> i64 {
     vector := mut storage_wal_vec2(3.0, 4.0)
     page_id := mut 0 as u32
     slot_index := mut 0 as u16
-    M store.write_vector_with_wal(
+    match store.write_vector_with_wal(
         &vector,
         901,
         7 as u32,
@@ -88,24 +88,24 @@ F main() -> i64 {
             slot_index = v.1
         },
         Err(e) => {
-            I e.code == "VAIS-0208005" { R 8 }
-            R 9
+            I e.code == "VAIS-0208005" { return 8 }
+            return 9
         },
     }
 
-    I page_id != 2 as u32 { R 10 }
-    I slot_index != 0 as u16 { R 11 }
+    I page_id != 2 as u32 { return 10 }
+    I slot_index != 0 as u16 { return 11 }
 
-    loaded := mut M store.read_vector(page_id, slot_index) {
+    loaded := mut match store.read_vector(page_id, slot_index) {
         Ok(v) => v,
-        Err(_) => { R 12 },
+        Err(_) => { return 12 },
     }
-    I loaded.len() != 2 { R 13 }
-    I !approx_eq_f32(loaded[0], 3.0 as f32, 0.0001 as f32) { R 14 }
-    I !approx_eq_f32(loaded[1], 4.0 as f32, 0.0001 as f32) { R 15 }
+    I loaded.len() != 2 { return 13 }
+    I !approx_eq_f32(loaded[0], 3.0 as f32, 0.0001 as f32) { return 14 }
+    I !approx_eq_f32(loaded[1], 4.0 as f32, 0.0001 as f32) { return 15 }
 
     lsn := mut gcm.writer().current_lsn()
-    I lsn == 0 { R 16 }
+    I lsn == 0 { return 16 }
 
-    R 0
+    return 0
 }

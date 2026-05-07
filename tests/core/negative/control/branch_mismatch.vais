@@ -1,4 +1,4 @@
-F main() -> i64 {
-    value: i64 := I true { 1 } EL { "bad" }
-    R value
+fn main() -> i64 {
+    value: i64 := I true { 1 } else { "bad" }
+    return value
 }

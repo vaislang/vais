@@ -1,13 +1,13 @@
 # CHECKS: match against bool
-F to_int(b: bool) -> i64 {
-    M b {
+fn to_int(b: bool) -> i64 {
+    match b {
         true  => 1,
         false => 0,
     }
 }
 
-F main() -> i64 {
-    I to_int(true)  != 1 { R 1 }
-    I to_int(false) != 0 { R 2 }
-    R 0
+fn main() -> i64 {
+    I to_int(true)  != 1 { return 1 }
+    I to_int(false) != 0 { return 2 }
+    return 0
 }

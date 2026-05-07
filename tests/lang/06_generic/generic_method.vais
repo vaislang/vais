@@ -1,19 +1,19 @@
 # CHECKS: generic struct with method using the type parameter
-S Holder<T> {
+struct Holder<T> {
     value: T,
 }
 
-X Holder<T> {
-    F new(v: T) -> Holder<T> {
+impl Holder<T> {
+    fn new(v: T) -> Holder<T> {
         Holder { value: v }
     }
-    F get(self) -> T {
+    fn get(self) -> T {
         self.value
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     h: Holder<i64> := Holder.new(123)
-    I h.get() != 123 { R 1 }
-    R 0
+    I h.get() != 123 { return 1 }
+    return 0
 }

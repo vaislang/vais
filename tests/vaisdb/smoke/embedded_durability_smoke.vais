@@ -1,13 +1,13 @@
-U server/embedded
-U storage/constants
-U storage/file
+use server/embedded
+use storage/constants
+use storage/file
 
-F embedded_file_exists(db_path: str, file_name: str) -> bool {
+fn embedded_file_exists(db_path: str, file_name: str) -> bool {
     path := mut db_path.clone() + "/" + file_name
     path_exists(&path)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     db_path := mut "embedded_durability_db"
     durability_lsn := mut 424242 as u64
 
@@ -15,50 +15,50 @@ F main() -> i64 {
     cfg = cfg.with_data_dir(db_path.clone())
     cfg = cfg.with_page_size(PAGE_SIZE_8K)
 
-    db := mut M EmbeddedDatabase.open(cfg) {
+    db := mut match EmbeddedDatabase.open(cfg) {
         Ok(v) => v,
-        Err(_) => { R 1 },
+        Err(_) => { return 1 },
     }
-    I !db.is_open() { R 2 }
-    I db.database.page_size != PAGE_SIZE_8K { R 3 }
-    I db.database.meta.last_checkpoint_lsn != 0 { R 4 }
+    I !db.is_open() { return 2 }
+    I db.database.page_size != PAGE_SIZE_8K { return 3 }
+    I db.database.meta.last_checkpoint_lsn != 0 { return 4 }
 
     db.database.meta.last_checkpoint_lsn = durability_lsn
-    M db.database.flush_meta() {
+    match db.database.flush_meta() {
         Ok(_) => {},
-        Err(_) => { R 5 },
+        Err(_) => { return 5 },
     }
-    M db.close() {
+    match db.close() {
         Ok(_) => {},
-        Err(_) => { R 6 },
+        Err(_) => { return 6 },
     }
-    I db.is_open() { R 7 }
+    I db.is_open() { return 7 }
 
-    I !embedded_file_exists(db_path.clone(), FILE_NAME_DATA) { R 8 }
-    I !embedded_file_exists(db_path.clone(), FILE_NAME_META) { R 9 }
-    I !embedded_file_exists(db_path.clone(), FILE_NAME_VECTORS) { R 10 }
-    I !embedded_file_exists(db_path.clone(), FILE_NAME_GRAPH) { R 11 }
-    I !embedded_file_exists(db_path.clone(), FILE_NAME_FULLTEXT) { R 12 }
-    I !embedded_file_exists(db_path.clone(), FILE_NAME_UNDO) { R 13 }
-    I !embedded_file_exists(db_path.clone(), FILE_NAME_LOCK) { R 14 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_DATA) { return 8 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_META) { return 9 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_VECTORS) { return 10 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_GRAPH) { return 11 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_FULLTEXT) { return 12 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_UNDO) { return 13 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_LOCK) { return 14 }
 
     reopen_cfg := mut EmbeddedConfig.default()
     reopen_cfg = reopen_cfg.with_data_dir(db_path.clone())
 
-    reopened := mut M EmbeddedDatabase.open(reopen_cfg) {
+    reopened := mut match EmbeddedDatabase.open(reopen_cfg) {
         Ok(v) => v,
-        Err(_) => { R 20 },
+        Err(_) => { return 20 },
     }
-    I !reopened.is_open() { R 21 }
-    I reopened.database.page_size != PAGE_SIZE_8K { R 22 }
-    I reopened.database.meta.last_checkpoint_lsn != durability_lsn { R 23 }
-    I reopened.database.meta.next_txn_id != 1 { R 24 }
+    I !reopened.is_open() { return 21 }
+    I reopened.database.page_size != PAGE_SIZE_8K { return 22 }
+    I reopened.database.meta.last_checkpoint_lsn != durability_lsn { return 23 }
+    I reopened.database.meta.next_txn_id != 1 { return 24 }
 
-    M reopened.close() {
+    match reopened.close() {
         Ok(_) => {},
-        Err(_) => { R 25 },
+        Err(_) => { return 25 },
     }
-    I reopened.is_open() { R 26 }
+    I reopened.is_open() { return 26 }
 
-    R 0
+    return 0
 }

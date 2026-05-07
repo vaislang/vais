@@ -1,7 +1,7 @@
 # CHECKS: replace zeros in Vec<i64> with a sentinel value.
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     v.push(1)
     v.push(0)
@@ -13,11 +13,11 @@ F main() -> i64 {
     LF i: 0..v.len() {
         I v[i] == 0 { v[i] = 99 }
     }
-    I v[0] != 1 { R 1 }
-    I v[1] != 99 { R 2 }
-    I v[2] != 2 { R 3 }
-    I v[3] != 99 { R 4 }
-    I v[4] != 99 { R 5 }
-    I v[5] != 3 { R 6 }
-    R 0
+    I v[0] != 1 { return 1 }
+    I v[1] != 99 { return 2 }
+    I v[2] != 2 { return 3 }
+    I v[3] != 99 { return 4 }
+    I v[4] != 99 { return 5 }
+    I v[5] != 3 { return 6 }
+    return 0
 }

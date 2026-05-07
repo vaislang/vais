@@ -1,21 +1,21 @@
 # CHECKS: extract a 4-byte signature at offset.
-F bytes_at(p: i64, offset: i64, b1: i64, b2: i64, b3: i64, b4: i64) -> i64 {
-    I load_byte(p + offset) != b1 { R 0 }
-    I load_byte(p + offset + 1) != b2 { R 0 }
-    I load_byte(p + offset + 2) != b3 { R 0 }
-    I load_byte(p + offset + 3) != b4 { R 0 }
+fn bytes_at(p: i64, offset: i64, b1: i64, b2: i64, b3: i64, b4: i64) -> i64 {
+    I load_byte(p + offset) != b1 { return 0 }
+    I load_byte(p + offset + 1) != b2 { return 0 }
+    I load_byte(p + offset + 2) != b3 { return 0 }
+    I load_byte(p + offset + 3) != b4 { return 0 }
     1
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p: i64 := str_to_ptr("HELP me!")
 
     # "HELP" = 72,69,76,80
-    I bytes_at(p, 0, 72, 69, 76, 80) != 1 { R 1 }
+    I bytes_at(p, 0, 72, 69, 76, 80) != 1 { return 1 }
     # "P me" at offset 3: 80,32,109,101
-    I bytes_at(p, 3, 80, 32, 109, 101) != 1 { R 2 }
+    I bytes_at(p, 3, 80, 32, 109, 101) != 1 { return 2 }
 
     # mismatched
-    I bytes_at(p, 0, 80, 80, 80, 80) != 0 { R 3 }
-    R 0
+    I bytes_at(p, 0, 80, 80, 80, 80) != 0 { return 3 }
+    return 0
 }

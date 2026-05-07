@@ -1,12 +1,12 @@
 # CHECKS: integer swap via temporary.
-F main() -> i64 {
+fn main() -> i64 {
     a: i64 := mut 10
     b: i64 := mut 20
     tmp: i64 := a
     a = b
     b = tmp
-    I a != 20 { R 1 }
-    I b != 10 { R 2 }
+    I a != 20 { return 1 }
+    I b != 10 { return 2 }
 
     # XOR swap (without temporary)
     x: i64 := mut 100
@@ -14,7 +14,7 @@ F main() -> i64 {
     x = x ^ y
     y = y ^ x
     x = x ^ y
-    I x != 200 { R 3 }
-    I y != 100 { R 4 }
-    R 0
+    I x != 200 { return 3 }
+    I y != 100 { return 4 }
+    return 0
 }

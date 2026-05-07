@@ -1,5 +1,5 @@
 # CHECKS: skip first iteration via continue.
-F main() -> i64 {
+fn main() -> i64 {
     sum: i64 := mut 0
     n: i64 := mut 0
 
@@ -9,7 +9,7 @@ F main() -> i64 {
         n = n + 1
     }
     # Skip 0; sum 1..9 = 45, n=9
-    I sum != 45 { R 1 }
-    I n != 9 { R 2 }
-    R 0
+    I sum != 45 { return 1 }
+    I n != 9 { return 2 }
+    return 0
 }

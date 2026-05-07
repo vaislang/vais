@@ -1,14 +1,14 @@
 # CHECKS: Vec<i64> push + len + index
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     v.push(10)
     v.push(20)
     v.push(30)
-    I v.len() != 3 { R 1 }
-    I v[0] != 10 { R 2 }
-    I v[1] != 20 { R 3 }
-    I v[2] != 30 { R 4 }
-    R 0
+    I v.len() != 3 { return 1 }
+    I v[0] != 10 { return 2 }
+    I v[1] != 20 { return 3 }
+    I v[2] != 30 { return 4 }
+    return 0
 }

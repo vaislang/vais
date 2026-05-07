@@ -1,6 +1,6 @@
 # CHECKS: count divisors of a positive integer.
-F divisor_count(n: i64) -> i64 {
-    I n <= 0 { R 0 }
+fn divisor_count(n: i64) -> i64 {
+    I n <= 0 { return 0 }
     count: i64 := mut 0
     LF i: 1..=n {
         I (n % i) == 0 { count = count + 1 }
@@ -8,12 +8,12 @@ F divisor_count(n: i64) -> i64 {
     count
 }
 
-F main() -> i64 {
-    I divisor_count(1) != 1 { R 1 }
-    I divisor_count(6) != 4 { R 2 }    # 1,2,3,6
-    I divisor_count(12) != 6 { R 3 }   # 1,2,3,4,6,12
-    I divisor_count(13) != 2 { R 4 }   # 1,13
-    I divisor_count(36) != 9 { R 5 }   # 1,2,3,4,6,9,12,18,36
-    I divisor_count(100) != 9 { R 6 }
-    R 0
+fn main() -> i64 {
+    I divisor_count(1) != 1 { return 1 }
+    I divisor_count(6) != 4 { return 2 }    # 1,2,3,6
+    I divisor_count(12) != 6 { return 3 }   # 1,2,3,4,6,12
+    I divisor_count(13) != 2 { return 4 }   # 1,13
+    I divisor_count(36) != 9 { return 5 }   # 1,2,3,4,6,9,12,18,36
+    I divisor_count(100) != 9 { return 6 }
+    return 0
 }

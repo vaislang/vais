@@ -1,23 +1,23 @@
 # CHECKS: extract last char of a non-empty string.
-F last_char(p: i64, n: i64) -> i64 {
-    I n == 0 { R 0 - 1 }
+fn last_char(p: i64, n: i64) -> i64 {
+    I n == 0 { return 0 - 1 }
     load_byte(p + n - 1)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p1: i64 := str_to_ptr("hello")
     # 'o' = 111
-    I last_char(p1, strlen(p1)) != 111 { R 1 }
+    I last_char(p1, strlen(p1)) != 111 { return 1 }
 
     p2: i64 := str_to_ptr("a")
     # 'a' = 97
-    I last_char(p2, 1) != 97 { R 2 }
+    I last_char(p2, 1) != 97 { return 2 }
 
     p3: i64 := str_to_ptr("xyz!")
     # '!' = 33
-    I last_char(p3, strlen(p3)) != 33 { R 3 }
+    I last_char(p3, strlen(p3)) != 33 { return 3 }
 
     p4: i64 := str_to_ptr("")
-    I last_char(p4, 0) != 0 - 1 { R 4 }
-    R 0
+    I last_char(p4, 0) != 0 - 1 { return 4 }
+    return 0
 }

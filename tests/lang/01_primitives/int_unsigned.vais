@@ -3,24 +3,24 @@
 # u32 alloca emitted `store i64 100, ptr %slot, align 4` against a 4-byte
 # slot, clobbering adjacent allocas. Fixed in `inkwell/gen_stmt.rs` by
 # truncating the value to the alloca's bit width before storing.
-F main() -> i64 {
+fn main() -> i64 {
     a: u32 := 100
     b: u32 := 200
     s: u32 := a + b
-    I (s as i64) != 300 { R 1 }
+    I (s as i64) != 300 { return 1 }
 
     # u64 — i64-width storage so cast preserves all bits
     big64: u64 := 1000000000000
-    I (big64 as i64) != 1000000000000 { R 2 }
+    I (big64 as i64) != 1000000000000 { return 2 }
 
     # u32 multiplication (small enough to avoid sign-extend wraparound)
     m32: u32 := 1000
     n32: u32 := 1000
-    I ((m32 * n32) as i64) != 1000000 { R 3 }
+    I ((m32 * n32) as i64) != 1000000 { return 3 }
 
     # u32 modulo
     x32: u32 := 100
     y32: u32 := 7
-    I ((x32 % y32) as i64) != 2 { R 4 }
-    R 0
+    I ((x32 % y32) as i64) != 2 { return 4 }
+    return 0
 }

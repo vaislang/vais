@@ -1,11 +1,11 @@
 # pipeline.vais - Data pipeline orchestration (chain reader -> transformer -> writer)
 
-X F time_get_ms() -> i64
-X F printf(format: str, value: i64) -> i64
-X F puts(text: str) -> i64
+impl fn time_get_ms() -> i64
+impl fn printf(format: str, value: i64) -> i64
+impl fn puts(text: str) -> i64
 
 # Pipeline structure
-S Pipeline {
+struct Pipeline {
     reader: CsvReader,
     transformer: Transformer,
     writer: JsonWriter,
@@ -13,7 +13,7 @@ S Pipeline {
 }
 
 # Pipeline configuration
-S PipelineConfig {
+struct PipelineConfig {
     input_path: str,
     output_path: str,
     filter_enabled: i64,
@@ -24,7 +24,7 @@ S PipelineConfig {
 }
 
 # Pipeline result
-S PipelineResult {
+struct PipelineResult {
     processed_count: i64,
     filtered_count: i64,
     elapsed_ms: i64,
@@ -32,7 +32,7 @@ S PipelineResult {
 }
 
 # Create default pipeline configuration
-F pipeline_config_default() -> PipelineConfig {
+fn pipeline_config_default() -> PipelineConfig {
     C config := PipelineConfig {
         input_path: "input.csv",
         output_path: "output.json",
@@ -43,11 +43,11 @@ F pipeline_config_default() -> PipelineConfig {
         skip_header: 1,
     }
 
-    R config
+    return config
 }
 
 # Create pipeline from configuration
-F pipeline_new(config: PipelineConfig) -> Pipeline {
+fn pipeline_new(config: PipelineConfig) -> Pipeline {
     C reader := csv_reader_new(config.input_path)
     C transformer := transformer_new()
 
@@ -70,19 +70,19 @@ F pipeline_new(config: PipelineConfig) -> Pipeline {
         stats: stats,
     }
 
-    R pipeline
+    return pipeline
 }
 
 # Free pipeline resources
-F pipeline_free(pipeline: Pipeline) -> i64 {
+fn pipeline_free(pipeline: Pipeline) -> i64 {
     csv_reader_free(pipeline.reader)
     json_writer_free(pipeline.writer)
 
-    R 0
+    return 0
 }
 
 # Execute the pipeline
-F pipeline_execute(pipeline: Pipeline, config: PipelineConfig) -> PipelineResult {
+fn pipeline_execute(pipeline: Pipeline, config: PipelineConfig) -> PipelineResult {
     C start_time := time_get_ms()
 
     # Skip header if configured
@@ -104,7 +104,7 @@ F pipeline_execute(pipeline: Pipeline, config: PipelineConfig) -> PipelineResult
     C i := 0
     L {
         I i >= max_rows {
-            R PipelineResult {
+            return PipelineResult {
                 processed_count: processed,
                 filtered_count: filtered,
                 elapsed_ms: time_get_ms() - start_time,
@@ -116,7 +116,7 @@ F pipeline_execute(pipeline: Pipeline, config: PipelineConfig) -> PipelineResult
         C line_result := csv_reader_read_line(pipeline.reader)
 
         I line_result == 0 {
-            R PipelineResult {
+            return PipelineResult {
                 processed_count: processed,
                 filtered_count: filtered,
                 elapsed_ms: time_get_ms() - start_time,
@@ -146,7 +146,7 @@ F pipeline_execute(pipeline: Pipeline, config: PipelineConfig) -> PipelineResult
             )
 
             processed = processed + 1
-        } E {
+        } enum {
             filtered = filtered + 1
         }
 
@@ -168,18 +168,18 @@ F pipeline_execute(pipeline: Pipeline, config: PipelineConfig) -> PipelineResult
         success: 1,
     }
 
-    R result
+    return result
 }
 
 # Print pipeline result
-F pipeline_print_result(result: PipelineResult) -> i64 {
+fn pipeline_print_result(result: PipelineResult) -> i64 {
     puts("\n=== Pipeline Execution Result ===")
 
     I result.success == 1 {
         puts("Status: SUCCESS")
-    } E {
+    } enum {
         puts("Status: FAILED")
-        R 1
+        return 1
     }
 
     puts("Processed rows: ")
@@ -196,11 +196,11 @@ F pipeline_print_result(result: PipelineResult) -> i64 {
 
     puts("=== Done ===")
 
-    R 0
+    return 0
 }
 
 # Run pipeline with configuration
-F pipeline_run(config: PipelineConfig) -> PipelineResult {
+fn pipeline_run(config: PipelineConfig) -> PipelineResult {
     puts("=== Starting Data Pipeline ===")
 
     puts("Input: ")
@@ -223,5 +223,5 @@ F pipeline_run(config: PipelineConfig) -> PipelineResult {
     # Print result
     pipeline_print_result(result)
 
-    R result
+    return result
 }

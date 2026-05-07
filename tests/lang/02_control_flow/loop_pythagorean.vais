@@ -1,5 +1,5 @@
 # CHECKS: count Pythagorean triples a²+b²=c² with a,b,c <= n.
-F count_triples(limit: i64) -> i64 {
+fn count_triples(limit: i64) -> i64 {
     count: i64 := mut 0
     LF a: 1..=limit {
         LF b: a..=limit {
@@ -12,12 +12,12 @@ F count_triples(limit: i64) -> i64 {
     count
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # triples up to 20: (3,4,5),(5,12,13),(6,8,10),(8,15,17),(9,12,15),(12,16,20) → 6
-    I count_triples(20) != 6 { R 1 }
+    I count_triples(20) != 6 { return 1 }
     # up to 5: (3,4,5) only → 1
-    I count_triples(5) != 1 { R 2 }
+    I count_triples(5) != 1 { return 2 }
     # up to 4: none
-    I count_triples(4) != 0 { R 3 }
-    R 0
+    I count_triples(4) != 0 { return 3 }
+    return 0
 }

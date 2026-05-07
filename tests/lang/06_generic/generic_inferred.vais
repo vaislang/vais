@@ -1,12 +1,12 @@
 # CHECKS: generic fn with T fully inferred from arg type.
-F same_or_zero<T>(a: T, b: T) -> T {
+fn same_or_zero<T>(a: T, b: T) -> T {
     a   # placeholder
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a: i64 := same_or_zero(10, 20)
-    I a != 10 { R 1 }
+    I a != 10 { return 1 }
     b: i64 := same_or_zero(0 - 5, 100)
-    I b != 0 - 5 { R 2 }
-    R 0
+    I b != 0 - 5 { return 2 }
+    return 0
 }

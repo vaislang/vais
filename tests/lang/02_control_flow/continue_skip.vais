@@ -1,6 +1,6 @@
 # CHECKS: C (continue) skips body in LW loop
 # Vais uses single-char keyword: C = continue.
-F main() -> i64 {
+fn main() -> i64 {
     i: i64 := mut 0
     sum: i64 := mut 0
     LW i < 10 {
@@ -9,6 +9,6 @@ F main() -> i64 {
         sum = sum + i
     }
     # odd from 1..=9: 1+3+5+7+9 = 25
-    I sum != 25 { R 1 }
-    R 0
+    I sum != 25 { return 1 }
+    return 0
 }

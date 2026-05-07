@@ -1,18 +1,18 @@
 # CHECKS: Option<T> map-style fold via match
-F double_if_some(o: Option<i64>) -> Option<i64> {
-    M o {
+fn double_if_some(o: Option<i64>) -> Option<i64> {
+    match o {
         Some(v) => Some(v * 2),
         None    => None,
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a: Option<i64> := double_if_some(Some(21))
-    av: i64 := M a { Some(v) => v, None => 0 }
-    I av != 42 { R 1 }
+    av: i64 := match a { Some(v) => v, None => 0 }
+    I av != 42 { return 1 }
 
     b: Option<i64> := double_if_some(None)
-    is_none: i64 := M b { Some(_) => 0, None => 1 }
-    I is_none != 1 { R 2 }
-    R 0
+    is_none: i64 := match b { Some(_) => 0, None => 1 }
+    I is_none != 1 { return 2 }
+    return 0
 }

@@ -1,15 +1,15 @@
 # CHECKS: early return short-circuits later branches
-F first_negative_index(a: i64, b: i64, c: i64) -> i64 {
-    I a < 0 { R 0 }
-    I b < 0 { R 1 }
-    I c < 0 { R 2 }
-    R -1
+fn first_negative_index(a: i64, b: i64, c: i64) -> i64 {
+    I a < 0 { return 0 }
+    I b < 0 { return 1 }
+    I c < 0 { return 2 }
+    return -1
 }
 
-F main() -> i64 {
-    I first_negative_index(-1, 2, 3) != 0  { R 1 }
-    I first_negative_index(1, -2, 3) != 1  { R 2 }
-    I first_negative_index(1, 2, -3) != 2  { R 3 }
-    I first_negative_index(1, 2, 3)  != -1 { R 4 }
-    R 0
+fn main() -> i64 {
+    I first_negative_index(-1, 2, 3) != 0  { return 1 }
+    I first_negative_index(1, -2, 3) != 1  { return 2 }
+    I first_negative_index(1, 2, -3) != 2  { return 3 }
+    I first_negative_index(1, 2, 3)  != -1 { return 4 }
+    return 0
 }

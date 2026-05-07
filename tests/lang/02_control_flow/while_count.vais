@@ -1,5 +1,5 @@
 # CHECKS: LW (while) with multiple conditions, accumulation.
-F main() -> i64 {
+fn main() -> i64 {
     n: i64 := mut 0
     sum: i64 := mut 0
     LW n < 10 {
@@ -7,8 +7,8 @@ F main() -> i64 {
         n = n + 1
     }
     # 0+1+...+9 = 45
-    I sum != 45 { R 1 }
-    I n != 10 { R 2 }
+    I sum != 45 { return 1 }
+    I n != 10 { return 2 }
 
     # while with compound condition
     i: i64 := mut 1
@@ -18,6 +18,6 @@ F main() -> i64 {
         i = i + 1
     }
     # 5! = 120, loop continues until i>5
-    I p != 120 { R 3 }
-    R 0
+    I p != 120 { return 3 }
+    return 0
 }

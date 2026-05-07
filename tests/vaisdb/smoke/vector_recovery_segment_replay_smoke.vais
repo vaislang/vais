@@ -1,29 +1,29 @@
-U storage/recovery/redo
-U storage/wal/writer
-U storage/wal/header
-U storage/wal/lsn
-U storage/wal/record_types
-U storage/wal/record_vector
-U storage/constants
-U storage/error
-U storage/file
-U storage/page/manager
-U storage/page/types
-U storage/page/header
-U storage/buffer/pool
-U storage/bytes
+use storage/recovery/redo
+use storage/wal/writer
+use storage/wal/header
+use storage/wal/lsn
+use storage/wal/record_types
+use storage/wal/record_vector
+use storage/constants
+use storage/error
+use storage/file
+use storage/page/manager
+use storage/page/types
+use storage/page/header
+use storage/buffer/pool
+use storage/bytes
 
-F segment_replay_open_clean(path: str) -> Result<File, VaisError> {
+fn segment_replay_open_clean(path: str) -> Result<File, VaisError> {
     file := mut File.open(path, "rw+")?;
     file.truncate(0)?;
     Ok(file)
 }
 
-F segment_replay_open_existing(path: str) -> Result<File, VaisError> {
+fn segment_replay_open_existing(path: str) -> Result<File, VaisError> {
     File.open(path, "rw+")
 }
 
-F segment_replay_files_clean(prefix: str) -> Result<Vec<File>, VaisError> {
+fn segment_replay_files_clean(prefix: str) -> Result<Vec<File>, VaisError> {
     files: Vec<File> := mut Vec.with_capacity(5)
     data_file := mut segment_replay_open_clean(prefix + "_data.vdb")?;
     vector_file := mut segment_replay_open_clean(prefix + "_vectors.vdb")?;
@@ -38,7 +38,7 @@ F segment_replay_files_clean(prefix: str) -> Result<Vec<File>, VaisError> {
     Ok(files)
 }
 
-F segment_replay_files_existing(prefix: str) -> Result<Vec<File>, VaisError> {
+fn segment_replay_files_existing(prefix: str) -> Result<Vec<File>, VaisError> {
     files: Vec<File> := mut Vec.with_capacity(5)
     data_file := mut segment_replay_open_existing(prefix + "_data.vdb")?;
     vector_file := mut segment_replay_open_existing(prefix + "_vectors.vdb")?;
@@ -53,41 +53,41 @@ F segment_replay_files_existing(prefix: str) -> Result<Vec<File>, VaisError> {
     Ok(files)
 }
 
-F segment_replay_write_u64_le(page_data: &Vec<u8>, offset: u32, value: u64) {
+fn segment_replay_write_u64_le(page_data: &Vec<u8>, offset: u32, value: u64) {
     LF i: 0..8u32 {
         page_data[(offset + i) as u64] = ((value >> (i * 8)) & 255) as u8
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     prefix := mut "vector_recovery_segment_replay"
     wal_dir := mut "vector_recovery_segment_replay_wal"
     txn_id := mut 61001 as u64
     page_id := mut 2 as u32
     offset := mut 256 as u16
 
-    files := mut M segment_replay_files_clean(prefix) {
+    files := mut match segment_replay_files_clean(prefix) {
         Ok(v) => v,
-        Err(_) => { R 1 },
+        Err(_) => { return 1 },
     }
     page_manager := mut PageManager.new(files, PAGE_SIZE_8K)
-    initial := mut M page_manager.allocate_page(
+    initial := mut match page_manager.allocate_page(
         FILE_ID_VECTORS,
         page_id,
         PAGE_TYPE_VECTOR_DATA,
         ENGINE_TAG_VECTOR
     ) {
         Ok(page) => page,
-        Err(_) => { R 2 },
+        Err(_) => { return 2 },
     }
 
     initial[(offset as u64) - 2] = 17 as u8
     initial[(offset as u64) - 1] = 18 as u8
     initial[(offset as u64) + 8] = 19 as u8
     initial[(offset as u64) + 9] = 20 as u8
-    M page_manager.write_page(FILE_ID_VECTORS, page_id, &initial) {
+    match page_manager.write_page(FILE_ID_VECTORS, page_id, &initial) {
         Ok(_) => {},
-        Err(_) => { R 3 },
+        Err(_) => { return 3 },
     }
 
     patch: Vec<u8> := mut Vec.with_capacity(8)
@@ -110,17 +110,17 @@ F main() -> i64 {
     payload.serialize(&mut payload_buf)
     payload_bytes := mut payload_buf.to_vec()
 
-    writer := mut M WalWriter.new(wal_dir, 4096 as u32) {
+    writer := mut match WalWriter.new(wal_dir, 4096 as u32) {
         Ok(w) => w,
-        Err(_) => { R 4 },
+        Err(_) => { return 4 },
     }
-    M writer.open() {
+    match writer.open() {
         Ok(_) => {},
         Err(e) => {
-            I e.code == "VAIS-0008001" { R 12 }
-            I e.code == "VAIS-0008002" { R 13 }
-            I e.code == "VAIS-0005001" { R 14 }
-            R 5
+            I e.code == "VAIS-0008001" { return 12 }
+            I e.code == "VAIS-0008002" { return 13 }
+            I e.code == "VAIS-0005001" { return 14 }
+            return 5
         },
     }
 
@@ -128,101 +128,101 @@ F main() -> i64 {
     begin_buf := mut ByteBuffer.with_capacity(8)
     begin_payload.serialize(&mut begin_buf)
     begin_bytes := mut begin_buf.to_vec()
-    begin_lsn := mut M writer.write_record(txn_id, TXN_BEGIN, ENGINE_META, &begin_bytes) {
+    begin_lsn := mut match writer.write_record(txn_id, TXN_BEGIN, ENGINE_META, &begin_bytes) {
         Ok(v) => v,
-        Err(_) => { R 6 },
+        Err(_) => { return 6 },
     }
 
-    data_lsn := mut M writer.write_record(txn_id, VECTOR_DATA_WRITE, ENGINE_VECTOR, &payload_bytes) {
+    data_lsn := mut match writer.write_record(txn_id, VECTOR_DATA_WRITE, ENGINE_VECTOR, &payload_bytes) {
         Ok(v) => v,
-        Err(_) => { R 7 },
+        Err(_) => { return 7 },
     }
-    I data_lsn <= begin_lsn { R 8 }
+    I data_lsn <= begin_lsn { return 8 }
 
     commit_payload := mut TxnCommitPayload {}
     commit_buf := mut ByteBuffer.with_capacity(1)
     commit_payload.serialize(&mut commit_buf)
     commit_bytes := mut commit_buf.to_vec()
-    commit_lsn := mut M writer.write_record(txn_id, TXN_COMMIT, ENGINE_META, &commit_bytes) {
+    commit_lsn := mut match writer.write_record(txn_id, TXN_COMMIT, ENGINE_META, &commit_bytes) {
         Ok(v) => v,
-        Err(_) => { R 9 },
+        Err(_) => { return 9 },
     }
-    I commit_lsn <= data_lsn { R 10 }
+    I commit_lsn <= data_lsn { return 10 }
 
-    M writer.close() {
+    match writer.close() {
         Ok(_) => {},
-        Err(_) => { R 11 },
+        Err(_) => { return 11 },
     }
 
-    analysis := mut M recovery_analysis(&wal_dir, NULL_LSN) {
+    analysis := mut match recovery_analysis(&wal_dir, NULL_LSN) {
         Ok(v) => v,
-        Err(_) => { R 20 },
+        Err(_) => { return 20 },
     }
-    I analysis.redo_start_lsn != NULL_LSN { R 21 }
-    I analysis.dirty_pages.len() != 1 { R 22 }
+    I analysis.redo_start_lsn != NULL_LSN { return 21 }
+    I analysis.dirty_pages.len() != 1 { return 22 }
 
     dirty := mut analysis.dirty_pages[0]
-    I dirty.file_id != FILE_ID_VECTORS { R 23 }
-    I dirty.page_id != page_id { R 24 }
-    I dirty.recovery_lsn != data_lsn { R 25 }
+    I dirty.file_id != FILE_ID_VECTORS { return 23 }
+    I dirty.page_id != page_id { return 24 }
+    I dirty.recovery_lsn != data_lsn { return 25 }
 
-    txn_entry := mut M analysis.txn_table.get_opt(txn_id) {
+    txn_entry := mut match analysis.txn_table.get_opt(txn_id) {
         Some(entry) => entry,
-        None => { R 26 },
+        None => { return 26 },
     }
-    I txn_entry.first_lsn != begin_lsn { R 27 }
-    I txn_entry.last_lsn != commit_lsn { R 28 }
-    committed := mut M txn_entry.state {
+    I txn_entry.first_lsn != begin_lsn { return 27 }
+    I txn_entry.last_lsn != commit_lsn { return 28 }
+    committed := mut match txn_entry.state {
         Committed => true,
         _ => false,
     }
-    I !committed { R 29 }
+    I !committed { return 29 }
 
-    replay_files := mut M segment_replay_files_existing(prefix) {
+    replay_files := mut match segment_replay_files_existing(prefix) {
         Ok(v) => v,
-        Err(_) => { R 30 },
+        Err(_) => { return 30 },
     }
     replay_manager := mut PageManager.new(replay_files, PAGE_SIZE_8K)
     pool := mut BufferPool.new(replay_manager, PAGE_SIZE_8K, 4 as u32)
 
-    pre_frame := mut M pool.pin_page(FILE_ID_VECTORS, page_id) {
+    pre_frame := mut match pool.pin_page(FILE_ID_VECTORS, page_id) {
         Ok(v) => v,
-        Err(_) => { R 31 },
+        Err(_) => { return 31 },
     }
     pre_page := mut pool.get_page(pre_frame)
     I pre_page[offset as u64] == payload.vector_data[0] {
         pool.unpin_page(pre_frame, false)
-        R 32
+        return 32
     }
     pool.unpin_page(pre_frame, false)
 
-    records_redone := mut M recovery_redo(&wal_dir, &analysis, &mut pool) {
+    records_redone := mut match recovery_redo(&wal_dir, &analysis, &mut pool) {
         Ok(v) => v,
-        Err(_) => { R 40 },
+        Err(_) => { return 40 },
     }
-    I records_redone != 1 { R 41 }
+    I records_redone != 1 { return 41 }
 
-    memory_frame_id := mut M pool.pin_page(FILE_ID_VECTORS, page_id) {
+    memory_frame_id := mut match pool.pin_page(FILE_ID_VECTORS, page_id) {
         Ok(v) => v,
-        Err(_) => { R 42 },
+        Err(_) => { return 42 },
     }
     memory_page := mut pool.get_page(memory_frame_id)
     mem_i := mut 0u64
     LW mem_i < payload.vector_data.len() {
         I memory_page[(offset as u64) + mem_i] != payload.vector_data[mem_i] {
             pool.unpin_page(memory_frame_id, false)
-            R 43
+            return 43
         }
         mem_i = mem_i + 1
     }
     pool.unpin_page(memory_frame_id, false)
 
-    I pool.dirty_count() == 0 { R 44 }
-    M pool.flush_all() {
+    I pool.dirty_count() == 0 { return 44 }
+    match pool.flush_all() {
         Ok(_) => {},
-        Err(_) => { R 45 },
+        Err(_) => { return 45 },
     }
-    I pool.dirty_count() != 0 { R 46 }
+    I pool.dirty_count() != 0 { return 46 }
 
     expected := mut initial.clone()
     i := mut 0u64
@@ -233,30 +233,30 @@ F main() -> i64 {
     segment_replay_write_u64_le(&expected, 0, data_lsn)
     PageHeader.update_checksum_vec(&expected)
 
-    reader_files := mut M segment_replay_files_existing(prefix) {
+    reader_files := mut match segment_replay_files_existing(prefix) {
         Ok(v) => v,
-        Err(_) => { R 50 },
+        Err(_) => { return 50 },
     }
     reader := mut PageManager.new(reader_files, PAGE_SIZE_8K)
-    replayed := mut M reader.read_page(FILE_ID_VECTORS, page_id) {
+    replayed := mut match reader.read_page(FILE_ID_VECTORS, page_id) {
         Ok(page) => page,
-        Err(_) => { R 51 },
+        Err(_) => { return 51 },
     }
-    replayed_header := mut M PageHeader.read_from_page(&replayed) {
+    replayed_header := mut match PageHeader.read_from_page(&replayed) {
         Ok(h) => h,
-        Err(_) => { R 52 },
+        Err(_) => { return 52 },
     }
-    I replayed_header.page_lsn != data_lsn { R 53 }
-    I replayed.len() != expected.len() { R 54 }
-    I replayed[(offset as u64) - 2] != 17 as u8 { R 55 }
-    I replayed[(offset as u64) - 1] != 18 as u8 { R 56 }
-    I replayed[(offset as u64) + 8] != 19 as u8 { R 57 }
-    I replayed[(offset as u64) + 9] != 20 as u8 { R 58 }
+    I replayed_header.page_lsn != data_lsn { return 53 }
+    I replayed.len() != expected.len() { return 54 }
+    I replayed[(offset as u64) - 2] != 17 as u8 { return 55 }
+    I replayed[(offset as u64) - 1] != 18 as u8 { return 56 }
+    I replayed[(offset as u64) + 8] != 19 as u8 { return 57 }
+    I replayed[(offset as u64) + 9] != 20 as u8 { return 58 }
 
     k := mut 0u64
     LW k < payload.vector_data.len() {
         I replayed[(offset as u64) + k] != payload.vector_data[k] {
-            R 59
+            return 59
         }
         k = k + 1
     }
@@ -265,13 +265,13 @@ F main() -> i64 {
     LW j < expected.len() {
         I j >= 20 && j < 24 {
             j = j + 1
-        } EL {
+        } else {
             I replayed[j] != expected[j] {
-                R 60
+                return 60
             }
             j = j + 1
         }
     }
 
-    R 0
+    return 0
 }

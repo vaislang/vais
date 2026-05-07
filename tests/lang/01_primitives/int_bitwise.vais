@@ -1,11 +1,11 @@
 # CHECKS: bitwise and/or/xor/shift operations
-F main() -> i64 {
+fn main() -> i64 {
     a: i64 := 12       # 0b1100
     b: i64 := 10       # 0b1010
-    I (a & b) != 8  { R 1 }   # 0b1000
-    I (a | b) != 14 { R 2 }   # 0b1110
-    I (a ^ b) != 6  { R 3 }   # 0b0110
-    I (a << 2) != 48 { R 4 }
-    I (a >> 1) != 6  { R 5 }
-    R 0
+    I (a & b) != 8  { return 1 }   # 0b1000
+    I (a | b) != 14 { return 2 }   # 0b1110
+    I (a ^ b) != 6  { return 3 }   # 0b0110
+    I (a << 2) != 48 { return 4 }
+    I (a >> 1) != 6  { return 5 }
+    return 0
 }

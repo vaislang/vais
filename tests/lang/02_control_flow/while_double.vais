@@ -1,5 +1,5 @@
 # CHECKS: LW with multiple state vars updating.
-F main() -> i64 {
+fn main() -> i64 {
     a: i64 := mut 1
     b: i64 := mut 1
     count: i64 := mut 0
@@ -13,7 +13,7 @@ F main() -> i64 {
     }
     # b sequence after each iter: 2, 3, 5, 8, 13, 21, 34, 55, 89, 144
     # After 10 iters, b = 144 > 100, loop exits.
-    I b != 144 { R 1 }
-    I count != 10 { R 2 }
-    R 0
+    I b != 144 { return 1 }
+    I count != 10 { return 2 }
+    return 0
 }

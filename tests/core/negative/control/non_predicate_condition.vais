@@ -1,3 +1,3 @@
-F main() -> i64 {
-    I "bad" { R 1 } EL { R 0 }
+fn main() -> i64 {
+    I "bad" { return 1 } else { return 0 }
 }

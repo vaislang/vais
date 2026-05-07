@@ -1,21 +1,21 @@
 # CHECKS: integer power via recursion (fast doubling).
-F pow(base: i64, exp: i64) -> i64 {
-    I exp == 0 { R 1 }
-    I exp == 1 { R base }
+fn pow(base: i64, exp: i64) -> i64 {
+    I exp == 0 { return 1 }
+    I exp == 1 { return base }
     I (exp & 1) == 0 {
         half: i64 := pow(base, exp / 2)
-        R half * half
+        return half * half
     }
     base * pow(base, exp - 1)
 }
 
-F main() -> i64 {
-    I pow(2, 0) != 1 { R 1 }
-    I pow(2, 1) != 2 { R 2 }
-    I pow(2, 4) != 16 { R 3 }
-    I pow(2, 10) != 1024 { R 4 }
-    I pow(3, 4) != 81 { R 5 }
-    I pow(5, 3) != 125 { R 6 }
-    I pow(10, 6) != 1000000 { R 7 }
-    R 0
+fn main() -> i64 {
+    I pow(2, 0) != 1 { return 1 }
+    I pow(2, 1) != 2 { return 2 }
+    I pow(2, 4) != 16 { return 3 }
+    I pow(2, 10) != 1024 { return 4 }
+    I pow(3, 4) != 81 { return 5 }
+    I pow(5, 3) != 125 { return 6 }
+    I pow(10, 6) != 1000000 { return 7 }
+    return 0
 }

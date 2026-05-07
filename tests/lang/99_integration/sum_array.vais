@@ -1,7 +1,7 @@
 # CHECKS: build a Vec, iterate via index, sum
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     LF i: 1..=5 {
         v.push(i)
@@ -11,6 +11,6 @@ F main() -> i64 {
         sum = sum + v[i]
     }
     # 1+2+3+4+5 = 15
-    I sum != 15 { R 1 }
-    R 0
+    I sum != 15 { return 1 }
+    return 0
 }

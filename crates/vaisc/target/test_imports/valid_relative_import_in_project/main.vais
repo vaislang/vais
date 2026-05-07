@@ -1,2 +1,2 @@
-U local
-F main() -> () = ()
+use local
+fn main() -> () = ()

@@ -1,5 +1,5 @@
 # CHECKS: while loop with both increment and decrement of separate vars.
-F main() -> i64 {
+fn main() -> i64 {
     a: i64 := mut 0
     b: i64 := mut 100
     LW a < b {
@@ -7,8 +7,8 @@ F main() -> i64 {
         b = b - 1
     }
     # converge at 50
-    I a != 50 { R 1 }
-    I b != 50 { R 2 }
+    I a != 50 { return 1 }
+    I b != 50 { return 2 }
 
     # asymmetric
     x: i64 := mut 0
@@ -22,6 +22,6 @@ F main() -> i64 {
     #       x=18,y=58; x=21,y=51; x=24,y=44 → x<y stops? 24<44 yes continue
     #       x=27,y=37; x=30,y=30 → still less; continue
     #       x=33,y=23 → x>=y, exit
-    I x < y { R 3 }
-    R 0
+    I x < y { return 3 }
+    return 0
 }

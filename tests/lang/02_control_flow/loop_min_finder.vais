@@ -1,7 +1,7 @@
 # CHECKS: classic min-finding pattern using LF + state via Vec.
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     v.push(5)
     v.push(3)
@@ -18,7 +18,7 @@ F main() -> i64 {
             best_idx = i
         }
     }
-    I best_idx != 3 { R 1 }
-    I best != 1 { R 2 }
-    R 0
+    I best_idx != 3 { return 1 }
+    I best != 1 { return 2 }
+    return 0
 }

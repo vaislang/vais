@@ -1,20 +1,20 @@
 # CHECKS: generic struct with two type params + method swapping fields
-S Pair<A, B> {
+struct Pair<A, B> {
     first: A,
     second: B,
 }
 
-X Pair<A, B> {
-    F new(a: A, b: B) -> Pair<A, B> {
+impl Pair<A, B> {
+    fn new(a: A, b: B) -> Pair<A, B> {
         Pair { first: a, second: b }
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p: Pair<i64, i64> := Pair.new(7, 11)
-    I p.first != 7   { R 1 }
-    I p.second != 11 { R 2 }
+    I p.first != 7   { return 1 }
+    I p.second != 11 { return 2 }
     sum: i64 := p.first + p.second
-    I sum != 18 { R 3 }
-    R 0
+    I sum != 18 { return 3 }
+    return 0
 }

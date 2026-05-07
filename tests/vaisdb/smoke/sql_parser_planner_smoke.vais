@@ -1,24 +1,24 @@
-U sql/parser/parser
-U sql/parser/ast
-U sql/parser/token
-U sql/planner/types
+use sql/parser/parser
+use sql/parser/ast
+use sql/parser/token
+use sql/planner/types
 
-F check_int_literal(expr: Expr, expected: i64, code: i64) -> i64 {
-    M expr {
+fn check_int_literal(expr: Expr, expected: i64, code: i64) -> i64 {
+    match expr {
         Expr.Literal { value } => {
-            M value {
+            match value {
                 SqlValue.IntVal { v } => {
-                    I v != expected { R code }
-                    R 0
+                    I v != expected { return code }
+                    return 0
                 },
-                _ => { R code },
+                _ => { return code },
             }
         },
-        _ => { R code },
+        _ => { return code },
     }
 }
 
-F anchor_parser_link_symbols() -> i64 {
+fn anchor_parser_link_symbols() -> i64 {
     cte_columns: Vec<str> := mut Vec.with_capacity(0)
     cte_query := mut SelectQuery.empty()
     ctes: Vec<Cte> := mut Vec.with_capacity(1)
@@ -28,65 +28,65 @@ F anchor_parser_link_symbols() -> i64 {
         query: cte_query,
         recursive: false,
     })
-    I ctes.len() != 1 { R 31 }
+    I ctes.len() != 1 { return 31 }
 
     columns: Vec<ColumnDef> := mut Vec.with_capacity(1)
     columns.push(ColumnDef.new("id", SqlType.Int))
-    I columns.len() != 1 { R 32 }
+    I columns.len() != 1 { return 32 }
 
     upper := mut "select".to_uppercase()
-    I upper != "SELECT" { R 33 }
-    I "p1".char_at(0) != 112 { R 34 }
+    I upper != "SELECT" { return 33 }
+    I "p1".char_at(0) != 112 { return 34 }
 
-    R 0
+    return 0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     anchor_code := mut anchor_parser_link_symbols()
-    I anchor_code != 0 { R anchor_code }
+    I anchor_code != 0 { return anchor_code }
 
     tokenizer := mut Tokenizer.new("SELECT 1 + 2 AS total LIMIT 1;")
-    I tokenizer.input.len() == 0 { R 50 }
-    I tokenizer.peek() != 83u8 { R 51 }
-    tokens := mut M tokenizer.tokenize_all() {
+    I tokenizer.input.len() == 0 { return 50 }
+    I tokenizer.peek() != 83u8 { return 51 }
+    tokens := mut match tokenizer.tokenize_all() {
         Ok(v) => v,
-        Err(_) => { R 1 },
+        Err(_) => { return 1 },
     }
-    I tokens.len() == 0 { R 35 }
-    I token_kind_tag(&tokens[0].kind) != token_kind_tag(&TokenKind.Select) { R 49 }
+    I tokens.len() == 0 { return 35 }
+    I token_kind_tag(&tokens[0].kind) != token_kind_tag(&TokenKind.Select) { return 49 }
 
     parser := mut Parser.new(tokens)
-    M parser.expect(TokenKind.Select) {
+    match parser.expect(TokenKind.Select) {
         Ok(_) => {},
-        Err(_) => { R 39 },
+        Err(_) => { return 39 },
     }
-    select_list_probe := mut M parser.parse_select_list() {
+    select_list_probe := mut match parser.parse_select_list() {
         Ok(v) => v,
-        Err(_) => { R 40 },
+        Err(_) => { return 40 },
     }
-    I select_list_probe.len() != 1 { R 41 }
-    M parser.parse_where_clause() {
+    I select_list_probe.len() != 1 { return 41 }
+    match parser.parse_where_clause() {
         Ok(_) => {},
-        Err(_) => { R 42 },
+        Err(_) => { return 42 },
     }
-    M parser.parse_group_by() {
+    match parser.parse_group_by() {
         Ok(_) => {},
-        Err(_) => { R 43 },
+        Err(_) => { return 43 },
     }
-    M parser.parse_having() {
+    match parser.parse_having() {
         Ok(_) => {},
-        Err(_) => { R 44 },
+        Err(_) => { return 44 },
     }
-    M parser.parse_order_by() {
+    match parser.parse_order_by() {
         Ok(_) => {},
-        Err(_) => { R 45 },
+        Err(_) => { return 45 },
     }
     limit_opt: Option<Expr> := mut Option.None
     offset_opt: Option<Expr> := mut Option.None
     I parser.match_token(TokenKind.Limit) {
-        limit_expr := mut M parser.parse_expr() {
+        limit_expr := mut match parser.parse_expr() {
             Ok(v) => v,
-            Err(_) => { R 46 },
+            Err(_) => { return 46 },
         }
         limit_opt = Option.Some(limit_expr)
     }
@@ -105,76 +105,76 @@ F main() -> i64 {
         set_op: Option.None,
     }
 
-    I query.ctes.len() != 0 { R 4 }
-    I query.select_list.len() != 1 { R 5 }
-    I query.distinct { R 6 }
-    M &query.from {
-        Some(_) => { R 7 },
+    I query.ctes.len() != 0 { return 4 }
+    I query.select_list.len() != 1 { return 5 }
+    I query.distinct { return 6 }
+    match &query.from {
+        Some(_) => { return 7 },
         None => {},
     }
 
     item := mut query.select_list[0].clone()
     plan_expr: Expr := mut Expr.Star
-    M item {
+    match item {
         SelectItem.Expr { expr, alias } => {
             plan_expr = expr.clone()
-            M alias {
+            match alias {
                 Some(a) => {
-                    I a != "total" { R 8 }
+                    I a != "total" { return 8 }
                 },
-                None => { R 9 },
+                None => { return 9 },
             }
 
-            M expr {
+            match expr {
                 Expr.BinaryOp { left, op, right } => {
-                    M op {
+                    match op {
                         BinOp.Add => {},
-                        _ => { R 10 },
+                        _ => { return 10 },
                     }
                     left_expr: Expr := mut *left
                     left_code := mut check_int_literal(left_expr, 1, 11)
-                    I left_code != 0 { R left_code }
+                    I left_code != 0 { return left_code }
                     right_expr: Expr := mut *right
                     right_code := mut check_int_literal(right_expr, 2, 12)
-                    I right_code != 0 { R right_code }
+                    I right_code != 0 { return right_code }
                 },
-                _ => { R 13 },
+                _ => { return 13 },
             }
         },
-        _ => { R 14 },
+        _ => { return 14 },
     }
 
-    limit_code := mut M &query.limit {
+    limit_code := mut match &query.limit {
         Some(v) => check_int_literal(v.clone(), 1, 16),
-        None => { R 15 },
+        None => { return 15 },
     }
-    I limit_code != 0 { R limit_code }
+    I limit_code != 0 { return limit_code }
 
     project_columns: Vec<ProjectColumn> := mut Vec.with_capacity(1)
     project_columns.push(ProjectColumn.with_alias(plan_expr, "total"))
 
     value_rows: Vec<Vec<Expr>> := mut Vec.with_capacity(0)
-    I value_rows.len() != 0 { R 27 }
+    I value_rows.len() != 0 { return 27 }
     values_plan := mut PlanNode.Values { rows: value_rows }
     limit_plan := mut PlanNode.Limit {
         input: Box.new(values_plan),
         limit: Some(1 as u64),
         offset: None,
     }
-    M limit_plan {
+    match limit_plan {
         PlanNode.Limit { limit, offset, .. } => {
-            M limit {
+            match limit {
                 Some(v) => {
-                    I v != 1 { R 24 }
+                    I v != 1 { return 24 }
                 },
-                None => { R 25 },
+                None => { return 25 },
             }
-            M offset {
-                Some(_) => { R 26 },
+            match offset {
+                Some(_) => { return 26 },
                 None => {},
             }
         },
-        _ => { R 29 },
+        _ => { return 29 },
     }
 
     plan := mut PlanNode.Project {
@@ -182,19 +182,19 @@ F main() -> i64 {
         columns: project_columns,
     }
 
-    M plan {
+    match plan {
         PlanNode.Project { columns, .. } => {
-            I columns.len() != 1 { R 21 }
+            I columns.len() != 1 { return 21 }
             projected := mut columns[0].clone()
-            M projected.alias {
+            match projected.alias {
                 Some(a) => {
-                    I a != "total" { R 22 }
+                    I a != "total" { return 22 }
                 },
-                None => { R 23 },
+                None => { return 23 },
             }
         },
-        _ => { R 30 },
+        _ => { return 30 },
     }
 
-    R 0
+    return 0
 }

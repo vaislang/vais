@@ -1,7 +1,7 @@
 # CHECKS: build a Vec of unique elements (preserve first-occurrence order).
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F build_unique(v: &Vec<i64>) -> Vec<i64> {
+fn build_unique(v: &Vec<i64>) -> Vec<i64> {
     out: Vec<i64> := mut vec_new()
     LF i: 0..v.len() {
         x: i64 := v[i]
@@ -14,7 +14,7 @@ F build_unique(v: &Vec<i64>) -> Vec<i64> {
     out
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     v.push(1)
     v.push(2)
@@ -24,10 +24,10 @@ F main() -> i64 {
     v.push(4)
 
     u: Vec<i64> := build_unique(&v)
-    I u.len() != 4 { R 1 }
-    I u[0] != 1 { R 2 }
-    I u[1] != 2 { R 3 }
-    I u[2] != 3 { R 4 }
-    I u[3] != 4 { R 5 }
-    R 0
+    I u.len() != 4 { return 1 }
+    I u[0] != 1 { return 2 }
+    I u[1] != 2 { return 3 }
+    I u[2] != 3 { return 4 }
+    I u[3] != 4 { return 5 }
+    return 0
 }

@@ -1,9 +1,9 @@
-U vector/hnsw/types
-U vector/hnsw/bulk
-U vector/distance
-U storage/error
+use vector/hnsw/types
+use vector/hnsw/bulk
+use vector/distance
+use storage/error
 
-S BulkSmokeStore {
+struct BulkSmokeStore {
     n1: HnswNode,
     n2: HnswNode,
     has1: bool,
@@ -12,8 +12,8 @@ S BulkSmokeStore {
     allocated_pages: u64,
 }
 
-X BulkSmokeStore {
-    F new() -> BulkSmokeStore {
+impl BulkSmokeStore {
+    fn new() -> BulkSmokeStore {
         BulkSmokeStore {
             n1: HnswNode.new(0, 0, 0, 0, 0, 0),
             n2: HnswNode.new(0, 0, 0, 0, 0, 0),
@@ -25,95 +25,95 @@ X BulkSmokeStore {
     }
 }
 
-X BulkSmokeStore : NodeStore {
-    F load_node(self, node_id: u64) -> Result<HnswNode, VaisError> {
+impl BulkSmokeStore : NodeStore {
+    fn load_node(self, node_id: u64) -> Result<HnswNode, VaisError> {
         I node_id == 1 && self.has1 {
-            R Ok(self.n1.clone())
+            return Ok(self.n1.clone())
         }
         I node_id == 2 && self.has2 {
-            R Ok(self.n2.clone())
+            return Ok(self.n2.clone())
         }
         Err(err_internal("missing smoke bulk node"))
     }
 
-    F load_vector(self, node_id: u64) -> Result<Vec<f32>, VaisError> {
+    fn load_vector(self, node_id: u64) -> Result<Vec<f32>, VaisError> {
         I node_id == 1 && self.has1 {
-            R Ok(smoke_vec2(0.0, 0.0))
+            return Ok(smoke_vec2(0.0, 0.0))
         }
         I node_id == 2 && self.has2 {
-            R Ok(smoke_vec2(1.0, 0.0))
+            return Ok(smoke_vec2(1.0, 0.0))
         }
         Err(err_internal("missing smoke bulk vector"))
     }
 
-    F store_node(mut self, node: HnswNode) -> Result<(), VaisError> {
+    fn store_node(mut self, node: HnswNode) -> Result<(), VaisError> {
         node_id := mut node.node_id
         I node_id == 1 {
             self.n1 = node
             self.has1 = true
-            R Ok(())
+            return Ok(())
         }
         I node_id == 2 {
             self.n2 = node
             self.has2 = true
-            R Ok(())
+            return Ok(())
         }
         Err(err_internal("unexpected smoke bulk node"))
     }
 
-    F allocate_node_id(mut self) -> u64 {
+    fn allocate_node_id(mut self) -> u64 {
         id := mut self.next_id
         self.next_id += 1
         id
     }
 
-    F get_file_page(self, node_id: u64) -> Result<(u8, u32), VaisError> {
+    fn get_file_page(self, node_id: u64) -> Result<(u8, u32), VaisError> {
         Ok((5 as u8, node_id as u32))
     }
 
-    F allocate_node_page(mut self, node_id: u64) -> Result<(u8, u32), VaisError> {
+    fn allocate_node_page(mut self, node_id: u64) -> Result<(u8, u32), VaisError> {
         self.allocated_pages += 1
         Ok((5 as u8, node_id as u32))
     }
 }
 
-F smoke_vec2(a: f32, b: f32) -> Vec<f32> {
+fn smoke_vec2(a: f32, b: f32) -> Vec<f32> {
     values: Vec<f32> := mut Vec.with_capacity(2)
     values.push(a)
     values.push(b)
     values
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     default_cfg := mut BulkLoadConfig.default()
-    I default_cfg.batch_size != 1000 { R 1 }
-    I default_cfg.skip_wal { R 2 }
-    I default_cfg.progress_interval != 0 { R 3 }
-    M default_cfg.validate() {
+    I default_cfg.batch_size != 1000 { return 1 }
+    I default_cfg.skip_wal { return 2 }
+    I default_cfg.progress_interval != 0 { return 3 }
+    match default_cfg.validate() {
         Ok(_) => {},
-        Err(_) => { R 4 },
+        Err(_) => { return 4 },
     }
 
     cfg := mut BulkLoadConfig.with_batch_size(2)
     cfg = cfg.with_wal_bypass()
     cfg = cfg.with_progress_interval(1)
     cfg = cfg.with_seed(42)
-    I cfg.batch_size != 2 { R 5 }
-    I !cfg.skip_wal { R 6 }
-    I cfg.progress_interval != 1 { R 7 }
-    I cfg.seed != 42 { R 8 }
+    I cfg.batch_size != 2 { return 5 }
+    I !cfg.skip_wal { return 6 }
+    I cfg.progress_interval != 1 { return 7 }
+    I cfg.seed != 42 { return 8 }
 
-    loader := mut M BulkLoader.new(cfg) {
+    loader := mut match BulkLoader.new(cfg) {
         Ok(v) => v,
-        Err(_) => { R 9 },
+        Err(_) => { return 9 },
     }
-    I !loader.config.skip_wal { R 10 }
+    I !loader.config.skip_wal { return 10 }
 
     bad_cfg := mut BulkLoadConfig.with_batch_size(0)
-    M BulkLoader.new(bad_cfg) {
-        Ok(_) => { R 11 },
+    match BulkLoader.new(bad_cfg) {
+        Ok(_) => { return 11 },
         Err(e) => {
-            I e.code != "VAIS-0202004" { R 12 }
+            I e.code != "VAIS-0202004" { return 12 }
         },
     }
 
@@ -121,35 +121,35 @@ F main() -> i64 {
     progress.set_phase("building_index")
     progress.set_inserted(2)
     progress.set_elapsed(9)
-    I progress.total_vectors != 4 { R 13 }
-    I progress.inserted_vectors != 2 { R 14 }
-    I progress.current_phase != "building_index" { R 15 }
-    I progress.elapsed_ms != 9 { R 16 }
-    I progress.percentage() != 50.0 { R 17 }
+    I progress.total_vectors != 4 { return 13 }
+    I progress.inserted_vectors != 2 { return 14 }
+    I progress.current_phase != "building_index" { return 15 }
+    I progress.elapsed_ms != 9 { return 16 }
+    I progress.percentage() != 50.0 { return 17 }
 
     empty_progress := mut BulkLoadProgress.new(0)
-    I empty_progress.percentage() != 0.0 { R 18 }
+    I empty_progress.percentage() != 0.0 { return 18 }
 
     result := mut BulkLoadResult.new(3, 2 as u8, 15, true)
-    I result.vectors_inserted != 3 { R 19 }
-    I result.layers_built != 2 as u8 { R 20 }
-    I result.elapsed_ms != 15 { R 21 }
-    I !result.wal_skipped { R 22 }
+    I result.vectors_inserted != 3 { return 19 }
+    I result.layers_built != 2 as u8 { return 20 }
+    I result.elapsed_ms != 15 { return 21 }
+    I !result.wal_skipped { return 22 }
 
     meta_info := mut VectorMeta.new(5, 99, 3 as u8, 44 as u32, 7 as u16)
-    I meta_info.vector_index != 5 { R 23 }
-    I meta_info.node_id != 99 { R 24 }
-    I meta_info.layer != 3 as u8 { R 25 }
-    I meta_info.page_id != 44 as u32 { R 26 }
-    I meta_info.offset != 7 as u16 { R 27 }
+    I meta_info.vector_index != 5 { return 23 }
+    I meta_info.node_id != 99 { return 24 }
+    I meta_info.layer != 3 as u8 { return 25 }
+    I meta_info.page_id != 44 as u32 { return 26 }
+    I meta_info.offset != 7 as u16 { return 27 }
 
-    I calculate_optimal_batch_size(4 as u32, 1 as u32) != 10000 { R 28 }
-    I calculate_optimal_batch_size(10000 as u32, 1 as u32) != 100 { R 29 }
-    I estimate_bulk_load_memory(2 as u32, 10) != 0 as u32 { R 30 }
+    I calculate_optimal_batch_size(4 as u32, 1 as u32) != 10000 { return 28 }
+    I calculate_optimal_batch_size(10000 as u32, 1 as u32) != 100 { return 29 }
+    I estimate_bulk_load_memory(2 as u32, 10) != 0 as u32 { return 30 }
 
-    hnsw_cfg := mut M HnswConfig.new(2 as u16, 4 as u16, 4 as u32, 4 as u32, 8 as u64, DISTANCE_L2) {
+    hnsw_cfg := mut match HnswConfig.new(2 as u16, 4 as u16, 4 as u32, 4 as u32, 8 as u64, DISTANCE_L2) {
         Ok(v) => v,
-        Err(_) => { R 31 },
+        Err(_) => { return 31 },
     }
     meta := mut HnswMeta.new(hnsw_cfg, 21 as u32)
     store := mut BulkSmokeStore.new()
@@ -165,7 +165,7 @@ F main() -> i64 {
     metas.push(VectorMeta.new(0, 1, 0 as u8, 44 as u32, 0 as u16))
     metas.push(VectorMeta.new(1, 2, 0 as u8, 45 as u32, 1 as u16))
 
-    meta = M bulk_insert_stored_vectors(
+    meta = match bulk_insert_stored_vectors(
         &loader.config,
         &vectors,
         &metas,
@@ -176,45 +176,45 @@ F main() -> i64 {
     ) {
         Ok(v) => v,
         Err(e) => {
-            I e.code == "VAIS-0205001" { R 35 }
-            I e.code == "VAIS-0205002" { R 36 }
-            R 37
+            I e.code == "VAIS-0205001" { return 35 }
+            I e.code == "VAIS-0205002" { return 36 }
+            return 37
         },
     }
 
-    I meta.total_nodes != 2 { R 38 }
-    I meta.entry_point != 1 { R 39 }
-    I meta.max_layer != 0 as u8 { R 40 }
-    I !store.has1 { R 41 }
-    I !store.has2 { R 42 }
-    I store.allocated_pages != 0 { R 43 }
+    I meta.total_nodes != 2 { return 38 }
+    I meta.entry_point != 1 { return 39 }
+    I meta.max_layer != 0 as u8 { return 40 }
+    I !store.has1 { return 41 }
+    I !store.has2 { return 42 }
+    I store.allocated_pages != 0 { return 43 }
 
-    stored1 := mut M store.load_node(1) {
+    stored1 := mut match store.load_node(1) {
         Ok(n) => n,
-        Err(_) => { R 44 },
+        Err(_) => { return 44 },
     }
-    stored2 := mut M store.load_node(2) {
+    stored2 := mut match store.load_node(2) {
         Ok(n) => n,
-        Err(_) => { R 45 },
+        Err(_) => { return 45 },
     }
-    I stored1.vector_page_id != 44 as u32 { R 46 }
-    I stored2.vector_page_id != 45 as u32 { R 47 }
-    I stored2.vector_offset != 1 as u16 { R 48 }
+    I stored1.vector_page_id != 44 as u32 { return 46 }
+    I stored2.vector_page_id != 45 as u32 { return 47 }
+    I stored2.vector_offset != 1 as u16 { return 48 }
 
-    n1_neighbors := mut M stored1.get_neighbors(0) {
+    n1_neighbors := mut match stored1.get_neighbors(0) {
         Ok(v) => v,
-        Err(_) => { R 49 },
+        Err(_) => { return 49 },
     }
-    n2_neighbors := mut M stored2.get_neighbors(0) {
+    n2_neighbors := mut match stored2.get_neighbors(0) {
         Ok(v) => v,
-        Err(_) => { R 50 },
+        Err(_) => { return 50 },
     }
-    I n1_neighbors.len() != 1 { R 51 }
-    I n2_neighbors.len() != 1 { R 52 }
-    I n1_neighbors[0].node_id != 2 { R 53 }
-    I n2_neighbors[0].node_id != 1 { R 54 }
-    I !approx_eq_f32(n1_neighbors[0].distance, 1.0 as f32, 0.0001 as f32) { R 55 }
-    I !approx_eq_f32(n2_neighbors[0].distance, 1.0 as f32, 0.0001 as f32) { R 56 }
+    I n1_neighbors.len() != 1 { return 51 }
+    I n2_neighbors.len() != 1 { return 52 }
+    I n1_neighbors[0].node_id != 2 { return 53 }
+    I n2_neighbors[0].node_id != 1 { return 54 }
+    I !approx_eq_f32(n1_neighbors[0].distance, 1.0 as f32, 0.0001 as f32) { return 55 }
+    I !approx_eq_f32(n2_neighbors[0].distance, 1.0 as f32, 0.0001 as f32) { return 56 }
 
-    R 0
+    return 0
 }

@@ -1,10 +1,10 @@
-U sql/parser/ast
-U sql/planner/mod
-U sql/catalog/manager
-U sql/catalog/schema
-U storage/btree/tree
+use sql/parser/ast
+use sql/planner/mod
+use sql/catalog/manager
+use sql/catalog/schema
+use storage/btree/tree
 
-F make_catalog() -> CatalogManager {
+fn make_catalog() -> CatalogManager {
     tree := mut BTree.new(1 as u32, 0 as u8, 4096 as u32)
     catalog := mut CatalogManager.new(tree)
 
@@ -27,21 +27,21 @@ F make_catalog() -> CatalogManager {
     catalog
 }
 
-F make_from_docs() -> Option<Vec<TableRef>> {
+fn make_from_docs() -> Option<Vec<TableRef>> {
     refs: Vec<TableRef> := mut Vec.with_capacity(1)
     refs.push(TableRef.Table { name: "docs", alias: None })
     Some(refs)
 }
 
-F make_column(name: str) -> Expr {
+fn make_column(name: str) -> Expr {
     Expr.ColumnRef { table: None, column: name }
 }
 
-F make_int(v: i64) -> Expr {
+fn make_int(v: i64) -> Expr {
     Expr.Literal { value: SqlValue.IntVal { v } }
 }
 
-F make_eq(left: Expr, right: Expr) -> Expr {
+fn make_eq(left: Expr, right: Expr) -> Expr {
     Expr.BinaryOp {
         left: Box.new(left),
         op: BinOp.Eq,
@@ -49,59 +49,59 @@ F make_eq(left: Expr, right: Expr) -> Expr {
     }
 }
 
-F make_all_query() -> SelectQuery {
+fn make_all_query() -> SelectQuery {
     query := mut SelectQuery.empty()
     query.from = make_from_docs()
     query.select_list.push(SelectItem.AllColumns)
     query
 }
 
-F check_indexed_predicate(catalog: &CatalogManager) -> i64 {
+fn check_indexed_predicate(catalog: &CatalogManager) -> i64 {
     query := mut make_all_query()
     query.where_clause = Some(make_eq(make_column("id"), make_int(7)))
-    plan := mut M build_plan(&query, catalog) {
+    plan := mut match build_plan(&query, catalog) {
         Ok(v) => v,
-        Err(_) => { R 1 },
+        Err(_) => { return 1 },
     }
 
-    M &plan {
+    match &plan {
         PlanNode.IndexScan { table, index, residual, .. } => {
-            I table != "docs" { R 2 }
-            I index != "idx_docs_id" { R 3 }
-            M residual {
-                Some(_) => { R 4 },
+            I table != "docs" { return 2 }
+            I index != "idx_docs_id" { return 3 }
+            match residual {
+                Some(_) => { return 4 },
                 None => {},
             }
-            R 0
+            return 0
         },
-        PlanNode.SeqScan { .. } => { R 5 },
-        _ => { R 6 },
+        PlanNode.SeqScan { .. } => { return 5 },
+        _ => { return 6 },
     }
 }
 
-F check_non_index_predicate(catalog: &CatalogManager) -> i64 {
+fn check_non_index_predicate(catalog: &CatalogManager) -> i64 {
     query := mut make_all_query()
     query.where_clause = Some(make_eq(make_column("title"), make_int(7)))
-    plan := mut M build_plan(&query, catalog) {
+    plan := mut match build_plan(&query, catalog) {
         Ok(v) => v,
-        Err(_) => { R 10 },
+        Err(_) => { return 10 },
     }
 
-    M &plan {
+    match &plan {
         PlanNode.SeqScan { table, filter, .. } => {
-            I table != "docs" { R 11 }
-            M filter {
+            I table != "docs" { return 11 }
+            match filter {
                 Some(_) => {},
-                None => { R 12 },
+                None => { return 12 },
             }
-            R 0
+            return 0
         },
-        PlanNode.IndexScan { .. } => { R 13 },
-        _ => { R 14 },
+        PlanNode.IndexScan { .. } => { return 13 },
+        _ => { return 14 },
     }
 }
 
-F check_order_by_preserved(catalog: &CatalogManager) -> i64 {
+fn check_order_by_preserved(catalog: &CatalogManager) -> i64 {
     query := mut SelectQuery.empty()
     query.from = make_from_docs()
     query.select_list.push(SelectItem.Expr {
@@ -114,47 +114,47 @@ F check_order_by_preserved(catalog: &CatalogManager) -> i64 {
         nulls_first: Some(true),
     })
 
-    plan := mut M build_plan(&query, catalog) {
+    plan := mut match build_plan(&query, catalog) {
         Ok(v) => v,
-        Err(_) => { R 20 },
+        Err(_) => { return 20 },
     }
 
-    M &plan {
+    match &plan {
         PlanNode.Project { input, columns } => {
-            I columns.len() != 1 { R 21 }
-            M input.as_ref() {
+            I columns.len() != 1 { return 21 }
+            match input.as_ref() {
                 PlanNode.Sort { input: sorted_input, order_by } => {
-                    I order_by.len() != 1 { R 22 }
+                    I order_by.len() != 1 { return 22 }
                     order_item := mut order_by[0].clone()
-                    I order_item.asc { R 23 }
-                    M &order_item.nulls_first {
+                    I order_item.asc { return 23 }
+                    match &order_item.nulls_first {
                         Some(v) => {
-                            I !*v { R 24 }
+                            I !*v { return 24 }
                         },
-                        None => { R 25 },
+                        None => { return 25 },
                     }
-                    M &order_item.expr {
+                    match &order_item.expr {
                         Expr.ColumnRef { column, .. } => {
-                            I column != "title" { R 26 }
+                            I column != "title" { return 26 }
                         },
-                        _ => { R 27 },
+                        _ => { return 27 },
                     }
-                    M sorted_input.as_ref() {
+                    match sorted_input.as_ref() {
                         PlanNode.SeqScan { table, .. } => {
-                            I table != "docs" { R 28 }
+                            I table != "docs" { return 28 }
                         },
-                        _ => { R 29 },
+                        _ => { return 29 },
                     }
-                    R 0
+                    return 0
                 },
-                _ => { R 30 },
+                _ => { return 30 },
             }
         },
-        _ => { R 31 },
+        _ => { return 31 },
     }
 }
 
-F check_group_by_and_aggregate(catalog: &CatalogManager) -> i64 {
+fn check_group_by_and_aggregate(catalog: &CatalogManager) -> i64 {
     query := mut SelectQuery.empty()
     query.from = make_from_docs()
     query.select_list.push(SelectItem.Expr {
@@ -172,72 +172,72 @@ F check_group_by_and_aggregate(catalog: &CatalogManager) -> i64 {
         alias: Some("n"),
     })
     query.group_by.push(make_column("id"))
-    M &query.group_by[0] {
+    match &query.group_by[0] {
         Expr.ColumnRef { column, .. } => {
-            I column != "id" { R 38 }
+            I column != "id" { return 38 }
         },
-        _ => { R 39 },
+        _ => { return 39 },
     }
 
-    plan := mut M build_plan(&query, catalog) {
+    plan := mut match build_plan(&query, catalog) {
         Ok(v) => v,
-        Err(_) => { R 40 },
+        Err(_) => { return 40 },
     }
 
-    M &plan {
+    match &plan {
         PlanNode.Project { input, columns } => {
-            I columns.len() != 2 { R 41 }
-            M input.as_ref() {
+            I columns.len() != 2 { return 41 }
+            match input.as_ref() {
                 PlanNode.Aggregate { input: agg_input, group_by, aggregates, having } => {
-                    I group_by.len() != 1 { R 42 }
+                    I group_by.len() != 1 { return 42 }
                     group_expr := mut group_by[0].clone()
-                    M group_expr {
+                    match group_expr {
                         Expr.ColumnRef { column, .. } => {
-                            I column != "id" { R 43 }
+                            I column != "id" { return 43 }
                         },
-                        _ => { R 44 },
+                        _ => { return 44 },
                     }
-                    I aggregates.len() != 1 { R 45 }
+                    I aggregates.len() != 1 { return 45 }
                     aggregate := mut aggregates[0].clone()
-                    I aggregate.func_name != "COUNT" { R 46 }
-                    I aggregate.is_distinct { R 47 }
-                    M &aggregate.arg_expr {
+                    I aggregate.func_name != "COUNT" { return 46 }
+                    I aggregate.is_distinct { return 47 }
+                    match &aggregate.arg_expr {
                         Expr.Star => {},
-                        _ => { R 48 },
+                        _ => { return 48 },
                     }
-                    M having {
-                        Some(_) => { R 49 },
+                    match having {
+                        Some(_) => { return 49 },
                         None => {},
                     }
-                    M agg_input.as_ref() {
+                    match agg_input.as_ref() {
                         PlanNode.SeqScan { table, .. } => {
-                            I table != "docs" { R 50 }
+                            I table != "docs" { return 50 }
                         },
-                        _ => { R 51 },
+                        _ => { return 51 },
                     }
-                    R 0
+                    return 0
                 },
-                _ => { R 52 },
+                _ => { return 52 },
             }
         },
-        _ => { R 53 },
+        _ => { return 53 },
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     catalog := mut make_catalog()
 
     code := mut check_indexed_predicate(&catalog)
-    I code != 0 { R code }
+    I code != 0 { return code }
 
     code = check_non_index_predicate(&catalog)
-    I code != 0 { R code }
+    I code != 0 { return code }
 
     code = check_order_by_preserved(&catalog)
-    I code != 0 { R code }
+    I code != 0 { return code }
 
     code = check_group_by_and_aggregate(&catalog)
-    I code != 0 { R code }
+    I code != 0 { return code }
 
-    R 0
+    return 0
 }

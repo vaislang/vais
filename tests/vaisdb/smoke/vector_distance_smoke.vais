@@ -1,7 +1,7 @@
-U vector/distance
-U std/vec.{vec_new_t}
+use vector/distance
+use std/vec.{vec_new_t}
 
-F main() -> i64 {
+fn main() -> i64 {
     a: Vec<f32> := mut vec_new_t()
     a.push(1.0)
     a.push(2.0)
@@ -13,24 +13,24 @@ F main() -> i64 {
     b.push(6.0)
 
     dot := mut dot_product_scalar(&a, &b)
-    I !approx_eq_f32(dot, -32.0, 0.0001) { R 1 }
+    I !approx_eq_f32(dot, -32.0, 0.0001) { return 1 }
 
     l2 := mut l2_distance_scalar(&a, &a)
-    I !approx_eq_f32(l2, 0.0, 0.0001) { R 2 }
+    I !approx_eq_f32(l2, 0.0, 0.0001) { return 2 }
 
     computer := mut DistanceComputer.new(DotProduct)
-    computed: f32 := mut M computer.compute(&a, &b) {
+    computed: f32 := mut match computer.compute(&a, &b) {
         Ok(v) => v,
-        Err(_) => { R 3 },
+        Err(_) => { return 3 },
     }
-    I !approx_eq_f32(computed, -32.0, 0.0001) { R 4 }
+    I !approx_eq_f32(computed, -32.0, 0.0001) { return 4 }
 
     mismatch: Vec<f32> := mut vec_new_t()
     mismatch.push(1.0)
-    M computer.compute(&a, &mismatch) {
-        Ok(_) => { R 5 },
+    match computer.compute(&a, &mismatch) {
+        Ok(_) => { return 5 },
         Err(_) => {},
     }
 
-    R 0
+    return 0
 }

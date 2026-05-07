@@ -1,6 +1,6 @@
 # CHECKS: match arms compute using the bound variable.
-F describe(n: i64) -> i64 {
-    M n {
+fn describe(n: i64) -> i64 {
+    match n {
         x I x < 0 => 0 - x,       # absolute value
         x I x == 0 => 100,
         x I x < 10 => x * 10,
@@ -9,12 +9,12 @@ F describe(n: i64) -> i64 {
     }
 }
 
-F main() -> i64 {
-    I describe(0 - 5) != 5 { R 1 }
-    I describe(0) != 100 { R 2 }
-    I describe(7) != 70 { R 3 }
-    I describe(50) != 1050 { R 4 }
-    I describe(500) != 9999 { R 5 }
-    I describe(0 - 99) != 99 { R 6 }
-    R 0
+fn main() -> i64 {
+    I describe(0 - 5) != 5 { return 1 }
+    I describe(0) != 100 { return 2 }
+    I describe(7) != 70 { return 3 }
+    I describe(50) != 1050 { return 4 }
+    I describe(500) != 9999 { return 5 }
+    I describe(0 - 99) != 99 { return 6 }
+    return 0
 }

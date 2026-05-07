@@ -3,16 +3,16 @@
 #             Vec_index_set previously matched any 4-byte type to
 #             `store i32 ptr_val` — this broke when the value was a
 #             struct value rather than a narrow int.
-S Slot {
+struct Slot {
     off: i16,
     len: i16,
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     s: Slot := mut Slot { off: 5i16, len: 100i16 }
-    I s.off as i64 != 5 { R 1 }
-    I s.len as i64 != 100 { R 2 }
+    I s.off as i64 != 5 { return 1 }
+    I s.len as i64 != 100 { return 2 }
     s.off = 7i16
-    I s.off as i64 != 7 { R 3 }
-    R 0
+    I s.off as i64 != 7 { return 3 }
+    return 0
 }

@@ -1,6 +1,6 @@
 # CHECKS: match on str literal patterns dispatching to integer codes.
-F country_code(name: str) -> i64 {
-    M name {
+fn country_code(name: str) -> i64 {
+    match name {
         "US" => 1,
         "KR" => 82,
         "JP" => 81,
@@ -10,13 +10,13 @@ F country_code(name: str) -> i64 {
     }
 }
 
-F main() -> i64 {
-    I country_code("US") != 1 { R 1 }
-    I country_code("KR") != 82 { R 2 }
-    I country_code("JP") != 81 { R 3 }
-    I country_code("CN") != 86 { R 4 }
-    I country_code("DE") != 49 { R 5 }
-    I country_code("XX") != 0 - 1 { R 6 }
-    I country_code("") != 0 - 1 { R 7 }
-    R 0
+fn main() -> i64 {
+    I country_code("US") != 1 { return 1 }
+    I country_code("KR") != 82 { return 2 }
+    I country_code("JP") != 81 { return 3 }
+    I country_code("CN") != 86 { return 4 }
+    I country_code("DE") != 49 { return 5 }
+    I country_code("XX") != 0 - 1 { return 6 }
+    I country_code("") != 0 - 1 { return 7 }
+    return 0
 }

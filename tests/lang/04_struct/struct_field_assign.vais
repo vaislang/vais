@@ -1,13 +1,13 @@
 # CHECKS: mutable struct field assignment
-S Counter {
+struct Counter {
     n: i64,
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c: Counter := mut Counter { n: 0 }
     c.n = 5
-    I c.n != 5 { R 1 }
+    I c.n != 5 { return 1 }
     c.n = c.n + 7
-    I c.n != 12 { R 2 }
-    R 0
+    I c.n != 12 { return 2 }
+    return 0
 }

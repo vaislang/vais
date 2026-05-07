@@ -1,27 +1,27 @@
 # CHECKS: build Vec via index-aware push pattern.
-U std/vec.{vec_new};
+use std/vec.{vec_new};
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut vec_new()
     LF i: 0..10 {
         I (i & 1) == 0 {
             v.push(i)
-        } EL {
+        } else {
             v.push(0 - i)
         }
     }
     # [0, -1, 2, -3, 4, -5, 6, -7, 8, -9]
-    I v.len() != 10 { R 1 }
-    I v[0] != 0 { R 2 }
-    I v[1] != 0 - 1 { R 3 }
-    I v[5] != 0 - 5 { R 4 }
-    I v[9] != 0 - 9 { R 5 }
+    I v.len() != 10 { return 1 }
+    I v[0] != 0 { return 2 }
+    I v[1] != 0 - 1 { return 3 }
+    I v[5] != 0 - 5 { return 4 }
+    I v[9] != 0 - 9 { return 5 }
 
     sum: i64 := mut 0
     LF i: 0..v.len() {
         sum = sum + v[i]
     }
     # 0-1+2-3+4-5+6-7+8-9 = -5
-    I sum != 0 - 5 { R 6 }
-    R 0
+    I sum != 0 - 5 { return 6 }
+    return 0
 }

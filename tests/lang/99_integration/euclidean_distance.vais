@@ -1,30 +1,30 @@
 # CHECKS: 2D squared euclidean distance over a Vec<Pair>.
-S Point2 {
+struct Point2 {
     x: i64,
     y: i64
 }
 
-F dist_sq(a: Point2, b: Point2) -> i64 {
+fn dist_sq(a: Point2, b: Point2) -> i64 {
     dx: i64 := a.x - b.x
     dy: i64 := a.y - b.y
     dx * dx + dy * dy
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     o: Point2 := Point2 { x: 0, y: 0 }
     p: Point2 := Point2 { x: 3, y: 4 }
     # 9 + 16 = 25
-    I dist_sq(o, p) != 25 { R 1 }
+    I dist_sq(o, p) != 25 { return 1 }
 
     q: Point2 := Point2 { x: 0 - 3, y: 0 - 4 }
     # same magnitude
-    I dist_sq(o, q) != 25 { R 2 }
+    I dist_sq(o, q) != 25 { return 2 }
 
     r: Point2 := Point2 { x: 6, y: 8 }
     # (3,4) to (6,8): dx=3, dy=4 → 25
-    I dist_sq(p, r) != 25 { R 3 }
+    I dist_sq(p, r) != 25 { return 3 }
 
     # zero distance
-    I dist_sq(p, p) != 0 { R 4 }
-    R 0
+    I dist_sq(p, p) != 0 { return 4 }
+    return 0
 }
