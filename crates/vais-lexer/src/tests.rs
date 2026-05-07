@@ -1097,13 +1097,15 @@ fn test_deprecation_two_warnings_for_F_and_R() {
 }
 
 #[test]
-fn test_deprecation_all_11_retired_forms() {
+fn test_deprecation_all_12_retired_forms() {
     // Each retired form lexes to a recognized token with the documented
-    // canonical replacement.
+    // canonical replacement. Both `E` (contextual single-char) and `EN`
+    // (unambiguous 2-char) retire to `enum`.
     let cases: &[(&str, &str, &str)] = &[
         ("F main() {}",         "F",  "fn"),
         ("S Foo {}",            "S",  "struct"),
-        ("EN E { A, B }",       "EN", "enum"),
+        ("E Color { Red, Green }", "E", "enum"),
+        ("EN Color { Red, Green }", "EN", "enum"),
         ("fn x() { I 1 { 1 } EL { 0 } }", "EL", "else"),
         ("fn x() -> i64 { M 1 { _ => 0 } }", "M",  "match"),
         ("fn x() -> i64 { R 0 }", "R",  "return"),
@@ -1147,14 +1149,18 @@ fn test_deprecation_warning_display_format() {
 }
 
 #[test]
-fn test_deprecation_e_alone_is_not_warned() {
-    // `E` alone is a contextual single-char (parses as identifier in many
-    // positions). The 11 retired forms are F/S/EN/EL/M/R/T/U/P/W/X — `E`
-    // is not in the list because it is also a generic-param identifier
-    // shape. `EN` (priority 4) is the explicit enum keyword form.
+fn test_deprecation_e_at_generic_position_is_warned() {
+    // `E` is in the 12 retired forms (Step 19, 2026-05-07 update). Even when
+    // used as a generic parameter (`Result<T, E>` style), the lexer cannot
+    // distinguish enum-keyword from generic-param at the token level — they
+    // both lex as `Token::Enum`. Step 19 P2 will rename generic-param uses
+    // (e.g. `E` → `Err`) so that P3 codemod (E → enum) is safe.
     let source = "fn x<E>(e: E) -> E { e }";
     let (_tokens, warnings) = tokenize_with_warnings(source).unwrap();
-    // No retired-form warnings expected; E is a generic-param identifier here.
-    let retired_hits: Vec<_> = warnings.iter().filter(|w| w.spelling == "E").collect();
-    assert!(retired_hits.is_empty(), "E used as generic-param should not warn, got: {:?}", warnings);
+    let e_hits: Vec<_> = warnings.iter().filter(|w| w.spelling == "E").collect();
+    // E appears 3 times: <E>, e: E, -> E
+    assert_eq!(e_hits.len(), 3, "all 3 E usages should warn, got: {:?}", warnings);
+    for w in e_hits {
+        assert_eq!(w.canonical, "enum");
+    }
 }

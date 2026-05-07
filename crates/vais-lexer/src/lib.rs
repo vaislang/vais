@@ -802,7 +802,10 @@ pub fn tokenize(source: &str) -> Result<Vec<SpannedToken>, LexError> {
 /// (`fn`/`struct`/`enum`/...) spellings as the same token; this struct
 /// records every site where the *single-char* spelling was used.
 ///
-/// The 11 retired forms are: F / S / EN / EL / M / R / T / U / P / W / X.
+/// The 12 retired forms are: F / S / E / EN / EL / M / R / T / U / P / W / X.
+/// Note both `E` (Token::Enum, contextual single-char) and `EN`
+/// (Token::EnumKeyword) are retired — the canonical replacement is
+/// `enum` for both.
 /// The retire decision is locked in (LESSONS L-009 / L-010); see WORKLOG
 /// loop 12-15 entries and the future P2-P6 phases for the full migration
 /// plan. P1 itself is purely additive — source code continues to parse and
@@ -841,6 +844,13 @@ fn retired_form_canonical(spelling: &str) -> Option<&'static str> {
     match spelling {
         "F" => Some("fn"),
         "S" => Some("struct"),
+        // Note: both `E` (Token::Enum, contextual single-char) and `EN`
+        // (Token::EnumKeyword, unambiguous 2-char) lex to enum-related
+        // tokens. Step 19 retires both — the multi-char form `enum` is
+        // canonical. `E` is added here in addition to `EN` because it
+        // collides with generic-param names (`Result<T, E>`) and is the
+        // root cause of LESSONS L-009.
+        "E" => Some("enum"),
         "EN" => Some("enum"),
         "EL" => Some("else"),
         "M" => Some("match"),
@@ -908,11 +918,12 @@ pub fn tokenize_with_warnings(
         let lexeme = &source[tok.span.clone()];
         if let Some(canonical) = retired_form_canonical(lexeme) {
             // retired_form_canonical's match guarantees lexeme is one of the
-            // 11 static strings; rebind to a 'static slice via the same
+            // 12 static strings; rebind to a 'static slice via the same
             // table so the warning struct can hold &'static.
             let spelling: &'static str = match lexeme {
                 "F" => "F",
                 "S" => "S",
+                "E" => "E",
                 "EN" => "EN",
                 "EL" => "EL",
                 "M" => "M",
