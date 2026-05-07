@@ -9,21 +9,21 @@ use vais_mir::validate::validate_module;
 
 #[test]
 fn interpreter_runs_arithmetic_return() {
-    let value = interpret_source("F main() -> i64 = 40 + 2", "main");
+    let value = interpret_source("fn main() -> i64 = 40 + 2", "main");
     assert_eq!(value, MirValue::Int(42));
 }
 
 #[test]
 fn interpreter_runs_direct_call_and_branch() {
     let source = r#"
-        F add(a: i64, b: i64) -> i64 {
+        fn add(a: i64, b: i64) -> i64 {
             a + b
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             x: i64 := add(20, 22)
-            I x != 42 { R 1 }
-            R 0
+            I x != 42 { return 1 }
+            return 0
         }
     "#;
     let value = interpret_source(source, "main");
@@ -90,7 +90,7 @@ fn compiler_root() -> PathBuf {
 /// `interpret_function_with_io` returns exit_code=42 for `R 42`.
 #[test]
 fn interpret_with_io_int_return_maps_to_exit_code() {
-    let source = "F main() -> i64 = 42";
+    let source = "fn main() -> i64 = 42";
     let module = vais_parser::parse(source).expect("parse");
     let mir = lower_module_checked(&module).expect("lower");
     validate_module(&mir).expect("validate");
@@ -104,7 +104,7 @@ fn interpret_with_io_int_return_maps_to_exit_code() {
 /// 8-bit truncation matches POSIX exit semantics.
 #[test]
 fn interpret_with_io_truncates_exit_code_to_8_bits() {
-    let source = "F main() -> i64 = 257";
+    let source = "fn main() -> i64 = 257";
     let module = vais_parser::parse(source).expect("parse");
     let mir = lower_module_checked(&module).expect("lower");
     validate_module(&mir).expect("validate");
@@ -121,7 +121,7 @@ fn interpret_with_io_truncates_exit_code_to_8_bits() {
 /// body) — the bare entry must error.
 #[test]
 fn bare_interpret_function_rejects_unknown_function_name() {
-    let source = "F main() -> i64 = 0";
+    let source = "fn main() -> i64 = 0";
     let module = vais_parser::parse(source).expect("parse");
     let mir = lower_module_checked(&module).expect("lower");
     validate_module(&mir).expect("validate");
@@ -141,7 +141,7 @@ fn bare_interpret_function_rejects_unknown_function_name() {
 /// (which fires before `bodies.get(...)`), so the module need not contain
 /// any bodies.
 fn empty_mir_module() -> vais_mir::MirModule {
-    let source = "F main() -> i64 = 0";
+    let source = "fn main() -> i64 = 0";
     let module = vais_parser::parse(source).expect("parse");
     lower_module_checked(&module).expect("lower")
 }

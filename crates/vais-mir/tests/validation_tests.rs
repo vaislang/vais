@@ -35,7 +35,7 @@ fn valid_body() -> Body {
 
 #[test]
 fn validator_accepts_lowered_core_function() {
-    let source = "F add(x: i64, y: i64) -> i64 = x + y";
+    let source = "fn add(x: i64, y: i64) -> i64 = x + y";
     let module = vais_parser::parse(source).expect("parse failed");
     let mir = lower_module(&module);
 

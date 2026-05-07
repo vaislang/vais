@@ -412,7 +412,7 @@ fn test_cross_verify_optimize_preserves_semantics() {
     // Build a function that computes (x + 1) * 2, optimize it,
     // and verify the output still contains the correct operations.
     let source = r#"
-        F calc(x: i64) -> i64 = {
+        fn calc(x: i64) -> i64 = {
             temp := x + 1
             temp * 2
         }

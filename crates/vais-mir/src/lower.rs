@@ -1543,7 +1543,7 @@ mod tests {
 
     #[test]
     fn test_lower_simple_function() {
-        let source = "F add(x: i64, y: i64) -> i64 = x + y";
+        let source = "fn add(x: i64, y: i64) -> i64 = x + y";
         let module = vais_parser::parse(source).expect("Parse failed");
         let mir = lower_module(&module);
 
@@ -1557,7 +1557,7 @@ mod tests {
 
     #[test]
     fn test_lower_with_if() {
-        let source = "F abs(x: i64) -> i64 = I x < 0 { 0 - x } E { x }";
+        let source = "fn abs(x: i64) -> i64 = I x < 0 { 0 - x } else { x }";
         let module = vais_parser::parse(source).expect("Parse failed");
         let mir = lower_module(&module);
 
@@ -1613,7 +1613,7 @@ mod tests {
 
     #[test]
     fn test_lower_and_emit_llvm() {
-        let source = "F add(x: i64, y: i64) -> i64 = x + y";
+        let source = "fn add(x: i64, y: i64) -> i64 = x + y";
         let module = vais_parser::parse(source).expect("Parse failed");
         let mut mir = lower_module(&module);
         crate::optimize::optimize_mir_module(&mut mir);
@@ -1626,7 +1626,7 @@ mod tests {
 
     #[test]
     fn test_lower_ternary() {
-        let source = "F max(a: i64, b: i64) -> i64 = a > b ? a : b";
+        let source = "fn max(a: i64, b: i64) -> i64 = a > b ? a : b";
         let module = vais_parser::parse(source).expect("Parse failed");
         let mir = lower_module(&module);
 
@@ -1660,7 +1660,7 @@ mod tests {
 
     #[test]
     fn test_lower_recursive_call() {
-        let source = "F factorial(n: i64) -> i64 = I n == 0 { 1 } E { n * @(n - 1) }";
+        let source = "fn factorial(n: i64) -> i64 = I n == 0 { 1 } else { n * @(n - 1) }";
         let module = vais_parser::parse(source).expect("Parse failed");
         let mir = lower_module(&module);
 
@@ -1672,7 +1672,7 @@ mod tests {
 
     #[test]
     fn test_lower_unary_operations() {
-        let source = "F negate_and_flip(x: i64) -> i64 = { y := -x; !y }";
+        let source = "fn negate_and_flip(x: i64) -> i64 = { y := -x; !y }";
         let module = vais_parser::parse(source).expect("Parse failed");
         let mir = lower_module(&module);
 
@@ -1699,7 +1699,7 @@ mod tests {
     #[test]
     fn test_copy_type_operand() {
         // All i64 types should use Operand::Copy (not Move)
-        let source = "F add(x: i64, y: i64) -> i64 = x + y";
+        let source = "fn add(x: i64, y: i64) -> i64 = x + y";
         let module = vais_parser::parse(source).expect("Parse failed");
         let mir = lower_module(&module);
 

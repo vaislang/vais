@@ -6,7 +6,7 @@ const LOWER_RS: &str = include_str!("../src/lower.rs");
 
 #[test]
 fn strict_lowering_accepts_simple_core_function() {
-    let source = "F add(x: i64, y: i64) -> i64 = x + y";
+    let source = "fn add(x: i64, y: i64) -> i64 = x + y";
     let module = vais_parser::parse(source).expect("parse failed");
     let mir = lower_module_checked(&module).expect("strict lowering should accept arithmetic");
 
@@ -16,13 +16,13 @@ fn strict_lowering_accepts_simple_core_function() {
 #[test]
 fn strict_lowering_preserves_primitive_result_types() {
     let source = r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x: i64 := (1 + 2) * 3
             ok: bool := x == 9
             label: str := "core"
-            I !ok { R 1 }
-            I label != "core" { R 2 }
-            R 0
+            I !ok { return 1 }
+            I label != "core" { return 2 }
+            return 0
         }
     "#;
     let module = vais_parser::parse(source).expect("parse failed");
@@ -60,14 +60,14 @@ fn strict_lowering_preserves_primitive_result_types() {
 #[test]
 fn strict_lowering_emits_explicit_while_cfg() {
     let source = r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             n: i64 := mut 0
             sum: i64 := mut 0
             LW n < 5 {
                 sum = sum + n
                 n = n + 1
             }
-            R sum
+            return sum
         }
     "#;
     let module = vais_parser::parse(source).expect("parse failed");
@@ -102,16 +102,16 @@ fn strict_lowering_emits_explicit_while_cfg() {
 #[test]
 fn strict_lowering_emits_struct_aggregate_and_field_projection() {
     let source = r#"
-        S Point {
+        struct Point {
             x: i64,
             y: i64,
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             p: Point := Point { x: 3, y: 4 }
-            I p.x != 3 { R 1 }
-            I p.y != 4 { R 2 }
-            R 0
+            I p.x != 3 { return 1 }
+            I p.y != 4 { return 2 }
+            return 0
         }
     "#;
     let module = vais_parser::parse(source).expect("parse failed");
@@ -151,21 +151,21 @@ fn strict_lowering_emits_struct_aggregate_and_field_projection() {
 #[test]
 fn strict_lowering_emits_enum_aggregate_and_discriminant_switch() {
     let source = r#"
-        EN Color {
+        enum Color {
             Red,
             Green,
             Blue,
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             c: Color := Green
-            value: i64 := M c {
+            value: i64 := match c {
                 Red => 1,
                 Green => 2,
                 Blue => 3,
             }
-            I value != 2 { R 1 }
-            R 0
+            I value != 2 { return 1 }
+            return 0
         }
     "#;
     let module = vais_parser::parse(source).expect("parse failed");
@@ -219,22 +219,22 @@ fn strict_lowering_emits_enum_aggregate_and_discriminant_switch() {
 #[test]
 fn strict_lowering_emits_option_payload_aggregate_and_binding_projection() {
     let source = r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             a: Option<i64> := Some(42)
             b: Option<i64> := None
 
-            va: i64 := M a {
+            va: i64 := match a {
                 Some(v) => v,
                 None => -1,
             }
-            vb: i64 := M b {
+            vb: i64 := match b {
                 Some(v) => v,
                 None => -1,
             }
 
-            I va != 42 { R 1 }
-            I vb != -1 { R 2 }
-            R 0
+            I va != 42 { return 1 }
+            I vb != -1 { return 2 }
+            return 0
         }
     "#;
     let module = vais_parser::parse(source).expect("parse failed");
@@ -301,22 +301,22 @@ fn strict_lowering_emits_option_payload_aggregate_and_binding_projection() {
 #[test]
 fn strict_lowering_emits_result_payload_aggregate_and_binding_projection() {
     let source = r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             a: Result<i64, i64> := Ok(42)
             b: Result<i64, i64> := Err(7)
 
-            va: i64 := M a {
+            va: i64 := match a {
                 Ok(v) => v,
                 Err(e) => e,
             }
-            vb: i64 := M b {
+            vb: i64 := match b {
                 Ok(v) => v,
                 Err(e) => e,
             }
 
-            I va != 42 { R 1 }
-            I vb != 7 { R 2 }
-            R 0
+            I va != 42 { return 1 }
+            I vb != 7 { return 2 }
+            return 0
         }
     "#;
     let module = vais_parser::parse(source).expect("parse failed");
@@ -382,7 +382,7 @@ fn strict_lowering_emits_result_payload_aggregate_and_binding_projection() {
 
 #[test]
 fn strict_lowering_rejects_unsupported_expression_fallback() {
-    let source = "F main() -> i64 = [1, 2]";
+    let source = "fn main() -> i64 = [1, 2]";
     let module = vais_parser::parse(source).expect("parse failed");
     let errors = lower_module_checked(&module).expect_err("array literal must not become const 0");
 
@@ -396,7 +396,7 @@ fn strict_lowering_rejects_unsupported_expression_fallback() {
 
 #[test]
 fn strict_lowering_rejects_unsupported_type_fallback() {
-    let source = "F main() -> i64 { value: i64? := 1 R 0 }";
+    let source = "fn main() -> i64 { value: i64? := 1 R 0 }";
     let module = vais_parser::parse(source).expect("parse failed");
     let errors =
         lower_module_checked(&module).expect_err("unsupported optional type must not become i64");
@@ -411,7 +411,7 @@ fn strict_lowering_rejects_unsupported_type_fallback() {
 
 #[test]
 fn strict_lowering_rejects_unbound_identifier_fallback() {
-    let source = "F main() -> i64 = missing_value";
+    let source = "fn main() -> i64 = missing_value";
     let module = vais_parser::parse(source).expect("parse failed");
     let errors =
         lower_module_checked(&module).expect_err("unbound identifier must not become const 0");
@@ -426,7 +426,7 @@ fn strict_lowering_rejects_unbound_identifier_fallback() {
 
 #[test]
 fn strict_lowering_rejects_match_binding_placeholder() {
-    let source = "F main(x: i64) -> i64 = M x { y => y }";
+    let source = "fn main(x: i64) -> i64 = match x { y => y }";
     let module = vais_parser::parse(source).expect("parse failed");
     let errors = lower_module_checked(&module).expect_err("match binding must not bind const 0");
 
@@ -441,16 +441,16 @@ fn strict_lowering_rejects_match_binding_placeholder() {
 #[test]
 fn strict_lowering_emits_vec_aggregate_push_len_and_index() {
     let source = r#"
-        U std/vec.{vec_new};
+        use std/vec.{vec_new};
 
-        F main() -> i64 {
+        fn main() -> i64 {
             v: Vec<i64> := mut vec_new()
             v.push(10)
             v.push(20)
-            I v.len() != 2 { R 1 }
-            I v[0] != 10 { R 2 }
-            I v[1] != 20 { R 3 }
-            R 0
+            I v.len() != 2 { return 1 }
+            I v[0] != 10 { return 2 }
+            I v[1] != 20 { return 3 }
+            return 0
         }
     "#;
     let module = vais_parser::parse(source).expect("parse failed");
@@ -511,11 +511,11 @@ fn strict_lowering_emits_vec_aggregate_push_len_and_index() {
 #[test]
 fn strict_lowering_rejects_uncertified_vec_element_type() {
     let source = r#"
-        U std/vec.{vec_new};
+        use std/vec.{vec_new};
 
-        F main() -> i64 {
+        fn main() -> i64 {
             v: Vec<str> := mut vec_new()
-            R 0
+            return 0
         }
     "#;
     let module = vais_parser::parse(source).expect("parse failed");
@@ -533,9 +533,9 @@ fn strict_lowering_rejects_uncertified_vec_element_type() {
 #[test]
 fn strict_lowering_rejects_uncertified_result_payload_types() {
     let source = r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             value: Result<str, i64> := Ok("not-core")
-            R 0
+            return 0
         }
     "#;
     let module = vais_parser::parse(source).expect("parse failed");
@@ -552,7 +552,7 @@ fn strict_lowering_rejects_uncertified_result_payload_types() {
 
 #[test]
 fn strict_lowering_rejects_assignment_target_placeholder() {
-    let source = "F main() -> i64 { missing = 1 R 0 }";
+    let source = "fn main() -> i64 { missing = 1 R 0 }";
     let module = vais_parser::parse(source).expect("parse failed");
     let errors = lower_module_checked(&module)
         .expect_err("undeclared assignment target must not be ignored");
@@ -624,7 +624,7 @@ fn strict_lowering_fallback_audit_is_current() {
 
 #[test]
 fn legacy_lowering_still_preserves_old_fallback_behavior() {
-    let source = "F main() -> i64 = value.field";
+    let source = "fn main() -> i64 = value.field";
     let module = vais_parser::parse(source).expect("parse failed");
     let mir = lower_module(&module);
 

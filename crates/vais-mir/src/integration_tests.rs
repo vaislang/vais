@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn test_full_pipeline_simple_add() {
-    let source = "F add(x: i64, y: i64) -> i64 = x + y";
+    let source = "fn add(x: i64, y: i64) -> i64 = x + y";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mut mir = lower::lower_module(&module);
 
@@ -43,7 +43,7 @@ fn test_full_pipeline_with_optimization() {
 
 #[test]
 fn test_full_pipeline_control_flow() {
-    let source = "F abs(x: i64) -> i64 = I x < 0 { 0 - x } E { x }";
+    let source = "fn abs(x: i64) -> i64 = I x < 0 { 0 - x } else { x }";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mut mir = lower::lower_module(&module);
 
@@ -78,7 +78,7 @@ fn test_full_pipeline_multiple_functions() {
 
 #[test]
 fn test_mir_module_display() {
-    let source = "F test(x: i64, y: i64) -> i64 = x + y";
+    let source = "fn test(x: i64, y: i64) -> i64 = x + y";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower::lower_module(&module);
 
@@ -91,7 +91,7 @@ fn test_mir_module_display() {
 
 #[test]
 fn test_body_display_with_blocks() {
-    let source = "F branch(x: i64) -> i64 = I x > 0 { 1 } E { 0 }";
+    let source = "fn branch(x: i64) -> i64 = I x > 0 { 1 } else { 0 }";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower::lower_module(&module);
 
@@ -774,7 +774,7 @@ fn test_lower_function_call() {
 
 #[test]
 fn test_lower_float_literal() {
-    let source = "F pi() -> f64 = 3.14";
+    let source = "fn pi() -> f64 = 3.14";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower::lower_module(&module);
     assert_eq!(mir.bodies.len(), 1);
@@ -782,7 +782,7 @@ fn test_lower_float_literal() {
 
 #[test]
 fn test_lower_bool_literal() {
-    let source = "F truth() -> bool = true";
+    let source = "fn truth() -> bool = true";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower::lower_module(&module);
     assert_eq!(mir.bodies.len(), 1);
@@ -814,7 +814,7 @@ fn test_lower_match_with_bool_patterns() {
 #[test]
 fn test_lower_nested_if() {
     let source = r#"
-        fn classify(x: i64) -> i64 = I x > 0 { I x > 100 { 2 } E { 1 } } E { 0 }
+        fn classify(x: i64) -> i64 = I x > 0 { I x > 100 { 2 } else { 1 } } else { 0 }
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower::lower_module(&module);
