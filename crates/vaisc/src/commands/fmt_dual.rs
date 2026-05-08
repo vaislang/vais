@@ -1,16 +1,37 @@
-//! `vaisc fmt --to=multi` / `--to=single` — Step 15 stage 3 round-trip
-//! codemod that converts between Vais's two surface forms.
+//! `vaisc fmt --to=multi` / `--to=single` — single→multi migration tool.
+//!
+//! **Status (post Step 19 P4 LANDED 2026-05-08, commit `2b485860`)**:
+//! migration-only. The lexer no longer accepts the retired single-char
+//! forms (F/S/E/EN/EL/M/R/T/U/P/W/X), so:
+//!
+//! - `--to=multi` is the **canonical migration tool** for legacy code
+//!   that still contains single-char declaration / control / modifier
+//!   keywords. Run it once on any historical .vais source (e.g. an
+//!   archive checkout, an external project) to bring it onto the
+//!   post-P4 baseline.
+//! - `--to=single` is **deprecated**. The output it produces will not
+//!   parse against the current lexer (single-char declaration forms
+//!   lex as `Token::Ident`, not as the original keyword). The
+//!   conversion is preserved for source-archeology purposes only.
+//!   Calling it on user-facing code is a regression.
+//!
+//! The original Step 15 round-trip property (`--to=multi` then
+//! `--to=single` reproduces input byte-identically) no longer holds
+//! against the current lexer because P4 removed the single-form input
+//! side. The unit tests below still validate the *substitution* logic
+//! (which keyword maps to which) but not the round-trip semantics.
+//!
+//! Rationale + retirement record: `docs/language/removed_keywords.md`
+//! §"Single-char declaration / control / modifier forms (Step 19 P4)".
+//! See also LESSONS L-009 (codemod readability trap, type-position
+//! generic-param clobber) and L-010 (token-efficiency hypothesis
+//! empirically false).
 //!
 //! The conversion is span-based, not AST-based: we re-lex the source,
 //! then for each token whose span text is one of the dual-syntax
 //! keywords (e.g. `F` ↔ `fn`, `S` ↔ `struct`), we substitute the other
 //! form. Comments, string literals, identifiers, and whitespace are
 //! preserved bit-exact because we only touch keyword spans.
-//!
-//! Round-trip property: `--to=multi` then `--to=single` must produce
-//! source that is byte-identical to the original (modulo any
-//! pre-existing inconsistent spelling in the input). See the unit
-//! tests at the bottom of this file.
 
 use std::path::Path;
 use vais_lexer::tokenize;
