@@ -3,37 +3,56 @@
 This file records what the first iteration of Order Step 7 retro-validation
 empirically discovered. It complements the per-A4 fixture directories.
 
-## Index (F-NN → 한 줄 요약)
+## Status summary (2026-05-08, master-plan v37)
 
-| ID | 한 줄 요약 |
-|---|---|
-| F-01 | A4-01 Unit ↔ i64 v1 sentinel reproduces (exit 96) |
-| F-02 | A4-02 Pointer<T> ↔ i64 v1 expected drifted by environment |
-| F-02b | A4-03 Auto-deref &T ↔ T same env drift as A4-02 |
-| F-02c | A4-06 Integer truthy v1 sentinel reproduces (exit 100) |
-| F-02d | A4-07 Numeric widening v1 sentinel reproduces (exit 42, runtime correct) |
-| F-02e | A4-09 Lifetime ref erasure v1 sentinel reproduces (linker fail) |
-| F-03 | `compiler/tests/empirical/` directory did not exist before this iteration |
-| F-04 | A4 site paths are unique by filename in the codebase |
-| F-05 | Environment-stability classification of A4 surfaces |
-| F-06 | A4-08 Vec ↔ &T permissive v1 sentinel symptom drifted, surface persists |
-| F-07 | Controlled-06 (Vec ↔ Slice .len() path) NOT actually controlled |
-| F-08 | Several Controlled probes fail to construct in current parser |
-| F-09 | Controlled fixtures LANDED this iteration |
-| F-10 | Rejected-01 LANDED (Box raw generic) |
-| F-11 | Rejected-02 (Box ↔ T) v1 sentinel does NOT reproduce |
-| F-12 | Rejected-03 LANDED (Optional ↔ T, bare i64) |
-| F-13 | Untested-01 (Result ↔ Unit auto Ok wrap) → RECLASSIFY to Rejected |
-| F-14 | `check_fails` assertion kind added (5th form) |
-| F-15 | NEW A4 candidate: struct partial-init silent acceptance |
-| F-16 | A4-05 Array→Pointer is structural, not user-level (2026-05-04) |
-| F-17 | A4-03 Auto-deref &T↔T also IR-lowering glue (2026-05-04) |
-| F-18 | Escape closure silent capture loss (NEW A4 candidate, 2026-05-04) |
-| F-19 | A4-06 strict mode emits "expected i64, found bool" + std codemod LANDED + strict default LANDED |
-| F-20 | A4-07 std codemod LANDED (Step 13 stage 0 std slice) |
-| F-21 | A4-07 strict scope is broader than master-plan v16 estimated |
-| F-22 | A4-03 / A4-05 / A4-07 reclass to Controlled LANDED (master-plan v17) |
-| F-23 | A2-03 dyn dispatch silently calls first impl (NEW A4 candidate, A4-12) — root cause `ast_type_to_resolved` Type::DynTrait arm 누락. step 1 LANDED 2026-05-04 (silent → loud, INTEGRITY OK). step 2 vtable wiring 별도 후속. |
+All 24 findings (F-01 through F-24) have reached terminal status. Step 7
+retro-validation no longer carries open work items here. Future surface
+discoveries will be filed under Step 7 next iteration in a new findings
+file (e.g., STEP7_FINDINGS_2026-MM.md) or directly into master-plan
+A4 inventory + per-fixture meta.toml.
+
+| Status | Count | Findings |
+|---|---|---|
+| LANDED (fixture exists, surface tracked) | 14 | F-01, F-02c, F-02d, F-02e, F-06, F-09, F-10, F-12, F-13, F-14, F-15, F-19, F-20, F-23 |
+| RECLASSIFIED (master-plan inventory amended) | 7 | F-02, F-02b (→ Controlled v17 via F-22), F-07 (→ A4-14 v37), F-11 (→ A4-13 via F-24), F-16 (→ Controlled v17), F-17 (→ Controlled v17), F-18 (→ A4-15 v37), F-21 (→ Controlled v17 via F-22), F-24 (→ A4-13 v24) |
+| INFORMATIONAL (no fixture, no inventory change) | 3 | F-03 (directory bootstrap), F-04 (site path uniqueness), F-05 (environment-stability classification — protocol revision LANDED) |
+| CLOSED (deferred at the time, resolved via other path) | 1 | F-08 (C-04/08/09 deferred Controlled probes) — C-04 resolved via A2-05 (fn-pointer params LANDED Step 9), C-08 resolved via A2-03 (dyn dispatch LANDED Step 9 v22), C-09 resolved via Step 16 master-plan v36 reclassify (Controlled-style affine annotation, see DEFERRED #21 close). |
+| PROTOCOL (assertion-kind taxonomy) | 2 | F-05 (tri-form), F-14 (5th form check_fails) |
+
+(F-22 is both reclassification target and inventory amendment — counted once under RECLASSIFIED.)
+
+## Index (F-NN → 한 줄 요약 + status)
+
+| ID | 한 줄 요약 | Status |
+|---|---|---|
+| F-01 | A4-01 Unit ↔ i64 v1 sentinel reproduces (exit 96) | LANDED |
+| F-02 | A4-02 Pointer<T> ↔ i64 v1 expected drifted by environment | LANDED via exit_not protocol (F-05) |
+| F-02b | A4-03 Auto-deref &T ↔ T same env drift as A4-02 | RECLASSIFIED → Controlled v17 (F-17/F-22) |
+| F-02c | A4-06 Integer truthy v1 sentinel reproduces (exit 100) | LANDED + strict default v22 (F-19) |
+| F-02d | A4-07 Numeric widening v1 sentinel reproduces (exit 42, runtime correct) | RECLASSIFIED → Controlled v17 (F-21/F-22) |
+| F-02e | A4-09 Lifetime ref erasure v1 sentinel reproduces (linker fail) | LANDED + strict default v25 |
+| F-03 | `compiler/tests/empirical/` directory did not exist before this iteration | INFORMATIONAL (bootstrap done) |
+| F-04 | A4 site paths are unique by filename in the codebase | INFORMATIONAL |
+| F-05 | Environment-stability classification of A4 surfaces | PROTOCOL (tri-form LANDED + 5th form added F-14) |
+| F-06 | A4-08 Vec ↔ &T permissive v1 sentinel symptom drifted, surface persists | LANDED + strict default v25 |
+| F-07 | Controlled-06 (Vec ↔ Slice .len() path) NOT actually controlled | RECLASSIFIED → A4-14 v37 (loop 32) |
+| F-08 | Several Controlled probes fail to construct in current parser | CLOSED (C-04 → A2-05 LANDED Step 9; C-08 → A2-03 LANDED Step 9; C-09 → DEFERRED #21 close v36) |
+| F-09 | Controlled fixtures LANDED this iteration (C-01 / C-02 / C-05) | LANDED |
+| F-10 | Rejected-01 LANDED (Box raw generic) | LANDED |
+| F-11 | Rejected-02 (Box ↔ T) v1 sentinel does NOT reproduce | RECLASSIFIED → A4-13 via F-24 (v24, DEFERRED #20 LANDED) |
+| F-12 | Rejected-03 LANDED (Optional ↔ T, bare i64) | LANDED |
+| F-13 | Untested-01 (Result ↔ Unit auto Ok wrap) → RECLASSIFY to Rejected | LANDED + RECLASSIFIED |
+| F-14 | `check_fails` assertion kind added (5th form) | PROTOCOL (LANDED) |
+| F-15 | NEW A4 candidate: struct partial-init silent acceptance | LANDED → A4-10 (v25) |
+| F-16 | A4-05 Array→Pointer is structural, not user-level (2026-05-04) | RECLASSIFIED → Controlled v17 |
+| F-17 | A4-03 Auto-deref &T↔T also IR-lowering glue (2026-05-04) | RECLASSIFIED → Controlled v17 |
+| F-18 | Escape closure silent capture loss (NEW A4 candidate, 2026-05-04) | RECLASSIFIED → A4-15 v37 (loop 32) |
+| F-19 | A4-06 strict mode emits "expected i64, found bool" + std codemod LANDED + strict default LANDED | LANDED |
+| F-20 | A4-07 std codemod LANDED (Step 13 stage 0 std slice) | LANDED + RECLASSIFIED → Controlled v17 (F-22) |
+| F-21 | A4-07 strict scope is broader than master-plan v16 estimated | RECLASSIFIED → Controlled v17 (F-22) |
+| F-22 | A4-03 / A4-05 / A4-07 reclass to Controlled LANDED (master-plan v17) | LANDED |
+| F-23 | A2-03 dyn dispatch silently calls first impl (NEW A4 candidate, A4-12) | LANDED step 1 (v17) + step 2 LANDED (v22) — A2-03 promoted Step 9 |
+| F-24 | Rejected-02 (Box ↔ T) re-probe REPRODUCES silent accept (2026-05-05) | LANDED → A4-13 (v24, DEFERRED #20 LANDED) |
 
 ## Findings
 
