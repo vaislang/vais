@@ -68,7 +68,7 @@ fn test_hello_world() {
 
 #[test]
 fn test_simple_arithmetic() {
-    let source = "F add(a:i64, b:i64) -> i64 = a + b";
+    let source = "fn add(a:i64, b:i64) -> i64 = a + b";
     let ir = compile_to_ir(source).unwrap();
     assert!(ir.contains("define i64 @add"));
     assert!(ir.contains("add i64"));
@@ -76,7 +76,7 @@ fn test_simple_arithmetic() {
 
 #[test]
 fn test_fibonacci() {
-    let source = "F fib(n:i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)";
+    let source = "fn fib(n:i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)";
     let ir = compile_to_ir(source).unwrap();
     assert!(ir.contains("define i64 @fib"));
     assert!(ir.contains("call i64 @fib")); // Recursive calls
@@ -86,7 +86,7 @@ fn test_fibonacci() {
 
 #[test]
 fn test_if_else() {
-    let source = "F max(a:i64, b:i64)->i64=I a>b{a}E{b}";
+    let source = "fn max(a:i64, b:i64)->i64=I a>b{a}E{b}";
     let ir = compile_to_ir(source).unwrap();
     assert!(ir.contains("icmp sgt"));
     assert!(ir.contains("br i1"));
@@ -97,9 +97,9 @@ fn test_nested_if() {
     let source = r#"
 fn classify(x: i64) -> i64 {
     I x > 0 {
-        I x > 100 { 2 } E { 1 }
-    } E {
-        I x < 0 - 100 { 0 - 2 } E { 0 - 1 }
+        I x > 100 { 2 } else { 1 }
+    } else {
+        I x < 0 - 100 { 0 - 2 } else { 0 - 1 }
     }
 }
 "#;
@@ -196,7 +196,7 @@ fn make_unit() -> Unit = Unit {}
 fn test_enum_definition() {
     // Enum definition - path syntax tested separately
     let source = r#"
-E Color { Red, Green, Blue }
+enum Color { Red, Green, Blue }
 "#;
     assert!(compiles(source));
 }
@@ -204,7 +204,7 @@ E Color { Red, Green, Blue }
 #[test]
 fn test_enum_with_data() {
     let source = r#"
-E Shape { Circle(f64), Rectangle(f64, f64) }
+enum Shape { Circle(f64), Rectangle(f64, f64) }
 "#;
     assert!(compiles(source));
 }
@@ -212,7 +212,7 @@ E Shape { Circle(f64), Rectangle(f64, f64) }
 #[test]
 fn test_enum_pattern_match() {
     let source = r#"
-E Result { Ok(i64), Err(str) }
+enum Result { Ok(i64), Err(str) }
 fn handle(r: Result) -> i64 = match r {
     Ok(v) => v,
     Err(_) => 0
@@ -224,7 +224,7 @@ fn handle(r: Result) -> i64 = match r {
 #[test]
 fn test_enum_unit_variant_matching() {
     let source = r#"
-E Status { Pending, Running, Done }
+enum Status { Pending, Running, Done }
 
 fn status_to_code(s: Status) -> i64 = match s {
     Pending => 0,
@@ -251,7 +251,7 @@ fn test_status() -> i64 {
 
 #[test]
 fn test_generic_function() {
-    let source = "F identity<T>(x: T) -> T = x";
+    let source = "fn identity<T>(x: T) -> T = x";
     assert!(compiles(source));
 }
 
@@ -266,7 +266,7 @@ fn get_value<T>(b: Box<T>) -> type = b.value
 
 #[test]
 fn test_generic_with_bounds() {
-    let source = "F compare<T: Ord>(a: T, b: T) -> bool = a < b";
+    let source = "fn compare<T: Ord>(a: T, b: T) -> bool = a < b";
     assert!(compiles(source));
 }
 
@@ -306,19 +306,19 @@ fn first(arr: [i64]) -> i64 = arr[0]
 
 #[test]
 fn test_tuple_type() {
-    let source = "F make_pair(a: i64, b: str) -> (i64, str) = (a, b)";
+    let source = "fn make_pair(a: i64, b: str) -> (i64, str) = (a, b)";
     assert!(compiles(source));
 }
 
 #[test]
 fn test_pointer_type() {
-    let source = "F identity_ptr(p: *i64) -> *i64 = p";
+    let source = "fn identity_ptr(p: *i64) -> *i64 = p";
     assert!(compiles(source));
 }
 
 #[test]
 fn test_reference_type() {
-    let source = "F ref_fn(r: &i64) -> i64 = 0";
+    let source = "fn ref_fn(r: &i64) -> i64 = 0";
     assert!(compiles(source));
 }
 
@@ -387,7 +387,7 @@ fn bits(a: i64, b: i64) -> i64 {
 
 #[test]
 fn test_logical_operators() {
-    let source = "F logic(a: bool, b: bool) -> bool = a && b || !a";
+    let source = "fn logic(a: bool, b: bool) -> bool = a && b || !a";
     assert!(compiles(source));
 }
 
@@ -445,7 +445,7 @@ impl Counter {
 
 #[test]
 fn test_use_statement() {
-    let source = "U std::fs";
+    let source = "use std::fs";
     assert!(compiles(source));
 }
 
@@ -468,19 +468,19 @@ fn test_async_function() {
 
 #[test]
 fn test_type_mismatch_error() {
-    let source = "F f() -> i64 = \"string\"";
+    let source = "fn f() -> i64 = \"string\"";
     assert!(fails_to_compile(source));
 }
 
 #[test]
 fn test_undefined_variable_error() {
-    let source = "F f() -> i64 = undefined_var";
+    let source = "fn f() -> i64 = undefined_var";
     assert!(fails_to_compile(source));
 }
 
 #[test]
 fn test_undefined_function_error() {
-    let source = "F f() -> i64 = unknown_func()";
+    let source = "fn f() -> i64 = unknown_func()";
     assert!(fails_to_compile(source));
 }
 
@@ -509,7 +509,7 @@ fn test_if_condition_lenient_integer_truthy() {
     // Phase 158's bool↔i64 prohibition in value context.
     // Mirror of crates/vais-types/src/tests.rs::test_if_condition_lenient_integer_truthy.
     // Renamed from test_if_condition_non_bool_error (pre-254 expectation).
-    let source = "F f() -> i64 = I 42 { 1 } E { 0 }";
+    let source = "fn f() -> i64 = I 42 { 1 } else { 0 }";
     assert!(compiles(source));
 }
 
@@ -532,13 +532,13 @@ fn test_binary_search() {
     let source = r#"
 fn binary_search(arr: [i64], target: i64, low: i64, high: i64) -> i64 {
     I low > high { 0 - 1 }
-    E {
+    else {
         mid := (low + high) / 2;
         I arr[mid] == target { mid }
-        E {
+        else {
             I arr[mid] < target {
                 @(arr, target, mid + 1, high)
-            } E {
+            } else {
                 @(arr, target, low, mid - 1)
             }
         }
@@ -606,7 +606,7 @@ fn main() -> () {
 
 #[test]
 fn test_ternary_operator() {
-    let source = "F abs(x: i64) -> i64 = x < 0 ? -x : x";
+    let source = "fn abs(x: i64) -> i64 = x < 0 ? -x : x";
     let ir = compile_to_ir(source).unwrap();
     assert!(ir.contains("define i64 @abs"));
     assert!(ir.contains("br i1")); // conditional branch for ternary
@@ -615,7 +615,7 @@ fn test_ternary_operator() {
 #[test]
 fn test_ternary_with_unary_minus() {
     // Test ternary where then branch starts with unary minus
-    let source = "F abs(x: i64) -> i64 = x < 0 ? -x : x";
+    let source = "fn abs(x: i64) -> i64 = x < 0 ? -x : x";
     assert!(compiles(source));
 }
 
@@ -1015,7 +1015,7 @@ fn test_reduce(v: Vec2i64) -> i64 {
 fn test_std_option_type() {
     // Test Option<T> enum definition and usage
     let source = r#"
-E Option<T> {
+enum Option<T> {
     None,
     Some(T)
 }
@@ -1055,7 +1055,7 @@ fn test_option() -> i64 {
 fn test_std_result_type() {
     // Test Result<T, E> enum definition
     let source = r#"
-E Result<T, E> {
+enum Result<T, E> {
     Ok(T),
     Err(E)
 }
@@ -1108,14 +1108,14 @@ impl Vec<T> {
     }
 
     fn is_empty(&self) -> i64 {
-        I self.len == 0 { 1 } E { 0 }
+        I self.len == 0 { 1 } else { 0 }
     }
 
     fn get(&self, index: i64) -> type {
         I index >= 0 && index < self.len {
             ptr := self.data + index * 8
             load_i64(ptr)
-        } E {
+        } else {
             0
         }
     }
@@ -1126,7 +1126,7 @@ impl Vec<T> {
             store_i64(ptr, value)
             self.len = self.len + 1
             self.len
-        } E {
+        } else {
             0
         }
     }
@@ -1136,7 +1136,7 @@ impl Vec<T> {
             self.len = self.len - 1
             ptr := self.data + self.len * 8
             load_i64(ptr)
-        } E {
+        } else {
             0
         }
     }
@@ -1257,13 +1257,13 @@ impl Deque<T> {
     fn len(&self) -> i64 {
         I self.tail >= self.head {
             self.tail - self.head
-        } E {
+        } else {
             self.cap - self.head + self.tail
         }
     }
 
     fn is_empty(&self) -> i64 {
-        I self.head == self.tail { 1 } E { 0 }
+        I self.head == self.tail { 1 } else { 0 }
     }
 
     fn push_back(&self, value: T) -> i64 {
@@ -1279,7 +1279,7 @@ impl Deque<T> {
             value := load_i64(ptr)
             self.head = (self.head + 1) % self.cap
             value
-        } E {
+        } else {
             0
         }
     }
@@ -1327,7 +1327,7 @@ impl HashMap<K, V> {
     }
 
     fn is_empty(&self) -> i64 {
-        I self.count == 0 { 1 } E { 0 }
+        I self.count == 0 { 1 } else { 0 }
     }
 
     fn drop(&self) -> () {
@@ -1367,7 +1367,7 @@ impl RangeIter : Iterator {
     }
 
     fn has_next(&self) -> i64 {
-        I self.current < self.end { 1 } E { 0 }
+        I self.current < self.end { 1 } else { 0 }
     }
 }
 
@@ -1412,7 +1412,7 @@ impl String {
     }
 
     fn is_empty(&self) -> i64 {
-        I self.len == 0 { 1 } E { 0 }
+        I self.len == 0 { 1 } else { 0 }
     }
 
     fn as_ptr(&self) -> i64 {
@@ -1439,12 +1439,12 @@ fn test_std_math_functions() {
     // Test math function signatures (without top-level const which isn't supported)
     let source = r#"
 # Basic math operations
-fn abs_f64(x: f64) -> f64 = I x < 0.0 { 0.0 - x } E { x }
-fn abs_i64(x: i64) -> i64 = I x < 0 { 0 - x } E { x }
-fn min_f64(a: f64, b: f64) -> f64 = I a < b { a } E { b }
-fn max_f64(a: f64, b: f64) -> f64 = I a > b { a } E { b }
-fn min_i64(a: i64, b: i64) -> i64 = I a < b { a } E { b }
-fn max_i64(a: i64, b: i64) -> i64 = I a > b { a } E { b }
+fn abs_f64(x: f64) -> f64 = I x < 0.0 { 0.0 - x } else { x }
+fn abs_i64(x: i64) -> i64 = I x < 0 { 0 - x } else { x }
+fn min_f64(a: f64, b: f64) -> f64 = I a < b { a } else { b }
+fn max_f64(a: f64, b: f64) -> f64 = I a > b { a } else { b }
+fn min_i64(a: i64, b: i64) -> i64 = I a < b { a } else { b }
+fn max_i64(a: i64, b: i64) -> i64 = I a > b { a } else { b }
 fn clamp_f64(x: f64, lo: f64, hi: f64) -> f64 = max_f64(lo, min_f64(x, hi))
 fn clamp_i64(x: i64, lo: i64, hi: i64) -> i64 = max_i64(lo, min_i64(x, hi))
 
@@ -1481,7 +1481,7 @@ impl Arena {
             ptr := self.base + self.offset
             self.offset = self.offset + size
             ptr
-        } E {
+        } else {
             0
         }
     }
@@ -1502,7 +1502,7 @@ fn test_arena() -> i64 {
     arena.reset()
     ptr3 := arena.alloc(64)
     arena.drop()
-    I ptr3 == ptr1 { 1 } E { 0 }
+    I ptr3 == ptr1 { 1 } else { 0 }
 }
 "#;
     assert!(compiles(source));
@@ -1530,13 +1530,13 @@ impl PriorityQueue<T> {
     }
 
     fn is_empty(&self) -> i64 {
-        I self.len == 0 { 1 } E { 0 }
+        I self.len == 0 { 1 } else { 0 }
     }
 
     fn peek(&self) -> type {
         I self.len > 0 {
             load_i64(self.data)
-        } E {
+        } else {
             0
         }
     }
@@ -1581,7 +1581,7 @@ impl Set<T> {
     }
 
     fn is_empty(&self) -> i64 {
-        I self.count == 0 { 1 } E { 0 }
+        I self.count == 0 { 1 } else { 0 }
     }
 
     fn drop(&self) -> () {
@@ -1603,7 +1603,7 @@ fn test_set() -> i64 {
 fn test_std_future_type() {
     // Test Future type for async operations
     let source = r#"
-E FutureState<T> {
+enum FutureState<T> {
     Pending,
     Ready(T)
 }
@@ -1640,7 +1640,7 @@ fn test_future() -> i64 {
     f := Future.ready(42)
     I f.is_ready() == 1 {
         f.get()
-    } E {
+    } else {
         0
     }
 }
@@ -1839,7 +1839,7 @@ fn test_string_equality() {
 fn check(s: str) -> i64 {
     I s == "hello" {
         1
-    } E {
+    } else {
         0
     }
 }
@@ -1854,7 +1854,7 @@ fn test_string_inequality() {
 fn check(s: str) -> i64 {
     I s != "world" {
         1
-    } E {
+    } else {
         0
     }
 }
@@ -1893,7 +1893,7 @@ fn main() -> i64 {
     s := "hello world"
     I s.contains("world") {
         1
-    } E {
+    } else {
         0
     }
 }
@@ -1933,7 +1933,7 @@ fn main() -> i64 {
     s := "hello world"
     I s.startsWith("hello") {
         1
-    } E {
+    } else {
         0
     }
 }
@@ -1949,7 +1949,7 @@ fn main() -> i64 {
     s := "hello world"
     I s.endsWith("world") {
         1
-    } E {
+    } else {
         0
     }
 }
@@ -1965,7 +1965,7 @@ fn main() -> i64 {
     s := ""
     I s.isEmpty() {
         1
-    } E {
+    } else {
         0
     }
 }
@@ -1979,7 +1979,7 @@ fn test_string_comparison_operators() {
 fn main() -> i64 {
     I "abc" < "def" {
         1
-    } E {
+    } else {
         0
     }
 }

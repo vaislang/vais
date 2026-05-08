@@ -15,13 +15,13 @@ use super::helpers::*;
 fn e2e_trait_alias_basic_parse() {
     // Verify trait alias parsing works
     let source = r#"
-W Printable {
-    F to_num(&self) -> i64
+trait Printable {
+    fn to_num(&self) -> i64
 }
 
-T Display = Printable
+type Display = Printable
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -32,17 +32,17 @@ F main() -> i64 {
 fn e2e_trait_alias_multiple_bounds_parse() {
     // Verify multiple trait bounds in alias
     let source = r#"
-W Numeric {
-    F value(&self) -> i64
+trait Numeric {
+    fn value(&self) -> i64
 }
 
-W Addable {
-    F add(&self, other: i64) -> i64
+trait Addable {
+    fn add(&self, other: i64) -> i64
 }
 
-T Combined = Numeric + Addable
+type Combined = Numeric + Addable
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -53,24 +53,24 @@ F main() -> i64 {
 fn e2e_trait_alias_where_clause_parse() {
     // Verify trait alias in where clause
     let source = r#"
-W Printable {
-    F to_num(&self) -> i64
+trait Printable {
+    fn to_num(&self) -> i64
 }
 
-T Display = Printable
+type Display = Printable
 
-S Point { x: i64, y: i64 }
-X Point: Printable {
-    F to_num(&self) -> i64 { self.x + self.y }
+struct Point { x: i64, y: i64 }
+impl Point: Printable {
+    fn to_num(&self) -> i64 { self.x + self.y }
 }
 
-F show<T>(val: &T) -> i64
+fn show<T>(val: &T) -> i64
 where T: Display
 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -81,29 +81,29 @@ F main() -> i64 {
 fn e2e_trait_alias_usage_in_bounds() {
     // Verify trait alias as generic bound
     let source = r#"
-W TraitA {
-    F method_a(&self) -> i64
+trait TraitA {
+    fn method_a(&self) -> i64
 }
 
-W TraitB {
-    F method_b(&self) -> i64
+trait TraitB {
+    fn method_b(&self) -> i64
 }
 
-T AliasAB = TraitA + TraitB
+type AliasAB = TraitA + TraitB
 
-S MyStruct { val: i64 }
-X MyStruct: TraitA {
-    F method_a(&self) -> i64 { self.val }
+struct MyStruct { val: i64 }
+impl MyStruct: TraitA {
+    fn method_a(&self) -> i64 { self.val }
 }
-X MyStruct: TraitB {
-    F method_b(&self) -> i64 { self.val * 2 }
+impl MyStruct: TraitB {
+    fn method_b(&self) -> i64 { self.val * 2 }
 }
 
-F use_alias<T: AliasAB>(x: &T) -> i64 {
+fn use_alias<T: AliasAB>(x: &T) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -114,24 +114,24 @@ F main() -> i64 {
 fn e2e_trait_alias_nested_bounds() {
     // Verify nested trait alias (alias referencing alias)
     let source = r#"
-W Base {
-    F base_fn(&self) -> i64
+trait Base {
+    fn base_fn(&self) -> i64
 }
 
-T Alias1 = Base
+type Alias1 = Base
 
-T Alias2 = Alias1
+type Alias2 = Alias1
 
-S Thing { n: i64 }
-X Thing: Base {
-    F base_fn(&self) -> i64 { self.n }
+struct Thing { n: i64 }
+impl Thing: Base {
+    fn base_fn(&self) -> i64 { self.n }
 }
 
-F use_nested<T: Alias2>(x: &T) -> i64 {
+fn use_nested<T: Alias2>(x: &T) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -153,12 +153,12 @@ F main() -> i64 {
 fn e2e_const_eval_basic_arithmetic() {
     // Verify basic arithmetic in const context compiles
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 2 + 3
     y := 10 - 5
     z := 4 * 2
     w := 20 / 4
-    R x + y + z + w
+    return x + y + z + w
 }
 "#;
     assert_exit_code(source, 23); // 5 + 5 + 8 + 5 = 23
@@ -168,9 +168,9 @@ F main() -> i64 {
 fn e2e_const_eval_modulo_expr() {
     // Verify modulo expression parsing
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10 % 3
-    R x
+    return x
 }
 "#;
     assert_exit_code(source, 1);
@@ -180,9 +180,9 @@ F main() -> i64 {
 fn e2e_const_eval_bitwise_and_expr() {
     // Verify bitwise AND expression
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 3 & 7
-    R x
+    return x
 }
 "#;
     assert_exit_code(source, 3);
@@ -192,9 +192,9 @@ F main() -> i64 {
 fn e2e_const_eval_bitwise_or_expr() {
     // Verify bitwise OR expression
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 2 | 4
-    R x
+    return x
 }
 "#;
     assert_exit_code(source, 6);
@@ -204,9 +204,9 @@ F main() -> i64 {
 fn e2e_const_eval_shift_left_expr() {
     // Verify left shift expression
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 1 << 3
-    R x
+    return x
 }
 "#;
     assert_exit_code(source, 8);
@@ -216,9 +216,9 @@ F main() -> i64 {
 fn e2e_const_eval_shift_right_expr() {
     // Verify right shift expression
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 16 >> 2
-    R x
+    return x
 }
 "#;
     assert_exit_code(source, 4);
@@ -228,9 +228,9 @@ F main() -> i64 {
 fn e2e_const_eval_bitwise_xor_expr() {
     // Verify bitwise XOR expression
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 5 ^ 3
-    R x
+    return x
 }
 "#;
     assert_exit_code(source, 6);
@@ -240,10 +240,10 @@ F main() -> i64 {
 fn e2e_const_eval_complex_expression() {
     // Verify complex nested expressions
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := (2 + 3) * 2
     y := ((1 << 4) - 2) / 2
-    R x + y
+    return x + y
 }
 "#;
     assert_exit_code(source, 17);

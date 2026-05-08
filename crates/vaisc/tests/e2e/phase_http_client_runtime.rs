@@ -18,35 +18,35 @@ fn e2e_std_http_client_loopback_post_json_runtime_smoke() {
     let port = listener.local_addr().expect("read listener address").port();
 
     let source = r#"
-U std/http_client
+use std/http_client
 
-F smoke_contains(haystack: str, needle: str) -> i64 {
+fn smoke_contains(haystack: str, needle: str) -> i64 {
     smoke_contains_rec(haystack, needle, 0)
 }
 
-F smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
-    I needle.len() == 0 { R 1 }
-    I i >= haystack.len() { R 0 }
-    I smoke_match_prefix(haystack, needle, i, 0) == 1 { R 1 }
+fn smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
+    I needle.len() == 0 { return 1 }
+    I i >= haystack.len() { return 0 }
+    I smoke_match_prefix(haystack, needle, i, 0) == 1 { return 1 }
     smoke_contains_rec(haystack, needle, i + 1)
 }
 
-F smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
+fn smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
     nc := needle.char_at(ni)
-    I nc == 0 { R 1 }
+    I nc == 0 { return 1 }
     hc := haystack.char_at(hi)
-    I hc == 0 { R 0 }
-    I hc != nc { R 0 }
+    I hc == 0 { return 0 }
+    I hc != nc { return 0 }
     smoke_match_prefix(haystack, needle, hi + 1, ni + 1)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     response := http_post("http://127.0.0.1:__PORT__/ssr/render", "{\"route\":\"/dashboard\",\"props\":\"state\"}")
-    I response.error_code != 0 { R 1 }
-    I response.status != 200 { R 2 }
+    I response.error_code != 0 { return 1 }
+    I response.status != 200 { return 2 }
     body := response.body_text()
-    I smoke_contains(body, "\"status\":200") != 1 { R 3 }
-    I smoke_contains(body, "app") != 1 { R 4 }
+    I smoke_contains(body, "\"status\":200") != 1 { return 3 }
+    I smoke_contains(body, "app") != 1 { return 4 }
     response.drop()
     0
 }

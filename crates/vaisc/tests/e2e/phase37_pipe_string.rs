@@ -15,10 +15,10 @@ use super::helpers::*;
 fn e2e_p37_pipe_single() {
     // Single pipe: 10 |> double = 20
     let source = r#"
-F double(x: i64) -> i64 { x * 2 }
+fn double(x: i64) -> i64 { x * 2 }
 
-F main() -> i64 {
-    R 10 |> double
+fn main() -> i64 {
+    return 10 |> double
 }
 "#;
     assert_exit_code(source, 20);
@@ -28,11 +28,11 @@ F main() -> i64 {
 fn e2e_p37_pipe_triple_chain() {
     // Three-stage pipeline: 2 |> double = 4, |> inc = 5, |> double = 10
     let source = r#"
-F double(x: i64) -> i64 { x * 2 }
-F inc(x: i64) -> i64 { x + 1 }
+fn double(x: i64) -> i64 { x * 2 }
+fn inc(x: i64) -> i64 { x + 1 }
 
-F main() -> i64 {
-    R 2 |> double |> inc |> double
+fn main() -> i64 {
+    return 2 |> double |> inc |> double
 }
 "#;
     assert_exit_code(source, 10);
@@ -43,10 +43,10 @@ fn e2e_p37_pipe_with_identity() {
     // Pipeline through identity function — value passes unchanged
     // 42 |> id = 42
     let source = r#"
-F id(x: i64) -> i64 { x }
+fn id(x: i64) -> i64 { x }
 
-F main() -> i64 {
-    R 42 |> id
+fn main() -> i64 {
+    return 42 |> id
 }
 "#;
     assert_exit_code(source, 42);
@@ -58,9 +58,9 @@ F main() -> i64 {
 fn e2e_p37_puts_hello() {
     // puts outputs to stdout — verify output contains the expected string
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     puts("hello")
-    R 0
+    return 0
 }
 "#;
     assert_stdout_contains(source, "hello");
@@ -70,10 +70,10 @@ F main() -> i64 {
 fn e2e_p37_puts_multiple_calls() {
     // Multiple puts calls — stdout should contain both strings
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     puts("first")
     puts("second")
-    R 0
+    return 0
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -91,9 +91,9 @@ F main() -> i64 {
 fn e2e_p37_puts_with_exit_code() {
     // puts outputs a message, then main returns a non-zero exit code
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     puts("done")
-    R 7
+    return 7
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -113,10 +113,10 @@ fn e2e_p37_expr_body_simple() {
     // Expression body function: F square(x) -> i64 = x * x
     // square(6) = 36
     let source = r#"
-F square(x: i64) -> i64 = x * x
+fn square(x: i64) -> i64 = x * x
 
-F main() -> i64 {
-    R square(6)
+fn main() -> i64 {
+    return square(6)
 }
 "#;
     assert_exit_code(source, 36);
@@ -127,11 +127,11 @@ fn e2e_p37_expr_body_chain() {
     // Two expression body functions chained in main
     // double(5) = 10, inc(10) = 11
     let source = r#"
-F double(x: i64) -> i64 = x * 2
-F inc(x: i64) -> i64 = x + 1
+fn double(x: i64) -> i64 = x * 2
+fn inc(x: i64) -> i64 = x + 1
 
-F main() -> i64 {
-    R inc(double(5))
+fn main() -> i64 {
+    return inc(double(5))
 }
 "#;
     assert_exit_code(source, 11);
@@ -144,7 +144,7 @@ fn e2e_p37_block_expression_nested() {
     // Nested block expression — inner block returns 30, outer adds 12
     // inner: 10 + 20 = 30, outer: 30 + 12 = 42
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     result := {
         inner := {
             a := 10
@@ -153,7 +153,7 @@ F main() -> i64 {
         }
         inner + 12
     }
-    R result
+    return result
 }
 "#;
     assert_exit_code(source, 42);
@@ -163,15 +163,15 @@ F main() -> i64 {
 fn e2e_p37_block_in_if() {
     // Block expression inside an if-else — if true, block computes 3*5=15
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := I true {
         a := 3
         b := 5
         a * b
-    } E {
+    } else {
         0
     }
-    R x
+    return x
 }
 "#;
     assert_exit_code(source, 15);

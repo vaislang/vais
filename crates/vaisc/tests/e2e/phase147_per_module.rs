@@ -71,9 +71,9 @@ fn e2e_per_module_generic_function() {
     // main is the second item (main module).
     // Type inference: identity(42) → identity<i64>
     let source = r#"
-F identity<T>(x: T) -> T { x }
+fn identity<T>(x: T) -> type { x }
 
-F main() -> i64 {
+fn main() -> i64 {
     identity(42)
 }
 "#;
@@ -99,11 +99,11 @@ fn e2e_per_module_generic_struct_method() {
     // Container<T> struct is in the other module.
     // main() creates a Container and accesses its field.
     let source = r#"
-S Container<T> {
+struct Container<T> {
     val: T
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c := Container { val: 7 }
     c.val
 }
@@ -130,17 +130,17 @@ fn e2e_per_module_trait_impl() {
     // W Greet + S Dog are in the other module.
     // X Dog: Greet + main are in the main module.
     let source = r#"
-W Greet {
-    F hello(self) -> i64
+trait Greet {
+    fn hello(self) -> i64
 }
 
-S Dog { }
+struct Dog { }
 
-X Dog: Greet {
-    F hello(self) -> i64 { 1 }
+impl Dog: Greet {
+    fn hello(self) -> i64 { 1 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     d := Dog { }
     d.hello()
 }
@@ -165,12 +165,12 @@ F main() -> i64 {
 fn e2e_per_module_specialized_struct_type() {
     // Pair<T> struct is in the other module; main uses Pair with i64.
     let source = r#"
-S Pair<T> {
+struct Pair<T> {
     a: T,
     b: T
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Pair { a: 3, b: 4 }
     p.a + p.b
 }
@@ -196,9 +196,9 @@ F main() -> i64 {
 fn e2e_per_module_multiple_instantiations() {
     // convert<T> is in the other module; main calls it (type inferred as i64).
     let source = r#"
-F convert<T>(x: T) -> T { x }
+fn convert<T>(x: T) -> type { x }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := convert(10)
     a
 }
@@ -223,17 +223,17 @@ F main() -> i64 {
 fn e2e_per_module_cross_module_method_call() {
     // Counter struct + impl are in the other module; main uses them.
     let source = r#"
-S Counter {
+struct Counter {
     val: i64
 }
 
-X Counter {
-    F inc(self) -> i64 {
+impl Counter {
+    fn inc(self) -> i64 {
         self.val + 1
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c := Counter { val: 5 }
     c.inc()
 }
@@ -259,11 +259,11 @@ fn e2e_per_module_extern_declarations() {
     // helper is defined in the other module; main calls it.
     // main_ir should declare @helper as extern or call it.
     let source = r#"
-F helper() -> i64 {
+fn helper() -> i64 {
     99
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     helper()
 }
 "#;
@@ -293,11 +293,11 @@ F main() -> i64 {
 fn e2e_per_module_no_instantiations() {
     // Two plain functions — no generics — split across modules.
     let source = r#"
-F add(a: i64, b: i64) -> i64 {
+fn add(a: i64, b: i64) -> i64 {
     a + b
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     add(2, 3)
 }
 "#;
@@ -328,11 +328,11 @@ fn e2e_per_module_nested_generic() {
     // main is in the main module.
     // wrap<T> internally calls identity<T> by type inference.
     let source = r#"
-F identity<T>(x: T) -> T { x }
+fn identity<T>(x: T) -> type { x }
 
-F wrap<T>(x: T) -> T { identity(x) }
+fn wrap<T>(x: T) -> type { identity(x) }
 
-F main() -> i64 {
+fn main() -> i64 {
     wrap(55)
 }
 "#;
@@ -362,21 +362,21 @@ fn e2e_per_module_drop_trait() {
     // main is in the main module.
     // Drop trait is declared inline (not built-in).
     let source = r#"
-S Resource {
+struct Resource {
     id: i64
 }
 
-W Drop {
-    F drop(&self) -> i64
+trait Drop {
+    fn drop(&self) -> i64
 }
 
-X Resource: Drop {
-    F drop(&self) -> i64 {
+impl Resource: Drop {
+    fn drop(&self) -> i64 {
         0
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     r := Resource { id: 1 }
     r.id
 }

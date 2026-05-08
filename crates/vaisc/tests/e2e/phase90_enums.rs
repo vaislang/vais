@@ -10,10 +10,10 @@ use super::helpers::*;
 #[test]
 fn e2e_enum_simple_variant() {
     let source = r#"
-E Color { Red, Green, Blue }
-F main() -> i64 {
+enum Color { Red, Green, Blue }
+fn main() -> i64 {
     c := Red
-    M c {
+    match c {
         Red => 42,
         Green => 1,
         Blue => 2
@@ -26,10 +26,10 @@ F main() -> i64 {
 #[test]
 fn e2e_enum_second_variant() {
     let source = r#"
-E Color { Red, Green, Blue }
-F main() -> i64 {
+enum Color { Red, Green, Blue }
+fn main() -> i64 {
     c := Green
-    M c {
+    match c {
         Red => 1,
         Green => 42,
         Blue => 3
@@ -42,10 +42,10 @@ F main() -> i64 {
 #[test]
 fn e2e_enum_third_variant() {
     let source = r#"
-E Color { Red, Green, Blue }
-F main() -> i64 {
+enum Color { Red, Green, Blue }
+fn main() -> i64 {
     c := Blue
-    M c {
+    match c {
         Red => 1,
         Green => 2,
         Blue => 42
@@ -58,10 +58,10 @@ F main() -> i64 {
 #[test]
 fn e2e_enum_wildcard_match() {
     let source = r#"
-E Dir { North, South, East, West }
-F main() -> i64 {
+enum Dir { North, South, East, West }
+fn main() -> i64 {
     d := West
-    M d {
+    match d {
         North => 1,
         _ => 42
     }
@@ -75,10 +75,10 @@ F main() -> i64 {
 #[test]
 fn e2e_enum_with_i64_data() {
     let source = r#"
-E Value { Num(i64), Empty }
-F main() -> i64 {
+enum Value { Num(i64), Empty }
+fn main() -> i64 {
     v := Num(42)
-    M v {
+    match v {
         Num(n) => n,
         Empty => 0
     }
@@ -90,10 +90,10 @@ F main() -> i64 {
 #[test]
 fn e2e_enum_empty_variant_match() {
     let source = r#"
-E Value { Num(i64), Empty }
-F main() -> i64 {
+enum Value { Num(i64), Empty }
+fn main() -> i64 {
     v := Empty
-    M v {
+    match v {
         Num(n) => n,
         Empty => 42
     }
@@ -107,15 +107,15 @@ F main() -> i64 {
 #[test]
 fn e2e_enum_as_parameter() {
     let source = r#"
-E Shape { Circle, Square, Triangle }
-F sides(s: Shape) -> i64 {
-    M s {
+enum Shape { Circle, Square, Triangle }
+fn sides(s: Shape) -> i64 {
+    match s {
         Circle => 0,
         Square => 4,
         Triangle => 3
     }
 }
-F main() -> i64 = sides(Square) * 10 + 2
+fn main() -> i64 = sides(Square) * 10 + 2
 "#;
     assert_exit_code(source, 42);
 }
@@ -123,14 +123,14 @@ F main() -> i64 = sides(Square) * 10 + 2
 #[test]
 fn e2e_enum_returned_from_function() {
     let source = r#"
-E Outcome { Good(i64), Bad }
-F safe_div(a: i64, b: i64) -> Outcome {
-    I b == 0 { R Bad }
-    R Good(a / b)
+enum Outcome { Good(i64), Bad }
+fn safe_div(a: i64, b: i64) -> Outcome {
+    I b == 0 { return Bad }
+    return Good(a / b)
 }
-F main() -> i64 {
+fn main() -> i64 {
     r := safe_div(84, 2)
-    M r {
+    match r {
         Good(v) => v,
         Bad => 0
     }
@@ -144,15 +144,15 @@ F main() -> i64 {
 #[test]
 fn e2e_enum_loop_matching() {
     let source = r#"
-E Action { Add(i64), Sub(i64), Nop }
-F apply(acc: i64, action: Action) -> i64 {
-    M action {
+enum Action { Add(i64), Sub(i64), Nop }
+fn apply(acc: i64, action: Action) -> i64 {
+    match action {
         Add(n) => acc + n,
         Sub(n) => acc - n,
         Nop => acc
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     result := mut 0
     result = apply(result, Add(50))
     result = apply(result, Sub(10))
@@ -167,15 +167,15 @@ F main() -> i64 {
 #[test]
 fn e2e_enum_two_data_variants() {
     let source = r#"
-E Op { Inc, Dec, Set(i64) }
-F exec(val: i64, op: Op) -> i64 {
-    M op {
+enum Op { Inc, Dec, Set(i64) }
+fn exec(val: i64, op: Op) -> i64 {
+    match op {
         Inc => val + 1,
         Dec => val - 1,
         Set(n) => n
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     v := mut 0
     v = exec(v, Set(40))
     v = exec(v, Inc)
@@ -191,14 +191,14 @@ F main() -> i64 {
 #[test]
 fn e2e_enum_bool_like() {
     let source = r#"
-E MyBool { Yes, No }
-F to_int(b: MyBool) -> i64 {
-    M b {
+enum MyBool { Yes, No }
+fn to_int(b: MyBool) -> i64 {
+    match b {
         Yes => 1,
         No => 0
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     a := to_int(Yes)
     b := to_int(No)
     a * 42 + b
@@ -210,16 +210,16 @@ F main() -> i64 {
 #[test]
 fn e2e_enum_four_variants() {
     let source = r#"
-E Season { Spring, Summer, Autumn, Winter }
-F temp(s: Season) -> i64 {
-    M s {
+enum Season { Spring, Summer, Autumn, Winter }
+fn temp(s: Season) -> i64 {
+    match s {
         Spring => 15,
         Summer => 30,
         Autumn => 10,
         Winter => 0
     }
 }
-F main() -> i64 = temp(Spring) + temp(Autumn) + 17
+fn main() -> i64 = temp(Spring) + temp(Autumn) + 17
 "#;
     assert_exit_code(source, 42);
 }
@@ -227,22 +227,22 @@ F main() -> i64 = temp(Spring) + temp(Autumn) + 17
 #[test]
 fn e2e_enum_equality_uses_tag_not_address() {
     let source = r#"
-EN State { Clean, Dirty }
+enum State { Clean, Dirty }
 
-S Frame {
+struct Frame {
     state: State,
 }
 
-X Frame {
-    F is_dirty(self) -> bool {
+impl Frame {
+    fn is_dirty(self) -> bool {
         self.state == State.Dirty
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     dirty := Frame { state: State.Dirty }
     clean := Frame { state: State.Clean }
-    I dirty.is_dirty() && !clean.is_dirty() { 42 } E { 1 }
+    I dirty.is_dirty() && !clean.is_dirty() { 42 } else { 1 }
 }
 "#;
     assert_exit_code(source, 42);
@@ -253,17 +253,17 @@ F main() -> i64 {
 #[test]
 fn e2e_enum_chain_matching() {
     let source = r#"
-E Token { Num(i64), Plus, Minus }
-F eval_simple(a: Token, op: Token, b: Token) -> i64 {
-    lhs := M a { Num(n) => n, _ => 0 }
-    rhs := M b { Num(n) => n, _ => 0 }
-    M op {
+enum Token { Num(i64), Plus, Minus }
+fn eval_simple(a: Token, op: Token, b: Token) -> i64 {
+    lhs := match a { Num(n) => n, _ => 0 }
+    rhs := match b { Num(n) => n, _ => 0 }
+    match op {
         Plus => lhs + rhs,
         Minus => lhs - rhs,
         _ => 0
     }
 }
-F main() -> i64 = eval_simple(Num(20), Plus, Num(22))
+fn main() -> i64 = eval_simple(Num(20), Plus, Num(22))
 "#;
     assert_exit_code(source, 42);
 }
@@ -271,10 +271,10 @@ F main() -> i64 = eval_simple(Num(20), Plus, Num(22))
 #[test]
 fn e2e_enum_nested_enum() {
     let source = r#"
-E Wrap { Val(i64), None }
-F main() -> i64 {
+enum Wrap { Val(i64), None }
+fn main() -> i64 {
     v := Val(42)
-    M v {
+    match v {
         Val(n) => n,
         None => 0
     }
@@ -286,9 +286,9 @@ F main() -> i64 {
 #[test]
 fn e2e_enum_five_variants() {
     let source = r#"
-E Digit { Zero, One, Two, Three, Four }
-F to_val(d: Digit) -> i64 {
-    M d {
+enum Digit { Zero, One, Two, Three, Four }
+fn to_val(d: Digit) -> i64 {
+    match d {
         Zero => 0,
         One => 1,
         Two => 2,
@@ -296,7 +296,7 @@ F to_val(d: Digit) -> i64 {
         Four => 4
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     a := to_val(Four)
     b := to_val(Two)
     a * 10 + b
@@ -311,19 +311,19 @@ F main() -> i64 {
 fn e2e_enum_str_field_select_variant() {
     // Enum variant with str field: match and extract str, use its presence to branch
     let source = r#"
-E QueryType {
+enum QueryType {
     Select(str),
     Insert(str),
 }
 
-F classify(q: QueryType) -> i64 {
-    M q {
+fn classify(q: QueryType) -> i64 {
+    match q {
         Select(s) => 1,
         Insert(s) => 2
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     q := Select("users")
     classify(q)
 }
@@ -334,19 +334,19 @@ F main() -> i64 {
 #[test]
 fn e2e_enum_str_field_insert_variant() {
     let source = r#"
-E QueryType {
+enum QueryType {
     Select(str),
     Insert(str),
 }
 
-F classify(q: QueryType) -> i64 {
-    M q {
+fn classify(q: QueryType) -> i64 {
+    match q {
         Select(s) => 1,
         Insert(s) => 2
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     q := Insert("data")
     classify(q)
 }
@@ -358,14 +358,14 @@ F main() -> i64 {
 fn e2e_enum_str_field_extract_and_print() {
     // Extract the str value from enum variant and use it with println
     let source = r#"
-E Msg {
+enum Msg {
     Hello(str),
     Bye(str),
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     m := Hello("world")
-    M m {
+    match m {
         Hello(s) => {
             println("{s}")
             42
@@ -393,21 +393,21 @@ F main() -> i64 {
 fn e2e_enum_str_field_mixed_with_unit() {
     // Enum with both str-carrying and unit variants
     let source = r#"
-E Event {
+enum Event {
     Click(str),
     Hover(str),
     Close,
 }
 
-F handle(e: Event) -> i64 {
-    M e {
+fn handle(e: Event) -> i64 {
+    match e {
         Click(target) => 10,
         Hover(target) => 20,
         Close => 30
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := handle(Click("button"))
     b := handle(Close)
     a + b + 2

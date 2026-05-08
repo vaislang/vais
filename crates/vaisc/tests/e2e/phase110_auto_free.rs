@@ -17,9 +17,9 @@ fn test_auto_free_ir_for_string_concat() {
     // Verify that string concat compiles successfully without auto-free.
     let ir = compile_to_ir(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := "a" + "b"
-    R 0
+    return 0
 }
 "#,
     )
@@ -43,10 +43,10 @@ fn test_simple_format_no_malloc() {
     // which does NOT use malloc. This verifies no spurious auto-free for simple formats.
     let ir = compile_to_ir(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
     println("{x}")
-    R 0
+    return 0
 }
 "#,
     )
@@ -69,10 +69,10 @@ fn test_auto_free_ir_for_slice() {
     // Auto-free is disabled; verify slice allocation compiles and tracks alloc slot.
     let ir = compile_to_ir(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     arr := [10, 20, 30, 40, 50]
     s := arr[1..3]
-    R 0
+    return 0
 }
 "#,
     )
@@ -93,12 +93,12 @@ F main() -> i64 {
 fn test_no_alloc_no_free() {
     let ir = compile_to_ir(
         r#"
-F add(a: i64, b: i64) -> i64 {
-    R a + b
+fn add(a: i64, b: i64) -> i64 {
+    return a + b
 }
 
-F main() -> i64 {
-    R add(1, 2)
+fn main() -> i64 {
+    return add(1, 2)
 }
 "#,
     )
@@ -118,10 +118,10 @@ fn test_multiple_allocs_tracked() {
     // Auto-free is disabled; verify multiple alloc slots are created for tracking.
     let ir = compile_to_ir(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := "x" + "y"
     b := "p" + "q"
-    R 0
+    return 0
 }
 "#,
     )
@@ -146,9 +146,9 @@ F main() -> i64 {
 fn test_string_concat_runs() {
     let result = compile_and_run(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := "hello" + " " + "world"
-    R 0
+    return 0
 }
 "#,
     )
@@ -160,10 +160,10 @@ F main() -> i64 {
 fn test_string_concat_output() {
     let result = compile_and_run(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := "abc" + "def"
     println(x)
-    R 0
+    return 0
 }
 "#,
     )
@@ -176,10 +176,10 @@ F main() -> i64 {
 fn test_format_string_runs() {
     let result = compile_and_run(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 42
     println("value: {x}")
-    R 0
+    return 0
 }
 "#,
     )
@@ -192,16 +192,16 @@ F main() -> i64 {
 fn test_early_return_with_alloc() {
     let result = compile_and_run(
         r#"
-F helper(x: i64) -> i64 {
+fn helper(x: i64) -> i64 {
     s := "hello" + " world"
     I x > 0 {
-        R 1
+        return 1
     }
-    R 0
+    return 0
 }
 
-F main() -> i64 {
-    R helper(5)
+fn main() -> i64 {
+    return helper(5)
 }
 "#,
     )

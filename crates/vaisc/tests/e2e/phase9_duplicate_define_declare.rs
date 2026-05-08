@@ -41,12 +41,12 @@ fn count_prefix_at(ir: &str, prefix: &str, name: &str) -> usize {
 /// registration path is triggered even for a minimal user program.
 fn intrinsic_exerciser_source() -> &'static str {
     r#"
-N F __store_byte(ptr: i64, value: i64) -> i64
-N F __load_byte(ptr: i64) -> i64
+N fn __store_byte(ptr: i64, value: i64) -> i64
+N fn __load_byte(ptr: i64) -> i64
 
-F main() -> i64 {
+fn main() -> i64 {
     buf := 0  # would be a heap alloc in real code; we just need the symbol reference
-    R buf
+    return buf
 }
 "#
 }
@@ -96,10 +96,10 @@ fn e2e_phase9_no_duplicate_load_byte() {
 #[test]
 fn e2e_phase9_real_externs_still_declared() {
     let source = r#"
-N F strlen(s: i64) -> i64
+N fn strlen(s: i64) -> i64
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let ir = compile_to_ir(source).expect("extern C declaration should compile");

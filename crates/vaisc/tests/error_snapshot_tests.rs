@@ -97,7 +97,7 @@ fn assert_error_snapshot(test_name: &str, source: &str) {
 
 #[test]
 fn snapshot_undefined_variable() {
-    let source = "F main() -> i64 = xyz";
+    let source = "fn main() -> i64 = xyz";
     assert_error_snapshot("undefined_variable", source);
 }
 
@@ -129,21 +129,21 @@ fn main() -> i64 = f(1)
 
 #[test]
 fn snapshot_parser_unexpected_token() {
-    let source = "F main( { }";
+    let source = "fn main( { }";
     assert_error_snapshot("parser_unexpected_token", source);
 }
 
 #[test]
 fn snapshot_unconstrained_params() {
     // Phase 61: Parameters without type annotations and no way to infer should fail
-    let source = "F add(a, b) { a + b }";
+    let source = "fn add(a, b) { a + b }";
     assert_error_snapshot("unconstrained_params", source);
 }
 
 #[test]
 fn snapshot_recursive_no_return_type() {
     // Phase 61: Recursive functions using @ without explicit return type should fail
-    let source = "F fib(n: i64) = I n < 2 { R n } E { R @(n-1) + @(n-2) }";
+    let source = "fn fib(n: i64) = I n < 2 { R n } else { R @(n-1) + @(n-2) }";
     assert_error_snapshot("recursive_no_return_type", source);
 }
 

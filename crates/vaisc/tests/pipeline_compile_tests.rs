@@ -92,7 +92,7 @@ impl DependencyGraph {
 fn test_single_module_pipeline() {
     let mut modules = HashMap::new();
     let path = PathBuf::from("/test/single.vais");
-    let source = "F answer() -> i32 { R 42 }";
+    let source = "fn answer() -> i32 { R 42 }";
 
     modules.insert(path.clone(), source.to_string());
 
@@ -132,16 +132,16 @@ fn test_linear_dependency_chain() {
     let path_c = PathBuf::from("/test/c.vais");
 
     // Module A: leaf (no dependencies)
-    modules.insert(path_a.clone(), "F func_a() -> i32 { R 10 }".to_string());
+    modules.insert(path_a.clone(), "fn func_a() -> i32 { R 10 }".to_string());
     // Module B: depends on A
     modules.insert(
         path_b.clone(),
-        "F func_b() -> i32 { R func_a() + 20 }".to_string(),
+        "fn func_b() -> i32 { R func_a() + 20 }".to_string(),
     );
     // Module C: depends on B
     modules.insert(
         path_c.clone(),
-        "F func_c() -> i32 { R func_b() + 30 }".to_string(),
+        "fn func_c() -> i32 { R func_b() + 30 }".to_string(),
     );
 
     let mut dep_graph = DependencyGraph::new();
@@ -176,18 +176,18 @@ fn test_diamond_dependency_pattern() {
     let path_top = PathBuf::from("/test/top.vais");
 
     // Diamond: top -> (left, right) -> base
-    modules.insert(path_base.clone(), "F base() -> i32 { R 1 }".to_string());
+    modules.insert(path_base.clone(), "fn base() -> i32 { R 1 }".to_string());
     modules.insert(
         path_left.clone(),
-        "F left() -> i32 { R base() * 2 }".to_string(),
+        "fn left() -> i32 { R base() * 2 }".to_string(),
     );
     modules.insert(
         path_right.clone(),
-        "F right() -> i32 { R base() * 3 }".to_string(),
+        "fn right() -> i32 { R base() * 3 }".to_string(),
     );
     modules.insert(
         path_top.clone(),
-        "F top() -> i32 { R left() + right() }".to_string(),
+        "fn top() -> i32 { R left() + right() }".to_string(),
     );
 
     let mut dep_graph = DependencyGraph::new();
@@ -236,7 +236,7 @@ fn test_independent_modules() {
     for (i, path) in paths.iter().enumerate() {
         modules.insert(
             path.clone(),
-            format!("F func{}() -> i32 {{ R {} }}", i, i * 10),
+            format!("fn func{}() -> i32 {{ R {} }}", i, i * 10),
         );
     }
 
@@ -304,8 +304,8 @@ fn test_error_propagation() {
     let path_ok = PathBuf::from("/test/ok.vais");
     let path_err = PathBuf::from("/test/err.vais");
 
-    modules.insert(path_ok.clone(), "F valid() -> i32 { R 42 }".to_string());
-    modules.insert(path_err.clone(), "F invalid( -> i32 { R 42 }".to_string()); // Parse error
+    modules.insert(path_ok.clone(), "fn valid() -> i32 { R 42 }".to_string());
+    modules.insert(path_err.clone(), "fn invalid( -> i32 { R 42 }".to_string()); // Parse error
 
     // Simulate parsing with error handling
     let parse_ok = vais_parser::parse(&modules[&path_ok]);
@@ -392,8 +392,8 @@ fn test_empty_modules() {
 /// Test 9: Type checking integration
 #[test]
 fn test_type_checking_pipeline() {
-    let source1 = "F add(a: i32, b: i32) -> i32 { R a + b }";
-    let source2 = "F mul(a: i32, b: i32) -> i32 { R a * b }";
+    let source1 = "fn add(a: i32, b: i32) -> i32 { R a + b }";
+    let source2 = "fn mul(a: i32, b: i32) -> i32 { R a * b }";
 
     // Parse both modules
     let ast1 = vais_parser::parse(source1).expect("Parse failed for module 1");
@@ -426,10 +426,10 @@ fn test_rayon_parallel_parsing() {
     use rayon::prelude::*;
 
     let sources = vec![
-        "F f1() -> i32 { R 1 }",
-        "F f2() -> i32 { R 2 }",
-        "F f3() -> i32 { R 3 }",
-        "F f4() -> i32 { R 4 }",
+        "fn f1() -> i32 { R 1 }",
+        "fn f2() -> i32 { R 2 }",
+        "fn f3() -> i32 { R 3 }",
+        "fn f4() -> i32 { R 4 }",
     ];
 
     // Parse all sources in parallel
@@ -603,16 +603,16 @@ fn test_realistic_module_sequence() {
 
     // Module 1: Type definitions
     let types_source = r#"
-        S Point { x: i32, y: i32 }
-        F new_point(x: i32, y: i32) -> Point {
-            R Point { x: x, y: y }
+        struct Point { x: i32, y: i32 }
+        fn new_point(x: i32, y: i32) -> Point {
+            return Point { x: x, y: y }
         }
     "#;
 
     // Module 2: Operations on types
     let ops_source = r#"
-        F distance(p: Point) -> i32 {
-            R p.x * p.x + p.y * p.y
+        fn distance(p: Point) -> i32 {
+            return p.x * p.x + p.y * p.y
         }
     "#;
 
@@ -694,7 +694,7 @@ fn test_pipeline_memory_efficiency() {
     // Create 10 modules
     for i in 0..10 {
         let path = PathBuf::from(format!("/test/mod{}.vais", i));
-        let source = format!("F func{}() -> i32 {{ R {} }}", i, i);
+        let source = format!("fn func{}() -> i32 {{ R {} }}", i, i);
         modules.insert(path, source);
     }
 
@@ -743,13 +743,13 @@ fn test_type_checking_accumulation() {
     let mut checker = vais_types::TypeChecker::new();
 
     // Module 1: Define struct
-    let mod1 = vais_parser::parse("S User { id: i32, name: str }").unwrap();
+    let mod1 = vais_parser::parse("struct User { id: i32, name: str }").unwrap();
     checker
         .check_module(&mod1)
         .expect("Module 1 should type-check");
 
     // Module 2: Define function using struct from Module 1
-    let mod2 = vais_parser::parse("F get_id(u: User) -> i32 { R u.id }").unwrap();
+    let mod2 = vais_parser::parse("fn get_id(u: User) -> i32 { R u.id }").unwrap();
     // This would fail if checker didn't accumulate type info from mod1
     let result = checker.check_module(&mod2);
 
@@ -798,9 +798,9 @@ fn test_parallel_level_independence() {
 
     // Verify processing order doesn't matter by parsing in different orders
     let sources = vec![
-        "F a() -> i32 { R 1 }",
-        "F b() -> i32 { R 2 }",
-        "F c() -> i32 { R 3 }",
+        "fn a() -> i32 { R 1 }",
+        "fn b() -> i32 { R 2 }",
+        "fn c() -> i32 { R 3 }",
     ];
 
     // Order 1: a, b, c

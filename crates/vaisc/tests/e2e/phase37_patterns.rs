@@ -15,8 +15,8 @@ fn e2e_p37_match_nested_if_fallthrough() {
     // Match with nested classification:
     // classify(85): 85 matches x I x > 50 => 2, exit code 2
     let source = r#"
-F classify(n: i64) -> i64 {
-    M n {
+fn classify(n: i64) -> i64 {
+    match n {
         x I x > 90 => 4,
         x I x > 70 => 3,
         x I x > 50 => 2,
@@ -25,8 +25,8 @@ F classify(n: i64) -> i64 {
     }
 }
 
-F main() -> i64 {
-    R classify(85)
+fn main() -> i64 {
+    return classify(85)
 }
 "#;
     assert_exit_code(source, 3);
@@ -37,16 +37,16 @@ fn e2e_p37_match_literal_zero() {
     // Match on literal 0 — direct pattern hit
     // input is 0 => 100, exit code 100
     let source = r#"
-F check(n: i64) -> i64 {
-    M n {
+fn check(n: i64) -> i64 {
+    match n {
         0 => 100,
         1 => 200,
         _ => 0
     }
 }
 
-F main() -> i64 {
-    R check(0)
+fn main() -> i64 {
+    return check(0)
 }
 "#;
     assert_exit_code(source, 100);
@@ -56,8 +56,8 @@ F main() -> i64 {
 fn e2e_p37_match_wildcard_fallback() {
     // Match that falls through to wildcard — input 999 matches _
     let source = r#"
-F lookup(n: i64) -> i64 {
-    M n {
+fn lookup(n: i64) -> i64 {
+    match n {
         1 => 10,
         2 => 20,
         3 => 30,
@@ -65,8 +65,8 @@ F lookup(n: i64) -> i64 {
     }
 }
 
-F main() -> i64 {
-    R lookup(999)
+fn main() -> i64 {
+    return lookup(999)
 }
 "#;
     assert_exit_code(source, 99);
@@ -77,10 +77,10 @@ fn e2e_p37_match_on_function_result() {
     // Match on the result of a function call
     // compute() = 15, 15 matches x I x > 10 => 2, exit code 2
     let source = r#"
-F compute() -> i64 { 15 }
+fn compute() -> i64 { 15 }
 
-F main() -> i64 {
-    M compute() {
+fn main() -> i64 {
+    match compute() {
         x I x > 20 => 3,
         x I x > 10 => 2,
         x I x > 0 => 1,
@@ -96,8 +96,8 @@ fn e2e_p37_match_or_pattern_extended() {
     // Or-pattern matching multiple literal values
     // n=7 matches 6|7|8 => 30, exit code 30
     let source = r#"
-F bucket(n: i64) -> i64 {
-    M n {
+fn bucket(n: i64) -> i64 {
+    match n {
         1 | 2 | 3 => 10,
         4 | 5 => 20,
         6 | 7 | 8 => 30,
@@ -105,8 +105,8 @@ F bucket(n: i64) -> i64 {
     }
 }
 
-F main() -> i64 {
-    R bucket(7)
+fn main() -> i64 {
+    return bucket(7)
 }
 "#;
     assert_exit_code(source, 30);
@@ -117,16 +117,16 @@ fn e2e_p37_match_range_boundary() {
     // Range pattern boundary test: n=10, 0..10 is exclusive, so 10 falls to 10..20
     // bucket(10) => 2
     let source = r#"
-F bucket(n: i64) -> i64 {
-    M n {
+fn bucket(n: i64) -> i64 {
+    match n {
         0..10 => 1,
         10..20 => 2,
         _ => 0
     }
 }
 
-F main() -> i64 {
-    R bucket(10)
+fn main() -> i64 {
+    return bucket(10)
 }
 "#;
     assert_exit_code(source, 2);
@@ -139,20 +139,20 @@ fn e2e_p37_enum_match_with_data() {
     // Enum with data field — destructuring in match
     // area(Circle(5)) = 5 * 5 * 3 = 75, exit code 75
     let source = r#"
-E Shape {
+enum Shape {
     Circle(i64),
     Square(i64)
 }
 
-F area(s: Shape) -> i64 {
-    M s {
+fn area(s: Shape) -> i64 {
+    match s {
         Circle(r) => r * r * 3,
         Square(side) => side * side
     }
 }
 
-F main() -> i64 {
-    R area(Circle(5))
+fn main() -> i64 {
+    return area(Circle(5))
 }
 "#;
     assert_exit_code(source, 75);
@@ -163,20 +163,20 @@ fn e2e_p37_enum_match_second_variant() {
     // Test matching the second variant of an enum
     // area(Square(7)) = 7 * 7 = 49, exit code 49
     let source = r#"
-E Shape {
+enum Shape {
     Circle(i64),
     Square(i64)
 }
 
-F area(s: Shape) -> i64 {
-    M s {
+fn area(s: Shape) -> i64 {
+    match s {
         Circle(r) => r * r * 3,
         Square(side) => side * side
     }
 }
 
-F main() -> i64 {
-    R area(Square(7))
+fn main() -> i64 {
+    return area(Square(7))
 }
 "#;
     assert_exit_code(source, 49);
@@ -187,22 +187,22 @@ fn e2e_p37_enum_unit_variants() {
     // Enum with unit variants (no data) — matching determines return value
     // to_num(Blue) matches Blue => 3
     let source = r#"
-E Color {
+enum Color {
     Red,
     Green,
     Blue
 }
 
-F to_num(c: Color) -> i64 {
-    M c {
+fn to_num(c: Color) -> i64 {
+    match c {
         Red => 1,
         Green => 2,
         Blue => 3
     }
 }
 
-F main() -> i64 {
-    R to_num(Blue)
+fn main() -> i64 {
+    return to_num(Blue)
 }
 "#;
     assert_exit_code(source, 3);
@@ -215,10 +215,10 @@ fn e2e_p37_closure_capture_and_add() {
     // Closure captures outer variable and adds to parameter
     // x = 100, f(23) = 100 + 23 = 123. exit code truncated to i32: 123
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 100
     f := |y| x + y
-    R f(23)
+    return f(23)
 }
 "#;
     assert_exit_code(source, 123);
@@ -229,13 +229,13 @@ fn e2e_p37_closure_in_loop_accumulator() {
     // Closure used repeatedly inside a loop with mutable accumulator
     // f = |a, b| a + b, sum starts at 0, adds i (0..5) = 0+1+2+3+4 = 10
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     f := |a: i64, b: i64| a + b
     sum := mut 0
     L i:0..5 {
         sum = f(sum, i)
     }
-    R sum
+    return sum
 }
 "#;
     assert_exit_code(source, 10);
@@ -247,11 +247,11 @@ fn e2e_p37_closure_nested_capture() {
     // a=5, b=3, inner closure captures a and b, returns a + b + x
     // result = 5 + 3 + 2 = 10
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := 5
     b := 3
     f := |x| a + b + x
-    R f(2)
+    return f(2)
 }
 "#;
     assert_exit_code(source, 10);

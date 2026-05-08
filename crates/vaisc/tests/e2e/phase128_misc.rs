@@ -12,11 +12,11 @@ use super::helpers::*;
 fn e2e_p128_misc_self_recursion_factorial() {
     assert_exit_code(
         r#"
-F fact(n: i64) -> i64 {
-    I n <= 1 { R 1 }
-    R n * @(n - 1)
+fn fact(n: i64) -> i64 {
+    I n <= 1 { return 1 }
+    return n * @(n - 1)
 }
-F main() -> i64 = fact(5)
+fn main() -> i64 = fact(5)
 "#,
         120,
     );
@@ -26,11 +26,11 @@ F main() -> i64 = fact(5)
 fn e2e_p128_misc_self_recursion_fibonacci() {
     assert_exit_code(
         r#"
-F fib(n: i64) -> i64 {
-    I n < 2 { R n }
-    R @(n - 1) + @(n - 2)
+fn fib(n: i64) -> i64 {
+    I n < 2 { return n }
+    return @(n - 1) + @(n - 2)
 }
-F main() -> i64 = fib(10)
+fn main() -> i64 = fib(10)
 "#,
         55,
     );
@@ -40,11 +40,11 @@ F main() -> i64 = fib(10)
 fn e2e_p128_misc_self_recursion_sum_to() {
     assert_exit_code(
         r#"
-F sum_to(n: i64) -> i64 {
-    I n <= 0 { R 0 }
-    R n + @(n - 1)
+fn sum_to(n: i64) -> i64 {
+    I n <= 0 { return 0 }
+    return n + @(n - 1)
 }
-F main() -> i64 = sum_to(9)
+fn main() -> i64 = sum_to(9)
 "#,
         45,
     );
@@ -54,11 +54,11 @@ F main() -> i64 = sum_to(9)
 fn e2e_p128_misc_self_recursion_countdown() {
     assert_exit_code(
         r#"
-F countdown(n: i64) -> i64 {
-    I n <= 0 { R 42 }
-    R @(n - 1)
+fn countdown(n: i64) -> i64 {
+    I n <= 0 { return 42 }
+    return @(n - 1)
 }
-F main() -> i64 = countdown(10)
+fn main() -> i64 = countdown(10)
 "#,
         42,
     );
@@ -70,16 +70,16 @@ F main() -> i64 = countdown(10)
 fn e2e_p128_misc_mutual_recursion() {
     assert_exit_code(
         r#"
-F is_even(n: i64) -> i64 {
-    I n == 0 { R 1 }
-    R is_odd(n - 1)
+fn is_even(n: i64) -> i64 {
+    I n == 0 { return 1 }
+    return is_odd(n - 1)
 }
-F is_odd(n: i64) -> i64 {
-    I n == 0 { R 0 }
-    R is_even(n - 1)
+fn is_odd(n: i64) -> i64 {
+    I n == 0 { return 0 }
+    return is_even(n - 1)
 }
-F main() -> i64 {
-    I is_even(42) == 1 { 42 } E { 0 }
+fn main() -> i64 {
+    I is_even(42) == 1 { 42 } else { 0 }
 }
 "#,
         42,
@@ -92,15 +92,15 @@ F main() -> i64 {
 fn e2e_p128_misc_nested_if() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
     I x > 5 {
         I x > 8 {
             42
-        } E {
+        } else {
             0
         }
-    } E {
+    } else {
         0
     }
 }
@@ -113,14 +113,14 @@ F main() -> i64 {
 fn e2e_p128_misc_if_else_chain() {
     assert_exit_code(
         r#"
-F classify(n: i64) -> i64 {
-    I n < 0 { R 1 }
-    I n == 0 { R 2 }
-    I n < 10 { R 3 }
-    I n < 100 { R 42 }
-    R 5
+fn classify(n: i64) -> i64 {
+    I n < 0 { return 1 }
+    I n == 0 { return 2 }
+    I n < 10 { return 3 }
+    I n < 100 { return 42 }
+    return 5
 }
-F main() -> i64 = classify(50)
+fn main() -> i64 = classify(50)
 "#,
         42,
     );
@@ -130,7 +130,7 @@ F main() -> i64 = classify(50)
 fn e2e_p128_misc_nested_loop_break() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     count := mut 0
     L i:0..10 {
         L j:0..10 {
@@ -149,7 +149,7 @@ F main() -> i64 {
 fn e2e_p128_misc_loop_continue() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     L i:0..10 {
         I i % 2 == 0 { C }
@@ -166,13 +166,13 @@ F main() -> i64 {
 fn e2e_p128_misc_early_return() {
     assert_exit_code(
         r#"
-F find_first_gt5(a: i64, b: i64, c: i64) -> i64 {
-    I a > 5 { R a }
-    I b > 5 { R b }
-    I c > 5 { R c }
-    R 0
+fn find_first_gt5(a: i64, b: i64, c: i64) -> i64 {
+    I a > 5 { return a }
+    I b > 5 { return b }
+    I c > 5 { return c }
+    return 0
 }
-F main() -> i64 = find_first_gt5(1, 42, 100)
+fn main() -> i64 = find_first_gt5(1, 42, 100)
 "#,
         42,
     );
@@ -184,7 +184,7 @@ F main() -> i64 = find_first_gt5(1, 42, 100)
 fn e2e_p128_misc_while_loop() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 0
     L {
         I x >= 42 { B }
@@ -201,7 +201,7 @@ F main() -> i64 {
 fn e2e_p128_misc_range_loop_sum() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     L i:1..10 {
         sum = sum + i
@@ -217,7 +217,7 @@ F main() -> i64 {
 fn e2e_p128_misc_nested_range_loops() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     total := mut 0
     L i:1..4 {
         L j:1..4 {
@@ -237,7 +237,7 @@ fn e2e_p128_misc_loop_with_computation() {
     // Instead, use a computation that fits in exit code range
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     result := mut 1
     L i:1..5 {
         result = result * i
@@ -255,7 +255,7 @@ F main() -> i64 {
 fn e2e_p128_misc_variable_shadowing() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
     x := 42
     x
@@ -269,7 +269,7 @@ F main() -> i64 {
 fn e2e_p128_misc_variable_rebinding() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
     y := x + 32
     y
@@ -283,7 +283,7 @@ F main() -> i64 {
 fn e2e_p128_misc_mutable_variable() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 0
     x = 42
     x
@@ -299,8 +299,8 @@ F main() -> i64 {
 fn e2e_p128_misc_expr_body_fn() {
     assert_exit_code(
         r#"
-F double(x: i64) -> i64 = x * 2
-F main() -> i64 = double(21)
+fn double(x: i64) -> i64 = x * 2
+fn main() -> i64 = double(21)
 "#,
         42,
     );
@@ -310,9 +310,9 @@ F main() -> i64 = double(21)
 fn e2e_p128_misc_expr_body_chain() {
     assert_exit_code(
         r#"
-F inc(x: i64) -> i64 = x + 1
-F double(x: i64) -> i64 = x * 2
-F main() -> i64 = inc(double(20))
+fn inc(x: i64) -> i64 = x + 1
+fn double(x: i64) -> i64 = x * 2
+fn main() -> i64 = inc(double(20))
 "#,
         41,
     );
@@ -322,8 +322,8 @@ F main() -> i64 = inc(double(20))
 fn e2e_p128_misc_complex_expr_body() {
     assert_exit_code(
         r#"
-F compute(a: i64, b: i64, c: i64) -> i64 = a * b + c
-F main() -> i64 = compute(6, 7, 0)
+fn compute(a: i64, b: i64, c: i64) -> i64 = a * b + c
+fn main() -> i64 = compute(6, 7, 0)
 "#,
         42,
     );
@@ -335,7 +335,7 @@ F main() -> i64 = compute(6, 7, 0)
 fn e2e_p128_misc_array_basic() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     arr := [10, 20, 12]
     arr[0] + arr[1] + arr[2]
 }
@@ -348,7 +348,7 @@ F main() -> i64 {
 fn e2e_p128_misc_array_index() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     arr := [42, 1, 2, 3]
     arr[0]
 }
@@ -361,7 +361,7 @@ F main() -> i64 {
 fn e2e_p128_misc_array_last_element() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     arr := [1, 2, 3, 42]
     arr[3]
 }
@@ -376,9 +376,9 @@ F main() -> i64 {
 fn e2e_p128_misc_fn_composition() {
     assert_exit_code(
         r#"
-F square(x: i64) -> i64 = x * x
-F add_six(x: i64) -> i64 = x + 6
-F main() -> i64 = add_six(square(6))
+fn square(x: i64) -> i64 = x * x
+fn add_six(x: i64) -> i64 = x + 6
+fn main() -> i64 = add_six(square(6))
 "#,
         42,
     );
@@ -388,10 +388,10 @@ F main() -> i64 = add_six(square(6))
 fn e2e_p128_misc_fn_multiple_calls() {
     assert_exit_code(
         r#"
-F max(a: i64, b: i64) -> i64 {
-    I a > b { a } E { b }
+fn max(a: i64, b: i64) -> i64 {
+    I a > b { a } else { b }
 }
-F main() -> i64 {
+fn main() -> i64 {
     a := max(10, 20)
     b := max(22, 5)
     a + b
@@ -405,11 +405,11 @@ F main() -> i64 {
 fn e2e_p128_misc_fn_recursive_helper() {
     assert_exit_code(
         r#"
-F gcd(a: i64, b: i64) -> i64 {
-    I b == 0 { R a }
-    R @(b, a % b)
+fn gcd(a: i64, b: i64) -> i64 {
+    I b == 0 { return a }
+    return @(b, a % b)
 }
-F main() -> i64 = gcd(42, 84)
+fn main() -> i64 = gcd(42, 84)
 "#,
         42,
     );

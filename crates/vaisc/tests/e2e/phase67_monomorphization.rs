@@ -18,10 +18,10 @@ fn e2e_phase67_transitive_generic_two_levels() {
     // bar<T> is only called from inside foo<T>.
     // When foo<i64> is instantiated, bar<i64> must also be instantiated.
     let source = r#"
-F bar<T>(x: T) -> T { x }
-F foo<T>(x: T) -> T { bar(x) }
+fn bar<T>(x: T) -> type { x }
+fn foo<T>(x: T) -> type { bar(x) }
 
-F main() -> i64 {
+fn main() -> i64 {
     foo(42)
 }
 "#;
@@ -34,11 +34,11 @@ F main() -> i64 {
 fn e2e_phase67_transitive_three_levels() {
     // c<T> -> b<T> -> a<T>, only c is called from main
     let source = r#"
-F a<T>(x: T) -> T { x }
-F b<T>(x: T) -> T { a(x) }
-F c<T>(x: T) -> T { b(x) }
+fn a<T>(x: T) -> type { x }
+fn b<T>(x: T) -> type { a(x) }
+fn c<T>(x: T) -> type { b(x) }
 
-F main() -> i64 {
+fn main() -> i64 {
     c(99)
 }
 "#;
@@ -51,10 +51,10 @@ F main() -> i64 {
 fn e2e_phase67_transitive_with_arithmetic() {
     // add_ten<T> calls identity<T>; arithmetic performed on result
     let source = r#"
-F identity<T>(x: T) -> T { x }
-F add_ten<T>(x: T) -> T { identity(x) + 10 }
+fn identity<T>(x: T) -> type { x }
+fn add_ten<T>(x: T) -> type { identity(x) + 10 }
 
-F main() -> i64 {
+fn main() -> i64 {
     add_ten(32)
 }
 "#;
@@ -67,12 +67,12 @@ F main() -> i64 {
 fn e2e_phase67_diamond_transitive() {
     // both left<T> and right<T> call base<T>; top<T> calls both
     let source = r#"
-F base<T>(x: T) -> T { x }
-F left<T>(x: T) -> T { base(x) }
-F right<T>(x: T) -> T { base(x) }
-F top<T>(a: T, b: T) -> T { left(a) + right(b) }
+fn base<T>(x: T) -> type { x }
+fn left<T>(x: T) -> type { base(x) }
+fn right<T>(x: T) -> type { base(x) }
+fn top<T>(a: T, b: T) -> type { left(a) + right(b) }
 
-F main() -> i64 {
+fn main() -> i64 {
     top(20, 22)
 }
 "#;
@@ -85,10 +85,10 @@ F main() -> i64 {
 fn e2e_phase67_multiple_calls_same_generic() {
     // wrap<T> is called 3 times with the same type from within combine<T>
     let source = r#"
-F wrap<T>(x: T) -> T { x }
-F combine<T>(a: T, b: T, c: T) -> T { wrap(a) + wrap(b) + wrap(c) }
+fn wrap<T>(x: T) -> type { x }
+fn combine<T>(a: T, b: T, c: T) -> type { wrap(a) + wrap(b) + wrap(c) }
 
-F main() -> i64 {
+fn main() -> i64 {
     combine(10, 20, 12)
 }
 "#;
@@ -101,13 +101,13 @@ F main() -> i64 {
 fn e2e_phase67_generic_struct_return() {
     // Generic function creates and returns a struct
     let source = r#"
-S Pair { first: i64, second: i64 }
+struct Pair { first: i64, second: i64 }
 
-F make_pair(a: i64, b: i64) -> Pair {
+fn make_pair(a: i64, b: i64) -> Pair {
     Pair { first: a, second: b }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := make_pair(30, 12)
     p.first + p.second
 }
@@ -121,16 +121,16 @@ F main() -> i64 {
 fn e2e_phase67_transitive_with_conditional() {
     // inner<T> returns x; outer<T> calls inner conditionally
     let source = r#"
-F inner<T>(x: T) -> T { x }
-F outer<T>(x: T) -> T {
+fn inner<T>(x: T) -> type { x }
+fn outer<T>(x: T) -> type {
     I x > 0 {
         inner(x)
-    } E {
+    } else {
         inner(0)
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     outer(42)
 }
 "#;
@@ -143,12 +143,12 @@ F main() -> i64 {
 fn e2e_phase67_recursive_generic() {
     // countdown uses @(n-1) to self-recurse; tests that recursive generics work
     let source = r#"
-F countdown(n: i64) -> i64 {
-    I n <= 0 { R 0 }
+fn countdown(n: i64) -> i64 {
+    I n <= 0 { return 0 }
     @(n - 1)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     countdown(10)
 }
 "#;
@@ -162,11 +162,11 @@ fn e2e_phase67_two_instantiations_transitive() {
     // caller1 calls helper<T> with i64, caller2 with i64 too
     // Both should produce correct results
     let source = r#"
-F helper<T>(x: T) -> T { x }
-F caller_a<T>(x: T) -> T { helper(x) + 1 }
-F caller_b<T>(x: T) -> T { helper(x) + 2 }
+fn helper<T>(x: T) -> type { x }
+fn caller_a<T>(x: T) -> type { helper(x) + 1 }
+fn caller_b<T>(x: T) -> type { helper(x) + 2 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := caller_a(20)
     b := caller_b(19)
     a + b
@@ -183,12 +183,12 @@ F main() -> i64 {
 #[test]
 fn e2e_phase67_identity_chain_four_levels() {
     let source = r#"
-F id1<T>(x: T) -> T { x }
-F id2<T>(x: T) -> T { id1(x) }
-F id3<T>(x: T) -> T { id2(x) }
-F id4<T>(x: T) -> T { id3(x) }
+fn id1<T>(x: T) -> type { x }
+fn id2<T>(x: T) -> type { id1(x) }
+fn id3<T>(x: T) -> type { id2(x) }
+fn id4<T>(x: T) -> type { id3(x) }
 
-F main() -> i64 {
+fn main() -> i64 {
     id4(77)
 }
 "#;
@@ -201,11 +201,11 @@ F main() -> i64 {
 fn e2e_phase67_transitive_accumulation() {
     // Each level adds a constant to the value
     let source = r#"
-F base<T>(x: T) -> T { x + 1 }
-F mid<T>(x: T) -> T { base(x) + 1 }
-F top<T>(x: T) -> T { mid(x) + 1 }
+fn base<T>(x: T) -> type { x + 1 }
+fn mid<T>(x: T) -> type { base(x) + 1 }
+fn top<T>(x: T) -> type { mid(x) + 1 }
 
-F main() -> i64 {
+fn main() -> i64 {
     top(39)
 }
 "#;
@@ -219,13 +219,13 @@ F main() -> i64 {
 fn e2e_phase67_generic_struct_with_generic_fn() {
     // Generic struct Wrapper<T> and generic function unwrap<T>
     let source = r#"
-S Wrapper<T> { value: T }
+struct Wrapper<T> { value: type }
 
-F unwrap_value<T>(w: Wrapper<T>) -> T {
+fn unwrap_value<T>(w: Wrapper<T>) -> type {
     w.value
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     w := Wrapper { value: 42 }
     unwrap_value(w)
 }

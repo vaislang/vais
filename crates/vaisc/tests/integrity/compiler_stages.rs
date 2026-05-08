@@ -31,7 +31,7 @@ fn write_tmp(name: &str, src: &str) -> (TempDir, std::path::PathBuf) {
 #[test]
 fn test_lex_gate_valid() {
     // Well-formed input — should parse cleanly.
-    let (_d, p) = write_tmp("lex_valid.vais", "F main() -> i64 { 0 }");
+    let (_d, p) = write_tmp("lex_valid.vais", "fn main() -> i64 { 0 }");
     assert!(
         ok_parse(&p),
         "ok_parse failed for {}: expected valid lex/parse",
@@ -56,7 +56,7 @@ fn test_lex_gate_unterminated_string() {
 #[test]
 fn test_lex_gate_invalid_char() {
     // `§` is not a valid Vais token — should fail at lex/parse.
-    let (_d, p) = write_tmp("lex_invalid_char.vais", "F main() -> i64 { § }");
+    let (_d, p) = write_tmp("lex_invalid_char.vais", "fn main() -> i64 { § }");
     assert!(
         !ok_parse(&p),
         "ok_parse should fail for {}: invalid character §",
@@ -86,7 +86,7 @@ fn main() -> i64 { add(1, 2) }
 fn test_parse_gate_invalid_tokens() {
     // `@@@` is the self-recursion op used three times with no valid expression
     // context — should fail to parse (P001).
-    let (_d, p) = write_tmp("parse_at3.vais", "F main() -> i64 { @@@ }");
+    let (_d, p) = write_tmp("parse_at3.vais", "fn main() -> i64 { @@@ }");
     assert!(
         !ok_parse(&p),
         "ok_parse should fail for {}: @@@ is not a valid expression",
@@ -97,7 +97,7 @@ fn test_parse_gate_invalid_tokens() {
 #[test]
 fn test_parse_gate_missing_brace() {
     // Missing closing brace — parse error.
-    let (_d, p) = write_tmp("parse_no_brace.vais", "F main() -> i64 { 0");
+    let (_d, p) = write_tmp("parse_no_brace.vais", "fn main() -> i64 { 0");
     assert!(
         !ok_parse(&p),
         "ok_parse should fail for {}: missing closing brace",
@@ -209,7 +209,7 @@ fn main() -> i64 {
 #[test]
 fn test_run_gate_exit_42() {
     // The canonical "hello compiler" test: main returns 42, exit code = 42 & 0xff.
-    let (_d, p) = write_tmp("run_exit42.vais", "F main() -> i64 { 42 }");
+    let (_d, p) = write_tmp("run_exit42.vais", "fn main() -> i64 { 42 }");
     assert!(
         ok_run(&p, 42),
         "ok_run failed for {}: expected exit 42",
@@ -219,7 +219,7 @@ fn test_run_gate_exit_42() {
 
 #[test]
 fn test_run_gate_exit_0() {
-    let (_d, p) = write_tmp("run_exit0.vais", "F main() -> i64 { 0 }");
+    let (_d, p) = write_tmp("run_exit0.vais", "fn main() -> i64 { 0 }");
     assert!(
         ok_run(&p, 0),
         "ok_run failed for {}: expected exit 0",

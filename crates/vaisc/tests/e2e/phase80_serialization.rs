@@ -12,7 +12,7 @@ use super::helpers::*;
 fn e2e_p80_msgpack_encode_nil() {
     // Encode nil -> should produce single byte 0xc0 (192)
     let source = r#"
-F mp_buf_new() -> i64 {
+fn mp_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -20,14 +20,14 @@ F mp_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F mp_buf_write(buf: i64, b: i64) -> i64 {
+fn mp_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F main() -> i64 {
+fn main() -> i64 {
     buf := mp_buf_new()
     # nil = 0xc0 = 192
     mp_buf_write(buf, 192)
@@ -48,7 +48,7 @@ F main() -> i64 {
 fn e2e_p80_msgpack_encode_bool() {
     // false = 0xc2 (194), true = 0xc3 (195)
     let source = r#"
-F mp_buf_new() -> i64 {
+fn mp_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -56,18 +56,18 @@ F mp_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F mp_buf_write(buf: i64, b: i64) -> i64 {
+fn mp_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F mp_encode_bool(buf: i64, b: i64) -> i64 {
+fn mp_encode_bool(buf: i64, b: i64) -> i64 {
     I b == 0 { mp_buf_write(buf, 194) }
-    E { mp_buf_write(buf, 195) }
+    else { mp_buf_write(buf, 195) }
 }
-F main() -> i64 {
+fn main() -> i64 {
     buf := mp_buf_new()
     mp_encode_bool(buf, 0)
     mp_encode_bool(buf, 1)
@@ -89,7 +89,7 @@ F main() -> i64 {
 fn e2e_p80_msgpack_encode_positive_fixint() {
     // Positive fixint: 0x00-0x7f for values 0-127
     let source = r#"
-F mp_buf_new() -> i64 {
+fn mp_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -97,23 +97,23 @@ F mp_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F mp_buf_write(buf: i64, b: i64) -> i64 {
+fn mp_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F mp_encode_int(buf: i64, n: i64) -> i64 {
+fn mp_encode_int(buf: i64, n: i64) -> i64 {
     I n >= 0 && n <= 127 { mp_buf_write(buf, n) }
-    E I n >= 0 - 32 && n < 0 { mp_buf_write(buf, 256 + n) }
-    E I n >= 0 && n <= 255 {
+    else I n >= 0 - 32 && n < 0 { mp_buf_write(buf, 256 + n) }
+    else I n >= 0 && n <= 255 {
         mp_buf_write(buf, 204)
         mp_buf_write(buf, n)
     }
-    E { 0 }
+    else { 0 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     buf := mp_buf_new()
     mp_encode_int(buf, 0)
     mp_encode_int(buf, 42)
@@ -137,7 +137,7 @@ F main() -> i64 {
 fn e2e_p80_msgpack_encode_negative_fixint() {
     // Negative fixint: 0xe0-0xff for -32 to -1
     let source = r#"
-F mp_buf_new() -> i64 {
+fn mp_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -145,19 +145,19 @@ F mp_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F mp_buf_write(buf: i64, b: i64) -> i64 {
+fn mp_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F mp_encode_int(buf: i64, n: i64) -> i64 {
+fn mp_encode_int(buf: i64, n: i64) -> i64 {
     I n >= 0 && n <= 127 { mp_buf_write(buf, n) }
-    E I n >= 0 - 32 && n < 0 { mp_buf_write(buf, 256 + n) }
-    E { 0 }
+    else I n >= 0 - 32 && n < 0 { mp_buf_write(buf, 256 + n) }
+    else { 0 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     buf := mp_buf_new()
     mp_encode_int(buf, 0 - 1)   # -1 -> 0xff (255)
     mp_encode_int(buf, 0 - 10)  # -10 -> 0xf6 (246)
@@ -181,7 +181,7 @@ F main() -> i64 {
 fn e2e_p80_msgpack_encode_uint8() {
     // uint 8: 0xcc prefix + 1 byte for values 128-255
     let source = r#"
-F mp_buf_new() -> i64 {
+fn mp_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -189,22 +189,22 @@ F mp_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F mp_buf_write(buf: i64, b: i64) -> i64 {
+fn mp_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F mp_encode_int(buf: i64, n: i64) -> i64 {
+fn mp_encode_int(buf: i64, n: i64) -> i64 {
     I n >= 0 && n <= 127 { mp_buf_write(buf, n) }
-    E I n >= 0 && n <= 255 {
+    else I n >= 0 && n <= 255 {
         mp_buf_write(buf, 204)
         mp_buf_write(buf, n)
     }
-    E { 0 }
+    else { 0 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     buf := mp_buf_new()
     mp_encode_int(buf, 200)
     data := load_i64(buf)
@@ -226,7 +226,7 @@ fn e2e_p80_msgpack_encode_fixstr() {
     // fixstr: 0xa0 + len, then string bytes
     // "Hi" = 0xa2 'H' 'i'
     let source = r#"
-F mp_buf_new() -> i64 {
+fn mp_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -234,26 +234,26 @@ F mp_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F mp_buf_write(buf: i64, b: i64) -> i64 {
+fn mp_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F mp_buf_write_bytes(buf: i64, src: i64, count: i64) -> i64 {
+fn mp_buf_write_bytes(buf: i64, src: i64, count: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     memcpy(data + len, src, count)
     store_i64(buf + 8, len + count)
     count
 }
-F mp_encode_str(buf: i64, s: i64, slen: i64) -> i64 {
+fn mp_encode_str(buf: i64, s: i64, slen: i64) -> i64 {
     I slen <= 31 { mp_buf_write(buf, 160 + slen) }
-    E { 0 }
+    else { 0 }
     mp_buf_write_bytes(buf, s, slen)
 }
-F main() -> i64 {
+fn main() -> i64 {
     buf := mp_buf_new()
     s := str_to_ptr("Hi")
     mp_encode_str(buf, s, 2)
@@ -277,7 +277,7 @@ fn e2e_p80_msgpack_encode_fixarray() {
     // fixarray: 0x90 + count, then elements
     // [1, 2, 3] = 0x93, 1, 2, 3
     let source = r#"
-F mp_buf_new() -> i64 {
+fn mp_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -285,14 +285,14 @@ F mp_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F mp_buf_write(buf: i64, b: i64) -> i64 {
+fn mp_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F main() -> i64 {
+fn main() -> i64 {
     buf := mp_buf_new()
     # fixarray with 3 elements: 0x90 + 3 = 0x93 = 147
     mp_buf_write(buf, 147)
@@ -320,7 +320,7 @@ F main() -> i64 {
 fn e2e_p80_msgpack_decode_positive_fixint() {
     // Decode bytes [42] -> positive fixint 42
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     # Create a buffer with a single positive fixint: 42
     data := malloc(1)
     store_byte(data, 42)
@@ -343,7 +343,7 @@ F main() -> i64 {
 fn e2e_p80_msgpack_decode_negative_fixint() {
     // Decode byte 0xf6 (246) -> negative fixint -10
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     data := malloc(1)
     store_byte(data, 246)  # 0xf6 = -10 in negative fixint
 
@@ -365,7 +365,7 @@ F main() -> i64 {
 fn e2e_p80_msgpack_roundtrip_int() {
     // Encode integer 42, then decode it back
     let source = r#"
-F mp_buf_new() -> i64 {
+fn mp_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -373,30 +373,30 @@ F mp_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F mp_buf_write(buf: i64, b: i64) -> i64 {
+fn mp_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F mp_encode_int(buf: i64, n: i64) -> i64 {
+fn mp_encode_int(buf: i64, n: i64) -> i64 {
     I n >= 0 && n <= 127 { mp_buf_write(buf, n) }
-    E I n >= 0 - 32 && n < 0 { mp_buf_write(buf, 256 + n) }
-    E I n >= 0 && n <= 255 {
+    else I n >= 0 - 32 && n < 0 { mp_buf_write(buf, 256 + n) }
+    else I n >= 0 && n <= 255 {
         mp_buf_write(buf, 204)
         mp_buf_write(buf, n)
     }
-    E { 0 }
+    else { 0 }
 }
-F mp_decode(data: i64, pos: i64) -> i64 {
+fn mp_decode(data: i64, pos: i64) -> i64 {
     b := load_byte(data + pos)
     I b <= 127 { b }
-    E I b >= 224 { b - 256 }
-    E I b == 204 { load_byte(data + pos + 1) }
-    E { 0 - 1 }
+    else I b >= 224 { b - 256 }
+    else I b == 204 { load_byte(data + pos + 1) }
+    else { 0 - 1 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     buf := mp_buf_new()
     mp_encode_int(buf, 42)
     mp_encode_int(buf, 0 - 5)
@@ -427,7 +427,7 @@ fn e2e_p80_msgpack_fixmap_encode() {
     // fixmap: 0x80 + count, then key-value pairs
     // {"a": 1} = 0x81, 0xa1, 'a', 1
     let source = r#"
-F mp_buf_new() -> i64 {
+fn mp_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -435,14 +435,14 @@ F mp_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F mp_buf_write(buf: i64, b: i64) -> i64 {
+fn mp_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F main() -> i64 {
+fn main() -> i64 {
     buf := mp_buf_new()
     # fixmap with 1 entry: 0x80 + 1 = 129
     mp_buf_write(buf, 129)
@@ -474,7 +474,7 @@ F main() -> i64 {
 fn e2e_p80_protobuf_varint_encode_small() {
     // Varint encode: value < 128 -> single byte
     let source = r#"
-F pb_buf_new() -> i64 {
+fn pb_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -482,24 +482,24 @@ F pb_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F pb_buf_write(buf: i64, b: i64) -> i64 {
+fn pb_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F pb_encode_varint(buf: i64, value: i64) -> i64 {
+fn pb_encode_varint(buf: i64, value: i64) -> i64 {
     I value >= 0 && value < 128 {
         pb_buf_write(buf, value)
         1
-    } E {
+    } else {
         pb_buf_write(buf, (value & 127) | 128)
         next := (value >> 7) & 576460752303423487
         pb_encode_varint(buf, next)
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     buf := pb_buf_new()
     pb_encode_varint(buf, 1)
     pb_encode_varint(buf, 42)
@@ -526,7 +526,7 @@ fn e2e_p80_protobuf_varint_encode_multibyte() {
     // byte1: 0101100 | 1 (continuation) = 0b10101100 = 172 (0xAC)
     // byte2: 0000010 = 2 (0x02)
     let source = r#"
-F pb_buf_new() -> i64 {
+fn pb_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -534,24 +534,24 @@ F pb_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F pb_buf_write(buf: i64, b: i64) -> i64 {
+fn pb_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F pb_encode_varint(buf: i64, value: i64) -> i64 {
+fn pb_encode_varint(buf: i64, value: i64) -> i64 {
     I value >= 0 && value < 128 {
         pb_buf_write(buf, value)
         1
-    } E {
+    } else {
         pb_buf_write(buf, (value & 127) | 128)
         next := (value >> 7) & 576460752303423487
         pb_encode_varint(buf, next)
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     buf := pb_buf_new()
     pb_encode_varint(buf, 300)
     data := load_i64(buf)
@@ -572,22 +572,22 @@ F main() -> i64 {
 fn e2e_p80_protobuf_varint_decode() {
     // Decode varint: [172, 2] -> 300
     let source = r#"
-F pb_decode_varint_rec(data: i64, pos: i64, result: i64, shift: i64) -> i64 {
+fn pb_decode_varint_rec(data: i64, pos: i64, result: i64, shift: i64) -> i64 {
     byte := load_byte(data + pos)
     new_result := result | ((byte & 127) << shift)
     I (byte & 128) == 0 { new_result }
-    E { pb_decode_varint_rec(data, pos + 1, new_result, shift + 7) }
+    else { pb_decode_varint_rec(data, pos + 1, new_result, shift + 7) }
 }
-F pb_decode_varint(data: i64, pos: i64) -> i64 {
+fn pb_decode_varint(data: i64, pos: i64) -> i64 {
     pb_decode_varint_rec(data, pos, 0, 0)
 }
-F main() -> i64 {
+fn main() -> i64 {
     data := malloc(2)
     store_byte(data, 172)  # 0xAC
     store_byte(data + 1, 2) # 0x02
     val := pb_decode_varint(data, 0)
     free(data)
-    I val == 300 { 10 } E { 0 }
+    I val == 300 { 10 } else { 0 }
 }
 "#;
     assert_exit_code(source, 10);
@@ -597,7 +597,7 @@ F main() -> i64 {
 fn e2e_p80_protobuf_varint_roundtrip() {
     // Encode and decode various values
     let source = r#"
-F pb_buf_new() -> i64 {
+fn pb_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -605,35 +605,35 @@ F pb_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F pb_buf_write(buf: i64, b: i64) -> i64 {
+fn pb_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F pb_encode_varint(buf: i64, value: i64) -> i64 {
+fn pb_encode_varint(buf: i64, value: i64) -> i64 {
     I value >= 0 && value < 128 {
         pb_buf_write(buf, value)
         1
-    } E {
+    } else {
         pb_buf_write(buf, (value & 127) | 128)
         next := (value >> 7) & 576460752303423487
         pb_encode_varint(buf, next)
     }
 }
-F pb_decode_varint_rec(data: i64, pos: i64, result: i64, shift: i64) -> i64 {
+fn pb_decode_varint_rec(data: i64, pos: i64, result: i64, shift: i64) -> i64 {
     byte := load_byte(data + pos)
     new_result := result | ((byte & 127) << shift)
     I (byte & 128) == 0 { new_result }
-    E { pb_decode_varint_rec(data, pos + 1, new_result, shift + 7) }
+    else { pb_decode_varint_rec(data, pos + 1, new_result, shift + 7) }
 }
-F pb_varint_size(data: i64, pos: i64) -> i64 {
+fn pb_varint_size(data: i64, pos: i64) -> i64 {
     byte := load_byte(data + pos)
     I (byte & 128) == 0 { 1 }
-    E { 1 + pb_varint_size(data, pos + 1) }
+    else { 1 + pb_varint_size(data, pos + 1) }
 }
-F main() -> i64 {
+fn main() -> i64 {
     buf := pb_buf_new()
     pb_encode_varint(buf, 0)
     pb_encode_varint(buf, 1)
@@ -675,16 +675,16 @@ fn e2e_p80_protobuf_zigzag() {
     // ZigZag encoding: maps signed to unsigned
     // 0 -> 0, -1 -> 1, 1 -> 2, -2 -> 3, 2 -> 4, etc.
     let source = r#"
-F pb_zigzag_encode(n: i64) -> i64 {
+fn pb_zigzag_encode(n: i64) -> i64 {
     I n >= 0 { n * 2 }
-    E { (0 - n) * 2 - 1 }
+    else { (0 - n) * 2 - 1 }
 }
-F pb_zigzag_decode(n: i64) -> i64 {
+fn pb_zigzag_decode(n: i64) -> i64 {
     half := (n >> 1) & 4611686018427387903
     I (n & 1) == 0 { half }
-    E { 0 - half - 1 }
+    else { 0 - half - 1 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     result := mut 0
     # Encode tests
     I pb_zigzag_encode(0) == 0 { result = result + 1 }
@@ -711,16 +711,16 @@ fn e2e_p80_protobuf_field_tag() {
     // field 1, wire type 0 (varint) = 0x08 = 8
     // field 2, wire type 2 (length-delimited) = 0x12 = 18
     let source = r#"
-F pb_make_tag(field_num: i64, wire_type: i64) -> i64 {
+fn pb_make_tag(field_num: i64, wire_type: i64) -> i64 {
     (field_num << 3) | (wire_type & 7)
 }
-F pb_tag_field_num(tag: i64) -> i64 {
+fn pb_tag_field_num(tag: i64) -> i64 {
     (tag >> 3) & 536870911
 }
-F pb_tag_wire_type(tag: i64) -> i64 {
+fn pb_tag_wire_type(tag: i64) -> i64 {
     tag & 7
 }
-F main() -> i64 {
+fn main() -> i64 {
     result := mut 0
     # field 1, varint
     t1 := pb_make_tag(1, 0)
@@ -752,7 +752,7 @@ fn e2e_p80_protobuf_write_varint_field() {
     // tag = (1 << 3) | 0 = 8 (one byte varint)
     // value = 150 = 0x96 0x01
     let source = r#"
-F pb_buf_new() -> i64 {
+fn pb_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -760,24 +760,24 @@ F pb_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F pb_buf_write(buf: i64, b: i64) -> i64 {
+fn pb_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F pb_encode_varint(buf: i64, value: i64) -> i64 {
+fn pb_encode_varint(buf: i64, value: i64) -> i64 {
     I value >= 0 && value < 128 {
         pb_buf_write(buf, value)
         1
-    } E {
+    } else {
         pb_buf_write(buf, (value & 127) | 128)
         next := (value >> 7) & 576460752303423487
         pb_encode_varint(buf, next)
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     buf := pb_buf_new()
     # tag for field 1, wire type 0
     tag := mut (1 << 3) | 0
@@ -807,7 +807,7 @@ fn e2e_p80_protobuf_write_string_field() {
     // length = 7
     // data = "testing"
     let source = r#"
-F pb_buf_new() -> i64 {
+fn pb_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -815,31 +815,31 @@ F pb_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F pb_buf_write(buf: i64, b: i64) -> i64 {
+fn pb_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F pb_buf_write_bytes(buf: i64, src: i64, count: i64) -> i64 {
+fn pb_buf_write_bytes(buf: i64, src: i64, count: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     memcpy(data + len, src, count)
     store_i64(buf + 8, len + count)
     count
 }
-F pb_encode_varint(buf: i64, value: i64) -> i64 {
+fn pb_encode_varint(buf: i64, value: i64) -> i64 {
     I value >= 0 && value < 128 {
         pb_buf_write(buf, value)
         1
-    } E {
+    } else {
         pb_buf_write(buf, (value & 127) | 128)
         next := (value >> 7) & 576460752303423487
         pb_encode_varint(buf, next)
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     buf := pb_buf_new()
     # tag for field 2, wire type 2 (length-delimited)
     tag := mut (2 << 3) | 2
@@ -872,7 +872,7 @@ fn e2e_p80_protobuf_fixed32_encode() {
     // Encode 32-bit fixed field: wire type 5
     // Field 3, value 0x01020304 = little-endian: 04 03 02 01
     let source = r#"
-F pb_buf_new() -> i64 {
+fn pb_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -880,30 +880,30 @@ F pb_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F pb_buf_write(buf: i64, b: i64) -> i64 {
+fn pb_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F pb_encode_varint(buf: i64, value: i64) -> i64 {
+fn pb_encode_varint(buf: i64, value: i64) -> i64 {
     I value >= 0 && value < 128 {
         pb_buf_write(buf, value)
         1
-    } E {
+    } else {
         pb_buf_write(buf, (value & 127) | 128)
         next := (value >> 7) & 576460752303423487
         pb_encode_varint(buf, next)
     }
 }
-F pb_write_fixed32(buf: i64, value: i64) -> i64 {
+fn pb_write_fixed32(buf: i64, value: i64) -> i64 {
     pb_buf_write(buf, value & 255)
     pb_buf_write(buf, (value >> 8) & 255)
     pb_buf_write(buf, (value >> 16) & 255)
     pb_buf_write(buf, (value >> 24) & 255)
 }
-F main() -> i64 {
+fn main() -> i64 {
     buf := pb_buf_new()
     # tag for field 3, wire type 5
     tag := mut (3 << 3) | 5
@@ -935,15 +935,15 @@ fn e2e_p80_protobuf_message_parse() {
     //   field1: tag=08(field1,varint), value=150(96 01)
     //   field2: tag=12(field2,ld), len=3, "abc"
     let source = r#"
-F pb_decode_varint_rec(data: i64, pos_ptr: i64, result: i64, shift: i64) -> i64 {
+fn pb_decode_varint_rec(data: i64, pos_ptr: i64, result: i64, shift: i64) -> i64 {
     pos := load_i64(pos_ptr)
     byte := load_byte(data + pos)
     store_i64(pos_ptr, pos + 1)
     new_result := result | ((byte & 127) << shift)
     I (byte & 128) == 0 { new_result }
-    E { pb_decode_varint_rec(data, pos_ptr, new_result, shift + 7) }
+    else { pb_decode_varint_rec(data, pos_ptr, new_result, shift + 7) }
 }
-F main() -> i64 {
+fn main() -> i64 {
     # Build encoded message manually
     msg := malloc(8)
     store_byte(msg, 8)    # tag: field 1, varint
@@ -998,7 +998,7 @@ fn e2e_p80_protobuf_embedded_message() {
     // Sub-message: field 1 = 42
     // Parent: field 3 = sub-message (wire type 2)
     let source = r#"
-F pb_buf_new() -> i64 {
+fn pb_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -1006,31 +1006,31 @@ F pb_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F pb_buf_write(buf: i64, b: i64) -> i64 {
+fn pb_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F pb_buf_write_bytes(buf: i64, src: i64, count: i64) -> i64 {
+fn pb_buf_write_bytes(buf: i64, src: i64, count: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     memcpy(data + len, src, count)
     store_i64(buf + 8, len + count)
     count
 }
-F pb_encode_varint(buf: i64, value: i64) -> i64 {
+fn pb_encode_varint(buf: i64, value: i64) -> i64 {
     I value >= 0 && value < 128 {
         pb_buf_write(buf, value)
         1
-    } E {
+    } else {
         pb_buf_write(buf, (value & 127) | 128)
         next := (value >> 7) & 576460752303423487
         pb_encode_varint(buf, next)
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     # Build sub-message: field 1 = 42
     sub := pb_buf_new()
     sub_tag := (1 << 3) | 0  # field 1, varint
@@ -1076,7 +1076,7 @@ fn e2e_p80_msgpack_vs_json_size() {
     // JSON:     ~19 bytes as text
     // MsgPack:  ~7 bytes as binary (fixmap(3) + 3*(fixstr(1)+fixint))
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     # Manually construct msgpack for {"a":1,"b":2,"c":3}
     buf := malloc(256)
     pos := mut 0
@@ -1125,7 +1125,7 @@ fn e2e_p80_protobuf_compact_encoding() {
     // tag(8)+val(42) + tag(16)+val(300) = 1+1 + 1+2 = 5 bytes
     // vs JSON {"field1":42,"field2":300} = 25 bytes
     let source = r#"
-F pb_buf_new() -> i64 {
+fn pb_buf_new() -> i64 {
     data := malloc(256)
     buf := malloc(24)
     store_i64(buf, data)
@@ -1133,24 +1133,24 @@ F pb_buf_new() -> i64 {
     store_i64(buf + 16, 256)
     buf
 }
-F pb_buf_write(buf: i64, b: i64) -> i64 {
+fn pb_buf_write(buf: i64, b: i64) -> i64 {
     data := load_i64(buf)
     len := load_i64(buf + 8)
     store_byte(data + len, b & 255)
     store_i64(buf + 8, len + 1)
     1
 }
-F pb_encode_varint(buf: i64, value: i64) -> i64 {
+fn pb_encode_varint(buf: i64, value: i64) -> i64 {
     I value >= 0 && value < 128 {
         pb_buf_write(buf, value)
         1
-    } E {
+    } else {
         pb_buf_write(buf, (value & 127) | 128)
         next := (value >> 7) & 576460752303423487
         pb_encode_varint(buf, next)
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     buf := pb_buf_new()
     # field 1 = 42
     pb_encode_varint(buf, (1 << 3) | 0)  # tag

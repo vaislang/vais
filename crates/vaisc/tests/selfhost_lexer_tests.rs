@@ -188,37 +188,37 @@ fn selfhost_lexer_module_compiles() {
     // Test that the core helper functions from the lexer compile as standalone Vais.
     let helpers = r#"
 fn is_digit(c: i64) -> i64 {
-    I c >= 48 && c <= 57 { 1 } E { 0 }
+    I c >= 48 && c <= 57 { 1 } else { 0 }
 }
 
 fn is_ident_start(c: i64) -> i64 {
     I (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95 {
         1
-    } E {
+    } else {
         0
     }
 }
 
 fn is_ident_char(c: i64) -> i64 {
-    I is_ident_start(c) == 1 || is_digit(c) == 1 { 1 } E { 0 }
+    I is_ident_start(c) == 1 || is_digit(c) == 1 { 1 } else { 0 }
 }
 
 fn is_whitespace(c: i64) -> i64 {
-    I c == 32 || c == 9 || c == 10 || c == 13 { 1 } E { 0 }
+    I c == 32 || c == 9 || c == 10 || c == 13 { 1 } else { 0 }
 }
 
 fn is_hex_digit(c: i64) -> i64 {
-    I is_digit(c) == 1 || (c >= 65 && c <= 70) || (c >= 97 && c <= 102) { 1 } E { 0 }
+    I is_digit(c) == 1 || (c >= 65 && c <= 70) || (c >= 97 && c <= 102) { 1 } else { 0 }
 }
 
 fn hex_digit_value(c: i64) -> i64 {
     I c >= 48 && c <= 57 {
         c - 48
-    } E I c >= 65 && c <= 70 {
+    } else I c >= 65 && c <= 70 {
         c - 55
-    } E I c >= 97 && c <= 102 {
+    } else I c >= 97 && c <= 102 {
         c - 87
-    } E {
+    } else {
         0
     }
 }
@@ -512,23 +512,23 @@ impl Token {
     }
 
     fn is_keyword(&self) -> i64 {
-        I self.kind >= 1 && self.kind <= 30 { 1 } E { 0 }
+        I self.kind >= 1 && self.kind <= 30 { 1 } else { 0 }
     }
 
     fn is_type_keyword(&self) -> i64 {
-        I self.kind >= 31 && self.kind <= 50 { 1 } E { 0 }
+        I self.kind >= 31 && self.kind <= 50 { 1 } else { 0 }
     }
 
     fn is_literal(&self) -> i64 {
-        I self.kind >= 51 && self.kind <= 60 { 1 } E { 0 }
+        I self.kind >= 51 && self.kind <= 60 { 1 } else { 0 }
     }
 
     fn is_operator(&self) -> i64 {
-        I self.kind >= 61 && self.kind <= 80 { 1 } E { 0 }
+        I self.kind >= 61 && self.kind <= 80 { 1 } else { 0 }
     }
 
     fn is_eof(&self) -> i64 {
-        I self.kind == TOK_EOF() { 1 } E { 0 }
+        I self.kind == TOK_EOF() { 1 } else { 0 }
     }
 }
 
@@ -551,7 +551,7 @@ fn main() -> i64 {
 #[test]
 fn selfhost_verify_single_char_keywords_f_function() {
     // F keyword = function declaration
-    let source = "F foo() -> i64 = 42\nF main() -> i64 = foo()";
+    let source = "fn foo() -> i64 = 42\nF main() -> i64 = foo()";
     assert_exit_code(source, 42);
 }
 
@@ -575,7 +575,7 @@ fn selfhost_verify_single_char_keywords_i_e_if_else() {
     let source = r#"
 fn main() -> i64 {
     x := 5
-    I x > 3 { 1 } E { 0 }
+    I x > 3 { 1 } else { 0 }
 }
 "#;
     // x=5 > 3 → 1
@@ -749,7 +749,7 @@ fn selfhost_verify_keyword_true_false() {
 fn main() -> i64 {
     a := true
     b := false
-    I a { 1 } E { 0 }
+    I a { 1 } else { 0 }
 }
 "#;
     // a=true → 1
@@ -762,55 +762,55 @@ fn main() -> i64 {
 
 #[test]
 fn selfhost_verify_type_i8() {
-    let source = "F main() -> i8 = 42";
+    let source = "fn main() -> i8 = 42";
     // i8(42) is sign-extended to i64(42); OS truncates exit code to 42 % 256 = 42
     assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_i16() {
-    let source = "F main() -> i16 = 42";
+    let source = "fn main() -> i16 = 42";
     // i16(42) is sign-extended to i64(42); exit code = 42
     assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_i32() {
-    let source = "F main() -> i32 = 42";
+    let source = "fn main() -> i32 = 42";
     // i32(42) is sign-extended to i64(42); exit code = 42
     assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_i64() {
-    let source = "F main() -> i64 = 42";
+    let source = "fn main() -> i64 = 42";
     assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_u8() {
-    let source = "F main() -> u8 = 42";
+    let source = "fn main() -> u8 = 42";
     // u8(42) is zero-extended to i64(42); exit code = 42
     assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_u16() {
-    let source = "F main() -> u16 = 42";
+    let source = "fn main() -> u16 = 42";
     // u16(42) is zero-extended to i64(42); exit code = 42
     assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_u32() {
-    let source = "F main() -> u32 = 42";
+    let source = "fn main() -> u32 = 42";
     // u32(42) is zero-extended to i64(42); exit code = 42
     assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_u64() {
-    let source = "F main() -> u64 = 42";
+    let source = "fn main() -> u64 = 42";
     // u64(42) maps to i64(42) in LLVM; exit code = 42
     assert_exit_code(source, 42);
 }
@@ -818,20 +818,20 @@ fn selfhost_verify_type_u64() {
 #[test]
 fn selfhost_verify_type_f32() {
     // Float literals default to f64; use explicit f32 parameter type to verify f32 token
-    let source = "F foo(x: f32) -> f32 = x\nF main() -> i64 = 0";
+    let source = "fn foo(x: f32) -> f32 = x\nF main() -> i64 = 0";
     assert_exit_code(source, 0);
 }
 
 #[test]
 fn selfhost_verify_type_f64() {
-    let source = "F main() -> f64 = 1.5";
+    let source = "fn main() -> f64 = 1.5";
     // fptosi(1.5) truncates toward zero → i64(1); exit code = 1
     assert_exit_code(source, 1);
 }
 
 #[test]
 fn selfhost_verify_type_bool() {
-    let source = "F foo() -> bool = true\nF main() -> i64 { I foo() { 1 } E { 0 } }";
+    let source = "fn foo() -> bool = true\nF main() -> i64 { I foo() { 1 } else { 0 } }";
     // foo() returns true → 1
     assert_exit_code(source, 1);
 }
@@ -849,14 +849,14 @@ fn main() -> i64 = 0"#;
 
 #[test]
 fn selfhost_verify_integer_decimal() {
-    let source = "F main() -> i64 = 12345";
+    let source = "fn main() -> i64 = 12345";
     // 12345 % 256 = 57 (exit codes are 0-255)
     assert_exit_code(source, 57);
 }
 
 #[test]
 fn selfhost_verify_integer_zero() {
-    let source = "F main() -> i64 = 0";
+    let source = "fn main() -> i64 = 0";
     assert_exit_code(source, 0);
 }
 
@@ -868,13 +868,13 @@ fn selfhost_verify_integer_hex_constants_compile() {
     // hex parsing logic compiles correctly as a standalone function.
     let source = r#"
 fn is_hex_digit(c: i64) -> i64 {
-    I (c >= 48 && c <= 57) || (c >= 65 && c <= 70) || (c >= 97 && c <= 102) { 1 } E { 0 }
+    I (c >= 48 && c <= 57) || (c >= 65 && c <= 70) || (c >= 97 && c <= 102) { 1 } else { 0 }
 }
 fn hex_digit_value(c: i64) -> i64 {
     I c >= 48 && c <= 57 { c - 48 }
-    E I c >= 65 && c <= 70 { c - 55 }
-    E I c >= 97 && c <= 102 { c - 87 }
-    E { 0 }
+    else I c >= 65 && c <= 70 { c - 55 }
+    else I c >= 97 && c <= 102 { c - 87 }
+    else { 0 }
 }
 fn main() -> i64 {
     # Verify hex digit classification: '0'=48, 'F'=70, 'f'=102, 'G'=71
@@ -896,7 +896,7 @@ fn main() -> i64 {
 
 #[test]
 fn selfhost_verify_float_simple() {
-    let source = "F main() -> f64 = 1.5";
+    let source = "fn main() -> f64 = 1.5";
     // fptosi(1.5) truncates toward zero → i64(1); exit code = 1
     assert_exit_code(source, 1);
 }
@@ -908,11 +908,11 @@ fn selfhost_verify_float_scientific_logic() {
     // We verify the logic compiles by testing the exponent detection pattern.
     let source = r#"
 fn is_digit(c: i64) -> i64 {
-    I c >= 48 && c <= 57 { 1 } E { 0 }
+    I c >= 48 && c <= 57 { 1 } else { 0 }
 }
 fn is_exponent_char(c: i64) -> i64 {
     # 'e' = 101, 'E' = 69
-    I c == 101 || c == 69 { 1 } E { 0 }
+    I c == 101 || c == 69 { 1 } else { 0 }
 }
 fn main() -> i64 {
     a := is_exponent_char(101)
@@ -927,7 +927,7 @@ fn main() -> i64 {
 
 #[test]
 fn selfhost_verify_float_zero_point() {
-    let source = "F main() -> f64 = 0.0";
+    let source = "fn main() -> f64 = 0.0";
     // main() declared as f64 but codegen forces i64 return with fptosi conversion.
     // 0.0 -> fptosi -> 0
     assert_exit_code(source, 0);
@@ -961,31 +961,31 @@ fn selfhost_verify_string_with_spaces() {
 
 #[test]
 fn selfhost_verify_op_plus() {
-    let source = "F main() -> i64 = 3 + 4";
+    let source = "fn main() -> i64 = 3 + 4";
     assert_exit_code(source, 7);
 }
 
 #[test]
 fn selfhost_verify_op_minus() {
-    let source = "F main() -> i64 = 10 - 3";
+    let source = "fn main() -> i64 = 10 - 3";
     assert_exit_code(source, 7);
 }
 
 #[test]
 fn selfhost_verify_op_star() {
-    let source = "F main() -> i64 = 6 * 7";
+    let source = "fn main() -> i64 = 6 * 7";
     assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_op_slash() {
-    let source = "F main() -> i64 = 42 / 6";
+    let source = "fn main() -> i64 = 42 / 6";
     assert_exit_code(source, 7);
 }
 
 #[test]
 fn selfhost_verify_op_percent() {
-    let source = "F main() -> i64 = 10 % 3";
+    let source = "fn main() -> i64 = 10 % 3";
     assert_exit_code(source, 1);
 }
 
@@ -995,37 +995,37 @@ fn selfhost_verify_op_percent() {
 
 #[test]
 fn selfhost_verify_op_lt() {
-    let source = "F main() -> i64 { I 1 < 2 { 1 } E { 0 } }";
+    let source = "fn main() -> i64 { I 1 < 2 { 1 } else { 0 } }";
     assert_exit_code(source, 1);
 }
 
 #[test]
 fn selfhost_verify_op_gt() {
-    let source = "F main() -> i64 { I 2 > 1 { 1 } E { 0 } }";
+    let source = "fn main() -> i64 { I 2 > 1 { 1 } else { 0 } }";
     assert_exit_code(source, 1);
 }
 
 #[test]
 fn selfhost_verify_op_lteq() {
-    let source = "F main() -> i64 { I 1 <= 2 { 1 } E { 0 } }";
+    let source = "fn main() -> i64 { I 1 <= 2 { 1 } else { 0 } }";
     assert_exit_code(source, 1);
 }
 
 #[test]
 fn selfhost_verify_op_gteq() {
-    let source = "F main() -> i64 { I 2 >= 1 { 1 } E { 0 } }";
+    let source = "fn main() -> i64 { I 2 >= 1 { 1 } else { 0 } }";
     assert_exit_code(source, 1);
 }
 
 #[test]
 fn selfhost_verify_op_eqeq() {
-    let source = "F main() -> i64 { I 5 == 5 { 1 } E { 0 } }";
+    let source = "fn main() -> i64 { I 5 == 5 { 1 } else { 0 } }";
     assert_exit_code(source, 1);
 }
 
 #[test]
 fn selfhost_verify_op_neq() {
-    let source = "F main() -> i64 { I 5 != 3 { 1 } E { 0 } }";
+    let source = "fn main() -> i64 { I 5 != 3 { 1 } else { 0 } }";
     assert_exit_code(source, 1);
 }
 
@@ -1035,13 +1035,13 @@ fn selfhost_verify_op_neq() {
 
 #[test]
 fn selfhost_verify_op_and() {
-    let source = "F main() -> i64 { I true && true { 1 } E { 0 } }";
+    let source = "fn main() -> i64 { I true && true { 1 } else { 0 } }";
     assert_exit_code(source, 1);
 }
 
 #[test]
 fn selfhost_verify_op_or() {
-    let source = "F main() -> i64 { I false || true { 1 } E { 0 } }";
+    let source = "fn main() -> i64 { I false || true { 1 } else { 0 } }";
     assert_exit_code(source, 1);
 }
 
@@ -1051,28 +1051,28 @@ fn selfhost_verify_op_or() {
 
 #[test]
 fn selfhost_verify_op_bitand() {
-    let source = "F main() -> i64 = 7 & 3";
+    let source = "fn main() -> i64 = 7 & 3";
     // 7 & 3 = 3
     assert_exit_code(source, 3);
 }
 
 #[test]
 fn selfhost_verify_op_bitor() {
-    let source = "F main() -> i64 = 5 | 3";
+    let source = "fn main() -> i64 = 5 | 3";
     // 5 | 3 = 7
     assert_exit_code(source, 7);
 }
 
 #[test]
 fn selfhost_verify_op_bitxor() {
-    let source = "F main() -> i64 = 5 ^ 3";
+    let source = "fn main() -> i64 = 5 ^ 3";
     // 5 ^ 3 = 6
     assert_exit_code(source, 6);
 }
 
 #[test]
 fn selfhost_verify_op_bitnot() {
-    let source = "F main() -> i64 = ~0";
+    let source = "fn main() -> i64 = ~0";
     // ~0 = -1, exit code = 255 (0xFF)
     assert_exit_code(source, 255);
 }
@@ -1084,7 +1084,7 @@ fn selfhost_verify_op_bitnot() {
 #[test]
 fn selfhost_verify_delimiters_parens() {
     // Parentheses in function calls and grouping
-    let source = "F add(a: i64, b: i64) -> i64 = a + b\nF main() -> i64 = add((1 + 2), 3)";
+    let source = "fn add(a: i64, b: i64) -> i64 = a + b\nF main() -> i64 = add((1 + 2), 3)";
     // add(3, 3) = 6
     assert_exit_code(source, 6);
 }
@@ -1123,7 +1123,7 @@ fn main() -> i64 {
 #[test]
 fn selfhost_verify_punct_comma() {
     // Commas in function parameters
-    let source = "F add(a: i64, b: i64, c: i64) -> i64 = a + b + c\nF main() -> i64 = add(1, 2, 3)";
+    let source = "fn add(a: i64, b: i64, c: i64) -> i64 = a + b + c\nF main() -> i64 = add(1, 2, 3)";
     // 1+2+3 = 6
     assert_exit_code(source, 6);
 }
@@ -1131,14 +1131,14 @@ fn selfhost_verify_punct_comma() {
 #[test]
 fn selfhost_verify_punct_colon() {
     // Colons in type annotations
-    let source = "F main() -> i64 { x: i64 = 42; x }";
+    let source = "fn main() -> i64 { x: i64 = 42; x }";
     assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_punct_semicolon() {
     // Semicolons as statement separators
-    let source = "F main() -> i64 { x := 1; y := 2; x + y }";
+    let source = "fn main() -> i64 { x := 1; y := 2; x + y }";
     assert_exit_code(source, 3);
 }
 
@@ -1170,7 +1170,7 @@ fn main() -> i64 {
 #[test]
 fn selfhost_verify_punct_arrow() {
     // Arrow -> in return type
-    let source = "F foo() -> i64 = 42\nF main() -> i64 = foo()";
+    let source = "fn foo() -> i64 = 42\nF main() -> i64 = foo()";
     assert_exit_code(source, 42);
 }
 
@@ -1193,7 +1193,7 @@ fn main() -> i64 {
 #[test]
 fn selfhost_verify_punct_question_ternary() {
     // Question mark in ternary
-    let source = "F main() -> i64 = true ? 1 : 0";
+    let source = "fn main() -> i64 = true ? 1 : 0";
     assert_exit_code(source, 1);
 }
 
@@ -1230,7 +1230,7 @@ fn main() -> i64 {
 #[test]
 fn selfhost_verify_assign_colon_eq() {
     // := for variable binding
-    let source = "F main() -> i64 { x := 42; x }";
+    let source = "fn main() -> i64 { x := 42; x }";
     assert_exit_code(source, 42);
 }
 
@@ -1335,7 +1335,7 @@ impl Counter {
         I self.value < self.limit {
             self.value = self.value + 1
             1
-        } E {
+        } else {
             0
         }
     }
@@ -1465,7 +1465,7 @@ fn selfhost_rust_lexer_cross_check_keywords() {
     use vais_lexer::Token;
 
     let tokens = tokenize("F").unwrap();
-    assert_eq!(tokens[0].token, Token::Function, "F should lex as Function");
+    assert_eq!(tokens[0].token, Token::Function, "fn should lex as Function");
 
     let tokens = tokenize("S").unwrap();
     assert_eq!(tokens[0].token, Token::Struct, "S should lex as Struct");
@@ -1484,10 +1484,10 @@ fn selfhost_rust_lexer_cross_check_keywords() {
     assert_eq!(tokens[0].token, Token::Loop, "L should lex as Loop");
 
     let tokens = tokenize("M").unwrap();
-    assert_eq!(tokens[0].token, Token::Match, "M should lex as Match");
+    assert_eq!(tokens[0].token, Token::Match, "match should lex as Match");
 
     let tokens = tokenize("R").unwrap();
-    assert_eq!(tokens[0].token, Token::Return, "R should lex as Return");
+    assert_eq!(tokens[0].token, Token::Return, "return should lex as Return");
 
     let tokens = tokenize("B").unwrap();
     assert_eq!(tokens[0].token, Token::Break, "B should lex as Break");
@@ -1509,7 +1509,7 @@ fn selfhost_rust_lexer_cross_check_keywords() {
     );
 
     let tokens = tokenize("U").unwrap();
-    assert_eq!(tokens[0].token, Token::Use, "U should lex as Use");
+    assert_eq!(tokens[0].token, Token::Use, "use should lex as Use");
 
     let tokens = tokenize("P").unwrap();
     assert_eq!(tokens[0].token, Token::Pub, "P should lex as Pub");
@@ -1629,7 +1629,7 @@ fn selfhost_rust_lexer_cross_check_assignment() {
 fn selfhost_verify_is_digit_logic() {
     let source = r#"
 fn is_digit(c: i64) -> i64 {
-    I c >= 48 && c <= 57 { 1 } E { 0 }
+    I c >= 48 && c <= 57 { 1 } else { 0 }
 }
 fn main() -> i64 {
     # '0' = 48, '9' = 57, 'A' = 65
@@ -1649,7 +1649,7 @@ fn selfhost_verify_is_ident_start_logic() {
 fn is_ident_start(c: i64) -> i64 {
     I (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95 {
         1
-    } E {
+    } else {
         0
     }
 }
@@ -1669,7 +1669,7 @@ fn main() -> i64 {
 fn selfhost_verify_is_whitespace_logic() {
     let source = r#"
 fn is_whitespace(c: i64) -> i64 {
-    I c == 32 || c == 9 || c == 10 || c == 13 { 1 } E { 0 }
+    I c == 32 || c == 9 || c == 10 || c == 13 { 1 } else { 0 }
 }
 fn main() -> i64 {
     # space=32, tab=9, newline=10, cr=13, 'A'=65
@@ -1690,11 +1690,11 @@ fn selfhost_verify_hex_digit_value_logic() {
 fn hex_digit_value(c: i64) -> i64 {
     I c >= 48 && c <= 57 {
         c - 48
-    } E I c >= 65 && c <= 70 {
+    } else I c >= 65 && c <= 70 {
         c - 55
-    } E I c >= 97 && c <= 102 {
+    } else I c >= 97 && c <= 102 {
         c - 87
-    } E {
+    } else {
         0
     }
 }
@@ -2364,7 +2364,7 @@ fn selfhost_examples_individual_file_verification() {
 #[test]
 fn selfhost_verify_token_sequence_function_def() {
     // Verify function definition token sequence
-    let source = "F add(a: i64, b: i64) -> i64 = a + b";
+    let source = "fn add(a: i64, b: i64) -> i64 = a + b";
     let tokens = tokenize(source).unwrap();
 
     let expected_ids: Vec<i64> = vec![
@@ -2417,7 +2417,7 @@ fn selfhost_verify_token_sequence_function_def() {
 
 #[test]
 fn selfhost_verify_token_sequence_struct_def() {
-    let source = "S Point { x: i64, y: i64 }";
+    let source = "struct Point { x: i64, y: i64 }";
     let tokens = tokenize(source).unwrap();
 
     let expected_ids: Vec<i64> = vec![
@@ -2451,7 +2451,7 @@ fn selfhost_verify_token_sequence_struct_def() {
 
 #[test]
 fn selfhost_verify_token_sequence_if_else() {
-    let source = "I x > 0 { 1 } E { 0 }";
+    let source = "I x > 0 { 1 } else { 0 }";
     let tokens = tokenize(source).unwrap();
 
     // I x > 0 { 1 } E { 0 }
@@ -2516,7 +2516,7 @@ fn selfhost_verify_token_sequence_loop() {
 
 #[test]
 fn selfhost_verify_token_sequence_match() {
-    let source = "M x { 1 => 10, _ => 0 }";
+    let source = "match x { 1 => 10, _ => 0 }";
     let tokens = tokenize(source).unwrap();
 
     let expected_ids: Vec<i64> = vec![
@@ -2550,7 +2550,7 @@ fn selfhost_verify_token_sequence_match() {
 
 #[test]
 fn selfhost_verify_token_sequence_self_recursion() {
-    let source = "F fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)";
+    let source = "fn fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)";
     let tokens = tokenize(source).unwrap();
 
     // Check that @ tokens are present

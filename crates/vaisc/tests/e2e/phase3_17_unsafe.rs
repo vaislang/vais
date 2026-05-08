@@ -5,7 +5,7 @@ use super::helpers::*;
 #[test]
 fn unsafe_block_expression_returns_value() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 5
     y := unsafe {
         x + 10
@@ -19,7 +19,7 @@ F main() -> i64 {
 #[test]
 fn unsafe_block_with_stmts() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     unsafe {
         42
     }
@@ -31,7 +31,7 @@ F main() -> i64 {
 #[test]
 fn unsafe_block_in_expression_context() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     n := 7
     m := unsafe { n * 3 } + 1
     m

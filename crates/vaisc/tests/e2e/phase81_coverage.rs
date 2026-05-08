@@ -21,9 +21,9 @@ use super::helpers::*;
 #[test]
 fn e2e_p81_type_alias_basic() {
     let source = r#"
-T Num = i64
-F double(x: Num) -> Num = x * 2
-F main() -> i64 = double(21)
+type Num = i64
+fn double(x: Num) -> Num = x * 2
+fn main() -> i64 = double(21)
 "#;
     assert_exit_code(source, 42);
 }
@@ -31,10 +31,10 @@ F main() -> i64 = double(21)
 #[test]
 fn e2e_p81_type_alias_in_struct() {
     let source = r#"
-T Coord = i64
-S Point { x: Coord, y: Coord }
-F dist(p: Point) -> Coord = p.x + p.y
-F main() -> i64 {
+type Coord = i64
+struct Point { x: Coord, y: Coord }
+fn dist(p: Point) -> Coord = p.x + p.y
+fn main() -> i64 {
     p := Point { x: 10, y: 32 }
     dist(p)
 }
@@ -45,9 +45,9 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_type_alias_function_param() {
     let source = r#"
-T Score = i64
-F add_scores(a: Score, b: Score) -> Score = a + b
-F main() -> i64 = add_scores(20, 22)
+type Score = i64
+fn add_scores(a: Score, b: Score) -> Score = a + b
+fn main() -> i64 = add_scores(20, 22)
 "#;
     assert_exit_code(source, 42);
 }
@@ -55,11 +55,11 @@ F main() -> i64 = add_scores(20, 22)
 #[test]
 fn e2e_p81_type_alias_multiple() {
     let source = r#"
-T Width = i64
-T Height = i64
-T Area = i64
-F compute_area(w: Width, h: Height) -> Area = w * h
-F main() -> i64 = compute_area(6, 7)
+type Width = i64
+type Height = i64
+type Area = i64
+fn compute_area(w: Width, h: Height) -> Area = w * h
+fn main() -> i64 = compute_area(6, 7)
 "#;
     assert_exit_code(source, 42);
 }
@@ -68,9 +68,9 @@ F main() -> i64 = compute_area(6, 7)
 fn e2e_p81_type_alias_in_return() {
     // Type alias used as function return type
     let source = r#"
-T Count = i64
-F make_count(n: i64) -> Count = n
-F main() -> i64 = make_count(42)
+type Count = i64
+fn make_count(n: i64) -> Count = n
+fn main() -> i64 = make_count(42)
 "#;
     assert_exit_code(source, 42);
 }
@@ -80,7 +80,7 @@ F main() -> i64 = make_count(42)
 #[test]
 fn e2e_p81_nested_loop_break() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     total := mut 0
     i := mut 0
     L {
@@ -103,7 +103,7 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_loop_continue_skip_even() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     i := mut 0
     L {
@@ -122,14 +122,14 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_early_return_guard() {
     let source = r#"
-F classify(n: i64) -> i64 {
-    I n < 0 { R 0 }
-    I n == 0 { R 1 }
-    I n < 10 { R 2 }
-    I n < 100 { R 3 }
-    R 4
+fn classify(n: i64) -> i64 {
+    I n < 0 { return 0 }
+    I n == 0 { return 1 }
+    I n < 10 { return 2 }
+    I n < 100 { return 3 }
+    return 4
 }
-F main() -> i64 {
+fn main() -> i64 {
     classify(-5) + classify(0) + classify(7) + classify(50) + classify(200)
 }
 "#;
@@ -140,7 +140,7 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_loop_countdown_accumulator() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     n := mut 10
     acc := mut 0
     L {
@@ -158,26 +158,26 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_nested_if_else_chain() {
     let source = r#"
-F grade(score: i64) -> i64 {
+fn grade(score: i64) -> i64 {
     I score >= 90 {
         I score >= 95 {
             5
-        } E {
+        } else {
             4
         }
-    } E {
+    } else {
         I score >= 80 {
             3
-        } E {
+        } else {
             I score >= 70 {
                 2
-            } E {
+            } else {
                 1
             }
         }
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     grade(97) + grade(91) + grade(85) + grade(75) + grade(60)
 }
 "#;
@@ -190,11 +190,11 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_struct_method_basic() {
     let source = r#"
-S Counter { val: i64 }
-X Counter {
-    F get(self) -> i64 { self.val }
+struct Counter { val: i64 }
+impl Counter {
+    fn get(self) -> i64 { self.val }
 }
-F main() -> i64 {
+fn main() -> i64 {
     c := Counter { val: 42 }
     c.get()
 }
@@ -205,13 +205,13 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_struct_multiple_methods() {
     let source = r#"
-S Rect { w: i64, h: i64 }
-X Rect {
-    F area(self) -> i64 { self.w * self.h }
-    F perimeter(self) -> i64 { 2 * (self.w + self.h) }
-    F is_square(self) -> i64 { I self.w == self.h { 1 } E { 0 } }
+struct Rect { w: i64, h: i64 }
+impl Rect {
+    fn area(self) -> i64 { self.w * self.h }
+    fn perimeter(self) -> i64 { 2 * (self.w + self.h) }
+    fn is_square(self) -> i64 { I self.w == self.h { 1 } else { 0 } }
 }
-F main() -> i64 {
+fn main() -> i64 {
     r := Rect { w: 4, h: 6 }
     r.area() + r.perimeter() + r.is_square()
 }
@@ -223,9 +223,9 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_nested_struct_access() {
     let source = r#"
-S Inner { val: i64 }
-S Outer { data: Inner, scale: i64 }
-F main() -> i64 {
+struct Inner { val: i64 }
+struct Outer { data: Inner, scale: i64 }
+fn main() -> i64 {
     o := Outer { data: Inner { val: 7 }, scale: 6 }
     o.data.val * o.scale
 }
@@ -236,11 +236,11 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_struct_with_function() {
     let source = r#"
-S Vec2 { x: i64, y: i64 }
-F add_vec(a: Vec2, b: Vec2) -> Vec2 {
+struct Vec2 { x: i64, y: i64 }
+fn add_vec(a: Vec2, b: Vec2) -> Vec2 {
     Vec2 { x: a.x + b.x, y: a.y + b.y }
 }
-F main() -> i64 {
+fn main() -> i64 {
     v1 := Vec2 { x: 10, y: 20 }
     v2 := Vec2 { x: 5, y: 7 }
     result := add_vec(v1, v2)
@@ -256,15 +256,15 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_enum_basic_match() {
     let source = r#"
-E Color { Red, Green, Blue }
-F color_val(c: Color) -> i64 {
-    M c {
+enum Color { Red, Green, Blue }
+fn color_val(c: Color) -> i64 {
+    match c {
         Red => 1,
         Green => 2,
         Blue => 3,
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     color_val(Red) + color_val(Green) + color_val(Blue)
 }
 "#;
@@ -275,14 +275,14 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_match_with_default() {
     let source = r#"
-F classify(n: i64) -> i64 {
-    M n {
+fn classify(n: i64) -> i64 {
+    match n {
         0 => 100,
         1 => 200,
         _ => 42,
     }
 }
-F main() -> i64 = classify(99)
+fn main() -> i64 = classify(99)
 "#;
     assert_exit_code(source, 42);
 }
@@ -290,8 +290,8 @@ F main() -> i64 = classify(99)
 #[test]
 fn e2e_p81_match_multiple_patterns() {
     let source = r#"
-F day_type(day: i64) -> i64 {
-    M day {
+fn day_type(day: i64) -> i64 {
+    match day {
         1 => 10,
         2 => 10,
         3 => 10,
@@ -302,7 +302,7 @@ F day_type(day: i64) -> i64 {
         _ => 0,
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     day_type(3) + day_type(6) + day_type(7) + day_type(99)
 }
 "#;
@@ -313,8 +313,8 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_match_integer_ranges() {
     let source = r#"
-F score(n: i64) -> i64 {
-    M n {
+fn score(n: i64) -> i64 {
+    match n {
         0 => 0,
         1 => 1,
         2 => 4,
@@ -322,7 +322,7 @@ F score(n: i64) -> i64 {
         _ => 100,
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     score(0) + score(1) + score(2) + score(3) + score(10)
 }
 "#;
@@ -335,11 +335,11 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_fibonacci_recursive() {
     let source = r#"
-F fib(n: i64) -> i64 {
-    I n <= 1 { R n }
+fn fib(n: i64) -> i64 {
+    I n <= 1 { return n }
     @(n - 1) + @(n - 2)
 }
-F main() -> i64 = fib(10)
+fn main() -> i64 = fib(10)
 "#;
     // fib(10) = 55
     assert_exit_code(source, 55);
@@ -348,12 +348,12 @@ F main() -> i64 = fib(10)
 #[test]
 fn e2e_p81_factorial_recursive() {
     let source = r#"
-F fact(n: i64) -> i64 {
-    I n <= 1 { R 1 }
+fn fact(n: i64) -> i64 {
+    I n <= 1 { return 1 }
     n * @(n - 1)
 }
-F main() -> i64 {
-    I fact(5) == 120 { 42 } E { 0 }
+fn main() -> i64 {
+    I fact(5) == 120 { 42 } else { 0 }
 }
 "#;
     assert_exit_code(source, 42);
@@ -362,11 +362,11 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_sum_recursive() {
     let source = r#"
-F sum_to(n: i64) -> i64 {
-    I n <= 0 { R 0 }
+fn sum_to(n: i64) -> i64 {
+    I n <= 0 { return 0 }
     n + @(n - 1)
 }
-F main() -> i64 = sum_to(10)
+fn main() -> i64 = sum_to(10)
 "#;
     // 10+9+8+...+1 = 55
     assert_exit_code(source, 55);
@@ -375,12 +375,12 @@ F main() -> i64 = sum_to(10)
 #[test]
 fn e2e_p81_power_recursive() {
     let source = r#"
-F power(base: i64, exp: i64) -> i64 {
-    I exp == 0 { R 1 }
+fn power(base: i64, exp: i64) -> i64 {
+    I exp == 0 { return 1 }
     base * power(base, exp - 1)
 }
-F main() -> i64 {
-    I power(2, 8) == 256 { 42 } E { 0 }
+fn main() -> i64 {
+    I power(2, 8) == 256 { 42 } else { 0 }
 }
 "#;
     assert_exit_code(source, 42);
@@ -389,11 +389,11 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_gcd_recursive() {
     let source = r#"
-F gcd(a: i64, b: i64) -> i64 {
-    I b == 0 { R a }
+fn gcd(a: i64, b: i64) -> i64 {
+    I b == 0 { return a }
     gcd(b, a % b)
 }
-F main() -> i64 {
+fn main() -> i64 {
     gcd(48, 18)
 }
 "#;
@@ -406,7 +406,7 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_shadow_basic() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
     x := x + 20
     x := x + 12
@@ -420,12 +420,12 @@ F main() -> i64 {
 fn e2e_p81_shadow_in_if() {
     // Variable shadowed inside if branch
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
     result := I true {
         x := 32
         x
-    } E {
+    } else {
         x
     }
     result
@@ -437,12 +437,12 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_shadow_function_param() {
     let source = r#"
-F process(x: i64) -> i64 {
+fn process(x: i64) -> i64 {
     x := x * 2
     x := x + 1
     x
 }
-F main() -> i64 = process(20)
+fn main() -> i64 = process(20)
 "#;
     // 20 * 2 + 1 = 41
     assert_exit_code(source, 41);
@@ -453,10 +453,10 @@ F main() -> i64 = process(20)
 #[test]
 fn e2e_p81_expr_body_chain() {
     let source = r#"
-F double(x: i64) -> i64 = x * 2
-F add_one(x: i64) -> i64 = x + 1
-F transform(x: i64) -> i64 = add_one(double(x))
-F main() -> i64 = transform(20)
+fn double(x: i64) -> i64 = x * 2
+fn add_one(x: i64) -> i64 = x + 1
+fn transform(x: i64) -> i64 = add_one(double(x))
+fn main() -> i64 = transform(20)
 "#;
     // double(20) = 40, add_one(40) = 41
     assert_exit_code(source, 41);
@@ -465,8 +465,8 @@ F main() -> i64 = transform(20)
 #[test]
 fn e2e_p81_expr_body_with_ternary() {
     let source = r#"
-F abs_val(x: i64) -> i64 = I x >= 0 { x } E { 0 - x }
-F main() -> i64 = abs_val(-42) + abs_val(0)
+fn abs_val(x: i64) -> i64 = I x >= 0 { x } else { 0 - x }
+fn main() -> i64 = abs_val(-42) + abs_val(0)
 "#;
     assert_exit_code(source, 42);
 }
@@ -474,8 +474,8 @@ F main() -> i64 = abs_val(-42) + abs_val(0)
 #[test]
 fn e2e_p81_expr_body_recursive() {
     let source = r#"
-F count_digits(n: i64) -> i64 = I n < 10 { 1 } E { 1 + @(n / 10) }
-F main() -> i64 = count_digits(12345)
+fn count_digits(n: i64) -> i64 = I n < 10 { 1 } else { 1 + @(n / 10) }
+fn main() -> i64 = count_digits(12345)
 "#;
     // 12345 has 5 digits
     assert_exit_code(source, 5);
@@ -486,7 +486,7 @@ F main() -> i64 = count_digits(12345)
 #[test]
 fn e2e_p81_bitwise_and() {
     let source = r#"
-F main() -> i64 = 255 & 42
+fn main() -> i64 = 255 & 42
 "#;
     assert_exit_code(source, 42);
 }
@@ -494,7 +494,7 @@ F main() -> i64 = 255 & 42
 #[test]
 fn e2e_p81_bitwise_or() {
     let source = r#"
-F main() -> i64 = 32 | 10
+fn main() -> i64 = 32 | 10
 "#;
     // 32 | 10 = 42
     assert_exit_code(source, 42);
@@ -503,7 +503,7 @@ F main() -> i64 = 32 | 10
 #[test]
 fn e2e_p81_bitwise_xor() {
     let source = r#"
-F main() -> i64 = 63 ^ 21
+fn main() -> i64 = 63 ^ 21
 "#;
     // 63 ^ 21 = 42
     assert_exit_code(source, 42);
@@ -512,7 +512,7 @@ F main() -> i64 = 63 ^ 21
 #[test]
 fn e2e_p81_shift_left() {
     let source = r#"
-F main() -> i64 = 21 << 1
+fn main() -> i64 = 21 << 1
 "#;
     assert_exit_code(source, 42);
 }
@@ -520,7 +520,7 @@ F main() -> i64 = 21 << 1
 #[test]
 fn e2e_p81_shift_right() {
     let source = r#"
-F main() -> i64 = 168 >> 2
+fn main() -> i64 = 168 >> 2
 "#;
     assert_exit_code(source, 42);
 }
@@ -529,7 +529,7 @@ F main() -> i64 = 168 >> 2
 fn e2e_p81_bitwise_not_complement() {
     // Use XOR with all 1s to simulate NOT for lower bits
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 213
     # Invert lower 8 bits: XOR with 0xFF (255)
     inverted := x ^ 255
@@ -543,10 +543,10 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_bitwise_mask_extract() {
     let source = r#"
-F extract_nibble(val: i64, pos: i64) -> i64 {
+fn extract_nibble(val: i64, pos: i64) -> i64 {
     (val >> (pos * 4)) & 15
 }
-F main() -> i64 {
+fn main() -> i64 {
     val := 42
     extract_nibble(val, 0) + extract_nibble(val, 1) * 16
 }
@@ -561,8 +561,8 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_closure_as_arg() {
     let source = r#"
-F apply_twice(x: i64, f: fn(i64) -> i64) -> i64 = f(f(x))
-F main() -> i64 {
+fn apply_twice(x: i64, f: fn(i64) -> i64) -> i64 = f(f(x))
+fn main() -> i64 {
     inc := |n: i64| n + 1
     apply_twice(40, inc)
 }
@@ -574,7 +574,7 @@ F main() -> i64 {
 fn e2e_p81_closure_capture_direct_call() {
     // Closure captures a variable and is called directly (not via fn pointer)
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     offset := 30
     add_offset := |n: i64| n + offset
     add_offset(12)
@@ -586,8 +586,8 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_closure_composition() {
     let source = r#"
-F compose(x: i64, f: fn(i64) -> i64, g: fn(i64) -> i64) -> i64 = g(f(x))
-F main() -> i64 {
+fn compose(x: i64, f: fn(i64) -> i64, g: fn(i64) -> i64) -> i64 = g(f(x))
+fn main() -> i64 {
     double := |x: i64| x * 2
     add_two := |x: i64| x + 2
     compose(20, double, add_two)
@@ -601,7 +601,7 @@ F main() -> i64 {
 fn e2e_p81_closure_in_loop() {
     // Closure created and called directly inside loop
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     i := mut 1
     L {
@@ -622,18 +622,18 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_trait_dispatch_two_types() {
     let source = r#"
-W Measurable {
-    F measure(self) -> i64
+trait Measurable {
+    fn measure(self) -> i64
 }
-S Box { size: i64 }
-S Sphere { radius: i64 }
-X Box: Measurable {
-    F measure(self) -> i64 { self.size * self.size }
+struct Box { size: i64 }
+struct Sphere { radius: i64 }
+impl Box: Measurable {
+    fn measure(self) -> i64 { self.size * self.size }
 }
-X Sphere: Measurable {
-    F measure(self) -> i64 { self.radius * 3 }
+impl Sphere: Measurable {
+    fn measure(self) -> i64 { self.radius * 3 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     b := Box { size: 5 }
     s := Sphere { radius: 4 }
     b.measure() + s.measure()
@@ -646,14 +646,14 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_trait_with_default_like() {
     let source = r#"
-W Printable {
-    F code(self) -> i64
+trait Printable {
+    fn code(self) -> i64
 }
-S Ascii { ch: i64 }
-X Ascii: Printable {
-    F code(self) -> i64 { self.ch }
+struct Ascii { ch: i64 }
+impl Ascii: Printable {
+    fn code(self) -> i64 { self.ch }
 }
-F main() -> i64 {
+fn main() -> i64 {
     a := Ascii { ch: 42 }
     a.code()
 }
@@ -664,17 +664,17 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_trait_method_arithmetic() {
     let source = r#"
-W Weighted {
-    F weight(self) -> i64
+trait Weighted {
+    fn weight(self) -> i64
 }
-S Item { w: i64, qty: i64 }
-X Item: Weighted {
-    F weight(self) -> i64 { self.w * self.qty }
+struct Item { w: i64, qty: i64 }
+impl Item: Weighted {
+    fn weight(self) -> i64 { self.w * self.qty }
 }
-F total_weight(a: Item, b: Item) -> i64 {
+fn total_weight(a: Item, b: Item) -> i64 {
     a.weight() + b.weight()
 }
-F main() -> i64 {
+fn main() -> i64 {
     x := Item { w: 5, qty: 4 }
     y := Item { w: 11, qty: 2 }
     total_weight(x, y)
@@ -689,7 +689,7 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_complex_arithmetic_chain() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := 100
     b := 50
     c := 8
@@ -703,7 +703,7 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_boolean_logic_chain() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := 10
     b := 20
     c := 30
@@ -721,8 +721,8 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_multiple_comparison_operators() {
     let source = r#"
-F to_int(b: bool) -> i64 = I b { 1 } E { 0 }
-F main() -> i64 {
+fn to_int(b: bool) -> i64 = I b { 1 } else { 0 }
+fn main() -> i64 {
     r := mut 0
     I 5 < 10 { r = r + 1 }
     I 10 > 5 { r = r + 2 }
@@ -743,9 +743,9 @@ F main() -> i64 {
 fn e2e_p81_defer_basic_compiles() {
     // Defer compiles correctly and doesn't affect explicit return
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     D { }
-    R 42
+    return 42
 }
 "#;
     assert_exit_code(source, 42);
@@ -755,11 +755,11 @@ F main() -> i64 {
 fn e2e_p81_defer_with_explicit_return() {
     // Multiple defers with explicit return
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     D { }
     D { }
     D { }
-    R 42
+    return 42
 }
 "#;
     assert_exit_code(source, 42);
@@ -772,7 +772,7 @@ fn e2e_p81_global_declaration_compiles() {
     // Global declarations compile to IR successfully
     let source = r#"
 G counter: i64 = 0
-F main() -> i64 = 42
+fn main() -> i64 = 42
 "#;
     assert_exit_code(source, 42);
 }
@@ -784,7 +784,7 @@ fn e2e_p81_global_multiple_compiles() {
 G a: i64 = 10
 G b: i64 = 20
 G c: i64 = 30
-F main() -> i64 = 42
+fn main() -> i64 = 42
 "#;
     assert_exit_code(source, 42);
 }
@@ -794,7 +794,7 @@ fn e2e_p81_global_with_expression() {
     // Global with constant expression initializer
     let source = r#"
 G limit: i64 = 100
-F main() -> i64 = 42
+fn main() -> i64 = 42
 "#;
     assert_exit_code(source, 42);
 }
@@ -805,7 +805,7 @@ F main() -> i64 = 42
 fn e2e_p81_union_basic() {
     let source = r#"
 O IntOrBool { int_val: i64, bool_val: i64 }
-F main() -> i64 {
+fn main() -> i64 {
     u := IntOrBool { int_val: 42 }
     u.int_val
 }
@@ -818,8 +818,8 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_generic_identity() {
     let source = r#"
-F id<T>(x: T) -> T = x
-F main() -> i64 = id(42)
+fn id<T>(x: T) -> type = x
+fn main() -> i64 = id(42)
 "#;
     assert_exit_code(source, 42);
 }
@@ -827,10 +827,10 @@ F main() -> i64 = id(42)
 #[test]
 fn e2e_p81_generic_max() {
     let source = r#"
-F max_of<T>(a: T, b: T) -> T {
-    I a > b { a } E { b }
+fn max_of<T>(a: T, b: T) -> type {
+    I a > b { a } else { b }
 }
-F main() -> i64 = max_of(42, 10)
+fn main() -> i64 = max_of(42, 10)
 "#;
     assert_exit_code(source, 42);
 }
@@ -838,10 +838,10 @@ F main() -> i64 = max_of(42, 10)
 #[test]
 fn e2e_p81_generic_min() {
     let source = r#"
-F min_of<T>(a: T, b: T) -> T {
-    I a < b { a } E { b }
+fn min_of<T>(a: T, b: T) -> type {
+    I a < b { a } else { b }
 }
-F main() -> i64 = min_of(42, 100)
+fn main() -> i64 = min_of(42, 100)
 "#;
     assert_exit_code(source, 42);
 }
@@ -849,11 +849,11 @@ F main() -> i64 = min_of(42, 100)
 #[test]
 fn e2e_p81_generic_swap_values() {
     let source = r#"
-S Pair { first: i64, second: i64 }
-F swap_pair(p: Pair) -> Pair {
+struct Pair { first: i64, second: i64 }
+fn swap_pair(p: Pair) -> Pair {
     Pair { first: p.second, second: p.first }
 }
-F main() -> i64 {
+fn main() -> i64 {
     p := Pair { first: 12, second: 42 }
     swapped := swap_pair(p)
     swapped.first
@@ -868,16 +868,16 @@ F main() -> i64 {
 fn e2e_p81_binary_search() {
     // Manual binary search on "virtual" sorted array
     let source = r#"
-F elem(i: i64) -> i64 = i * 3
-F binary_search(target: i64, lo: i64, hi: i64) -> i64 {
-    I lo > hi { R 0 - 1 }
+fn elem(i: i64) -> i64 = i * 3
+fn binary_search(target: i64, lo: i64, hi: i64) -> i64 {
+    I lo > hi { return 0 - 1 }
     mid := (lo + hi) / 2
     val := elem(mid)
-    I val == target { R mid }
-    I val < target { R binary_search(target, mid + 1, hi) }
+    I val == target { return mid }
+    I val < target { return binary_search(target, mid + 1, hi) }
     binary_search(target, lo, mid - 1)
 }
-F main() -> i64 {
+fn main() -> i64 {
     # Search for 42 in [0, 3, 6, 9, ..., 300]
     binary_search(42, 0, 100)
 }
@@ -890,7 +890,7 @@ F main() -> i64 {
 fn e2e_p81_bubble_sort_check() {
     // Sort 5 elements manually using variables
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := mut 5
     b := mut 3
     c := mut 1
@@ -920,15 +920,15 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_collatz_steps() {
     let source = r#"
-F collatz_steps(n: i64) -> i64 {
-    I n <= 1 { R 0 }
+fn collatz_steps(n: i64) -> i64 {
+    I n <= 1 { return 0 }
     I n % 2 == 0 {
         1 + @(n / 2)
-    } E {
+    } else {
         1 + @(3 * n + 1)
     }
 }
-F main() -> i64 = collatz_steps(27)
+fn main() -> i64 = collatz_steps(27)
 "#;
     // Collatz(27) takes 111 steps, mod 256 = 111
     assert_exit_code(source, 111);
@@ -937,17 +937,17 @@ F main() -> i64 = collatz_steps(27)
 #[test]
 fn e2e_p81_is_prime() {
     let source = r#"
-F is_prime(n: i64) -> i64 {
-    I n < 2 { R 0 }
+fn is_prime(n: i64) -> i64 {
+    I n < 2 { return 0 }
     i := mut 2
     L {
         I i * i > n { B }
-        I n % i == 0 { R 0 }
+        I n % i == 0 { return 0 }
         i = i + 1
     }
     1
 }
-F main() -> i64 {
+fn main() -> i64 {
     # Count primes up to 20
     count := mut 0
     n := mut 2
@@ -968,7 +968,7 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_compound_assign_all() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 100
     x += 10
     x -= 50
@@ -984,7 +984,7 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_compound_assign_mod() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 100
     x %= 58
     x
@@ -999,14 +999,14 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_where_clause_parse() {
     let source = r#"
-W Addable {
-    F add(self, other: i64) -> i64
+trait Addable {
+    fn add(self, other: i64) -> i64
 }
-S MyNum { val: i64 }
-X MyNum: Addable {
-    F add(self, other: i64) -> i64 { self.val + other }
+struct MyNum { val: i64 }
+impl MyNum: Addable {
+    fn add(self, other: i64) -> i64 { self.val + other }
 }
-F main() -> i64 {
+fn main() -> i64 {
     n := MyNum { val: 30 }
     n.add(12)
 }
@@ -1019,13 +1019,13 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_multi_function_pipeline() {
     let source = r#"
-F parse_digit(ch: i64) -> i64 = ch - 48
-F validate(n: i64) -> i64 = I n >= 0 && n <= 9 { n } E { 0 - 1 }
-F process(ch: i64) -> i64 {
+fn parse_digit(ch: i64) -> i64 = ch - 48
+fn validate(n: i64) -> i64 = I n >= 0 && n <= 9 { n } else { 0 - 1 }
+fn process(ch: i64) -> i64 {
     digit := parse_digit(ch)
     validate(digit)
 }
-F main() -> i64 {
+fn main() -> i64 {
     # '0' = 48, '5' = 53
     a := process(48)
     b := process(53)
@@ -1039,15 +1039,15 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_mutual_helper_functions() {
     let source = r#"
-F is_even(n: i64) -> i64 {
-    I n == 0 { R 1 }
+fn is_even(n: i64) -> i64 {
+    I n == 0 { return 1 }
     is_odd(n - 1)
 }
-F is_odd(n: i64) -> i64 {
-    I n == 0 { R 0 }
+fn is_odd(n: i64) -> i64 {
+    I n == 0 { return 0 }
     is_even(n - 1)
 }
-F main() -> i64 {
+fn main() -> i64 {
     is_even(10) + is_odd(7) + is_even(0) + is_odd(0)
 }
 "#;
@@ -1062,7 +1062,7 @@ F main() -> i64 {
 fn e2e_p81_error_undefined_variable() {
     assert_compile_error(
         r#"
-F main() -> i64 { R undefined_var }
+fn main() -> i64 { return undefined_var }
 "#,
     );
 }
@@ -1072,7 +1072,7 @@ fn e2e_p81_error_type_mismatch() {
     // Returning a string where i64 is expected
     assert_compile_error(
         r#"
-F main() -> i64 { R "hello" }
+fn main() -> i64 { return "hello" }
 "#,
     );
 }
@@ -1081,9 +1081,9 @@ F main() -> i64 { R "hello" }
 fn e2e_p81_error_duplicate_function() {
     assert_compile_error(
         r#"
-F foo() -> i64 = 1
-F foo() -> i64 = 2
-F main() -> i64 = foo()
+fn foo() -> i64 = 1
+fn foo() -> i64 = 2
+fn main() -> i64 = foo()
 "#,
     );
 }
@@ -1092,8 +1092,8 @@ F main() -> i64 = foo()
 fn e2e_p81_error_wrong_arg_count() {
     assert_compile_error(
         r#"
-F add(a: i64, b: i64) -> i64 = a + b
-F main() -> i64 = add(1)
+fn add(a: i64, b: i64) -> i64 = a + b
+fn main() -> i64 = add(1)
 "#,
     );
 }
@@ -1102,7 +1102,7 @@ F main() -> i64 = add(1)
 fn e2e_p81_error_undefined_function_call() {
     assert_compile_error(
         r#"
-F main() -> i64 { R nonexistent_func(42) }
+fn main() -> i64 { return nonexistent_func(42) }
 "#,
     );
 }
@@ -1112,7 +1112,7 @@ F main() -> i64 { R nonexistent_func(42) }
 #[test]
 fn e2e_p81_for_loop_range() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     L i:0..10 {
         sum = sum + i
@@ -1127,7 +1127,7 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_for_loop_range_with_computation() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     product := mut 1
     L i:1..6 {
         product = product * i
@@ -1142,7 +1142,7 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_for_loop_nested_ranges() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     count := mut 0
     L i:0..5 {
         L j:0..3 {
@@ -1161,11 +1161,11 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_struct_default_pattern() {
     let source = r#"
-S Config { width: i64, height: i64, depth: i64 }
-F default_config() -> Config {
+struct Config { width: i64, height: i64, depth: i64 }
+fn default_config() -> Config {
     Config { width: 10, height: 20, depth: 12 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     c := default_config()
     c.width + c.height + c.depth
 }
@@ -1176,12 +1176,12 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_struct_builder_pattern() {
     let source = r#"
-S Builder { x: i64, y: i64, z: i64 }
-F new_builder() -> Builder { Builder { x: 0, y: 0, z: 0 } }
-F with_x(b: Builder, val: i64) -> Builder { Builder { x: val, y: b.y, z: b.z } }
-F with_y(b: Builder, val: i64) -> Builder { Builder { x: b.x, y: val, z: b.z } }
-F with_z(b: Builder, val: i64) -> Builder { Builder { x: b.x, y: b.y, z: val } }
-F main() -> i64 {
+struct Builder { x: i64, y: i64, z: i64 }
+fn new_builder() -> Builder { Builder { x: 0, y: 0, z: 0 } }
+fn with_x(b: Builder, val: i64) -> Builder { Builder { x: val, y: b.y, z: b.z } }
+fn with_y(b: Builder, val: i64) -> Builder { Builder { x: b.x, y: val, z: b.z } }
+fn with_z(b: Builder, val: i64) -> Builder { Builder { x: b.x, y: b.y, z: val } }
+fn main() -> i64 {
     b := mut new_builder()
     b = with_x(b, 10)
     b = with_y(b, 20)
@@ -1197,7 +1197,7 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_fizzbuzz_counter() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     fizz_count := mut 0
     buzz_count := mut 0
     fizzbuzz_count := mut 0
@@ -1206,10 +1206,10 @@ F main() -> i64 {
         I i > 30 { B }
         I i % 15 == 0 {
             fizzbuzz_count = fizzbuzz_count + 1
-        } E {
+        } else {
             I i % 3 == 0 {
                 fizz_count = fizz_count + 1
-            } E {
+            } else {
                 I i % 5 == 0 {
                     buzz_count = buzz_count + 1
                 }
@@ -1231,13 +1231,13 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_temperature_converter() {
     let source = r#"
-F c_to_f(c: i64) -> i64 = c * 9 / 5 + 32
-F f_to_c(f: i64) -> i64 = (f - 32) * 5 / 9
+fn c_to_f(c: i64) -> i64 = c * 9 / 5 + 32
+fn f_to_c(f: i64) -> i64 = (f - 32) * 5 / 9
 
-F main() -> i64 {
+fn main() -> i64 {
     # 100C = 212F
     f := c_to_f(100)
-    I f == 212 { 42 } E { 0 }
+    I f == 212 { 42 } else { 0 }
 }
 "#;
     assert_exit_code(source, 42);
@@ -1248,7 +1248,7 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_zero_operations() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := 0
     result := mut 0
     I a + 0 == 0 { result = result + 1 }
@@ -1265,10 +1265,10 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_negative_arithmetic() {
     let source = r#"
-F abs_val(x: i64) -> i64 {
-    I x < 0 { 0 - x } E { x }
+fn abs_val(x: i64) -> i64 {
+    I x < 0 { 0 - x } else { x }
 }
-F main() -> i64 {
+fn main() -> i64 {
     a := 0 - 10
     b := 0 - 32
     abs_val(a + b)
@@ -1284,9 +1284,9 @@ F main() -> i64 {
 fn e2e_p81_matrix_multiply_2x2() {
     let source = r#"
 # 2x2 matrix stored as 4 values
-S Mat2 { a: i64, b: i64, c: i64, d: i64 }
+struct Mat2 { a: i64, b: i64, c: i64, d: i64 }
 
-F mat_mul(m1: Mat2, m2: Mat2) -> Mat2 {
+fn mat_mul(m1: Mat2, m2: Mat2) -> Mat2 {
     Mat2 {
         a: m1.a * m2.a + m1.b * m2.c,
         b: m1.a * m2.b + m1.b * m2.d,
@@ -1295,9 +1295,9 @@ F mat_mul(m1: Mat2, m2: Mat2) -> Mat2 {
     }
 }
 
-F mat_trace(m: Mat2) -> i64 = m.a + m.d
+fn mat_trace(m: Mat2) -> i64 = m.a + m.d
 
-F main() -> i64 {
+fn main() -> i64 {
     identity := Mat2 { a: 1, b: 0, c: 0, d: 1 }
     m := Mat2 { a: 3, b: 4, c: 5, d: 6 }
     result := mat_mul(identity, m)
@@ -1312,24 +1312,24 @@ F main() -> i64 {
 fn e2e_p81_stack_simulation() {
     // Simulate a stack using struct fields
     let source = r#"
-S Stack { a: i64, b: i64, c: i64, top: i64 }
+struct Stack { a: i64, b: i64, c: i64, top: i64 }
 
-F new_stack() -> Stack { Stack { a: 0, b: 0, c: 0, top: 0 } }
+fn new_stack() -> Stack { Stack { a: 0, b: 0, c: 0, top: 0 } }
 
-F push(s: Stack, val: i64) -> Stack {
-    I s.top == 0 { R Stack { a: val, b: s.b, c: s.c, top: 1 } }
-    I s.top == 1 { R Stack { a: s.a, b: val, c: s.c, top: 2 } }
+fn push(s: Stack, val: i64) -> Stack {
+    I s.top == 0 { return Stack { a: val, b: s.b, c: s.c, top: 1 } }
+    I s.top == 1 { return Stack { a: s.a, b: val, c: s.c, top: 2 } }
     Stack { a: s.a, b: s.b, c: val, top: 3 }
 }
 
-F peek(s: Stack) -> i64 {
-    I s.top == 3 { R s.c }
-    I s.top == 2 { R s.b }
-    I s.top == 1 { R s.a }
+fn peek(s: Stack) -> i64 {
+    I s.top == 3 { return s.c }
+    I s.top == 2 { return s.b }
+    I s.top == 1 { return s.a }
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     s := mut new_stack()
     s = push(s, 10)
     s = push(s, 20)
@@ -1344,16 +1344,16 @@ F main() -> i64 {
 fn e2e_p81_linked_computation() {
     // Chain of computations mimicking a pipeline
     let source = r#"
-F step1(x: i64) -> i64 = x * 2
-F step2(x: i64) -> i64 = x + 10
-F step3(x: i64) -> i64 = x / 2
-F step4(x: i64) -> i64 = x - 3
+fn step1(x: i64) -> i64 = x * 2
+fn step2(x: i64) -> i64 = x + 10
+fn step3(x: i64) -> i64 = x / 2
+fn step4(x: i64) -> i64 = x - 3
 
-F pipeline(x: i64) -> i64 {
+fn pipeline(x: i64) -> i64 {
     step4(step3(step2(step1(x))))
 }
 
-F main() -> i64 = pipeline(34)
+fn main() -> i64 = pipeline(34)
 "#;
     // step1(34) = 68
     // step2(68) = 78
@@ -1367,10 +1367,10 @@ F main() -> i64 = pipeline(34)
 #[test]
 fn e2e_p81_enum_impl_method() {
     let source = r#"
-E Direction { North, South, East, West }
-X Direction {
-    F code(self) -> i64 {
-        M self {
+enum Direction { North, South, East, West }
+impl Direction {
+    fn code(self) -> i64 {
+        match self {
             North => 1,
             South => 2,
             East => 3,
@@ -1378,7 +1378,7 @@ X Direction {
         }
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     d := North
     d.code()
 }
@@ -1391,12 +1391,12 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_self_recursion_ackermann_small() {
     let source = r#"
-F ack(m: i64, n: i64) -> i64 {
-    I m == 0 { R n + 1 }
-    I n == 0 { R ack(m - 1, 1) }
+fn ack(m: i64, n: i64) -> i64 {
+    I m == 0 { return n + 1 }
+    I n == 0 { return ack(m - 1, 1) }
     ack(m - 1, ack(m, n - 1))
 }
-F main() -> i64 {
+fn main() -> i64 {
     # ack(2, 3) = 9
     ack(2, 3)
 }
@@ -1407,11 +1407,11 @@ F main() -> i64 {
 #[test]
 fn e2e_p81_self_recursion_tower_of_hanoi_count() {
     let source = r#"
-F hanoi_moves(n: i64) -> i64 {
-    I n <= 0 { R 0 }
+fn hanoi_moves(n: i64) -> i64 {
+    I n <= 0 { return 0 }
     @(n - 1) + 1 + @(n - 1)
 }
-F main() -> i64 = hanoi_moves(5)
+fn main() -> i64 = hanoi_moves(5)
 "#;
     // 2^5 - 1 = 31
     assert_exit_code(source, 31);

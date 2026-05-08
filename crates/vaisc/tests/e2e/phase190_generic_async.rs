@@ -14,11 +14,11 @@ use super::helpers::*;
 fn e2e_phase190_generic_async_await_compiles() {
     assert_compiles(
         r#"
-A F fetch<T>(x: T) -> T {
+A fn fetch<T>(x: T) -> type {
   x
 }
 
-A F main() -> i64 {
+A fn main() -> i64 {
   v := fetch(42).await
   v
 }
@@ -30,11 +30,11 @@ A F main() -> i64 {
 fn e2e_phase190_plain_async_await_compiles() {
     assert_compiles(
         r#"
-A F double(n: i64) -> i64 {
+A fn double(n: i64) -> i64 {
   n + n
 }
 
-A F main() -> i64 {
+A fn main() -> i64 {
   double(21).await
 }
 "#,

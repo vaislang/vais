@@ -9,8 +9,8 @@ use super::helpers::assert_exit_code;
 fn generic_identity_function() {
     assert_exit_code(
         r#"
-F identity<T>(x: T) -> T { x }
-F main() -> i64 {
+fn identity<T>(x: T) -> type { x }
+fn main() -> i64 {
     identity(42)
 }
 "#,
@@ -22,8 +22,8 @@ F main() -> i64 {
 fn generic_function_multiple_instantiations() {
     assert_exit_code(
         r#"
-F identity<T>(x: T) -> T { x }
-F main() -> i64 {
+fn identity<T>(x: T) -> type { x }
+fn main() -> i64 {
     a := identity(10)
     b := identity(20)
     a + b
@@ -37,8 +37,8 @@ F main() -> i64 {
 fn generic_function_two_type_params() {
     assert_exit_code(
         r#"
-F first<A, B>(a: A, b: B) -> A { a }
-F main() -> i64 {
+fn first<A, B>(a: A, b: B) -> A { a }
+fn main() -> i64 {
     first(42, 0)
 }
 "#,
@@ -50,9 +50,9 @@ F main() -> i64 {
 fn generic_function_nested_calls() {
     assert_exit_code(
         r#"
-F identity<T>(x: T) -> T { x }
-F double<T>(x: T) -> T { identity(x) }
-F main() -> i64 {
+fn identity<T>(x: T) -> type { x }
+fn double<T>(x: T) -> type { identity(x) }
+fn main() -> i64 {
     double(21)
 }
 "#,
@@ -64,8 +64,8 @@ F main() -> i64 {
 fn generic_function_with_arithmetic() {
     assert_exit_code(
         r#"
-F add_one<T>(x: T) -> T { x }
-F main() -> i64 {
+fn add_one<T>(x: T) -> type { x }
+fn main() -> i64 {
     a := add_one(20)
     b := add_one(22)
     a + b
@@ -79,8 +79,8 @@ F main() -> i64 {
 fn generic_swap_compiles() {
     assert_exit_code(
         r#"
-F swap<T>(a: T, b: T) -> T { b }
-F main() -> i64 {
+fn swap<T>(a: T, b: T) -> type { b }
+fn main() -> i64 {
     swap(1, 2)
 }
 "#,
@@ -92,9 +92,9 @@ F main() -> i64 {
 fn multiple_generic_functions() {
     assert_exit_code(
         r#"
-F id<T>(x: T) -> T { x }
-F const_val<T>(x: T, y: T) -> T { x }
-F main() -> i64 {
+fn id<T>(x: T) -> type { x }
+fn const_val<T>(x: T, y: T) -> type { x }
+fn main() -> i64 {
     a := id(10)
     b := const_val(32, 0)
     a + b
@@ -110,8 +110,8 @@ F main() -> i64 {
 fn generic_expression_body() {
     assert_exit_code(
         r#"
-F wrap<T>(x: T) -> T = x
-F main() -> i64 = wrap(99)
+fn wrap<T>(x: T) -> type = x
+fn main() -> i64 = wrap(99)
 "#,
         99,
     );
@@ -121,8 +121,8 @@ F main() -> i64 = wrap(99)
 fn generic_function_repeated_same_type() {
     assert_exit_code(
         r#"
-F get<T>(x: T) -> T { x }
-F main() -> i64 {
+fn get<T>(x: T) -> type { x }
+fn main() -> i64 {
     a := get(10)
     b := get(20)
     c := get(12)

@@ -11,9 +11,9 @@ fn e2e_string_substring_returned_struct_field_per_module() {
     std::fs::write(
         &main_path,
         r#"
-U string_owner
+use string_owner
 
-F main() -> i64 {
+fn main() -> i64 {
     box := make_sub_box("abcdef")
     check_sub_box(box)
 }
@@ -23,27 +23,27 @@ F main() -> i64 {
     std::fs::write(
         &helper_path,
         r#"
-S SubBox {
+struct SubBox {
     key: str,
     value: str,
 }
 
-F make_sub_box(source: str) -> SubBox {
+fn make_sub_box(source: str) -> SubBox {
     box := mut SubBox { key: "", value: "" }
     box.key = source.substring(0, 3)
     box.value = source.substring(3, 6)
     box
 }
 
-F check_sub_box(box: SubBox) -> i64 {
-    I box.key.len() != 3 { R 1 }
-    I box.value.len() != 3 { R 2 }
-    I box.key.char_at(0) != 97 { R 3 }
-    I box.key.char_at(1) != 98 { R 4 }
-    I box.key.char_at(2) != 99 { R 5 }
-    I box.value.char_at(0) != 100 { R 6 }
-    I box.value.char_at(1) != 101 { R 7 }
-    I box.value.char_at(2) != 102 { R 8 }
+fn check_sub_box(box: SubBox) -> i64 {
+    I box.key.len() != 3 { return 1 }
+    I box.value.len() != 3 { return 2 }
+    I box.key.char_at(0) != 97 { return 3 }
+    I box.key.char_at(1) != 98 { return 4 }
+    I box.key.char_at(2) != 99 { return 5 }
+    I box.value.char_at(0) != 100 { return 6 }
+    I box.value.char_at(1) != 101 { return 7 }
+    I box.value.char_at(2) != 102 { return 8 }
     0
 }
 "#,
@@ -89,23 +89,23 @@ fn e2e_string_if_expr_retains_return_context_with_block_cleanup() {
     std::fs::write(
         &main_path,
         r#"
-S Pair {
+struct Pair {
     key: str,
     value: str,
 }
 
-F lookup(i: i64) -> str {
+fn lookup(i: i64) -> str {
     I i >= 1 { "" }
-    EL {
+    else {
         pair := Pair { key: "tab", value: "posts" }
         I pair.key == "tab" { pair.value }
-        EL { lookup(i + 1) }
+        else { lookup(i + 1) }
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     value := lookup(0)
-    I value != "posts" { R 1 }
+    I value != "posts" { return 1 }
     0
 }
 "#,

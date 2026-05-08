@@ -34,13 +34,13 @@ fn test_coverage_branching() {
 fn classify(n: i64) -> i64 {
     I n > 100 {
         3
-    } E {
+    } else {
         I n > 50 {
             2
-        } E {
+        } else {
             I n > 0 {
                 1
-            } E {
+            } else {
                 0
             }
         }
@@ -127,7 +127,7 @@ fn todo_new(id: i64, title: str, completed: bool) -> Todo {
 
 fn main() -> i64 {
     t := todo_new(1, "Buy milk", false)
-    I t.id == 1 { 10 } E { 1 }
+    I t.id == 1 { 10 } else { 1 }
 }
 "#,
     )
@@ -341,18 +341,18 @@ fn main() -> i64 {
         first := load_byte(entry)
         I first != 46 {
             count = count + 1
-        } E {
+        } else {
             second := load_byte(entry + 1)
             I second == 0 {
                 # "." skip
-            } E I second == 46 {
+            } else I second == 46 {
                 third := load_byte(entry + 2)
                 I third == 0 {
                     # ".." skip
-                } E {
+                } else {
                     count = count + 1
                 }
-            } E {
+            } else {
                 count = count + 1
             }
         }
@@ -465,7 +465,7 @@ struct SHMap {
 }
 impl SHMap {
     fn with_capacity(c: i64) -> SHMap {
-        cap := I c < 8 { 8 } E { c }
+        cap := I c < 8 { 8 } else { c }
         b := malloc(cap * 8)
         i := mut 0
         L { I i >= cap { B }; store_i64(b + i * 8, 0); i = i + 1 }
@@ -484,10 +484,10 @@ impl SHMap {
     }
     fn get_chain(&self, ep: i64, kp: i64) -> i64 {
         I ep == 0 { 0 }
-        E {
+        else {
             ek := load_i64(ep)
             I streq(ek, kp) == 1 { load_i64(ep + 8) }
-            E { @.get_chain(load_i64(ep + 16), kp) }
+            else { @.get_chain(load_i64(ep + 16), kp) }
         }
     }
     fn contains(&self, key: str) -> i64 {
@@ -498,10 +498,10 @@ impl SHMap {
     }
     fn contains_chain(&self, ep: i64, kp: i64) -> i64 {
         I ep == 0 { 0 }
-        E {
+        else {
             ek := load_i64(ep)
             I streq(ek, kp) == 1 { 1 }
-            E { @.contains_chain(load_i64(ep + 16), kp) }
+            else { @.contains_chain(load_i64(ep + 16), kp) }
         }
     }
     fn set(&self, key: str, value: i64) -> i64 {
@@ -587,7 +587,7 @@ struct SHMap2 {
 }
 impl SHMap2 {
     fn with_capacity(c: i64) -> SHMap2 {
-        cap := I c < 8 { 8 } E { c }
+        cap := I c < 8 { 8 } else { c }
         b := malloc(cap * 8)
         i := mut 0
         L { I i >= cap { B }; store_i64(b + i * 8, 0); i = i + 1 }
@@ -605,10 +605,10 @@ impl SHMap2 {
     }
     fn get_chain(&self, ep: i64, kp: i64) -> i64 {
         I ep == 0 { 0 }
-        E {
+        else {
             ek := load_i64(ep)
             I streq(ek, kp) == 1 { load_i64(ep + 8) }
-            E { @.get_chain(load_i64(ep + 16), kp) }
+            else { @.get_chain(load_i64(ep + 16), kp) }
         }
     }
     fn set(&self, key: str, value: i64) -> i64 {
@@ -628,12 +628,12 @@ impl SHMap2 {
     }
     fn try_update(&self, ep: i64, kp: i64, value: i64) -> i64 {
         I ep == 0 { 0 }
-        E {
+        else {
             ek := load_i64(ep)
             I streq(ek, kp) == 1 {
                 store_i64(ep + 8, value)
                 1
-            } E {
+            } else {
                 @.try_update(load_i64(ep + 16), kp, value)
             }
         }
@@ -646,21 +646,21 @@ impl SHMap2 {
     }
     fn remove_chain(&self, bidx: i64, prev: i64, ep: i64, kp: i64) -> i64 {
         I ep == 0 { 0 }
-        E {
+        else {
             ek := load_i64(ep)
             I streq(ek, kp) == 1 {
                 val := load_i64(ep + 8)
                 nxt := load_i64(ep + 16)
                 _ := I prev == 0 {
                     store_i64(self.buckets + bidx * 8, nxt); 0
-                } E {
+                } else {
                     store_i64(prev + 16, nxt); 0
                 }
                 free(ek)
                 free(ep)
                 self.size = self.size - 1
                 val
-            } E {
+            } else {
                 @.remove_chain(bidx, ep, load_i64(ep + 16), kp)
             }
         }
@@ -732,14 +732,14 @@ struct StrMap {
 
 impl StrMap {
     fn with_capacity(c: i64) -> StrMap {
-        cap := I c < 8 { 8 } E { c }
+        cap := I c < 8 { 8 } else { c }
         b := malloc(cap * 8)
         i := mut 0
         L { I i >= cap { B }; store_i64(b + i * 8, 0); i = i + 1 }
         StrMap { buckets: b, size: 0, cap: cap }
     }
     fn len(&self) -> i64 = self.size
-    fn is_empty(&self) -> i64 { I self.size == 0 { 1 } E { 0 } }
+    fn is_empty(&self) -> i64 { I self.size == 0 { 1 } else { 0 } }
     fn get(&self, key: i64) -> i64 {
         h := djb2_hash(key)
         idx := h % self.cap
@@ -748,10 +748,10 @@ impl StrMap {
     }
     fn get_chain(&self, ep: i64, key: i64) -> i64 {
         I ep == 0 { 0 }
-        E {
+        else {
             ek := load_i64(ep)
             I streq(ek, key) == 1 { load_i64(ep + 8) }
-            E { @.get_chain(load_i64(ep + 16), key) }
+            else { @.get_chain(load_i64(ep + 16), key) }
         }
     }
     fn set(&self, key: i64, value: i64) -> i64 {
@@ -777,10 +777,10 @@ impl StrMap {
     }
     fn contains_chain(&self, ep: i64, key: i64) -> i64 {
         I ep == 0 { 0 }
-        E {
+        else {
             ek := load_i64(ep)
             I streq(ek, key) == 1 { 1 }
-            E { @.contains_chain(load_i64(ep + 16), key) }
+            else { @.contains_chain(load_i64(ep + 16), key) }
         }
     }
 }
@@ -831,7 +831,7 @@ struct ByteBuffer {
 }
 impl ByteBuffer {
     fn with_capacity(c: i64) -> ByteBuffer {
-        cap := mut I c < 16 { 16 } E { c }
+        cap := mut I c < 16 { 16 } else { c }
         d := malloc(cap)
         ByteBuffer { data: d, len: 0, cap: cap, pos: 0 }
     }
@@ -866,7 +866,7 @@ impl ByteBuffer {
             v = v >> 7
             I v > 0 {
                 @.write_u8(byte | 128)
-            } E {
+            } else {
                 @.write_u8(byte)
             }
             count = count + 1
@@ -939,7 +939,7 @@ struct ByteBuffer {
 }
 impl ByteBuffer {
     fn with_capacity(c: i64) -> ByteBuffer {
-        cap := mut I c < 16 { 16 } E { c }
+        cap := mut I c < 16 { 16 } else { c }
         d := malloc(cap)
         ByteBuffer { data: d, len: 0, cap: cap, pos: 0 }
     }
@@ -1361,7 +1361,7 @@ impl Pool {
         I idx >= self.count { return 0 }
         pid := load_i64(self.ids + idx * 8)
         I pid == id { load_i64(self.pages + idx * 8) }
-        E { @.find(id, idx + 1) }
+        else { @.find(id, idx + 1) }
     }
 
     fn get(&self, id: i64) -> i64 = @.find(id, 0)
@@ -2203,7 +2203,7 @@ fn test_js_target_enum_tagged_union() {
     let input = tmp.path().join("test.vais");
     fs::write(
         &input,
-        r#"E Result {
+        r#"enum Result {
     Ok(i64),
     Err(i64),
 }
@@ -2248,7 +2248,7 @@ fn test_js_target_if_else() {
         r#"fn max(a: i64, b: i64) -> i64 {
     I a > b {
         return a
-    } E {
+    } else {
         return b
     }
 }
@@ -2592,7 +2592,7 @@ fn test_typed_memory_type_size_builtin() {
         impl Vec<T> {
             fn with_capacity(capacity: i64) -> Vec<T> {
                 es := type_size()
-                elem_sz := I es <= 0 { 8 } E I es > 8 { 8 } E { es }
+                elem_sz := I es <= 0 { 8 } else I es > 8 { 8 } else { es }
                 data := malloc(capacity * elem_sz)
                 Vec { data: data, len: 0, cap: capacity, elem_size: elem_sz }
             }
@@ -3064,7 +3064,7 @@ impl Data: Checker {
     fn check(&self) -> i64 {
         I self.flag > 0 {
             return self.value
-        } E {
+        } else {
             return 0
         }
     }
@@ -3417,10 +3417,10 @@ fn main() -> i64 {
     I s == "hello" {
         I s == "hello" {
             1
-        } E {
+        } else {
             0
         }
-    } E {
+    } else {
         0
     }
 }
@@ -3434,14 +3434,14 @@ fn e2e_str_comparison_and_use() {
 fn check(s: str) -> i64 {
     I s == "world" {
         1
-    } E {
+    } else {
         0
     }
 }
 
 fn main() -> i64 {
     s := "world"
-    result := I s == "world" { 1 } E { 0 }
+    result := I s == "world" { 1 } else { 0 }
     # Use s again after comparison
     check_result := check(s)
     result + check_result
@@ -3456,7 +3456,7 @@ fn e2e_str_param_comparison() {
 fn check_str(input: str) -> i64 {
     I input == "test" {
         42
-    } E {
+    } else {
         0
     }
 }
@@ -3504,7 +3504,7 @@ fn main() -> i64 {
         I i >= 3 {
             B
         }
-        test := I i == 1 { "match" } E { "other" }
+        test := I i == 1 { "match" } else { "other" }
         I test == target {
             count = count + 1
         }
@@ -3524,10 +3524,10 @@ fn main() -> i64 {
     I s != "world" {
         I s == "hello" {
             42
-        } E {
+        } else {
             0
         }
-    } E {
+    } else {
         0
     }
 }

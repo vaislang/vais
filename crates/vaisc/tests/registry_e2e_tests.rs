@@ -1850,7 +1850,7 @@ fn test_build_directory_with_main_vais() {
     fs::create_dir_all(&src_dir).unwrap();
     fs::write(
         src_dir.join("main.vais"),
-        "F main() -> i64 { puts(\"dir build test\") \n 0 }",
+        "fn main() -> i64 { puts(\"dir build test\") \n 0 }",
     )
     .unwrap();
 
@@ -1888,14 +1888,14 @@ fn test_build_directory_with_multifile_import() {
     // Create utils module
     fs::write(
         src_dir.join("myutils.vais"),
-        "F add_nums(a: i64, b: i64) -> i64 { a + b }",
+        "fn add_nums(a: i64, b: i64) -> i64 { a + b }",
     )
     .unwrap();
 
     // Create main with use statement
     fs::write(
         src_dir.join("main.vais"),
-        "U myutils\nF main() -> i64 { add_nums(3, 4) }",
+        "use myutils\nF main() -> i64 { add_nums(3, 4) }",
     )
     .unwrap();
 
@@ -2082,7 +2082,7 @@ fn test_vaisc_new_creates_test_file() {
 
                 let content = fs::read_to_string(&test_file).unwrap();
                 assert!(
-                    content.contains("test_basic") || content.contains("F test_"),
+                    content.contains("test_basic") || content.contains("fn test_"),
                     "test file should contain a test function"
                 );
             }
@@ -2100,7 +2100,7 @@ fn test_vaisc_test_with_passing_test() {
     fs::create_dir_all(&tests_dir).unwrap();
 
     // Write a passing test (exit code 0)
-    let test_source = "F main() -> i64 {\n    0\n}\n";
+    let test_source = "fn main() -> i64 {\n    0\n}\n";
     fs::write(tests_dir.join("pass_test.vais"), test_source).unwrap();
 
     match run_vaisc(&["test", tests_dir.to_str().unwrap()], tmp.path()) {
@@ -2131,7 +2131,7 @@ fn test_vaisc_test_with_failing_test() {
     fs::create_dir_all(&tests_dir).unwrap();
 
     // Write a failing test (exit code 1)
-    let test_source = "F main() -> i64 {\n    1\n}\n";
+    let test_source = "fn main() -> i64 {\n    1\n}\n";
     fs::write(tests_dir.join("fail_test.vais"), test_source).unwrap();
 
     match run_vaisc(&["test", tests_dir.to_str().unwrap()], tmp.path()) {
@@ -2185,8 +2185,8 @@ fn test_vaisc_test_filter() {
     fs::create_dir_all(&tests_dir).unwrap();
 
     // Write two test files
-    let test1 = "F main() -> i64 { 0 }\n";
-    let test2 = "F main() -> i64 { 0 }\n";
+    let test1 = "fn main() -> i64 { 0 }\n";
+    let test2 = "fn main() -> i64 { 0 }\n";
     fs::write(tests_dir.join("alpha_test.vais"), test1).unwrap();
     fs::write(tests_dir.join("beta_test.vais"), test2).unwrap();
 
@@ -2220,7 +2220,7 @@ fn test_vaisc_pkg_tree_basic() {
     fs::create_dir_all(tmp.path().join("src")).unwrap();
     fs::write(
         tmp.path().join("src").join("main.vais"),
-        "F main() -> i64 { 0 }\n",
+        "fn main() -> i64 { 0 }\n",
     )
     .unwrap();
 
@@ -2255,7 +2255,7 @@ fn test_vaisc_pkg_tree_with_deps() {
     fs::write(dep_dir.join("vais.toml"), dep_manifest).unwrap();
     fs::write(
         dep_dir.join("src").join("lib.vais"),
-        "F helper() -> i64 { 42 }\n",
+        "fn helper() -> i64 { 42 }\n",
     )
     .unwrap();
 
@@ -2268,7 +2268,7 @@ fn test_vaisc_pkg_tree_with_deps() {
     fs::create_dir_all(tmp.path().join("src")).unwrap();
     fs::write(
         tmp.path().join("src").join("main.vais"),
-        "F main() -> i64 { 0 }\n",
+        "fn main() -> i64 { 0 }\n",
     )
     .unwrap();
 
@@ -2351,7 +2351,7 @@ fn test_vaisc_pkg_doc_html_format() {
     fs::create_dir_all(tmp.path().join("src")).unwrap();
     fs::write(
         tmp.path().join("src").join("main.vais"),
-        "F main() -> i64 { 0 }\n",
+        "fn main() -> i64 { 0 }\n",
     )
     .unwrap();
 
@@ -2680,7 +2680,7 @@ fn test_bench_with_filter() {
 
     // Create a simple benchmark file
     let bench_file = benches_dir.join("simple.vais");
-    fs::write(&bench_file, "F main() -> i64 = 42").unwrap();
+    fs::write(&bench_file, "fn main() -> i64 = 42").unwrap();
 
     match run_vaisc_from_root(&[
         "bench",
@@ -2711,7 +2711,7 @@ fn test_fix_dry_run() {
     let test_file = tmp.path().join("test.vais");
 
     // Create a valid Vais file
-    fs::write(&test_file, "F main() -> i64 = 42").unwrap();
+    fs::write(&test_file, "fn main() -> i64 = 42").unwrap();
 
     match run_vaisc_from_root(&["fix", "--dry-run", test_file.to_str().unwrap()]) {
         Ok(output) => {
@@ -2736,7 +2736,7 @@ fn test_lint_clean_file() {
     let test_file = tmp.path().join("clean.vais");
 
     // Create a clean, valid Vais file
-    fs::write(&test_file, "F main() -> i64 = 42").unwrap();
+    fs::write(&test_file, "fn main() -> i64 = 42").unwrap();
 
     match run_vaisc_from_root(&["lint", test_file.to_str().unwrap()]) {
         Ok(output) => {
@@ -2764,7 +2764,7 @@ fn test_lint_json_format() {
     let test_file = tmp.path().join("test.vais");
 
     // Create a Vais file
-    fs::write(&test_file, "F main() -> i64 = 42").unwrap();
+    fs::write(&test_file, "fn main() -> i64 = 42").unwrap();
 
     match run_vaisc_from_root(&["lint", "--format", "json", test_file.to_str().unwrap()]) {
         Ok(output) => {
@@ -2802,7 +2802,7 @@ fn test_pkg_vendor_no_deps() {
     .unwrap();
     fs::write(
         project_dir.join("src").join("main.vais"),
-        "F main() -> i64 { 0 }\n",
+        "fn main() -> i64 { 0 }\n",
     )
     .unwrap();
 
@@ -2836,7 +2836,7 @@ fn test_pkg_package_list() {
     .unwrap();
     fs::write(
         project_dir.join("src").join("main.vais"),
-        "F main() -> i64 { 42 }\n",
+        "fn main() -> i64 { 42 }\n",
     )
     .unwrap();
 
@@ -2874,7 +2874,7 @@ fn test_pkg_metadata_json() {
     .unwrap();
     fs::write(
         project_dir.join("src").join("lib.vais"),
-        "F foo() -> i64 { 1 }\n",
+        "fn foo() -> i64 { 1 }\n",
     )
     .unwrap();
 
@@ -2918,7 +2918,7 @@ fn test_pkg_owner_add_list() {
     .unwrap();
     fs::write(
         project_dir.join("src").join("main.vais"),
-        "F main() -> i64 { 0 }\n",
+        "fn main() -> i64 { 0 }\n",
     )
     .unwrap();
 
@@ -2968,7 +2968,7 @@ fn test_pkg_verify_valid() {
     .unwrap();
     fs::write(
         project_dir.join("src").join("main.vais"),
-        "F main() -> i64 { 0 }\n",
+        "fn main() -> i64 { 0 }\n",
     )
     .unwrap();
 
@@ -3040,7 +3040,7 @@ fn test_phase64_init_creates_valid_manifest_and_source() {
                 assert!(main_path.exists(), "src/main.vais must be created");
                 let main_content = fs::read_to_string(&main_path).unwrap();
                 assert!(
-                    main_content.contains("F main()"),
+                    main_content.contains("fn main()"),
                     "main.vais should contain F main(): got {}",
                     main_content
                 );
@@ -3239,7 +3239,7 @@ fn test_phase64_install_path_dependency_resolution() {
     .unwrap();
     fs::write(
         lib_dir.join("src").join("lib.vais"),
-        "F add(a: i64, b: i64) -> i64 { a + b }\n",
+        "fn add(a: i64, b: i64) -> i64 { a + b }\n",
     )
     .unwrap();
 
@@ -3253,7 +3253,7 @@ fn test_phase64_install_path_dependency_resolution() {
     .unwrap();
     fs::write(
         app_dir.join("src").join("main.vais"),
-        "U mylib\nF main() -> i64 { add(3, 4) }\n",
+        "use mylib\nF main() -> i64 { add(3, 4) }\n",
     )
     .unwrap();
 
@@ -3299,7 +3299,7 @@ fn test_phase64_path_dependency_manifest_parsing() {
     .unwrap();
     fs::write(
         lib_dir.join("src").join("lib.vais"),
-        "F double(x: i64) -> i64 { x * 2 }\n",
+        "fn double(x: i64) -> i64 { x * 2 }\n",
     )
     .unwrap();
 
@@ -3311,7 +3311,7 @@ fn test_phase64_path_dependency_manifest_parsing() {
     fs::write(app_dir.join("vais.toml"), manifest_str).unwrap();
     fs::write(
         app_dir.join("src").join("main.vais"),
-        "F main() -> i64 { 0 }\n",
+        "fn main() -> i64 { 0 }\n",
     )
     .unwrap();
 
@@ -3341,7 +3341,7 @@ fn test_phase64_transitive_path_dependencies() {
     .unwrap();
     fs::write(
         c_dir.join("src").join("lib.vais"),
-        "F base_val() -> i64 { 42 }\n",
+        "fn base_val() -> i64 { 42 }\n",
     )
     .unwrap();
 
@@ -3354,7 +3354,7 @@ fn test_phase64_transitive_path_dependencies() {
     .unwrap();
     fs::write(
         b_dir.join("src").join("lib.vais"),
-        "U c\nF wrapped_val() -> i64 { base_val() }\n",
+        "use c\nF wrapped_val() -> i64 { base_val() }\n",
     )
     .unwrap();
 
@@ -3367,7 +3367,7 @@ fn test_phase64_transitive_path_dependencies() {
     .unwrap();
     fs::write(
         a_dir.join("src").join("main.vais"),
-        "U b\nF main() -> i64 { wrapped_val() }\n",
+        "use b\nF main() -> i64 { wrapped_val() }\n",
     )
     .unwrap();
 
@@ -3402,7 +3402,7 @@ fn test_phase64_install_binary_package_creates_binary() {
     .unwrap();
     fs::write(
         project_dir.join("src").join("main.vais"),
-        "F main() -> i64 { puts(\"installed!\") \n 0 }\n",
+        "fn main() -> i64 { puts(\"installed!\") \n 0 }\n",
     )
     .unwrap();
 
@@ -3450,7 +3450,7 @@ fn test_phase64_install_library_only_fails() {
     // Only lib.vais, no main.vais
     fs::write(
         project_dir.join("src").join("lib.vais"),
-        "F helper() -> i64 { 0 }\n",
+        "fn helper() -> i64 { 0 }\n",
     )
     .unwrap();
 
@@ -3534,7 +3534,7 @@ fn test_phase64_publish_package_creates_archive() {
     .unwrap();
     fs::write(
         project_dir.join("src").join("lib.vais"),
-        "F greet() -> i64 { puts(\"hi\") \n 0 }\n",
+        "fn greet() -> i64 { puts(\"hi\") \n 0 }\n",
     )
     .unwrap();
 
@@ -3574,7 +3574,7 @@ fn test_phase64_publish_no_server_reports_error() {
     .unwrap();
     fs::write(
         project_dir.join("src").join("lib.vais"),
-        "F nop() -> i64 { 0 }\n",
+        "fn nop() -> i64 { 0 }\n",
     )
     .unwrap();
 
@@ -3791,7 +3791,7 @@ fn test_phase64_workspace_member_resolution() {
     .unwrap();
     fs::write(
         member_a.join("src").join("lib.vais"),
-        "F hello_a() -> i64 { 1 }\n",
+        "fn hello_a() -> i64 { 1 }\n",
     )
     .unwrap();
 
@@ -3804,7 +3804,7 @@ fn test_phase64_workspace_member_resolution() {
     .unwrap();
     fs::write(
         member_b.join("src").join("lib.vais"),
-        "F hello_b() -> i64 { 2 }\n",
+        "fn hello_b() -> i64 { 2 }\n",
     )
     .unwrap();
 
@@ -3855,7 +3855,7 @@ fn test_phase64_workspace_inter_member_dependency() {
     .unwrap();
     fs::write(
         core_dir.join("src").join("lib.vais"),
-        "F core_fn() -> i64 { 10 }\n",
+        "fn core_fn() -> i64 { 10 }\n",
     )
     .unwrap();
 
@@ -3869,7 +3869,7 @@ fn test_phase64_workspace_inter_member_dependency() {
     .unwrap();
     fs::write(
         app_dir.join("src").join("main.vais"),
-        "U core\nF main() -> i64 { core_fn() }\n",
+        "use core\nF main() -> i64 { core_fn() }\n",
     )
     .unwrap();
 
@@ -4094,7 +4094,7 @@ fn test_phase64_new_bin_project_structure() {
 
                 let main = fs::read_to_string(project.join("src").join("main.vais")).unwrap();
                 assert!(
-                    main.contains("F main()"),
+                    main.contains("fn main()"),
                     "bin project should have F main()"
                 );
             }
@@ -4120,7 +4120,7 @@ fn test_phase64_new_lib_project_structure() {
 
                 let lib = fs::read_to_string(project.join("src").join("lib.vais")).unwrap();
                 assert!(
-                    !lib.contains("F main()"),
+                    !lib.contains("fn main()"),
                     "lib project should not have F main()"
                 );
             }
@@ -4291,7 +4291,7 @@ fn test_phase64_add_then_build_with_path_dep() {
     .unwrap();
     fs::write(
         lib_dir.join("src").join("lib.vais"),
-        "F square(x: i64) -> i64 { x * x }\n",
+        "fn square(x: i64) -> i64 { x * x }\n",
     )
     .unwrap();
 
@@ -4305,7 +4305,7 @@ fn test_phase64_add_then_build_with_path_dep() {
     .unwrap();
     fs::write(
         app_dir.join("src").join("main.vais"),
-        "F main() -> i64 { 0 }\n",
+        "fn main() -> i64 { 0 }\n",
     )
     .unwrap();
 
@@ -4401,7 +4401,7 @@ fn test_phase64_pkg_check_workspace() {
     .unwrap();
     fs::write(
         member.join("src").join("lib.vais"),
-        "F lib_fn() -> i64 { 42 }\n",
+        "fn lib_fn() -> i64 { 42 }\n",
     )
     .unwrap();
 
@@ -4442,7 +4442,7 @@ fn test_phase64_cyclic_dependency_detection() {
         "[package]\nname = \"a\"\nversion = \"1.0.0\"\n\n[dependencies]\nb = { path = \"../b\" }\n",
     )
     .unwrap();
-    fs::write(a_dir.join("src").join("lib.vais"), "F fa() -> i64 { 1 }\n").unwrap();
+    fs::write(a_dir.join("src").join("lib.vais"), "fn fa() -> i64 { 1 }\n").unwrap();
 
     let b_dir = tmp.path().join("b");
     fs::create_dir_all(b_dir.join("src")).unwrap();
@@ -4451,7 +4451,7 @@ fn test_phase64_cyclic_dependency_detection() {
         "[package]\nname = \"b\"\nversion = \"1.0.0\"\n\n[dependencies]\na = { path = \"../a\" }\n",
     )
     .unwrap();
-    fs::write(b_dir.join("src").join("lib.vais"), "F fb() -> i64 { 2 }\n").unwrap();
+    fs::write(b_dir.join("src").join("lib.vais"), "fn fb() -> i64 { 2 }\n").unwrap();
 
     // Build A — should detect cycle and fail gracefully
     let output = Command::new("cargo")

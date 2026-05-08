@@ -16,7 +16,7 @@ use crate::helpers::assert_compiles;
 fn e2e_phase6_28_lw_then_deref_assign() {
     assert_compiles(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     ids := mut Vec.new();
     ids.push(1u64);
     used := mut Vec.new();
@@ -34,7 +34,7 @@ F main() -> i64 {
 fn e2e_phase6_28_if_then_deref_assign() {
     assert_compiles(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     ids := mut Vec.new();
     ids.push(1u64);
 
@@ -50,11 +50,11 @@ F main() -> i64 {
 fn e2e_phase6_28_match_then_deref_assign() {
     assert_compiles(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     ids := mut Vec.new();
     ids.push(1u64);
 
-    M ids.len() { _ => {} }
+    match ids.len() { _ => {} }
     *ids.get_mut(0) = 99u64;
     0
 }
@@ -72,7 +72,7 @@ fn e2e_phase6_28_ok_or_else_on_optional() {
     // Use an explicit Optional(...) via Vec.pop() which returns Option<T>.
     assert_compiles(
         r#"
-partial F main() -> i64 {
+partial fn main() -> i64 {
     v := mut Vec.new();
     v.push(42i64);
     result := v.pop().ok_or_else(|| "empty".to_string())!;
@@ -86,7 +86,7 @@ partial F main() -> i64 {
 fn e2e_phase6_28_ok_or_on_optional() {
     assert_compiles(
         r#"
-partial F main() -> i64 {
+partial fn main() -> i64 {
     v := mut Vec.new();
     v.push(7i64);
     result := v.pop().ok_or("none".to_string())!;
@@ -106,12 +106,12 @@ partial F main() -> i64 {
 fn e2e_phase6_28_first_use_of_noncopy_param() {
     assert_compiles(
         r#"
-F test(x: Vec<u8>) -> i64 {
+fn test(x: Vec<u8>) -> i64 {
     y := mut x;
     y.len() as i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<u8> = Vec.new();
     test(v)
 }
@@ -126,24 +126,24 @@ F main() -> i64 {
 fn e2e_phase6_28_enum_variant_binding_threaded() {
     assert_compiles(
         r#"
-E SplitResult {
+enum SplitResult {
     Done,
     NeedsSplit(Vec<u8>, u32),
 }
 
-partial F propagate(sep: Vec<u8>, id: u32) -> i64 {
+partial fn propagate(sep: Vec<u8>, id: u32) -> i64 {
     current_sep := mut sep;
     current_sep.len() as i64
 }
 
-partial F handle(r: SplitResult) -> i64 {
-    M r {
+partial fn handle(r: SplitResult) -> i64 {
+    match r {
         Done => 0i64,
         NeedsSplit(sep, id) => propagate(sep, id),
     }
 }
 
-partial F main() -> i64 {
+partial fn main() -> i64 {
     handle(NeedsSplit(Vec.new(), 5u32))
 }
 "#,
@@ -156,7 +156,7 @@ fn e2e_phase6_28_nested_lw_windows_pattern() {
     // sibling Vec<bool>. The trailing `j = j + 1` keeps the loop well-formed.
     assert_compiles(
         r#"
-F merge(items: &Vec<i64>) -> i64 {
+fn merge(items: &Vec<i64>) -> i64 {
     used := mut Vec.new();
     k := mut 0u32;
     LW k < items.len() as u32 {
@@ -176,7 +176,7 @@ F merge(items: &Vec<i64>) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> = Vec.new();
     merge(&v)
 }

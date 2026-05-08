@@ -11,26 +11,26 @@ use std::process::{Command, Output};
 #[test]
 fn e2e_vaisdb_synthetic_vec_index_field_still_compiles() {
     let source = r#"
-U std/vec
+use std/vec
 
-S Policy {
+struct Policy {
     policy_name: str,
     active: bool,
 }
 
-X Policy {
-    F is_active(self) -> bool {
+impl Policy {
+    fn is_active(self) -> bool {
         self.active
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     policies := mut Vec.new()
     policies.push(Policy { policy_name: "p1", active: true })
     I policies[0].policy_name == "p1" && policies[0].is_active() {
-        R 0
+        return 0
     }
-    R 1
+    return 1
 }
 "#;
 
@@ -40,33 +40,33 @@ F main() -> i64 {
 #[test]
 fn e2e_vaisdb_hashmap_get_preserves_struct_value_type() {
     let source = r#"
-U std/hashmap
-U std/option
+use std/hashmap
+use std/option
 
-S TableInfo {
+struct TableInfo {
     table_id: u32,
     name: str,
 }
 
-X TableInfo {
-    F clone(self) -> TableInfo {
+impl TableInfo {
+    fn clone(self) -> TableInfo {
         TableInfo { table_id: self.table_id, name: self.name.clone() }
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     tables: HashMap<str, TableInfo> := mut HashMap.with_capacity(16)
     tables.insert("users", TableInfo { table_id: 42, name: "users" })
 
-    table_info := mut M tables.get("users") {
+    table_info := mut match tables.get("users") {
         Some(info) => info.clone(),
-        None => { R 1 },
+        None => { return 1 },
     }
 
     I table_info.table_id == 42 {
-        R 0
+        return 0
     }
-    R 2
+    return 2
 }
 "#;
 

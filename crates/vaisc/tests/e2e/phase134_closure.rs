@@ -12,7 +12,7 @@ use super::helpers::*;
 fn e2e_p134_cl_return_constant() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     f := || 42
     f()
 }
@@ -25,7 +25,7 @@ F main() -> i64 {
 fn e2e_p134_cl_single_param_passthrough() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     id := |x| x
     id(42)
 }
@@ -38,7 +38,7 @@ F main() -> i64 {
 fn e2e_p134_cl_two_params_add() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     add := |a, b| a + b
     add(20, 22)
 }
@@ -51,7 +51,7 @@ F main() -> i64 {
 fn e2e_p134_cl_two_params_mul() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     mul := |a, b| a * b
     mul(6, 7)
 }
@@ -64,7 +64,7 @@ F main() -> i64 {
 fn e2e_p134_cl_three_params_sum() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := |a, b, c| a + b + c
     sum(10, 20, 12)
 }
@@ -77,7 +77,7 @@ F main() -> i64 {
 fn e2e_p134_cl_with_body_block() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     f := |x| {
         doubled := x * 2
         doubled + 2
@@ -95,7 +95,7 @@ F main() -> i64 {
 fn e2e_p134_cl_capture_single() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     base := 40
     add_base := |x| x + base
     add_base(2)
@@ -109,7 +109,7 @@ F main() -> i64 {
 fn e2e_p134_cl_capture_two_vars() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := 20
     b := 22
     sum := || a + b
@@ -124,7 +124,7 @@ F main() -> i64 {
 fn e2e_p134_cl_capture_three_vars() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
     y := 20
     z := 12
@@ -140,7 +140,7 @@ F main() -> i64 {
 fn e2e_p134_cl_capture_and_param() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     offset := 32
     add := |x| x + offset
     add(10)
@@ -154,11 +154,11 @@ F main() -> i64 {
 fn e2e_p134_cl_capture_outer_scope() {
     assert_exit_code(
         r#"
-F make_adder(n: i64) -> i64 {
+fn make_adder(n: i64) -> i64 {
     f := |x| x + n
     f(2)
 }
-F main() -> i64 = make_adder(40)
+fn main() -> i64 = make_adder(40)
 "#,
         42,
     );
@@ -170,8 +170,8 @@ F main() -> i64 = make_adder(40)
 fn e2e_p134_cl_as_param_basic() {
     assert_exit_code(
         r#"
-F apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)
-F main() -> i64 {
+fn apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)
+fn main() -> i64 {
     double := |x| x * 2
     apply(double, 21)
 }
@@ -184,8 +184,8 @@ F main() -> i64 {
 fn e2e_p134_cl_as_param_add() {
     assert_exit_code(
         r#"
-F apply2(f: fn(i64, i64) -> i64, a: i64, b: i64) -> i64 = f(a, b)
-F main() -> i64 {
+fn apply2(f: fn(i64, i64) -> i64, a: i64, b: i64) -> i64 = f(a, b)
+fn main() -> i64 {
     add := |a, b| a + b
     apply2(add, 20, 22)
 }
@@ -198,9 +198,9 @@ F main() -> i64 {
 fn e2e_p134_cl_named_fn_as_param() {
     assert_exit_code(
         r#"
-F double(x: i64) -> i64 = x * 2
-F apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)
-F main() -> i64 = apply(double, 21)
+fn double(x: i64) -> i64 = x * 2
+fn apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)
+fn main() -> i64 = apply(double, 21)
 "#,
         42,
     );
@@ -212,8 +212,8 @@ F main() -> i64 = apply(double, 21)
 fn e2e_p134_cl_with_if() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    classify := |x| I x > 0 { x } E { 0 - x }
+fn main() -> i64 {
+    classify := |x| I x > 0 { x } else { 0 - x }
     classify(42)
 }
 "#,
@@ -225,8 +225,8 @@ F main() -> i64 {
 fn e2e_p134_cl_with_match() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    decode := |x| M x {
+fn main() -> i64 {
+    decode := |x| match x {
         1 => 10,
         2 => 20,
         3 => 42,
@@ -243,8 +243,8 @@ F main() -> i64 {
 fn e2e_p134_cl_in_loop() {
     assert_exit_code(
         r#"
-F inc(x: i64) -> i64 = x + 1
-F main() -> i64 {
+fn inc(x: i64) -> i64 = x + 1
+fn main() -> i64 {
     sum := mut 0
     L i:0..42 {
         sum = inc(sum)
@@ -262,7 +262,7 @@ F main() -> i64 {
 fn e2e_p134_cl_called_twice() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     add := |a, b| a + b
     add(20, 0) + add(0, 22)
 }
@@ -275,7 +275,7 @@ F main() -> i64 {
 fn e2e_p134_cl_called_three_times() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     sq := |x| x * x
     sq(1) + sq(2) + sq(3) + sq(4) + sq(5) - 13
 }
@@ -288,7 +288,7 @@ F main() -> i64 {
 fn e2e_p134_cl_result_chain() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     step := |x| x + 7
     step(step(step(step(step(step(0))))))
 }
@@ -305,7 +305,7 @@ fn e2e_p134_cl_iife_no_args() {
     // Test closure called immediately after assignment instead.
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     f := || 42
     f()
 }
@@ -319,7 +319,7 @@ fn e2e_p134_cl_iife_with_arg() {
     // NOTE: IIFE syntax (|x| expr)(val) not supported in Vais.
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     f := |x| x * 2
     f(21)
 }
@@ -334,7 +334,7 @@ F main() -> i64 {
 fn e2e_p134_cl_two_closures_sequential() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     double := |x| x * 2
     step1 := double(20)
     step1 + 2
@@ -348,7 +348,7 @@ F main() -> i64 {
 fn e2e_p134_cl_three_closures() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     add5 := |x| x + 5
     mul2 := |x| x * 2
     step1 := add5(17)
@@ -364,7 +364,7 @@ F main() -> i64 {
 fn e2e_p134_cl_closure_picks_closure() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     add := |a, b| a + b
     mul := |a, b| a * b
     x := add(20, 1)
@@ -383,8 +383,8 @@ fn e2e_p134_cl_struct_field_capture() {
     // Extract field to local variable first.
     assert_exit_code(
         r#"
-S Config { factor: i64 }
-F main() -> i64 {
+struct Config { factor: i64 }
+fn main() -> i64 {
     cfg := Config { factor: 2 }
     factor := cfg.factor
     scale := |x| x * factor
@@ -399,11 +399,11 @@ F main() -> i64 {
 fn e2e_p134_cl_struct_method_returns_closure_result() {
     assert_exit_code(
         r#"
-S Calculator { base: i64 }
-X Calculator {
-    F compute(&self, f: fn(i64) -> i64) -> i64 = f(self.base)
+struct Calculator { base: i64 }
+impl Calculator {
+    fn compute(&self, f: fn(i64) -> i64) -> i64 = f(self.base)
 }
-F main() -> i64 {
+fn main() -> i64 {
     c := Calculator { base: 21 }
     double := |x| x * 2
     c.compute(double)
@@ -419,7 +419,7 @@ F main() -> i64 {
 fn e2e_p134_cl_capture_reassigned_before() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 10
     x = 42
     f := || x
@@ -434,8 +434,8 @@ F main() -> i64 {
 fn e2e_p134_cl_capture_loop_var() {
     assert_exit_code(
         r#"
-F inc(x: i64) -> i64 = x + 1
-F main() -> i64 {
+fn inc(x: i64) -> i64 = x + 1
+fn main() -> i64 {
     result := mut 0
     L i:0..42 {
         result = inc(result)
@@ -451,11 +451,11 @@ F main() -> i64 {
 fn e2e_p134_cl_capture_fn_param() {
     assert_exit_code(
         r#"
-F make(n: i64) -> i64 {
+fn make(n: i64) -> i64 {
     adder := |x| x + n
     adder(2)
 }
-F main() -> i64 = make(40)
+fn main() -> i64 = make(40)
 "#,
         42,
     );
@@ -467,10 +467,10 @@ F main() -> i64 = make(40)
 fn e2e_p134_cl_returns_bool() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     is_pos := |x| x > 0
-    I is_pos(1) { R 42 }
-    R 0
+    I is_pos(1) { return 42 }
+    return 0
 }
 "#,
         42,
@@ -481,7 +481,7 @@ F main() -> i64 {
 fn e2e_p134_cl_zero_return() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     zero := || 0
     42 + zero()
 }
@@ -494,7 +494,7 @@ F main() -> i64 {
 fn e2e_p134_cl_large_computation() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     calc := |a, b, c| (a + b) * c - a
     calc(2, 5, 6)
 }

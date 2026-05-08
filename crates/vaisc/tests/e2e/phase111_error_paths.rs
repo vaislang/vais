@@ -73,7 +73,7 @@ fn error_non_exhaustive_match_compiles() {
     // Test that it at least generates valid IR
     let result = compile_to_ir(
         r#"
-E Color { Red, Blue, Green }
+enum Color { Red, Blue, Green }
 fn main() -> i64 {
     c := Red
     match c {
@@ -268,7 +268,7 @@ fn main() -> i64 = @(5)
 
 #[test]
 fn error_empty_function_body_with_return_type() {
-    assert_compile_error("F main() -> i64 { }");
+    assert_compile_error("fn main() -> i64 { }");
 }
 
 #[test]
@@ -368,7 +368,7 @@ fn main() -> i64 {
 fn positive_enum_match() {
     assert_exit_code(
         r#"
-E Color { Red, Blue, Green }
+enum Color { Red, Blue, Green }
 fn main() -> i64 {
     c := Blue
     match c {

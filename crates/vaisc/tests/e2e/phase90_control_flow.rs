@@ -10,10 +10,10 @@ use super::helpers::*;
 #[test]
 fn e2e_cf_simple_if_true() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
-    I x > 5 { R 42 }
-    R 0
+    I x > 5 { return 42 }
+    return 0
 }
 "#;
     assert_exit_code(source, 42);
@@ -22,10 +22,10 @@ F main() -> i64 {
 #[test]
 fn e2e_cf_simple_if_false() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 3
-    I x > 5 { R 0 }
-    R 42
+    I x > 5 { return 0 }
+    return 42
 }
 "#;
     assert_exit_code(source, 42);
@@ -34,9 +34,9 @@ F main() -> i64 {
 #[test]
 fn e2e_cf_if_else() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
-    I x > 5 { 42 } E { 0 }
+    I x > 5 { 42 } else { 0 }
 }
 "#;
     assert_exit_code(source, 42);
@@ -45,12 +45,12 @@ F main() -> i64 {
 #[test]
 fn e2e_cf_nested_if() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
     y := 20
     I x > 5 {
-        I y > 15 { 42 } E { 0 }
-    } E { 0 }
+        I y > 15 { 42 } else { 0 }
+    } else { 0 }
 }
 "#;
     assert_exit_code(source, 42);
@@ -59,15 +59,15 @@ F main() -> i64 {
 #[test]
 fn e2e_cf_triple_nested_if() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := 1
     b := 2
     c := 3
     I a < b {
         I b < c {
-            I c == 3 { 42 } E { 0 }
-        } E { 0 }
-    } E { 0 }
+            I c == 3 { 42 } else { 0 }
+        } else { 0 }
+    } else { 0 }
 }
 "#;
     assert_exit_code(source, 42);
@@ -76,14 +76,14 @@ F main() -> i64 {
 #[test]
 fn e2e_cf_if_else_chain() {
     let source = r#"
-F classify(x: i64) -> i64 {
-    I x < 0 { R 1 }
-    E I x == 0 { R 2 }
-    E I x < 10 { R 3 }
-    E I x < 100 { R 4 }
-    E { R 5 }
+fn classify(x: i64) -> i64 {
+    I x < 0 { return 1 }
+    else I x == 0 { return 2 }
+    else I x < 10 { return 3 }
+    else I x < 100 { return 4 }
+    else { return 5 }
 }
-F main() -> i64 = classify(42)
+fn main() -> i64 = classify(42)
 "#;
     assert_exit_code(source, 4);
 }
@@ -91,9 +91,9 @@ F main() -> i64 = classify(42)
 #[test]
 fn e2e_cf_if_as_expression() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
-    result := I x > 5 { 42 } E { 0 }
+    result := I x > 5 { 42 } else { 0 }
     result
 }
 "#;
@@ -105,7 +105,7 @@ F main() -> i64 {
 #[test]
 fn e2e_cf_loop_break() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     i := mut 0
     L {
         I i >= 42 { B }
@@ -120,7 +120,7 @@ F main() -> i64 {
 #[test]
 fn e2e_cf_loop_continue() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     L i:0..10 {
         I i % 2 == 0 { C }
@@ -136,7 +136,7 @@ F main() -> i64 {
 #[test]
 fn e2e_cf_nested_loops() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     L i:0..3 {
         L j:0..3 {
@@ -153,13 +153,13 @@ F main() -> i64 {
 #[test]
 fn e2e_cf_loop_early_return() {
     let source = r#"
-F find_first_gt(threshold: i64) -> i64 {
+fn find_first_gt(threshold: i64) -> i64 {
     L i:0..100 {
-        I i > threshold { R i }
+        I i > threshold { return i }
     }
-    R 0
+    return 0
 }
-F main() -> i64 = find_first_gt(41)
+fn main() -> i64 = find_first_gt(41)
 "#;
     assert_exit_code(source, 42);
 }
@@ -167,7 +167,7 @@ F main() -> i64 = find_first_gt(41)
 #[test]
 fn e2e_cf_countdown() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     n := mut 10
     L {
         I n <= 0 { B }
@@ -182,7 +182,7 @@ F main() -> i64 {
 #[test]
 fn e2e_cf_loop_with_accumulator() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     product := mut 1
     L i:1..7 {
         product = product * i
@@ -199,9 +199,9 @@ F main() -> i64 {
 #[test]
 fn e2e_cf_match_simple() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 3
-    M x {
+    match x {
         1 => 10,
         2 => 20,
         3 => 42,
@@ -215,9 +215,9 @@ F main() -> i64 {
 #[test]
 fn e2e_cf_match_wildcard() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 99
-    M x {
+    match x {
         1 => 10,
         2 => 20,
         _ => 42
@@ -230,8 +230,8 @@ F main() -> i64 {
 #[test]
 fn e2e_cf_match_in_function() {
     let source = r#"
-F day_type(d: i64) -> i64 {
-    M d {
+fn day_type(d: i64) -> i64 {
+    match d {
         1 => 1,
         2 => 1,
         3 => 1,
@@ -242,7 +242,7 @@ F day_type(d: i64) -> i64 {
         _ => 0
     }
 }
-F main() -> i64 = day_type(6)
+fn main() -> i64 = day_type(6)
 "#;
     assert_exit_code(source, 2);
 }
@@ -250,15 +250,15 @@ F main() -> i64 = day_type(6)
 #[test]
 fn e2e_cf_match_nested() {
     let source = r#"
-F inner(y: i64) -> i64 {
-    M y {
+fn inner(y: i64) -> i64 {
+    match y {
         2 => 42,
         _ => 0
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     x := 1
-    M x {
+    match x {
         1 => inner(2),
         _ => 0
     }
@@ -271,19 +271,19 @@ F main() -> i64 {
 
 #[test]
 fn e2e_cf_ternary_true() {
-    assert_exit_code("F main()->i64 = 1 > 0 ? 42 : 0", 42);
+    assert_exit_code("fn main()->i64 = 1 > 0 ? 42 : 0", 42);
 }
 
 #[test]
 fn e2e_cf_ternary_false() {
-    assert_exit_code("F main()->i64 = 0 > 1 ? 0 : 42", 42);
+    assert_exit_code("fn main()->i64 = 0 > 1 ? 0 : 42", 42);
 }
 
 #[test]
 fn e2e_cf_ternary_nested() {
     let source = r#"
-F inner(x: i64) -> i64 = x > 3 ? 42 : 0
-F main() -> i64 {
+fn inner(x: i64) -> i64 = x > 3 ? 42 : 0
+fn main() -> i64 {
     x := 5
     x > 10 ? 1 : inner(x)
 }
@@ -294,8 +294,8 @@ F main() -> i64 {
 #[test]
 fn e2e_cf_ternary_in_function() {
     let source = r#"
-F sign(x: i64) -> i64 = x > 0 ? 1 : (x < 0 ? 2 : 0)
-F main() -> i64 = sign(42)
+fn sign(x: i64) -> i64 = x > 0 ? 1 : (x < 0 ? 2 : 0)
+fn main() -> i64 = sign(42)
 "#;
     assert_exit_code(source, 1);
 }
@@ -305,14 +305,14 @@ F main() -> i64 = sign(42)
 #[test]
 fn e2e_cf_early_return_nested() {
     let source = r#"
-F check(a: i64, b: i64) -> i64 {
+fn check(a: i64, b: i64) -> i64 {
     I a > 0 {
-        I b > 0 { R a + b }
-        R a
+        I b > 0 { return a + b }
+        return a
     }
-    R b
+    return b
 }
-F main() -> i64 = check(20, 22)
+fn main() -> i64 = check(20, 22)
 "#;
     assert_exit_code(source, 42);
 }
@@ -320,13 +320,13 @@ F main() -> i64 = check(20, 22)
 #[test]
 fn e2e_cf_multiple_returns() {
     let source = r#"
-F classify(x: i64) -> i64 {
-    I x < 0 { R 1 }
-    I x == 0 { R 2 }
-    I x < 50 { R 42 }
-    R 4
+fn classify(x: i64) -> i64 {
+    I x < 0 { return 1 }
+    I x == 0 { return 2 }
+    I x < 50 { return 42 }
+    return 4
 }
-F main() -> i64 = classify(30)
+fn main() -> i64 = classify(30)
 "#;
     assert_exit_code(source, 42);
 }
@@ -334,10 +334,10 @@ F main() -> i64 = classify(30)
 #[test]
 fn e2e_cf_loop_match_combo() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     result := mut 0
     L i:0..5 {
-        result = result + M i {
+        result = result + match i {
             0 => 10,
             1 => 8,
             2 => 12,

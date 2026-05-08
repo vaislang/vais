@@ -9,12 +9,12 @@ use super::helpers::*;
 fn defer_runs_after_return_value_evaluated() {
     // Defer writes 99 to x, but return value x is already captured.
     let source = r#"
-F compute() -> i64 {
+fn compute() -> i64 {
     x := mut 10
     D { x = 99 }
     x
 }
-F main() -> i64 { compute() }
+fn main() -> i64 { compute() }
 "#;
     assert_exit_code(source, 10);
 }
@@ -25,12 +25,12 @@ fn defer_observable_via_global() {
     let source = r#"
 G OBSERVED: i64 = 0
 
-F compute() -> i64 {
+fn compute() -> i64 {
     D { OBSERVED = 99 }
     10
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     _r := compute()
     OBSERVED
 }
@@ -46,14 +46,14 @@ fn defer_multiple_reverse_order() {
     let source = r#"
 G OBSERVED: i64 = 0
 
-F compute() -> i64 {
+fn compute() -> i64 {
     D { OBSERVED = 1 }
     D { OBSERVED = 2 }
     D { OBSERVED = 3 }
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     _r := compute()
     OBSERVED
 }
@@ -67,13 +67,13 @@ fn defer_with_early_return() {
     let source = r#"
 G OBSERVED: i64 = 0
 
-F compute(cond: bool) -> i64 {
+fn compute(cond: bool) -> i64 {
     D { OBSERVED = 42 }
-    I cond { R 7 }
+    I cond { return 7 }
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     _r := compute(true)
     OBSERVED
 }
@@ -98,15 +98,15 @@ fn defer_lifo_ordering_with_early_return() {
     let source = r#"
 G OBSERVED: i64 = 0
 
-F compute() -> i64 {
+fn compute() -> i64 {
     D { OBSERVED = 1 }
     D { OBSERVED = 2 }
     D { OBSERVED = 3 }
-    I true { R 7 }
+    I true { return 7 }
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     _r := compute()
     OBSERVED
 }
@@ -121,12 +121,12 @@ fn defer_nested_function_calls_independent_stacks() {
     let source = r#"
 G OBS: i64 = 0
 
-F compute() -> i64 {
+fn compute() -> i64 {
     D { OBS = 10 }
     5
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     _r := compute()
     x := OBS
     D { OBS = 20 }
@@ -143,14 +143,14 @@ fn defer_mutable_local_with_early_return() {
     // Defer runs after return value captured — mutation of local `x` via
     // defer is not visible to caller, matching Go's behavior.
     let source = r#"
-F compute(early: bool) -> i64 {
+fn compute(early: bool) -> i64 {
     x := mut 100
     D { x = 0 }
-    I early { R x }
+    I early { return x }
     x * 2
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     compute(true)
 }
 "#;

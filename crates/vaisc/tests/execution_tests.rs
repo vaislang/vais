@@ -227,44 +227,44 @@ fn assert_no_crash(source: &str) {
 
 #[test]
 fn exec_return_constant_42() {
-    assert_exit_code("F main() -> i64 = 42", 42);
+    assert_exit_code("fn main() -> i64 = 42", 42);
 }
 
 #[test]
 fn exec_arithmetic_add() {
-    assert_exit_code("F main() -> i64 = 3 + 4", 7);
+    assert_exit_code("fn main() -> i64 = 3 + 4", 7);
 }
 
 #[test]
 fn exec_arithmetic_sub() {
-    assert_exit_code("F main() -> i64 = 10 - 3", 7);
+    assert_exit_code("fn main() -> i64 = 10 - 3", 7);
 }
 
 #[test]
 fn exec_arithmetic_mul() {
-    assert_exit_code("F main() -> i64 = 6 * 7", 42);
+    assert_exit_code("fn main() -> i64 = 6 * 7", 42);
 }
 
 #[test]
 fn exec_arithmetic_div() {
-    assert_exit_code("F main() -> i64 = 84 / 2", 42);
+    assert_exit_code("fn main() -> i64 = 84 / 2", 42);
 }
 
 #[test]
 fn exec_arithmetic_mod() {
-    assert_exit_code("F main() -> i64 = 17 % 5", 2);
+    assert_exit_code("fn main() -> i64 = 17 % 5", 2);
 }
 
 #[test]
 fn exec_arithmetic_precedence() {
-    assert_exit_code("F main() -> i64 = 2 + 3 * 4", 14);
+    assert_exit_code("fn main() -> i64 = 2 + 3 * 4", 14);
 }
 
 #[test]
 fn exec_function_call() {
     let source = r#"
-F add(a: i64, b: i64) -> i64 = a + b
-F main() -> i64 = add(20, 22)
+fn add(a: i64, b: i64) -> i64 = a + b
+fn main() -> i64 = add(20, 22)
 "#;
     assert_exit_code(source, 42);
 }
@@ -272,8 +272,8 @@ F main() -> i64 = add(20, 22)
 #[test]
 fn exec_recursion_factorial() {
     let source = r#"
-F factorial(n: i64) -> i64 = n < 2 ? 1 : n * @(n - 1)
-F main() -> i64 = factorial(5)
+fn factorial(n: i64) -> i64 = n < 2 ? 1 : n * @(n - 1)
+fn main() -> i64 = factorial(5)
 "#;
     // 5! = 120, exit code is 120 % 256 = 120
     assert_exit_code(source, 120);
@@ -282,8 +282,8 @@ F main() -> i64 = factorial(5)
 #[test]
 fn exec_recursion_fibonacci() {
     let source = r#"
-F fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
-F main() -> i64 = fib(10)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
+fn main() -> i64 = fib(10)
 "#;
     // fib(10) = 55
     assert_exit_code(source, 55);
@@ -292,9 +292,9 @@ F main() -> i64 = fib(10)
 #[test]
 fn exec_if_else_true_branch() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
-    I x > 5 { 1 } E { 0 }
+    I x > 5 { 1 } else { 0 }
 }
 "#;
     assert_exit_code(source, 1);
@@ -303,9 +303,9 @@ F main() -> i64 {
 #[test]
 fn exec_if_else_false_branch() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 3
-    I x > 5 { 1 } E { 0 }
+    I x > 5 { 1 } else { 0 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -314,24 +314,24 @@ F main() -> i64 {
 #[test]
 fn exec_nested_if() {
     let source = r#"
-F classify(x: i64) -> i64 {
-    I x > 100 { 3 } E I x > 10 { 2 } E I x > 0 { 1 } E { 0 }
+fn classify(x: i64) -> i64 {
+    I x > 100 { 3 } else I x > 10 { 2 } else I x > 0 { 1 } else { 0 }
 }
-F main() -> i64 = classify(50)
+fn main() -> i64 = classify(50)
 "#;
     assert_exit_code(source, 2);
 }
 
 #[test]
 fn exec_ternary() {
-    let source = "F main() -> i64 = 5 > 3 ? 42 : 0";
+    let source = "fn main() -> i64 = 5 > 3 ? 42 : 0";
     assert_exit_code(source, 42);
 }
 
 #[test]
 fn exec_variable_binding() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
     y := 32
     x + y
@@ -343,7 +343,7 @@ F main() -> i64 {
 #[test]
 fn exec_loop_with_break() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     i := mut 0
     sum := mut 0
     L {
@@ -360,53 +360,53 @@ F main() -> i64 {
 
 #[test]
 fn exec_left_shift() {
-    assert_exit_code("F main() -> i64 = 1 << 4", 16);
+    assert_exit_code("fn main() -> i64 = 1 << 4", 16);
 }
 
 #[test]
 fn exec_right_shift() {
-    assert_exit_code("F main() -> i64 = 32 >> 2", 8);
+    assert_exit_code("fn main() -> i64 = 32 >> 2", 8);
 }
 
 #[test]
 fn exec_comparison_eq() {
-    let source = "F main() -> i64 = 5 == 5 ? 1 : 0";
+    let source = "fn main() -> i64 = 5 == 5 ? 1 : 0";
     assert_exit_code(source, 1);
 }
 
 #[test]
 fn exec_comparison_neq() {
-    let source = "F main() -> i64 = 5 != 3 ? 1 : 0";
+    let source = "fn main() -> i64 = 5 != 3 ? 1 : 0";
     assert_exit_code(source, 1);
 }
 
 #[test]
 fn exec_comparison_lt() {
-    let source = "F main() -> i64 = 3 < 5 ? 1 : 0";
+    let source = "fn main() -> i64 = 3 < 5 ? 1 : 0";
     assert_exit_code(source, 1);
 }
 
 #[test]
 fn exec_comparison_gte() {
-    let source = "F main() -> i64 = 5 >= 5 ? 1 : 0";
+    let source = "fn main() -> i64 = 5 >= 5 ? 1 : 0";
     assert_exit_code(source, 1);
 }
 
 #[test]
 fn exec_logical_and() {
-    let source = "F main() -> i64 = (1 == 1) && (2 == 2) ? 1 : 0";
+    let source = "fn main() -> i64 = (1 == 1) && (2 == 2) ? 1 : 0";
     assert_exit_code(source, 1);
 }
 
 #[test]
 fn exec_logical_or() {
-    let source = "F main() -> i64 = (1 == 2) || (2 == 2) ? 1 : 0";
+    let source = "fn main() -> i64 = (1 == 2) || (2 == 2) ? 1 : 0";
     assert_exit_code(source, 1);
 }
 
 #[test]
 fn exec_negative_numbers() {
-    assert_exit_code("F main() -> i64 = 0 - 42", 214);
+    assert_exit_code("fn main() -> i64 = 0 - 42", 214);
     // -42 as u8 = 214 (exit codes are 0-255)
 }
 
@@ -415,7 +415,7 @@ fn exec_negative_numbers() {
 #[test]
 fn exec_printf_integer() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     printf("%d\n", 42)
     0
 }
@@ -426,7 +426,7 @@ F main() -> i64 {
 #[test]
 fn exec_printf_multiple() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     printf("%d\n", 10)
     printf("%d\n", 20)
     printf("%d\n", 30)
@@ -439,7 +439,7 @@ F main() -> i64 {
 #[test]
 fn exec_printf_string() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     printf("hello world\n")
     0
 }
@@ -450,8 +450,8 @@ F main() -> i64 {
 #[test]
 fn exec_printf_computed_value() {
     let source = r#"
-F add(a: i64, b: i64) -> i64 = a + b
-F main() -> i64 {
+fn add(a: i64, b: i64) -> i64 = a + b
+fn main() -> i64 {
     printf("%d\n", add(20, 22))
     0
 }
@@ -462,7 +462,7 @@ F main() -> i64 {
 #[test]
 fn exec_printf_loop_output() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     i := mut 1
     L {
         I i > 5 { B }
@@ -478,8 +478,8 @@ F main() -> i64 {
 #[test]
 fn exec_printf_fibonacci_sequence() {
     let source = r#"
-F fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
-F main() -> i64 {
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
+fn main() -> i64 {
     i := mut 0
     L {
         I i >= 10 { B }
@@ -498,13 +498,13 @@ F main() -> i64 {
 #[test]
 fn exec_printf_conditional() {
     let source = r#"
-F classify(x: i64) -> i64 {
+fn classify(x: i64) -> i64 {
     I x > 0 { printf("positive\n") }
-    E I x == 0 { printf("zero\n") }
-    E { printf("negative\n") }
+    else I x == 0 { printf("zero\n") }
+    else { printf("negative\n") }
     0
 }
-F main() -> i64 {
+fn main() -> i64 {
     classify(5)
     classify(0)
     classify(0 - 1)
@@ -519,8 +519,8 @@ F main() -> i64 {
 #[test]
 fn exec_struct_field_access() {
     let source = r#"
-S Point { x: i64, y: i64 }
-F main() -> i64 {
+struct Point { x: i64, y: i64 }
+fn main() -> i64 {
     p := Point { x: 10, y: 32 }
     p.x + p.y
 }
@@ -533,15 +533,15 @@ F main() -> i64 {
 #[test]
 fn exec_match_literals() {
     let source = r#"
-F day_type(d: i64) -> i64 {
-    M d {
+fn day_type(d: i64) -> i64 {
+    match d {
         1 => 10,
         2 => 20,
         3 => 30,
         _ => 0
     }
 }
-F main() -> i64 = day_type(2)
+fn main() -> i64 = day_type(2)
 "#;
     assert_exit_code(source, 20);
 }
@@ -549,15 +549,15 @@ F main() -> i64 = day_type(2)
 #[test]
 fn exec_match_with_computation() {
     let source = r#"
-F score(x: i64) -> i64 {
-    M x {
+fn score(x: i64) -> i64 {
+    match x {
         1 => x * 10,
         2 => x * 20,
         3 => x * 30,
         _ => 0
     }
 }
-F main() -> i64 = score(3)
+fn main() -> i64 = score(3)
 "#;
     assert_exit_code(source, 90);
 }
@@ -567,8 +567,8 @@ F main() -> i64 = score(3)
 #[test]
 fn exec_closure_basic() {
     let source = r#"
-F apply(f: (i64) -> i64, x: i64) -> i64 = f(x)
-F main() -> i64 = apply(|x| x * 2, 21)
+fn apply(f: (i64) -> i64, x: i64) -> i64 = f(x)
+fn main() -> i64 = apply(|x| x * 2, 21)
 "#;
     assert_exit_code(source, 42);
 }
@@ -580,8 +580,8 @@ F main() -> i64 = apply(|x| x * 2, 21)
 #[test]
 fn exec_converted_max_function() {
     let source = r#"
-F max(a: i64, b: i64) -> i64 = I a > b { a } E { b }
-F main() -> i64 = max(10, 20)
+fn max(a: i64, b: i64) -> i64 = I a > b { a } else { b }
+fn main() -> i64 = max(10, 20)
 "#;
     assert_exit_code(source, 20);
 }
@@ -589,56 +589,56 @@ F main() -> i64 = max(10, 20)
 #[test]
 fn exec_converted_max_reversed() {
     let source = r#"
-F max(a: i64, b: i64) -> i64 = I a > b { a } E { b }
-F main() -> i64 = max(20, 10)
+fn max(a: i64, b: i64) -> i64 = I a > b { a } else { b }
+fn main() -> i64 = max(20, 10)
 "#;
     assert_exit_code(source, 20);
 }
 
 #[test]
 fn exec_converted_subtraction() {
-    assert_exit_code("F main() -> i64 = 100 - 58", 42);
+    assert_exit_code("fn main() -> i64 = 100 - 58", 42);
 }
 
 #[test]
 fn exec_converted_division() {
-    assert_exit_code("F main() -> i64 = 126 / 3", 42);
+    assert_exit_code("fn main() -> i64 = 126 / 3", 42);
 }
 
 #[test]
 fn exec_converted_modulo() {
-    assert_exit_code("F main() -> i64 = 107 % 65", 42);
+    assert_exit_code("fn main() -> i64 = 107 % 65", 42);
 }
 
 #[test]
 fn exec_converted_comparison_less_true() {
-    let source = "F main() -> i64 = 5 < 10 ? 1 : 0";
+    let source = "fn main() -> i64 = 5 < 10 ? 1 : 0";
     assert_exit_code(source, 1);
 }
 
 #[test]
 fn exec_converted_comparison_less_false() {
-    let source = "F main() -> i64 = 10 < 5 ? 1 : 0";
+    let source = "fn main() -> i64 = 10 < 5 ? 1 : 0";
     assert_exit_code(source, 0);
 }
 
 #[test]
 fn exec_converted_comparison_lte() {
-    let source = "F main() -> i64 = 5 <= 5 ? 1 : 0";
+    let source = "fn main() -> i64 = 5 <= 5 ? 1 : 0";
     assert_exit_code(source, 1);
 }
 
 #[test]
 fn exec_converted_comparison_gt() {
-    let source = "F main() -> i64 = 10 > 5 ? 1 : 0";
+    let source = "fn main() -> i64 = 10 > 5 ? 1 : 0";
     assert_exit_code(source, 1);
 }
 
 #[test]
 fn exec_converted_ternary_abs() {
     let source = r#"
-F abs(x: i64) -> i64 = x < 0 ? 0 - x : x
-F main() -> i64 = abs(0 - 42)
+fn abs(x: i64) -> i64 = x < 0 ? 0 - x : x
+fn main() -> i64 = abs(0 - 42)
 "#;
     assert_exit_code(source, 42);
 }
@@ -646,8 +646,8 @@ F main() -> i64 = abs(0 - 42)
 #[test]
 fn exec_converted_ternary_abs_positive() {
     let source = r#"
-F abs(x: i64) -> i64 = x < 0 ? 0 - x : x
-F main() -> i64 = abs(42)
+fn abs(x: i64) -> i64 = x < 0 ? 0 - x : x
+fn main() -> i64 = abs(42)
 "#;
     assert_exit_code(source, 42);
 }
@@ -655,9 +655,9 @@ F main() -> i64 = abs(42)
 #[test]
 fn exec_converted_struct_two_fields() {
     let source = r#"
-S Vec2 { x: i64, y: i64 }
-F dot(a: Vec2, b: Vec2) -> i64 = a.x * b.x + a.y * b.y
-F main() -> i64 = dot(Vec2 { x: 3, y: 4 }, Vec2 { x: 5, y: 6 })
+struct Vec2 { x: i64, y: i64 }
+fn dot(a: Vec2, b: Vec2) -> i64 = a.x * b.x + a.y * b.y
+fn main() -> i64 = dot(Vec2 { x: 3, y: 4 }, Vec2 { x: 5, y: 6 })
 "#;
     // 3*5 + 4*6 = 15 + 24 = 39
     assert_exit_code(source, 39);
@@ -666,8 +666,8 @@ F main() -> i64 = dot(Vec2 { x: 3, y: 4 }, Vec2 { x: 5, y: 6 })
 #[test]
 fn exec_converted_generic_identity() {
     let source = r#"
-F identity<T>(x: T) -> T = x
-F main() -> i64 = identity(99)
+fn identity<T>(x: T) -> type = x
+fn main() -> i64 = identity(99)
 "#;
     assert_exit_code(source, 99);
 }
@@ -675,8 +675,8 @@ F main() -> i64 = identity(99)
 #[test]
 fn exec_converted_generic_add_pair() {
     let source = r#"
-F add_pair(a: i64, b: i64) -> i64 = a + b
-F main() -> i64 = add_pair(10, 20)
+fn add_pair(a: i64, b: i64) -> i64 = a + b
+fn main() -> i64 = add_pair(10, 20)
 "#;
     assert_exit_code(source, 30);
 }
@@ -687,14 +687,14 @@ F main() -> i64 = add_pair(10, 20)
 #[test]
 fn exec_converted_match_default() {
     let source = r#"
-F classify(x: i64) -> i64 {
-    M x {
+fn classify(x: i64) -> i64 {
+    match x {
         1 => 10,
         2 => 20,
         _ => 99
     }
 }
-F main() -> i64 = classify(7)
+fn main() -> i64 = classify(7)
 "#;
     assert_exit_code(source, 99);
 }
@@ -702,9 +702,9 @@ F main() -> i64 = classify(7)
 #[test]
 fn exec_converted_chained_calls() {
     let source = r#"
-F inc(x: i64) -> i64 = x + 1
-F double(x: i64) -> i64 = x * 2
-F main() -> i64 = double(inc(double(inc(0))))
+fn inc(x: i64) -> i64 = x + 1
+fn double(x: i64) -> i64 = x * 2
+fn main() -> i64 = double(inc(double(inc(0))))
 "#;
     // inc(0)=1, double(1)=2, inc(2)=3, double(3)=6
     assert_exit_code(source, 6);
@@ -713,7 +713,7 @@ F main() -> i64 = double(inc(double(inc(0))))
 #[test]
 fn exec_converted_countdown_loop() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     n := mut 10
     L {
         I n <= 0 { B }
@@ -728,9 +728,9 @@ F main() -> i64 {
 #[test]
 fn exec_converted_nested_struct_access() {
     let source = r#"
-S Inner { val: i64 }
-S Outer { a: Inner, b: i64 }
-F main() -> i64 {
+struct Inner { val: i64 }
+struct Outer { a: Inner, b: i64 }
+fn main() -> i64 {
     o := Outer { a: Inner { val: 40 }, b: 2 }
     o.a.val + o.b
 }
@@ -741,12 +741,12 @@ F main() -> i64 {
 #[test]
 fn exec_converted_multiple_returns() {
     let source = r#"
-F clamp(x: i64, lo: i64, hi: i64) -> i64 {
-    I x < lo { R lo }
-    I x > hi { R hi }
+fn clamp(x: i64, lo: i64, hi: i64) -> i64 {
+    I x < lo { return lo }
+    I x > hi { return hi }
     x
 }
-F main() -> i64 = clamp(50, 0, 42)
+fn main() -> i64 = clamp(50, 0, 42)
 "#;
     assert_exit_code(source, 42);
 }
@@ -758,10 +758,10 @@ F main() -> i64 = clamp(50, 0, 42)
 #[test]
 fn exec_std_option_some_match() {
     let source = r#"
-E Option { Some(i64), None }
-F main() -> i64 {
+enum Option { Some(i64), None }
+fn main() -> i64 {
     x := Some(42)
-    M x {
+    match x {
         Some(v) => v,
         None => 0
     }
@@ -773,10 +773,10 @@ F main() -> i64 {
 #[test]
 fn exec_std_option_none_match() {
     let source = r#"
-E Option { Some(i64), None }
-F main() -> i64 {
+enum Option { Some(i64), None }
+fn main() -> i64 {
     x := None
-    M x {
+    match x {
         Some(v) => v,
         None => 99
     }
@@ -788,14 +788,14 @@ F main() -> i64 {
 #[test]
 fn exec_std_option_unwrap_some() {
     let source = r#"
-E Option { Some(i64), None }
-F unwrap_or(opt: Option, default: i64) -> i64 {
-    M opt {
+enum Option { Some(i64), None }
+fn unwrap_or(opt: Option, default: i64) -> i64 {
+    match opt {
         Some(v) => v,
         None => default
     }
 }
-F main() -> i64 = unwrap_or(Some(42), 0)
+fn main() -> i64 = unwrap_or(Some(42), 0)
 "#;
     assert_exit_code(source, 42);
 }
@@ -803,14 +803,14 @@ F main() -> i64 = unwrap_or(Some(42), 0)
 #[test]
 fn exec_std_option_unwrap_none_default() {
     let source = r#"
-E Option { Some(i64), None }
-F unwrap_or(opt: Option, default: i64) -> i64 {
-    M opt {
+enum Option { Some(i64), None }
+fn unwrap_or(opt: Option, default: i64) -> i64 {
+    match opt {
         Some(v) => v,
         None => default
     }
 }
-F main() -> i64 = unwrap_or(None, 99)
+fn main() -> i64 = unwrap_or(None, 99)
 "#;
     assert_exit_code(source, 99);
 }
@@ -818,14 +818,14 @@ F main() -> i64 = unwrap_or(None, 99)
 #[test]
 fn exec_std_option_is_some() {
     let source = r#"
-E Option { Some(i64), None }
-F is_some(opt: Option) -> i64 {
-    M opt {
+enum Option { Some(i64), None }
+fn is_some(opt: Option) -> i64 {
+    match opt {
         Some(_) => 1,
         None => 0
     }
 }
-F main() -> i64 = is_some(Some(10)) + is_some(None)
+fn main() -> i64 = is_some(Some(10)) + is_some(None)
 "#;
     // 1 + 0 = 1
     assert_exit_code(source, 1);
@@ -836,10 +836,10 @@ F main() -> i64 = is_some(Some(10)) + is_some(None)
 #[test]
 fn exec_std_result_ok_match() {
     let source = r#"
-E Result { Ok(i64), Err(i64) }
-F main() -> i64 {
+enum Result { Ok(i64), Err(i64) }
+fn main() -> i64 {
     r := Ok(42)
-    M r {
+    match r {
         Ok(v) => v,
         Err(_) => 0
     }
@@ -851,10 +851,10 @@ F main() -> i64 {
 #[test]
 fn exec_std_result_err_match() {
     let source = r#"
-E Result { Ok(i64), Err(i64) }
-F main() -> i64 {
+enum Result { Ok(i64), Err(i64) }
+fn main() -> i64 {
     r := Err(1)
-    M r {
+    match r {
         Ok(v) => v,
         Err(e) => e + 98
     }
@@ -867,14 +867,14 @@ F main() -> i64 {
 #[test]
 fn exec_std_result_is_ok() {
     let source = r#"
-E Result { Ok(i64), Err(i64) }
-F is_ok(r: Result) -> i64 {
-    M r {
+enum Result { Ok(i64), Err(i64) }
+fn is_ok(r: Result) -> i64 {
+    match r {
         Ok(_) => 1,
         Err(_) => 0
     }
 }
-F main() -> i64 = is_ok(Ok(5)) + is_ok(Err(1))
+fn main() -> i64 = is_ok(Ok(5)) + is_ok(Err(1))
 "#;
     // 1 + 0 = 1
     assert_exit_code(source, 1);
@@ -883,14 +883,14 @@ F main() -> i64 = is_ok(Ok(5)) + is_ok(Err(1))
 #[test]
 fn exec_std_result_unwrap_or() {
     let source = r#"
-E Result { Ok(i64), Err(i64) }
-F unwrap_or(r: Result, default: i64) -> i64 {
-    M r {
+enum Result { Ok(i64), Err(i64) }
+fn unwrap_or(r: Result, default: i64) -> i64 {
+    match r {
         Ok(v) => v,
         Err(_) => default
     }
 }
-F main() -> i64 = unwrap_or(Ok(42), 0) + unwrap_or(Err(1), 58)
+fn main() -> i64 = unwrap_or(Ok(42), 0) + unwrap_or(Err(1), 58)
 "#;
     // 42 + 58 = 100
     assert_exit_code(source, 100);
@@ -899,15 +899,15 @@ F main() -> i64 = unwrap_or(Ok(42), 0) + unwrap_or(Err(1), 58)
 #[test]
 fn exec_std_result_chain() {
     let source = r#"
-E Result { Ok(i64), Err(i64) }
-F safe_div(a: i64, b: i64) -> Result {
-    I b == 0 { Err(1) } E { Ok(a / b) }
+enum Result { Ok(i64), Err(i64) }
+fn safe_div(a: i64, b: i64) -> Result {
+    I b == 0 { Err(1) } else { Ok(a / b) }
 }
-F main() -> i64 {
+fn main() -> i64 {
     r1 := safe_div(84, 2)
     r2 := safe_div(10, 0)
-    v1 := M r1 { Ok(v) => v, Err(_) => 0 }
-    v2 := M r2 { Ok(v) => v, Err(e) => e }
+    v1 := match r1 { Ok(v) => v, Err(_) => 0 }
+    v2 := match r2 { Ok(v) => v, Err(e) => e }
     v1 + v2
 }
 "#;
@@ -921,20 +921,20 @@ F main() -> i64 {
 #[test]
 fn exec_std_string_manual_build() {
     let source = r#"
-S MyStr { data: i64, len: i64 }
+struct MyStr { data: i64, len: i64 }
 
-F new_str() -> MyStr {
+fn new_str() -> MyStr {
     buf := malloc(64)
     store_byte(buf, 0)
     MyStr { data: buf, len: 0 }
 }
 
-F push_byte(s: MyStr, b: i64) -> MyStr {
+fn push_byte(s: MyStr, b: i64) -> MyStr {
     store_byte(s.data + s.len, b)
     MyStr { data: s.data, len: s.len + 1 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     s := mut new_str()
     s = push_byte(s, 72)   # H
     s = push_byte(s, 105)  # i
@@ -951,23 +951,23 @@ F main() -> i64 {
 #[test]
 fn exec_std_vec_push_get() {
     let source = r#"
-S Vec { data: i64, len: i64, cap: i64 }
+struct Vec { data: i64, len: i64, cap: i64 }
 
-F vec_new() -> Vec {
+fn vec_new() -> Vec {
     data := malloc(64)
     Vec { data: data, len: 0, cap: 8 }
 }
 
-F vec_push(v: Vec, val: i64) -> Vec {
+fn vec_push(v: Vec, val: i64) -> Vec {
     store_i64(v.data + v.len * 8, val)
     Vec { data: v.data, len: v.len + 1, cap: v.cap }
 }
 
-F vec_get(v: Vec, idx: i64) -> i64 {
+fn vec_get(v: Vec, idx: i64) -> i64 {
     load_i64(v.data + idx * 8)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := mut vec_new()
     v = vec_push(v, 10)
     v = vec_push(v, 20)
@@ -982,19 +982,19 @@ F main() -> i64 {
 #[test]
 fn exec_std_vec_length() {
     let source = r#"
-S Vec { data: i64, len: i64, cap: i64 }
+struct Vec { data: i64, len: i64, cap: i64 }
 
-F vec_new() -> Vec {
+fn vec_new() -> Vec {
     data := malloc(64)
     Vec { data: data, len: 0, cap: 8 }
 }
 
-F vec_push(v: Vec, val: i64) -> Vec {
+fn vec_push(v: Vec, val: i64) -> Vec {
     store_i64(v.data + v.len * 8, val)
     Vec { data: v.data, len: v.len + 1, cap: v.cap }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := mut vec_new()
     v = vec_push(v, 1)
     v = vec_push(v, 2)
@@ -1010,23 +1010,23 @@ F main() -> i64 {
 #[test]
 fn exec_std_vec_sum_loop() {
     let source = r#"
-S Vec { data: i64, len: i64, cap: i64 }
+struct Vec { data: i64, len: i64, cap: i64 }
 
-F vec_new() -> Vec {
+fn vec_new() -> Vec {
     data := malloc(80)
     Vec { data: data, len: 0, cap: 10 }
 }
 
-F vec_push(v: Vec, val: i64) -> Vec {
+fn vec_push(v: Vec, val: i64) -> Vec {
     store_i64(v.data + v.len * 8, val)
     Vec { data: v.data, len: v.len + 1, cap: v.cap }
 }
 
-F vec_get(v: Vec, idx: i64) -> i64 {
+fn vec_get(v: Vec, idx: i64) -> i64 {
     load_i64(v.data + idx * 8)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := mut vec_new()
     i := mut 1
     L {
@@ -1053,9 +1053,9 @@ F main() -> i64 {
 #[test]
 fn exec_std_hashmap_set_get() {
     let source = r#"
-S HashMap { buckets: i64, size: i64, cap: i64 }
+struct HashMap { buckets: i64, size: i64, cap: i64 }
 
-F hm_new() -> HashMap {
+fn hm_new() -> HashMap {
     cap := 16
     buckets := malloc(cap * 8)
     # Zero out buckets
@@ -1068,14 +1068,14 @@ F hm_new() -> HashMap {
     HashMap { buckets: buckets, size: 0, cap: cap }
 }
 
-F hm_abs(x: i64) -> i64 = x < 0 ? 0 - x : x
+fn hm_abs(x: i64) -> i64 = x < 0 ? 0 - x : x
 
-F hm_hash(key: i64, cap: i64) -> i64 {
+fn hm_hash(key: i64, cap: i64) -> i64 {
     h := hm_abs(key * 2654435761)
     h % cap
 }
 
-F hm_set(m: HashMap, key: i64, val: i64) -> HashMap {
+fn hm_set(m: HashMap, key: i64, val: i64) -> HashMap {
     idx := hm_hash(key, m.cap)
     # Simple direct-mapped (no collision handling for this test)
     store_i64(m.buckets + idx * 16, key)
@@ -1083,12 +1083,12 @@ F hm_set(m: HashMap, key: i64, val: i64) -> HashMap {
     HashMap { buckets: m.buckets, size: m.size + 1, cap: m.cap }
 }
 
-F hm_get(m: HashMap, key: i64) -> i64 {
+fn hm_get(m: HashMap, key: i64) -> i64 {
     idx := hm_hash(key, m.cap)
     load_i64(m.buckets + idx * 16 + 8)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     m := mut hm_new()
     m = hm_set(m, 1, 42)
     m = hm_set(m, 2, 58)
@@ -1349,7 +1349,7 @@ fn exec_smoke_all_examples_compile() {
 #[test]
 fn exec_io_printf_basic() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     printf("hello %d\n", 42)
     0
 }
@@ -1360,7 +1360,7 @@ F main() -> i64 {
 #[test]
 fn exec_io_puts_output() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     puts("Hello from Vais!")
     0
 }
@@ -1371,7 +1371,7 @@ F main() -> i64 {
 #[test]
 fn exec_io_putchar_sequence() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     putchar(72)   # H
     putchar(105)  # i
     putchar(33)   # !
@@ -1385,7 +1385,7 @@ F main() -> i64 {
 #[test]
 fn exec_io_printf_multiple_formats() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     printf("int: %d, char: %c\n", 42, 65)  # 65 = 'A'
     0
 }
@@ -1396,7 +1396,7 @@ F main() -> i64 {
 #[test]
 fn exec_io_mixed_output() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     puts("Line 1")
     printf("Line %d\n", 2)
     putchar(51)   # '3'
@@ -1410,9 +1410,9 @@ F main() -> i64 {
 #[test]
 fn exec_io_formatted_computation() {
     let source = r#"
-F compute(x: i64, y: i64) -> i64 = x * y + 2
+fn compute(x: i64, y: i64) -> i64 = x * y + 2
 
-F main() -> i64 {
+fn main() -> i64 {
     result := compute(10, 4)
     printf("result = %d\n", result)
     0
@@ -1426,17 +1426,17 @@ F main() -> i64 {
 #[test]
 fn exec_net_tcp_struct_smoke() {
     let source = r#"
-S TcpStream { fd: i64, addr: i64, port: i64 }
+struct TcpStream { fd: i64, addr: i64, port: i64 }
 
-F new_tcp(addr: i64, port: i64) -> TcpStream {
+fn new_tcp(addr: i64, port: i64) -> TcpStream {
     TcpStream { fd: 0, addr: addr, port: port }
 }
 
-F tcp_port(stream: TcpStream) -> i64 {
+fn tcp_port(stream: TcpStream) -> i64 {
     stream.port
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     stream := new_tcp(127, 80)
     tcp_port(stream)
 }
@@ -1447,17 +1447,17 @@ F main() -> i64 {
 #[test]
 fn exec_net_socket_addr_smoke() {
     let source = r#"
-S SocketAddr { ip: i64, port: i64 }
+struct SocketAddr { ip: i64, port: i64 }
 
-F make_addr(ip: i64, port: i64) -> SocketAddr {
+fn make_addr(ip: i64, port: i64) -> SocketAddr {
     SocketAddr { ip: ip, port: port }
 }
 
-F addr_port(addr: SocketAddr) -> i64 {
+fn addr_port(addr: SocketAddr) -> i64 {
     addr.port
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     addr := make_addr(127, 42)
     addr_port(addr)
 }
@@ -1468,17 +1468,17 @@ F main() -> i64 {
 #[test]
 fn exec_net_http_request_struct_smoke() {
     let source = r#"
-S HttpRequest { method: i64, path: i64, version: i64 }
+struct HttpRequest { method: i64, path: i64, version: i64 }
 
-F new_request(method: i64, path: i64) -> HttpRequest {
+fn new_request(method: i64, path: i64) -> HttpRequest {
     HttpRequest { method: method, path: path, version: 11 }
 }
 
-F request_version(req: HttpRequest) -> i64 {
+fn request_version(req: HttpRequest) -> i64 {
     req.version
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     req := new_request(1, 100)  # 1=GET, path=dummy
     request_version(req)
 }
@@ -1489,17 +1489,17 @@ F main() -> i64 {
 #[test]
 fn exec_net_http_response_struct_smoke() {
     let source = r#"
-S HttpResponse { status: i64, body: i64, headers: i64 }
+struct HttpResponse { status: i64, body: i64, headers: i64 }
 
-F new_response(status: i64) -> HttpResponse {
+fn new_response(status: i64) -> HttpResponse {
     HttpResponse { status: status, body: 0, headers: 0 }
 }
 
-F response_status(resp: HttpResponse) -> i64 {
+fn response_status(resp: HttpResponse) -> i64 {
     resp.status
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     resp := new_response(200)
     response_status(resp)
 }
@@ -1511,9 +1511,9 @@ F main() -> i64 {
 #[test]
 fn exec_pattern_alias_tuple() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := (1, 2)
-    M x {
+    match x {
         whole @ (a, b) => a + b
     }
 }
@@ -1524,9 +1524,9 @@ F main() -> i64 {
 #[test]
 fn exec_pattern_alias_literal() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 42
-    M x {
+    match x {
         n @ 42 => n,
         _ => 0
     }
@@ -1538,9 +1538,9 @@ F main() -> i64 {
 #[test]
 fn exec_pattern_alias_wildcard() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 99
-    M x {
+    match x {
         n @ _ => n
     }
 }
@@ -1551,14 +1551,14 @@ F main() -> i64 {
 #[test]
 fn exec_pattern_alias_variant() {
     let source = r#"
-E Option<T> {
+enum Option<T> {
     Some(T),
     None
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     opt := Some(42)
-    M opt {
+    match opt {
         whole @ Some(val) => val,
         _ => 0
     }
@@ -1574,7 +1574,7 @@ F main() -> i64 {
 #[test]
 fn exec_range_loop_basic() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     L i:0..5 {
         sum = sum + i
@@ -1589,7 +1589,7 @@ F main() -> i64 {
 #[test]
 fn exec_range_loop_inclusive() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     L i:0..=5 {
         sum = sum + i
@@ -1604,7 +1604,7 @@ F main() -> i64 {
 #[test]
 fn exec_range_loop_product() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     prod := mut 1
     L i:1..5 {
         prod = prod * i
@@ -1619,7 +1619,7 @@ F main() -> i64 {
 #[test]
 fn exec_range_loop_start_nonzero() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     L i:10..15 {
         sum = sum + i
@@ -1636,7 +1636,7 @@ F main() -> i64 {
 #[test]
 fn exec_closure_move_capture() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 42
     f := move |y| x + y
     f(8)
@@ -1649,7 +1649,7 @@ F main() -> i64 {
 #[test]
 fn exec_closure_capture_multiple() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := 10
     b := 20
     f := |x| a + b + x
@@ -1665,13 +1665,13 @@ F main() -> i64 {
 #[test]
 fn exec_struct_method_self() {
     let source = r#"
-S Point { x: i64, y: i64 }
+struct Point { x: i64, y: i64 }
 
-X Point {
-    F sum(&self) -> i64 = self.x + self.y
+impl Point {
+    fn sum(&self) -> i64 = self.x + self.y
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Point { x: 10, y: 32 }
     p.sum()
 }
@@ -1682,18 +1682,18 @@ F main() -> i64 {
 #[test]
 fn exec_struct_method_mutate() {
     let source = r#"
-S Counter { val: i64 }
+struct Counter { val: i64 }
 
-X Counter {
-    F new() -> Counter = Counter { val: 0 }
+impl Counter {
+    fn new() -> Counter = Counter { val: 0 }
 
-    F increment(&self, amt: i64) -> Counter =
+    fn increment(&self, amt: i64) -> Counter =
         Counter { val: self.val + amt }
 
-    F get(&self) -> i64 = self.val
+    fn get(&self) -> i64 = self.val
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c := mut Counter::new()
     c = c.increment(10)
     c = c.increment(32)
@@ -1706,15 +1706,15 @@ F main() -> i64 {
 #[test]
 fn exec_struct_method_chained() {
     let source = r#"
-S Val { n: i64 }
+struct Val { n: i64 }
 
-X Val {
-    F add(&self, x: i64) -> Val = Val { n: self.n + x }
-    F mul(&self, x: i64) -> Val = Val { n: self.n * x }
-    F get(&self) -> i64 = self.n
+impl Val {
+    fn add(&self, x: i64) -> Val = Val { n: self.n + x }
+    fn mul(&self, x: i64) -> Val = Val { n: self.n * x }
+    fn get(&self) -> i64 = self.n
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := mut Val { n: 2 }
     v = v.add(3)
     v = v.mul(7)
@@ -1731,16 +1731,16 @@ F main() -> i64 {
 #[test]
 fn exec_enum_variant_match_simple() {
     let source = r#"
-E Status { Good, Bad }
+enum Status { Good, Bad }
 
-F check(s: Status) -> i64 {
-    M s {
+fn check(s: Status) -> i64 {
+    match s {
         Good => 1,
         Bad => 0
     }
 }
 
-F main() -> i64 = check(Good)
+fn main() -> i64 = check(Good)
 "#;
     assert_exit_code(source, 1);
 }
@@ -1748,16 +1748,16 @@ F main() -> i64 = check(Good)
 #[test]
 fn exec_enum_variant_with_data() {
     let source = r#"
-E Value { Int(i64), None }
+enum Value { Int(i64), None }
 
-F extract(v: Value) -> i64 {
-    M v {
+fn extract(v: Value) -> i64 {
+    match v {
         Int(n) => n,
         None => 0
     }
 }
 
-F main() -> i64 = extract(Int(42))
+fn main() -> i64 = extract(Int(42))
 "#;
     assert_exit_code(source, 42);
 }
@@ -1765,17 +1765,17 @@ F main() -> i64 = extract(Int(42))
 #[test]
 fn exec_enum_multiple_variants() {
     let source = r#"
-E Color { Red, Green, Blue }
+enum Color { Red, Green, Blue }
 
-F color_code(c: Color) -> i64 {
-    M c {
+fn color_code(c: Color) -> i64 {
+    match c {
         Red => 1,
         Green => 2,
         Blue => 3
     }
 }
 
-F main() -> i64 = color_code(Green)
+fn main() -> i64 = color_code(Green)
 "#;
     assert_exit_code(source, 2);
 }
@@ -1785,9 +1785,9 @@ F main() -> i64 = color_code(Green)
 #[test]
 fn exec_slice_type_compiles() {
     let source = r#"
-F get_slice(arr: &[i64]) -> i64 = 42
+fn get_slice(arr: &[i64]) -> i64 = 42
 
-F main() -> i64 = get_slice(&[1, 2, 3])
+fn main() -> i64 = get_slice(&[1, 2, 3])
 "#;
     // Slice literal &[1,2,3] now correctly builds { i8*, i64 } fat pointer
     // and function signature matches. get_slice always returns 42.
@@ -1797,9 +1797,9 @@ F main() -> i64 = get_slice(&[1, 2, 3])
 #[test]
 fn exec_slice_len_method() {
     let source = r#"
-F slice_len(s: &[i64]) -> i64 = s.len()
+fn slice_len(s: &[i64]) -> i64 = s.len()
 
-F main() -> i64 = slice_len(&[1, 2, 3, 4, 5])
+fn main() -> i64 = slice_len(&[1, 2, 3, 4, 5])
 "#;
     // Phase 73: Slice .len() uses extractvalue on { i8*, i64 } fat pointer field 1.
     // The fat pointer is correctly constructed at the call site with insertvalue.
@@ -1811,22 +1811,22 @@ F main() -> i64 = slice_len(&[1, 2, 3, 4, 5])
 #[test]
 fn exec_where_clause_simple() {
     let source = r#"
-W Display {
-    F show(&self) -> i64
+trait Display {
+    fn show(&self) -> i64
 }
 
-F print_value<T>(val: T) -> i64
+fn print_value<T>(val: T) -> i64
 where T: Display {
     val.show()
 }
 
-S MyInt { n: i64 }
+struct MyInt { n: i64 }
 
-X MyInt: Display {
-    F show(&self) -> i64 = self.n
+impl MyInt: Display {
+    fn show(&self) -> i64 = self.n
 }
 
-F main() -> i64 = print_value(MyInt { n: 42 })
+fn main() -> i64 = print_value(MyInt { n: 42 })
 "#;
     assert_exit_code(source, 42);
 }
@@ -1834,15 +1834,15 @@ F main() -> i64 = print_value(MyInt { n: 42 })
 #[test]
 fn exec_where_clause_multiple_bounds() {
     let source = r#"
-W Trait1 { F method1(&self) -> i64 }
-W Trait2 { F method2(&self) -> i64 }
+trait Trait1 { fn method1(&self) -> i64 }
+trait Trait2 { fn method2(&self) -> i64 }
 
-F use_both<T>(x: T) -> i64
+fn use_both<T>(x: T) -> i64
 where T: Trait1, T: Trait2 {
     x.method1() + x.method2()
 }
 
-F main() -> i64 = 0
+fn main() -> i64 = 0
 "#;
     // Phase 73: Generic function use_both is declared but not defined (no concrete
     // instantiation). Since main() doesn't call it, clang links successfully.
@@ -1854,12 +1854,12 @@ F main() -> i64 = 0
 #[test]
 fn exec_trait_alias_compiles() {
     let source = r#"
-W Display { F show(&self) -> i64 }
-W Debug { F debug(&self) -> i64 }
+trait Display { fn show(&self) -> i64 }
+trait Debug { fn debug(&self) -> i64 }
 
-T Printable = Display + Debug
+type Printable = Display + Debug
 
-F main() -> i64 = 0
+fn main() -> i64 = 0
 "#;
     assert_exit_code(source, 0);
 }
@@ -1869,9 +1869,9 @@ F main() -> i64 = 0
 #[test]
 fn exec_async_basic_compiles() {
     let source = r#"
-A F async_task() -> i64 = 42
+A fn async_task() -> i64 = 42
 
-F main() -> i64 = 0
+fn main() -> i64 = 0
 "#;
     assert_exit_code(source, 0);
 }
@@ -1881,16 +1881,16 @@ F main() -> i64 = 0
 #[test]
 fn exec_pattern_match_nested_enum() {
     let source = r#"
-E Inner { Val(i64), Ref(i64) }
+enum Inner { Val(i64), Ref(i64) }
 
-F extract(inner: Inner) -> i64 {
-    M inner {
+fn extract(inner: Inner) -> i64 {
+    match inner {
         Val(n) => n,
         Ref(n) => n * 2
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := extract(Val(21))
     r := extract(Ref(21))
     v + r
@@ -1902,15 +1902,15 @@ F main() -> i64 {
 #[test]
 fn exec_pattern_match_or_pattern() {
     let source = r#"
-F classify(x: i64) -> i64 {
-    M x {
+fn classify(x: i64) -> i64 {
+    match x {
         1 | 2 | 3 => 10,
         4 | 5 => 20,
         _ => 0
     }
 }
 
-F main() -> i64 = classify(2) + classify(5)
+fn main() -> i64 = classify(2) + classify(5)
 "#;
     // 10 + 20 = 30
     assert_exit_code(source, 30);
@@ -1919,8 +1919,8 @@ F main() -> i64 = classify(2) + classify(5)
 #[test]
 fn exec_pattern_match_guard() {
     let source = r#"
-F classify(x: i64) -> i64 {
-    M x {
+fn classify(x: i64) -> i64 {
+    match x {
         n I n > 100 => 3,
         n I n > 10 => 2,
         n I n > 0 => 1,
@@ -1928,7 +1928,7 @@ F classify(x: i64) -> i64 {
     }
 }
 
-F main() -> i64 = classify(50)
+fn main() -> i64 = classify(50)
 "#;
     assert_exit_code(source, 2);
 }
@@ -1938,9 +1938,9 @@ F main() -> i64 = classify(50)
 #[test]
 fn exec_generic_swap() {
     let source = r#"
-F swap<T>(a: T, b: T) -> T = b
+fn swap<T>(a: T, b: T) -> type = b
 
-F main() -> i64 = swap(10, 42)
+fn main() -> i64 = swap(10, 42)
 "#;
     assert_exit_code(source, 42);
 }
@@ -1948,11 +1948,11 @@ F main() -> i64 = swap(10, 42)
 #[test]
 fn exec_generic_pair_first() {
     let source = r#"
-S Pair<T> { first: T, second: T }
+struct Pair<T> { first: T, second: type }
 
-F get_first<T>(p: Pair<T>) -> T = p.first
+fn get_first<T>(p: Pair<T>) -> type = p.first
 
-F main() -> i64 = get_first(Pair { first: 42, second: 100 })
+fn main() -> i64 = get_first(Pair { first: 42, second: 100 })
 "#;
     assert_exit_code(source, 42);
 }
@@ -1962,7 +1962,7 @@ F main() -> i64 = get_first(Pair { first: 42, second: 100 })
 #[test]
 fn exec_nested_loops() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     i := mut 0
     L {
@@ -1985,7 +1985,7 @@ F main() -> i64 {
 #[test]
 fn exec_loop_with_continue() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     i := mut 0
     L {
@@ -2006,11 +2006,11 @@ F main() -> i64 {
 #[test]
 fn exec_tail_recursion_sum() {
     let source = r#"
-F sum_helper(n: i64, acc: i64) -> i64 = n == 0 ? acc : @(n - 1, acc + n)
+fn sum_helper(n: i64, acc: i64) -> i64 = n == 0 ? acc : @(n - 1, acc + n)
 
-F sum(n: i64) -> i64 = sum_helper(n, 0)
+fn sum(n: i64) -> i64 = sum_helper(n, 0)
 
-F main() -> i64 = sum(9)
+fn main() -> i64 = sum(9)
 "#;
     // sum(9) = 45
     assert_exit_code(source, 45);

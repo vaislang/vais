@@ -18,19 +18,19 @@ use super::helpers::*;
 fn e2e_p183_enum_small_struct_payload() {
     // Small struct (1 i64 field = 8 bytes) stored in enum variant
     let source = r#"
-S Small {
+struct Small {
     val: i64
 }
 
-E Maybe {
+enum Maybe {
     Nothing,
     Just(Small)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     s := Small { val: 42 }
     opt := Just(s)
-    M opt {
+    match opt {
         Just(v) => v.val,
         Nothing => 0
     }
@@ -45,20 +45,20 @@ F main() -> i64 {
 fn e2e_p183_enum_large_struct_payload() {
     // Large struct (2 i64 fields = 16 bytes) stored in enum variant
     let source = r#"
-S Point {
+struct Point {
     x: i64,
     y: i64
 }
 
-E Maybe {
+enum Maybe {
     Nothing,
     Just(Point)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Point { x: 10, y: 32 }
     opt := Just(p)
-    M opt {
+    match opt {
         Just(val) => val.x + val.y,
         Nothing => 0
     }
@@ -73,23 +73,23 @@ F main() -> i64 {
 fn e2e_p183_enum_err_struct_payload() {
     // Error struct (2 fields = 16 bytes) stored in error variant
     let source = r#"
-S MyError {
+struct MyError {
     code: i64,
     line: i64
 }
 
-E Outcome {
+enum Outcome {
     Success(i64),
     Failure(MyError)
 }
 
-F fail_with(code: i64, line: i64) -> Outcome {
+fn fail_with(code: i64, line: i64) -> Outcome {
     Failure(MyError { code: code, line: line })
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     res := fail_with(40, 2)
-    M res {
+    match res {
         Success(_v) => 0,
         Failure(e) => e.code + e.line
     }
@@ -104,22 +104,22 @@ F main() -> i64 {
 fn e2e_p183_enum_ok_struct_payload() {
     // Struct stored in success variant, extracted via match
     let source = r#"
-S Value {
+struct Value {
     data: i64
 }
 
-E Outcome {
+enum Outcome {
     Success(Value),
     Failure(i64)
 }
 
-F succeed_with(n: i64) -> Outcome {
+fn succeed_with(n: i64) -> Outcome {
     Success(Value { data: n })
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     res := succeed_with(42)
-    M res {
+    match res {
         Success(v) => v.data,
         Failure(_e) => 0
     }
@@ -134,21 +134,21 @@ F main() -> i64 {
 fn e2e_p183_enum_three_field_struct() {
     // Struct with 3 fields (24 bytes) in enum
     let source = r#"
-S Triple {
+struct Triple {
     a: i64,
     b: i64,
     c: i64
 }
 
-E Wrapper {
+enum Wrapper {
     Empty,
     Has(Triple)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     t := Triple { a: 10, b: 20, c: 12 }
     w := Has(t)
-    M w {
+    match w {
         Has(v) => v.a + v.b + v.c,
         Empty => 0
     }
@@ -163,18 +163,18 @@ F main() -> i64 {
 fn e2e_p183_enum_none_branch_with_struct() {
     // Ensure the None-equivalent branch works when the other variant has struct payload
     let source = r#"
-S Data {
+struct Data {
     x: i64
 }
 
-E Maybe {
+enum Maybe {
     Nothing,
     Just(Data)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     opt := Nothing
-    M opt {
+    match opt {
         Just(d) => d.x,
         Nothing => 42
     }
@@ -189,23 +189,23 @@ F main() -> i64 {
 fn e2e_p183_enum_struct_via_function() {
     // Struct stored via function call, extracted in caller
     let source = r#"
-S Coord {
+struct Coord {
     x: i64,
     y: i64
 }
 
-E Shape {
+enum Shape {
     Empty,
     Located(Coord)
 }
 
-F make_shape(x: i64, y: i64) -> Shape {
+fn make_shape(x: i64, y: i64) -> Shape {
     Located(Coord { x: x, y: y })
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     s := make_shape(20, 22)
-    M s {
+    match s {
         Located(pos) => pos.x + pos.y,
         Empty => 0
     }
@@ -220,22 +220,22 @@ F main() -> i64 {
 fn e2e_p183_enum_both_variants_struct() {
     // Both variants carry structs — test correct tag dispatch
     let source = r#"
-S Good {
+struct Good {
     value: i64
 }
 
-S Bad {
+struct Bad {
     code: i64
 }
 
-E Either {
+enum Either {
     Left(Good),
     Right(Bad)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     e := Left(Good { value: 42 })
-    M e {
+    match e {
         Left(g) => g.value,
         Right(b) => b.code
     }

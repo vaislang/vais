@@ -14,17 +14,17 @@ use super::helpers::*;
 fn e2e_phase91_generic_struct_impl_method() {
     // Generic struct with impl block where T falls back to i64
     let source = r#"
-S Container<T> {
+struct Container<T> {
     value: T
 }
 
-X Container<T> {
-    F get(self) -> T {
+impl Container<T> {
+    fn get(self) -> type {
         self.value
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c := Container { value: 42 }
     c.get()
 }
@@ -38,17 +38,17 @@ F main() -> i64 {
 fn e2e_phase91_generic_struct_method_arithmetic() {
     // Generic struct method that performs arithmetic on the field
     let source = r#"
-S Wrapper<T> {
+struct Wrapper<T> {
     val: T
 }
 
-X Wrapper<T> {
-    F doubled(self) -> T {
+impl Wrapper<T> {
+    fn doubled(self) -> type {
         self.val + self.val
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     w := Wrapper { val: 21 }
     w.doubled()
 }
@@ -61,9 +61,9 @@ F main() -> i64 {
 #[test]
 fn e2e_phase91_generic_identity_i64() {
     let source = r#"
-F identity<T>(x: T) -> T { x }
+fn identity<T>(x: T) -> type { x }
 
-F main() -> i64 {
+fn main() -> i64 {
     identity(77)
 }
 "#;
@@ -75,9 +75,9 @@ F main() -> i64 {
 #[test]
 fn e2e_phase91_generic_add() {
     let source = r#"
-F add<T>(a: T, b: T) -> T { a + b }
+fn add<T>(a: T, b: T) -> type { a + b }
 
-F main() -> i64 {
+fn main() -> i64 {
     add(20, 22)
 }
 "#;
@@ -89,22 +89,22 @@ F main() -> i64 {
 #[test]
 fn e2e_phase91_generic_struct_multiple_methods() {
     let source = r#"
-S Pair<T> {
+struct Pair<T> {
     first: T,
     second: T
 }
 
-X Pair<T> {
-    F sum(self) -> T {
+impl Pair<T> {
+    fn sum(self) -> type {
         self.first + self.second
     }
 
-    F get_first(self) -> T {
+    fn get_first(self) -> type {
         self.first
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Pair { first: 30, second: 12 }
     p.sum()
 }
@@ -117,21 +117,21 @@ F main() -> i64 {
 #[test]
 fn e2e_phase91_generic_struct_method_computation() {
     let source = r#"
-S Box<T> {
+struct Box<T> {
     data: T
 }
 
-X Box<T> {
-    F value(self) -> T {
+impl Box<T> {
+    fn value(self) -> type {
         self.data
     }
 
-    F plus(self, n: T) -> T {
+    fn plus(self, n: T) -> type {
         self.data + n
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     b := Box { data: 40 }
     b.plus(2)
 }
@@ -144,13 +144,13 @@ F main() -> i64 {
 #[test]
 fn e2e_phase91_generic_fn_called_from_non_generic() {
     let source = r#"
-F double<T>(x: T) -> T { x + x }
+fn double<T>(x: T) -> type { x + x }
 
-F compute() -> i64 {
+fn compute() -> i64 {
     double(21)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     compute()
 }
 "#;
@@ -163,17 +163,17 @@ F main() -> i64 {
 fn e2e_phase91_generic_struct_concrete_impl() {
     // Impl for a concrete type param (Wrapper<i64>)
     let source = r#"
-S Wrapper<T> {
+struct Wrapper<T> {
     value: T
 }
 
-X Wrapper<i64> {
-    F get(self) -> i64 {
+impl Wrapper<i64> {
+    fn get(self) -> i64 {
         self.value
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     w := Wrapper { value: 42 }
     w.get() - 42
 }
@@ -186,15 +186,15 @@ F main() -> i64 {
 #[test]
 fn e2e_phase91_generic_struct_with_fn() {
     let source = r#"
-S Cell<T> {
+struct Cell<T> {
     inner: T
 }
 
-F extract<T>(c: Cell<T>) -> T {
+fn extract<T>(c: Cell<T>) -> type {
     c.inner
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     cell := Cell { inner: 99 }
     extract(cell)
 }
@@ -207,10 +207,10 @@ F main() -> i64 {
 #[test]
 fn e2e_phase91_generic_fn_chain() {
     let source = r#"
-F step1<T>(x: T) -> T { x + 1 }
-F step2<T>(x: T) -> T { step1(x) + 1 }
+fn step1<T>(x: T) -> type { x + 1 }
+fn step2<T>(x: T) -> type { step1(x) + 1 }
 
-F main() -> i64 {
+fn main() -> i64 {
     step2(40)
 }
 "#;
@@ -223,17 +223,17 @@ F main() -> i64 {
 #[test]
 fn e2e_phase91_generic_method_chain_vars() {
     let source = r#"
-S Num<T> {
+struct Num<T> {
     v: T
 }
 
-X Num<T> {
-    F val(self) -> T {
+impl Num<T> {
+    fn val(self) -> type {
         self.v
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := Num { v: 20 }
     b := Num { v: 22 }
     a.val() + b.val()
@@ -247,21 +247,21 @@ F main() -> i64 {
 #[test]
 fn e2e_phase91_trait_on_generic_struct() {
     let source = r#"
-W Valuable {
-    F worth(self) -> i64
+trait Valuable {
+    fn worth(self) -> i64
 }
 
-S Item<T> {
+struct Item<T> {
     price: T
 }
 
-X Item<i64>: Valuable {
-    F worth(self) -> i64 {
+impl Item<i64>: Valuable {
+    fn worth(self) -> i64 {
         self.price
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     item := Item { price: 42 }
     item.worth()
 }

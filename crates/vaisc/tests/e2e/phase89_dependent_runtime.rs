@@ -13,13 +13,13 @@ use super::helpers::*;
 fn e2e_dependent_runtime_assert_valid() {
     // Non-literal argument that satisfies predicate should pass runtime check
     let source = r#"
-F check_positive(n: {x: i64 | x > 0}) -> i64 {
-    R n
+fn check_positive(n: {x: i64 | x > 0}) -> i64 {
+    return n
 }
-F get_value() -> i64 { R 42 }
-F main() -> i64 {
+fn get_value() -> i64 { return 42 }
+fn main() -> i64 {
     v := get_value()
-    R check_positive(v)
+    return check_positive(v)
 }
 "#;
     assert_exit_code(source, 42);
@@ -29,13 +29,13 @@ F main() -> i64 {
 fn e2e_dependent_runtime_assert_fail() {
     // Non-literal argument that violates predicate should trigger runtime abort
     let source = r#"
-F check_positive(n: {x: i64 | x > 0}) -> i64 {
-    R n
+fn check_positive(n: {x: i64 | x > 0}) -> i64 {
+    return n
 }
-F get_negative() -> i64 { R 0 - 5 }
-F main() -> i64 {
+fn get_negative() -> i64 { return 0 - 5 }
+fn main() -> i64 {
     v := get_negative()
-    R check_positive(v)
+    return check_positive(v)
 }
 "#;
     // Should abort with non-zero exit code (runtime assertion failure)
@@ -53,13 +53,13 @@ F main() -> i64 {
 fn e2e_dependent_runtime_compound_valid() {
     // Non-literal argument that satisfies compound predicate (AND)
     let source = r#"
-F bounded(n: {x: i64 | x >= 0 && x <= 100}) -> i64 {
-    R n
+fn bounded(n: {x: i64 | x >= 0 && x <= 100}) -> i64 {
+    return n
 }
-F compute() -> i64 { R 50 }
-F main() -> i64 {
+fn compute() -> i64 { return 50 }
+fn main() -> i64 {
     v := compute()
-    R bounded(v)
+    return bounded(v)
 }
 "#;
     assert_exit_code(source, 50);
@@ -69,13 +69,13 @@ F main() -> i64 {
 fn e2e_dependent_runtime_compound_fail() {
     // Non-literal argument that violates compound predicate
     let source = r#"
-F bounded(n: {x: i64 | x >= 0 && x <= 100}) -> i64 {
-    R n
+fn bounded(n: {x: i64 | x >= 0 && x <= 100}) -> i64 {
+    return n
 }
-F compute() -> i64 { R 200 }
-F main() -> i64 {
+fn compute() -> i64 { return 200 }
+fn main() -> i64 {
     v := compute()
-    R bounded(v)
+    return bounded(v)
 }
 "#;
     let result = compile_and_run(source);
@@ -89,13 +89,13 @@ F main() -> i64 {
 fn e2e_dependent_runtime_two_params_valid() {
     // Two dependent-typed parameters, both satisfied at runtime
     let source = r#"
-F add_pos(a: {x: i64 | x > 0}, b: {y: i64 | y > 0}) -> i64 {
-    R a + b
+fn add_pos(a: {x: i64 | x > 0}, b: {y: i64 | y > 0}) -> i64 {
+    return a + b
 }
-F get_a() -> i64 { R 20 }
-F get_b() -> i64 { R 22 }
-F main() -> i64 {
-    R add_pos(get_a(), get_b())
+fn get_a() -> i64 { return 20 }
+fn get_b() -> i64 { return 22 }
+fn main() -> i64 {
+    return add_pos(get_a(), get_b())
 }
 "#;
     assert_exit_code(source, 42);
@@ -105,13 +105,13 @@ F main() -> i64 {
 fn e2e_dependent_runtime_two_params_one_fails() {
     // Two dependent-typed parameters, second one violates predicate
     let source = r#"
-F add_pos(a: {x: i64 | x > 0}, b: {y: i64 | y > 0}) -> i64 {
-    R a + b
+fn add_pos(a: {x: i64 | x > 0}, b: {y: i64 | y > 0}) -> i64 {
+    return a + b
 }
-F get_a() -> i64 { R 20 }
-F get_neg() -> i64 { R 0 - 1 }
-F main() -> i64 {
-    R add_pos(get_a(), get_neg())
+fn get_a() -> i64 { return 20 }
+fn get_neg() -> i64 { return 0 - 1 }
+fn main() -> i64 {
+    return add_pos(get_a(), get_neg())
 }
 "#;
     let result = compile_and_run(source);
@@ -127,12 +127,12 @@ F main() -> i64 {
 fn e2e_dependent_f64_positive_valid() {
     // {x: f64 | x > 0.0} with positive literal
     let source = r#"
-F check_positive_f(n: {x: f64 | x > 0.0}) -> f64 {
-    R n
+fn check_positive_f(n: {x: f64 | x > 0.0}) -> f64 {
+    return n
 }
-F main() -> i64 {
+fn main() -> i64 {
     v := check_positive_f(3.14)
-    R 42
+    return 42
 }
 "#;
     assert_exit_code(source, 42);
@@ -142,12 +142,12 @@ F main() -> i64 {
 fn e2e_dependent_f64_violation() {
     // {x: f64 | x > 0.0} with negative literal should fail at compile time
     let source = r#"
-F check_positive_f(n: {x: f64 | x > 0.0}) -> f64 {
-    R n
+fn check_positive_f(n: {x: f64 | x > 0.0}) -> f64 {
+    return n
 }
-F main() -> i64 {
+fn main() -> i64 {
     v := check_positive_f(-1.5)
-    R 0
+    return 0
 }
 "#;
     assert_compile_error(source);
@@ -157,12 +157,12 @@ F main() -> i64 {
 fn e2e_dependent_f64_bounded_valid() {
     // {x: f64 | x >= 0.0 && x <= 1.0} with value in range
     let source = r#"
-F probability(p: {x: f64 | x >= 0.0 && x <= 1.0}) -> f64 {
-    R p
+fn probability(p: {x: f64 | x >= 0.0 && x <= 1.0}) -> f64 {
+    return p
 }
-F main() -> i64 {
+fn main() -> i64 {
     v := probability(0.5)
-    R 42
+    return 42
 }
 "#;
     assert_exit_code(source, 42);
@@ -172,12 +172,12 @@ F main() -> i64 {
 fn e2e_dependent_f64_bounded_violation() {
     // {x: f64 | x >= 0.0 && x <= 1.0} with value out of range
     let source = r#"
-F probability(p: {x: f64 | x >= 0.0 && x <= 1.0}) -> f64 {
-    R p
+fn probability(p: {x: f64 | x >= 0.0 && x <= 1.0}) -> f64 {
+    return p
 }
-F main() -> i64 {
+fn main() -> i64 {
     v := probability(1.5)
-    R 0
+    return 0
 }
 "#;
     assert_compile_error(source);
@@ -187,13 +187,13 @@ F main() -> i64 {
 fn e2e_dependent_f64_runtime_valid() {
     // Non-literal f64 that satisfies predicate at runtime
     let source = r#"
-F check_positive_f(n: {x: f64 | x > 0.0}) -> f64 {
-    R n
+fn check_positive_f(n: {x: f64 | x > 0.0}) -> f64 {
+    return n
 }
-F get_pi() -> f64 { R 3.14 }
-F main() -> i64 {
+fn get_pi() -> f64 { return 3.14 }
+fn main() -> i64 {
     v := check_positive_f(get_pi())
-    R 42
+    return 42
 }
 "#;
     assert_exit_code(source, 42);
@@ -205,12 +205,12 @@ F main() -> i64 {
 fn e2e_dependent_return_type_valid() {
     // Function with dependent return type, returns valid value
     let source = r#"
-F make_positive(n: i64) -> {x: i64 | x > 0} {
-    I n > 0 { R n }
-    R 1
+fn make_positive(n: i64) -> {x: i64 | x > 0} {
+    I n > 0 { return n }
+    return 1
 }
-F main() -> i64 {
-    R make_positive(42)
+fn main() -> i64 {
+    return make_positive(42)
 }
 "#;
     assert_exit_code(source, 42);
@@ -220,12 +220,12 @@ F main() -> i64 {
 fn e2e_dependent_param_with_arithmetic() {
     // Use dependent-typed parameter in arithmetic at runtime
     let source = r#"
-F double_positive(n: {x: i64 | x > 0}) -> i64 {
-    R n * 2
+fn double_positive(n: {x: i64 | x > 0}) -> i64 {
+    return n * 2
 }
-F get_value() -> i64 { R 21 }
-F main() -> i64 {
-    R double_positive(get_value())
+fn get_value() -> i64 { return 21 }
+fn main() -> i64 {
+    return double_positive(get_value())
 }
 "#;
     assert_exit_code(source, 42);
@@ -235,12 +235,12 @@ F main() -> i64 {
 fn e2e_dependent_equality_runtime_valid() {
     // {x: i64 | x == 42} with runtime value 42
     let source = r#"
-F exact(n: {x: i64 | x == 42}) -> i64 {
-    R n
+fn exact(n: {x: i64 | x == 42}) -> i64 {
+    return n
 }
-F get_42() -> i64 { R 42 }
-F main() -> i64 {
-    R exact(get_42())
+fn get_42() -> i64 { return 42 }
+fn main() -> i64 {
+    return exact(get_42())
 }
 "#;
     assert_exit_code(source, 42);
@@ -250,12 +250,12 @@ F main() -> i64 {
 fn e2e_dependent_equality_runtime_fail() {
     // {x: i64 | x == 42} with runtime value != 42
     let source = r#"
-F exact(n: {x: i64 | x == 42}) -> i64 {
-    R n
+fn exact(n: {x: i64 | x == 42}) -> i64 {
+    return n
 }
-F get_10() -> i64 { R 10 }
-F main() -> i64 {
-    R exact(get_10())
+fn get_10() -> i64 { return 10 }
+fn main() -> i64 {
+    return exact(get_10())
 }
 "#;
     let result = compile_and_run(source);

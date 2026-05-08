@@ -62,50 +62,50 @@ fn e2e_vais_server_08_ssr_forwarding_runtime_smoke() {
         .port();
 
     let source = r#"
-U src/api/ssr
-U src/http/header
+use src/api/ssr
+use src/http/header
 
-F smoke_contains(haystack: str, needle: str) -> i64 {
+fn smoke_contains(haystack: str, needle: str) -> i64 {
     smoke_contains_rec(haystack, needle, 0)
 }
 
-F smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
-    I needle.len() == 0 { R 1 }
-    I i >= haystack.len() { R 0 }
-    I smoke_match_prefix(haystack, needle, i, 0) == 1 { R 1 }
+fn smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
+    I needle.len() == 0 { return 1 }
+    I i >= haystack.len() { return 0 }
+    I smoke_match_prefix(haystack, needle, i, 0) == 1 { return 1 }
     smoke_contains_rec(haystack, needle, i + 1)
 }
 
-F smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
+fn smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
     nc := needle.char_at(ni)
-    I nc == 0 { R 1 }
+    I nc == 0 { return 1 }
     hc := haystack.char_at(hi)
-    I hc == 0 { R 0 }
-    I hc != nc { R 0 }
+    I hc == 0 { return 0 }
+    I hc != nc { return 0 }
     smoke_match_prefix(haystack, needle, hi + 1, ni + 1)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     response := forward_ssr_render("http://127.0.0.1:__PORT__", "/products/sku-42", "state")
     I response.status.code != 202 {
         println("FAIL ssr forwarding status")
-        R 1
+        return 1
     }
     I response.status.reason != "Accepted" {
         println("FAIL ssr forwarding reason")
-        R 2
+        return 2
     }
     I response.headers.get(CONTENT_TYPE) != "application/json" {
         println("FAIL ssr forwarding content type")
-        R 3
+        return 3
     }
     I smoke_contains(response.body, "from-node") != 1 {
         println("FAIL ssr forwarding body")
-        R 4
+        return 4
     }
     I smoke_contains(response.body, "\"status\":202") != 1 {
         println("FAIL ssr forwarding body status")
-        R 5
+        return 5
     }
     println("VAIS_SERVER_SSR_FORWARDING_RUNTIME_OK")
     0
@@ -172,64 +172,64 @@ fn e2e_vais_server_09_ssr_forwarding_error_mapping_runtime_smoke() {
         .port();
 
     let source = r#"
-U src/api/ssr
-U src/http/header
+use src/api/ssr
+use src/http/header
 
-F smoke_contains(haystack: str, needle: str) -> i64 {
+fn smoke_contains(haystack: str, needle: str) -> i64 {
     smoke_contains_rec(haystack, needle, 0)
 }
 
-F smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
-    I needle.len() == 0 { R 1 }
-    I i >= haystack.len() { R 0 }
-    I smoke_match_prefix(haystack, needle, i, 0) == 1 { R 1 }
+fn smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
+    I needle.len() == 0 { return 1 }
+    I i >= haystack.len() { return 0 }
+    I smoke_match_prefix(haystack, needle, i, 0) == 1 { return 1 }
     smoke_contains_rec(haystack, needle, i + 1)
 }
 
-F smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
+fn smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
     nc := needle.char_at(ni)
-    I nc == 0 { R 1 }
+    I nc == 0 { return 1 }
     hc := haystack.char_at(hi)
-    I hc == 0 { R 0 }
-    I hc != nc { R 0 }
+    I hc == 0 { return 0 }
+    I hc != nc { return 0 }
     smoke_match_prefix(haystack, needle, hi + 1, ni + 1)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     upstream_status := forward_ssr_render("http://127.0.0.1:__STATUS_PORT__", "/missing", "state")
     I upstream_status.status.code != 503 {
         println("FAIL ssr forwarding upstream status code")
-        R 1
+        return 1
     }
     I upstream_status.status.reason != "Service Unavailable" {
         println("FAIL ssr forwarding upstream reason")
-        R 2
+        return 2
     }
     I upstream_status.headers.get(CONTENT_TYPE) != "application/json" {
         println("FAIL ssr forwarding upstream content type")
-        R 3
+        return 3
     }
     I smoke_contains(upstream_status.body, "remote-down") != 1 {
         println("FAIL ssr forwarding upstream body")
-        R 4
+        return 4
     }
 
     transport_failure := forward_ssr_render("http://127.0.0.1:__DROP_PORT__", "/dashboard", "state")
     I transport_failure.status.code != 502 {
         println("FAIL ssr forwarding transport status code")
-        R 10
+        return 10
     }
     I transport_failure.status.reason != "Bad Gateway" {
         println("FAIL ssr forwarding transport reason")
-        R 11
+        return 11
     }
     I transport_failure.headers.get(CONTENT_TYPE) != "application/json" {
         println("FAIL ssr forwarding transport content type")
-        R 12
+        return 12
     }
     I smoke_contains(transport_failure.body, "SSR upstream unavailable") != 1 {
         println("FAIL ssr forwarding transport body")
-        R 13
+        return 13
     }
 
     println("VAIS_SERVER_SSR_FORWARDING_ERROR_MAPPING_RUNTIME_OK")
@@ -279,46 +279,46 @@ fn e2e_vais_server_10_ssr_forwarding_timeout_runtime_smoke() {
         .port();
 
     let source = r#"
-U src/api/ssr
-U src/http/header
+use src/api/ssr
+use src/http/header
 
-F smoke_contains(haystack: str, needle: str) -> i64 {
+fn smoke_contains(haystack: str, needle: str) -> i64 {
     smoke_contains_rec(haystack, needle, 0)
 }
 
-F smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
-    I needle.len() == 0 { R 1 }
-    I i >= haystack.len() { R 0 }
-    I smoke_match_prefix(haystack, needle, i, 0) == 1 { R 1 }
+fn smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
+    I needle.len() == 0 { return 1 }
+    I i >= haystack.len() { return 0 }
+    I smoke_match_prefix(haystack, needle, i, 0) == 1 { return 1 }
     smoke_contains_rec(haystack, needle, i + 1)
 }
 
-F smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
+fn smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
     nc := needle.char_at(ni)
-    I nc == 0 { R 1 }
+    I nc == 0 { return 1 }
     hc := haystack.char_at(hi)
-    I hc == 0 { R 0 }
-    I hc != nc { R 0 }
+    I hc == 0 { return 0 }
+    I hc != nc { return 0 }
     smoke_match_prefix(haystack, needle, hi + 1, ni + 1)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     response := forward_ssr_render_with_timeout("http://127.0.0.1:__PORT__", "/slow", "state", 100)
     I response.status.code != 504 {
         println("FAIL ssr forwarding timeout status code")
-        R 1
+        return 1
     }
     I response.status.reason != "Gateway Timeout" {
         println("FAIL ssr forwarding timeout reason")
-        R 2
+        return 2
     }
     I response.headers.get(CONTENT_TYPE) != "application/json" {
         println("FAIL ssr forwarding timeout content type")
-        R 3
+        return 3
     }
     I smoke_contains(response.body, "SSR upstream timeout") != 1 {
         println("FAIL ssr forwarding timeout body")
-        R 4
+        return 4
     }
     println("VAIS_SERVER_SSR_FORWARDING_TIMEOUT_RUNTIME_OK")
     0
@@ -359,46 +359,46 @@ fn e2e_vais_server_11_ssr_forwarding_retry_runtime_smoke() {
         .port();
 
     let source = r#"
-U src/api/ssr
-U src/http/header
+use src/api/ssr
+use src/http/header
 
-F smoke_contains(haystack: str, needle: str) -> i64 {
+fn smoke_contains(haystack: str, needle: str) -> i64 {
     smoke_contains_rec(haystack, needle, 0)
 }
 
-F smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
-    I needle.len() == 0 { R 1 }
-    I i >= haystack.len() { R 0 }
-    I smoke_match_prefix(haystack, needle, i, 0) == 1 { R 1 }
+fn smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
+    I needle.len() == 0 { return 1 }
+    I i >= haystack.len() { return 0 }
+    I smoke_match_prefix(haystack, needle, i, 0) == 1 { return 1 }
     smoke_contains_rec(haystack, needle, i + 1)
 }
 
-F smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
+fn smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
     nc := needle.char_at(ni)
-    I nc == 0 { R 1 }
+    I nc == 0 { return 1 }
     hc := haystack.char_at(hi)
-    I hc == 0 { R 0 }
-    I hc != nc { R 0 }
+    I hc == 0 { return 0 }
+    I hc != nc { return 0 }
     smoke_match_prefix(haystack, needle, hi + 1, ni + 1)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     response := forward_ssr_render_with_retry("http://127.0.0.1:__PORT__", "/retry", "state", 1000, 1)
     I response.status.code != 200 {
         println("FAIL ssr forwarding retry status code")
-        R 1
+        return 1
     }
     I response.status.reason != "OK" {
         println("FAIL ssr forwarding retry reason")
-        R 2
+        return 2
     }
     I response.headers.get(CONTENT_TYPE) != "application/json" {
         println("FAIL ssr forwarding retry content type")
-        R 3
+        return 3
     }
     I smoke_contains(response.body, "retry-ok") != 1 {
         println("FAIL ssr forwarding retry body")
-        R 4
+        return 4
     }
     println("VAIS_SERVER_SSR_FORWARDING_RETRY_RUNTIME_OK")
     0
@@ -446,66 +446,66 @@ fn e2e_vais_server_12_ssr_forwarding_retry_budget_observability_runtime_smoke() 
         .port();
 
     let source = r#"
-U src/api/ssr
-U src/http/header
+use src/api/ssr
+use src/http/header
 
-F smoke_contains(haystack: str, needle: str) -> i64 {
+fn smoke_contains(haystack: str, needle: str) -> i64 {
     smoke_contains_rec(haystack, needle, 0)
 }
 
-F smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
-    I needle.len() == 0 { R 1 }
-    I i >= haystack.len() { R 0 }
-    I smoke_match_prefix(haystack, needle, i, 0) == 1 { R 1 }
+fn smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
+    I needle.len() == 0 { return 1 }
+    I i >= haystack.len() { return 0 }
+    I smoke_match_prefix(haystack, needle, i, 0) == 1 { return 1 }
     smoke_contains_rec(haystack, needle, i + 1)
 }
 
-F smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
+fn smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
     nc := needle.char_at(ni)
-    I nc == 0 { R 1 }
+    I nc == 0 { return 1 }
     hc := haystack.char_at(hi)
-    I hc == 0 { R 0 }
-    I hc != nc { R 0 }
+    I hc == 0 { return 0 }
+    I hc != nc { return 0 }
     smoke_match_prefix(haystack, needle, hi + 1, ni + 1)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     response := forward_ssr_render_with_retry_observed("http://127.0.0.1:__PORT__", "/exhaust", "state", 1000, 2, 25, 5)
     I response.status.code != 502 {
         println("FAIL ssr retry budget status code")
-        R 1
+        return 1
     }
     I response.status.reason != "Bad Gateway" {
         println("FAIL ssr retry budget reason")
-        R 2
+        return 2
     }
     I response.headers.get(CONTENT_TYPE) != "application/json" {
         println("FAIL ssr retry budget content type")
-        R 3
+        return 3
     }
     I response.headers.get("X-SSR-Retry-Budget") != "exhausted" {
         println("FAIL ssr retry budget header")
-        R 4
+        return 4
     }
     I response.headers.get("X-SSR-Retry-Backoff") != "base+jitter" {
         println("FAIL ssr retry backoff header")
-        R 5
+        return 5
     }
     I response.headers.get("X-SSR-Retry-Last-Error") != "transport" {
         println("FAIL ssr retry last error header")
-        R 6
+        return 6
     }
     I smoke_contains(response.body, "SSR retry budget exhausted") != 1 {
         println("FAIL ssr retry budget body marker")
-        R 7
+        return 7
     }
     I smoke_contains(response.body, "backoff") != 1 {
         println("FAIL ssr retry budget backoff marker")
-        R 8
+        return 8
     }
     I smoke_contains(response.body, "jitter") != 1 {
         println("FAIL ssr retry budget jitter marker")
-        R 9
+        return 9
     }
     println("VAIS_SERVER_SSR_FORWARDING_RETRY_BUDGET_OBSERVABILITY_RUNTIME_OK")
     0

@@ -32,20 +32,20 @@ use crate::helpers::assert_compiles;
 fn p16_block_body_expected_type_does_not_leak_into_local_vec() {
     assert_compiles(
         r#"
-F from_utf8_lossy(bytes: &[u8]) -> str {
+fn from_utf8_lossy(bytes: &[u8]) -> str {
     bytes as str
 }
 
-F parse_csv_minimal(data: &[u8]) -> Vec<str> {
+fn parse_csv_minimal(data: &[u8]) -> Vec<str> {
     fields := mut Vec.with_capacity(0u64)
     current_field := mut Vec.with_capacity(0u64)
     field_str := mut from_utf8_lossy(&current_field)
     fields.push(field_str)
     current_field.push(72u8)
-    R fields
+    return fields
 }
 
-F main() -> i64 { R 0 }
+fn main() -> i64 { return 0 }
 "#,
     );
 }
@@ -58,11 +58,11 @@ F main() -> i64 { R 0 }
 fn p16_csv_loop_branch_shape_compiles() {
     assert_compiles(
         r#"
-F from_utf8_lossy(bytes: &[u8]) -> str {
+fn from_utf8_lossy(bytes: &[u8]) -> str {
     bytes as str
 }
 
-F parse_csv(data: &[u8]) -> Vec<str> {
+fn parse_csv(data: &[u8]) -> Vec<str> {
     fields := mut Vec.with_capacity(0u64)
     current_field := mut Vec.with_capacity(0u64)
     in_quotes := mut false
@@ -71,19 +71,19 @@ F parse_csv(data: &[u8]) -> Vec<str> {
         byte := mut data[i]
         I byte == 34u8 {
             in_quotes = !in_quotes
-        } EL I byte == 44u8 && !in_quotes {
+        } else I byte == 44u8 && !in_quotes {
             field_str := mut from_utf8_lossy(&current_field)
             fields.push(field_str)
             current_field.clear()
-        } EL {
+        } else {
             current_field.push(byte)
         }
         i = i + 1
     }
-    R fields
+    return fields
 }
 
-F main() -> i64 { R 0 }
+fn main() -> i64 { return 0 }
 "#,
     );
 }
@@ -97,17 +97,17 @@ F main() -> i64 { R 0 }
 fn p16_single_expr_body_still_consumes_return_hint() {
     assert_compiles(
         r#"
-EN Color { Red, Green, Blue }
+enum Color { Red, Green, Blue }
 
-F vec_new_color() -> Vec<Color> {
+fn vec_new_color() -> Vec<Color> {
     Vec.with_capacity(8)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := mut vec_new_color()
     v.push(Red)
     v.push(Green)
-    R 0
+    return 0
 }
 "#,
     );
@@ -120,15 +120,15 @@ F main() -> i64 {
 fn p16_hashmap_block_body_no_leak() {
     assert_compiles(
         r#"
-F build() -> HashMap<str, i64> {
+fn build() -> HashMap<str, i64> {
     out := mut HashMap.new()
     aux := mut HashMap.new()
     aux.insert(1u8, 2u8)
     out.insert("k", 1)
-    R out
+    return out
 }
 
-F main() -> i64 { R 0 }
+fn main() -> i64 { return 0 }
 "#,
     );
 }

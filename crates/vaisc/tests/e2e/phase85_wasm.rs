@@ -17,8 +17,8 @@ use super::helpers::compile_to_ir;
 fn test_wasip2_target_triple_in_ir() {
     // WasiPreview2 target should produce wasm32-wasip2 triple
     let source = r#"
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -38,8 +38,8 @@ F main() -> i64 {
 fn test_wasip1_target_triple_in_ir() {
     // WasiPreview1 target should produce wasm32-wasi triple (not wasip2)
     let source = r#"
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -62,10 +62,10 @@ F main() -> i64 {
 fn test_wasip2_vs_wasip1_different_triple() {
     // Same source code should produce different target triples
     let source = r#"
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 
-F main() -> i64 {
-    R add(1, 2)
+fn main() -> i64 {
+    return add(1, 2)
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -102,8 +102,8 @@ F main() -> i64 {
 fn test_wasip2_data_layout() {
     // WASI Preview 2 should use 32-bit pointer data layout
     let source = r#"
-F main() -> i64 {
-    R 42
+fn main() -> i64 {
+    return 42
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -193,14 +193,14 @@ fn test_wasip2_io_stream_import() {
     let source = r#"
 N "C" {
     #[wasm_import("wasi:io/streams@0.2.0", "read")]
-    F stream_read(stream: i64, buf_ptr: i64, buf_len: i64) -> i64;
+    fn stream_read(stream: i64, buf_ptr: i64, buf_len: i64) -> i64;
 
     #[wasm_import("wasi:io/streams@0.2.0", "write")]
-    F stream_write(stream: i64, buf_ptr: i64, buf_len: i64) -> i64;
+    fn stream_write(stream: i64, buf_ptr: i64, buf_len: i64) -> i64;
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -220,17 +220,17 @@ fn test_wasip2_cli_stdio_import() {
     let source = r#"
 N "C" {
     #[wasm_import("wasi:cli/stdout@0.2.0", "get-stdout")]
-    F get_stdout() -> i64;
+    fn get_stdout() -> i64;
 
     #[wasm_import("wasi:cli/stderr@0.2.0", "get-stderr")]
-    F get_stderr() -> i64;
+    fn get_stderr() -> i64;
 
     #[wasm_import("wasi:cli/stdin@0.2.0", "get-stdin")]
-    F get_stdin() -> i64;
+    fn get_stdin() -> i64;
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -250,14 +250,14 @@ fn test_wasip2_filesystem_import() {
     let source = r#"
 N "C" {
     #[wasm_import("wasi:filesystem/types@0.2.0", "open-at")]
-    F fs_open_at(dir_fd: i64, path_flags: i64, path_ptr: i64, path_len: i64, open_flags: i64, desc_flags: i64) -> i64;
+    fn fs_open_at(dir_fd: i64, path_flags: i64, path_ptr: i64, path_len: i64, open_flags: i64, desc_flags: i64) -> i64;
 
     #[wasm_import("wasi:filesystem/types@0.2.0", "stat")]
-    F fs_stat(fd: i64, stat_ptr: i64) -> i64;
+    fn fs_stat(fd: i64, stat_ptr: i64) -> i64;
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -275,14 +275,14 @@ fn test_wasip2_clock_import() {
     let source = r#"
 N "C" {
     #[wasm_import("wasi:clocks/monotonic-clock@0.2.0", "now")]
-    F clock_now() -> i64;
+    fn clock_now() -> i64;
 
     #[wasm_import("wasi:clocks/monotonic-clock@0.2.0", "resolution")]
-    F clock_resolution() -> i64;
+    fn clock_resolution() -> i64;
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -300,14 +300,14 @@ fn test_wasip2_random_import() {
     let source = r#"
 N "C" {
     #[wasm_import("wasi:random/random@0.2.0", "get-random-u64")]
-    F random_u64() -> i64;
+    fn random_u64() -> i64;
 
     #[wasm_import("wasi:random/random@0.2.0", "get-random-bytes")]
-    F random_bytes(buf_ptr: i64, buf_len: i64) -> i64;
+    fn random_bytes(buf_ptr: i64, buf_len: i64) -> i64;
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -325,14 +325,14 @@ fn test_wasip2_http_import() {
     let source = r#"
 N "C" {
     #[wasm_import("wasi:http/types@0.2.0", "new-outgoing-request")]
-    F http_new_request(method: i64, path_ptr: i64, path_len: i64) -> i64;
+    fn http_new_request(method: i64, path_ptr: i64, path_len: i64) -> i64;
 
     #[wasm_import("wasi:http/outgoing-handler@0.2.0", "handle")]
-    F http_handle(request: i64, options: i64) -> i64;
+    fn http_handle(request: i64, options: i64) -> i64;
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -505,10 +505,10 @@ fn test_wasip2_export_function() {
     // wasm_export should work with wasip2 target
     let source = r#"
 #[wasm_export("compute")]
-F compute(x: i64) -> i64 = x * x + 1
+fn compute(x: i64) -> i64 = x * x + 1
 
-F main() -> i64 {
-    R compute(5)
+fn main() -> i64 {
+    return compute(5)
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -531,17 +531,17 @@ fn test_wasip2_mixed_import_export() {
     let source = r#"
 N "C" {
     #[wasm_import("wasi:cli/stdout@0.2.0", "get-stdout")]
-    F get_stdout() -> i64;
+    fn get_stdout() -> i64;
 
     #[wasm_import("wasi:io/streams@0.2.0", "write")]
-    F stream_write(stream: i64, buf_ptr: i64, buf_len: i64) -> i64;
+    fn stream_write(stream: i64, buf_ptr: i64, buf_len: i64) -> i64;
 }
 
 #[wasm_export("greet")]
-F greet() -> i64 = 42
+fn greet() -> i64 = 42
 
-F main() -> i64 {
-    R greet()
+fn main() -> i64 {
+    return greet()
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -571,11 +571,11 @@ fn test_wasm32_unknown_still_works() {
     let source = r#"
 N "C" {
     #[wasm_import("env", "log")]
-    F host_log(ptr: *i8, len: i64);
+    fn host_log(ptr: *i8, len: i64);
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -593,8 +593,8 @@ F main() -> i64 {
 fn test_native_target_no_wasm_metadata() {
     // Native target should not produce any WASM metadata
     let source = r#"
-F main() -> i64 {
-    R 42
+fn main() -> i64 {
+    return 42
 }
 "#;
     let ir = compile_to_ir(source).unwrap();
@@ -609,11 +609,11 @@ fn test_wasip2_import_not_on_native() {
     let source = r#"
 N "C" {
     #[wasm_import("wasi:io/streams@0.2.0", "read")]
-    F stream_read(stream: i64, buf_ptr: i64, buf_len: i64) -> i64;
+    fn stream_read(stream: i64, buf_ptr: i64, buf_len: i64) -> i64;
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let ir = compile_to_ir(source).unwrap();

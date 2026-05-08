@@ -19,9 +19,9 @@ O Data {
     flt_val: f64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Data { int_val: 99 }
-    R v.int_val
+    return v.int_val
 }
 "#;
     assert_exit_code(source, 99);
@@ -36,9 +36,9 @@ O NumStore {
     y: f64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := NumStore { x: 10 }
-    R v.x * 3 + 7
+    return v.x * 3 + 7
 }
 "#;
     assert_exit_code(source, 37);
@@ -59,10 +59,10 @@ O Beta {
     code: i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := Alpha { val: 5 }
     b := Beta { val: 8 }
-    R a.val + b.val
+    return a.val + b.val
 }
 "#;
     assert_exit_code(source, 13);
@@ -78,13 +78,13 @@ O Data {
     other: f64
 }
 
-F extract(d: Data) -> i64 {
+fn extract(d: Data) -> i64 {
     d.int_val
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     d := Data { int_val: 25 }
-    R extract(d)
+    return extract(d)
 }
 "#;
     assert_exit_code(source, 25);
@@ -98,8 +98,8 @@ fn e2e_p37_const_basic_usage() {
     let source = r#"
 C MAX: i64 = 100
 
-F main() -> i64 {
-    R MAX
+fn main() -> i64 {
+    return MAX
 }
 "#;
     assert_exit_code(source, 100);
@@ -111,8 +111,8 @@ fn e2e_p37_const_arithmetic() {
     let source = r#"
 C MAX: i64 = 100
 
-F main() -> i64 {
-    R MAX - 42
+fn main() -> i64 {
+    return MAX - 42
 }
 "#;
     assert_exit_code(source, 58);
@@ -125,8 +125,8 @@ fn e2e_p37_const_multiple() {
 C WIDTH: i64 = 10
 C HEIGHT: i64 = 5
 
-F main() -> i64 {
-    R WIDTH * HEIGHT
+fn main() -> i64 {
+    return WIDTH * HEIGHT
 }
 "#;
     assert_exit_code(source, 50);
@@ -138,12 +138,12 @@ fn e2e_p37_const_in_condition() {
     let source = r#"
 C THRESHOLD: i64 = 50
 
-F classify(n: i64) -> i64 {
-    I n > THRESHOLD { 1 } E { 0 }
+fn classify(n: i64) -> i64 {
+    I n > THRESHOLD { 1 } else { 0 }
 }
 
-F main() -> i64 {
-    R classify(75)
+fn main() -> i64 {
+    return classify(75)
 }
 "#;
     assert_exit_code(source, 1);
@@ -157,8 +157,8 @@ fn e2e_p37_global_single() {
     let source = r#"
 G counter: i64 = 0
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     assert_exit_code(source, 0);
@@ -172,8 +172,8 @@ G width: i64 = 800
 G height: i64 = 600
 G depth: i64 = 32
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     assert_exit_code(source, 0);
@@ -187,8 +187,8 @@ fn e2e_p37_global_with_const() {
 C MAX: i64 = 255
 G state: i64 = 0
 
-F main() -> i64 {
-    R MAX
+fn main() -> i64 {
+    return MAX
 }
 "#;
     assert_exit_code(source, 255);
@@ -201,9 +201,9 @@ fn e2e_p37_const_in_local_binding() {
     let source = r#"
 C MAX: i64 = 50
 
-F main() -> i64 {
+fn main() -> i64 {
     x := MAX - 8
-    R x
+    return x
 }
 "#;
     assert_exit_code(source, 42);

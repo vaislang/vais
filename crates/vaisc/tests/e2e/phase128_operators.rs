@@ -287,7 +287,7 @@ fn e2e_p128_op_and_true_true() {
     assert_exit_code(
         r#"
 fn main() -> i64 {
-    I true && true { 42 } E { 0 }
+    I true && true { 42 } else { 0 }
 }
 "#,
         42,
@@ -299,7 +299,7 @@ fn e2e_p128_op_and_true_false() {
     assert_exit_code(
         r#"
 fn main() -> i64 {
-    I true && false { 0 } E { 42 }
+    I true && false { 0 } else { 42 }
 }
 "#,
         42,
@@ -311,7 +311,7 @@ fn e2e_p128_op_or_false_true() {
     assert_exit_code(
         r#"
 fn main() -> i64 {
-    I false || true { 42 } E { 0 }
+    I false || true { 42 } else { 0 }
 }
 "#,
         42,
@@ -323,7 +323,7 @@ fn e2e_p128_op_or_false_false() {
     assert_exit_code(
         r#"
 fn main() -> i64 {
-    I false || false { 0 } E { 42 }
+    I false || false { 0 } else { 42 }
 }
 "#,
         42,
@@ -335,7 +335,7 @@ fn e2e_p128_op_not_true() {
     assert_exit_code(
         r#"
 fn main() -> i64 {
-    I !true { 0 } E { 42 }
+    I !true { 0 } else { 42 }
 }
 "#,
         42,
@@ -349,7 +349,7 @@ fn e2e_p128_op_eq() {
     assert_exit_code(
         r#"
 fn main() -> i64 {
-    I 42 == 42 { 42 } E { 0 }
+    I 42 == 42 { 42 } else { 0 }
 }
 "#,
         42,
@@ -361,7 +361,7 @@ fn e2e_p128_op_ne() {
     assert_exit_code(
         r#"
 fn main() -> i64 {
-    I 1 != 2 { 42 } E { 0 }
+    I 1 != 2 { 42 } else { 0 }
 }
 "#,
         42,
@@ -373,7 +373,7 @@ fn e2e_p128_op_lt() {
     assert_exit_code(
         r#"
 fn main() -> i64 {
-    I 5 < 10 { 42 } E { 0 }
+    I 5 < 10 { 42 } else { 0 }
 }
 "#,
         42,
@@ -385,7 +385,7 @@ fn e2e_p128_op_gt() {
     assert_exit_code(
         r#"
 fn main() -> i64 {
-    I 10 > 5 { 42 } E { 0 }
+    I 10 > 5 { 42 } else { 0 }
 }
 "#,
         42,
@@ -397,7 +397,7 @@ fn e2e_p128_op_lte() {
     assert_exit_code(
         r#"
 fn main() -> i64 {
-    I 5 <= 5 { 42 } E { 0 }
+    I 5 <= 5 { 42 } else { 0 }
 }
 "#,
         42,
@@ -409,7 +409,7 @@ fn e2e_p128_op_gte() {
     assert_exit_code(
         r#"
 fn main() -> i64 {
-    I 10 >= 10 { 42 } E { 0 }
+    I 10 >= 10 { 42 } else { 0 }
 }
 "#,
         42,
@@ -477,7 +477,7 @@ fn main() -> i64 {
 fn e2e_p128_op_match_enum_variant() {
     assert_exit_code(
         r#"
-E Dir { Up, Down, Left, Right }
+enum Dir { Up, Down, Left, Right }
 fn main() -> i64 {
     d := Left
     match d {

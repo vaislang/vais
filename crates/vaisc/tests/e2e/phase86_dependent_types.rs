@@ -15,11 +15,11 @@ use super::helpers::*;
 fn e2e_dependent_positive_i64() {
     // {x: i64 | x > 0} with positive literal satisfies predicate
     let source = r#"
-F check_positive(n: {x: i64 | x > 0}) -> i64 {
-    R n
+fn check_positive(n: {x: i64 | x > 0}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R check_positive(7)
+fn main() -> i64 {
+    return check_positive(7)
 }
 "#;
     assert_exit_code(source, 7);
@@ -29,11 +29,11 @@ F main() -> i64 {
 fn e2e_dependent_nonneg_zero() {
     // {x: i64 | x >= 0} with zero satisfies predicate
     let source = r#"
-F check_nonneg(n: {x: i64 | x >= 0}) -> i64 {
-    R n
+fn check_nonneg(n: {x: i64 | x >= 0}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R check_nonneg(0)
+fn main() -> i64 {
+    return check_nonneg(0)
 }
 "#;
     assert_exit_code(source, 0);
@@ -43,11 +43,11 @@ F main() -> i64 {
 fn e2e_dependent_less_than() {
     // {x: i64 | x < 100} with value 50 satisfies predicate
     let source = r#"
-F check_small(n: {x: i64 | x < 100}) -> i64 {
-    R n
+fn check_small(n: {x: i64 | x < 100}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R check_small(50)
+fn main() -> i64 {
+    return check_small(50)
 }
 "#;
     assert_exit_code(source, 50);
@@ -57,11 +57,11 @@ F main() -> i64 {
 fn e2e_dependent_equality() {
     // {x: i64 | x == 42} with value 42
     let source = r#"
-F check_exact(n: {x: i64 | x == 42}) -> i64 {
-    R n
+fn check_exact(n: {x: i64 | x == 42}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R check_exact(42)
+fn main() -> i64 {
+    return check_exact(42)
 }
 "#;
     assert_exit_code(source, 42);
@@ -73,11 +73,11 @@ F main() -> i64 {
 fn e2e_dependent_violation_negative() {
     // Passing -1 to {x: i64 | x > 0} should fail
     let source = r#"
-F check_positive(n: {x: i64 | x > 0}) -> i64 {
-    R n
+fn check_positive(n: {x: i64 | x > 0}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R check_positive(-1)
+fn main() -> i64 {
+    return check_positive(-1)
 }
 "#;
     assert_compile_error(source);
@@ -87,11 +87,11 @@ F main() -> i64 {
 fn e2e_dependent_violation_zero_strict() {
     // Passing 0 to {x: i64 | x > 0} should fail
     let source = r#"
-F check_positive(n: {x: i64 | x > 0}) -> i64 {
-    R n
+fn check_positive(n: {x: i64 | x > 0}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R check_positive(0)
+fn main() -> i64 {
+    return check_positive(0)
 }
 "#;
     assert_compile_error(source);
@@ -101,11 +101,11 @@ F main() -> i64 {
 fn e2e_dependent_violation_upper_bound() {
     // Passing 200 to {x: i64 | x < 100} should fail
     let source = r#"
-F check_small(n: {x: i64 | x < 100}) -> i64 {
-    R n
+fn check_small(n: {x: i64 | x < 100}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R check_small(200)
+fn main() -> i64 {
+    return check_small(200)
 }
 "#;
     assert_compile_error(source);
@@ -115,11 +115,11 @@ F main() -> i64 {
 fn e2e_dependent_violation_equality() {
     // Passing 10 to {x: i64 | x == 42} should fail
     let source = r#"
-F check_exact(n: {x: i64 | x == 42}) -> i64 {
-    R n
+fn check_exact(n: {x: i64 | x == 42}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R check_exact(10)
+fn main() -> i64 {
+    return check_exact(10)
 }
 "#;
     assert_compile_error(source);
@@ -131,9 +131,9 @@ F main() -> i64 {
 fn e2e_dependent_binding_valid() {
     // Variable binding with dependent type and valid literal
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x: {n: i64 | n > 0} = 10
-    R x
+    return x
 }
 "#;
     assert_exit_code(source, 10);
@@ -143,9 +143,9 @@ F main() -> i64 {
 fn e2e_dependent_binding_violation() {
     // Variable binding with dependent type and invalid literal
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x: {n: i64 | n > 0} = -5
-    R x
+    return x
 }
 "#;
     assert_compile_error(source);
@@ -157,13 +157,13 @@ F main() -> i64 {
 fn e2e_dependent_runtime_passthrough() {
     // Non-literal argument bypasses compile-time check (runtime values)
     let source = r#"
-F check_positive(n: {x: i64 | x > 0}) -> i64 {
-    R n
+fn check_positive(n: {x: i64 | x > 0}) -> i64 {
+    return n
 }
-F get_value() -> i64 { R 42 }
-F main() -> i64 {
+fn get_value() -> i64 { return 42 }
+fn main() -> i64 {
     v := get_value()
-    R check_positive(v)
+    return check_positive(v)
 }
 "#;
     assert_exit_code(source, 42);
@@ -175,11 +175,11 @@ F main() -> i64 {
 fn e2e_dependent_compound_and_valid() {
     // {x: i64 | x >= 0 && x <= 100} with value 50
     let source = r#"
-F bounded(n: {x: i64 | x >= 0 && x <= 100}) -> i64 {
-    R n
+fn bounded(n: {x: i64 | x >= 0 && x <= 100}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R bounded(50)
+fn main() -> i64 {
+    return bounded(50)
 }
 "#;
     assert_exit_code(source, 50);
@@ -189,11 +189,11 @@ F main() -> i64 {
 fn e2e_dependent_compound_and_violation() {
     // {x: i64 | x >= 0 && x <= 100} with value 200 violates upper bound
     let source = r#"
-F bounded(n: {x: i64 | x >= 0 && x <= 100}) -> i64 {
-    R n
+fn bounded(n: {x: i64 | x >= 0 && x <= 100}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R bounded(200)
+fn main() -> i64 {
+    return bounded(200)
 }
 "#;
     assert_compile_error(source);
@@ -203,11 +203,11 @@ F main() -> i64 {
 fn e2e_dependent_compound_or_valid() {
     // {x: i64 | x == 0 || x == 1} with value 1
     let source = r#"
-F binary(n: {x: i64 | x == 0 || x == 1}) -> i64 {
-    R n
+fn binary(n: {x: i64 | x == 0 || x == 1}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R binary(1)
+fn main() -> i64 {
+    return binary(1)
 }
 "#;
     assert_exit_code(source, 1);
@@ -219,11 +219,11 @@ F main() -> i64 {
 fn e2e_dependent_arithmetic_in_body() {
     // Use dependent-typed parameter in arithmetic expression
     let source = r#"
-F double_positive(n: {x: i64 | x > 0}) -> i64 {
-    R n * 2
+fn double_positive(n: {x: i64 | x > 0}) -> i64 {
+    return n * 2
 }
-F main() -> i64 {
-    R double_positive(21)
+fn main() -> i64 {
+    return double_positive(21)
 }
 "#;
     assert_exit_code(source, 42);
@@ -233,11 +233,11 @@ F main() -> i64 {
 fn e2e_dependent_add_positive_values() {
     // Two dependent-typed parameters
     let source = r#"
-F add_pos(a: {x: i64 | x > 0}, b: {y: i64 | y > 0}) -> i64 {
-    R a + b
+fn add_pos(a: {x: i64 | x > 0}, b: {y: i64 | y > 0}) -> i64 {
+    return a + b
 }
-F main() -> i64 {
-    R add_pos(20, 22)
+fn main() -> i64 {
+    return add_pos(20, 22)
 }
 "#;
     assert_exit_code(source, 42);

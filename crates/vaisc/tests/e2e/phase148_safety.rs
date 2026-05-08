@@ -17,11 +17,11 @@ use crate::helpers::assert_exit_code;
 #[test]
 fn e2e_keyword_as_type_param() {
     let source = r#"
-F identity<C>(x: C) -> C {
-    R x
+fn identity<C>(x: C) -> C {
+    return x
 }
-F main() -> i64 {
-    R identity(55)
+fn main() -> i64 {
+    return identity(55)
 }
 "#;
     assert_exit_code(source, 55);
@@ -31,7 +31,7 @@ F main() -> i64 {
 #[test]
 fn e2e_keywords_still_work_as_keywords() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := mut 0
     L {
         x = x + 1
@@ -39,7 +39,7 @@ F main() -> i64 {
             B
         }
     }
-    R x
+    return x
 }
 "#;
     assert_exit_code(source, 3);
@@ -49,11 +49,11 @@ F main() -> i64 {
 #[test]
 fn e2e_return_still_works_as_keyword() {
     let source = r#"
-F add(a: i64, b: i64) -> i64 {
-    R a + b
+fn add(a: i64, b: i64) -> i64 {
+    return a + b
 }
-F main() -> i64 {
-    R add(20, 22)
+fn main() -> i64 {
+    return add(20, 22)
 }
 "#;
     assert_exit_code(source, 42);
@@ -63,10 +63,10 @@ F main() -> i64 {
 #[test]
 fn e2e_keyword_struct_name_definition_compiles() {
     // Struct definition with keyword letter as name succeeds at IR level
-    assert_exit_code("S C { val: i64 }\nF main() -> i64 { R 0 }", 0);
-    assert_exit_code("S B { count: i64 }\nF main() -> i64 { R 0 }", 0);
-    assert_exit_code("S I { flag: i64 }\nF main() -> i64 { R 0 }", 0);
-    assert_exit_code("S M { data: i64 }\nF main() -> i64 { R 0 }", 0);
+    assert_exit_code("struct C { val: i64 }\nF main() -> i64 { R 0 }", 0);
+    assert_exit_code("struct B { count: i64 }\nF main() -> i64 { R 0 }", 0);
+    assert_exit_code("struct I { flag: i64 }\nF main() -> i64 { R 0 }", 0);
+    assert_exit_code("struct M { data: i64 }\nF main() -> i64 { R 0 }", 0);
 }
 
 /// Keyword letter as enum name — definition compiles
@@ -79,8 +79,8 @@ fn e2e_keyword_enum_name_definition_compiles() {
 /// Keyword letter as trait name — definition compiles
 #[test]
 fn e2e_keyword_trait_name_definition_compiles() {
-    assert_exit_code("W X { F foo() -> i64 }\nF main() -> i64 { R 0 }", 0);
-    assert_exit_code("W A { F bar() -> i64 }\nF main() -> i64 { R 0 }", 0);
+    assert_exit_code("trait X { F foo() -> i64 }\nF main() -> i64 { R 0 }", 0);
+    assert_exit_code("trait A { F bar() -> i64 }\nF main() -> i64 { R 0 }", 0);
 }
 
 /// Keyword letter as union name — definition compiles
@@ -94,8 +94,8 @@ fn e2e_keyword_union_name_definition_compiles() {
 fn e2e_keyword_as_type_annotation() {
     // Multi-letter types using keyword first letter still work
     let source = r#"
-F main() -> i64 {
-    R 42
+fn main() -> i64 {
+    return 42
 }
 "#;
     assert_exit_code(source, 42);
@@ -107,14 +107,14 @@ F main() -> i64 {
 #[test]
 fn e2e_match_value_arms() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 2
-    result := M x {
+    result := match x {
         1 => 10,
         2 => 20,
         _ => 30
     }
-    R result
+    return result
 }
 "#;
     assert_exit_code(source, 20);
@@ -124,15 +124,15 @@ F main() -> i64 {
 #[test]
 fn e2e_match_function_call_arms() {
     let source = r#"
-F do_a() -> i64 { R 1 }
-F do_b() -> i64 { R 2 }
-F main() -> i64 {
+fn do_a() -> i64 { return 1 }
+fn do_b() -> i64 { return 2 }
+fn main() -> i64 {
     x := 1
-    result := M x {
+    result := match x {
         1 => do_a(),
         _ => do_b()
     }
-    R result
+    return result
 }
 "#;
     assert_exit_code(source, 1);
@@ -142,14 +142,14 @@ F main() -> i64 {
 #[test]
 fn e2e_match_statement_arms() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 2
-    M x {
+    match x {
         1 => 10,
         2 => 20,
         _ => 30
     }
-    R x
+    return x
 }
 "#;
     assert_exit_code(source, 2);
@@ -159,14 +159,14 @@ F main() -> i64 {
 #[test]
 fn e2e_match_wildcard_default() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 99
-    result := M x {
+    result := match x {
         1 => 10,
         2 => 20,
         _ => 0
     }
-    R result
+    return result
 }
 "#;
     assert_exit_code(source, 0);
@@ -176,16 +176,16 @@ F main() -> i64 {
 #[test]
 fn e2e_match_computed_arms() {
     let source = r#"
-F double(x: i64) -> i64 { R x * 2 }
-F main() -> i64 {
+fn double(x: i64) -> i64 { return x * 2 }
+fn main() -> i64 {
     x := 3
-    result := M x {
+    result := match x {
         1 => double(1),
         2 => double(2),
         3 => double(3),
         _ => 0
     }
-    R result
+    return result
 }
 "#;
     assert_exit_code(source, 6);
@@ -197,12 +197,12 @@ F main() -> i64 {
 #[test]
 fn e2e_move_semantics_basic_compiles() {
     let source = r#"
-S Point { x: i64, y: i64 }
-F use_point(p: Point) -> i64 { R p.x + p.y }
-F main() -> i64 {
+struct Point { x: i64, y: i64 }
+fn use_point(p: Point) -> i64 { return p.x + p.y }
+fn main() -> i64 {
     p := Point { x: 1, y: 2 }
     result := use_point(p)
-    R result
+    return result
 }
 "#;
     assert_exit_code(source, 3);
@@ -212,11 +212,11 @@ F main() -> i64 {
 #[test]
 fn e2e_move_semantics_no_reuse_compiles() {
     let source = r#"
-S Data { val: i64 }
-F take(d: Data) -> i64 { R d.val }
-F main() -> i64 {
+struct Data { val: i64 }
+fn take(d: Data) -> i64 { return d.val }
+fn main() -> i64 {
     d := Data { val: 42 }
-    R take(d)
+    return take(d)
 }
 "#;
     assert_exit_code(source, 42);
@@ -226,12 +226,12 @@ F main() -> i64 {
 #[test]
 fn e2e_move_semantics_primitive_copy() {
     let source = r#"
-F double(x: i64) -> i64 { R x * 2 }
-F main() -> i64 {
+fn double(x: i64) -> i64 { return x * 2 }
+fn main() -> i64 {
     x := 21
     a := double(x)
     b := double(x)
-    R a + b - 42
+    return a + b - 42
 }
 "#;
     assert_exit_code(source, 42);
@@ -241,11 +241,11 @@ F main() -> i64 {
 #[test]
 fn e2e_move_semantics_struct_and_primitive() {
     let source = r#"
-S Pair { a: i64, b: i64 }
-F sum_pair(p: Pair, extra: i64) -> i64 { R p.a + p.b + extra }
-F main() -> i64 {
+struct Pair { a: i64, b: i64 }
+fn sum_pair(p: Pair, extra: i64) -> i64 { return p.a + p.b + extra }
+fn main() -> i64 {
     p := Pair { a: 10, b: 20 }
-    R sum_pair(p, 12)
+    return sum_pair(p, 12)
 }
 "#;
     assert_exit_code(source, 42);

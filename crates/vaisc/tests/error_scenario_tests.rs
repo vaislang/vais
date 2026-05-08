@@ -108,12 +108,12 @@ fn assert_exit_code(source: &str, expected: i32) {
 
 #[test]
 fn error_undefined_variable() {
-    assert_error_contains("F main() -> i64 = unknown_var", "Undefined");
+    assert_error_contains("fn main() -> i64 = unknown_var", "Undefined");
 }
 
 #[test]
 fn error_undefined_function_call() {
-    assert_error_contains("F main() -> i64 = unknown_func(42)", "Undefined");
+    assert_error_contains("fn main() -> i64 = unknown_func(42)", "Undefined");
 }
 
 // ==================== Type Mismatch Errors ====================
@@ -160,7 +160,7 @@ fn main() -> i64 = 1
 #[test]
 fn error_missing_return_type_unconstrained() {
     // Phase 61: Function with unconstrained parameters should fail
-    assert_compile_error("F add(a, b) { a + b }");
+    assert_compile_error("fn add(a, b) { a + b }");
 }
 
 #[test]
@@ -170,7 +170,7 @@ fn error_recursive_without_return_type() {
     // So this actually compiles successfully with inferred types
     // Wrap with main() to verify execution: fib(10) = 55
     assert_exit_code(
-        "F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)\nF main() -> i64 = fib(10)",
+        "fn fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)\nF main() -> i64 = fib(10)",
         55,
     );
 }
@@ -191,7 +191,7 @@ fn main() -> i64 {
 #[test]
 fn error_unknown_struct_type() {
     assert_error_contains(
-        "F main() -> i64 { p := UnknownStruct { x: 1 }; 0 }",
+        "fn main() -> i64 { p := UnknownStruct { x: 1 }; 0 }",
         "Unknown",
     );
 }
@@ -233,12 +233,12 @@ fn main() -> i64 {
 
 #[test]
 fn error_break_outside_loop() {
-    assert_error_contains("F main() -> i64 { B; 0 }", "break");
+    assert_error_contains("fn main() -> i64 { B; 0 }", "break");
 }
 
 #[test]
 fn error_continue_outside_loop() {
-    assert_error_contains("F main() -> i64 { C; 0 }", "continue");
+    assert_error_contains("fn main() -> i64 { C; 0 }", "continue");
 }
 
 #[test]
@@ -258,13 +258,13 @@ fn main() -> i64 {
 #[test]
 fn error_empty_function_body() {
     // Function with empty body should fail if return type is not ()
-    assert_compile_error("F main() -> i64 { }");
+    assert_compile_error("fn main() -> i64 { }");
 }
 
 #[test]
 fn error_division_by_zero_literal() {
     // Some compilers detect this at compile time
-    let source = "F main() -> i64 = 42 / 0";
+    let source = "fn main() -> i64 = 42 / 0";
     // This may or may not be caught at compile time depending on implementation
     // For now, we just try to compile it - it might succeed and fail at runtime
     let result = compile_to_ir(source);
@@ -296,7 +296,7 @@ fn positive_explicit_types() {
     // With explicit types, should always compile and run
     // Wrap with main() to verify execution: add(20, 22) = 42
     assert_exit_code(
-        "F add(a: i64, b: i64) -> i64 { R a + b }\nF main() -> i64 = add(20, 22)",
+        "fn add(a: i64, b: i64) -> i64 { R a + b }\nF main() -> i64 = add(20, 22)",
         42,
     );
 }
@@ -307,7 +307,7 @@ fn positive_explicit_types() {
 fn error_unknown_enum_variant() {
     // Note: This tests enum variant validation
     let source = r#"
-E Color { Red, Blue }
+enum Color { Red, Blue }
 fn main() -> i64 {
     c := Red
     match c {

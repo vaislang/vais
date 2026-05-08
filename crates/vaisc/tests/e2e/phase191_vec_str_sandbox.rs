@@ -18,7 +18,7 @@ use super::helpers::*;
 fn e2e_phase191_vec_str_push_literal_only() {
     assert_exit_code(
         r#"
-S Vec<T> {
+struct Vec<T> {
     data: i64,
     len: i64,
     cap: i64,
@@ -26,9 +26,9 @@ S Vec<T> {
     owned: i64
 }
 
-X Vec<T> {
-    F grow(&self) -> i64 {
-        new_cap := I self.cap * 2 < 8 { 8 } EL { self.cap * 2 }
+impl Vec<T> {
+    fn grow(&self) -> i64 {
+        new_cap := I self.cap * 2 < 8 { 8 } else { self.cap * 2 }
         new_data := malloc(new_cap * self.elem_size)
         memcpy(new_data, self.data, self.len * self.elem_size)
         free(self.data)
@@ -37,7 +37,7 @@ X Vec<T> {
         new_cap
     }
 
-    F push(&self, value: T) -> i64 {
+    fn push(&self, value: T) -> i64 {
         I self.len >= self.cap { @.grow() }
         ptr := self.data + self.len * self.elem_size
         store_typed(ptr, value)
@@ -45,10 +45,10 @@ X Vec<T> {
         self.len
     }
 
-    F drop(&self) -> i64 { free(self.data); self.data = 0; 0 }
+    fn drop(&self) -> i64 { free(self.data); self.data = 0; 0 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<str> := Vec { data: 0, len: 0, cap: 0, elem_size: 16, owned: 0 }
     v.push("hi")
     v.push("bye")
@@ -70,7 +70,7 @@ F main() -> i64 {
 fn e2e_phase191_vec_str_push_concat_drop() {
     assert_exit_code(
         r#"
-S Vec<T> {
+struct Vec<T> {
     data: i64,
     len: i64,
     cap: i64,
@@ -78,9 +78,9 @@ S Vec<T> {
     owned: i64
 }
 
-X Vec<T> {
-    F grow(&self) -> i64 {
-        new_cap := I self.cap * 2 < 8 { 8 } EL { self.cap * 2 }
+impl Vec<T> {
+    fn grow(&self) -> i64 {
+        new_cap := I self.cap * 2 < 8 { 8 } else { self.cap * 2 }
         new_data := malloc(new_cap * self.elem_size)
         memcpy(new_data, self.data, self.len * self.elem_size)
         free(self.data)
@@ -89,7 +89,7 @@ X Vec<T> {
         new_cap
     }
 
-    F push(&self, value: T) -> i64 {
+    fn push(&self, value: T) -> i64 {
         I self.len >= self.cap { @.grow() }
         ptr := self.data + self.len * self.elem_size
         store_typed(ptr, value)
@@ -97,10 +97,10 @@ X Vec<T> {
         self.len
     }
 
-    F drop(&self) -> i64 { free(self.data); self.data = 0; 0 }
+    fn drop(&self) -> i64 { free(self.data); self.data = 0; 0 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<str> := Vec { data: 0, len: 0, cap: 0, elem_size: 16, owned: 0 }
     i := mut 0
     L i < 100 {
@@ -125,7 +125,7 @@ F main() -> i64 {
 fn e2e_phase191_vec_str_push_mixed_literal_heap() {
     assert_exit_code(
         r#"
-S Vec<T> {
+struct Vec<T> {
     data: i64,
     len: i64,
     cap: i64,
@@ -133,9 +133,9 @@ S Vec<T> {
     owned: i64
 }
 
-X Vec<T> {
-    F grow(&self) -> i64 {
-        new_cap := I self.cap * 2 < 8 { 8 } EL { self.cap * 2 }
+impl Vec<T> {
+    fn grow(&self) -> i64 {
+        new_cap := I self.cap * 2 < 8 { 8 } else { self.cap * 2 }
         new_data := malloc(new_cap * self.elem_size)
         memcpy(new_data, self.data, self.len * self.elem_size)
         free(self.data)
@@ -144,7 +144,7 @@ X Vec<T> {
         new_cap
     }
 
-    F push(&self, value: T) -> i64 {
+    fn push(&self, value: T) -> i64 {
         I self.len >= self.cap { @.grow() }
         ptr := self.data + self.len * self.elem_size
         store_typed(ptr, value)
@@ -152,10 +152,10 @@ X Vec<T> {
         self.len
     }
 
-    F drop(&self) -> i64 { free(self.data); self.data = 0; 0 }
+    fn drop(&self) -> i64 { free(self.data); self.data = 0; 0 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<str> := Vec { data: 0, len: 0, cap: 0, elem_size: 16, owned: 0 }
     v.push("literal-a")
     owned1 := "heap-" + "one"

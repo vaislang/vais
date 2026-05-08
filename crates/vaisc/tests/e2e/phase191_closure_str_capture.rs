@@ -7,11 +7,11 @@ use super::helpers::*;
 fn e2e_phase191_closure_capture_concat_str() {
     assert_exit_code(
         r#"
-F use_closure(f: fn(i64) -> i64) -> i64 {
+fn use_closure(f: fn(i64) -> i64) -> i64 {
     f(0)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     greeting := "hello-" + "world"
     f := |x: i64| x
     use_closure(f)
@@ -26,7 +26,7 @@ F main() -> i64 {
 fn e2e_phase191_closure_capture_literal_str() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     msg := "static"
     f := |x: i64| x + 2
     f(40)

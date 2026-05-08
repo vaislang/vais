@@ -17,19 +17,19 @@ use super::helpers::*;
 fn e2e_p47_enum_three_data_variants() {
     // Enum with three data-carrying variants
     let source = r#"
-E Expr {
+enum Expr {
     Lit(i64),
     Add(i64, i64),
     Mul(i64, i64)
 }
-F eval(e: Expr) -> i64 {
-    M e {
+fn eval(e: Expr) -> i64 {
+    match e {
         Lit(n) => n,
         Add(a, b) => a + b,
         Mul(a, b) => a * b
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     eval(Mul(6, 7))
 }
 "#;
@@ -42,19 +42,19 @@ F main() -> i64 {
 #[test]
 fn e2e_p47_enum_match_add_variant() {
     let source = r#"
-E Op {
+enum Op {
     Lit(i64),
     Add(i64, i64),
     Sub(i64, i64)
 }
-F eval(op: Op) -> i64 {
-    M op {
+fn eval(op: Op) -> i64 {
+    match op {
         Lit(n) => n,
         Add(a, b) => a + b,
         Sub(a, b) => a - b
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     eval(Add(10, 25))
 }
 "#;
@@ -68,8 +68,8 @@ F main() -> i64 {
 fn e2e_p47_match_many_literals() {
     // Match with 6 literal arms
     let source = r#"
-F day_code(d: i64) -> i64 {
-    M d {
+fn day_code(d: i64) -> i64 {
+    match d {
         1 => 10,
         2 => 20,
         3 => 30,
@@ -78,7 +78,7 @@ F day_code(d: i64) -> i64 {
         _ => 0
     }
 }
-F main() -> i64 { day_code(4) }
+fn main() -> i64 { day_code(4) }
 "#;
     assert_exit_code(source, 40);
 }
@@ -89,8 +89,8 @@ F main() -> i64 { day_code(4) }
 fn e2e_p47_match_guard_variable() {
     // Guard expression referencing matched variable
     let source = r#"
-F grade(score: i64) -> i64 {
-    M score {
+fn grade(score: i64) -> i64 {
+    match score {
         x I x >= 90 => 5,
         x I x >= 80 => 4,
         x I x >= 70 => 3,
@@ -98,7 +98,7 @@ F grade(score: i64) -> i64 {
         _ => 1
     }
 }
-F main() -> i64 { grade(85) }
+fn main() -> i64 { grade(85) }
 "#;
     assert_exit_code(source, 4);
 }
@@ -109,8 +109,8 @@ F main() -> i64 { grade(85) }
 fn e2e_p47_match_block_arm_bodies() {
     // Match arms with block bodies that compute values
     let source = r#"
-F check(n: i64) -> i64 {
-    M n {
+fn check(n: i64) -> i64 {
+    match n {
         0 => {
             x := 50
             x * 2
@@ -122,7 +122,7 @@ F check(n: i64) -> i64 {
         _ => 0
     }
 }
-F main() -> i64 { check(0) }
+fn main() -> i64 { check(0) }
 "#;
     assert_exit_code(source, 100);
 }
@@ -133,9 +133,9 @@ F main() -> i64 { check(0) }
 fn e2e_p47_match_result_assigned() {
     // Match expression result stored in variable
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 3
-    label := M x {
+    label := match x {
         1 => 10,
         2 => 20,
         3 => 30,
@@ -154,15 +154,15 @@ F main() -> i64 {
 fn e2e_p47_nested_if_in_match() {
     // If-else inside a match arm body
     let source = r#"
-F process(n: i64) -> i64 {
-    M n {
+fn process(n: i64) -> i64 {
+    match n {
         x I x > 0 => {
-            I x > 50 { 3 } E { 2 }
+            I x > 50 { 3 } else { 2 }
         },
         _ => 1
     }
 }
-F main() -> i64 { process(25) }
+fn main() -> i64 { process(25) }
 "#;
     assert_exit_code(source, 2);
 }
@@ -173,9 +173,9 @@ F main() -> i64 { process(25) }
 fn e2e_p47_match_on_fn_result() {
     // Match applied to a function's return value
     let source = r#"
-F compute(a: i64, b: i64) -> i64 { a + b }
-F main() -> i64 {
-    M compute(3, 7) {
+fn compute(a: i64, b: i64) -> i64 { a + b }
+fn main() -> i64 {
+    match compute(3, 7) {
         10 => 1,
         20 => 2,
         _ => 0
@@ -192,21 +192,21 @@ F main() -> i64 {
 fn e2e_p47_enum_all_unit_arms() {
     // Exercise every arm of a 4-variant enum
     let source = r#"
-E Season {
+enum Season {
     Spring,
     Summer,
     Autumn,
     Winter
 }
-F temp(s: Season) -> i64 {
-    M s {
+fn temp(s: Season) -> i64 {
+    match s {
         Spring => 15,
         Summer => 30,
         Autumn => 10,
         Winter => 0
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     temp(Summer) + temp(Winter)
 }
 "#;
@@ -220,12 +220,12 @@ F main() -> i64 {
 fn e2e_p47_struct_method_calls_fn() {
     // Method body calls a free (non-method) function
     let source = r#"
-F square(x: i64) -> i64 { x * x }
-S Num { val: i64 }
-X Num {
-    F squared(self) -> i64 { square(self.val) }
+fn square(x: i64) -> i64 { x * x }
+struct Num { val: i64 }
+impl Num {
+    fn squared(self) -> i64 { square(self.val) }
 }
-F main() -> i64 {
+fn main() -> i64 {
     n := Num { val: 8 }
     n.squared()
 }
@@ -240,13 +240,13 @@ F main() -> i64 {
 fn e2e_p47_struct_method_three_params() {
     // Method with three extra parameters beyond self
     let source = r#"
-S Acc { base: i64 }
-X Acc {
-    F add3(self, a: i64, b: i64, c: i64) -> i64 {
+struct Acc { base: i64 }
+impl Acc {
+    fn add3(self, a: i64, b: i64, c: i64) -> i64 {
         self.base + a + b + c
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     a := Acc { base: 10 }
     a.add3(1, 2, 3)
 }
@@ -261,17 +261,17 @@ F main() -> i64 {
 fn e2e_p47_enum_data_arithmetic() {
     // Arithmetic performed on data extracted from enum variant
     let source = r#"
-E Item {
+enum Item {
     Priced(i64),
     Free
 }
-F cost(item: Item) -> i64 {
-    M item {
+fn cost(item: Item) -> i64 {
+    match item {
         Priced(p) => p * 2,
         Free => 0
     }
 }
-F main() -> i64 { cost(Priced(25)) }
+fn main() -> i64 { cost(Priced(25)) }
 "#;
     // 25 * 2 = 50
     assert_exit_code(source, 50);
@@ -283,14 +283,14 @@ F main() -> i64 { cost(Priced(25)) }
 fn e2e_p47_match_wildcard_computation() {
     // Wildcard arm does computation rather than constant
     let source = r#"
-F transform(n: i64) -> i64 {
-    M n {
+fn transform(n: i64) -> i64 {
+    match n {
         0 => 100,
         1 => 50,
         x => x * 3
     }
 }
-F main() -> i64 { transform(9) }
+fn main() -> i64 { transform(9) }
 "#;
     // 9 * 3 = 27
     assert_exit_code(source, 27);
@@ -302,19 +302,19 @@ F main() -> i64 { transform(9) }
 fn e2e_p47_enum_is_some_pattern() {
     // Enum method that checks if a variant has data
     let source = r#"
-E Maybe {
+enum Maybe {
     Just(i64),
     Empty
 }
-X Maybe {
-    F is_just(self) -> i64 {
-        M self {
+impl Maybe {
+    fn is_just(self) -> i64 {
+        match self {
             Just(_) => 1,
             Empty => 0
         }
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     a := Just(42)
     b := Empty
     a.is_just() + b.is_just()
@@ -330,13 +330,13 @@ F main() -> i64 {
 fn e2e_p47_struct_method_returns_conditional() {
     // Method returns result of if-else
     let source = r#"
-S Limit { max: i64 }
-X Limit {
-    F clamp(self, val: i64) -> i64 {
-        I val > self.max { self.max } E { val }
+struct Limit { max: i64 }
+impl Limit {
+    fn clamp(self, val: i64) -> i64 {
+        I val > self.max { self.max } else { val }
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     lim := Limit { max: 50 }
     lim.clamp(30) + lim.clamp(100)
 }
@@ -351,13 +351,13 @@ F main() -> i64 {
 fn e2e_p47_match_in_loop() {
     // Match expression evaluated each iteration
     let source = r#"
-F classify(n: i64) -> i64 {
-    M n {
+fn classify(n: i64) -> i64 {
+    match n {
         x I x > 3 => 10,
         _ => 1
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     total := mut 0
     L i:0..6 {
         total = total + classify(i)
@@ -375,17 +375,17 @@ F main() -> i64 {
 fn e2e_p47_enum_two_field_match() {
     // Enum variant with two fields, both destructured
     let source = r#"
-E Pair {
+enum Pair {
     Both(i64, i64),
     Single(i64)
 }
-F sum_pair(p: Pair) -> i64 {
-    M p {
+fn sum_pair(p: Pair) -> i64 {
+    match p {
         Both(a, b) => a + b,
         Single(x) => x
     }
 }
-F main() -> i64 { sum_pair(Both(17, 28)) }
+fn main() -> i64 { sum_pair(Both(17, 28)) }
 "#;
     // 17 + 28 = 45
     assert_exit_code(source, 45);
@@ -397,15 +397,15 @@ F main() -> i64 { sum_pair(Both(17, 28)) }
 fn e2e_p47_multiple_structs_methods() {
     // Two different structs, each with methods
     let source = r#"
-S Foo { x: i64 }
-S Bar { y: i64 }
-X Foo {
-    F val(self) -> i64 { self.x }
+struct Foo { x: i64 }
+struct Bar { y: i64 }
+impl Foo {
+    fn val(self) -> i64 { self.x }
 }
-X Bar {
-    F val(self) -> i64 { self.y * 2 }
+impl Bar {
+    fn val(self) -> i64 { self.y * 2 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     f := Foo { x: 5 }
     b := Bar { y: 10 }
     f.val() + b.val()
@@ -421,8 +421,8 @@ F main() -> i64 {
 fn e2e_p47_match_all_arms_return() {
     // Verify all match arms return consistent types
     let source = r#"
-F pick(n: i64) -> i64 {
-    M n {
+fn pick(n: i64) -> i64 {
+    match n {
         0 => 10,
         1 => 20,
         2 => 30,
@@ -430,7 +430,7 @@ F pick(n: i64) -> i64 {
         _ => 50
     }
 }
-F main() -> i64 { pick(2) + pick(99) }
+fn main() -> i64 { pick(2) + pick(99) }
 "#;
     // pick(2)=30, pick(99)=50, 30+50=80
     assert_exit_code(source, 80);
@@ -442,11 +442,11 @@ F main() -> i64 { pick(2) + pick(99) }
 fn e2e_p47_struct_field_update_method() {
     // Mutable struct field updated, then method called
     let source = r#"
-S Count { n: i64 }
-X Count {
-    F get(self) -> i64 { self.n }
+struct Count { n: i64 }
+impl Count {
+    fn get(self) -> i64 { self.n }
 }
-F main() -> i64 {
+fn main() -> i64 {
     c := mut Count { n: 0 }
     c.n = 42
     c.get()
@@ -461,18 +461,18 @@ F main() -> i64 {
 fn e2e_p47_enum_match_or_pattern() {
     // Or-pattern matching multiple enum variants
     let source = r#"
-E Light {
+enum Light {
     Red,
     Yellow,
     Green
 }
-F should_stop(l: Light) -> i64 {
-    M l {
+fn should_stop(l: Light) -> i64 {
+    match l {
         Red | Yellow => 1,
         Green => 0
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     should_stop(Yellow) + should_stop(Green)
 }
 "#;
@@ -486,9 +486,9 @@ F main() -> i64 {
 fn e2e_p47_match_on_bool() {
     // Match on a boolean expression
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
-    M x > 5 {
+    match x > 5 {
         true => 1,
         false => 0
     }
@@ -503,9 +503,9 @@ F main() -> i64 {
 fn e2e_p47_struct_method_with_loop() {
     // Method body contains a loop
     let source = r#"
-S Range { n: i64 }
-X Range {
-    F sum_to(self) -> i64 {
+struct Range { n: i64 }
+impl Range {
+    fn sum_to(self) -> i64 {
         total := mut 0
         L i:1..self.n+1 {
             total = total + i
@@ -513,7 +513,7 @@ X Range {
         total
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     r := Range { n: 5 }
     r.sum_to()
 }
@@ -528,19 +528,19 @@ F main() -> i64 {
 fn e2e_p47_enum_variant_to_fn() {
     // Enum variant constructed inline and passed to function
     let source = r#"
-E Cmd {
+enum Cmd {
     Inc(i64),
     Dec(i64),
     Reset
 }
-F apply(cmd: Cmd, val: i64) -> i64 {
-    M cmd {
+fn apply(cmd: Cmd, val: i64) -> i64 {
+    match cmd {
         Inc(n) => val + n,
         Dec(n) => val - n,
         Reset => 0
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     v := apply(Inc(5), 10)
     apply(Dec(3), v)
 }
@@ -555,14 +555,14 @@ F main() -> i64 {
 fn e2e_p47_multiple_matches() {
     // Two match expressions computed sequentially
     let source = r#"
-F main() -> i64 {
-    a := M 3 {
+fn main() -> i64 {
+    a := match 3 {
         1 => 10,
         2 => 20,
         3 => 30,
         _ => 0
     }
-    b := M 5 {
+    b := match 5 {
         x I x > 4 => 50,
         _ => 0
     }
@@ -579,17 +579,17 @@ F main() -> i64 {
 fn e2e_p47_struct_method_returns_match() {
     // Method body is a match expression
     let source = r#"
-S Selector { choice: i64 }
-X Selector {
-    F select(self) -> i64 {
-        M self.choice {
+struct Selector { choice: i64 }
+impl Selector {
+    fn select(self) -> i64 {
+        match self.choice {
             1 => 100,
             2 => 200,
             _ => 0
         }
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     s := Selector { choice: 2 }
     s.select()
 }

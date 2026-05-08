@@ -27,7 +27,7 @@ use super::helpers::*;
 fn e2e_phase191_loop_body_concat_no_leak() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
   i := mut 0
   L i < 100000 {
     a := "abcdefghij"
@@ -52,7 +52,7 @@ F main() -> i64 {
 fn e2e_phase191_nested_block_string_transfer() {
     assert_stdout_contains(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
   s := {
     inner := "hello " + "world"
     inner
@@ -72,7 +72,7 @@ F main() -> i64 {
 fn e2e_phase191_loop_then_concat_still_correct() {
     assert_stdout_contains(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
   i := mut 0
   L i < 100 {
     a := "x"
@@ -98,18 +98,18 @@ F main() -> i64 {
 fn e2e_phase191_if_with_nested_let_binding_true() {
     assert_stdout_contains(
         r#"
-F build(c: bool) -> str {
+fn build(c: bool) -> str {
   msg := I c {
     s := "aa" + "bb"
     s
-  } E {
+  } else {
     s := "cc" + "dd"
     s
   }
-  R msg
+  return msg
 }
 
-F main() -> i64 {
+fn main() -> i64 {
   println(build(true))
   0
 }
@@ -122,18 +122,18 @@ F main() -> i64 {
 fn e2e_phase191_if_with_nested_let_binding_false() {
     assert_stdout_contains(
         r#"
-F build(c: bool) -> str {
+fn build(c: bool) -> str {
   msg := I c {
     s := "aa" + "bb"
     s
-  } E {
+  } else {
     s := "cc" + "dd"
     s
   }
-  R msg
+  return msg
 }
 
-F main() -> i64 {
+fn main() -> i64 {
   println(build(false))
   0
 }
@@ -155,7 +155,7 @@ F main() -> i64 {
 fn e2e_phase191_break_frees_scope_strings() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
   i := mut 0
   L i < 100000 {
     a := "abcdefghij"
@@ -182,7 +182,7 @@ F main() -> i64 {
 fn e2e_phase191_continue_frees_scope_strings() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
   i := mut 0
   j := mut 0
   L i < 100000 {
@@ -213,7 +213,7 @@ F main() -> i64 {
 fn transfer_slot_ident_fallback_no_uaf() {
     assert_stdout_contains(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
   s := {
     a := "hello-"
     b := "world"
@@ -235,7 +235,7 @@ F main() -> i64 {
 fn e2e_phase191_loop_body_substring_no_leak() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
   i := mut 0
   L i < 100000 {
     s := "abcdefghij"
@@ -255,7 +255,7 @@ F main() -> i64 {
 fn e2e_phase191_loop_body_push_str_no_leak() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
   i := mut 0
   L i < 100000 {
     _s := "hello".push_str("world")
@@ -277,8 +277,8 @@ F main() -> i64 {
 fn e2e_phase191_match_arm_concat_phi() {
     assert_stdout_contains(
         r#"
-F build(n: i64) -> str {
-  msg := M n {
+fn build(n: i64) -> str {
+  msg := match n {
     1 => {
       s := "aa" + "bb"
       s
@@ -288,10 +288,10 @@ F build(n: i64) -> str {
       s
     }
   }
-  R msg
+  return msg
 }
 
-F main() -> i64 {
+fn main() -> i64 {
   println(build(1))
   println(build(2))
   0
@@ -309,7 +309,7 @@ F main() -> i64 {
 fn e2e_phase191_break_before_concat_no_leak() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
   i := mut 0
   L i < 100000 {
     _first := "abcde" + "fghij"

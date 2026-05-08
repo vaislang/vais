@@ -68,7 +68,7 @@ fn e2e_p128_err_type_mismatch_if_branches() {
     assert_error_contains(
         r#"
 fn main() -> i64 {
-    I true { "hello" } E { 42 }
+    I true { "hello" } else { 42 }
 }
 "#,
         "mismatch",
@@ -139,7 +139,7 @@ fn main() -> i64 {
 fn e2e_p128_err_undef_enum_variant() {
     assert_error_contains(
         r#"
-E Color { Red, Green, Blue }
+enum Color { Red, Green, Blue }
 fn main() -> i64 {
     c := Yellow
     return 0
@@ -198,8 +198,8 @@ fn main() -> i64 {
 fn e2e_p128_err_duplicate_enum() {
     assert_compile_error(
         r#"
-E Dir { Up, Down }
-E Dir { Left, Right }
+enum Dir { Up, Down }
+enum Dir { Left, Right }
 fn main() -> i64 = 0
 "#,
     );
@@ -421,7 +421,7 @@ fn e2e_p128_err_return_string_for_int() {
 
 #[test]
 fn e2e_p128_err_empty_body_with_return_type() {
-    assert_compile_error("F main() -> i64 { }");
+    assert_compile_error("fn main() -> i64 { }");
 }
 
 #[test]
@@ -493,7 +493,7 @@ fn main() -> i64 {
 fn e2e_p128_err_positive_valid_enum() {
     assert_exit_code(
         r#"
-E Shape { Circle, Square, Triangle }
+enum Shape { Circle, Square, Triangle }
 fn main() -> i64 {
     s := Square
     match s {
@@ -599,7 +599,7 @@ fn e2e_p128_err_positive_if_else() {
         r#"
 fn main() -> i64 {
     x := 10
-    I x > 5 { 42 } E { 0 }
+    I x > 5 { 42 } else { 0 }
 }
 "#,
         42,
@@ -655,7 +655,7 @@ fn e2e_p128_err_positive_bool_logic() {
     assert_exit_code(
         r#"
 fn main() -> i64 {
-    I true && true { 42 } E { 0 }
+    I true && true { 42 } else { 0 }
 }
 "#,
         42,

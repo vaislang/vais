@@ -31,22 +31,22 @@ use crate::helpers::{
 #[test]
 fn implicit_try_result_ok_path() {
     let source = r#"
-E Result { Ok(i64), Err(i64) }
+enum Result { Ok(i64), Err(i64) }
 
-F parse_num() -> Result {
-    R Ok(42)
+fn parse_num() -> Result {
+    return Ok(42)
 }
 
-F add_one(x: i64) -> i64 {
-    R x + 1
+fn add_one(x: i64) -> i64 {
+    return x + 1
 }
 
-F double() -> Result {
-    R Ok(add_one(parse_num()))
+fn double() -> Result {
+    return Ok(add_one(parse_num()))
 }
 
-F main() -> i64 {
-    M double() {
+fn main() -> i64 {
+    match double() {
         Ok(v) => v,
         Err(_) => 1
     }
@@ -60,22 +60,22 @@ F main() -> i64 {
 #[test]
 fn implicit_try_result_err_propagates() {
     let source = r#"
-E Result { Ok(i64), Err(i64) }
+enum Result { Ok(i64), Err(i64) }
 
-F parse_num() -> Result {
-    R Err(7)
+fn parse_num() -> Result {
+    return Err(7)
 }
 
-F add_one(x: i64) -> i64 {
-    R x + 1
+fn add_one(x: i64) -> i64 {
+    return x + 1
 }
 
-F double() -> Result {
-    R Ok(add_one(parse_num()))
+fn double() -> Result {
+    return Ok(add_one(parse_num()))
 }
 
-F main() -> i64 {
-    M double() {
+fn main() -> i64 {
+    match double() {
         Ok(_) => 0,
         Err(e) => e + 90
     }
@@ -88,22 +88,22 @@ F main() -> i64 {
 #[test]
 fn implicit_try_option_some_path() {
     let source = r#"
-E Option { Some(i64), None }
+enum Option { Some(i64), None }
 
-F find_val() -> Option {
-    R Some(7)
+fn find_val() -> Option {
+    return Some(7)
 }
 
-F square(x: i64) -> i64 {
-    R x * x
+fn square(x: i64) -> i64 {
+    return x * x
 }
 
-F caller() -> Option {
-    R Some(square(find_val()))
+fn caller() -> Option {
+    return Some(square(find_val()))
 }
 
-F main() -> i64 {
-    M caller() {
+fn main() -> i64 {
+    match caller() {
         Some(v) => v,
         None => 1
     }
@@ -117,22 +117,22 @@ F main() -> i64 {
 #[test]
 fn implicit_try_option_none_propagates() {
     let source = r#"
-E Option { Some(i64), None }
+enum Option { Some(i64), None }
 
-F find_val() -> Option {
-    R None
+fn find_val() -> Option {
+    return None
 }
 
-F square(x: i64) -> i64 {
-    R x * x
+fn square(x: i64) -> i64 {
+    return x * x
 }
 
-F caller() -> Option {
-    R Some(square(find_val()))
+fn caller() -> Option {
+    return Some(square(find_val()))
 }
 
-F main() -> i64 {
-    M caller() {
+fn main() -> i64 {
+    match caller() {
         Some(v) => v,
         None => 55
     }
@@ -148,22 +148,22 @@ F main() -> i64 {
 #[test]
 fn implicit_try_does_not_double_wrap_explicit_try() {
     let source = r#"
-E Result { Ok(i64), Err(i64) }
+enum Result { Ok(i64), Err(i64) }
 
-F parse_num() -> Result {
-    R Ok(10)
+fn parse_num() -> Result {
+    return Ok(10)
 }
 
-F add_one(x: i64) -> i64 {
-    R x + 1
+fn add_one(x: i64) -> i64 {
+    return x + 1
 }
 
-F double() -> Result {
-    R Ok(add_one(parse_num()?))
+fn double() -> Result {
+    return Ok(add_one(parse_num()?))
 }
 
-F main() -> i64 {
-    M double() {
+fn main() -> i64 {
+    match double() {
         Ok(v) => v,
         Err(_) => 1
     }
@@ -180,18 +180,18 @@ F main() -> i64 {
 #[test]
 fn implicit_try_rejects_plain_return_type() {
     let source = r#"
-E Result { Ok(i64), Err(i64) }
+enum Result { Ok(i64), Err(i64) }
 
-F parse_num() -> Result {
-    R Ok(42)
+fn parse_num() -> Result {
+    return Ok(42)
 }
 
-F add_one(x: i64) -> i64 {
-    R x + 1
+fn add_one(x: i64) -> i64 {
+    return x + 1
 }
 
-F main() -> i64 {
-    R add_one(parse_num())
+fn main() -> i64 {
+    return add_one(parse_num())
 }
 "#;
     assert_compile_error_implicit_try(source);
@@ -205,22 +205,22 @@ F main() -> i64 {
 #[test]
 fn implicit_try_off_rejects_result_to_i64_param() {
     let source = r#"
-E Result { Ok(i64), Err(i64) }
+enum Result { Ok(i64), Err(i64) }
 
-F parse_num() -> Result {
-    R Ok(42)
+fn parse_num() -> Result {
+    return Ok(42)
 }
 
-F add_one(x: i64) -> i64 {
-    R x + 1
+fn add_one(x: i64) -> i64 {
+    return x + 1
 }
 
-F double() -> Result {
-    R Ok(add_one(parse_num()))
+fn double() -> Result {
+    return Ok(add_one(parse_num()))
 }
 
-F main() -> i64 {
-    M double() {
+fn main() -> i64 {
+    match double() {
         Ok(v) => v,
         Err(_) => 1
     }

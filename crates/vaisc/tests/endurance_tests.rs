@@ -28,22 +28,22 @@ impl MemorySnapshot {
 /// Generate simple Vais code for repeated compilation
 fn generate_simple_program() -> String {
     r#"
-F add(a: i64, b: i64) -> i64 {
-    R a + b
+fn add(a: i64, b: i64) -> i64 {
+    return a + b
 }
 
-F multiply(x: i64, y: i64) -> i64 {
-    R x * y
+fn multiply(x: i64, y: i64) -> i64 {
+    return x * y
 }
 
-F compute(n: i64) -> i64 {
+fn compute(n: i64) -> i64 {
     a := add(n, 10)
     b := multiply(a, 2)
-    R b
+    return b
 }
 
-F main() -> i64 {
-    R compute(42)
+fn main() -> i64 {
+    return compute(42)
 }
 "#
     .to_string()
@@ -54,12 +54,12 @@ fn generate_incremental_program(iteration: usize) -> String {
     let mut code = String::new();
 
     // Base function
-    code.push_str("F base(x: i64) -> i64 {\n    R x + 1\n}\n\n");
+    code.push_str("fn base(x: i64) -> i64 {\n    R x + 1\n}\n\n");
 
     // Add one function per iteration
     for i in 0..=iteration {
         code.push_str(&format!(
-            "F func{}(x: i64) -> i64 {{\n    R x * {} + {}\n}}\n\n",
+            "fn func{}(x: i64) -> i64 {{\n    R x * {} + {}\n}}\n\n",
             i,
             i % 10 + 1,
             i
@@ -68,7 +68,7 @@ fn generate_incremental_program(iteration: usize) -> String {
 
     // Main function that calls the latest function
     code.push_str(&format!(
-        "F main() -> i64 {{\n    R func{}(42)\n}}\n",
+        "fn main() -> i64 {{\n    R func{}(42)\n}}\n",
         iteration
     ));
 
@@ -84,7 +84,7 @@ fn generate_large_program(target_lines: usize) -> String {
 
     for i in 0..funcs_needed {
         code.push_str(&format!(
-            "F func{}(x: i64) -> i64 {{\n    R x * {} + {}\n}}\n\n",
+            "fn func{}(x: i64) -> i64 {{\n    R x * {} + {}\n}}\n\n",
             i,
             i % 10 + 1,
             i
@@ -96,22 +96,22 @@ fn generate_large_program(target_lines: usize) -> String {
         }
     }
 
-    code.push_str("F main() -> i64 {\n    R func0(42)\n}\n");
+    code.push_str("fn main() -> i64 {\n    R func0(42)\n}\n");
     code
 }
 
 /// Generate intentionally malformed program for error recovery testing
 fn generate_malformed_program(variant: usize) -> String {
     match variant % 8 {
-        0 => "F add(a: i64) -> { R a }".to_string(), // Missing return type
-        1 => "F mul(x y) -> i64 { R x * y }".to_string(), // Missing comma in params
-        2 => "F div(a: i64, b: i64) -> i64 { R a / }".to_string(), // Incomplete expression
-        3 => "F sub(x: i64) { R x - 1 }".to_string(), // Missing return type
-        4 => "S Point { x: i64 y: i64 }".to_string(), // Missing comma in struct
-        5 => "F test() -> i64 { a := 5 R }".to_string(), // Incomplete return
-        6 => "F loop_test() -> i64 { L { B } R 0".to_string(), // Missing closing brace
-        7 => "F bad_if(x: i64) -> i64 { I x > 0 { R x } E }".to_string(), // Incomplete else
-        _ => "F broken() -> i64 { R }".to_string(),  // Incomplete return value
+        0 => "fn add(a: i64) -> { R a }".to_string(), // Missing return type
+        1 => "fn mul(x y) -> i64 { R x * y }".to_string(), // Missing comma in params
+        2 => "fn div(a: i64, b: i64) -> i64 { R a / }".to_string(), // Incomplete expression
+        3 => "fn sub(x: i64) { R x - 1 }".to_string(), // Missing return type
+        4 => "struct Point { x: i64 y: i64 }".to_string(), // Missing comma in struct
+        5 => "fn test() -> i64 { a := 5 R }".to_string(), // Incomplete return
+        6 => "fn loop_test() -> i64 { L { B } R 0".to_string(), // Missing closing brace
+        7 => "fn bad_if(x: i64) -> i64 { I x > 0 { R x } E }".to_string(), // Incomplete else
+        _ => "fn broken() -> i64 { R }".to_string(),  // Incomplete return value
     }
 }
 
@@ -491,7 +491,7 @@ fn test_endurance_parser_stress() {
 
     // Generate deeply nested expressions (reduced depth to avoid stack overflow)
     let depth = 20;
-    let mut source = String::from("F compute() -> i64 {\n    R ");
+    let mut source = String::from("fn compute() -> i64 {\n    R ");
 
     for _ in 0..depth {
         source.push('(');
@@ -504,7 +504,7 @@ fn test_endurance_parser_stress() {
     }
 
     source.push_str("\n}\n");
-    source.push_str("F main() -> i64 { R compute() }\n");
+    source.push_str("fn main() -> i64 { R compute() }\n");
 
     println!("Testing deeply nested expression (depth: {})...", depth);
 

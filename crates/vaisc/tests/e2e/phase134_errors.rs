@@ -28,13 +28,13 @@ fn assert_error_contains(source: &str, expected: &str) {
 #[test]
 fn e2e_p134_err_bool_where_int_expected() {
     // Phase 158: bool↔int unification is forbidden — requires explicit `as i64`
-    assert_error_contains("F main() -> i64 = true", "mismatch");
+    assert_error_contains("fn main() -> i64 = true", "mismatch");
 }
 
 #[test]
 fn e2e_p134_err_int_where_bool_expected() {
     // Phase 160-A: bool↔int unification restored — i64→bool is now allowed
-    let _ = compile_to_ir("F main() -> bool = 42");
+    let _ = compile_to_ir("fn main() -> bool = 42");
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn e2e_p134_err_string_where_bool_expected() {
 
 #[test]
 fn e2e_p134_err_bool_add_int() {
-    assert_error_contains("F main() -> i64 = true + 1", "mismatch");
+    assert_error_contains("fn main() -> i64 = true + 1", "mismatch");
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn e2e_p134_err_if_branch_type_mismatch() {
     assert_error_contains(
         r#"
 fn main() -> i64 {
-    I true { "hello" } E { 42 }
+    I true { "hello" } else { 42 }
 }
 "#,
         "mismatch",
@@ -109,7 +109,7 @@ fn main() -> i64 {
 
 #[test]
 fn e2e_p134_err_undef_variable() {
-    assert_error_contains("F main() -> i64 = x + 1", "undefined");
+    assert_error_contains("fn main() -> i64 = x + 1", "undefined");
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn main() -> i64 {
 
 #[test]
 fn e2e_p134_err_undef_function() {
-    assert_error_contains("F main() -> i64 = nonexistent()", "undefined");
+    assert_error_contains("fn main() -> i64 = nonexistent()", "undefined");
 }
 
 #[test]
@@ -158,7 +158,7 @@ fn main() -> i64 {
 fn e2e_p134_err_undef_enum_variant() {
     assert_error_contains(
         r#"
-E Color { Red, Green, Blue }
+enum Color { Red, Green, Blue }
 fn main() -> i64 {
     c := Yellow
     return 0
@@ -230,8 +230,8 @@ fn main() -> i64 {
 fn e2e_p134_err_duplicate_enum() {
     assert_error_contains(
         r#"
-E Status { On, Off }
-E Status { Active, Inactive }
+enum Status { On, Off }
+enum Status { Active, Inactive }
 fn main() -> i64 = 0
 "#,
         "duplicate",
@@ -466,7 +466,7 @@ fn e2e_p134_err_wrong_variant_field_count() {
     // Test correct pattern matching.
     assert_exit_code(
         r#"
-E Op {
+enum Op {
     Add(i64, i64),
     Neg(i64)
 }
@@ -554,7 +554,7 @@ fn main() -> i64 = foo("hello")
 fn e2e_p134_err_empty_source() {
     // NOTE: Empty source compiles OK (empty module).
     // Test minimal valid program.
-    assert_exit_code("F main() -> i64 = 42", 42);
+    assert_exit_code("fn main() -> i64 = 42", 42);
 }
 
 #[test]

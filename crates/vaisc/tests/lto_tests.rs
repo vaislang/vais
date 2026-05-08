@@ -26,8 +26,8 @@ fn run_vaisc(args: &[&str]) -> std::process::Output {
 #[test]
 fn test_thinlto_auto_enabled_o2() {
     let source = r#"
-F add(a: i64, b: i64) -> i64 = a + b
-F main() -> () { () }
+fn add(a: i64, b: i64) -> i64 = a + b
+fn main() -> () { () }
 "#;
 
     let test_file = create_test_file("o2_auto_lto", source);
@@ -69,8 +69,8 @@ F main() -> () { () }
 #[test]
 fn test_thinlto_auto_enabled_o3() {
     let source = r#"
-F multiply(a: i64, b: i64) -> i64 = a * b
-F main() -> () { () }
+fn multiply(a: i64, b: i64) -> i64 = a * b
+fn main() -> () { () }
 "#;
 
     let test_file = create_test_file("o3_auto_lto", source);
@@ -100,8 +100,8 @@ F main() -> () { () }
 #[test]
 fn test_no_lto_disables_auto_lto() {
     let source = r#"
-F square(x: i64) -> i64 = x * x
-F main() -> () { () }
+fn square(x: i64) -> i64 = x * x
+fn main() -> () { () }
 "#;
 
     let test_file = create_test_file("no_lto", source);
@@ -133,8 +133,8 @@ F main() -> () { () }
 #[ignore] // CI: phi instruction after non-phi instruction ICE on macOS post-optimization
 fn test_explicit_lto_full() {
     let source = r#"
-F factorial(n: i64) -> i64 = n < 2 ? 1 : n * @(n - 1)
-F main() -> () { () }
+fn factorial(n: i64) -> i64 = n < 2 ? 1 : n * @(n - 1)
+fn main() -> () { () }
 "#;
 
     let test_file = create_test_file("lto_full", source);
@@ -176,8 +176,8 @@ F main() -> () { () }
 #[test]
 fn test_o0_no_auto_lto() {
     let source = r#"
-F increment(x: i64) -> i64 = x + 1
-F main() -> () { () }
+fn increment(x: i64) -> i64 = x + 1
+fn main() -> () { () }
 "#;
 
     let test_file = create_test_file("o0_no_lto", source);
@@ -201,8 +201,8 @@ F main() -> () { () }
 #[test]
 fn test_o1_no_auto_lto() {
     let source = r#"
-F double(x: i64) -> i64 = x + x
-F main() -> () { () }
+fn double(x: i64) -> i64 = x + x
+fn main() -> () { () }
 "#;
 
     let test_file = create_test_file("o1_no_lto", source);

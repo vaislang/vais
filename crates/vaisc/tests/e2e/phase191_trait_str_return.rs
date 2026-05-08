@@ -6,26 +6,26 @@ use super::helpers::*;
 fn e2e_phase191_trait_str_return_literal() {
     assert_exit_code(
         r#"
-W Describable {
-    F describe(&self) -> str
+trait Describable {
+    fn describe(&self) -> str
 }
 
-S Cat {
+struct Cat {
     age: i64
 }
 
-X Cat: Describable {
-    F describe(&self) -> str {
+impl Cat: Describable {
+    fn describe(&self) -> str {
         "meow"
     }
 }
 
-F use_desc(c: Cat) -> i64 {
+fn use_desc(c: Cat) -> i64 {
     s := c.describe()
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c := Cat { age: 3 }
     use_desc(c)
 }
@@ -40,26 +40,26 @@ F main() -> i64 {
 fn e2e_phase191_trait_str_return_concat() {
     assert_exit_code(
         r#"
-W Named {
-    F name(&self) -> str
+trait Named {
+    fn name(&self) -> str
 }
 
-S Dog {
+struct Dog {
     prefix: str
 }
 
-X Dog: Named {
-    F name(&self) -> str {
+impl Dog: Named {
+    fn name(&self) -> str {
         "good-" + "dog"
     }
 }
 
-F get_name(d: Dog) -> i64 {
+fn get_name(d: Dog) -> i64 {
     n := d.name()
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     d := Dog { prefix: "Rex" }
     get_name(d)
 }

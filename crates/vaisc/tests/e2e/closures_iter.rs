@@ -10,11 +10,11 @@ fn parse_recovery(source: &str) -> (vais_ast::Module, Vec<vais_parser::ParseErro
 fn e2e_closure_inferred_params() {
     // Test closure with inferred parameter types
     let source = r#"
-F apply(x: i64, f: fn(i64) -> i64) -> i64 = f(x)
-F main() -> i64 {
+fn apply(x: i64, f: fn(i64) -> i64) -> i64 = f(x)
+fn main() -> i64 {
     double := |x: i64| x * 2
     result := apply(21, double)
-    I result == 42 { 0 } E { 1 }
+    I result == 42 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -29,11 +29,11 @@ F main() -> i64 {
 fn e2e_closure_capture_variable() {
     // Test closure capturing a variable from enclosing scope
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     multiplier := 10
     scale := |x: i64| x * multiplier
     result := scale(5)
-    I result == 50 { 0 } E { 1 }
+    I result == 50 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -48,13 +48,13 @@ F main() -> i64 {
 fn e2e_closure_multiple_captures() {
     // Test closure capturing multiple variables
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := 10
     b := 20
     c := 30
     sum_all := |x: i64| x + a + b + c
     result := sum_all(1)
-    I result == 61 { 0 } E { 1 }
+    I result == 61 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -69,14 +69,14 @@ F main() -> i64 {
 fn e2e_closure_nested() {
     // Test nested closures
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     outer := 100
     f := |x: i64| {
         inner := outer + x
         inner
     }
     result := f(23)
-    I result == 123 { 0 } E { 1 }
+    I result == 123 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -91,13 +91,13 @@ F main() -> i64 {
 fn e2e_closure_as_callback() {
     // Test passing closure as callback parameter
     let source = r#"
-F transform(a: i64, b: i64, f: fn(i64, i64) -> i64) -> i64 = f(a, b)
-F main() -> i64 {
+fn transform(a: i64, b: i64, f: fn(i64, i64) -> i64) -> i64 = f(a, b)
+fn main() -> i64 {
     add := |x: i64, y: i64| x + y
     mul := |x: i64, y: i64| x * y
     r1 := transform(3, 4, add)
     r2 := transform(3, 4, mul)
-    I r1 == 7 && r2 == 12 { 0 } E { 1 }
+    I r1 == 7 && r2 == 12 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -112,8 +112,8 @@ F main() -> i64 {
 fn e2e_closure_higher_order_chain() {
     // Test chaining higher-order function calls with closures
     let source = r#"
-F apply_twice(x: i64, f: fn(i64) -> i64) -> i64 = f(f(x))
-F apply_n(x: i64, n: i64, f: fn(i64) -> i64) -> i64 {
+fn apply_twice(x: i64, f: fn(i64) -> i64) -> i64 = f(f(x))
+fn apply_n(x: i64, n: i64, f: fn(i64) -> i64) -> i64 {
     result := mut x
     i := mut 0
     L {
@@ -123,13 +123,13 @@ F apply_n(x: i64, n: i64, f: fn(i64) -> i64) -> i64 {
     }
     result
 }
-F main() -> i64 {
+fn main() -> i64 {
     inc := |x: i64| x + 1
     double := |x: i64| x * 2
     r1 := apply_twice(3, inc)
     r2 := apply_twice(3, double)
     r3 := apply_n(1, 5, inc)
-    I r1 == 5 && r2 == 12 && r3 == 6 { 0 } E { 1 }
+    I r1 == 5 && r2 == 12 && r3 == 6 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -144,14 +144,14 @@ F main() -> i64 {
 fn e2e_closure_with_block_body() {
     // Test closure with block body (multiple statements)
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     compute := |x: i64| {
         doubled := x * 2
         tripled := x * 3
         doubled + tripled
     }
     result := compute(4)
-    I result == 20 { 0 } E { 1 }
+    I result == 20 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -166,12 +166,12 @@ F main() -> i64 {
 fn e2e_closure_identity_and_composition() {
     // Test identity closure and function composition
     let source = r#"
-F compose(f: fn(i64) -> i64, g: fn(i64) -> i64, x: i64) -> i64 = f(g(x))
-F main() -> i64 {
+fn compose(f: fn(i64) -> i64, g: fn(i64) -> i64, x: i64) -> i64 = f(g(x))
+fn main() -> i64 {
     double := |x: i64| x * 2
     inc := |x: i64| x + 1
     result := compose(double, inc, 5)
-    I result == 12 { 0 } E { 1 }
+    I result == 12 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -182,7 +182,7 @@ F main() -> i64 {
 fn e2e_closure_in_loop() {
     // Test using closure inside a loop
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     add_to_sum := |x: i64| x * x
     i := mut 1
@@ -192,7 +192,7 @@ F main() -> i64 {
         i = i + 1
     }
     # 1 + 4 + 9 + 16 + 25 = 55
-    I sum == 55 { 0 } E { 1 }
+    I sum == 55 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -207,7 +207,7 @@ F main() -> i64 {
 fn e2e_closure_higher_order_fold() {
     // Test fold-like pattern with closure
     let source = r#"
-F fold(arr: i64, len: i64, init: i64, f: fn(i64, i64) -> i64) -> i64 {
+fn fold(arr: i64, len: i64, init: i64, f: fn(i64, i64) -> i64) -> i64 {
     acc := mut init
     i := mut 0
     L {
@@ -218,7 +218,7 @@ F fold(arr: i64, len: i64, init: i64, f: fn(i64, i64) -> i64) -> i64 {
     }
     acc
 }
-F main() -> i64 {
+fn main() -> i64 {
     data := malloc(40)
     store_i64(data, 1)
     store_i64(data + 8, 2)
@@ -228,7 +228,7 @@ F main() -> i64 {
     sum := fold(data, 5, 0, |acc: i64, x: i64| acc + x)
     product := fold(data, 5, 1, |acc: i64, x: i64| acc * x)
     free(data)
-    I sum == 15 && product == 120 { 0 } E { 1 }
+    I sum == 15 && product == 120 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -245,14 +245,14 @@ F main() -> i64 {
 fn e2e_result_is_ok_is_err() {
     // Test Result is_ok/is_err free functions
     let source = r#"
-E Result { Ok(i64), Err(i64) }
-F is_ok(r: Result) -> i64 { M r { Ok(_) => 1, Err(_) => 0 } }
-F is_err(r: Result) -> i64 { M r { Ok(_) => 0, Err(_) => 1 } }
-F main() -> i64 {
+enum Result { Ok(i64), Err(i64) }
+fn is_ok(r: Result) -> i64 { match r { Ok(_) => 1, Err(_) => 0 } }
+fn is_err(r: Result) -> i64 { match r { Ok(_) => 0, Err(_) => 1 } }
+fn main() -> i64 {
     ok := Ok(42)
     err := Err(99)
     ok_check := is_ok(ok) + is_err(err)
-    I ok_check == 2 { 0 } E { 1 }
+    I ok_check == 2 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -267,14 +267,14 @@ F main() -> i64 {
 fn e2e_result_unwrap_or() {
     // Test Result unwrap_or free function
     let source = r#"
-E Result { Ok(i64), Err(i64) }
-F unwrap_or(r: Result, default: i64) -> i64 {
-    M r { Ok(v) => v, Err(_) => default }
+enum Result { Ok(i64), Err(i64) }
+fn unwrap_or(r: Result, default: i64) -> i64 {
+    match r { Ok(v) => v, Err(_) => default }
 }
-F main() -> i64 {
+fn main() -> i64 {
     ok_val := unwrap_or(Ok(42), 0)
     err_val := unwrap_or(Err(99), 0)
-    I ok_val == 42 && err_val == 0 { 0 } E { 1 }
+    I ok_val == 42 && err_val == 0 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -289,13 +289,13 @@ F main() -> i64 {
 fn e2e_result_err_value() {
     // Test extracting error value from Result
     let source = r#"
-E Result { Ok(i64), Err(i64) }
-F err_or(r: Result, default: i64) -> i64 {
-    M r { Ok(_) => default, Err(e) => e }
+enum Result { Ok(i64), Err(i64) }
+fn err_or(r: Result, default: i64) -> i64 {
+    match r { Ok(_) => default, Err(e) => e }
 }
-F main() -> i64 {
+fn main() -> i64 {
     code := err_or(Err(42), 0)
-    I code == 42 { 0 } E { 1 }
+    I code == 42 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -310,14 +310,14 @@ F main() -> i64 {
 fn e2e_error_context_encoding() {
     // Test error context encoding: ctx * 65536 + err_code
     let source = r#"
-F error_code(err: i64) -> i64 { err % 65536 }
-F error_context(err: i64) -> i64 { err / 65536 }
-F wrap_error(code: i64, ctx: i64) -> i64 { ctx * 65536 + code }
-F main() -> i64 {
+fn error_code(err: i64) -> i64 { err % 65536 }
+fn error_context(err: i64) -> i64 { err / 65536 }
+fn wrap_error(code: i64, ctx: i64) -> i64 { ctx * 65536 + code }
+fn main() -> i64 {
     wrapped := wrap_error(3, 42)
     orig := error_code(wrapped)
     ctx := error_context(wrapped)
-    I orig == 3 && ctx == 42 { 0 } E { 1 }
+    I orig == 3 && ctx == 42 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -332,10 +332,10 @@ F main() -> i64 {
 fn e2e_error_context_chaining() {
     // Test multi-level error context chaining
     let source = r#"
-F wrap_error(code: i64, ctx: i64) -> i64 { ctx * 65536 + code }
-F error_code(err: i64) -> i64 { err % 65536 }
-F error_context(err: i64) -> i64 { err / 65536 }
-F main() -> i64 {
+fn wrap_error(code: i64, ctx: i64) -> i64 { ctx * 65536 + code }
+fn error_code(err: i64) -> i64 { err % 65536 }
+fn error_context(err: i64) -> i64 { err / 65536 }
+fn main() -> i64 {
     # Original error: code 5
     err := 5
     # First context: module 10
@@ -343,7 +343,7 @@ F main() -> i64 {
     code1 := error_code(err1)
     ctx1 := error_context(err1)
     # Verify: original code preserved, context attached
-    I code1 == 5 && ctx1 == 10 { 0 } E { 1 }
+    I code1 == 5 && ctx1 == 10 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -358,27 +358,27 @@ F main() -> i64 {
 fn e2e_error_typed_enum_pattern() {
     // Test thiserror-style typed error enum
     let source = r#"
-E AppError {
+enum AppError {
     NotFound(i64),
     InvalidInput(i64),
     IoError(i64)
 }
-X AppError {
-    F code(&self) -> i64 {
-        M self {
+impl AppError {
+    fn code(&self) -> i64 {
+        match self {
             NotFound(c) => c,
             InvalidInput(c) => c,
             IoError(c) => c
         }
     }
-    F is_retryable(&self) -> i64 {
-        M self {
+    fn is_retryable(&self) -> i64 {
+        match self {
             IoError(_) => 1,
             _ => 0
         }
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     e1: AppError = NotFound(404)
     e2: AppError = IoError(5)
     e3: AppError = InvalidInput(22)
@@ -386,7 +386,7 @@ F main() -> i64 {
     c2 := e2.code()
     r := e2.is_retryable()
     nr := e3.is_retryable()
-    I c1 == 404 && c2 == 5 && r == 1 && nr == 0 { 0 } E { 1 }
+    I c1 == 404 && c2 == 5 && r == 1 && nr == 0 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -401,18 +401,18 @@ F main() -> i64 {
 fn e2e_error_result_with_custom_error() {
     // Test Result combined with custom error types using free functions
     let source = r#"
-E Result { Ok(i64), Err(i64) }
-F is_ok(r: Result) -> i64 {
-    M r { Ok(_) => 1, Err(_) => 0 }
+enum Result { Ok(i64), Err(i64) }
+fn is_ok(r: Result) -> i64 {
+    match r { Ok(_) => 1, Err(_) => 0 }
 }
-F get_val(r: Result) -> i64 {
-    M r { Ok(v) => v, Err(_) => 0 - 1 }
+fn get_val(r: Result) -> i64 {
+    match r { Ok(v) => v, Err(_) => 0 - 1 }
 }
-F get_err(r: Result) -> i64 {
-    M r { Ok(_) => 0, Err(e) => e }
+fn get_err(r: Result) -> i64 {
+    match r { Ok(_) => 0, Err(e) => e }
 }
-F ERR_NOT_FOUND() -> i64 { 2 }
-F main() -> i64 {
+fn ERR_NOT_FOUND() -> i64 { 2 }
+fn main() -> i64 {
     # Success path
     ok := Ok(100)
     r1 := get_val(ok)
@@ -420,7 +420,7 @@ F main() -> i64 {
     err := Err(ERR_NOT_FOUND())
     r2 := get_val(err)
     r3 := get_err(err)
-    I r1 == 100 && r2 == 0 - 1 && r3 == 2 { 0 } E { 1 }
+    I r1 == 100 && r2 == 0 - 1 && r3 == 2 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -435,32 +435,32 @@ F main() -> i64 {
 fn e2e_error_ensure_pattern() {
     // Test ensure-like validation pattern (anyhow::ensure style) using free functions
     let source = r#"
-E Result { Ok(i64), Err(i64) }
-F ensure(cond: i64, err: i64) -> Result {
-    I cond != 0 { Ok(0) } E { Err(err) }
+enum Result { Ok(i64), Err(i64) }
+fn ensure(cond: i64, err: i64) -> Result {
+    I cond != 0 { Ok(0) } else { Err(err) }
 }
-F is_ok(r: Result) -> i64 {
-    M r { Ok(_) => 1, Err(_) => 0 }
+fn is_ok(r: Result) -> i64 {
+    match r { Ok(_) => 1, Err(_) => 0 }
 }
-F is_err(r: Result) -> i64 {
-    M r { Ok(_) => 0, Err(_) => 1 }
+fn is_err(r: Result) -> i64 {
+    match r { Ok(_) => 0, Err(_) => 1 }
 }
-F validate_age(age: i64) -> i64 {
+fn validate_age(age: i64) -> i64 {
     # age >= 0 check
-    ge_zero := I age >= 0 { 1 } E { 0 }
+    ge_zero := I age >= 0 { 1 } else { 0 }
     r1 := ensure(ge_zero, 1)
-    I is_err(r1) != 0 { R 1 }
+    I is_err(r1) != 0 { return 1 }
     # age <= 150 check
-    le_150 := I age <= 150 { 1 } E { 0 }
+    le_150 := I age <= 150 { 1 } else { 0 }
     r2 := ensure(le_150, 2)
-    I is_err(r2) != 0 { R 2 }
+    I is_err(r2) != 0 { return 2 }
     0
 }
-F main() -> i64 {
+fn main() -> i64 {
     ok := validate_age(25)
     err1 := validate_age(0 - 1)
     err2 := validate_age(200)
-    I ok == 0 && err1 == 1 && err2 == 2 { 0 } E { 1 }
+    I ok == 0 && err1 == 1 && err2 == 2 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -477,12 +477,12 @@ F main() -> i64 {
 fn e2e_iter_range_for_loop() {
     // Test range-based for loop: L i:start..end { body }
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     L i:0..10 {
         sum = sum + i
     }
-    I sum == 45 { 0 } E { 1 }
+    I sum == 45 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -497,7 +497,7 @@ F main() -> i64 {
 fn e2e_iter_range_step_manual() {
     // Test manual range iterator with step > 1
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     # Sum even numbers 0,2,4,6,8
     sum := mut 0
     i := mut 0
@@ -506,7 +506,7 @@ F main() -> i64 {
         sum = sum + i
         i = i + 2
     }
-    I sum == 20 { 0 } E { 1 }
+    I sum == 20 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -521,7 +521,7 @@ F main() -> i64 {
 fn e2e_iter_map_array() {
     // Test map adapter on array via malloc/store/load pattern
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     # Create array [1, 2, 3, 4, 5]
     data := malloc(40)
     store_i64(data, 1)
@@ -550,7 +550,7 @@ F main() -> i64 {
     }
     free(data)
     free(out)
-    I sum == 30 { 0 } E { 1 }
+    I sum == 30 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -565,7 +565,7 @@ F main() -> i64 {
 fn e2e_iter_filter_array() {
     // Test filter adapter: keep only even elements
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     # Create array [1, 2, 3, 4, 5, 6]
     data := malloc(48)
     store_i64(data, 1)
@@ -600,7 +600,7 @@ F main() -> i64 {
     }
     free(data)
     free(out)
-    I sum == 12 && count == 3 { 0 } E { 1 }
+    I sum == 12 && count == 3 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -615,7 +615,7 @@ F main() -> i64 {
 fn e2e_iter_fold_sum() {
     // Test fold/reduce pattern
     let source = r#"
-F fold(data: i64, len: i64, init: i64, f: fn(i64, i64) -> i64) -> i64 {
+fn fold(data: i64, len: i64, init: i64, f: fn(i64, i64) -> i64) -> i64 {
     acc := mut init
     i := mut 0
     L {
@@ -625,7 +625,7 @@ F fold(data: i64, len: i64, init: i64, f: fn(i64, i64) -> i64) -> i64 {
     }
     acc
 }
-F main() -> i64 {
+fn main() -> i64 {
     data := malloc(40)
     store_i64(data, 1)
     store_i64(data + 8, 2)
@@ -636,7 +636,7 @@ F main() -> i64 {
     sum := fold(data, 5, 0, |a: i64, b: i64| a + b)
     product := fold(data, 5, 1, |a: i64, b: i64| a * b)
     free(data)
-    I sum == 15 && product == 120 { 0 } E { 1 }
+    I sum == 15 && product == 120 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -647,7 +647,7 @@ F main() -> i64 {
 fn e2e_iter_take_skip() {
     // Test take and skip patterns
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     # Array [10, 20, 30, 40, 50]
     data := malloc(40)
     store_i64(data, 10)
@@ -674,7 +674,7 @@ F main() -> i64 {
         j = j + 1
     }
     free(data)
-    I take_sum == 60 && skip_sum == 120 { 0 } E { 1 }
+    I take_sum == 60 && skip_sum == 120 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -685,7 +685,7 @@ F main() -> i64 {
 fn e2e_iter_chain() {
     // Test chain: concatenate two arrays
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := malloc(24)
     store_i64(a, 1)
     store_i64(a + 8, 2)
@@ -721,7 +721,7 @@ F main() -> i64 {
     free(a)
     free(b)
     free(out)
-    I sum == 15 { 0 } E { 1 }
+    I sum == 15 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -732,7 +732,7 @@ F main() -> i64 {
 fn e2e_iter_zip() {
     // Test zip: pair elements from two arrays
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := malloc(24)
     store_i64(a, 1)
     store_i64(a + 8, 2)
@@ -756,7 +756,7 @@ F main() -> i64 {
     }
     free(a)
     free(b)
-    I dot == 140 { 0 } E { 1 }
+    I dot == 140 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -767,7 +767,7 @@ F main() -> i64 {
 fn e2e_iter_enumerate() {
     // Test enumerate: pair each element with its index
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     data := malloc(24)
     store_i64(data, 100)
     store_i64(data + 8, 200)
@@ -784,7 +784,7 @@ F main() -> i64 {
         i = i + 1
     }
     free(data)
-    I sum == 800 { 0 } E { 1 }
+    I sum == 800 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -799,35 +799,35 @@ F main() -> i64 {
 fn e2e_iter_any_all_find() {
     // Test any, all, find patterns with closures
     let source = r#"
-F any(data: i64, len: i64, pred: fn(i64) -> i64) -> i64 {
+fn any(data: i64, len: i64, pred: fn(i64) -> i64) -> i64 {
     i := mut 0
     L {
         I i >= len { B }
-        I pred(load_i64(data + i * 8)) != 0 { R 1 }
+        I pred(load_i64(data + i * 8)) != 0 { return 1 }
         i = i + 1
     }
     0
 }
-F all(data: i64, len: i64, pred: fn(i64) -> i64) -> i64 {
+fn all(data: i64, len: i64, pred: fn(i64) -> i64) -> i64 {
     i := mut 0
     L {
         I i >= len { B }
-        I pred(load_i64(data + i * 8)) == 0 { R 0 }
+        I pred(load_i64(data + i * 8)) == 0 { return 0 }
         i = i + 1
     }
     1
 }
-F find(data: i64, len: i64, pred: fn(i64) -> i64) -> i64 {
+fn find(data: i64, len: i64, pred: fn(i64) -> i64) -> i64 {
     i := mut 0
     L {
         I i >= len { B }
         v := load_i64(data + i * 8)
-        I pred(v) != 0 { R v }
+        I pred(v) != 0 { return v }
         i = i + 1
     }
     0 - 1
 }
-F main() -> i64 {
+fn main() -> i64 {
     data := malloc(40)
     store_i64(data, 2)
     store_i64(data + 8, 4)
@@ -835,12 +835,12 @@ F main() -> i64 {
     store_i64(data + 24, 8)
     store_i64(data + 32, 10)
 
-    has_even := any(data, 5, |x: i64| I x - (x / 2) * 2 == 0 { 1 } E { 0 })
-    has_odd := any(data, 5, |x: i64| I x - (x / 2) * 2 != 0 { 1 } E { 0 })
-    all_pos := all(data, 5, |x: i64| I x > 0 { 1 } E { 0 })
-    first_big := find(data, 5, |x: i64| I x > 7 { 1 } E { 0 })
+    has_even := any(data, 5, |x: i64| I x - (x / 2) * 2 == 0 { 1 } else { 0 })
+    has_odd := any(data, 5, |x: i64| I x - (x / 2) * 2 != 0 { 1 } else { 0 })
+    all_pos := all(data, 5, |x: i64| I x > 0 { 1 } else { 0 })
+    first_big := find(data, 5, |x: i64| I x > 7 { 1 } else { 0 })
     free(data)
-    I has_even == 1 && has_odd == 0 && all_pos == 1 && first_big == 8 { 0 } E { 1 }
+    I has_even == 1 && has_odd == 0 && all_pos == 1 && first_big == 8 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -855,7 +855,7 @@ F main() -> i64 {
 fn e2e_iter_map_filter_chain() {
     // Test chaining map -> filter -> fold
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     # [1, 2, 3, 4, 5]
     data := malloc(40)
     store_i64(data, 1)
@@ -898,7 +898,7 @@ F main() -> i64 {
     free(data)
     free(mapped)
     free(filtered)
-    I sum == 24 && count == 3 { 0 } E { 1 }
+    I sum == 24 && count == 3 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -913,7 +913,7 @@ F main() -> i64 {
 fn e2e_iter_collect_to_array() {
     // Test collecting results into a new array (simulating Iterator.collect())
     let source = r#"
-F collect_range(start: i64, end: i64) -> i64 {
+fn collect_range(start: i64, end: i64) -> i64 {
     len := end - start
     out := malloc(len * 8)
     i := mut 0
@@ -924,7 +924,7 @@ F collect_range(start: i64, end: i64) -> i64 {
     }
     out
 }
-F main() -> i64 {
+fn main() -> i64 {
     # Collect 5..10 into array [5,6,7,8,9]
     arr := collect_range(5, 10)
     sum := mut 0
@@ -936,7 +936,7 @@ F main() -> i64 {
     }
     free(arr)
     # 5+6+7+8+9 = 35
-    I sum == 35 { 0 } E { 1 }
+    I sum == 35 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -951,16 +951,16 @@ F main() -> i64 {
 fn e2e_iter_position() {
     // Test finding position/index of first matching element
     let source = r#"
-F position(data: i64, len: i64, pred: fn(i64) -> i64) -> i64 {
+fn position(data: i64, len: i64, pred: fn(i64) -> i64) -> i64 {
     i := mut 0
     L {
         I i >= len { B }
-        I pred(load_i64(data + i * 8)) != 0 { R i }
+        I pred(load_i64(data + i * 8)) != 0 { return i }
         i = i + 1
     }
     0 - 1
 }
-F main() -> i64 {
+fn main() -> i64 {
     data := malloc(40)
     store_i64(data, 10)
     store_i64(data + 8, 20)
@@ -968,10 +968,10 @@ F main() -> i64 {
     store_i64(data + 24, 40)
     store_i64(data + 32, 50)
 
-    pos := position(data, 5, |x: i64| I x == 30 { 1 } E { 0 })
-    not_found := position(data, 5, |x: i64| I x == 99 { 1 } E { 0 })
+    pos := position(data, 5, |x: i64| I x == 30 { 1 } else { 0 })
+    not_found := position(data, 5, |x: i64| I x == 99 { 1 } else { 0 })
     free(data)
-    I pos == 2 && not_found == 0 - 1 { 0 } E { 1 }
+    I pos == 2 && not_found == 0 - 1 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -987,13 +987,13 @@ fn e2e_generator_yield_parse() {
     // Test that yield keyword is recognized by the parser
     // (simplified generator — yield evaluates the expression for now)
     let source = r#"
-F gen_next(state: i64) -> i64 {
+fn gen_next(state: i64) -> i64 {
     yield state * 2
 }
-F main() -> i64 {
+fn main() -> i64 {
     a := gen_next(5)
     b := gen_next(10)
-    I a == 10 && b == 20 { 0 } E { 1 }
+    I a == 10 && b == 20 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -1004,7 +1004,7 @@ F main() -> i64 {
 fn e2e_iter_nested_loops() {
     // Test nested range for loops
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     L i:0..3 {
         L j:0..4 {
@@ -1012,7 +1012,7 @@ F main() -> i64 {
         }
     }
     # 3 * 4 = 12
-    I sum == 12 { 0 } E { 1 }
+    I sum == 12 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -1027,15 +1027,15 @@ F main() -> i64 {
 fn e2e_iter_closure_capture_in_loop() {
     // Test closures that capture loop variables
     let source = r#"
-F apply(x: i64, f: fn(i64) -> i64) -> i64 { f(x) }
-F main() -> i64 {
+fn apply(x: i64, f: fn(i64) -> i64) -> i64 { f(x) }
+fn main() -> i64 {
     sum := mut 0
     L i:1..6 {
         doubled := apply(i, |x: i64| x * 2)
         sum = sum + doubled
     }
     # 2+4+6+8+10 = 30
-    I sum == 30 { 0 } E { 1 }
+    I sum == 30 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -1052,12 +1052,12 @@ F main() -> i64 {
 fn e2e_recursive_fibonacci() {
     // Classic recursive fibonacci
     let source = r#"
-F fib(n: i64) -> i64 {
-    I n <= 1 { R n }
+fn fib(n: i64) -> i64 {
+    I n <= 1 { return n }
     fib(n - 1) + fib(n - 2)
 }
-F main() -> i64 {
-    I fib(10) == 55 { 0 } E { 1 }
+fn main() -> i64 {
+    I fib(10) == 55 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -1072,11 +1072,11 @@ F main() -> i64 {
 fn e2e_self_recursion_operator() {
     // Test @ self-recursion operator
     let source = r#"
-F factorial(n: i64) -> i64 {
-    I n <= 1 { 1 } E { n * @(n - 1) }
+fn factorial(n: i64) -> i64 {
+    I n <= 1 { 1 } else { n * @(n - 1) }
 }
-F main() -> i64 {
-    I factorial(5) == 120 { 0 } E { 1 }
+fn main() -> i64 {
+    I factorial(5) == 120 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -1091,7 +1091,7 @@ F main() -> i64 {
 fn e2e_bitwise_operations() {
     // Test bitwise operations: AND, OR, XOR, shift
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := 255
     b := 15
     and_result := a & b    # 15
@@ -1099,7 +1099,7 @@ F main() -> i64 {
     xor_result := a ^ b    # 240
     shl := 1 << 8          # 256
     shr := 256 >> 4         # 16
-    I and_result == 15 && or_result == 255 && xor_result == 240 && shl == 256 && shr == 16 { 0 } E { 1 }
+    I and_result == 15 && or_result == 255 && xor_result == 240 && shl == 256 && shr == 16 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -1110,20 +1110,20 @@ F main() -> i64 {
 fn e2e_multiple_return_paths() {
     // Test function with multiple early returns
     let source = r#"
-F classify(n: i64) -> i64 {
-    I n < 0 { R 0 - 1 }
-    I n == 0 { R 0 }
-    I n < 10 { R 1 }
-    I n < 100 { R 2 }
+fn classify(n: i64) -> i64 {
+    I n < 0 { return 0 - 1 }
+    I n == 0 { return 0 }
+    I n < 10 { return 1 }
+    I n < 100 { return 2 }
     3
 }
-F main() -> i64 {
+fn main() -> i64 {
     a := classify(0 - 5)
     b := classify(0)
     c := classify(7)
     d := classify(50)
     e := classify(999)
-    I a == 0 - 1 && b == 0 && c == 1 && d == 2 && e == 3 { 0 } E { 1 }
+    I a == 0 - 1 && b == 0 && c == 1 && d == 2 && e == 3 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -1138,12 +1138,12 @@ F main() -> i64 {
 fn e2e_closure_compose_apply_twice() {
     // Test passing closures as callbacks: apply_twice and compose
     let source = r#"
-F apply_twice(x: i64, f: fn(i64) -> i64) -> i64 { f(f(x)) }
-F compose(x: i64, f: fn(i64) -> i64, g: fn(i64) -> i64) -> i64 { g(f(x)) }
-F main() -> i64 {
+fn apply_twice(x: i64, f: fn(i64) -> i64) -> i64 { f(f(x)) }
+fn compose(x: i64, f: fn(i64) -> i64, g: fn(i64) -> i64) -> i64 { g(f(x)) }
+fn main() -> i64 {
     a := apply_twice(3, |x: i64| x * 2)   # 3*2=6, 6*2=12
     b := compose(5, |x: i64| x + 1, |x: i64| x * 3)  # (5+1)*3=18
-    I a == 12 && b == 18 { 0 } E { 1 }
+    I a == 12 && b == 18 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -1158,17 +1158,17 @@ F main() -> i64 {
 fn e2e_mutable_accumulator_pattern() {
     // Test mutable variable accumulation in loops
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     product := mut 1
     max := mut 0
     L i:1..11 {
         sum = sum + i
-        product = I i <= 5 { product * i } E { product }
+        product = I i <= 5 { product * i } else { product }
         I i > max { max = i }
     }
     # sum=55, product=120 (1*2*3*4*5), max=10
-    I sum == 55 && product == 120 && max == 10 { 0 } E { 1 }
+    I sum == 55 && product == 120 && max == 10 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -1183,25 +1183,25 @@ F main() -> i64 {
 fn e2e_struct_method_chaining() {
     // Test struct with methods used in sequence
     let source = r#"
-S Counter { value: i64 }
-X Counter {
-    F get(&self) -> i64 { self.value }
-    F inc(&self) -> i64 {
+struct Counter { value: i64 }
+impl Counter {
+    fn get(&self) -> i64 { self.value }
+    fn inc(&self) -> i64 {
         self.value = self.value + 1
         self.value
     }
-    F add(&self, n: i64) -> i64 {
+    fn add(&self, n: i64) -> i64 {
         self.value = self.value + n
         self.value
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     c := Counter { value: 0 }
     c.inc()
     c.inc()
     c.add(10)
     v := c.get()
-    I v == 12 { 0 } E { 1 }
+    I v == 12 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -1216,19 +1216,19 @@ F main() -> i64 {
 fn e2e_enum_tag_matching() {
     // Test enum tag-based matching with different variants
     let source = r#"
-E Shape { Circle(i64), Rect(i64), Triangle(i64) }
-F area(s: Shape) -> i64 {
-    M s {
+enum Shape { Circle(i64), Rect(i64), Triangle(i64) }
+fn area(s: Shape) -> i64 {
+    match s {
         Circle(r) => r * r * 3,
         Rect(side) => side * side,
         Triangle(base) => base * base / 2
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     c := area(Circle(5))    # 75
     r := area(Rect(4))       # 16
     t := area(Triangle(6))   # 18
-    I c == 75 && r == 16 && t == 18 { 0 } E { 1 }
+    I c == 75 && r == 16 && t == 18 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -1243,7 +1243,7 @@ F main() -> i64 {
 fn e2e_higher_order_pipeline() {
     // Test combining higher-order functions in a data processing pipeline
     let source = r#"
-F map_arr(data: i64, len: i64, f: fn(i64) -> i64) -> i64 {
+fn map_arr(data: i64, len: i64, f: fn(i64) -> i64) -> i64 {
     out := malloc(len * 8)
     i := mut 0
     L {
@@ -1253,7 +1253,7 @@ F map_arr(data: i64, len: i64, f: fn(i64) -> i64) -> i64 {
     }
     out
 }
-F sum_arr(data: i64, len: i64) -> i64 {
+fn sum_arr(data: i64, len: i64) -> i64 {
     acc := mut 0
     i := mut 0
     L {
@@ -1263,7 +1263,7 @@ F sum_arr(data: i64, len: i64) -> i64 {
     }
     acc
 }
-F main() -> i64 {
+fn main() -> i64 {
     # Pipeline: [1..5] -> square -> add_one -> sum
     data := malloc(40)
     store_i64(data, 1)
@@ -1279,7 +1279,7 @@ F main() -> i64 {
     free(data)
     free(squared)
     free(plus_one)
-    I result == 60 { 0 } E { 1 }
+    I result == 60 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
@@ -1293,7 +1293,7 @@ F main() -> i64 {
 #[test]
 fn e2e_recovery_max_errors_limit() {
     // Normal mode should fail fast on first error
-    let source = "F broken(\nF good() -> i64 = 0\n";
+    let source = "fn broken(\nF good() -> i64 = 0\n";
     let result = vais_parser::parse(source);
     assert!(result.is_err(), "Normal mode should fail on first error");
 }
@@ -1302,8 +1302,8 @@ fn e2e_recovery_max_errors_limit() {
 fn e2e_recovery_valid_code_no_errors() {
     // Valid code should produce no errors in recovery mode
     let source = r#"
-F add(a: i64, b: i64) -> i64 = a + b
-F main() -> i64 = add(1, 2)
+fn add(a: i64, b: i64) -> i64 = a + b
+fn main() -> i64 = add(1, 2)
 "#;
     let (module, errors) = parse_recovery(source);
     assert!(

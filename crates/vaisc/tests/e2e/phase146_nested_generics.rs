@@ -11,11 +11,11 @@ use super::helpers::*;
 fn e2e_p146_triple_nested_generic() {
     // Triple-nested generic struct declarations should parse without error
     let source = r#"
-S Inner { val: i64 }
-S Mid<T> { item: T }
-S Outer<T> { nested: T }
+struct Inner { val: i64 }
+struct Mid<T> { item: type }
+struct Outer<T> { nested: type }
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -26,8 +26,8 @@ F main() -> i64 {
 fn e2e_p146_triple_nested_generic_type_annotation() {
     // Simple function with exit code verification
     let source = r#"
-F identity(x: i64) -> i64 { x }
-F main() -> i64 {
+fn identity(x: i64) -> i64 { x }
+fn main() -> i64 {
     identity(42)
 }
 "#;
@@ -38,10 +38,10 @@ F main() -> i64 {
 fn e2e_p146_double_nested_generic_parses() {
     // Double-nesting (Vec<Vec<i64>>) — baseline that was already working
     let source = r#"
-S Wrapper<T> { val: T }
-S Container<T> { inner: T }
+struct Wrapper<T> { val: type }
+struct Container<T> { inner: type }
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -52,13 +52,13 @@ F main() -> i64 {
 fn e2e_p146_generic_fn_triple_nested_return() {
     // Function returning triple-nested generic
     let source = r#"
-S Box<T> { val: T }
+struct Box<T> { val: type }
 
-F wrap(x: i64) -> i64 {
+fn wrap(x: i64) -> i64 {
     x
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     wrap(7)
 }
 "#;

@@ -14,26 +14,26 @@ fn e2e_void_phi_if_else_with_assert() {
     // (void phi node with assert in both arms) is orthogonal.
     let source = r#"
 N "C" {
-    F printf(fmt: str, ...) -> i64
+    fn printf(fmt: str, ...) -> i64
 }
 
-partial F main() -> i64 {
+partial fn main() -> i64 {
     x := 5
 
     # if-else with assert (Unit type) in both branches
     I x > 3 {
         assert(x > 0)
-    } E {
+    } else {
         assert(x >= 0)
     }
 
     # Nested case
     I x > 10 {
         assert(x > 10)
-    } E {
+    } else {
         I x > 0 {
             assert(x > 0)
-        } E {
+        } else {
             assert(x >= 0)
         }
     }
@@ -94,13 +94,13 @@ fn e2e_thread_sleep_yield() {
     };
     let source = r#"
 N "C" {
-    F printf(fmt: str, ...) -> i64
+    fn printf(fmt: str, ...) -> i64
 }
 
-X F __thread_sleep_ms(ms: i64) -> i64
-X F __thread_yield() -> i64
+impl fn __thread_sleep_ms(ms: i64) -> i64
+impl fn __thread_yield() -> i64
 
-F main() -> i64 {
+fn main() -> i64 {
     printf("sleep 10ms\n")
     __thread_sleep_ms(10)
     printf("yield\n")
@@ -165,15 +165,15 @@ fn e2e_sync_mutex_lock_unlock() {
     };
     let source = r#"
 N "C" {
-    F printf(fmt: str, ...) -> i64
+    fn printf(fmt: str, ...) -> i64
 }
 
-X F __mutex_create() -> i64
-X F __mutex_lock(h: i64) -> i64
-X F __mutex_unlock(h: i64) -> i64
-X F __mutex_destroy(h: i64) -> i64
+impl fn __mutex_create() -> i64
+impl fn __mutex_lock(h: i64) -> i64
+impl fn __mutex_unlock(h: i64) -> i64
+impl fn __mutex_destroy(h: i64) -> i64
 
-F main() -> i64 {
+fn main() -> i64 {
     m := __mutex_create()
     printf("mutex created: %lld\n", m)
 
@@ -186,7 +186,7 @@ F main() -> i64 {
     rc3 := __mutex_destroy(m)
     printf("destroy: %lld\n", rc3)
 
-    I m > 0 { 0 } E { 1 }
+    I m > 0 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
@@ -212,17 +212,17 @@ fn e2e_sync_rwlock_read_write() {
     };
     let source = r#"
 N "C" {
-    F printf(fmt: str, ...) -> i64
+    fn printf(fmt: str, ...) -> i64
 }
 
-X F __rwlock_create() -> i64
-X F __rwlock_read_lock(h: i64) -> i64
-X F __rwlock_read_unlock(h: i64) -> i64
-X F __rwlock_write_lock(h: i64) -> i64
-X F __rwlock_write_unlock(h: i64) -> i64
-X F __rwlock_destroy(h: i64) -> i64
+impl fn __rwlock_create() -> i64
+impl fn __rwlock_read_lock(h: i64) -> i64
+impl fn __rwlock_read_unlock(h: i64) -> i64
+impl fn __rwlock_write_lock(h: i64) -> i64
+impl fn __rwlock_write_unlock(h: i64) -> i64
+impl fn __rwlock_destroy(h: i64) -> i64
 
-F main() -> i64 {
+fn main() -> i64 {
     rw := __rwlock_create()
     printf("rwlock created: %lld\n", rw)
 
@@ -265,14 +265,14 @@ fn e2e_sync_barrier_single() {
     };
     let source = r#"
 N "C" {
-    F printf(fmt: str, ...) -> i64
+    fn printf(fmt: str, ...) -> i64
 }
 
-X F __barrier_create(count: i64) -> i64
-X F __barrier_wait(h: i64) -> i64
-X F __barrier_destroy(h: i64) -> i64
+impl fn __barrier_create(count: i64) -> i64
+impl fn __barrier_wait(h: i64) -> i64
+impl fn __barrier_destroy(h: i64) -> i64
 
-F main() -> i64 {
+fn main() -> i64 {
     b := __barrier_create(1)
     printf("barrier created: %lld\n", b)
 
@@ -308,16 +308,16 @@ fn e2e_sync_semaphore() {
     };
     let source = r#"
 N "C" {
-    F printf(fmt: str, ...) -> i64
+    fn printf(fmt: str, ...) -> i64
 }
 
-X F __semaphore_create(permits: i64) -> i64
-X F __semaphore_wait(h: i64) -> i64
-X F __semaphore_try_wait(h: i64) -> i64
-X F __semaphore_post(h: i64) -> i64
-X F __semaphore_destroy(h: i64) -> i64
+impl fn __semaphore_create(permits: i64) -> i64
+impl fn __semaphore_wait(h: i64) -> i64
+impl fn __semaphore_try_wait(h: i64) -> i64
+impl fn __semaphore_post(h: i64) -> i64
+impl fn __semaphore_destroy(h: i64) -> i64
 
-F main() -> i64 {
+fn main() -> i64 {
     sem := __semaphore_create(2)
     printf("semaphore created with 2 permits\n")
 
@@ -340,8 +340,8 @@ F main() -> i64 {
     __semaphore_destroy(sem)
 
     I r1 == 0 {
-        I r2 == 1 { 0 } E { 2 }
-    } E { 1 }
+        I r2 == 1 { 0 } else { 2 }
+    } else { 1 }
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
@@ -404,17 +404,17 @@ fn e2e_sync_atomics() {
     };
     let source = r#"
 N "C" {
-    F printf(fmt: str, ...) -> i64
+    fn printf(fmt: str, ...) -> i64
 }
 
-X F __malloc(size: i64) -> i64
-X F __free(ptr: i64) -> i64
-X F __atomic_load_i64(ptr: i64) -> i64
-X F __atomic_store_i64(ptr: i64, value: i64) -> i64
-X F __atomic_fetch_add_i64(ptr: i64, value: i64) -> i64
-X F __atomic_compare_exchange_i64(ptr: i64, expected: i64, desired: i64) -> i64
+impl fn __malloc(size: i64) -> i64
+impl fn __free(ptr: i64) -> i64
+impl fn __atomic_load_i64(ptr: i64) -> i64
+impl fn __atomic_store_i64(ptr: i64, value: i64) -> i64
+impl fn __atomic_fetch_add_i64(ptr: i64, value: i64) -> i64
+impl fn __atomic_compare_exchange_i64(ptr: i64, expected: i64, desired: i64) -> i64
 
-F main() -> i64 {
+fn main() -> i64 {
     # Allocate memory for atomic value
     ptr := __malloc(8)
 
@@ -444,11 +444,11 @@ F main() -> i64 {
         I v2 == 15 {
             I v3 == 20 {
                 I rc1 == 0 {
-                    I rc2 == 1 { 0 } E { 5 }
-                } E { 4 }
-            } E { 3 }
-        } E { 2 }
-    } E { 1 }
+                    I rc2 == 1 { 0 } else { 5 }
+                } else { 4 }
+            } else { 3 }
+        } else { 2 }
+    } else { 1 }
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&sync_rt, &http_rt]).unwrap();
@@ -480,20 +480,20 @@ fn e2e_sync_condvar_create_destroy() {
     };
     let source = r#"
 N "C" {
-    F printf(fmt: str, ...) -> i64
+    fn printf(fmt: str, ...) -> i64
 }
 
-X F __condvar_create() -> i64
-X F __condvar_destroy(h: i64) -> i64
+impl fn __condvar_create() -> i64
+impl fn __condvar_destroy(h: i64) -> i64
 
-F main() -> i64 {
+fn main() -> i64 {
     cv := __condvar_create()
     printf("condvar created: %lld\n", cv)
 
     rc := __condvar_destroy(cv)
     printf("condvar destroyed: %lld\n", rc)
 
-    I cv > 0 { 0 } E { 1 }
+    I cv > 0 { 0 } else { 1 }
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
@@ -523,15 +523,15 @@ fn e2e_sync_condvar_signal() {
     };
     let source = r#"
 N "C" {
-    F printf(fmt: str, ...) -> i64
+    fn printf(fmt: str, ...) -> i64
 }
 
-X F __condvar_create() -> i64
-X F __condvar_signal(h: i64) -> i64
-X F __condvar_broadcast(h: i64) -> i64
-X F __condvar_destroy(h: i64) -> i64
+impl fn __condvar_create() -> i64
+impl fn __condvar_signal(h: i64) -> i64
+impl fn __condvar_broadcast(h: i64) -> i64
+impl fn __condvar_destroy(h: i64) -> i64
 
-F main() -> i64 {
+fn main() -> i64 {
     cv := __condvar_create()
 
     rc1 := __condvar_signal(cv)
@@ -543,8 +543,8 @@ F main() -> i64 {
     __condvar_destroy(cv)
 
     I rc1 == 0 {
-        I rc2 == 0 { 0 } E { 2 }
-    } E { 1 }
+        I rc2 == 0 { 0 } else { 2 }
+    } else { 1 }
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
@@ -569,10 +569,10 @@ F main() -> i64 {
 fn e2e_f64_arithmetic() {
     let source = r#"
 N "C" {
-    F printf(fmt: str, ...) -> i64
+    fn printf(fmt: str, ...) -> i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a: f64 = 3.14
     b: f64 = 2.0
 
@@ -587,20 +587,20 @@ F main() -> i64 {
 
     # Test basic operations by converting results to validation
     # sum should be ~5.14, diff ~1.14
-    sum_ok := mut I sum > 5.0 { I sum < 6.0 { 1 } E { 0 } } E { 0 }
-    diff_ok := mut I diff > 1.0 { I diff < 2.0 { 1 } E { 0 } } E { 0 }
-    prod_ok := mut I prod > 6.0 { I prod < 7.0 { 1 } E { 0 } } E { 0 }
-    quot_ok := mut I quot > 1.5 { I quot < 1.6 { 1 } E { 0 } } E { 0 }
+    sum_ok := mut I sum > 5.0 { I sum < 6.0 { 1 } else { 0 } } else { 0 }
+    diff_ok := mut I diff > 1.0 { I diff < 2.0 { 1 } else { 0 } } else { 0 }
+    prod_ok := mut I prod > 6.0 { I prod < 7.0 { 1 } else { 0 } } else { 0 }
+    quot_ok := mut I quot > 1.5 { I quot < 1.6 { 1 } else { 0 } } else { 0 }
 
     printf("sum_ok=%lld diff_ok=%lld prod_ok=%lld quot_ok=%lld\n", sum_ok, diff_ok, prod_ok, quot_ok)
 
     I sum_ok == 1 {
         I diff_ok == 1 {
             I prod_ok == 1 {
-                I quot_ok == 1 { 0 } E { 4 }
-            } E { 3 }
-        } E { 2 }
-    } E { 1 }
+                I quot_ok == 1 { 0 } else { 4 }
+            } else { 3 }
+        } else { 2 }
+    } else { 1 }
 }
 "#;
     let result = compile_and_run(source).unwrap();
@@ -627,19 +627,19 @@ F main() -> i64 {
 fn e2e_f64_comparison() {
     let source = r#"
 N "C" {
-    F printf(fmt: str, ...) -> i64
+    fn printf(fmt: str, ...) -> i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a: f64 = 3.5
     b: f64 = 2.5
     c: f64 = 3.5
 
-    gt := I a > b { 1 } E { 0 }
-    lt := I a < b { 1 } E { 0 }
-    eq := I a == c { 1 } E { 0 }
-    ge := I a >= c { 1 } E { 0 }
-    le := I b <= a { 1 } E { 0 }
+    gt := I a > b { 1 } else { 0 }
+    lt := I a < b { 1 } else { 0 }
+    eq := I a == c { 1 } else { 0 }
+    ge := I a >= c { 1 } else { 0 }
+    le := I b <= a { 1 } else { 0 }
 
     printf("a > b: %lld\n", gt)
     printf("a < b: %lld\n", lt)
@@ -651,11 +651,11 @@ F main() -> i64 {
         I lt == 0 {
             I eq == 1 {
                 I ge == 1 {
-                    I le == 1 { 0 } E { 5 }
-                } E { 4 }
-            } E { 3 }
-        } E { 2 }
-    } E { 1 }
+                    I le == 1 { 0 } else { 5 }
+                } else { 4 }
+            } else { 3 }
+        } else { 2 }
+    } else { 1 }
 }
 "#;
     let result = compile_and_run(source).unwrap();

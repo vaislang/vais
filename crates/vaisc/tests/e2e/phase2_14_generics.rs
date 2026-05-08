@@ -31,8 +31,8 @@ fn check_only(source: &str) {
 fn generic_fn_single_param() {
     check_only(
         r#"
-F id<T>(x: T) -> T { x }
-F main() -> i64 { id(42) }
+fn id<T>(x: T) -> type { x }
+fn main() -> i64 { id(42) }
 "#,
     );
 }
@@ -41,8 +41,8 @@ F main() -> i64 { id(42) }
 fn generic_fn_multi_param() {
     check_only(
         r#"
-F pick_first<A, B>(a: A, _b: B) -> A { a }
-F main() -> i64 { pick_first(10, 20) }
+fn pick_first<A, B>(a: A, _b: B) -> A { a }
+fn main() -> i64 { pick_first(10, 20) }
 "#,
     );
 }
@@ -51,11 +51,11 @@ F main() -> i64 { pick_first(10, 20) }
 fn generic_struct_with_method() {
     check_only(
         r#"
-S Wrapper<T> { val: T }
-X Wrapper<T> {
-    F get(self) -> T { self.val }
+struct Wrapper<T> { val: type }
+impl Wrapper<T> {
+    fn get(self) -> type { self.val }
 }
-F main() -> i64 {
+fn main() -> i64 {
     w := Wrapper { val: 7 }
     w.get()
 }
@@ -68,13 +68,13 @@ fn nested_generic_option_vec() {
     // Option<Vec<i64>> should typecheck.
     check_only(
         r#"
-F wrap(v: Vec<i64>) -> Option<Vec<i64>> { Some(v) }
+fn wrap(v: Vec<i64>) -> Option<Vec<i64>> { Some(v) }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> = Vec::new()
     v.push(5)
     w := wrap(v)
-    M w {
+    match w {
         Some(_) => 1,
         None => 0
     }
@@ -89,19 +89,19 @@ fn where_clause_single_bound() {
     // on specific built-in trait semantics.
     check_only(
         r#"
-W Show { F show(self) -> i64 }
+trait Show { fn show(self) -> i64 }
 
-S Thing { id: i64 }
+struct Thing { id: i64 }
 
-X Thing: Show {
-    F show(self) -> i64 { self.id }
+impl Thing: Show {
+    fn show(self) -> i64 { self.id }
 }
 
-F describe<T: Show>(x: T) -> i64 {
+fn describe<T: Show>(x: T) -> i64 {
     x.show()
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     t := Thing { id: 7 }
     describe(t)
 }

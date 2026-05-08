@@ -23,11 +23,11 @@ use super::helpers::*;
 fn e2e_phase190_direct_return_concat() {
     assert_stdout_contains(
         r#"
-F build() -> str {
-  R "hello " + "world"
+fn build() -> str {
+  return "hello " + "world"
 }
 
-F main() -> i64 {
+fn main() -> i64 {
   println(build())
   0
 }
@@ -41,12 +41,12 @@ F main() -> i64 {
 fn e2e_phase190_let_bound_return_preserves_buffer() {
     assert_stdout_contains(
         r#"
-F build() -> str {
+fn build() -> str {
   msg := "hello " + "world"
-  R msg
+  return msg
 }
 
-F main() -> i64 {
+fn main() -> i64 {
   println(build())
   0
 }
@@ -62,12 +62,12 @@ F main() -> i64 {
 fn e2e_phase190_callee_return_caller_uses_twice() {
     assert_stdout_contains(
         r#"
-F build() -> str {
+fn build() -> str {
   msg := "hello " + "world"
-  R msg
+  return msg
 }
 
-F main() -> i64 {
+fn main() -> i64 {
   s := build()
   println(s)
   println(s)
@@ -85,12 +85,12 @@ F main() -> i64 {
 fn e2e_phase190_if_expr_return_true_branch() {
     assert_stdout_contains(
         r#"
-F build(c: bool) -> str {
-  msg := I c { "aa" + "bb" } E { "cc" + "dd" }
-  R msg
+fn build(c: bool) -> str {
+  msg := I c { "aa" + "bb" } else { "cc" + "dd" }
+  return msg
 }
 
-F main() -> i64 {
+fn main() -> i64 {
   println(build(true))
   0
 }
@@ -103,12 +103,12 @@ F main() -> i64 {
 fn e2e_phase190_if_expr_return_false_branch() {
     assert_stdout_contains(
         r#"
-F build(c: bool) -> str {
-  msg := I c { "aa" + "bb" } E { "cc" + "dd" }
-  R msg
+fn build(c: bool) -> str {
+  msg := I c { "aa" + "bb" } else { "cc" + "dd" }
+  return msg
 }
 
-F main() -> i64 {
+fn main() -> i64 {
   println(build(false))
   0
 }
@@ -123,7 +123,7 @@ F main() -> i64 {
 fn e2e_phase190_concat_chain_correct_result() {
     assert_stdout_contains(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
   a := "one-"
   b := "two-"
   c := "three-"
@@ -144,7 +144,7 @@ F main() -> i64 {
 fn e2e_phase190_loop_concat_crash_free() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
   i := mut 0
   L i < 10000 {
     a := "abcdefghij"
@@ -167,12 +167,12 @@ F main() -> i64 {
 fn e2e_phase190_push_str_let_return() {
     assert_stdout_contains(
         r#"
-F build() -> str {
+fn build() -> str {
   s := "abc".push_str("def")
-  R s
+  return s
 }
 
-F main() -> i64 {
+fn main() -> i64 {
   println(build())
   0
 }

@@ -23,20 +23,20 @@ use crate::helpers::assert_compiles;
 fn p17_sort_by_struct_field_access() {
     assert_compiles(
         r#"
-S Item {
+struct Item {
     score: f64,
     id: i64,
 }
 
-F sort_items(items: &mut Vec<Item>) {
+fn sort_items(items: &mut Vec<Item>) {
     items.sort_by(|a, b| {
         I b.score > a.score { 1 }
-        EL I b.score < a.score { -1 }
-        EL { 0 }
+        else I b.score < a.score { -1 }
+        else { 0 }
     })
 }
 
-F main() -> i64 { R 0 }
+fn main() -> i64 { return 0 }
 "#,
     );
 }
@@ -49,11 +49,11 @@ F main() -> i64 { R 0 }
 fn p17_sort_by_with_generic_receiver() {
     assert_compiles(
         r#"
-F sort_any<T>(items: &mut Vec<T>, cmp: fn(T, T) -> i64) {
+fn sort_any<T>(items: &mut Vec<T>, cmp: fn(T, T) -> i64) {
     items.sort_by(|a, b| cmp(a, b))
 }
 
-F main() -> i64 { R 0 }
+fn main() -> i64 { return 0 }
 "#,
     );
 }
@@ -64,13 +64,13 @@ F main() -> i64 { R 0 }
 fn p17_sort_no_closure_still_compiles() {
     assert_compiles(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<i64> := mut Vec.new()
     v.push(3)
     v.push(1)
     v.push(2)
     v.sort()
-    R 0
+    return 0
 }
 "#,
     );

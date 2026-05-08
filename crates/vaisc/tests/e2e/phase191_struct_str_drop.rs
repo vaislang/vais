@@ -8,12 +8,12 @@ use super::helpers::*;
 fn e2e_phase191_struct_str_field_drop() {
     assert_exit_code(
         r#"
-S Person {
+struct Person {
     name: str,
     age: i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := "hello-"
     b := "world"
     p := Person { name: a + b, age: 42 }
@@ -32,23 +32,23 @@ F main() -> i64 {
 fn e2e_phase191_struct_user_drop() {
     assert_exit_code(
         r#"
-S Resource {
+struct Resource {
     label: str,
     handle: i64
 }
 
-W Drop {
-    F drop(&self) -> i64
+trait Drop {
+    fn drop(&self) -> i64
 }
 
-X Resource: Drop {
-    F drop(&self) -> i64 {
+impl Resource: Drop {
+    fn drop(&self) -> i64 {
         self.handle = 0
         0
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     r := Resource { label: "prefix-" + "suffix", handle: 99 }
     0
 }
@@ -65,11 +65,11 @@ F main() -> i64 {
 fn e2e_phase191_struct_literal_str_no_free() {
     assert_exit_code(
         r#"
-S Tag {
+struct Tag {
     name: str
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     t := Tag { name: "static-literal" }
     0
 }
@@ -86,11 +86,11 @@ F main() -> i64 {
 fn e2e_phase191_struct_str_loop_no_leak() {
     assert_exit_code(
         r#"
-S Item {
+struct Item {
     value: str
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     i := mut 0
     L i < 1000 {
         item := Item { value: "a" + "b" }
@@ -111,12 +111,12 @@ F main() -> i64 {
 fn e2e_phase191_nested_vec_struct_str() {
     assert_exit_code(
         r#"
-S Person {
+struct Person {
     name: str,
     age: i64
 }
 
-S Vec<T> {
+struct Vec<T> {
     data: i64,
     len: i64,
     cap: i64,
@@ -124,9 +124,9 @@ S Vec<T> {
     owned: i64
 }
 
-X Vec<T> {
-    F grow(&self) -> i64 {
-        new_cap := I self.cap * 2 < 8 { 8 } EL { self.cap * 2 }
+impl Vec<T> {
+    fn grow(&self) -> i64 {
+        new_cap := I self.cap * 2 < 8 { 8 } else { self.cap * 2 }
         new_data := malloc(new_cap * self.elem_size)
         memcpy(new_data, self.data, self.len * self.elem_size)
         free(self.data)
@@ -135,7 +135,7 @@ X Vec<T> {
         new_cap
     }
 
-    F push(&self, value: T) -> i64 {
+    fn push(&self, value: T) -> i64 {
         I self.len >= self.cap { @.grow() }
         ptr := self.data + self.len * self.elem_size
         store_typed(ptr, value)
@@ -143,10 +143,10 @@ X Vec<T> {
         self.len
     }
 
-    F drop(&self) -> i64 { free(self.data); self.data = 0; 0 }
+    fn drop(&self) -> i64 { free(self.data); self.data = 0; 0 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v: Vec<Person> := Vec { data: 0, len: 0, cap: 0, elem_size: 32, owned: 0 }
     v.push(Person { name: "hello-" + "world", age: 1 })
     v.push(Person { name: "foo-" + "bar", age: 2 })

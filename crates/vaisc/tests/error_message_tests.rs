@@ -82,7 +82,7 @@ fn parse_error(source: &str) -> String {
 #[test]
 fn error_type_mismatch_bool_vs_i64() {
     // Passing a struct where i64 is expected
-    let error = type_check_error("S Foo { x: i64 }\nF main() -> i64 = Foo { x: 1 }");
+    let error = type_check_error("struct Foo { x: i64 }\nF main() -> i64 = Foo { x: 1 }");
     assert!(
         error.contains("Type mismatch"),
         "Error should mention type mismatch: got '{}'",
@@ -98,7 +98,7 @@ fn error_type_mismatch_bool_vs_i64() {
 #[test]
 fn error_type_mismatch_help_suggests_cast() {
     // Struct mismatch — verify type error is returned
-    let error = type_check_error("S Foo { x: i64 }\nF main() -> i64 = Foo { x: 1 }");
+    let error = type_check_error("struct Foo { x: i64 }\nF main() -> i64 = Foo { x: 1 }");
     assert!(
         error.contains("Type mismatch"),
         "Should produce type mismatch error: got '{}'",
@@ -134,7 +134,7 @@ fn error_type_mismatch_str_to_i64() {
 
 #[test]
 fn warning_unused_variable_suggests_underscore() {
-    let warnings = type_check_warnings("F main() -> i64 { x := 5\n R 0 }");
+    let warnings = type_check_warnings("fn main() -> i64 { x := 5\n R 0 }");
     let has_unused_warning = warnings
         .iter()
         .any(|w| w.contains("unused variable") && w.contains("_x"));
@@ -147,7 +147,7 @@ fn warning_unused_variable_suggests_underscore() {
 
 #[test]
 fn warning_unused_variable_no_warning_for_underscore_prefix() {
-    let warnings = type_check_warnings("F main() -> i64 { _x := 5\n R 0 }");
+    let warnings = type_check_warnings("fn main() -> i64 { _x := 5\n R 0 }");
     let has_unused_warning = warnings
         .iter()
         .any(|w| w.contains("unused variable") && w.contains("_x"));
@@ -160,7 +160,7 @@ fn warning_unused_variable_no_warning_for_underscore_prefix() {
 
 #[test]
 fn warning_unused_variable_used_variable_no_warning() {
-    let warnings = type_check_warnings("F main() -> i64 { x := 5\n R x }");
+    let warnings = type_check_warnings("fn main() -> i64 { x := 5\n R x }");
     let has_unused_warning = warnings
         .iter()
         .any(|w| w.contains("unused variable") && w.contains("`x`"));
@@ -176,7 +176,7 @@ fn warning_unused_variable_used_variable_no_warning() {
 #[test]
 fn error_no_such_field_on_struct() {
     let error = type_check_error(
-        "S User { name: str, age: i64 }\nF main() -> i64 { u := User { name: \"Alice\", age: 30 }\n R u.agee }"
+        "struct User { name: str, age: i64 }\nF main() -> i64 { u := User { name: \"Alice\", age: 30 }\n R u.agee }"
     );
     assert!(
         error.contains("No field") || error.contains("no field") || error.contains("field"),
@@ -187,7 +187,7 @@ fn error_no_such_field_on_struct() {
 
 #[test]
 fn error_no_such_field_suggests_similar() {
-    let source = "S User { name: str, age: i64 }\nF main() -> i64 { u := User { name: \"Alice\", age: 30 }\n R u.nme }";
+    let source = "struct User { name: str, age: i64 }\nF main() -> i64 { u := User { name: \"Alice\", age: 30 }\n R u.nme }";
     let _tokens = tokenize(source).expect("Lexer should succeed");
     let module = parse(source).expect("Parser should succeed");
     let mut checker = TypeChecker::new();
@@ -220,7 +220,7 @@ fn warning_extern_pointer_fn_wrong_return_type() {
     // X F is the single extern function syntax
     // dlopen is a known pointer-returning function that is NOT a builtin
     let warnings =
-        type_check_warnings("X F dlopen(path: i64, mode: i64) -> bool\nF main() -> i64 = 0");
+        type_check_warnings("impl F dlopen(path: i64, mode: i64) -> bool\nF main() -> i64 = 0");
     let has_extern_warning = warnings
         .iter()
         .any(|w| w.contains("dlopen") && w.contains("should return"));
@@ -235,7 +235,7 @@ fn warning_extern_pointer_fn_wrong_return_type() {
 fn warning_extern_pointer_fn_correct_return_type_no_warning() {
     // X F is the single extern function syntax
     let warnings =
-        type_check_warnings("X F dlopen(path: i64, mode: i64) -> i64\nF main() -> i64 = 0");
+        type_check_warnings("impl F dlopen(path: i64, mode: i64) -> i64\nF main() -> i64 = 0");
     let has_extern_warning = warnings
         .iter()
         .any(|w| w.contains("dlopen") && w.contains("should return"));
@@ -250,7 +250,7 @@ fn warning_extern_pointer_fn_correct_return_type_no_warning() {
 
 #[test]
 fn error_parse_unexpected_token_shows_context() {
-    let error = parse_error("F main( -> i64 = 0");
+    let error = parse_error("fn main( -> i64 = 0");
     assert!(
         error.contains("Unexpected") || error.contains("expected"),
         "Parse error should mention what was unexpected or expected: got '{}'",
@@ -260,7 +260,7 @@ fn error_parse_unexpected_token_shows_context() {
 
 #[test]
 fn error_parse_missing_body() {
-    let error = parse_error("F main() -> i64");
+    let error = parse_error("fn main() -> i64");
     assert!(
         error.contains("Unexpected") || error.contains("expected") || error.contains("end of file"),
         "Parse error should provide context about what's missing: got '{}'",
@@ -272,7 +272,7 @@ fn error_parse_missing_body() {
 
 #[test]
 fn error_undefined_variable_suggests_similar() {
-    let source = "F main() -> i64 { myvar := 42\n R myva }";
+    let source = "fn main() -> i64 { myvar := 42\n R myva }";
     let _tokens = tokenize(source).expect("Lexer should succeed");
     let module = parse(source).expect("Parser should succeed");
     let mut checker = TypeChecker::new();
@@ -302,7 +302,7 @@ fn error_undefined_function_suggests_similar() {
     // When calling an undefined function, the type checker first checks
     // registered functions, then falls through to check it as a variable.
     // The error is reported as "Undefined variable" with a did-you-mean suggestion.
-    let source = "F greet() -> i64 = 0\nF main() -> i64 = gret()";
+    let source = "fn greet() -> i64 = 0\nF main() -> i64 = gret()";
     let _tokens = tokenize(source).expect("Lexer should succeed");
     let module = parse(source).expect("Parser should succeed");
     let mut checker = TypeChecker::new();
@@ -332,7 +332,7 @@ fn error_undefined_function_suggests_similar() {
 #[test]
 fn help_not_callable_has_message() {
     // Calling a non-function value
-    let help = type_check_help("F main() -> i64 { x := 5\n x() }");
+    let help = type_check_help("fn main() -> i64 { x := 5\n x() }");
     assert!(help.is_some(), "NotCallable should provide help message");
     let text = help.unwrap();
     assert!(
@@ -345,7 +345,7 @@ fn help_not_callable_has_message() {
 #[test]
 fn help_arg_count_has_message() {
     // Wrong number of arguments
-    let help = type_check_help("F add(a: i64, b: i64) -> i64 = a + b\nF main() -> i64 = add(1)");
+    let help = type_check_help("fn add(a: i64, b: i64) -> i64 = a + b\nF main() -> i64 = add(1)");
     assert!(help.is_some(), "ArgCount should provide help message");
     let text = help.unwrap();
     assert!(
@@ -443,7 +443,7 @@ fn secondary_spans_empty_for_simple_errors() {
 #[test]
 fn multi_error_collects_multiple_errors() {
     // Two functions with errors — multi_error_mode should collect both
-    let source = "S Foo { x: i64 }\nF foo() -> i64 = Foo { x: 1 }\nF bar() -> i64 = Foo { x: 1 }\nF main() -> i64 = 0";
+    let source = "struct Foo { x: i64 }\nF foo() -> i64 = Foo { x: 1 }\nF bar() -> i64 = Foo { x: 1 }\nF main() -> i64 = 0";
     let errors = type_check_multi_errors(source);
     assert!(
         errors.len() >= 2,
@@ -456,7 +456,7 @@ fn multi_error_collects_multiple_errors() {
 #[test]
 fn multi_error_mode_disabled_returns_first_error_only() {
     // Without multi_error_mode, only first error is returned
-    let source = "S Foo { x: i64 }\nF foo() -> i64 = Foo { x: 1 }\nF bar() -> i64 = Foo { x: 1 }\nF main() -> i64 = 0";
+    let source = "struct Foo { x: i64 }\nF foo() -> i64 = Foo { x: 1 }\nF bar() -> i64 = Foo { x: 1 }\nF main() -> i64 = 0";
     let _tokens = tokenize(source).expect("Lexer should succeed");
     let module = parse(source).expect("Parser should succeed");
     let mut checker = TypeChecker::new();
@@ -474,7 +474,7 @@ fn multi_error_mode_disabled_returns_first_error_only() {
 
 #[test]
 fn error_code_format_is_exxxx() {
-    let err = type_check_type_error("S Foo { x: i64 }\nF main() -> i64 = Foo { x: 1 }");
+    let err = type_check_type_error("struct Foo { x: i64 }\nF main() -> i64 = Foo { x: 1 }");
     let code = err.error_code();
     assert!(
         code.starts_with('E') || code.starts_with('C'),

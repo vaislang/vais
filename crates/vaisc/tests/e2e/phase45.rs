@@ -10,9 +10,9 @@ use super::helpers::*;
 fn e2e_phase45_comptime_basic() {
     // comptime block evaluated at compile time
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := comptime { 2 + 3 }
-    R x
+    return x
 }
 "#;
     assert_exit_code(source, 5);
@@ -29,8 +29,8 @@ O Value {
     flt_val: f64
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     assert_exit_code(source, 0);
@@ -42,8 +42,8 @@ F main() -> i64 {
 fn e2e_phase45_match_guard_basic() {
     // Match arms with guard conditions
     let source = r#"
-F classify(n: i64) -> i64 {
-    M n {
+fn classify(n: i64) -> i64 {
+    match n {
         x I x > 100 => 3,
         x I x > 50 => 2,
         x I x > 0 => 1,
@@ -51,8 +51,8 @@ F classify(n: i64) -> i64 {
     }
 }
 
-F main() -> i64 {
-    R classify(75)
+fn main() -> i64 {
+    return classify(75)
 }
 "#;
     assert_exit_code(source, 2);
@@ -62,16 +62,16 @@ F main() -> i64 {
 fn e2e_phase45_match_guard_with_literal() {
     // Guard on a specific literal arm
     let source = r#"
-F check(n: i64) -> i64 {
-    M n {
+fn check(n: i64) -> i64 {
+    match n {
         0 => 100,
         x I x < 0 => 50,
         _ => 1
     }
 }
 
-F main() -> i64 {
-    R check(0)
+fn main() -> i64 {
+    return check(0)
 }
 "#;
     assert_exit_code(source, 100);
@@ -86,16 +86,16 @@ F main() -> i64 {
 fn e2e_phase45_match_range_pattern() {
     // Exclusive range patterns in match
     let source = r#"
-F bucket(n: i64) -> i64 {
-    M n {
+fn bucket(n: i64) -> i64 {
+    match n {
         0..10 => 1,
         10..20 => 2,
         _ => 0
     }
 }
 
-F main() -> i64 {
-    R bucket(15)
+fn main() -> i64 {
+    return bucket(15)
 }
 "#;
     assert_exit_code(source, 2);
@@ -105,16 +105,16 @@ F main() -> i64 {
 fn e2e_phase45_match_inclusive_range() {
     // Inclusive range pattern (..=)
     let source = r#"
-F check(n: i64) -> i64 {
-    M n {
+fn check(n: i64) -> i64 {
+    match n {
         0..=5 => 1,
         6..=10 => 2,
         _ => 0
     }
 }
 
-F main() -> i64 {
-    R check(5)
+fn main() -> i64 {
+    return check(5)
 }
 "#;
     assert_exit_code(source, 1);
@@ -126,12 +126,12 @@ F main() -> i64 {
 fn e2e_phase45_for_loop_sum() {
     // Exclusive range for-loop summing 0..10
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     L i:0..10 {
         sum = sum + i
     }
-    R sum
+    return sum
 }
 "#;
     // 0+1+2+...+9 = 45
@@ -142,14 +142,14 @@ F main() -> i64 {
 fn e2e_phase45_for_loop_nested() {
     // Nested for-loops counting iterations
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     count := mut 0
     L i:0..5 {
         L j:0..3 {
             count = count + 1
         }
     }
-    R count
+    return count
 }
 "#;
     // 5 * 3 = 15
@@ -162,12 +162,12 @@ F main() -> i64 {
 fn e2e_phase45_while_loop_countdown() {
     // Condition-based loop counts down to zero
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     n := mut 10
     L n > 0 {
         n = n - 1
     }
-    R n
+    return n
 }
 "#;
     assert_exit_code(source, 0);
@@ -179,9 +179,9 @@ F main() -> i64 {
 fn e2e_phase45_defer_parse() {
     // Defer statement should parse and compile (execution verified separately)
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     D puts("cleanup")
-    R 42
+    return 42
 }
 "#;
     assert_exit_code(source, 42);
@@ -199,10 +199,10 @@ fn e2e_phase45_assert_expr() {
     // Phase 4c.2: `assert` is a panic source, so the caller must be
     // marked `partial` to opt out of the totality gate.
     let source = r#"
-partial F main() -> i64 {
+partial fn main() -> i64 {
     x := 10
     assert(x > 0)
-    R x
+    return x
 }
 "#;
     assert_exit_code(source, 10);
