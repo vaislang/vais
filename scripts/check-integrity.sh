@@ -224,7 +224,9 @@ else
             __tests__/e2e/vais-web-server-action-file-upload-production-runtime.test.ts \
             __tests__/e2e/vais-web-cloudflare-miniflare-runtime.test.ts \
             __tests__/e2e/vais-web-cloudflare-live-deploy.test.ts \
-            __tests__/e2e/vais-web-vercel-live-deploy.test.ts
+            __tests__/e2e/vais-web-vercel-live-deploy.test.ts \
+            __tests__/e2e/vais-web-netlify-live-deploy.test.ts \
+            __tests__/e2e/vais-web-aws-lambda-live-deploy.test.ts
     ) 2>&1 | tee "${WEB_RUNTIME_LOG}" || WEB_RUNTIME_EXIT=$?
 fi
 
