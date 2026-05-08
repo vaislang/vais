@@ -1,0 +1,31 @@
+# B-01: HashMap.get_opt(&key) with K=u64 — silent ptr/i64 coercion
+#
+# Discovered: 2026-05-08 loop 39 (test_transaction.vais multi-bug isolation).
+# Fixture narrowed from 370 LOC to 16 LOC by binary search across describe blocks
+# + scenario set + std imports.
+#
+# Symptom: clang error: '%t6' defined with type 'ptr' but expected 'i64'
+#   call %Option @HashMap_get_opt$u64_u64(%HashMap* %m, i64 %t6)
+#                                                       ^
+# 
+# Root cause hypothesis (NOT yet verified — multi-iter follow-up):
+#   Either vais-codegen silently coerces &u64 to u64 at call site, or
+#   vais-types accepts &K where K is expected without ref-deref insertion.
+#   The signature of HashMap::get_opt is `fn get_opt(&self, key: K) -> Option<V>`
+#   (compiler/std/hashmap.vais:259), so passing `&key` should be rejected at TC
+#   layer or auto-deref'd by codegen. Currently neither happens — silent path.
+#
+# Status: still_silent (codegen lowers to broken IR; clang catches loud).
+# Step 13 candidate (after Step 16 prerequisite if needed) or independent fix.
+
+use std/hashmap
+
+fn main() -> i64 {
+    m: HashMap<u64, u64> = HashMap.new()
+    m.insert(100u64, 200u64)
+    key: u64 = 100u64
+    match m.get_opt(&key) {
+        Some(v) => v as i64,
+        None => 0,
+    }
+}
