@@ -1,0 +1,4 @@
+surface=Escape closure captured-environment loss
+expected_per_design=exit 42 (= 37 + 5; closure x captured by value)
+actual_observed=exit varies (45, 69, 245, 104, ...) — capture frame freed before call, closure reads stale stack memory
+assertion=exit_not, forbidden_set=[42]

@@ -14,6 +14,14 @@
 #   INTEGRITY_BACKEND_PHASE158_MIN=18      minimum phase158 backend smoke
 #   INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=2   minimum cross_package_schema gate (positive + negative)
 #
+# Strict-default imports (Step 11 root fix, loop 29, 2026-05-08):
+#   This script does NOT export VAIS_STRICT_IMPORTS — the compiler is
+#   default-strict since simple.rs:209-249 inverted the Err arm. Every
+#   `vaisc check` / `vaisc build` invocation downstream of this script
+#   (cargo test on integrity / ecosystem / runtime smoke gates) inherits
+#   strict imports. Legacy harness opt-out is `VAIS_STRICT_IMPORTS=0`.
+#   See LESSONS L-002 (no silent failure) + WORKLOG loop 29.
+#
 # Exit codes:
 #   0  all gates pass
 #   1  regression detected OR a test suite exited non-zero

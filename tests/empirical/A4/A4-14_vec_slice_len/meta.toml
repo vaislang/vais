@@ -1,0 +1,47 @@
+[entry]
+id = "A4-14"
+classification = "A4 silent surface (runtime corruption)"
+surface = "Vec<T> ↔ &[T] permissive at call site (.len() path) — runtime corruption"
+site = "vais-types/inference/unification.rs (Vec ↔ Slice arm — currently classified Controlled, see Linear/Affine wrapper erasure entry's neighbour)"
+master_plan_version = 36
+proposed_reclassification = "from [controlled] (Vec ↔ Slice .len() path) to [phase.A4.runtime_silent] A4-14"
+
+[v1_evidence]
+probe_summary = "fn len_of(s: &[i64]) -> i64 { s.len() as i64 }; main passes &v where v: Vec<i64> = [1,2,3]; expects 3."
+expected_per_design = "exit 3 (Vec length, well-typed Vec.len())"
+actual_observed = "exit 232 (macOS arm64, vaisc release build, 2026-05-08). The fat-pointer layout of Vec<i64> ({ptr, len, cap}) is misread as a Slice header ({ptr, len}) and .len() reads the wrong slot."
+verified_date = "2026-05-08"
+
+[v2_evidence]
+status = "v1_reverified_silent_corruption"
+notes = """
+History: F-07 (STEP7_FINDINGS, 2026-05-03) first measured exit 184 (different exact value, same corruption class — F-05 memory-load class). Re-measurement 2026-05-08 yields exit 232; specific value varies with stack layout but the assertion is "exit ≠ 3" (the well-typed result).
+
+The surface is currently in master-plan [[controlled.entry]] as "Vec ↔ Slice (.len() path)" at unification.rs:370. Empirical evidence (this fixture) shows the surface is in fact silent corruption, not a controlled coercion. v36+1 master-plan revision should reclassify Controlled → A4-14.
+
+Multi-form follow-up probes (next iteration):
+  - .len() with non-zero index access: probe_pos[i] where i unaffected by len mismatch
+  - element access via *(slice as *T) — should also corrupt
+"""
+
+[migration]
+proposal = """
+Master-plan v37 (next revision) should:
+  1. Remove "Vec ↔ Slice (.len() path)" from [[controlled.entry]] —
+     it is empirically silent corruption, not controlled.
+  2. Add A4-14 to [[phase.A4.runtime_silent]] with this fixture as v1 evidence.
+  3. Bump phase.A4.runtime_silent_count and total accordingly.
+  4. Decrement controlled.total accordingly.
+
+Codemod (Step 13 follow-up): tighten unification.rs Vec ↔ Slice arm to require explicit .as_slice() or explicit Slice construction.
+"""
+
+[assertion_kind]
+kind = "exit_not"
+forbidden_set = [3]
+rationale = """
+The well-typed result (Vec length 3) is forbidden — observing it would mean either the surface was tightened (good) or the test infra changed (drift). The actual exit is environment-dependent (memory layout) but always non-3 because the layout mismatch is structural.
+
+When the hard-block phase lands (Step 13 follow-up for A4-14), flip
+this fixture from exit_not → check_fails with E001/Vec/Slice patterns.
+"""

@@ -1,0 +1,48 @@
+[entry]
+id = "A4-15"
+classification = "A4 silent surface (runtime corruption — stack-after-return)"
+surface = "Escape closure: closure returned from function and called later loses captured environment"
+site = "vais-codegen closure lowering — capture frame allocated on caller stack, freed at return"
+master_plan_version = 36
+proposed_reclassification = "ADD to [phase.A4.runtime_silent] — not previously in master-plan inventory"
+
+[v1_evidence]
+probe_summary = "fn make_adder(x) returns closure |n| n + x. main captures add5 then calls add5(37). Closure should compute 37 + 5 = 42."
+expected_per_design = "exit 42 (well-typed escape closure preserving captured x=5)"
+actual_observed = "exit ≠ 42 (macOS arm64, vaisc release build, 2026-05-08 measured exit=45). Specific value varies across builds — classic stack-after-return corruption."
+verified_date = "2026-05-08"
+
+[v2_evidence]
+status = "v1_reverified_silent_corruption"
+notes = """
+History: F-18 (STEP7_FINDINGS, 2026-05-04) discovered this during A2-04 inline-closure promotion. The fixture lived under compiler/tests/empirical/A2/A2-04_inline_closure/probe_neg.vais (double duty as A2 negative form + A4 evidence). Re-measured 2026-05-08 = exit 45 (different value than the earlier 245/69 — same corruption class, F-05 memory-load).
+
+A2-04 (inline closure) is certified as A2 because the inline form (apply(|n| n+1, 41) = 42 deterministically) does NOT escape — capture frame lives on caller's stack throughout call. Escape form crosses the return boundary.
+
+Multi-form follow-up (next iteration):
+  - move-capture annotation if/when added (Step 16)
+  - escape closure with mutable capture
+  - escape closure capturing struct value vs reference
+"""
+
+[migration]
+proposal = """
+Master-plan v37 (next revision) should:
+  1. Add A4-15 to [[phase.A4.runtime_silent]] with this fixture as v1 evidence.
+  2. Bump phase.A4.runtime_silent_count and total accordingly.
+
+Codemod / compiler fix path: closure escape detection in TC. Either:
+  (a) reject escape closures at type-check (block surface entirely until codegen supports heap-allocated capture frame).
+  (b) heap-allocate capture frame for escape closures (real fix; ties to Step 16 memory protocol).
+
+A2-04 certified subset (inline closures) is unaffected by either path.
+"""
+
+[assertion_kind]
+kind = "exit_not"
+forbidden_set = [42]
+rationale = """
+The well-typed result (42 = 37 + 5) is forbidden — observing it would mean the escape-closure surface was correctly fixed (good) or a build accidentally had the captured value land in the right stack slot (rare drift). Specific exit value varies by build; the assertion is structural ("escape closure does not preserve capture").
+
+When the surface is correctly fixed (path a or b above), flip this fixture from exit_not → exact_exit=42 to assert positive correctness.
+"""
