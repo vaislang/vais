@@ -575,28 +575,28 @@ fn main() -> i64 {
 
 #[test]
 fn syntax_mod_pub_fn() {
-    let src = "pub fn foo() -> i64 { 1 }\nF main() -> i64 { foo() }";
+    let src = "pub fn foo() -> i64 { 1 }\nfn main() -> i64 { foo() }";
     let (_d, p) = write_tmp("mod_pub.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: pub fn (pub fn)");
 }
 
 #[test]
 fn syntax_mod_async_fn() {
-    let src = "A fn fetch() -> i64 { 0 }\nF main() -> i64 { 0 }";
+    let src = "A fn fetch() -> i64 { 0 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("mod_async.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: A fn (async fn)");
 }
 
 #[test]
 fn syntax_mod_pub_async_fn() {
-    let src = "P A fn pub_async() -> i64 { 0 }\nF main() -> i64 { 0 }";
+    let src = "pub A fn pub_async() -> i64 { 0 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("mod_pub_async.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: P A fn (pub async fn)");
 }
 
 #[test]
 fn syntax_mod_pure_fn() {
-    let src = "pure fn add(a: i64, b: i64) -> i64 = a + b\nF main() -> i64 { add(1, 2) }";
+    let src = "pure fn add(a: i64, b: i64) -> i64 = a + b\nfn main() -> i64 { add(1, 2) }";
     let (_d, p) = write_tmp("mod_pure.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: pure F");
 }
@@ -604,49 +604,49 @@ fn syntax_mod_pure_fn() {
 #[test]
 fn syntax_mod_unsafe_fn() {
     // Phase 1.18: `unsafe F ...` top-level modifier accepted at parse.
-    let src = "unsafe fn raw(p: i64) -> i64 { p }\nF main() -> i64 { 0 }";
+    let src = "unsafe fn raw(p: i64) -> i64 { p }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("mod_unsafe.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: unsafe F");
 }
 
 #[test]
 fn syntax_mod_io_fn() {
-    let src = "io fn print_val(x: i64) { }\nF main() -> i64 { 0 }";
+    let src = "io fn print_val(x: i64) { }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("mod_io.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: io F");
 }
 
 #[test]
 fn syntax_mod_partial_fn() {
-    let src = "partial fn div(a: i64, b: i64) -> i64 { a / b }\nF main() -> i64 { 0 }";
+    let src = "partial fn div(a: i64, b: i64) -> i64 { a / b }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("mod_partial.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: partial F");
 }
 
 #[test]
 fn syntax_mod_pub_struct() {
-    let src = "P struct Pt { x: i64, y: i64, }\nF main() -> i64 { 0 }";
+    let src = "pub struct Pt { x: i64, y: i64, }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("mod_pub_struct.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: P struct (pub struct)");
 }
 
 #[test]
 fn syntax_mod_pub_enum() {
-    let src = "P enum Color { Red, Green, Blue, }\nF main() -> i64 { 0 }";
+    let src = "pub enum Color { Red, Green, Blue, }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("mod_pub_enum.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: P enum (pub enum)");
 }
 
 #[test]
 fn syntax_mod_pure_expr_body() {
-    let src = "pure fn square(x: i64) -> i64 = x * x\nF main() -> i64 { square(5) }";
+    let src = "pure fn square(x: i64) -> i64 = x * x\nfn main() -> i64 { square(5) }";
     let (_d, p) = write_tmp("mod_pure_expr.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: pure fn expression body");
 }
 
 #[test]
 fn syntax_neg_mod_double_pub() {
-    let src = "P pub fn foo() -> i64 { 0 }\nF main() -> i64 { 0 }";
+    let src = "pub pub fn foo() -> i64 { 0 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("neg_double_pub.vais", src);
     assert!(!ok_parse(&p), "should not parse: double pub P P F");
 }
@@ -654,7 +654,7 @@ fn syntax_neg_mod_double_pub() {
 #[test]
 fn syntax_neg_mod_missing_fn_keyword() {
     // modifier without F should not parse as a function
-    let src = "P main() -> i64 { 0 }";
+    let src = "pub main() -> i64 { 0 }";
     let (_d, p) = write_tmp("neg_mod_no_fn.vais", src);
     assert!(!ok_parse(&p), "should not parse: P without fn keyword");
 }
@@ -1112,49 +1112,49 @@ fn syntax_neg_match_missing_arrow() {
 
 #[test]
 fn syntax_type_vec() {
-    let src = "fn takes_vec(v: Vec<i64>) -> i64 { 0 }\nF main() -> i64 { 0 }";
+    let src = "fn takes_vec(v: Vec<i64>) -> i64 { 0 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("type_vec.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: Vec<i64> type");
 }
 
 #[test]
 fn syntax_type_hashmap() {
-    let src = "fn takes_map(m: HashMap<str, i64>) -> i64 { 0 }\nF main() -> i64 { 0 }";
+    let src = "fn takes_map(m: HashMap<str, i64>) -> i64 { 0 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("type_hashmap.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: HashMap<str, i64> type");
 }
 
 #[test]
 fn syntax_type_option() {
-    let src = "fn takes_opt(o: Option<i64>) -> i64 { 0 }\nF main() -> i64 { 0 }";
+    let src = "fn takes_opt(o: Option<i64>) -> i64 { 0 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("type_option.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: Option<i64> type");
 }
 
 #[test]
 fn syntax_type_result() {
-    let src = "fn takes_res(r: Result<i64, str>) -> i64 { 0 }\nF main() -> i64 { 0 }";
+    let src = "fn takes_res(r: Result<i64, str>) -> i64 { 0 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("type_result.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: Result<i64, str> type");
 }
 
 #[test]
 fn syntax_type_tuple() {
-    let src = "fn takes_tuple(t: (i64, str)) -> i64 { 0 }\nF main() -> i64 { 0 }";
+    let src = "fn takes_tuple(t: (i64, str)) -> i64 { 0 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("type_tuple.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: tuple type (i64, str)");
 }
 
 #[test]
 fn syntax_type_ref() {
-    let src = "fn takes_ref(x: &i64) -> i64 { 0 }\nF main() -> i64 { 0 }";
+    let src = "fn takes_ref(x: &i64) -> i64 { 0 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("type_ref.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: &i64 reference type");
 }
 
 #[test]
 fn syntax_type_mut_ref() {
-    let src = "fn takes_mut_ref(x: &mut i64) -> i64 { 0 }\nF main() -> i64 { 0 }";
+    let src = "fn takes_mut_ref(x: &mut i64) -> i64 { 0 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("type_mut_ref.vais", src);
     assert!(
         ok_parse(&p),
@@ -1164,21 +1164,21 @@ fn syntax_type_mut_ref() {
 
 #[test]
 fn syntax_type_ptr() {
-    let src = "fn takes_ptr(x: *i64) -> i64 { 0 }\nF main() -> i64 { 0 }";
+    let src = "fn takes_ptr(x: *i64) -> i64 { 0 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("type_ptr.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: *i64 pointer type");
 }
 
 #[test]
 fn syntax_type_array() {
-    let src = "fn takes_arr(a: [i64; 5]) -> i64 { 0 }\nF main() -> i64 { 0 }";
+    let src = "fn takes_arr(a: [i64; 5]) -> i64 { 0 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("type_array.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: [i64; 5] array type");
 }
 
 #[test]
 fn syntax_type_fn_pointer() {
-    let src = "fn takes_fn(f: fn(i64) -> i64) -> i64 { f(0) }\nF main() -> i64 { 0 }";
+    let src = "fn takes_fn(f: fn(i64) -> i64) -> i64 { f(0) }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("type_fn_ptr.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: fn(i64)->i64 function type");
 }
@@ -1198,7 +1198,7 @@ fn main() -> i64 { 0 }
 
 #[test]
 fn syntax_type_dyn_trait() {
-    let src = "fn takes_dyn(x: &dyn Show) -> i64 { 0 }\nF main() -> i64 { 0 }";
+    let src = "fn takes_dyn(x: &dyn Show) -> i64 { 0 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("type_dyn.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: &dyn Trait type");
 }
@@ -1206,7 +1206,7 @@ fn syntax_type_dyn_trait() {
 #[test]
 fn syntax_neg_type_vec_empty_generic() {
     // Phase 1.17: Vec<> empty generic list is now rejected at parse.
-    let src = "fn takes_vec(v: Vec<>) -> i64 { 0 }\nF main() -> i64 { 0 }";
+    let src = "fn takes_vec(v: Vec<>) -> i64 { 0 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("neg_vec_empty.vais", src);
     assert!(!ok_parse(&p), "should not parse: Vec<> with empty type arg");
 }
@@ -1214,7 +1214,7 @@ fn syntax_neg_type_vec_empty_generic() {
 #[test]
 fn syntax_neg_type_bad_primitive() {
     // Phase 1.16: i65 (primitive-lookalike but invalid) rejected at parse.
-    let src = "fn takes_bad(x: i65) -> i64 { 0 }\nF main() -> i64 { 0 }";
+    let src = "fn takes_bad(x: i65) -> i64 { 0 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("neg_bad_prim.vais", src);
     assert!(!ok_parse(&p), "should not parse: i65 bad primitive");
 }
@@ -1491,7 +1491,7 @@ fn main() -> i64 {
 #[test]
 fn syntax_neg_struct_missing_comma() {
     // missing comma between fields
-    let src = "struct Bad { x: i64 y: i64 }\nF main() -> i64 { 0 }";
+    let src = "struct Bad { x: i64 y: i64 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("neg_struct_comma.vais", src);
     assert!(
         !ok_parse(&p),
@@ -1580,7 +1580,7 @@ fn main() -> i64 { 0 }
 #[test]
 fn syntax_neg_enum_missing_comma() {
     // EN Color { Red Green } — no comma
-    let src = "enum Color { Red Green }\nF main() -> i64 { 0 }";
+    let src = "enum Color { Red Green }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("neg_enum_comma.vais", src);
     assert!(
         !ok_parse(&p),
@@ -1696,14 +1696,14 @@ fn main() -> i64 { 0 }
 
 #[test]
 fn syntax_generic_identity() {
-    let src = "fn id<T>(x: T) -> type = x\nF main() -> i64 { id(42) }";
+    let src = "fn id<T>(x: T) -> type = x\nfn main() -> i64 { id(42) }";
     let (_d, p) = write_tmp("generic_id.vais", src);
     assert!(ok_tc(&p), "ok_tc failed: generic identity fn id<T>");
 }
 
 #[test]
 fn syntax_generic_two_params() {
-    let src = "fn pair<A, B>(a: A, b: B) -> A { a }\nF main() -> i64 { pair(42, true) }";
+    let src = "fn pair<A, B>(a: A, b: B) -> A { a }\nfn main() -> i64 { pair(42, true) }";
     let (_d, p) = write_tmp("generic_two.vais", src);
     assert!(ok_tc(&p), "ok_tc failed: generic fn two type params");
 }
@@ -1778,14 +1778,14 @@ fn main() -> i64 { 0 }
 
 #[test]
 fn syntax_import_simple() {
-    let src = "use std::io\nF main() -> i64 { 0 }";
+    let src = "use std::io\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("import_simple.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: use std::io import");
 }
 
 #[test]
 fn syntax_import_multi() {
-    let src = "use std::io::{print, println}\nF main() -> i64 { 0 }";
+    let src = "use std::io::{print, println}\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("import_multi.vais", src);
     assert!(
         ok_parse(&p),
@@ -1795,7 +1795,7 @@ fn syntax_import_multi() {
 
 #[test]
 fn syntax_import_dot_path() {
-    let src = "use foo.bar\nF main() -> i64 { 0 }";
+    let src = "use foo.bar\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("import_dot.vais", src);
     assert!(
         ok_parse(&p),
@@ -1805,7 +1805,7 @@ fn syntax_import_dot_path() {
 
 #[test]
 fn syntax_attr_cfg_linux() {
-    let src = "#[cfg(target_os = \"linux\")]\nF main() -> i64 { 0 }";
+    let src = "#[cfg(target_os = \"linux\")]\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("attr_cfg.vais", src);
     assert!(
         ok_parse(&p),
@@ -1815,7 +1815,7 @@ fn syntax_attr_cfg_linux() {
 
 #[test]
 fn syntax_attr_wasm_export() {
-    let src = "#[wasm_export(\"run\")]\nF main() -> i64 { 0 }";
+    let src = "#[wasm_export(\"run\")]\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("attr_wasm_export.vais", src);
     assert!(
         ok_parse(&p),
@@ -1826,14 +1826,14 @@ fn syntax_attr_wasm_export() {
 #[test]
 fn syntax_attr_wasm_import() {
     let src =
-        "#[wasm_import(\"env\", \"log\")]\nF log_val(x: i64) -> i64 { 0 }\nF main() -> i64 { 0 }";
+        "#[wasm_import(\"env\", \"log\")]\nfn log_val(x: i64) -> i64 { 0 }\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("attr_wasm_import.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: #[wasm_import()] attribute");
 }
 
 #[test]
 fn syntax_neg_attr_unclosed() {
-    let src = "#[cfg\nF main() -> i64 { 0 }";
+    let src = "#[cfg\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("neg_attr_unclosed.vais", src);
     assert!(!ok_parse(&p), "should not parse: unclosed attribute #[cfg");
 }
@@ -1982,7 +1982,7 @@ fn main() -> i64 {
 
 #[test]
 fn syntax_misc_empty_struct() {
-    let src = "struct Empty {}\nF main() -> i64 { _e := Empty {}\n 0 }";
+    let src = "struct Empty {}\nfn main() -> i64 { _e := Empty {}\n 0 }";
     let (_d, p) = write_tmp("misc_empty_struct.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: empty struct struct Empty {{}}");
 }
@@ -2019,21 +2019,21 @@ fn main() -> i64 { fib(7) }
 
 #[test]
 fn syntax_misc_const() {
-    let src = "const MAX: i64 = 100\nF main() -> i64 { MAX }";
+    let src = "const MAX: i64 = 100\nfn main() -> i64 { MAX }";
     let (_d, p) = write_tmp("misc_const.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: const declaration");
 }
 
 #[test]
 fn syntax_misc_global() {
-    let src = "G counter: i64 = 0\nF main() -> i64 { counter }";
+    let src = "G counter: i64 = 0\nfn main() -> i64 { counter }";
     let (_d, p) = write_tmp("misc_global.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: G global variable");
 }
 
 #[test]
 fn syntax_misc_type_alias() {
-    let src = "type MyInt = i64\nF main() -> i64 { x: MyInt := 5\n x }";
+    let src = "type MyInt = i64\nfn main() -> i64 { x: MyInt := 5\n x }";
     let (_d, p) = write_tmp("misc_type_alias.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: type type alias");
 }
@@ -2095,14 +2095,14 @@ fn main() -> i64 { sum_to(10) }
 
 #[test]
 fn syntax_extra_fn_no_args() {
-    let src = "fn get_zero() -> i64 { 0 }\nF main() -> i64 { get_zero() }";
+    let src = "fn get_zero() -> i64 { 0 }\nfn main() -> i64 { get_zero() }";
     let (_d, p) = write_tmp("extra_no_args.vais", src);
     assert!(ok_tc(&p), "ok_tc failed: fn with no args");
 }
 
 #[test]
 fn syntax_extra_fn_unit_return() {
-    let src = "fn noop() { }\nF main() -> i64 { noop()\n 0 }";
+    let src = "fn noop() { }\nfn main() -> i64 { noop()\n 0 }";
     let (_d, p) = write_tmp("extra_unit_ret.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: fn with unit return");
 }
@@ -2284,7 +2284,7 @@ fn main() -> i64 {
 
 #[test]
 fn syntax_extra_empty_fn_body() {
-    let src = "fn nothing() {}\nF main() -> i64 { nothing()\n 0 }";
+    let src = "fn nothing() {}\nfn main() -> i64 { nothing()\n 0 }";
     let (_d, p) = write_tmp("extra_empty_fn.vais", src);
     assert!(ok_parse(&p), "ok_parse failed: empty fn body {{}}");
 }

@@ -153,13 +153,13 @@ fn callarg_invariant_holds_on_simple_vec_to_slice_push() {
     // is_vec_to_slice_coercion path handles this.
     let ir = gen_ir(
         r#"
-        F take_slice(s: &[u8]) -> i64 {
-            R 0;
+        fn take_slice(s: &[u8]) -> i64 {
+            return 0;
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             v: Vec<u8> := mut Vec.with_capacity(4);
             v.push(1u8);
-            R take_slice(&v);
+            return take_slice(&v);
         }
         "#,
     );
@@ -206,15 +206,15 @@ fn vec_of_vec_no_annotation_loses_inner_type() {
     // indexing later loads the inner Vec as raw i64.
     let ir = gen_ir(
         r#"
-        F take_slice(s: &[u8]) -> i64 {
-            R 0;
+        fn take_slice(s: &[u8]) -> i64 {
+            return 0;
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             keys := mut Vec.with_capacity(2);
             inner := mut Vec.with_capacity(1);
             inner.push(42u8);
             keys.push(inner);
-            R take_slice(&keys[0]);
+            return take_slice(&keys[0]);
         }
         "#,
     );
@@ -246,15 +246,15 @@ fn vec_of_vec_indexing_simple_repro_passes() {
     // (vaisdb Task #11 follow-up). For now this test guards the simple case.
     let ir = gen_ir(
         r#"
-        F take_slice(s: &[u8]) -> i64 {
-            R 0;
+        fn take_slice(s: &[u8]) -> i64 {
+            return 0;
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             keys: Vec<Vec<u8>> := mut Vec.with_capacity(2);
             inner: Vec<u8> := mut Vec.with_capacity(1);
             inner.push(42u8);
             keys.push(inner);
-            R take_slice(&keys[0]);
+            return take_slice(&keys[0]);
         }
         "#,
     );

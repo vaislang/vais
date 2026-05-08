@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn test_function_def() {
-    let source = "F add(a:i64,b:i64)->i64=a+b";
+    let source = "fn add(a:i64,b:i64)->i64=a+b";
     let tokens = tokenize(source).unwrap();
 
     assert_eq!(tokens[0].token, Token::Function);
@@ -15,7 +15,7 @@ fn test_function_def() {
 
 #[test]
 fn test_fibonacci() {
-    let source = "F fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)";
+    let source = "fn fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)";
     let tokens = tokenize(source).unwrap();
 
     // Check @ for self-recursion
@@ -25,7 +25,7 @@ fn test_fibonacci() {
 
 #[test]
 fn test_struct_def() {
-    let source = "S Point{x:f64,y:f64}";
+    let source = "struct Point{x:f64,y:f64}";
     let tokens = tokenize(source).unwrap();
 
     assert_eq!(tokens[0].token, Token::Struct);
@@ -34,14 +34,13 @@ fn test_struct_def() {
 
 #[test]
 fn test_control_flow() {
-    let source = "I x<0{-1}E{0}";
+    let source = "I x<0{-1}else{0}";
     let tokens = tokenize(source).unwrap();
 
     assert_eq!(tokens[0].token, Token::If);
-    // E is used for both enum definition and else - lexer returns Enum
-    // The parser decides context (after { in if => else)
-    let e_idx = tokens.iter().position(|t| t.token == Token::Enum).unwrap();
-    assert!(e_idx > 0);
+    // P4 retired E single-char; `else` lexes to Token::Else.
+    let else_idx = tokens.iter().position(|t| t.token == Token::Else).unwrap();
+    assert!(else_idx > 0);
 }
 
 #[test]
@@ -266,8 +265,9 @@ fn test_empty_string() {
 
 #[test]
 fn test_all_keywords() {
-    // F=Function, S=Struct, E=Enum, I=If, L=Loop, M=Match, R=Return, B=Break, C=Continue, T=Type, W=Trait, A=Async, P=Pub, U=Use, X=Impl
-    let source = "F S E I L M R B C T W A P U X";
+    // P4: retired single-char F/S/E/M/R/T/U/P/W/X — only multi-char canonical forms
+    // remain. Non-retired single-char keywords (I/L/A/B/C) still lex as keywords.
+    let source = "fn struct enum I L match return B C type trait A pub use impl";
     let tokens = tokenize(source).unwrap();
     assert_eq!(tokens[0].token, Token::Function);
     assert_eq!(tokens[1].token, Token::Struct);
@@ -279,7 +279,7 @@ fn test_all_keywords() {
     assert_eq!(tokens[7].token, Token::Break);
     assert_eq!(tokens[8].token, Token::Continue);
     assert_eq!(tokens[9].token, Token::TypeKeyword);
-    assert_eq!(tokens[10].token, Token::Trait); // W is Trait
+    assert_eq!(tokens[10].token, Token::Trait);
     assert_eq!(tokens[11].token, Token::Async);
     assert_eq!(tokens[12].token, Token::Pub);
     assert_eq!(tokens[13].token, Token::Use);
@@ -390,9 +390,9 @@ fn test_logical_operators() {
 #[test]
 fn test_multiline_code() {
     let source = r#"
-F add(a:i64,
+fn add(a:i64,
   b:i64)->i64 {
-R a + b
+return a + b
 }
 "#;
     let tokens = tokenize(source).unwrap();
@@ -442,7 +442,7 @@ fn test_span_accuracy() {
 fn test_nested_generic_syntax() {
     // Test nested generic type syntax with spaces: Vec<HashMap<K, V> >
     // Note: Without spaces, >> is tokenized as Shr (right shift)
-    let source = "S Container{data:Vec<HashMap<str,Option<i64> > >}";
+    let source = "struct Container{data:Vec<HashMap<str,Option<i64> > >}";
     let tokens = tokenize(source).unwrap();
 
     // Verify proper tokenization of nested generics
@@ -469,7 +469,7 @@ fn test_nested_generic_syntax() {
 #[test]
 fn test_deeply_nested_generic_combinations() {
     // Test Vec<HashMap<K, Option<V> > > with spaces to avoid >> tokenization
-    let source = "F process(data:Vec<HashMap<str,Option<Vec<i64> > > >)->i64=42";
+    let source = "fn process(data:Vec<HashMap<str,Option<Vec<i64> > > >)->i64=42";
     let tokens = tokenize(source).unwrap();
 
     assert!(tokens.iter().any(|t| t.token == Token::Function));
@@ -552,11 +552,11 @@ fn test_integer_overflow_literal() {
 
 #[test]
 fn test_pattern_with_guard_syntax() {
-    // Test pattern matching with guard: M x{n I n>0=>n,_=>0}
-    let source = "F abs(x:i64)->i64=M x{n I n>0=>n,n I n<0=>-n,_=>0}";
+    // Test pattern matching with guard: match x{n I n>0=>n,_=>0}
+    let source = "fn abs(x:i64)->i64=match x{n I n>0=>n,n I n<0=>-n,_=>0}";
     let tokens = tokenize(source).unwrap();
 
-    // Verify M (Match), I (If in guard position), => (FatArrow)
+    // Verify match, I (If in guard position), => (FatArrow)
     assert!(tokens.iter().any(|t| t.token == Token::Match));
     assert!(tokens.iter().any(|t| t.token == Token::If));
     assert!(tokens.iter().any(|t| t.token == Token::FatArrow));
@@ -565,7 +565,7 @@ fn test_pattern_with_guard_syntax() {
 #[test]
 fn test_nested_pattern_destructuring() {
     // Test nested destructuring: Some((x, y))
-    let source = "M opt{Some((x,y))=>x+y,None=>0}";
+    let source = "match opt{Some((x,y))=>x+y,None=>0}";
     let tokens = tokenize(source).unwrap();
 
     assert!(tokens.iter().any(|t| t.token == Token::Match));
@@ -585,7 +585,7 @@ fn test_nested_pattern_destructuring() {
 #[test]
 fn test_complex_guard_condition() {
     // Test complex guard with multiple conditions
-    let source = "M (x,y){(a,b) I a>0&&b<10=>1,_=>0}";
+    let source = "match (x,y){(a,b) I a>0&&b<10=>1,_=>0}";
     let tokens = tokenize(source).unwrap();
 
     assert!(tokens.iter().any(|t| t.token == Token::Match));
@@ -788,46 +788,39 @@ fn test_macro_with_repetition() {
 }
 
 #[test]
-fn test_split_keyword_idents_ei() {
-    // "EI" must split into Enum (E=else) + If
-    let source = "I x>0{}EI x>5{}E{}";
-    let tokens = tokenize(source).unwrap();
-    // Find the Enum token that comes after '}'
-    let enum_positions: Vec<_> = tokens
-        .iter()
-        .enumerate()
-        .filter(|(_, t)| t.token == Token::Enum)
-        .map(|(i, _)| i)
-        .collect();
-    assert!(
-        !enum_positions.is_empty(),
-        "should have at least one Enum token"
-    );
-    // The token after the first Enum that resulted from split must be If
-    for &pos in &enum_positions {
-        if pos + 1 < tokens.len() && tokens[pos + 1].token == Token::If {
-            return; // found E followed by I from the split
-        }
-    }
-    panic!("Expected Enum followed by If from EI split");
+fn test_split_keyword_idents_ei_retired() {
+    // P4: E retired (now ident); I still keyword.
+    // 2-char ident "EI" → first char ident (E retired), second char keyword (I)
+    // → mixed → NOT split, stays as Ident("EI").
+    let tokens = tokenize("EI").unwrap();
+    assert_eq!(tokens.len(), 1, "EI should not split after E retire");
+    assert_eq!(tokens[0].token, Token::Ident("EI".to_string()));
 }
 
 #[test]
-fn test_split_keyword_idents_ee() {
-    // "EE" (two E's) must split into Enum + Enum
+fn test_split_keyword_idents_ee_retired() {
+    // P4: both E's retired → both ident → ident "EE" stays single ident.
     let tokens = tokenize("EE").unwrap();
-    assert_eq!(tokens.len(), 2, "EE should produce exactly 2 tokens");
-    assert_eq!(tokens[0].token, Token::Enum);
-    assert_eq!(tokens[1].token, Token::Enum);
+    assert_eq!(tokens.len(), 1, "EE should not split after E retire");
+    assert_eq!(tokens[0].token, Token::Ident("EE".to_string()));
 }
 
 #[test]
-fn test_split_keyword_idents_if() {
-    // "IF" must split into If + Function
+fn test_split_keyword_idents_if_retired() {
+    // P4: F retired (now ident); I still keyword.
+    // 2-char ident "IF" → I keyword + F ident → mixed → NOT split.
     let tokens = tokenize("IF").unwrap();
-    assert_eq!(tokens.len(), 2, "IF should produce exactly 2 tokens");
+    assert_eq!(tokens.len(), 1, "IF should not split after F retire");
+    assert_eq!(tokens[0].token, Token::Ident("IF".to_string()));
+}
+
+#[test]
+fn test_split_keyword_idents_il() {
+    // P4: I and L both still keywords (not retired) → 2-char ident "IL" splits.
+    let tokens = tokenize("IL").unwrap();
+    assert_eq!(tokens.len(), 2, "IL should split (both still keywords)");
     assert_eq!(tokens[0].token, Token::If);
-    assert_eq!(tokens[1].token, Token::Function);
+    assert_eq!(tokens[1].token, Token::Loop);
 }
 
 #[test]
@@ -878,7 +871,7 @@ fn test_utf8_string_mixed_ascii_korean() {
 #[test]
 fn test_utf8_line_comment_korean() {
     // # line comment followed by Korean text must be skipped cleanly
-    let source = "# 안녕하세요 주석\nF main(){}";
+    let source = "# 안녕하세요 주석\nfn main(){}";
     let tokens = tokenize(source).unwrap();
     assert_eq!(tokens[0].token, Token::Function);
     assert_eq!(tokens[1].token, Token::Ident("main".to_string()));
@@ -1032,8 +1025,8 @@ fn test_lifetime_static_not_broken() {
 
 #[test]
 fn test_lifetime_then_identifier() {
-    // `'a T` — lifetime followed by a type identifier. Common in generic signatures.
-    let tokens = tokenize("'a T").unwrap();
+    // `'a type` — lifetime followed by the multi-char `type` keyword (P4: T retired).
+    let tokens = tokenize("'a type").unwrap();
     assert_eq!(tokens.len(), 2);
     assert_eq!(tokens[0].token, Token::Lifetime("a".to_string()));
     assert_eq!(tokens[1].token, Token::TypeKeyword);

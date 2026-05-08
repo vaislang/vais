@@ -13,15 +13,17 @@ use std::fmt;
 
 /// Token types for Vais 0.0.1 language.
 ///
-/// Uses single-letter keywords (F, S, E, I, L, M, etc.) for token efficiency,
-/// optimizing for AI model processing and reducing token count in LLM contexts.
+/// Step 19 P4 retired the single-char declaration keywords (F/S/E/M/R/T/U/P/W/X);
+/// the canonical multi-char forms (`fn`/`struct`/`enum`/`match`/`return`/`type`/
+/// `use`/`pub`/`trait`/`impl`) are the only accepted spellings. Non-retired
+/// single-char forms (I/L/A/B/C/D/O/N/G) remain for control-flow and minor uses.
 ///
 /// # Examples
 ///
 /// ```
 /// use vais_lexer::{tokenize, Token};
 ///
-/// let source = "F add(a:i64,b:i64)->i64=a+b";
+/// let source = "fn add(a:i64,b:i64)->i64=a+b";
 /// let tokens = tokenize(source).unwrap();
 /// assert_eq!(tokens[0].token, Token::Function);
 /// ```
@@ -47,46 +49,36 @@ pub enum Token {
     #[token("<!--", skip_html_comment)]
     // === VaisX Template Doctype (HTML5 doctype declaration) ===
     #[regex(r"<!DOCTYPE[^>]*>", logos::skip, ignore(ascii_case))]
-    // === Keywords (single-letter for token efficiency) ===
-    // Higher priority than identifiers
-    #[token("F", priority = 3)]
+    // === Keywords (multi-char canonical; Step 19 P4 retired single-char forms F/S/E/EN/EL/M/R/T/U/P/W/X) ===
+    // Non-retired single-char keywords (I/L/A/B/C/D/O/N/G/Y) remain as tokens.
     #[token("fn", priority = 3)]
     Function,
-    #[token("S", priority = 3)]
     #[token("struct", priority = 3)]
     Struct,
-    #[token("E", priority = 3)]
     #[token("enum", priority = 3)]
     Enum,
     #[token("I", priority = 3)]
     If,
     #[token("L", priority = 3)]
     Loop,
-    #[token("M", priority = 3)]
     #[token("match", priority = 3)]
     Match,
     #[token("A", priority = 3)]
     Async,
-    #[token("R", priority = 3)]
     #[token("return", priority = 3)]
     Return,
     #[token("B", priority = 3)]
     Break,
     #[token("C", priority = 3)]
     Continue,
-    #[token("T", priority = 3)]
     #[token("type", priority = 3)]
     TypeKeyword,
-    #[token("U", priority = 3)]
     #[token("use", priority = 3)]
     Use,
-    #[token("P", priority = 3)]
     #[token("pub", priority = 3)]
     Pub,
-    #[token("W", priority = 3)]
     #[token("trait", priority = 3)]
     Trait,
-    #[token("X", priority = 3)]
     #[token("impl", priority = 3)]
     Impl,
     #[token("D", priority = 3)]
@@ -99,11 +91,14 @@ pub enum Token {
     Global,
 
     // === Unambiguous 2-char Keywords (priority 4 > single-letter priority 3) ===
-    #[token("EN", priority = 4)]
-    EnumKeyword, // Unambiguous enum (replaces contextual E)
-    #[token("EL", priority = 4)]
+    // EN/EL retired with Step 19 P4 — the `#[token("EN")]` / `#[token("EL")]`
+    // logos attributes are removed so the lexer no longer accepts those
+    // spellings, but the variants stay for backwards compatibility with
+    // downstream parser/codegen match arms (legacy paths that mention the
+    // variant but never receive it). Canonical replacements: `enum`, `else`.
+    EnumKeyword, // Retired spelling EN — variant retained for parser arms
     #[token("else", priority = 4)]
-    Else, // Unambiguous else (replaces contextual E after if)
+    Else, // Unambiguous else
     #[token("LF", priority = 4)]
     ForEach, // Unambiguous for-each loop (replaces contextual L pattern:iter)
     #[token("LW", priority = 4)]
@@ -1118,9 +1113,8 @@ fn split_keyword_idents(tokens: Vec<SpannedToken>) -> Vec<SpannedToken> {
             if s.len() == 2 {
                 // Check if this 2-char sequence is one of the unambiguous 2-char keywords.
                 // These must NOT be split into two single-char keyword tokens.
+                // EN/EL retired with Step 19 P4 — only LF/LW remain.
                 let two_char_keyword = match s.as_str() {
-                    "EN" => Some(Token::EnumKeyword),
-                    "EL" => Some(Token::Else),
                     "LF" => Some(Token::ForEach),
                     "LW" => Some(Token::While),
                     _ => None,
@@ -1156,22 +1150,14 @@ fn split_keyword_idents(tokens: Vec<SpannedToken>) -> Vec<SpannedToken> {
 }
 
 fn char_to_keyword(c: char) -> Token {
+    // Step 19 P4: retired single-char keywords (F/S/E/M/R/T/U/P/W/X) lex as
+    // identifiers; non-retired ones (I/L/A/B/C/D/O/N/G) stay as keyword tokens.
     match c {
-        'F' => Token::Function,
-        'S' => Token::Struct,
-        'E' => Token::Enum,
         'I' => Token::If,
         'L' => Token::Loop,
-        'M' => Token::Match,
         'A' => Token::Async,
-        'R' => Token::Return,
         'B' => Token::Break,
         'C' => Token::Continue,
-        'T' => Token::TypeKeyword,
-        'U' => Token::Use,
-        'P' => Token::Pub,
-        'W' => Token::Trait,
-        'X' => Token::Impl,
         'D' => Token::Defer,
         'O' => Token::Union,
         'N' => Token::Extern,

@@ -88,10 +88,10 @@ fn index_invariant_compound_assign_i32_keeps_i32_elem_type() {
     // adjacent slot.
     let ir = gen_ir(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             v: Vec<i32> := mut [1, 2, 3];
             v[0] += 10;
-            R 0;
+            return 0;
         }
         "#,
     );
@@ -114,10 +114,10 @@ fn index_invariant_compound_assign_i32_no_i64_gep_on_vec() {
     // `getelementptr i64, ...` on the user's array.
     let ir = gen_ir(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             v: Vec<i32> := mut [10, 20, 30];
             v[1] += 5;
-            R 0;
+            return 0;
         }
         "#,
     );
@@ -154,10 +154,10 @@ fn index_invariant_compound_assign_i64_still_emits_i64_gep() {
     // where someone over-corrects and breaks the i64 path.
     let ir = gen_ir(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             v: Vec<i64> := mut [1, 2, 3];
             v[0] += 100;
-            R 0;
+            return 0;
         }
         "#,
     );
@@ -175,10 +175,10 @@ fn index_invariant_simple_assign_vec_i32_already_correct() {
     // it here documents the contract that compound assign must match.
     let ir = gen_ir(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             v: Vec<i32> := mut [1, 2, 3];
             v[0] = 42;
-            R 0;
+            return 0;
         }
         "#,
     );
@@ -200,10 +200,10 @@ fn index_invariant_simple_assign_vec_u8_emits_i8_gep() {
     // 본 case는 simple-assign path (AccessKind::VecData)로 이미 정상 동작.
     let ir = gen_ir(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             buf: Vec<u8> := mut [0, 0, 0];
             buf[0] = 65;
-            R 0;
+            return 0;
         }
         "#,
     );
@@ -221,7 +221,7 @@ fn index_invariant_simple_read_vec_u8_emits_i8_gep() {
     // Vec<u8> indexed read도 i8 GEP를 emit해야 한다.
     let ir = gen_ir(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             buf: Vec<u8> := mut [10, 20, 30];
             x := buf[1];
             x as i64
@@ -242,11 +242,11 @@ fn index_invariant_simple_assign_vec_i32_no_compound() {
     // 일관성 있어야 함을 명문화.
     let ir = gen_ir(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             v: Vec<i32> := mut [1, 2, 3];
             v[0] = 42;
             v[1] = 99;
-            R 0;
+            return 0;
         }
         "#,
     );
@@ -270,11 +270,11 @@ fn index_invariant_vec_of_vec_u8_outer_push_emits_struct_gep() {
     // 가 필요. i64 erasure → 실패.
     let ir = gen_ir(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             outer: Vec<Vec<u8>> := mut [];
             inner: Vec<u8> := mut [1, 2, 3];
             outer.push(inner);
-            R 0;
+            return 0;
         }
         "#,
     );
@@ -301,12 +301,12 @@ fn index_invariant_slice_of_slices_u8_indexing() {
     // inner fat-ptr GEP를 거쳐야 함. 양쪽 모두 i64 erasure 금지.
     let ir = gen_ir(
         r#"
-        F process(parts: &[&[u8]]) -> i64 {
+        fn process(parts: &[&[u8]]) -> i64 {
             first := parts[0];
-            R first.len() as i64;
+            return first.len() as i64;
         }
-        F main() -> i64 {
-            R 0;
+        fn main() -> i64 {
+            return 0;
         }
         "#,
     );

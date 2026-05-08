@@ -331,7 +331,7 @@ fn test_tokenize_comment_only() {
 
 #[test]
 fn test_tokenize_multiple_lines() {
-    let source = "F a() -> i64 = 1\nF b() -> i64 = 2\nF c() -> i64 = 3";
+    let source = "fn a() -> i64 = 1\nfn b() -> i64 = 2\nfn c() -> i64 = 3";
     let tokens = tokenize(source).unwrap();
     let fn_count: usize = tokens.iter().filter(|t| t.token == Token::Function).count();
     assert_eq!(fn_count, 3);

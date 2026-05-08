@@ -263,8 +263,8 @@ fn find_ret_violations(ir: &str) -> Vec<(String, String, String, String, String)
 fn ret_invariant_holds_on_simple_int_return() {
     let ir = gen_ir(
         r#"
-        F main() -> i64 {
-            R 42;
+        fn main() -> i64 {
+            return 42;
         }
         "#,
     );
@@ -283,9 +283,9 @@ fn ret_invariant_holds_on_int_width_coerce() {
     // must trunc back to i32 before ret.
     let ir = gen_ir(
         r#"
-        F narrow() -> i32 {
+        fn narrow() -> i32 {
             x: i32 := 42;
-            R x;
+            return x;
         }
         "#,
     );
@@ -303,9 +303,9 @@ fn ret_invariant_holds_on_float_width_coerce() {
     // f32 declared, body produces double — coerce_float_width must fptrunc.
     let ir = gen_ir(
         r#"
-        F narrow_float() -> f32 {
+        fn narrow_float() -> f32 {
             x: f32 := 3.14;
-            R x;
+            return x;
         }
         "#,
     );
@@ -333,16 +333,16 @@ fn ret_invariant_blocks_vec_ptr_to_fat_ptr_regression() {
     // If anyone deletes that branch or breaks the path, this test fires.
     let ir = gen_ir(
         r#"
-        S Holder {
+        struct Holder {
             data: Vec<u8>,
         }
-        X Holder {
-            F view(self) -> &[u8] {
-                R &self.data;
+        impl Holder {
+            fn view(self) -> &[u8] {
+                return &self.data;
             }
         }
-        F main() -> i64 {
-            R 0;
+        fn main() -> i64 {
+            return 0;
         }
         "#,
     );
@@ -424,11 +424,11 @@ fn ret_cast_migration_uses_legacy_prefix_format() {
     // stmt_visitor.rs:708 and emits a `%ret.cast.{N}` bitcast.
     let ir = gen_ir(
         r#"
-        F maybe(x: i64) -> Result<i64, str> {
-            R Ok(x);
+        fn maybe(x: i64) -> Result<i64, str> {
+            return Ok(x);
         }
-        F main() -> i64 {
-            R 0;
+        fn main() -> i64 {
+            return 0;
         }
         "#,
     );
@@ -464,11 +464,11 @@ fn ret_cast_is_immediately_followed_by_typed_load() {
     // pair would no longer match.
     let ir = gen_ir(
         r#"
-        F maybe(x: i64) -> Result<i64, str> {
-            R Ok(x);
+        fn maybe(x: i64) -> Result<i64, str> {
+            return Ok(x);
         }
-        F main() -> i64 {
-            R 0;
+        fn main() -> i64 {
+            return 0;
         }
         "#,
     );
@@ -522,11 +522,11 @@ fn ret_cast_dst_type_is_pointer_to_specialized_form() {
     // typed-pointer load mismatches.
     let ir = gen_ir(
         r#"
-        F maybe(x: i64) -> Result<i64, str> {
-            R Ok(x);
+        fn maybe(x: i64) -> Result<i64, str> {
+            return Ok(x);
         }
-        F main() -> i64 {
-            R 0;
+        fn main() -> i64 {
+            return 0;
         }
         "#,
     );
