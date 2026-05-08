@@ -1,0 +1,75 @@
+# MVCC transaction layer runtime smoke for vaisdb.
+# Step 14 stage 1 deliverable: transaction-matrix smoke. Pairs with the
+# 8 existing recovery_/checkpoint_/wal_ smokes (vaisdb_runtime 22..30,
+# crash + recovery already covered) and the 2026-05-08 Cloudflare
+# live-deploy smoke. Closes the master-plan Step 14 stage 1 list:
+# crash + recovery + transaction matrix + live deploy.
+#
+# Surface exercised end-to-end (vaisc build → linker → exit code):
+# - TxnSnapshot construction with active-transaction set
+# - min_active_txn invariant (smallest active txn computed correctly)
+# - active_txns membership check (is_active for present + absent ids)
+# - MvccTupleMeta creation + expire mutation (tuple state transitions)
+# - cmd_id advancement under a snapshot (statement-level ordering)
+#
+# Asserted by exit code only (smoke convention): 0 = all invariants hold,
+# 1..N = first failing scenario index. The static codegen gate
+# vaisdb=261/261 already covers full transaction module compilation;
+# this fixture proves the runtime path links and executes correctly.
+
+use storage/constants.{INVALID_TXN_ID}
+use storage/txn/snapshot.{TxnSnapshot}
+use storage/page/mvcc.{MvccTupleMeta}
+
+fn main() -> i64 {
+    # Scenario 1: TxnSnapshot construction preserves txn_id.
+    active1 := mut Vec.with_capacity(1)
+    active1.push(100u64)
+    snap1 := mut TxnSnapshot.new(100u64, active1)
+    I snap1.get_txn_id() != 100u64 { return 1 }
+    I snap1.get_cmd_id() != 0u32 { return 2 }
+
+    # Scenario 2: min_active_txn computed as smallest of {self, active set}.
+    active2 := mut Vec.with_capacity(3)
+    active2.push(50u64)
+    active2.push(200u64)
+    active2.push(75u64)
+    snap2 := mut TxnSnapshot.new(120u64, active2)
+    I snap2.low_water_mark() != 50u64 { return 3 }
+
+    # Scenario 3: is_active returns true for present, false for absent.
+    active3 := mut Vec.with_capacity(2)
+    active3.push(101u64)
+    active3.push(102u64)
+    snap3 := mut TxnSnapshot.new(100u64, active3)
+    I !snap3.is_active(101u64) { return 4 }
+    I !snap3.is_active(102u64) { return 5 }
+    I snap3.is_active(999u64) { return 6 }
+
+    # Scenario 4: MvccTupleMeta.new_insert sets txn_id_create and leaves
+    # txn_id_expire as INVALID_TXN_ID until expire is set.
+    tuple := mut MvccTupleMeta.new_insert(100u64, 0u32)
+    I tuple.txn_id_create != 100u64 { return 7 }
+    I tuple.txn_id_expire != INVALID_TXN_ID { return 8 }
+    I tuple.cmd_id != 0u32 { return 9 }
+
+    # Scenario 5: set_expired writes txn_id_expire and expire_cmd_id.
+    tuple.set_expired(105u64, 1u32)
+    I tuple.txn_id_expire != 105u64 { return 10 }
+    I tuple.expire_cmd_id != 1u32 { return 11 }
+    # txn_id_create must remain unchanged after expire.
+    I tuple.txn_id_create != 100u64 { return 12 }
+
+    # Scenario 6: snapshot cmd_id advances on each statement.
+    active6 := mut Vec.with_capacity(1)
+    active6.push(300u64)
+    snap6 := mut TxnSnapshot.new(300u64, active6)
+    I snap6.get_cmd_id() != 0u32 { return 13 }
+    snap6.advance_cmd()
+    I snap6.get_cmd_id() != 1u32 { return 14 }
+    snap6.advance_cmd()
+    snap6.advance_cmd()
+    I snap6.get_cmd_id() != 3u32 { return 15 }
+
+    return 0
+}

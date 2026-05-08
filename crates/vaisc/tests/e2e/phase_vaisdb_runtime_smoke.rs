@@ -146,6 +146,11 @@ fn e2e_vaisdb_30_embedded_durability_runtime_smoke() {
     assert_vaisdb_smoke_runs("embedded_durability_smoke.vais", 0);
 }
 
+#[test]
+fn e2e_vaisdb_31_transaction_mvcc_runtime_smoke() {
+    assert_vaisdb_smoke_runs("transaction_mvcc_smoke.vais", 0);
+}
+
 fn assert_vaisdb_smoke_runs(fixture: &str, expected_exit: i32) {
     let _guard = VAISDB_SMOKE_LOCK
         .lock()
