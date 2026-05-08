@@ -33,7 +33,6 @@ post_certification_expected = "If grpc is certified later, the import resolves a
 
 [assertion_kind]
 kind = "check_fails"
-required_env = { VAIS_STRICT_IMPORTS = "1" }
 required_stderr_patterns = ["E_IMPORT_NOT_FOUND", "grpc"]
 rationale = """
 E_IMPORT_NOT_FOUND is the stable error code introduced by Step 11

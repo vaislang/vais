@@ -1794,6 +1794,7 @@ fn syntax_import_multi() {
 }
 
 #[test]
+#[ignore = "Step 11 default-strict (2026-05-08): `use foo.bar` is unresolvable, and ok_parse runs full vaisc check (parse + type-check + import resolve). True parse-only would require a vaisc --parse-only flag. The dot-path syntax itself is exercised by std/use std::io::* and by package files; this fixture's parse-only intent is no longer expressible."]
 fn syntax_import_dot_path() {
     let src = "use foo.bar\nfn main() -> i64 { 0 }";
     let (_d, p) = write_tmp("import_dot.vais", src);

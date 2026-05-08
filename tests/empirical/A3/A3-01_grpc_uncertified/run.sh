@@ -12,7 +12,7 @@
 # back; STEP11_FINDINGS F-A3-01 documents the finding and the strict
 # mode introduced to address it.
 #
-# assertion_kind = "check_fails" (strict-mode env required).
+# assertion_kind = "check_fails" (strict is now default).
 # Required stderr patterns: E_IMPORT_NOT_FOUND + the surface name.
 
 set -euo pipefail
@@ -31,13 +31,13 @@ trap 'rm -rf "$WORK"' EXIT
 
 cp "$DIR/probe.vais" "$WORK/probe.vais"
 
-CHECK_OUTPUT="$( VAIS_STRICT_IMPORTS=1 "$VAISC" check "$WORK/probe.vais" 2>&1 || true )"
+CHECK_OUTPUT="$( "$VAISC" check "$WORK/probe.vais" 2>&1 || true )"
 CHECK_EXIT=0
-VAIS_STRICT_IMPORTS=1 "$VAISC" check "$WORK/probe.vais" >/dev/null 2>&1 \
+"$VAISC" check "$WORK/probe.vais" >/dev/null 2>&1 \
   && CHECK_EXIT=0 || CHECK_EXIT=$?
 
 if [[ "$CHECK_EXIT" == "0" ]]; then
-  echo "DRIFT: A3-01 vaisc check (strict mode) now succeeds — the grpc" >&2
+  echo "DRIFT: A3-01 vaisc check now succeeds — the grpc" >&2
   echo "  surface may have been certified, or strict mode regressed." >&2
   exit 1
 fi
@@ -51,4 +51,4 @@ for pat in "${REQUIRED[@]}"; do
   fi
 done
 
-echo "A3-01 OK: VAIS_STRICT_IMPORTS=1 rejects U server/api/grpc with E_IMPORT_NOT_FOUND."
+echo "A3-01 OK: default-strict rejects U server/api/grpc with E_IMPORT_NOT_FOUND."

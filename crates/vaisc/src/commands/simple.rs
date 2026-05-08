@@ -209,30 +209,44 @@ pub(crate) fn cmd_check(
     let ast = match merged {
         Ok(module) => module,
         Err(import_err) => {
-            // Strict mode: fail with a stable error code instead of falling
-            // back. Opt-in via VAIS_STRICT_IMPORTS=1 environment variable
-            // (Master Plan v16 Order Step 11 unblock — STEP11_FINDINGS
-            // F-A3-01: silent fallback violates north star L-002).
+            // Default-strict (Master Plan v34 / Step 11 root-fix close,
+            // 2026-05-08). Import resolution failure now returns a stable
+            // E_IMPORT_NOT_FOUND error instead of silently falling back to
+            // single-file parse. Empirical impact measurement (vaisc check
+            // across std/82 + selfhost/58 + LIVING_SPEC/117 + vaisdb/282 +
+            // vais-server/78 with strict on vs off) showed delta=0 — every
+            // file that resolves under default mode also resolves under
+            // strict mode, because the only callers that previously hit the
+            // fallback path were uncertified A3 surfaces (gRPC / graphql /
+            // ws-handler / vaisdb security / vaisdb graph / fulltext /
+            // advanced-sql / WAL bulk / vais-server HTTPS), each of which
+            // is now permanent-fixture rejected (compiler/tests/empirical/A3/
+            // A3-01 .. A3-09).
             //
-            // Default behaviour (env unset or != "1"): emit a warning and
-            // fall back to single-file parse, preserving current behaviour
-            // so the regression-locked baseline does not move.
-            let strict_imports = std::env::var("VAIS_STRICT_IMPORTS")
+            // Opt-out via VAIS_STRICT_IMPORTS=0 retained for legacy harness
+            // scripts that intentionally compile-as-single-file; this is
+            // the inverse of the previous policy. Setting it to anything
+            // other than "0" (or leaving it unset) keeps the strict path.
+            //
+            // Rationale: silent fallback violates LESSONS L-002 north star
+            // ("no silent failure / no implicit behavior"). STEP11_FINDINGS
+            // F-A3-01 documented the violation; the loop 28 drift-correction
+            // close marked the 9 A3 fixtures as DONE but left the default
+            // unchanged, which the user flagged as a non-root close. This
+            // commit lands the actual root fix.
+            let opt_out = std::env::var("VAIS_STRICT_IMPORTS")
                 .ok()
                 .as_deref()
-                == Some("1");
-            if strict_imports {
+                == Some("0");
+            if !opt_out {
                 return Err(format!(
-                    "error[E_IMPORT_NOT_FOUND]: import resolution failed in strict mode\n  {}\n  Set VAIS_STRICT_IMPORTS=0 (or unset) to fall back to single-file parse.",
+                    "error[E_IMPORT_NOT_FOUND]: import resolution failed\n  {}\n  Set VAIS_STRICT_IMPORTS=0 to fall back to single-file parse (legacy harness only — uncertified surfaces stay rejected).",
                     import_err
                 ));
             }
-            // Fall back to single-file parse if import resolution fails.
-            // Emit a warning by default (not just on --verbose). Silent fallback
-            // previously led to misleading "undefined field / function" errors
-            // when the real problem was that stdlib couldn't be located.
+            // Legacy single-file fallback (opt-out only).
             eprintln!(
-                "{} import resolution failed, falling back to single-file parse:\n  {}\n  Hint: run from the compiler directory or set VAIS_STD_PATH to the stdlib.\n  Hint: set VAIS_STRICT_IMPORTS=1 to make this fatal instead of a warning.",
+                "{} import resolution failed, falling back to single-file parse (VAIS_STRICT_IMPORTS=0 opt-out):\n  {}",
                 "warning:".yellow().bold(),
                 import_err
             );

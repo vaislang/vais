@@ -21,5 +21,4 @@ post_certification_expected = "If graphql API in vais-server is certified, the i
 
 [assertion_kind]
 kind = "check_fails"
-required_env = { VAIS_STRICT_IMPORTS = "1" }
 required_stderr_patterns = ["E_IMPORT_NOT_FOUND", "graphql"]

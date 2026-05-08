@@ -7,9 +7,9 @@ VAISC="${VAISC:-${COMPILER_ROOT}/target/release/vaisc}"
 [[ -x "$VAISC" ]] || { echo "FIXTURE_BROKEN: vaisc not found" >&2; exit 2; }
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 cp "$DIR/probe.vais" "$WORK/probe.vais"
-OUT="$( VAIS_STRICT_IMPORTS=1 "$VAISC" check "$WORK/probe.vais" 2>&1 || true )"
+OUT="$( "$VAISC" check "$WORK/probe.vais" 2>&1 || true )"
 EXIT=0
-VAIS_STRICT_IMPORTS=1 "$VAISC" check "$WORK/probe.vais" >/dev/null 2>&1 \
+"$VAISC" check "$WORK/probe.vais" >/dev/null 2>&1 \
   && EXIT=0 || EXIT=$?
 if [[ "$EXIT" == "0" ]]; then
   echo "DRIFT: A3-05 strict-mode check now succeeds — surface may be certified" >&2
@@ -22,4 +22,4 @@ for pat in "E_IMPORT_NOT_FOUND" "graph"; do
     exit 1
   fi
 done
-echo "A3-05 OK: VAIS_STRICT_IMPORTS=1 rejects U vaisdb/graph/executor with E_IMPORT_NOT_FOUND."
+echo "A3-05 OK: default-strict rejects U vaisdb/graph/executor with E_IMPORT_NOT_FOUND."

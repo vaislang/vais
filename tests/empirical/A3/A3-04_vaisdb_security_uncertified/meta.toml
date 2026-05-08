@@ -21,5 +21,4 @@ post_certification_expected = "If vaisdb security (TLS / encryption / RBAC) is c
 
 [assertion_kind]
 kind = "check_fails"
-required_env = { VAIS_STRICT_IMPORTS = "1" }
 required_stderr_patterns = ["E_IMPORT_NOT_FOUND", "security"]

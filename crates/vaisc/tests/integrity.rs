@@ -110,9 +110,21 @@ mod integrity {
     /// which is strictly stronger than parse-only but still skips codegen —
     /// close enough to "stage 2 OK" for integrity tests. A true parse-only
     /// gate is Phase 1.7 territory.
+    ///
+    /// Step 11 root fix (2026-05-08): pass VAIS_STD_PATH + VAIS_DEP_PATHS so
+    /// `use std::io` and friends resolve under default-strict imports. Without
+    /// these, the spawned vaisc inherits the test runner's cwd
+    /// (`crates/vaisc/`) which has no `std/` subdirectory, and strict-default
+    /// reports E_IMPORT_NOT_FOUND. Previously hidden by the silent fallback.
     pub fn ok_parse(path: &Path) -> bool {
         let vaisc = vaisc_path();
-        let output = Command::new(&vaisc).arg("check").arg(path).output();
+        let std_path = "/tmp/vais-lib/std";
+        let output = Command::new(&vaisc)
+            .arg("check")
+            .arg(path)
+            .env("VAIS_STD_PATH", std_path)
+            .env("VAIS_DEP_PATHS", std_path)
+            .output();
         match output {
             Err(e) => {
                 eprintln!(
@@ -141,9 +153,18 @@ mod integrity {
     /// Stage 3: Type-check OK?
     ///
     /// Runs `vaisc check <path>` and returns `true` on exit 0.
+    ///
+    /// Step 11 root fix (2026-05-08): same VAIS_STD_PATH / VAIS_DEP_PATHS
+    /// injection as ok_parse — see that function's comment.
     pub fn ok_tc(path: &Path) -> bool {
         let vaisc = vaisc_path();
-        let output = Command::new(&vaisc).arg("check").arg(path).output();
+        let std_path = "/tmp/vais-lib/std";
+        let output = Command::new(&vaisc)
+            .arg("check")
+            .arg(path)
+            .env("VAIS_STD_PATH", std_path)
+            .env("VAIS_DEP_PATHS", std_path)
+            .output();
         match output {
             Err(e) => {
                 eprintln!(
