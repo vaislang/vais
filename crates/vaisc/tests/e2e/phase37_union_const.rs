@@ -10,6 +10,7 @@ use super::helpers::*;
 // ==================== Union (O) Tests ====================
 
 #[test]
+#[ignore = "A1-03 Union hard block (LANDED Step 10)"]
 fn e2e_p37_union_single_field() {
     // Union with only one field used — store and read back int_val
     // v.int_val = 99, exit code 99
@@ -28,6 +29,7 @@ fn main() -> i64 {
 }
 
 #[test]
+#[ignore = "A1-03 Union hard block (LANDED Step 10)"]
 fn e2e_p37_union_field_arithmetic() {
     // Union field used in arithmetic — v.x = 10, result = 10 * 3 + 7 = 37
     let source = r#"
@@ -45,6 +47,7 @@ fn main() -> i64 {
 }
 
 #[test]
+#[ignore = "A1-03 Union hard block (LANDED Step 10)"]
 fn e2e_p37_union_multiple_declarations() {
     // Multiple union types in the same module — each with different fields
     // a.val = 5, b.val = 8, exit code = 5 + 8 = 13
@@ -69,6 +72,7 @@ fn main() -> i64 {
 }
 
 #[test]
+#[ignore = "A1-03 Union hard block (LANDED Step 10)"]
 fn e2e_p37_union_passed_to_function() {
     // Union value passed as function parameter
     // extract(Data { int_val: 25 }) = 25, exit code 25

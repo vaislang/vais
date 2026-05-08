@@ -1,11 +1,11 @@
-# Vais Lexer Keyword Registry (Phase 1.7)
+# Vais Lexer Keyword Registry
 
 Single source of truth for **every reserved token** the Vais lexer emits as a keyword. Any identifier that is NOT in this list is passed through as `Token::Ident` and never interpreted as a keyword. Adding/removing/renaming keywords requires:
 
 1. Edit `crates/vais-lexer/src/lib.rs`.
 2. Update this file.
 3. Update `docs/LANGUAGE_SPEC.md` "Keywords" section.
-4. If removing: add entry to `docs/language/removed_keywords.md` and bump Phase note.
+4. If removing: add entry to `docs/language/removed_keywords.md` and bump phase note.
 5. Run `./scripts/check-integrity.sh` — must stay green.
 
 Source of truth: `crates/vais-lexer/src/lib.rs` (logos derive attributes).
@@ -13,39 +13,51 @@ Cross-reference: `docs/LANGUAGE_SPEC.md` "Keywords" + "Construct Status Matrix".
 
 ---
 
-## Single-letter Declaration / Statement Keywords (priority 3)
+## Step 19 P4 retirement (2026-05-08)
 
-| Token | Lexer variant | Grammar role | Phase added |
-|-------|---------------|--------------|-------------|
-| `F`   | `Function`      | Function declaration | 0.0.1 |
-| `S`   | `Struct`        | Struct declaration | 0.0.1 |
-| `E`   | `Enum`          | Enum decl (context-dependent, legacy) | 0.0.1 — `EN`/`EL` preferred |
-| `I`   | `If`            | If-expression | 0.0.1 |
-| `L`   | `Loop`          | Infinite loop | 0.0.1 |
-| `M`   | `Match`         | Match expression | 0.0.1 |
-| `R`   | `Return`        | Early return | 0.0.1 |
-| `B`   | `Break`         | Loop break | 0.0.1 |
-| `C`   | `Continue`      | Loop continue **(never Const)** | 0.0.1 |
-| `T`   | `TypeKeyword`   | Type alias / trait alias | 0.0.1 |
-| `U`   | `Use`           | Import | 0.0.1 |
-| `P`   | `Pub`           | Public visibility | 0.0.1 |
-| `W`   | `Trait`         | Trait (interface) declaration | 0.0.1 |
-| `X`   | `Impl`          | Impl block (methods / trait impl) | 0.0.1 |
-| `D`   | `Defer`         | Defer block | 0.0.1 |
-| `O`   | `Union`         | C-style untagged union | 0.0.1 |
-| `N`   | `Extern`        | Extern "C" block | 0.0.1 |
-| `G`   | `Global`        | Global variable | 0.0.1 |
-| `A`   | `Async`         | Async modifier | 0.0.1 |
-| `Y`   | `Await`         | Postfix-await shortcut | Phase 29 |
+The single-char declaration / control / modifier forms `F` / `S` / `E` / `EN` / `EL` / `M` / `R` / `T` / `U` / `P` / `W` / `X` were retired by Step 19 P4. The lexer no longer accepts those spellings as keywords; they lex as `Token::Ident`. Canonical multi-char forms (`fn` / `struct` / `enum` / `else` / `match` / `return` / `type` / `use` / `pub` / `trait` / `impl`) are the only accepted spellings. Rationale + 6-phase migration record: `docs/design/single-char-keyword-retirement.md` and LESSONS L-009 / L-010.
 
-## Two-letter Unambiguous Keywords (priority 4 > single-letter priority 3)
+Non-retired single-char keywords below remain as tokens.
+
+## Single-letter Declaration / Statement Keywords (priority 3, post-P4)
+
+| Token | Lexer variant | Grammar role | Note |
+|-------|---------------|--------------|------|
+| `I`   | `If`            | If-expression | retained (no multi-char alias) |
+| `L`   | `Loop`          | Infinite loop | retained |
+| `B`   | `Break`         | Loop break | retained |
+| `C`   | `Continue`      | Loop continue **(never Const)** | retained |
+| `D`   | `Defer`         | Defer block | retained |
+| `O`   | `Union`         | C-style untagged union | retained |
+| `N`   | `Extern`        | Extern "C" block | retained |
+| `G`   | `Global`        | Global variable | retained |
+| `A`   | `Async`         | Async modifier | retained |
+| `Y`   | `Await`         | Postfix-await shortcut (alias of `await`) | retained |
+
+## Two-letter Unambiguous Keywords (priority 4)
 
 | Token | Lexer variant | Grammar role |
 |-------|---------------|--------------|
-| `EN`  | `EnumKeyword`   | Unambiguous enum declaration |
-| `EL`  | `Else`          | Else branch (`I … { … } EL { … }`) |
 | `LF`  | `ForEach`       | For-each loop (`LF i: range`) |
 | `LW`  | `While`         | While loop (`LW cond { … }`) |
+
+(`EN` and `EL` were retired with P4 — the variants `EnumKeyword` / `Else` survive in code but `Else` is now reached only via the `else` spelling; `EnumKeyword` is unreachable from the lexer and retained only for downstream parser arm compatibility.)
+
+## Multi-letter Declaration / Item Keywords (priority 3, P4 canonical forms)
+
+| Token | Lexer variant | Role |
+|-------|---------------|------|
+| `fn`        | `Function`     | Function declaration |
+| `struct`    | `Struct`       | Struct declaration |
+| `enum`      | `Enum`         | Enum declaration |
+| `match`     | `Match`        | Match expression |
+| `return`    | `Return`       | Early return |
+| `type`      | `TypeKeyword`  | Type alias / trait alias |
+| `use`       | `Use`          | Import |
+| `pub`       | `Pub`          | Public visibility |
+| `trait`     | `Trait`        | Trait (interface) declaration |
+| `impl`      | `Impl`         | Impl block (methods / trait impl) |
+| `else`      | `Else`         | Else branch |
 
 ## Multi-letter Word Keywords
 
@@ -56,7 +68,7 @@ Cross-reference: `docs/LANGUAGE_SPEC.md` "Keywords" + "Construct Status Matrix".
 | `Self`      | `SelfUpper`  | Self type |
 | `true`      | `True`       | Boolean literal |
 | `false`     | `False`      | Boolean literal |
-| `await`     | `Await`      | Long form of `Y` (both emit same token) |
+| `await`     | `Await`      | Long form (also emitted by `Y`) |
 | `yield`     | `Yield`      | Iterator/coroutine yield |
 | `const`     | `Const`      | Compile-time constant |
 | `comptime`  | `Comptime`   | Compile-time expr/block |
@@ -85,7 +97,7 @@ Cross-reference: `docs/LANGUAGE_SPEC.md` "Keywords" + "Construct Status Matrix".
 
 These words are NOT reserved — the lexer emits them as `Token::Ident` and the parser reinterprets them only in specific positions:
 
-- `alloc` — effect prefix when it occurs before `F`/`A F`/`P F`. Remains a valid identifier elsewhere (used in `std/allocator.vais` and `std/arena.vais` ~40 times as method/variable name).
+- `alloc` — effect prefix when it occurs before `fn` / `A fn` / `pub fn`. Remains a valid identifier elsewhere (used in `std/allocator.vais` and `std/arena.vais` ~40 times as method/variable name).
 
 ---
 
@@ -96,16 +108,16 @@ These words are NOT reserved — the lexer emits them as `Token::Ident` and the 
 | `spawn` | Phase 195 | `12592076` | Replaced by runtime task APIs |
 | `lazy`  | Phase 194 | `8c60c075` | Paired with `force`; replaced by `LazyCell`-style stdlib |
 | `force` | Phase 194 | `8c60c075` | Paired with `lazy` |
+| `F` `S` `E` `EN` `EL` `M` `R` `T` `U` `P` `W` `X` (single-char form) | Step 19 P4 (loop 25, 2026-05-08) | `2b485860` | LESSONS L-009 (codemod readability trap) + L-010 (token-efficiency hypothesis empirically false) |
 
-Re-introducing requires RFC + update to `docs/language/removed_keywords.md`.
+Re-introducing any of these requires RFC + update to `docs/language/removed_keywords.md`.
 
 ---
 
 ## Ambiguity Rules
 
-1. **`E` vs `EN`/`EL`**: `E` is a single-letter, context-dependent token. The parser accepts `E` as both enum-head (`E Color { Red, Green }`) and else-tail (`I c { a } E { b }`). New code MUST prefer `EN` and `EL` (higher lexer priority: 4 > 3, eliminates ambiguity).
+1. **`Y` vs `await`**: both emit `Token::Await`. Choose based on readability; compiler is indifferent.
 2. **`C` is always Continue**: compile-time constants use the lowercase `const` keyword. Historical docs that claimed "C can also mean Const" are incorrect — the lexer has never produced a `Const` token from `C`.
-3. **`Y` vs `await`**: both emit `Token::Await`. Choose based on readability; compiler is indifferent.
 
 ---
 

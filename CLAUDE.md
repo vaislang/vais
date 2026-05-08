@@ -224,11 +224,21 @@ intellij-vais/     # IntelliJ plugin
 
 ## Vais Language Syntax Quick Reference
 
-### Single-Character Keywords
-- `F` = function, `S` = struct, `E` = enum/else, `I` = if, `L` = loop, `M` = match, `R` = return
-- `B` = break, `C` = continue, `T` = type alias, `U` = use (import)
-- `W` = trait, `X` = impl, `P` = pub, `D` = defer
-- `A` = async, `Y` = await, `N` = extern, `G` = global, `O` = union
+> **Step 19 P4 retirement (2026-05-08, commit `2b485860`)**: the single-char
+> declaration / control / modifier forms `F` / `S` / `E` / `EN` / `EL` / `M` /
+> `R` / `T` / `U` / `P` / `W` / `X` were retired. Multi-char canonical forms
+> (`fn` / `struct` / `enum` / `else` / `match` / `return` / `type` / `use` /
+> `pub` / `trait` / `impl`) are the only accepted spellings. Rationale +
+> migration: `docs/language/removed_keywords.md`, LESSONS L-009 / L-010.
+
+### Single-Character Keywords (post-P4, retained)
+- `I` = if, `L` = loop, `B` = break, `C` = continue, `D` = defer
+- `A` = async, `Y` = await (alias of `await`), `N` = extern, `G` = global, `O` = union
+
+### Multi-Character Declaration / Item Keywords (P4 canonical)
+- `fn` = function, `struct` = struct, `enum` = enum, `else` = else
+- `match` = match, `return` = return, `type` = type alias, `use` = use (import)
+- `trait` = trait, `impl` = impl, `pub` = pub
 
 ### Operators & Syntax
 - `@` = self-recursion operator (calls current function)
@@ -242,15 +252,17 @@ intellij-vais/     # IntelliJ plugin
 - `#` = line comment
 
 ### Declarations
-- Traits: `W MyTrait { ... }`, impl: `X MyStruct: MyTrait { ... }`
-- Generics: `F foo<T>(x: T) -> T`
-- Pattern matching: `M expr { pattern => result, _ => default }`
+- Traits: `trait MyTrait { ... }`, impl: `impl MyStruct: MyTrait { ... }`
+- Generics: `fn foo<T>(x: T) -> T`
+- Pattern matching: `match expr { pattern => result, _ => default }`
 - Closures: `|x| x * 2`, `|x, y| { x + y }`
-- Async: `A F name() -> T { ... }` + `.await` (no `spawn` — removed in Phase 195)
+- Async: `A fn name() -> T { ... }` + `.await` (no `spawn` — removed in Phase 195)
 
 ### Removed keywords
-> `lazy` / `force` (Phase 194, commit 8c60c075) and `spawn` (Phase 195,
-> commit 12592076) were deleted across lexer/AST/parser/types/codegen.
+> `lazy` / `force` (Phase 194, commit 8c60c075), `spawn` (Phase 195,
+> commit 12592076), and the 12 single-char declaration / control /
+> modifier forms `F S E EN EL M R T U P W X` (Step 19 P4, commit
+> `2b485860`, 2026-05-08) were deleted across lexer/AST/parser/types/codegen.
 > Migration guide: `docs/language/removed_keywords.md`. Do not re-introduce
 > these in new examples or std/.
 

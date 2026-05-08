@@ -150,39 +150,55 @@ Vais reserves the following tokens. **Status column** uses:
 
 Source of truth for every entry below is `crates/vais-lexer/src/lib.rs`.
 
-### Single-letter Declaration/Statement Keywords
+> **Step 19 P4 retirement (loop 25, 2026-05-08, commit `2b485860`)**: the
+> single-char declaration / control / modifier forms `F` / `S` / `E` / `EN` /
+> `EL` / `M` / `R` / `T` / `U` / `P` / `W` / `X` were retired. They lex as
+> `Token::Ident` post-P4. Multi-char canonical forms below are the only
+> accepted spellings. See `docs/language/removed_keywords.md` and LESSONS
+> L-009 / L-010 for rationale (token-level codemod readability trap +
+> empirically-zero token efficiency vs `cl100k_base`).
+
+### Single-letter Declaration/Statement Keywords (post-P4, retained)
 
 | Token | Name | Role | Status | Test gate |
 |-------|------|------|--------|-----------|
-| `F` | `Function` | Function declaration | ✓ | compiler_syntax test_function_basic |
-| `S` | `Struct` | Struct declaration | ✓ | compiler_syntax test_struct_minimal |
-| `E` | `Enum` | Legacy enum / else tail (context-dependent) | ◐ | prefer `EN`/`EL` — `E` kept for backcompat |
 | `I` | `If` | If-expression opener | ✓ | compiler_syntax test_if_expression |
 | `L` | `Loop` | Infinite loop | ✓ | compiler_syntax test_loop_break |
-| `M` | `Match` | Match expression | ✓ | compiler_syntax test_match_basic |
-| `R` | `Return` | Early return | ✓ | compiler_syntax test_return |
 | `B` | `Break` | Loop break | ✓ | compiler_syntax test_loop_break |
 | `C` | `Continue` | Loop continue (**never Const** — `const` is its own keyword) | ✓ | compiler_syntax test_loop_continue |
-| `T` | `TypeKeyword` | Type alias | ✓ | compiler_syntax test_type_alias |
-| `U` | `Use` | Import | ✓ | compiler_syntax test_use_std |
-| `P` | `Pub` | Public visibility modifier | ✓ | parser_tests visibility |
-| `W` | `Trait` | Trait (interface) declaration | ✓ | compiler_syntax test_trait_decl |
-| `X` | `Impl` | Impl block (method / trait impl) | ✓ | compiler_syntax test_impl_methods |
 | `D` | `Defer` | Defer block (runs on scope exit) | ◐ | partially implemented; see B5 in COMPILER_STAGES.md |
-| `O` | `Union` | C-style untagged union | ◐ | FFI-only; not recommended in pure Vais |
+| `O` | `Union` | C-style untagged union | ◐ | A1-03 hard block (Step 10 LANDED) — parser rejects |
 | `N` | `Extern` | Extern "C" block | ✓ | FFI tests |
 | `G` | `Global` | Global variable declaration | ✓ | selfhost/ uses `G` widely |
-| `A` | `Async` | Async function modifier (`A F foo()`) | ✓ | phase158 async tests |
-| `Y` | `Await` | Postfix-await (`expr.Y`) | ✓ | phase158 async tests |
+| `A` | `Async` | Async function modifier (`A fn foo()`) | ✓ | phase158 async tests |
+| `Y` | `Await` | Postfix-await (`expr.Y`, alias of `await`) | ✓ | phase158 async tests |
 
-### Two-letter Unambiguous Keywords
+### Multi-letter Declaration / Item Keywords (P4 canonical forms)
 
 | Token | Name | Role | Status |
 |-------|------|------|--------|
-| `EN` | `EnumKeyword` | Unambiguous enum declaration | ✓ |
-| `EL` | `Else` | Else branch (`I … { … } EL { … }`) | ✓ |
+| `fn`     | `Function`      | Function declaration | ✓ |
+| `struct` | `Struct`        | Struct declaration | ✓ |
+| `enum`   | `Enum`          | Enum declaration | ✓ |
+| `match`  | `Match`         | Match expression | ✓ |
+| `return` | `Return`        | Early return | ✓ |
+| `type`   | `TypeKeyword`   | Type alias | ✓ |
+| `use`    | `Use`           | Import | ✓ |
+| `pub`    | `Pub`           | Public visibility modifier | ✓ |
+| `trait`  | `Trait`         | Trait declaration | ✓ |
+| `impl`   | `Impl`          | Impl block | ✓ |
+| `else`   | `Else`          | Else branch (`I … { … } else { … }`) | ✓ |
+
+### Two-letter Unambiguous Keywords (post-P4, retained)
+
+| Token | Name | Role | Status |
+|-------|------|------|--------|
 | `LF` | `ForEach` | For-each loop (`LF i: range`) | ✓ |
 | `LW` | `While` | While loop (`LW cond { … }`) | ✓ |
+
+(`EN` / `EL` retired with P4. The `EnumKeyword` variant survives in
+the AST for parser arm compatibility but is unreachable from the
+lexer; `Else` is now reached only via `else`.)
 
 ### Multi-letter Word Keywords
 

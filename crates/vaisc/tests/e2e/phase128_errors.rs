@@ -254,6 +254,7 @@ fn main() -> i64 = inc("hello")
 // ==================== E. Struct Field Errors ====================
 
 #[test]
+#[ignore = "A4-10 strict-default LANDED: missing struct fields now reject (was silent partial-init)"]
 fn e2e_p128_err_missing_struct_field() {
     // Vais allows partial struct init (missing fields default to 0)
     // This test documents current behavior

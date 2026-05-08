@@ -80,6 +80,7 @@ fn main() -> i64 {
 // ==================== Macro Declarations ====================
 
 #[test]
+#[ignore = "A1-04 Macro hard block (LANDED Step 10)"]
 fn e2e_p37_macro_simple_parse() {
     // Simple macro declaration — should parse without error
     let source = r#"
@@ -95,6 +96,7 @@ fn main() -> i64 {
 }
 
 #[test]
+#[ignore = "A1-04 Macro hard block (LANDED Step 10)"]
 fn e2e_p37_macro_with_body_parse() {
     // Macro with a more complex body pattern — parser accepts it
     let source = r#"

@@ -21,6 +21,7 @@ fn main() -> i64 {
 // ===== Union =====
 
 #[test]
+#[ignore = "A1-03 Union hard block (LANDED Step 10)"]
 fn e2e_phase45_union_parse() {
     // Union type declaration should parse and compile
     let source = r#"

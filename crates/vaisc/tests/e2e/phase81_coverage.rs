@@ -802,6 +802,7 @@ fn main() -> i64 = 42
 // ==================== 14. Union Types ====================
 
 #[test]
+#[ignore = "A1-03 Union hard block (LANDED Step 10)"]
 fn e2e_p81_union_basic() {
     let source = r#"
 O IntOrBool { int_val: i64, bool_val: i64 }
