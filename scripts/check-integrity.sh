@@ -222,7 +222,8 @@ else
             __tests__/e2e/vais-web-server-action-production-runtime.test.ts \
             __tests__/e2e/vais-web-server-action-auth-rate-production-runtime.test.ts \
             __tests__/e2e/vais-web-server-action-file-upload-production-runtime.test.ts \
-            __tests__/e2e/vais-web-cloudflare-miniflare-runtime.test.ts
+            __tests__/e2e/vais-web-cloudflare-miniflare-runtime.test.ts \
+            __tests__/e2e/vais-web-cloudflare-live-deploy.test.ts
     ) 2>&1 | tee "${WEB_RUNTIME_LOG}" || WEB_RUNTIME_EXIT=$?
 fi
 
@@ -337,11 +338,16 @@ parse_vitest_passed() {
 }
 
 parse_vitest_total() {
+    # Matches both shapes:
+    #   "Tests  N passed (N)"
+    #   "Tests  N passed | M skipped (TOTAL)"
+    # Returns the parenthesised total. Falls back via caller's :- when sed
+    # finds no match (e.g. all-skipped runs that print no `passed` token).
     local log="$1"
     grep "Tests" "${log}" 2>/dev/null \
         | grep "passed" \
         | tail -1 \
-        | sed 's/.*Tests[[:space:]]*[0-9][0-9]* passed (\([0-9][0-9]*\)).*/\1/' \
+        | sed 's/.*(\([0-9][0-9]*\)).*/\1/' \
         || true
 }
 
