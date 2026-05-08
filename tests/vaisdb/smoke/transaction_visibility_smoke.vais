@@ -1,0 +1,98 @@
+# MVCC visibility runtime smoke for vaisdb (Step 14 stage 1 expansion).
+#
+# Pairs with transaction_mvcc_smoke.vais (TxnSnapshot + MvccTupleMeta total-fn
+# coverage). This fixture exercises the full visibility check against a real
+# Clog (commit-log) + active-transaction snapshot, covering the 6 canonical
+# MVCC visibility scenarios from vaisdb/tests/storage/test_transaction.vais
+# (Stage 1 Section 5).
+#
+# Surface exercised end-to-end:
+# - Clog construction with cache pages
+# - Clog.set_status (Committed / InProgress / Aborted) per-txn
+# - is_visible(...) full Case 1/2/3 dispatch:
+#   * Case 1: created_by == snapshot.txn_id (own writes)
+#   * Case 2: committed-before-snapshot visibility
+#   * Case 3: expiration check (committed expirer / aborted expirer)
+# - Mutex.lock + Mutex.unlock explicit pairing (clog 측 RAII 우회)
+#
+# Asserted by exit code only (smoke convention): 0 = all 6 scenarios pass,
+# 1..6 = first failing scenario index.
+#
+# History: enabled by clog.vais explicit Mutex.unlock fix (master-plan v51,
+# 2026-05-09 loop 46) + B-03 hang resolution. Prior to that fix, this
+# surface caused recursive Mutex deadlock between set_status and
+# get_status (called transitively from is_aborted_fast inside is_visible).
+
+use storage/constants.{INVALID_TXN_ID}
+use storage/txn/snapshot.{TxnSnapshot}
+use storage/txn/visibility.{is_visible}
+use storage/txn/clog.{Clog, TxnStatus}
+use storage/page/mvcc.{MvccTupleMeta}
+
+fn main() -> i64 {
+    # Scenario 1: own committed insert from before snapshot is visible.
+    # txn 90 commits before snapshot at txn 100; created_by=90, expired=invalid.
+    tuple1 := mut MvccTupleMeta.new_insert(90u64, 0u32)
+    clog1 := mut Clog.new(4096u64, 4u32)
+    clog1.set_status(90u64, TxnStatus.Committed)
+    active1 := mut Vec.with_capacity(1)
+    active1.push(100u64)
+    snap1 := mut TxnSnapshot.new(100u64, active1)
+    I !is_visible(tuple1.txn_id_create, tuple1.txn_id_expire, tuple1.cmd_id, tuple1.expire_cmd_id, &snap1, &clog1) { return 1 }
+
+    # Scenario 2: another's uncommitted insert is NOT visible.
+    # txn 101 in-progress; reader txn 100 cannot see it (active set blocks).
+    tuple2 := mut MvccTupleMeta.new_insert(101u64, 0u32)
+    clog2 := mut Clog.new(4096u64, 4u32)
+    clog2.set_status(101u64, TxnStatus.InProgress)
+    active2 := mut Vec.with_capacity(2)
+    active2.push(100u64)
+    active2.push(101u64)
+    snap2 := mut TxnSnapshot.new(100u64, active2)
+    I is_visible(tuple2.txn_id_create, tuple2.txn_id_expire, tuple2.cmd_id, tuple2.expire_cmd_id, &snap2, &clog2) { return 2 }
+
+    # Scenario 3: aborted insert is NOT visible (fast-path is_aborted_fast).
+    tuple3 := mut MvccTupleMeta.new_insert(95u64, 0u32)
+    clog3 := mut Clog.new(4096u64, 4u32)
+    clog3.set_status(95u64, TxnStatus.Aborted)
+    active3 := mut Vec.with_capacity(1)
+    active3.push(100u64)
+    snap3 := mut TxnSnapshot.new(100u64, active3)
+    I is_visible(tuple3.txn_id_create, tuple3.txn_id_expire, tuple3.cmd_id, tuple3.expire_cmd_id, &snap3, &clog3) { return 3 }
+
+    # Scenario 4: committed insert from after snapshot is NOT visible.
+    # txn 105 > snapshot.txn_id 100 → snapshot boundary blocks.
+    tuple4 := mut MvccTupleMeta.new_insert(105u64, 0u32)
+    clog4 := mut Clog.new(4096u64, 4u32)
+    clog4.set_status(105u64, TxnStatus.Committed)
+    active4 := mut Vec.with_capacity(1)
+    active4.push(100u64)
+    snap4 := mut TxnSnapshot.new(100u64, active4)
+    I is_visible(tuple4.txn_id_create, tuple4.txn_id_expire, tuple4.cmd_id, tuple4.expire_cmd_id, &snap4, &clog4) { return 4 }
+
+    # Scenario 5: tuple expired by committed txn before snapshot NOT visible.
+    # txn 85 inserted, txn 90 expired, both committed before snapshot 100.
+    tuple5 := mut MvccTupleMeta.new_insert(85u64, 0u32)
+    tuple5.set_expired(90u64, 0u32)
+    clog5 := mut Clog.new(4096u64, 4u32)
+    clog5.set_status(85u64, TxnStatus.Committed)
+    clog5.set_status(90u64, TxnStatus.Committed)
+    active5 := mut Vec.with_capacity(1)
+    active5.push(100u64)
+    snap5 := mut TxnSnapshot.new(100u64, active5)
+    I is_visible(tuple5.txn_id_create, tuple5.txn_id_expire, tuple5.cmd_id, tuple5.expire_cmd_id, &snap5, &clog5) { return 5 }
+
+    # Scenario 6: tuple expired by aborted txn IS visible (aborted expirer ignored).
+    # txn 85 inserted (committed), txn 95 expired but aborted → effective expire=invalid.
+    tuple6 := mut MvccTupleMeta.new_insert(85u64, 0u32)
+    tuple6.set_expired(95u64, 0u32)
+    clog6 := mut Clog.new(4096u64, 4u32)
+    clog6.set_status(85u64, TxnStatus.Committed)
+    clog6.set_status(95u64, TxnStatus.Aborted)
+    active6 := mut Vec.with_capacity(1)
+    active6.push(100u64)
+    snap6 := mut TxnSnapshot.new(100u64, active6)
+    I !is_visible(tuple6.txn_id_create, tuple6.txn_id_expire, tuple6.cmd_id, tuple6.expire_cmd_id, &snap6, &clog6) { return 6 }
+
+    0
+}
