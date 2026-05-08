@@ -1,0 +1,40 @@
+# B-03: is_visible(...) runtime hang
+#
+# Discovered: 2026-05-09 loop 45 (transaction smoke 확장 시도 중).
+#
+# Symptom: build 성공, runtime SIGALRM (10s timeout 초과 hang).
+# Calling vaisdb's storage/txn/visibility.is_visible with valid TxnSnapshot
+# + Clog arguments causes the binary to never terminate. minimal Clog
+# construction + set_status alone exits 0 in <1s; adding the is_visible
+# call hangs.
+#
+# Hypothesis (NOT yet verified): infinite loop or deadlock inside
+# is_visible (vaisdb/src/storage/txn/visibility.vais), possibly within
+# Clog.get_status lookup path. Could be:
+#   - bucket scan that doesn't terminate when status not found
+#   - recursive Mutex/RwLock lock attempt
+#   - HashMap iteration that monomorphizes incorrectly
+#
+# Status: still_silent_runtime (build OK + clang OK + linker OK + runtime
+# hang). L-002 north star: vais 컴파일러 자체가 catch 못함, runtime hang
+# 으로만 manifest. Worse than B-01 (which clang catches loud).
+#
+# Baseline impact: 0 (vaisdb_runtime smoke 가 visibility surface 미사용).
+# transaction-matrix smoke 확장 시 trigger.
+
+use storage/txn/snapshot.{TxnSnapshot}
+use storage/txn/visibility.{is_visible}
+use storage/txn/clog.{Clog, TxnStatus}
+use storage/page/mvcc.{MvccTupleMeta}
+
+fn main() -> i64 {
+    tuple1 := mut MvccTupleMeta.new_insert(100u64, 0u32)
+    active1 := mut Vec.with_capacity(1)
+    active1.push(100u64)
+    snap1 := mut TxnSnapshot.new(100u64, active1)
+    clog := mut Clog.new(4096u64, 4u32)
+    clog.set_status(100u64, TxnStatus.InProgress)
+
+    visible := is_visible(tuple1.txn_id_create, tuple1.txn_id_expire, tuple1.cmd_id, tuple1.expire_cmd_id, &snap1, &clog)
+    visible ? 0 : 1
+}
