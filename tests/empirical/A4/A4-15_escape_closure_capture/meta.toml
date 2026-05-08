@@ -13,16 +13,13 @@ actual_observed = "exit ≠ 42 (macOS arm64, vaisc release build, 2026-05-08 mea
 verified_date = "2026-05-08"
 
 [v2_evidence]
-status = "v1_reverified_silent_corruption"
+status = "hard_block_landed"
 notes = """
-History: F-18 (STEP7_FINDINGS, 2026-05-04) discovered this during A2-04 inline-closure promotion. The fixture lived under compiler/tests/empirical/A2/A2-04_inline_closure/probe_neg.vais (double duty as A2 negative form + A4 evidence). Re-measured 2026-05-08 = exit 45 (different value than the earlier 245/69 — same corruption class, F-05 memory-load).
+History: F-18 (STEP7_FINDINGS, 2026-05-04) discovered this during A2-04 inline-closure promotion. v37 (loop 32) inventoried as A4-15 with assertion_kind=exit_not. v39 (loop 34) hard-blocked at TC level — escape closure detector at vais-types/checker_expr/stmts.rs::Stmt::Return + vais-types/checker_fn.rs::check_function trailing-expression branch. Probe now rejects with E001 'expected named function pointer or capture-free closure, found escape closure capturing N variable(s)'. Opt-out via VAIS_REJECT_A4_15=0.
 
-A2-04 (inline closure) is certified as A2 because the inline form (apply(|n| n+1, 41) = 42 deterministically) does NOT escape — capture frame lives on caller's stack throughout call. Escape form crosses the return boundary.
+baseline impact measurement before LANDED: std=0/82, LIVING_SPEC=0/117, vaisdb 11/282 (= prior baseline; A4-15 introduced 0 new failures). escape closure form has zero baseline use across std + lang/packages + LIVING_SPEC.
 
-Multi-form follow-up (next iteration):
-  - move-capture annotation if/when added (Step 16)
-  - escape closure with mutable capture
-  - escape closure capturing struct value vs reference
+A2-04 (inline closure) is certified as A2 — the inline form (apply(|n| n+1, 41) = 42 deterministically) does NOT reach return position. Escape form (return |params| body with non-empty captures) crosses the return boundary; this is what the new detector rejects.
 """
 
 [migration]
@@ -39,10 +36,8 @@ A2-04 certified subset (inline closures) is unaffected by either path.
 """
 
 [assertion_kind]
-kind = "exit_not"
-forbidden_set = [42]
+kind = "check_fails"
+required_stderr_patterns = ["E001", "escape closure", "A4-15"]
 rationale = """
-The well-typed result (42 = 37 + 5) is forbidden — observing it would mean the escape-closure surface was correctly fixed (good) or a build accidentally had the captured value land in the right stack slot (rare drift). Specific exit value varies by build; the assertion is structural ("escape closure does not preserve capture").
-
-When the surface is correctly fixed (path a or b above), flip this fixture from exit_not → exact_exit=42 to assert positive correctness.
+Hard-blocked at TC layer (loop 34, master-plan v39). The probe now rejects with E001 mentioning the escape-closure name + A4-15 marker. Opt-out via VAIS_REJECT_A4_15=0 retains legacy silent accept for legacy harness; the default rejects.
 """

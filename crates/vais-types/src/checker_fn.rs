@@ -101,6 +101,44 @@ impl TypeChecker {
             }
         }
 
+        // A4-15 (Step 13 hard-block, 2026-05-08): escape closure detection on
+        // trailing-expression body form. Reject `fn make_adder(x) -> |i64| -> i64 { |n| n + x }`
+        // where the trailing lambda captures any variable from the function
+        // scope (= x in the example). The Stmt::Return path catches the
+        // explicit-return form (`return |n| n + x`); this catches the
+        // implicit-trailing form. See checker_expr/stmts.rs::Stmt::Return for
+        // the rationale and STEP7 F-18 / A4-15 fixture.
+        //
+        // Opt-out: VAIS_REJECT_A4_15=0 restores legacy silent accept.
+        let trailing_expr: Option<&Spanned<Expr>> = match &f.body {
+            FunctionBody::Expr(expr) => Some(expr),
+            FunctionBody::Block(stmts) => stmts.last().and_then(|s| {
+                if let Stmt::Expr(e) = &s.node { Some(&**e) } else { None }
+            }),
+        };
+        if let Some(trailing) = trailing_expr {
+            if let Expr::Lambda { params, body, .. } = &trailing.node {
+                let opt_out = std::env::var("VAIS_REJECT_A4_15")
+                    .as_deref() == Ok("0");
+                if !opt_out {
+                    let param_names: std::collections::HashSet<_> =
+                        params.iter().map(|p| p.name.node.clone()).collect();
+                    let captures = self.find_free_vars_in_expr(&*body, &param_names);
+                    if !captures.is_empty() {
+                        return Err(TypeError::Mismatch {
+                            expected: "named function pointer or capture-free closure".to_string(),
+                            found: format!(
+                                "escape closure capturing {} variable(s) from enclosing scope: [{}] — escape closures cause stack-after-return corruption (A4-15). Use a named fn or extract captured state to a struct. Set VAIS_REJECT_A4_15=0 to restore legacy silent accept.",
+                                captures.len(),
+                                captures.join(", "),
+                            ),
+                            span: Some(trailing.span),
+                        });
+                    }
+                }
+            }
+        }
+
         // Check body
         //
         // Push the function's return type as an expected-type hint. Block

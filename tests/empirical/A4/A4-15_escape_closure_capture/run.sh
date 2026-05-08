@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# A4-15 — Escape closure captured-environment loss (master-plan v37 add).
+# A4-15 — Escape closure captured-environment loss (HARD-BLOCKED 2026-05-08).
 #
-# Closure returned from a function and called later loses its captured
-# environment because the capture frame lives on the caller's stack and
-# is freed at return. STEP7_FINDINGS F-18 (2026-05-04) first observed.
+# TC-level escape detector at vais-types/checker_expr/stmts.rs::Stmt::Return
+# + vais-types/checker_fn.rs::check_function trailing-expression branch.
+# Probe rejects with E001 mentioning 'escape closure' + 'A4-15'.
 #
-# Probe asserts CURRENT BEHAVIOR: vaisc check passes, build succeeds,
-# runtime exit ≠ 42 (the well-typed result).
+# Opt-out via VAIS_REJECT_A4_15=0 restores legacy silent accept (for legacy
+# harness only; this fixture asserts the default-strict behavior).
 
 set -euo pipefail
 
@@ -24,32 +24,24 @@ trap 'rm -rf "$WORK"' EXIT
 
 cp "$DIR/probe.vais" "$WORK/probe.vais"
 
-# Stage 1: vaisc check must succeed (silent surface).
+# Stage 1: vaisc check must FAIL with E001 + escape closure + A4-15.
 CHECK_OUTPUT="$( "$VAISC" check "$WORK/probe.vais" 2>&1 || true )"
 CHECK_EXIT=0
 "$VAISC" check "$WORK/probe.vais" >/dev/null 2>&1 && CHECK_EXIT=0 || CHECK_EXIT=$?
-if [[ "$CHECK_EXIT" != "0" ]]; then
-  echo "DRIFT: A4-15 vaisc check now FAILS — escape closure may be type-check-rejected." >&2
+if [[ "$CHECK_EXIT" == "0" ]]; then
+  echo "DRIFT: A4-15 vaisc check now SUCCEEDS — escape closure detector may have" >&2
+  echo "  been disabled. Restore default-strict behavior (VAIS_REJECT_A4_15 != '0')." >&2
   echo "$CHECK_OUTPUT" >&2
   exit 1
 fi
 
-# Stage 2: build must succeed.
-BUILD_OUTPUT="$( "$VAISC" build "$WORK/probe.vais" -o "$WORK/probe_bin" 2>&1 || true )"
-if [[ ! -x "$WORK/probe_bin" ]]; then
-  echo "DRIFT: A4-15 build did not produce probe_bin:" >&2
-  echo "$BUILD_OUTPUT" >&2
-  exit 1
-fi
+REQUIRED=("E001" "escape closure" "A4-15")
+for pat in "${REQUIRED[@]}"; do
+  if ! grep -qF "$pat" <<< "$CHECK_OUTPUT"; then
+    echo "DRIFT: A4-15 check failed but stderr lacks '$pat':" >&2
+    echo "$CHECK_OUTPUT" >&2
+    exit 1
+  fi
+done
 
-# Stage 3: runtime exit must NOT be 42.
-RUN_EXIT=0
-"$WORK/probe_bin" >/dev/null 2>&1 && RUN_EXIT=0 || RUN_EXIT=$?
-if [[ "$RUN_EXIT" == "42" ]]; then
-  echo "DRIFT: A4-15 runtime returned 42 (well-typed result) — escape closure may have" >&2
-  echo "  been correctly fixed or build happened to land capture in right stack slot." >&2
-  echo "  Investigate; flip assertion_kind from exit_not to exact_exit if surface fixed." >&2
-  exit 1
-fi
-
-echo "A4-15 OK: escape closure silently accepted; runtime exit=${RUN_EXIT} (≠42)."
+echo "A4-15 OK: escape closure rejected by TC detector with E001 + A4-15 marker."

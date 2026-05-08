@@ -147,6 +147,42 @@ impl TypeChecker {
             Stmt::Expr(expr) => self.check_expr(expr),
             Stmt::Return(expr) => {
                 let ret_span = expr.as_ref().map(|e| e.span);
+
+                // A4-15 (Step 13 hard-block, 2026-05-08): escape closure detection.
+                // Reject `return |params| body` where the lambda body captures any
+                // variable from the enclosing function scope (escape closure with
+                // non-empty captures). Such closures live on the caller's stack
+                // and freeing the capture frame at return causes runtime
+                // corruption (STEP7 F-18 + A4-15 fixture). Inline closures
+                // (A2-04 certified subset) are unaffected — they don't reach
+                // a return statement.
+                //
+                // Opt-out: VAIS_REJECT_A4_15=0 restores the legacy silent
+                // accept (for legacy harness only; certified surfaces stay
+                // safe under default).
+                if let Some(ret_expr) = expr {
+                    if let Expr::Lambda { params, body, .. } = &ret_expr.node {
+                        let opt_out = std::env::var("VAIS_REJECT_A4_15")
+                            .as_deref() == Ok("0");
+                        if !opt_out {
+                            let param_names: std::collections::HashSet<_> =
+                                params.iter().map(|p| p.name.node.clone()).collect();
+                            let captures = self.find_free_vars_in_expr(&*body, &param_names);
+                            if !captures.is_empty() {
+                                return Err(TypeError::Mismatch {
+                                    expected: "named function pointer or capture-free closure".to_string(),
+                                    found: format!(
+                                        "escape closure capturing {} variable(s) from enclosing scope: [{}] — escape closures cause stack-after-return corruption (A4-15). Use a named fn or extract captured state to a struct. Set VAIS_REJECT_A4_15=0 to restore legacy silent accept.",
+                                        captures.len(),
+                                        captures.join(", "),
+                                    ),
+                                    span: ret_span,
+                                });
+                            }
+                        }
+                    }
+                }
+
                 let ret_type = if let Some(expr) = expr {
                     if let Some(expected) = self.current_fn_ret.clone() {
                         self.push_expected_type(expected.clone());
