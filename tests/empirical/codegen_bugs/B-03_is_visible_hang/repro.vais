@@ -15,12 +15,24 @@
 #   - recursive Mutex/RwLock lock attempt
 #   - HashMap iteration that monomorphizes incorrectly
 #
-# Status: still_silent_runtime (build OK + clang OK + linker OK + runtime
-# hang). L-002 north star: vais 컴파일러 자체가 catch 못함, runtime hang
-# 으로만 manifest. Worse than B-01 (which clang catches loud).
+# Status: HANG_RESOLVED 2026-05-09 (loop 46 iter 7). Root cause = vaisdb
+# Clog 측 Mutex 명시 unlock 누락. clog.vais 3 사이트 (get_status / set_status
+# / load_pages) 가 `self.lock.lock()` 후 `# guard.drop() # disabled for dev
+# compiler` 주석 — RAII drop 의존. dev compiler 의 Mutex Drop 미구현으로
+# guard 가 drop 안 되고, 후속 lock 시도 시 recursive deadlock.
 #
-# Baseline impact: 0 (vaisdb_runtime smoke 가 visibility surface 미사용).
-# transaction-matrix smoke 확장 시 trigger.
+# Fix: clog.vais 3 사이트에 `self.lock.unlock()` 명시 호출 추가. std/sync.vais:48-53
+# 의 `Mutex.unlock(&self)` 가 정확히 'when a guard destructor cannot be used'
+# use case 명시.
+#
+# Verification: 본 fixture 재실행 → exit 142 (hang, SIGALRM) → exit 1 (정상
+# logic). INTEGRITY OK pre/post (vaisdb 261/261 + runtime 29/29 유지).
+#
+# Cascade backlog (iter 8+): 같은 anti-pattern 40 사이트 vaisdb 잔존
+# (att / conflict / undo / manager / deadlock / truncation 6 file).
+#
+# Step 16 (Owned/Borrow) 완성 시 RAII drop 자동화로 해소 가능 — 그때까지는
+# 명시적 unlock 필수.
 
 use storage/txn/snapshot.{TxnSnapshot}
 use storage/txn/visibility.{is_visible}
