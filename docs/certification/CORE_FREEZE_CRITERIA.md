@@ -73,7 +73,7 @@ markers is generated from `GATE_MANIFEST.toml` by
 | Ecosystem package codegen | `std=82/82`, `vaisdb=261/261` |
 | Backend smoke | `phase158=18/18` |
 | std/http_client runtime | `smoke=1/1` |
-| VaisDB runtime | `smoke=30/30` |
+| VaisDB runtime | `smoke=31/31` |
 | vais-server runtime | `smoke=13/13` |
 | vais-web runtime | `smoke=23/23` |
 | Cross-package schema gate | `gate=2/2` |

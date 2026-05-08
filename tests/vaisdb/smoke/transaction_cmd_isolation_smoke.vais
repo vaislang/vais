@@ -1,0 +1,70 @@
+# MVCC cmd_id ordering + snapshot isolation runtime smoke for vaisdb.
+#
+# Pairs with transaction_mvcc_smoke.vais (basic invariants) and
+# transaction_visibility_smoke.vais (Case 1/2/3 dispatch). This fixture
+# covers the more nuanced cmd_id-based ordering and snapshot isolation
+# semantics — the subset that distinguishes MVCC from simple per-row
+# committed-or-not visibility.
+#
+# Scenarios:
+# A1: cmd_id ordering within same txn — cmd 10 sees own cmd 5 write;
+#     cmd 3 does NOT see own cmd 5 write (snapshot.current_cmd_id is
+#     enforced for same-txn visibility per visibility.vais Case 1).
+# B1: snapshot isolation — readers committed before another writer's
+#     commit see the OLD version (v1) and NOT the NEW version (v2).
+#
+# Asserted by exit code only: 0 = all 4 sub-scenarios pass,
+# 1..4 = first failing scenario.
+#
+# History: enabled by clog Mutex unlock fix (master-plan v51, loop 46)
+# + vaisdb cascade fix (v54, loop 49). Prior to those fixes, repeated
+# is_visible calls caused recursive Mutex deadlock on the shared Clog.
+
+use storage/constants.{INVALID_TXN_ID}
+use storage/txn/snapshot.{TxnSnapshot}
+use storage/txn/visibility.{is_visible}
+use storage/txn/clog.{Clog, TxnStatus}
+use storage/page/mvcc.{MvccTupleMeta}
+
+fn main() -> i64 {
+    # Scenario A1: cmd_id ordering — same-txn cmd 10 sees cmd 5 write.
+    tuple_a := mut MvccTupleMeta.new_insert(100u64, 0u32)
+    tuple_a.cmd_id = 5u32
+    clog_a := mut Clog.new(4096u64, 4u32)
+    clog_a.set_status(100u64, TxnStatus.InProgress)
+
+    active_a10 := mut Vec.with_capacity(1)
+    active_a10.push(100u64)
+    snap_a10 := mut TxnSnapshot.new(100u64, active_a10)
+    snap_a10.current_cmd_id = 10u32
+    I !is_visible(tuple_a.txn_id_create, tuple_a.txn_id_expire, tuple_a.cmd_id, tuple_a.expire_cmd_id, &snap_a10, &clog_a) { return 1 }
+
+    # Scenario A2: cmd_id ordering — same-txn cmd 3 does NOT see cmd 5 write.
+    active_a3 := mut Vec.with_capacity(1)
+    active_a3.push(100u64)
+    snap_a3 := mut TxnSnapshot.new(100u64, active_a3)
+    snap_a3.current_cmd_id = 3u32
+    I is_visible(tuple_a.txn_id_create, tuple_a.txn_id_expire, tuple_a.cmd_id, tuple_a.expire_cmd_id, &snap_a3, &clog_a) { return 2 }
+
+    # Scenario B1: snapshot isolation — v1 (old version) visible to reader
+    # whose snapshot predates the writer txn (101) commit.
+    tuple_v1 := mut MvccTupleMeta.new_insert(80u64, 0u32)
+    tuple_v1.set_expired(101u64, 0u32)
+    tuple_v2 := mut MvccTupleMeta.new_insert(101u64, 0u32)
+
+    clog_b := mut Clog.new(4096u64, 4u32)
+    clog_b.set_status(80u64, TxnStatus.Committed)
+    clog_b.set_status(101u64, TxnStatus.Committed)
+
+    active_b := mut Vec.with_capacity(1)
+    active_b.push(100u64)
+    snap_b := mut TxnSnapshot.new(100u64, active_b)
+
+    I !is_visible(tuple_v1.txn_id_create, tuple_v1.txn_id_expire, tuple_v1.cmd_id, tuple_v1.expire_cmd_id, &snap_b, &clog_b) { return 3 }
+
+    # Scenario B2: snapshot isolation — v2 (new version) NOT visible
+    # since 101 is after the snapshot boundary at 100.
+    I is_visible(tuple_v2.txn_id_create, tuple_v2.txn_id_expire, tuple_v2.cmd_id, tuple_v2.expire_cmd_id, &snap_b, &clog_b) { return 4 }
+
+    0
+}
