@@ -10,7 +10,7 @@
 #   INTEGRITY_HTTP_CLIENT_RUNTIME_MIN=1    minimum http_client runtime smoke
 #   INTEGRITY_VAISDB_RUNTIME_MIN=34        minimum vaisdb runtime smoke
 #   INTEGRITY_SERVER_RUNTIME_MIN=13        minimum vais-server runtime smoke
-#   INTEGRITY_WEB_RUNTIME_MIN=61           minimum vais-web runtime smoke
+#   INTEGRITY_WEB_RUNTIME_MIN=451          minimum vais-web runtime smoke
 #   INTEGRITY_BACKEND_PHASE158_MIN=18      minimum phase158 backend smoke
 #   INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=2   minimum cross_package_schema gate (positive + negative)
 #
@@ -54,7 +54,7 @@ INTEGRITY_VAISDB_MIN="${INTEGRITY_VAISDB_MIN:-261}"
 INTEGRITY_HTTP_CLIENT_RUNTIME_MIN="${INTEGRITY_HTTP_CLIENT_RUNTIME_MIN:-1}"
 INTEGRITY_VAISDB_RUNTIME_MIN="${INTEGRITY_VAISDB_RUNTIME_MIN:-34}"
 INTEGRITY_SERVER_RUNTIME_MIN="${INTEGRITY_SERVER_RUNTIME_MIN:-13}"
-INTEGRITY_WEB_RUNTIME_MIN="${INTEGRITY_WEB_RUNTIME_MIN:-61}"
+INTEGRITY_WEB_RUNTIME_MIN="${INTEGRITY_WEB_RUNTIME_MIN:-451}"
 INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN="${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN:-2}"
 INTEGRITY_BACKEND_PHASE158_MIN="${INTEGRITY_BACKEND_PHASE158_MIN:-18}"
 
@@ -227,7 +227,20 @@ else
             __tests__/e2e/vais-web-vercel-live-deploy.test.ts \
             __tests__/e2e/vais-web-netlify-live-deploy.test.ts \
             __tests__/e2e/vais-web-aws-lambda-live-deploy.test.ts \
-            __tests__/e2e/pipeline.test.ts
+            __tests__/e2e/pipeline.test.ts \
+            __tests__/router.test.ts \
+            __tests__/ssr.test.ts \
+            __tests__/hydration.test.ts \
+            __tests__/middleware.test.ts \
+            __tests__/adapters.test.ts \
+            __tests__/client.test.ts \
+            __tests__/types.test.ts \
+            __tests__/server-action.test.ts \
+            __tests__/server-load.test.ts \
+            __tests__/ssg.test.ts \
+            __tests__/resolver.test.ts \
+            __tests__/adapters-cloud.test.ts \
+            __tests__/adapters-extra.test.ts
     ) 2>&1 | tee "${WEB_RUNTIME_LOG}" || WEB_RUNTIME_EXIT=$?
 fi
 
