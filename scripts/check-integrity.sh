@@ -10,7 +10,8 @@
 #   INTEGRITY_HTTP_CLIENT_RUNTIME_MIN=1    minimum http_client runtime smoke
 #   INTEGRITY_VAISDB_RUNTIME_MIN=34        minimum vaisdb runtime smoke
 #   INTEGRITY_SERVER_RUNTIME_MIN=13        minimum vais-server runtime smoke
-#   INTEGRITY_WEB_RUNTIME_MIN=451          minimum vais-web runtime smoke
+#   INTEGRITY_WEB_RUNTIME_MIN=61           minimum vais-web runtime smoke
+#   INTEGRITY_WEB_UNIT_MIN=390             minimum vais-web unit tests
 #   INTEGRITY_BACKEND_PHASE158_MIN=18      minimum phase158 backend smoke
 #   INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=2   minimum cross_package_schema gate (positive + negative)
 #
@@ -54,7 +55,8 @@ INTEGRITY_VAISDB_MIN="${INTEGRITY_VAISDB_MIN:-261}"
 INTEGRITY_HTTP_CLIENT_RUNTIME_MIN="${INTEGRITY_HTTP_CLIENT_RUNTIME_MIN:-1}"
 INTEGRITY_VAISDB_RUNTIME_MIN="${INTEGRITY_VAISDB_RUNTIME_MIN:-34}"
 INTEGRITY_SERVER_RUNTIME_MIN="${INTEGRITY_SERVER_RUNTIME_MIN:-13}"
-INTEGRITY_WEB_RUNTIME_MIN="${INTEGRITY_WEB_RUNTIME_MIN:-451}"
+INTEGRITY_WEB_RUNTIME_MIN="${INTEGRITY_WEB_RUNTIME_MIN:-61}"
+INTEGRITY_WEB_UNIT_MIN="${INTEGRITY_WEB_UNIT_MIN:-390}"
 INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN="${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN:-2}"
 INTEGRITY_BACKEND_PHASE158_MIN="${INTEGRITY_BACKEND_PHASE158_MIN:-18}"
 
@@ -227,7 +229,30 @@ else
             __tests__/e2e/vais-web-vercel-live-deploy.test.ts \
             __tests__/e2e/vais-web-netlify-live-deploy.test.ts \
             __tests__/e2e/vais-web-aws-lambda-live-deploy.test.ts \
-            __tests__/e2e/pipeline.test.ts \
+            __tests__/e2e/pipeline.test.ts
+    ) 2>&1 | tee "${WEB_RUNTIME_LOG}" || WEB_RUNTIME_EXIT=$?
+fi
+
+# ---------------------------------------------------------------------------
+# Run vais-web unit tests (separate gate from runtime smoke)
+# ---------------------------------------------------------------------------
+# These exercise individual modules (router parser, SSR renderer, hydration
+# markers, middleware chain, adapter generators, client runtime, type
+# helpers, server-action handler, server-load loader, SSG path scanner,
+# module resolver) without browser/node runtime — pure logic/IO unit
+# coverage. Kept in a separate gate from runtime smoke so the gate name
+# remains accurate (no unit/runtime mixing — L-002 north star clarity).
+WEB_UNIT_LOG="/tmp/vais-web-unit.log"
+echo "check-integrity: running vais-web unit tests..."
+
+WEB_UNIT_EXIT=0
+if [ ! -d "${WEB_RUNTIME_DIR}" ]; then
+    echo "vais-web unit test directory missing: ${WEB_RUNTIME_DIR}" | tee "${WEB_UNIT_LOG}"
+    WEB_UNIT_EXIT=1
+else
+    (
+        cd "${WEB_RUNTIME_DIR}"
+        NPM_TOKEN="${NPM_TOKEN:-}" pnpm exec vitest run \
             __tests__/router.test.ts \
             __tests__/ssr.test.ts \
             __tests__/hydration.test.ts \
@@ -241,7 +266,7 @@ else
             __tests__/resolver.test.ts \
             __tests__/adapters-cloud.test.ts \
             __tests__/adapters-extra.test.ts
-    ) 2>&1 | tee "${WEB_RUNTIME_LOG}" || WEB_RUNTIME_EXIT=$?
+    ) 2>&1 | tee "${WEB_UNIT_LOG}" || WEB_UNIT_EXIT=$?
 fi
 
 # ---------------------------------------------------------------------------
@@ -392,6 +417,11 @@ WEB_RUNTIME_PASSED="${WEB_RUNTIME_PASSED:-0}"
 WEB_RUNTIME_TOTAL="$(parse_vitest_total "${WEB_RUNTIME_LOG}")"
 WEB_RUNTIME_TOTAL="${WEB_RUNTIME_TOTAL:-${WEB_RUNTIME_PASSED}}"
 WEB_RUNTIME_TOTAL="${WEB_RUNTIME_TOTAL:-0}"
+WEB_UNIT_PASSED="$(parse_vitest_passed "${WEB_UNIT_LOG}")"
+WEB_UNIT_PASSED="${WEB_UNIT_PASSED:-0}"
+WEB_UNIT_TOTAL="$(parse_vitest_total "${WEB_UNIT_LOG}")"
+WEB_UNIT_TOTAL="${WEB_UNIT_TOTAL:-${WEB_UNIT_PASSED}}"
+WEB_UNIT_TOTAL="${WEB_UNIT_TOTAL:-0}"
 
 # ---------------------------------------------------------------------------
 # Regression checks
@@ -433,6 +463,10 @@ fi
 if [ -n "${WEB_RUNTIME_PASSED}" ] && [ "${WEB_RUNTIME_PASSED}" -lt "${INTEGRITY_WEB_RUNTIME_MIN}" ]; then
     REGRESSION=1
     REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: vais_web_runtime baseline=${INTEGRITY_WEB_RUNTIME_MIN} current=${WEB_RUNTIME_PASSED}/${WEB_RUNTIME_TOTAL}\n"
+fi
+if [ -n "${WEB_UNIT_PASSED}" ] && [ "${WEB_UNIT_PASSED}" -lt "${INTEGRITY_WEB_UNIT_MIN}" ]; then
+    REGRESSION=1
+    REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: vais_web_unit baseline=${INTEGRITY_WEB_UNIT_MIN} current=${WEB_UNIT_PASSED}/${WEB_UNIT_TOTAL}\n"
 fi
 if [ -n "${PHASE158_PASSED}" ] && [ "${PHASE158_PASSED}" -lt "${INTEGRITY_BACKEND_PHASE158_MIN}" ]; then
     REGRESSION=1
@@ -505,6 +539,12 @@ fi
 if [ "${WEB_RUNTIME_EXIT}" -ne 0 ]; then
     echo ""
     echo "WEB RUNTIME SMOKE FAILED: vitest vais-web runtime smoke exited ${WEB_RUNTIME_EXIT}"
+    OVERALL_EXIT=1
+fi
+
+if [ "${WEB_UNIT_EXIT}" -ne 0 ]; then
+    echo ""
+    echo "WEB UNIT TESTS FAILED: vitest vais-web unit tests exited ${WEB_UNIT_EXIT}"
     OVERALL_EXIT=1
 fi
 
@@ -585,6 +625,12 @@ print_gate_summary() {
         echo "WEB RUNTIME FAIL: exit=${WEB_RUNTIME_EXIT} smoke=${WEB_RUNTIME_PASSED}/${WEB_RUNTIME_TOTAL}"
     fi
 
+    if [ "${WEB_UNIT_EXIT}" -eq 0 ]; then
+        echo "WEB UNIT OK: tests=${WEB_UNIT_PASSED}/${WEB_UNIT_TOTAL}"
+    else
+        echo "WEB UNIT FAIL: exit=${WEB_UNIT_EXIT} tests=${WEB_UNIT_PASSED}/${WEB_UNIT_TOTAL}"
+    fi
+
     if [ "${CROSS_PKG_SCHEMA_EXIT}" -eq 0 ]; then
         echo "CROSS PACKAGE SCHEMA OK: gate=${CROSS_PKG_SCHEMA_PASSED}/${CROSS_PKG_SCHEMA_TOTAL}"
     else
@@ -594,7 +640,7 @@ print_gate_summary() {
 
 if [ "${OVERALL_EXIT}" -eq 0 ]; then
     print_gate_summary
-    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok cross_package_schema=ok"
+    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok web_unit=ok cross_package_schema=ok"
     exit 0
 else
     print_gate_summary

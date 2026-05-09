@@ -59,7 +59,7 @@ single source for current pass counts. CI fails on drift.
 | std/http_client runtime | `smoke=1/1` |
 | VaisDB runtime | `smoke=34/34` |
 | vais-server runtime | `smoke=13/13` |
-| vais-web runtime | `smoke=451/467` |
+| vais-web runtime | `smoke=61/77` |
 | Cross-package schema gate | `gate=2/2` |
 <!-- gate-table:auto-end -->
 
