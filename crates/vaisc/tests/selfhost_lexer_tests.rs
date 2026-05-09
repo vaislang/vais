@@ -601,7 +601,7 @@ fn main() -> i64 {
 
 #[test]
 fn selfhost_verify_single_char_keywords_m_match() {
-    // M keyword = match
+    // match keyword = match
     let source = r#"
 fn main() -> i64 {
     x := 2
@@ -618,7 +618,7 @@ fn main() -> i64 {
 
 #[test]
 fn selfhost_verify_single_char_keywords_r_return() {
-    // R keyword = return
+    // return keyword = return
     let source = r#"
 fn foo(x: i64) -> i64 {
     I x > 0 { return x }
@@ -626,7 +626,7 @@ fn foo(x: i64) -> i64 {
 }
 fn main() -> i64 = foo(42)
 "#;
-    // foo(42): x=42 > 0 → R 42
+    // foo(42): x=42 > 0 → return 42
     assert_exit_code(source, 42);
 }
 
@@ -2454,7 +2454,7 @@ fn selfhost_verify_token_sequence_if_else() {
     let source = "I x > 0 { 1 } else { 0 }";
     let tokens = tokenize(source).unwrap();
 
-    // I x > 0 { 1 } E { 0 }
+    // I x > 0 { 1 } else { 0 }
     // 4 54 67 51 93 51 94 3 93 51 94
     let expected_ids: Vec<i64> = vec![
         4,  // I (If)

@@ -20,7 +20,7 @@ fn gen_js(source: &str) -> String {
 
 #[test]
 fn test_js_function() {
-    let js = gen_js("F add(x: i64, y: i64) -> i64 = x + y");
+    let js = gen_js("fn add(x: i64, y: i64) -> i64 = x + y");
     assert!(js.contains("add") || js.contains("function"));
 }
 
@@ -114,7 +114,7 @@ fn test_js_match() {
 
 #[test]
 fn test_js_lambda() {
-    let js = gen_js("F test() -> i64 { f := |x: i64| x * 2; f(21) }");
+    let js = gen_js("fn test() -> i64 { f := |x: i64| x * 2; f(21) }");
     assert!(js.contains("=>") || js.contains("function"));
 }
 
@@ -194,31 +194,31 @@ fn test_js_string_literal() {
 
 #[test]
 fn test_js_bool_literal() {
-    let js = gen_js("F test() -> bool = true");
+    let js = gen_js("fn test() -> bool = true");
     assert!(js.contains("true"));
 }
 
 #[test]
 fn test_js_float_literal() {
-    let js = gen_js("F test() -> f64 = 3.14");
+    let js = gen_js("fn test() -> f64 = 3.14");
     assert!(js.contains("3.14"));
 }
 
 #[test]
 fn test_js_array_literal() {
-    let js = gen_js("F test() -> i64 { arr := [1, 2, 3]; R 0 }");
+    let js = gen_js("fn test() -> i64 { arr := [1, 2, 3]; return 0 }");
     assert!(js.contains("[1") || js.contains("1,") || js.contains("1, 2, 3"));
 }
 
 #[test]
 fn test_js_tuple_literal() {
-    let js = gen_js("F test() -> i64 { t := (1, 2); R 0 }");
+    let js = gen_js("fn test() -> i64 { t := (1, 2); return 0 }");
     assert!(js.contains("[1") || js.contains("1,") || js.contains("1, 2"));
 }
 
 #[test]
 fn test_js_ternary() {
-    let js = gen_js("F test(x: i64) -> i64 = x > 0 ? x : 0");
+    let js = gen_js("fn test(x: i64) -> i64 = x > 0 ? x : 0");
     assert!(js.contains("?") || js.contains(":") || js.contains("if"));
 }
 
@@ -289,7 +289,7 @@ fn test_js_self_recursion() {
 
 #[test]
 fn test_js_cast() {
-    let js = gen_js("F test() -> f64 { x := 42; x as f64 }");
+    let js = gen_js("fn test() -> f64 { x := 42; x as f64 }");
     assert!(js.contains("42"));
 }
 
@@ -358,7 +358,7 @@ fn test_js_const() {
 
 #[test]
 fn test_js_pub_function() {
-    let js = gen_js("P F public_fn() -> i64 = 42");
+    let js = gen_js("pub fn public_fn() -> i64 = 42");
     assert!(js.contains("export") || js.contains("42"));
 }
 
@@ -572,13 +572,13 @@ fn test_js_tree_shake_generic_function() {
 
 #[test]
 fn test_js_unary_neg() {
-    let js = gen_js("F test() -> i64 = -42");
+    let js = gen_js("fn test() -> i64 = -42");
     assert!(js.contains("-42") || js.contains("42"));
 }
 
 #[test]
 fn test_js_unary_not() {
-    let js = gen_js("F test() -> bool = !true");
+    let js = gen_js("fn test() -> bool = !true");
     assert!(js.contains("!") || js.contains("true"));
 }
 
@@ -635,9 +635,7 @@ fn test_js_else_if() {
     let js = gen_js(
         r#"
         fn test(x: i64) -> i64 {
-            I x > 20 { return 3 }
-            E I x > 10 { return 2 }
-            E { return 1 }
+            I x > 20 { return 3 } else I x > 10 { return 2 } else { return 1 }
         }
     "#,
     );

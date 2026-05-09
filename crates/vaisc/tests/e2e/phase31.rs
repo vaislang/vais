@@ -2232,7 +2232,7 @@ fn good() -> i64 = 0
 #[test]
 fn e2e_recovery_error_preserves_span() {
     // Verify that errors contain span information
-    let source = "fn broken(\nF good() -> i64 = 0\n";
+    let source = "fn broken(\nfn good() -> i64 = 0\n";
     let (_module, errors) = parse_recovery(source);
     assert!(!errors.is_empty(), "Should have errors");
     for error in &errors {

@@ -147,7 +147,7 @@ fn test_lower_i32_function() {
 #[test]
 fn test_lower_nested_if_else() {
     // Classify function with nested if/else:
-    // F classify(x: i64) -> i64 = I x > 0 { 1 } E I x < 0 { -1 } else { 0 }
+    // F classify(x: i64) -> i64 = I x > 0 { 1 } else I x < 0 { -1 } else { 0 }
     let source = "fn classify(x: i64) -> i64 = I x > 0 { 1 } else I x < 0 { 0 - 1 } else { 0 }";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);

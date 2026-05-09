@@ -296,7 +296,7 @@ fn positive_explicit_types() {
     // With explicit types, should always compile and run
     // Wrap with main() to verify execution: add(20, 22) = 42
     assert_exit_code(
-        "fn add(a: i64, b: i64) -> i64 { R a + b }\nfn main() -> i64 = add(20, 22)",
+        "fn add(a: i64, b: i64) -> i64 { return a + b }\nfn main() -> i64 = add(20, 22)",
         42,
     );
 }

@@ -124,8 +124,8 @@ fn test_generate_large_project_contains_variety() {
     // Control flow
     assert!(code.contains("I ")); // if
     assert!(code.contains("L {")); // loop
-    assert!(code.contains("M ")); // match
-    assert!(code.contains("R ")); // return
+    assert!(code.contains("match ")); // match
+    assert!(code.contains("return ")); // return
 
     // Operators
     assert!(code.contains("@(")); // self-recursion
@@ -160,7 +160,7 @@ fn test_generate_multi_module_project() {
         // Check for public declarations (except main)
         if filename != "main.vais" {
             assert!(
-                code.contains("P S ") || code.contains("P E ") || code.contains("P F "),
+                code.contains("pub struct ") || code.contains("pub enum ") || code.contains("pub fn "),
                 "Module {} should have public declarations",
                 filename
             );
@@ -172,7 +172,7 @@ fn test_generate_multi_module_project() {
         .iter()
         .find(|(name, _)| name == "main.vais")
         .expect("Should have main.vais");
-    assert!(main_module.1.contains("U module0"));
+    assert!(main_module.1.contains("use module0"));
 }
 
 #[test]
@@ -222,8 +222,8 @@ fn test_generated_code_has_valid_syntax() {
     // Loop syntax should have braces
     assert!(code.contains("L {"));
 
-    // Return statements should use R
-    assert!(code.contains("R "));
+    // Return statements should use canonical `return`
+    assert!(code.contains("return "));
 }
 
 #[test]
@@ -256,7 +256,7 @@ fn test_multi_module_cross_references() {
 
     // Should import previous module
     assert!(
-        module1.1.contains("U module0"),
+        module1.1.contains("use module0"),
         "Module1 should import module0"
     );
 

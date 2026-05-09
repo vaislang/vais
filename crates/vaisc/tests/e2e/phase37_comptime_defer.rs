@@ -129,7 +129,7 @@ fn main() -> i64 {
 #[test]
 fn e2e_p37_defer_with_early_return_zero() {
     // Defer registered before conditional early return
-    // if true => R 0, defer runs on scope exit
+    // if true => return 0, defer runs on scope exit
     let source = r#"
 fn main() -> i64 {
     D { }

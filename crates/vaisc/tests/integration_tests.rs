@@ -86,7 +86,7 @@ fn test_fibonacci() {
 
 #[test]
 fn test_if_else() {
-    let source = "fn max(a:i64, b:i64)->i64=I a>b{a}E{b}";
+    let source = "fn max(a:i64, b:i64)->i64=I a>b{a} else {b}";
     let ir = compile_to_ir(source).unwrap();
     assert!(ir.contains("icmp sgt"));
     assert!(ir.contains("br i1"));

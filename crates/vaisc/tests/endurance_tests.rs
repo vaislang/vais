@@ -54,12 +54,12 @@ fn generate_incremental_program(iteration: usize) -> String {
     let mut code = String::new();
 
     // Base function
-    code.push_str("fn base(x: i64) -> i64 {\n    R x + 1\n}\n\n");
+    code.push_str("fn base(x: i64) -> i64 {\n    return x + 1\n}\n\n");
 
     // Add one function per iteration
     for i in 0..=iteration {
         code.push_str(&format!(
-            "fn func{}(x: i64) -> i64 {{\n    R x * {} + {}\n}}\n\n",
+            "fn func{}(x: i64) -> i64 {{\n    return x * {} + {}\n}}\n\n",
             i,
             i % 10 + 1,
             i
@@ -68,7 +68,7 @@ fn generate_incremental_program(iteration: usize) -> String {
 
     // Main function that calls the latest function
     code.push_str(&format!(
-        "fn main() -> i64 {{\n    R func{}(42)\n}}\n",
+        "fn main() -> i64 {{\n    return func{}(42)\n}}\n",
         iteration
     ));
 
@@ -84,7 +84,7 @@ fn generate_large_program(target_lines: usize) -> String {
 
     for i in 0..funcs_needed {
         code.push_str(&format!(
-            "fn func{}(x: i64) -> i64 {{\n    R x * {} + {}\n}}\n\n",
+            "fn func{}(x: i64) -> i64 {{\n    return x * {} + {}\n}}\n\n",
             i,
             i % 10 + 1,
             i
@@ -96,22 +96,22 @@ fn generate_large_program(target_lines: usize) -> String {
         }
     }
 
-    code.push_str("fn main() -> i64 {\n    R func0(42)\n}\n");
+    code.push_str("fn main() -> i64 {\n    return func0(42)\n}\n");
     code
 }
 
 /// Generate intentionally malformed program for error recovery testing
 fn generate_malformed_program(variant: usize) -> String {
     match variant % 8 {
-        0 => "fn add(a: i64) -> { R a }".to_string(), // Missing return type
-        1 => "fn mul(x y) -> i64 { R x * y }".to_string(), // Missing comma in params
-        2 => "fn div(a: i64, b: i64) -> i64 { R a / }".to_string(), // Incomplete expression
-        3 => "fn sub(x: i64) { R x - 1 }".to_string(), // Missing return type
+        0 => "fn add(a: i64) -> { return a }".to_string(), // Missing return type
+        1 => "fn mul(x y) -> i64 { return x * y }".to_string(), // Missing comma in params
+        2 => "fn div(a: i64, b: i64) -> i64 { return a / }".to_string(), // Incomplete expression
+        3 => "fn sub(x: i64) { return x - 1 }".to_string(), // Missing return type
         4 => "struct Point { x: i64 y: i64 }".to_string(), // Missing comma in struct
         5 => "fn test() -> i64 { a := 5 R }".to_string(), // Incomplete return
-        6 => "fn loop_test() -> i64 { L { B } R 0".to_string(), // Missing closing brace
-        7 => "fn bad_if(x: i64) -> i64 { I x > 0 { R x } E }".to_string(), // Incomplete else
-        _ => "fn broken() -> i64 { R }".to_string(),  // Incomplete return value
+        6 => "fn loop_test() -> i64 { L { B } return 0".to_string(), // Missing closing brace
+        7 => "fn bad_if(x: i64) -> i64 { I x > 0 { return x } E }".to_string(), // Incomplete else
+        _ => "fn broken() -> i64 { return }".to_string(),  // Incomplete return value
     }
 }
 
@@ -504,7 +504,7 @@ fn test_endurance_parser_stress() {
     }
 
     source.push_str("\n}\n");
-    source.push_str("fn main() -> i64 { R compute() }\n");
+    source.push_str("fn main() -> i64 { return compute() }\n");
 
     println!("Testing deeply nested expression (depth: {})...", depth);
 

@@ -58,7 +58,7 @@ fn test_js_comparison_ops() {
 
 #[test]
 fn test_js_modulo() {
-    let js = gen_js("F modulo(a: i64, b: i64) -> i64 = a % b");
+    let js = gen_js("fn modulo(a: i64, b: i64) -> i64 = a % b");
     assert!(js.contains("%") || !js.is_empty());
 }
 
@@ -79,13 +79,13 @@ fn test_js_logical_ops() {
 
 #[test]
 fn test_js_negation() {
-    let js = gen_js("F neg(x: i64) -> i64 = -x");
+    let js = gen_js("fn neg(x: i64) -> i64 = -x");
     assert!(!js.is_empty());
 }
 
 #[test]
 fn test_js_not() {
-    let js = gen_js("F not(x: bool) -> bool = !x");
+    let js = gen_js("fn not(x: bool) -> bool = !x");
     assert!(!js.is_empty());
 }
 
@@ -95,7 +95,7 @@ fn test_js_not() {
 
 #[test]
 fn test_js_ternary() {
-    let js = gen_js("F max(a: i64, b: i64) -> i64 = a > b ? a : b");
+    let js = gen_js("fn max(a: i64, b: i64) -> i64 = a > b ? a : b");
     assert!(js.contains("?") || js.contains("if"));
 }
 
@@ -185,7 +185,7 @@ fn test_js_for_loop() {
 
 #[test]
 fn test_js_float_literal() {
-    let js = gen_js("F pi() -> f64 = 3.14159");
+    let js = gen_js("fn pi() -> f64 = 3.14159");
     assert!(js.contains("3.14159"));
 }
 
@@ -255,13 +255,13 @@ fn test_js_enum_with_data() {
 
 #[test]
 fn test_js_multiple_params() {
-    let js = gen_js("F add3(a: i64, b: i64, c: i64) -> i64 = a + b + c");
+    let js = gen_js("fn add3(a: i64, b: i64, c: i64) -> i64 = a + b + c");
     assert!(!js.is_empty());
 }
 
 #[test]
 fn test_js_no_params() {
-    let js = gen_js("F constant() -> i64 = 42");
+    let js = gen_js("fn constant() -> i64 = 42");
     assert!(js.contains("42"));
 }
 
@@ -351,13 +351,13 @@ fn test_js_string_concat() {
 
 #[test]
 fn test_js_nested_arithmetic() {
-    let js = gen_js("F f(x: i64) -> i64 = (x + 1) * (x - 1) + x / 2");
+    let js = gen_js("fn f(x: i64) -> i64 = (x + 1) * (x - 1) + x / 2");
     assert!(!js.is_empty());
 }
 
 #[test]
 fn test_js_chained_comparisons() {
-    let js = gen_js("F in_range(x: i64) -> bool = x > 0 && x < 100");
+    let js = gen_js("fn in_range(x: i64) -> bool = x > 0 && x < 100");
     assert!(!js.is_empty());
 }
 
@@ -387,7 +387,7 @@ fn test_js_function_calls() {
 
 #[test]
 fn test_js_recursive_fibonacci() {
-    let js = gen_js("F fib(n: i64) -> i64 = I n < 2 { n } E { @(n-1) + @(n-2) }");
+    let js = gen_js("fn fib(n: i64) -> i64 = I n < 2 { n } else { @(n-1) + @(n-2) }");
     assert!(js.contains("fib"));
 }
 
@@ -431,7 +431,7 @@ fn test_js_multiple_variables() {
 
 #[test]
 fn test_js_empty_block() {
-    let js = gen_js("F noop() -> i64 = { 0 }");
+    let js = gen_js("fn noop() -> i64 = { 0 }");
     assert!(!js.is_empty());
 }
 
@@ -457,9 +457,9 @@ fn test_js_deeply_nested_if() {
         r#"
         fn deep(x: i64) -> i64 = I x > 0 {
             I x > 10 {
-                I x > 100 { 3 } E { 2 }
-            } E { 1 }
-        } E { 0 }
+                I x > 100 { 3 } else { 2 }
+            } else { 1 }
+        } else { 0 }
     "#,
     );
     assert!(!js.is_empty());
@@ -467,7 +467,7 @@ fn test_js_deeply_nested_if() {
 
 #[test]
 fn test_js_pub_function() {
-    let js = gen_js("P F public_fn(x: i64) -> i64 = x");
+    let js = gen_js("pub fn public_fn(x: i64) -> i64 = x");
     assert!(js.contains("export") || !js.is_empty());
 }
 

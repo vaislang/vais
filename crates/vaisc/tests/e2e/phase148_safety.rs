@@ -63,31 +63,31 @@ fn main() -> i64 {
 #[test]
 fn e2e_keyword_struct_name_definition_compiles() {
     // Struct definition with keyword letter as name succeeds at IR level
-    assert_exit_code("struct C { val: i64 }\nF main() -> i64 { R 0 }", 0);
-    assert_exit_code("struct B { count: i64 }\nF main() -> i64 { R 0 }", 0);
-    assert_exit_code("struct I { flag: i64 }\nF main() -> i64 { R 0 }", 0);
-    assert_exit_code("struct M { data: i64 }\nF main() -> i64 { R 0 }", 0);
+    assert_exit_code("struct C { val: i64 }\nfn main() -> i64 { return 0 }", 0);
+    assert_exit_code("struct B { count: i64 }\nfn main() -> i64 { return 0 }", 0);
+    assert_exit_code("struct I { flag: i64 }\nfn main() -> i64 { return 0 }", 0);
+    assert_exit_code("struct M { data: i64 }\nfn main() -> i64 { return 0 }", 0);
 }
 
 /// Keyword letter as enum name — definition compiles
 #[test]
 fn e2e_keyword_enum_name_definition_compiles() {
-    assert_exit_code("E R { Ok, Err }\nF main() -> i64 { R 0 }", 0);
-    assert_exit_code("E D { X, Y }\nF main() -> i64 { R 0 }", 0);
+    assert_exit_code("enum R { Ok, Err }\nfn main() -> i64 { return 0 }", 0);
+    assert_exit_code("enum D { X, Y }\nfn main() -> i64 { return 0 }", 0);
 }
 
 /// Keyword letter as trait name — definition compiles
 #[test]
 fn e2e_keyword_trait_name_definition_compiles() {
-    assert_exit_code("trait X { F foo() -> i64 }\nF main() -> i64 { R 0 }", 0);
-    assert_exit_code("trait A { F bar() -> i64 }\nF main() -> i64 { R 0 }", 0);
+    assert_exit_code("trait X { F foo() -> i64 }\nfn main() -> i64 { return 0 }", 0);
+    assert_exit_code("trait A { F bar() -> i64 }\nfn main() -> i64 { return 0 }", 0);
 }
 
 /// Keyword letter as union name — definition compiles
 #[test]
 #[ignore = "A1-03 Union hard block: `O N { ... }` rejected as Union declaration"]
 fn e2e_keyword_union_name_definition_compiles() {
-    assert_exit_code("O N { a: i64, b: f64 }\nF main() -> i64 { R 0 }", 0);
+    assert_exit_code("O N { a: i64, b: f64 }\nfn main() -> i64 { return 0 }", 0);
 }
 
 /// Keywords in type annotation positions (additional keyword tokens: G, N, O, W, X, Y, D)

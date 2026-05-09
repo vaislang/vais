@@ -140,9 +140,9 @@ pub mod utils {
                         code.push_str(&format!("fn mod{}_conditional_{}(x: i64) -> i64 {{\n", m, f));
                         code.push_str(&format!("    I x < {} {{\n", f * 5));
                         code.push_str(&format!("        return x * {}\n", f % 4 + 2));
-                        code.push_str(&format!("    }} E I x < {} {{\n", f * 10));
+                        code.push_str(&format!("    }} else I x < {} {{\n", f * 10));
                         code.push_str(&format!("        return x + {}\n", f));
-                        code.push_str("    } E {\n");
+                        code.push_str("    } else {\n");
                         code.push_str("        return x\n");
                         code.push_str("    }\n");
                         code.push_str("}\n\n");
@@ -167,7 +167,7 @@ pub mod utils {
                     4 => {
                         // Match expression on simple integer
                         code.push_str(&format!("fn mod{}_match_{}(x: i64) -> i64 {{\n", m, f));
-                        code.push_str("    M x {\n");
+                        code.push_str("    match x {\n");
                         code.push_str(&format!("        {} => x * 2,\n", f % 10));
                         code.push_str(&format!("        {} => x * 3,\n", (f + 1) % 10));
                         code.push_str(&format!("        {} => x * 4,\n", (f + 2) % 10));
@@ -217,7 +217,7 @@ pub mod utils {
                         code.push_str(&format!("    y := b * {} - c * {}\n", f % 4 + 1, f % 2 + 1));
                         code.push_str(&format!("    z := c * {} + x\n", f % 5 + 1));
                         code.push_str("    w := x + y - z\n");
-                        code.push_str("    R (x + y + z + w) / 4\n");
+                        code.push_str("    return (x + y + z + w) / 4\n");
                         code.push_str("}\n\n");
                         lines += 8;
                     }
@@ -278,7 +278,7 @@ pub mod utils {
 
             // Import from previous module (if not first)
             if m > 0 {
-                code.push_str(&format!("U module{}\n\n", m - 1));
+                code.push_str(&format!("use module{}\n\n", m - 1));
                 lines += 2;
             }
 
@@ -373,7 +373,7 @@ pub mod utils {
             main_code.push_str("# Main module — Entry point for multi-module benchmark\n\n");
 
             for m in 0..num_modules {
-                main_code.push_str(&format!("U module{}\n", m));
+                main_code.push_str(&format!("use module{}\n", m));
             }
             main_code.push('\n');
 

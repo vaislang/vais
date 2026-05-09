@@ -143,7 +143,7 @@ fn snapshot_unconstrained_params() {
 #[test]
 fn snapshot_recursive_no_return_type() {
     // Phase 61: Recursive functions using @ without explicit return type should fail
-    let source = "fn fib(n: i64) = I n < 2 { R n } else { R @(n-1) + @(n-2) }";
+    let source = "fn fib(n: i64) = I n < 2 { return n } else { return @(n-1) + @(n-2) }";
     assert_error_snapshot("recursive_no_return_type", source);
 }
 

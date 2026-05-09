@@ -3662,7 +3662,7 @@ fn main() -> i64 {
 
 #[test]
 fn test_main_auto_return_explicit_r() {
-    // F main() { R 5 } — explicit return in auto-return main
+    // F main() { return 5 } — explicit return in auto-return main
     let source = r#"
 fn main() {
     return 5

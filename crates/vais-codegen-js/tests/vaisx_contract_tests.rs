@@ -30,7 +30,7 @@ fn parse_and_generate_with_config(source: &str, config: JsConfig) -> String {
 
 #[test]
 fn test_public_function_generates_export() {
-    let js = parse_and_generate("P F greet() { 42 }");
+    let js = parse_and_generate("pub fn greet() { 42 }");
     assert!(
         js.contains("export function greet()"),
         "Public function should have 'export'"
@@ -39,7 +39,7 @@ fn test_public_function_generates_export() {
 
 #[test]
 fn test_private_function_no_export() {
-    let js = parse_and_generate("F helper() { 42 }");
+    let js = parse_and_generate("fn helper() { 42 }");
     assert!(js.contains("function helper()"), "Should have function");
     assert!(
         !js.contains("export function helper"),
@@ -55,7 +55,7 @@ fn test_async_function() {
 
 #[test]
 fn test_function_with_params() {
-    let js = parse_and_generate("F add(a: i64, b: i64) -> i64 { a + b }");
+    let js = parse_and_generate("fn add(a: i64, b: i64) -> i64 { a + b }");
     assert!(js.contains("function add(a, b)"), "Should have params");
     assert!(js.contains("return"), "Should have return");
     assert!(js.contains("a + b"), "Should have body expression");
@@ -63,7 +63,7 @@ fn test_function_with_params() {
 
 #[test]
 fn test_function_with_default_params() {
-    let js = parse_and_generate("F greet(name: str = \"world\") { name }");
+    let js = parse_and_generate("fn greet(name: str = \"world\") { name }");
     assert!(
         js.contains("name = \"world\""),
         "Should have default parameter value"
@@ -76,7 +76,7 @@ fn test_function_with_default_params() {
 
 #[test]
 fn test_struct_generates_class() {
-    let js = parse_and_generate("S Point { x: f64, y: f64 }");
+    let js = parse_and_generate("struct Point { x: f64, y: f64 }");
     assert!(js.contains("class Point"), "Struct should become class");
     assert!(
         js.contains("constructor(x, y)"),
@@ -97,7 +97,7 @@ fn test_public_struct_exports() {
 
 #[test]
 fn test_struct_object_arg_support() {
-    let js = parse_and_generate("S Config { width: i64, height: i64 }");
+    let js = parse_and_generate("struct Config { width: i64, height: i64 }");
     // Multi-field structs support object-style construction
     assert!(js.contains("typeof"), "Should support object arg pattern");
     assert!(js.contains("__obj"), "Should destructure object arg");
@@ -105,7 +105,7 @@ fn test_struct_object_arg_support() {
 
 #[test]
 fn test_struct_single_field() {
-    let js = parse_and_generate("S Wrapper { value: i64 }");
+    let js = parse_and_generate("struct Wrapper { value: i64 }");
     assert!(
         js.contains("class Wrapper"),
         "Single field struct should work"
@@ -119,7 +119,7 @@ fn test_struct_single_field() {
 
 #[test]
 fn test_enum_generates_frozen_object() {
-    let js = parse_and_generate("E Color { Red, Green, Blue }");
+    let js = parse_and_generate("enum Color { Red, Green, Blue }");
     assert!(
         js.contains("const Color = Object.freeze"),
         "Enum should be frozen object"
@@ -131,7 +131,7 @@ fn test_enum_generates_frozen_object() {
 
 #[test]
 fn test_enum_tuple_variant() {
-    let js = parse_and_generate("E Shape { Circle(f64), Rect(f64, f64) }");
+    let js = parse_and_generate("enum Shape { Circle(f64), Rect(f64, f64) }");
     assert!(
         js.contains("Circle(__0)"),
         "Tuple variant should be factory function"
@@ -254,7 +254,7 @@ fn test_public_const_exports() {
 
 #[test]
 fn test_use_generates_import() {
-    let js = parse_and_generate("U math");
+    let js = parse_and_generate("use math");
     assert!(
         js.contains("import * as math from './math.js'"),
         "Use should become import"
@@ -307,7 +307,7 @@ fn test_custom_indent() {
         indent: "    ".to_string(),
         ..JsConfig::default()
     };
-    let js = parse_and_generate_with_config("F test() { 1 }", config);
+    let js = parse_and_generate_with_config("fn test() { 1 }", config);
     assert!(js.contains("    "), "Should use 4-space indent");
 }
 

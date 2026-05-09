@@ -154,6 +154,6 @@ fn main() -> i64 {
     compute(true)
 }
 "#;
-    // early=true → R x returns 100 (defer hasn't run yet at value evaluation).
+    // early=true → return x returns 100 (defer hasn't run yet at value evaluation).
     assert_exit_code(source, 100);
 }

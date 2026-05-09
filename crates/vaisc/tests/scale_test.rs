@@ -447,7 +447,7 @@ fn test_wide_match_expression() {
     source.push_str(" }\n");
 
     // Generate function with match on all variants
-    source.push_str("fn color_to_num(c: Color) -> i64 = M c {\n");
+    source.push_str("fn color_to_num(c: Color) -> i64 = match c {\n");
     for i in 0..100 {
         source.push_str(&format!("    Color::Color{} -> {},\n", i, i));
     }

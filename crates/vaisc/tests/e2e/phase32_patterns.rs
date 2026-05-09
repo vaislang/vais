@@ -31,7 +31,7 @@ fn main() -> i64 {
     assert_exit_code(source, 0);
 }
 
-// Test 2: Enum variant data extraction — M Shape { Circle(r) => r, Rect(w, h) => w * h }
+// Test 2: Enum variant data extraction — match Shape { Circle(r) => r, Rect(w, h) => w * h }
 #[test]
 fn e2e_phase32_pattern_enum_data() {
     // Enum with data: Rect(3, 7) => 3 * 7 = 21, exit code 21
@@ -55,7 +55,7 @@ fn main() -> i64 {
     assert_exit_code(source, 21);
 }
 
-// Test 3: Or pattern — M x { 1 | 2 | 3 => 10, _ => 0 }
+// Test 3: Or pattern — match x { 1 | 2 | 3 => 10, _ => 0 }
 #[test]
 fn e2e_phase32_pattern_or_simple() {
     // x = 2 matches arm 1|2|3, so result = 10, exit code 10
@@ -71,7 +71,7 @@ fn main() -> i64 {
     assert_exit_code(source, 10);
 }
 
-// Test 4: Guard condition — M x { n I n > 10 => 1, _ => 0 }
+// Test 4: Guard condition — match x { n I n > 10 => 1, _ => 0 }
 #[test]
 fn e2e_phase32_pattern_guard() {
     // x = 15: guard n > 10 is true => result 1, exit code 1
@@ -126,7 +126,7 @@ fn main() -> i64 {
     assert_exit_code(source, 40);
 }
 
-// Test 7: Bool value matching — M flag { true => 1, false => 0 }
+// Test 7: Bool value matching — match flag { true => 1, false => 0 }
 #[test]
 fn e2e_phase32_pattern_match_bool() {
     // flag = true => result 1, exit code 1

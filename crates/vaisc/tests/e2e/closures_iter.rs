@@ -1293,7 +1293,7 @@ fn main() -> i64 {
 #[test]
 fn e2e_recovery_max_errors_limit() {
     // Normal mode should fail fast on first error
-    let source = "fn broken(\nF good() -> i64 = 0\n";
+    let source = "fn broken(\nfn good() -> i64 = 0\n";
     let result = vais_parser::parse(source);
     assert!(result.is_err(), "Normal mode should fail on first error");
 }

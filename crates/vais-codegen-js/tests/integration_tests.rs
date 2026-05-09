@@ -69,7 +69,7 @@ fn test_recursive_function_with_selfcall() {
     let source = r#"
         F factorial(n: i64) -> i64 {
             I n <= 1 {
-                R 1
+                return 1
             }
             n * @(n - 1)
         }
@@ -166,9 +166,9 @@ fn test_if_else_to_js_iife() {
     let source = r#"
         F test(x: i64) -> i64 {
             I x > 0 {
-                R 1
-            } E {
-                R -1
+                return 1
+            } else {
+                return -1
             }
         }
     "#;
@@ -183,7 +183,7 @@ fn test_if_else_to_js_iife() {
 fn test_match_to_if_else_chain() {
     let source = r#"
         F test(x: i64) -> str {
-            M x {
+            match x {
                 1 => "one",
                 2 => "two",
                 _ => "other"
@@ -773,7 +773,7 @@ fn test_async_with_multiple_awaits() {
 fn test_pattern_alias_in_match() {
     let source = r#"
         F test(x: i64) -> i64 {
-            M x {
+            match x {
                 n @ 1 => n,
                 n @ 2 => n * 2,
                 _ => 0
@@ -794,7 +794,7 @@ fn test_pattern_alias_with_destructuring() {
     // Test simple pattern alias instead
     let source = r#"
         F test(x: i64) -> i64 {
-            M x {
+            match x {
                 pt @ 5 => pt * 2,
                 pt @ 10 => pt + 1,
                 _ => 0
@@ -858,7 +858,7 @@ fn test_enum_variant_matching() {
             None
         }
         F unwrap_or(opt: Option<i64>, default: i64) -> i64 {
-            M opt {
+            match opt {
                 Some(x) => x,
                 None => default
             }

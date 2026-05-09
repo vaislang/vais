@@ -36,7 +36,7 @@ fn gen_js_result(source: &str) -> Result<String, String> {
 fn test_js_config_default() {
     let config = JsConfig::default();
     assert!(config.use_const_let);
-    let js = gen_js_with_config("F f() -> i64 = 42", config);
+    let js = gen_js_with_config("fn f() -> i64 = 42", config);
     assert!(!js.is_empty());
 }
 
@@ -44,7 +44,7 @@ fn test_js_config_default() {
 fn test_js_config_var_mode() {
     let mut config = JsConfig::default();
     config.use_const_let = false;
-    let js = gen_js_with_config("F f() -> i64 = 42", config);
+    let js = gen_js_with_config("fn f() -> i64 = 42", config);
     assert!(!js.is_empty());
 }
 
@@ -52,7 +52,7 @@ fn test_js_config_var_mode() {
 fn test_js_config_jsdoc() {
     let mut config = JsConfig::default();
     config.emit_jsdoc = true;
-    let js = gen_js_with_config("F add(x: i64, y: i64) -> i64 = x + y", config);
+    let js = gen_js_with_config("fn add(x: i64, y: i64) -> i64 = x + y", config);
     assert!(!js.is_empty());
 }
 
@@ -78,13 +78,13 @@ fn test_js_config_custom_indent() {
 
 #[test]
 fn test_js_struct_simple() {
-    let js = gen_js("S Point { x: i64, y: i64 }");
+    let js = gen_js("struct Point { x: i64, y: i64 }");
     assert!(js.contains("Point") || js.contains("class"));
 }
 
 #[test]
 fn test_js_struct_single_field() {
-    let js = gen_js("S Wrapper { value: i64 }");
+    let js = gen_js("struct Wrapper { value: i64 }");
     assert!(js.contains("Wrapper") || js.contains("value"));
 }
 
@@ -105,7 +105,7 @@ fn test_js_struct_with_methods() {
 
 #[test]
 fn test_js_struct_many_fields() {
-    let js = gen_js("S Big { a: i64, b: f64, c: bool, d: str }");
+    let js = gen_js("struct Big { a: i64, b: f64, c: bool, d: str }");
     assert!(js.contains("Big"));
 }
 
@@ -115,13 +115,13 @@ fn test_js_struct_many_fields() {
 
 #[test]
 fn test_js_enum_unit_variants() {
-    let js = gen_js("E Color { Red, Green, Blue }");
+    let js = gen_js("enum Color { Red, Green, Blue }");
     assert!(js.contains("Color") || js.contains("Red"));
 }
 
 #[test]
 fn test_js_enum_with_data() {
-    let js = gen_js("E Shape { Circle(i64), Square(i64, i64) }");
+    let js = gen_js("enum Shape { Circle(i64), Square(i64, i64) }");
     assert!(js.contains("Shape") || js.contains("Circle"));
 }
 
@@ -145,19 +145,19 @@ fn test_js_enum_variant_access() {
 
 #[test]
 fn test_js_let_binding() {
-    let js = gen_js("F f() -> i64 { x := 42; x }");
+    let js = gen_js("fn f() -> i64 { x := 42; x }");
     assert!(js.contains("42"));
 }
 
 #[test]
 fn test_js_mutable_let() {
-    let js = gen_js("F f() -> i64 { x := mut 0; x = 42; x }");
+    let js = gen_js("fn f() -> i64 { x := mut 0; x = 42; x }");
     assert!(js.contains("let") || js.contains("var") || js.contains("42"));
 }
 
 #[test]
 fn test_js_return_statement() {
-    let js = gen_js("F f() -> i64 { R 42 }");
+    let js = gen_js("fn f() -> i64 { return 42 }");
     assert!(js.contains("return") || js.contains("42"));
 }
 
@@ -180,25 +180,25 @@ fn test_js_early_return() {
 
 #[test]
 fn test_js_binary_ops() {
-    let js = gen_js("F f(a: i64, b: i64) -> i64 = a + b - a * b");
+    let js = gen_js("fn f(a: i64, b: i64) -> i64 = a + b - a * b");
     assert!(js.contains("+") || js.contains("-") || js.contains("*"));
 }
 
 #[test]
 fn test_js_comparison() {
-    let js = gen_js("F f(a: i64, b: i64) -> bool = a < b");
+    let js = gen_js("fn f(a: i64, b: i64) -> bool = a < b");
     assert!(js.contains("<"));
 }
 
 #[test]
 fn test_js_logical_ops() {
-    let js = gen_js("F f(a: bool, b: bool) -> bool = a && b || !a");
+    let js = gen_js("fn f(a: bool, b: bool) -> bool = a && b || !a");
     assert!(js.contains("&&") || js.contains("||") || js.contains("!"));
 }
 
 #[test]
 fn test_js_ternary() {
-    let js = gen_js("F f(x: i64) -> i64 = x > 0 ? x : 0");
+    let js = gen_js("fn f(x: i64) -> i64 = x > 0 ? x : 0");
     assert!(js.contains("?") || js.contains(":") || js.contains("if"));
 }
 
@@ -210,13 +210,13 @@ fn test_js_string_literal() {
 
 #[test]
 fn test_js_array_literal() {
-    let js = gen_js("F f() -> i64 { arr := [1, 2, 3]; 0 }");
+    let js = gen_js("fn f() -> i64 { arr := [1, 2, 3]; 0 }");
     assert!(js.contains("[") || js.contains("1"));
 }
 
 #[test]
 fn test_js_if_else() {
-    let js = gen_js("F f(x: i64) -> i64 = I x > 0 { 1 } E { 0 }");
+    let js = gen_js("fn f(x: i64) -> i64 = I x > 0 { 1 } else { 0 }");
     assert!(js.contains("if") || js.contains("else") || js.contains("?"));
 }
 
@@ -270,20 +270,20 @@ fn test_js_block_expression() {
 
 #[test]
 fn test_js_type_number() {
-    let js = gen_js("F f(x: i64) -> i64 = x");
+    let js = gen_js("fn f(x: i64) -> i64 = x");
     // i64 maps to number in JS
     assert!(!js.is_empty());
 }
 
 #[test]
 fn test_js_type_boolean() {
-    let js = gen_js("F f(x: bool) -> bool = x");
+    let js = gen_js("fn f(x: bool) -> bool = x");
     assert!(!js.is_empty());
 }
 
 #[test]
 fn test_js_type_string() {
-    let js = gen_js("F f(x: str) -> str = x");
+    let js = gen_js("fn f(x: str) -> str = x");
     assert!(!js.is_empty());
 }
 
@@ -387,7 +387,7 @@ fn test_js_multiple_functions() {
 
 #[test]
 fn test_js_empty_function() {
-    let js = gen_js("F noop() -> i64 = 0");
+    let js = gen_js("fn noop() -> i64 = 0");
     assert!(!js.is_empty());
 }
 
@@ -395,7 +395,7 @@ fn test_js_empty_function() {
 fn test_js_nested_if() {
     let js = gen_js(
         r#"
-        fn f(x: i64) -> i64 = I x > 0 { I x > 10 { 2 } E { 1 } } E { 0 }
+        fn f(x: i64) -> i64 = I x > 0 { I x > 10 { 2 } else { 1 } } else { 0 }
     "#,
     );
     assert!(!js.is_empty());
@@ -403,7 +403,7 @@ fn test_js_nested_if() {
 
 #[test]
 fn test_js_recursive_function() {
-    let js = gen_js("F fib(n: i64) -> i64 = I n < 2 { n } E { @(n-1) + @(n-2) }");
+    let js = gen_js("fn fib(n: i64) -> i64 = I n < 2 { n } else { @(n-1) + @(n-2) }");
     assert!(js.contains("fib"));
 }
 

@@ -134,7 +134,7 @@ fn error_type_mismatch_str_to_i64() {
 
 #[test]
 fn warning_unused_variable_suggests_underscore() {
-    let warnings = type_check_warnings("fn main() -> i64 { x := 5\n R 0 }");
+    let warnings = type_check_warnings("fn main() -> i64 { x := 5\n return 0 }");
     let has_unused_warning = warnings
         .iter()
         .any(|w| w.contains("unused variable") && w.contains("_x"));
@@ -147,7 +147,7 @@ fn warning_unused_variable_suggests_underscore() {
 
 #[test]
 fn warning_unused_variable_no_warning_for_underscore_prefix() {
-    let warnings = type_check_warnings("fn main() -> i64 { _x := 5\n R 0 }");
+    let warnings = type_check_warnings("fn main() -> i64 { _x := 5\n return 0 }");
     let has_unused_warning = warnings
         .iter()
         .any(|w| w.contains("unused variable") && w.contains("_x"));
@@ -160,7 +160,7 @@ fn warning_unused_variable_no_warning_for_underscore_prefix() {
 
 #[test]
 fn warning_unused_variable_used_variable_no_warning() {
-    let warnings = type_check_warnings("fn main() -> i64 { x := 5\n R x }");
+    let warnings = type_check_warnings("fn main() -> i64 { x := 5\n return x }");
     let has_unused_warning = warnings
         .iter()
         .any(|w| w.contains("unused variable") && w.contains("`x`"));
@@ -176,7 +176,7 @@ fn warning_unused_variable_used_variable_no_warning() {
 #[test]
 fn error_no_such_field_on_struct() {
     let error = type_check_error(
-        "struct User { name: str, age: i64 }\nfn main() -> i64 { u := User { name: \"Alice\", age: 30 }\n R u.agee }"
+        "struct User { name: str, age: i64 }\nfn main() -> i64 { u := User { name: \"Alice\", age: 30 }\n return u.agee }"
     );
     assert!(
         error.contains("No field") || error.contains("no field") || error.contains("field"),
@@ -187,7 +187,7 @@ fn error_no_such_field_on_struct() {
 
 #[test]
 fn error_no_such_field_suggests_similar() {
-    let source = "struct User { name: str, age: i64 }\nfn main() -> i64 { u := User { name: \"Alice\", age: 30 }\n R u.nme }";
+    let source = "struct User { name: str, age: i64 }\nfn main() -> i64 { u := User { name: \"Alice\", age: 30 }\n return u.nme }";
     let _tokens = tokenize(source).expect("Lexer should succeed");
     let module = parse(source).expect("Parser should succeed");
     let mut checker = TypeChecker::new();
@@ -272,7 +272,7 @@ fn error_parse_missing_body() {
 
 #[test]
 fn error_undefined_variable_suggests_similar() {
-    let source = "fn main() -> i64 { myvar := 42\n R myva }";
+    let source = "fn main() -> i64 { myvar := 42\n return myva }";
     let _tokens = tokenize(source).expect("Lexer should succeed");
     let module = parse(source).expect("Parser should succeed");
     let mut checker = TypeChecker::new();

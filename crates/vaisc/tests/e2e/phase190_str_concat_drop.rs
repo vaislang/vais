@@ -10,7 +10,7 @@
 //!      `msg`'s backing buffer before the caller could read it, because the
 //!      load-from-alloca produces a new SSA that didn't match the concat's
 //!      original SSA in the ownership map. Caught by team-review 2026-04-14.
-//!   3. If/match-expression binding UAF — `let msg = I c { a+b } E { c+d }`
+//!   3. If/match-expression binding UAF — `let msg = I c { a+b } else { c+d }`
 //!      produces a PHI, both incoming branches own a slot, and the PHI
 //!      consumer must inherit ownership of both. Same family as #2.
 //!

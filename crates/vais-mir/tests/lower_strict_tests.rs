@@ -396,7 +396,7 @@ fn strict_lowering_rejects_unsupported_expression_fallback() {
 
 #[test]
 fn strict_lowering_rejects_unsupported_type_fallback() {
-    let source = "fn main() -> i64 { value: i64? := 1 R 0 }";
+    let source = "fn main() -> i64 { value: i64? := 1 return 0 }";
     let module = vais_parser::parse(source).expect("parse failed");
     let errors =
         lower_module_checked(&module).expect_err("unsupported optional type must not become i64");
@@ -552,7 +552,7 @@ fn strict_lowering_rejects_uncertified_result_payload_types() {
 
 #[test]
 fn strict_lowering_rejects_assignment_target_placeholder() {
-    let source = "fn main() -> i64 { missing = 1 R 0 }";
+    let source = "fn main() -> i64 { missing = 1 return 0 }";
     let module = vais_parser::parse(source).expect("parse failed");
     let errors = lower_module_checked(&module)
         .expect_err("undeclared assignment target must not be ignored");

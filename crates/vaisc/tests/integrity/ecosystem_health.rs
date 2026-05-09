@@ -5,8 +5,8 @@
 /// They exist to produce baseline numbers for Phase 0.3.
 ///
 /// Output format (machine-readable, one line per category):
-///   INTEGRITY std_files pass=N fail=M total=T
-///   INTEGRITY vaisdb_files pass=N fail=M total=T
+///   INTEGRITY std_files pass=N fail=match total=T
+///   INTEGRITY vaisdb_files pass=N fail=match total=T
 ///
 /// Thresholds for Phase 0.2: at least 1 file must pass in each category.
 /// The actual counts feed ROADMAP via Phase 0.3.

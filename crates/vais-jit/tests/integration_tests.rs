@@ -50,7 +50,7 @@ fn tiered_run(source: &str) -> Result<i64, JitError> {
 
 #[test]
 fn test_jitcompiler_simple_return() {
-    let result = compile_and_run("F main() -> i64 = 42");
+    let result = compile_and_run("fn main() -> i64 = 42");
     assert!(result.is_ok() || matches!(result, Err(JitError::Cranelift(_))));
     if let Ok(val) = result {
         assert_eq!(val, 42);
@@ -60,31 +60,31 @@ fn test_jitcompiler_simple_return() {
 #[test]
 fn test_jitcompiler_arithmetic_operations() {
     // Addition
-    let result = compile_and_run("F main() -> i64 = 10 + 20");
+    let result = compile_and_run("fn main() -> i64 = 10 + 20");
     if let Ok(val) = result {
         assert_eq!(val, 30);
     }
 
     // Subtraction
-    let result = compile_and_run("F main() -> i64 = 50 - 15");
+    let result = compile_and_run("fn main() -> i64 = 50 - 15");
     if let Ok(val) = result {
         assert_eq!(val, 35);
     }
 
     // Multiplication
-    let result = compile_and_run("F main() -> i64 = 6 * 7");
+    let result = compile_and_run("fn main() -> i64 = 6 * 7");
     if let Ok(val) = result {
         assert_eq!(val, 42);
     }
 
     // Division
-    let result = compile_and_run("F main() -> i64 = 100 / 5");
+    let result = compile_and_run("fn main() -> i64 = 100 / 5");
     if let Ok(val) = result {
         assert_eq!(val, 20);
     }
 
     // Modulo
-    let result = compile_and_run("F main() -> i64 = 17 % 5");
+    let result = compile_and_run("fn main() -> i64 = 17 % 5");
     if let Ok(val) = result {
         assert_eq!(val, 2);
     }
@@ -93,19 +93,19 @@ fn test_jitcompiler_arithmetic_operations() {
 #[test]
 fn test_jitcompiler_comparison_operations() {
     // Equality
-    let result = compile_and_run("F main() -> i64 = I 5 == 5 { 1 } E { 0 }");
+    let result = compile_and_run("fn main() -> i64 = I 5 == 5 { 1 } else { 0 }");
     if let Ok(val) = result {
         assert_eq!(val, 1);
     }
 
     // Less than
-    let result = compile_and_run("F main() -> i64 = I 3 < 10 { 1 } E { 0 }");
+    let result = compile_and_run("fn main() -> i64 = I 3 < 10 { 1 } else { 0 }");
     if let Ok(val) = result {
         assert_eq!(val, 1);
     }
 
     // Greater than
-    let result = compile_and_run("F main() -> i64 = I 15 > 10 { 1 } E { 0 }");
+    let result = compile_and_run("fn main() -> i64 = I 15 > 10 { 1 } else { 0 }");
     if let Ok(val) = result {
         assert_eq!(val, 1);
     }
@@ -147,7 +147,7 @@ fn test_jitcompiler_if_else() {
             x := 10
             I x > 5 {
                 42
-            } E {
+            } else {
                 0
             }
         }
@@ -165,10 +165,10 @@ fn test_jitcompiler_nested_if_else() {
             x := 15
             I x > 20 {
                 1
-            } E {
+            } else {
                 I x > 10 {
                     2
-                } E {
+                } else {
                     3
                 }
             }
@@ -182,7 +182,7 @@ fn test_jitcompiler_nested_if_else() {
 
 #[test]
 fn test_jitcompiler_ternary_operator() {
-    let source = "F main() -> i64 = { x := 7; x > 5 ? 100 : 200 }";
+    let source = "fn main() -> i64 = { x := 7; x > 5 ? 100 : 200 }";
     let result = compile_and_run(source);
     if let Ok(val) = result {
         assert_eq!(val, 100);
@@ -197,10 +197,10 @@ fn test_jitcompiler_match_expression() {
         F check(n: i64) -> i64 = {
             I n == 1 {
                 10
-            } E {
+            } else {
                 I n == 2 {
                     20
-                } E {
+                } else {
                     30
                 }
             }
@@ -219,7 +219,7 @@ fn test_jitcompiler_match_expression() {
 
 #[test]
 fn test_jitcompiler_let_binding() {
-    let source = "F main() -> i64 = { x := 42; x }";
+    let source = "fn main() -> i64 = { x := 42; x }";
     let result = compile_and_run(source);
     if let Ok(val) = result {
         assert_eq!(val, 42);
@@ -265,7 +265,7 @@ fn test_jitcompiler_variable_reuse() {
 
 #[test]
 fn test_interpreter_simple_execution() {
-    let result = interpret("F main() -> i64 = 42");
+    let result = interpret("fn main() -> i64 = 42");
     assert!(result.is_ok());
     if let Ok(val) = result {
         assert_eq!(val.as_i64().unwrap(), 42);
@@ -274,7 +274,7 @@ fn test_interpreter_simple_execution() {
 
 #[test]
 fn test_interpreter_arithmetic() {
-    let source = "F main() -> i64 = 5 + 3 * 2";
+    let source = "fn main() -> i64 = 5 + 3 * 2";
     let result = interpret(source);
     assert!(result.is_ok());
     if let Ok(val) = result {
@@ -297,7 +297,7 @@ fn test_interpreter_function_call() {
 
 #[test]
 fn test_interpreter_if_else() {
-    let source = "F main() -> i64 = I true { 100 } E { 200 }";
+    let source = "fn main() -> i64 = I true { 100 } else { 200 }";
     let result = interpret(source);
     assert!(result.is_ok());
     if let Ok(val) = result {
@@ -311,7 +311,7 @@ fn test_interpreter_if_else() {
 
 #[test]
 fn test_tieredjit_basic_execution() {
-    let result = tiered_run("F main() -> i64 = 42");
+    let result = tiered_run("fn main() -> i64 = 42");
     assert!(result.is_ok());
     if let Ok(val) = result {
         assert_eq!(val, 42);
@@ -345,7 +345,7 @@ fn test_tieredjit_custom_thresholds() {
         baseline_to_optimizing: 500,
     };
 
-    let source = "F main() -> i64 = 100";
+    let source = "fn main() -> i64 = 100";
     let module = vais_parser::parse(source).unwrap();
     let mut jit = TieredJit::with_thresholds(thresholds).unwrap();
     let result = jit.run_main(&module);
@@ -469,7 +469,7 @@ fn test_jitruntime_lookup_failure() {
 fn test_error_undefined_function() {
     // Call to undefined function - JIT will try to declare it as external
     // This test verifies that calling undefined functions doesn't crash
-    let source = "F identity(x: i64) -> i64 = x; F main() -> i64 = identity(42)";
+    let source = "fn identity(x: i64) -> i64 = x; F main() -> i64 = identity(42)";
     let result = compile_and_run(source);
 
     // Should succeed since identity is defined
@@ -481,7 +481,7 @@ fn test_error_undefined_function() {
 #[test]
 fn test_error_empty_module() {
     // Module with no main function
-    let source = "F helper() -> i64 = 42";
+    let source = "fn helper() -> i64 = 42";
     let result = compile_and_run(source);
 
     // Should fail with FunctionNotFound
@@ -497,7 +497,7 @@ fn test_error_empty_module() {
 
 #[test]
 fn test_error_clear_and_recompile() {
-    let source1 = "F main() -> i64 = 100";
+    let source1 = "fn main() -> i64 = 100";
     let module1 = vais_parser::parse(source1).unwrap();
 
     let mut compiler = JitCompiler::new().unwrap();
@@ -510,7 +510,7 @@ fn test_error_clear_and_recompile() {
     assert!(compiler.clear().is_ok());
 
     // Try to compile new code after clear
-    let source2 = "F main() -> i64 = 200";
+    let source2 = "fn main() -> i64 = 200";
     let module2 = vais_parser::parse(source2).unwrap();
     let result2 = compiler.compile_and_run_main(&module2);
 
@@ -548,7 +548,7 @@ fn test_tier_comparisons() {
 
 #[test]
 fn test_complex_arithmetic_expression() {
-    let source = "F main() -> i64 = (10 + 20) * 3 - 5";
+    let source = "fn main() -> i64 = (10 + 20) * 3 - 5";
     let result = compile_and_run(source);
     if let Ok(val) = result {
         assert_eq!(val, 85); // (10 + 20) * 3 - 5 = 90 - 5 = 85
@@ -577,13 +577,13 @@ fn test_interpreter_with_locals() {
 #[test]
 fn test_jitcompiler_bitwise_operations() {
     // Bitwise AND
-    let result = compile_and_run("F main() -> i64 = 12 & 10");
+    let result = compile_and_run("fn main() -> i64 = 12 & 10");
     if let Ok(val) = result {
         assert_eq!(val, 8);
     }
 
     // Bitwise OR
-    let result = compile_and_run("F main() -> i64 = 4 | 8");
+    let result = compile_and_run("fn main() -> i64 = 4 | 8");
     if let Ok(val) = result {
         assert_eq!(val, 12);
     }
