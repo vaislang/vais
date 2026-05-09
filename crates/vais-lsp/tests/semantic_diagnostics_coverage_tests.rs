@@ -17,51 +17,51 @@ use vais_parser::ParseError;
 
 #[test]
 fn test_semantic_tokens_function_keyword() {
-    let tokens = get_semantic_tokens("F test() -> i64 = 42");
+    let tokens = get_semantic_tokens("fn test() -> i64 = 42");
     assert!(!tokens.is_empty());
 }
 
 #[test]
 fn test_semantic_tokens_struct_keyword() {
-    let tokens = get_semantic_tokens("S Point { x: i64, y: i64 }");
+    let tokens = get_semantic_tokens("struct Point { x: i64, y: i64 }");
     assert!(!tokens.is_empty());
 }
 
 #[test]
 fn test_semantic_tokens_enum_keyword() {
-    let tokens = get_semantic_tokens("E Color { Red, Green, Blue }");
+    let tokens = get_semantic_tokens("enum Color { Red, Green, Blue }");
     assert!(!tokens.is_empty());
 }
 
 #[test]
 fn test_semantic_tokens_if_else() {
-    let tokens = get_semantic_tokens("F test(b: bool) -> i64 = I b { 1 } E { 0 }");
+    let tokens = get_semantic_tokens("fn test(b: bool) -> i64 = I b { 1 } else { 0 }");
     assert!(!tokens.is_empty());
 }
 
 #[test]
 fn test_semantic_tokens_loop() {
-    let tokens = get_semantic_tokens("F test() -> i64 { L { B }; R 0 }");
+    let tokens = get_semantic_tokens("fn test() -> i64 { L { B }; R 0 }");
     assert!(!tokens.is_empty());
 }
 
 #[test]
 fn test_semantic_tokens_match() {
-    let tokens = get_semantic_tokens("F test(x: i64) -> i64 = M x { 0 => 1, _ => 2 }");
+    let tokens = get_semantic_tokens("fn test(x: i64) -> i64 = M x { 0 => 1, _ => 2 }");
     assert!(!tokens.is_empty());
 }
 
 #[test]
 fn test_semantic_tokens_trait_impl() {
     let tokens = get_semantic_tokens(
-        "W Display { F show(self) -> i64 }\nS Num { v: i64 }\nX Num: Display { F show(self) -> i64 = self.v }",
+        "trait Display { F show(self) -> i64 }\nS Num { v: i64 }\nX Num: Display { F show(self) -> i64 = self.v }",
     );
     assert!(!tokens.is_empty());
 }
 
 #[test]
 fn test_semantic_tokens_return_break_continue() {
-    let tokens = get_semantic_tokens("F test() -> i64 { L { I true { B } E { C } }; R 0 }");
+    let tokens = get_semantic_tokens("fn test() -> i64 { L { I true { B } else { C } }; R 0 }");
     assert!(!tokens.is_empty());
 }
 
@@ -71,7 +71,7 @@ fn test_semantic_tokens_return_break_continue() {
 
 #[test]
 fn test_semantic_tokens_integer_literal() {
-    let tokens = get_semantic_tokens("F test() -> i64 = 42");
+    let tokens = get_semantic_tokens("fn test() -> i64 = 42");
     // Should have at least keyword + number
     assert!(tokens.len() >= 2);
 }
@@ -84,13 +84,13 @@ fn test_semantic_tokens_string_literal() {
 
 #[test]
 fn test_semantic_tokens_float_literal() {
-    let tokens = get_semantic_tokens("F test() -> f64 = 3.14");
+    let tokens = get_semantic_tokens("fn test() -> f64 = 3.14");
     assert!(!tokens.is_empty());
 }
 
 #[test]
 fn test_semantic_tokens_bool_literal() {
-    let tokens = get_semantic_tokens("F test() -> bool = true");
+    let tokens = get_semantic_tokens("fn test() -> bool = true");
     assert!(!tokens.is_empty());
 }
 
@@ -113,7 +113,7 @@ fn test_semantic_tokens_comment_only() {
 
 #[test]
 fn test_semantic_tokens_multiline() {
-    let source = "F add(x: i64, y: i64) -> i64 {\n    R x + y\n}";
+    let source = "fn add(x: i64, y: i64) -> i64 {\n    R x + y\n}";
     let tokens = get_semantic_tokens(source);
     assert!(!tokens.is_empty());
 }
@@ -142,7 +142,7 @@ fn test_semantic_tokens_complex_program() {
 #[test]
 fn test_diagnostic_unexpected_eof() {
     let err = ParseError::UnexpectedEof { span: 10..10 };
-    let source = "F test() {";
+    let source = "fn test() {";
     let diag = parse_error_to_diagnostic(&err, source);
     assert_eq!(diag.severity, Some(DiagnosticSeverity::ERROR));
     assert!(diag.message.contains("end of file"));
@@ -173,7 +173,7 @@ fn test_diagnostic_unexpected_token_with_span() {
 #[test]
 fn test_diagnostic_at_end_of_file() {
     let err = ParseError::UnexpectedEof { span: 18..18 };
-    let source = "F test() -> i64 =";
+    let source = "fn test() -> i64 =";
     let diag = parse_error_to_diagnostic(&err, source);
     // Position should be at end of source
     assert!(diag.range.start.character > 0 || diag.range.start.line > 0);
@@ -186,7 +186,7 @@ fn test_diagnostic_multiline_source() {
         span: 15..17,
         expected: "type".to_string(),
     };
-    let source = "F test() -> \n  99 thing";
+    let source = "fn test() -> \n  99 thing";
     let diag = parse_error_to_diagnostic(&err, source);
     assert_eq!(diag.range.start.line, 1); // Second line
 }
@@ -218,7 +218,7 @@ fn test_ai_completion_after_s_keyword() {
 
 #[test]
 fn test_ai_completion_in_function_body() {
-    let source = "F test() -> i64 {\n    \n}";
+    let source = "fn test() -> i64 {\n    \n}";
     let ctx = CompletionContext::from_document(source, Position::new(1, 4), None);
     let completions = generate_ai_completions(&ctx);
     let _ = completions;
@@ -226,7 +226,7 @@ fn test_ai_completion_in_function_body() {
 
 #[test]
 fn test_ai_completion_after_dot() {
-    let source = "F test() -> i64 { x.";
+    let source = "fn test() -> i64 { x.";
     let ctx = CompletionContext::from_document(source, Position::new(0, 20), None);
     let completions = generate_ai_completions(&ctx);
     let _ = completions;
@@ -234,7 +234,7 @@ fn test_ai_completion_after_dot() {
 
 #[test]
 fn test_ai_completion_with_ast_context() {
-    let source = "F add(x: i64, y: i64) -> i64 = x + y\nF test() -> i64 {\n    \n}";
+    let source = "fn add(x: i64, y: i64) -> i64 = x + y\nF test() -> i64 {\n    \n}";
     let ast = vais_parser::parse(source).ok();
     let ctx = CompletionContext::from_document(source, Position::new(2, 4), ast.as_ref());
     let completions = generate_ai_completions(&ctx);
@@ -243,7 +243,7 @@ fn test_ai_completion_with_ast_context() {
 
 #[test]
 fn test_ai_completion_after_colon_type_position() {
-    let source = "F test(x: ";
+    let source = "fn test(x: ";
     let ctx = CompletionContext::from_document(source, Position::new(0, 10), None);
     let completions = generate_ai_completions(&ctx);
     let _ = completions;
@@ -252,7 +252,7 @@ fn test_ai_completion_after_colon_type_position() {
 #[test]
 fn test_ai_completion_with_struct_in_ast() {
     let source =
-        "S Point { x: i64, y: i64 }\nF test() -> i64 {\n    p := Point { x: 1, y: 2 }\n    p.\n}";
+        "struct Point { x: i64, y: i64 }\nF test() -> i64 {\n    p := Point { x: 1, y: 2 }\n    p.\n}";
     let ast = vais_parser::parse(source).ok();
     let ctx = CompletionContext::from_document(source, Position::new(3, 6), ast.as_ref());
     let completions = generate_ai_completions(&ctx);
@@ -261,7 +261,7 @@ fn test_ai_completion_with_struct_in_ast() {
 
 #[test]
 fn test_ai_completion_trait_context() {
-    let source = "W Printable {\n    F show(self) -> i64\n}\nX ";
+    let source = "trait Printable {\n    F show(self) -> i64\n}\nX ";
     let ast = vais_parser::parse(source).ok();
     let ctx = CompletionContext::from_document(source, Position::new(3, 2), ast.as_ref());
     let completions = generate_ai_completions(&ctx);

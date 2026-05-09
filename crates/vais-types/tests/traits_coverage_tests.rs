@@ -32,12 +32,12 @@ fn check_err(source: &str) {
 fn test_trait_simple_method() {
     check_ok(
         r#"
-        W Display {
-            F show(self) -> str
+        trait Display {
+            fn show(self) -> str
         }
-        S Num { val: i64 }
-        X Num: Display {
-            F show(self) -> str = "num"
+        struct Num { val: i64 }
+        impl Num: Display {
+            fn show(self) -> str = "num"
         }
     "#,
     );
@@ -47,14 +47,14 @@ fn test_trait_simple_method() {
 fn test_trait_multiple_methods() {
     check_ok(
         r#"
-        W Container {
-            F size(self) -> i64
-            F empty(self) -> bool
+        trait Container {
+            fn size(self) -> i64
+            fn empty(self) -> bool
         }
-        S Box { n: i64 }
-        X Box: Container {
-            F size(self) -> i64 = self.n
-            F empty(self) -> bool = self.n == 0
+        struct Box { n: i64 }
+        impl Box: Container {
+            fn size(self) -> i64 = self.n
+            fn empty(self) -> bool = self.n == 0
         }
     "#,
     );
@@ -64,13 +64,13 @@ fn test_trait_multiple_methods() {
 fn test_trait_with_default_method() {
     check_ok(
         r#"
-        W HasDefault {
-            F required(self) -> i64
-            F optional(self) -> i64 = 0
+        trait HasDefault {
+            fn required(self) -> i64
+            fn optional(self) -> i64 = 0
         }
-        S Foo { x: i64 }
-        X Foo: HasDefault {
-            F required(self) -> i64 = self.x
+        struct Foo { x: i64 }
+        impl Foo: HasDefault {
+            fn required(self) -> i64 = self.x
         }
     "#,
     );
@@ -84,14 +84,14 @@ fn test_trait_with_default_method() {
 fn test_trait_method_call() {
     check_ok(
         r#"
-        W Greet {
-            F hello(self) -> i64
+        trait Greet {
+            fn hello(self) -> i64
         }
-        S Dog { age: i64 }
-        X Dog: Greet {
-            F hello(self) -> i64 = self.age
+        struct Dog { age: i64 }
+        impl Dog: Greet {
+            fn hello(self) -> i64 = self.age
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             d := Dog { age: 5 }
             d.hello()
         }
@@ -103,14 +103,14 @@ fn test_trait_method_call() {
 fn test_trait_method_with_params() {
     check_ok(
         r#"
-        W Addable {
-            F add(self, n: i64) -> i64
+        trait Addable {
+            fn add(self, n: i64) -> i64
         }
-        S Counter { val: i64 }
-        X Counter: Addable {
-            F add(self, n: i64) -> i64 = self.val + n
+        struct Counter { val: i64 }
+        impl Counter: Addable {
+            fn add(self, n: i64) -> i64 = self.val + n
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             c := Counter { val: 10 }
             c.add(5)
         }
@@ -126,16 +126,16 @@ fn test_trait_method_with_params() {
 fn test_trait_impl_for_multiple_types() {
     check_ok(
         r#"
-        W Describable {
-            F desc(self) -> str
+        trait Describable {
+            fn desc(self) -> str
         }
-        S Cat { name: str }
-        S Dog { name: str }
-        X Cat: Describable {
-            F desc(self) -> str = "cat"
+        struct Cat { name: str }
+        struct Dog { name: str }
+        impl Cat: Describable {
+            fn desc(self) -> str = "cat"
         }
-        X Dog: Describable {
-            F desc(self) -> str = "dog"
+        impl Dog: Describable {
+            fn desc(self) -> str = "dog"
         }
     "#,
     );
@@ -149,18 +149,18 @@ fn test_trait_impl_for_multiple_types() {
 fn test_trait_super_trait() {
     check_ok(
         r#"
-        W Base {
-            F base_method(self) -> i64
+        trait Base {
+            fn base_method(self) -> i64
         }
         W Extended: Base {
-            F ext_method(self) -> i64
+            fn ext_method(self) -> i64
         }
-        S Impl { x: i64 }
-        X Impl: Base {
-            F base_method(self) -> i64 = self.x
+        struct Impl { x: i64 }
+        impl Impl: Base {
+            fn base_method(self) -> i64 = self.x
         }
-        X Impl: Extended {
-            F ext_method(self) -> i64 = self.x * 2
+        impl Impl: Extended {
+            fn ext_method(self) -> i64 = self.x * 2
         }
     "#,
     );
@@ -174,19 +174,19 @@ fn test_trait_super_trait() {
 fn test_trait_alias() {
     check_ok(
         r#"
-        W Printable {
-            F print(self) -> str
+        trait Printable {
+            fn print(self) -> str
         }
-        W Loggable {
-            F log(self) -> str
+        trait Loggable {
+            fn log(self) -> str
         }
-        T Output = Printable + Loggable
-        S Msg { text: str }
-        X Msg: Printable {
-            F print(self) -> str = self.text
+        type Output = Printable + Loggable
+        struct Msg { text: str }
+        impl Msg: Printable {
+            fn print(self) -> str = self.text
         }
-        X Msg: Loggable {
-            F log(self) -> str = self.text
+        impl Msg: Loggable {
+            fn log(self) -> str = self.text
         }
     "#,
     );
@@ -201,14 +201,14 @@ fn test_trait_generic_definition() {
     // Generic trait definition parses and type-checks
     check_ok(
         r#"
-        W Converter {
-            F convert(self) -> i64
+        trait Converter {
+            fn convert(self) -> i64
         }
-        S IntWrapper { value: i64 }
-        X IntWrapper: Converter {
-            F convert(self) -> i64 = self.value
+        struct IntWrapper { value: i64 }
+        impl IntWrapper: Converter {
+            fn convert(self) -> i64 = self.value
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             w := IntWrapper { value: 42 }
             w.convert()
         }
@@ -220,14 +220,14 @@ fn test_trait_generic_definition() {
 fn test_generic_trait_with_method_params() {
     check_ok(
         r#"
-        W Transform {
-            F apply(self, x: i64) -> i64
+        trait Transform {
+            fn apply(self, x: i64) -> i64
         }
-        S Doubler { factor: i64 }
-        X Doubler: Transform {
-            F apply(self, x: i64) -> i64 = x * self.factor
+        struct Doubler { factor: i64 }
+        impl Doubler: Transform {
+            fn apply(self, x: i64) -> i64 = x * self.factor
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             d := Doubler { factor: 2 }
             d.apply(21)
         }
@@ -243,12 +243,12 @@ fn test_generic_trait_with_method_params() {
 fn test_trait_associated_type() {
     check_ok(
         r#"
-        W Iterator {
-            F next(self) -> i64
+        trait Iterator {
+            fn next(self) -> i64
         }
-        S Range { current: i64, end: i64 }
-        X Range: Iterator {
-            F next(self) -> i64 = self.current
+        struct Range { current: i64, end: i64 }
+        impl Range: Iterator {
+            fn next(self) -> i64 = self.current
         }
     "#,
     );
@@ -262,10 +262,10 @@ fn test_trait_associated_type() {
 fn test_inherent_impl() {
     check_ok(
         r#"
-        S Point { x: i64, y: i64 }
-        X Point {
-            F origin() -> Point = Point { x: 0, y: 0 }
-            F manhattan(self) -> i64 = self.x + self.y
+        struct Point { x: i64, y: i64 }
+        impl Point {
+            fn origin() -> Point = Point { x: 0, y: 0 }
+            fn manhattan(self) -> i64 = self.x + self.y
         }
     "#,
     );
@@ -275,11 +275,11 @@ fn test_inherent_impl() {
 fn test_inherent_impl_multiple_methods() {
     check_ok(
         r#"
-        S Stack { count: i64 }
-        X Stack {
-            F new() -> Stack = Stack { count: 0 }
-            F size(self) -> i64 = self.count
-            F is_empty(self) -> bool = self.count == 0
+        struct Stack { count: i64 }
+        impl Stack {
+            fn new() -> Stack = Stack { count: 0 }
+            fn size(self) -> i64 = self.count
+            fn is_empty(self) -> bool = self.count == 0
         }
     "#,
     );
@@ -293,9 +293,9 @@ fn test_inherent_impl_multiple_methods() {
 fn test_empty_trait() {
     check_ok(
         r#"
-        W Marker {}
-        S Foo { x: i64 }
-        X Foo: Marker {}
+        trait Marker {}
+        struct Foo { x: i64 }
+        impl Foo: Marker {}
     "#,
     );
 }
@@ -304,12 +304,12 @@ fn test_empty_trait() {
 fn test_trait_method_returning_self_type() {
     check_ok(
         r#"
-        W Incrementable {
-            F inc(self) -> i64
+        trait Incrementable {
+            fn inc(self) -> i64
         }
-        S Counter { n: i64 }
-        X Counter: Incrementable {
-            F inc(self) -> i64 = self.n + 1
+        struct Counter { n: i64 }
+        impl Counter: Incrementable {
+            fn inc(self) -> i64 = self.n + 1
         }
     "#,
     );
@@ -319,13 +319,13 @@ fn test_trait_method_returning_self_type() {
 fn test_multiple_traits_for_one_type() {
     check_ok(
         r#"
-        W TraitA { F a(self) -> i64 }
-        W TraitB { F b(self) -> i64 }
-        W TraitC { F c(self) -> i64 }
-        S Multi { x: i64 }
-        X Multi: TraitA { F a(self) -> i64 = 1 }
-        X Multi: TraitB { F b(self) -> i64 = 2 }
-        X Multi: TraitC { F c(self) -> i64 = 3 }
+        trait TraitA { F a(self) -> i64 }
+        trait TraitB { F b(self) -> i64 }
+        trait TraitC { F c(self) -> i64 }
+        struct Multi { x: i64 }
+        impl Multi: TraitA { F a(self) -> i64 = 1 }
+        impl Multi: TraitB { F b(self) -> i64 = 2 }
+        impl Multi: TraitC { F c(self) -> i64 = 3 }
     "#,
     );
 }

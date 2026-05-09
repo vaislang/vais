@@ -37,17 +37,17 @@ fn tc_err(source: &str) {
 
 #[test]
 fn test_unify_i64_same() {
-    tc_ok("fn test() -> i64 { x := 42; R x }");
+    tc_ok("fn test() -> i64 { x := 42; return x }");
 }
 
 #[test]
 fn test_unify_bool_same() {
-    tc_ok("fn test() -> bool { x := true; R x }");
+    tc_ok("fn test() -> bool { x := true; return x }");
 }
 
 #[test]
 fn test_unify_f64_same() {
-    tc_ok("fn test() -> f64 { x := 3.14; R x }");
+    tc_ok("fn test() -> f64 { x := 3.14; return x }");
 }
 
 #[test]
@@ -80,12 +80,12 @@ fn test_unify_generic_nested_call() {
 
 #[test]
 fn test_unify_array_element_type() {
-    tc_ok("fn test() -> i64 { a := [1, 2, 3]; R a[0] }");
+    tc_ok("fn test() -> i64 { a := [1, 2, 3]; return a[0] }");
 }
 
 #[test]
 fn test_unify_array_assignment() {
-    tc_ok("fn test() -> i64 { a := [10, 20]; b := [30, 40]; R a[0] + b[1] }");
+    tc_ok("fn test() -> i64 { a := [10, 20]; b := [30, 40]; return a[0] + b[1] }");
 }
 
 // ============================================================================
@@ -94,17 +94,17 @@ fn test_unify_array_assignment() {
 
 #[test]
 fn test_unify_tuple_basic() {
-    tc_ok("fn test() -> i64 { t := (1, 2); R 0 }");
+    tc_ok("fn test() -> i64 { t := (1, 2); return 0 }");
 }
 
 #[test]
 fn test_unify_tuple_mixed_types() {
-    tc_ok("fn test() -> i64 { t := (42, true); R 0 }");
+    tc_ok("fn test() -> i64 { t := (42, true); return 0 }");
 }
 
 #[test]
 fn test_unify_tuple_three_elements() {
-    tc_ok("fn test() -> i64 { t := (1, 2, 3); R 0 }");
+    tc_ok("fn test() -> i64 { t := (1, 2, 3); return 0 }");
 }
 
 // ============================================================================
@@ -134,12 +134,12 @@ fn test_unify_fn_two_params() {
 
 #[test]
 fn test_unify_named_struct_basic() {
-    tc_ok("struct Point { x: i64, y: i64 }\nfn test() -> i64 { p := Point { x: 1, y: 2 }; R p.x }");
+    tc_ok("struct Point { x: i64, y: i64 }\nfn test() -> i64 { p := Point { x: 1, y: 2 }; return p.x }");
 }
 
 #[test]
 fn test_unify_named_struct_return() {
-    tc_ok("struct Pair { a: i64, b: i64 }\nfn make() -> Pair = Pair { a: 1, b: 2 }\nfn test() -> i64 { p := make(); R p.a }");
+    tc_ok("struct Pair { a: i64, b: i64 }\nfn make() -> Pair = Pair { a: 1, b: 2 }\nfn test() -> i64 { p := make(); return p.a }");
 }
 
 // ============================================================================
@@ -148,17 +148,17 @@ fn test_unify_named_struct_return() {
 
 #[test]
 fn test_unify_integer_widening_i32_to_i64() {
-    tc_ok("fn test(x: i32) -> i64 { R x }");
+    tc_ok("fn test(x: i32) -> i64 { return x }");
 }
 
 #[test]
 fn test_unify_integer_i8_to_i64() {
-    tc_ok("fn test(x: i8) -> i64 { R x }");
+    tc_ok("fn test(x: i8) -> i64 { return x }");
 }
 
 #[test]
 fn test_unify_integer_unsigned() {
-    tc_ok("fn test(x: u32) -> u64 { R x }");
+    tc_ok("fn test(x: u32) -> u64 { return x }");
 }
 
 // ============================================================================
@@ -176,7 +176,7 @@ fn test_unify_result_generic() {
 
 #[test]
 fn test_unify_ref_to_value() {
-    tc_ok("fn test() -> i64 { x := 42; R x }");
+    tc_ok("fn test() -> i64 { x := 42; return x }");
 }
 
 // ============================================================================
@@ -185,7 +185,7 @@ fn test_unify_ref_to_value() {
 
 #[test]
 fn test_unify_never_in_if() {
-    tc_ok("fn test(b: bool) -> i64 { I b { R 1 }; R 0 }");
+    tc_ok("fn test(b: bool) -> i64 { I b { return 1 }; return 0 }");
 }
 
 // ============================================================================
@@ -234,7 +234,7 @@ fn test_unify_dyn_trait() {
 #[test]
 fn test_unify_bool_i64_rejected() {
     // Phase 158: bool↔i64 implicit coercion is forbidden
-    tc_err("fn test() -> bool { R 42 }");
+    tc_err("fn test() -> bool { return 42 }");
 }
 
 #[test]
@@ -245,7 +245,7 @@ fn test_unify_mismatch_str_i64() {
 #[test]
 fn test_unify_if_branches_bool_int_rejected() {
     // Phase 158: bool↔i64 implicit coercion is forbidden
-    tc_err("fn test(b: bool) -> i64 = I b { true } E { 2 }");
+    tc_err("fn test(b: bool) -> i64 = I b { true } else { 2 }");
 }
 
 #[test]
@@ -302,7 +302,7 @@ fn test_bidirectional_lambda_param_inference() {
 
 #[test]
 fn test_bidirectional_array_element_type() {
-    tc_ok("fn test() -> i64 { arr := [10, 20, 30]; R arr[1] }");
+    tc_ok("fn test() -> i64 { arr := [10, 20, 30]; return arr[1] }");
 }
 
 // ============================================================================
@@ -358,7 +358,7 @@ fn test_substitution_with_trait_impl() {
 fn test_unify_enum_variant() {
     tc_ok(
         r#"
-        E Color { Red, Green, Blue }
+        enum Color { Red, Green, Blue }
         fn test(c: Color) -> i64 {
             match c {
                 Red => 1,
@@ -373,12 +373,12 @@ fn test_unify_enum_variant() {
 
 #[test]
 fn test_unify_match_all_arms_same_type() {
-    tc_ok("fn test(x: i64) -> i64 = M x { 0 => 10, 1 => 20, _ => 30 }");
+    tc_ok("fn test(x: i64) -> i64 = match x { 0 => 10, 1 => 20, _ => 30 }");
 }
 
 #[test]
 fn test_unify_closure_capture() {
-    tc_ok("fn test() -> i64 { a := 10; f := |x: i64| x + a; R f(5) }");
+    tc_ok("fn test() -> i64 { a := 10; f := |x: i64| x + a; return f(5) }");
 }
 
 #[test]
@@ -397,22 +397,22 @@ fn test_unify_nested_struct_access() {
 
 #[test]
 fn test_unify_loop_types() {
-    tc_ok("fn test() -> i64 { x := mut 0; L { I x >= 10 { B }; x = x + 1 }; R x }");
+    tc_ok("fn test() -> i64 { x := mut 0; L { I x >= 10 { B }; x = x + 1 }; return x }");
 }
 
 #[test]
 fn test_unify_for_loop() {
-    tc_ok("fn test() -> i64 { sum := mut 0; L i:0..5 { sum = sum + i }; R sum }");
+    tc_ok("fn test() -> i64 { sum := mut 0; L i:0..5 { sum = sum + i }; return sum }");
 }
 
 #[test]
 fn test_unify_self_recursion() {
-    tc_ok("fn fib(n: i64) -> i64 = I n < 2 { n } E { @(n - 1) + @(n - 2) }");
+    tc_ok("fn fib(n: i64) -> i64 = I n < 2 { n } else { @(n - 1) + @(n - 2) }");
 }
 
 #[test]
 fn test_unify_mutual_call() {
-    tc_ok("fn a(x: i64) -> i64 = I x <= 0 { 0 } E { b(x - 1) }\nfn b(x: i64) -> i64 = a(x)");
+    tc_ok("fn a(x: i64) -> i64 = I x <= 0 { 0 } else { b(x - 1) }\nfn b(x: i64) -> i64 = a(x)");
 }
 
 #[test]
@@ -442,12 +442,12 @@ fn test_unify_boolean_logic() {
 
 #[test]
 fn test_unify_nested_if() {
-    tc_ok("fn test(x: i64) -> i64 = I x > 0 { I x > 10 { 2 } E { 1 } } E { 0 }");
+    tc_ok("fn test(x: i64) -> i64 = I x > 0 { I x > 10 { 2 } else { 1 } } else { 0 }");
 }
 
 #[test]
 fn test_unify_match_with_guard_like() {
-    tc_ok("fn test(x: i64) -> i64 = M x { 0 => 0, 1 => 1, _ => x * 2 }");
+    tc_ok("fn test(x: i64) -> i64 = match x { 0 => 0, 1 => 1, _ => x * 2 }");
 }
 
 #[test]

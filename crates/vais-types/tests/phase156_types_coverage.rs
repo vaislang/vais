@@ -240,7 +240,7 @@ fn test_if_else_same_type() {
     check_ok(
         r#"
         fn f(x: i64) -> i64 {
-            I x > 0 { 1 } E { 2 }
+            I x > 0 { 1 } else { 2 }
         }
     "#,
     );
@@ -335,7 +335,7 @@ fn test_deref_non_ref_errors() {
 fn test_match_enum_variants() {
     check_ok(
         r#"
-        E Color { Red, Green, Blue }
+        enum Color { Red, Green, Blue }
         fn f(c: Color) -> i64 {
             match c {
                 Red => 0,
@@ -539,7 +539,7 @@ fn test_fn_empty_block_returns_unit() {
 
 #[test]
 fn test_fn_explicit_return_in_block() {
-    check_ok("fn f() -> i64 { R 99 }");
+    check_ok("fn f() -> i64 { return 99 }");
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -551,7 +551,7 @@ fn test_recursive_fn_needs_explicit_return_type() {
     // Using @ (self-recursion) without annotated return type should error
     check_err(
         r#"
-        fn countdown(n: i64) = I n <= 0 { 0 } E { @(n - 1) }
+        fn countdown(n: i64) = I n <= 0 { 0 } else { @(n - 1) }
     "#,
     );
 }
@@ -560,7 +560,7 @@ fn test_recursive_fn_needs_explicit_return_type() {
 fn test_recursive_fn_with_explicit_return_type() {
     check_ok(
         r#"
-        fn factorial(n: i64) -> i64 = I n <= 1 { 1 } E { n * @(n - 1) }
+        fn factorial(n: i64) -> i64 = I n <= 1 { 1 } else { n * @(n - 1) }
     "#,
     );
 }
@@ -872,7 +872,7 @@ fn test_struct_generic() {
 fn test_enum_unit_variants() {
     check_ok(
         r#"
-        E Direction { North, South, East, West }
+        enum Direction { North, South, East, West }
         fn f() -> i64 {
             d := Direction::North
             0
@@ -885,7 +885,7 @@ fn test_enum_unit_variants() {
 fn test_enum_tuple_variant() {
     check_ok(
         r#"
-        E Shape { Circle(f64), Square(f64) }
+        enum Shape { Circle(f64), Square(f64) }
         fn area(s: Shape) -> f64 {
             match s {
                 Circle(r) => r * r * 3.14,
@@ -900,7 +900,7 @@ fn test_enum_tuple_variant() {
 fn test_enum_match_all_variants() {
     check_ok(
         r#"
-        E Coin { Penny, Nickel, Dime, Quarter }
+        enum Coin { Penny, Nickel, Dime, Quarter }
         fn value(c: Coin) -> i64 {
             match c {
                 Penny => 1,
@@ -1080,7 +1080,7 @@ fn test_inferred_return_type_str() {
 
 #[test]
 fn test_unit_literal() {
-    check_ok("fn f() -> i64 { () R 0 }");
+    check_ok("fn f() -> i64 { () return 0 }");
 }
 
 #[test]
@@ -1132,8 +1132,8 @@ fn test_mutual_forward_declaration() {
     // In Vais two-pass TC, functions are registered before bodies are checked
     check_ok(
         r#"
-        fn is_even(n: i64) -> bool = I n == 0 { true } E { is_odd(n - 1) }
-        fn is_odd(n: i64) -> bool = I n == 0 { false } E { is_even(n - 1) }
+        fn is_even(n: i64) -> bool = I n == 0 { true } else { is_odd(n - 1) }
+        fn is_odd(n: i64) -> bool = I n == 0 { false } else { is_even(n - 1) }
     "#,
     );
 }

@@ -3,7 +3,7 @@ use vais_parser::parse;
 
 #[test]
 fn test_comptime_simple_arithmetic() {
-    let source = "F test()->i64=comptime{4*8}";
+    let source = "fn test()->i64=comptime{4*8}";
     let module = parse(source).unwrap();
 
     if let Item::Function(func) = &module.items[0].node {

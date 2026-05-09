@@ -624,7 +624,7 @@ fn test_ast_expander_with_non_empty_module() {
     let registry = MacroRegistry::new();
     let mut expander = AstExpander::new(&registry);
 
-    let source = "F add(a: i64, b: i64) -> i64 = a + b";
+    let source = "fn add(a: i64, b: i64) -> i64 = a + b";
     let module = parse(source).unwrap();
     let result = expander.expand_module(module);
     assert!(result.is_ok());
@@ -635,7 +635,7 @@ fn test_expand_macros_with_undefined_macro_in_source() {
     use vais_parser::parse;
 
     let registry = MacroRegistry::new(); // empty registry
-    let source = "F test() = 42";
+    let source = "fn test() = 42";
     let module = parse(source).unwrap();
     // No macro invocations → no error
     let result = expand_macros(module, &registry);
@@ -649,7 +649,7 @@ fn test_collect_macros_multiple_defs() {
     let source = r#"
         macro foo! { ($x:expr) => { $x } }
         macro bar! { ($a:expr, $b:expr) => { $a + $b } }
-        F dummy() = 1
+        fn dummy() = 1
     "#;
 
     let module = parse(source).unwrap();
@@ -685,8 +685,8 @@ fn test_process_derives_module_with_items() {
     use vais_parser::parse;
 
     let source = r#"
-        S Point { x: i64, y: i64 }
-        F origin() -> Point = Point { x: 0, y: 0 }
+        struct Point { x: i64, y: i64 }
+        fn origin() -> Point = Point { x: 0, y: 0 }
     "#;
     let module = parse(source).unwrap();
     let mut module = module;

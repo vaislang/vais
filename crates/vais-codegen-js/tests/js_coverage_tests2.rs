@@ -129,7 +129,7 @@ fn test_js_enum_with_data() {
 fn test_js_enum_variant_access() {
     let js = gen_js(
         r#"
-        E Dir { North, South, East, West }
+        enum Dir { North, South, East, West }
         fn test() -> i64 {
             d := North
             0

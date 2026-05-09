@@ -76,7 +76,7 @@ fn test_infer_string_literal() {
 
 #[test]
 fn test_infer_binary_op_addition() {
-    let source = "fn test() -> i64 { x := 1 + 2; R x }";
+    let source = "fn test() -> i64 { x := 1 + 2; return x }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     assert!(tc.check_module(&module).is_ok());
@@ -84,7 +84,7 @@ fn test_infer_binary_op_addition() {
 
 #[test]
 fn test_infer_binary_op_comparison() {
-    let source = "fn test() -> bool { x := 1 < 2; R x }";
+    let source = "fn test() -> bool { x := 1 < 2; return x }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     assert!(tc.check_module(&module).is_ok());
@@ -92,7 +92,7 @@ fn test_infer_binary_op_comparison() {
 
 #[test]
 fn test_infer_binary_op_logical() {
-    let source = "fn test() -> bool { x := true && false; R x }";
+    let source = "fn test() -> bool { x := true && false; return x }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     assert!(tc.check_module(&module).is_ok());
@@ -100,7 +100,7 @@ fn test_infer_binary_op_logical() {
 
 #[test]
 fn test_infer_unary_op_negate() {
-    let source = "fn test() -> i64 { x := -42; R x }";
+    let source = "fn test() -> i64 { x := -42; return x }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     assert!(tc.check_module(&module).is_ok());
@@ -108,7 +108,7 @@ fn test_infer_unary_op_negate() {
 
 #[test]
 fn test_infer_unary_op_not() {
-    let source = "fn test() -> bool { x := !true; R x }";
+    let source = "fn test() -> bool { x := !true; return x }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     assert!(tc.check_module(&module).is_ok());
@@ -122,7 +122,7 @@ fn test_infer_unary_op_not() {
 fn test_infer_if_expression() {
     let source = r#"
         fn test(x: i64) -> i64 {
-            result := I x > 0 { x } E { -x }
+            result := I x > 0 { x } else { -x }
             result
         }
     "#;
@@ -302,7 +302,7 @@ fn test_infer_struct_construction() {
 #[test]
 fn test_infer_enum_variant() {
     let source = r#"
-        E MyOpt { MySome(i64), MyNone }
+        enum MyOpt { MySome(i64), MyNone }
         fn test() -> i64 {
             x := MySome(42)
             match x {
@@ -546,7 +546,7 @@ fn test_resolve_type_alias_in_struct() {
 #[test]
 fn test_resolve_enum_with_complex_variants() {
     let source = r#"
-        E Expr {
+        enum Expr {
             Num(i64),
             Add(i64, i64),
             Neg(i64)

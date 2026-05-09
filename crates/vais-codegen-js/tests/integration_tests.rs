@@ -31,7 +31,7 @@ fn parse_and_generate_with_config(source: &str, config: JsConfig) -> String {
 #[test]
 fn test_simple_function_definition() {
     let source = r#"
-        F add(a: i64, b: i64) -> i64 { a + b }
+        fn add(a: i64, b: i64) -> i64 { a + b }
     "#;
     let js = parse_and_generate(source);
     assert!(js.contains("function add(a, b)"));
@@ -42,7 +42,7 @@ fn test_simple_function_definition() {
 #[test]
 fn test_multiple_parameter_function() {
     let source = r#"
-        F calculate(x: i64, y: i64, z: i64) -> i64 {
+        fn calculate(x: i64, y: i64, z: i64) -> i64 {
             x * y + z
         }
     "#;
@@ -55,7 +55,7 @@ fn test_multiple_parameter_function() {
 #[test]
 fn test_void_return_function() {
     let source = r#"
-        F print_hello() {
+        fn print_hello() {
             42
         }
     "#;
@@ -67,7 +67,7 @@ fn test_void_return_function() {
 #[test]
 fn test_recursive_function_with_selfcall() {
     let source = r#"
-        F factorial(n: i64) -> i64 {
+        fn factorial(n: i64) -> i64 {
             I n <= 1 {
                 return 1
             }
@@ -86,7 +86,7 @@ fn test_recursive_function_with_selfcall() {
 #[test]
 fn test_arithmetic_and_comparison_operators() {
     let source = r#"
-        F test() -> bool {
+        fn test() -> bool {
             (5 + 3) * 2 == 16
         }
     "#;
@@ -99,7 +99,7 @@ fn test_arithmetic_and_comparison_operators() {
 #[test]
 fn test_ternary_operator() {
     let source = r#"
-        F max(a: i64, b: i64) -> i64 {
+        fn max(a: i64, b: i64) -> i64 {
             a > b ? a : b
         }
     "#;
@@ -113,7 +113,7 @@ fn test_ternary_operator() {
 #[test]
 fn test_string_literal() {
     let source = r#"
-        F greet() -> str {
+        fn greet() -> str {
             "Hello, World!"
         }
     "#;
@@ -124,7 +124,7 @@ fn test_string_literal() {
 #[test]
 fn test_array_literal() {
     let source = r#"
-        F get_numbers() {
+        fn get_numbers() {
             [1, 2, 3, 4, 5]
         }
     "#;
@@ -135,8 +135,8 @@ fn test_array_literal() {
 #[test]
 fn test_pipe_operator() {
     let source = r#"
-        F double(x: i64) -> i64 { x * 2 }
-        F test() -> i64 {
+        fn double(x: i64) -> i64 { x * 2 }
+        fn test() -> i64 {
             5 |> double
         }
     "#;
@@ -147,7 +147,7 @@ fn test_pipe_operator() {
 #[test]
 fn test_range_operator() {
     let source = r#"
-        F test() {
+        fn test() {
             1..10
         }
     "#;
@@ -164,7 +164,7 @@ fn test_range_operator() {
 #[test]
 fn test_if_else_to_js_iife() {
     let source = r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             I x > 0 {
                 return 1
             } else {
@@ -182,7 +182,7 @@ fn test_if_else_to_js_iife() {
 #[test]
 fn test_match_to_if_else_chain() {
     let source = r#"
-        F test(x: i64) -> str {
+        fn test(x: i64) -> str {
             match x {
                 1 => "one",
                 2 => "two",
@@ -200,7 +200,7 @@ fn test_match_to_if_else_chain() {
 #[test]
 fn test_loop_while_to_js() {
     let source = r#"
-        F test() {
+        fn test() {
             x := 0
             L x < 10 {
                 x = x + 1
@@ -216,7 +216,7 @@ fn test_loop_while_to_js() {
 #[test]
 fn test_break_continue() {
     let source = r#"
-        F test() {
+        fn test() {
             x := 0
             L x < 100 {
                 I x == 50 {
@@ -237,7 +237,7 @@ fn test_break_continue() {
 #[test]
 fn test_struct_to_js_class() {
     let source = r#"
-        S Point {
+        struct Point {
             x: f64,
             y: f64
         }
@@ -252,7 +252,7 @@ fn test_struct_to_js_class() {
 #[test]
 fn test_enum_to_frozen_object() {
     let source = r#"
-        E Color {
+        enum Color {
             Red,
             Green,
             Blue
@@ -268,11 +268,11 @@ fn test_enum_to_frozen_object() {
 #[test]
 fn test_impl_block_to_prototype_methods() {
     let source = r#"
-        S Counter {
+        struct Counter {
             value: i64
         }
-        X Counter {
-            F increment(&self) -> i64 {
+        impl Counter {
+            fn increment(&self) -> i64 {
                 self.value + 1
             }
         }
@@ -286,8 +286,8 @@ fn test_impl_block_to_prototype_methods() {
 #[test]
 fn test_trait_to_base_class() {
     let source = r#"
-        W Drawable {
-            F draw()
+        trait Drawable {
+            fn draw()
         }
     "#;
     let js = parse_and_generate(source);
@@ -302,11 +302,11 @@ fn test_trait_to_base_class() {
 #[test]
 fn test_result_enum_helpers() {
     let source = r#"
-        E Result<T, E> {
+        enum Result<T, E> {
             Ok(T),
             Err(E)
         }
-        F test() -> Result<i64, str> {
+        fn test() -> Result<i64, str> {
             Result::Ok(42)
         }
     "#;
@@ -319,11 +319,11 @@ fn test_result_enum_helpers() {
 #[test]
 fn test_option_enum_helpers() {
     let source = r#"
-        E Option<T> {
+        enum Option<T> {
             Some(T),
             None
         }
-        F test() -> Option<i64> {
+        fn test() -> Option<i64> {
             Option::Some(42)
         }
     "#;
@@ -386,7 +386,7 @@ fn test_try_operator_codegen() {
 #[test]
 fn test_unwrap_operator() {
     let source = r#"
-        F get_value() -> i64 {
+        fn get_value() -> i64 {
             x := some_option!
             x
         }
@@ -403,8 +403,8 @@ fn test_unwrap_operator() {
 #[test]
 fn test_use_to_esm_import() {
     let source = r#"
-        U std::collections::Vec
-        F test() {
+        use std::collections::Vec
+        fn test() {
             42
         }
     "#;
@@ -432,8 +432,8 @@ fn test_barrel_export_generation() {
 #[test]
 fn test_multifile_mode() {
     let source = r#"
-        P F func1() -> i64 { 1 }
-        F func2() -> i64 { 2 }
+        pub fn func1() -> i64 { 1 }
+        fn func2() -> i64 { 2 }
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mut gen = JsCodeGenerator::new();
@@ -455,8 +455,8 @@ fn test_multifile_mode() {
 #[test]
 fn test_unreferenced_private_function_removed() {
     let source = r#"
-        F main() -> i64 { 42 }
-        F unused() -> i64 { 0 }
+        fn main() -> i64 { 42 }
+        fn unused() -> i64 { 0 }
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let shaken = vais_codegen_js::tree_shaking::TreeShaker::shake(&module);
@@ -471,10 +471,10 @@ fn test_unreferenced_private_function_removed() {
 #[test]
 fn test_transitive_dependencies_kept() {
     let source = r#"
-        F main() -> i64 { helper1() }
-        F helper1() -> i64 { helper2() }
-        F helper2() -> i64 { 42 }
-        F unused() -> i64 { 0 }
+        fn main() -> i64 { helper1() }
+        fn helper1() -> i64 { helper2() }
+        fn helper2() -> i64 { 42 }
+        fn unused() -> i64 { 0 }
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let shaken = vais_codegen_js::tree_shaking::TreeShaker::shake(&module);
@@ -500,9 +500,9 @@ fn test_transitive_dependencies_kept() {
 #[test]
 fn test_public_functions_always_kept() {
     let source = r#"
-        F main() -> i64 { 42 }
-        P F public_api() -> i64 { 100 }
-        F unused_private() -> i64 { 0 }
+        fn main() -> i64 { 42 }
+        pub fn public_api() -> i64 { 100 }
+        fn unused_private() -> i64 { 0 }
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let shaken = vais_codegen_js::tree_shaking::TreeShaker::shake(&module);
@@ -570,7 +570,7 @@ fn test_sourcemap_file_comment() {
 #[test]
 fn test_config_custom_indent() {
     let source = r#"
-        S Point {
+        struct Point {
             x: i64,
             y: i64
         }
@@ -598,8 +598,8 @@ fn test_config_custom_indent() {
 #[test]
 fn test_public_export_functions() {
     let source = r#"
-        P F public_func() -> i64 { 42 }
-        F private_func() -> i64 { 0 }
+        pub fn public_func() -> i64 { 42 }
+        fn private_func() -> i64 { 0 }
     "#;
     let js = parse_and_generate(source);
     assert!(js.contains("export function public_func()"));
@@ -614,7 +614,7 @@ fn test_public_export_functions() {
 #[test]
 fn test_range_loop_inclusive() {
     let source = r#"
-        F sum_range() -> i64 {
+        fn sum_range() -> i64 {
             total := mut 0
             L i:0..5 {
                 total = total + i
@@ -631,7 +631,7 @@ fn test_range_loop_inclusive() {
 #[test]
 fn test_range_loop_exclusive() {
     let source = r#"
-        F count() {
+        fn count() {
             L i:1..10 {
                 i
             }
@@ -647,7 +647,7 @@ fn test_range_loop_exclusive() {
 #[test]
 fn test_range_loop_with_break() {
     let source = r#"
-        F find_limit() -> i64 {
+        fn find_limit() -> i64 {
             L i:0..100 {
                 I i > 50 {
                     B
@@ -669,7 +669,7 @@ fn test_range_loop_with_break() {
 #[test]
 fn test_closure_capture_by_value() {
     let source = r#"
-        F test() {
+        fn test() {
             x := 10
             f := |y| x + y
             f(5)
@@ -685,7 +685,7 @@ fn test_closure_capture_by_value() {
 #[test]
 fn test_closure_move_capture() {
     let source = r#"
-        F test() {
+        fn test() {
             x := 42
             f := move |y| x + y
             f(10)
@@ -701,7 +701,7 @@ fn test_closure_move_capture() {
 #[test]
 fn test_closure_multiple_captures() {
     let source = r#"
-        F test() {
+        fn test() {
             a := 1
             b := 2
             f := |c| a + b + c
@@ -722,7 +722,7 @@ fn test_closure_multiple_captures() {
 #[test]
 fn test_async_function() {
     let source = r#"
-        A F fetch_data() -> i64 {
+        A fn fetch_data() -> i64 {
             42
         }
     "#;
@@ -735,8 +735,8 @@ fn test_async_function() {
 fn test_await_expression() {
     // Parser doesn't support Y (await) syntax yet, test async function only
     let source = r#"
-        A F task() -> i64 { 100 }
-        A F main() -> i64 {
+        A fn task() -> i64 { 100 }
+        A fn main() -> i64 {
             task()
         }
     "#;
@@ -750,9 +750,9 @@ fn test_await_expression() {
 fn test_async_with_multiple_awaits() {
     // Parser doesn't support Y (await) syntax yet
     let source = r#"
-        A F get_x() -> i64 { 1 }
-        A F get_y() -> i64 { 2 }
-        A F compute() -> i64 {
+        A fn get_x() -> i64 { 1 }
+        A fn get_y() -> i64 { 2 }
+        A fn compute() -> i64 {
             x := get_x()
             y := get_y()
             x + y
@@ -772,7 +772,7 @@ fn test_async_with_multiple_awaits() {
 #[test]
 fn test_pattern_alias_in_match() {
     let source = r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             match x {
                 n @ 1 => n,
                 n @ 2 => n * 2,
@@ -793,7 +793,7 @@ fn test_pattern_alias_with_destructuring() {
     // Parser doesn't support struct pattern destructuring in match yet
     // Test simple pattern alias instead
     let source = r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             match x {
                 pt @ 5 => pt * 2,
                 pt @ 10 => pt + 1,
@@ -811,7 +811,7 @@ fn test_pattern_alias_with_destructuring() {
 #[test]
 fn test_pattern_alias_in_let() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             val @ x := 42
             val
         }
@@ -829,14 +829,14 @@ fn test_pattern_alias_in_let() {
 #[test]
 fn test_struct_method_with_self() {
     let source = r#"
-        S Counter {
+        struct Counter {
             count: i64
         }
-        X Counter {
-            F increment(&self) -> i64 {
+        impl Counter {
+            fn increment(&self) -> i64 {
                 self.count + 1
             }
-            F get_count(&self) -> i64 {
+            fn get_count(&self) -> i64 {
                 self.count
             }
         }
@@ -853,11 +853,11 @@ fn test_enum_variant_matching() {
     // Parser doesn't support :: in match patterns yet
     // Test basic enum matching instead
     let source = r#"
-        E Option<T> {
+        enum Option<T> {
             Some(T),
             None
         }
-        F unwrap_or(opt: Option<i64>, default: i64) -> i64 {
+        fn unwrap_or(opt: Option<i64>, default: i64) -> i64 {
             match opt {
                 Some(x) => x,
                 None => default
@@ -875,8 +875,8 @@ fn test_enum_variant_matching() {
 fn test_combined_async_closure() {
     // Parser doesn't support Y (await) syntax yet
     let source = r#"
-        A F delay() -> i64 { 100 }
-        A F test() -> i64 {
+        A fn delay() -> i64 { 100 }
+        A fn test() -> i64 {
             f := |x| x * 2
             result := delay()
             f(result)

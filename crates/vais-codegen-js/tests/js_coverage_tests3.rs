@@ -242,7 +242,7 @@ fn test_js_struct_field_access() {
 fn test_js_enum_with_data() {
     let js = gen_js(
         r#"
-        E Shape { Circle(f64), Rectangle(f64, f64) }
+        enum Shape { Circle(f64), Rectangle(f64, f64) }
         fn test() -> i64 = 0
     "#,
     );
@@ -299,7 +299,7 @@ fn test_js_early_return() {
 
 #[test]
 fn test_js_generic_function() {
-    let js = gen_js("F identity<T>(x: T) -> T = x");
+    let js = gen_js("fn identity<T>(x: T) -> T = x");
     assert!(!js.is_empty());
 }
 

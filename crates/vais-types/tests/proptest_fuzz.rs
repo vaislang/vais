@@ -132,7 +132,7 @@ proptest! {
         base_case in 0i64..10,
     ) {
         let source = format!(
-            "fn fib(n: i64) -> i64 I n <= {} {{ n }} E {{ @(n - 1) + @(n - 2) }}",
+            "fn fib(n: i64) -> i64 I n <= {} {{ n }} else {{ @(n - 1) + @(n - 2) }}",
             base_case
         );
         let _ = parse_and_check(&source);

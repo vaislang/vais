@@ -10,11 +10,11 @@ use vais_types::{ExhaustivenessChecker, ResolvedType, TypeChecker};
 #[test]
 fn test_type_substitution_cache_correctness() {
     let code = r#"
-        S Box<T> { value: i64 }
+        struct Box<T> { value: i64 }
 
         F create_box<T>() -> Box<T> = Box { value: 42 }
 
-        F main() -> i64 = 0
+        fn main() -> i64 = 0
     "#;
 
     let ast = parse(code).expect("Parse failed");
@@ -117,10 +117,10 @@ fn test_exhaustiveness_cache_invalidation() {
 #[test]
 fn test_complex_generic_substitution() {
     let code = r#"
-        S Option<T> { is_some: bool, value: i64 }
-        S Vec<T> { ptr: i64, len: i64, cap: i64 }
+        struct Option<T> { is_some: bool, value: i64 }
+        struct Vec<T> { ptr: i64, len: i64, cap: i64 }
 
-        F main() -> i64 = 0
+        fn main() -> i64 = 0
     "#;
 
     let ast = parse(code).expect("Parse failed");
@@ -140,12 +140,12 @@ fn test_pattern_matching_with_generics() {
     let code = r#"
         E Option<T> { Some(T), None }
 
-        F unwrap_or<T>(opt: Option<T>, default: T) -> T = M opt {
+        F unwrap_or<T>(opt: Option<T>, default: T) -> T = match opt {
             Some(val) => val,
             None => default
         }
 
-        F main() -> i64 = 0
+        fn main() -> i64 = 0
     "#;
 
     let ast = parse(code).expect("Parse failed");
@@ -162,11 +162,11 @@ fn test_pattern_matching_with_generics() {
 #[test]
 fn test_multiple_instantiations_same_type() {
     let code = r#"
-        S Box<T> { value: T }
+        struct Box<T> { value: T }
 
         F create<T>(val: T) -> Box<T> = Box { value: val }
 
-        F main() -> i64 = 0
+        fn main() -> i64 = 0
     "#;
 
     let ast = parse(code).expect("Parse failed");
@@ -226,8 +226,8 @@ fn test_exhaustiveness_with_integer_ranges() {
 fn test_cache_performance_consistency() {
     // Verify that results are consistent regardless of cache state
     let code = r#"
-        F add(x: i64, y: i64) -> i64 = x + y
-        F main() -> i64 = add(10, 20)
+        fn add(x: i64, y: i64) -> i64 = x + y
+        fn main() -> i64 = add(10, 20)
     "#;
 
     let ast = parse(code).expect("Parse failed");

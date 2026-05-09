@@ -38,7 +38,7 @@ fn test_error_code_type_mismatch() {
 
 #[test]
 fn test_error_code_undefined_variable() {
-    let source = "fn test()->i64{count:=42;R cont}";
+    let source = "fn test()->i64{count:=42;return cont}";
     if let Some(err) = check_error(source) {
         assert_eq!(err.error_code(), "E002");
         let help = err.help();
@@ -58,7 +58,7 @@ fn test_error_code_undefined_variable() {
 
 #[test]
 fn test_error_undefined_var_no_suggestion_for_dissimilar() {
-    let source = "fn test()->i64{counter:=42;R xyz}";
+    let source = "fn test()->i64{counter:=42;return xyz}";
     if let Some(err) = check_error(source) {
         assert_eq!(err.error_code(), "E002");
         let help = err.help();

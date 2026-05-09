@@ -1106,7 +1106,7 @@ fn test_simd_vector_type_clone() {
 fn test_generate_simd_code_empty_module() {
     use vais_parser::parse;
 
-    let source = "F unused_placeholder() = 0";
+    let source = "fn unused_placeholder() = 0";
     let module = parse(source).unwrap();
     let result = generate_simd_code(&module, SimdTarget::Avx2);
     assert!(result.is_ok());
@@ -1119,7 +1119,7 @@ fn test_generate_simd_code_empty_module() {
 fn test_generate_simd_code_avx512_header() {
     use vais_parser::parse;
 
-    let source = "F noop() = 0";
+    let source = "fn noop() = 0";
     let module = parse(source).unwrap();
     let code = generate_simd_code(&module, SimdTarget::Avx512).unwrap();
     assert!(code.contains("immintrin.h") || code.contains("AVX-512") || code.len() > 0);
@@ -1129,7 +1129,7 @@ fn test_generate_simd_code_avx512_header() {
 fn test_generate_simd_code_neon_header() {
     use vais_parser::parse;
 
-    let source = "F noop() = 0";
+    let source = "fn noop() = 0";
     let module = parse(source).unwrap();
     let code = generate_simd_code(&module, SimdTarget::Neon).unwrap();
     assert!(code.contains("arm_neon.h") || code.contains("NEON") || code.len() > 0);
@@ -1139,7 +1139,7 @@ fn test_generate_simd_code_neon_header() {
 fn test_generate_simd_code_sve_header() {
     use vais_parser::parse;
 
-    let source = "F noop() = 0";
+    let source = "fn noop() = 0";
     let module = parse(source).unwrap();
     let code = generate_simd_code(&module, SimdTarget::Sve).unwrap();
     assert!(code.contains("arm_sve.h") || code.contains("SVE") || code.len() > 0);
@@ -1149,7 +1149,7 @@ fn test_generate_simd_code_sve_header() {
 fn test_generate_simd_code_all_targets_succeed() {
     use vais_parser::parse;
 
-    let source = "F noop() = 0";
+    let source = "fn noop() = 0";
     let module = parse(source).unwrap();
 
     for target in &[
@@ -1170,7 +1170,7 @@ fn test_generate_simd_code_with_simd_attr() {
 
     let source = r#"
 #[simd]
-F vector_sum(a: *f32, b: *f32, out: *f32, n: i32) {
+fn vector_sum(a: *f32, b: *f32, out: *f32, n: i32) {
     idx := 0
     I idx < n {
         out[idx] = a[idx] + b[idx]

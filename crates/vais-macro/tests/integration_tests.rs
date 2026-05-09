@@ -493,7 +493,7 @@ fn test_expand_macros_module() {
         is_pub: false,
     });
 
-    let source = "F test() = answer!()";
+    let source = "fn test() = answer!()";
     let module = parse(source).unwrap();
 
     let result = expand_macros(module, &registry);
@@ -506,7 +506,7 @@ fn test_collect_macros_from_module() {
 
     let source = r#"
         macro double! { ($x:expr) => { $x + $x } }
-        F test() = 1
+        fn test() = 1
     "#;
 
     let module = parse(source).unwrap();
@@ -528,7 +528,7 @@ fn test_expand_module_no_macros() {
     use vais_parser::parse;
 
     let registry = MacroRegistry::new();
-    let source = "F identity(x: i64) -> i64 = x";
+    let source = "fn identity(x: i64) -> i64 = x";
     let module = parse(source).unwrap();
 
     let result = expand_macros(module, &registry);

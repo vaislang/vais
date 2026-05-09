@@ -75,13 +75,13 @@ fn test_mismatch_help_message() {
 
 #[test]
 fn test_undefined_var_simple() {
-    let err = check_err("fn test()->i64{R x}");
+    let err = check_err("fn test()->i64{return x}");
     assert_eq!(err.error_code(), "E002");
 }
 
 #[test]
 fn test_undefined_var_with_suggestion() {
-    if let Some(err) = check_error("fn test()->i64{count:=42;R cont}") {
+    if let Some(err) = check_error("fn test()->i64{count:=42;return cont}") {
         assert_eq!(err.error_code(), "E002");
         let help = err.help();
         assert!(help.is_some(), "Should have help with suggestion");
@@ -96,7 +96,7 @@ fn test_undefined_var_with_suggestion() {
 
 #[test]
 fn test_undefined_var_no_suggestion_dissimilar() {
-    if let Some(err) = check_error("fn test()->i64{counter:=42;R xyz}") {
+    if let Some(err) = check_error("fn test()->i64{counter:=42;return xyz}") {
         assert_eq!(err.error_code(), "E002");
         let help = err.help();
         assert!(help.is_some(), "Should still have a help message");
@@ -105,21 +105,21 @@ fn test_undefined_var_no_suggestion_dissimilar() {
 
 #[test]
 fn test_undefined_var_in_binary_expr() {
-    if let Some(err) = check_error("fn test()->i64{a:=1;R a+b}") {
+    if let Some(err) = check_error("fn test()->i64{a:=1;return a+b}") {
         assert_eq!(err.error_code(), "E002");
     }
 }
 
 #[test]
 fn test_undefined_var_in_condition() {
-    if let Some(err) = check_error("fn test()->i64{I flag{R 1}E{R 0}}") {
+    if let Some(err) = check_error("fn test()->i64{I flag{return 1} else {return 0}}") {
         assert_eq!(err.error_code(), "E002");
     }
 }
 
 #[test]
 fn test_undefined_var_in_loop() {
-    if let Some(err) = check_error("fn test()->i64{L _:cond{B};R 0}") {
+    if let Some(err) = check_error("fn test()->i64{L _:cond{B};return 0}") {
         assert_eq!(err.error_code(), "E002");
     }
 }
@@ -237,7 +237,7 @@ fn test_duplicate_struct() {
 
 #[test]
 fn test_immutable_assign() {
-    if let Some(err) = check_error("fn test()->i64{x:=42;x=10;R x}") {
+    if let Some(err) = check_error("fn test()->i64{x:=42;x=10;return x}") {
         assert_eq!(err.error_code(), "E009");
         let help = err.help().unwrap();
         assert!(help.contains("mutable"), "Help: {}", help);
@@ -260,7 +260,7 @@ fn test_valid_binary_op() {
 
 #[test]
 fn test_valid_if_else() {
-    check_ok("fn abs(x:i64)->i64{I x>0{R x}E{R 0-x}}");
+    check_ok("fn abs(x:i64)->i64{I x>0{return x} else {return 0-x}}");
 }
 
 #[test]
@@ -276,7 +276,7 @@ fn test_valid_struct_field_access() {
 
 #[test]
 fn test_valid_match() {
-    check_ok("fn test(x:i64)->i64{M x{0=>1,1=>2,_=>0}}");
+    check_ok("fn test(x:i64)->i64{match x{0=>1,1=>2,_=>0}}");
 }
 
 #[test]
@@ -291,7 +291,7 @@ fn test_valid_generic() {
 
 #[test]
 fn test_valid_mutable_var() {
-    check_ok("fn test()->i64{x:= mut 0;x=42;R x}");
+    check_ok("fn test()->i64{x:= mut 0;x=42;return x}");
 }
 
 #[test]
@@ -311,7 +311,7 @@ fn test_valid_impl() {
 
 #[test]
 fn test_valid_nested_if() {
-    check_ok("fn test(x:i64)->i64{I x>0{I x>10{R 2}E{R 1}}E{R 0}}");
+    check_ok("fn test(x:i64)->i64{I x>0{I x>10{return 2} else {return 1}} else {return 0}}");
 }
 
 #[test]

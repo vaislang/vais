@@ -114,8 +114,8 @@ fn test_jitcompiler_comparison_operations() {
 #[test]
 fn test_jitcompiler_nested_function_call() {
     let source = r#"
-        F double(x: i64) -> i64 = x * 2
-        F main() -> i64 = double(double(10))
+        fn double(x: i64) -> i64 = x * 2
+        fn main() -> i64 = double(double(10))
     "#;
     let result = compile_and_run(source);
     if let Ok(val) = result {
@@ -126,9 +126,9 @@ fn test_jitcompiler_nested_function_call() {
 #[test]
 fn test_jitcompiler_multiple_functions() {
     let source = r#"
-        F add(a: i64, b: i64) -> i64 = a + b
-        F mul(a: i64, b: i64) -> i64 = a * b
-        F main() -> i64 = add(mul(3, 4), mul(2, 5))
+        fn add(a: i64, b: i64) -> i64 = a + b
+        fn mul(a: i64, b: i64) -> i64 = a * b
+        fn main() -> i64 = add(mul(3, 4), mul(2, 5))
     "#;
     let result = compile_and_run(source);
     if let Ok(val) = result {
@@ -143,7 +143,7 @@ fn test_jitcompiler_multiple_functions() {
 #[test]
 fn test_jitcompiler_if_else() {
     let source = r#"
-        F main() -> i64 = {
+        fn main() -> i64 = {
             x := 10
             I x > 5 {
                 42
@@ -161,7 +161,7 @@ fn test_jitcompiler_if_else() {
 #[test]
 fn test_jitcompiler_nested_if_else() {
     let source = r#"
-        F main() -> i64 = {
+        fn main() -> i64 = {
             x := 15
             I x > 20 {
                 1
@@ -194,7 +194,7 @@ fn test_jitcompiler_match_expression() {
     // Note: Match expressions require more complex AST support
     // This test verifies if-else chain as a substitute
     let source = r#"
-        F check(n: i64) -> i64 = {
+        fn check(n: i64) -> i64 = {
             I n == 1 {
                 10
             } else {
@@ -205,7 +205,7 @@ fn test_jitcompiler_match_expression() {
                 }
             }
         }
-        F main() -> i64 = check(2)
+        fn main() -> i64 = check(2)
     "#;
     let result = compile_and_run(source);
     if let Ok(val) = result {
@@ -229,7 +229,7 @@ fn test_jitcompiler_let_binding() {
 #[test]
 fn test_jitcompiler_multiple_variables() {
     let source = r#"
-        F main() -> i64 = {
+        fn main() -> i64 = {
             a := 10
             b := 20
             c := 30
@@ -245,13 +245,13 @@ fn test_jitcompiler_multiple_variables() {
 #[test]
 fn test_jitcompiler_variable_reuse() {
     let source = r#"
-        F compute(x: i64) -> i64 = {
+        fn compute(x: i64) -> i64 = {
             y := x * 2
             z := y + 10
             result := z - 5
             result
         }
-        F main() -> i64 = compute(15)
+        fn main() -> i64 = compute(15)
     "#;
     let result = compile_and_run(source);
     if let Ok(val) = result {
@@ -285,8 +285,8 @@ fn test_interpreter_arithmetic() {
 #[test]
 fn test_interpreter_function_call() {
     let source = r#"
-        F square(n: i64) -> i64 = n * n
-        F main() -> i64 = square(7)
+        fn square(n: i64) -> i64 = n * n
+        fn main() -> i64 = square(7)
     "#;
     let result = interpret(source);
     assert!(result.is_ok());
@@ -321,8 +321,8 @@ fn test_tieredjit_basic_execution() {
 #[test]
 fn test_tieredjit_function_stats() {
     let source = r#"
-        F helper() -> i64 = 10
-        F main() -> i64 = { helper(); helper(); 0 }
+        fn helper() -> i64 = 10
+        fn main() -> i64 = { helper(); helper(); 0 }
     "#;
     let module = vais_parser::parse(source).unwrap();
     let mut jit = TieredJit::new().unwrap();
@@ -359,8 +359,8 @@ fn test_tieredjit_custom_thresholds() {
 #[test]
 fn test_tieredjit_function_tier() {
     let source = r#"
-        F compute() -> i64 = 42
-        F main() -> i64 = compute()
+        fn compute() -> i64 = 42
+        fn main() -> i64 = compute()
     "#;
     let module = vais_parser::parse(source).unwrap();
     let mut jit = TieredJit::new().unwrap();
@@ -558,13 +558,13 @@ fn test_complex_arithmetic_expression() {
 #[test]
 fn test_interpreter_with_locals() {
     let source = r#"
-        F compute() -> i64 = {
+        fn compute() -> i64 = {
             a := 5
             b := 10
             c := a + b
             c * 2
         }
-        F main() -> i64 = compute()
+        fn main() -> i64 = compute()
     "#;
 
     let result = interpret(source);

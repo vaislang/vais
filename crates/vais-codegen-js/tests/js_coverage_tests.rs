@@ -42,7 +42,7 @@ fn test_js_struct() {
 fn test_js_enum() {
     let js = gen_js(
         r#"
-        E Color { Red, Green, Blue }
+        enum Color { Red, Green, Blue }
         fn test() -> i64 {
             c := Red
             match c {
@@ -417,7 +417,7 @@ fn test_js_complex_struct() {
 fn test_js_tree_shake_enum_with_match() {
     let js = gen_js(
         r#"
-        E Direction { North, South, East, West }
+        enum Direction { North, South, East, West }
         fn go(d: Direction) -> i64 {
             match d {
                 North => 1,
@@ -437,8 +437,8 @@ fn test_js_tree_shake_enum_with_match() {
 fn test_js_tree_shake_unused_enum() {
     let js = gen_js(
         r#"
-        E Used { Aa, Bb }
-        E Unused { Cc, Dd }
+        enum Used { Aa, Bb }
+        enum Unused { Cc, Dd }
         fn main() -> i64 {
             x := Aa
             match x {
@@ -731,7 +731,7 @@ fn test_js_early_return() {
 fn test_js_complex_enum() {
     let js = gen_js(
         r#"
-        E Expr {
+        enum Expr {
             Lit(i64),
             Add(i64, i64)
         }

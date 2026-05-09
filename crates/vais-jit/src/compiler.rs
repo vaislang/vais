@@ -1022,156 +1022,156 @@ mod tests {
 
     #[test]
     fn test_simple_return() {
-        let result = compile_and_run("F main()->i64{42}").unwrap();
+        let result = compile_and_run("fn main()->i64{42}").unwrap();
         assert_eq!(result, 42);
     }
 
     #[test]
     fn test_addition() {
-        let result = compile_and_run("F main()->i64{1+2+3}").unwrap();
+        let result = compile_and_run("fn main()->i64{1+2+3}").unwrap();
         assert_eq!(result, 6);
     }
 
     #[test]
     fn test_arithmetic() {
-        let result = compile_and_run("F main()->i64{2*3+4}").unwrap();
+        let result = compile_and_run("fn main()->i64{2*3+4}").unwrap();
         assert_eq!(result, 10);
     }
 
     #[test]
     fn test_subtraction() {
-        let result = compile_and_run("F main()->i64{10-3}").unwrap();
+        let result = compile_and_run("fn main()->i64{10-3}").unwrap();
         assert_eq!(result, 7);
     }
 
     #[test]
     fn test_multiplication() {
-        let result = compile_and_run("F main()->i64{6*7}").unwrap();
+        let result = compile_and_run("fn main()->i64{6*7}").unwrap();
         assert_eq!(result, 42);
     }
 
     #[test]
     fn test_division() {
-        let result = compile_and_run("F main()->i64{100/10}").unwrap();
+        let result = compile_and_run("fn main()->i64{100/10}").unwrap();
         assert_eq!(result, 10);
     }
 
     #[test]
     fn test_modulo() {
-        let result = compile_and_run("F main()->i64{17%5}").unwrap();
+        let result = compile_and_run("fn main()->i64{17%5}").unwrap();
         assert_eq!(result, 2);
     }
 
     #[test]
     fn test_comparison_eq() {
-        let result = compile_and_run("F main()->i64{I 5==5{1}E{0}}").unwrap();
+        let result = compile_and_run("fn main()->i64{I 5==5{1} else {0}}").unwrap();
         assert_eq!(result, 1);
     }
 
     #[test]
     fn test_comparison_lt() {
-        let result = compile_and_run("F main()->i64{I 3<5{1}E{0}}").unwrap();
+        let result = compile_and_run("fn main()->i64{I 3<5{1} else {0}}").unwrap();
         assert_eq!(result, 1);
     }
 
     #[test]
     fn test_if_else() {
-        let result = compile_and_run("F main()->i64{I true{42}E{0}}").unwrap();
+        let result = compile_and_run("fn main()->i64{I true{42} else {0}}").unwrap();
         assert_eq!(result, 42);
     }
 
     #[test]
     fn test_if_false() {
-        let result = compile_and_run("F main()->i64{I false{0}E{99}}").unwrap();
+        let result = compile_and_run("fn main()->i64{I false{0} else {99}}").unwrap();
         assert_eq!(result, 99);
     }
 
     #[test]
     fn test_local_variable() {
-        let result = compile_and_run("F main()->i64{x:=10;x+5}").unwrap();
+        let result = compile_and_run("fn main()->i64{x:=10;x+5}").unwrap();
         assert_eq!(result, 15);
     }
 
     #[test]
     fn test_multiple_variables() {
-        let result = compile_and_run("F main()->i64{a:=3;b:=4;a*b}").unwrap();
+        let result = compile_and_run("fn main()->i64{a:=3;b:=4;a*b}").unwrap();
         assert_eq!(result, 12);
     }
 
     #[test]
     fn test_function_call() {
         let result =
-            compile_and_run("F add(a:i64,b:i64)->i64{a+b} F main()->i64{add(3,4)}").unwrap();
+            compile_and_run("fn add(a:i64,b:i64)->i64{a+b} fn main()->i64{add(3,4)}").unwrap();
         assert_eq!(result, 7);
     }
 
     #[test]
     fn test_nested_calls() {
         let result =
-            compile_and_run("F double(x:i64)->i64{x*2} F main()->i64{double(double(5))}").unwrap();
+            compile_and_run("fn double(x:i64)->i64{x*2} fn main()->i64{double(double(5))}").unwrap();
         assert_eq!(result, 20);
     }
 
     #[test]
     fn test_negation() {
-        let result = compile_and_run("F main()->i64{0-42}").unwrap();
+        let result = compile_and_run("fn main()->i64{0-42}").unwrap();
         assert_eq!(result, -42);
     }
 
     #[test]
     fn test_logical_and() {
-        let result = compile_and_run("F main()->i64{I true&&true{1}E{0}}").unwrap();
+        let result = compile_and_run("fn main()->i64{I true&&true{1} else {0}}").unwrap();
         assert_eq!(result, 1);
     }
 
     #[test]
     fn test_logical_or() {
-        let result = compile_and_run("F main()->i64{I false||true{1}E{0}}").unwrap();
+        let result = compile_and_run("fn main()->i64{I false||true{1} else {0}}").unwrap();
         assert_eq!(result, 1);
     }
 
     #[test]
     fn test_bitwise_and() {
-        let result = compile_and_run("F main()->i64{12&10}").unwrap();
+        let result = compile_and_run("fn main()->i64{12&10}").unwrap();
         assert_eq!(result, 8);
     }
 
     #[test]
     fn test_bitwise_or() {
-        let result = compile_and_run("F main()->i64{12|3}").unwrap();
+        let result = compile_and_run("fn main()->i64{12|3}").unwrap();
         assert_eq!(result, 15);
     }
 
     #[test]
     fn test_complex_expression() {
-        let result = compile_and_run("F main()->i64{(2+3)*(4-1)}").unwrap();
+        let result = compile_and_run("fn main()->i64{(2+3)*(4-1)}").unwrap();
         assert_eq!(result, 15);
     }
 
     #[test]
     fn test_nested_if_expressions() {
-        let source = "F main()->i64{x:=10;I x>5{I x>8{1}E{2}}E{3}}";
+        let source = "fn main()->i64{x:=10;I x>5{I x>8{1} else {2}} else {3}}";
         let result = compile_and_run(source).unwrap();
         assert_eq!(result, 1);
     }
 
     #[test]
     fn test_multiple_function_calls_same_function() {
-        let source = "F sq(x:i64)->i64{x*x} F main()->i64{sq(3)+sq(4)}";
+        let source = "fn sq(x:i64)->i64{x*x} fn main()->i64{sq(3)+sq(4)}";
         let result = compile_and_run(source).unwrap();
         assert_eq!(result, 25);
     }
 
     #[test]
     fn test_ternary_expression() {
-        let source = "F main()->i64{x:=5;x>3?10:20}";
+        let source = "fn main()->i64{x:=5;x>3?10:20}";
         let result = compile_and_run(source).unwrap();
         assert_eq!(result, 10);
     }
 
     #[test]
     fn test_chained_comparisons() {
-        let source = "F main()->i64{a:=5;b:=10;I a<b&&b<20{1}E{0}}";
+        let source = "fn main()->i64{a:=5;b:=10;I a<b&&b<20{1} else {0}}";
         let result = compile_and_run(source).unwrap();
         assert_eq!(result, 1);
     }
@@ -1180,14 +1180,14 @@ mod tests {
     fn test_compiler_clear() {
         let mut jit = JitCompiler::new().unwrap();
 
-        let ast1 = parse("F main()->i64{42}").unwrap();
+        let ast1 = parse("fn main()->i64{42}").unwrap();
         let result1 = jit.compile_and_run_main(&ast1).unwrap();
         assert_eq!(result1, 42);
 
         // Clear and compile new code
         jit.clear().unwrap();
 
-        let ast2 = parse("F main()->i64{99}").unwrap();
+        let ast2 = parse("fn main()->i64{99}").unwrap();
         let result2 = jit.compile_and_run_main(&ast2).unwrap();
         assert_eq!(result2, 99);
     }

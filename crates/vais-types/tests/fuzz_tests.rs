@@ -388,15 +388,15 @@ fn fuzz_type_mismatches() {
         // Wrong parameter type
         "fn add(x:i64,y:i64)->i64=x+y F test()->i64=add(true, false)",
         // Type mismatch in assignment
-        "fn test()->i64{x:i64=true;R x}",
+        "fn test()->i64{x:i64=true;return x}",
         // Multiple type errors
-        "fn test()->i64{x:bool=42;y:str=true;R false}",
+        "fn test()->i64{x:bool=42;y:str=true;return false}",
         // Unresolved type variable
         "F test<T>(x:T)->i64=x",
         // Wrong number of type arguments
         "enum Option<T>{Some(T),None} F test()->Option=None",
         // Conflicting type constraints
-        "F test<T>(x:T, y:T)->T{R x} F main()->i64=test(42, true)",
+        "F test<T>(x:T, y:T)->T{return x} F main()->i64=test(42, true)",
     ];
 
     let mut failures = Vec::new();
@@ -431,7 +431,7 @@ fn fuzz_undefined_references() {
         // Undefined type
         "fn test()->UndefinedType=42",
         // Undefined struct field
-        "struct Point{x:i64} F test()->i64{p:=Point{x:1};R p.undefined_field}",
+        "struct Point{x:i64} F test()->i64{p:=Point{x:1};return p.undefined_field}",
         // Undefined enum variant
         "enum Option<T>{Some(T),None} F test()->Option<i64>=Option::Undefined",
         // Undefined trait
@@ -478,7 +478,7 @@ fn fuzz_malformed_generics() {
         // Conflicting generic bounds
         "T Trait1 {} T Trait2 {} F test<T: Trait1 + Trait2>(x:T)->T=x F main()->i64=test(42)",
         // Generic type in wrong position
-        "fn test()->i64{T:=42;R T}",
+        "fn test()->i64{T:=42;return T}",
         // Multiple definitions with same generic name
         "F test<T,T>(x:T,y:T)->T=x",
     ];

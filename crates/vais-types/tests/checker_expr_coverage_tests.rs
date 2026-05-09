@@ -32,8 +32,8 @@ fn check_err(source: &str) {
 fn test_check_call_simple() {
     check_ok(
         r#"
-        F add(a: i64, b: i64) -> i64 = a + b
-        F test() -> i64 = add(1, 2)
+        fn add(a: i64, b: i64) -> i64 = a + b
+        fn test() -> i64 = add(1, 2)
     "#,
     );
 }
@@ -42,8 +42,8 @@ fn test_check_call_simple() {
 fn test_check_call_no_args() {
     check_ok(
         r#"
-        F answer() -> i64 = 42
-        F test() -> i64 = answer()
+        fn answer() -> i64 = 42
+        fn test() -> i64 = answer()
     "#,
     );
 }
@@ -52,8 +52,8 @@ fn test_check_call_no_args() {
 fn test_check_call_single_arg() {
     check_ok(
         r#"
-        F double(x: i64) -> i64 = x * 2
-        F test() -> i64 = double(21)
+        fn double(x: i64) -> i64 = x * 2
+        fn test() -> i64 = double(21)
     "#,
     );
 }
@@ -62,11 +62,11 @@ fn test_check_call_single_arg() {
 fn test_check_method_call() {
     check_ok(
         r#"
-        S Point { x: i64, y: i64 }
-        X Point {
-            F sum(self) -> i64 = self.x + self.y
+        struct Point { x: i64, y: i64 }
+        impl Point {
+            fn sum(self) -> i64 = self.x + self.y
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             p := Point { x: 3, y: 4 }
             p.sum()
         }
@@ -78,11 +78,11 @@ fn test_check_method_call() {
 fn test_check_method_call_with_args() {
     check_ok(
         r#"
-        S Calc { base: i64 }
-        X Calc {
-            F add(self, n: i64) -> i64 = self.base + n
+        struct Calc { base: i64 }
+        impl Calc {
+            fn add(self, n: i64) -> i64 = self.base + n
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             c := Calc { base: 10 }
             c.add(5)
         }
@@ -94,9 +94,9 @@ fn test_check_method_call_with_args() {
 fn test_check_chained_calls() {
     check_ok(
         r#"
-        F inc(x: i64) -> i64 = x + 1
-        F double(x: i64) -> i64 = x * 2
-        F test() -> i64 = double(inc(20))
+        fn inc(x: i64) -> i64 = x + 1
+        fn double(x: i64) -> i64 = x * 2
+        fn test() -> i64 = double(inc(20))
     "#,
     );
 }
@@ -105,7 +105,7 @@ fn test_check_chained_calls() {
 fn test_check_builtin_print() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             print("hello")
             0
         }
@@ -117,7 +117,7 @@ fn test_check_builtin_print() {
 fn test_check_builtin_println() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             println("hello")
             0
         }
@@ -133,7 +133,7 @@ fn test_check_builtin_println() {
 fn test_check_array_literal_i64() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr := [1, 2, 3]
             arr[0]
         }
@@ -145,7 +145,7 @@ fn test_check_array_literal_i64() {
 fn test_check_array_literal_bool() {
     check_ok(
         r#"
-        F test() -> bool {
+        fn test() -> bool {
             arr := [true, false, true]
             arr[0]
         }
@@ -157,7 +157,7 @@ fn test_check_array_literal_bool() {
 fn test_check_array_index() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr := [10, 20, 30]
             arr[1]
         }
@@ -169,7 +169,7 @@ fn test_check_array_index() {
 fn test_check_tuple_literal() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             t := (1, true, 3)
             0
         }
@@ -181,8 +181,8 @@ fn test_check_tuple_literal() {
 fn test_check_struct_literal() {
     check_ok(
         r#"
-        S Point { x: i64, y: i64 }
-        F test() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn test() -> i64 {
             p := Point { x: 1, y: 2 }
             p.x + p.y
         }
@@ -194,8 +194,8 @@ fn test_check_struct_literal() {
 fn test_check_struct_field_access() {
     check_ok(
         r#"
-        S Pair { first: i64, second: str }
-        F test() -> i64 {
+        struct Pair { first: i64, second: str }
+        fn test() -> i64 {
             p := Pair { first: 42, second: "hello" }
             p.first
         }
@@ -209,15 +209,15 @@ fn test_check_struct_field_access() {
 
 #[test]
 fn test_check_if_expression() {
-    check_ok("fn f(x: i64) -> i64 = I x > 0 { 1 } E { 0 }");
+    check_ok("fn f(x: i64) -> i64 = I x > 0 { 1 } else { 0 }");
 }
 
 #[test]
 fn test_check_if_without_else() {
     check_ok(
         r#"
-        F f(x: i64) -> i64 {
-            I x > 0 { R 1 }
+        fn f(x: i64) -> i64 {
+            I x > 0 { return 1 }
             0
         }
     "#,
@@ -228,10 +228,8 @@ fn test_check_if_without_else() {
 fn test_check_if_else_if() {
     check_ok(
         r#"
-        F classify(x: i64) -> str {
-            I x > 0 { "positive" }
-            E I x < 0 { "negative" }
-            E { "zero" }
+        fn classify(x: i64) -> str {
+            I x > 0 { "positive" } else I x < 0 { "negative" } else { "zero" }
         }
     "#,
     );
@@ -246,7 +244,7 @@ fn test_check_ternary() {
 fn test_check_match_int() {
     check_ok(
         r#"
-        F f(x: i64) -> str = M x {
+        fn f(x: i64) -> str = match x {
             0 => "zero",
             1 => "one",
             _ => "other"
@@ -259,7 +257,7 @@ fn test_check_match_int() {
 fn test_check_match_bool() {
     check_ok(
         r#"
-        F f(b: bool) -> i64 = M b {
+        fn f(b: bool) -> i64 = match b {
             true => 1,
             false => 0
         }
@@ -271,7 +269,7 @@ fn test_check_match_bool() {
 fn test_check_for_loop() {
     check_ok(
         r#"
-        F sum() -> i64 {
+        fn sum() -> i64 {
             total := mut 0
             L i:0..10 {
                 total = total + i
@@ -286,7 +284,7 @@ fn test_check_for_loop() {
 fn test_check_while_loop() {
     check_ok(
         r#"
-        F countdown(n: i64) -> i64 {
+        fn countdown(n: i64) -> i64 {
             x := mut n
             L x > 0 {
                 x = x - 1
@@ -301,7 +299,7 @@ fn test_check_while_loop() {
 fn test_check_loop_break() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             L i:0..100 {
                 I i == 10 { B }
             }
@@ -315,7 +313,7 @@ fn test_check_loop_break() {
 fn test_check_loop_continue() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             total := mut 0
             L i:0..10 {
                 I i == 5 { C }
@@ -335,7 +333,7 @@ fn test_check_loop_continue() {
 fn test_check_block_expression() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := {
                 a := 10
                 b := 20
@@ -351,7 +349,7 @@ fn test_check_block_expression() {
 fn test_check_nested_block() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := {
                 a := {
                     b := 42
@@ -369,8 +367,8 @@ fn test_check_nested_block() {
 fn test_check_pipe_operator() {
     check_ok(
         r#"
-        F double(x: i64) -> i64 = x * 2
-        F test() -> i64 = 5 |> double
+        fn double(x: i64) -> i64 = x * 2
+        fn test() -> i64 = 5 |> double
     "#,
     );
 }
@@ -379,7 +377,7 @@ fn test_check_pipe_operator() {
 fn test_check_self_recursion() {
     check_ok(
         r#"
-        F fib(n: i64) -> i64 = I n < 2 { n } E { @(n-1) + @(n-2) }
+        fn fib(n: i64) -> i64 = I n < 2 { n } else { @(n-1) + @(n-2) }
     "#,
     );
 }
@@ -392,7 +390,7 @@ fn test_check_self_recursion() {
 fn test_check_let_inferred() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := 42
             x
         }
@@ -404,7 +402,7 @@ fn test_check_let_inferred() {
 fn test_check_let_annotated() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x: i64 = 42
             x
         }
@@ -416,7 +414,7 @@ fn test_check_let_annotated() {
 fn test_check_assignment() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := mut 0
             x = 42
             x
@@ -429,7 +427,7 @@ fn test_check_assignment() {
 fn test_check_compound_assignment() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := mut 10
             x += 5
             x -= 3
@@ -444,8 +442,8 @@ fn test_check_compound_assignment() {
 fn test_check_return_expr() {
     check_ok(
         r#"
-        F f() -> i64 {
-            R 42
+        fn f() -> i64 {
+            return 42
         }
     "#,
     );
@@ -453,14 +451,14 @@ fn test_check_return_expr() {
 
 #[test]
 fn test_check_return_void() {
-    check_ok("fn f() { R }");
+    check_ok("fn f() { return }");
 }
 
 #[test]
 fn test_check_defer() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             D { 0 }
             42
         }
@@ -486,7 +484,7 @@ fn test_check_modulo() {
 fn test_check_bitwise_ops() {
     check_ok(
         r#"
-        F f(a: i64, b: i64) -> i64 {
+        fn f(a: i64, b: i64) -> i64 {
             c := a & b
             d := c | b
             e := d ^ a
@@ -502,7 +500,7 @@ fn test_check_bitwise_ops() {
 fn test_check_comparison_ops() {
     check_ok(
         r#"
-        F f(a: i64, b: i64) -> bool {
+        fn f(a: i64, b: i64) -> bool {
             c := a == b
             d := a != b
             e := a < b
@@ -519,7 +517,7 @@ fn test_check_comparison_ops() {
 fn test_check_logical_and_or() {
     check_ok(
         r#"
-        F f(a: bool, b: bool) -> bool = (a && b) || (!a && !b)
+        fn f(a: bool, b: bool) -> bool = (a && b) || (!a && !b)
     "#,
     );
 }
@@ -546,7 +544,7 @@ fn test_check_unary_not() {
 fn test_check_string_eq() {
     check_ok(
         r#"
-        F f() -> bool {
+        fn f() -> bool {
             a := "hello"
             b := "hello"
             a == b
@@ -559,7 +557,7 @@ fn test_check_string_eq() {
 fn test_check_string_concat() {
     check_ok(
         r#"
-        F f() -> str {
+        fn f() -> str {
             a := "hello"
             b := " world"
             a + b
@@ -576,10 +574,10 @@ fn test_check_string_concat() {
 fn test_check_nested_function_calls() {
     check_ok(
         r#"
-        F inc(x: i64) -> i64 = x + 1
-        F double(x: i64) -> i64 = x * 2
-        F triple(x: i64) -> i64 = x * 3
-        F test() -> i64 = triple(double(inc(0)))
+        fn inc(x: i64) -> i64 = x + 1
+        fn double(x: i64) -> i64 = x * 2
+        fn triple(x: i64) -> i64 = x * 3
+        fn test() -> i64 = triple(double(inc(0)))
     "#,
     );
 }
@@ -588,7 +586,7 @@ fn test_check_nested_function_calls() {
 fn test_check_complex_match_with_binding() {
     check_ok(
         r#"
-        F f(x: i64) -> i64 = M x {
+        fn f(x: i64) -> i64 = match x {
             0 => 100,
             n => n * 2
         }

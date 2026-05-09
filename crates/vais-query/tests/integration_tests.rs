@@ -149,9 +149,9 @@ fn main() -> i64 {
 fn test_pipeline_invalid_source_error() {
     // Test that invalid source produces appropriate errors
     let invalid_sources = vec![
-        ("lex_error.vais", "F broken( -> i64 { }", "parse"),
-        ("parse_error.vais", "F missing_body() -> i64", "parse"),
-        ("type_error.vais", "F type_err() -> i64 { x + y }", "type"),
+        ("lex_error.vais", "fn broken( -> i64 { }", "parse"),
+        ("parse_error.vais", "fn missing_body() -> i64", "parse"),
+        ("type_error.vais", "fn type_err() -> i64 { x + y }", "type"),
     ];
 
     for (path, source, expected_error_kind) in invalid_sources {
@@ -262,7 +262,7 @@ fn test_selective_invalidation_multi_file() {
     }
 
     // Modify file 5
-    let modified_source = "F func5() -> i64 { 999 }";
+    let modified_source = "fn func5() -> i64 { 999 }";
     db.set_source_text("multi5.vais", modified_source);
 
     // Only file 5 should be invalidated
@@ -373,7 +373,7 @@ fn windows_specific() -> i64 { 2 }
 #[test]
 fn test_lexer_error_propagation() {
     // Test that lexer errors are properly wrapped in QueryError::Lex
-    let invalid_source = "F test() -> i64 { \x00\x01\x02 }"; // Invalid characters
+    let invalid_source = "fn test() -> i64 { \x00\x01\x02 }"; // Invalid characters
 
     let db = QueryDatabase::new();
     db.set_source_text("lex_err.vais", invalid_source);
@@ -398,10 +398,10 @@ fn test_lexer_error_propagation() {
 fn test_parser_error_propagation() {
     // Test that parser errors are properly wrapped in QueryError::Parse
     let invalid_sources = vec![
-        "F incomplete_func(",          // Missing closing paren and body
-        "F no_body() -> i64",          // Missing function body
-        "F bad_syntax() -> i64 { = }", // Invalid expression
-        "S BadStruct { field }",       // Missing type annotation
+        "fn incomplete_func(",          // Missing closing paren and body
+        "fn no_body() -> i64",          // Missing function body
+        "fn bad_syntax() -> i64 { = }", // Invalid expression
+        "struct BadStruct { field }",       // Missing type annotation
     ];
 
     for source in invalid_sources {
@@ -431,22 +431,22 @@ fn test_revision_monotonic_increase() {
     let rev0 = db.current_revision();
 
     // Add first file
-    db.set_source_text("rev1.vais", "F a() -> i64 { 1 }");
+    db.set_source_text("rev1.vais", "fn a() -> i64 { 1 }");
     let rev1 = db.current_revision();
     assert!(rev1 > rev0);
 
     // Add second file
-    db.set_source_text("rev2.vais", "F b() -> i64 { 2 }");
+    db.set_source_text("rev2.vais", "fn b() -> i64 { 2 }");
     let rev2 = db.current_revision();
     assert!(rev2 > rev1);
 
     // Modify first file
-    db.set_source_text("rev1.vais", "F a() -> i64 { 10 }");
+    db.set_source_text("rev1.vais", "fn a() -> i64 { 10 }");
     let rev3 = db.current_revision();
     assert!(rev3 > rev2);
 
     // Add third file
-    db.set_source_text("rev3.vais", "F c() -> i64 { 3 }");
+    db.set_source_text("rev3.vais", "fn c() -> i64 { 3 }");
     let rev4 = db.current_revision();
     assert!(rev4 > rev3);
 
@@ -468,7 +468,7 @@ fn test_hash_prevents_unnecessary_invalidation() {
     // Test that re-setting identical source doesn't invalidate cache
     let db = QueryDatabase::new();
 
-    let source = "F stable() -> i64 { 42 }";
+    let source = "fn stable() -> i64 { 42 }";
     db.set_source_text("stable.vais", source);
 
     let hash1 = db.source_hash("stable.vais").unwrap();
@@ -494,7 +494,7 @@ fn test_hash_prevents_unnecessary_invalidation() {
     assert!(db.is_cached("stable.vais", "parse"));
 
     // Modify content slightly
-    db.set_source_text("stable.vais", "F stable() -> i64 { 43 }");
+    db.set_source_text("stable.vais", "fn stable() -> i64 { 43 }");
     let hash3 = db.source_hash("stable.vais").unwrap();
     let rev3 = db.current_revision();
 
@@ -567,7 +567,7 @@ fn test_source_files_list_accuracy() {
 fn test_has_current_source_accuracy() {
     // Test has_current_source hash comparison
     let db = QueryDatabase::new();
-    let source = "F test() -> i64 { 123 }";
+    let source = "fn test() -> i64 { 123 }";
 
     // Before setting
     assert!(!db.has_current_source("test.vais", source));
@@ -577,12 +577,12 @@ fn test_has_current_source_accuracy() {
     assert!(db.has_current_source("test.vais", source));
 
     // Different content
-    assert!(!db.has_current_source("test.vais", "F test() -> i64 { 456 }"));
+    assert!(!db.has_current_source("test.vais", "fn test() -> i64 { 456 }"));
 
     // After modifying
-    db.set_source_text("test.vais", "F test() -> i64 { 999 }");
+    db.set_source_text("test.vais", "fn test() -> i64 { 999 }");
     assert!(!db.has_current_source("test.vais", source));
-    assert!(db.has_current_source("test.vais", "F test() -> i64 { 999 }"));
+    assert!(db.has_current_source("test.vais", "fn test() -> i64 { 999 }"));
 }
 
 #[test]

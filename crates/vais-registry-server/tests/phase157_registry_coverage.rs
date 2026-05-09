@@ -663,7 +663,7 @@ fn test_storage_validate_archive_missing_manifest_err() {
     let storage = PackageStorage::new(dir.path().join("storage")).unwrap();
     let pkg_dir = dir.path().join("pkg");
     std::fs::create_dir_all(&pkg_dir).unwrap();
-    std::fs::write(pkg_dir.join("lib.vais"), "F main() -> i64 { 0 }").unwrap();
+    std::fs::write(pkg_dir.join("lib.vais"), "fn main() -> i64 { 0 }").unwrap();
     let archive = create_archive(&pkg_dir).unwrap();
     assert!(storage.validate_archive(&archive).is_err());
 }

@@ -96,8 +96,8 @@ fn test_resolve_u128() {
 fn test_resolve_struct_type() {
     check_ok(
         r#"
-        S Point { x: i64, y: i64 }
-        F f(p: Point) -> i64 = p.x
+        struct Point { x: i64, y: i64 }
+        fn f(p: Point) -> i64 = p.x
     "#,
     );
 }
@@ -106,13 +106,13 @@ fn test_resolve_struct_type() {
 fn test_resolve_struct_field_types() {
     check_ok(
         r#"
-        S Mixed {
+        struct Mixed {
             a: i64,
             b: f64,
             c: bool,
             d: str
         }
-        F f() -> i64 {
+        fn f() -> i64 {
             m := Mixed { a: 1, b: 2.0, c: true, d: "hi" }
             m.a
         }
@@ -124,9 +124,9 @@ fn test_resolve_struct_field_types() {
 fn test_resolve_nested_struct() {
     check_ok(
         r#"
-        S Inner { val: i64 }
-        S Outer { inner: Inner }
-        F f() -> i64 {
+        struct Inner { val: i64 }
+        struct Outer { inner: Inner }
+        fn f() -> i64 {
             o := Outer { inner: Inner { val: 42 } }
             o.inner.val
         }
@@ -142,8 +142,8 @@ fn test_resolve_nested_struct() {
 fn test_resolve_enum_type() {
     check_ok(
         r#"
-        E Direction { North, South, East, West }
-        F f() -> i64 {
+        enum Direction { North, South, East, West }
+        fn f() -> i64 {
             d := North
             0
         }
@@ -155,8 +155,8 @@ fn test_resolve_enum_type() {
 fn test_resolve_enum_with_data() {
     check_ok(
         r#"
-        E Shape { Circle(i64), Rectangle(i64, i64) }
-        F f() -> i64 {
+        enum Shape { Circle(i64), Rectangle(i64, i64) }
+        fn f() -> i64 {
             s := Circle(5)
             0
         }
@@ -172,8 +172,8 @@ fn test_resolve_enum_with_data() {
 fn test_resolve_type_alias() {
     check_ok(
         r#"
-        T Number = i64
-        F add(a: Number, b: Number) -> Number = a + b
+        type Number = i64
+        fn add(a: Number, b: Number) -> Number = a + b
     "#,
     );
 }
@@ -182,9 +182,9 @@ fn test_resolve_type_alias() {
 fn test_resolve_type_alias_chain() {
     check_ok(
         r#"
-        T Num = i64
-        T Count = Num
-        F f(x: Count) -> Count = x + 1
+        type Num = i64
+        type Count = Num
+        fn f(x: Count) -> Count = x + 1
     "#,
     );
 }
@@ -197,7 +197,7 @@ fn test_resolve_type_alias_chain() {
 fn test_resolve_array_type() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             arr := [1, 2, 3]
             arr[0]
         }
@@ -213,7 +213,7 @@ fn test_resolve_array_type() {
 fn test_resolve_tuple_type() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             t := (1, 2, 3)
             0
         }
@@ -229,10 +229,10 @@ fn test_resolve_tuple_type() {
 fn test_resolve_function_return_types() {
     check_ok(
         r#"
-        F returns_i64() -> i64 = 42
-        F returns_bool() -> bool = true
-        F returns_str() -> str = "hello"
-        F returns_f64() -> f64 = 3.14
+        fn returns_i64() -> i64 = 42
+        fn returns_bool() -> bool = true
+        fn returns_str() -> str = "hello"
+        fn returns_f64() -> f64 = 3.14
     "#,
     );
 }
@@ -246,7 +246,7 @@ fn test_resolve_generic_function() {
     check_ok(
         r#"
         F id<T>(x: T) -> T = x
-        F test() -> i64 = id(42)
+        fn test() -> i64 = id(42)
     "#,
     );
 }
@@ -255,8 +255,8 @@ fn test_resolve_generic_function() {
 fn test_resolve_generic_struct() {
     check_ok(
         r#"
-        S Wrapper<T> { value: T }
-        F test() -> i64 {
+        struct Wrapper<T> { value: T }
+        fn test() -> i64 {
             w := Wrapper { value: 42 }
             w.value
         }
@@ -272,7 +272,7 @@ fn test_resolve_generic_struct() {
 fn test_resolve_variable_in_scope() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := 10
             y := x + 1
             y
@@ -285,7 +285,7 @@ fn test_resolve_variable_in_scope() {
 fn test_resolve_shadowed_variable() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := 10
             x := 20
             x
@@ -298,7 +298,7 @@ fn test_resolve_shadowed_variable() {
 fn test_resolve_block_scope() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := {
                 a := 10
                 b := 20
@@ -318,8 +318,8 @@ fn test_resolve_block_scope() {
 fn test_resolve_forward_reference() {
     check_ok(
         r#"
-        F test() -> i64 = helper(5)
-        F helper(x: i64) -> i64 = x * 2
+        fn test() -> i64 = helper(5)
+        fn helper(x: i64) -> i64 = x * 2
     "#,
     );
 }
@@ -328,8 +328,8 @@ fn test_resolve_forward_reference() {
 fn test_resolve_struct_used_in_function() {
     check_ok(
         r#"
-        F make_point() -> Point = Point { x: 0, y: 0 }
-        S Point { x: i64, y: i64 }
+        fn make_point() -> Point = Point { x: 0, y: 0 }
+        struct Point { x: i64, y: i64 }
     "#,
     );
 }
@@ -342,11 +342,11 @@ fn test_resolve_struct_used_in_function() {
 fn test_resolve_method_on_struct() {
     check_ok(
         r#"
-        S Pair { a: i64, b: i64 }
-        X Pair {
-            F sum(self) -> i64 = self.a + self.b
+        struct Pair { a: i64, b: i64 }
+        impl Pair {
+            fn sum(self) -> i64 = self.a + self.b
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             p := Pair { a: 3, b: 4 }
             p.sum()
         }
@@ -358,14 +358,14 @@ fn test_resolve_method_on_struct() {
 fn test_resolve_trait_method_on_struct() {
     check_ok(
         r#"
-        W Sized {
-            F size(self) -> i64
+        trait Sized {
+            fn size(self) -> i64
         }
-        S Box { width: i64 }
-        X Box: Sized {
-            F size(self) -> i64 = self.width
+        struct Box { width: i64 }
+        impl Box: Sized {
+            fn size(self) -> i64 = self.width
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             b := Box { width: 10 }
             b.size()
         }
@@ -381,8 +381,8 @@ fn test_resolve_trait_method_on_struct() {
 fn test_resolve_empty_struct() {
     check_ok(
         r#"
-        S Empty {}
-        F test() -> i64 {
+        struct Empty {}
+        fn test() -> i64 {
             e := Empty {}
             0
         }
@@ -394,8 +394,8 @@ fn test_resolve_empty_struct() {
 fn test_resolve_recursive_struct_use() {
     check_ok(
         r#"
-        S Node { value: i64 }
-        F test() -> i64 {
+        struct Node { value: i64 }
+        fn test() -> i64 {
             n := Node { value: 42 }
             n.value
         }

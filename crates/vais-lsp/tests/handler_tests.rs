@@ -79,7 +79,7 @@ async fn test_completion_after_dot_method() {
 
     let uri = test_uri("comp_dot");
     // Source where we type a dot after an identifier
-    let source = "S Foo { x: i64 }\nF test() -> i64 {\n    f := Foo { x: 1 }\n    f.\n}\n";
+    let source = "struct Foo { x: i64 }\nF test() -> i64 {\n    f := Foo { x: 1 }\n    f.\n}\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -115,7 +115,7 @@ async fn test_completion_includes_document_symbols() {
     init(&service).await;
 
     let uri = test_uri("comp_sym");
-    let source = "F helper(x: i64) -> i64 = x * 2\nF main() -> i64 {\n    \n}\n";
+    let source = "fn helper(x: i64) -> i64 = x * 2\nF main() -> i64 {\n    \n}\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -148,7 +148,7 @@ async fn test_completion_includes_struct_from_document() {
     init(&service).await;
 
     let uri = test_uri("comp_struct");
-    let source = "S Vec2 { x: f64, y: f64 }\nF main() -> i64 {\n    \n}\n";
+    let source = "struct Vec2 { x: f64, y: f64 }\nF main() -> i64 {\n    \n}\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -185,7 +185,7 @@ async fn test_document_symbols_with_functions() {
     init(&service).await;
 
     let uri = test_uri("sym_fn");
-    let source = "F foo() -> i64 = 1\nF bar(x: i64) -> i64 = x + 1\n";
+    let source = "fn foo() -> i64 = 1\nF bar(x: i64) -> i64 = x + 1\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -216,7 +216,7 @@ async fn test_document_symbols_with_struct_and_enum() {
     init(&service).await;
 
     let uri = test_uri("sym_types");
-    let source = "S Point { x: i64, y: i64 }\nE Direction { North, South, East, West }\n";
+    let source = "struct Point { x: i64, y: i64 }\nE Direction { North, South, East, West }\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -243,7 +243,7 @@ async fn test_document_symbols_with_trait() {
     init(&service).await;
 
     let uri = test_uri("sym_trait");
-    let source = "W Display {\n    F show(self) -> str\n}\n";
+    let source = "trait Display {\n    F show(self) -> str\n}\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -273,7 +273,7 @@ async fn test_goto_definition_function() {
     init(&service).await;
 
     let uri = test_uri("goto_fn");
-    let source = "F helper() -> i64 = 42\nF main() -> i64 {\n    helper()\n}\n";
+    let source = "fn helper() -> i64 = 42\nF main() -> i64 {\n    helper()\n}\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -302,7 +302,7 @@ async fn test_goto_definition_variable() {
     init(&service).await;
 
     let uri = test_uri("goto_var");
-    let source = "F test() -> i64 {\n    x := 42\n    x + 1\n}\n";
+    let source = "fn test() -> i64 {\n    x := 42\n    x + 1\n}\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -332,7 +332,7 @@ async fn test_references_function() {
     init(&service).await;
 
     let uri = test_uri("refs_fn");
-    let source = "F helper() -> i64 = 42\nF a() -> i64 = helper()\nF b() -> i64 = helper()\n";
+    let source = "fn helper() -> i64 = 42\nF a() -> i64 = helper()\nF b() -> i64 = helper()\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -370,7 +370,7 @@ async fn test_signature_help_builtin() {
     init(&service).await;
 
     let uri = test_uri("sig_builtin");
-    let source = "F main() -> i64 {\n    puts(\n}\n";
+    let source = "fn main() -> i64 {\n    puts(\n}\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -401,7 +401,7 @@ async fn test_signature_help_user_function() {
     init(&service).await;
 
     let uri = test_uri("sig_user");
-    let source = "F add(x: i64, y: i64) -> i64 = x + y\nF main() -> i64 {\n    add(\n}\n";
+    let source = "fn add(x: i64, y: i64) -> i64 = x + y\nF main() -> i64 {\n    add(\n}\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -440,7 +440,7 @@ async fn test_document_highlight_variable() {
     init(&service).await;
 
     let uri = test_uri("hl_var");
-    let source = "F test() -> i64 {\n    x := 10\n    x + x\n}\n";
+    let source = "fn test() -> i64 {\n    x := 10\n    x + x\n}\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -502,7 +502,7 @@ async fn test_range_formatting() {
     init(&service).await;
 
     let uri = test_uri("fmt_range");
-    let source = "F foo() -> i64 = 1\nF bar() -> i64 = 2\n";
+    let source = "fn foo() -> i64 = 1\nF bar() -> i64 = 2\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -533,7 +533,7 @@ async fn test_inlay_hints_with_variables() {
     init(&service).await;
 
     let uri = test_uri("inlay_var");
-    let source = "F test() -> i64 {\n    x := 42\n    y := x + 1\n    y\n}\n";
+    let source = "fn test() -> i64 {\n    x := 42\n    y := x + 1\n    y\n}\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -560,7 +560,7 @@ async fn test_folding_ranges_function_blocks() {
     init(&service).await;
 
     let uri = test_uri("fold_fn");
-    let source = "F foo() -> i64 {\n    x := 1\n    x + 1\n}\n\nF bar() -> i64 {\n    42\n}\n";
+    let source = "fn foo() -> i64 {\n    x := 1\n    x + 1\n}\n\nF bar() -> i64 {\n    42\n}\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -591,7 +591,7 @@ async fn test_call_hierarchy_prepare() {
     init(&service).await;
 
     let uri = test_uri("call_hier");
-    let source = "F helper() -> i64 = 42\nF main() -> i64 = helper()\n";
+    let source = "fn helper() -> i64 = 42\nF main() -> i64 = helper()\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -625,7 +625,7 @@ async fn test_document_link_imports() {
     init(&service).await;
 
     let uri = test_uri("doc_link");
-    let source = "U std/math\nF main() -> i64 = 0\n";
+    let source = "use std/math\nF main() -> i64 = 0\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -683,7 +683,7 @@ async fn test_did_change_updates_ast() {
     init(&service).await;
 
     let uri = test_uri("change");
-    let source_v1 = "F foo() -> i64 = 1\n";
+    let source_v1 = "fn foo() -> i64 = 1\n";
     open_doc(&service, &uri, source_v1).await;
 
     // First check symbols
@@ -712,7 +712,7 @@ async fn test_did_change_updates_ast() {
             content_changes: vec![TextDocumentContentChangeEvent {
                 range: None,
                 range_length: None,
-                text: "F foo() -> i64 = 1\nF bar() -> i64 = 2\n".to_string(),
+                text: "fn foo() -> i64 = 1\nF bar() -> i64 = 2\n".to_string(),
             }],
         }),
     )
@@ -748,7 +748,7 @@ async fn test_code_action_no_diagnostics_no_selection() {
     init(&service).await;
 
     let uri = test_uri("ca_empty");
-    let source = "F main() -> i64 = 0\n";
+    let source = "fn main() -> i64 = 0\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -777,7 +777,7 @@ async fn test_code_action_with_selection() {
     init(&service).await;
 
     let uri = test_uri("ca_select");
-    let source = "F main() -> i64 {\n    1 + 2 + 3\n}\n";
+    let source = "fn main() -> i64 {\n    1 + 2 + 3\n}\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -818,7 +818,7 @@ async fn test_code_action_undefined_variable_diagnostic() {
     init(&service).await;
 
     let uri = test_uri("ca_undef");
-    let source = "F main() -> i64 {\n    x + 1\n}\n";
+    let source = "fn main() -> i64 {\n    x + 1\n}\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -864,7 +864,7 @@ async fn test_code_action_undefined_function_import() {
     init(&service).await;
 
     let uri = test_uri("ca_import");
-    let source = "F main() -> i64 {\n    sqrt(4.0)\n}\n";
+    let source = "fn main() -> i64 {\n    sqrt(4.0)\n}\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -914,7 +914,7 @@ async fn test_workspace_symbols_with_document() {
     init(&service).await;
 
     let uri = test_uri("ws_sym");
-    let source = "F compute(x: i64) -> i64 = x * 2\nS Config { debug: bool }\n";
+    let source = "fn compute(x: i64) -> i64 = x * 2\nS Config { debug: bool }\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -941,7 +941,7 @@ async fn test_semantic_tokens_full() {
     init(&service).await;
 
     let uri = test_uri("sem_full");
-    let source = "F add(x: i64, y: i64) -> i64 = x + y\n";
+    let source = "fn add(x: i64, y: i64) -> i64 = x + y\n";
     open_doc(&service, &uri, source).await;
 
     let result = service
@@ -972,7 +972,7 @@ async fn test_type_hierarchy_with_trait() {
     init(&service).await;
 
     let uri = test_uri("type_hier");
-    let source = "W Animal {\n    F speak(self) -> str\n}\nS Dog { name: str }\nX Animal for Dog {\n    F speak(self) -> str = \"woof\"\n}\n";
+    let source = "trait Animal {\n    F speak(self) -> str\n}\nS Dog { name: str }\nX Animal for Dog {\n    F speak(self) -> str = \"woof\"\n}\n";
     open_doc(&service, &uri, source).await;
 
     let result = service

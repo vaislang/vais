@@ -21,7 +21,7 @@ fn check_ok(source: &str) {
 fn test_scope_let_binding() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := 42
             x
         }
@@ -33,7 +33,7 @@ fn test_scope_let_binding() {
 fn test_scope_sequential_bindings() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := 1
             y := 2
             z := 3
@@ -47,7 +47,7 @@ fn test_scope_sequential_bindings() {
 fn test_scope_variable_shadowing() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := 10
             x := 20
             x
@@ -60,7 +60,7 @@ fn test_scope_variable_shadowing() {
 fn test_scope_function_params() {
     check_ok(
         r#"
-        F add(a: i64, b: i64) -> i64 = a + b
+        fn add(a: i64, b: i64) -> i64 = a + b
     "#,
     );
 }
@@ -69,7 +69,7 @@ fn test_scope_function_params() {
 fn test_scope_block_creates_scope() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := 10
             y := {
                 z := 20
@@ -85,10 +85,10 @@ fn test_scope_block_creates_scope() {
 fn test_scope_if_creates_scope() {
     check_ok(
         r#"
-        F f(x: i64) -> i64 {
+        fn f(x: i64) -> i64 {
             I x > 0 {
                 y := x * 2
-                R y
+                return y
             }
             0
         }
@@ -100,7 +100,7 @@ fn test_scope_if_creates_scope() {
 fn test_scope_loop_creates_scope() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             total := mut 0
             L i:0..5 {
                 total = total + i
@@ -115,7 +115,7 @@ fn test_scope_loop_creates_scope() {
 fn test_scope_match_arms() {
     check_ok(
         r#"
-        F f(x: i64) -> i64 = M x {
+        fn f(x: i64) -> i64 = match x {
             0 => {
                 y := 100
                 y
@@ -130,9 +130,9 @@ fn test_scope_match_arms() {
 fn test_scope_nested_functions() {
     check_ok(
         r#"
-        F outer(x: i64) -> i64 = x + 1
-        F inner(y: i64) -> i64 = y * 2
-        F test() -> i64 = outer(inner(5))
+        fn outer(x: i64) -> i64 = x + 1
+        fn inner(y: i64) -> i64 = y * 2
+        fn test() -> i64 = outer(inner(5))
     "#,
     );
 }
@@ -145,7 +145,7 @@ fn test_scope_nested_functions() {
 fn test_free_vars_lambda_captures_outer() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := 10
             g := |y: i64| x + y
             g(5)
@@ -158,7 +158,7 @@ fn test_free_vars_lambda_captures_outer() {
 fn test_free_vars_lambda_no_capture() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             g := |x: i64| x * 2
             g(21)
         }
@@ -170,7 +170,7 @@ fn test_free_vars_lambda_no_capture() {
 fn test_free_vars_lambda_param_shadows_outer() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := 10
             g := |x: i64| x * 2
             g(21)
@@ -183,7 +183,7 @@ fn test_free_vars_lambda_param_shadows_outer() {
 fn test_free_vars_lambda_captures_multiple() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             a := 1
             b := 2
             c := 3
@@ -198,7 +198,7 @@ fn test_free_vars_lambda_captures_multiple() {
 fn test_free_vars_nested_lambda() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := 10
             g := |y: i64| {
                 h := |z: i64| x + y + z
@@ -218,11 +218,11 @@ fn test_free_vars_nested_lambda() {
 fn test_scope_struct_methods() {
     check_ok(
         r#"
-        S Counter { value: i64 }
-        X Counter {
-            F get(self) -> i64 = self.value
+        struct Counter { value: i64 }
+        impl Counter {
+            fn get(self) -> i64 = self.value
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             c := Counter { value: 42 }
             c.get()
         }
@@ -234,14 +234,14 @@ fn test_scope_struct_methods() {
 fn test_scope_trait_methods() {
     check_ok(
         r#"
-        W Show {
-            F show(self) -> i64
+        trait Show {
+            fn show(self) -> i64
         }
-        S Num { x: i64 }
-        X Num: Show {
-            F show(self) -> i64 = self.x
+        struct Num { x: i64 }
+        impl Num: Show {
+            fn show(self) -> i64 = self.x
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             n := Num { x: 5 }
             n.show()
         }
@@ -257,8 +257,8 @@ fn test_scope_trait_methods() {
 fn test_scope_forward_function_ref() {
     check_ok(
         r#"
-        F test() -> i64 = helper(5)
-        F helper(x: i64) -> i64 = x * 2
+        fn test() -> i64 = helper(5)
+        fn helper(x: i64) -> i64 = x * 2
     "#,
     );
 }
@@ -267,8 +267,8 @@ fn test_scope_forward_function_ref() {
 fn test_scope_forward_struct_ref() {
     check_ok(
         r#"
-        F make() -> Point = Point { x: 0, y: 0 }
-        S Point { x: i64, y: i64 }
+        fn make() -> Point = Point { x: 0, y: 0 }
+        struct Point { x: i64, y: i64 }
     "#,
     );
 }
@@ -281,7 +281,7 @@ fn test_scope_forward_struct_ref() {
 fn test_scope_deeply_nested_blocks() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             a := 1
             b := {
                 c := a + 1
@@ -301,11 +301,11 @@ fn test_scope_deeply_nested_blocks() {
 fn test_scope_variables_in_different_branches() {
     check_ok(
         r#"
-        F f(x: i64) -> i64 {
+        fn f(x: i64) -> i64 {
             I x > 0 {
                 a := 10
                 a
-            } E {
+            } else {
                 b := 20
                 b
             }
@@ -318,7 +318,7 @@ fn test_scope_variables_in_different_branches() {
 fn test_scope_loop_variable_reuse() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             total := mut 0
             L i:0..3 {
                 L j:0..3 {
@@ -340,7 +340,7 @@ fn test_scope_global_variable() {
     // Global declarations should parse and type-check the declaration itself
     let source = r#"
         G count: i64 = 0
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#;
     let module = vais_parser::parse(source).unwrap();
     let mut tc = vais_types::TypeChecker::new();
@@ -353,7 +353,7 @@ fn test_scope_multiple_globals() {
     let source = r#"
         G a: i64 = 1
         G b: i64 = 2
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#;
     let module = vais_parser::parse(source).unwrap();
     let mut tc = vais_types::TypeChecker::new();
@@ -368,7 +368,7 @@ fn test_scope_multiple_globals() {
 fn test_scope_empty_block() {
     check_ok(
         r#"
-        F f() -> i64 {
+        fn f() -> i64 {
             x := {}
             0
         }
@@ -380,8 +380,8 @@ fn test_scope_empty_block() {
 fn test_scope_let_with_complex_expr() {
     check_ok(
         r#"
-        F f(a: i64, b: i64) -> i64 {
-            result := I a > b { a * 2 } E { b * 3 }
+        fn f(a: i64, b: i64) -> i64 {
+            result := I a > b { a * 2 } else { b * 3 }
             result
         }
     "#,

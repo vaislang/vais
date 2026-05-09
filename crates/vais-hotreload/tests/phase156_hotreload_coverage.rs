@@ -161,7 +161,7 @@ fn test_config_compile_timeout_default_is_30() {
 fn test_hot_reloader_new_with_valid_source_file() {
     let tmp = TempDir::new().unwrap();
     let src = tmp.path().join("myapp.vais");
-    fs::write(&src, "F main() -> i64 { 99 }").unwrap();
+    fs::write(&src, "fn main() -> i64 { 99 }").unwrap();
 
     let config = HotReloadConfig::new(&src).with_output_dir(tmp.path());
     let reloader = HotReloader::new(config);
@@ -172,7 +172,7 @@ fn test_hot_reloader_new_with_valid_source_file() {
 fn test_hot_reloader_version_is_zero_before_start() {
     let tmp = TempDir::new().unwrap();
     let src = tmp.path().join("app.vais");
-    fs::write(&src, "F main() -> i64 { 0 }").unwrap();
+    fs::write(&src, "fn main() -> i64 { 0 }").unwrap();
 
     let config = HotReloadConfig::new(&src).with_output_dir(tmp.path());
     let reloader = HotReloader::new(config).unwrap();

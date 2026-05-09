@@ -109,7 +109,7 @@ fn test_exhaustive_match_many_arms() {
 fn test_exhaustive_match_enum_all_variants() {
     check_ok(
         r#"
-        E Color { Red, Green, Blue }
+        enum Color { Red, Green, Blue }
         fn test(c: Color) -> i64 {
             match c {
                 Red => 1,
@@ -125,7 +125,7 @@ fn test_exhaustive_match_enum_all_variants() {
 fn test_exhaustive_match_enum_with_wildcard() {
     check_ok(
         r#"
-        E Dir { North, South, East, West }
+        enum Dir { North, South, East, West }
         fn test(d: Dir) -> i64 {
             match d {
                 North => 0,
@@ -340,7 +340,7 @@ fn test_lookup_struct_name() {
 fn test_lookup_enum_name() {
     check_ok(
         r#"
-        E Fruit { Apple, Banana }
+        enum Fruit { Apple, Banana }
         fn test() -> i64 = 0
     "#,
     );
@@ -637,7 +637,7 @@ fn test_scope_if_else_separate_scopes() {
             I b {
                 x := 1
                 x
-            } E {
+            } else {
                 x := 2
                 x
             }
@@ -764,8 +764,7 @@ fn test_tc_recursive_function() {
     check_ok(
         r#"
         fn fib(n: i64) -> i64 {
-            I n <= 1 { n }
-            E { fib(n - 1) + fib(n - 2) }
+            I n <= 1 { n } else { fib(n - 1) + fib(n - 2) }
         }
     "#,
     );
@@ -798,7 +797,7 @@ fn test_tc_struct_with_methods() {
         }
         fn test() -> i64 {
             s := Stack { top: 5 }
-            I s.is_empty() { 0 } E { s.peek() }
+            I s.is_empty() { 0 } else { s.peek() }
         }
     "#,
     );
@@ -819,7 +818,7 @@ fn test_tc_type_alias() {
 fn test_tc_enum_basic() {
     check_ok(
         r#"
-        E Status { Active, Inactive, Pending }
+        enum Status { Active, Inactive, Pending }
         fn test() -> i64 = 0
     "#,
     );
@@ -829,7 +828,7 @@ fn test_tc_enum_basic() {
 fn test_tc_enum_match() {
     check_ok(
         r#"
-        E Light { Red, Yellow, Green }
+        enum Light { Red, Yellow, Green }
         fn test(l: Light) -> i64 {
             match l {
                 Red => 0,
@@ -952,8 +951,7 @@ fn test_tc_self_recursion_operator() {
     check_ok(
         r#"
         fn fact(n: i64) -> i64 {
-            I n <= 1 { 1 }
-            E { n * @(n - 1) }
+            I n <= 1 { 1 } else { n * @(n - 1) }
         }
     "#,
     );
@@ -999,7 +997,7 @@ fn test_tc_complex_match_with_nested_if() {
                 _ => {
                     I x > 100 {
                         100
-                    } E {
+                    } else {
                         x
                     }
                 }
@@ -1023,7 +1021,7 @@ fn test_tc_impl_multiple_methods() {
             c := Calculator { value: 42 }
             I c.is_positive() {
                 c.get()
-            } E {
+            } else {
                 0
             }
         }
@@ -1204,8 +1202,8 @@ fn test_tc_struct_many_fields() {
 fn test_tc_multiple_enums() {
     check_ok(
         r#"
-        E Season { Spring, Summer, Fall, Winter }
-        E Day { Mon, Tue, Wed, Thu, Fri, Sat, Sun }
+        enum Season { Spring, Summer, Fall, Winter }
+        enum Day { Mon, Tue, Wed, Thu, Fri, Sat, Sun }
         fn test() -> i64 = 0
     "#,
     );

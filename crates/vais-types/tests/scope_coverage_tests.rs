@@ -144,7 +144,7 @@ fn test_generic_instantiation_hash() {
 
 #[test]
 fn test_unused_variable_warning() {
-    let source = "fn test() -> i64 { x := 42; R 0 }";
+    let source = "fn test() -> i64 { x := 42; return 0 }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     let _ = tc.check_module(&module);
@@ -160,7 +160,7 @@ fn test_unused_variable_warning() {
 
 #[test]
 fn test_underscore_prefixed_no_warning() {
-    let source = "fn test() -> i64 { _unused := 42; R 0 }";
+    let source = "fn test() -> i64 { _unused := 42; return 0 }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     let _ = tc.check_module(&module);
@@ -174,7 +174,7 @@ fn test_underscore_prefixed_no_warning() {
 
 #[test]
 fn test_variable_used_no_warning() {
-    let source = "fn test() -> i64 { x := 42; R x }";
+    let source = "fn test() -> i64 { x := 42; return x }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     let _ = tc.check_module(&module);
@@ -195,9 +195,9 @@ fn test_variable_used_no_warning() {
 #[test]
 fn test_tuple_pattern_binding() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             p := (1, 2)
-            M p {
+            match p {
                 (a, b) => a + b,
                 _ => 0
             }
@@ -211,8 +211,8 @@ fn test_tuple_pattern_binding() {
 #[test]
 fn test_struct_pattern_binding() {
     let source = r#"
-        S Point { x: i64, y: i64 }
-        F test() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn test() -> i64 {
             p := Point { x: 1, y: 2 }
             p.x + p.y
         }
@@ -225,12 +225,12 @@ fn test_struct_pattern_binding() {
 #[test]
 fn test_variant_pattern_binding() {
     let source = r#"
-        E Shape {
+        enum Shape {
             Circle(i64),
             Rect(i64, i64)
         }
-        F test(s: Shape) -> i64 {
-            M s {
+        fn test(s: Shape) -> i64 {
+            match s {
                 Circle(r) => r,
                 Rect(w, h) => w + h,
                 _ => 0
@@ -245,8 +245,8 @@ fn test_variant_pattern_binding() {
 #[test]
 fn test_or_pattern_binding() {
     let source = r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 1 | 2 | 3 => 10,
                 _ => 0
             }
@@ -260,8 +260,8 @@ fn test_or_pattern_binding() {
 #[test]
 fn test_alias_pattern_binding() {
     let source = r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 n @ 1 => n,
                 n @ _ => n + 1
             }
@@ -275,8 +275,8 @@ fn test_alias_pattern_binding() {
 #[test]
 fn test_wildcard_pattern() {
     let source = r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 _ => 42
             }
         }
@@ -289,8 +289,8 @@ fn test_wildcard_pattern() {
 #[test]
 fn test_range_pattern() {
     let source = r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 0..10 => 1,
                 _ => 0
             }
@@ -310,7 +310,7 @@ fn test_range_pattern() {
 #[test]
 fn test_free_vars_in_lambda() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 10
             f := |y: i64| x + y
             f(5)
@@ -324,7 +324,7 @@ fn test_free_vars_in_lambda() {
 #[test]
 fn test_free_vars_in_nested_block() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 10
             y := {
                 z := x + 1
@@ -341,14 +341,14 @@ fn test_free_vars_in_nested_block() {
 #[test]
 fn test_free_vars_in_if_else() {
     let source = r#"
-        F test(cond: bool) -> i64 {
+        fn test(cond: bool) -> i64 {
             x := 10
             I cond {
                 y := x + 1
-                R y
-            } E {
+                return y
+            } else {
                 z := x + 2
-                R z
+                return z
             }
         }
     "#;
@@ -360,9 +360,9 @@ fn test_free_vars_in_if_else() {
 #[test]
 fn test_free_vars_in_match() {
     let source = r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             y := 100
-            M x {
+            match x {
                 1 => y + 1,
                 2 => y + 2,
                 _ => y
@@ -377,7 +377,7 @@ fn test_free_vars_in_match() {
 #[test]
 fn test_free_vars_in_for_loop() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := mut 0
             L i:0..10 {
                 sum = sum + i
@@ -393,7 +393,7 @@ fn test_free_vars_in_for_loop() {
 #[test]
 fn test_free_vars_in_while_loop() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             L x < 10 {
                 x = x + 1
@@ -413,8 +413,8 @@ fn test_free_vars_in_while_loop() {
 #[test]
 fn test_struct_field_access_in_match() {
     let source = r#"
-        S Point { x: i64, y: i64 }
-        F test() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn test() -> i64 {
             p := Point { x: 3, y: 4 }
             p.x * p.x + p.y * p.y
         }
@@ -427,12 +427,12 @@ fn test_struct_field_access_in_match() {
 #[test]
 fn test_enum_struct_variant_match() {
     let source = r#"
-        E Config {
+        enum Config {
             Debug(i64),
             Release
         }
-        F test(c: Config) -> i64 {
-            M c {
+        fn test(c: Config) -> i64 {
+            match c {
                 Debug(level) => level,
                 Release => 0,
                 _ => 0
@@ -451,8 +451,8 @@ fn test_enum_struct_variant_match() {
 #[test]
 fn test_type_checker_get_functions() {
     let source = r#"
-        F add(x: i64, y: i64) -> i64 = x + y
-        F mul(x: i64, y: i64) -> i64 = x * y
+        fn add(x: i64, y: i64) -> i64 = x + y
+        fn mul(x: i64, y: i64) -> i64 = x * y
     "#;
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
@@ -492,8 +492,8 @@ fn test_type_checker_get_enum() {
 #[test]
 fn test_type_checker_get_type_aliases() {
     let source = r#"
-        T Num = i64
-        F test(x: Num) -> Num = x
+        type Num = i64
+        fn test(x: Num) -> Num = x
     "#;
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
@@ -507,7 +507,7 @@ fn test_type_checker_get_type_aliases() {
 fn test_type_checker_generic_function_detection() {
     let source = r#"
         F id<T>(x: T) -> T = x
-        F add(x: i64, y: i64) -> i64 = x + y
+        fn add(x: i64, y: i64) -> i64 = x + y
     "#;
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
@@ -520,8 +520,8 @@ fn test_type_checker_generic_function_detection() {
 #[test]
 fn test_type_checker_generic_struct_detection() {
     let source = r#"
-        S Pair<T> { first: T, second: T }
-        S Point { x: i64, y: i64 }
+        struct Pair<T> { first: T, second: T }
+        struct Point { x: i64, y: i64 }
     "#;
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
@@ -551,7 +551,7 @@ fn test_type_checker_disable_ownership() {
 
 #[test]
 fn test_type_checker_clear_warnings() {
-    let source = "fn test() -> i64 { x := 42; R 0 }";
+    let source = "fn test() -> i64 { x := 42; return 0 }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     let _ = tc.check_module(&module);
@@ -564,7 +564,7 @@ fn test_type_checker_clear_warnings() {
 fn test_type_checker_generic_instantiations() {
     let source = r#"
         F id<T>(x: T) -> T = x
-        F main() -> i64 = id(42)
+        fn main() -> i64 = id(42)
     "#;
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
@@ -590,8 +590,8 @@ fn test_type_checker_set_imported_item_count() {
 #[test]
 fn test_type_checker_clone_type_defs() {
     let source1 = r#"
-        S Point { x: i64, y: i64 }
-        E Color { Red, Green }
+        struct Point { x: i64, y: i64 }
+        enum Color { Red, Green }
     "#;
     let module1 = parse(source1).unwrap();
     let mut tc1 = TypeChecker::new();
@@ -612,8 +612,8 @@ fn test_type_checker_clone_type_defs() {
 #[test]
 fn test_collected_errors() {
     let source = r#"
-        F test() -> i64 {
-            R undefined_var
+        fn test() -> i64 {
+            return undefined_var
         }
     "#;
     let module = parse(source).unwrap();

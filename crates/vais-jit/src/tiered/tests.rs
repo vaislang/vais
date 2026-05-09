@@ -4,7 +4,7 @@ use vais_parser::parse;
 
 #[test]
 fn test_interpreter_simple() {
-    let source = "F main()->i64{42}";
+    let source = "fn main()->i64{42}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::new();
@@ -16,7 +16,7 @@ fn test_interpreter_simple() {
 
 #[test]
 fn test_interpreter_arithmetic() {
-    let source = "F main()->i64{1+2*3}";
+    let source = "fn main()->i64{1+2*3}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::new();
@@ -28,7 +28,7 @@ fn test_interpreter_arithmetic() {
 
 #[test]
 fn test_interpreter_function_call() {
-    let source = "F add(a:i64,b:i64)->i64{a+b} F main()->i64{add(3,4)}";
+    let source = "fn add(a:i64,b:i64)->i64{a+b} F main()->i64{add(3,4)}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::new();
@@ -40,7 +40,7 @@ fn test_interpreter_function_call() {
 
 #[test]
 fn test_interpreter_if_else() {
-    let source = "F main()->i64{I true{1}E{0}}";
+    let source = "fn main()->i64{I true{1} else {0}}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::new();
@@ -52,7 +52,7 @@ fn test_interpreter_if_else() {
 
 #[test]
 fn test_interpreter_local_variable() {
-    let source = "F main()->i64{x:=10;x+5}";
+    let source = "fn main()->i64{x:=10;x+5}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::new();
@@ -64,7 +64,7 @@ fn test_interpreter_local_variable() {
 
 #[test]
 fn test_profiling_execution_count() {
-    let source = "F foo()->i64{1} F main()->i64{foo();foo();foo();0}";
+    let source = "fn foo()->i64{1} F main()->i64{foo();foo();foo();0}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::new();
@@ -82,7 +82,7 @@ fn test_tier_promotion_detection() {
         baseline_to_optimizing: 10,
     };
 
-    let source = "F hot()->i64{1} F main()->i64{hot();hot();hot();0}";
+    let source = "fn hot()->i64{1} F main()->i64{hot();hot();hot();0}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::with_thresholds(thresholds);
@@ -95,7 +95,7 @@ fn test_tier_promotion_detection() {
 
 #[test]
 fn test_tiered_jit_basic() {
-    let source = "F main()->i64{42}";
+    let source = "fn main()->i64{42}";
     let ast = parse(source).unwrap();
 
     let mut jit = TieredJit::new().unwrap();
@@ -106,7 +106,7 @@ fn test_tiered_jit_basic() {
 
 #[test]
 fn test_function_stats() {
-    let source = "F foo()->i64{1} F main()->i64{foo();0}";
+    let source = "fn foo()->i64{1} F main()->i64{foo();0}";
     let ast = parse(source).unwrap();
 
     let mut jit = TieredJit::new().unwrap();
@@ -137,7 +137,7 @@ fn test_hot_function_detection() {
         baseline_to_optimizing: 50,
     };
 
-    let source = "F loop_func()->i64{x:=0;L{I x>=10{R x} x:=x+1}0} F main()->i64{loop_func()}";
+    let source = "fn loop_func()->i64{x:=0;L{I x>=10{return x} x:=x+1}0} F main()->i64{loop_func()}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::with_thresholds(thresholds.clone());
@@ -159,7 +159,7 @@ fn test_tier_promotion_baseline_to_optimizing() {
         baseline_to_optimizing: 5,
     };
 
-    let source = "F hot()->i64{42} F main()->i64{hot()}";
+    let source = "fn hot()->i64{42} F main()->i64{hot()}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::with_thresholds(thresholds);
@@ -194,7 +194,7 @@ fn test_tier_promotion_baseline_to_optimizing() {
 
 #[test]
 fn test_branch_profiling() {
-    let source = "F branch_test(x:i64)->i64{I x>5{1}E{0}} F main()->i64{branch_test(10)}";
+    let source = "fn branch_test(x:i64)->i64{I x>5{1} else {0}} F main()->i64{branch_test(10)}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::new();
@@ -217,7 +217,7 @@ fn test_branch_profiling() {
 
 #[test]
 fn test_loop_profiling() {
-    let source = "F loop_test()->i64{i:=0;L{I i>=5{R i} i:=i+1}0} F main()->i64{loop_test()}";
+    let source = "fn loop_test()->i64{i:=0;L{I i>=5{return i} i:=i+1}0} F main()->i64{loop_test()}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::new();
@@ -242,7 +242,7 @@ fn test_tiered_jit_with_custom_thresholds() {
         baseline_to_optimizing: 500,
     };
 
-    let source = "F compute()->i64{10+20+30} F main()->i64{compute()}";
+    let source = "fn compute()->i64{10+20+30} F main()->i64{compute()}";
     let ast = parse(source).unwrap();
 
     let mut jit = TieredJit::with_thresholds(thresholds).unwrap();
@@ -257,7 +257,7 @@ fn test_tiered_jit_with_custom_thresholds() {
 
 #[test]
 fn test_hot_path_score_calculation() {
-    let source = "F loop_heavy()->i64{x:=0;L{I x>=100{R x} x:=x+1}0} F main()->i64{loop_heavy()}";
+    let source = "fn loop_heavy()->i64{x:=0;L{I x>=100{return x} x:=x+1}0} F main()->i64{loop_heavy()}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::new();
@@ -284,7 +284,7 @@ fn test_hot_path_score_calculation() {
 
 #[test]
 fn test_deoptimization() {
-    let source = "F hot()->i64{42} F main()->i64{hot()}";
+    let source = "fn hot()->i64{42} F main()->i64{hot()}";
     let ast = parse(source).unwrap();
 
     let mut jit = TieredJit::new().unwrap();
@@ -315,7 +315,7 @@ fn test_deoptimization() {
 
 #[test]
 fn test_deopt_blacklist() {
-    let source = "F unstable()->i64{1} F main()->i64{unstable()}";
+    let source = "fn unstable()->i64{1} F main()->i64{unstable()}";
     let ast = parse(source).unwrap();
 
     let mut jit = TieredJit::new().unwrap();
@@ -393,7 +393,7 @@ fn test_dynamic_tier_promotion_with_score() {
         baseline_to_optimizing: 200,
     };
 
-    let source = "F work()->i64{x:=0;L{I x>=20{R x} x:=x+1}0} F main()->i64{work()}";
+    let source = "fn work()->i64{x:=0;L{I x>=20{return x} x:=x+1}0} F main()->i64{work()}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::with_thresholds(thresholds);
@@ -422,7 +422,7 @@ fn test_dynamic_tier_promotion_with_score() {
 
 #[test]
 fn test_total_loop_iterations() {
-    let source = "F looper()->i64{x:=0;L{I x>=10{R x} x:=x+1}0} F main()->i64{looper()}";
+    let source = "fn looper()->i64{x:=0;L{I x>=10{return x} x:=x+1}0} F main()->i64{looper()}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::new();
@@ -443,7 +443,7 @@ fn test_total_loop_iterations() {
 
 #[test]
 fn test_get_all_stats() {
-    let source = "F foo()->i64{1} F bar()->i64{2} F main()->i64{foo()+bar()}";
+    let source = "fn foo()->i64{1} F bar()->i64{2} F main()->i64{foo()+bar()}";
     let ast = parse(source).unwrap();
 
     let mut jit = TieredJit::new().unwrap();
@@ -460,7 +460,7 @@ fn test_get_all_stats() {
 
 #[test]
 fn test_branch_bias_score() {
-    let source = "F biased(x:i64)->i64{I x>0{1}E{0}} F main()->i64{biased(10)}";
+    let source = "fn biased(x:i64)->i64{I x>0{1} else {0}} F main()->i64{biased(10)}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::new();
@@ -485,7 +485,7 @@ fn test_branch_bias_score() {
 
 #[test]
 fn test_last_promoted_at() {
-    let source = "F func()->i64{1} F main()->i64{func()}";
+    let source = "fn func()->i64{1} F main()->i64{func()}";
     let ast = parse(source).unwrap();
 
     let mut jit = TieredJit::new().unwrap();

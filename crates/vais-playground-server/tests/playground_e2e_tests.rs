@@ -83,14 +83,14 @@ fn vaisc_available() -> bool {
 #[test]
 fn test_compile_request_serialization_defaults() {
     let req = CompileRequest {
-        source: "F main() { }".to_string(),
+        source: "fn main() { }".to_string(),
         optimize: None,
         emit_ir: None,
         execute: None,
     };
 
     let json = serde_json::to_string(&req).expect("Failed to serialize");
-    assert!(json.contains("\"source\":\"F main() { }\""));
+    assert!(json.contains("\"source\":\"fn main() { }\""));
     // Optional fields should not appear when None
     assert!(!json.contains("optimize"));
     assert!(!json.contains("emit_ir"));
@@ -100,14 +100,14 @@ fn test_compile_request_serialization_defaults() {
 #[test]
 fn test_compile_request_serialization_all_fields() {
     let req = CompileRequest {
-        source: "F main() { print(42) }".to_string(),
+        source: "fn main() { print(42) }".to_string(),
         optimize: Some(true),
         emit_ir: Some(true),
         execute: Some(false),
     };
 
     let json = serde_json::to_string(&req).expect("Failed to serialize");
-    assert!(json.contains("\"source\":\"F main() { print(42) }\""));
+    assert!(json.contains("\"source\":\"fn main() { print(42) }\""));
     assert!(json.contains("\"optimize\":true"));
     assert!(json.contains("\"emit_ir\":true"));
     assert!(json.contains("\"execute\":false"));
@@ -116,13 +116,13 @@ fn test_compile_request_serialization_all_fields() {
 #[test]
 fn test_compile_wasm_request_serialization() {
     let req = CompileWasmRequest {
-        source: "F main() { }".to_string(),
+        source: "fn main() { }".to_string(),
         target: Some("wasm32-unknown-unknown".to_string()),
         optimize: Some(false),
     };
 
     let json = serde_json::to_string(&req).expect("Failed to serialize");
-    assert!(json.contains("\"source\":\"F main() { }\""));
+    assert!(json.contains("\"source\":\"fn main() { }\""));
     assert!(json.contains("\"target\":\"wasm32-unknown-unknown\""));
     assert!(json.contains("\"optimize\":false"));
 }
@@ -207,7 +207,7 @@ fn test_source_size_under_limit() {
 fn test_source_size_validation_logic() {
     // Test the size limit validation logic
     let max_size = 64 * 1024; // 64KB
-    let under_limit = "F main() { }".to_string();
+    let under_limit = "fn main() { }".to_string();
     let over_limit = "# padding\n".repeat(10000); // ~100KB
 
     assert!(under_limit.len() < max_size);
@@ -266,7 +266,7 @@ fn test_vaisc_compile_simple_source() {
     let source_path = temp_dir.path().join("test.vais");
     let output_path = temp_dir.path().join("test");
 
-    std::fs::write(&source_path, "F main() { }").expect("Failed to write source");
+    std::fs::write(&source_path, "fn main() { }").expect("Failed to write source");
 
     let output = Command::new("vaisc")
         .arg(&source_path)
@@ -299,7 +299,7 @@ fn test_vaisc_error_format() {
     let source_path = temp_dir.path().join("test.vais");
 
     // Invalid syntax to trigger error
-    std::fs::write(&source_path, "F main( { }").expect("Failed to write source");
+    std::fs::write(&source_path, "fn main( { }").expect("Failed to write source");
 
     let output = Command::new("vaisc")
         .arg(&source_path)
@@ -463,7 +463,7 @@ fn test_wasm_target_variants() {
 
     for target in targets {
         let req = CompileWasmRequest {
-            source: "F main() { }".to_string(),
+            source: "fn main() { }".to_string(),
             target: Some(target.to_string()),
             optimize: None,
         };
@@ -666,7 +666,7 @@ fn test_empty_source_handling() {
 #[test]
 fn test_special_characters_in_source() {
     // Test that source with special characters is properly escaped
-    let source = "F main() {\n    print(\"Hello, \\\"World\\\"!\")\n}".to_string();
+    let source = "fn main() {\n    print(\"Hello, \\\"World\\\"!\")\n}".to_string();
     let req = CompileRequest {
         source,
         optimize: None,

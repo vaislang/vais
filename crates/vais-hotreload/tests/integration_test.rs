@@ -8,7 +8,7 @@ fn test_file_watcher_basic() {
     let test_file = temp_dir.path().join("test.vais");
 
     // Create initial file
-    fs::write(&test_file, "F main() -> i64 { 0 }").unwrap();
+    fs::write(&test_file, "fn main() -> i64 { 0 }").unwrap();
 
     // Create watcher
     let mut watcher = FileWatcher::new().unwrap();
@@ -109,7 +109,7 @@ fn test_hot_reload_config_all_methods_chained() {
 fn test_file_watcher_watch_unwatch_cycle() {
     let temp_dir = TempDir::new().unwrap();
     let test_file = temp_dir.path().join("cycle.vais");
-    fs::write(&test_file, "F main() -> i64 { 1 }").unwrap();
+    fs::write(&test_file, "fn main() -> i64 { 1 }").unwrap();
 
     let mut watcher = FileWatcher::new().unwrap();
 
@@ -132,8 +132,8 @@ fn test_file_watcher_watched_paths_verification() {
     let file1 = temp_dir.path().join("file1.vais");
     let file2 = temp_dir.path().join("file2.vais");
 
-    fs::write(&file1, "F foo() -> i64 { 1 }").unwrap();
-    fs::write(&file2, "F bar() -> i64 { 2 }").unwrap();
+    fs::write(&file1, "fn foo() -> i64 { 1 }").unwrap();
+    fs::write(&file2, "fn bar() -> i64 { 2 }").unwrap();
 
     let mut watcher = FileWatcher::new().unwrap();
     watcher.watch(&file1).unwrap();
@@ -258,7 +258,7 @@ fn test_hot_reloader_new_config_validation() {
 
     let temp_dir = TempDir::new().unwrap();
     let source_file = temp_dir.path().join("app.vais");
-    fs::write(&source_file, "F main() -> i64 { 42 }").unwrap();
+    fs::write(&source_file, "fn main() -> i64 { 42 }").unwrap();
 
     let config = HotReloadConfig::new(&source_file)
         .with_output_dir(temp_dir.path())

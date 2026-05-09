@@ -115,7 +115,7 @@ fn test_check_fn_mixed_params() {
     check_ok(
         r#"
         fn mixed(n: i64, flag: bool) -> i64 {
-            I flag { n * 2 } E { n }
+            I flag { n * 2 } else { n }
         }
     "#,
     );
@@ -229,7 +229,7 @@ fn test_check_fn_if_else_return() {
     check_ok(
         r#"
         fn abs(x: i64) -> i64 {
-            I x < 0 { 0 - x } E { x }
+            I x < 0 { 0 - x } else { x }
         }
     "#,
     );
@@ -393,13 +393,13 @@ fn test_check_fn_deeply_nested_if() {
                 I x > 10 {
                     I x > 100 {
                         3
-                    } E {
+                    } else {
                         2
                     }
-                } E {
+                } else {
                     1
                 }
-            } E {
+            } else {
                 0
             }
         }
