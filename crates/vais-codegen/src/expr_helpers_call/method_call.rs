@@ -884,7 +884,12 @@ impl CodeGenerator {
         };
         let full_method_name = if let ResolvedType::Named { name, generics } = inner_recv_type {
             let resolved = self.resolve_struct_name(name);
-            let base = format!("{}_{}", resolved, method_name);
+            // Method names are mangled as `<base>_<method>$<typeargs>` (e.g.
+            // `Vec_push$u8`), not `<specialized>_<method>` (e.g.
+            // `Vec$u8_push`). Use the base struct name here even though
+            // `resolved` may already be specialized — `mangle_name` below
+            // appends the type-arg suffix.
+            let base = format!("{}_{}", name, method_name);
 
             if !generics.is_empty() {
                 // Check if generics are all concrete (not Generic("T") or Var)
@@ -917,13 +922,17 @@ impl CodeGenerator {
                         // that referenced this call (e.g., Vec_push$T body calling
                         // @.grow()) was specialized without also scheduling the
                         // inner generic method. See ROADMAP Phase 191 #10.
+                        // `try_generate_vec_specialization` expects the base
+                        // struct name (e.g. "Vec") — passing the specialized
+                        // form ("Vec$u8") would miss the method-body lookup
+                        // and silently emit an unmangled callsite.
                         self.try_generate_vec_specialization(
-                            &resolved,
+                            name,
                             method_name,
                             generics,
                             counter,
                         )
-                        .unwrap_or(base)
+                        .unwrap_or_else(|| mangled.clone())
                     }
                 } else {
                     // Unresolved generics (e.g., Generic("T")): use fn_instantiations
