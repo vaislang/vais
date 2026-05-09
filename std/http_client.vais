@@ -825,13 +825,88 @@ impl HttpClient {
         send_buf := __malloc(CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
         req_len := request.serialize(send_buf, CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
 
-        # HTTPS is intentionally not promoted by the plain HTTP client runtime
-        # gate. Return a stable TLS error until std/tls is certified together
-        # with this client.
+        # HTTPS path: full TLS handshake via tls_runtime.c
         I is_https == 1 {
+            # TLS handshake
+            ctx := __tls_ctx_new(0)
+            I ctx == 0 {
+                __free(send_buf)
+                __tcp_close(fd)
+                return HttpResponse::error(CLIENT_ERR_TLS_INIT)
+            }
+            __tls_ctx_set_default_verify(ctx)
+
+            ssl := __tls_new(ctx, fd)
+            I ssl == 0 {
+                __tls_ctx_free(ctx)
+                __free(send_buf)
+                __tcp_close(fd)
+                return HttpResponse::error(CLIENT_ERR_TLS_INIT)
+            }
+            __tls_set_hostname(ssl, host)
+            hs := __tls_connect(ssl)
+            I hs <= 0 {
+                __tls_free(ssl)
+                __tls_ctx_free(ctx)
+                __free(send_buf)
+                __tcp_close(fd)
+                return HttpResponse::error(CLIENT_ERR_TLS_HANDSHAKE)
+            }
+
+            # Send request via TLS
+            sent := __tls_write(ssl, send_buf, req_len)
             __free(send_buf)
+            I sent < 0 {
+                __tls_shutdown(ssl)
+                __tls_free(ssl)
+                __tls_ctx_free(ctx)
+                __tcp_close(fd)
+                return HttpResponse::error(CLIENT_ERR_SEND)
+            }
+
+            # Recv loop via TLS
+            recv_buf := __malloc(CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
+            total_recv := mut 0
+            last_recv := mut 0
+            LW true {
+                n := __tls_read(ssl, recv_buf + total_recv, CLIENT_RECV_CHUNK)
+                I n <= 0 {
+                    last_recv = n
+                    B
+                }
+                total_recv = total_recv + n
+                header_end := __find_header_end(recv_buf, total_recv)
+                I header_end >= 0 {
+                    content_len := __hc_get_content_length(recv_buf, total_recv)
+                    I content_len >= 0 {
+                        body_received := total_recv - header_end
+                        I body_received >= content_len {
+                            B
+                        }
+                    } else {
+                        B
+                    }
+                }
+            }
+
+            # Cleanup TLS
+            __tls_shutdown(ssl)
+            __tls_free(ssl)
+            __tls_ctx_free(ctx)
+
+            I total_recv <= 0 {
+                __tcp_close(fd)
+                __free(recv_buf)
+                I last_recv < 0 & timeout_ms > 0 {
+                    return HttpResponse::error(CLIENT_ERR_TIMEOUT)
+                }
+                return HttpResponse::error(CLIENT_ERR_RECV)
+            }
+
+            response := __hc_parse_response(recv_buf, total_recv)
+            __free(recv_buf)
             __tcp_close(fd)
-            return HttpResponse::error(CLIENT_ERR_TLS_INIT)
+            return response
         } else {
             # Plain HTTP path (unchanged)
             sent := __tcp_send(fd, send_buf, req_len)
@@ -1567,6 +1642,19 @@ impl fn __str_to_i64(s: str) -> i64
 # Memory operations
 impl fn __malloc(size: i64) -> i64
 impl fn __free(ptr: i64) -> i64
+
+# TLS operations (from tls_runtime.c) — used by the HTTPS path
+impl fn __tls_ctx_new(mode: i64) -> i64
+impl fn __tls_ctx_free(handle: i64) -> i64
+impl fn __tls_ctx_set_default_verify(handle: i64) -> i64
+impl fn __tls_ctx_set_verify(handle: i64, mode: i64) -> i64
+impl fn __tls_new(ctx: i64, fd: i64) -> i64
+impl fn __tls_free(handle: i64) -> i64
+impl fn __tls_set_hostname(handle: i64, hostname: str) -> i64
+impl fn __tls_connect(handle: i64) -> i64
+impl fn __tls_read(handle: i64, buf: i64, len: i64) -> i64
+impl fn __tls_write(handle: i64, data: i64, len: i64) -> i64
+impl fn __tls_shutdown(handle: i64) -> i64
 impl fn __memcpy(dst: i64, src: i64, len: i64) -> i64
 impl fn __memset(dst: i64, value: i64, len: i64) -> i64
 impl fn __store_byte(ptr: i64, value: i64) -> i64

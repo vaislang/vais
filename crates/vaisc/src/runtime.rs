@@ -31,7 +31,15 @@ pub(crate) fn get_runtime_for_module(module_path: &str) -> Option<RuntimeInfo> {
         "std::http_client" => Some(RuntimeInfo {
             file: "http_client_runtime.c",
             needs_pthread: false,
-            libs: &[],
+            // HTTPS path now uses TLS via tls_runtime.c; mirror the OpenSSL
+            // library search hints from the std::tls entry so programs using
+            // http_client with HTTPS resolve -lssl / -lcrypto on macOS Homebrew.
+            libs: &[
+                "-L/opt/homebrew/opt/openssl/lib",
+                "-L/usr/local/opt/openssl/lib",
+                "-lssl",
+                "-lcrypto",
+            ],
         }),
         "std::websocket" => Some(RuntimeInfo {
             file: "websocket_runtime.c",
@@ -158,7 +166,9 @@ pub(crate) fn runtime_files_for_module(
     primary_file: &'static str,
 ) -> Vec<&'static str> {
     match module_path {
-        "std::http_client" => vec!["http_runtime.c", primary_file],
+        // std::http_client HTTPS path calls __tls_* symbols from tls_runtime.c.
+        // The plain HTTP path uses helpers from http_runtime.c.
+        "std::http_client" => vec!["http_runtime.c", "tls_runtime.c", primary_file],
         // std::tls reuses TCP helpers from http_runtime.c (`__tcp_close` etc.)
         // and connection-establishment from http_client_runtime.c (`__hc_tcp_connect`).
         // Linking only tls_runtime.c leaves these two helpers as undefined symbols.
