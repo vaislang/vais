@@ -8,6 +8,7 @@
 #   INTEGRITY_STD_MIN=82                   minimum std_files pass count
 #   INTEGRITY_VAISDB_MIN=261               minimum vaisdb_files pass count
 #   INTEGRITY_HTTP_CLIENT_RUNTIME_MIN=1    minimum http_client runtime smoke
+#   INTEGRITY_TLS_RUNTIME_MIN=1            minimum std/tls runtime smoke
 #   INTEGRITY_VAISDB_RUNTIME_MIN=34        minimum vaisdb runtime smoke
 #   INTEGRITY_SERVER_RUNTIME_MIN=13        minimum vais-server runtime smoke
 #   INTEGRITY_WEB_RUNTIME_MIN=61           minimum vais-web runtime smoke
@@ -54,6 +55,7 @@ INTEGRITY_VAISDB_MIN="${INTEGRITY_VAISDB_MIN:-261}"
 # catch a silent reduction in pass count if the suite count itself shrank.
 # These minima are the current promoted gate counts as of 2026-05-03.
 INTEGRITY_HTTP_CLIENT_RUNTIME_MIN="${INTEGRITY_HTTP_CLIENT_RUNTIME_MIN:-1}"
+INTEGRITY_TLS_RUNTIME_MIN="${INTEGRITY_TLS_RUNTIME_MIN:-1}"
 INTEGRITY_VAISDB_RUNTIME_MIN="${INTEGRITY_VAISDB_RUNTIME_MIN:-34}"
 INTEGRITY_SERVER_RUNTIME_MIN="${INTEGRITY_SERVER_RUNTIME_MIN:-13}"
 INTEGRITY_WEB_RUNTIME_MIN="${INTEGRITY_WEB_RUNTIME_MIN:-61}"
@@ -174,6 +176,15 @@ echo "check-integrity: running std/http_client runtime smoke tests..."
 
 HTTP_CLIENT_RUNTIME_EXIT=0
 cargo test -p vaisc --test e2e --release phase_http_client_runtime -- --nocapture --test-threads=1 2>&1 | tee "${HTTP_CLIENT_RUNTIME_LOG}" || HTTP_CLIENT_RUNTIME_EXIT=$?
+
+# ---------------------------------------------------------------------------
+# Run std/tls runtime smoke tests (TLS Phase A entry, master-plan v74)
+# ---------------------------------------------------------------------------
+TLS_RUNTIME_LOG="/tmp/tls-runtime-smoke.log"
+echo "check-integrity: running std/tls runtime smoke tests..."
+
+TLS_RUNTIME_EXIT=0
+cargo test -p vaisc --test e2e --release phase_tls_runtime -- --nocapture --test-threads=1 2>&1 | tee "${TLS_RUNTIME_LOG}" || TLS_RUNTIME_EXIT=$?
 
 # ---------------------------------------------------------------------------
 # Run VaisDB runtime smoke tests
@@ -454,6 +465,11 @@ HTTP_CLIENT_RUNTIME_PASSED="${HTTP_CLIENT_RUNTIME_PASSED:-0}"
 HTTP_CLIENT_RUNTIME_TOTAL="$(parse_cargo_running "${HTTP_CLIENT_RUNTIME_LOG}")"
 HTTP_CLIENT_RUNTIME_TOTAL="${HTTP_CLIENT_RUNTIME_TOTAL:-${HTTP_CLIENT_RUNTIME_PASSED}}"
 HTTP_CLIENT_RUNTIME_TOTAL="${HTTP_CLIENT_RUNTIME_TOTAL:-0}"
+TLS_RUNTIME_PASSED="$(parse_cargo_passed "${TLS_RUNTIME_LOG}")"
+TLS_RUNTIME_PASSED="${TLS_RUNTIME_PASSED:-0}"
+TLS_RUNTIME_TOTAL="$(parse_cargo_running "${TLS_RUNTIME_LOG}")"
+TLS_RUNTIME_TOTAL="${TLS_RUNTIME_TOTAL:-${TLS_RUNTIME_PASSED}}"
+TLS_RUNTIME_TOTAL="${TLS_RUNTIME_TOTAL:-0}"
 VAISDB_RUNTIME_PASSED="$(parse_cargo_passed "${VAISDB_RUNTIME_LOG}")"
 VAISDB_RUNTIME_PASSED="${VAISDB_RUNTIME_PASSED:-0}"
 VAISDB_RUNTIME_TOTAL="$(parse_cargo_running "${VAISDB_RUNTIME_LOG}")"
@@ -508,6 +524,10 @@ fi
 if [ -n "${HTTP_CLIENT_RUNTIME_PASSED}" ] && [ "${HTTP_CLIENT_RUNTIME_PASSED}" -lt "${INTEGRITY_HTTP_CLIENT_RUNTIME_MIN}" ]; then
     REGRESSION=1
     REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: http_client_runtime baseline=${INTEGRITY_HTTP_CLIENT_RUNTIME_MIN} current=${HTTP_CLIENT_RUNTIME_PASSED}/${HTTP_CLIENT_RUNTIME_TOTAL}\n"
+fi
+if [ -n "${TLS_RUNTIME_PASSED}" ] && [ "${TLS_RUNTIME_PASSED}" -lt "${INTEGRITY_TLS_RUNTIME_MIN}" ]; then
+    REGRESSION=1
+    REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: tls_runtime baseline=${INTEGRITY_TLS_RUNTIME_MIN} current=${TLS_RUNTIME_PASSED}/${TLS_RUNTIME_TOTAL}\n"
 fi
 if [ -n "${VAISDB_RUNTIME_PASSED}" ] && [ "${VAISDB_RUNTIME_PASSED}" -lt "${INTEGRITY_VAISDB_RUNTIME_MIN}" ]; then
     REGRESSION=1
@@ -582,6 +602,12 @@ fi
 if [ "${HTTP_CLIENT_RUNTIME_EXIT}" -ne 0 ]; then
     echo ""
     echo "HTTP CLIENT RUNTIME SMOKE FAILED: cargo test phase_http_client_runtime exited ${HTTP_CLIENT_RUNTIME_EXIT}"
+    OVERALL_EXIT=1
+fi
+
+if [ "${TLS_RUNTIME_EXIT}" -ne 0 ]; then
+    echo ""
+    echo "TLS RUNTIME SMOKE FAILED: cargo test phase_tls_runtime exited ${TLS_RUNTIME_EXIT}"
     OVERALL_EXIT=1
 fi
 
@@ -674,6 +700,12 @@ print_gate_summary() {
         echo "HTTP CLIENT RUNTIME FAIL: exit=${HTTP_CLIENT_RUNTIME_EXIT} smoke=${HTTP_CLIENT_RUNTIME_PASSED}/${HTTP_CLIENT_RUNTIME_TOTAL}"
     fi
 
+    if [ "${TLS_RUNTIME_EXIT}" -eq 0 ]; then
+        echo "TLS RUNTIME OK: smoke=${TLS_RUNTIME_PASSED}/${TLS_RUNTIME_TOTAL}"
+    else
+        echo "TLS RUNTIME FAIL: exit=${TLS_RUNTIME_EXIT} smoke=${TLS_RUNTIME_PASSED}/${TLS_RUNTIME_TOTAL}"
+    fi
+
     if [ "${VAISDB_RUNTIME_EXIT}" -eq 0 ]; then
         echo "VAISDB RUNTIME OK: smoke=${VAISDB_RUNTIME_PASSED}/${VAISDB_RUNTIME_TOTAL}"
     else
@@ -713,7 +745,7 @@ print_gate_summary() {
 
 if [ "${OVERALL_EXIT}" -eq 0 ]; then
     print_gate_summary
-    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok web_unit=ok web_packages=ok cross_package_schema=ok"
+    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok tls_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok web_unit=ok web_packages=ok cross_package_schema=ok"
     exit 0
 else
     print_gate_summary
