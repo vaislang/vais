@@ -12,7 +12,7 @@
 #   INTEGRITY_SERVER_RUNTIME_MIN=13        minimum vais-server runtime smoke
 #   INTEGRITY_WEB_RUNTIME_MIN=61           minimum vais-web runtime smoke
 #   INTEGRITY_WEB_UNIT_MIN=390             minimum vais-web unit tests
-#   INTEGRITY_WEB_PACKAGES_MIN=3087        minimum vais-web non-kit packages tests
+#   INTEGRITY_WEB_PACKAGES_MIN=3272        minimum vais-web non-kit packages tests
 #   INTEGRITY_BACKEND_PHASE158_MIN=18      minimum phase158 backend smoke
 #   INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=2   minimum cross_package_schema gate (positive + negative)
 #
@@ -58,7 +58,7 @@ INTEGRITY_VAISDB_RUNTIME_MIN="${INTEGRITY_VAISDB_RUNTIME_MIN:-34}"
 INTEGRITY_SERVER_RUNTIME_MIN="${INTEGRITY_SERVER_RUNTIME_MIN:-13}"
 INTEGRITY_WEB_RUNTIME_MIN="${INTEGRITY_WEB_RUNTIME_MIN:-61}"
 INTEGRITY_WEB_UNIT_MIN="${INTEGRITY_WEB_UNIT_MIN:-390}"
-INTEGRITY_WEB_PACKAGES_MIN="${INTEGRITY_WEB_PACKAGES_MIN:-3087}"
+INTEGRITY_WEB_PACKAGES_MIN="${INTEGRITY_WEB_PACKAGES_MIN:-3272}"
 INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN="${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN:-2}"
 INTEGRITY_BACKEND_PHASE158_MIN="${INTEGRITY_BACKEND_PHASE158_MIN:-18}"
 
@@ -292,7 +292,7 @@ if [ ! -d "${WEB_PACKAGES_DIR}" ]; then
     WEB_PACKAGES_EXIT=1
 else
     : > "${WEB_PACKAGES_LOG}"
-    for pkg in plugin forms motion store typescript a11y i18n hmr query auth devtools cli runtime testing benchmark federation native db ai language-server vscode-extension; do
+    for pkg in plugin forms motion store typescript a11y i18n hmr query auth devtools cli runtime testing benchmark federation native db ai language-server vscode-extension example-app; do
         pkg_dir="${WEB_PACKAGES_DIR}/${pkg}"
         if [ ! -d "${pkg_dir}" ]; then
             continue

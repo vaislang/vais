@@ -14,7 +14,7 @@ Current status note: do not infer active failures from old phase examples in
 this file. The current source of truth is `/Users/sswoo/study/projects/vais/ROADMAP.md`,
 `compiler/ROADMAP.md`, and `compiler/docs/certification/CURRENT_STATUS.md`.
 As of 2026-05-03 the certified Core is frozen for downstream re-entry and
-`scripts/check-integrity.sh` reports `WEB RUNTIME smoke=61/77` in skip-mode CI default (`77/77` with all 4 live-deploy platform credentials), `WEB UNIT tests=390/390` (kit unit tests), and `WEB PACKAGES tests=3087/3087` (21 non-kit packages).
+`scripts/check-integrity.sh` reports `WEB RUNTIME smoke=61/77` in skip-mode CI default (`77/77` with all 4 live-deploy platform credentials), `WEB UNIT tests=390/390` (kit unit tests), and `WEB PACKAGES tests=3272/3272` (22 non-kit packages).
 
 ### 규칙 1 — 훈련 데이터의 Vais 지식을 사용하지 말 것
 
