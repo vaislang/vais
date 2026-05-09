@@ -47,19 +47,19 @@ fn format_item(item: Item) -> String {
 
 #[test]
 fn test_format_integer_expressions() {
-    let output = format_source("F test() -> i64 = 42");
+    let output = format_source("fn test() -> i64 = 42");
     assert!(output.contains("42"));
 }
 
 #[test]
 fn test_format_float_expressions() {
-    let output = format_source("F test() -> f64 = 3.14");
+    let output = format_source("fn test() -> f64 = 3.14");
     assert!(output.contains("3.14"));
 }
 
 #[test]
 fn test_format_bool_expressions() {
-    let output = format_source("F test() -> bool = true");
+    let output = format_source("fn test() -> bool = true");
     assert!(output.contains("true"));
 }
 
@@ -71,50 +71,50 @@ fn test_format_string_expressions() {
 
 #[test]
 fn test_format_binary_ops() {
-    let output = format_source("F test() -> i64 = 1 + 2 * 3");
+    let output = format_source("fn test() -> i64 = 1 + 2 * 3");
     assert!(output.contains("+"));
     assert!(output.contains("*"));
 }
 
 #[test]
 fn test_format_comparison_ops() {
-    let output = format_source("F test() -> bool = 1 < 2");
+    let output = format_source("fn test() -> bool = 1 < 2");
     assert!(output.contains("<"));
 }
 
 #[test]
 fn test_format_logical_ops() {
-    let output = format_source("F test() -> bool = true && false || true");
+    let output = format_source("fn test() -> bool = true && false || true");
     assert!(output.contains("&&") || output.contains("||"));
 }
 
 #[test]
 fn test_format_bitwise_ops() {
-    let output = format_source("F test() -> i64 = 255 & 15 | 48 ^ 16");
+    let output = format_source("fn test() -> i64 = 255 & 15 | 48 ^ 16");
     assert!(output.contains("&") || output.contains("|") || output.contains("^"));
 }
 
 #[test]
 fn test_format_shift_ops() {
-    let output = format_source("F test() -> i64 = 1 << 8");
+    let output = format_source("fn test() -> i64 = 1 << 8");
     assert!(output.contains("<<"));
 }
 
 #[test]
 fn test_format_unary_neg() {
-    let output = format_source("F test() -> i64 = -42");
+    let output = format_source("fn test() -> i64 = -42");
     assert!(output.contains("-"));
 }
 
 #[test]
 fn test_format_unary_not() {
-    let output = format_source("F test() -> bool = !true");
+    let output = format_source("fn test() -> bool = !true");
     assert!(output.contains("!"));
 }
 
 #[test]
 fn test_format_ternary() {
-    let output = format_source("F test(x: i64) -> i64 = x > 0 ? x : 0");
+    let output = format_source("fn test(x: i64) -> i64 = x > 0 ? x : 0");
     assert!(output.contains("?"));
 }
 
@@ -125,14 +125,14 @@ fn test_format_if_else() {
         fn test(x: i64) -> i64 {
             I x > 0 {
                 return x
-            } E {
+            } else {
                 return 0
             }
         }
     "#,
     );
     assert!(output.contains("I "));
-    assert!(output.contains("E {"));
+    assert!(output.contains("else {"));
 }
 
 #[test]
@@ -142,15 +142,15 @@ fn test_format_if_elseif_else() {
         fn test(x: i64) -> i64 {
             I x > 0 {
                 return 1
-            } E I x < 0 {
+            } else if x < 0 {
                 return -1
-            } E {
+            } else {
                 return 0
             }
         }
     "#,
     );
-    assert!(output.contains("E I"));
+    assert!(output.contains("else if"));
 }
 
 #[test]
@@ -254,13 +254,13 @@ fn test_format_index_access() {
 
 #[test]
 fn test_format_array_literal() {
-    let output = format_source("F test() -> i64 { arr := [1, 2, 3]; R 0 }");
+    let output = format_source("fn test() -> i64 { arr := [1, 2, 3]; return 0 }");
     assert!(output.contains("[1, 2, 3]"));
 }
 
 #[test]
 fn test_format_tuple_literal() {
-    let output = format_source("F test() -> i64 { t := (1, 2, 3); R 0 }");
+    let output = format_source("fn test() -> i64 { t := (1, 2, 3); return 0 }");
     assert!(output.contains("(1, 2, 3)"));
 }
 
@@ -280,13 +280,13 @@ fn test_format_struct_literal() {
 
 #[test]
 fn test_format_range() {
-    let output = format_source("F test() -> i64 { L i:0..10 { C }; R 0 }");
+    let output = format_source("fn test() -> i64 { L i:0..10 { C }; return 0 }");
     assert!(output.contains(".."));
 }
 
 #[test]
 fn test_format_inclusive_range() {
-    let output = format_source("F test() -> i64 { L i:0..=10 { C }; R 0 }");
+    let output = format_source("fn test() -> i64 { L i:0..=10 { C }; return 0 }");
     assert!(output.contains("..="));
 }
 
@@ -308,7 +308,7 @@ fn test_format_block() {
 
 #[test]
 fn test_format_cast() {
-    let output = format_source("F test() -> f64 { x := 42; x as f64 }");
+    let output = format_source("fn test() -> f64 { x := 42; x as f64 }");
     assert!(output.contains("as"));
 }
 
@@ -364,13 +364,13 @@ fn test_format_assign_op_bitwise() {
 
 #[test]
 fn test_format_lambda() {
-    let output = format_source("F test() -> i64 { f := |x: i64| x * 2; f(21) }");
+    let output = format_source("fn test() -> i64 { f := |x: i64| x * 2; f(21) }");
     assert!(output.contains("|"));
 }
 
 #[test]
 fn test_format_self_recursion() {
-    let output = format_source("F fact(n: i64) -> i64 { I n <= 1 { R 1 }; R n * @(n - 1) }");
+    let output = format_source("fn fact(n: i64) -> i64 { I n <= 1 { return 1 }; R n * @(n - 1) }");
     assert!(output.contains("@"));
 }
 
@@ -401,7 +401,7 @@ fn test_format_unwrap() {
 
 #[test]
 fn test_format_ref_deref() {
-    let output = format_source("F test(x: i64) -> i64 { y := &x; *y }");
+    let output = format_source("fn test(x: i64) -> i64 { y := &x; *y }");
     assert!(output.contains("&") || output.contains("*"));
 }
 
@@ -425,49 +425,49 @@ fn test_format_lazy_force() {
 
 #[test]
 fn test_format_let_binding() {
-    let output = format_source("F test() -> i64 { x := 42; x }");
+    let output = format_source("fn test() -> i64 { x := 42; x }");
     assert!(output.contains(":="));
 }
 
 #[test]
 fn test_format_mut_binding() {
-    let output = format_source("F test() -> i64 { x := mut 0; x = 1; x }");
+    let output = format_source("fn test() -> i64 { x := mut 0; x = 1; x }");
     assert!(output.contains("mut"));
 }
 
 #[test]
 fn test_format_typed_binding() {
-    let output = format_source("F test() -> i64 { x: i64 = 42; x }");
+    let output = format_source("fn test() -> i64 { x: i64 = 42; x }");
     assert!(output.contains("i64"));
 }
 
 #[test]
 fn test_format_return_statement() {
-    let output = format_source("F test() -> i64 { R 42 }");
+    let output = format_source("fn test() -> i64 { return 42 }");
     assert!(output.contains("R "));
 }
 
 #[test]
 fn test_format_return_void() {
-    let output = format_source("F test() { R }");
+    let output = format_source("fn test() { return }");
     assert!(output.contains("R"));
 }
 
 #[test]
 fn test_format_break_statement() {
-    let output = format_source("F test() -> i64 { L { B }; R 0 }");
+    let output = format_source("fn test() -> i64 { L { B }; return 0 }");
     assert!(output.contains("B"));
 }
 
 #[test]
 fn test_format_continue_statement() {
-    let output = format_source("F test() -> i64 { L i:0..10 { C }; R 0 }");
+    let output = format_source("fn test() -> i64 { L i:0..10 { C }; return 0 }");
     assert!(output.contains("C"));
 }
 
 #[test]
 fn test_format_defer_statement() {
-    let output = format_source("F test() -> i64 { D print(0); R 42 }");
+    let output = format_source("fn test() -> i64 { D print(0); R 42 }");
     assert!(output.contains("D "));
 }
 
@@ -477,25 +477,25 @@ fn test_format_defer_statement() {
 
 #[test]
 fn test_format_function_declaration() {
-    let output = format_source("F add(x: i64, y: i64) -> i64 = x + y");
+    let output = format_source("fn add(x: i64, y: i64) -> i64 = x + y");
     assert!(output.contains("F add"));
 }
 
 #[test]
 fn test_format_struct_declaration() {
-    let output = format_source("S Point { x: i64, y: i64 }");
+    let output = format_source("struct Point { x: i64, y: i64 }");
     assert!(output.contains("S Point"));
 }
 
 #[test]
 fn test_format_enum_declaration() {
-    let output = format_source("E Color { Red, Green, Blue }");
+    let output = format_source("enum Color { Red, Green, Blue }");
     assert!(output.contains("E Color"));
 }
 
 #[test]
 fn test_format_trait_declaration() {
-    let output = format_source("W Printable { F show(self) -> str }");
+    let output = format_source("trait Printable { fn show(self) -> str }");
     assert!(output.contains("W Printable"));
 }
 
@@ -528,13 +528,13 @@ fn test_format_trait_impl() {
 
 #[test]
 fn test_format_type_alias() {
-    let output = format_source("T Num = i64");
+    let output = format_source("type Num = i64");
     assert!(output.contains("T Num"));
 }
 
 #[test]
 fn test_format_pub_function() {
-    let output = format_source("P F public_fn() -> i64 = 42");
+    let output = format_source("pub fn public_fn() -> i64 = 42");
     assert!(output.contains("public_fn") && output.contains("42"));
 }
 
@@ -558,13 +558,13 @@ fn test_format_extern_function() {
 
 #[test]
 fn test_format_generic_function() {
-    let output = format_source("F id<T>(x: T) -> T = x");
+    let output = format_source("fn id<T>(x: T) -> T = x");
     assert!(output.contains("<T>") || output.contains("< T >"));
 }
 
 #[test]
 fn test_format_generic_struct() {
-    let output = format_source("S Pair<T> { first: T, second: T }");
+    let output = format_source("struct Pair<T> { first: T, second: T }");
     assert!(output.contains("Pair"));
 }
 
@@ -574,7 +574,7 @@ fn test_format_generic_struct() {
 
 #[test]
 fn test_format_primitive_types() {
-    let output = format_source("F test(a: i64, b: f64, c: bool, d: str) -> i64 = 0");
+    let output = format_source("fn test(a: i64, b: f64, c: bool, d: str) -> i64 = 0");
     assert!(output.contains("i64"));
     assert!(output.contains("f64"));
     assert!(output.contains("bool"));
@@ -583,25 +583,25 @@ fn test_format_primitive_types() {
 
 #[test]
 fn test_format_generic_type() {
-    let output = format_source("F test(x: Vec<i64>) -> i64 = 0");
+    let output = format_source("fn test(x: Vec<i64>) -> i64 = 0");
     assert!(output.contains("Vec"));
 }
 
 #[test]
 fn test_format_optional_type() {
-    let output = format_source("F test(x: i64?) -> i64 = 0");
+    let output = format_source("fn test(x: i64?) -> i64 = 0");
     assert!(output.contains("?"));
 }
 
 #[test]
 fn test_format_result_type() {
-    let output = format_source("F test() -> i64 = 0");
+    let output = format_source("fn test() -> i64 = 0");
     assert!(output.contains("i64"));
 }
 
 #[test]
 fn test_format_function_type() {
-    let output = format_source("F apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)");
+    let output = format_source("fn apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)");
     assert!(output.contains("fn") || output.contains("->"));
 }
 
@@ -633,7 +633,7 @@ fn test_format_macro_with_args() {
 
 #[test]
 fn test_format_macro_invocation() {
-    let source = "F test() -> i64 = my_macro!(1, 2, 3)";
+    let source = "fn test() -> i64 = my_macro!(1, 2, 3)";
     let output = format_source(source);
     assert!(output.contains("my_macro!"));
 }
@@ -693,7 +693,7 @@ fn test_format_empty_module() {
 
 #[test]
 fn test_format_with_tabs() {
-    let module = parse("F test() -> i64 { R 42 }").unwrap();
+    let module = parse("fn test() -> i64 { return 42 }").unwrap();
     let mut fmt = Formatter::new(FormatConfig {
         indent_size: 4,
         max_line_length: 100,
