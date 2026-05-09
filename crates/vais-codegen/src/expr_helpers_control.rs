@@ -202,7 +202,7 @@ impl CodeGenerator {
                 phi_type = expected;
             }
         }
-        let phi_llvm = self.type_to_llvm(&phi_type);
+        let mut phi_llvm = self.type_to_llvm(&phi_type);
 
         // Check each branch independently for struct pointer vs value
         let is_named_phi = matches!(&phi_type, ResolvedType::Named { .. });
@@ -297,6 +297,24 @@ impl CodeGenerator {
                 ("0".to_string(), String::new(), false, String::new(), false)
             };
         ir.push_str(&else_ir);
+
+        // B-04b fix: post-else fat-pointer retroactive upgrade.
+        // 같은 패턴이 nested elseif handler (if_else.rs:213-237) 에 *float* 케이스로
+        // 이미 존재. outer if-else 에서는 *fat-pointer* 케이스가 누락 — phi_type
+        // 추론이 then_type/else_type 이 모두 I64 면 phi_type=I64 fallback 으로
+        // 가는데, nested if-else 가 expected_expr_types (function return type Str)
+        // 영향으로 fat-pointer phi 를 emit 한 경우 outer 가 그 사실을 모름.
+        // else_val 의 actual emitted LLVM type 이 fat-pointer 면 outer phi_type 을
+        // Str/fat-pointer 로 upgrade. then arm 의 i64 literal 은 phi 작성 시
+        // zeroinitializer 로 자동 substitute (L444-461 기존 로직).
+        if !else_terminated && has_else {
+            if let Some(else_actual) = self.llvm_type_of_checked(&else_val) {
+                if else_actual == "{ i8*, i64 }" && phi_llvm != "{ i8*, i64 }" {
+                    phi_type = ResolvedType::Str;
+                    phi_llvm = "{ i8*, i64 }".to_string();
+                }
+            }
+        }
 
         // For struct/enum results, load the value from the alloca pointer before branch
         // But if else_val comes from a nested if-else (indicated by non-empty nested_last_block),
