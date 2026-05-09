@@ -741,6 +741,18 @@ impl CodeGenerator {
             _ => return Ok((ptr_val, ir)),
         };
 
+        // L-019: `&T` parameters can be lowered as fat-pointer-by-value
+        // (e.g. `{ i8*, i64 } %s` for `&str`) rather than `T*`. When the SSA
+        // value's actual LLVM type already matches the pointee type, `*ref`
+        // is a no-op — emitting `load %T, %T* %ssa_value` would produce
+        // invalid IR (`load %T from a non-pointer SSA value`). Mirrors the
+        // Phase B5 "value-not-pointer" fall-through above.
+        if let Some(actual_ty) = self.llvm_type_of_checked(&ptr_val) {
+            if actual_ty == pointee_llvm {
+                return Ok((ptr_val, ir));
+            }
+        }
+
         let result = self.next_temp(counter);
         write_ir!(
             ir,
