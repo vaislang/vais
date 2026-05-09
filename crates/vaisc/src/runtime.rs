@@ -41,7 +41,20 @@ pub(crate) fn get_runtime_for_module(module_path: &str) -> Option<RuntimeInfo> {
         "std::tls" => Some(RuntimeInfo {
             file: "tls_runtime.c",
             needs_pthread: false,
-            libs: &["-lssl", "-lcrypto"],
+            // macOS: system OpenSSL is unshipped; clang -lssl/-lcrypto fails
+            // unless Homebrew openssl is on the search path. The library
+            // search hint comes through `-L`-prefixed entries in `libs`,
+            // which native.rs forwards verbatim to clang. The presence of
+            // -L paths for both Homebrew arm64 and Intel locations covers
+            // both Apple-silicon and older x86_64 macOS layouts; on Linux
+            // these paths simply don't exist, so clang silently ignores
+            // them and resolves -lssl from the standard system path.
+            libs: &[
+                "-L/opt/homebrew/opt/openssl/lib",
+                "-L/usr/local/opt/openssl/lib",
+                "-lssl",
+                "-lcrypto",
+            ],
         }),
 
         // Concurrency modules
@@ -146,6 +159,14 @@ pub(crate) fn runtime_files_for_module(
 ) -> Vec<&'static str> {
     match module_path {
         "std::http_client" => vec!["http_runtime.c", primary_file],
+        // std::tls reuses TCP helpers from http_runtime.c (`__tcp_close` etc.)
+        // and connection-establishment from http_client_runtime.c (`__hc_tcp_connect`).
+        // Linking only tls_runtime.c leaves these two helpers as undefined symbols.
+        "std::tls" => vec![
+            "http_runtime.c",
+            "http_client_runtime.c",
+            primary_file,
+        ],
         _ => vec![primary_file],
     }
 }
