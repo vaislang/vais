@@ -401,17 +401,15 @@ impl CodeGenerator {
                     // accept void as an incoming value.
                     let then_is_void = then_val_for_phi == "void";
                     let else_is_void = else_val_for_phi == "void";
+                    // B-04a fix: phi incoming 으로 constant zeroinitializer 직접 사용.
+                    // 이전 코드는 merge block 안에 `insertvalue` SSA temp 를 emit 한 후
+                    // 그 temp 를 phi incoming 으로 썼는데, 이는 LLVM 의 "PHI nodes must
+                    // be grouped at top of basic block" 규칙을 위반.
+                    // 같은 fix 가 expr_helpers_control.rs (outer if-else) 에도 있음.
                     let then_safe = if llvm_type == "{ i8*, i64 }"
                         && (then_actual_ty.starts_with('i') || then_is_void)
                     {
-                        let zinit = self.next_temp(counter);
-                        write_ir!(
-                            ir,
-                            "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
-                            zinit
-                        );
-                        self.fn_ctx.record_emitted_type(&zinit, "{ i8*, i64 }");
-                        zinit
+                        "zeroinitializer".to_string()
                     } else if then_is_void {
                         "0".to_string()
                     } else {
@@ -420,14 +418,7 @@ impl CodeGenerator {
                     let else_safe = if llvm_type == "{ i8*, i64 }"
                         && (else_actual_ty.starts_with('i') || else_is_void)
                     {
-                        let zinit = self.next_temp(counter);
-                        write_ir!(
-                            ir,
-                            "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
-                            zinit
-                        );
-                        self.fn_ctx.record_emitted_type(&zinit, "{ i8*, i64 }");
-                        zinit
+                        "zeroinitializer".to_string()
                     } else if else_is_void {
                         "0".to_string()
                     } else {
