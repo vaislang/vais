@@ -171,6 +171,11 @@ fn e2e_vaisdb_35_transaction_undo_att_runtime_smoke() {
     assert_vaisdb_smoke_runs("transaction_undo_att_smoke.vais", 0);
 }
 
+#[test]
+fn e2e_vaisdb_36_transaction_clog_runtime_smoke() {
+    assert_vaisdb_smoke_runs("transaction_clog_smoke.vais", 0);
+}
+
 fn assert_vaisdb_smoke_runs(fixture: &str, expected_exit: i32) {
     let _guard = VAISDB_SMOKE_LOCK
         .lock()
