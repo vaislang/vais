@@ -63,6 +63,70 @@ fn main() -> i64 {
     );
 }
 
+/// External HTTPS endpoint smoke. Env-gated (RUN_EXTERNAL_HTTPS=1). Skipped
+/// in INTEGRITY default to avoid network flakiness. Validates the full
+/// std/http_client HTTPS path end-to-end against a stable real server.
+///
+/// Endpoint: example.com (RFC-2606 reserved, IANA-maintained, stable
+/// "Example Domain" body, HTTPS 200, valid Let's Encrypt / DigiCert chain).
+#[test]
+fn e2e_external_https_example_com_runtime_smoke() {
+    if std::env::var("RUN_EXTERNAL_HTTPS").is_err() {
+        eprintln!("e2e_external_https_example_com_runtime_smoke: skipped (set RUN_EXTERNAL_HTTPS=1 to run)");
+        return;
+    }
+
+    let temp = tempfile::TempDir::new().expect("temp dir");
+    let main_path = temp.path().join("main.vais");
+    let exe_path = temp.path().join("https_external_smoke");
+
+    let source = r#"
+use std/http_client
+
+fn main() -> i64 {
+    response := http_get("https://example.com/")
+    I response.error_code != 0 { return 1 }
+    I response.status != 200 { return 2 }
+    body := response.body_text()
+    I body.len() <= 0 { return 3 }
+    response.drop()
+    0
+}
+"#;
+    std::fs::write(&main_path, source).expect("write main.vais");
+
+    let vaisc = vaisc_path();
+    let std_dir = std_dir();
+
+    let build = Command::new(&vaisc)
+        .args([
+            "build",
+            main_path.to_str().expect("main.vais path utf8"),
+            "-o",
+            exe_path.to_str().expect("exe path utf8"),
+        ])
+        .env("VAIS_STD_PATH", &std_dir)
+        .output()
+        .expect("vaisc build invocation");
+    assert!(
+        build.status.success(),
+        "vaisc build failed: stdout={}\nstderr={}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr)
+    );
+
+    let run = Command::new(&exe_path)
+        .output()
+        .expect("run external https smoke binary");
+    assert!(
+        run.status.success(),
+        "external https smoke binary exited non-zero: code={:?} stdout={} stderr={}",
+        run.status.code(),
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+}
+
 fn vaisc_path() -> PathBuf {
     let exe = std::env::current_exe().expect("current_exe");
     let mut dir = exe.parent().expect("test binary parent dir").to_path_buf();
