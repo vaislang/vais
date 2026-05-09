@@ -30,14 +30,14 @@ pub mod utils {
 
         for i in 0..num_funcs {
             code.push_str(&format!(
-                "F func{}(x: i64)->i64 = x * {} + {}\n",
+                "fn func{}(x: i64)->i64 = x * {} + {}\n",
                 i,
                 i % 10,
                 i
             ));
         }
 
-        code.push_str("F main()->i64 = func0(42)\n");
+        code.push_str("fn main()->i64 = func0(42)\n");
         code
     }
 
@@ -71,7 +71,7 @@ pub mod utils {
                 if lines >= target_lines {
                     break;
                 }
-                code.push_str(&format!("S Point{}_{}_{} {{\n", m, s, lines));
+                code.push_str(&format!("struct Point{}_{}_{} {{\n", m, s, lines));
                 code.push_str("    x: i64,\n");
                 code.push_str("    y: i64,\n");
                 code.push_str("    z: i64\n");
@@ -84,7 +84,7 @@ pub mod utils {
                 if lines >= target_lines {
                     break;
                 }
-                code.push_str(&format!("E Result{}_{}_{} {{\n", m, e, lines));
+                code.push_str(&format!("enum Result{}_{}_{} {{\n", m, e, lines));
                 code.push_str("    Ok(i64),\n");
                 code.push_str("    Err(i64),\n");
                 code.push_str("    Pending\n");
@@ -97,7 +97,7 @@ pub mod utils {
                 if lines >= target_lines {
                     break;
                 }
-                code.push_str(&format!("S Container{}_{}_{}<T> {{\n", m, g, lines));
+                code.push_str(&format!("struct Container{}_{}_{}<T> {{\n", m, g, lines));
                 code.push_str("    value: T,\n");
                 code.push_str("    count: i64\n");
                 code.push_str("}\n\n");
@@ -115,42 +115,42 @@ pub mod utils {
                     0 => {
                         // Simple arithmetic
                         code.push_str(&format!(
-                            "F mod{}_arithmetic_{}(x: i64, y: i64) -> i64 {{\n",
+                            "fn mod{}_arithmetic_{}(x: i64, y: i64) -> i64 {{\n",
                             m, f
                         ));
                         code.push_str(&format!("    a := x * {} + y\n", f + 1));
                         code.push_str(&format!("    b := a - {} * x\n", f % 7 + 1));
                         code.push_str(&format!("    c := b + {} * y\n", f % 5 + 2));
-                        code.push_str("    R a + b + c\n");
+                        code.push_str("    return a + b + c\n");
                         code.push_str("}\n\n");
                         lines += 7;
                     }
                     1 => {
                         // Recursive factorial-like
-                        code.push_str(&format!("F mod{}_recursive_{}(n: i64) -> i64 {{\n", m, f));
+                        code.push_str(&format!("fn mod{}_recursive_{}(n: i64) -> i64 {{\n", m, f));
                         code.push_str("    I n <= 1 {\n");
-                        code.push_str("        R 1\n");
+                        code.push_str("        return 1\n");
                         code.push_str("    }\n");
-                        code.push_str(&format!("    R n * @(n - {})\n", f % 3 + 1));
+                        code.push_str(&format!("    return n * @(n - {})\n", f % 3 + 1));
                         code.push_str("}\n\n");
                         lines += 7;
                     }
                     2 => {
                         // Conditional chain
-                        code.push_str(&format!("F mod{}_conditional_{}(x: i64) -> i64 {{\n", m, f));
+                        code.push_str(&format!("fn mod{}_conditional_{}(x: i64) -> i64 {{\n", m, f));
                         code.push_str(&format!("    I x < {} {{\n", f * 5));
-                        code.push_str(&format!("        R x * {}\n", f % 4 + 2));
+                        code.push_str(&format!("        return x * {}\n", f % 4 + 2));
                         code.push_str(&format!("    }} E I x < {} {{\n", f * 10));
-                        code.push_str(&format!("        R x + {}\n", f));
+                        code.push_str(&format!("        return x + {}\n", f));
                         code.push_str("    } E {\n");
-                        code.push_str("        R x\n");
+                        code.push_str("        return x\n");
                         code.push_str("    }\n");
                         code.push_str("}\n\n");
                         lines += 10;
                     }
                     3 => {
                         // Loop with accumulator
-                        code.push_str(&format!("F mod{}_loop_{}(n: i64) -> i64 {{\n", m, f));
+                        code.push_str(&format!("fn mod{}_loop_{}(n: i64) -> i64 {{\n", m, f));
                         code.push_str("    sum := mut 0\n");
                         code.push_str("    i := mut 0\n");
                         code.push_str("    L {\n");
@@ -160,13 +160,13 @@ pub mod utils {
                         code.push_str(&format!("        sum = sum + i * {}\n", f % 6 + 1));
                         code.push_str("        i = i + 1\n");
                         code.push_str("    }\n");
-                        code.push_str("    R sum\n");
+                        code.push_str("    return sum\n");
                         code.push_str("}\n\n");
                         lines += 13;
                     }
                     4 => {
                         // Match expression on simple integer
-                        code.push_str(&format!("F mod{}_match_{}(x: i64) -> i64 {{\n", m, f));
+                        code.push_str(&format!("fn mod{}_match_{}(x: i64) -> i64 {{\n", m, f));
                         code.push_str("    M x {\n");
                         code.push_str(&format!("        {} => x * 2,\n", f % 10));
                         code.push_str(&format!("        {} => x * 3,\n", (f + 1) % 10));
@@ -179,7 +179,7 @@ pub mod utils {
                     5 => {
                         // Ternary operator chain
                         code.push_str(&format!(
-                            "F mod{}_ternary_{}(a: i64, b: i64) -> i64 {{\n",
+                            "fn mod{}_ternary_{}(a: i64, b: i64) -> i64 {{\n",
                             m, f
                         ));
                         code.push_str(&format!("    x := a > b ? a * {} : b * {}\n", f + 1, f + 2));
@@ -189,13 +189,13 @@ pub mod utils {
                             f,
                             f * 2
                         ));
-                        code.push_str("    R x + y\n");
+                        code.push_str("    return x + y\n");
                         code.push_str("}\n\n");
                         lines += 6;
                     }
                     6 => {
                         // Struct construction and field access
-                        code.push_str(&format!("F mod{}_struct_{}(v: i64) -> i64 {{\n", m, f));
+                        code.push_str(&format!("fn mod{}_struct_{}(v: i64) -> i64 {{\n", m, f));
                         code.push_str(&format!(
                             "    p := Point{}_0_{} {{ x: v, y: v * {}, z: v + {} }}\n",
                             m,
@@ -203,14 +203,14 @@ pub mod utils {
                             f % 5 + 1,
                             f
                         ));
-                        code.push_str("    R p.x + p.y + p.z\n");
+                        code.push_str("    return p.x + p.y + p.z\n");
                         code.push_str("}\n\n");
                         lines += 5;
                     }
                     _ => {
                         // Multi-variable computation
                         code.push_str(&format!(
-                            "F mod{}_compute_{}(a: i64, b: i64, c: i64) -> i64 {{\n",
+                            "fn mod{}_compute_{}(a: i64, b: i64, c: i64) -> i64 {{\n",
                             m, f
                         ));
                         code.push_str(&format!("    x := a * {} + b * {}\n", f + 1, f % 3 + 1));
@@ -226,24 +226,24 @@ pub mod utils {
 
             // Add a module-level aggregator function
             if lines < target_lines {
-                code.push_str(&format!("F mod{}_aggregate() -> i64 {{\n", m));
+                code.push_str(&format!("fn mod{}_aggregate() -> i64 {{\n", m));
                 code.push_str(&format!("    a := mod{}_arithmetic_0(10, 20)\n", m));
                 code.push_str(&format!("    b := mod{}_recursive_1(5)\n", m));
                 code.push_str(&format!("    c := mod{}_conditional_2(15)\n", m));
-                code.push_str("    R a + b + c\n");
+                code.push_str("    return a + b + c\n");
                 code.push_str("}\n\n");
                 lines += 7;
             }
         }
 
         // Main entry point
-        code.push_str("F main() -> i64 {\n");
+        code.push_str("fn main() -> i64 {\n");
         code.push_str("    result := mod0_arithmetic_0(42, 13)\n");
         if module_count > 1 {
             code.push_str("    result2 := mod0_aggregate()\n");
-            code.push_str("    R result + result2\n");
+            code.push_str("    return result + result2\n");
         } else {
-            code.push_str("    R result\n");
+            code.push_str("    return result\n");
         }
         code.push_str("}\n");
 
@@ -318,20 +318,20 @@ pub mod utils {
 
                 match f % 4 {
                     0 => {
-                        code.push_str(&format!("P F process_{}(x: i64) -> i64 {{\n", f));
+                        code.push_str(&format!("pub fn process_{}(x: i64) -> i64 {{\n", f));
                         code.push_str(&format!("    result := x * {} + {}\n", f + 1, m));
                         code.push_str("    I result > 100 {\n");
-                        code.push_str("        R result / 2\n");
+                        code.push_str("        return result / 2\n");
                         code.push_str("    }\n");
-                        code.push_str("    R result\n");
+                        code.push_str("    return result\n");
                         code.push_str("}\n\n");
                         lines += 8;
                     }
                     1 => {
-                        code.push_str(&format!("P F calculate_{}(a: i64, b: i64) -> i64 {{\n", f));
+                        code.push_str(&format!("pub fn calculate_{}(a: i64, b: i64) -> i64 {{\n", f));
                         code.push_str("    L {\n");
                         code.push_str("        I a <= b {\n");
-                        code.push_str("            R a + b\n");
+                        code.push_str("            return a + b\n");
                         code.push_str("        }\n");
                         code.push_str(&format!("        a := a - {}\n", f % 5 + 1));
                         code.push_str("    }\n");
@@ -339,17 +339,17 @@ pub mod utils {
                         lines += 9;
                     }
                     2 => {
-                        code.push_str(&format!("P F recursive_{}(n: i64) -> i64 {{\n", f));
+                        code.push_str(&format!("pub fn recursive_{}(n: i64) -> i64 {{\n", f));
                         code.push_str(&format!("    I n <= {} {{ R n }}\n", f % 3 + 1));
                         code.push_str("    R @(n - 1) + @(n - 2)\n");
                         code.push_str("}\n\n");
                         lines += 5;
                     }
                     _ => {
-                        code.push_str(&format!("P F transform_{}(x: i64) -> i64 {{\n", f));
+                        code.push_str(&format!("pub fn transform_{}(x: i64) -> i64 {{\n", f));
                         code.push_str(&format!("    a := x > {} ? x * 2 : x + {}\n", f * 10, f));
                         code.push_str(&format!("    b := a < {} ? a - {} : a\n", f * 20, f * 2));
-                        code.push_str("    R a + b\n");
+                        code.push_str("    return a + b\n");
                         code.push_str("}\n\n");
                         lines += 6;
                     }
@@ -358,8 +358,8 @@ pub mod utils {
 
             // Add cross-module reference if not first module
             if m > 0 && lines < lines_per_module {
-                code.push_str("P F call_previous() -> i64 {\n");
-                code.push_str(&format!("    R module{}::process_0(42)\n", m - 1));
+                code.push_str("pub fn call_previous() -> i64 {\n");
+                code.push_str(&format!("    return module{}::process_0(42)\n", m - 1));
                 code.push_str("}\n\n");
             }
 
@@ -377,7 +377,7 @@ pub mod utils {
             }
             main_code.push('\n');
 
-            main_code.push_str("F main() -> i64 {\n");
+            main_code.push_str("fn main() -> i64 {\n");
             main_code.push_str("    sum := mut 0\n");
             for m in 0..num_modules.min(5) {
                 main_code.push_str(&format!(
@@ -386,7 +386,7 @@ pub mod utils {
                     m * 10
                 ));
             }
-            main_code.push_str("    R sum\n");
+            main_code.push_str("    return sum\n");
             main_code.push_str("}\n");
 
             modules.push(("main.vais".to_string(), main_code));

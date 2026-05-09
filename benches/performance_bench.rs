@@ -361,7 +361,7 @@ fn generate_vais_code(loc: usize) -> String {
 
     for i in 0..funcs_needed {
         code.push_str(&format!(
-            "F func_{i}(x: i64, y: i64) -> i64 {{\n  z := x * {m} + y\n  R z + {c}\n}}\n\n",
+            "fn func_{i}(x: i64, y: i64) -> i64 {{\n  z := x * {m} + y\n  return z + {c}\n}}\n\n",
             i = i,
             m = (i % 7) + 1,
             c = i % 100,

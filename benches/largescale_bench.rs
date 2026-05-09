@@ -38,7 +38,7 @@ fn generate_large_project(target_lines: usize) -> String {
 
         // Structs
         for s in 0..structs_per_module {
-            code.push_str(&format!("S Mod{}Struct{} {{\n", m, s));
+            code.push_str(&format!("struct Mod{}Struct{} {{\n", m, s));
             code.push_str(&format!("    field_a: i64,\n"));
             code.push_str(&format!("    field_b: i64,\n"));
             code.push_str(&format!("    field_c: bool\n"));
@@ -52,7 +52,7 @@ fn generate_large_project(target_lines: usize) -> String {
 
         // Enums
         for e in 0..enums_per_module {
-            code.push_str(&format!("E Mod{}Result{} {{\n", m, e));
+            code.push_str(&format!("enum Mod{}Result{} {{\n", m, e));
             code.push_str(&format!("    Ok(i64),\n"));
             code.push_str(&format!("    Err(i64),\n"));
             code.push_str(&format!("    None\n"));

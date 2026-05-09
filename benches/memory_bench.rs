@@ -155,7 +155,7 @@ fn generate_code(num_funcs: usize) -> String {
 
     for i in 0..num_funcs {
         code.push_str(&format!(
-            "F func{}(x: i64)->i64 = x * {} + {}\n",
+            "fn func{}(x: i64)->i64 = x * {} + {}\n",
             i,
             i % 10,
             i

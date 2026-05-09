@@ -12,9 +12,9 @@ use vais_parser::parse;
 fn test_generate_code_basic() {
     // Test the simple generator
     let code = generate_code(10);
-    assert!(code.contains("F func0"));
-    assert!(code.contains("F func9"));
-    assert!(code.contains("F main()->i64 = func0(42)"));
+    assert!(code.contains("fn func0"));
+    assert!(code.contains("fn func9"));
+    assert!(code.contains("fn main()->i64 = func0(42)"));
 
     // Verify it parses
     let result = parse(&code);
@@ -40,9 +40,9 @@ fn test_generate_large_project_10k() {
 
     // Should contain expected constructs
     assert!(code.contains("# Module"));
-    assert!(code.contains("S Point"));
-    assert!(code.contains("E Result"));
-    assert!(code.contains("F main()"));
+    assert!(code.contains("struct Point"));
+    assert!(code.contains("enum Result"));
+    assert!(code.contains("fn main()"));
 
     // Verify it parses
     let result = parse(&code);
@@ -113,11 +113,11 @@ fn test_generate_large_project_contains_variety() {
     assert!(code.contains("_compute_"));
 
     // Structs
-    assert!(code.contains("S Point"));
-    assert!(code.contains("S Container"));
+    assert!(code.contains("struct Point"));
+    assert!(code.contains("struct Container"));
 
     // Enums
-    assert!(code.contains("E Result"));
+    assert!(code.contains("enum Result"));
     assert!(code.contains("Ok(i64)"));
     assert!(code.contains("Err(i64)"));
 
@@ -271,7 +271,7 @@ fn test_multi_module_cross_references() {
 fn test_generate_code_empty() {
     // Edge case: 0 functions
     let code = generate_code(0);
-    assert!(code.contains("F main()->i64 = func0(42)"));
+    assert!(code.contains("fn main()->i64 = func0(42)"));
 
     // Should still parse (even though func0 is missing, parser doesn't check semantics)
     let result = parse(&code);
@@ -282,7 +282,7 @@ fn test_generate_code_empty() {
 fn test_large_project_min_size() {
     // Edge case: very small target
     let code = generate_large_project(10);
-    assert!(code.contains("F main()"));
+    assert!(code.contains("fn main()"));
 
     // Should still parse
     let result = parse(&code);
