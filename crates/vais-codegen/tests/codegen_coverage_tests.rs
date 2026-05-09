@@ -38,19 +38,19 @@ fn gen_result(source: &str) -> Result<String, String> {
 
 #[test]
 fn test_codegen_binary_arithmetic() {
-    let ir = gen_ok("F test() -> i64 = 2 + 3 * 4 - 1");
+    let ir = gen_ok("fn test() -> i64 = 2 + 3 * 4 - 1");
     assert!(ir.contains("add") || ir.contains("mul") || ir.contains("sub"));
 }
 
 #[test]
 fn test_codegen_binary_comparison() {
-    let ir = gen_ok("F test() -> bool = 1 < 2");
+    let ir = gen_ok("fn test() -> bool = 1 < 2");
     assert!(ir.contains("icmp"));
 }
 
 #[test]
 fn test_codegen_binary_logical() {
-    let ir = gen_ok("F test() -> bool = true && false");
+    let ir = gen_ok("fn test() -> bool = true && false");
     assert!(ir.contains("and") || ir.contains("br"));
 }
 
@@ -80,19 +80,19 @@ fn test_codegen_binary_bitwise() {
 
 #[test]
 fn test_codegen_unary_neg() {
-    let ir = gen_ok("F test() -> i64 = -42");
+    let ir = gen_ok("fn test() -> i64 = -42");
     assert!(ir.contains("sub") || ir.contains("42"));
 }
 
 #[test]
 fn test_codegen_unary_not() {
-    let ir = gen_ok("F test() -> bool = !true");
+    let ir = gen_ok("fn test() -> bool = !true");
     assert!(ir.contains("xor") || ir.contains("icmp"));
 }
 
 #[test]
 fn test_codegen_ternary() {
-    let ir = gen_ok("F test(x: i64) -> i64 = x > 0 ? x : 0");
+    let ir = gen_ok("fn test(x: i64) -> i64 = x > 0 ? x : 0");
     assert!(ir.contains("br") || ir.contains("phi") || ir.contains("select"));
 }
 
@@ -104,13 +104,13 @@ fn test_codegen_string_literal() {
 
 #[test]
 fn test_codegen_array_literal() {
-    let ir = gen_ok("F test() -> i64 { arr := [1, 2, 3]; R 0 }");
+    let ir = gen_ok("fn test() -> i64 { arr := [1, 2, 3]; return 0 }");
     assert!(ir.contains("alloca") || ir.contains("store") || ir.contains("1"));
 }
 
 #[test]
 fn test_codegen_tuple_literal() {
-    let ir = gen_ok("F test() -> i64 { t := (10, 20); R 0 }");
+    let ir = gen_ok("fn test() -> i64 { t := (10, 20); return 0 }");
     assert!(ir.contains("10") || ir.contains("20"));
 }
 
@@ -187,13 +187,13 @@ fn test_codegen_self_recursion() {
 
 #[test]
 fn test_codegen_cast() {
-    let ir = gen_ok("F test() -> f64 { x := 42; x as f64 }");
+    let ir = gen_ok("fn test() -> f64 { x := 42; x as f64 }");
     assert!(ir.contains("sitofp") || ir.contains("f64"));
 }
 
 #[test]
 fn test_codegen_ref_deref() {
-    let ir = gen_ok("F test(x: i64) -> i64 { y := &x; *y }");
+    let ir = gen_ok("fn test(x: i64) -> i64 { y := &x; *y }");
     assert!(ir.contains("alloca") || ir.contains("load") || ir.contains("store"));
 }
 
@@ -208,7 +208,7 @@ fn test_codegen_if_else() {
         fn test(x: i64) -> i64 {
             I x > 0 {
                 return x
-            } E {
+            } else {
                 return 0
             }
         }
@@ -224,9 +224,9 @@ fn test_codegen_if_elseif_else() {
         fn classify(x: i64) -> i64 {
             I x > 0 {
                 return 1
-            } E I x < 0 {
+            } else I x < 0 {
                 return -1
-            } E {
+            } else {
                 return 0
             }
         }
@@ -340,10 +340,10 @@ fn test_codegen_nested_if() {
             I x > 0 {
                 I y > 0 {
                     return x + y
-                } E {
+                } else {
                     return x
                 }
-            } E {
+            } else {
                 return 0
             }
         }
@@ -358,13 +358,13 @@ fn test_codegen_nested_if() {
 
 #[test]
 fn test_codegen_let_binding() {
-    let ir = gen_ok("F test() -> i64 { x := 42; x }");
+    let ir = gen_ok("fn test() -> i64 { x := 42; x }");
     assert!(ir.contains("42"));
 }
 
 #[test]
 fn test_codegen_mut_binding() {
-    let ir = gen_ok("F test() -> i64 { x := mut 0; x = 42; x }");
+    let ir = gen_ok("fn test() -> i64 { x := mut 0; x = 42; x }");
     assert!(ir.contains("store") || ir.contains("42"));
 }
 
@@ -401,7 +401,7 @@ fn test_codegen_assign_ops() {
 
 #[test]
 fn test_codegen_return_void() {
-    let ir = gen_ok("F test() { R }");
+    let ir = gen_ok("fn test() { return }");
     assert!(ir.contains("ret"));
 }
 
@@ -424,13 +424,13 @@ fn test_codegen_early_return() {
 
 #[test]
 fn test_codegen_lambda_simple() {
-    let ir = gen_ok("F test() -> i64 { f := |x: i64| x * 2; f(21) }");
+    let ir = gen_ok("fn test() -> i64 { f := |x: i64| x * 2; f(21) }");
     assert!(ir.contains("mul") || ir.contains("21"));
 }
 
 #[test]
 fn test_codegen_lambda_multi_param() {
-    let ir = gen_ok("F test() -> i64 { f := |x: i64, y: i64| x + y; f(1, 2) }");
+    let ir = gen_ok("fn test() -> i64 { f := |x: i64, y: i64| x + y; f(1, 2) }");
     assert!(ir.contains("add"));
 }
 
@@ -509,7 +509,7 @@ fn test_codegen_inferred_types() {
 
 #[test]
 fn test_codegen_inferred_bool() {
-    let ir = gen_ok("F test() -> bool { x := 1 < 2; x }");
+    let ir = gen_ok("fn test() -> bool { x := 1 < 2; x }");
     assert!(ir.contains("icmp"));
 }
 
@@ -519,7 +519,7 @@ fn test_codegen_inferred_bool() {
 
 #[test]
 fn test_codegen_print_call() {
-    let ir = gen_ok("F test() -> i64 { print(42); R 0 }");
+    let ir = gen_ok("fn test() -> i64 { print(42); return 0 }");
     assert!(ir.contains("print") || ir.contains("42"));
 }
 
@@ -543,7 +543,7 @@ fn test_codegen_multiple_functions() {
 fn test_codegen_enum_variant() {
     let ir = gen_ok(
         r#"
-        E Color { Red, Green, Blue }
+        enum Color { Red, Green, Blue }
         fn test() -> i64 {
             c := Red
             match c {
@@ -562,7 +562,7 @@ fn test_codegen_enum_variant() {
 fn test_codegen_enum_with_data() {
     let ir = gen_ok(
         r#"
-        E Shape {
+        enum Shape {
             Circle(i64),
             Rect(i64, i64)
         }
@@ -626,14 +626,14 @@ fn test_codegen_impl_methods() {
 
 #[test]
 fn test_codegen_error_undefined_var() {
-    let result = gen_result("F test() -> i64 { R undefined_xyz }");
+    let result = gen_result("fn test() -> i64 { return undefined_xyz }");
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("undefined_xyz"));
 }
 
 #[test]
 fn test_codegen_error_undefined_function() {
-    let result = gen_result("F test() -> i64 = nonexistent_func(42)");
+    let result = gen_result("fn test() -> i64 = nonexistent_func(42)");
     assert!(result.is_err());
 }
 
@@ -691,11 +691,11 @@ fn test_codegen_complex_control_flow() {
             I x > 100 {
                 I x > 1000 { return 3 }
                 return 2
-            } E I x > 0 {
+            } else I x > 0 {
                 return 1
-            } E I x == 0 {
+            } else I x == 0 {
                 return 0
-            } E {
+            } else {
                 return -1
             }
         }
@@ -1032,7 +1032,7 @@ fn test_codegen_call_chain() {
 fn test_codegen_enum_wildcard_match() {
     let ir = gen_ok(
         r#"
-        E Animal { Cat, Dog, Fish, Bird }
+        enum Animal { Cat, Dog, Fish, Bird }
         fn score(a: Animal) -> i64 {
             match a {
                 Cat => 4,

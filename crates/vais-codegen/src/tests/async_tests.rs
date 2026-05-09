@@ -4,11 +4,11 @@ use crate::CodeGenerator;
 fn test_async_basic_poll_ir() {
     use vais_types::TypeChecker;
     let source = r#"
-A F compute(x: i64) -> i64 {
+A fn compute(x: i64) -> i64 {
     x + 10
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := compute(32).await
     result - 42
 }
@@ -31,15 +31,15 @@ F main() -> i64 {
 fn test_async_with_if_ir() {
     use vais_types::TypeChecker;
     let source = r#"
-A F conditional(x: i64) -> i64 {
+A fn conditional(x: i64) -> i64 {
     I x > 0 {
-        R x * 2
-    } E {
-        R 0
+        return x * 2
+    } else {
+        return 0
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := conditional(21).await
     result - 42
 }
@@ -62,13 +62,13 @@ F main() -> i64 {
 fn test_async_bool_return_ir() {
     use vais_types::TypeChecker;
     let source = r#"
-A F check() -> bool {
+A fn check() -> bool {
     yield true
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := check().await
-    I result { R 0 } E { R 1 }
+    I result { return 0 } else { return 1 }
 }
 "#;
     let module = vais_parser::parse(source).unwrap();

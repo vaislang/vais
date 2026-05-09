@@ -52,8 +52,8 @@ fn test_alloc_tracker_clear() {
 #[test]
 fn test_alloc_tracker_no_alloc() {
     let source = r#"
-F add(a: i64, b: i64) -> i64 = a + b
-F main() -> i64 = add(1, 2)
+fn add(a: i64, b: i64) -> i64 = a + b
+fn main() -> i64 = add(1, 2)
 "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -73,14 +73,14 @@ fn test_drop_function_level_no_recursion() {
     // Regression: Counter_drop must NOT recursively call itself.
     // The `self` param is a reference; only alloca-declared locals are auto-dropped.
     let source = r#"
-S Counter { n: i64 }
-W Drop { F drop(&self) -> i64 }
-X Counter: Drop { F drop(&self) -> i64 { 0 } }
-F count_to(limit: i64) -> i64 {
+struct Counter { n: i64 }
+trait Drop { fn drop(&self) -> i64 }
+impl Counter: Drop { fn drop(&self) -> i64 { 0 } }
+fn count_to(limit: i64) -> i64 {
     c := Counter { n: limit }
     c.n
 }
-F main() -> i64 { count_to(42) }
+fn main() -> i64 { count_to(42) }
 "#;
     let module = parse(source).unwrap();
     let mut checker = vais_types::TypeChecker::new();
@@ -120,10 +120,10 @@ fn test_block_scope_drop_ir_correct() {
     // Block-scoped named locals should have drop call in that block's IR,
     // using the single-pointer alloca directly.
     let source = r#"
-S Token { value: i64 }
-W Drop { F drop(&self) -> i64 }
-X Token: Drop { F drop(&self) -> i64 { 0 } }
-F process(flag: bool) -> i64 {
+struct Token { value: i64 }
+trait Drop { fn drop(&self) -> i64 }
+impl Token: Drop { fn drop(&self) -> i64 { 0 } }
+fn process(flag: bool) -> i64 {
     result := mut 0
     I flag {
         t := Token { value: 42 }
@@ -131,7 +131,7 @@ F process(flag: bool) -> i64 {
     }
     result
 }
-F main() -> i64 { process(true) }
+fn main() -> i64 { process(true) }
 "#;
     let module = parse(source).unwrap();
     let mut checker = vais_types::TypeChecker::new();

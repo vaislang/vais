@@ -25,8 +25,8 @@ fn test_fibonacci() {
 
 #[test]
 fn test_if_else() {
-    // I cond { then } E { else }
-    let source = "fn max(a:i64,b:i64)->i64{I a>b{R a}E{R b}}";
+    // I cond { then } else { else }
+    let source = "fn max(a:i64,b:i64)->i64{I a>b{return a} else {return b}}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -256,9 +256,9 @@ fn test_nested_if_else() {
     let source = r#"
         fn classify(x:i64)->i64{
             I x>0{
-                I x>100{2}E{1}
-            }E{
-                I x<-100{-2}E{-1}
+                I x>100{2} else {1}
+            } else {
+                I x<-100{-2} else {-1}
             }
         }
     "#;
@@ -272,7 +272,7 @@ fn test_nested_if_else() {
 
 #[test]
 fn test_simple_match() {
-    let source = "fn digit(n:i64)->str=M n{0=>\"zero\",1=>\"one\",_=>\"other\"}";
+    let source = "fn digit(n:i64)->str=match n{0=>\"zero\",1=>\"one\",_=>\"other\"}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -898,7 +898,7 @@ fn test_nested_generic_codegen() {
 fn test_pattern_match_with_guard_codegen() {
     // Test pattern match with guard generates correct branches (fix escaping)
     let source = r#"
-        fn classify(x:i64)->str=M x{
+        fn classify(x:i64)->str=match x{
             n I n>0=>"pos",
             n I n<0=>"neg",
             _=>"zero"
@@ -935,11 +935,11 @@ fn test_deeply_nested_if_codegen() {
     let source = r#"
         fn deep(x:i64)->i64{
             I x>100{
-                I x>1000{1}E{2}
-            }E{
+                I x>1000{1} else {2}
+            } else {
                 I x>10{
-                    I x>50{3}E{4}
-                }E{5}
+                    I x>50{3} else {4}
+                } else {5}
             }
         }
     "#;

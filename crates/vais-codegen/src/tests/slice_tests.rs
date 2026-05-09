@@ -4,10 +4,10 @@ use crate::CodeGenerator;
 fn test_slice_len_codegen() {
     use vais_types::TypeChecker;
     let source = r#"
-F baz(s: &[i64]) -> i64 {
+fn baz(s: &[i64]) -> i64 {
 s.len()
 }
-F main() -> i64 {
+fn main() -> i64 {
 0
 }
 "#;
@@ -40,8 +40,8 @@ F main() -> i64 {
 fn test_slice_literal_fat_pointer_codegen() {
     use vais_types::TypeChecker;
     let source = r#"
-F get_slice(arr: &[i64]) -> i64 = 42
-F main() -> i64 = get_slice(&[1, 2, 3])
+fn get_slice(arr: &[i64]) -> i64 = 42
+fn main() -> i64 = get_slice(&[1, 2, 3])
 "#;
     let module = vais_parser::parse(source).unwrap();
     let mut checker = TypeChecker::new();

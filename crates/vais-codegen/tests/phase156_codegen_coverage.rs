@@ -120,7 +120,7 @@ fn test_let_binding_from_if_expression() {
     let ir = gen_ok(
         r#"
         fn test(x: i64) -> i64 {
-            y := I x > 0 { x } E { 0 }
+            y := I x > 0 { x } else { 0 }
             return y
         }
     "#,
@@ -293,7 +293,7 @@ fn test_match_string_literal() {
 fn test_match_nested_enum() {
     let ir = gen_ok(
         r#"
-        E Direction { North, South, East, West }
+        enum Direction { North, South, East, West }
         fn to_int(d: Direction) -> i64 {
             match d {
                 North => 0,
@@ -331,7 +331,7 @@ fn test_match_arm_with_if_in_body() {
         r#"
         fn test(x: i64) -> i64 {
             match x {
-                n => I n > 10 { n } E { 0 }
+                n => I n > 10 { n } else { 0 }
             }
         }
     "#,
@@ -509,8 +509,8 @@ fn test_module_struct_with_many_fields() {
 fn test_module_multiple_enums() {
     let ir = gen_ok(
         r#"
-        E Color { Red, Green, Blue }
-        E Shape { Circle(i64), Square(i64) }
+        enum Color { Red, Green, Blue }
+        enum Shape { Circle(i64), Square(i64) }
         fn test() -> i64 {
             c := Red
             s := Circle(5)
@@ -523,7 +523,7 @@ fn test_module_multiple_enums() {
 
 #[test]
 fn test_module_trait_and_impl() {
-    // Trait definition + impl using X StructName { ... } pattern
+    // Trait definition + impl using impl StructName { ... } pattern
     let ir = gen_ok(
         r#"
         struct Animal { name: i64 }
@@ -656,7 +656,7 @@ fn test_builtin_exit_call() {
 fn test_call_with_bool_arg() {
     let ir = gen_ok(
         r#"
-        fn takes_bool(b: bool) -> i64 = I b { 1 } E { 0 }
+        fn takes_bool(b: bool) -> i64 = I b { 1 } else { 0 }
         fn test() -> i64 = takes_bool(true)
     "#,
     );
@@ -915,13 +915,13 @@ fn test_string_interpolation_in_variable() {
 
 #[test]
 fn test_function_returns_bool() {
-    let ir = gen_ok("F is_positive(x: i64) -> bool = x > 0");
+    let ir = gen_ok("fn is_positive(x: i64) -> bool = x > 0");
     assert!(ir.contains("icmp") || !ir.is_empty());
 }
 
 #[test]
 fn test_function_returns_f64() {
-    let ir = gen_ok("F half(x: f64) -> f64 = x / 2.0");
+    let ir = gen_ok("fn half(x: f64) -> f64 = x / 2.0");
     assert!(ir.contains("fdiv") || !ir.is_empty());
 }
 
@@ -962,7 +962,7 @@ fn test_function_with_mixed_param_types() {
     let ir = gen_ok(
         r#"
         fn mixed(a: i64, b: f64, c: bool) -> i64 {
-            I c { return a } E { return 0 }
+            I c { return a } else { return 0 }
         }
     "#,
     );
@@ -971,7 +971,7 @@ fn test_function_with_mixed_param_types() {
 
 #[test]
 fn test_function_expression_body() {
-    let ir = gen_ok("F square(x: i64) -> i64 = x * x");
+    let ir = gen_ok("fn square(x: i64) -> i64 = x * x");
     assert!(ir.contains("mul"));
 }
 
@@ -1061,37 +1061,37 @@ fn test_struct_field_arithmetic() {
 
 #[test]
 fn test_bool_literal_true() {
-    let ir = gen_ok("F test() -> bool = true");
+    let ir = gen_ok("fn test() -> bool = true");
     assert!(ir.contains("1") || !ir.is_empty());
 }
 
 #[test]
 fn test_bool_literal_false() {
-    let ir = gen_ok("F test() -> bool = false");
+    let ir = gen_ok("fn test() -> bool = false");
     assert!(ir.contains("0") || !ir.is_empty());
 }
 
 #[test]
 fn test_integer_literal_zero() {
-    let ir = gen_ok("F test() -> i64 = 0");
+    let ir = gen_ok("fn test() -> i64 = 0");
     assert!(ir.contains("ret i64 0") || ir.contains("0"));
 }
 
 #[test]
 fn test_integer_literal_large() {
-    let ir = gen_ok("F test() -> i64 = 9999999");
+    let ir = gen_ok("fn test() -> i64 = 9999999");
     assert!(ir.contains("9999999") || !ir.is_empty());
 }
 
 #[test]
 fn test_float_literal_zero() {
-    let ir = gen_ok("F test() -> f64 = 0.0");
+    let ir = gen_ok("fn test() -> f64 = 0.0");
     assert!(!ir.is_empty());
 }
 
 #[test]
 fn test_float_literal_negative() {
-    let ir = gen_ok("F test() -> f64 = -1.5");
+    let ir = gen_ok("fn test() -> f64 = -1.5");
     assert!(!ir.is_empty());
 }
 
@@ -1163,7 +1163,7 @@ fn test_compound_div() {
 fn test_enum_unit_variants_all_matched() {
     let ir = gen_ok(
         r#"
-        E Season { Spring, Summer, Autumn, Winter }
+        enum Season { Spring, Summer, Autumn, Winter }
         fn to_num(s: Season) -> i64 {
             match s {
                 Spring => 1,
@@ -1182,7 +1182,7 @@ fn test_enum_unit_variants_all_matched() {
 fn test_enum_with_multiple_payloads() {
     let ir = gen_ok(
         r#"
-        E Expr {
+        enum Expr {
             Num(i64),
             Add(i64, i64),
             Neg(i64)
@@ -1558,7 +1558,7 @@ fn test_float_comparison_complex() {
 fn test_multiple_enum_patterns_or() {
     let ir = gen_ok(
         r#"
-        E Day { Mon, Tue, Wed, Thu, Fri, Sat, Sun }
+        enum Day { Mon, Tue, Wed, Thu, Fri, Sat, Sun }
         fn is_weekend(d: Day) -> bool {
             match d {
                 Sat | Sun => true,

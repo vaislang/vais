@@ -108,7 +108,7 @@ fn test_call_function_chain() {
 
 #[test]
 fn test_call_undefined_function() {
-    let err = gen_err("F test() -> i64 = undefined_fn(42)");
+    let err = gen_err("fn test() -> i64 = undefined_fn(42)");
     assert!(err.contains("undefined") || err.contains("not found") || err.contains("unknown"));
 }
 
@@ -133,7 +133,7 @@ fn test_call_struct_constructor() {
 fn test_call_enum_variant_constructor() {
     let result = gen_result(
         r#"
-        E Option {
+        enum Option {
             Some(i64),
             None
         }
@@ -204,7 +204,7 @@ fn test_method_call_chained_access() {
 
 #[test]
 fn test_stmt_let_binding() {
-    let ir = gen_ok("F test() -> i64 { x := 42\nR x }");
+    let ir = gen_ok("fn test() -> i64 { x := 42\nreturn x }");
     assert!(!ir.is_empty());
 }
 
@@ -275,7 +275,7 @@ fn test_stmt_nested_scopes() {
 
 #[test]
 fn test_stmt_explicit_return() {
-    let ir = gen_ok("F test() -> i64 { R 42 }");
+    let ir = gen_ok("fn test() -> i64 { return 42 }");
     assert!(ir.contains("ret i64 42") || ir.contains("ret"));
 }
 
@@ -383,19 +383,19 @@ fn test_ffi_extern_str_param() {
 
 #[test]
 fn test_infer_integer_literal() {
-    let ir = gen_ok("F test() -> i64 = 42");
+    let ir = gen_ok("fn test() -> i64 = 42");
     assert!(ir.contains("42"));
 }
 
 #[test]
 fn test_infer_float_literal() {
-    let ir = gen_ok("F test() -> f64 = 3.14");
+    let ir = gen_ok("fn test() -> f64 = 3.14");
     assert!(!ir.is_empty());
 }
 
 #[test]
 fn test_infer_bool_literal() {
-    let ir = gen_ok("F test() -> bool = true");
+    let ir = gen_ok("fn test() -> bool = true");
     assert!(!ir.is_empty());
 }
 
@@ -407,13 +407,13 @@ fn test_infer_string_literal() {
 
 #[test]
 fn test_infer_binary_add() {
-    let ir = gen_ok("F test() -> i64 = 1 + 2");
+    let ir = gen_ok("fn test() -> i64 = 1 + 2");
     assert!(ir.contains("add"));
 }
 
 #[test]
 fn test_infer_binary_comparison() {
-    let ir = gen_ok("F test() -> bool = 1 < 2");
+    let ir = gen_ok("fn test() -> bool = 1 < 2");
     assert!(ir.contains("icmp"));
 }
 
@@ -422,7 +422,7 @@ fn test_infer_if_else_type() {
     let ir = gen_ok(
         r#"
         fn test(b: bool) -> i64 {
-            I b { 1 } E { 2 }
+            I b { 1 } else { 2 }
         }
     "#,
     );
@@ -834,7 +834,7 @@ fn test_complex_nested_if_match() {
                     2 => 20,
                     _ => 30
                 }
-            } E {
+            } else {
                 match x {
                     0 => 0,
                     _ => 0 - 1
@@ -1032,7 +1032,7 @@ fn test_logical_not() {
 
 #[test]
 fn test_unary_minus() {
-    let ir = gen_ok("F test() -> i64 = 0 - 42");
+    let ir = gen_ok("fn test() -> i64 = 0 - 42");
     assert!(ir.contains("sub"));
 }
 
@@ -1047,7 +1047,7 @@ fn test_multiline_function() {
             d := a + b + c
             I d > 100 {
                 d - 100
-            } E {
+            } else {
                 d
             }
         }
@@ -1239,7 +1239,7 @@ fn test_multiple_struct_methods() {
             a := Account { balance: 100 }
             I a.is_positive() {
                 a.get_balance()
-            } E {
+            } else {
                 0
             }
         }
@@ -1365,19 +1365,19 @@ fn test_loop_with_break_value() {
 
 #[test]
 fn test_large_integer_constants() {
-    let ir = gen_ok("F test() -> i64 = 9999999999");
+    let ir = gen_ok("fn test() -> i64 = 9999999999");
     assert!(ir.contains("9999999999"));
 }
 
 #[test]
 fn test_zero_constant() {
-    let ir = gen_ok("F test() -> i64 = 0");
+    let ir = gen_ok("fn test() -> i64 = 0");
     assert!(ir.contains("ret i64 0") || ir.contains("0"));
 }
 
 #[test]
 fn test_negative_via_subtraction() {
-    let ir = gen_ok("F test() -> i64 = 0 - 1");
+    let ir = gen_ok("fn test() -> i64 = 0 - 1");
     assert!(ir.contains("sub"));
 }
 
@@ -1430,7 +1430,7 @@ fn test_while_loop_countdown() {
 
 #[test]
 fn test_i32_function() {
-    let result = gen_result("F test() -> i32 = 42");
+    let result = gen_result("fn test() -> i32 = 42");
     assert!(result.is_ok() || result.is_err());
 }
 
@@ -1440,7 +1440,7 @@ fn test_bool_to_int() {
         r#"
         fn test() -> i64 {
             b := true
-            I b { 1 } E { 0 }
+            I b { 1 } else { 0 }
         }
     "#,
     );
@@ -1518,7 +1518,7 @@ fn test_max_function() {
     let ir = gen_ok(
         r#"
         fn max(a: i64, b: i64) -> i64 {
-            I a > b { a } E { b }
+            I a > b { a } else { b }
         }
     "#,
     );
@@ -1530,7 +1530,7 @@ fn test_min_function() {
     let ir = gen_ok(
         r#"
         fn min(a: i64, b: i64) -> i64 {
-            I a < b { a } E { b }
+            I a < b { a } else { b }
         }
     "#,
     );
@@ -1542,7 +1542,7 @@ fn test_abs_function() {
     let ir = gen_ok(
         r#"
         fn abs(x: i64) -> i64 {
-            I x < 0 { 0 - x } E { x }
+            I x < 0 { 0 - x } else { x }
         }
     "#,
     );
@@ -1554,9 +1554,7 @@ fn test_sign_function() {
     let ir = gen_ok(
         r#"
         fn sign(x: i64) -> i64 {
-            I x > 0 { 1 }
-            E I x < 0 { 0 - 1 }
-            E { 0 }
+            I x > 0 { 1 } else I x < 0 { 0 - 1 } else { 0 }
         }
     "#,
     );

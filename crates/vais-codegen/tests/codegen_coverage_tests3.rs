@@ -1138,7 +1138,7 @@ fn test_target_all_targets_not_empty() {
 
 #[test]
 fn test_codegen_undefined_var_suggests_similar() {
-    let result = gen_result("F test() -> i64 { abc := 1\nR abd }");
+    let result = gen_result("fn test() -> i64 { abc := 1\nreturn abd }");
     // Should either succeed (if abd is somehow resolved) or give error with suggestion
     match result {
         Err(e) => assert!(
@@ -1152,7 +1152,7 @@ fn test_codegen_undefined_var_suggests_similar() {
 
 #[test]
 fn test_codegen_simple_arithmetic() {
-    let ir = gen_ok("F f() -> i64 = 1 + 2 + 3");
+    let ir = gen_ok("fn f() -> i64 = 1 + 2 + 3");
     assert!(ir.contains("add"));
 }
 
@@ -1163,7 +1163,7 @@ fn test_codegen_if_else_phi() {
         fn test(x: i64) -> i64 {
             I x > 0 {
                 x
-            } E {
+            } else {
                 0 - x
             }
         }
@@ -1180,10 +1180,10 @@ fn test_codegen_nested_if() {
             I x > 10 {
                 I x > 20 {
                     3
-                } E {
+                } else {
                     2
                 }
-            } E {
+            } else {
                 1
             }
         }
@@ -1231,7 +1231,7 @@ fn test_codegen_struct_definition() {
 fn test_codegen_enum_definition() {
     let ir = gen_ok(
         r#"
-        E Color {
+        enum Color {
             Red,
             Green,
             Blue
@@ -1250,7 +1250,7 @@ fn test_codegen_string_literal() {
 
 #[test]
 fn test_codegen_bool_operations() {
-    let ir = gen_ok("F test() -> bool = true && false || true");
+    let ir = gen_ok("fn test() -> bool = true && false || true");
     assert!(!ir.is_empty());
 }
 
@@ -1293,7 +1293,7 @@ fn test_codegen_recursive_function() {
         fn fib(n: i64) -> i64 {
             I n <= 1 {
                 n
-            } E {
+            } else {
                 fib(n - 1) + fib(n - 2)
             }
         }
@@ -1318,13 +1318,13 @@ fn test_codegen_mutable_variable() {
 
 #[test]
 fn test_codegen_unary_negation() {
-    let ir = gen_ok("F test() -> i64 = 0 - 42");
+    let ir = gen_ok("fn test() -> i64 = 0 - 42");
     assert!(ir.contains("sub"));
 }
 
 #[test]
 fn test_codegen_float_literal() {
-    let ir = gen_ok("F test() -> f64 = 3.14");
+    let ir = gen_ok("fn test() -> f64 = 3.14");
     assert!(ir.contains("3.14") || ir.contains("double") || ir.contains("float"));
 }
 
@@ -1344,14 +1344,14 @@ fn test_codegen_float_arithmetic() {
 
 #[test]
 fn test_codegen_type_cast() {
-    let result = gen_result("F test() -> f64 = 42 as f64");
+    let result = gen_result("fn test() -> f64 = 42 as f64");
     // May or may not be supported
     assert!(result.is_ok() || result.is_err());
 }
 
 #[test]
 fn test_codegen_empty_function() {
-    let ir = gen_ok("F test() -> i64 = 0");
+    let ir = gen_ok("fn test() -> i64 = 0");
     assert!(ir.contains("@test"));
     assert!(ir.contains("ret"));
 }
@@ -1487,7 +1487,7 @@ fn test_codegen_extern_declaration() {
 
 #[test]
 fn test_codegen_modulo_operator() {
-    let ir = gen_ok("F test() -> i64 = 17 % 5");
+    let ir = gen_ok("fn test() -> i64 = 17 % 5");
     assert!(ir.contains("srem") || ir.contains("rem"));
 }
 
@@ -1498,7 +1498,7 @@ fn test_codegen_self_recursion_operator() {
         fn factorial(n: i64) -> i64 {
             I n <= 1 {
                 1
-            } E {
+            } else {
                 n * @(n - 1)
             }
         }

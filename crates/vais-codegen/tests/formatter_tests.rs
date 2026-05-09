@@ -105,7 +105,7 @@ fn test_format_simple_function() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("pub F add(a: i64, b: i64) -> i64 = a + b"));
+    assert!(output.contains("pub fn add(a: i64, b: i64) -> i64 = a + b"));
 }
 
 #[test]
@@ -132,7 +132,7 @@ fn test_format_function_with_no_params() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("F get_answer() -> i64 = 42"));
+    assert!(output.contains("fn get_answer() -> i64 = 42"));
 }
 
 #[test]
@@ -166,7 +166,7 @@ fn test_format_function_with_generics() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("pub F identity<T>(x: T) -> T = x"));
+    assert!(output.contains("pub fn identity<T>(x: T) -> T = x"));
 }
 
 #[test]
@@ -203,7 +203,7 @@ fn test_format_function_with_bounded_generics() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("F display<T: Display + Clone>(value: T) -> () = ()"));
+    assert!(output.contains("fn display<T: Display + Clone>(value: T) -> () = ()"));
 }
 
 #[test]
@@ -230,7 +230,7 @@ fn test_format_async_function() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("pub async F fetch_data() -> String"));
+    assert!(output.contains("pub async fn fetch_data() -> String"));
 }
 
 #[test]
@@ -277,9 +277,9 @@ fn test_format_function_with_block_body() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("F compute(x: i64) -> i64 {"));
+    assert!(output.contains("fn compute(x: i64) -> i64 {"));
     assert!(output.contains("    y := 10"));
-    assert!(output.contains("    R x + y"));
+    assert!(output.contains("    return x + y"));
     assert!(output.contains("}"));
 }
 
@@ -353,7 +353,7 @@ fn test_format_function_with_mut_params() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("F increment(mut x: i64)"));
+    assert!(output.contains("fn increment(mut x: i64)"));
 }
 
 // ============================================================================
@@ -391,7 +391,7 @@ fn test_format_simple_struct() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("pub S Point {"));
+    assert!(output.contains("pub struct Point {"));
     assert!(output.contains("    pub x: i64,"));
     assert!(output.contains("    pub y: i64,"));
     assert!(output.contains("}"));
@@ -421,7 +421,7 @@ fn test_format_generic_struct() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("pub S Container<T> {"));
+    assert!(output.contains("pub struct Container<T> {"));
     assert!(output.contains("    pub value: T,"));
 }
 
@@ -484,9 +484,9 @@ fn test_format_struct_with_methods() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("pub S Point {"));
+    assert!(output.contains("pub struct Point {"));
     assert!(output.contains("    x: i64,"));
-    assert!(output.contains("    pub F new(x: i64) -> Point"));
+    assert!(output.contains("    pub fn new(x: i64) -> Point"));
 }
 
 // ============================================================================
@@ -524,7 +524,7 @@ fn test_format_simple_enum() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("pub E Color {"));
+    assert!(output.contains("pub enum Color {"));
     assert!(output.contains("    Red,"));
     assert!(output.contains("    Green,"));
     assert!(output.contains("    Blue,"));
@@ -557,7 +557,7 @@ fn test_format_enum_with_tuple_variants() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("pub E Option<T> {"));
+    assert!(output.contains("pub enum Option<T> {"));
     assert!(output.contains("    Some(T),"));
     assert!(output.contains("    None,"));
 }
@@ -600,7 +600,7 @@ fn test_format_enum_with_struct_variants() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("pub E Message {"));
+    assert!(output.contains("pub enum Message {"));
     assert!(output.contains("    Quit,"));
     assert!(output.contains("    Move {"));
     assert!(output.contains("        x: i64,"));
@@ -644,7 +644,7 @@ fn test_format_if_else() {
     let output = formatter.format_module(&module);
 
     assert!(output.contains("I x {"));
-    assert!(output.contains("} E {"));
+    assert!(output.contains("} else {"));
 }
 
 #[test]
@@ -692,8 +692,8 @@ fn test_format_else_if_chain() {
     let output = formatter.format_module(&module);
 
     assert!(output.contains("I x < 0 {"));
-    assert!(output.contains("} E I x > 0 {"));
-    assert!(output.contains("} E {"));
+    assert!(output.contains("} else I x > 0 {"));
+    assert!(output.contains("} else {"));
 }
 
 #[test]
@@ -1065,7 +1065,7 @@ fn test_format_types() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("pub T IntArray = [i64]"));
+    assert!(output.contains("pub type IntArray = [i64]"));
 }
 
 #[test]
@@ -1088,7 +1088,7 @@ fn test_format_generic_types() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("T VecOfVec = Vec<Vec<i64>>"));
+    assert!(output.contains("type VecOfVec = Vec<Vec<i64>>"));
 }
 
 #[test]
@@ -1108,7 +1108,7 @@ fn test_format_optional_type() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("T MaybeInt = i64?"));
+    assert!(output.contains("type MaybeInt = i64?"));
 }
 
 #[test]
@@ -1128,7 +1128,7 @@ fn test_format_result_type() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("T ResultInt = i64!"));
+    assert!(output.contains("type ResultInt = i64!"));
 }
 
 // ============================================================================
@@ -1271,7 +1271,7 @@ fn test_format_multiple_items() {
     let output = formatter.format_module(&module);
 
     // Should have blank line between items
-    assert!(output.contains("pub T Int = i64\n\npub F add"));
+    assert!(output.contains("pub type Int = i64\n\npub F add"));
 }
 
 // ============================================================================

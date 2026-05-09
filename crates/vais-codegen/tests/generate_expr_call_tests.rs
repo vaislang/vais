@@ -72,34 +72,34 @@ fn test_call_println_bool() {
 
 #[test]
 fn test_call_simple_function() {
-    let ir = gen_ok("F add(x: i64, y: i64) -> i64 = x + y\nF main() -> i64 = add(1, 2)");
+    let ir = gen_ok("fn add(x: i64, y: i64) -> i64 = x + y\nF main() -> i64 = add(1, 2)");
     assert!(ir.contains("call"));
     assert!(ir.contains("@add"));
 }
 
 #[test]
 fn test_call_no_args() {
-    let ir = gen_ok("F zero() -> i64 = 0\nF main() -> i64 = zero()");
+    let ir = gen_ok("fn zero() -> i64 = 0\nF main() -> i64 = zero()");
     assert!(ir.contains("@zero"));
 }
 
 #[test]
 fn test_call_multiple_args() {
     let ir = gen_ok(
-        "F sum3(a: i64, b: i64, c: i64) -> i64 = a + b + c\nF main() -> i64 = sum3(1, 2, 3)",
+        "fn sum3(a: i64, b: i64, c: i64) -> i64 = a + b + c\nF main() -> i64 = sum3(1, 2, 3)",
     );
     assert!(ir.contains("@sum3"));
 }
 
 #[test]
 fn test_call_nested() {
-    let ir = gen_ok("F inc(x: i64) -> i64 = x + 1\nF main() -> i64 = inc(inc(inc(0)))");
+    let ir = gen_ok("fn inc(x: i64) -> i64 = x + 1\nF main() -> i64 = inc(inc(inc(0)))");
     assert!(ir.contains("@inc"));
 }
 
 #[test]
 fn test_call_with_expression_args() {
-    let ir = gen_ok("F add(x: i64, y: i64) -> i64 = x + y\nF main() -> i64 = add(1 + 2, 3 * 4)");
+    let ir = gen_ok("fn add(x: i64, y: i64) -> i64 = x + y\nF main() -> i64 = add(1 + 2, 3 * 4)");
     assert!(ir.contains("@add"));
 }
 
@@ -211,13 +211,13 @@ fn test_method_chained_call() {
 
 #[test]
 fn test_self_recursion_basic() {
-    let ir = gen_ok("F fib(n: i64) -> i64 = I n < 2 { n } E { @(n-1) + @(n-2) }");
+    let ir = gen_ok("fn fib(n: i64) -> i64 = I n < 2 { n } else { @(n-1) + @(n-2) }");
     assert!(ir.contains("call") && ir.contains("@fib"));
 }
 
 #[test]
 fn test_self_recursion_factorial() {
-    let ir = gen_ok("F fact(n: i64) -> i64 = I n <= 1 { 1 } E { n * @(n - 1) }");
+    let ir = gen_ok("fn fact(n: i64) -> i64 = I n <= 1 { 1 } else { n * @(n - 1) }");
     assert!(ir.contains("@fact"));
 }
 
@@ -229,7 +229,7 @@ fn test_self_recursion_factorial() {
 fn test_enum_unit_variant() {
     let ir = gen_ok(
         r#"
-        E Direction { North, South, East, West }
+        enum Direction { North, South, East, West }
         fn test(d: Direction) -> i64 {
             match d {
                 North => 0,
@@ -247,14 +247,14 @@ fn test_enum_unit_variant() {
 
 #[test]
 fn test_call_undefined_function() {
-    let result = gen_result("F main() -> i64 = undefined_func(42)");
+    let result = gen_result("fn main() -> i64 = undefined_func(42)");
     assert!(result.is_err());
 }
 
 #[test]
 fn test_call_too_few_args_builtin() {
     // str_to_ptr expects exactly 1 arg
-    let result = gen_result("F main() -> i64 = str_to_ptr()");
+    let result = gen_result("fn main() -> i64 = str_to_ptr()");
     assert!(result.is_err());
 }
 
@@ -265,7 +265,7 @@ fn test_call_too_few_args_builtin() {
 #[test]
 fn test_pipe_operator_call() {
     // Pipe operator desugars to function call — may produce indirect call
-    let result = gen_result("F inc(x: i64) -> i64 = x + 1\nF main() -> i64 = 5 |> inc()");
+    let result = gen_result("fn inc(x: i64) -> i64 = x + 1\nF main() -> i64 = 5 |> inc()");
     let _ = result; // Exercise the path, may or may not succeed
 }
 
@@ -273,7 +273,7 @@ fn test_pipe_operator_call() {
 fn test_pipe_chain() {
     // Pipe chain may produce indirect call error
     let result = gen_result(
-        "F inc(x: i64) -> i64 = x + 1\nF dbl(x: i64) -> i64 = x * 2\nF main() -> i64 = 1 |> inc() |> dbl()",
+        "fn inc(x: i64) -> i64 = x + 1\nF dbl(x: i64) -> i64 = x * 2\nF main() -> i64 = 1 |> inc() |> dbl()",
     );
     let _ = result; // Exercise the path
 }
@@ -284,7 +284,7 @@ fn test_pipe_chain() {
 
 #[test]
 fn test_ternary_with_call() {
-    let ir = gen_ok("F abs(x: i64) -> i64 = x >= 0 ? x : 0 - x\nF main() -> i64 = abs(0 - 5)");
+    let ir = gen_ok("fn abs(x: i64) -> i64 = x >= 0 ? x : 0 - x\nF main() -> i64 = abs(0 - 5)");
     assert!(ir.contains("@abs"));
 }
 
@@ -315,7 +315,7 @@ fn test_call_in_if_branches() {
         fn dec(x: i64) -> i64 = x - 1
         fn main() -> i64 {
             x := 5
-            return I x > 3 { inc(x) } E { dec(x) }
+            return I x > 3 { inc(x) } else { dec(x) }
         }
     "#,
     );

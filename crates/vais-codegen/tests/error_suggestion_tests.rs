@@ -5,7 +5,7 @@ use vais_parser::parse;
 
 #[test]
 fn test_undefined_variable_suggestion() {
-    let source = "F test()->i64{count:=42;R cont}";
+    let source = "fn test()->i64{count:=42;return cont}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let result = gen.generate_module(&module);
@@ -29,7 +29,7 @@ fn test_undefined_variable_suggestion() {
 
 #[test]
 fn test_undefined_variable_multiple_suggestions() {
-    let source = "F test()->i64{counter:=1;count:=2;counter_max:=3;R cont}";
+    let source = "fn test()->i64{counter:=1;count:=2;counter_max:=3;return cont}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let result = gen.generate_module(&module);
@@ -60,7 +60,7 @@ fn test_undefined_variable_multiple_suggestions() {
 #[test]
 fn test_undefined_function_suggestion() {
     // Fixed: Remove semicolon between declarations and use regular function call instead of @
-    let source = "F print_num(x:i64)->i64=x F main()->i64=print_nu(42)";
+    let source = "fn print_num(x:i64)->i64=x fn main()->i64=print_nu(42)";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let result = gen.generate_module(&module);
@@ -84,10 +84,10 @@ fn test_undefined_function_suggestion() {
 
 #[test]
 fn test_field_not_found_suggestion() {
-    // Fixed: Use S for struct instead of T
+    // Fixed: Use struct for struct instead of T
     let source = r#"
-        S Point{x:i64,y:i64}
-        F test(p:Point)->i64=p.X
+        struct Point{x:i64,y:i64}
+        fn test(p:Point)->i64=p.X
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -112,7 +112,7 @@ fn test_field_not_found_suggestion() {
 
 #[test]
 fn test_no_suggestion_for_very_different_name() {
-    let source = "F test()->i64{counter:=42;R xyz}";
+    let source = "fn test()->i64{counter:=42;return xyz}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let result = gen.generate_module(&module);
@@ -134,7 +134,7 @@ fn test_no_suggestion_for_very_different_name() {
 #[test]
 fn test_type_error_includes_type_info() {
     // Test that type errors now include actual type information
-    let source = "F test()->i64{x:=42;R x[0]}";
+    let source = "fn test()->i64{x:=42;return x[0]}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let result = gen.generate_module(&module);
