@@ -57,7 +57,7 @@ single source for current pass counts. CI fails on drift.
 | Ecosystem package codegen | `std=82/82`, `vaisdb=261/261` |
 | Backend smoke | `phase158=18/18` |
 | std/http_client runtime | `smoke=1/1` |
-| VaisDB runtime | `smoke=32/32` |
+| VaisDB runtime | `smoke=33/33` |
 | vais-server runtime | `smoke=13/13` |
 | vais-web runtime | `smoke=23/23` |
 | Cross-package schema gate | `gate=2/2` |
