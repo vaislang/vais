@@ -551,7 +551,7 @@ fn main() -> i64 {
 #[test]
 fn selfhost_verify_single_char_keywords_f_function() {
     // F keyword = function declaration
-    let source = "fn foo() -> i64 = 42\nF main() -> i64 = foo()";
+    let source = "fn foo() -> i64 = 42\nfn main() -> i64 = foo()";
     assert_exit_code(source, 42);
 }
 
@@ -818,7 +818,7 @@ fn selfhost_verify_type_u64() {
 #[test]
 fn selfhost_verify_type_f32() {
     // Float literals default to f64; use explicit f32 parameter type to verify f32 token
-    let source = "fn foo(x: f32) -> f32 = x\nF main() -> i64 = 0";
+    let source = "fn foo(x: f32) -> f32 = x\nfn main() -> i64 = 0";
     assert_exit_code(source, 0);
 }
 
@@ -831,7 +831,7 @@ fn selfhost_verify_type_f64() {
 
 #[test]
 fn selfhost_verify_type_bool() {
-    let source = "fn foo() -> bool = true\nF main() -> i64 { I foo() { 1 } else { 0 } }";
+    let source = "fn foo() -> bool = true\nfn main() -> i64 { I foo() { 1 } else { 0 } }";
     // foo() returns true → 1
     assert_exit_code(source, 1);
 }
@@ -1084,7 +1084,7 @@ fn selfhost_verify_op_bitnot() {
 #[test]
 fn selfhost_verify_delimiters_parens() {
     // Parentheses in function calls and grouping
-    let source = "fn add(a: i64, b: i64) -> i64 = a + b\nF main() -> i64 = add((1 + 2), 3)";
+    let source = "fn add(a: i64, b: i64) -> i64 = a + b\nfn main() -> i64 = add((1 + 2), 3)";
     // add(3, 3) = 6
     assert_exit_code(source, 6);
 }
@@ -1123,7 +1123,7 @@ fn main() -> i64 {
 #[test]
 fn selfhost_verify_punct_comma() {
     // Commas in function parameters
-    let source = "fn add(a: i64, b: i64, c: i64) -> i64 = a + b + c\nF main() -> i64 = add(1, 2, 3)";
+    let source = "fn add(a: i64, b: i64, c: i64) -> i64 = a + b + c\nfn main() -> i64 = add(1, 2, 3)";
     // 1+2+3 = 6
     assert_exit_code(source, 6);
 }
@@ -1170,7 +1170,7 @@ fn main() -> i64 {
 #[test]
 fn selfhost_verify_punct_arrow() {
     // Arrow -> in return type
-    let source = "fn foo() -> i64 = 42\nF main() -> i64 = foo()";
+    let source = "fn foo() -> i64 = 42\nfn main() -> i64 = foo()";
     assert_exit_code(source, 42);
 }
 
@@ -1468,7 +1468,7 @@ fn selfhost_rust_lexer_cross_check_keywords() {
     assert_eq!(tokens[0].token, Token::Function, "fn should lex as Function");
 
     let tokens = tokenize("S").unwrap();
-    assert_eq!(tokens[0].token, Token::Struct, "S should lex as Struct");
+    assert_eq!(tokens[0].token, Token::Struct, "struct should lex as Struct");
 
     let tokens = tokenize("I").unwrap();
     assert_eq!(tokens[0].token, Token::If, "I should lex as If");
@@ -1499,7 +1499,7 @@ fn selfhost_rust_lexer_cross_check_keywords() {
     assert_eq!(tokens[0].token, Token::Trait, "W should lex as Trait");
 
     let tokens = tokenize("X").unwrap();
-    assert_eq!(tokens[0].token, Token::Impl, "X should lex as Impl");
+    assert_eq!(tokens[0].token, Token::Impl, "impl should lex as Impl");
 
     let tokens = tokenize("T").unwrap();
     assert_eq!(

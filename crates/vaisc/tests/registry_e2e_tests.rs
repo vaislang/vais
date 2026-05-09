@@ -277,7 +277,7 @@ fn init_test_package(dir: &Path, name: &str) -> PackageManifest {
     fs::create_dir_all(&src_dir).unwrap();
     fs::write(
         src_dir.join("main.vais"),
-        "# Main\nF main() -> i64 {\n    0\n}\n",
+        "# Main\nfn main() -> i64 {\n    0\n}\n",
     )
     .unwrap();
 
@@ -1895,7 +1895,7 @@ fn test_build_directory_with_multifile_import() {
     // Create main with use statement
     fs::write(
         src_dir.join("main.vais"),
-        "use myutils\nF main() -> i64 { add_nums(3, 4) }",
+        "use myutils\nfn main() -> i64 { add_nums(3, 4) }",
     )
     .unwrap();
 
@@ -2306,7 +2306,7 @@ fn test_vaisc_pkg_doc_basic() {
         "[package]\nname = \"doc-test\"\nversion = \"1.0.0\"\ndescription = \"A test package for docs\"\n";
     fs::write(tmp.path().join("vais.toml"), manifest).unwrap();
     fs::create_dir_all(tmp.path().join("src")).unwrap();
-    let source = "# Math module\n\nF add(a: i64, b: i64) -> i64 {\n    a + b\n}\n";
+    let source = "# Math module\n\nfn add(a: i64, b: i64) -> i64 {\n    a + b\n}\n";
     fs::write(tmp.path().join("src").join("math.vais"), source).unwrap();
 
     match run_vaisc(&["pkg", "doc"], tmp.path()) {
@@ -3253,7 +3253,7 @@ fn test_phase64_install_path_dependency_resolution() {
     .unwrap();
     fs::write(
         app_dir.join("src").join("main.vais"),
-        "use mylib\nF main() -> i64 { add(3, 4) }\n",
+        "use mylib\nfn main() -> i64 { add(3, 4) }\n",
     )
     .unwrap();
 
@@ -3354,7 +3354,7 @@ fn test_phase64_transitive_path_dependencies() {
     .unwrap();
     fs::write(
         b_dir.join("src").join("lib.vais"),
-        "use c\nF wrapped_val() -> i64 { base_val() }\n",
+        "use c\nfn wrapped_val() -> i64 { base_val() }\n",
     )
     .unwrap();
 
@@ -3367,7 +3367,7 @@ fn test_phase64_transitive_path_dependencies() {
     .unwrap();
     fs::write(
         a_dir.join("src").join("main.vais"),
-        "use b\nF main() -> i64 { wrapped_val() }\n",
+        "use b\nfn main() -> i64 { wrapped_val() }\n",
     )
     .unwrap();
 
@@ -3869,7 +3869,7 @@ fn test_phase64_workspace_inter_member_dependency() {
     .unwrap();
     fs::write(
         app_dir.join("src").join("main.vais"),
-        "use core\nF main() -> i64 { core_fn() }\n",
+        "use core\nfn main() -> i64 { core_fn() }\n",
     )
     .unwrap();
 
@@ -4198,7 +4198,7 @@ fn test_phase64_doc_generates_markdown() {
     .unwrap();
     fs::write(
         project_dir.join("src").join("lib.vais"),
-        "# A helper function\nF helper(x: i64) -> i64 { x + 1 }\n\n# Entry point\nF main() -> i64 { helper(5) }\n",
+        "# A helper function\nfn helper(x: i64) -> i64 { x + 1 }\n\n# Entry point\nfn main() -> i64 { helper(5) }\n",
     )
     .unwrap();
 
@@ -4232,7 +4232,7 @@ fn test_phase64_doc_html_format_output() {
     .unwrap();
     fs::write(
         project_dir.join("src").join("lib.vais"),
-        "# Compute sum\nF sum(a: i64, b: i64) -> i64 { a + b }\n",
+        "# Compute sum\nfn sum(a: i64, b: i64) -> i64 { a + b }\n",
     )
     .unwrap();
 

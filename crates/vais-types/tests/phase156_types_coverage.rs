@@ -40,77 +40,77 @@ fn check_err(source: &str) {
 
 #[test]
 fn test_binary_add_i64() {
-    check_ok("F f() -> i64 = 1 + 2");
+    check_ok("fn f() -> i64 = 1 + 2");
 }
 
 #[test]
 fn test_binary_sub_i64() {
-    check_ok("F f() -> i64 = 10 - 3");
+    check_ok("fn f() -> i64 = 10 - 3");
 }
 
 #[test]
 fn test_binary_mul_i64() {
-    check_ok("F f() -> i64 = 4 * 5");
+    check_ok("fn f() -> i64 = 4 * 5");
 }
 
 #[test]
 fn test_binary_div_i64() {
-    check_ok("F f() -> i64 = 20 / 4");
+    check_ok("fn f() -> i64 = 20 / 4");
 }
 
 #[test]
 fn test_binary_mod_i64() {
-    check_ok("F f() -> i64 = 7 % 3");
+    check_ok("fn f() -> i64 = 7 % 3");
 }
 
 #[test]
 fn test_binary_eq_i64_returns_bool() {
-    check_ok("F f() -> bool = 1 == 1");
+    check_ok("fn f() -> bool = 1 == 1");
 }
 
 #[test]
 fn test_binary_neq_i64_returns_bool() {
-    check_ok("F f() -> bool = 1 != 2");
+    check_ok("fn f() -> bool = 1 != 2");
 }
 
 #[test]
 fn test_binary_lt_returns_bool() {
-    check_ok("F f() -> bool = 3 < 4");
+    check_ok("fn f() -> bool = 3 < 4");
 }
 
 #[test]
 fn test_binary_le_returns_bool() {
-    check_ok("F f() -> bool = 3 <= 4");
+    check_ok("fn f() -> bool = 3 <= 4");
 }
 
 #[test]
 fn test_binary_gt_returns_bool() {
-    check_ok("F f() -> bool = 5 > 2");
+    check_ok("fn f() -> bool = 5 > 2");
 }
 
 #[test]
 fn test_binary_ge_returns_bool() {
-    check_ok("F f() -> bool = 5 >= 5");
+    check_ok("fn f() -> bool = 5 >= 5");
 }
 
 #[test]
 fn test_binary_and_returns_bool() {
-    check_ok("F f() -> bool = true && false");
+    check_ok("fn f() -> bool = true && false");
 }
 
 #[test]
 fn test_binary_or_returns_bool() {
-    check_ok("F f() -> bool = false || true");
+    check_ok("fn f() -> bool = false || true");
 }
 
 #[test]
 fn test_binary_add_f64() {
-    check_ok("F f() -> f64 = 1.0 + 2.0");
+    check_ok("fn f() -> f64 = 1.0 + 2.0");
 }
 
 #[test]
 fn test_binary_mul_f64() {
-    check_ok("F f() -> f64 = 3.0 * 4.0");
+    check_ok("fn f() -> f64 = 3.0 * 4.0");
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -119,17 +119,17 @@ fn test_binary_mul_f64() {
 
 #[test]
 fn test_unary_not_bool() {
-    check_ok("F f() -> bool = !true");
+    check_ok("fn f() -> bool = !true");
 }
 
 #[test]
 fn test_unary_neg_i64() {
-    check_ok("F f() -> i64 = -42");
+    check_ok("fn f() -> i64 = -42");
 }
 
 #[test]
 fn test_unary_neg_f64() {
-    check_ok("F f() -> f64 = -3.14");
+    check_ok("fn f() -> f64 = -3.14");
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -211,12 +211,12 @@ fn test_index_nested_array() {
 
 #[test]
 fn test_ternary_i64() {
-    check_ok("F f(x: i64) -> i64 = x > 0 ? x : 0");
+    check_ok("fn f(x: i64) -> i64 = x > 0 ? x : 0");
 }
 
 #[test]
 fn test_ternary_bool() {
-    check_ok("F f(a: bool, b: bool) -> bool = a ? b : false");
+    check_ok("fn f(a: bool, b: bool) -> bool = a ? b : false");
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -528,18 +528,18 @@ fn test_fn_return_type_mismatch_str_vs_i64() {
 
 #[test]
 fn test_fn_return_type_correct_f64() {
-    check_ok("F f() -> f64 = 2.718");
+    check_ok("fn f() -> f64 = 2.718");
 }
 
 #[test]
 fn test_fn_empty_block_returns_unit() {
     // empty block → Unit, which triggers mismatch when declared i64 without explicit R
-    check_err("F f() -> i64 { }");
+    check_err("fn f() -> i64 { }");
 }
 
 #[test]
 fn test_fn_explicit_return_in_block() {
-    check_ok("F f() -> i64 { R 99 }");
+    check_ok("fn f() -> i64 { R 99 }");
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -740,12 +740,12 @@ fn test_mut_var_reassign_same_type() {
 
 #[test]
 fn test_undefined_variable_errors() {
-    check_err("F f() -> i64 = undefined_var");
+    check_err("fn f() -> i64 = undefined_var");
 }
 
 #[test]
 fn test_undefined_function_errors() {
-    check_err("F f() -> i64 = no_such_fn(1)");
+    check_err("fn f() -> i64 = no_such_fn(1)");
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -835,7 +835,7 @@ fn test_strict_ownership_copy_types_ok() {
 
 #[test]
 fn test_struct_registration_basic() {
-    check_ok("S Empty { }");
+    check_ok("struct Empty { }");
 }
 
 #[test]
@@ -1043,12 +1043,12 @@ fn test_tuple_three_elements_mixed() {
 #[test]
 fn test_main_fn_no_explicit_return_type() {
     // main() without explicit return type: implicit i64
-    check_ok("F main() { }");
+    check_ok("fn main() { }");
 }
 
 #[test]
 fn test_main_fn_explicit_i64_return() {
-    check_ok("F main() -> i64 = 0");
+    check_ok("fn main() -> i64 = 0");
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1061,12 +1061,12 @@ fn test_main_fn_explicit_i64_return() {
 
 #[test]
 fn test_inferred_return_type_i64() {
-    check_ok("F f() = 42");
+    check_ok("fn f() = 42");
 }
 
 #[test]
 fn test_inferred_return_type_bool() {
-    check_ok("F f() = true");
+    check_ok("fn f() = true");
 }
 
 #[test]
@@ -1080,7 +1080,7 @@ fn test_inferred_return_type_str() {
 
 #[test]
 fn test_unit_literal() {
-    check_ok("F f() -> i64 { () R 0 }");
+    check_ok("fn f() -> i64 { () R 0 }");
 }
 
 #[test]
@@ -1144,12 +1144,12 @@ fn test_mutual_forward_declaration() {
 
 #[test]
 fn test_bool_logical_ops_chain() {
-    check_ok("F f(a: bool, b: bool, c: bool) -> bool = a && b || c");
+    check_ok("fn f(a: bool, b: bool, c: bool) -> bool = a && b || c");
 }
 
 #[test]
 fn test_bool_not_chain() {
-    check_ok("F f(a: bool) -> bool = !!a");
+    check_ok("fn f(a: bool) -> bool = !!a");
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

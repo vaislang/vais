@@ -288,7 +288,7 @@ pub mod utils {
                 if lines >= lines_per_module {
                     break;
                 }
-                code.push_str(&format!("P S Data{}_{} {{\n", m, s));
+                code.push_str(&format!("pub struct Data{}_{} {{\n", m, s));
                 code.push_str("    value: i64,\n");
                 code.push_str("    status: bool\n");
                 code.push_str("}\n\n");
@@ -301,7 +301,7 @@ pub mod utils {
                 if lines >= lines_per_module {
                     break;
                 }
-                code.push_str(&format!("P E Status{}_{} {{\n", m, e));
+                code.push_str(&format!("pub enum Status{}_{} {{\n", m, e));
                 code.push_str("    Active,\n");
                 code.push_str("    Inactive,\n");
                 code.push_str("    Error(i64)\n");

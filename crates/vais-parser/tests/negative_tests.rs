@@ -20,7 +20,7 @@ fn test_error_incomplete_function_no_name() {
 #[test]
 fn test_error_incomplete_function_missing_closing_paren() {
     // Function with parameter list not closed
-    let source = "F broken(x: i64 -> i64 = x";
+    let source = "fn broken(x: i64 -> i64 = x";
     let result = parse(source);
     assert!(
         result.is_err(),
@@ -40,7 +40,7 @@ fn test_error_incomplete_function_missing_closing_paren() {
 #[test]
 fn test_error_incomplete_function_no_body() {
     // Function declaration without body
-    let source = "F test(x: i64) -> i64";
+    let source = "fn test(x: i64) -> i64";
     let result = parse(source);
     assert!(result.is_err(), "Expected error for function without body");
 }
@@ -48,7 +48,7 @@ fn test_error_incomplete_function_no_body() {
 #[test]
 fn test_error_incomplete_struct_no_fields() {
     // Struct with opening brace but no closing brace
-    let source = "S Point{x: f64";
+    let source = "struct Point{x: f64";
     let result = parse(source);
     assert!(result.is_err(), "Expected error for unclosed struct");
 
@@ -65,7 +65,7 @@ fn test_error_incomplete_struct_no_fields() {
 #[test]
 fn test_error_struct_missing_field_type() {
     // Struct field without type
-    let source = "S Point{x:, y: f64}";
+    let source = "struct Point{x:, y: f64}";
     let result = parse(source);
     assert!(result.is_err(), "Expected error for field without type");
 }
@@ -94,7 +94,7 @@ fn test_error_unexpected_token_sequence() {
 #[test]
 fn test_error_incomplete_expression_missing_operand() {
     // Expression with operator but missing right operand
-    let source = "F test() -> i64 = 42 +";
+    let source = "fn test() -> i64 = 42 +";
     let result = parse(source);
     assert!(
         result.is_err(),
@@ -105,7 +105,7 @@ fn test_error_incomplete_expression_missing_operand() {
 #[test]
 fn test_error_incomplete_type_annotation() {
     // Function with -> but no return type
-    let source = "F test(x: i64) -> = x";
+    let source = "fn test(x: i64) -> = x";
     let result = parse(source);
     assert!(
         result.is_err(),
@@ -116,7 +116,7 @@ fn test_error_incomplete_type_annotation() {
 #[test]
 fn test_error_incomplete_match_no_arms() {
     // Match expression without arms
-    let source = "F test(x: i64) -> i64 = M x {}";
+    let source = "fn test(x: i64) -> i64 = M x {}";
     let result = parse(source);
     // This might parse successfully with zero arms, or might error
     // depending on parser strictness. We test that it's handled.
@@ -126,7 +126,7 @@ fn test_error_incomplete_match_no_arms() {
 #[test]
 fn test_error_incomplete_match_missing_arrow() {
     // Match arm without =>
-    let source = "F test(x: i64) -> i64 = M x { 0 1, _ => 2 }";
+    let source = "fn test(x: i64) -> i64 = M x { 0 1, _ => 2 }";
     let result = parse(source);
     assert!(result.is_err(), "Expected error for match arm without =>");
 }
@@ -162,7 +162,7 @@ fn test_error_enum_variant_missing_paren() {
 fn test_error_deeply_nested_expressions() {
     // Create deeply nested expressions (using a conservative nesting level)
     // Parser has deep recursion, so we use only 20 levels to avoid stack overflow
-    let mut source = String::from("F test() -> i64 = ");
+    let mut source = String::from("fn test() -> i64 = ");
     for _ in 0..20 {
         source.push('(');
     }
@@ -186,7 +186,7 @@ fn test_error_exceeding_max_depth() {
     // Note: This is ignored because the Rust call stack overflows before
     // the parser's depth check can trigger. This demonstrates that the parser
     // needs to check depth earlier in the recursion to be effective.
-    let mut source = String::from("F test() -> i64 = ");
+    let mut source = String::from("fn test() -> i64 = ");
     for _ in 0..260 {
         source.push('(');
     }
@@ -216,7 +216,7 @@ fn test_error_exceeding_max_depth() {
 fn test_error_invalid_operator_sequence() {
     // Multiple operators in sequence without operands
     // Note: Parser might treat * as unary dereference, so this might parse
-    let source = "F test() -> i64 = 1 + * 2";
+    let source = "fn test() -> i64 = 1 + * 2";
     let result = parse(source);
     // Parser handles this case - it might parse or error depending on operator precedence
     let _ = result;
@@ -236,7 +236,7 @@ fn test_error_unclosed_string_literal() {
 #[test]
 fn test_error_invalid_number_literal() {
     // Invalid number format (multiple decimal points)
-    let source = "F test() -> f64 = 3.14.159";
+    let source = "fn test() -> f64 = 3.14.159";
     let result = parse(source);
     // Lexer might treat this as 3.14 followed by .159
     // We just verify it's handled
@@ -309,7 +309,7 @@ fn test_error_generic_invalid_constraint() {
 #[test]
 fn test_error_array_type_unclosed() {
     // Array type without closing bracket
-    let source = "F test(x: [i64) -> i64 = 42";
+    let source = "fn test(x: [i64) -> i64 = 42";
     let result = parse(source);
     assert!(result.is_err(), "Expected error for unclosed array type");
 }
@@ -317,7 +317,7 @@ fn test_error_array_type_unclosed() {
 #[test]
 fn test_error_tuple_type_unclosed() {
     // Tuple type without closing paren
-    let source = "F test(x: (i64, i64) -> i64 = 42";
+    let source = "fn test(x: (i64, i64) -> i64 = 42";
     let result = parse(source);
     assert!(result.is_err(), "Expected error for unclosed tuple type");
 }
@@ -325,7 +325,7 @@ fn test_error_tuple_type_unclosed() {
 #[test]
 fn test_error_function_type_invalid() {
     // Function type with invalid syntax
-    let source = "F test(f: (i64 -> ) -> i64 = 42";
+    let source = "fn test(f: (i64 -> ) -> i64 = 42";
     let result = parse(source);
     assert!(
         result.is_err(),
@@ -593,7 +593,7 @@ fn cascade() -> i64 {
 #[test]
 fn test_recovery_error_message_quality() {
     // Verify that error messages contain useful information
-    let source = "F broken(x: i64, y: i64";
+    let source = "fn broken(x: i64, y: i64";
     let (_, errors) = parse_with_recovery(source);
 
     assert!(!errors.is_empty(), "Expected errors");
@@ -779,7 +779,7 @@ fn valid2() -> i64 = 2
 #[test]
 fn test_error_use_dot_missing_ident() {
     // U mod. without an identifier after the dot
-    let source = "U std/option.\nF main() -> i64 = 42";
+    let source = "use std/option.\nfn main() -> i64 = 42";
     let result = parse(source);
     assert!(result.is_err(), "Expected error for dot without identifier");
 }
@@ -787,7 +787,7 @@ fn test_error_use_dot_missing_ident() {
 #[test]
 fn test_error_use_braces_missing_close() {
     // U mod.{A, B without closing brace
-    let source = "U std/option.{Option, Some\nF main() -> i64 = 42";
+    let source = "use std/option.{Option, Some\nfn main() -> i64 = 42";
     let result = parse(source);
     assert!(result.is_err(), "Expected error for unclosed braces");
 }

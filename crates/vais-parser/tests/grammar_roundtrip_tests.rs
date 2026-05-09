@@ -252,7 +252,7 @@ fn parse_success_rate_std() {
 
 #[test]
 fn reject_broken_syntax_missing_brace() {
-    let source = "F foo() { x := 5";
+    let source = "fn foo() { x := 5";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     assert!(
@@ -274,7 +274,7 @@ fn reject_broken_syntax_invalid_function() {
 
 #[test]
 fn reject_broken_syntax_incomplete_struct() {
-    let source = "S MyStruct {";
+    let source = "struct MyStruct {";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     assert!(
@@ -296,7 +296,7 @@ fn reject_broken_syntax_orphan_arrow() {
 
 #[test]
 fn reject_broken_syntax_double_equals_binding() {
-    let source = "F foo() { x == 5 }";
+    let source = "fn foo() { x == 5 }";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     // This might parse as an expression statement (comparison), which is valid.
@@ -306,7 +306,7 @@ fn reject_broken_syntax_double_equals_binding() {
 
 #[test]
 fn reject_broken_syntax_empty_match() {
-    let source = "F foo() { M x { } }";
+    let source = "fn foo() { M x { } }";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     // Empty match body — parser may accept or reject, but must not crash

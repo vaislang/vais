@@ -72,34 +72,34 @@ fn test_call_println_bool() {
 
 #[test]
 fn test_call_simple_function() {
-    let ir = gen_ok("fn add(x: i64, y: i64) -> i64 = x + y\nF main() -> i64 = add(1, 2)");
+    let ir = gen_ok("fn add(x: i64, y: i64) -> i64 = x + y\nfn main() -> i64 = add(1, 2)");
     assert!(ir.contains("call"));
     assert!(ir.contains("@add"));
 }
 
 #[test]
 fn test_call_no_args() {
-    let ir = gen_ok("fn zero() -> i64 = 0\nF main() -> i64 = zero()");
+    let ir = gen_ok("fn zero() -> i64 = 0\nfn main() -> i64 = zero()");
     assert!(ir.contains("@zero"));
 }
 
 #[test]
 fn test_call_multiple_args() {
     let ir = gen_ok(
-        "fn sum3(a: i64, b: i64, c: i64) -> i64 = a + b + c\nF main() -> i64 = sum3(1, 2, 3)",
+        "fn sum3(a: i64, b: i64, c: i64) -> i64 = a + b + c\nfn main() -> i64 = sum3(1, 2, 3)",
     );
     assert!(ir.contains("@sum3"));
 }
 
 #[test]
 fn test_call_nested() {
-    let ir = gen_ok("fn inc(x: i64) -> i64 = x + 1\nF main() -> i64 = inc(inc(inc(0)))");
+    let ir = gen_ok("fn inc(x: i64) -> i64 = x + 1\nfn main() -> i64 = inc(inc(inc(0)))");
     assert!(ir.contains("@inc"));
 }
 
 #[test]
 fn test_call_with_expression_args() {
-    let ir = gen_ok("fn add(x: i64, y: i64) -> i64 = x + y\nF main() -> i64 = add(1 + 2, 3 * 4)");
+    let ir = gen_ok("fn add(x: i64, y: i64) -> i64 = x + y\nfn main() -> i64 = add(1 + 2, 3 * 4)");
     assert!(ir.contains("@add"));
 }
 
@@ -265,7 +265,7 @@ fn test_call_too_few_args_builtin() {
 #[test]
 fn test_pipe_operator_call() {
     // Pipe operator desugars to function call — may produce indirect call
-    let result = gen_result("fn inc(x: i64) -> i64 = x + 1\nF main() -> i64 = 5 |> inc()");
+    let result = gen_result("fn inc(x: i64) -> i64 = x + 1\nfn main() -> i64 = 5 |> inc()");
     let _ = result; // Exercise the path, may or may not succeed
 }
 
@@ -273,7 +273,7 @@ fn test_pipe_operator_call() {
 fn test_pipe_chain() {
     // Pipe chain may produce indirect call error
     let result = gen_result(
-        "fn inc(x: i64) -> i64 = x + 1\nF dbl(x: i64) -> i64 = x * 2\nF main() -> i64 = 1 |> inc() |> dbl()",
+        "fn inc(x: i64) -> i64 = x + 1\nfn dbl(x: i64) -> i64 = x * 2\nfn main() -> i64 = 1 |> inc() |> dbl()",
     );
     let _ = result; // Exercise the path
 }
@@ -284,7 +284,7 @@ fn test_pipe_chain() {
 
 #[test]
 fn test_ternary_with_call() {
-    let ir = gen_ok("fn abs(x: i64) -> i64 = x >= 0 ? x : 0 - x\nF main() -> i64 = abs(0 - 5)");
+    let ir = gen_ok("fn abs(x: i64) -> i64 = x >= 0 ? x : 0 - x\nfn main() -> i64 = abs(0 - 5)");
     assert!(ir.contains("@abs"));
 }
 

@@ -1331,7 +1331,7 @@ fn test_formatter_format_const() {
         is_pub: true,
         attributes: vec![],
     }));
-    assert!(result.contains("P C MAX"));
+    assert!(result.contains("pub const MAX"));
     assert!(result.contains("100"));
 }
 
@@ -1384,7 +1384,7 @@ fn test_formatter_format_function_simple() {
         attributes: vec![],
         where_clause: vec![],
     }));
-    assert!(result.contains("F add(a: i64, b: i64) -> i64"));
+    assert!(result.contains("fn add(a: i64, b: i64) -> i64"));
     assert!(result.contains("a + b"));
 }
 
@@ -1405,7 +1405,7 @@ fn test_formatter_format_function_pub_async() {
         attributes: vec![],
         where_clause: vec![],
     }));
-    assert!(result.contains("pub async F fetch"));
+    assert!(result.contains("pub async fn fetch"));
 }
 
 #[test]
@@ -1430,7 +1430,7 @@ fn test_formatter_format_struct() {
         attributes: vec![],
         where_clause: vec![],
     }));
-    assert!(result.contains("pub S Point"));
+    assert!(result.contains("pub struct Point"));
     assert!(result.contains("x: f64"));
     assert!(result.contains("y: f64"));
 }
@@ -1457,7 +1457,7 @@ fn test_formatter_format_enum() {
         is_pub: false,
         attributes: vec![],
     }));
-    assert!(result.contains("E Color"));
+    assert!(result.contains("enum Color"));
     assert!(result.contains("Red"));
     assert!(result.contains("Green"));
     assert!(result.contains("Blue"));
@@ -1471,7 +1471,7 @@ fn test_formatter_format_type_alias() {
         ty: named_type("i64"),
         is_pub: false,
     }));
-    assert!(result.contains("T Num = i64"));
+    assert!(result.contains("type Num = i64"));
 }
 
 #[test]
@@ -1481,7 +1481,7 @@ fn test_formatter_format_use() {
         alias: None,
         items: None,
     }));
-    assert!(result.contains("U std::io"));
+    assert!(result.contains("use std::io"));
 }
 
 #[test]
@@ -1513,7 +1513,7 @@ fn test_formatter_format_extern_block() {
         }],
     }));
     assert!(result.contains("extern \"C\""));
-    assert!(result.contains("F exit(code: i32)"));
+    assert!(result.contains("fn exit(code: i32)"));
 }
 
 #[test]
@@ -1572,8 +1572,8 @@ fn test_formatter_format_multiple_items() {
     };
     let result = fmt.format_module(&module);
     // Multiple items should be separated by newline
-    assert!(result.contains("C A"));
-    assert!(result.contains("C B"));
+    assert!(result.contains("const A"));
+    assert!(result.contains("const B"));
 }
 
 #[test]
@@ -1595,8 +1595,8 @@ fn test_formatter_format_trait() {
         is_pub: true,
         where_clause: vec![],
     }));
-    assert!(result.contains("pub W Printable"));
-    assert!(result.contains("F print"));
+    assert!(result.contains("pub trait Printable"));
+    assert!(result.contains("fn print"));
 }
 
 #[test]
@@ -1631,8 +1631,8 @@ fn test_formatter_format_impl() {
             1,
         )],
     }));
-    assert!(result.contains("X Point"));
-    assert!(result.contains("F new"));
+    assert!(result.contains("impl Point"));
+    assert!(result.contains("fn new"));
 }
 
 #[test]

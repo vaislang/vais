@@ -46,7 +46,7 @@ fn test_parse_macro_rules_with_args() {
 
 #[test]
 fn test_parse_macro_invocation() {
-    let source = "F test() -> i64 = my_macro!(1, 2, 3)";
+    let source = "fn test() -> i64 = my_macro!(1, 2, 3)";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -57,7 +57,7 @@ fn test_parse_macro_invocation() {
 
 #[test]
 fn test_parse_optional_type() {
-    let source = "F test(x: i64?) -> i64 = 0";
+    let source = "fn test(x: i64?) -> i64 = 0";
     let module = parse_ok(source);
     if let Item::Function(f) = &module.items[0].node {
         assert!(!f.params.is_empty());
@@ -66,7 +66,7 @@ fn test_parse_optional_type() {
 
 #[test]
 fn test_parse_result_type() {
-    let source = "F test() -> Result<i64, str> = 0";
+    let source = "fn test() -> Result<i64, str> = 0";
     let module = parse_ok(source);
     if let Item::Function(f) = &module.items[0].node {
         assert!(f.ret_type.is_some());
@@ -75,7 +75,7 @@ fn test_parse_result_type() {
 
 #[test]
 fn test_parse_array_type() {
-    let source = "F test(x: [i64]) -> i64 = 0";
+    let source = "fn test(x: [i64]) -> i64 = 0";
     let module = parse_ok(source);
     if let Item::Function(f) = &module.items[0].node {
         assert!(!f.params.is_empty());
@@ -84,7 +84,7 @@ fn test_parse_array_type() {
 
 #[test]
 fn test_parse_tuple_type() {
-    let source = "F test(x: (i64, bool)) -> i64 = 0";
+    let source = "fn test(x: (i64, bool)) -> i64 = 0";
     let module = parse_ok(source);
     if let Item::Function(f) = &module.items[0].node {
         assert!(!f.params.is_empty());
@@ -93,7 +93,7 @@ fn test_parse_tuple_type() {
 
 #[test]
 fn test_parse_map_type() {
-    let source = "F test(x: HashMap<str, i64>) -> i64 = 0";
+    let source = "fn test(x: HashMap<str, i64>) -> i64 = 0";
     let module = parse_ok(source);
     if let Item::Function(f) = &module.items[0].node {
         assert!(!f.params.is_empty());
@@ -102,7 +102,7 @@ fn test_parse_map_type() {
 
 #[test]
 fn test_parse_nested_generic_type() {
-    let source = "F test(x: Vec<Option<i64>>) -> i64 = 0";
+    let source = "fn test(x: Vec<Option<i64>>) -> i64 = 0";
     let module = parse_ok(source);
     if let Item::Function(f) = &module.items[0].node {
         assert!(!f.params.is_empty());
@@ -111,7 +111,7 @@ fn test_parse_nested_generic_type() {
 
 #[test]
 fn test_parse_fn_type() {
-    let source = "F test(f: fn(i64) -> bool) -> i64 = 0";
+    let source = "fn test(f: fn(i64) -> bool) -> i64 = 0";
     let module = parse_ok(source);
     if let Item::Function(f) = &module.items[0].node {
         assert!(!f.params.is_empty());
@@ -120,7 +120,7 @@ fn test_parse_fn_type() {
 
 #[test]
 fn test_parse_ref_type() {
-    let source = "F test(x: &i64) -> i64 = 0";
+    let source = "fn test(x: &i64) -> i64 = 0";
     let module = parse_ok(source);
     if let Item::Function(f) = &module.items[0].node {
         assert!(!f.params.is_empty());
@@ -129,7 +129,7 @@ fn test_parse_ref_type() {
 
 #[test]
 fn test_parse_ref_mut_type() {
-    let source = "F test(x: &mut i64) -> i64 = 0";
+    let source = "fn test(x: &mut i64) -> i64 = 0";
     let module = parse_ok(source);
     if let Item::Function(f) = &module.items[0].node {
         assert!(!f.params.is_empty());
@@ -138,7 +138,7 @@ fn test_parse_ref_mut_type() {
 
 #[test]
 fn test_parse_slice_type() {
-    let source = "F test(x: &[i64]) -> i64 = 0";
+    let source = "fn test(x: &[i64]) -> i64 = 0";
     let module = parse_ok(source);
     if let Item::Function(f) = &module.items[0].node {
         assert!(!f.params.is_empty());
@@ -151,7 +151,7 @@ fn test_parse_slice_type() {
 
 #[test]
 fn test_parse_type_alias() {
-    let source = "T Num = i64";
+    let source = "type Num = i64";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
     assert!(matches!(&module.items[0].node, Item::TypeAlias(..)));
@@ -185,7 +185,7 @@ fn test_parse_extern_block() {
 
 #[test]
 fn test_parse_use_statement() {
-    let source = "U std.io";
+    let source = "use std.io";
     let module = parse_ok(source);
     assert!(!module.items.is_empty());
 }
@@ -304,28 +304,28 @@ fn test_parse_loop_with_range() {
 
 #[test]
 fn test_parse_lambda() {
-    let source = "F test() -> i64 { f := |x| x * 2 \n R f(5) }";
+    let source = "fn test() -> i64 { f := |x| x * 2 \n R f(5) }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_pipe_operator() {
-    let source = "F test(x: i64) -> i64 = x |> abs";
+    let source = "fn test(x: i64) -> i64 = x |> abs";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_ternary() {
-    let source = "F test(x: i64) -> i64 = x > 0 ? x : 0 - x";
+    let source = "fn test(x: i64) -> i64 = x > 0 ? x : 0 - x";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_self_recursion() {
-    let source = "F factorial(n: i64) -> i64 = n <= 1 ? 1 : n * @(n - 1)";
+    let source = "fn factorial(n: i64) -> i64 = n <= 1 ? 1 : n * @(n - 1)";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -361,7 +361,7 @@ fn test_parse_defer() {
 
 #[test]
 fn test_parse_comptime() {
-    let source = "F test() -> i64 = comptime { 4 * 8 }";
+    let source = "fn test() -> i64 = comptime { 4 * 8 }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -499,7 +499,7 @@ fn test_parse_multiple_functions() {
 
 #[test]
 fn test_parse_pub_function() {
-    let source = "P F public_fn() -> i64 = 42";
+    let source = "pub fn public_fn() -> i64 = 42";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
     if let Item::Function(f) = &module.items[0].node {

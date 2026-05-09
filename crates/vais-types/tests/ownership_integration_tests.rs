@@ -100,7 +100,7 @@ fn ownership_warn_mode_does_not_fail() {
 
 #[test]
 fn ownership_strict_mode_can_be_enabled() {
-    let module = parse("F main() -> i64 { 0 }").unwrap();
+    let module = parse("fn main() -> i64 { 0 }").unwrap();
     let mut checker = TypeChecker::new();
     checker.set_strict_ownership(true);
     let result = checker.check_module(&module);
@@ -109,7 +109,7 @@ fn ownership_strict_mode_can_be_enabled() {
 
 #[test]
 fn ownership_can_be_disabled() {
-    let module = parse("F main() -> i64 { 0 }").unwrap();
+    let module = parse("fn main() -> i64 { 0 }").unwrap();
     let mut checker = TypeChecker::new();
     checker.disable_ownership_check();
     let result = checker.check_module(&module);

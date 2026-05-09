@@ -1271,7 +1271,7 @@ fn test_format_multiple_items() {
     let output = formatter.format_module(&module);
 
     // Should have blank line between items
-    assert!(output.contains("pub type Int = i64\n\npub F add"));
+    assert!(output.contains("pub type Int = i64\n\npub fn add"));
 }
 
 // ============================================================================
@@ -1294,7 +1294,7 @@ fn test_format_use_statement() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("U std::io::println"));
+    assert!(output.contains("use std::io::println"));
 }
 
 #[test]
@@ -1313,5 +1313,5 @@ fn test_format_use_with_alias() {
     let mut formatter = Formatter::new(FormatConfig::default());
     let output = formatter.format_module(&module);
 
-    assert!(output.contains("U std::collections::HashMap as Map"));
+    assert!(output.contains("use std::collections::HashMap as Map"));
 }

@@ -451,7 +451,7 @@ fn test_use_statement() {
 
 #[test]
 fn test_pub_function() {
-    let source = "P F public_fn() -> () = ()";
+    let source = "pub fn public_fn() -> () = ()";
     let ir = compile_to_ir(source).unwrap();
     assert!(ir.contains("define void @public_fn"));
 }

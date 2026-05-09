@@ -260,28 +260,28 @@ fn test_macro_template_with_keywords() {
 
 #[test]
 fn test_macro_invoke_paren() {
-    let source = "F test() -> i64 = my_macro!(1, 2, 3)";
+    let source = "fn test() -> i64 = my_macro!(1, 2, 3)";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_macro_invoke_bracket() {
-    let source = "F test() -> i64 = my_macro![1, 2, 3]";
+    let source = "fn test() -> i64 = my_macro![1, 2, 3]";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_macro_invoke_no_args() {
-    let source = "F test() -> i64 = my_macro!()";
+    let source = "fn test() -> i64 = my_macro!()";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_macro_invoke_nested_parens() {
-    let source = "F test() -> i64 = my_macro!(1, 2, 3)";
+    let source = "fn test() -> i64 = my_macro!(1, 2, 3)";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }

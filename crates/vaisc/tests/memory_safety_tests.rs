@@ -153,7 +153,7 @@ fn test_comment_variations() {
         "# comment only",
         "#",
         "fn f() -> i64 = 1 # trailing",
-        "# line1\n# line2\nF f() -> i64 = 1",
+        "# line1\n# line2\nfn f() -> i64 = 1",
         "fn f() -> i64 = 1 ## double hash",
     ];
 
@@ -223,7 +223,7 @@ fn test_many_enum_variants() {
         .map(|i| format!("Variant{}", i))
         .collect::<Vec<_>>()
         .join(", ");
-    let source = format!("E BigEnum {{ {} }}", variants);
+    let source = format!("enum BigEnum {{ {} }}", variants);
 
     let result = parse(&source);
     assert!(result.is_ok());
@@ -402,7 +402,7 @@ fn test_error_recovery_no_leaks() {
         "fn f() ->",           // Incomplete return type
         "fn f() -> i64",       // Missing body
         "struct Point {",          // Incomplete struct
-        "E Color {",          // Incomplete enum
+        "enum Color {",          // Incomplete enum
         "{ { { {",            // Unbalanced braces
         "))))",               // Unbalanced parentheses
         "fn f() -> i64 = 1 +", // Incomplete expression

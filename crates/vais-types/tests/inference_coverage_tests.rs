@@ -44,7 +44,7 @@ fn test_check_mode_check_with_different_types() {
 
 #[test]
 fn test_infer_integer_literal() {
-    let source = "F test() -> i64 = 42";
+    let source = "fn test() -> i64 = 42";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     assert!(tc.check_module(&module).is_ok());
@@ -52,7 +52,7 @@ fn test_infer_integer_literal() {
 
 #[test]
 fn test_infer_float_literal() {
-    let source = "F test() -> f64 = 3.14";
+    let source = "fn test() -> f64 = 3.14";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     assert!(tc.check_module(&module).is_ok());
@@ -60,7 +60,7 @@ fn test_infer_float_literal() {
 
 #[test]
 fn test_infer_bool_literal() {
-    let source = "F test() -> bool = true";
+    let source = "fn test() -> bool = true";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     assert!(tc.check_module(&module).is_ok());
@@ -76,7 +76,7 @@ fn test_infer_string_literal() {
 
 #[test]
 fn test_infer_binary_op_addition() {
-    let source = "F test() -> i64 { x := 1 + 2; R x }";
+    let source = "fn test() -> i64 { x := 1 + 2; R x }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     assert!(tc.check_module(&module).is_ok());
@@ -84,7 +84,7 @@ fn test_infer_binary_op_addition() {
 
 #[test]
 fn test_infer_binary_op_comparison() {
-    let source = "F test() -> bool { x := 1 < 2; R x }";
+    let source = "fn test() -> bool { x := 1 < 2; R x }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     assert!(tc.check_module(&module).is_ok());
@@ -92,7 +92,7 @@ fn test_infer_binary_op_comparison() {
 
 #[test]
 fn test_infer_binary_op_logical() {
-    let source = "F test() -> bool { x := true && false; R x }";
+    let source = "fn test() -> bool { x := true && false; R x }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     assert!(tc.check_module(&module).is_ok());
@@ -100,7 +100,7 @@ fn test_infer_binary_op_logical() {
 
 #[test]
 fn test_infer_unary_op_negate() {
-    let source = "F test() -> i64 { x := -42; R x }";
+    let source = "fn test() -> i64 { x := -42; R x }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     assert!(tc.check_module(&module).is_ok());
@@ -108,7 +108,7 @@ fn test_infer_unary_op_negate() {
 
 #[test]
 fn test_infer_unary_op_not() {
-    let source = "F test() -> bool { x := !true; R x }";
+    let source = "fn test() -> bool { x := !true; R x }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     assert!(tc.check_module(&module).is_ok());
@@ -217,7 +217,7 @@ fn test_infer_closure_type() {
 
 #[test]
 fn test_infer_ternary() {
-    let source = "F test(x: i64) -> i64 = x > 0 ? x : -x";
+    let source = "fn test(x: i64) -> i64 = x > 0 ? x : -x";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     assert!(tc.check_module(&module).is_ok());
@@ -439,7 +439,7 @@ fn test_infer_mutually_independent_functions() {
 
 #[test]
 fn test_infer_empty_function_body() {
-    let source = "F test() -> i64 = 0";
+    let source = "fn test() -> i64 = 0";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     assert!(tc.check_module(&module).is_ok());

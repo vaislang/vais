@@ -12,7 +12,7 @@ use vais_parser::Parser;
 
 #[test]
 fn test_parse_simple_function() {
-    let source = "F add(a: i64, b: i64) -> i64 = a + b";
+    let source = "fn add(a: i64, b: i64) -> i64 = a + b";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -75,7 +75,7 @@ fn test_parse_generic_function() {
 
 #[test]
 fn test_parse_public_function() {
-    let source = "P F hello() -> () = ()";
+    let source = "pub fn hello() -> () = ()";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -248,7 +248,7 @@ fn test_parse_union() {
 
 #[test]
 fn test_parse_type_alias() {
-    let source = "T MyInt = i64";
+    let source = "type MyInt = i64";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -271,7 +271,7 @@ fn test_parse_type_alias() {
 
 #[test]
 fn test_parse_use_statement() {
-    let source = "U std::collections::HashMap";
+    let source = "use std::collections::HashMap";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -290,7 +290,7 @@ fn test_parse_use_statement() {
 
 #[test]
 fn test_parse_use_selective_single() {
-    let source = "U std/string.Str";
+    let source = "use std/string.Str";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -310,7 +310,7 @@ fn test_parse_use_selective_single() {
 
 #[test]
 fn test_parse_use_selective_multi() {
-    let source = "U std/option.{Option, Some, None}";
+    let source = "use std/option.{Option, Some, None}";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -332,7 +332,7 @@ fn test_parse_use_selective_multi() {
 
 #[test]
 fn test_parse_use_with_semicolon() {
-    let source = "U std/option;\nF main() -> i64 = 42";
+    let source = "use std/option;\nfn main() -> i64 = 42";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -351,7 +351,7 @@ fn test_parse_use_with_semicolon() {
 
 #[test]
 fn test_parse_use_selective_with_semicolon() {
-    let source = "U std/option.{Option, None};\nF main() -> i64 = 42";
+    let source = "use std/option.{Option, None};\nfn main() -> i64 = 42";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -370,7 +370,7 @@ fn test_parse_use_selective_with_semicolon() {
 
 #[test]
 fn test_parse_use_trailing_comma() {
-    let source = "U std/option.{Option, Some,}";
+    let source = "use std/option.{Option, Some,}";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -1061,7 +1061,7 @@ fn test_parse_defer() {
 
 #[test]
 fn test_parse_slice_type() {
-    let source = "F process(data: &[i64]) -> i64 = data.len()";
+    let source = "fn process(data: &[i64]) -> i64 = data.len()";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -1080,7 +1080,7 @@ fn test_parse_slice_type() {
 
 #[test]
 fn test_parse_mut_slice_type() {
-    let source = "F modify(data: &mut [i64]) -> () = ()";
+    let source = "fn modify(data: &mut [i64]) -> () = ()";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -1451,7 +1451,7 @@ fn test_parse_complex_generic_function_with_trait_bounds() {
 
 #[test]
 fn test_parse_lambda_default_capture() {
-    let source = "F main() { f := |x| x + 1 }";
+    let source = "fn main() { f := |x| x + 1 }";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -1479,7 +1479,7 @@ fn test_parse_lambda_default_capture() {
 
 #[test]
 fn test_parse_lambda_move_capture() {
-    let source = "F main() { f := move |x| x + 1 }";
+    let source = "fn main() { f := move |x| x + 1 }";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();

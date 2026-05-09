@@ -171,7 +171,7 @@ fn emit_ts_skips_private_struct() {
     // Two structs: one public, one private.
     std::fs::write(
         &input_path,
-        "P S Public {\n  x: i64,\n}\nS Private {\n  y: i64,\n}\n",
+        "P S Public {\n  x: i64,\n}\nstruct Private {\n  y: i64,\n}\n",
     )
     .expect("write input");
 

@@ -86,7 +86,7 @@ proptest! {
         depth in 1usize..30,
         op in prop_oneof![Just("+"), Just("-"), Just("*"), Just("/"), Just("%")],
     ) {
-        let mut source = String::from("F f() -> i64 ");
+        let mut source = String::from("fn f() -> i64 ");
         for _ in 0..depth {
             source.push('(');
         }
@@ -111,7 +111,7 @@ proptest! {
             .map(|(pat, body)| format!("    {} => {}", pat, body))
             .collect::<Vec<_>>()
             .join(",\n");
-        let source = format!("F f(x: i64) -> i64 M x {{\n{}\n}}", arm_str);
+        let source = format!("fn f(x: i64) -> i64 M x {{\n{}\n}}", arm_str);
         let _ = parse(&source);
     }
 
@@ -119,7 +119,7 @@ proptest! {
     fn parser_never_panics_on_if_chains(
         depth in 1usize..15,
     ) {
-        let mut source = String::from("F f(x: i64) -> i64 ");
+        let mut source = String::from("fn f(x: i64) -> i64 ");
         for i in 0..depth {
             source.push_str(&format!("I x == {} {{ {} }} E ", i, i * 10));
         }

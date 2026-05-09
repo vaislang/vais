@@ -170,7 +170,7 @@ fn error_recursive_without_return_type() {
     // So this actually compiles successfully with inferred types
     // Wrap with main() to verify execution: fib(10) = 55
     assert_exit_code(
-        "fn fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)\nF main() -> i64 = fib(10)",
+        "fn fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)\nfn main() -> i64 = fib(10)",
         55,
     );
 }
@@ -296,7 +296,7 @@ fn positive_explicit_types() {
     // With explicit types, should always compile and run
     // Wrap with main() to verify execution: add(20, 22) = 42
     assert_exit_code(
-        "fn add(a: i64, b: i64) -> i64 { R a + b }\nF main() -> i64 = add(20, 22)",
+        "fn add(a: i64, b: i64) -> i64 { R a + b }\nfn main() -> i64 = add(20, 22)",
         42,
     );
 }

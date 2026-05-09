@@ -370,7 +370,10 @@ impl Formatter {
     pub(crate) fn format_if_else(&self, if_else: &IfElse) -> String {
         match if_else {
             IfElse::ElseIf(cond, stmts, else_) => {
-                let mut s = format!(" E I {} {{\n", self.format_expr(&cond.node));
+                // Step 19 P4 retirement: canonical chain form is `else I`
+                // (multi-char `else` + retained single-char `I` for if).
+                // Legacy ` E I ` emission would round-trip to a parse error.
+                let mut s = format!(" else I {} {{\n", self.format_expr(&cond.node));
                 for stmt in stmts {
                     s.push_str("    ");
                     s.push_str(&self.format_stmt_inline(&stmt.node));
@@ -383,7 +386,7 @@ impl Formatter {
                 s
             }
             IfElse::Else(stmts) => {
-                let mut s = String::from(" E {\n");
+                let mut s = String::from(" else {\n");
                 for stmt in stmts {
                     s.push_str("    ");
                     s.push_str(&self.format_stmt_inline(&stmt.node));

@@ -38,13 +38,13 @@ fn assert_parse_fails(source: &str) {
 }
 
 fn assert_parses_expr(source: &str) {
-    let wrapped = format!("F __test__() -> i64 {{ {} }}", source);
+    let wrapped = format!("fn __test__() -> i64 {{ {} }}", source);
     assert_parses(&wrapped);
 }
 
 #[allow(dead_code)]
 fn assert_expr_fails(source: &str) {
-    let wrapped = format!("F __test__() -> i64 {{ {} }}", source);
+    let wrapped = format!("fn __test__() -> i64 {{ {} }}", source);
     assert_parse_fails(&wrapped);
 }
 
@@ -66,7 +66,7 @@ mod items {
 
     #[test]
     fn grammar_item_function_expr_body() {
-        let m = parse_ok("F add(a: i64, b: i64) -> i64 = a + b");
+        let m = parse_ok("fn add(a: i64, b: i64) -> i64 = a + b");
         assert_eq!(m.items.len(), 1);
         match &m.items[0].node {
             Item::Function(f) => {
@@ -80,7 +80,7 @@ mod items {
 
     #[test]
     fn grammar_item_function_block_body() {
-        let m = parse_ok("F foo(x: i64) -> i64 { R x + 1 }");
+        let m = parse_ok("fn foo(x: i64) -> i64 { R x + 1 }");
         match &m.items[0].node {
             Item::Function(f) => {
                 assert!(matches!(f.body, FunctionBody::Block(_)));
@@ -91,12 +91,12 @@ mod items {
 
     #[test]
     fn grammar_item_function_no_return_type() {
-        assert_parses("F greet() { R 0 }");
+        assert_parses("fn greet() { R 0 }");
     }
 
     #[test]
     fn grammar_item_function_no_params() {
-        assert_parses("F zero() -> i64 = 0");
+        assert_parses("fn zero() -> i64 = 0");
     }
 
     #[test]
@@ -110,7 +110,7 @@ mod items {
 
     #[test]
     fn grammar_item_public_function() {
-        let m = parse_ok("P F hello() -> i64 = 42");
+        let m = parse_ok("pub fn hello() -> i64 = 42");
         match &m.items[0].node {
             Item::Function(f) => assert!(f.is_pub),
             other => panic!("Expected Function, got {:?}", other),
@@ -136,14 +136,14 @@ mod items {
 
     #[test]
     fn grammar_item_function_with_attributes() {
-        assert_parses("#[inline]\nF fast() -> i64 = 0");
+        assert_parses("#[inline]\nfn fast() -> i64 = 0");
     }
 
     // --- Item::Struct ---
 
     #[test]
     fn grammar_item_struct_simple() {
-        let m = parse_ok("S Point { x: f64, y: f64 }");
+        let m = parse_ok("struct Point { x: f64, y: f64 }");
         match &m.items[0].node {
             Item::Struct(s) => {
                 assert_eq!(s.name.node, "Point");
@@ -155,7 +155,7 @@ mod items {
 
     #[test]
     fn grammar_item_struct_generic() {
-        let m = parse_ok("S Pair<A, B> { first: A, second: B }");
+        let m = parse_ok("struct Pair<A, B> { first: A, second: B }");
         match &m.items[0].node {
             Item::Struct(s) => assert_eq!(s.generics.len(), 2),
             other => panic!("Expected Struct, got {:?}", other),
@@ -173,14 +173,14 @@ mod items {
 
     #[test]
     fn grammar_item_struct_with_where() {
-        assert_parses("S Container<T> where T: Clone { value: T }");
+        assert_parses("struct Container<T> where T: Clone { value: T }");
     }
 
     // --- Item::Enum ---
 
     #[test]
     fn grammar_item_enum_simple() {
-        let m = parse_ok("E Color { Red, Green, Blue }");
+        let m = parse_ok("enum Color { Red, Green, Blue }");
         match &m.items[0].node {
             Item::Enum(e) => {
                 assert_eq!(e.name.node, "Color");
@@ -192,7 +192,7 @@ mod items {
 
     #[test]
     fn grammar_item_enum_generic() {
-        let m = parse_ok("E Option<T> { Some(T), None }");
+        let m = parse_ok("enum Option<T> { Some(T), None }");
         match &m.items[0].node {
             Item::Enum(e) => {
                 assert_eq!(e.generics.len(), 1);
@@ -205,7 +205,7 @@ mod items {
 
     #[test]
     fn grammar_item_enum_struct_variant() {
-        assert_parses("E Shape { Circle { radius: f64 }, Rect { w: f64, h: f64 } }");
+        assert_parses("enum Shape { Circle { radius: f64 }, Rect { w: f64, h: f64 } }");
     }
 
     #[test]
@@ -235,7 +235,7 @@ mod items {
 
     #[test]
     fn grammar_item_type_alias() {
-        let m = parse_ok("T Num = i64");
+        let m = parse_ok("type Num = i64");
         match &m.items[0].node {
             Item::TypeAlias(ta) => {
                 assert_eq!(ta.name.node, "Num");
@@ -253,7 +253,7 @@ mod items {
 
     #[test]
     fn grammar_item_trait_alias() {
-        let m = parse_ok("T Printable = Display + Debug");
+        let m = parse_ok("type Printable = Display + Debug");
         match &m.items[0].node {
             Item::TraitAlias(ta) => {
                 assert_eq!(ta.name.node, "Printable");
@@ -267,7 +267,7 @@ mod items {
 
     #[test]
     fn grammar_item_use_simple() {
-        let m = parse_ok("U std");
+        let m = parse_ok("use std");
         match &m.items[0].node {
             Item::Use(u) => {
                 assert!(!u.path.is_empty());
@@ -278,19 +278,19 @@ mod items {
 
     #[test]
     fn grammar_item_use_dotted_path() {
-        assert_parses("U std.io");
+        assert_parses("use std.io");
     }
 
     #[test]
     fn grammar_item_use_selective() {
-        assert_parses("U std/collections.{HashMap, HashSet}");
+        assert_parses("use std/collections.{HashMap, HashSet}");
     }
 
     // --- Item::Trait ---
 
     #[test]
     fn grammar_item_trait_empty() {
-        let m = parse_ok("W Marker { }");
+        let m = parse_ok("trait Marker { }");
         match &m.items[0].node {
             Item::Trait(t) => assert_eq!(t.name.node, "Marker"),
             other => panic!("Expected Trait, got {:?}", other),
@@ -300,7 +300,7 @@ mod items {
     #[test]
     fn grammar_item_trait_with_methods() {
         assert_parses(
-            "W Greet {
+            "trait Greet {
                 F greet(self) -> i64
             }",
         );
@@ -319,7 +319,7 @@ mod items {
     #[test]
     fn grammar_item_trait_with_default_impl() {
         assert_parses(
-            "W Greeter {
+            "trait Greeter {
                 F greet(self) -> i64 = 42
             }",
         );
@@ -330,7 +330,7 @@ mod items {
     #[test]
     fn grammar_item_impl_inherent() {
         assert_parses(
-            "S Foo { x: i64 }
+            "struct Foo { x: i64 }
              X Foo {
                  F get_x(self) -> i64 = self.x
              }",
@@ -340,7 +340,7 @@ mod items {
     #[test]
     fn grammar_item_impl_for_trait() {
         assert_parses(
-            "W Greet { F greet(self) -> i64 }
+            "trait Greet { F greet(self) -> i64 }
              S Bar { v: i64 }
              X Bar: Greet {
                  F greet(self) -> i64 = self.v
@@ -351,7 +351,7 @@ mod items {
     #[test]
     fn grammar_item_impl_generic() {
         assert_parses(
-            "S Wrapper<T> { val: T }
+            "struct Wrapper<T> { val: T }
              X Wrapper<T> {
                  F unwrap(self) -> T = self.val
              }",
@@ -445,7 +445,7 @@ mod items {
     #[test]
     fn grammar_item_multiple_items() {
         let m = parse_ok(
-            "S Point { x: i64, y: i64 }
+            "struct Point { x: i64, y: i64 }
              F origin() -> Point = Point { x: 0, y: 0 }
              C ZERO: i64 = 0",
         );
@@ -471,89 +471,89 @@ mod types {
 
     #[test]
     fn grammar_type_named_simple() {
-        assert_parses("F f(x: i64) -> i64 = x");
-        assert_parses("F f(x: f64) -> f64 = x");
-        assert_parses("F f(x: bool) -> bool = x");
-        assert_parses("F f(x: str) -> str = x");
-        assert_parses("F f(x: i8) -> i8 = x");
-        assert_parses("F f(x: u32) -> u32 = x");
+        assert_parses("fn f(x: i64) -> i64 = x");
+        assert_parses("fn f(x: f64) -> f64 = x");
+        assert_parses("fn f(x: bool) -> bool = x");
+        assert_parses("fn f(x: str) -> str = x");
+        assert_parses("fn f(x: i8) -> i8 = x");
+        assert_parses("fn f(x: u32) -> u32 = x");
     }
 
     #[test]
     fn grammar_type_named_generic() {
-        assert_parses("F f(x: Vec<i64>) -> Vec<i64> = x");
-        assert_parses("F f(x: HashMap<str, i64>) -> HashMap<str, i64> = x");
+        assert_parses("fn f(x: Vec<i64>) -> Vec<i64> = x");
+        assert_parses("fn f(x: HashMap<str, i64>) -> HashMap<str, i64> = x");
     }
 
     #[test]
     fn grammar_type_named_nested_generic() {
-        assert_parses("F f(x: Vec<Vec<i64>>) -> Vec<Vec<i64>> = x");
+        assert_parses("fn f(x: Vec<Vec<i64>>) -> Vec<Vec<i64>> = x");
     }
 
     #[test]
     fn grammar_type_fn_ptr() {
-        assert_parses("F f(cb: fn(i64) -> i64) -> i64 = 0");
+        assert_parses("fn f(cb: fn(i64) -> i64) -> i64 = 0");
     }
 
     #[test]
     fn grammar_type_fn_ptr_vararg() {
-        assert_parses("F f(cb: fn(i64, ...) -> i64) -> i64 = 0");
+        assert_parses("fn f(cb: fn(i64, ...) -> i64) -> i64 = 0");
     }
 
     #[test]
     fn grammar_type_array() {
-        assert_parses("F f(arr: [i64]) -> i64 = 0");
+        assert_parses("fn f(arr: [i64]) -> i64 = 0");
     }
 
     #[test]
     fn grammar_type_const_array() {
-        assert_parses("F f(arr: [i64; 10]) -> i64 = 0");
+        assert_parses("fn f(arr: [i64; 10]) -> i64 = 0");
     }
 
     #[test]
     fn grammar_type_map() {
-        assert_parses("F f(m: [str:i64]) -> i64 = 0");
+        assert_parses("fn f(m: [str:i64]) -> i64 = 0");
     }
 
     #[test]
     fn grammar_type_tuple() {
-        assert_parses("F f(t: (i64, f64)) -> i64 = 0");
-        assert_parses("F f(t: (i64, f64, bool)) -> i64 = 0");
+        assert_parses("fn f(t: (i64, f64)) -> i64 = 0");
+        assert_parses("fn f(t: (i64, f64, bool)) -> i64 = 0");
     }
 
     #[test]
     fn grammar_type_optional() {
-        assert_parses("F f(x: i64?) -> i64 = 0");
+        assert_parses("fn f(x: i64?) -> i64 = 0");
     }
 
     #[test]
     fn grammar_type_result() {
-        assert_parses("F f(x: i64!) -> i64 = 0");
+        assert_parses("fn f(x: i64!) -> i64 = 0");
     }
 
     #[test]
     fn grammar_type_pointer() {
-        assert_parses("F f(p: *i64) -> i64 = 0");
+        assert_parses("fn f(p: *i64) -> i64 = 0");
     }
 
     #[test]
     fn grammar_type_ref() {
-        assert_parses("F f(r: &i64) -> i64 = 0");
+        assert_parses("fn f(r: &i64) -> i64 = 0");
     }
 
     #[test]
     fn grammar_type_ref_mut() {
-        assert_parses("F f(r: &mut i64) -> i64 = 0");
+        assert_parses("fn f(r: &mut i64) -> i64 = 0");
     }
 
     #[test]
     fn grammar_type_slice() {
-        assert_parses("F f(s: &[i64]) -> i64 = 0");
+        assert_parses("fn f(s: &[i64]) -> i64 = 0");
     }
 
     #[test]
     fn grammar_type_slice_mut() {
-        assert_parses("F f(s: &mut [i64]) -> i64 = 0");
+        assert_parses("fn f(s: &mut [i64]) -> i64 = 0");
     }
 
     #[test]
@@ -568,32 +568,32 @@ mod types {
 
     #[test]
     fn grammar_type_fn_type() {
-        assert_parses("F f(cb: (i64, i64) -> i64) -> i64 = 0");
+        assert_parses("fn f(cb: (i64, i64) -> i64) -> i64 = 0");
     }
 
     #[test]
     fn grammar_type_unit() {
-        assert_parses("F f() -> () = ()");
+        assert_parses("fn f() -> () = ()");
     }
 
     #[test]
     fn grammar_type_dyn_trait() {
-        assert_parses("F f(x: dyn Display) -> i64 = 0");
+        assert_parses("fn f(x: dyn Display) -> i64 = 0");
     }
 
     #[test]
     fn grammar_type_dyn_trait_generic() {
-        assert_parses("F f(x: dyn Iterator<i64>) -> i64 = 0");
+        assert_parses("fn f(x: dyn Iterator<i64>) -> i64 = 0");
     }
 
     #[test]
     fn grammar_type_linear() {
-        assert_parses("F f(x: linear i64) -> i64 = 0");
+        assert_parses("fn f(x: linear i64) -> i64 = 0");
     }
 
     #[test]
     fn grammar_type_affine() {
-        assert_parses("F f(x: affine i64) -> i64 = 0");
+        assert_parses("fn f(x: affine i64) -> i64 = 0");
     }
 
     // grammar_type_impl_trait{,_multi_bound} REMOVED (ROADMAP #18):
@@ -635,7 +635,7 @@ mod expressions {
 
     #[test]
     fn grammar_expr_string_interp() {
-        assert_parses("F f(name: str) -> str = ~\"hello {name}\"");
+        assert_parses("fn f(name: str) -> str = ~\"hello {name}\"");
     }
 
     #[test]
@@ -650,7 +650,7 @@ mod expressions {
 
     #[test]
     fn grammar_expr_self_call() {
-        assert_parses("F fact(n: i64) -> i64 = I n <= 1 { R 1 } E { R n * @(n - 1) }");
+        assert_parses("fn fact(n: i64) -> i64 = I n <= 1 { R 1 } E { R n * @(n - 1) }");
     }
 
     // --- Binary operators by precedence ---
@@ -794,7 +794,7 @@ mod expressions {
 
     #[test]
     fn grammar_expr_static_method_call() {
-        assert_parses("F f() -> i64 = Vec.new()");
+        assert_parses("fn f() -> i64 = Vec.new()");
     }
 
     // --- Field access ---
@@ -834,7 +834,7 @@ mod expressions {
     #[test]
     fn grammar_expr_struct_lit() {
         assert_parses(
-            "S Point { x: i64, y: i64 }
+            "struct Point { x: i64, y: i64 }
              F f() -> Point = Point { x: 1, y: 2 }",
         );
     }
@@ -884,7 +884,7 @@ mod expressions {
 
     #[test]
     fn grammar_expr_map_lit() {
-        assert_parses("F f() -> i64 { m := {\"a\": 1, \"b\": 2}\n R 0 }");
+        assert_parses("fn f() -> i64 { m := {\"a\": 1, \"b\": 2}\n R 0 }");
     }
 
     // --- Spread ---
@@ -960,7 +960,7 @@ mod expressions {
     #[test]
     fn grammar_expr_yield() {
         // `yield` is the keyword (not `Y` which is await)
-        assert_parses("F gen() -> i64 { yield 42 }");
+        assert_parses("fn gen() -> i64 { yield 42 }");
     }
 
     // --- Comptime ---
@@ -1024,57 +1024,57 @@ mod statements {
 
     #[test]
     fn grammar_stmt_let_simple() {
-        assert_parses("F f() -> i64 { x := 5\n R x }");
+        assert_parses("fn f() -> i64 { x := 5\n R x }");
     }
 
     #[test]
     fn grammar_stmt_let_typed() {
-        assert_parses("F f() -> i64 { x: i64 = 5\n R x }");
+        assert_parses("fn f() -> i64 { x: i64 = 5\n R x }");
     }
 
     #[test]
     fn grammar_stmt_let_mutable() {
-        assert_parses("F f() -> i64 { x := mut 0\n x = 1\n R x }");
+        assert_parses("fn f() -> i64 { x := mut 0\n x = 1\n R x }");
     }
 
     #[test]
     fn grammar_stmt_let_destructure() {
-        assert_parses("F f() -> i64 { (a, b) := (1, 2)\n R a + b }");
+        assert_parses("fn f() -> i64 { (a, b) := (1, 2)\n R a + b }");
     }
 
     #[test]
     fn grammar_stmt_expr() {
-        assert_parses("F f() -> i64 { foo()\n R 0 }");
+        assert_parses("fn f() -> i64 { foo()\n R 0 }");
     }
 
     #[test]
     fn grammar_stmt_return_explicit() {
-        assert_parses("F f() -> i64 { R 42 }");
+        assert_parses("fn f() -> i64 { R 42 }");
     }
 
     #[test]
     fn grammar_stmt_return_void() {
-        assert_parses("F f() { R }");
+        assert_parses("fn f() { R }");
     }
 
     #[test]
     fn grammar_stmt_break() {
-        assert_parses("F f() -> i64 { L { B } R 0 }");
+        assert_parses("fn f() -> i64 { L { B } R 0 }");
     }
 
     #[test]
     fn grammar_stmt_break_with_value() {
-        assert_parses("F f() -> i64 { L { B 42 } }");
+        assert_parses("fn f() -> i64 { L { B 42 } }");
     }
 
     #[test]
     fn grammar_stmt_continue() {
-        assert_parses("F f() -> i64 { L i:0..10 { C } R 0 }");
+        assert_parses("fn f() -> i64 { L i:0..10 { C } R 0 }");
     }
 
     #[test]
     fn grammar_stmt_defer() {
-        assert_parses("F f() -> i64 { D cleanup()\n R 0 }");
+        assert_parses("fn f() -> i64 { D cleanup()\n R 0 }");
     }
 }
 
@@ -1086,32 +1086,32 @@ mod patterns {
 
     #[test]
     fn grammar_pattern_wildcard() {
-        assert_parses("F f(x: i64) -> i64 = M x { _ => 0 }");
+        assert_parses("fn f(x: i64) -> i64 = M x { _ => 0 }");
     }
 
     #[test]
     fn grammar_pattern_ident() {
-        assert_parses("F f(x: i64) -> i64 = M x { n => n }");
+        assert_parses("fn f(x: i64) -> i64 = M x { n => n }");
     }
 
     #[test]
     fn grammar_pattern_literal_int() {
-        assert_parses("F f(x: i64) -> i64 = M x { 0 => 1, _ => 0 }");
+        assert_parses("fn f(x: i64) -> i64 = M x { 0 => 1, _ => 0 }");
     }
 
     #[test]
     fn grammar_pattern_literal_bool() {
-        assert_parses("F f(x: bool) -> i64 = M x { true => 1, false => 0 }");
+        assert_parses("fn f(x: bool) -> i64 = M x { true => 1, false => 0 }");
     }
 
     #[test]
     fn grammar_pattern_literal_string() {
-        assert_parses("F f(x: str) -> i64 = M x { \"hi\" => 1, _ => 0 }");
+        assert_parses("fn f(x: str) -> i64 = M x { \"hi\" => 1, _ => 0 }");
     }
 
     #[test]
     fn grammar_pattern_tuple() {
-        assert_parses("F f(x: (i64, i64)) -> i64 = M x { (a, b) => a + b }");
+        assert_parses("fn f(x: (i64, i64)) -> i64 = M x { (a, b) => a + b }");
     }
 
     #[test]
@@ -1119,7 +1119,7 @@ mod patterns {
         // Struct patterns are not currently supported in the parser.
         // Variant patterns with parens are used instead: `Point(x, y)`
         assert_parses(
-            "E Shape { Circle(f64), Rect(f64, f64) }
+            "enum Shape { Circle(f64), Rect(f64, f64) }
              F f(s: Shape) -> f64 = M s { Circle(r) => r, Rect(w, h) => w + h }",
         );
     }
@@ -1127,30 +1127,30 @@ mod patterns {
     #[test]
     fn grammar_pattern_variant() {
         assert_parses(
-            "E Opt { Some(i64), None }
+            "enum Opt { Some(i64), None }
              F f(o: Opt) -> i64 = M o { Some(v) => v, None => 0 }",
         );
     }
 
     #[test]
     fn grammar_pattern_range() {
-        assert_parses("F f(x: i64) -> i64 = M x { 0..10 => 1, _ => 0 }");
+        assert_parses("fn f(x: i64) -> i64 = M x { 0..10 => 1, _ => 0 }");
     }
 
     #[test]
     fn grammar_pattern_or() {
-        assert_parses("F f(x: i64) -> i64 = M x { 0 | 1 => 1, _ => 0 }");
+        assert_parses("fn f(x: i64) -> i64 = M x { 0 | 1 => 1, _ => 0 }");
     }
 
     #[test]
     fn grammar_pattern_alias() {
-        assert_parses("F f(x: i64) -> i64 = M x { n @ 0 => n, _ => 0 }");
+        assert_parses("fn f(x: i64) -> i64 = M x { n @ 0 => n, _ => 0 }");
     }
 
     #[test]
     fn grammar_pattern_nested() {
         assert_parses(
-            "E Tree { Leaf(i64), Node(Tree, Tree) }
+            "enum Tree { Leaf(i64), Node(Tree, Tree) }
              F f(t: Tree) -> i64 = M t { Leaf(v) => v, Node(_, _) => 0 }",
         );
     }
@@ -1158,12 +1158,12 @@ mod patterns {
     #[test]
     fn grammar_pattern_with_guard() {
         // Guard uses `I` (If keyword), not `if`
-        assert_parses("F f(x: i64) -> i64 = M x { n I n > 0 => n, _ => 0 }");
+        assert_parses("fn f(x: i64) -> i64 = M x { n I n > 0 => n, _ => 0 }");
     }
 
     #[test]
     fn grammar_pattern_negative_int() {
-        assert_parses("F f(x: i64) -> i64 = M x { -1 => 1, _ => 0 }");
+        assert_parses("fn f(x: i64) -> i64 = M x { -1 => 1, _ => 0 }");
     }
 }
 
@@ -1200,12 +1200,12 @@ mod generics {
 
     #[test]
     fn grammar_generic_struct() {
-        assert_parses("S Box<T> { value: T }");
+        assert_parses("struct Box<T> { value: T }");
     }
 
     #[test]
     fn grammar_generic_enum() {
-        assert_parses("E Result<T, E> { Ok(T), Err(E) }");
+        assert_parses("enum Result<T, E> { Ok(T), Err(E) }");
     }
 
     #[test]
@@ -1226,7 +1226,7 @@ mod generics {
     #[test]
     fn grammar_generic_nested_closing() {
         // >> must be split into two > for nested generics
-        assert_parses("F f(x: Vec<Vec<i64>>) -> i64 = 0");
+        assert_parses("fn f(x: Vec<Vec<i64>>) -> i64 = 0");
     }
 
     #[test]
@@ -1248,52 +1248,52 @@ mod negative {
 
     #[test]
     fn grammar_neg_function_missing_body() {
-        assert_parse_fails("F test(x: i64) -> i64");
+        assert_parse_fails("fn test(x: i64) -> i64");
     }
 
     #[test]
     fn grammar_neg_function_missing_closing_paren() {
-        assert_parse_fails("F broken(x: i64 -> i64 = x");
+        assert_parse_fails("fn broken(x: i64 -> i64 = x");
     }
 
     #[test]
     fn grammar_neg_struct_unclosed() {
-        assert_parse_fails("S Point { x: f64");
+        assert_parse_fails("struct Point { x: f64");
     }
 
     #[test]
     fn grammar_neg_struct_missing_field_type() {
-        assert_parse_fails("S Point { x:, y: f64 }");
+        assert_parse_fails("struct Point { x:, y: f64 }");
     }
 
     #[test]
     fn grammar_neg_enum_unclosed() {
-        assert_parse_fails("E Color { Red, Green");
+        assert_parse_fails("enum Color { Red, Green");
     }
 
     #[test]
     fn grammar_neg_match_missing_arrow() {
-        assert_parse_fails("F f(x: i64) -> i64 = M x { 0 1, _ => 0 }");
+        assert_parse_fails("fn f(x: i64) -> i64 = M x { 0 1, _ => 0 }");
     }
 
     #[test]
     fn grammar_neg_let_missing_value() {
-        assert_parse_fails("F f() -> i64 { x := \n R 0 }");
+        assert_parse_fails("fn f() -> i64 { x := \n R 0 }");
     }
 
     #[test]
     fn grammar_neg_unclosed_paren_expr() {
-        assert_parse_fails("F f() -> i64 = (1 + 2");
+        assert_parse_fails("fn f() -> i64 = (1 + 2");
     }
 
     #[test]
     fn grammar_neg_unclosed_bracket() {
-        assert_parse_fails("F f() -> i64 = [1, 2");
+        assert_parse_fails("fn f() -> i64 = [1, 2");
     }
 
     #[test]
     fn grammar_neg_double_arrow_in_lambda() {
-        assert_parse_fails("F f() -> i64 = |x| =>");
+        assert_parse_fails("fn f() -> i64 = |x| =>");
     }
 
     #[test]
@@ -1324,7 +1324,7 @@ mod negative {
 
     #[test]
     fn grammar_neg_impl_missing_brace() {
-        assert_parse_fails("X Foo F bar(self) -> i64 = 0 }");
+        assert_parse_fails("impl Foo F bar(self) -> i64 = 0 }");
     }
 
     #[test]
@@ -1532,24 +1532,24 @@ mod edge_cases {
 
     #[test]
     fn grammar_edge_complex_type_annotation() {
-        assert_parses("F f(cb: fn(Vec<i64>, &[i64]) -> (i64, bool)) -> i64 = 0");
+        assert_parses("fn f(cb: fn(Vec<i64>, &[i64]) -> (i64, bool)) -> i64 = 0");
     }
 
     #[test]
     fn grammar_edge_multiple_attributes() {
-        assert_parses("#[inline]\n#[cfg(test)]\nF f() -> i64 = 0");
+        assert_parses("#[inline]\n#[cfg(test)]\nfn f() -> i64 = 0");
     }
 
     #[test]
     fn grammar_edge_function_with_default_param() {
         // Default parameter values
-        assert_parses("F f(x: i64 = 10) -> i64 = x");
+        assert_parses("fn f(x: i64 = 10) -> i64 = x");
     }
 
     #[test]
     fn grammar_edge_struct_with_methods() {
         assert_parses(
-            "S Counter { count: i64 }
+            "struct Counter { count: i64 }
              X Counter {
                  F new() -> Counter = Counter { count: 0 }
                  F inc(self) -> i64 = self.count + 1
@@ -1560,7 +1560,7 @@ mod edge_cases {
     #[test]
     fn grammar_edge_enum_with_multiple_variant_types() {
         assert_parses(
-            "E Value {
+            "enum Value {
                  Int(i64),
                  Float(f64),
                  Pair(i64, f64),
@@ -1573,7 +1573,7 @@ mod edge_cases {
     #[test]
     fn grammar_edge_trait_with_associated_type() {
         assert_parses(
-            "W Iterator {
+            "trait Iterator {
                  T Item
                  F next(self) -> i64
              }",
@@ -1583,7 +1583,7 @@ mod edge_cases {
     #[test]
     fn grammar_edge_impl_with_associated_type() {
         assert_parses(
-            "S Nums { data: i64 }
+            "struct Nums { data: i64 }
              W Iter { T Item\n F next(self) -> i64 }
              X Nums: Iter {
                  T Item = i64
@@ -1620,13 +1620,13 @@ mod edge_cases {
 
     #[test]
     fn grammar_edge_range_in_loop() {
-        assert_parses("F f() -> i64 { L i:0..=100 { i }\n R 0 }");
+        assert_parses("fn f() -> i64 { L i:0..=100 { i }\n R 0 }");
     }
 
     #[test]
     fn grammar_edge_multiple_stmts() {
         assert_parses(
-            "F f() -> i64 {
+            "fn f() -> i64 {
                  x := 1
                  y := 2
                  z := x + y
@@ -1664,7 +1664,7 @@ mod edge_cases {
 
     #[test]
     fn grammar_edge_macro_invocation_in_item() {
-        assert_parses("F f() -> i64 = println!(\"hello\")");
+        assert_parses("fn f() -> i64 = println!(\"hello\")");
     }
 
     #[test]
@@ -1699,7 +1699,7 @@ mod edge_cases {
     #[test]
     fn grammar_edge_multiline_struct() {
         assert_parses(
-            "S Config {
+            "struct Config {
                  width: i64,
                  height: i64,
                  depth: i64,
@@ -1711,7 +1711,7 @@ mod edge_cases {
     #[test]
     fn grammar_edge_generic_impl_for_trait() {
         assert_parses(
-            "W Add { F add(self, other: i64) -> i64 }
+            "trait Add { F add(self, other: i64) -> i64 }
              S Num { v: i64 }
              X Num: Add {
                  F add(self, other: i64) -> i64 = self.v + other
@@ -1738,12 +1738,12 @@ mod dependent_types {
     #[test]
     fn grammar_dependent_type_basic() {
         // {n: i64 | n > 0} — positive integer refinement
-        assert_parses("F f(x: {n: i64 | n > 0}) -> i64 = x");
+        assert_parses("fn f(x: {n: i64 | n > 0}) -> i64 = x");
     }
 
     #[test]
     fn grammar_dependent_type_ast_structure() {
-        let m = parse_ok("F f(x: {n: i64 | n > 0}) -> i64 = x");
+        let m = parse_ok("fn f(x: {n: i64 | n > 0}) -> i64 = x");
         match &m.items[0].node {
             Item::Function(f) => {
                 let param_ty = &f.params[0].ty.node;
@@ -1768,36 +1768,36 @@ mod dependent_types {
     #[test]
     fn grammar_dependent_type_equality_predicate() {
         // {x: i64 | x == 42}
-        assert_parses("F f(x: {x: i64 | x == 42}) -> i64 = x");
+        assert_parses("fn f(x: {x: i64 | x == 42}) -> i64 = x");
     }
 
     #[test]
     fn grammar_dependent_type_complex_predicate() {
         // {n: i64 | n >= 0 && n < 100}
-        assert_parses("F f(x: {n: i64 | n >= 0 && n < 100}) -> i64 = x");
+        assert_parses("fn f(x: {n: i64 | n >= 0 && n < 100}) -> i64 = x");
     }
 
     #[test]
     fn grammar_dependent_type_in_return_position() {
-        assert_parses("F abs(x: i64) -> {r: i64 | r >= 0} = I x < 0 { 0 - x } E { x }");
+        assert_parses("fn abs(x: i64) -> {r: i64 | r >= 0} = I x < 0 { 0 - x } E { x }");
     }
 
     #[test]
     fn grammar_dependent_type_with_function_call_predicate() {
         // {s: str | len(s) > 0}
-        assert_parses("F f(x: {s: str | len(s) > 0}) -> i64 = 0");
+        assert_parses("fn f(x: {s: str | len(s) > 0}) -> i64 = 0");
     }
 
     #[test]
     fn grammar_dependent_type_bool_base() {
         // {b: bool | b == true}
-        assert_parses("F f(x: {b: bool | b == true}) -> i64 = 0");
+        assert_parses("fn f(x: {b: bool | b == true}) -> i64 = 0");
     }
 
     #[test]
     fn grammar_dependent_type_nested_in_generic() {
         // Vec<{n: i64 | n > 0}>
-        assert_parses("F f(x: Vec<{n: i64 | n > 0}>) -> i64 = 0");
+        assert_parses("fn f(x: Vec<{n: i64 | n > 0}>) -> i64 = 0");
     }
 }
 
@@ -1809,7 +1809,7 @@ mod contract_attributes {
 
     #[test]
     fn grammar_contract_requires_basic() {
-        let m = parse_ok("#[requires(x > 0)]\nF f(x: i64) -> i64 = x");
+        let m = parse_ok("#[requires(x > 0)]\nfn f(x: i64) -> i64 = x");
         match &m.items[0].node {
             Item::Function(f) => {
                 assert_eq!(f.attributes.len(), 1);
@@ -1823,7 +1823,7 @@ mod contract_attributes {
     #[test]
     fn grammar_contract_ensures_basic() {
         let m =
-            parse_ok("#[ensures(result >= 0)]\nF abs(x: i64) -> i64 = I x < 0 { 0 - x } E { x }");
+            parse_ok("#[ensures(result >= 0)]\nfn abs(x: i64) -> i64 = I x < 0 { 0 - x } E { x }");
         match &m.items[0].node {
             Item::Function(f) => {
                 assert_eq!(f.attributes[0].name, "ensures");
@@ -1835,33 +1835,33 @@ mod contract_attributes {
 
     #[test]
     fn grammar_contract_invariant() {
-        assert_parses("#[invariant(self.count >= 0)]\nF inc(self) -> i64 = self.count + 1");
+        assert_parses("#[invariant(self.count >= 0)]\nfn inc(self) -> i64 = self.count + 1");
     }
 
     #[test]
     fn grammar_contract_decreases() {
         assert_parses(
-            "#[decreases(n)]\nF fib(n: i64) -> i64 = I n <= 1 { n } E { @(n - 1) + @(n - 2) }",
+            "#[decreases(n)]\nfn fib(n: i64) -> i64 = I n <= 1 { n } E { @(n - 1) + @(n - 2) }",
         );
     }
 
     #[test]
     fn grammar_contract_multiple_contracts() {
         assert_parses(
-            "#[requires(x > 0)]\n#[requires(y > 0)]\n#[ensures(result > 0)]\nF mul(x: i64, y: i64) -> i64 = x * y",
+            "#[requires(x > 0)]\n#[requires(y > 0)]\n#[ensures(result > 0)]\nfn mul(x: i64, y: i64) -> i64 = x * y",
         );
     }
 
     #[test]
     fn grammar_contract_requires_complex_expr() {
         // Contract with logical AND in predicate
-        assert_parses("#[requires(x >= 0 && x < 100)]\nF f(x: i64) -> i64 = x");
+        assert_parses("#[requires(x >= 0 && x < 100)]\nfn f(x: i64) -> i64 = x");
     }
 
     #[test]
     fn grammar_contract_ensures_with_old() {
         // old(expr) in ensures — references pre-state value
-        assert_parses("F inc(x: i64) -> i64 { old(x)\n R x + 1 }");
+        assert_parses("fn inc(x: i64) -> i64 { old(x)\n R x + 1 }");
     }
 
     #[test]
@@ -1931,7 +1931,7 @@ mod const_params_and_variance {
 
     #[test]
     fn grammar_const_param_struct() {
-        assert_parses("S Array<T, const N: u64> { data: T }");
+        assert_parses("struct Array<T, const N: u64> { data: T }");
     }
 
     #[test]
@@ -1943,7 +1943,7 @@ mod const_params_and_variance {
 
     #[test]
     fn grammar_variance_covariant() {
-        let m = parse_ok("S Producer<+T> { value: T }");
+        let m = parse_ok("struct Producer<+T> { value: T }");
         match &m.items[0].node {
             Item::Struct(s) => {
                 assert_eq!(s.generics.len(), 1);
@@ -1956,7 +1956,7 @@ mod const_params_and_variance {
 
     #[test]
     fn grammar_variance_contravariant() {
-        let m = parse_ok("S Consumer<-T> { handler: fn(T) -> i64 }");
+        let m = parse_ok("struct Consumer<-T> { handler: fn(T) -> i64 }");
         match &m.items[0].node {
             Item::Struct(s) => {
                 assert_eq!(s.generics.len(), 1);
@@ -1969,7 +1969,7 @@ mod const_params_and_variance {
 
     #[test]
     fn grammar_variance_invariant_default() {
-        let m = parse_ok("S Container<T> { value: T }");
+        let m = parse_ok("struct Container<T> { value: T }");
         match &m.items[0].node {
             Item::Struct(s) => {
                 assert_eq!(s.generics[0].variance, Variance::Invariant);
@@ -1981,7 +1981,7 @@ mod const_params_and_variance {
     #[test]
     fn grammar_variance_mixed() {
         // +T covariant, -U contravariant, V invariant (default)
-        let m = parse_ok("S Mixed<+T, -U, V> { a: T, b: V }");
+        let m = parse_ok("struct Mixed<+T, -U, V> { a: T, b: V }");
         match &m.items[0].node {
             Item::Struct(s) => {
                 assert_eq!(s.generics.len(), 3);
@@ -2022,22 +2022,22 @@ mod map_block_ambiguity {
     #[test]
     fn grammar_map_literal_string_keys() {
         // Clear map literal: {"key": value, ...}
-        assert_parses("F f() -> i64 { m := {\"a\": 1, \"b\": 2}\n R 0 }");
+        assert_parses("fn f() -> i64 { m := {\"a\": 1, \"b\": 2}\n R 0 }");
     }
 
     #[test]
     fn grammar_map_literal_single_entry() {
-        assert_parses("F f() -> i64 { m := {\"key\": 42}\n R 0 }");
+        assert_parses("fn f() -> i64 { m := {\"key\": 42}\n R 0 }");
     }
 
     #[test]
     fn grammar_map_literal_trailing_comma() {
-        assert_parses("F f() -> i64 { m := {\"a\": 1, \"b\": 2,}\n R 0 }");
+        assert_parses("fn f() -> i64 { m := {\"a\": 1, \"b\": 2,}\n R 0 }");
     }
 
     #[test]
     fn grammar_map_literal_numeric_keys() {
-        assert_parses("F f() -> i64 { m := {1: \"one\", 2: \"two\"}\n R 0 }");
+        assert_parses("fn f() -> i64 { m := {1: \"one\", 2: \"two\"}\n R 0 }");
     }
 
     #[test]
@@ -2067,7 +2067,7 @@ mod map_block_ambiguity {
     #[test]
     fn grammar_map_literal_is_map_ast() {
         // Verify {k: v} is parsed as MapLit, not Block
-        let m = parse_ok("F f() -> i64 { m := {\"x\": 1}\n R 0 }");
+        let m = parse_ok("fn f() -> i64 { m := {\"x\": 1}\n R 0 }");
         match &m.items[0].node {
             Item::Function(f) => match &f.body {
                 FunctionBody::Block(stmts) => {
@@ -2097,14 +2097,14 @@ mod map_block_ambiguity {
     #[test]
     fn grammar_block_with_return() {
         // {R 0} — return statement → clearly block
-        assert_parses("F f() -> i64 { R 0 }");
+        assert_parses("fn f() -> i64 { R 0 }");
     }
 
     #[test]
     fn grammar_map_vs_block_ident_colon() {
         // Ambiguous: {x: 1} could be map or struct-like
         // The parser tries map first (key: value pattern)
-        assert_parses("F f() -> i64 { m := {x: 1}\n R 0 }");
+        assert_parses("fn f() -> i64 { m := {x: 1}\n R 0 }");
     }
 }
 
@@ -2117,25 +2117,25 @@ mod negative_new_features {
     #[test]
     fn grammar_neg_dependent_type_missing_pipe() {
         // {n: i64 n > 0} — missing |
-        assert_parse_fails("F f(x: {n: i64 n > 0}) -> i64 = x");
+        assert_parse_fails("fn f(x: {n: i64 n > 0}) -> i64 = x");
     }
 
     #[test]
     fn grammar_neg_dependent_type_missing_closing_brace() {
         // {n: i64 | n > 0 — missing }
-        assert_parse_fails("F f(x: {n: i64 | n > 0) -> i64 = x");
+        assert_parse_fails("fn f(x: {n: i64 | n > 0) -> i64 = x");
     }
 
     #[test]
     fn grammar_neg_dependent_type_no_var_name() {
         // {: i64 | true} — missing variable name
-        assert_parse_fails("F f(x: {: i64 | true}) -> i64 = x");
+        assert_parse_fails("fn f(x: {: i64 | true}) -> i64 = x");
     }
 
     #[test]
     fn grammar_neg_contract_requires_no_parens() {
         // #[requires x > 0] — missing parentheses
-        assert_parse_fails("#[requires x > 0]\nF f(x: i64) -> i64 = x");
+        assert_parse_fails("#[requires x > 0]\nfn f(x: i64) -> i64 = x");
     }
 
     #[test]

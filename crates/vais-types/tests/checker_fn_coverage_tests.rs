@@ -30,27 +30,27 @@ fn check_err(source: &str) {
 
 #[test]
 fn test_check_fn_no_params_no_return() {
-    check_ok("F noop() -> i64 = 0");
+    check_ok("fn noop() -> i64 = 0");
 }
 
 #[test]
 fn test_check_fn_single_param() {
-    check_ok("F inc(x: i64) -> i64 = x + 1");
+    check_ok("fn inc(x: i64) -> i64 = x + 1");
 }
 
 #[test]
 fn test_check_fn_multiple_params() {
-    check_ok("F add(a: i64, b: i64) -> i64 = a + b");
+    check_ok("fn add(a: i64, b: i64) -> i64 = a + b");
 }
 
 #[test]
 fn test_check_fn_many_params() {
-    check_ok("F sum(a: i64, b: i64, c: i64, d: i64) -> i64 = a + b + c + d");
+    check_ok("fn sum(a: i64, b: i64, c: i64, d: i64) -> i64 = a + b + c + d");
 }
 
 #[test]
 fn test_check_fn_expression_body() {
-    check_ok("F double(x: i64) -> i64 = x * 2");
+    check_ok("fn double(x: i64) -> i64 = x * 2");
 }
 
 #[test]
@@ -72,12 +72,12 @@ fn test_check_fn_block_body() {
 
 #[test]
 fn test_check_fn_return_bool() {
-    check_ok("F is_positive(x: i64) -> bool = x > 0");
+    check_ok("fn is_positive(x: i64) -> bool = x > 0");
 }
 
 #[test]
 fn test_check_fn_return_f64() {
-    check_ok("F pi() -> f64 = 3.14");
+    check_ok("fn pi() -> f64 = 3.14");
 }
 
 #[test]
@@ -102,12 +102,12 @@ fn test_check_fn_return_unit() {
 
 #[test]
 fn test_check_fn_bool_param() {
-    check_ok("F flip(b: bool) -> bool = !b");
+    check_ok("fn flip(b: bool) -> bool = !b");
 }
 
 #[test]
 fn test_check_fn_f64_param() {
-    check_ok("F square(x: f64) -> f64 = x * x");
+    check_ok("fn square(x: f64) -> f64 = x * x");
 }
 
 #[test]
@@ -409,12 +409,12 @@ fn test_check_fn_deeply_nested_if() {
 
 #[test]
 fn test_check_fn_ternary() {
-    check_ok("F max(a: i64, b: i64) -> i64 = a > b ? a : b");
+    check_ok("fn max(a: i64, b: i64) -> i64 = a > b ? a : b");
 }
 
 #[test]
 fn test_check_fn_complex_expression() {
-    check_ok("F calc(a: i64, b: i64, c: i64) -> i64 = (a + b) * c - (a / b)");
+    check_ok("fn calc(a: i64, b: i64, c: i64) -> i64 = (a + b) * c - (a / b)");
 }
 
 // ============================================================================

@@ -65,7 +65,7 @@ fn test_valid_local_import() {
     let safe_dir = test_dir.join("safe");
 
     // Create a test file that imports from the same directory
-    let source = "use module\nF main() -> () = ()";
+    let source = "use module\nfn main() -> () = ()";
     let test_file = safe_dir.join("test.vais");
     fs::write(&test_file, source).unwrap();
 
@@ -96,7 +96,7 @@ fn test_valid_std_import() {
     // Set VAIS_STD_PATH to our test std directory
     let std_dir = test_dir.join("std");
 
-    let source = "use std/vec\nF main() -> () = ()";
+    let source = "use std/vec\nfn main() -> () = ()";
     let test_file = test_dir.join("test_std.vais");
     fs::write(&test_file, source).unwrap();
 
@@ -123,7 +123,7 @@ fn test_path_traversal_attack_absolute() {
     let test_dir = setup_test_env("path_traversal_attack_absolute");
 
     // Try to import using absolute path to /etc/passwd
-    let source = "use /etc/passwd\nF main() -> () = ()";
+    let source = "use /etc/passwd\nfn main() -> () = ()";
     let test_file = test_dir.join("test_attack.vais");
     fs::write(&test_file, source).unwrap();
 
@@ -144,7 +144,7 @@ fn test_path_traversal_attack_relative() {
     let safe_dir = test_dir.join("safe");
 
     // Try to escape safe directory using ../
-    let source = "use ../unsafe/secrets\nF main() -> () = ()";
+    let source = "use ../unsafe/secrets\nfn main() -> () = ()";
     let test_file = safe_dir.join("test_attack.vais");
     fs::write(&test_file, source).unwrap();
 
@@ -187,7 +187,7 @@ fn test_symlink_attack_outside_project() {
     }
 
     // Try to import the symlinked file
-    let source = "use malicious\nF main() -> () = ()";
+    let source = "use malicious\nfn main() -> () = ()";
     let test_file = safe_dir.join("test_symlink.vais");
     fs::write(&test_file, source).unwrap();
 
@@ -231,7 +231,7 @@ fn test_symlink_attack_to_system_file() {
     // Note: We use "build" command instead of "check" because "check" only parses
     // and type-checks the single file without resolving imports, so the symlink
     // security validation wouldn't be triggered.
-    let source = "use system\nF main() -> i64 = 42";
+    let source = "use system\nfn main() -> i64 = 42";
     let test_file = safe_dir.join("test_system.vais");
     fs::write(&test_file, source).unwrap();
 
@@ -268,7 +268,7 @@ fn test_valid_relative_import_in_project() {
     fs::write(test_dir.join("local.vais"), "fn local_func() -> i64 = 42").unwrap();
 
     // Import it from a file in the same directory
-    let source = "use local\nF main() -> () = ()";
+    let source = "use local\nfn main() -> () = ()";
     let test_file = test_dir.join("main.vais");
     fs::write(&test_file, source).unwrap();
 
@@ -298,7 +298,7 @@ fn test_non_vais_file_rejection() {
 
     // Use `/` path separator to reference a file with .txt extension
     // This tries to import "malicious/txt" which resolves to malicious/txt.vais (not found)
-    let source = "use malicious/txt\nF main() -> () = ()";
+    let source = "use malicious/txt\nfn main() -> () = ()";
     let test_file = test_dir.join("test.vais");
     fs::write(&test_file, source).unwrap();
 
@@ -349,7 +349,7 @@ fn test_empty_import_path() {
     let test_dir = setup_test_env("empty_import_path");
 
     // Try empty import (if parser allows it)
-    let source = "U\nF main() -> () = ()";
+    let source = "U\nfn main() -> () = ()";
     let test_file = test_dir.join("test_empty.vais");
     fs::write(&test_file, source).unwrap();
 
@@ -370,7 +370,7 @@ fn test_module_not_found_error_message() {
 
     // Try to import non-existent module
     // Note: We use "build" command to trigger import resolution
-    let source = "use nonexistent_module\nF main() -> i64 = 42";
+    let source = "use nonexistent_module\nfn main() -> i64 = 42";
     let test_file = test_dir.join("test_notfound.vais");
     fs::write(&test_file, source).unwrap();
 
@@ -404,7 +404,7 @@ fn test_nested_module_path() {
     .unwrap();
 
     // Import using path segments
-    let source = "use a::b::c::deep\nF main() -> () = ()";
+    let source = "use a::b::c::deep\nfn main() -> () = ()";
     let test_file = test_dir.join("test_nested.vais");
     fs::write(&test_file, source).unwrap();
 
@@ -435,7 +435,7 @@ fn test_windows_backslash_path() {
     let test_dir = setup_test_env("windows_backslash_path");
 
     // Try Windows-style backslash path
-    let source = "use ..\\unsafe\\secrets\nF main() -> () = ()";
+    let source = "use ..\\unsafe\\secrets\nfn main() -> () = ()";
     let test_file = test_dir.join("test_win.vais");
     fs::write(&test_file, source).unwrap();
 
@@ -459,7 +459,7 @@ fn test_unc_path_rejection() {
     let test_dir = setup_test_env("unc_path_rejection");
 
     // Try UNC path (Windows network path)
-    let source = "use \\\\server\\share\\evil\nF main() -> () = ()";
+    let source = "use \\\\server\\share\\evil\nfn main() -> () = ()";
     let test_file = test_dir.join("test_unc.vais");
     fs::write(&test_file, source).unwrap();
 
@@ -480,7 +480,7 @@ fn test_double_dot_in_middle_of_path() {
     let safe_dir = test_dir.join("safe");
 
     // Try path with .. in the middle
-    let source = "use safe/../unsafe/secrets\nF main() -> () = ()";
+    let source = "use safe/../unsafe/secrets\nfn main() -> () = ()";
     let test_file = safe_dir.join("test_dotdot.vais");
     fs::write(&test_file, source).unwrap();
 
@@ -503,7 +503,7 @@ fn test_null_byte_in_import() {
     let test_dir = setup_test_env("null_byte_import");
 
     // Try import with null byte (potential C-level path truncation attack)
-    let source = "use evil\x00.vais\nF main() -> () = ()";
+    let source = "use evil\x00.vais\nfn main() -> () = ()";
     let test_file = test_dir.join("test_null.vais");
     fs::write(&test_file, source).unwrap();
 
@@ -527,7 +527,7 @@ fn test_very_long_import_path() {
 
     // Try an extremely long import path to test for buffer issues
     let long_name = "a".repeat(10000);
-    let source = format!("use {}\nF main() -> () = ()", long_name);
+    let source = format!("use {}\nfn main() -> () = ()", long_name);
     let test_file = test_dir.join("test_long.vais");
     fs::write(&test_file, source).unwrap();
 

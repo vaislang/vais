@@ -15,7 +15,7 @@ use vais_parser::{parse, parse_with_recovery};
 
 #[test]
 fn test_vx_state_integer_literal() {
-    let source = "F init() { count := __vx_state(0) }";
+    let source = "fn init() { count := __vx_state(0) }";
     let module = parse(source).expect("__vx_state(0) should parse");
     assert_eq!(module.items.len(), 1);
     match &module.items[0].node {
@@ -35,14 +35,14 @@ fn test_vx_state_string_literal() {
 
 #[test]
 fn test_vx_state_boolean_literal() {
-    let source = "F init() { flag := __vx_state(true) }";
+    let source = "fn init() { flag := __vx_state(true) }";
     let module = parse(source).expect("__vx_state with bool should parse");
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_vx_state_empty_array() {
-    let source = "F init() { items := __vx_state([]) }";
+    let source = "fn init() { items := __vx_state([]) }";
     let module = parse(source).expect("__vx_state with empty array should parse");
     assert_eq!(module.items.len(), 1);
 }
@@ -66,7 +66,7 @@ fn test_vx_state_multiple_declarations() {
 
 #[test]
 fn test_vx_derived_simple_expr() {
-    let source = "F init() { doubled := __vx_derived(|| { count * 2 }) }";
+    let source = "fn init() { doubled := __vx_derived(|| { count * 2 }) }";
     let module = parse(source).expect("__vx_derived with closure should parse");
     assert_eq!(module.items.len(), 1);
 }
@@ -122,8 +122,8 @@ fn test_vx_effect_multi_statement() {
 
 #[test]
 fn test_vx_props_basic_struct() {
-    let source = "S __VxProps__ { user: User, showAvatar: bool }";
-    let module = parse(source).expect("S __VxProps__ should parse as struct");
+    let source = "struct __VxProps__ { user: User, showAvatar: bool }";
+    let module = parse(source).expect("struct __VxProps__ should parse as struct");
     assert_eq!(module.items.len(), 1);
     match &module.items[0].node {
         Item::Struct(s) => {
@@ -138,8 +138,8 @@ fn test_vx_props_basic_struct() {
 
 #[test]
 fn test_vx_props_single_field() {
-    let source = "S __VxProps__ { count: i64 }";
-    let module = parse(source).expect("S __VxProps__ with single field should parse");
+    let source = "struct __VxProps__ { count: i64 }";
+    let module = parse(source).expect("struct __VxProps__ with single field should parse");
     assert_eq!(module.items.len(), 1);
     match &module.items[0].node {
         Item::Struct(s) => {
@@ -152,8 +152,8 @@ fn test_vx_props_single_field() {
 
 #[test]
 fn test_vx_props_complex_types() {
-    let source = "S __VxProps__ { items: Vec<Item>, callback: Fn<i64, bool> }";
-    let module = parse(source).expect("S __VxProps__ with complex types should parse");
+    let source = "struct __VxProps__ { items: Vec<Item>, callback: Fn<i64, bool> }";
+    let module = parse(source).expect("struct __VxProps__ with complex types should parse");
     assert_eq!(module.items.len(), 1);
 }
 

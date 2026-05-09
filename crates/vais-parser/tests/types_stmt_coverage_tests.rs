@@ -95,25 +95,25 @@ fn test_parse_lifetime_generic() {
 
 #[test]
 fn test_parse_type_i64() {
-    let module = parse_ok("F test(x: i64) -> i64 = x");
+    let module = parse_ok("fn test(x: i64) -> i64 = x");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_type_bool() {
-    let module = parse_ok("F test(x: bool) -> bool = x");
+    let module = parse_ok("fn test(x: bool) -> bool = x");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_type_f64() {
-    let module = parse_ok("F test(x: f64) -> f64 = x");
+    let module = parse_ok("fn test(x: f64) -> f64 = x");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_type_str() {
-    let module = parse_ok("F test(x: str) -> str = x");
+    let module = parse_ok("fn test(x: str) -> str = x");
     assert!(!module.items.is_empty());
 }
 
@@ -123,37 +123,37 @@ fn test_parse_type_str() {
 
 #[test]
 fn test_parse_type_array() {
-    let module = parse_ok("F test(arr: [i64; 5]) -> i64 = 0");
+    let module = parse_ok("fn test(arr: [i64; 5]) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_type_tuple() {
-    let module = parse_ok("F test(t: (i64, bool)) -> i64 = 0");
+    let module = parse_ok("fn test(t: (i64, bool)) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_type_reference() {
-    let module = parse_ok("F test(x: &i64) -> i64 = 0");
+    let module = parse_ok("fn test(x: &i64) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_type_mut_reference() {
-    let module = parse_ok("F test(x: &mut i64) -> i64 = 0");
+    let module = parse_ok("fn test(x: &mut i64) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_type_option() {
-    let module = parse_ok("F test(x: Option<i64>) -> i64 = 0");
+    let module = parse_ok("fn test(x: Option<i64>) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_type_result() {
-    let module = parse_ok("F test(x: Result<i64, str>) -> i64 = 0");
+    let module = parse_ok("fn test(x: Result<i64, str>) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
@@ -163,7 +163,7 @@ fn test_parse_type_result() {
 
 #[test]
 fn test_parse_type_pointer() {
-    let module = parse_ok("F test(x: &i64) -> i64 = 0");
+    let module = parse_ok("fn test(x: &i64) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
@@ -173,7 +173,7 @@ fn test_parse_type_pointer() {
 
 #[test]
 fn test_parse_nested_generic() {
-    let module = parse_ok("F test(x: Vec<Vec<i64>>) -> i64 = 0");
+    let module = parse_ok("fn test(x: Vec<Vec<i64>>) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
@@ -224,19 +224,19 @@ fn test_parse_where_clause() {
 
 #[test]
 fn test_parse_let_simple() {
-    let module = parse_ok("F test() -> i64 { x := 42\n R x }");
+    let module = parse_ok("fn test() -> i64 { x := 42\n R x }");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_let_mutable() {
-    let module = parse_ok("F test() -> i64 { x := mut 0\n x = 1\n R x }");
+    let module = parse_ok("fn test() -> i64 { x := mut 0\n x = 1\n R x }");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_let_with_expr() {
-    let module = parse_ok("F test() -> i64 { x := 21 * 2\n R x }");
+    let module = parse_ok("fn test() -> i64 { x := 21 * 2\n R x }");
     assert!(!module.items.is_empty());
 }
 
@@ -246,7 +246,7 @@ fn test_parse_let_with_expr() {
 
 #[test]
 fn test_parse_return() {
-    let module = parse_ok("F test() -> i64 { R 42 }");
+    let module = parse_ok("fn test() -> i64 { R 42 }");
     assert!(!module.items.is_empty());
 }
 
@@ -471,7 +471,7 @@ fn test_parse_defer() {
 
 #[test]
 fn test_parse_type_alias() {
-    let module = parse_ok("T Num = i64");
+    let module = parse_ok("type Num = i64");
     assert!(!module.items.is_empty());
 }
 
@@ -514,7 +514,7 @@ fn test_parse_impl() {
 
 #[test]
 fn test_parse_enum_unit() {
-    let module = parse_ok("E Color { Red, Green, Blue }");
+    let module = parse_ok("enum Color { Red, Green, Blue }");
     if let Item::Enum(e) = &module.items[0].node {
         assert_eq!(e.variants.len(), 3);
     }
@@ -522,7 +522,7 @@ fn test_parse_enum_unit() {
 
 #[test]
 fn test_parse_enum_with_payload() {
-    let module = parse_ok("E Shape { Circle(i64), Rect(i64, i64) }");
+    let module = parse_ok("enum Shape { Circle(i64), Rect(i64, i64) }");
     assert!(!module.items.is_empty());
 }
 
@@ -548,7 +548,7 @@ fn test_parse_const_expr_negative() {
 
 #[test]
 fn test_parse_params_none() {
-    let module = parse_ok("F test() -> i64 = 0");
+    let module = parse_ok("fn test() -> i64 = 0");
     if let Item::Function(f) = &module.items[0].node {
         assert!(f.params.is_empty());
     }
@@ -556,7 +556,7 @@ fn test_parse_params_none() {
 
 #[test]
 fn test_parse_params_single() {
-    let module = parse_ok("F test(x: i64) -> i64 = x");
+    let module = parse_ok("fn test(x: i64) -> i64 = x");
     if let Item::Function(f) = &module.items[0].node {
         assert_eq!(f.params.len(), 1);
     }
@@ -564,7 +564,7 @@ fn test_parse_params_single() {
 
 #[test]
 fn test_parse_params_many() {
-    let module = parse_ok("F test(a: i64, b: i64, c: i64, d: i64) -> i64 = a");
+    let module = parse_ok("fn test(a: i64, b: i64, c: i64, d: i64) -> i64 = a");
     if let Item::Function(f) = &module.items[0].node {
         assert_eq!(f.params.len(), 4);
     }

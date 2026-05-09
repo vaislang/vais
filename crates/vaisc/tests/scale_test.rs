@@ -119,10 +119,10 @@ impl SourceGenerator {
         let mut source = String::new();
 
         // Generate Option-like enum
-        source.push_str("E Option<T> { None, Some(T) }\n");
+        source.push_str("enum Option<T> { None, Some(T) }\n");
 
         // Generate Result-like enum
-        source.push_str("E Result<T, E> { Ok(T), Err(E) }\n");
+        source.push_str("enum Result<T, E> { Ok(T), Err(E) }\n");
 
         // Generate functions with pattern matching
         for i in 0..self.function_count {
@@ -437,7 +437,7 @@ fn test_wide_match_expression() {
     let mut source = String::new();
 
     // Generate enum with many variants
-    source.push_str("E Color { ");
+    source.push_str("enum Color { ");
     for i in 0..100 {
         source.push_str(&format!("Color{}", i));
         if i < 99 {

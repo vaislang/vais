@@ -66,7 +66,7 @@ fn test_extern_block_multiple_functions() {
 
 #[test]
 fn test_function_pointer_type() {
-    let source = "F test(callback: fn(i32, i32) -> i64) -> i64 = 0";
+    let source = "fn test(callback: fn(i32, i32) -> i64) -> i64 = 0";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -90,7 +90,7 @@ fn test_function_pointer_type() {
 
 #[test]
 fn test_function_pointer_vararg() {
-    let source = "F test(callback: fn(i32, ...) -> i32) -> i32 = 0";
+    let source = "fn test(callback: fn(i32, ...) -> i32) -> i32 = 0";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();

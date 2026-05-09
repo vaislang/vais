@@ -378,7 +378,7 @@ fn test_tail_call_factorial() {
         r#"
         fn fact(n: i64, acc: i64) -> i64 {
             I n <= 1 { return acc }
-            R @(n - 1, acc * n)
+            return @(n - 1, acc * n)
         }
     "#,
     );
@@ -391,7 +391,7 @@ fn test_tail_call_fibonacci() {
         r#"
         fn fib(n: i64, a: i64, b: i64) -> i64 {
             I n == 0 { return a }
-            R @(n - 1, b, a + b)
+            return @(n - 1, b, a + b)
         }
     "#,
     );
@@ -424,7 +424,7 @@ fn test_function_early_return() {
     let ir = gen_ok(
         r#"
         fn test(x: i64) -> i64 {
-            I x < 0 { R -1 }
+            I x < 0 { return -1 }
             I x == 0 { return 0 }
             return 1
         }

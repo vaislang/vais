@@ -197,7 +197,7 @@ fn test_format_match() {
         }
     "#,
     );
-    assert!(output.contains("M "));
+    assert!(output.contains("match "));
     assert!(output.contains("=>"));
 }
 
@@ -444,13 +444,13 @@ fn test_format_typed_binding() {
 #[test]
 fn test_format_return_statement() {
     let output = format_source("fn test() -> i64 { return 42 }");
-    assert!(output.contains("R "));
+    assert!(output.contains("return "));
 }
 
 #[test]
 fn test_format_return_void() {
     let output = format_source("fn test() { return }");
-    assert!(output.contains("R"));
+    assert!(output.contains("return"));
 }
 
 #[test]
@@ -478,25 +478,25 @@ fn test_format_defer_statement() {
 #[test]
 fn test_format_function_declaration() {
     let output = format_source("fn add(x: i64, y: i64) -> i64 = x + y");
-    assert!(output.contains("F add"));
+    assert!(output.contains("fn add"));
 }
 
 #[test]
 fn test_format_struct_declaration() {
     let output = format_source("struct Point { x: i64, y: i64 }");
-    assert!(output.contains("S Point"));
+    assert!(output.contains("struct Point"));
 }
 
 #[test]
 fn test_format_enum_declaration() {
     let output = format_source("enum Color { Red, Green, Blue }");
-    assert!(output.contains("E Color"));
+    assert!(output.contains("enum Color"));
 }
 
 #[test]
 fn test_format_trait_declaration() {
     let output = format_source("trait Printable { fn show(self) -> str }");
-    assert!(output.contains("W Printable"));
+    assert!(output.contains("trait Printable"));
 }
 
 #[test]
@@ -509,7 +509,7 @@ fn test_format_impl_block() {
         }
     "#,
     );
-    assert!(output.contains("X Foo"));
+    assert!(output.contains("impl Foo"));
 }
 
 #[test]
@@ -523,13 +523,13 @@ fn test_format_trait_impl() {
         }
     "#,
     );
-    assert!(output.contains("X Foo") || output.contains("Show"));
+    assert!(output.contains("impl Foo") || output.contains("Show"));
 }
 
 #[test]
 fn test_format_type_alias() {
     let output = format_source("type Num = i64");
-    assert!(output.contains("T Num"));
+    assert!(output.contains("type Num"));
 }
 
 #[test]
@@ -679,9 +679,9 @@ fn test_format_complete_program() {
         }
     "#,
     );
-    assert!(output.contains("S Point"));
-    assert!(output.contains("X Point"));
-    assert!(output.contains("F main"));
+    assert!(output.contains("struct Point"));
+    assert!(output.contains("impl Point"));
+    assert!(output.contains("fn main"));
 }
 
 // ============================================================================

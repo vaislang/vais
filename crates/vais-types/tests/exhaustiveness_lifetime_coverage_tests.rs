@@ -289,12 +289,12 @@ fn test_lookup_local_variable() {
 
 #[test]
 fn test_lookup_function_parameter() {
-    check_ok("F test(x: i64) -> i64 = x");
+    check_ok("fn test(x: i64) -> i64 = x");
 }
 
 #[test]
 fn test_lookup_multiple_params() {
-    check_ok("F test(a: i64, b: i64, c: i64) -> i64 = a + b + c");
+    check_ok("fn test(a: i64, b: i64, c: i64) -> i64 = a + b + c");
 }
 
 #[test]
@@ -383,7 +383,7 @@ fn test_lookup_trait_method() {
 
 #[test]
 fn test_lookup_undefined_variable() {
-    let err = check_err("F test() -> i64 = undefined_var");
+    let err = check_err("fn test() -> i64 = undefined_var");
     assert!(
         err.contains("undefined") || err.contains("not found") || err.contains("Undefined"),
         "Error should mention undefined: {}",
@@ -393,7 +393,7 @@ fn test_lookup_undefined_variable() {
 
 #[test]
 fn test_lookup_undefined_function() {
-    let err = check_err("F test() -> i64 = no_such_fn()");
+    let err = check_err("fn test() -> i64 = no_such_fn()");
     assert!(
         err.contains("no_such_fn")
             || err.contains("not found")
@@ -406,7 +406,7 @@ fn test_lookup_undefined_function() {
 
 #[test]
 fn test_lookup_undefined_type() {
-    let result = check_result("F test(x: NonExistent) -> i64 = 0");
+    let result = check_result("fn test(x: NonExistent) -> i64 = 0");
     // Unknown type may be accepted as opaque or error
     assert!(result.is_ok() || result.is_err());
 }
@@ -478,13 +478,13 @@ fn test_error_struct_unknown_field() {
 
 #[test]
 fn test_error_field_access_on_non_struct() {
-    let err = check_err("F test() -> i64 { x := 42\nx.field }");
+    let err = check_err("fn test() -> i64 { x := 42\nx.field }");
     assert!(!err.is_empty());
 }
 
 #[test]
 fn test_error_method_on_non_struct() {
-    let err = check_err("F test() -> i64 { x := 42\nx.method() }");
+    let err = check_err("fn test() -> i64 { x := 42\nx.method() }");
     assert!(!err.is_empty());
 }
 
@@ -736,17 +736,17 @@ fn test_free_vars_nested_lambda() {
 
 #[test]
 fn test_tc_i64_arithmetic() {
-    check_ok("F test() -> i64 = 1 + 2 * 3 - 4");
+    check_ok("fn test() -> i64 = 1 + 2 * 3 - 4");
 }
 
 #[test]
 fn test_tc_i64_comparison() {
-    check_ok("F test() -> bool = 1 < 2");
+    check_ok("fn test() -> bool = 1 < 2");
 }
 
 #[test]
 fn test_tc_bool_operations() {
-    check_ok("F test() -> bool = true && false || true");
+    check_ok("fn test() -> bool = true && false || true");
 }
 
 #[test]
@@ -756,7 +756,7 @@ fn test_tc_string_literal() {
 
 #[test]
 fn test_tc_f64_arithmetic() {
-    check_ok("F test() -> f64 = 1.0 + 2.0");
+    check_ok("fn test() -> f64 = 1.0 + 2.0");
 }
 
 #[test]
@@ -1123,22 +1123,22 @@ fn test_resolved_type_clone() {
 
 #[test]
 fn test_tc_empty_main() {
-    check_ok("F main() -> i64 = 0");
+    check_ok("fn main() -> i64 = 0");
 }
 
 #[test]
 fn test_tc_function_no_params() {
-    check_ok("F constant() -> i64 = 42");
+    check_ok("fn constant() -> i64 = 42");
 }
 
 #[test]
 fn test_tc_function_five_params() {
-    check_ok("F sum(a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 = a + b + c + d + e");
+    check_ok("fn sum(a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 = a + b + c + d + e");
 }
 
 #[test]
 fn test_tc_bool_negation() {
-    check_ok("F test(b: bool) -> bool = !b");
+    check_ok("fn test(b: bool) -> bool = !b");
 }
 
 #[test]
@@ -1160,12 +1160,12 @@ fn test_tc_comparison_operators() {
 
 #[test]
 fn test_tc_modulo_operator() {
-    check_ok("F test() -> i64 = 17 % 5");
+    check_ok("fn test() -> i64 = 17 % 5");
 }
 
 #[test]
 fn test_tc_division_operator() {
-    check_ok("F test() -> i64 = 100 / 3");
+    check_ok("fn test() -> i64 = 100 / 3");
 }
 
 #[test]

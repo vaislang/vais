@@ -144,7 +144,7 @@ fn test_generic_instantiation_hash() {
 
 #[test]
 fn test_unused_variable_warning() {
-    let source = "F test() -> i64 { x := 42; R 0 }";
+    let source = "fn test() -> i64 { x := 42; R 0 }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     let _ = tc.check_module(&module);
@@ -160,7 +160,7 @@ fn test_unused_variable_warning() {
 
 #[test]
 fn test_underscore_prefixed_no_warning() {
-    let source = "F test() -> i64 { _unused := 42; R 0 }";
+    let source = "fn test() -> i64 { _unused := 42; R 0 }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     let _ = tc.check_module(&module);
@@ -174,7 +174,7 @@ fn test_underscore_prefixed_no_warning() {
 
 #[test]
 fn test_variable_used_no_warning() {
-    let source = "F test() -> i64 { x := 42; R x }";
+    let source = "fn test() -> i64 { x := 42; R x }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     let _ = tc.check_module(&module);
@@ -469,7 +469,7 @@ fn test_type_checker_get_functions() {
 
 #[test]
 fn test_type_checker_get_struct() {
-    let source = "S Point { x: i64, y: i64 }";
+    let source = "struct Point { x: i64, y: i64 }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     tc.check_module(&module).unwrap();
@@ -480,7 +480,7 @@ fn test_type_checker_get_struct() {
 
 #[test]
 fn test_type_checker_get_enum() {
-    let source = "E Color { Red, Green, Blue }";
+    let source = "enum Color { Red, Green, Blue }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     tc.check_module(&module).unwrap();
@@ -533,7 +533,7 @@ fn test_type_checker_generic_struct_detection() {
 
 #[test]
 fn test_type_checker_strict_ownership() {
-    let source = "F test() -> i64 = 42";
+    let source = "fn test() -> i64 = 42";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     tc.set_strict_ownership(true);
@@ -542,7 +542,7 @@ fn test_type_checker_strict_ownership() {
 
 #[test]
 fn test_type_checker_disable_ownership() {
-    let source = "F test() -> i64 = 42";
+    let source = "fn test() -> i64 = 42";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     tc.disable_ownership_check();
@@ -551,7 +551,7 @@ fn test_type_checker_disable_ownership() {
 
 #[test]
 fn test_type_checker_clear_warnings() {
-    let source = "F test() -> i64 { x := 42; R 0 }";
+    let source = "fn test() -> i64 { x := 42; R 0 }";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     let _ = tc.check_module(&module);
@@ -580,7 +580,7 @@ fn test_type_checker_generic_instantiations() {
 
 #[test]
 fn test_type_checker_set_imported_item_count() {
-    let source = "F test() -> i64 = 42";
+    let source = "fn test() -> i64 = 42";
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     tc.set_imported_item_count(5);
@@ -597,7 +597,7 @@ fn test_type_checker_clone_type_defs() {
     let mut tc1 = TypeChecker::new();
     tc1.check_module(&module1).unwrap();
 
-    let source2 = "F test() -> i64 = 42";
+    let source2 = "fn test() -> i64 = 42";
     let module2 = parse(source2).unwrap();
     let mut tc2 = TypeChecker::new();
     tc2.clone_type_defs_from(&tc1);

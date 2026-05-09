@@ -209,7 +209,7 @@ fn test_check_struct_field_access() {
 
 #[test]
 fn test_check_if_expression() {
-    check_ok("F f(x: i64) -> i64 = I x > 0 { 1 } E { 0 }");
+    check_ok("fn f(x: i64) -> i64 = I x > 0 { 1 } E { 0 }");
 }
 
 #[test]
@@ -239,7 +239,7 @@ fn test_check_if_else_if() {
 
 #[test]
 fn test_check_ternary() {
-    check_ok("F max(a: i64, b: i64) -> i64 = a > b ? a : b");
+    check_ok("fn max(a: i64, b: i64) -> i64 = a > b ? a : b");
 }
 
 #[test]
@@ -453,7 +453,7 @@ fn test_check_return_expr() {
 
 #[test]
 fn test_check_return_void() {
-    check_ok("F f() { R }");
+    check_ok("fn f() { R }");
 }
 
 #[test]
@@ -474,12 +474,12 @@ fn test_check_defer() {
 
 #[test]
 fn test_check_arithmetic_ops() {
-    check_ok("F f(a: i64, b: i64) -> i64 = a + b - a * b / a");
+    check_ok("fn f(a: i64, b: i64) -> i64 = a + b - a * b / a");
 }
 
 #[test]
 fn test_check_modulo() {
-    check_ok("F f(a: i64, b: i64) -> i64 = a % b");
+    check_ok("fn f(a: i64, b: i64) -> i64 = a % b");
 }
 
 #[test]
@@ -530,12 +530,12 @@ fn test_check_logical_and_or() {
 
 #[test]
 fn test_check_unary_neg() {
-    check_ok("F f(x: i64) -> i64 = -x");
+    check_ok("fn f(x: i64) -> i64 = -x");
 }
 
 #[test]
 fn test_check_unary_not() {
-    check_ok("F f(x: bool) -> bool = !x");
+    check_ok("fn f(x: bool) -> bool = !x");
 }
 
 // ============================================================================
@@ -598,5 +598,5 @@ fn test_check_complex_match_with_binding() {
 
 #[test]
 fn test_check_deeply_nested_expression() {
-    check_ok("F f(a: i64, b: i64) -> i64 = ((a + b) * (a - b)) + ((a * b) / (a + 1))");
+    check_ok("fn f(a: i64, b: i64) -> i64 = ((a + b) * (a - b)) + ((a * b) / (a + 1))");
 }

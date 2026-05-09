@@ -528,7 +528,7 @@ fn test_unary_negation() {
     let ir = gen_ok(
         r#"
         fn test(x: i64) -> i64 {
-            R -x
+            return -x
         }
     "#,
     );

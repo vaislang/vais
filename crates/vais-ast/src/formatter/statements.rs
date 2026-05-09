@@ -86,7 +86,7 @@ impl Formatter {
             }
             Stmt::Return(expr) => {
                 self.output.push_str(&indent);
-                self.output.push('R');
+                self.output.push_str("return");
                 if let Some(e) = expr {
                     self.output.push(' ');
                     self.output.push_str(&self.format_expr(&e.node));
@@ -234,7 +234,7 @@ impl Formatter {
         arms: &[MatchArm],
     ) {
         self.output.push_str(indent);
-        self.output.push_str("M ");
+        self.output.push_str("match ");
         self.output.push_str(&self.format_expr(&expr.node));
         self.output.push_str(" {\n");
         self.push_indent();
@@ -296,7 +296,7 @@ impl Formatter {
             }
             Stmt::Expr(expr) => self.format_expr(&expr.node),
             Stmt::Return(expr) => {
-                let mut s = String::from("R");
+                let mut s = String::from("return");
                 if let Some(e) = expr {
                     s.push(' ');
                     s.push_str(&self.format_expr(&e.node));

@@ -91,7 +91,7 @@ fn fuzz_functions_with_many_parameters() {
 
     for param_count in [10, 50, 100, 200] {
         // Generate function with many parameters
-        let mut source = String::from("F test(");
+        let mut source = String::from("fn test(");
         for i in 0..param_count {
             if i > 0 {
                 source.push_str(", ");
@@ -105,7 +105,7 @@ fn fuzz_functions_with_many_parameters() {
         }
 
         // Function call with many arguments
-        let mut call_source = String::from("F f(");
+        let mut call_source = String::from("fn f(");
         for i in 0..param_count {
             if i > 0 {
                 call_source.push_str(", ");
@@ -164,7 +164,7 @@ fn fuzz_deeply_nested_types() {
                 for _ in 0..depth {
                     type_str = format!("Option<{}>", type_str);
                 }
-                let source = format!("E Option<T>{{Some(T),None}} F test()->{}=None", type_str);
+                let source = format!("enum Option<T>{{Some(T),None}} F test()->{}=None", type_str);
 
                 if let Err(panic_msg) = type_check_no_panic(&source) {
                     failures.push((format!("Option depth {}", depth), panic_msg));
@@ -175,7 +175,7 @@ fn fuzz_deeply_nested_types() {
                 for _ in 0..depth {
                     tuple_type = format!("({}, i64)", tuple_type);
                 }
-                let source2 = format!("F test()->{}=(42, 42)", tuple_type);
+                let source2 = format!("fn test()->{}=(42, 42)", tuple_type);
 
                 if let Err(panic_msg) = type_check_no_panic(&source2) {
                     failures.push((format!("Tuple depth {}", depth), panic_msg));
@@ -186,7 +186,7 @@ fn fuzz_deeply_nested_types() {
                 for _ in 0..depth {
                     fn_type = format!("fn({})->i64", fn_type);
                 }
-                let source3 = format!("F test(f:{})->i64=42", fn_type);
+                let source3 = format!("fn test(f:{})->i64=42", fn_type);
 
                 if let Err(panic_msg) = type_check_no_panic(&source3) {
                     failures.push((format!("Function type depth {}", depth), panic_msg));
@@ -218,17 +218,17 @@ fn fuzz_circular_type_references() {
         // Mutual type alias references
         "Y A = B Y B = A",
         // Struct with field of its own type
-        "S Node { value: i64, next: Node }",
+        "struct Node { value: i64, next: Node }",
         // Mutual struct references
-        "S A { b: B } S B { a: A }",
+        "struct A { b: B } S B { a: A }",
         // Enum with recursive variant
-        "E List { Cons(i64, List), Nil }",
+        "enum List { Cons(i64, List), Nil }",
         // Type alias chain
         "Y A = B Y B = C Y C = A",
         // Complex circular dependency
-        "S Foo { bar: Bar } S Bar { baz: Baz } S Baz { foo: Foo }",
+        "struct Foo { bar: Bar } S Bar { baz: Baz } S Baz { foo: Foo }",
         // Self-referential generic
-        "E Tree<T> { Node(T, Tree<Tree<T>>), Leaf }",
+        "enum Tree<T> { Node(T, Tree<Tree<T>>), Leaf }",
     ];
 
     let mut failures = Vec::new();
@@ -300,15 +300,15 @@ fn fuzz_empty_trait_implementations() {
 fn fuzz_functions_with_no_body() {
     let test_cases = vec![
         // These should parse but might have issues in type checking
-        "F test()->i64",
-        "F test(x:i64)->i64",
+        "fn test()->i64",
+        "fn test(x:i64)->i64",
         "F test<T>(x:T)->T",
         // Function with just type signature
-        "F add(x:i64, y:i64)->i64",
+        "fn add(x:i64, y:i64)->i64",
         // Generic function without body
         "F identity<T>(x:T)->T",
         // Multiple functions without bodies
-        "F f1()->i64 F f2()->bool F f3()->str",
+        "fn f1()->i64 F f2()->bool F f3()->str",
     ];
 
     let mut failures = Vec::new();
@@ -341,7 +341,7 @@ fn fuzz_very_long_identifiers() {
         let long_id = "x".repeat(len);
 
         // Long variable name
-        let source1 = format!("F test()->i64{{{}:=42;R {}}}", long_id, long_id);
+        let source1 = format!("fn test()->i64{{{}:=42;R {}}}", long_id, long_id);
         if let Err(panic_msg) = type_check_no_panic(&source1) {
             failures.push((format!("var name len {}", len), panic_msg));
         }
@@ -359,7 +359,7 @@ fn fuzz_very_long_identifiers() {
         }
 
         // Long field name
-        let source4 = format!("S Point{{{}: i64, y: i64}}", long_id);
+        let source4 = format!("struct Point{{{}: i64, y: i64}}", long_id);
         if let Err(panic_msg) = type_check_no_panic(&source4) {
             failures.push((format!("field name len {}", len), panic_msg));
         }
@@ -382,19 +382,19 @@ fn fuzz_very_long_identifiers() {
 fn fuzz_type_mismatches() {
     let test_cases = vec![
         // Wrong return type
-        "F test()->i64=true",
-        "F test()->bool=42",
-        "F test()->str=123",
+        "fn test()->i64=true",
+        "fn test()->bool=42",
+        "fn test()->str=123",
         // Wrong parameter type
-        "F add(x:i64,y:i64)->i64=x+y F test()->i64=add(true, false)",
+        "fn add(x:i64,y:i64)->i64=x+y F test()->i64=add(true, false)",
         // Type mismatch in assignment
-        "F test()->i64{x:i64=true;R x}",
+        "fn test()->i64{x:i64=true;R x}",
         // Multiple type errors
-        "F test()->i64{x:bool=42;y:str=true;R false}",
+        "fn test()->i64{x:bool=42;y:str=true;R false}",
         // Unresolved type variable
         "F test<T>(x:T)->i64=x",
         // Wrong number of type arguments
-        "E Option<T>{Some(T),None} F test()->Option=None",
+        "enum Option<T>{Some(T),None} F test()->Option=None",
         // Conflicting type constraints
         "F test<T>(x:T, y:T)->T{R x} F main()->i64=test(42, true)",
     ];
@@ -425,21 +425,21 @@ fn fuzz_type_mismatches() {
 fn fuzz_undefined_references() {
     let test_cases = vec![
         // Undefined variable
-        "F test()->i64=undefined_var",
+        "fn test()->i64=undefined_var",
         // Undefined function
-        "F test()->i64=undefined_func()",
+        "fn test()->i64=undefined_func()",
         // Undefined type
-        "F test()->UndefinedType=42",
+        "fn test()->UndefinedType=42",
         // Undefined struct field
-        "S Point{x:i64} F test()->i64{p:=Point{x:1};R p.undefined_field}",
+        "struct Point{x:i64} F test()->i64{p:=Point{x:1};R p.undefined_field}",
         // Undefined enum variant
-        "E Option<T>{Some(T),None} F test()->Option<i64>=Option::Undefined",
+        "enum Option<T>{Some(T),None} F test()->Option<i64>=Option::Undefined",
         // Undefined trait
         "I UndefinedTrait for i64 {}",
         // Undefined generic parameter
-        "F test()->T=42",
+        "fn test()->T=42",
         // Referencing non-existent module
-        "F test()->i64=some_module::some_func()",
+        "fn test()->i64=some_module::some_func()",
     ];
 
     let mut failures = Vec::new();
@@ -468,17 +468,17 @@ fn fuzz_undefined_references() {
 fn fuzz_malformed_generics() {
     let test_cases = vec![
         // Too many type arguments
-        "E Option<T>{Some(T),None} F test()->Option<i64,bool>=None",
+        "enum Option<T>{Some(T),None} F test()->Option<i64,bool>=None",
         // Too few type arguments
-        "S Pair<A,B>{first:A,second:B} F test()->Pair<i64>=Pair{first:1,second:2}",
+        "struct Pair<A,B>{first:A,second:B} F test()->Pair<i64>=Pair{first:1,second:2}",
         // Generic without definition
-        "F test()->Vec<i64>=42",
+        "fn test()->Vec<i64>=42",
         // Nested unresolved generics
         "F test<T>()->Option<Option<Option<T>>>=None",
         // Conflicting generic bounds
         "T Trait1 {} T Trait2 {} F test<T: Trait1 + Trait2>(x:T)->T=x F main()->i64=test(42)",
         // Generic type in wrong position
-        "F test()->i64{T:=42;R T}",
+        "fn test()->i64{T:=42;R T}",
         // Multiple definitions with same generic name
         "F test<T,T>(x:T,y:T)->T=x",
     ];
@@ -649,24 +649,24 @@ fn fuzz_edge_case_expressions() {
         .spawn(|| {
             let test_cases = vec![
                 // Division by zero
-                "F test()->i64=42/0",
+                "fn test()->i64=42/0",
                 // Overflow in literals
-                "F test()->i64=99999999999999999999999999999",
+                "fn test()->i64=99999999999999999999999999999",
                 // Deep expression nesting
-                "F test()->i64=((((((((((1+2)+3)+4)+5)+6)+7)+8)+9)+10)+11)",
+                "fn test()->i64=((((((((((1+2)+3)+4)+5)+6)+7)+8)+9)+10)+11)",
                 // Many chained operations
-                "F test()->i64=1+2+3+4+5+6+7+8+9+10+11+12+13+14+15+16+17+18+19+20",
+                "fn test()->i64=1+2+3+4+5+6+7+8+9+10+11+12+13+14+15+16+17+18+19+20",
                 // Complex boolean expression
-                "F test()->bool=true&&false||true&&false||true&&false||true",
+                "fn test()->bool=true&&false||true&&false||true&&false||true",
                 // Deeply nested field access (if struct exists)
-                "S A{b:B} S B{c:C} S C{d:D} S D{val:i64} F test(a:A)->i64=a.b.c.d.val",
+                "struct A{b:B} S B{c:C} S C{d:D} S D{val:i64} F test(a:A)->i64=a.b.c.d.val",
                 // Empty string operations
-                "F test()->str=\"\"",
+                "fn test()->str=\"\"",
                 // Negative numbers
-                "F test()->i64=-42",
-                "F test()->i64=-(-(-42))",
+                "fn test()->i64=-42",
+                "fn test()->i64=-(-(-42))",
                 // Mixed operations
-                "F test()->i64=(1+2)*3-4/2",
+                "fn test()->i64=(1+2)*3-4/2",
             ];
 
             let mut failures = Vec::new();

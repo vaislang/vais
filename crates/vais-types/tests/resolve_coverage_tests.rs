@@ -20,72 +20,72 @@ fn check_ok(source: &str) -> TypeChecker {
 
 #[test]
 fn test_resolve_i64() {
-    check_ok("F f(x: i64) -> i64 = x");
+    check_ok("fn f(x: i64) -> i64 = x");
 }
 
 #[test]
 fn test_resolve_i32() {
-    check_ok("F f(x: i32) -> i32 = x");
+    check_ok("fn f(x: i32) -> i32 = x");
 }
 
 #[test]
 fn test_resolve_i16() {
-    check_ok("F f(x: i16) -> i16 = x");
+    check_ok("fn f(x: i16) -> i16 = x");
 }
 
 #[test]
 fn test_resolve_i8() {
-    check_ok("F f(x: i8) -> i8 = x");
+    check_ok("fn f(x: i8) -> i8 = x");
 }
 
 #[test]
 fn test_resolve_f64() {
-    check_ok("F f(x: f64) -> f64 = x");
+    check_ok("fn f(x: f64) -> f64 = x");
 }
 
 #[test]
 fn test_resolve_f32() {
-    check_ok("F f(x: f32) -> f32 = x");
+    check_ok("fn f(x: f32) -> f32 = x");
 }
 
 #[test]
 fn test_resolve_bool() {
-    check_ok("F f(x: bool) -> bool = x");
+    check_ok("fn f(x: bool) -> bool = x");
 }
 
 #[test]
 fn test_resolve_str() {
-    check_ok("F f(x: str) -> str = x");
+    check_ok("fn f(x: str) -> str = x");
 }
 
 #[test]
 fn test_resolve_u8() {
-    check_ok("F f(x: u8) -> u8 = x");
+    check_ok("fn f(x: u8) -> u8 = x");
 }
 
 #[test]
 fn test_resolve_u16() {
-    check_ok("F f(x: u16) -> u16 = x");
+    check_ok("fn f(x: u16) -> u16 = x");
 }
 
 #[test]
 fn test_resolve_u32() {
-    check_ok("F f(x: u32) -> u32 = x");
+    check_ok("fn f(x: u32) -> u32 = x");
 }
 
 #[test]
 fn test_resolve_u64() {
-    check_ok("F f(x: u64) -> u64 = x");
+    check_ok("fn f(x: u64) -> u64 = x");
 }
 
 #[test]
 fn test_resolve_i128() {
-    check_ok("F f(x: i128) -> i128 = x");
+    check_ok("fn f(x: i128) -> i128 = x");
 }
 
 #[test]
 fn test_resolve_u128() {
-    check_ok("F f(x: u128) -> u128 = x");
+    check_ok("fn f(x: u128) -> u128 = x");
 }
 
 // ============================================================================

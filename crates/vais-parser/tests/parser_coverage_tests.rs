@@ -61,7 +61,7 @@ fn test_parse_with_cfg_windows_excluded() {
 
 #[test]
 fn test_parse_with_cfg_empty() {
-    let source = "F test() -> i64 = 42";
+    let source = "fn test() -> i64 = 42";
     let module = parse_with_cfg(source, HashMap::new()).unwrap();
     assert_eq!(module.items.len(), 1);
 }
@@ -72,7 +72,7 @@ fn test_parse_with_cfg_empty() {
 
 #[test]
 fn test_parse_with_recovery_valid_code() {
-    let source = "F test() -> i64 = 42";
+    let source = "fn test() -> i64 = 42";
     let (module, errors) = parse_with_recovery(source);
     assert!(errors.is_empty());
     assert_eq!(module.items.len(), 1);
@@ -80,7 +80,7 @@ fn test_parse_with_recovery_valid_code() {
 
 #[test]
 fn test_parse_with_recovery_broken_function() {
-    let source = "F broken(; S Valid { x: i64 }";
+    let source = "fn broken(; S Valid { x: i64 }";
     let (module, errors) = parse_with_recovery(source);
     assert!(!errors.is_empty());
     // Should still parse the valid struct
@@ -108,7 +108,7 @@ fn test_parse_with_recovery_multiple_errors() {
 
 #[test]
 fn test_parse_with_recovery_missing_body() {
-    let source = "F test() -> i64";
+    let source = "fn test() -> i64";
     let (module, errors) = parse_with_recovery(source);
     // May or may not produce errors, but should not crash
     let _ = (module, errors);
@@ -127,14 +127,14 @@ fn test_parse_string_interpolation() {
 
 #[test]
 fn test_parse_range_expressions() {
-    let source = "F test() -> i64 { L i:0..10 { C }; R 0 }";
+    let source = "fn test() -> i64 { L i:0..10 { C }; R 0 }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_inclusive_range() {
-    let source = "F test() -> i64 { L i:0..=10 { C }; R 0 }";
+    let source = "fn test() -> i64 { L i:0..=10 { C }; R 0 }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -151,7 +151,7 @@ fn test_parse_pipe_operator() {
 
 #[test]
 fn test_parse_ternary_expression() {
-    let source = "F abs(x: i64) -> i64 = x > 0 ? x : -x";
+    let source = "fn abs(x: i64) -> i64 = x > 0 ? x : -x";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -171,28 +171,28 @@ fn test_parse_try_operator() {
 
 #[test]
 fn test_parse_unwrap_operator() {
-    let source = "F test(x: i64) -> i64 { y := x + 1; y! }";
+    let source = "fn test(x: i64) -> i64 { y := x + 1; y! }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_self_recursion() {
-    let source = "F factorial(n: i64) -> i64 { I n <= 1 { R 1 }; R n * @(n - 1) }";
+    let source = "fn factorial(n: i64) -> i64 { I n <= 1 { R 1 }; R n * @(n - 1) }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_lambda() {
-    let source = "F test() -> i64 { f := |x: i64| x * 2; f(21) }";
+    let source = "fn test() -> i64 { f := |x: i64| x * 2; f(21) }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_lambda_multi_param() {
-    let source = "F test() -> i64 { f := |x: i64, y: i64| x + y; f(1, 2) }";
+    let source = "fn test() -> i64 { f := |x: i64, y: i64| x + y; f(1, 2) }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -212,28 +212,28 @@ fn test_parse_struct_literal() {
 
 #[test]
 fn test_parse_array_literal() {
-    let source = "F test() -> i64 { arr := [1, 2, 3, 4, 5]; R 0 }";
+    let source = "fn test() -> i64 { arr := [1, 2, 3, 4, 5]; R 0 }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_tuple_literal() {
-    let source = "F test() -> i64 { t := (1, 2, 3); R 0 }";
+    let source = "fn test() -> i64 { t := (1, 2, 3); R 0 }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_cast_expression() {
-    let source = "F test() -> f64 { x := 42; x as f64 }";
+    let source = "fn test() -> f64 { x := 42; x as f64 }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_ref_deref() {
-    let source = "F test(x: i64) -> i64 { y := &x; *y }";
+    let source = "fn test(x: i64) -> i64 { y := &x; *y }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -244,21 +244,21 @@ fn test_parse_ref_deref() {
 
 #[test]
 fn test_parse_mutable_binding() {
-    let source = "F test() -> i64 { x := mut 0; x = 42; x }";
+    let source = "fn test() -> i64 { x := mut 0; x = 42; x }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_typed_binding() {
-    let source = "F test() -> i64 { x: i64 = 42; x }";
+    let source = "fn test() -> i64 { x: i64 = 42; x }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_return_statement() {
-    let source = "F test() -> i64 { R 42 }";
+    let source = "fn test() -> i64 { R 42 }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -296,7 +296,7 @@ fn test_parse_defer_statement() {
 
 #[test]
 fn test_parse_function_type() {
-    let source = "F apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)";
+    let source = "fn apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -317,42 +317,42 @@ fn test_parse_multi_generic_type() {
 
 #[test]
 fn test_parse_result_type() {
-    let source = "F test() -> i64 = 42";
+    let source = "fn test() -> i64 = 42";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_option_type() {
-    let source = "F test(x: i64?) -> i64 = 0";
+    let source = "fn test(x: i64?) -> i64 = 0";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_tuple_type() {
-    let source = "F test() -> (i64, bool) = (42, true)";
+    let source = "fn test() -> (i64, bool) = (42, true)";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_array_type() {
-    let source = "F test(arr: [i64]) -> i64 = 0";
+    let source = "fn test(arr: [i64]) -> i64 = 0";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_pointer_type() {
-    let source = "F test(ptr: *i64) -> i64 = 0";
+    let source = "fn test(ptr: *i64) -> i64 = 0";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_reference_type() {
-    let source = "F test(r: &i64) -> i64 = 0";
+    let source = "fn test(r: &i64) -> i64 = 0";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -363,7 +363,7 @@ fn test_parse_reference_type() {
 
 #[test]
 fn test_parse_struct_with_generics() {
-    let source = "S Container<T> { value: T, count: i64 }";
+    let source = "struct Container<T> { value: T, count: i64 }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -421,7 +421,7 @@ fn test_parse_trait_impl() {
 
 #[test]
 fn test_parse_type_alias() {
-    let source = "T Num = i64";
+    let source = "type Num = i64";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -447,7 +447,7 @@ fn test_parse_union() {
 
 #[test]
 fn test_parse_pub_function() {
-    let source = "P F public_fn() -> i64 = 42";
+    let source = "pub fn public_fn() -> i64 = 42";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
     if let Item::Function(f) = &module.items[0].node {
@@ -581,21 +581,21 @@ fn test_parse_macro_with_ident() {
 
 #[test]
 fn test_parse_macro_invocation_expr() {
-    let source = "F test() -> i64 = my_macro!(1, 2, 3)";
+    let source = "fn test() -> i64 = my_macro!(1, 2, 3)";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_macro_invocation_bracket() {
-    let source = "F test() -> i64 = vec![1, 2, 3]";
+    let source = "fn test() -> i64 = vec![1, 2, 3]";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_macro_invocation_brace() {
-    let source = "F test() -> i64 = block!{ 42 }";
+    let source = "fn test() -> i64 = block!{ 42 }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -606,42 +606,42 @@ fn test_parse_macro_invocation_brace() {
 
 #[test]
 fn test_parse_precedence_add_mul() {
-    let source = "F test() -> i64 = 1 + 2 * 3";
+    let source = "fn test() -> i64 = 1 + 2 * 3";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_precedence_comparison_chain() {
-    let source = "F test() -> bool = 1 < 2 && 3 > 1";
+    let source = "fn test() -> bool = 1 < 2 && 3 > 1";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_precedence_bitwise() {
-    let source = "F test() -> i64 = 255 & 15 | 48 ^ 16";
+    let source = "fn test() -> i64 = 255 & 15 | 48 ^ 16";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_precedence_shift() {
-    let source = "F test() -> i64 = 1 << 8 >> 4";
+    let source = "fn test() -> i64 = 1 << 8 >> 4";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_precedence_parenthesized() {
-    let source = "F test() -> i64 = (1 + 2) * (3 + 4)";
+    let source = "fn test() -> i64 = (1 + 2) * (3 + 4)";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_precedence_unary_in_binary() {
-    let source = "F test() -> i64 = -1 + 2";
+    let source = "fn test() -> i64 = -1 + 2";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -674,17 +674,17 @@ fn test_parse_precedence_assign_ops() {
 
 #[test]
 fn test_parse_error_missing_return_type_arrow() {
-    parse_err("F test() i64 = 42");
+    parse_err("fn test() i64 = 42");
 }
 
 #[test]
 fn test_parse_error_unclosed_paren() {
-    parse_err("F test( -> i64 = 42");
+    parse_err("fn test( -> i64 = 42");
 }
 
 #[test]
 fn test_parse_error_unclosed_brace() {
-    parse_err("F test() -> i64 { R 42");
+    parse_err("fn test() -> i64 { R 42");
 }
 
 // ============================================================================
@@ -711,7 +711,7 @@ fn test_parse_global_variable() {
 
 #[test]
 fn test_parse_use_import() {
-    let source = "U std";
+    let source = "use std";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -739,7 +739,7 @@ fn test_parse_spawn_yield() {
 
 #[test]
 fn test_parse_comptime() {
-    let source = "F test() -> i64 = comptime { 2 + 3 }";
+    let source = "fn test() -> i64 = comptime { 2 + 3 }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -802,21 +802,21 @@ fn test_parse_multiple_impl_blocks() {
 
 #[test]
 fn test_parse_negative_literal() {
-    let source = "F test() -> i64 = -42";
+    let source = "fn test() -> i64 = -42";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_double_negation() {
-    let source = "F test() -> i64 = -(-42)";
+    let source = "fn test() -> i64 = -(-42)";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_not_expression() {
-    let source = "F test() -> bool = !true";
+    let source = "fn test() -> bool = !true";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -851,21 +851,21 @@ fn test_parse_chained_field_access() {
 
 #[test]
 fn test_parse_complex_expression_mix() {
-    let source = "F test(a: i64, b: i64) -> i64 = a * b + a / b - a % b";
+    let source = "fn test(a: i64, b: i64) -> i64 = a * b + a / b - a % b";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_comparison_chain() {
-    let source = "F test(x: i64) -> bool = x > 0 && x < 100 && x != 50";
+    let source = "fn test(x: i64) -> bool = x > 0 && x < 100 && x != 50";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_bool_logic() {
-    let source = "F test(a: bool, b: bool) -> bool = (a && b) || (!a && !b)";
+    let source = "fn test(a: bool, b: bool) -> bool = (a && b) || (!a && !b)";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -967,24 +967,24 @@ fn test_parse_mixed_items() {
 
 #[test]
 fn test_parse_fn_type_multi_param() {
-    let source = "F compose(x: i64, f: fn(i64) -> i64, g: fn(i64) -> i64) -> i64 = f(g(x))";
+    let source = "fn compose(x: i64, f: fn(i64) -> i64, g: fn(i64) -> i64) -> i64 = f(g(x))";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_error_missing_closing_brace() {
-    parse_err("F test() -> i64 { x := 42");
+    parse_err("fn test() -> i64 { x := 42");
 }
 
 #[test]
 fn test_parse_error_unexpected_token() {
-    parse_err("F 123() -> i64 = 42");
+    parse_err("fn 123() -> i64 = 42");
 }
 
 #[test]
 fn test_parse_error_missing_arrow() {
-    parse_err("F test() i64 = 42");
+    parse_err("fn test() i64 = 42");
 }
 
 #[test]
