@@ -133,6 +133,7 @@ mod phase91_monomorphization;
 mod phase95_coverage;
 mod phase9_duplicate_define_declare;
 mod phase_http_client_runtime;
+mod phase_package_full_build_smoke;
 mod phase_tls_runtime;
 mod phase_omega_p16_expected_type_scoping;
 mod phase_omega_p17_lambda_param_hint;

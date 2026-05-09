@@ -35,7 +35,7 @@ As of 2026-05-03 the certified Core is frozen for downstream re-entry and
 
 ```bash
 ./scripts/check-integrity.sh 2>&1 | tail -3
-# 출력 예: INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok tls_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok
+# 출력 예: INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok tls_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok web_unit=ok web_packages=ok cross_package_schema=ok pkg_full_build=threshold-met-1/2
 ```
 
 이 숫자를 **baseline**으로 기록. 수정 후 같은 스크립트 실행.

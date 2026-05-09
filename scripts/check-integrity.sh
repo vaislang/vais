@@ -16,6 +16,7 @@
 #   INTEGRITY_WEB_PACKAGES_MIN=3272        minimum vais-web non-kit packages tests
 #   INTEGRITY_BACKEND_PHASE158_MIN=18      minimum phase158 backend smoke
 #   INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=2   minimum cross_package_schema gate (positive + negative)
+#   INTEGRITY_PKG_FULL_BUILD_MIN=1         minimum package full-build smoke (Phase 1 100% Gap)
 #
 # Strict-default imports (Step 11 root fix, loop 29, 2026-05-08):
 #   This script does NOT export VAIS_STRICT_IMPORTS — the compiler is
@@ -63,6 +64,10 @@ INTEGRITY_WEB_UNIT_MIN="${INTEGRITY_WEB_UNIT_MIN:-390}"
 INTEGRITY_WEB_PACKAGES_MIN="${INTEGRITY_WEB_PACKAGES_MIN:-3272}"
 INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN="${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN:-2}"
 INTEGRITY_BACKEND_PHASE158_MIN="${INTEGRITY_BACKEND_PHASE158_MIN:-18}"
+# Phase 1 100% Gap (master-plan v78): package full-build smoke baseline.
+# Current: vais-server PASS, vaisdb FAIL → 1/2. Raises monotonically as
+# cascade fixes land (target: 2/2 → Phase β entry condition, ROADMAP §"100% Gap").
+INTEGRITY_PKG_FULL_BUILD_MIN="${INTEGRITY_PKG_FULL_BUILD_MIN:-1}"
 
 # ---------------------------------------------------------------------------
 # Ensure /tmp/vais-lib/std symlink exists
@@ -185,6 +190,18 @@ echo "check-integrity: running std/tls runtime smoke tests..."
 
 TLS_RUNTIME_EXIT=0
 cargo test -p vaisc --test e2e --release phase_tls_runtime -- --nocapture --test-threads=1 2>&1 | tee "${TLS_RUNTIME_LOG}" || TLS_RUNTIME_EXIT=$?
+
+# ---------------------------------------------------------------------------
+# Run package full-build smoke tests (Phase 1 100% Gap close, master-plan v78)
+# Builds lang/packages/<pkg>/src/main.vais entry-points with the actual `vaisc
+# build` driver. Catches production-cascade bugs that runtime-smoke gates
+# (which use inline fixture source) silently miss (LESSONS L-018).
+# ---------------------------------------------------------------------------
+PKG_FULL_BUILD_LOG="/tmp/pkg-full-build-smoke.log"
+echo "check-integrity: running package full-build smoke tests..."
+
+PKG_FULL_BUILD_EXIT=0
+cargo test -p vaisc --test e2e --release phase_package_full_build_smoke -- --nocapture --test-threads=1 2>&1 | tee "${PKG_FULL_BUILD_LOG}" || PKG_FULL_BUILD_EXIT=$?
 
 # ---------------------------------------------------------------------------
 # Run VaisDB runtime smoke tests
@@ -470,6 +487,12 @@ TLS_RUNTIME_PASSED="${TLS_RUNTIME_PASSED:-0}"
 TLS_RUNTIME_TOTAL="$(parse_cargo_running "${TLS_RUNTIME_LOG}")"
 TLS_RUNTIME_TOTAL="${TLS_RUNTIME_TOTAL:-${TLS_RUNTIME_PASSED}}"
 TLS_RUNTIME_TOTAL="${TLS_RUNTIME_TOTAL:-0}"
+
+PKG_FULL_BUILD_PASSED="$(parse_cargo_passed "${PKG_FULL_BUILD_LOG}")"
+PKG_FULL_BUILD_PASSED="${PKG_FULL_BUILD_PASSED:-0}"
+PKG_FULL_BUILD_TOTAL="$(parse_cargo_running "${PKG_FULL_BUILD_LOG}")"
+PKG_FULL_BUILD_TOTAL="${PKG_FULL_BUILD_TOTAL:-${PKG_FULL_BUILD_PASSED}}"
+PKG_FULL_BUILD_TOTAL="${PKG_FULL_BUILD_TOTAL:-0}"
 VAISDB_RUNTIME_PASSED="$(parse_cargo_passed "${VAISDB_RUNTIME_LOG}")"
 VAISDB_RUNTIME_PASSED="${VAISDB_RUNTIME_PASSED:-0}"
 VAISDB_RUNTIME_TOTAL="$(parse_cargo_running "${VAISDB_RUNTIME_LOG}")"
@@ -528,6 +551,10 @@ fi
 if [ -n "${TLS_RUNTIME_PASSED}" ] && [ "${TLS_RUNTIME_PASSED}" -lt "${INTEGRITY_TLS_RUNTIME_MIN}" ]; then
     REGRESSION=1
     REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: tls_runtime baseline=${INTEGRITY_TLS_RUNTIME_MIN} current=${TLS_RUNTIME_PASSED}/${TLS_RUNTIME_TOTAL}\n"
+fi
+if [ -n "${PKG_FULL_BUILD_PASSED}" ] && [ "${PKG_FULL_BUILD_PASSED}" -lt "${INTEGRITY_PKG_FULL_BUILD_MIN}" ]; then
+    REGRESSION=1
+    REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: pkg_full_build baseline=${INTEGRITY_PKG_FULL_BUILD_MIN} current=${PKG_FULL_BUILD_PASSED}/${PKG_FULL_BUILD_TOTAL}\n"
 fi
 if [ -n "${VAISDB_RUNTIME_PASSED}" ] && [ "${VAISDB_RUNTIME_PASSED}" -lt "${INTEGRITY_VAISDB_RUNTIME_MIN}" ]; then
     REGRESSION=1
@@ -602,6 +629,15 @@ fi
 if [ "${HTTP_CLIENT_RUNTIME_EXIT}" -ne 0 ]; then
     echo ""
     echo "HTTP CLIENT RUNTIME SMOKE FAILED: cargo test phase_http_client_runtime exited ${HTTP_CLIENT_RUNTIME_EXIT}"
+    OVERALL_EXIT=1
+fi
+
+if false && [ "${PKG_FULL_BUILD_EXIT}" -ne 0 ]; then
+    # Phase 1 100% Gap intentional: baseline starts 1/2 (vaisdb FAIL).
+    # Cargo exits !=0 when any test fails, but the regression check above
+    # uses threshold instead. Only flag if PASSED count drops below threshold.
+    echo ""
+    echo "PKG FULL BUILD SMOKE FAILED: cargo test exited ${PKG_FULL_BUILD_EXIT}"
     OVERALL_EXIT=1
 fi
 
@@ -706,6 +742,13 @@ print_gate_summary() {
         echo "TLS RUNTIME FAIL: exit=${TLS_RUNTIME_EXIT} smoke=${TLS_RUNTIME_PASSED}/${TLS_RUNTIME_TOTAL}"
     fi
 
+    # Phase 1 100% Gap (master-plan v78): no exit-code fail — threshold-based.
+    # Baseline starts 1/2 (vais-server PASS, vaisdb cascade FAIL). Cargo exits
+    # !=0 when vaisdb fails but the gate uses INTEGRITY_PKG_FULL_BUILD_MIN
+    # threshold (currently 1) for OVERALL_EXIT. Display always reports the
+    # current count for visibility.
+    echo "PKG FULL BUILD: smoke=${PKG_FULL_BUILD_PASSED}/${PKG_FULL_BUILD_TOTAL} (threshold=${INTEGRITY_PKG_FULL_BUILD_MIN})"
+
     if [ "${VAISDB_RUNTIME_EXIT}" -eq 0 ]; then
         echo "VAISDB RUNTIME OK: smoke=${VAISDB_RUNTIME_PASSED}/${VAISDB_RUNTIME_TOTAL}"
     else
@@ -745,7 +788,12 @@ print_gate_summary() {
 
 if [ "${OVERALL_EXIT}" -eq 0 ]; then
     print_gate_summary
-    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok tls_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok web_unit=ok web_packages=ok cross_package_schema=ok"
+    if [ "${PKG_FULL_BUILD_PASSED}" -ge "2" ]; then
+        PKG_FULL_BUILD_STATUS="ok"
+    else
+        PKG_FULL_BUILD_STATUS="threshold-met-${PKG_FULL_BUILD_PASSED}/${PKG_FULL_BUILD_TOTAL}"
+    fi
+    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok tls_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok web_unit=ok web_packages=ok cross_package_schema=ok pkg_full_build=${PKG_FULL_BUILD_STATUS}"
     exit 0
 else
     print_gate_summary

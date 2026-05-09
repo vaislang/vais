@@ -64,6 +64,7 @@ single source for current pass counts. CI fails on drift.
 | vais-web unit | `tests=390/390` |
 | vais-web packages | `tests=3272/3272` |
 | Cross-package schema gate | `gate=2/2` |
+| Package full-build smoke | `smoke=1/2` |
 <!-- gate-table:auto-end -->
 
 ## Meaning of the Result
