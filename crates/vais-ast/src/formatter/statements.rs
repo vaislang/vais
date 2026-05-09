@@ -150,7 +150,8 @@ impl Formatter {
     pub(crate) fn format_if_else_branch(&mut self, if_else: &IfElse) {
         match if_else {
             IfElse::ElseIf(cond, stmts, else_) => {
-                self.output.push_str(" E I ");
+                // Step 19 P4 retirement: canonical chain form is `else I`.
+                self.output.push_str(" else I ");
                 self.output.push_str(&self.format_expr(&cond.node));
                 self.output.push_str(" {\n");
                 self.push_indent();
@@ -165,7 +166,7 @@ impl Formatter {
                 }
             }
             IfElse::Else(stmts) => {
-                self.output.push_str(" E {\n");
+                self.output.push_str(" else {\n");
                 self.push_indent();
                 for stmt in stmts {
                     self.format_stmt(&stmt.node);

@@ -142,7 +142,7 @@ fn test_format_if_elseif_else() {
         fn test(x: i64) -> i64 {
             I x > 0 {
                 return 1
-            } else if x < 0 {
+            } else I x < 0 {
                 return -1
             } else {
                 return 0
@@ -150,7 +150,7 @@ fn test_format_if_elseif_else() {
         }
     "#,
     );
-    assert!(output.contains("else if"));
+    assert!(output.contains("else I"));
 }
 
 #[test]
@@ -609,6 +609,10 @@ fn test_format_function_type() {
 // Macro formatting (via direct AST construction)
 // ============================================================================
 
+// Macro declarations are an A1 hard-blocked uncertified surface
+// (master-plan v22+, parser rejects with stable error). Re-enable when
+// macros are promoted to a certified surface (Step 18 reservation).
+#[ignore]
 #[test]
 fn test_format_macro_definition() {
     let source = r#"
@@ -620,6 +624,10 @@ fn test_format_macro_definition() {
     assert!(output.contains("macro my_macro!"));
 }
 
+// Macro declarations are an A1 hard-blocked uncertified surface
+// (master-plan v22+, parser rejects with stable error). Re-enable when
+// macros are promoted.
+#[ignore]
 #[test]
 fn test_format_macro_with_args() {
     let source = r#"
@@ -743,6 +751,9 @@ fn test_format_where_clause() {
     assert!(output.contains("where") || output.contains("Show"));
 }
 
+// Union (`O`) is an A1 hard-blocked uncertified surface (master-plan v22+,
+// parser rejects). Re-enable when union is promoted to a certified surface.
+#[ignore]
 #[test]
 fn test_format_union() {
     let output = format_source(
