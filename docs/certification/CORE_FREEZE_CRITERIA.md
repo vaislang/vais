@@ -73,9 +73,12 @@ markers is generated from `GATE_MANIFEST.toml` by
 | Ecosystem package codegen | `std=82/82`, `vaisdb=261/261` |
 | Backend smoke | `phase158=18/18` |
 | std/http_client runtime | `smoke=1/1` |
+| std/tls runtime | `smoke=2/2` |
 | VaisDB runtime | `smoke=34/34` |
 | vais-server runtime | `smoke=13/13` |
 | vais-web runtime | `smoke=61/77` |
+| vais-web unit | `tests=390/390` |
+| vais-web packages | `tests=3272/3272` |
 | Cross-package schema gate | `gate=2/2` |
 <!-- gate-table:auto-end -->
 
