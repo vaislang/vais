@@ -1,0 +1,33 @@
+# B-04: Vec<str> internal codegen — '%t20' i64 vs { ptr, i64 } mismatch
+#
+# Discovered: 2026-05-09 loop 54 (vais-server JSON smoke 시도 중).
+#
+# Symptom: clang error
+#   '%t20' defined with type 'i64' but expected '{ ptr, i64 }'
+#   ret { i8*, i64 } %t20
+# in module vec_56f011cae24e68f1.ll line 316.
+#
+# Trigger context: vais-server util/json.vais 가 transitively import 되는
+# fixture 가 compile 시 발생. json.vais 자체는 single-file build 가능
+# (vaisdb path 등에 exposed) 하지만 vais-server src/ 의존을 통해 build 시
+# Vec<str> instantiation path 의 다른 site 와 monomorph collision.
+#
+# Hypothesis (미검증): str 이 { ptr, i64 } (vais 의 fat string repr) 인데
+# Vec<str> 의 어떤 internal path (push / get / pop / ...) 가 이를 단순 i64
+# 로 잘못 lower. B-01 (HashMap<u64,u64> ptr/i64 mismatch) 와 symmetric
+# pattern — Vec generic instantiation 에서 같은 silent type coercion.
+#
+# Status: still_silent (build 통과 + clang catches). vais-server JSON smoke
+# 추가 LANDED 차단 — vaisdb 와 동일한 pattern 의 cascade 측정 필요.
+#
+# Baseline impact: 0 (vais-server runtime 13/13 미사용 path; util/json.vais
+# 는 SSR API surface 의 internal helper 라 promoted smoke 미경유).
+
+use util/json.{json_encode}
+
+fn main() -> i64 {
+    empty: Vec<str> = Vec.with_capacity(0)
+    j1 := json_encode(empty)
+    I j1 != "{}" { return 1 }
+    0
+}
