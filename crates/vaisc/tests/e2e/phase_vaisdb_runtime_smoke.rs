@@ -161,6 +161,11 @@ fn e2e_vaisdb_33_transaction_cmd_isolation_runtime_smoke() {
     assert_vaisdb_smoke_runs("transaction_cmd_isolation_smoke.vais", 0);
 }
 
+#[test]
+fn e2e_vaisdb_34_transaction_conflict_deadlock_runtime_smoke() {
+    assert_vaisdb_smoke_runs("transaction_conflict_deadlock_smoke.vais", 0);
+}
+
 fn assert_vaisdb_smoke_runs(fixture: &str, expected_exit: i32) {
     let _guard = VAISDB_SMOKE_LOCK
         .lock()

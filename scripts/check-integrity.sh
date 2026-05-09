@@ -8,7 +8,7 @@
 #   INTEGRITY_STD_MIN=82                   minimum std_files pass count
 #   INTEGRITY_VAISDB_MIN=261               minimum vaisdb_files pass count
 #   INTEGRITY_HTTP_CLIENT_RUNTIME_MIN=1    minimum http_client runtime smoke
-#   INTEGRITY_VAISDB_RUNTIME_MIN=31        minimum vaisdb runtime smoke
+#   INTEGRITY_VAISDB_RUNTIME_MIN=32        minimum vaisdb runtime smoke
 #   INTEGRITY_SERVER_RUNTIME_MIN=13        minimum vais-server runtime smoke
 #   INTEGRITY_WEB_RUNTIME_MIN=23           minimum vais-web runtime smoke
 #   INTEGRITY_BACKEND_PHASE158_MIN=18      minimum phase158 backend smoke
@@ -52,7 +52,7 @@ INTEGRITY_VAISDB_MIN="${INTEGRITY_VAISDB_MIN:-261}"
 # catch a silent reduction in pass count if the suite count itself shrank.
 # These minima are the current promoted gate counts as of 2026-05-03.
 INTEGRITY_HTTP_CLIENT_RUNTIME_MIN="${INTEGRITY_HTTP_CLIENT_RUNTIME_MIN:-1}"
-INTEGRITY_VAISDB_RUNTIME_MIN="${INTEGRITY_VAISDB_RUNTIME_MIN:-31}"
+INTEGRITY_VAISDB_RUNTIME_MIN="${INTEGRITY_VAISDB_RUNTIME_MIN:-32}"
 INTEGRITY_SERVER_RUNTIME_MIN="${INTEGRITY_SERVER_RUNTIME_MIN:-13}"
 INTEGRITY_WEB_RUNTIME_MIN="${INTEGRITY_WEB_RUNTIME_MIN:-23}"
 INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN="${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN:-2}"

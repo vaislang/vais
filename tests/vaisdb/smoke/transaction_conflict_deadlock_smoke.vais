@@ -1,0 +1,85 @@
+# Transaction conflict + deadlock detection runtime smoke for vaisdb.
+#
+# Pairs with transaction_mvcc_smoke (basic invariants),
+# transaction_visibility_smoke (Case 1/2/3), and transaction_cmd_isolation_smoke
+# (cmd_id + isolation). This fixture covers the *concurrency control* layer
+# of the transaction subsystem: ConflictDetector (first-writer-wins) and
+# WaitForGraph (deadlock detection via cycle finding).
+#
+# Surface exercised end-to-end:
+# - ConflictDetector.new + check_and_lock + release_locks (HashMap<u64, u64>
+#   path with K=u64 lock keys; same path that B-01 cascade migrated and v54
+#   B-03 cascade fixed Mutex unlock for).
+# - WaitForGraph.new + add_wait + has_cycle + remove_txn (DFS-based cycle
+#   detection over Vec<WaitEdge>; same path that v54 deadlock.vais cascade
+#   fix LANDED Mutex unlock for has_cycle / detect_cycle_dfs).
+#
+# Asserted by exit code only: 0 = all 6 sub-scenarios pass,
+# 1..6 = first failing scenario.
+#
+# History: enabled by clog Mutex unlock fix (master-plan v51, loop 46) +
+# vaisdb 5 file cascade fix (v54, loop 49). Prior to those fixes,
+# ConflictDetector.release_locks (which calls release_locks under self.lock)
+# and WaitForGraph.has_cycle (which holds self.lock during DFS) caused
+# recursive Mutex deadlock when called in sequence.
+
+use storage/txn/conflict.{ConflictDetector}
+use storage/txn/deadlock.{WaitForGraph}
+
+fn main() -> i64 {
+    # ─── ConflictDetector (first-writer-wins) ───────────────────────────
+
+    detector := mut ConflictDetector.new()
+
+    # Scenario 1: first writer (txn 100) acquires lock on (file=1, page=10, slot=0).
+    is_a_ok := match detector.check_and_lock(1u8, 10u32, 0u16, 100u64) {
+        Ok(_) => 1,
+        Err(_) => 0,
+    }
+    I is_a_ok != 1 { return 1 }
+
+    # Scenario 2: second writer (txn 101) on same row → write-write conflict.
+    is_b_err := match detector.check_and_lock(1u8, 10u32, 0u16, 101u64) {
+        Ok(_) => 0,
+        Err(_) => 1,
+    }
+    I is_b_err != 1 { return 2 }
+
+    # Scenario 3: release_locks(100) frees the row → txn 101 can now acquire.
+    detector.release_locks(100u64)
+    is_c_ok := match detector.check_and_lock(1u8, 10u32, 0u16, 101u64) {
+        Ok(_) => 1,
+        Err(_) => 0,
+    }
+    I is_c_ok != 1 { return 3 }
+
+    # ─── WaitForGraph (deadlock detection) ──────────────────────────────
+
+    graph := mut WaitForGraph.new()
+
+    # Scenario 4: txn 1 waits for txn 2 — no cycle yet.
+    graph.add_wait(1u64, 2u64)
+    a_has_cycle := match graph.has_cycle() {
+        Some(_) => 1,
+        None => 0,
+    }
+    I a_has_cycle != 0 { return 4 }
+
+    # Scenario 5: txn 2 waits for txn 1 → completes 2-way cycle.
+    graph.add_wait(2u64, 1u64)
+    b_has_cycle := match graph.has_cycle() {
+        Some(_) => 1,
+        None => 0,
+    }
+    I b_has_cycle != 1 { return 5 }
+
+    # Scenario 6: remove_txn(1) resolves the cycle (victim aborted).
+    graph.remove_txn(1u64)
+    c_has_cycle := match graph.has_cycle() {
+        Some(_) => 1,
+        None => 0,
+    }
+    I c_has_cycle != 0 { return 6 }
+
+    0
+}
