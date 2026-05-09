@@ -12,6 +12,7 @@
 #   INTEGRITY_SERVER_RUNTIME_MIN=13        minimum vais-server runtime smoke
 #   INTEGRITY_WEB_RUNTIME_MIN=61           minimum vais-web runtime smoke
 #   INTEGRITY_WEB_UNIT_MIN=390             minimum vais-web unit tests
+#   INTEGRITY_WEB_PACKAGES_MIN=3087        minimum vais-web non-kit packages tests
 #   INTEGRITY_BACKEND_PHASE158_MIN=18      minimum phase158 backend smoke
 #   INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=2   minimum cross_package_schema gate (positive + negative)
 #
@@ -57,6 +58,7 @@ INTEGRITY_VAISDB_RUNTIME_MIN="${INTEGRITY_VAISDB_RUNTIME_MIN:-34}"
 INTEGRITY_SERVER_RUNTIME_MIN="${INTEGRITY_SERVER_RUNTIME_MIN:-13}"
 INTEGRITY_WEB_RUNTIME_MIN="${INTEGRITY_WEB_RUNTIME_MIN:-61}"
 INTEGRITY_WEB_UNIT_MIN="${INTEGRITY_WEB_UNIT_MIN:-390}"
+INTEGRITY_WEB_PACKAGES_MIN="${INTEGRITY_WEB_PACKAGES_MIN:-3087}"
 INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN="${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN:-2}"
 INTEGRITY_BACKEND_PHASE158_MIN="${INTEGRITY_BACKEND_PHASE158_MIN:-18}"
 
@@ -270,7 +272,38 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Run cross_package_schema validation gate (Master Plan v16 Step 14 stage 0)
+# Run vais-web non-kit package tests (separate gate from kit unit + runtime)
+# ---------------------------------------------------------------------------
+# vais-web monorepo has 23 non-kit packages (plugin / forms / motion / store /
+# typescript / a11y / i18n / hmr / query / auth / devtools / cli / runtime /
+# testing / benchmark / federation / native / db / ai / language-server /
+# vscode-extension / example-app / docs-site). Each ships its own vitest
+# suite; ~3087 tests collectively. Aggregated into a single web_packages
+# gate (per L-014: distinct from web_runtime smoke gate semantically).
+# Per-package iteration runs vitest in each pkg dir; PASS counts summed
+# from each suite's "Tests N passed" line in the combined log.
+WEB_PACKAGES_LOG="/tmp/vais-web-packages.log"
+WEB_PACKAGES_DIR="${REPO_ROOT}/../lang/packages/vais-web/packages"
+echo "check-integrity: running vais-web non-kit package tests..."
+
+WEB_PACKAGES_EXIT=0
+if [ ! -d "${WEB_PACKAGES_DIR}" ]; then
+    echo "vais-web packages directory missing: ${WEB_PACKAGES_DIR}" | tee "${WEB_PACKAGES_LOG}"
+    WEB_PACKAGES_EXIT=1
+else
+    : > "${WEB_PACKAGES_LOG}"
+    for pkg in plugin forms motion store typescript a11y i18n hmr query auth devtools cli runtime testing benchmark federation native db ai language-server vscode-extension; do
+        pkg_dir="${WEB_PACKAGES_DIR}/${pkg}"
+        if [ ! -d "${pkg_dir}" ]; then
+            continue
+        fi
+        echo "=== ${pkg} ===" >> "${WEB_PACKAGES_LOG}"
+        (
+            cd "${pkg_dir}"
+            NPM_TOKEN="${NPM_TOKEN:-}" pnpm exec vitest run 2>&1
+        ) >> "${WEB_PACKAGES_LOG}" 2>&1 || WEB_PACKAGES_EXIT=$?
+    done
+fi
 # ---------------------------------------------------------------------------
 # The gate proves that a typed change to a shared schema.vais propagates
 # to .vais consumers (vaisdb-style + vais-server-style) AND to .ts
@@ -393,6 +426,25 @@ parse_vitest_total() {
         || true
 }
 
+parse_vitest_passed_sum() {
+    # Sum the "Tests N passed" counts across multiple vitest invocations
+    # appended to the same log (web_packages gate runs vitest per package).
+    local log="$1"
+    grep "Tests" "${log}" 2>/dev/null \
+        | grep "passed" \
+        | sed 's/.*Tests[[:space:]]*\([0-9][0-9]*\) passed.*/\1/' \
+        | awk '{s += $1} END {print s+0}'
+}
+
+parse_vitest_total_sum() {
+    # Sum the parenthesised totals across multiple vitest invocations.
+    local log="$1"
+    grep "Tests" "${log}" 2>/dev/null \
+        | grep "passed" \
+        | sed 's/.*(\([0-9][0-9]*\)).*/\1/' \
+        | awk '{s += $1} END {print s+0}'
+}
+
 PHASE158_PASSED="$(parse_cargo_passed "${PHASE158_LOG}")"
 PHASE158_PASSED="${PHASE158_PASSED:-0}"
 PHASE158_TOTAL="$(parse_cargo_running "${PHASE158_LOG}")"
@@ -422,6 +474,11 @@ WEB_UNIT_PASSED="${WEB_UNIT_PASSED:-0}"
 WEB_UNIT_TOTAL="$(parse_vitest_total "${WEB_UNIT_LOG}")"
 WEB_UNIT_TOTAL="${WEB_UNIT_TOTAL:-${WEB_UNIT_PASSED}}"
 WEB_UNIT_TOTAL="${WEB_UNIT_TOTAL:-0}"
+WEB_PACKAGES_PASSED="$(parse_vitest_passed_sum "${WEB_PACKAGES_LOG}")"
+WEB_PACKAGES_PASSED="${WEB_PACKAGES_PASSED:-0}"
+WEB_PACKAGES_TOTAL="$(parse_vitest_total_sum "${WEB_PACKAGES_LOG}")"
+WEB_PACKAGES_TOTAL="${WEB_PACKAGES_TOTAL:-${WEB_PACKAGES_PASSED}}"
+WEB_PACKAGES_TOTAL="${WEB_PACKAGES_TOTAL:-0}"
 
 # ---------------------------------------------------------------------------
 # Regression checks
@@ -467,6 +524,10 @@ fi
 if [ -n "${WEB_UNIT_PASSED}" ] && [ "${WEB_UNIT_PASSED}" -lt "${INTEGRITY_WEB_UNIT_MIN}" ]; then
     REGRESSION=1
     REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: vais_web_unit baseline=${INTEGRITY_WEB_UNIT_MIN} current=${WEB_UNIT_PASSED}/${WEB_UNIT_TOTAL}\n"
+fi
+if [ -n "${WEB_PACKAGES_PASSED}" ] && [ "${WEB_PACKAGES_PASSED}" -lt "${INTEGRITY_WEB_PACKAGES_MIN}" ]; then
+    REGRESSION=1
+    REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: vais_web_packages baseline=${INTEGRITY_WEB_PACKAGES_MIN} current=${WEB_PACKAGES_PASSED}/${WEB_PACKAGES_TOTAL}\n"
 fi
 if [ -n "${PHASE158_PASSED}" ] && [ "${PHASE158_PASSED}" -lt "${INTEGRITY_BACKEND_PHASE158_MIN}" ]; then
     REGRESSION=1
@@ -545,6 +606,12 @@ fi
 if [ "${WEB_UNIT_EXIT}" -ne 0 ]; then
     echo ""
     echo "WEB UNIT TESTS FAILED: vitest vais-web unit tests exited ${WEB_UNIT_EXIT}"
+    OVERALL_EXIT=1
+fi
+
+if [ "${WEB_PACKAGES_EXIT}" -ne 0 ]; then
+    echo ""
+    echo "WEB PACKAGES TESTS FAILED: vitest vais-web packages exited ${WEB_PACKAGES_EXIT}"
     OVERALL_EXIT=1
 fi
 
@@ -631,6 +698,12 @@ print_gate_summary() {
         echo "WEB UNIT FAIL: exit=${WEB_UNIT_EXIT} tests=${WEB_UNIT_PASSED}/${WEB_UNIT_TOTAL}"
     fi
 
+    if [ "${WEB_PACKAGES_EXIT}" -eq 0 ]; then
+        echo "WEB PACKAGES OK: tests=${WEB_PACKAGES_PASSED}/${WEB_PACKAGES_TOTAL}"
+    else
+        echo "WEB PACKAGES FAIL: exit=${WEB_PACKAGES_EXIT} tests=${WEB_PACKAGES_PASSED}/${WEB_PACKAGES_TOTAL}"
+    fi
+
     if [ "${CROSS_PKG_SCHEMA_EXIT}" -eq 0 ]; then
         echo "CROSS PACKAGE SCHEMA OK: gate=${CROSS_PKG_SCHEMA_PASSED}/${CROSS_PKG_SCHEMA_TOTAL}"
     else
@@ -640,7 +713,7 @@ print_gate_summary() {
 
 if [ "${OVERALL_EXIT}" -eq 0 ]; then
     print_gate_summary
-    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok web_unit=ok cross_package_schema=ok"
+    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok web_unit=ok web_packages=ok cross_package_schema=ok"
     exit 0
 else
     print_gate_summary
