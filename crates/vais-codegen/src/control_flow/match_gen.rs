@@ -1028,7 +1028,29 @@ impl CodeGenerator {
                             .iter()
                             .find_map(|(v, _)| self.llvm_type_of_checked(v))
                     });
-                if matches!(arm_body_type, ResolvedType::Named { .. }) {
+                // B-58 fix (Phase 1 100% Gap, iter 62): when actual phi LLVM type is a
+                // value (e.g. `{ i8*, i64 }` fat-pointer for &str / Str return), the
+                // arm_body_type-based "null" default produces a pointer-typed default
+                // and forces phi to pointer type — clang rejects with type mismatch
+                // (vaisdb types.ll:2412 cascade). Honor actual emitted type first.
+                let actual_override: Option<String> = phi_llvm_actual.as_deref().and_then(|actual| {
+                    if actual == "{ i8*, i64 }" {
+                        let zinit = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
+                            zinit
+                        );
+                        Some(zinit)
+                    } else if !actual.ends_with('*') && actual.starts_with('{') {
+                        Some("zeroinitializer".to_string())
+                    } else {
+                        None
+                    }
+                });
+                if let Some(v) = actual_override {
+                    v
+                } else if matches!(arm_body_type, ResolvedType::Named { .. }) {
                     "null".to_string()
                 } else if matches!(
                     arm_body_type,
