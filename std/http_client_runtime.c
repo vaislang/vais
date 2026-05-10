@@ -14,6 +14,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <ctype.h>
+#include <limits.h>
 #include <errno.h>
 
 // ============================================
@@ -492,7 +493,7 @@ HcResponse __hc_parse_response(long buffer, long len) {
 // ============================================
 
 // Extract Content-Length value from raw HTTP response headers.
-// Returns the content length, or -1 if not found.
+// Returns the content length, -1 if not found, or -2 if malformed.
 long __hc_get_content_length(long buffer, long len) {
     const char* buf = (const char*)buffer;
     if (buf == NULL || len <= 0) return -1;
@@ -507,13 +508,25 @@ long __hc_get_content_length(long buffer, long len) {
             if (strncasecmp(p, "Content-Length:", 15) == 0) {
                 p += 15;
                 // Skip whitespace
-                while (p < end && *p == ' ') p++;
+                while (p < end && (*p == ' ' || *p == '\t')) p++;
+
+                if (p >= end || *p < '0' || *p > '9') {
+                    return -2;  // malformed Content-Length
+                }
 
                 // Parse number
                 long cl = 0;
                 while (p < end && *p >= '0' && *p <= '9') {
-                    cl = cl * 10 + (*p - '0');
+                    int digit = *p - '0';
+                    if (cl > (LONG_MAX - digit) / 10) {
+                        return -2;  // malformed Content-Length overflow
+                    }
+                    cl = cl * 10 + digit;
                     p++;
+                }
+                while (p < end && (*p == ' ' || *p == '\t')) p++;
+                if (p < end && *p != '\r' && *p != '\n') {
+                    return -2;  // malformed Content-Length suffix
                 }
                 return cl;
             }

@@ -12,6 +12,7 @@
 # - Keep-alive connection reuse
 # - Connection pooling with stale pooled idempotent request retry
 # - Malformed HTTP status-line responses return CLIENT_ERR_PARSE
+# - Malformed Content-Length response headers return CLIENT_ERR_PARSE
 # - Truncated Content-Length response bodies return CLIENT_ERR_PARSE
 # - Plain HTTP runtime path plus absolute, scheme-relative, root-relative,
 #   path-relative dot-segment, and query/fragment-relative plain-HTTP
@@ -1009,6 +1010,9 @@ fn http_response_body_complete(buffer: i64, len: i64) -> i64 {
     }
 
     content_len := __hc_get_content_length(buffer, len)
+    I content_len == -2 {
+        return 0
+    }
     I content_len < 0 {
         return 1
     }
