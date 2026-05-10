@@ -40,11 +40,13 @@ fn convert_const_expr(expr: &ConstExpr) -> ResolvedConst {
                     ConstBinOp::Sub => lv - rv,
                     ConstBinOp::Mul => lv * rv,
                     ConstBinOp::Div if *rv != 0 => lv / rv,
-                    _ => return ResolvedConst::BinOp {
-                        op: convert_const_binop(op),
-                        left: Box::new(l),
-                        right: Box::new(r),
-                    },
+                    _ => {
+                        return ResolvedConst::BinOp {
+                            op: convert_const_binop(op),
+                            left: Box::new(l),
+                            right: Box::new(r),
+                        }
+                    }
                 };
                 return ResolvedConst::Value(v);
             }

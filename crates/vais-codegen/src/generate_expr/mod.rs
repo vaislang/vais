@@ -46,12 +46,6 @@ impl CodeGenerator {
         // Use stacker to grow the stack on demand, preventing stack overflow
         // for deeply nested expressions (e.g., complex struct specializations)
         stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
-            use std::sync::atomic::{AtomicUsize, Ordering};
-            static CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
-            let count = CALL_COUNT.fetch_add(1, Ordering::Relaxed);
-            if count > 100000 {
-                std::process::abort();
-            }
             self.generate_expr_inner(expr, counter)
         })
     }

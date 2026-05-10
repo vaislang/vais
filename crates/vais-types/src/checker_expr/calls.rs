@@ -63,12 +63,12 @@ impl TypeChecker {
                 if let Some((enum_name, enum_def)) = found_enum {
                     if let Some(variant_fields) = enum_def.variants.get(func_name) {
                         match variant_fields {
-                            crate::types::VariantFieldTypes::Tuple(field_types) => {
-                                if args.len() == field_types.len() {
-                                    for (arg, expected_ty) in args.iter().zip(field_types.iter()) {
-                                        let arg_ty = self.check_expr(arg)?;
-                                        self.unify(expected_ty, &arg_ty)?;
-                                    }
+                            crate::types::VariantFieldTypes::Tuple(field_types)
+                                if args.len() == field_types.len() =>
+                            {
+                                for (arg, expected_ty) in args.iter().zip(field_types.iter()) {
+                                    let arg_ty = self.check_expr(arg)?;
+                                    self.unify(expected_ty, &arg_ty)?;
                                 }
                             }
                             crate::types::VariantFieldTypes::Unit => {}
@@ -1003,10 +1003,7 @@ impl TypeChecker {
             if self.unify(ret_err_ty, arg_err_ty).is_err() {
                 self.substitutions = snapshot;
                 return Err(TypeError::Mismatch {
-                    expected: format!(
-                        "Result<_, {}> (to match argument's error type)",
-                        arg_err_ty
-                    ),
+                    expected: format!("Result<_, {}> (to match argument's error type)", arg_err_ty),
                     found: current_resolved.to_string(),
                     span: Some(arg_span),
                 });

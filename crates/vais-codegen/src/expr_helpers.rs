@@ -302,13 +302,27 @@ impl CodeGenerator {
                 if left_is_int {
                     let conv = self.next_temp(counter);
                     let int_llvm = self.type_to_llvm(&left_type);
-                    write_ir!(ir, "  {} = sitofp {} {} to {}", conv, int_llvm, actual_left, float_llvm);
+                    write_ir!(
+                        ir,
+                        "  {} = sitofp {} {} to {}",
+                        conv,
+                        int_llvm,
+                        actual_left,
+                        float_llvm
+                    );
                     actual_left = conv;
                 }
                 if right_is_int {
                     let conv = self.next_temp(counter);
                     let int_llvm = self.type_to_llvm(&right_type);
-                    write_ir!(ir, "  {} = sitofp {} {} to {}", conv, int_llvm, actual_right, float_llvm);
+                    write_ir!(
+                        ir,
+                        "  {} = sitofp {} {} to {}",
+                        conv,
+                        int_llvm,
+                        actual_right,
+                        float_llvm
+                    );
                     actual_right = conv;
                 }
 

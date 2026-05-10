@@ -90,7 +90,7 @@ pub(crate) fn cmd_fix(input: &PathBuf, dry_run: bool, verbose: bool) -> Result<(
 
     // Sort removals by start position in descending order (apply from end to start
     // so earlier offsets remain valid after each removal)
-    removals.sort_by(|a, b| b.start.cmp(&a.start));
+    removals.sort_by_key(|removal| std::cmp::Reverse(removal.start));
 
     // Validate no overlapping spans — overlapping removals would corrupt the source
     for window in removals.windows(2) {

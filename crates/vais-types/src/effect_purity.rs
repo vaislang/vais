@@ -83,11 +83,9 @@ use crate::types::{TypeError, TypeResult};
 /// here as well.
 const IO_BUILTINS: &[&str] = &[
     // stdout / stderr
-    "print", "println", "eprint", "eprintln", "puts", "putchar", "printf",
-    // file IO
+    "print", "println", "eprint", "eprintln", "puts", "putchar", "printf", // file IO
     "fopen", "fclose", "fread", "fwrite", "fseek", "ftell", "open", "close", "read", "write",
-    "lseek",
-    // network IO
+    "lseek", // network IO
     "socket", "bind", "listen", "accept", "connect", "send", "recv", "sendto", "recvfrom",
 ];
 
@@ -195,9 +193,7 @@ pub(crate) fn enforce_effect_purity(module: &Module) -> TypeResult<()> {
     // today (Task #54 has just landed — real user code has not yet
     // adopted the prefixes) and keeps the pass O(0) for the entire
     // 2539-test E2E baseline.
-    let has_any_declared = all_fns
-        .values()
-        .any(|f| f.declared_effect.is_some());
+    let has_any_declared = all_fns.values().any(|f| f.declared_effect.is_some());
     if !has_any_declared {
         return Ok(());
     }
@@ -214,10 +210,8 @@ pub(crate) fn enforce_effect_purity(module: &Module) -> TypeResult<()> {
     // 2. Worklist fixed point: a function's transitive effect is the
     //    union of its direct effect and every reachable callee's
     //    transitive effect. Iterate until nothing changes.
-    let mut transitive: HashMap<String, EffectFlags> = direct
-        .iter()
-        .map(|(n, s)| (n.clone(), s.flags))
-        .collect();
+    let mut transitive: HashMap<String, EffectFlags> =
+        direct.iter().map(|(n, s)| (n.clone(), s.flags)).collect();
     let mut changed = true;
     while changed {
         changed = false;
@@ -281,15 +275,11 @@ pub(crate) fn enforce_effect_purity(module: &Module) -> TypeResult<()> {
             "io" => direct
                 .get(*name)
                 .and_then(|s| s.first_io_source.clone())
-                .unwrap_or_else(|| {
-                    "transitively calls a function that performs io".to_string()
-                }),
+                .unwrap_or_else(|| "transitively calls a function that performs io".to_string()),
             "alloc" => direct
                 .get(*name)
                 .and_then(|s| s.first_alloc_source.clone())
-                .unwrap_or_else(|| {
-                    "transitively calls a function that allocates".to_string()
-                }),
+                .unwrap_or_else(|| "transitively calls a function that allocates".to_string()),
             _ => "performs a forbidden effect".to_string(),
         };
         return Err(TypeError::PurityViolation {

@@ -267,12 +267,18 @@ impl CodeGenerator {
         let else_actual_ty = self.llvm_type_of(&else_val_for_phi);
         let phi_type_mismatch = if phi_is_struct {
             // phi expects struct — check if any branch clearly produces a non-struct value
-            (!then_from_label.is_empty() && then_actual_ty.starts_with('i') && !then_val_for_phi.starts_with("zeroinitializer"))
-                || (!else_from_label.is_empty() && else_actual_ty.starts_with('i') && else_val_for_phi != "0")
+            (!then_from_label.is_empty()
+                && then_actual_ty.starts_with('i')
+                && !then_val_for_phi.starts_with("zeroinitializer"))
+                || (!else_from_label.is_empty()
+                    && else_actual_ty.starts_with('i')
+                    && else_val_for_phi != "0")
         } else {
             // phi expects a scalar — check if any branch clearly produces a struct
-            (!then_from_label.is_empty() && (then_actual_ty.starts_with('{') || then_actual_ty.starts_with('%')))
-                || (!else_from_label.is_empty() && (else_actual_ty.starts_with('{') || else_actual_ty.starts_with('%')))
+            (!then_from_label.is_empty()
+                && (then_actual_ty.starts_with('{') || then_actual_ty.starts_with('%')))
+                || (!else_from_label.is_empty()
+                    && (else_actual_ty.starts_with('{') || else_actual_ty.starts_with('%')))
         };
 
         if is_void || !has_else || phi_type_mismatch {
@@ -285,12 +291,14 @@ impl CodeGenerator {
                     result
                 );
                 // Register as Str so downstream code doesn't override with wrong type
-                self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::Str);
+                self.fn_ctx
+                    .register_temp_type(&result, vais_types::ResolvedType::Str);
             } else {
                 ir.push_str(&crate::helpers::void_placeholder_ir(&result));
                 // Register void placeholder as I64 to prevent generate_expr catch-all
                 // from overriding with the inferred expression type (e.g., Str).
-                self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::I64);
+                self.fn_ctx
+                    .register_temp_type(&result, vais_types::ResolvedType::I64);
             }
         } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
             // Check if any incoming value has a type mismatch with the phi type.
@@ -302,7 +310,9 @@ impl CodeGenerator {
             // for the phi type.
             let then_is_void = then_val_for_phi == "void";
             let else_is_void = else_val_for_phi == "void";
-            let then_safe = if phi_llvm == "{ i8*, i64 }" && (then_actual_ty.starts_with('i') || then_is_void) {
+            let then_safe = if phi_llvm == "{ i8*, i64 }"
+                && (then_actual_ty.starts_with('i') || then_is_void)
+            {
                 let zinit = self.next_temp(counter);
                 write_ir!(
                     ir,
@@ -315,7 +325,9 @@ impl CodeGenerator {
             } else {
                 then_val_for_phi.clone()
             };
-            let else_safe = if phi_llvm == "{ i8*, i64 }" && (else_actual_ty.starts_with('i') || else_is_void) {
+            let else_safe = if phi_llvm == "{ i8*, i64 }"
+                && (else_actual_ty.starts_with('i') || else_is_void)
+            {
                 let zinit = self.next_temp(counter);
                 write_ir!(
                     ir,
@@ -354,9 +366,13 @@ impl CodeGenerator {
                 let then_slot = self.fn_ctx.string_value_slot.get(&then_key).cloned();
                 let else_slot = self.fn_ctx.string_value_slot.get(&else_key).cloned();
                 let mut slots: Vec<String> = Vec::new();
-                if let Some(s) = then_slot { slots.push(s); }
+                if let Some(s) = then_slot {
+                    slots.push(s);
+                }
                 if let Some(s) = else_slot {
-                    if !slots.contains(&s) { slots.push(s); }
+                    if !slots.contains(&s) {
+                        slots.push(s);
+                    }
                 }
                 if !slots.is_empty() {
                     self.fn_ctx
@@ -370,7 +386,11 @@ impl CodeGenerator {
                 }
             }
         } else if !then_from_label.is_empty() {
-            let safe = if then_val_for_phi == "void" { "0".to_string() } else { then_val_for_phi.clone() };
+            let safe = if then_val_for_phi == "void" {
+                "0".to_string()
+            } else {
+                then_val_for_phi.clone()
+            };
             write_ir!(
                 ir,
                 "  {} = phi {} [ {}, %{} ]",
@@ -381,7 +401,11 @@ impl CodeGenerator {
             );
             self.fn_ctx.register_temp_type(&result, phi_type.clone());
         } else if !else_from_label.is_empty() {
-            let safe = if else_val_for_phi == "void" { "0".to_string() } else { else_val_for_phi.clone() };
+            let safe = if else_val_for_phi == "void" {
+                "0".to_string()
+            } else {
+                else_val_for_phi.clone()
+            };
             write_ir!(
                 ir,
                 "  {} = phi {} [ {}, %{} ]",
@@ -400,10 +424,12 @@ impl CodeGenerator {
                     "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
                     result
                 );
-                self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::Str);
+                self.fn_ctx
+                    .register_temp_type(&result, vais_types::ResolvedType::Str);
             } else {
                 ir.push_str(&crate::helpers::void_placeholder_ir(&result));
-                self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::I64);
+                self.fn_ctx
+                    .register_temp_type(&result, vais_types::ResolvedType::I64);
             }
         }
 

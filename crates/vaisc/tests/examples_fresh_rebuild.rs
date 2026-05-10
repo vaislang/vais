@@ -162,10 +162,7 @@ fn examples_fresh_rebuild() {
 
     if !failures.is_empty() {
         // Print individually first so they appear in --nocapture output.
-        eprintln!(
-            "\nexamples_fresh_rebuild: {} failure(s):",
-            failures.len()
-        );
+        eprintln!("\nexamples_fresh_rebuild: {} failure(s):", failures.len());
         for f in &failures {
             eprintln!("  FAIL  {}", f);
         }

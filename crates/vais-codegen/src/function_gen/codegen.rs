@@ -243,7 +243,11 @@ impl CodeGenerator {
                 // Ownership transfer for implicit-return string values. RFC-001 §4.6.
                 // Direct SSA match first; fall back to var_string_slot via expr.
                 if matches!(ret_type, ResolvedType::Str) {
-                    let key = value.strip_prefix("{ i8*, i64 } ").unwrap_or(&value).trim().to_string();
+                    let key = value
+                        .strip_prefix("{ i8*, i64 } ")
+                        .unwrap_or(&value)
+                        .trim()
+                        .to_string();
                     if let Some(slot) = self.fn_ctx.string_value_slot.get(&key).cloned() {
                         self.fn_ctx.pending_return_skip_slot.push(slot);
                         if let Some(extras) = self.fn_ctx.phi_extra_slots.get(&key).cloned() {
@@ -263,10 +267,10 @@ impl CodeGenerator {
 
                 // main() with f64/f32 body needs fptosi conversion to i64
                 let value = if is_main_float_ret {
-                    let is_float_literal = !value.starts_with('%')
-                        && (value.contains("e+") || value.contains("e-"));
-                    let is_int_literal =
-                        !value.starts_with('%') && value.chars().all(|c| c.is_ascii_digit() || c == '-');
+                    let is_float_literal =
+                        !value.starts_with('%') && (value.contains("e+") || value.contains("e-"));
+                    let is_int_literal = !value.starts_with('%')
+                        && value.chars().all(|c| c.is_ascii_digit() || c == '-');
                     if is_int_literal {
                         // Integer literal (e.g., 42) for `F main() -> f64 = 42` — already i64
                         value
@@ -382,7 +386,11 @@ impl CodeGenerator {
 
                     // Ownership transfer for implicit-return string values. RFC-001 §4.6.
                     if matches!(ret_type, ResolvedType::Str) {
-                        let key = value.strip_prefix("{ i8*, i64 } ").unwrap_or(&value).trim().to_string();
+                        let key = value
+                            .strip_prefix("{ i8*, i64 } ")
+                            .unwrap_or(&value)
+                            .trim()
+                            .to_string();
                         if let Some(slot) = self.fn_ctx.string_value_slot.get(&key).cloned() {
                             self.fn_ctx.pending_return_skip_slot.push(slot);
                             if let Some(extras) = self.fn_ctx.phi_extra_slots.get(&key).cloned() {
@@ -581,9 +589,7 @@ impl CodeGenerator {
                     let type_params: Vec<_> = struct_def
                         .generics
                         .iter()
-                        .filter(|g| {
-                            !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. })
-                        })
+                        .filter(|g| !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. }))
                         .collect();
                     // Match generic params to concrete types from specialized fields:
                     // struct_def.fields has generic types (T), specialized.fields has concrete types (f32)
@@ -738,7 +744,11 @@ impl CodeGenerator {
                 // Ownership transfer for implicit-return string values. RFC-001 §4.6.
                 // Direct SSA match first; fall back to var_string_slot via expr.
                 if matches!(ret_type, ResolvedType::Str) {
-                    let key = value.strip_prefix("{ i8*, i64 } ").unwrap_or(&value).trim().to_string();
+                    let key = value
+                        .strip_prefix("{ i8*, i64 } ")
+                        .unwrap_or(&value)
+                        .trim()
+                        .to_string();
                     if let Some(slot) = self.fn_ctx.string_value_slot.get(&key).cloned() {
                         self.fn_ctx.pending_return_skip_slot.push(slot);
                         if let Some(extras) = self.fn_ctx.phi_extra_slots.get(&key).cloned() {
@@ -808,7 +818,11 @@ impl CodeGenerator {
 
                     // Ownership transfer for implicit-return string values. RFC-001 §4.6.
                     if matches!(ret_type, ResolvedType::Str) {
-                        let key = value.strip_prefix("{ i8*, i64 } ").unwrap_or(&value).trim().to_string();
+                        let key = value
+                            .strip_prefix("{ i8*, i64 } ")
+                            .unwrap_or(&value)
+                            .trim()
+                            .to_string();
                         if let Some(slot) = self.fn_ctx.string_value_slot.get(&key).cloned() {
                             self.fn_ctx.pending_return_skip_slot.push(slot);
                             if let Some(extras) = self.fn_ctx.phi_extra_slots.get(&key).cloned() {

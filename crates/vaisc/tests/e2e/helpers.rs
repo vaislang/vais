@@ -13,10 +13,7 @@ pub fn compile_to_ir(source: &str) -> Result<String, String> {
 
 /// Compile Vais source to LLVM IR string, optionally enabling Phase 4b.1
 /// implicit error propagation (`--implicit-try`) on the type checker.
-pub fn compile_to_ir_with_options(
-    source: &str,
-    implicit_try: bool,
-) -> Result<String, String> {
+pub fn compile_to_ir_with_options(source: &str, implicit_try: bool) -> Result<String, String> {
     let _tokens = tokenize(source).map_err(|e| format!("Lexer error: {:?}", e))?;
     let module = parse(source).map_err(|e| format!("Parser error: {:?}", e))?;
     let mut checker = TypeChecker::new();

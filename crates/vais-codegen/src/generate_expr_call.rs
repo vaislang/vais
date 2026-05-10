@@ -328,14 +328,13 @@ impl CodeGenerator {
             // unless the compiler was invoked with `--implicit-try`, so
             // regular code is unaffected.
             let owned_try_arg;
-            let arg_for_gen: &Spanned<Expr> = if self.is_implicit_try_site(arg.span)
-                && !matches!(&arg.node, Expr::Try(_))
-            {
-                owned_try_arg = Spanned::new(Expr::Try(Box::new(arg.clone())), arg.span);
-                &owned_try_arg
-            } else {
-                arg
-            };
+            let arg_for_gen: &Spanned<Expr> =
+                if self.is_implicit_try_site(arg.span) && !matches!(&arg.node, Expr::Try(_)) {
+                    owned_try_arg = Spanned::new(Expr::Try(Box::new(arg.clone())), arg.span);
+                    &owned_try_arg
+                } else {
+                    arg
+                };
             let (mut val, arg_ir) = self.generate_expr(arg_for_gen, counter)?;
             ir.push_str(&arg_ir);
 

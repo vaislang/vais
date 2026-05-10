@@ -53,10 +53,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 //    Guards against UAF when alloca-backed locals produce a fresh
                 //    load SSA that doesn't match string_value_slot.
                 let last_stmt = stmts.iter().rev().find(|s| {
-                    !matches!(
-                        &s.node,
-                        Stmt::Break(_) | Stmt::Continue | Stmt::Return(_)
-                    )
+                    !matches!(&s.node, Stmt::Break(_) | Stmt::Continue | Stmt::Return(_))
                 });
                 last_stmt.and_then(|s| match &s.node {
                     Stmt::Expr(e) => match &e.node {
@@ -91,10 +88,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // removed it from string_value_slot — emit_free_slot is
                 // defensive against null but removing from string_value_slot
                 // lets us skip the IR emission entirely.
-                let still_tracked = self
-                    .string_value_slot
-                    .values()
-                    .any(|s| s == slot);
+                let still_tracked = self.string_value_slot.values().any(|s| s == slot);
                 if !still_tracked {
                     continue;
                 }
@@ -144,10 +138,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         self.var_string_slot.insert(name.node.clone(), slot);
                         let extras = self.phi_extra_slots.remove(&key).unwrap_or_default();
                         if !extras.is_empty() {
-                            let owned: Vec<_> =
-                                std::iter::once(slot).chain(extras).collect();
-                            self.var_string_slots_multi
-                                .insert(name.node.clone(), owned);
+                            let owned: Vec<_> = std::iter::once(slot).chain(extras).collect();
+                            self.var_string_slots_multi.insert(name.node.clone(), owned);
                         }
                         // Ownership stays with the enclosing block's scope
                         // frame. The variable and the scope frame share the
@@ -941,7 +933,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// don't go through `Stmt::Return`. Callers that know the source Expr
     /// should prefer `mark_return_ownership_transfer_expr` to also match on
     /// `let`-bound identifier returns. See RFC-001 §4.6.
-    pub(super) fn mark_return_ownership_transfer(&mut self, val: &inkwell::values::BasicValueEnum<'ctx>) {
+    pub(super) fn mark_return_ownership_transfer(
+        &mut self,
+        val: &inkwell::values::BasicValueEnum<'ctx>,
+    ) {
         if val.is_struct_value() {
             use inkwell::values::AsValueRef;
             let key = val.into_struct_value().as_value_ref() as usize;
@@ -967,10 +962,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// For a `Block` function body, the implicit return is the trailing
     /// expression. Extracts it so we can apply variable-level ownership
     /// transfer on `F foo() -> str { let msg = a+b; msg }` patterns.
-    pub(super) fn block_trailing_expr<'a>(
-        &self,
-        stmts: &'a [Spanned<Stmt>],
-    ) -> Option<&'a Expr> {
+    pub(super) fn block_trailing_expr<'a>(&self, stmts: &'a [Spanned<Stmt>]) -> Option<&'a Expr> {
         match stmts.last().map(|s| &s.node) {
             Some(Stmt::Expr(e)) => Some(&e.node),
             _ => None,
@@ -1008,24 +1000,35 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Clone to avoid borrow conflict
         let slots: Vec<_> = self.alloc_tracker.clone();
         let skip_slots: Vec<_> = std::mem::take(&mut self.pending_return_skip_slot);
-        let ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::default());
+        let ptr_type = self
+            .context
+            .i8_type()
+            .ptr_type(inkwell::AddressSpace::default());
         for slot in slots {
             if skip_slots.contains(&slot) {
                 continue;
             }
             // Load the actual pointer from the entry-block alloca slot
-            let loaded = self.builder
+            let loaded = self
+                .builder
                 .build_load(ptr_type, slot, "alloc_cleanup_ptr")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                 .into_pointer_value();
             // Only free if not null (slot initialized to null, may not have been written in loop)
-            let is_null = self.builder
+            let is_null = self
+                .builder
                 .build_is_null(loaded, "is_null_check")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            let current_fn = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+            let current_fn = self
+                .builder
+                .get_insert_block()
+                .unwrap()
+                .get_parent()
+                .unwrap();
             let free_block = self.context.append_basic_block(current_fn, "free_alloc");
             let skip_block = self.context.append_basic_block(current_fn, "skip_free");
-            self.builder.build_conditional_branch(is_null, skip_block, free_block)
+            self.builder
+                .build_conditional_branch(is_null, skip_block, free_block)
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             self.builder.position_at_end(free_block);
             self.builder
@@ -1036,7 +1039,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.builder
                 .build_store(slot, ptr_type.const_null())
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            self.builder.build_unconditional_branch(skip_block)
+            self.builder
+                .build_unconditional_branch(skip_block)
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             self.builder.position_at_end(skip_block);
         }
@@ -1048,9 +1052,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         value: Option<&Expr>,
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         let (break_block, loop_depth) = {
-            let ctx = self.loop_stack.last().ok_or_else(|| {
-                CodegenError::Unsupported("break outside of loop".to_string())
-            })?;
+            let ctx = self
+                .loop_stack
+                .last()
+                .ok_or_else(|| CodegenError::Unsupported("break outside of loop".to_string()))?;
             (ctx.break_block, ctx.scope_str_depth)
         };
 
@@ -1071,9 +1076,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     pub(super) fn generate_continue(&mut self) -> CodegenResult<BasicValueEnum<'ctx>> {
         let (continue_block, loop_depth) = {
-            let loop_ctx = self.loop_stack.last().ok_or_else(|| {
-                CodegenError::Unsupported("continue outside of loop".to_string())
-            })?;
+            let loop_ctx = self
+                .loop_stack
+                .last()
+                .ok_or_else(|| CodegenError::Unsupported("continue outside of loop".to_string()))?;
             (loop_ctx.continue_block, loop_ctx.scope_str_depth)
         };
 
@@ -1096,10 +1102,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         for idx in loop_depth..top {
             let frame: Vec<_> = self.scope_str_stack[idx].clone();
             for slot in frame.iter() {
-                let still_tracked = self
-                    .string_value_slot
-                    .values()
-                    .any(|s| s == slot);
+                let still_tracked = self.string_value_slot.values().any(|s| s == slot);
                 if !still_tracked {
                     continue;
                 }

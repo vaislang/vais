@@ -53,11 +53,23 @@ impl Parser {
 
         let item = if self.check(&Token::Function) {
             self.advance_skip();
-            Item::Function(self.parse_function(is_pub, false, is_partial, declared_effect, attributes)?)
+            Item::Function(self.parse_function(
+                is_pub,
+                false,
+                is_partial,
+                declared_effect,
+                attributes,
+            )?)
         } else if self.check(&Token::Async) {
             self.advance_skip();
             self.expect_skip(&Token::Function)?;
-            Item::Function(self.parse_function(is_pub, true, is_partial, declared_effect, attributes)?)
+            Item::Function(self.parse_function(
+                is_pub,
+                true,
+                is_partial,
+                declared_effect,
+                attributes,
+            )?)
         } else if self.check(&Token::Struct) {
             self.advance_skip();
             Item::Struct(self.parse_struct(is_pub, attributes)?)

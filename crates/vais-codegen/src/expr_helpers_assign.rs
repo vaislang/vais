@@ -35,9 +35,8 @@ impl CodeGenerator {
                         // (numbers) of scalar integer/float types are guaranteed
                         // safe — register references (%tN) may not dominate
                         // entry, and aggregate types cannot use a numeric literal.
-                        let is_scalar_ty = llvm_ty.starts_with('i')
-                            || llvm_ty == "double"
-                            || llvm_ty == "float";
+                        let is_scalar_ty =
+                            llvm_ty.starts_with('i') || llvm_ty == "double" || llvm_ty == "float";
                         let is_immediate = old_ssa_val
                             .chars()
                             .next()
@@ -49,12 +48,7 @@ impl CodeGenerator {
                             // including paths that bypass the reassignment branch.
                             self.fn_ctx.entry_allocas.push(format!(
                                 "  %{} = alloca {}\n  store {} {}, {}* %{}",
-                                alloca_name,
-                                llvm_ty,
-                                llvm_ty,
-                                old_ssa_val,
-                                llvm_ty,
-                                alloca_name
+                                alloca_name, llvm_ty, llvm_ty, old_ssa_val, llvm_ty, alloca_name
                             ));
                         } else {
                             // Fallback: alloca only; the reassignment store covers the

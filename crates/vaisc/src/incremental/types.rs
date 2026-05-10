@@ -499,8 +499,7 @@ mod tests {
             },
             "last_build": 0
         }"#;
-        let parsed: CacheState =
-            serde_json::from_str(v1_json).expect("v1 JSON should deserialize");
+        let parsed: CacheState = serde_json::from_str(v1_json).expect("v1 JSON should deserialize");
         assert!(parsed.std_hash.is_none());
     }
 
