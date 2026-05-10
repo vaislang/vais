@@ -171,26 +171,27 @@ impl CodeGenerator {
                 // Build per-method (arg_tys, ret_ty) in deterministic
                 // alphabetical order — must match info.methods order
                 // (now also sorted; DEFERRED #19 2a-C-1 audit fix).
-                let methods_typed: Vec<(Vec<String>, String)> = super::vtable::sorted_method_names(trait_def)
-                    .into_iter()
-                    .map(|name| {
-                        let sig = &trait_def.methods[&name];
-                        let arg_tys: Vec<String> = sig
-                            .params
-                            .iter()
-                            .skip(1) // self
-                            .map(|(_n, ty, _mut)| self.type_to_llvm(ty))
-                            .collect();
-                        let ret_ty = if sig.is_async {
-                            String::from("i64")
-                        } else if matches!(sig.ret, ResolvedType::Unit) {
-                            String::from("void")
-                        } else {
-                            self.type_to_llvm(&sig.ret)
-                        };
-                        (arg_tys, ret_ty)
-                    })
-                    .collect();
+                let methods_typed: Vec<(Vec<String>, String)> =
+                    super::vtable::sorted_method_names(trait_def)
+                        .into_iter()
+                        .map(|name| {
+                            let sig = &trait_def.methods[&name];
+                            let arg_tys: Vec<String> = sig
+                                .params
+                                .iter()
+                                .skip(1) // self
+                                .map(|(_n, ty, _mut)| self.type_to_llvm(ty))
+                                .collect();
+                            let ret_ty = if sig.is_async {
+                                String::from("i64")
+                            } else if matches!(sig.ret, ResolvedType::Unit) {
+                                String::from("void")
+                            } else {
+                                self.type_to_llvm(&sig.ret)
+                            };
+                            (arg_tys, ret_ty)
+                        })
+                        .collect();
 
                 ir.push_str(&self.vtable_generator.generate_vtable_global_typed(
                     vtable_info,
@@ -305,26 +306,27 @@ impl CodeGenerator {
         // alphabetical order — must match the shape used by
         // `generate_vtable_globals` so emission/dispatch sides agree
         // (DEFERRED #19 2a-C-1 audit fix).
-        let methods_typed: Vec<(Vec<String>, String)> = super::vtable::sorted_method_names(trait_def)
-            .into_iter()
-            .map(|name| {
-                let sig = &trait_def.methods[&name];
-                let arg_tys: Vec<String> = sig
-                    .params
-                    .iter()
-                    .skip(1)
-                    .map(|(_n, ty, _mut)| self.type_to_llvm(ty))
-                    .collect();
-                let ret_ty = if sig.is_async {
-                    String::from("i64")
-                } else if matches!(sig.ret, ResolvedType::Unit) {
-                    String::from("void")
-                } else {
-                    self.type_to_llvm(&sig.ret)
-                };
-                (arg_tys, ret_ty)
-            })
-            .collect();
+        let methods_typed: Vec<(Vec<String>, String)> =
+            super::vtable::sorted_method_names(trait_def)
+                .into_iter()
+                .map(|name| {
+                    let sig = &trait_def.methods[&name];
+                    let arg_tys: Vec<String> = sig
+                        .params
+                        .iter()
+                        .skip(1)
+                        .map(|(_n, ty, _mut)| self.type_to_llvm(ty))
+                        .collect();
+                    let ret_ty = if sig.is_async {
+                        String::from("i64")
+                    } else if matches!(sig.ret, ResolvedType::Unit) {
+                        String::from("void")
+                    } else {
+                        self.type_to_llvm(&sig.ret)
+                    };
+                    (arg_tys, ret_ty)
+                })
+                .collect();
 
         Ok(self.vtable_generator.generate_dynamic_call_typed(
             trait_object,

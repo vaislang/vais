@@ -181,12 +181,29 @@ impl CodeGenerator {
             }
             _ => left_type_raw,
         };
+        let right_type_raw = self.infer_expr_type(right);
+        let right_type = match &right_type_raw {
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                if matches!(inner.as_ref(), ResolvedType::Str) =>
+            {
+                ResolvedType::Str
+            }
+            _ => right_type_raw,
+        };
+        if matches!(op, BinOp::Add)
+            && matches!(
+                left_type,
+                ResolvedType::Named { ref name, .. } if name == "String"
+            )
+            && matches!(right_type, ResolvedType::Str)
+        {
+            return self.generate_string_append_str(&left_val, &right_val, ir, counter);
+        }
         if matches!(left_type, ResolvedType::Str) {
             // `str + int` is pointer-arithmetic, not string concatenation.
             // load_byte(s + i) / similar low-level helpers rely on this form.
-            let right_type_for_strop = self.infer_expr_type(right);
-            let right_is_int = self.get_integer_bits(&right_type_for_strop) > 0
-                && !matches!(right_type_for_strop, ResolvedType::Str | ResolvedType::Bool);
+            let right_is_int = self.get_integer_bits(&right_type) > 0
+                && !matches!(right_type, ResolvedType::Str | ResolvedType::Bool);
             if matches!(op, BinOp::Add | BinOp::Sub) && right_is_int {
                 // Extract raw i8* from left fat pointer, ptrtoint to i64, then add/sub.
                 let ptr_tmp = self.next_temp(counter);
@@ -206,7 +223,7 @@ impl CodeGenerator {
                     _ => unreachable!(),
                 };
                 // Right operand may be narrower than i64; widen if so.
-                let rbits = self.get_integer_bits(&right_type_for_strop);
+                let rbits = self.get_integer_bits(&right_type);
                 let right_use = if rbits < 64 {
                     let widened = self.next_temp(counter);
                     write_ir!(ir, "  {} = sext i{} {} to i64", widened, rbits, right_val);

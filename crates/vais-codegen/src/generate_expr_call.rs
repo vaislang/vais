@@ -431,10 +431,24 @@ impl CodeGenerator {
                     // val is a `%Vec*` or `%Vec$T*` pointer.
                     let actual_ty = self.llvm_type_of(&val);
                     if actual_ty != "{ i8*, i64 }" {
-                        let vec_struct_ty = actual_ty
-                            .strip_suffix('*')
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| "%Vec".to_string());
+                        let (vec_struct_ty, vec_ptr) =
+                            if let Some(pointee) = actual_ty.strip_suffix('*') {
+                                (pointee.to_string(), val.clone())
+                            } else if actual_ty.starts_with('%') {
+                                let alloca = self.next_temp(counter);
+                                self.emit_entry_alloca(&alloca, &actual_ty);
+                                write_ir!(
+                                    ir,
+                                    "  store {} {}, {}* {}",
+                                    actual_ty,
+                                    val,
+                                    actual_ty,
+                                    alloca
+                                );
+                                (actual_ty.clone(), alloca)
+                            } else {
+                                ("%Vec".to_string(), val.clone())
+                            };
                         let data_gep = self.next_temp(counter);
                         write_ir!(
                             ir,
@@ -442,7 +456,7 @@ impl CodeGenerator {
                             data_gep,
                             vec_struct_ty,
                             vec_struct_ty,
-                            val
+                            vec_ptr
                         );
                         let data_i64 = self.next_temp(counter);
                         write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_gep);
@@ -456,7 +470,7 @@ impl CodeGenerator {
                             len_gep,
                             vec_struct_ty,
                             vec_struct_ty,
-                            val
+                            vec_ptr
                         );
                         let len_val = self.next_temp(counter);
                         write_ir!(ir, "  {} = load i64, i64* {}", len_val, len_gep);
@@ -500,11 +514,17 @@ impl CodeGenerator {
 
             // Integer width coercion: if param expects i32 but expr produces i64, trunc.
             if let Some(ref pt) = param_ty {
-                let src_bits = self.get_integer_bits(&inferred_ty);
+                let actual_int_ty = self
+                    .llvm_type_of_checked(&val)
+                    .filter(|ty| ty.starts_with('i') && ty[1..].parse::<u32>().is_ok());
+                let src_bits = actual_int_ty
+                    .as_deref()
+                    .and_then(|ty| ty[1..].parse::<u32>().ok())
+                    .unwrap_or_else(|| self.get_integer_bits(&inferred_ty));
                 let dst_bits = self.get_integer_bits(pt);
                 if src_bits > 0 && dst_bits > 0 && src_bits != dst_bits {
                     let conv_tmp = self.next_temp(counter);
-                    let src_ty = format!("i{}", src_bits);
+                    let src_ty = actual_int_ty.unwrap_or_else(|| format!("i{}", src_bits));
                     let dst_ty = format!("i{}", dst_bits);
                     if src_bits > dst_bits {
                         write_ir!(
@@ -560,6 +580,32 @@ impl CodeGenerator {
                     write_ir!(ir, "  {} = load {}, {}* {}", loaded, arg_ty, arg_ty, val);
                     self.fn_ctx.record_emitted_type(&loaded, &arg_ty);
                     val = loaded;
+                }
+            }
+
+            // `str` has value ABI `{ i8*, i64 }`, but `load_typed(..., K)`
+            // materializes aggregate values in a stack slot and returns a pointer.
+            // When the callee expects a string value, load that slot before the call.
+            if arg_ty == "{ i8*, i64 }" {
+                match self.llvm_type_of_checked(&val).as_deref() {
+                    Some("{ i8*, i64 }*") => {
+                        let loaded = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* {}",
+                            loaded,
+                            val
+                        );
+                        self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+                        val = loaded;
+                    }
+                    Some("ptr") => {
+                        let loaded = self.next_temp(counter);
+                        write_ir!(ir, "  {} = load {{ i8*, i64 }}, ptr {}", loaded, val);
+                        self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+                        val = loaded;
+                    }
+                    _ => {}
                 }
             }
 
@@ -854,13 +900,15 @@ impl CodeGenerator {
             // and differs from arg_ty, coerce. Only check temps with registered
             // types or locals — skip when llvm_type_of falls back to i64.
             {
-                let has_known_type = self.fn_ctx.get_temp_type(&val).is_some()
+                let known_val_ty = self.llvm_type_of_checked(&val);
+                let has_known_type = known_val_ty.is_some()
+                    || self.fn_ctx.get_temp_type(&val).is_some()
                     || self
                         .fn_ctx
                         .locals
                         .contains_key(val.strip_prefix('%').unwrap_or(&val));
                 if has_known_type {
-                    let val_ty = self.llvm_type_of(&val);
+                    let val_ty = known_val_ty.unwrap_or_else(|| self.llvm_type_of(&val));
                     // i1 → wider int: when the arg type is wider and the value
                     // is an i1 (e.g. a raw comparison flowing into an i64 param),
                     // zext up to the expected width.
@@ -1626,9 +1674,7 @@ impl CodeGenerator {
                 if is_specialized {
                     // In specialized context, return the alloca pointer directly
                     // so downstream code can use GEP for field access.
-                    write_ir!(ir, "  {} = alloca {}", result, llvm_ty);
-                    self.fn_ctx
-                        .record_emitted_type(&result, &format!("{}*", llvm_ty));
+                    self.emit_entry_alloca(&result, &llvm_ty);
                     let dst_ptr = self.next_temp(counter);
                     write_ir!(ir, "  {} = bitcast {}* {} to i8*", dst_ptr, llvm_ty, result);
                     let src_ptr = self.next_temp(counter);
@@ -1664,9 +1710,7 @@ impl CodeGenerator {
                     // The alloca is still needed for memcpy, but we ptrtoint it
                     // so callers see an i64 value.
                     let alloca_tmp = self.next_temp(counter);
-                    write_ir!(ir, "  {} = alloca {}", alloca_tmp, llvm_ty);
-                    self.fn_ctx
-                        .record_emitted_type(&alloca_tmp, &format!("{}*", llvm_ty));
+                    self.emit_entry_alloca(&alloca_tmp, &llvm_ty);
                     let dst_ptr = self.next_temp(counter);
                     write_ir!(
                         ir,

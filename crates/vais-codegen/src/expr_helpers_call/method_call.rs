@@ -105,8 +105,14 @@ impl CodeGenerator {
 
         let method_name = &method.node;
 
-        // String method calls: str.len(), str.charAt(), str.contains(), etc.
-        if matches!(recv_type, ResolvedType::Str) {
+        // String method calls: str.len(), &str.len(), str.charAt(), etc.
+        let is_str_receiver = matches!(recv_type, ResolvedType::Str)
+            || matches!(
+                &recv_type,
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                    if matches!(inner.as_ref(), ResolvedType::Str)
+            );
+        if is_str_receiver {
             return self.generate_string_method_call(&recv_val, &ir, method_name, args, counter);
         }
 
@@ -777,6 +783,86 @@ impl CodeGenerator {
             other => other,
         };
         if method_name == "as_bytes" && args.is_empty() {
+            if matches!(inner_recv_for_builtin, ResolvedType::Str) {
+                let recv_llvm = self.llvm_type_of(&recv_val);
+                let fat_val = if recv_llvm == "{ i8*, i64 }" {
+                    recv_val.clone()
+                } else if recv_llvm == "{ i8*, i64 }*" {
+                    let loaded = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* {}",
+                        loaded,
+                        recv_val
+                    );
+                    self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+                    loaded
+                } else if recv_llvm == "ptr" {
+                    let loaded = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load {{ i8*, i64 }}, ptr {}", loaded, recv_val);
+                    self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+                    loaded
+                } else {
+                    recv_val.clone()
+                };
+
+                let data_i8 = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                    data_i8,
+                    fat_val
+                );
+                self.fn_ctx.record_emitted_type(&data_i8, "i8*");
+                let data_i64 = self.next_temp(counter);
+                write_ir!(ir, "  {} = ptrtoint i8* {} to i64", data_i64, data_i8);
+                self.fn_ctx.record_emitted_type(&data_i64, "i64");
+                let len = self.next_temp(counter);
+                write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 1", len, fat_val);
+                self.fn_ctx.record_emitted_type(&len, "i64");
+
+                let vec_ty = "%Vec$u8";
+                let v0 = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = insertvalue {} undef, i64 {}, 0",
+                    v0,
+                    vec_ty,
+                    data_i64
+                );
+                let v1 = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = insertvalue {} {}, i64 {}, 1",
+                    v1,
+                    vec_ty,
+                    v0,
+                    len
+                );
+                let v2 = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = insertvalue {} {}, i64 {}, 2",
+                    v2,
+                    vec_ty,
+                    v1,
+                    len
+                );
+                let v3 = self.next_temp(counter);
+                write_ir!(ir, "  {} = insertvalue {} {}, i64 1, 3", v3, vec_ty, v2);
+                let vec = self.next_temp(counter);
+                write_ir!(ir, "  {} = insertvalue {} {}, i64 0, 4", vec, vec_ty, v3);
+                self.fn_ctx.record_emitted_type(&vec, vec_ty);
+                self.fn_ctx.register_temp_type(
+                    &vec,
+                    ResolvedType::Named {
+                        name: "Vec".to_string(),
+                        generics: vec![ResolvedType::U8],
+                    },
+                );
+                return Ok((vec, ir));
+            }
+
             if let ResolvedType::Named { name, .. } = inner_recv_for_builtin {
                 let resolved = self.resolve_struct_name(name);
                 if name == "ByteBuffer" || resolved == "ByteBuffer" {
@@ -878,11 +964,37 @@ impl CodeGenerator {
         // Use resolve_struct_name to match definition naming (e.g., Pair → Pair$i64)
         // For generic structs with type args, try mangled name first (e.g., Vec_push$GraphNode)
         // Unwrap Ref/RefMut to get the inner Named type
-        let inner_recv_type = match &recv_type {
-            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
-            other => other,
+        let inner_recv_type_owned = match &recv_type {
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref().clone(),
+            other => other.clone(),
         };
-        let full_method_name = if let ResolvedType::Named { name, generics } = inner_recv_type {
+        let inner_recv_type = &inner_recv_type_owned;
+        let guard_forward_inner = match inner_recv_type {
+            ResolvedType::Named { name, generics }
+                if matches!(
+                    name.as_str(),
+                    "MutexGuard" | "RwLockReadGuard" | "RwLockWriteGuard"
+                ) && !generics.is_empty() =>
+            {
+                let guard_method_arity = match method_name.as_str() {
+                    "new" => Some(1),
+                    "get" | "unlock" => Some(0),
+                    "set" => Some(1),
+                    _ => None,
+                };
+                if guard_method_arity == Some(args.len()) {
+                    None
+                } else {
+                    Some(generics[0].clone())
+                }
+            }
+            _ => None,
+        };
+        let effective_recv_type_owned = guard_forward_inner
+            .clone()
+            .unwrap_or_else(|| inner_recv_type_owned.clone());
+        let effective_recv_type = &effective_recv_type_owned;
+        let full_method_name = if let ResolvedType::Named { name, generics } = effective_recv_type {
             let resolved = self.resolve_struct_name(name);
             // Method names are mangled as `<base>_<method>$<typeargs>` (e.g.
             // `Vec_push$u8`), not `<specialized>_<method>` (e.g.
@@ -926,13 +1038,8 @@ impl CodeGenerator {
                         // struct name (e.g. "Vec") — passing the specialized
                         // form ("Vec$u8") would miss the method-body lookup
                         // and silently emit an unmangled callsite.
-                        self.try_generate_vec_specialization(
-                            name,
-                            method_name,
-                            generics,
-                            counter,
-                        )
-                        .unwrap_or_else(|| mangled.clone())
+                        self.try_generate_vec_specialization(name, method_name, generics, counter)
+                            .unwrap_or_else(|| mangled.clone())
                     }
                 } else {
                     // Unresolved generics (e.g., Generic("T")): use fn_instantiations
@@ -1038,7 +1145,10 @@ impl CodeGenerator {
             }
             // If exactly one struct provides this method, use it unambiguously
             if candidates.len() == 1 {
-                candidates.into_iter().next().expect("invariant: candidates.len() == 1 checked immediately before iteration")
+                candidates
+                    .into_iter()
+                    .next()
+                    .expect("invariant: candidates.len() == 1 checked immediately before iteration")
             } else {
                 method_name.clone()
             }
@@ -1054,7 +1164,7 @@ impl CodeGenerator {
                 .or_else(|| {
                     if args.len() == 1
                         && matches!(
-                            inner_recv_type,
+                            effective_recv_type,
                             ResolvedType::Named { name, .. } if name == "Vec"
                         )
                     {
@@ -1108,15 +1218,15 @@ impl CodeGenerator {
                 } else {
                     format!("{}*", self_llvm)
                 }
-            } else if matches!(&recv_type, ResolvedType::Named { .. }) {
-                format!("{}*", self.type_to_llvm(&recv_type))
+            } else if matches!(effective_recv_type, ResolvedType::Named { .. }) {
+                format!("{}*", self.type_to_llvm(effective_recv_type))
             } else {
-                self.type_to_llvm(&recv_type)
+                self.type_to_llvm(effective_recv_type)
             }
-        } else if matches!(&recv_type, ResolvedType::Named { .. }) {
-            format!("{}*", self.type_to_llvm(&recv_type))
+        } else if matches!(effective_recv_type, ResolvedType::Named { .. }) {
+            format!("{}*", self.type_to_llvm(effective_recv_type))
         } else {
-            self.type_to_llvm(&recv_type)
+            self.type_to_llvm(effective_recv_type)
         };
 
         // If receiver is a struct value (from function call) but method expects pointer,
@@ -1179,6 +1289,83 @@ impl CodeGenerator {
                 self.fn_ctx.record_emitted_type(&typed_ptr, &recv_llvm_ty);
                 recv_val = typed_ptr;
             }
+        }
+        if let Some(inner_ty) = &guard_forward_inner {
+            let guard_llvm = self.type_to_llvm(&recv_type);
+            let guard_ptr = match self.llvm_type_of_checked(&recv_val).as_deref() {
+                Some(actual) if actual == format!("{}*", guard_llvm) || actual == "ptr" => {
+                    recv_val.clone()
+                }
+                Some(actual) if actual.ends_with('*') => {
+                    let casted = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = bitcast {} {} to {}*",
+                        casted,
+                        actual,
+                        recv_val,
+                        guard_llvm
+                    );
+                    self.fn_ctx
+                        .record_emitted_type(&casted, &format!("{}*", guard_llvm));
+                    casted
+                }
+                _ => recv_val.clone(),
+            };
+            let mutex_word_ptr = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
+                mutex_word_ptr,
+                guard_llvm,
+                guard_llvm,
+                guard_ptr
+            );
+            self.fn_ctx.record_emitted_type(&mutex_word_ptr, "i64*");
+            let mutex_word = self.next_temp(counter);
+            write_ir!(ir, "  {} = load i64, i64* {}", mutex_word, mutex_word_ptr);
+            self.fn_ctx.record_emitted_type(&mutex_word, "i64");
+            let mutex_ty = ResolvedType::Named {
+                name: "Mutex".to_string(),
+                generics: vec![inner_ty.clone()],
+            };
+            let mutex_llvm = self.type_to_llvm(&mutex_ty);
+            let mutex_ptr = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = inttoptr i64 {} to {}*",
+                mutex_ptr,
+                mutex_word,
+                mutex_llvm
+            );
+            self.fn_ctx
+                .record_emitted_type(&mutex_ptr, &format!("{}*", mutex_llvm));
+            let inner_ptr = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
+                inner_ptr,
+                mutex_llvm,
+                mutex_llvm,
+                mutex_ptr
+            );
+            self.fn_ctx
+                .record_emitted_type(&inner_ptr, &format!("{}*", self.type_to_llvm(inner_ty)));
+            recv_val = if recv_llvm_ty == self.llvm_type_of(&inner_ptr) {
+                inner_ptr
+            } else {
+                let casted = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = bitcast {} {} to {}",
+                    casted,
+                    self.llvm_type_of(&inner_ptr),
+                    inner_ptr,
+                    recv_llvm_ty
+                );
+                self.fn_ctx.record_emitted_type(&casted, &recv_llvm_ty);
+                casted
+            };
         }
         let mut arg_vals = vec![format!("{} {}", recv_llvm_ty, recv_val)];
 
@@ -1525,8 +1712,12 @@ impl CodeGenerator {
                                 && matches!(local.ty, ResolvedType::Named { .. })
                                 && (local.is_ssa() || local.is_alloca() || local.is_param())
                         });
+                    let actual_is_named_ptr = actual_val_ty
+                        .as_deref()
+                        .is_some_and(|ty| ty.ends_with('*') && arg_llvm_ty.starts_with('%'));
                     let needs_load = actual_val_ty.as_deref() == Some(expected_ptr_ty.as_str())
                         || actual_val_ty.as_deref() == Some("ptr")
+                        || actual_is_named_ptr
                         || known_named_pointer_local
                         || (actual_val_ty.is_none() && !self.is_expr_value(arg));
                     if needs_load {
@@ -1566,6 +1757,26 @@ impl CodeGenerator {
 
             // Coerce struct pointer → i64 when arg_ty is i64 but value is a Named type
             if arg_llvm_ty == "i64" {
+                match self.llvm_type_of_checked(&val).as_deref() {
+                    Some("i64*") => {
+                        let loaded = self.next_temp(counter);
+                        write_ir!(ir, "  {} = load i64, i64* {}", loaded, val);
+                        self.fn_ctx.record_emitted_type(&loaded, "i64");
+                        val = loaded;
+                    }
+                    Some("ptr")
+                        if matches!(
+                            inferred_ty,
+                            ResolvedType::Ref(_) | ResolvedType::RefMut(_)
+                        ) =>
+                    {
+                        let loaded = self.next_temp(counter);
+                        write_ir!(ir, "  {} = load i64, ptr {}", loaded, val);
+                        self.fn_ctx.record_emitted_type(&loaded, "i64");
+                        val = loaded;
+                    }
+                    _ => {}
+                }
                 // Same scalar-shape guard as `generate_expr_call.rs` —
                 // if the AST is a Binary/Unary/literal/Cast, the LLVM
                 // result is scalar by construction. A cross-module span
@@ -1702,6 +1913,28 @@ impl CodeGenerator {
                     );
                     self.fn_ctx.record_emitted_type(&fat2, "{ i8*, i64 }");
                     val = fat2;
+                }
+            }
+            if arg_llvm_ty == "{ i8*, i64 }" {
+                match self.llvm_type_of_checked(&val).as_deref() {
+                    Some("{ i8*, i64 }*") => {
+                        let loaded = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* {}",
+                            loaded,
+                            val
+                        );
+                        self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+                        val = loaded;
+                    }
+                    Some("ptr") => {
+                        let loaded = self.next_temp(counter);
+                        write_ir!(ir, "  {} = load {{ i8*, i64 }}, ptr {}", loaded, val);
+                        self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+                        val = loaded;
+                    }
+                    _ => {}
                 }
             }
 
@@ -2759,11 +2992,34 @@ impl CodeGenerator {
                             && matches!(local.ty, ResolvedType::Named { .. })
                             && (local.is_ssa() || local.is_alloca() || local.is_param())
                     });
+                let actual_is_named_ptr = actual_val_ty
+                    .as_deref()
+                    .is_some_and(|ty| ty.ends_with('*') && arg_llvm_ty.starts_with('%'));
                 let needs_load = actual_val_ty.as_deref() == Some(expected_ptr_ty.as_str())
                     || actual_val_ty.as_deref() == Some("ptr")
+                    || actual_is_named_ptr
                     || known_named_pointer_local
                     || (actual_val_ty.is_none() && !self.is_expr_value(arg));
                 if needs_load {
+                    let load_ptr = if let Some(actual_ptr_ty) = actual_val_ty.as_deref() {
+                        if actual_ptr_ty != expected_ptr_ty && actual_ptr_ty.ends_with('*') {
+                            let casted = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = bitcast {} {} to {}",
+                                casted,
+                                actual_ptr_ty,
+                                val,
+                                expected_ptr_ty
+                            );
+                            self.fn_ctx.record_emitted_type(&casted, &expected_ptr_ty);
+                            casted
+                        } else {
+                            val.clone()
+                        }
+                    } else {
+                        val.clone()
+                    };
                     let loaded = self.next_temp(counter);
                     write_ir!(
                         ir,
@@ -2771,10 +3027,32 @@ impl CodeGenerator {
                         loaded,
                         arg_llvm_ty,
                         arg_llvm_ty,
-                        val
+                        load_ptr
                     );
                     self.fn_ctx.record_emitted_type(&loaded, &arg_llvm_ty);
                     val = loaded;
+                }
+            }
+            if arg_llvm_ty == "{ i8*, i64 }" {
+                match self.llvm_type_of_checked(&val).as_deref() {
+                    Some("{ i8*, i64 }*") => {
+                        let loaded = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* {}",
+                            loaded,
+                            val
+                        );
+                        self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+                        val = loaded;
+                    }
+                    Some("ptr") => {
+                        let loaded = self.next_temp(counter);
+                        write_ir!(ir, "  {} = load {{ i8*, i64 }}, ptr {}", loaded, val);
+                        self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+                        val = loaded;
+                    }
+                    _ => {}
                 }
             }
 

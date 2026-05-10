@@ -3,6 +3,16 @@ use vais_ast::{Expr, Span, Spanned};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
+    fn is_printf_string_arg_type(ty: &ResolvedType) -> bool {
+        match ty {
+            ResolvedType::Str => true,
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                matches!(inner.as_ref(), ResolvedType::Str)
+            }
+            _ => false,
+        }
+    }
+
     fn lower_aggregate_format_arg_to_i64(
         &mut self,
         val: &str,
@@ -203,7 +213,7 @@ impl CodeGenerator {
                             ResolvedType::I64 | ResolvedType::I128 => "%ld",
                             ResolvedType::U64 | ResolvedType::U128 => "%lu",
                             ResolvedType::F32 | ResolvedType::F64 => "%f",
-                            ResolvedType::Str => "%s",
+                            ty if Self::is_printf_string_arg_type(ty) => "%s",
                             ResolvedType::Bool => "%ld",
                             _ => "%ld",
                         };
@@ -288,7 +298,7 @@ impl CodeGenerator {
                 ResolvedType::F64 => {
                     printf_args.push(format!("double {}", val));
                 }
-                ResolvedType::Str => {
+                ty if Self::is_printf_string_arg_type(ty) => {
                     // Extract raw i8* pointer from string fat pointer for printf
                     let raw_ptr = self.extract_str_ptr(&val, counter, &mut ir);
                     printf_args.push(format!("i8* {}", raw_ptr));
@@ -399,7 +409,7 @@ impl CodeGenerator {
                             ResolvedType::I64 | ResolvedType::I128 => "%ld",
                             ResolvedType::U64 | ResolvedType::U128 => "%lu",
                             ResolvedType::F32 | ResolvedType::F64 => "%f",
-                            ResolvedType::Str => "%s",
+                            ty if Self::is_printf_string_arg_type(ty) => "%s",
                             ResolvedType::Bool => "%ld",
                             _ => "%ld",
                         };
@@ -478,7 +488,7 @@ impl CodeGenerator {
                 ResolvedType::F64 => {
                     arg_vals.push(format!("double {}", val));
                 }
-                ResolvedType::Str => {
+                ty if Self::is_printf_string_arg_type(ty) => {
                     // Extract raw i8* pointer from string fat pointer for snprintf
                     let raw_ptr = self.extract_str_ptr(&val, counter, &mut ir);
                     arg_vals.push(format!("i8* {}", raw_ptr));

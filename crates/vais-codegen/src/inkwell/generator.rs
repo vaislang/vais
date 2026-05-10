@@ -239,8 +239,7 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Mirrors text-IR `trait_impl_methods`. Populated by
     /// `register_trait_impl_inkwell` from `Item::Impl` AST nodes with a
     /// declared trait. Dead until 2b-5.
-    pub(super) trait_impl_methods:
-        HashMap<(String, String), HashMap<String, String>>,
+    pub(super) trait_impl_methods: HashMap<(String, String), HashMap<String, String>>,
 
     /// Cached vtable globals: (impl_type, trait_name) -> emitted GlobalValue.
     /// Populated lazily by `get_or_generate_vtable_inkwell` in 2b-2.
@@ -485,8 +484,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             // `<Trait>_<method>_default`.
                             let mut method_impls = std::collections::HashMap::new();
                             for method in &impl_block.methods {
-                                let fn_name =
-                                    format!("{}_{}", type_name, method.node.name.node);
+                                let fn_name = format!("{}_{}", type_name, method.node.name.node);
                                 method_impls.insert(method.node.name.node.clone(), fn_name);
                             }
                             self.register_trait_impl_inkwell(
@@ -871,7 +869,29 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use inkwell::types::StructType;
     use vais_ast::Type;
+
+    fn assert_canonical_option_result_abi(st: StructType<'_>) {
+        assert_eq!(st.count_fields(), 2);
+        let tag_ty = st
+            .get_field_type_at_index(0)
+            .expect("Option/Result tag field");
+        assert!(tag_ty.is_int_type());
+        assert_eq!(tag_ty.into_int_type().get_bit_width(), 32);
+
+        let payload_ty = st
+            .get_field_type_at_index(1)
+            .expect("Option/Result payload field");
+        assert!(payload_ty.is_struct_type());
+        let payload_st = payload_ty.into_struct_type();
+        assert_eq!(payload_st.count_fields(), 1);
+        let payload_i64 = payload_st
+            .get_field_type_at_index(0)
+            .expect("Option/Result payload i64 field");
+        assert!(payload_i64.is_int_type());
+        assert_eq!(payload_i64.into_int_type().get_bit_width(), 64);
+    }
 
     #[test]
     fn test_create_generator() {
@@ -921,6 +941,48 @@ mod tests {
         let unit_type = Type::Unit;
         let resolved = gen.ast_type_to_resolved(&unit_type);
         assert!(matches!(resolved, ResolvedType::Unit));
+    }
+
+    #[test]
+    fn test_option_result_type_mapper_uses_canonical_erased_abi() {
+        let context = Context::create();
+        let gen = InkwellCodeGenerator::new(&context, "test");
+
+        let tys = [
+            ResolvedType::Optional(Box::new(ResolvedType::I64)),
+            ResolvedType::Result(Box::new(ResolvedType::I64), Box::new(ResolvedType::Str)),
+            ResolvedType::Named {
+                name: "Option".to_string(),
+                generics: vec![ResolvedType::I64],
+            },
+            ResolvedType::Named {
+                name: "Result".to_string(),
+                generics: vec![ResolvedType::I64, ResolvedType::Str],
+            },
+        ];
+
+        for ty in tys {
+            let llvm_ty = gen.type_mapper.map_type(&ty);
+            assert!(llvm_ty.is_struct_type(), "{:?} did not map to a struct", ty);
+            assert_canonical_option_result_abi(llvm_ty.into_struct_type());
+        }
+    }
+
+    #[test]
+    fn test_option_result_constructors_use_canonical_erased_abi() {
+        let context = Context::create();
+        let mut gen = InkwellCodeGenerator::new(&context, "test");
+
+        let fn_type = context.void_type().fn_type(&[], false);
+        let func = gen.module.add_function("__test_option", fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        gen.builder.position_at_end(entry);
+
+        let empty_args: &[vais_ast::Spanned<vais_ast::Expr>] = &[];
+        let some = gen
+            .build_option_result_ctor(1, empty_args, "some")
+            .expect("Some constructor should build");
+        assert_canonical_option_result_abi(some.into_struct_value().get_type());
     }
 
     #[test]

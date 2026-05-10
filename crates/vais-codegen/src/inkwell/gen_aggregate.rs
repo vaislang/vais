@@ -631,8 +631,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 .expect("invariant: builder positioned in a basic block before struct-malloc alloca-slot setup")
                 .get_parent()
                 .expect("invariant: basic block owned by a function during struct-malloc alloca-slot setup");
-            let entry_block = current_fn.get_first_basic_block().expect("invariant: function has at least one basic block (entry) when placing alloca slot");
-            let current_block = self.builder.get_insert_block().expect("invariant: builder still positioned in a basic block after retrieving entry block");
+            let entry_block = current_fn.get_first_basic_block().expect(
+                "invariant: function has at least one basic block (entry) when placing alloca slot",
+            );
+            let current_block = self.builder.get_insert_block().expect(
+                "invariant: builder still positioned in a basic block after retrieving entry block",
+            );
             if let Some(terminator) = entry_block.get_terminator() {
                 self.builder.position_before(&terminator);
             } else {
@@ -1484,7 +1488,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .build_and(advanced, consumed_all, "parse_success")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
-        // Pack payload as i64 for the Result { i8 tag, i64 payload } ABI (B.1).
+        // Pack payload as i64 for the Result { i32 tag, { i64 } payload } ABI.
         let payload_ok = if bits == 64 {
             parsed
         } else {
@@ -1510,8 +1514,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .builder
             .build_select(
                 success,
-                i8_ty.const_int(0, false),
-                i8_ty.const_int(1, false),
+                self.context.i32_type().const_int(0, false),
+                self.context.i32_type().const_int(1, false),
                 "parse_tag",
             )
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
@@ -1632,8 +1636,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .builder
             .build_select(
                 success,
-                i8_ty.const_int(0, false),
-                i8_ty.const_int(1, false),
+                self.context.i32_type().const_int(0, false),
+                self.context.i32_type().const_int(1, false),
                 "parse_tag",
             )
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
@@ -1711,26 +1715,41 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map_err(|e| CodegenError::LlvmError(e.to_string()))
     }
 
-    /// Assemble the Result `{ i8 tag, i64 payload }` value used by B.1's ABI.
+    /// Assemble the canonical Result `{ i32 tag, { i64 } payload }` value.
     fn assemble_result_struct(
         &mut self,
         tag: inkwell::values::IntValue<'ctx>,
         payload: inkwell::values::IntValue<'ctx>,
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
-        let i8_ty = self.context.i8_type();
-        let i64_ty = self.context.i64_type();
-        let result_ty = self
-            .context
-            .struct_type(&[i8_ty.into(), i64_ty.into()], false);
+        let result_ty = self.type_mapper.option_result_type();
+        let payload_ty = self.type_mapper.option_result_payload_type();
+        let tag_bits = tag.get_type().get_bit_width();
+        let tag_i32 = if tag_bits == 32 {
+            tag
+        } else if tag_bits < 32 {
+            self.builder
+                .build_int_z_extend(tag, self.context.i32_type(), "result_tag_i32")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        } else {
+            self.builder
+                .build_int_truncate(tag, self.context.i32_type(), "result_tag_i32")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        };
+        let mut payload_struct = payload_ty.get_undef();
+        payload_struct = self
+            .builder
+            .build_insert_value(payload_struct, payload, 0, "result_payload_i64")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
         let mut val = result_ty.get_undef();
         val = self
             .builder
-            .build_insert_value(val, tag, 0, "result_tag")
+            .build_insert_value(val, tag_i32, 0, "result_tag")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
             .into_struct_value();
         val = self
             .builder
-            .build_insert_value(val, payload, 1, "result_payload")
+            .build_insert_value(val, payload_struct, 1, "result_payload")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
             .into_struct_value();
         Ok(val.into())

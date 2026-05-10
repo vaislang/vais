@@ -670,21 +670,28 @@ impl CodeGenerator {
                         {
                             write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                         } else if ret_llvm == "{ i8*, i64 }" && value.starts_with('%') {
-                            // Phase E: function body produced a typed pointer
-                            // (e.g. `i64*` from a slice-buffer allocation) but
-                            // the declared return is a slice fat pointer.
-                            // Build `{ i8*, i64 }` by bitcast + insertvalue
-                            // with length from an adjacent counter-like local
-                            // if available; fall back to zeroinitializer.
-                            //
-                            // We cannot always recover the length at this late
-                            // stage, so the conservative path is to bitcast
-                            // the data pointer into the fat pointer's data
-                            // slot and leave length 0. Callers that rely on
-                            // .len() will see 0 — preferable to emitting
-                            // invalid IR.
                             let val_llvm = self.llvm_type_of(&value);
-                            if val_llvm.ends_with('*') {
+                            let (coerced_val, coerce_ir) =
+                                self.coerce_ret_value(&value, &val_llvm, &ret_llvm, &mut counter);
+                            if !coerce_ir.is_empty() || coerced_val != value {
+                                ir.push_str(&coerce_ir);
+                                write_ir!(ir, "  ret {{ i8*, i64 }} {}{}", coerced_val, ret_dbg);
+                            } else if val_llvm == "{ i8*, i64 }*" {
+                                let loaded = self.next_temp(&mut counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* {}",
+                                    loaded,
+                                    value
+                                );
+                                self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+                                write_ir!(ir, "  ret {{ i8*, i64 }} {}{}", loaded, ret_dbg);
+                            } else if val_llvm == "ptr" {
+                                let loaded = self.next_temp(&mut counter);
+                                write_ir!(ir, "  {} = load {{ i8*, i64 }}, ptr {}", loaded, value);
+                                self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+                                write_ir!(ir, "  ret {{ i8*, i64 }} {}{}", loaded, ret_dbg);
+                            } else if val_llvm.ends_with('*') {
                                 let data_i8 = self.next_temp(&mut counter);
                                 write_ir!(
                                     ir,

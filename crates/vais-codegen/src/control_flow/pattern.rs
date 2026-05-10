@@ -618,6 +618,8 @@ impl CodeGenerator {
         }
 
         let enum_ty = match match_type {
+            ResolvedType::Optional(_) => return Some("Option".to_string()),
+            ResolvedType::Result(_, _) => return Some("Result".to_string()),
             ResolvedType::Named { .. } => match_type,
             ResolvedType::Ref(inner)
             | ResolvedType::RefMut(inner)

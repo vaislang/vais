@@ -191,6 +191,89 @@ impl CodeGenerator {
             return (fp2, ir);
         }
 
+        // Case 3b: String → str fat-ptr.
+        // Vais code commonly builds a heap-backed `String` locally and returns
+        // it from a function declared as `Str`. The public ABI for `Str` is the
+        // `{ i8*, i64 }` data/len pair, so make that ownership/view conversion
+        // explicit instead of letting ret sites emit `ret { i8*, i64 } %String*`.
+        if ret_llvm == "{ i8*, i64 }" {
+            if val_ty == "%String*" {
+                let data_field = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr %String, %String* {}, i32 0, i32 0",
+                    data_field,
+                    val
+                );
+                self.fn_ctx.record_emitted_type(&data_field, "i64*");
+                let data_i64 = self.next_temp(counter);
+                write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_field);
+                self.fn_ctx.record_emitted_type(&data_i64, "i64");
+                let data_i8 = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_i8, data_i64);
+                self.fn_ctx.record_emitted_type(&data_i8, "i8*");
+
+                let len_field = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr %String, %String* {}, i32 0, i32 1",
+                    len_field,
+                    val
+                );
+                self.fn_ctx.record_emitted_type(&len_field, "i64*");
+                let len_val = self.next_temp(counter);
+                write_ir!(ir, "  {} = load i64, i64* {}", len_val, len_field);
+                self.fn_ctx.record_emitted_type(&len_val, "i64");
+
+                let fat0 = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+                    fat0,
+                    data_i8
+                );
+                let fat1 = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
+                    fat1,
+                    fat0,
+                    len_val
+                );
+                self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
+                return (fat1, ir);
+            }
+
+            if val_ty == "%String" {
+                let data_i64 = self.next_temp(counter);
+                write_ir!(ir, "  {} = extractvalue %String {}, 0", data_i64, val);
+                self.fn_ctx.record_emitted_type(&data_i64, "i64");
+                let data_i8 = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_i8, data_i64);
+                self.fn_ctx.record_emitted_type(&data_i8, "i8*");
+                let len_val = self.next_temp(counter);
+                write_ir!(ir, "  {} = extractvalue %String {}, 1", len_val, val);
+                self.fn_ctx.record_emitted_type(&len_val, "i64");
+                let fat0 = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+                    fat0,
+                    data_i8
+                );
+                let fat1 = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
+                    fat1,
+                    fat0,
+                    len_val
+                );
+                self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
+                return (fat1, ir);
+            }
+        }
+
         // Case 4: i64 void-placeholder → str fat-ptr (zeroinitializer fallback).
         // Body produced an i64 placeholder for a void/Unit expression but
         // function ret is `str` (fat pointer). Use zero fat-ptr.

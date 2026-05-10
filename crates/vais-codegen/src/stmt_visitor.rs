@@ -1012,7 +1012,7 @@ impl CodeGenerator {
             // Mini Pillar 1 (ADR 0001 §1): coerce return value to match
             // function ret type via single coerce_ret_value entry point.
             // Skip if we already coerced above to avoid double conversion.
-            let ret_val = if !coerced {
+            let mut ret_val = if !coerced {
                 let actual = self.llvm_type_of(&ret_val);
                 let inferred_ret_expr_type = self.infer_expr_type(expr);
                 let actual_for_coerce = if actual == "i64"
@@ -1035,6 +1035,29 @@ impl CodeGenerator {
             } else {
                 ret_val
             };
+
+            if llvm_ty == "{ i8*, i64 }" && ret_val.starts_with('%') {
+                match self.llvm_type_of_checked(&ret_val).as_deref() {
+                    Some("{ i8*, i64 }*") => {
+                        let loaded = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* {}",
+                            loaded,
+                            ret_val
+                        );
+                        self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+                        ret_val = loaded;
+                    }
+                    Some("ptr") => {
+                        let loaded = self.next_temp(counter);
+                        write_ir!(ir, "  {} = load {{ i8*, i64 }}, ptr {}", loaded, ret_val);
+                        self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+                        ret_val = loaded;
+                    }
+                    _ => {}
+                }
+            }
 
             write_ir!(ir, "  ret {} {}", llvm_ty, ret_val);
         } else {

@@ -231,16 +231,16 @@ impl HashMap<K, V> {
         @.next_offset() + 8
     }
 
-    # Get value for key, returns 0 if not found
-    # Use contains() to check if key exists
-    fn get(&self, key: K) -> V {
+    # Get value for key, returns zero/default memory if not found.
+    # Prefer get()/get_mut()/get_opt() for presence-aware lookups.
+    fn get_value(&self, key: K) -> V {
         idx := @.hash(key)
         entry_ptr := load_i64(self.buckets + idx * 8)
-        @.get_from_chain(entry_ptr, key)
+        @.get_value_from_chain(entry_ptr, key)
     }
 
     # Helper to search through chain
-    fn get_from_chain(&self, entry_ptr: i64, key: K) -> V {
+    fn get_value_from_chain(&self, entry_ptr: i64, key: K) -> V {
         I entry_ptr == 0 {
             load_typed(entry_ptr + @.value_offset(), V)
         } else {
@@ -249,16 +249,55 @@ impl HashMap<K, V> {
                 load_typed(entry_ptr + @.value_offset(), V)
             } else {
                 next := load_i64(entry_ptr + @.next_offset())
-                @.get_from_chain(next, key)
+                @.get_value_from_chain(next, key)
             }
         }
+    }
+
+    fn value_ptr(&self, key: K) -> i64 {
+        idx := @.hash(key)
+        entry_ptr := load_i64(self.buckets + idx * 8)
+        @.value_ptr_in_chain(entry_ptr, key)
+    }
+
+    fn value_ptr_in_chain(&self, entry_ptr: i64, key: K) -> i64 {
+        I entry_ptr == 0 {
+            0
+        } else {
+            entry_key: K := load_typed(entry_ptr, K)
+            I entry_key == key {
+                entry_ptr + @.value_offset()
+            } else {
+                next := load_i64(entry_ptr + @.next_offset())
+                @.value_ptr_in_chain(next, key)
+            }
+        }
+    }
+
+    # Rust-style presence-aware immutable lookup.
+    fn get(&self, key: &K) -> Option<&V> {
+        ptr := @.value_ptr(*key)
+        I ptr == 0 {
+            return Option.None
+        }
+        Option.Some(ptr as &V)
+    }
+
+    # Rust-style presence-aware mutable lookup.
+    fn get_mut(&self, key: &K) -> Option<&mut V> {
+        ptr := @.value_ptr(*key)
+        I ptr == 0 {
+            return Option.None
+        }
+        Option.Some(ptr as &mut V)
     }
 
     # Get value for key using Option type
     # Returns Some(value) if found, None if not found
     fn get_opt(&self, key: K) -> Option<V> {
-        I @.contains(key) == 1 {
-            return Option.Some(@.get(key))
+        ptr := @.value_ptr(key)
+        I ptr != 0 {
+            return Option.Some(load_typed(ptr, V))
         }
         Option.None
     }

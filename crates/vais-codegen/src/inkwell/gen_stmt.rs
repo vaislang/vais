@@ -1104,7 +1104,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             let current_fn = self
                 .builder
                 .get_insert_block()
-                .expect("invariant: builder positioned in a basic block before alloc-cleanup codegen")
+                .expect(
+                    "invariant: builder positioned in a basic block before alloc-cleanup codegen",
+                )
                 .get_parent()
                 .expect("invariant: basic block owned by a function during alloc-cleanup codegen");
             let free_block = self.context.append_basic_block(current_fn, "free_alloc");

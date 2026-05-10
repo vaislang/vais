@@ -829,7 +829,8 @@ fn test_early_return() {
 
 #[test]
 fn test_multiple_returns() {
-    let ir = gen_ok("fn test(x:i64)->i64{I x<0{return -1} else {I x==0{return 0} else {return 1}}}");
+    let ir =
+        gen_ok("fn test(x:i64)->i64{I x<0{return -1} else {I x==0{return 0} else {return 1}}}");
     assert!(ir.contains("ret i64"));
 }
 

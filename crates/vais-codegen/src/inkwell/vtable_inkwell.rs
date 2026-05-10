@@ -20,8 +20,8 @@ use inkwell::module::Linkage;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};
 use inkwell::values::{BasicValueEnum, GlobalValue, StructValue};
 use inkwell::AddressSpace;
-use vais_types::{ResolvedType, TraitDef, TraitMethodSig, AssociatedTypeDef};
 use vais_ast::Trait as AstTrait;
+use vais_types::{AssociatedTypeDef, ResolvedType, TraitDef, TraitMethodSig};
 
 use super::generator::InkwellCodeGenerator;
 
@@ -44,8 +44,7 @@ impl InkwellVtableGenerator {
         ctx: &'ctx Context,
         trait_def: &TraitDef,
     ) -> StructType<'ctx> {
-        let i8_ptr: BasicTypeEnum<'ctx> =
-            ctx.i8_type().ptr_type(AddressSpace::default()).into();
+        let i8_ptr: BasicTypeEnum<'ctx> = ctx.i8_type().ptr_type(AddressSpace::default()).into();
         let i64_t: BasicTypeEnum<'ctx> = ctx.i64_type().into();
 
         // drop_fn_ptr + size + align
@@ -64,8 +63,7 @@ impl InkwellVtableGenerator {
     /// LLVM type for a trait object: `{ i8*, i8* }` (data, vtable).
     /// Mirrors text-IR `vtable.rs::TRAIT_OBJECT_TYPE`.
     pub(super) fn trait_object_type<'ctx>(ctx: &'ctx Context) -> StructType<'ctx> {
-        let i8_ptr: BasicTypeEnum<'ctx> =
-            ctx.i8_type().ptr_type(AddressSpace::default()).into();
+        let i8_ptr: BasicTypeEnum<'ctx> = ctx.i8_type().ptr_type(AddressSpace::default()).into();
         ctx.struct_type(&[i8_ptr, i8_ptr], false)
     }
 
@@ -182,8 +180,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         trait_name: &str,
         method_impls: std::collections::HashMap<String, String>,
     ) {
-        self.trait_impl_methods
-            .insert((impl_type.to_string(), trait_name.to_string()), method_impls);
+        self.trait_impl_methods.insert(
+            (impl_type.to_string(), trait_name.to_string()),
+            method_impls,
+        );
     }
 
     /// Get-or-generate vtable global for (impl_type, trait_name).
@@ -454,10 +454,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             call_args.push((*arg).into());
         }
 
-        let call_site =
-            self.builder
-                .build_indirect_call(fn_type, fn_ptr_typed, &call_args, "dyn.call")
-                .ok()?;
+        let call_site = self
+            .builder
+            .build_indirect_call(fn_type, fn_ptr_typed, &call_args, "dyn.call")
+            .ok()?;
 
         Some(call_site.try_as_basic_value().left())
     }

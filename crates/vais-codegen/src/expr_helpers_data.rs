@@ -811,6 +811,7 @@ impl CodeGenerator {
                     typed_elem_ptr
                 );
                 // Register element type so downstream call-arg coercion can detect width mismatch
+                self.fn_ctx.record_emitted_type(&result, &elem_llvm_ty);
                 Self::register_elem_type(&mut self.fn_ctx, &result, &elem_llvm_ty);
                 return Ok((result, ir));
             } else {
@@ -880,6 +881,7 @@ impl CodeGenerator {
 
         // Register the element type for downstream codegen (e.g., Option/Result construction,
         // call-arg width coercion).
+        self.fn_ctx.record_emitted_type(&result, &elem_llvm_ty);
         Self::register_elem_type(&mut self.fn_ctx, &result, &elem_llvm_ty);
         if elem_llvm_ty == "{ i8*, i64 }" {
             // Override with precise Str type for fat pointer elements
@@ -1311,6 +1313,7 @@ impl CodeGenerator {
                             field_ptr
                         );
                     }
+                    self.fn_ctx.record_emitted_type(&result, &elem_llvm);
                     Self::register_elem_type(&mut self.fn_ctx, &result, &elem_llvm);
                     return Ok((result, ir));
                 }

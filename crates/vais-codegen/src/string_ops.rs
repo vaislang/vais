@@ -14,7 +14,7 @@ impl CodeGenerator {
     /// 2. `i8*` raw pointer → use directly
     /// 3. `i64` integer → inttoptr to i8*
     pub(crate) fn resolve_arg_to_i8_ptr(
-        &self,
+        &mut self,
         arg_full: &str,
         counter: &mut usize,
         ir: &mut String,
@@ -42,27 +42,97 @@ impl CodeGenerator {
     /// Extract the i8* pointer from a string fat pointer { i8*, i64 }
     #[inline(never)]
     pub(crate) fn extract_str_ptr(
-        &self,
+        &mut self,
         fat_ptr: &str,
         counter: &mut usize,
         ir: &mut String,
     ) -> String {
+        let actual_ty = self.llvm_type_of_checked(fat_ptr);
         let ptr = self.next_temp(counter);
-        write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, fat_ptr);
-        ptr
+        match actual_ty.as_deref() {
+            Some("i8*") => fat_ptr.to_string(),
+            Some("i64") => {
+                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr, fat_ptr);
+                self.fn_ctx.record_emitted_type(&ptr, "i8*");
+                ptr
+            }
+            Some("{ i8*, i64 }*") => {
+                let field_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr {{ i8*, i64 }}, {{ i8*, i64 }}* {}, i32 0, i32 0",
+                    field_ptr,
+                    fat_ptr
+                );
+                self.fn_ctx.record_emitted_type(&field_ptr, "i8**");
+                write_ir!(ir, "  {} = load i8*, i8** {}", ptr, field_ptr);
+                self.fn_ctx.record_emitted_type(&ptr, "i8*");
+                ptr
+            }
+            Some("ptr") => {
+                let field_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr {{ i8*, i64 }}, ptr {}, i32 0, i32 0",
+                    field_ptr,
+                    fat_ptr
+                );
+                self.fn_ctx.record_emitted_type(&field_ptr, "ptr");
+                write_ir!(ir, "  {} = load i8*, ptr {}", ptr, field_ptr);
+                self.fn_ctx.record_emitted_type(&ptr, "i8*");
+                ptr
+            }
+            _ => {
+                write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, fat_ptr);
+                self.fn_ctx.record_emitted_type(&ptr, "i8*");
+                ptr
+            }
+        }
     }
 
     /// Extract the i64 length from a string fat pointer { i8*, i64 }
     #[inline(never)]
     pub(crate) fn extract_str_len(
-        &self,
+        &mut self,
         fat_ptr: &str,
         counter: &mut usize,
         ir: &mut String,
     ) -> String {
+        let actual_ty = self.llvm_type_of_checked(fat_ptr);
         let len = self.next_temp(counter);
-        write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 1", len, fat_ptr);
-        len
+        match actual_ty.as_deref() {
+            Some("{ i8*, i64 }*") => {
+                let field_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr {{ i8*, i64 }}, {{ i8*, i64 }}* {}, i32 0, i32 1",
+                    field_ptr,
+                    fat_ptr
+                );
+                self.fn_ctx.record_emitted_type(&field_ptr, "i64*");
+                write_ir!(ir, "  {} = load i64, i64* {}", len, field_ptr);
+                self.fn_ctx.record_emitted_type(&len, "i64");
+                len
+            }
+            Some("ptr") => {
+                let field_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr {{ i8*, i64 }}, ptr {}, i32 0, i32 1",
+                    field_ptr,
+                    fat_ptr
+                );
+                self.fn_ctx.record_emitted_type(&field_ptr, "ptr");
+                write_ir!(ir, "  {} = load i64, ptr {}", len, field_ptr);
+                self.fn_ctx.record_emitted_type(&len, "i64");
+                len
+            }
+            _ => {
+                write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 1", len, fat_ptr);
+                self.fn_ctx.record_emitted_type(&len, "i64");
+                len
+            }
+        }
     }
 
     /// Build a string fat pointer { i8*, i64 } from a raw pointer and length
@@ -257,6 +327,91 @@ impl CodeGenerator {
                 op
             ))),
         }
+    }
+
+    pub(crate) fn generate_string_append_str(
+        &mut self,
+        left_val: &str,
+        right_val: &str,
+        mut ir: String,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let left_llvm = self.llvm_type_of(left_val);
+        let left_ptr = if left_llvm == "%String*" {
+            left_val.to_string()
+        } else if left_llvm == "%String" {
+            let slot = self.next_temp(counter);
+            self.emit_entry_alloca(&slot, "%String");
+            write_ir!(ir, "  store %String {}, %String* {}", left_val, slot);
+            slot
+        } else {
+            left_val.to_string()
+        };
+
+        let right_ptr = self.extract_str_ptr(right_val, counter, &mut ir);
+        let right_len = self.extract_str_len(right_val, counter, &mut ir);
+        let loop_id = self.fn_ctx.label_counter;
+        self.fn_ctx.label_counter += 1;
+        let idx_slot = format!("%__str_append_i_{}", loop_id);
+        self.emit_entry_alloca(&idx_slot, "i64");
+        write_ir!(ir, "  store i64 0, i64* {}", idx_slot);
+
+        let cond_label = format!("str.append.cond{}", loop_id);
+        let body_label = format!("str.append.body{}", loop_id);
+        let end_label = format!("str.append.end{}", loop_id);
+        write_ir!(ir, "  br label %{}", cond_label);
+        write_ir!(ir, "{}:", cond_label);
+        let idx = self.next_temp(counter);
+        write_ir!(ir, "  {} = load i64, i64* {}", idx, idx_slot);
+        self.fn_ctx.record_emitted_type(&idx, "i64");
+        let keep_going = self.next_temp(counter);
+        write_ir!(ir, "  {} = icmp ult i64 {}, {}", keep_going, idx, right_len);
+        self.fn_ctx.record_emitted_type(&keep_going, "i1");
+        write_ir!(
+            ir,
+            "  br i1 {}, label %{}, label %{}",
+            keep_going,
+            body_label,
+            end_label
+        );
+
+        write_ir!(ir, "{}:", body_label);
+        let byte_ptr = self.next_temp(counter);
+        write_ir!(
+            ir,
+            "  {} = getelementptr i8, i8* {}, i64 {}",
+            byte_ptr,
+            right_ptr,
+            idx
+        );
+        self.fn_ctx.record_emitted_type(&byte_ptr, "i8*");
+        let byte_i8 = self.next_temp(counter);
+        write_ir!(ir, "  {} = load i8, i8* {}", byte_i8, byte_ptr);
+        self.fn_ctx.record_emitted_type(&byte_i8, "i8");
+        let byte_i64 = self.next_temp(counter);
+        write_ir!(ir, "  {} = sext i8 {} to i64", byte_i64, byte_i8);
+        self.fn_ctx.record_emitted_type(&byte_i64, "i64");
+        let push_ret = self.next_temp(counter);
+        write_ir!(
+            ir,
+            "  {} = call i64 @String_push_byte(%String* {}, i64 {})",
+            push_ret,
+            left_ptr,
+            byte_i64
+        );
+        self.fn_ctx.record_emitted_type(&push_ret, "i64");
+        let next_idx = self.next_temp(counter);
+        write_ir!(ir, "  {} = add i64 {}, 1", next_idx, idx);
+        self.fn_ctx.record_emitted_type(&next_idx, "i64");
+        write_ir!(ir, "  store i64 {}, i64* {}", next_idx, idx_slot);
+        write_ir!(ir, "  br label %{}", cond_label);
+
+        write_ir!(ir, "{}:", end_label);
+        let result = self.next_temp(counter);
+        write_ir!(ir, "  {} = load %String, %String* {}", result, left_ptr);
+        self.fn_ctx.record_emitted_type(&result, "%String");
+        self.fn_ctx.current_block = end_label;
+        Ok((result, ir))
     }
 
     /// Generate LLVM IR for string method calls.

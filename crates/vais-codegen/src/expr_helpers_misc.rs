@@ -456,13 +456,7 @@ impl CodeGenerator {
 
         ir.push_str("  ; Try expression (?)\n");
 
-        // Determine the tag type based on the inner type:
-        // - Optional/Result use i8 tag: { i8, T }
-        // - User-defined enums use i32 tag: { i32, { T } }
-        let (tag_type, extract_payload) = match &inner_type {
-            ResolvedType::Optional(_) | ResolvedType::Result(_, _) => ("i8", false),
-            _ => ("i32", true),
-        };
+        let (tag_type, extract_payload) = ("i32", true);
 
         // Extract tag (field 0)
         let tag = self.next_temp(counter);
@@ -746,13 +740,7 @@ impl CodeGenerator {
 
         ir.push_str("  ; Unwrap expression\n");
 
-        // Determine the tag type based on the inner type:
-        // - Optional/Result use i8 tag: { i8, T }
-        // - User-defined enums use i32 tag: { i32, { T } }
-        let (tag_type, extract_payload) = match &inner_type {
-            ResolvedType::Optional(_) | ResolvedType::Result(_, _) => ("i8", false),
-            _ => ("i32", true),
-        };
+        let (tag_type, extract_payload) = ("i32", true);
 
         // Extract tag (field 0)
         let tag = self.next_temp(counter);

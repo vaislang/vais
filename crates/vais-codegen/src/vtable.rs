@@ -221,11 +221,7 @@ done:
         trait_def: &TraitDef,
         methods_typed: &[(Vec<String>, String)],
     ) -> String {
-        let mut fields = vec![
-            "i8*".to_string(),
-            "i64".to_string(),
-            "i64".to_string(),
-        ];
+        let mut fields = vec!["i8*".to_string(), "i64".to_string(), "i64".to_string()];
 
         for (arg_tys, ret_ty) in methods_typed {
             let mut param_list = vec!["i8*".to_string()];
@@ -328,10 +324,8 @@ done:
                 concrete_param_types.push(ty.clone());
             }
 
-            let vtable_fn_type =
-                format!("{}({})*", ret_ty, vtable_param_types.join(", "));
-            let concrete_fn_type =
-                format!("{}({})*", ret_ty, concrete_param_types.join(", "));
+            let vtable_fn_type = format!("{}({})*", ret_ty, vtable_param_types.join(", "));
+            let concrete_fn_type = format!("{}({})*", ret_ty, concrete_param_types.join(", "));
 
             // bitcast (concrete @impl to vtable_fn_type) so the constant
             // expression's destination type matches the slot's

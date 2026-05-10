@@ -19,6 +19,18 @@ impl ByteBuffer {
         ByteBuffer { data: data, len: 0, cap: cap, pos: 0, write_pos: 0 }
     }
 
+    # Create a readable buffer by copying a byte slice.
+    fn from_slice(bytes: &[u8]) -> ByteBuffer {
+        buf := mut ByteBuffer.with_capacity(bytes.len())
+        i := mut 0
+        LW i < bytes.len() {
+            buf.write_u8(bytes[i])
+            i += 1
+        }
+        buf.rewind()
+        buf
+    }
+
     # Getters
     fn len(&self) -> i64 = self.len
     fn capacity(&self) -> i64 = self.cap

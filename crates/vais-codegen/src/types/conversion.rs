@@ -336,14 +336,12 @@ impl CodeGenerator {
                 format!("{}({})*", ret_type, param_types.join(", "))
             }
             ResolvedType::Optional(inner) => {
-                // Option<T> is { i8 tag, T value }
-                let inner_ty = self.type_to_llvm_impl(inner)?;
-                format!("{{ i8, {} }}", inner_ty)
+                let _ = inner;
+                String::from("%Option")
             }
             ResolvedType::Result(ok, _err) => {
-                // Result<T, E> is { i8 tag, T value } (use ok type for payload)
-                let ok_ty = self.type_to_llvm_impl(ok)?;
-                format!("{{ i8, {} }}", ok_ty)
+                let _ = ok;
+                String::from("%Result")
             }
             ResolvedType::Future(_) => {
                 // Future is an opaque pointer to async state machine.

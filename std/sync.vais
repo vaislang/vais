@@ -72,14 +72,15 @@ struct MutexGuard<T> {
 impl MutexGuard<T> {
     fn new(mutex: &Mutex<T>) -> MutexGuard<T> {
         MutexGuard {
-            mutex_ptr: mutex.os_mutex
+            mutex_ptr: mutex as i64
         }
     }
 
     # Access the protected value — placeholder until raw pointer deref lands.
     # Returns the underlying OS mutex handle.
     fn get(&self) -> i64 {
-        self.mutex_ptr
+        mutex := self.mutex_ptr as &Mutex<T>
+        mutex.os_mutex
     }
 
     # Modify the protected value — placeholder.
@@ -89,7 +90,8 @@ impl MutexGuard<T> {
 
     # Explicitly release the lock — uses mutex_ptr as handle directly.
     fn unlock(&self) -> i64 {
-        __mutex_unlock(self.mutex_ptr)
+        mutex := self.mutex_ptr as &Mutex<T>
+        __mutex_unlock(mutex.os_mutex)
         0
     }
 }

@@ -197,7 +197,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             "load_byte" => return self.generate_load_byte(args),
             "store_f64" => return self.generate_store_f64(args),
             "load_f64" => return self.generate_load_f64(args),
-            // Option/Result constructors. ABI: { i8 tag, i64 payload }.
+            // Option/Result constructors. ABI: { i32 tag, { i64 } payload }.
             // Tag: Some=1, None=0, Ok=0, Err=1.
             // Payload: struct args are packed (≤8B via stack-alloca bitcast,
             // >8B via malloc+store+ptrtoint). Primitives go through
@@ -842,7 +842,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .unwrap_or_else(|| i64_type.const_int(0, false).into()))
     }
 
-    /// Build an `Option<T>` / `Result<T,E>` struct value `{ i8 tag, i64 payload }`.
+    /// Build an `Option<T>` / `Result<T,E>` value `{ i32 tag, { i64 } payload }`.
     /// Tag: caller passes numeric tag. Some=1, None=0, Ok=0, Err=1.
     /// Payload: struct args packed — ≤8B via stack-alloca bitcast, >8B via
     /// malloc+store+ptrtoint. Primitives go through `coerce_to_i64`.
@@ -856,10 +856,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         prefix: &str,
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         let i64_ty = self.context.i64_type();
-        let i8_ty = self.context.i8_type();
-        let enum_type = self
-            .context
-            .struct_type(&[i8_ty.into(), i64_ty.into()], false);
+        let i32_ty = self.context.i32_type();
+        let payload_type = self.type_mapper.option_result_payload_type();
+        let enum_type = self.type_mapper.option_result_type();
 
         let data_val: IntValue<'ctx> = if args.is_empty() {
             i64_ty.const_int(0, false)
@@ -867,6 +866,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             let v = self.generate_expr(&args[0].node)?;
             self.pack_enum_payload_i64(v)?
         };
+        let mut payload = payload_type.get_undef();
+        payload = self
+            .builder
+            .build_insert_value(payload, data_val, 0, &format!("{}_payload_i64", prefix))
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
 
         let tag_name = format!("{}_tag", prefix);
         let data_name = format!("{}_data", prefix);
@@ -874,12 +879,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let mut val = enum_type.get_undef();
         val = self
             .builder
-            .build_insert_value(val, i8_ty.const_int(tag, false), 0, &tag_name)
+            .build_insert_value(val, i32_ty.const_int(tag, false), 0, &tag_name)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
             .into_struct_value();
         val = self
             .builder
-            .build_insert_value(val, data_val, 1, &data_name)
+            .build_insert_value(val, payload, 1, &data_name)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
             .into_struct_value();
         Ok(val.into())

@@ -117,6 +117,23 @@ impl<'ctx> TypeMapper<'ctx> {
         self.generic_substitutions.clear();
     }
 
+    /// Canonical erased payload wrapper shared by Option<T> and Result<T, E>.
+    pub(crate) fn option_result_payload_type(&self) -> StructType<'ctx> {
+        self.context
+            .struct_type(&[self.context.i64_type().into()], false)
+    }
+
+    /// Canonical erased ABI for built-in Option<T> and Result<T, E>.
+    pub(crate) fn option_result_type(&self) -> StructType<'ctx> {
+        self.context.struct_type(
+            &[
+                self.context.i32_type().into(),
+                self.option_result_payload_type().into(),
+            ],
+            false,
+        )
+    }
+
     /// Registers a named struct type.
     pub(crate) fn register_struct(&mut self, name: &str, struct_type: StructType<'ctx>) {
         self.struct_types.insert(name.to_string(), struct_type);
@@ -204,6 +221,11 @@ impl<'ctx> TypeMapper<'ctx> {
                     .into()
             }
             ResolvedType::Named { name, generics } => {
+                if (name == "Option" && generics.len() == 1)
+                    || (name == "Result" && generics.len() == 2)
+                {
+                    return self.option_result_type().into();
+                }
                 // If generics are present and all concrete, try mangled name first (e.g., "Vec$f32")
                 if !generics.is_empty() {
                     let all_concrete = generics
@@ -282,33 +304,18 @@ impl<'ctx> TypeMapper<'ctx> {
                 self.context.struct_type(&elem_types, false).into()
             }
             ResolvedType::Optional(inner) => {
-                // Option<T> ABI: { tag: i8, payload: i64 }.
-                // The payload slot always holds i64 regardless of T — struct payloads
-                // are packed via bitcast (≤8B) or heap pointer (>8B) at construction
-                // time, and unpacked symmetrically at match-arm extraction.
-                // This matches gen_types.rs {try/unwrap} convention and the user-enum
-                // ABI (call.rs user-enum branch, gen_match.rs variant decode).
-                // B.1: previously lowered as { i8, %T } which conflicted with the
-                // i64-payload constructor path and caused C004 "Aggregate extract
-                // index out of range" at return/extract time.
+                // Built-in Option<T> uses the same erased ABI as the text IR
+                // backend: { i32 tag, { i64 } payload }. The wrapper keeps the
+                // payload field layout explicit and prevents paths from mixing
+                // raw i64 payload structs with enum values.
                 let _inner_llvm = self.map_type(inner);
-                let tag_type = self.context.i8_type();
-                let i64_type = self.context.i64_type();
-                self.context
-                    .struct_type(&[tag_type.into(), i64_type.into()], false)
-                    .into()
+                self.option_result_type().into()
             }
             ResolvedType::Result(ok, err) => {
-                // Result<T, E> ABI: { tag: i8, payload: i64 }. Same reasoning as
-                // Optional above — single i64 slot for both Ok(T) and Err(E), with
-                // payload packed/unpacked via bitcast-or-heap convention.
+                // Built-in Result<T, E> shares the Option erased ABI.
                 let _ok_llvm = self.map_type(ok);
                 let _err_llvm = self.map_type(err);
-                let tag_type = self.context.i8_type();
-                let i64_type = self.context.i64_type();
-                self.context
-                    .struct_type(&[tag_type.into(), i64_type.into()], false)
-                    .into()
+                self.option_result_type().into()
             }
             ResolvedType::Map(key, value) => {
                 // Map is a pointer to runtime structure

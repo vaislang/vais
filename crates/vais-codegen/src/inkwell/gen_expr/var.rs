@@ -7,21 +7,27 @@ use crate::{CodegenError, CodegenResult};
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
     pub(super) fn generate_var(&mut self, name: &str) -> CodegenResult<BasicValueEnum<'ctx>> {
-        // Handle None as a built-in value: { i8 tag=0, i64 data=0 }
+        // Handle None as a built-in value: { i32 tag=0, { i64 } data=0 }
         if name == "None" {
-            let enum_type = self.context.struct_type(
-                &[
-                    self.context.i8_type().into(),
-                    self.context.i64_type().into(),
-                ],
-                false,
-            );
+            let enum_type = self.type_mapper.option_result_type();
+            let payload_type = self.type_mapper.option_result_payload_type();
+            let mut payload = payload_type.get_undef();
+            payload = self
+                .builder
+                .build_insert_value(
+                    payload,
+                    self.context.i64_type().const_int(0, false),
+                    0,
+                    "none_payload_i64",
+                )
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                .into_struct_value();
             let mut val = enum_type.get_undef();
             val = self
                 .builder
                 .build_insert_value(
                     val,
-                    self.context.i8_type().const_int(0, false),
+                    self.context.i32_type().const_int(0, false),
                     0,
                     "none_tag",
                 )
@@ -29,12 +35,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 .into_struct_value();
             val = self
                 .builder
-                .build_insert_value(
-                    val,
-                    self.context.i64_type().const_int(0, false),
-                    1,
-                    "none_data",
-                )
+                .build_insert_value(val, payload, 1, "none_data")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                 .into_struct_value();
             return Ok(val.into());

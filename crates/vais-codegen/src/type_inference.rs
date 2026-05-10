@@ -308,7 +308,7 @@ impl CodeGenerator {
             Expr::If { .. } => true,         // if-else produces a value (phi node)
             Expr::Match { .. } => true,      // match produces a value
             // Check if Call is an enum variant constructor or struct tuple literal
-            Expr::Call { func, .. } => {
+            Expr::Call { func, args } => {
                 if let Expr::Ident(name) = &func.node {
                     // Enum variant constructors (e.g., Some(x)) return pointers
                     if self.get_tuple_variant_info(name).is_some() {
@@ -335,8 +335,16 @@ impl CodeGenerator {
                     // The codegen for Named/Str in load_typed always uses the
                     // alloca+memcpy path regardless of size.
                     if name == "load_typed" {
-                        if let Some(concrete) = self.get_generic_substitution("T") {
-                            if matches!(concrete, ResolvedType::Named { .. }) {
+                        let explicit_t = args.get(1).and_then(|arg| {
+                            if let Expr::Ident(ident) = &arg.node {
+                                self.get_generic_substitution(ident.as_str())
+                            } else {
+                                None
+                            }
+                        });
+                        let concrete_t = explicit_t.or_else(|| self.get_generic_substitution("T"));
+                        if let Some(concrete) = concrete_t {
+                            if matches!(concrete, ResolvedType::Named { .. } | ResolvedType::Str) {
                                 return false;
                             }
                         }
@@ -1300,9 +1308,37 @@ impl CodeGenerator {
                 // Look up registered function signature first — this is the ground truth
                 // from the type checker and always takes priority over hardcoded heuristics.
                 // Unwrap Ref/RefMut to get the inner Named type
-                let inner_recv = match &recv_type {
+                let inner_recv_base = match &recv_type {
                     ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
                     other => other,
+                };
+                let guard_forward_inner = match inner_recv_base {
+                    ResolvedType::Named { name, generics }
+                        if matches!(
+                            name.as_str(),
+                            "MutexGuard" | "RwLockReadGuard" | "RwLockWriteGuard"
+                        ) && !generics.is_empty() =>
+                    {
+                        let guard_method_arity = match method.node.as_str() {
+                            "new" => Some(1),
+                            "get" | "unlock" => Some(0),
+                            "set" => Some(1),
+                            _ => None,
+                        };
+                        if guard_method_arity == Some(args.len()) {
+                            None
+                        } else {
+                            Some(generics[0].clone())
+                        }
+                    }
+                    _ => None,
+                };
+                let effective_inner_recv_owned;
+                let inner_recv = if let Some(inner) = &guard_forward_inner {
+                    effective_inner_recv_owned = inner.clone();
+                    &effective_inner_recv_owned
+                } else {
+                    inner_recv_base
                 };
                 if let ResolvedType::Named { name, generics } = inner_recv {
                     let method_name = format!("{}_{}", name, method.node);
@@ -1339,7 +1375,7 @@ impl CodeGenerator {
 
                 // Hardcoded heuristics for types without registered signatures
                 // (e.g., std library types used without explicit impl blocks in scope)
-                if let ResolvedType::Named { name, .. } = inner_recv {
+                if let ResolvedType::Named { name, generics } = inner_recv {
                     if name == "Option" {
                         let generics = if let ResolvedType::Named { generics, .. } = inner_recv {
                             generics.clone()
@@ -1388,11 +1424,33 @@ impl CodeGenerator {
                         };
                     }
 
-                    // Mutex.lock() returns MutexGuard
-                    if name == "Mutex" && method.node == "lock" {
-                        return ResolvedType::Named {
+                    if name == "Mutex" {
+                        let guard_ty = ResolvedType::Named {
                             name: "MutexGuard".to_string(),
-                            generics: vec![],
+                            generics: generics.clone(),
+                        };
+                        return match method.node.as_str() {
+                            "lock" => guard_ty,
+                            "try_lock" => ResolvedType::Optional(Box::new(guard_ty)),
+                            _ => ResolvedType::I64,
+                        };
+                    }
+
+                    if name == "RwLock" {
+                        let read_guard_ty = ResolvedType::Named {
+                            name: "RwLockReadGuard".to_string(),
+                            generics: generics.clone(),
+                        };
+                        let write_guard_ty = ResolvedType::Named {
+                            name: "RwLockWriteGuard".to_string(),
+                            generics: generics.clone(),
+                        };
+                        return match method.node.as_str() {
+                            "read" | "read_lock" => read_guard_ty,
+                            "write" | "write_lock" => write_guard_ty,
+                            "try_read" => ResolvedType::Optional(Box::new(read_guard_ty)),
+                            "try_write" => ResolvedType::Optional(Box::new(write_guard_ty)),
+                            _ => ResolvedType::I64,
                         };
                     }
 
@@ -1476,6 +1534,9 @@ impl CodeGenerator {
 
                 // clone on any type returns the same type
                 if method.node == "clone" {
+                    if guard_forward_inner.is_some() {
+                        return inner_recv.clone();
+                    }
                     return recv_type;
                 }
 

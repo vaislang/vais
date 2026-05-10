@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use inkwell::module::Linkage;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType};
-use inkwell::values::{BasicValueEnum, FunctionValue};
+use inkwell::values::{BasicValueEnum, FunctionValue, StructValue};
 
 use vais_ast::{ConstExpr, Expr, Type};
 use vais_types::{ResolvedConst, ResolvedType};
@@ -97,7 +97,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 "str" => ResolvedType::Str,
                 // B.1: `Option<T>` and `Result<T, E>` written as named-generic
                 // AST must resolve to the dedicated ResolvedType variants so
-                // `map_type` lowers them to the { i8 tag, i64 payload } ABI
+                // `map_type` lowers them to the canonical erased Option/Result ABI
                 // (types.rs Optional/Result arms). Otherwise they slip through
                 // the generic Named branch and become `%Option = type opaque`,
                 // causing `ret %Option zeroinitializer` / C004 Aggregate errors
@@ -214,7 +214,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             // activates correctly: cross-impl dyn dispatch now hits a
             // hard CodegenError::Unsupported instead of silently binding
             // to the alphabetically-first impl. STEP7_FINDINGS F-23.
-            Type::DynTrait { trait_name, generics } => {
+            Type::DynTrait {
+                trait_name,
+                generics,
+            } => {
                 let resolved_generics: Vec<ResolvedType> = generics
                     .iter()
                     .map(|g| self.ast_type_to_resolved(&g.node))
@@ -386,10 +389,87 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     // ========== Try/Unwrap ==========
 
+    fn resolve_try_expr_type(&self, expr: &Expr) -> Option<ResolvedType> {
+        match expr {
+            Expr::Ident(name) => self.var_resolved_types.get(name).cloned(),
+            Expr::Call { func, .. } => {
+                if let Expr::Ident(fn_name) = &func.node {
+                    self.resolved_function_sigs
+                        .get(fn_name.as_str())
+                        .map(|sig| sig.ret.clone())
+                } else {
+                    None
+                }
+            }
+            Expr::MethodCall { method, .. } => match method.node.as_str() {
+                "parse_i64" | "parse_int" => Some(ResolvedType::Result(
+                    Box::new(ResolvedType::I64),
+                    Box::new(ResolvedType::Str),
+                )),
+                "parse_i32" => Some(ResolvedType::Result(
+                    Box::new(ResolvedType::I32),
+                    Box::new(ResolvedType::Str),
+                )),
+                "parse_u64" => Some(ResolvedType::Result(
+                    Box::new(ResolvedType::U64),
+                    Box::new(ResolvedType::Str),
+                )),
+                "parse_u32" => Some(ResolvedType::Result(
+                    Box::new(ResolvedType::U32),
+                    Box::new(ResolvedType::Str),
+                )),
+                "parse_f64" => Some(ResolvedType::Result(
+                    Box::new(ResolvedType::F64),
+                    Box::new(ResolvedType::Str),
+                )),
+                "parse_f32" => Some(ResolvedType::Result(
+                    Box::new(ResolvedType::F32),
+                    Box::new(ResolvedType::Str),
+                )),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    fn build_try_error_predicate(
+        &self,
+        tag: inkwell::values::IntValue<'ctx>,
+        ty: Option<&ResolvedType>,
+        name: &str,
+    ) -> CodegenResult<inkwell::values::IntValue<'ctx>> {
+        let zero = tag.get_type().const_int(0, false);
+        let pred = match ty {
+            Some(ResolvedType::Optional(_)) => inkwell::IntPredicate::EQ,
+            Some(ResolvedType::Result(_, _)) | None => inkwell::IntPredicate::NE,
+            Some(_) => inkwell::IntPredicate::NE,
+        };
+        self.builder
+            .build_int_compare(pred, tag, zero, name)
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))
+    }
+
+    fn extract_option_result_payload_i64(
+        &self,
+        struct_val: StructValue<'ctx>,
+        name: &str,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        let payload = self
+            .builder
+            .build_extract_value(struct_val, 1, name)
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+        if payload.is_struct_value() {
+            self.builder
+                .build_extract_value(payload.into_struct_value(), 0, &format!("{}_i64", name))
+                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))
+        } else {
+            Ok(payload)
+        }
+    }
+
     pub(super) fn generate_try(&mut self, inner: &Expr) -> CodegenResult<BasicValueEnum<'ctx>> {
-        // Try (?) operator - propagate error if Result/Option is error/None
-        // Result/Optional layout: { i8 tag, i64 payload } where tag 0=Ok/Some, 1=Err/None (for Result)
-        // and tag 0=None, 1=Some (for Option)
+        // Try (?) operator: propagate Err for Result, None for Option.
+        // Built-in Option/Result layout is { i32 tag, { i64 } payload }.
         let val = self.generate_expr(inner)?;
 
         // If the value is not a struct (e.g. primitive), just return it as-is (no unwrapping needed)
@@ -400,10 +480,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let struct_val = val.into_struct_value();
         let struct_type = struct_val.get_type();
 
-        // Only handle { i8, i64 } shaped structs (Result/Optional)
+        // Only handle two-field enum-like structs (Result/Optional).
         if struct_type.count_fields() != 2 {
             return Ok(struct_val.into());
         }
+        let scrutinee_ty = self.resolve_try_expr_type(inner);
 
         let fn_value = self.current_function.ok_or_else(|| {
             crate::CodegenError::LlvmError("No current function for try operator".to_string())
@@ -416,23 +497,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
             .into_int_value();
 
-        // Check if error: for Result, tag != 0 means Err; for Option, tag == 0 means None
-        // We use the Result convention (tag 0 = Ok/Some success path)
-        // Actually in this codebase: Ok tag=0, Some tag=1, None tag=0, Err tag=1
-        // So for both Result and Option, tag != 0 means error/None needs propagation
-        // Wait - Some is tag=1 and None is tag=0 for Option. That means for Option,
-        // tag==0 is the error case (None). For Result, tag!=0 (Err=1) is error.
-        // Since we can't easily distinguish at codegen level, we use Result convention:
-        // tag != 0 means error -> propagate. This is consistent with Ok=0, Err=1.
-        let is_error = self
-            .builder
-            .build_int_compare(
-                inkwell::IntPredicate::NE,
-                tag,
-                tag.get_type().const_int(0, false),
-                "try_is_err",
-            )
-            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+        let is_error = self.build_try_error_predicate(tag, scrutinee_ty.as_ref(), "try_is_err")?;
 
         let ok_block = self.context.append_basic_block(fn_value, "try_ok");
         let err_block = self.context.append_basic_block(fn_value, "try_err");
@@ -447,19 +512,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .build_return(Some(&struct_val))
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
 
-        // Ok path: extract payload (field 1)
+        // Ok path: extract canonical payload field 1, then unwrap { i64 }.
         self.builder.position_at_end(ok_block);
-        let payload = self
-            .builder
-            .build_extract_value(struct_val, 1, "try_payload")
-            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+        let payload = self.extract_option_result_payload_i64(struct_val, "try_payload")?;
 
         Ok(payload)
     }
 
     pub(super) fn generate_unwrap(&mut self, inner: &Expr) -> CodegenResult<BasicValueEnum<'ctx>> {
-        // Unwrap (!) operator - panic if Result/Option is error/None
-        // Result/Optional layout: { i8 tag, i64 payload } where tag 0=Ok, 1=Err
+        // Unwrap (!) operator - panic if Result is Err or Option is None.
         let val = self.generate_expr(inner)?;
 
         // If the value is not a struct, just return it as-is
@@ -470,10 +531,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let struct_val = val.into_struct_value();
         let struct_type = struct_val.get_type();
 
-        // Only handle { i8, i64 } shaped structs (Result/Optional)
+        // Only handle two-field enum-like structs (Result/Optional).
         if struct_type.count_fields() != 2 {
             return Ok(struct_val.into());
         }
+        let scrutinee_ty = self.resolve_try_expr_type(inner);
 
         let fn_value = self.current_function.ok_or_else(|| {
             crate::CodegenError::LlvmError("No current function for unwrap operator".to_string())
@@ -486,16 +548,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
             .into_int_value();
 
-        // Check if error (tag != 0)
-        let is_error = self
-            .builder
-            .build_int_compare(
-                inkwell::IntPredicate::NE,
-                tag,
-                tag.get_type().const_int(0, false),
-                "unwrap_is_err",
-            )
-            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+        let is_error =
+            self.build_try_error_predicate(tag, scrutinee_ty.as_ref(), "unwrap_is_err")?;
 
         let ok_block = self.context.append_basic_block(fn_value, "unwrap_ok");
         let panic_block = self.context.append_basic_block(fn_value, "unwrap_panic");
@@ -515,12 +569,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .build_unreachable()
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
 
-        // Ok path: extract payload (field 1)
+        // Ok path: extract canonical payload field 1, then unwrap { i64 }.
         self.builder.position_at_end(ok_block);
-        let payload = self
-            .builder
-            .build_extract_value(struct_val, 1, "unwrap_payload")
-            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+        let payload = self.extract_option_result_payload_i64(struct_val, "unwrap_payload")?;
 
         Ok(payload)
     }

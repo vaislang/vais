@@ -430,12 +430,24 @@ impl CodeGenerator {
         // Check if match expression is a struct/enum value (not a pointer)
         // If it's a function call returning enum, we need to store it first
         let match_type = self.infer_expr_type(match_expr);
-        let is_enum_or_struct = matches!(&match_type, ResolvedType::Named { .. });
+        let match_raw_actual_ty = self.llvm_type_of_checked(&match_val_raw);
+        let is_enum_or_struct = matches!(
+            &match_type,
+            ResolvedType::Named { .. } | ResolvedType::Optional(_) | ResolvedType::Result(_, _)
+        );
+        let emitted_aggregate_value = match_raw_actual_ty
+            .as_deref()
+            .map(|ty| ty.starts_with('%') && !ty.ends_with('*'))
+            .unwrap_or(false);
         let is_value = self.is_expr_value(match_expr);
 
         // If it's an enum/struct value from a function call, store it on the stack
-        let match_val = if is_enum_or_struct && is_value {
-            let llvm_type = self.type_to_llvm(&match_type);
+        let match_val = if (is_enum_or_struct || emitted_aggregate_value) && is_value {
+            let llvm_type = if is_enum_or_struct {
+                self.type_to_llvm(&match_type)
+            } else {
+                match_raw_actual_ty.unwrap_or_else(|| self.type_to_llvm(&match_type))
+            };
             let stack_ptr = self.next_temp(counter);
             self.emit_entry_alloca(&stack_ptr, &llvm_type);
             write_ir!(
@@ -446,6 +458,8 @@ impl CodeGenerator {
                 llvm_type,
                 stack_ptr
             );
+            self.fn_ctx
+                .record_emitted_type(&stack_ptr, &format!("{}*", llvm_type));
 
             stack_ptr
         } else {
@@ -854,9 +868,8 @@ impl CodeGenerator {
                         &arm_body_type
                     {
                         let actual = self.llvm_type_of(&body_val);
-                        let inner_llvm = self.type_to_llvm(inner);
-                        let target = format!("{}*", inner_llvm);
-                        if actual == "i64" {
+                        let target = self.type_to_llvm(&arm_body_type);
+                        if actual == "i64" && target.ends_with('*') {
                             let casted = self.next_temp(counter);
                             write_ir!(ir, "  {} = inttoptr i64 {} to {}", casted, body_val, target);
                             self.fn_ctx.record_emitted_type(&casted, &target);
@@ -1033,21 +1046,22 @@ impl CodeGenerator {
                 // arm_body_type-based "null" default produces a pointer-typed default
                 // and forces phi to pointer type — clang rejects with type mismatch
                 // (vaisdb types.ll:2412 cascade). Honor actual emitted type first.
-                let actual_override: Option<String> = phi_llvm_actual.as_deref().and_then(|actual| {
-                    if actual == "{ i8*, i64 }" {
-                        let zinit = self.next_temp(counter);
-                        write_ir!(
-                            ir,
-                            "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
-                            zinit
-                        );
-                        Some(zinit)
-                    } else if !actual.ends_with('*') && actual.starts_with('{') {
-                        Some("zeroinitializer".to_string())
-                    } else {
-                        None
-                    }
-                });
+                let actual_override: Option<String> =
+                    phi_llvm_actual.as_deref().and_then(|actual| {
+                        if actual == "{ i8*, i64 }" {
+                            let zinit = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
+                                zinit
+                            );
+                            Some(zinit)
+                        } else if !actual.ends_with('*') && actual.starts_with('{') {
+                            Some("zeroinitializer".to_string())
+                        } else {
+                            None
+                        }
+                    });
                 if let Some(v) = actual_override {
                     v
                 } else if matches!(arm_body_type, ResolvedType::Named { .. }) {
@@ -1056,7 +1070,20 @@ impl CodeGenerator {
                     arm_body_type,
                     ResolvedType::Ref(_) | ResolvedType::RefMut(_)
                 ) {
-                    "null".to_string()
+                    let ref_llvm = self.type_to_llvm(&arm_body_type);
+                    if ref_llvm.ends_with('*') {
+                        "null".to_string()
+                    } else if ref_llvm == "{ i8*, i64 }" {
+                        let zinit = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
+                            zinit
+                        );
+                        zinit
+                    } else {
+                        "0".to_string()
+                    }
                 } else if matches!(arm_body_type, ResolvedType::Str) {
                     let zinit = self.next_temp(counter);
                     write_ir!(
@@ -1104,10 +1131,20 @@ impl CodeGenerator {
                             zinit
                         }
                         ResolvedType::Named { .. } => "null".to_string(),
-                        ResolvedType::Ref(_) | ResolvedType::RefMut(_)
-                            if resolved_llvm.ends_with('*') =>
-                        {
-                            "null".to_string()
+                        ResolvedType::Ref(_) | ResolvedType::RefMut(_) => {
+                            if resolved_llvm.ends_with('*') {
+                                "null".to_string()
+                            } else if resolved_llvm == "{ i8*, i64 }" {
+                                let zinit = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
+                                    zinit
+                                );
+                                zinit
+                            } else {
+                                "0".to_string()
+                            }
                         }
                         ResolvedType::F64 => "0.0".to_string(),
                         ResolvedType::Bool => "0".to_string(),
@@ -1152,10 +1189,7 @@ impl CodeGenerator {
                     format!("{}*", llvm_ty)
                 }
                 ResolvedType::Str => "{ i8*, i64 }".to_string(),
-                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
-                    let inner_ty = self.type_to_llvm(inner);
-                    format!("{}*", inner_ty)
-                }
+                ResolvedType::Ref(_) | ResolvedType::RefMut(_) => self.type_to_llvm(&arm_body_type),
                 ResolvedType::F64 => "double".to_string(),
                 ResolvedType::F32 => "float".to_string(),
                 ResolvedType::Bool => "i64".to_string(), // Bool is zext'd to i64 in codegen

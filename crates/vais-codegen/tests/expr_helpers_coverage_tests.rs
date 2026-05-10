@@ -765,6 +765,30 @@ fn test_string_interpolation() {
     assert!(!ir.is_empty());
 }
 
+#[test]
+fn test_string_interpolation_ref_str_constant_formats_as_string() {
+    let ir = gen_ok(
+        r#"
+        const VERSION: &str = "0.1.0"
+        fn test() -> i64 {
+            println("VaisDB v{VERSION}")
+            return 0
+        }
+    "#,
+    );
+    assert!(ir.contains("VaisDB v%s"), "expected %s format:\n{}", ir);
+    assert!(
+        ir.contains("extractvalue { i8*, i64 }"),
+        "expected fat string pointer extraction:\n{}",
+        ir
+    );
+    assert!(
+        !ir.contains("VaisDB v%ld"),
+        "ref-str interpolation must not use integer formatting:\n{}",
+        ir
+    );
+}
+
 // ============================================================================
 // expr_helpers.rs — generate_binary_expr: string operations
 // ============================================================================

@@ -176,6 +176,11 @@ impl Vec<T> {
         I self.len == 0 { 1 } else { 0 }
     }
 
+    # Raw pointer to the contiguous element storage.
+    fn as_ptr(&self) -> i64 {
+        self.data
+    }
+
     # Get element at index
     fn get(&self, index: i64) -> T {
         I index < 0 {
