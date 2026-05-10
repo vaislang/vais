@@ -32,7 +32,9 @@ These modules pass `vaisc build <file>` and are safe to import via `U std/<name>
 | `string` | String helpers | str_len, str_concat |
 | ... | ...others... | see individual .vais files |
 
-> For the exhaustive list of **all 82 files** and their current status, run:
+> The aggregate integrity gate already runs this exact standalone codegen
+> check for all **82 files** (`INTEGRITY std_files pass=82 fail=0 total=82`).
+> To inspect the per-file status manually, run:
 > ```bash
 > for f in std/*.vais; do
 >   ./target/release/vaisc build "$f" --emit-ir -o /tmp/__chk.ll --force-rebuild 2>&1 \
@@ -50,4 +52,4 @@ These modules pass `vaisc build <file>` and are safe to import via `U std/<name>
 
 ## Versioning
 
-The stdlib tracks the compiler version — **no independent versioning yet**. Phase 5.25 will add a 100% gate (every std file must build). Phase 5.26 adds per-module API pages.
+The stdlib tracks the compiler version — **no independent versioning yet**. The 100% standalone codegen gate for every std file is current in `compiler/scripts/check-integrity.sh`; Phase 5.26 adds per-module API pages.

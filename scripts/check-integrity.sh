@@ -5,7 +5,7 @@
 #   ./scripts/check-integrity.sh
 #
 # Environment overrides (defaults shown; baseline locked 2026-05-03):
-#   INTEGRITY_STD_MIN=82                   minimum std_files pass count
+#   INTEGRITY_STD_MIN=82                   minimum std/*.vais standalone codegen pass count
 #   INTEGRITY_VAISDB_MIN=261               minimum vaisdb_files pass count
 #   INTEGRITY_HTTP_CLIENT_RUNTIME_MIN=2    minimum http_client runtime smoke
 #   INTEGRITY_TLS_RUNTIME_MIN=2            minimum std/tls runtime smoke
