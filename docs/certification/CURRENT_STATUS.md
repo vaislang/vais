@@ -28,7 +28,7 @@ current Core contract and promoted smoke gates pass with the evidence below.
 | Std package codegen | `82/82` |
 | VaisDB package codegen | `261/261` |
 | Phase 158 backend smoke | `18/18` |
-| std/http_client runtime smoke | `1/1` |
+| std/http_client runtime smoke | `3/3` |
 | VaisDB runtime smoke | `28/28` |
 | VaisDB runtime lock stability | WAL/LSN/buffer/page/checkpoint mutex release paths covered by current `28/28` smoke |
 | vais-server runtime smoke | `13/13` |
@@ -56,7 +56,7 @@ single source for current pass counts. CI fails on drift.
 | Unsafe documentation audit | `UNSAFE AUDIT OK: vais-codegen undocumented_unsafe_blocks=0` |
 | Ecosystem package codegen | `std=82/82`, `vaisdb=261/261` |
 | Backend smoke | `phase158=18/18` |
-| std/http_client runtime | `smoke=2/2` |
+| std/http_client runtime | `smoke=3/3` |
 | std/tls runtime | `smoke=2/2` |
 | VaisDB runtime | `smoke=34/34` |
 | vais-server runtime | `smoke=13/13` |
@@ -100,8 +100,9 @@ The following claims are valid:
   paths that previously exposed mutex wait hangs.
 - Current std/http_client runtime smoke compiles, links, and runs a real
   loopback plain HTTP `POST /ssr/render` request, verifies request
-  serialization, parses HTTP status/body through the C runtime, and exposes
-  response body text with the current `{ptr,len}` string ABI.
+  serialization, parses HTTP status/body through the C runtime, exposes
+  response body text with the current `{ptr,len}` string ABI, and follows a
+  loopback absolute `302 Location: http://127.0.0.1:<port>/final` redirect.
 - Current vais-server compiled SSR forwarding smoke compiles, links, and runs
   `forward_ssr_render()` through `std/http_client` against a real loopback
   upstream SSR service, preserving upstream status, content-type, and body in
@@ -257,8 +258,9 @@ The following claims are not valid yet:
   runtime behavior."
 - "Automatic RAII/destructor-based unlock lowering is certified for every
   synchronization primitive and every package path."
-- "std/http_client HTTPS/TLS, redirect semantics, keep-alive pooling, external
-  network behavior, or production network reliability are certified."
+- "std/http_client relative redirects, HTTPS redirects, keep-alive pooling,
+  broad external network behavior, or production network reliability are
+  certified."
 - "Compiled vais-server SSR forwarding real delay sleep, probabilistic jitter,
   HTTPS/TLS, nested props/full JSON escaping, external network stability, or
   deployed Node SSR bridge operation are certified."

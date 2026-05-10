@@ -11,8 +11,9 @@
 # - Timeout support via setsockopt
 # - Keep-alive connection reuse
 # - Connection pooling basics
-# - Plain HTTP runtime path is promoted; HTTPS/TLS returns CLIENT_ERR_TLS_INIT
-#   until a separate TLS runtime gate promotes that surface.
+# - Plain HTTP runtime path and absolute plain-HTTP redirects are promoted.
+# - HTTPS/TLS path is enabled; broad HTTPS redirect and external network
+#   reliability remain certification work.
 
 # ============================================
 # Constants
