@@ -271,7 +271,7 @@ This generates WIT definitions for all `#[wit_export]` annotated items.
 | Standardization | W3C proposal | Rust ecosystem |
 | Browser Support | Future | Current |
 
-wasm-bindgen is production-ready for Rust+JS. Component Model is the future standard for all languages.
+wasm-bindgen is a mature Rust+JS tool. Component Model is the future standard for all languages.
 
 ## Example: Multi-Language App
 

@@ -520,7 +520,7 @@
       </h1>
       <p class="eco-hero-subtitle">
         하나의 언어로 프론트엔드, 백엔드, 데이터베이스를 모두.
-        컴파일 타임 반응성부터 RAG-native 하이브리드 DB까지 — 모두 Vais 컴파일러 위에서 동작합니다.
+        현재 공개 기준은 제품 완성이 아니라 명시된 package/runtime/full-build gate로 검증된 범위입니다.
       </p>
       <div class="eco-hero-actions">
         <a href="https://docs.vaislang.dev/ecosystem/" class="btn btn-primary">Get Started</a>
@@ -533,7 +533,7 @@
 
         <div class="arch-layer arch-layer-browser">
           <span class="arch-label">[ Browser ]</span>
-          <span class="arch-desc">VaisX (vais-web) — 컴파일 타임 반응성, SSR/SSG, &lt; 3KB 런타임</span>
+          <span class="arch-desc">VaisX (vais-web) — runtime 61/77, unit 390/390, full-build 24/24</span>
         </div>
 
         <div class="arch-arrow">↕  HTTP / WebSocket  ↕</div>
@@ -543,7 +543,7 @@
           <span class="arch-desc">vais-server — Express/Axum 스타일 라우팅, 미들웨어, 네이티브 vaisdb 통합</span>
         </div>
 
-        <div class="arch-arrow">↕  native FFI (zero-copy)  ↕</div>
+        <div class="arch-arrow">↕  promoted local integration  ↕</div>
 
         <div class="arch-layer arch-layer-db">
           <span class="arch-label">[ Data    ]</span>
@@ -554,7 +554,7 @@
 
         <div class="arch-layer arch-layer-compiler">
           <span class="arch-label">[ Compile ]</span>
-          <span class="arch-desc">Vais compiler — LLVM IR / WASM / JS ESM 공통 백엔드, 단일 빌드 파이프라인</span>
+          <span class="arch-desc">Vais compiler — certified Core native path; JS/WASM targets are experimental unless gated</span>
         </div>
       </div>
     </div>
@@ -566,7 +566,7 @@
       <p class="section-eyebrow">세 가지 핵심 제품</p>
       <h2 class="eco-section-title">One Language, <span class="gradient-text">Three Pillars</span></h2>
       <p class="eco-section-subtitle">
-        각 레이어는 독립적으로 사용하거나, Vais 생태계 전체와 함께 결합할 수 있습니다.
+        각 레이어는 독립적으로 사용할 수 있는 workbench이며, 아래 항목은 현재 검증된 gate 범위를 함께 봐야 합니다.
       </p>
 
       <div class="product-cards">
@@ -574,17 +574,17 @@
         <div class="product-card product-card-vaisx">
           <div class="product-icon product-icon-vaisx">VX</div>
           <div class="product-name">VaisX</div>
-          <div class="product-tagline">vais-web · 풀스택 웹 프레임워크</div>
+          <div class="product-tagline">vais-web · 웹 프레임워크 workbench</div>
           <p class="product-desc">
-            런타임 Virtual DOM 없이 컴파일 타임에 반응성을 해결하는 웹 프레임워크.
-            Vais 컴파일러가 직접 최적화된 DOM 업데이트 코드를 생성합니다.
+            컴파일 타임 반응성과 DOM 업데이트 생성을 목표로 하는 웹 프레임워크.
+            현재 공개 claim은 runtime 61/77, unit 390/390, full-build 24/24 gate에 묶입니다.
           </p>
           <ul class="product-features">
-            <li>컴파일 타임 반응성 — 런타임 diffing 없음</li>
-            <li>&lt; 3KB 런타임 번들 (gzip)</li>
+            <li>컴파일 타임 반응성 구현 표면</li>
+            <li>런타임 크기 claim은 별도 size gate 필요</li>
             <li>파일 기반 라우팅 + SSR / SSG</li>
-            <li>Vais 타입 시스템과 완전 통합</li>
-            <li>WASM 빌드 지원</li>
+            <li>Vais 타입 시스템 연동 workbench</li>
+            <li>WASM 빌드는 experimental target</li>
           </ul>
           <a href="https://docs.vaislang.dev/ecosystem/vaisx/" class="product-link">
             문서 보기 →
@@ -597,15 +597,15 @@
           <div class="product-name">VaisDB</div>
           <div class="product-tagline">RAG-native 하이브리드 데이터베이스</div>
           <p class="product-desc">
-            벡터 검색, 그래프 쿼리, SQL, 전문 검색(FTS)을 단일 엔진에 통합한
-            임베딩 가능한 데이터베이스. AI 애플리케이션에 최적화되어 있습니다.
+            벡터 검색, 그래프 쿼리, SQL, 전문 검색(FTS)을 단일 엔진으로 묶는
+            데이터베이스 workbench. 현재 gate는 package 261/261, runtime 34/34입니다.
           </p>
           <ul class="product-features">
-            <li>Vector + Graph + SQL + FTS 하이브리드 쿼리</li>
-            <li>RAG-native — 임베딩 파이프라인 내장</li>
+            <li>Vector + Graph + SQL + FTS 구현 표면</li>
+            <li>RAG-native 설계 목표와 bounded fixtures</li>
             <li>임베딩 가능 (프로세스 내 실행)</li>
             <li>vais-server 네이티브 통합</li>
-            <li>WebAssembly 빌드 지원</li>
+            <li>WebAssembly 빌드는 experimental target</li>
           </ul>
           <a href="https://docs.vaislang.dev/ecosystem/vaisdb/" class="product-link">
             문서 보기 →
@@ -616,17 +616,17 @@
         <div class="product-card product-card-server">
           <div class="product-icon product-icon-server">SV</div>
           <div class="product-name">vais-server</div>
-          <div class="product-tagline">네이티브 백엔드 프레임워크</div>
+          <div class="product-tagline">백엔드 프레임워크 workbench</div>
           <p class="product-desc">
-            Express/Axum 스타일의 라우팅 API를 제공하는 고성능 HTTP 서버.
-            vaisdb와 zero-copy FFI로 직접 연결되며 Vais 타입 안전성을 서버까지 확장합니다.
+            Express/Axum 스타일 라우팅 API를 제공하는 HTTP 서버 workbench.
+            현재 gate는 server runtime 15/15이며, broad protocol/auth/deploy claim은 별도 gate가 필요합니다.
           </p>
           <ul class="product-features">
             <li>Express / Axum 스타일 선언형 라우팅</li>
-            <li>네이티브 vaisdb 통합 (zero-copy)</li>
+            <li>프로모션된 vaisdb local integration</li>
             <li>미들웨어 체인, 비동기 핸들러</li>
             <li>타입 안전 요청/응답 직렬화</li>
-            <li>WebSocket 지원</li>
+            <li>WebSocket 표면은 dedicated gate 필요</li>
           </ul>
           <a href="https://docs.vaislang.dev/ecosystem/vais-server/" class="product-link">
             문서 보기 →

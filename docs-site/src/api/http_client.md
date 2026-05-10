@@ -1,8 +1,13 @@
 # HTTP Client API Reference
 
-> Full-featured HTTP client library with request building, response handling, connection pooling, and TLS support
+> HTTP client implementation surface with promoted local smoke coverage for the
+> named gates below
 
 > **Implementation:** Requires C runtime (`http_client_runtime.c`). TLS support requires linking OpenSSL (`-lssl -lcrypto`).
+>
+> **Certified gate:** `std/http_client` runtime smoke `15/15`, TLS runtime smoke
+> `2/2`. Broad external network reliability, redirect policy, pooling behavior,
+> and deployment coverage require dedicated gates.
 
 ## Import
 
@@ -12,7 +17,7 @@ U std/http_client
 
 ## Overview
 
-The HTTP Client module provides a complete HTTP/HTTPS client implementation with support for:
+The HTTP Client module provides an HTTP/HTTPS client implementation surface with support for:
 - All standard HTTP methods (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS)
 - URL parsing and validation
 - Header management (set, add, remove, get)

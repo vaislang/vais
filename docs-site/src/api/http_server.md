@@ -1,6 +1,6 @@
 # HTTP Server API Reference
 
-> Advanced HTTP server framework with routing, middleware, and static files
+> HTTP server framework implementation surface with routing, middleware, and static files
 
 > **Implementation:** Requires C runtime (`http_server_runtime.c`). For TLS support, link OpenSSL (`-lssl -lcrypto`).
 
@@ -12,7 +12,8 @@ U std/http_server
 
 ## Overview
 
-The HTTP server module provides a full-featured web framework built on top of `std/http` and `std/net`. It includes:
+The HTTP server module provides a web framework implementation surface built on
+top of `std/http` and `std/net`. It includes:
 
 - Path parameter matching (e.g., `/users/:id`)
 - Query string parsing

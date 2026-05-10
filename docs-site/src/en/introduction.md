@@ -2,6 +2,11 @@
 
 **Vais** (Vibe AI Language for Systems) is an AI-optimized systems programming language designed for maximum token efficiency and developer productivity.
 
+> **Current public status:** Vais is currently presented as a certified Core
+> compiler plus named promoted runtime gates, not a product-complete v1.0
+> release. See [`PUBLIC_STATUS.md`](https://github.com/vaislang/vais/blob/main/PUBLIC_STATUS.md)
+> in the repository for the gate-backed claim boundary.
+
 ## Key Features
 
 ### Token-Efficient Syntax
@@ -13,18 +18,22 @@
 
 ### Modern Type System
 
-- **Full Type Inference**: Minimal type annotations with complete constraint solving
-- **Generics**: Generic functions, structs, and enums with type parameters
+- **Type Inference**: Minimal annotations on the certified Core surface, with
+  broader inference work under active hardening
+- **Generics**: Generic functions, structs, and enums where covered by named
+  fixtures; broader specialization semantics remain gate-bound
 - **Traits**: Interface-based polymorphism with trait bounds
 - **Memory Safety**: Borrow checker with Non-Lexical Lifetimes (NLL) and `--strict-borrow` mode
 - **Slice Types**: `&[T]` and `&mut [T]` with fat pointer implementation
 
 ### Performance & Compilation
 
-- **LLVM Backend**: Native performance with LLVM 17 code generation
-- **Parallel Compilation**: DAG-based parallel type-check and codegen (2-4x speedup)
-- **774K lines/second** compilation speed (50K LOC in 64.6ms)
-- **Multiple Targets**: Native binaries, JavaScript (ESM), WebAssembly (WASM)
+- **LLVM Backend**: Promoted native codegen path with LLVM 17
+- **Parallel Compilation**: DAG-based type-check and codegen workbench
+- **Benchmarked compilation**: performance numbers are useful regression context
+  and should be read with the corresponding benchmark date
+- **Targets**: Native is the promoted path; JavaScript and WebAssembly remain
+  experimental unless a page names a gate
 
 ### Advanced Features
 
@@ -39,8 +48,10 @@
 Vais is built from the ground up to excel in AI-assisted development:
 
 - **Token Efficiency**: Single-character keywords minimize token usage in LLM context windows
-- **Self-Hosting**: Self-hosting compiler (bootstrap achieved) — v0.9.0, 51,190 LOC, 58 .vais files
-- **Production-Ready**: 12,000+ tests across all crates, 2,592 E2E tests
+- **Self-Hosting Workbench**: 50,000+ lines of Vais compiler sources used for
+  bootstrap and conformance work
+- **Gate-backed status**: Current guarantees are the certified Core and promoted
+  runtime gates listed in `PUBLIC_STATUS.md`
 - **Rich Ecosystem**: 74 standard library modules, 9 official packages
 - **Fast Iteration**: JIT compiler, REPL, hot reloading, incremental compilation
 
@@ -83,14 +94,15 @@ Vais uses a multi-stage compilation pipeline:
 Outputs:
   → LLVM IR (.ll) → clang → native binary
   → JavaScript ESM (.mjs)
-  → WebAssembly (.wasm)
+  → WebAssembly (.wasm, experimental unless gated)
 ```
 
 **Key Stages:**
 - **Lexer**: Tokenizes source code using logos library (~2M tokens/sec)
 - **Parser**: Builds AST with recursive descent parser (~800K nodes/sec)
 - **Type Checker**: Performs type inference and constraint solving (~400K types/sec)
-- **Codegen**: Generates LLVM IR, JavaScript, or WASM (~300K IR lines/sec)
+- **Codegen**: Generates LLVM IR on the promoted native path; JavaScript and
+  WASM paths are experimental unless a page names a gate
 
 ## Quick Examples
 
@@ -173,7 +185,9 @@ F compute() -> Result<i64, str> {
 | Code Generator | ~3.0ms/1K LOC | ~300K IR lines/sec |
 | **Full Pipeline** | **~1.25ms/1K LOC** | **~800K lines/sec** |
 
-**Self-Hosting:** Self-hosting compiler (bootstrap achieved) — v0.9.0, 51,190 LOC, 58 .vais files compile to native with full test coverage.
+**Self-Hosting:** The repository contains 50,000+ lines of Vais compiler
+sources used for bootstrap and conformance work. Current correctness is judged
+by the certified Core gate and promoted runtime fixtures.
 
 ### Runtime Performance
 
@@ -190,7 +204,8 @@ Fibonacci(35) benchmark (Apple M-series ARM64):
 
 1. **[Install Vais](./getting-started/installation.md)** - Download pre-built binaries or build from source
 2. **[Quick Start](./getting-started/quick-start.md)** - Write your first program in 5 minutes
-3. **[Tutorial](./getting-started/tutorial.md)** - Complete guide from basics to advanced features
+3. **[Tutorial](./getting-started/tutorial.md)** - Guided path from basics to
+   advanced workbench topics
 4. **[Language Specification](./language/language-spec.md)** - Full syntax and semantics reference
 
 ## Ecosystem
@@ -220,8 +235,8 @@ Fibonacci(35) benchmark (Apple M-series ARM64):
 ## Community & Support
 
 - **GitHub**: [vaislang/vais](https://github.com/vaislang/vais)
-- **Documentation**: [vais.dev/docs](https://vais.dev/docs/)
-- **Playground**: [vais.dev/playground](https://vais.dev/playground/)
+- **Documentation**: [vaislang.dev/docs](https://vaislang.dev/docs/)
+- **Playground**: [vaislang.dev/playground](https://vaislang.dev/playground/)
 - **Issues**: [Report bugs and request features](https://github.com/vaislang/vais/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/vaislang/vais/discussions)
 
