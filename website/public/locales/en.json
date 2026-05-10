@@ -76,7 +76,7 @@
   },
   "playground": {
     "title": "Try Vais Now",
-    "subtitle": "Try Vais syntax and examples in the browser. Server-backed compilation is used when available; browser-only JS/WASM paths are experimental.",
+    "subtitle": "Try Vais syntax and examples in the browser. Real compilation uses the playground API; browser-only compile/execute remains experimental.",
     "launch": "Launch Interactive Playground",
     "loadHere": "Load Playground Here",
     "openTab": "Open in New Tab"

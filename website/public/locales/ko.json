@@ -76,7 +76,7 @@
   },
   "playground": {
     "title": "지금 Vais를 시도해보세요",
-    "subtitle": "브라우저에서 Vais syntax와 examples를 실험할 수 있습니다. Server-backed compilation은 API가 있을 때 사용되며 JS/WASM browser path는 experimental입니다.",
+    "subtitle": "브라우저에서 Vais syntax와 examples를 실험할 수 있습니다. 실제 compilation은 playground API를 사용하며, browser-only compile/execute는 아직 experimental입니다.",
     "launch": "대화형 플레이그라운드 시작",
     "loadHere": "여기에 플레이그라운드 로드",
     "openTab": "새 탭에서 열기"

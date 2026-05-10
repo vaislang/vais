@@ -76,7 +76,7 @@
   },
   "playground": {
     "title": "今すぐVaisを試す",
-    "subtitle": "ブラウザで Vais syntax と examples を試せます。Server-backed compilation は API がある場合に使い、JS/WASM browser path は experimental です。",
+    "subtitle": "ブラウザで Vais syntax と examples を試せます。実際の compilation は playground API を使い、browser-only compile/execute はまだ experimental です。",
     "launch": "インタラクティブプレイグラウンドを起動",
     "loadHere": "ここにプレイグラウンドを読み込む",
     "openTab": "新しいタブで開く"
