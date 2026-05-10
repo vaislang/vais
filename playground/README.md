@@ -122,6 +122,16 @@ does not include browser-only compilation or execution.
 
 ## Development
 
+### Local Gates
+
+```bash
+npm run test:contract
+npm run build
+```
+
+`test:contract` verifies the public mode boundary: Server-WASM is API-compiled,
+and Preview is only a syntax/demo fallback.
+
 ### Adding New Examples
 
 Edit `src/examples.js`:

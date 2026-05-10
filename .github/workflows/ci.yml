@@ -48,6 +48,33 @@ jobs:
       - name: Check public claims
         run: node scripts/check-public-claims.mjs
 
+  # ---------- Playground web gate ----------
+  playground-web:
+    name: Playground Web Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: playground/package-lock.json
+
+      - name: Install playground dependencies
+        working-directory: playground
+        run: npm ci
+
+      - name: Check playground mode contract
+        working-directory: playground
+        run: npm run test:contract
+
+      - name: Build playground
+        working-directory: playground
+        run: npm run build
+
   # ---------- Documentation check ----------
   docs:
     name: Documentation
