@@ -333,6 +333,72 @@ HcStr __hc_str_from_buffer(long ptr, long len) {
     return out;
 }
 
+const char* __hc_json_escape_string(const char* input) {
+    if (input == NULL) {
+        return "";
+    }
+
+    size_t len = strlen(input);
+    if (len > (((size_t)-1) - 1) / 6) {
+        return "";
+    }
+    size_t cap = len * 6 + 1;
+    char* out = (char*)malloc(cap);
+    if (out == NULL) {
+        return "";
+    }
+
+    size_t j = 0;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)input[i];
+        switch (c) {
+            case '"':
+                out[j++] = '\\';
+                out[j++] = '"';
+                break;
+            case '\\':
+                out[j++] = '\\';
+                out[j++] = '\\';
+                break;
+            case '\b':
+                out[j++] = '\\';
+                out[j++] = 'b';
+                break;
+            case '\f':
+                out[j++] = '\\';
+                out[j++] = 'f';
+                break;
+            case '\n':
+                out[j++] = '\\';
+                out[j++] = 'n';
+                break;
+            case '\r':
+                out[j++] = '\\';
+                out[j++] = 'r';
+                break;
+            case '\t':
+                out[j++] = '\\';
+                out[j++] = 't';
+                break;
+            default:
+                if (c < 0x20) {
+                    static const char hex[] = "0123456789abcdef";
+                    out[j++] = '\\';
+                    out[j++] = 'u';
+                    out[j++] = '0';
+                    out[j++] = '0';
+                    out[j++] = hex[(c >> 4) & 0x0f];
+                    out[j++] = hex[c & 0x0f];
+                } else {
+                    out[j++] = (char)c;
+                }
+                break;
+        }
+    }
+    out[j] = '\0';
+    return out;
+}
+
 typedef struct {
     long status;
     HcStr status_text;

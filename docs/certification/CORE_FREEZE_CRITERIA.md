@@ -75,7 +75,7 @@ markers is generated from `GATE_MANIFEST.toml` by
 | std/http_client runtime | `smoke=15/15` |
 | std/tls runtime | `smoke=2/2` |
 | VaisDB runtime | `smoke=34/34` |
-| vais-server runtime | `smoke=14/14` |
+| vais-server runtime | `smoke=15/15` |
 | vais-web runtime | `smoke=61/77` |
 | vais-web unit | `tests=390/390` |
 | vais-web packages | `tests=3272/3272` |

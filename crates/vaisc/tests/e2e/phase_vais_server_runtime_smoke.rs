@@ -675,6 +675,108 @@ fn main() -> i64 {
     );
 }
 
+#[test]
+fn e2e_vais_server_14_ssr_json_escape_runtime_smoke() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR escape upstream listener");
+    listener
+        .set_nonblocking(true)
+        .expect("set SSR escape upstream listener nonblocking");
+    let port = listener
+        .local_addr()
+        .expect("read SSR escape upstream address")
+        .port();
+
+    let source = r#"
+use src/api/ssr
+use src/http/header
+
+fn smoke_contains(haystack: str, needle: str) -> i64 {
+    smoke_contains_rec(haystack, needle, 0)
+}
+
+fn smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
+    I needle.len() == 0 { return 1 }
+    I i >= haystack.len() { return 0 }
+    I smoke_match_prefix(haystack, needle, i, 0) == 1 { return 1 }
+    smoke_contains_rec(haystack, needle, i + 1)
+}
+
+fn smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
+    nc := needle.char_at(ni)
+    I nc == 0 { return 1 }
+    hc := haystack.char_at(hi)
+    I hc == 0 { return 0 }
+    I hc != nc { return 0 }
+    smoke_match_prefix(haystack, needle, hi + 1, ni + 1)
+}
+
+fn main() -> i64 {
+    route := "/quoted\"path\\tail"
+    props := "state \"Ada\" \\ tail"
+
+    local := do_hydrate(route, props)
+    I local.status.code != 200 {
+        println("FAIL ssr escape local status")
+        return 1
+    }
+    I local.headers.get(CONTENT_TYPE) != "application/json" {
+        println("FAIL ssr escape local content type")
+        return 2
+    }
+    println(local.body)
+
+    response := forward_ssr_render("http://127.0.0.1:__PORT__", route, props)
+    I response.status.code != 202 {
+        println("FAIL ssr escape forwarding status")
+        return 10
+    }
+    I response.headers.get(CONTENT_TYPE) != "application/json" {
+        println("FAIL ssr escape forwarding content type")
+        return 11
+    }
+    I smoke_contains(response.body, "from-node") != 1 {
+        println("FAIL ssr escape forwarding body")
+        return 12
+    }
+
+    println("VAIS_SERVER_SSR_JSON_ESCAPE_RUNTIME_OK")
+    0
+}
+"#
+    .replace("__PORT__", &port.to_string());
+
+    let (run, request_text) = run_vais_server_generated_loopback_smoke(
+        "ssr_json_escape_runtime_smoke.vais",
+        &source,
+        listener,
+    );
+
+    assert_eq!(
+        run.status.code().unwrap_or(-1),
+        0,
+        "vais-server SSR JSON escape smoke exited unexpectedly.\nstdout:\n{}\nstderr:\n{}\nrequest:\n{}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr),
+        request_text
+    );
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    assert!(
+        stdout.contains(r#""data": "state \"Ada\" \\ tail""#),
+        "SSR hydrate response did not JSON-escape string props.\nstdout:\n{}",
+        stdout
+    );
+    assert!(
+        stdout.contains(r#""route": "/quoted\"path\\tail""#),
+        "SSR hydrate response did not JSON-escape route.\nstdout:\n{}",
+        stdout
+    );
+    assert!(
+        request_text.contains(r#"{"route":"/quoted\"path\\tail","props":"state \"Ada\" \\ tail"}"#),
+        "SSR forwarding request did not JSON-escape string payload fields:\n{}",
+        request_text
+    );
+}
+
 fn run_vais_server_generated_retry_budget_smoke(
     fixture: &str,
     source: &str,
