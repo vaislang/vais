@@ -618,11 +618,10 @@ impl CodeGenerator {
     /// Collect unique generic parameter names from a ResolvedType, preserving first-appearance order.
     fn collect_generic_names(ty: &ResolvedType, names: &mut Vec<String>) {
         match ty {
-            ResolvedType::Generic(name) => {
-                if !names.contains(name) {
-                    names.push(name.clone());
-                }
+            ResolvedType::Generic(name) if !names.contains(name) => {
+                names.push(name.clone());
             }
+            ResolvedType::Generic(_) => {}
             ResolvedType::Named { generics, .. } => {
                 for g in generics {
                     Self::collect_generic_names(g, names);

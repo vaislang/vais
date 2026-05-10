@@ -185,14 +185,13 @@ impl CodeGenerator {
         inferred: &mut HashMap<String, ResolvedType>,
     ) {
         match param_type {
-            ResolvedType::Generic(name) => {
+            ResolvedType::Generic(name) if type_params.contains(&name) => {
                 // Direct generic type parameter (e.g., T)
-                if type_params.contains(&name) {
-                    inferred
-                        .entry(name.clone())
-                        .or_insert_with(|| arg_type.clone());
-                }
+                inferred
+                    .entry(name.clone())
+                    .or_insert_with(|| arg_type.clone());
             }
+            ResolvedType::Generic(_) => {}
             ResolvedType::Named { name, generics } => {
                 // Check if this is a type parameter name
                 if type_params.contains(&name) {

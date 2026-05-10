@@ -44,7 +44,11 @@ impl CodeGenerator {
         let (future_ptr_raw, future_ir) = self.generate_expr(inner, counter)?;
         let mut ir = future_ir;
         // void results (from non-async functions) cannot be used as i64 pointer args
-        let future_ptr = if future_ptr_raw == "void" { "0".to_string() } else { future_ptr_raw };
+        let future_ptr = if future_ptr_raw == "void" {
+            "0".to_string()
+        } else {
+            future_ptr_raw
+        };
 
         // Determine the poll function to call:
         // 1. Try static AST analysis (direct call/spawn expressions)
@@ -85,7 +89,8 @@ impl CodeGenerator {
             // Extract the async function name from the poll function name
             let async_fn_name = poll_func.trim_end_matches("__poll");
             // Look up the function's return type in the registry
-            let ret_ty = self.types
+            let ret_ty = self
+                .types
                 .functions
                 .get(async_fn_name)
                 .map(|info| self.type_to_llvm(&info.signature.ret))
@@ -97,7 +102,11 @@ impl CodeGenerator {
                         .unwrap_or_else(|| "i64".to_string())
                 });
             // void cannot be a struct field — use i64 placeholder for void async returns
-            if ret_ty == "void" { "i64".to_string() } else { ret_ty }
+            if ret_ty == "void" {
+                "i64".to_string()
+            } else {
+                ret_ty
+            }
         };
         let poll_ret_ty = format!("{{ i64, {} }}", inner_ret_llvm);
 
@@ -109,15 +118,16 @@ impl CodeGenerator {
         // Cross-module async calls need an extern declaration for the __poll function.
         // Skip only if the base async function is a local async definition (has is_async=true).
         let base_async_name = poll_func.trim_end_matches("__poll");
-        let is_local_async_fn = self.types.functions.get(base_async_name)
+        let is_local_async_fn = self
+            .types
+            .functions
+            .get(base_async_name)
             .map(|info| info.signature.is_async)
             .unwrap_or(false);
-        if !is_local_async_fn
-            && !self.types.functions.contains_key(&poll_func)
-        {
-            self.fn_ctx.async_poll_declares.insert(
-                format!("declare {} @{}(i64)", poll_ret_ty, poll_func)
-            );
+        if !is_local_async_fn && !self.types.functions.contains_key(&poll_func) {
+            self.fn_ctx
+                .async_poll_declares
+                .insert(format!("declare {} @{}(i64)", poll_ret_ty, poll_func));
         }
 
         write_ir!(ir, "  br label %{}\n", poll_start);

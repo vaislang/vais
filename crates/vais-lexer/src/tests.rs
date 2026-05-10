@@ -869,7 +869,10 @@ fn test_utf8_string_emoji() {
 fn test_utf8_string_mixed_ascii_korean() {
     let tokens = tokenize(r#""Hello 안녕 World""#).unwrap();
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].token, Token::String("Hello 안녕 World".to_string()));
+    assert_eq!(
+        tokens[0].token,
+        Token::String("Hello 안녕 World".to_string())
+    );
 }
 
 #[test]
@@ -887,7 +890,12 @@ fn test_vaisx_html_comment_korean() {
     let source = "<!-- 인증 페이지: 레이아웃 없이 전체 화면 -->\n";
     let tokens = tokenize(source).unwrap();
     // HTML comment is skipped entirely → zero tokens
-    assert_eq!(tokens.len(), 0, "HTML comment should be skipped, got: {:?}", tokens);
+    assert_eq!(
+        tokens.len(),
+        0,
+        "HTML comment should be skipped, got: {:?}",
+        tokens
+    );
 }
 
 #[test]
@@ -934,7 +942,9 @@ fn test_vaisx_doctype_skipped() {
     let source = "<!DOCTYPE html>\n<template></template>";
     let tokens = tokenize(source).unwrap();
     // doctype skipped; remaining tokens are <, template, >, <, /, template, >
-    assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "template")));
+    assert!(tokens
+        .iter()
+        .any(|t| matches!(&t.token, Token::Ident(s) if s == "template")));
 }
 
 #[test]
@@ -1003,8 +1013,14 @@ fn test_lifetime_a_not_broken_by_string_rule() {
     // Input: `F f<'a>()` — angle brackets and `<` ensure lifetime context.
     let tokens = tokenize("F f<'a>()").unwrap();
     // Find the lifetime token — there should be exactly one `Lifetime("a")`.
-    let has_lifetime = tokens.iter().any(|t| t.token == Token::Lifetime("a".to_string()));
-    assert!(has_lifetime, "Lifetime 'a must still tokenize, got: {:?}", tokens);
+    let has_lifetime = tokens
+        .iter()
+        .any(|t| t.token == Token::Lifetime("a".to_string()));
+    assert!(
+        has_lifetime,
+        "Lifetime 'a must still tokenize, got: {:?}",
+        tokens
+    );
 }
 
 #[test]
@@ -1040,8 +1056,12 @@ fn test_single_quote_es_module_import() {
     // `import Sidebar from './components/sidebar.vaisx'` —
     // VaisX template ES module import statement (layout.vaisx line 34, position 1041).
     let tokens = tokenize("import Sidebar from './components/sidebar.vaisx'").unwrap();
-    let has_path = tokens.iter().any(|t| {
-        matches!(&t.token, Token::String(s) if s == "./components/sidebar.vaisx")
-    });
-    assert!(has_path, "ES module import path must tokenize as String, got: {:?}", tokens);
+    let has_path = tokens
+        .iter()
+        .any(|t| matches!(&t.token, Token::String(s) if s == "./components/sidebar.vaisx"));
+    assert!(
+        has_path,
+        "ES module import path must tokenize as String, got: {:?}",
+        tokens
+    );
 }

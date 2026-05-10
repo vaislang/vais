@@ -23,12 +23,10 @@ impl CodeGenerator {
             // Check if the struct has generic field types and we have active substitutions.
             // If so, try to find the specialized struct (e.g., Vec$f32 instead of Vec) so
             // that alloca/GEP use the correct specialized layout.
-            let has_generic_fields = struct_info.fields.iter().any(|(_, ty)| {
-                matches!(
-                    ty,
-                    ResolvedType::Generic(_) | ResolvedType::Var(_)
-                )
-            });
+            let has_generic_fields = struct_info
+                .fields
+                .iter()
+                .any(|(_, ty)| matches!(ty, ResolvedType::Generic(_) | ResolvedType::Var(_)));
             let (effective_type_name, effective_fields) = if has_generic_fields {
                 if !self.generics.substitutions.is_empty() {
                     // Case 1: Inside a specialized function — use substitutions to resolve
@@ -54,8 +52,10 @@ impl CodeGenerator {
                                 .fields
                                 .iter()
                                 .map(|(n, ty)| {
-                                    let concrete =
-                                        vais_types::substitute_type(ty, &self.generics.substitutions);
+                                    let concrete = vais_types::substitute_type(
+                                        ty,
+                                        &self.generics.substitutions,
+                                    );
                                     (n.clone(), concrete)
                                 })
                                 .collect();
@@ -80,10 +80,7 @@ impl CodeGenerator {
                         Some(ResolvedType::Named { generics, .. })
                             if !generics.is_empty()
                                 && generics.iter().all(|g| {
-                                    !matches!(
-                                        g,
-                                        ResolvedType::Generic(_) | ResolvedType::Var(_)
-                                    )
+                                    !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_))
                                 }) =>
                         {
                             Some(generics)

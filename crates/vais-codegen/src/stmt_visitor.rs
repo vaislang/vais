@@ -113,10 +113,8 @@ impl StmtVisitor for CodeGenerator {
 
             // Step 1: free all string-scope slots BEFORE Named-type drops.
             // (Strings are raw heap; Named drops may reference their contents.)
-            let str_cleanup_ir = self.generate_string_scope_cleanup(
-                &str_frame,
-                transfer_slot.as_deref(),
-            );
+            let str_cleanup_ir =
+                self.generate_string_scope_cleanup(&str_frame, transfer_slot.as_deref());
             if !str_cleanup_ir.is_empty() {
                 ir.push_str(&str_cleanup_ir);
             }
@@ -630,14 +628,10 @@ impl CodeGenerator {
                 // them to the variable's multi-slot list.
                 let mut matched = false;
                 if let Expr::Ident(name) = &expr.node {
-                    if let Some(slots) =
-                        self.fn_ctx.var_string_slots_multi.get(name).cloned()
-                    {
+                    if let Some(slots) = self.fn_ctx.var_string_slots_multi.get(name).cloned() {
                         self.fn_ctx.pending_return_skip_slot.extend(slots);
                         matched = true;
-                    } else if let Some(slot) =
-                        self.fn_ctx.var_string_slot.get(name).cloned()
-                    {
+                    } else if let Some(slot) = self.fn_ctx.var_string_slot.get(name).cloned() {
                         self.fn_ctx.pending_return_skip_slot.push(slot);
                         matched = true;
                     }
@@ -646,13 +640,9 @@ impl CodeGenerator {
                 // binding). Also includes phi_extra_slots for inline PHI
                 // returns like `return I c { a+b } E { c+d }`.
                 if !matched {
-                    if let Some(slot) =
-                        self.fn_ctx.string_value_slot.get(&val_key).cloned()
-                    {
+                    if let Some(slot) = self.fn_ctx.string_value_slot.get(&val_key).cloned() {
                         self.fn_ctx.pending_return_skip_slot.push(slot);
-                        if let Some(extras) =
-                            self.fn_ctx.phi_extra_slots.get(&val_key).cloned()
-                        {
+                        if let Some(extras) = self.fn_ctx.phi_extra_slots.get(&val_key).cloned() {
                             self.fn_ctx.pending_return_skip_slot.extend(extras);
                         }
                     }

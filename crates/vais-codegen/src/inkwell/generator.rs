@@ -178,16 +178,14 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// be kept live until the owner uses the value (runtime picks exactly one,
     /// the other remains null). On `return x` we exclude ALL slots in this
     /// list; the null one is already a no-op in emit_alloc_cleanup.
-    pub(super) var_string_slots_multi:
-        HashMap<String, Vec<inkwell::values::PointerValue<'ctx>>>,
+    pub(super) var_string_slots_multi: HashMap<String, Vec<inkwell::values::PointerValue<'ctx>>>,
 
     /// For PHI results that represent a merge of multiple tracked concat
     /// results (if/match-as-expression producing a string), the PHI's SSA is
     /// registered in `string_value_slot` with its first incoming slot; any
     /// additional slots go here, keyed by the PHI's raw LLVM value ref.
     /// Consumed by the `let` binding hook to populate `var_string_slots_multi`.
-    pub(super) phi_extra_slots:
-        HashMap<usize, Vec<inkwell::values::PointerValue<'ctx>>>,
+    pub(super) phi_extra_slots: HashMap<usize, Vec<inkwell::values::PointerValue<'ctx>>>,
 
     /// TCO state: when generating a tail-recursive function as a loop,
     /// this holds the parameter allocas and the loop header block for jumping back.
@@ -632,8 +630,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// error propagation by the type checker.
     #[inline]
     pub(super) fn is_implicit_try_site(&self, span: vais_ast::Span) -> bool {
-        self.implicit_try_sites
-            .contains(&(span.start, span.end))
+        self.implicit_try_sites.contains(&(span.start, span.end))
     }
 
     /// Returns the LLVM IR as a string.

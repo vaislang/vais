@@ -641,7 +641,11 @@ impl CodeGenerator {
             .get("Vec")
             .map(|si| {
                 si.fields.len() >= 4
-                    && si.fields.get(3).map(|(n, _)| n == "elem_size").unwrap_or(false)
+                    && si
+                        .fields
+                        .get(3)
+                        .map(|(n, _)| n == "elem_size")
+                        .unwrap_or(false)
             })
             .unwrap_or(false);
         if stdlib_vec_layout
@@ -754,11 +758,7 @@ impl CodeGenerator {
                 .unwrap_or("")
                 .to_string();
             if !self_ptr.is_empty() && !rvalue_token.is_empty() {
-                let slot_opt = self
-                    .fn_ctx
-                    .string_value_slot
-                    .get(&rvalue_token)
-                    .cloned();
+                let slot_opt = self.fn_ctx.string_value_slot.get(&rvalue_token).cloned();
                 if let Some(slot) = slot_opt {
                     // 1) Ensure bitmap capacity covers current self.len.
                     let len_ptr = self.next_temp(counter);
@@ -1059,8 +1059,8 @@ impl CodeGenerator {
                 } else {
                     base_method_name.clone()
                 }
-            } else if let Some(type_args) = self
-                .infer_static_ctor_type_args_from_peers(&type_name.node, &method.node)
+            } else if let Some(type_args) =
+                self.infer_static_ctor_type_args_from_peers(&type_name.node, &method.node)
             {
                 // Phase 193 R-1: static ctor (Vec.new / Vec.with_capacity) has
                 // non-informative args (e.g., just i64 capacity). Recover T by
@@ -1237,9 +1237,9 @@ impl CodeGenerator {
                     continue;
                 }
                 let concrete = !type_args.is_empty()
-                    && type_args.iter().all(|t| {
-                        !matches!(t, ResolvedType::Var(_) | ResolvedType::Generic(_))
-                    });
+                    && type_args
+                        .iter()
+                        .all(|t| !matches!(t, ResolvedType::Var(_) | ResolvedType::Generic(_)));
                 if concrete {
                     return Some(type_args.clone());
                 }
@@ -1406,10 +1406,8 @@ impl CodeGenerator {
             let saved_locals = std::mem::take(&mut self.fn_ctx.locals);
             let saved_label_counter = self.fn_ctx.label_counter;
             let saved_loop_stack = std::mem::take(&mut self.fn_ctx.loop_stack);
-            let saved_current_block = std::mem::replace(
-                &mut self.fn_ctx.current_block,
-                String::from("entry"),
-            );
+            let saved_current_block =
+                std::mem::replace(&mut self.fn_ctx.current_block, String::from("entry"));
             let saved_future_poll_fns = std::mem::take(&mut self.fn_ctx.future_poll_fns);
             let saved_async_poll_context = self.fn_ctx.async_poll_context.take();
             let saved_alloc_tracker = std::mem::take(&mut self.fn_ctx.alloc_tracker);

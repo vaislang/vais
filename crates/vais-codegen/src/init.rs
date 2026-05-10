@@ -222,10 +222,7 @@ impl CodeGenerator {
     ///
     /// Call sites must invoke this alongside `set_expr_types` so that the
     /// two views of the type checker's output stay in sync.
-    pub fn set_implicit_try_sites(
-        &mut self,
-        sites: std::collections::HashSet<(usize, usize)>,
-    ) {
+    pub fn set_implicit_try_sites(&mut self, sites: std::collections::HashSet<(usize, usize)>) {
         self.implicit_try_sites = sites;
     }
 
@@ -233,8 +230,7 @@ impl CodeGenerator {
     /// error propagation by the type checker.
     #[inline]
     pub(crate) fn is_implicit_try_site(&self, span: vais_ast::Span) -> bool {
-        self.implicit_try_sites
-            .contains(&(span.start, span.end))
+        self.implicit_try_sites.contains(&(span.start, span.end))
     }
 
     /// Set string prefix for per-module codegen (avoids .str.N collisions across modules)
@@ -280,9 +276,8 @@ impl CodeGenerator {
     ///
     /// In strict mode, ICE-level type fallbacks (`Var`, `Unknown`, `Lifetime`
     /// reaching codegen) become hard errors instead of warnings with i64
-    /// fallback. Generic/ConstGeneric fallbacks remain as warnings in this
-    /// mode — use [`Self::set_strict_generic_mode`] to also promote those
-    /// to hard errors (Phase 191).
+    /// fallback. Generic/ConstGeneric fallbacks are also hard errors; the
+    /// historical strict-generic opt-in was removed in Phase 191.
     pub fn set_strict_type_mode(&mut self, strict: bool) {
         self.strict_type_mode = strict;
     }

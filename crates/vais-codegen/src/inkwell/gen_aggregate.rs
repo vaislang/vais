@@ -491,7 +491,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             })?;
         // Track allocation via entry-block alloca slot to avoid dominance issues in loops.
         {
-            let current_fn = self.builder.get_insert_block()
+            let current_fn = self
+                .builder
+                .get_insert_block()
                 .unwrap()
                 .get_parent()
                 .unwrap();
@@ -503,12 +505,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 self.builder.position_at_end(entry_block);
             }
             let ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
-            let alloc_slot = self.builder.build_alloca(ptr_type, &format!("__slice_alloc_slot_{}", self.alloc_tracker.len()))
+            let alloc_slot = self
+                .builder
+                .build_alloca(
+                    ptr_type,
+                    &format!("__slice_alloc_slot_{}", self.alloc_tracker.len()),
+                )
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            self.builder.build_store(alloc_slot, ptr_type.const_null())
+            self.builder
+                .build_store(alloc_slot, ptr_type.const_null())
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             self.builder.position_at_end(current_block);
-            self.builder.build_store(alloc_slot, raw_ptr.into_pointer_value())
+            self.builder
+                .build_store(alloc_slot, raw_ptr.into_pointer_value())
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             self.alloc_tracker.push(alloc_slot);
         }

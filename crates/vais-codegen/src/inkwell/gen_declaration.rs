@@ -191,19 +191,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             // Primitive type reached here by name (e.g. "f64", "i32").
                             let resolved = self.ast_type_to_resolved(&types[0].node);
                             let ll_ty = self.type_mapper.map_type(&resolved);
-                            self.enum_variant_primitive_payload_types.insert(
-                                (enum_name.clone(), variant.name.node.clone()),
-                                ll_ty,
-                            );
+                            self.enum_variant_primitive_payload_types
+                                .insert((enum_name.clone(), variant.name.node.clone()), ll_ty);
                         }
                     } else {
                         // Non-Named single-tuple payload (tuple of primitives, etc.).
                         let resolved = self.ast_type_to_resolved(&types[0].node);
                         let ll_ty = self.type_mapper.map_type(&resolved);
-                        self.enum_variant_primitive_payload_types.insert(
-                            (enum_name.clone(), variant.name.node.clone()),
-                            ll_ty,
-                        );
+                        self.enum_variant_primitive_payload_types
+                            .insert((enum_name.clone(), variant.name.node.clone()), ll_ty);
                     }
                 } else if types.len() > 1 {
                     // Multi-field tuple variant (e.g., Rect(f64, f64)): build an
@@ -316,8 +312,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 (f.name.node.clone(), type_name)
             })
             .collect();
-        self.struct_fields
-            .insert(union_name.clone(), field_names);
+        self.struct_fields.insert(union_name.clone(), field_names);
         self.struct_field_type_names
             .insert(union_name.clone(), field_type_names);
         self.type_mapper.register_struct(union_name, union_type);

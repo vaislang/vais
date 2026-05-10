@@ -900,7 +900,12 @@ impl CodeGenerator {
                 field_idx
             );
             let fat = format!("%fat_{}", seq);
-            write_ir!(ir, "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* {}", fat, fptr);
+            write_ir!(
+                ir,
+                "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* {}",
+                fat,
+                fptr
+            );
             let buf = format!("%buf_{}", seq);
             write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", buf, fat);
             let is_null = format!("%null_{}", seq);

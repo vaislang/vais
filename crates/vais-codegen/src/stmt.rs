@@ -10,7 +10,15 @@ use vais_types::ResolvedType;
 // (type_name, llvm_name, drop_fn_opt, has_shallow, is_double_ptr, vec_elem_shallow)
 type DroppableScopeEntry = (String, String, Option<String>, bool, bool, Option<String>);
 // (var_name, type_name, llvm_name, drop_fn_opt, has_shallow, is_double_ptr, vec_elem_shallow)
-type DroppableFnEntry = (String, String, String, Option<String>, bool, bool, Option<String>);
+type DroppableFnEntry = (
+    String,
+    String,
+    String,
+    Option<String>,
+    bool,
+    bool,
+    Option<String>,
+);
 
 impl CodeGenerator {
     /// Generate LLVM IR for a block of statements
@@ -153,8 +161,9 @@ impl CodeGenerator {
                     // Traditional alloca style.
                     // Struct literals and Named function returns use double-pointer
                     // (%Type**) because the codegen stores a %Type* in an alloca.
-                    let needs_double_ptr =
-                        is_struct_lit || is_enum_variant_call || is_unit_variant
+                    let needs_double_ptr = is_struct_lit
+                        || is_enum_variant_call
+                        || is_unit_variant
                         || matches!(resolved_ty, ResolvedType::Named { .. });
                     if needs_double_ptr {
                         self.fn_ctx.locals.insert(
@@ -770,16 +779,28 @@ impl CodeGenerator {
                 continue;
             }
 
-            let loaded = format!("%__sd_ld_{}_{}_{}", block_id, slot_idx, self.fn_ctx.label_counter);
+            let loaded = format!(
+                "%__sd_ld_{}_{}_{}",
+                block_id, slot_idx, self.fn_ctx.label_counter
+            );
             self.fn_ctx.label_counter += 1;
-            let is_null = format!("%__sd_nn_{}_{}_{}", block_id, slot_idx, self.fn_ctx.label_counter);
+            let is_null = format!(
+                "%__sd_nn_{}_{}_{}",
+                block_id, slot_idx, self.fn_ctx.label_counter
+            );
             self.fn_ctx.label_counter += 1;
             let do_free = format!("__sd_do_{}_{}", block_id, slot_idx);
             let after = format!("__sd_af_{}_{}", block_id, slot_idx);
 
             write_ir!(ir, "  {} = load i8*, i8** {}", loaded, slot_name);
             write_ir!(ir, "  {} = icmp eq i8* {}, null", is_null, loaded);
-            write_ir!(ir, "  br i1 {}, label %{}, label %{}", is_null, after, do_free);
+            write_ir!(
+                ir,
+                "  br i1 {}, label %{}, label %{}",
+                is_null,
+                after,
+                do_free
+            );
             write_ir!(ir, "{}:", do_free);
             write_ir!(ir, "  call void @free(i8* {})", loaded);
             write_ir!(ir, "  store i8* null, i8** {}", slot_name);
@@ -789,9 +810,7 @@ impl CodeGenerator {
 
             // Remove from string_value_slot so the transferred-slot lookup at
             // outer-scope exit can't match a slot that has already been freed.
-            self.fn_ctx
-                .string_value_slot
-                .retain(|_, s| s != slot_name);
+            self.fn_ctx.string_value_slot.retain(|_, s| s != slot_name);
             // DO NOT remove from alloc_tracker: `track_alloc_with_slot` assigns
             // slot ids from `alloc_tracker.len()`, so removing an entry would
             // let a later concat in the same function collide with this slot
@@ -977,8 +996,7 @@ impl CodeGenerator {
         if self.fn_ctx.alloc_tracker.is_empty() {
             return String::new();
         }
-        let skip_slots: Vec<String> =
-            std::mem::take(&mut self.fn_ctx.pending_return_skip_slot);
+        let skip_slots: Vec<String> = std::mem::take(&mut self.fn_ctx.pending_return_skip_slot);
         let slots: Vec<(String, String)> = self.fn_ctx.alloc_tracker.clone();
         let mut ir = String::new();
         ir.push_str("  ; auto-free cleanup (string concat heap buffers)\n");
@@ -1091,8 +1109,15 @@ impl CodeGenerator {
         ir.push_str("  ; auto-drop cleanup (Drop trait + shallow-free)\n");
         // Drop in reverse order (last declared first)
         droppable.reverse();
-        for (_var_name, type_name, llvm_name, drop_fn, has_shallow, is_double_ptr, vec_elem_shallow) in
-            &droppable
+        for (
+            _var_name,
+            type_name,
+            llvm_name,
+            drop_fn,
+            has_shallow,
+            is_double_ptr,
+            vec_elem_shallow,
+        ) in &droppable
         {
             let struct_ty = format!("%{}", type_name);
             let id = self.fn_ctx.label_counter;
@@ -1182,7 +1207,10 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
-            data_ptr, vec_ty, vec_ty, vec_ptr
+            data_ptr,
+            vec_ty,
+            vec_ty,
+            vec_ptr
         );
         let data_i = format!("%__ved_di_{}", id);
         write_ir!(ir, "  {} = load i64, i64* {}", data_i, data_ptr);
@@ -1190,7 +1218,10 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  {} = getelementptr {}, {}* {}, i32 0, i32 1",
-            len_ptr, vec_ty, vec_ty, vec_ptr
+            len_ptr,
+            vec_ty,
+            vec_ty,
+            vec_ptr
         );
         let len_v = format!("%__ved_len_{}", id);
         write_ir!(ir, "  {} = load i64, i64* {}", len_v, len_ptr);
@@ -1198,7 +1229,10 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  {} = getelementptr {}, {}* {}, i32 0, i32 3",
-            es_ptr, vec_ty, vec_ty, vec_ptr
+            es_ptr,
+            vec_ty,
+            vec_ty,
+            vec_ptr
         );
         let es_v = format!("%__ved_es_{}", id);
         write_ir!(ir, "  {} = load i64, i64* {}", es_v, es_ptr);
@@ -1213,7 +1247,9 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}",
-            skip_cmp, lbl_exit, lbl_init
+            skip_cmp,
+            lbl_exit,
+            lbl_init
         );
         write_ir!(ir, "{}:", lbl_init);
         write_ir!(ir, "  br label %{}", lbl_head);
@@ -1222,14 +1258,19 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  {} = phi i64 [ 0, %{} ], [ %__ved_inext_{}, %{} ]",
-            i_phi, lbl_init, id, lbl_cont
+            i_phi,
+            lbl_init,
+            id,
+            lbl_cont
         );
         let done_cmp = format!("%__ved_done_{}", id);
         write_ir!(ir, "  {} = icmp sge i64 {} , {}", done_cmp, i_phi, len_v);
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}",
-            done_cmp, lbl_exit, lbl_body
+            done_cmp,
+            lbl_exit,
+            lbl_body
         );
         write_ir!(ir, "{}:", lbl_body);
         let offset = format!("%__ved_off_{}", id);
@@ -1240,12 +1281,16 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  {} = inttoptr i64 {} to {}*",
-            elem_ptr, elem_int, inner_ty
+            elem_ptr,
+            elem_int,
+            inner_ty
         );
         write_ir!(
             ir,
             "  call void @__vais_struct_shallow_free_{}({}* {})",
-            inner_name, inner_ty, elem_ptr
+            inner_name,
+            inner_ty,
+            elem_ptr
         );
         write_ir!(ir, "  br label %{}", lbl_cont);
         write_ir!(ir, "{}:", lbl_cont);

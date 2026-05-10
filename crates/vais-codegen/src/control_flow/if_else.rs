@@ -33,11 +33,12 @@ impl CodeGenerator {
                 } else {
                     vais_types::ResolvedType::I64
                 };
-                let block_type = if self.type_to_llvm(&then_type) != self.type_to_llvm(&else_type_resolved) {
-                    vais_types::ResolvedType::I64
-                } else {
-                    then_type
-                };
+                let block_type =
+                    if self.type_to_llvm(&then_type) != self.type_to_llvm(&else_type_resolved) {
+                        vais_types::ResolvedType::I64
+                    } else {
+                        then_type
+                    };
                 let llvm_type = self.type_to_llvm(&block_type);
 
                 // Check each branch independently for struct pointer vs value
@@ -223,11 +224,17 @@ impl CodeGenerator {
                 let then_actual_ty = self.llvm_type_of(&then_val_for_phi);
                 let else_actual_ty = self.llvm_type_of(&else_val_for_phi);
                 let phi_type_mismatch = if phi_is_struct {
-                    (!then_from_label.is_empty() && then_actual_ty.starts_with('i') && !then_val_for_phi.starts_with("zeroinitializer"))
-                        || (!else_from_label.is_empty() && else_actual_ty.starts_with('i') && else_val_for_phi != "0")
+                    (!then_from_label.is_empty()
+                        && then_actual_ty.starts_with('i')
+                        && !then_val_for_phi.starts_with("zeroinitializer"))
+                        || (!else_from_label.is_empty()
+                            && else_actual_ty.starts_with('i')
+                            && else_val_for_phi != "0")
                 } else {
-                    (!then_from_label.is_empty() && (then_actual_ty.starts_with('{') || then_actual_ty.starts_with('%')))
-                        || (!else_from_label.is_empty() && (else_actual_ty.starts_with('{') || else_actual_ty.starts_with('%')))
+                    (!then_from_label.is_empty()
+                        && (then_actual_ty.starts_with('{') || then_actual_ty.starts_with('%')))
+                        || (!else_from_label.is_empty()
+                            && (else_actual_ty.starts_with('{') || else_actual_ty.starts_with('%')))
                 };
 
                 // Build phi node only from non-terminated predecessors and non-void types
@@ -240,17 +247,27 @@ impl CodeGenerator {
                             "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
                             result
                         );
-                        self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::Str);
+                        self.fn_ctx
+                            .register_temp_type(&result, vais_types::ResolvedType::Str);
                     } else {
                         ir.push_str(&crate::helpers::void_placeholder_ir(&result));
-                        self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::I64);
+                        self.fn_ctx
+                            .register_temp_type(&result, vais_types::ResolvedType::I64);
                     }
                 } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
                     // Substitute "void" placeholders (from void-returning calls
                     // as the last block expression) with a literal 0 — phi cannot
                     // accept void as an incoming value.
-                    let then_safe = if then_val_for_phi == "void" { "0".to_string() } else { then_val_for_phi.clone() };
-                    let else_safe = if else_val_for_phi == "void" { "0".to_string() } else { else_val_for_phi.clone() };
+                    let then_safe = if then_val_for_phi == "void" {
+                        "0".to_string()
+                    } else {
+                        then_val_for_phi.clone()
+                    };
+                    let else_safe = if else_val_for_phi == "void" {
+                        "0".to_string()
+                    } else {
+                        else_val_for_phi.clone()
+                    };
                     write_ir!(
                         ir,
                         "  {} = phi {} [ {}, %{} ], [ {}, %{} ]",
@@ -281,9 +298,13 @@ impl CodeGenerator {
                         let then_slot = self.fn_ctx.string_value_slot.get(&then_key).cloned();
                         let else_slot = self.fn_ctx.string_value_slot.get(&else_key).cloned();
                         let mut slots: Vec<String> = Vec::new();
-                        if let Some(s) = then_slot { slots.push(s); }
+                        if let Some(s) = then_slot {
+                            slots.push(s);
+                        }
                         if let Some(s) = else_slot {
-                            if !slots.contains(&s) { slots.push(s); }
+                            if !slots.contains(&s) {
+                                slots.push(s);
+                            }
                         }
                         if !slots.is_empty() {
                             self.fn_ctx
@@ -297,7 +318,11 @@ impl CodeGenerator {
                         }
                     }
                 } else if !then_from_label.is_empty() {
-                    let safe = if then_val_for_phi == "void" { "0".to_string() } else { then_val_for_phi.clone() };
+                    let safe = if then_val_for_phi == "void" {
+                        "0".to_string()
+                    } else {
+                        then_val_for_phi.clone()
+                    };
                     write_ir!(
                         ir,
                         "  {} = phi {} [ {}, %{} ]",
@@ -308,7 +333,11 @@ impl CodeGenerator {
                     );
                     self.fn_ctx.register_temp_type(&result, block_type.clone());
                 } else if !else_from_label.is_empty() {
-                    let safe = if else_val_for_phi == "void" { "0".to_string() } else { else_val_for_phi.clone() };
+                    let safe = if else_val_for_phi == "void" {
+                        "0".to_string()
+                    } else {
+                        else_val_for_phi.clone()
+                    };
                     write_ir!(
                         ir,
                         "  {} = phi {} [ {}, %{} ]",

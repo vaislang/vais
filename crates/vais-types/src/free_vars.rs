@@ -1,7 +1,7 @@
 //! Free variable analysis for closure capture.
 
-use vais_ast::*;
 use vais_ast::StringInterpPart;
+use vais_ast::*;
 
 use super::TypeChecker;
 
@@ -27,11 +27,10 @@ impl TypeChecker {
         free: &mut Vec<String>,
     ) {
         match expr {
-            Expr::Ident(name) => {
-                if !bound.contains(name) && self.lookup_var(name).is_some() {
-                    free.push(name.clone());
-                }
+            Expr::Ident(name) if !bound.contains(name) && self.lookup_var(name).is_some() => {
+                free.push(name.clone());
             }
+            Expr::Ident(_) => {}
             Expr::Binary { left, right, .. } => {
                 self.collect_free_vars(&left.node, bound, free);
                 self.collect_free_vars(&right.node, bound, free);

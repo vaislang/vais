@@ -123,9 +123,7 @@ pub(crate) fn enforce_totality(module: &Module) -> TypeResult<()> {
     for item in &module.items {
         if let Item::Impl(impl_block) = &item.node {
             for m in &impl_block.methods {
-                all_fns
-                    .entry(m.node.name.node.clone())
-                    .or_insert(&m.node);
+                all_fns.entry(m.node.name.node.clone()).or_insert(&m.node);
             }
         }
     }
@@ -174,9 +172,9 @@ pub(crate) fn enforce_totality(module: &Module) -> TypeResult<()> {
                     // The propagation reason is always "calls <callee>"
                     // for transitively-reachable functions. Only store
                     // it if we don't already have a direct reason.
-                    direct_reason
-                        .entry(caller.clone())
-                        .or_insert_with(|| format!("transitively calls `{}` which may panic", callee));
+                    direct_reason.entry(caller.clone()).or_insert_with(|| {
+                        format!("transitively calls `{}` which may panic", callee)
+                    });
                     changed = true;
                     break;
                 }

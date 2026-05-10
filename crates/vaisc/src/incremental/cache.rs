@@ -89,8 +89,8 @@ impl IncrementalCache {
         };
         let invalidate = match &self.state.std_hash {
             Some(prev) if prev == &current_hash => false,
-            Some(_) => true,  // hash drifted → invalidate
-            None => false,    // first build after upgrade → adopt new hash
+            Some(_) => true, // hash drifted → invalidate
+            None => false,   // first build after upgrade → adopt new hash
         };
         self.state.std_hash = Some(current_hash);
         invalidate
