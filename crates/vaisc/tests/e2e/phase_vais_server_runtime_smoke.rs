@@ -545,6 +545,136 @@ fn main() -> i64 {
     }
 }
 
+#[test]
+fn e2e_vais_server_13_ssr_nested_json_props_runtime_smoke() {
+    let listener =
+        TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR nested JSON upstream listener");
+    listener
+        .set_nonblocking(true)
+        .expect("set SSR nested JSON upstream listener nonblocking");
+    let port = listener
+        .local_addr()
+        .expect("read SSR nested JSON upstream address")
+        .port();
+
+    let source = r#"
+use src/api/ssr
+use src/http/header
+use src/http/method
+use src/http/request
+
+fn smoke_contains(haystack: str, needle: str) -> i64 {
+    smoke_contains_rec(haystack, needle, 0)
+}
+
+fn smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
+    I needle.len() == 0 { return 1 }
+    I i >= haystack.len() { return 0 }
+    I smoke_match_prefix(haystack, needle, i, 0) == 1 { return 1 }
+    smoke_contains_rec(haystack, needle, i + 1)
+}
+
+fn smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
+    nc := needle.char_at(ni)
+    I nc == 0 { return 1 }
+    hc := haystack.char_at(hi)
+    I hc == 0 { return 0 }
+    I hc != nc { return 0 }
+    smoke_match_prefix(haystack, needle, hi + 1, ni + 1)
+}
+
+fn smoke_local_nested_json_props() -> i64 {
+    body := "{\"route\":\"/dashboard\",\"props\":{\"user\":{\"name\":\"Ada\"},\"items\":[\"one\",\"two\"]}}"
+    parsed := parse_render_request(body)
+    I parsed.route != "/dashboard" {
+        println("FAIL ssr nested parse route")
+        return 1
+    }
+    I smoke_contains(parsed.props, "\"user\":{\"name\":\"Ada\"}") != 1 {
+        println("FAIL ssr nested parse object props")
+        return 2
+    }
+    I smoke_contains(parsed.props, "\"items\":[\"one\",\"two\"]") != 1 {
+        println("FAIL ssr nested parse array props")
+        return 3
+    }
+
+    req := mut Request.new(HttpMethod.Post, "/api/hydrate")
+    req.headers = req.headers.set(CONTENT_TYPE, "application/json")
+    req.body = body
+
+    response := handle_ssr_hydrate(req)
+    I response.status.code != 200 {
+        println("FAIL ssr nested hydrate status")
+        return 4
+    }
+    I response.headers.get(CONTENT_TYPE) != "application/json" {
+        println("FAIL ssr nested hydrate content type")
+        return 5
+    }
+    I smoke_contains(response.body, "\"data\": {\"user\":{\"name\":\"Ada\"}") != 1 {
+        println("FAIL ssr nested hydrate data object")
+        return 6
+    }
+    I smoke_contains(response.body, "\"items\":[\"one\",\"two\"]") != 1 {
+        println("FAIL ssr nested hydrate data array")
+        return 7
+    }
+    I smoke_contains(response.body, "\"route\": \"/dashboard\"") != 1 {
+        println("FAIL ssr nested hydrate route")
+        return 8
+    }
+    0
+}
+
+fn main() -> i64 {
+    nested_props := "{\"user\":{\"name\":\"Ada\"},\"items\":[\"one\",\"two\"]}"
+    response := forward_ssr_render("http://127.0.0.1:__PORT__", "/nested", nested_props)
+    I response.status.code != 202 {
+        println("FAIL ssr nested forwarding status")
+        return 20
+    }
+    I response.headers.get(CONTENT_TYPE) != "application/json" {
+        println("FAIL ssr nested forwarding content type")
+        return 21
+    }
+    I smoke_contains(response.body, "from-node") != 1 {
+        println("FAIL ssr nested forwarding body")
+        return 22
+    }
+
+    local_result := smoke_local_nested_json_props()
+    I local_result != 0 { return local_result }
+
+    println("VAIS_SERVER_SSR_NESTED_JSON_PROPS_RUNTIME_OK")
+    0
+}
+"#
+    .replace("__PORT__", &port.to_string());
+
+    let (run, request_text) = run_vais_server_generated_loopback_smoke(
+        "ssr_nested_json_props_runtime_smoke.vais",
+        &source,
+        listener,
+    );
+
+    assert_eq!(
+        run.status.code().unwrap_or(-1),
+        0,
+        "vais-server SSR nested JSON props smoke exited unexpectedly.\nstdout:\n{}\nstderr:\n{}\nrequest:\n{}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr),
+        request_text
+    );
+    assert!(
+        request_text.contains(
+            r#"{"route":"/nested","props":{"user":{"name":"Ada"},"items":["one","two"]}}"#
+        ),
+        "SSR nested JSON forwarding request did not preserve props as raw JSON:\n{}",
+        request_text
+    );
+}
+
 fn run_vais_server_generated_retry_budget_smoke(
     fixture: &str,
     source: &str,
@@ -984,10 +1114,7 @@ fn accept_one_ssr_forwarding_request(listener: TcpListener) -> String {
             Ok(0) => break,
             Ok(n) => {
                 request.extend_from_slice(&buffer[..n]);
-                let text = String::from_utf8_lossy(&request);
-                if text.contains("\r\n\r\n")
-                    && text.contains(r#"{"route":"/products/sku-42","props":"state"}"#)
-                {
+                if request_has_complete_http_body(&request) {
                     break;
                 }
             }
@@ -1091,8 +1218,7 @@ fn accept_one_ssr_request_and_then(
             Ok(0) => break,
             Ok(n) => {
                 request.extend_from_slice(&buffer[..n]);
-                let text = String::from_utf8_lossy(&request);
-                if text.contains("\r\n\r\n") && text.contains(r#""props":"state""#) {
+                if request_has_complete_http_body(&request) {
                     break;
                 }
             }
@@ -1118,6 +1244,23 @@ fn isolated_smoke_dir(fixture: &str) -> PathBuf {
         std::process::id(),
         unique
     ))
+}
+
+fn request_has_complete_http_body(request: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(request);
+    let Some(header_end) = text.find("\r\n\r\n") else {
+        return false;
+    };
+    let headers = &text[..header_end];
+    let body_len = request.len().saturating_sub(header_end + 4);
+    let Some(content_length) = headers.lines().find_map(|line| {
+        line.strip_prefix("Content-Length:")
+            .or_else(|| line.strip_prefix("content-length:"))
+            .and_then(|raw| raw.trim().parse::<usize>().ok())
+    }) else {
+        return true;
+    };
+    body_len >= content_length
 }
 
 fn compiler_root() -> PathBuf {

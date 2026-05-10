@@ -31,8 +31,8 @@ current Core contract and promoted smoke gates pass with the evidence below.
 | std/http_client runtime smoke | `15/15` |
 | VaisDB runtime smoke | `34/34` |
 | VaisDB runtime lock stability | WAL/LSN/buffer/page/checkpoint mutex release paths covered by current `34/34` smoke |
-| vais-server runtime smoke | `13/13` |
-| vais-server compiled SSR forwarding | `forward_ssr_render()` loopback upstream POST/status/content-type/body bridge plus upstream non-2xx/transport-failure/timeout/retry mapping and retry-budget observability covered by current `13/13` smoke |
+| vais-server runtime smoke | `14/14` |
+| vais-server compiled SSR forwarding | `forward_ssr_render()` loopback upstream POST/status/content-type/body bridge plus upstream non-2xx/transport-failure/timeout/retry mapping, retry-budget observability, and nested JSON props preservation covered by current `14/14` smoke |
 | vais-web runtime smoke | `61/77` in skip-mode CI default |
 | vais-web Cloudflare workerd in-process smoke | `Miniflare dispatchFetch` against generated `_worker.js` with real KV-backed `__STATIC_CONTENT` site binding (static index, dynamic route, 404) |
 | Rust toolchain pin | `rust-toolchain.toml` pins Rust `1.92.0` with `rustfmt` and `clippy` components |
@@ -59,7 +59,7 @@ single source for current pass counts. CI fails on drift.
 | std/http_client runtime | `smoke=15/15` |
 | std/tls runtime | `smoke=2/2` |
 | VaisDB runtime | `smoke=34/34` |
-| vais-server runtime | `smoke=13/13` |
+| vais-server runtime | `smoke=14/14` |
 | vais-web runtime | `smoke=61/77` |
 | vais-web unit | `tests=390/390` |
 | vais-web packages | `tests=3272/3272` |
@@ -267,7 +267,7 @@ The following claims are not valid yet:
 - "MIR is the semantic oracle for all Core constructs."
 - "`vaisdb`, `vais-server`, and `vais-web` are product-complete."
 - "vais-server request body parsing is a complete JSON validator."
-- "vais-server request body parsing supports nested JSON objects/arrays or a
+- "vais-server request body parsing is a complete JSON validator or supports a
   broad JSON escape contract."
 - "vais-server middleware supports arbitrary middleware instance dispatch."
 - "vais-server middleware response body string-concat transforms are certified
@@ -277,10 +277,9 @@ The following claims are not valid yet:
 - "std/http_client broad external network behavior or production network
   reliability is certified."
 - "Compiled vais-server SSR forwarding real delay sleep, probabilistic jitter,
-  HTTPS/TLS, nested props/full JSON escaping, external network stability, or
-  deployed Node SSR bridge operation are certified."
-- "vais-server SSR API parsing supports nested JSON props or a broad JSON
-  escape contract."
+  HTTPS/TLS, full JSON escaping, external network stability, or deployed Node
+  SSR bridge operation are certified."
+- "vais-server SSR API parsing supports a broad JSON escape contract."
 - "vais-web live deployed cloud platform runtime (i.e., a real upload through
   `wrangler deploy` to the Cloudflare edge, or equivalent for Vercel/Netlify/AWS),
   production browser/device hydration beyond the promoted local
