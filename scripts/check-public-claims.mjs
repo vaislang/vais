@@ -70,6 +70,16 @@ requireText(
   'Server-WASM remains API-compiled',
   'playground status must keep the server compile boundary explicit',
 );
+requireText(
+  publicStatus,
+  'Browser-JS playground smoke gate: passed',
+  'browser JS smoke gate must be named without promoting complete browser-only status',
+);
+requireText(
+  publicStatus,
+  'this is not a complete browser-only language',
+  'browser JS smoke gate must not imply full browser-only language completion',
+);
 
 const playgroundCompiler = 'playground/src/compiler.js';
 requireText(
@@ -118,6 +128,16 @@ requireText(
   playgroundReadme,
   'test:contract',
   'playground README must document the local mode contract gate',
+);
+requireText(
+  playgroundReadme,
+  'Browser-JS mode',
+  'playground README must document the browser JS smoke mode',
+);
+requireText(
+  playgroundReadme,
+  'without the playground API',
+  'playground README must say Browser-JS smoke does not use the API',
 );
 
 const websiteSubtitle =

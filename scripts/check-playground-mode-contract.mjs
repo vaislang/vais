@@ -76,7 +76,35 @@ async function testServerWasmModeNamesApiCompileBoundary() {
   assert.ok(!calls.some((url) => url.endsWith('/api/compile')));
 }
 
+async function testBrowserJsModeDoesNotUseApi() {
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    throw new TypeError('offline');
+  };
+
+  const browserCompiler = {
+    initialize: async () => {},
+    compileAndRun: async () => ({
+      success: true,
+      errors: [],
+      warnings: [],
+      output: '5\n\n[Browser-JS mode — browser compiled and executed JavaScript in 1ms]',
+      exitCode: 0,
+    }),
+  };
+
+  const compiler = new VaisCompiler('http://localhost:8080', { browserCompiler });
+  const result = await compiler.compileAndRun('F main() -> i64 = 5', 'browser-js');
+
+  assert.equal(compiler.getModeLabel(), 'Browser-JS');
+  assert.equal(result.success, true);
+  assert.match(result.output, /Browser-JS mode\s+\u2014\s+browser compiled and executed JavaScript/);
+  assert.deepEqual(calls, ['http://localhost:8080/api/health']);
+}
+
 await testPreviewFallbackIsExplicitlyNonCertified();
 await testServerWasmModeNamesApiCompileBoundary();
+await testBrowserJsModeDoesNotUseApi();
 
 console.log('Playground mode contract passed.');

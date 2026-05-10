@@ -2,6 +2,7 @@
 // Supports server-side compilation, server-backed WASM execution, and preview fallback.
 
 import { WasmRunner } from './wasm-runner.js';
+import { BrowserCompiler } from './browser-compiler.js';
 
 const viteEnv = import.meta.env || {};
 const runtimeWindow = globalThis.window;
@@ -16,15 +17,18 @@ const DEFAULT_API_URL = viteEnv.VITE_API_URL || (
 // compilation; only the generated WASM binary executes in the browser.
 const MODE_SERVER = 'server';
 const MODE_WASM = 'wasm';
+const MODE_BROWSER_JS = 'browser-js';
 const MODE_MOCK = 'mock';
 
 export class VaisCompiler {
-  constructor(apiUrl) {
+  constructor(apiUrl, options = {}) {
     this.apiUrl = apiUrl || DEFAULT_API_URL;
     this.isReady = false;
     this.serverAvailable = false;
     this.wasmAvailable = false;
+    this.browserAvailable = false;
     this.wasmRunner = new WasmRunner();
+    this.browserCompiler = options.browserCompiler || new BrowserCompiler(options.browserCompilerOptions || {});
     this.mode = MODE_MOCK;
   }
 
@@ -86,6 +90,7 @@ export class VaisCompiler {
     switch (this.mode) {
       case MODE_SERVER: return 'Server';
       case MODE_WASM: return 'Server-WASM';
+      case MODE_BROWSER_JS: return 'Browser-JS';
       case MODE_MOCK: return 'Preview';
       default: return 'Unknown';
     }
@@ -126,14 +131,18 @@ export class VaisCompiler {
       await this.initialize();
     }
 
-    // Lazy WASM probe on first actual compile (not at startup)
-    if (!this.serverAvailable && !this._wasmProbed) {
-      await this._probeWasm();
-    }
-
     // Handle JS target - compile only, no execution
     if (target === 'js') {
       return this.compileToJs(sourceCode);
+    }
+
+    if (target === 'browser-js') {
+      return this.browserCompileAndRun(sourceCode);
+    }
+
+    // Lazy WASM probe on first actual compile (not at startup)
+    if (!this.serverAvailable && !this._wasmProbed) {
+      await this._probeWasm();
     }
 
     // Handle WASM target
@@ -155,6 +164,29 @@ export class VaisCompiler {
       return this.wasmCompileAndRun(sourceCode);
     }
     return this.mockCompileAndRun(sourceCode);
+  }
+
+  // --- Browser-only JavaScript mode ---
+
+  async browserCompileAndRun(sourceCode) {
+    try {
+      await this.browserCompiler.initialize();
+      this.browserAvailable = true;
+      this.mode = MODE_BROWSER_JS;
+      return this.browserCompiler.compileAndRun(sourceCode);
+    } catch (error) {
+      this.browserAvailable = false;
+      return {
+        success: false,
+        errors: [{
+          line: 0,
+          column: 0,
+          message: `Browser-JS compiler unavailable: ${error.message}`,
+        }],
+        warnings: [],
+        output: null,
+      };
+    }
   }
 
   // --- Server-backed WASM mode ---

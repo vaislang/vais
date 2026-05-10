@@ -8,6 +8,17 @@ on:
       - 'website/**'
       - 'docs-site/**'
       - 'playground/**'
+      - 'crates/vais-ast/**'
+      - 'crates/vais-browser-compiler/**'
+      - 'crates/vais-codegen-js/**'
+      - 'crates/vais-i18n/**'
+      - 'crates/vais-lexer/**'
+      - 'crates/vais-parser/**'
+      - 'crates/vais-types/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'scripts/check-browser-compiler-gate.mjs'
+      - 'scripts/check-public-claims.mjs'
       - 'install.sh'
       - 'install.ps1'
       - '.github/workflows/website.yml'
@@ -40,6 +51,9 @@ jobs:
       - name: Check public claims
         run: node scripts/check-public-claims.mjs
 
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
       - name: Install mdBook
         run: |
           curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.40/mdbook-v0.4.40-x86_64-unknown-linux-gnu.tar.gz | tar -xz
@@ -64,6 +78,8 @@ jobs:
         working-directory: playground
         run: |
           npm install
+          npm run browser-compiler:build
+          npm run browser-compiler:check
           npm run build
 
       # Combine all outputs into website/dist

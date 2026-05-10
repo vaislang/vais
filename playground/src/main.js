@@ -277,7 +277,9 @@ class Playground {
       if (result.success) {
         const successMsg = this.currentTarget === 'js'
           ? 'Compilation to JavaScript successful!'
-          : 'Compilation successful!';
+          : this.currentTarget === 'browser-js'
+            ? 'Browser compilation and execution successful!'
+            : 'Compilation successful!';
         this.appendOutput(successMsg, 'success');
 
         // Show warnings if any
@@ -353,7 +355,9 @@ class Playground {
     const output = document.getElementById('output');
     const loadingText = this.currentTarget === 'js'
       ? 'Compiling to JavaScript...'
-      : 'Compiling and running...';
+      : this.currentTarget === 'browser-js'
+        ? 'Compiling and running in browser...'
+        : 'Compiling and running...';
     output.innerHTML = `<div class="output-loading"><div class="output-loading-spinner"></div><span class="output-loading-text">${loadingText}</span></div>`;
   }
 

@@ -35,6 +35,9 @@ source_of_truth: `PUBLIC_STATUS.md`
 - Package full-build gate: `2/2`
 - Playground web mode/build gate: passed; Server-WASM remains API-compiled,
   and Preview remains a syntax/demo fallback only
+- Browser-JS playground smoke gate: passed for parser + JavaScript codegen
+  compile/execute in the browser; this is not a complete browser-only language
+  implementation claim
 
 ### 공개 non-claim
 
