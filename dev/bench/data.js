@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776473283221,
+  "lastUpdate": 1778424338349,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -35063,6 +35063,336 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 6275483,
             "range": "± 102025",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "65996868+sswoo88@users.noreply.github.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bc5f7995f04c5cf569e8b328199f612fb735b453",
+          "message": "Merge pull request #47 from vaislang/codex/ci-baseline-fix\n\nFix compiler CI baseline",
+          "timestamp": "2026-05-10T23:33:03+09:00",
+          "tree_id": "e3b9e2d9626447896d18fbcbd2528f466bd31b5c",
+          "url": "https://github.com/vaislang/vais/commit/bc5f7995f04c5cf569e8b328199f612fb735b453"
+        },
+        "date": 1778424337538,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 5025,
+            "range": "± 64",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 9171,
+            "range": "± 33",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 10343,
+            "range": "± 416",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 20175,
+            "range": "± 315",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 19928,
+            "range": "± 184",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 38387,
+            "range": "± 392",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 35011,
+            "range": "± 457",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 75065,
+            "range": "± 3928",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 312640,
+            "range": "± 1924",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 483131,
+            "range": "± 7820",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 128871,
+            "range": "± 1195",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 831496,
+            "range": "± 4836",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 297318,
+            "range": "± 3426",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 414922,
+            "range": "± 3937",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 397594,
+            "range": "± 2885",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 607983,
+            "range": "± 6589",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 698729,
+            "range": "± 7559",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 1029722,
+            "range": "± 20297",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 651920,
+            "range": "± 4254",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1640836,
+            "range": "± 32899",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 68061,
+            "range": "± 221",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 338313,
+            "range": "± 1371",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 660564,
+            "range": "± 2558",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 3263754,
+            "range": "± 7724",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_full_pipeline/compile/1011lines",
+            "value": 5011587,
+            "range": "± 33867",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_full_pipeline/compile/5009lines",
+            "value": 26872842,
+            "range": "± 144201",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_full_pipeline/compile/10007lines",
+            "value": 54454711,
+            "range": "± 511407",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_full_pipeline/compile/25005lines",
+            "value": 129319261,
+            "range": "± 839910",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_full_pipeline/compile/50004lines",
+            "value": 257919374,
+            "range": "± 2658555",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_lexer/tokenize/1011lines",
+            "value": 224422,
+            "range": "± 723",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_lexer/tokenize/5009lines",
+            "value": 1117508,
+            "range": "± 2977",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_lexer/tokenize/10007lines",
+            "value": 2195507,
+            "range": "± 10629",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_lexer/tokenize/25005lines",
+            "value": 5471453,
+            "range": "± 24450",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_lexer/tokenize/50004lines",
+            "value": 10912785,
+            "range": "± 40410",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_parser/parse/1011lines",
+            "value": 821867,
+            "range": "± 1857",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_parser/parse/5009lines",
+            "value": 4073812,
+            "range": "± 12722",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_parser/parse/10007lines",
+            "value": 8114518,
+            "range": "± 74093",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_parser/parse/25005lines",
+            "value": 21355467,
+            "range": "± 236216",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_parser/parse/50004lines",
+            "value": 45326170,
+            "range": "± 103894",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_typechecker/check/1011lines",
+            "value": 318015,
+            "range": "± 518",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_typechecker/check/5009lines",
+            "value": 939738,
+            "range": "± 1291",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_typechecker/check/10007lines",
+            "value": 1720115,
+            "range": "± 4870",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_typechecker/check/25005lines",
+            "value": 4004564,
+            "range": "± 18426",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_typechecker/check/50004lines",
+            "value": 8376917,
+            "range": "± 133330",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_codegen/generate/1011lines",
+            "value": 3583356,
+            "range": "± 10561",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_codegen/generate/5009lines",
+            "value": 17694704,
+            "range": "± 327286",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_codegen/generate/10007lines",
+            "value": 35534363,
+            "range": "± 246156",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_codegen/generate/25005lines",
+            "value": 91028772,
+            "range": "± 921118",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_codegen/generate/50004lines",
+            "value": 187833619,
+            "range": "± 1350656",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_incremental/full_10k",
+            "value": 49421336,
+            "range": "± 770477",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_incremental/second_compile_10k",
+            "value": 48857170,
+            "range": "± 216852",
             "unit": "ns/iter"
           }
         ]
