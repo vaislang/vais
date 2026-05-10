@@ -1,7 +1,7 @@
-use std::io::{Read, Write};
+use std::io::{BufRead, Read, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -786,6 +786,153 @@ fn main() -> i64 {
 }
 
 #[test]
+fn e2e_std_http_client_loopback_https_redirect_runtime_smoke() {
+    let temp = tempfile::TempDir::new().expect("temp dir");
+    let main_path = temp.path().join("main.vais");
+    let exe_path = temp.path().join("http_client_https_redirect_smoke");
+    let cert_path = temp.path().join("cert.pem");
+    let key_path = temp.path().join("key.pem");
+    let script_path = temp.path().join("tls_redirect_server.py");
+
+    generate_self_signed_loopback_cert(&cert_path, &key_path);
+    write_tls_redirect_server_script(&script_path);
+
+    let mut server = Command::new("python3")
+        .arg(&script_path)
+        .arg(&cert_path)
+        .arg(&key_path)
+        .arg(temp.path())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn local TLS redirect server");
+    let stdout = server
+        .stdout
+        .take()
+        .expect("local TLS redirect server stdout");
+    let mut port_line = String::new();
+    std::io::BufReader::new(stdout)
+        .read_line(&mut port_line)
+        .expect("read local TLS redirect server port");
+    let port: u16 = port_line
+        .trim()
+        .parse()
+        .unwrap_or_else(|_| panic!("invalid local TLS redirect server port line: {port_line:?}"));
+
+    let source = r#"
+use std/http_client
+
+fn smoke_contains(haystack: str, needle: str) -> i64 {
+    smoke_contains_rec(haystack, needle, 0)
+}
+
+fn smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
+    I needle.len() == 0 { return 1 }
+    I i >= haystack.len() { return 0 }
+    I smoke_match_prefix(haystack, needle, i, 0) == 1 { return 1 }
+    smoke_contains_rec(haystack, needle, i + 1)
+}
+
+fn smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
+    nc := needle.char_at(ni)
+    I nc == 0 { return 1 }
+    hc := haystack.char_at(hi)
+    I hc == 0 { return 0 }
+    I hc != nc { return 0 }
+    smoke_match_prefix(haystack, needle, hi + 1, ni + 1)
+}
+
+fn main() -> i64 {
+    client := HttpClient::new()
+    client.insecure_tls()
+    response := client.get("https://127.0.0.1:__PORT__/secure/redirect")
+    I response.error_code != 0 { return 1 }
+    I response.status != 200 { return 2 }
+    body := response.body_text()
+    I smoke_contains(body, "https-redirect-ok") != 1 { return 3 }
+    response.drop()
+    0
+}
+"#
+    .replace("__PORT__", &port.to_string());
+    std::fs::write(&main_path, source).expect("write http_client HTTPS redirect fixture");
+
+    let compiler_root = compiler_root();
+    let std_path = std_link(&compiler_root);
+    let dep_paths = format!("{}:{}", temp.path().display(), std_path.display());
+
+    let build = Command::new(env!("CARGO_BIN_EXE_vaisc"))
+        .arg("-v")
+        .arg("build")
+        .arg(&main_path)
+        .arg("-o")
+        .arg(&exe_path)
+        .arg("--force-rebuild")
+        .current_dir(temp.path())
+        .env("VAIS_STD_PATH", &std_path)
+        .env("VAIS_DEP_PATHS", dep_paths)
+        .output()
+        .expect("spawn vaisc build");
+    if !build.status.success() {
+        let _ = server.kill();
+    }
+    assert!(
+        build.status.success(),
+        "std/http_client HTTPS redirect fixture failed to build\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr)
+    );
+
+    let run = Command::new(&exe_path)
+        .current_dir(temp.path())
+        .output()
+        .expect("run std/http_client HTTPS redirect fixture");
+    let server_output = server
+        .wait_with_output()
+        .expect("wait for local TLS redirect server");
+    let first_request =
+        std::fs::read_to_string(temp.path().join("tls_request1.txt")).unwrap_or_default();
+    let second_request =
+        std::fs::read_to_string(temp.path().join("tls_request2.txt")).unwrap_or_default();
+
+    assert!(
+        server_output.status.success(),
+        "local TLS redirect server exited non-zero\nstatus={:?}\nstderr:\n{}\nfirst request:\n{}\nsecond request:\n{}",
+        server_output.status.code(),
+        String::from_utf8_lossy(&server_output.stderr),
+        first_request,
+        second_request
+    );
+    assert_eq!(
+        run.status.code().unwrap_or(-1),
+        0,
+        "std/http_client HTTPS redirect fixture exited unexpectedly\nstdout:\n{}\nstderr:\n{}\nfirst request:\n{}\nsecond request:\n{}\nserver stderr:\n{}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr),
+        first_request,
+        second_request,
+        String::from_utf8_lossy(&server_output.stderr)
+    );
+    assert!(
+        first_request.contains("GET /secure/redirect HTTP/1.1"),
+        "first TLS request did not contain expected request line:\n{}",
+        first_request
+    );
+    assert!(
+        second_request.contains("GET /secure/final HTTP/1.1"),
+        "second TLS request did not follow HTTPS redirect:\n{}",
+        second_request
+    );
+    assert!(
+        first_request.contains("Host: 127.0.0.1:")
+            && second_request.contains("Host: 127.0.0.1:"),
+        "TLS redirect requests did not contain Host headers with loopback port:\nfirst:\n{}\nsecond:\n{}",
+        first_request,
+        second_request
+    );
+}
+
+#[test]
 fn e2e_std_http_client_single_arg_return_ir_regression() {
     let temp = tempfile::TempDir::new().expect("temp dir");
     let main_path = temp.path().join("main.vais");
@@ -990,6 +1137,101 @@ fn accept_307_preserve_redirect_then_final(listener: TcpListener) -> (String, St
         .expect("flush std/http_client final response");
 
     (first_request, second_request)
+}
+
+fn generate_self_signed_loopback_cert(cert_path: &Path, key_path: &Path) {
+    let output = Command::new("openssl")
+        .args([
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-sha256",
+            "-days",
+            "1",
+            "-subj",
+            "/CN=127.0.0.1",
+            "-addext",
+            "subjectAltName=IP:127.0.0.1",
+            "-keyout",
+            key_path.to_str().expect("key path utf8"),
+            "-out",
+            cert_path.to_str().expect("cert path utf8"),
+        ])
+        .output()
+        .expect("spawn openssl self-signed certificate generation");
+    assert!(
+        output.status.success(),
+        "openssl self-signed certificate generation failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn write_tls_redirect_server_script(script_path: &Path) {
+    let script = r#"
+import pathlib
+import socket
+import ssl
+import sys
+
+cert_path = sys.argv[1]
+key_path = sys.argv[2]
+out_dir = pathlib.Path(sys.argv[3])
+
+context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+context.load_cert_chain(certfile=cert_path, keyfile=key_path)
+
+listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+listener.bind(("127.0.0.1", 0))
+listener.listen(2)
+listener.settimeout(20)
+print(listener.getsockname()[1], flush=True)
+
+def read_request(conn):
+    conn.settimeout(10)
+    chunks = []
+    while True:
+        data = conn.recv(4096)
+        if not data:
+            break
+        chunks.append(data)
+        joined = b"".join(chunks)
+        if b"\r\n\r\n" in joined:
+            return joined
+    return b"".join(chunks)
+
+try:
+    raw, _ = listener.accept()
+    with context.wrap_socket(raw, server_side=True) as conn:
+        request = read_request(conn)
+        (out_dir / "tls_request1.txt").write_bytes(request)
+        conn.sendall(
+            b"HTTP/1.1 302 Found\r\n"
+            b"Location: /secure/final\r\n"
+            b"Content-Length: 0\r\n"
+            b"Connection: close\r\n"
+            b"\r\n"
+        )
+
+    raw, _ = listener.accept()
+    with context.wrap_socket(raw, server_side=True) as conn:
+        request = read_request(conn)
+        (out_dir / "tls_request2.txt").write_bytes(request)
+        body = b"https-redirect-ok"
+        conn.sendall(
+            b"HTTP/1.1 200 OK\r\n"
+            b"Content-Type: text/plain\r\n"
+            b"Content-Length: " + str(len(body)).encode("ascii") + b"\r\n"
+            b"Connection: close\r\n"
+            b"\r\n" + body
+        )
+finally:
+    listener.close()
+"#;
+    std::fs::write(script_path, script).expect("write local TLS redirect server script");
 }
 
 fn accept_redirect_then_final(listener: TcpListener, location: String) -> (String, String) {

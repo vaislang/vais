@@ -14,8 +14,9 @@
 # - Plain HTTP runtime path plus absolute, scheme-relative, root-relative,
 #   path-relative dot-segment, and query/fragment-relative plain-HTTP
 #   redirects are promoted.
-# - HTTPS/TLS path is enabled; broad HTTPS redirect and external network
-#   reliability remain certification work.
+# - HTTPS/TLS path is enabled; HTTPS same-host redirect following is promoted
+#   with explicit insecure TLS opt-out available for local/self-signed endpoints.
+#   Broad external network reliability remains certification work.
 
 # ============================================
 # Constants
@@ -41,6 +42,8 @@ C CLIENT_DEFAULT_TIMEOUT: i64 = 30000    # 30 seconds
 C CLIENT_DEFAULT_MAX_REDIRECTS: i64 = 10
 C CLIENT_DEFAULT_PORT_HTTP: i64 = 80
 C CLIENT_DEFAULT_PORT_HTTPS: i64 = 443
+C CLIENT_TLS_VERIFY_NONE: i64 = 0
+C CLIENT_TLS_VERIFY_PEER: i64 = 1
 
 # Connection pool
 C POOL_MAX_CONNECTIONS: i64 = 16
@@ -990,6 +993,7 @@ struct HttpClient {
     follow_redirects: i64,
     max_redirects: i64,
     keep_alive: i64,
+    tls_verify_peer: i64,
     pool: ConnectionPool,
     default_headers: i64,       # Array of default headers
     default_header_count: i64,
@@ -1005,6 +1009,7 @@ impl HttpClient {
             follow_redirects: 1,
             max_redirects: CLIENT_DEFAULT_MAX_REDIRECTS,
             keep_alive: 1,
+            tls_verify_peer: CLIENT_TLS_VERIFY_PEER,
             pool: ConnectionPool::new(),
             default_headers: default_headers,
             default_header_count: 0,
@@ -1034,6 +1039,17 @@ impl HttpClient {
     fn keep_alive(&self, enabled: i64) -> HttpClient {
         self.keep_alive = enabled
         self
+    }
+
+    # Set TLS certificate verification mode (1 = verify peer, 0 = insecure).
+    fn tls_verify(&self, verify: i64) -> HttpClient {
+        self.tls_verify_peer = verify
+        self
+    }
+
+    # Disable TLS certificate verification for explicit local/self-signed endpoints.
+    fn insecure_tls(&self) -> HttpClient {
+        self.tls_verify(CLIENT_TLS_VERIFY_NONE)
     }
 
     # Add a default header applied to every request
@@ -1117,7 +1133,12 @@ impl HttpClient {
                 __tcp_close(fd)
                 return HttpResponse::error(CLIENT_ERR_TLS_INIT)
             }
-            __tls_ctx_set_default_verify(ctx)
+            I self.tls_verify_peer == CLIENT_TLS_VERIFY_PEER {
+                __tls_ctx_set_default_verify(ctx)
+                __tls_ctx_set_verify(ctx, CLIENT_TLS_VERIFY_PEER)
+            } else {
+                __tls_ctx_set_verify(ctx, CLIENT_TLS_VERIFY_NONE)
+            }
 
             ssl := __tls_new(ctx, fd)
             I ssl == 0 {
@@ -1189,6 +1210,20 @@ impl HttpClient {
             response := __hc_parse_response(recv_buf, total_recv)
             __free(recv_buf)
             __tcp_close(fd)
+            I self.follow_redirects == 1 & response.is_redirect() == 1 {
+                I redirect_count >= self.max_redirects {
+                    return HttpResponse::error(CLIENT_ERR_TOO_MANY_REDIRECTS)
+                }
+                location := response.location()
+                I __strlen(location) > 0 {
+                    # 307/308 preserve the request; other promoted redirects rewrite to GET.
+                    redirect_url := request.url.resolve_redirect_location(location)
+                    redirect_req := request.redirect_to(redirect_url, response.status)
+                    return self.do_send(&redirect_req, redirect_count + 1, timeout_ms)
+                } else {
+                    return response
+                }
+            }
             return response
         } else {
             # Plain HTTP path (unchanged)

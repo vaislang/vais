@@ -28,7 +28,7 @@ current Core contract and promoted smoke gates pass with the evidence below.
 | Std package codegen | `82/82` |
 | VaisDB package codegen | `261/261` |
 | Phase 158 backend smoke | `18/18` |
-| std/http_client runtime smoke | `8/8` |
+| std/http_client runtime smoke | `9/9` |
 | VaisDB runtime smoke | `28/28` |
 | VaisDB runtime lock stability | WAL/LSN/buffer/page/checkpoint mutex release paths covered by current `28/28` smoke |
 | vais-server runtime smoke | `13/13` |
@@ -56,7 +56,7 @@ single source for current pass counts. CI fails on drift.
 | Unsafe documentation audit | `UNSAFE AUDIT OK: vais-codegen undocumented_unsafe_blocks=0` |
 | Ecosystem package codegen | `std=82/82`, `vaisdb=261/261` |
 | Backend smoke | `phase158=18/18` |
-| std/http_client runtime | `smoke=8/8` |
+| std/http_client runtime | `smoke=9/9` |
 | std/tls runtime | `smoke=2/2` |
 | VaisDB runtime | `smoke=34/34` |
 | vais-server runtime | `smoke=13/13` |
@@ -111,7 +111,9 @@ The following claims are valid:
   fragment-only `302 Location: #section` without sending `#section` in the
   HTTP request line, and preserves the original `POST` method,
   `Content-Type: application/json`, and JSON body across loopback
-  `307 Location: /submit/final`.
+  `307 Location: /submit/final`, and follows a loopback HTTPS
+  `302 Location: /secure/final` redirect through a local TLS server with
+  explicit `HttpClient.insecure_tls()` for the self-signed test endpoint.
 - Current vais-server compiled SSR forwarding smoke compiles, links, and runs
   `forward_ssr_render()` through `std/http_client` against a real loopback
   upstream SSR service, preserving upstream status, content-type, and body in
@@ -267,8 +269,8 @@ The following claims are not valid yet:
   runtime behavior."
 - "Automatic RAII/destructor-based unlock lowering is certified for every
   synchronization primitive and every package path."
-- "std/http_client HTTPS redirects, keep-alive pooling, broad external network
-  behavior, or production network reliability are certified."
+- "std/http_client keep-alive pooling, broad external network behavior, or
+  production network reliability are certified."
 - "Compiled vais-server SSR forwarding real delay sleep, probabilistic jitter,
   HTTPS/TLS, nested props/full JSON escaping, external network stability, or
   deployed Node SSR bridge operation are certified."
