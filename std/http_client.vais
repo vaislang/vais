@@ -11,8 +11,9 @@
 # - Timeout support via setsockopt
 # - Keep-alive connection reuse
 # - Connection pooling basics
-# - Plain HTTP runtime path plus absolute, scheme-relative, root-relative, and
-#   path-relative dot-segment plain-HTTP redirects are promoted.
+# - Plain HTTP runtime path plus absolute, scheme-relative, root-relative,
+#   path-relative dot-segment, and query/fragment-relative plain-HTTP
+#   redirects are promoted.
 # - HTTPS/TLS path is enabled; broad HTTPS redirect and external network
 #   reliability remain certification work.
 
@@ -143,7 +144,8 @@ impl Url {
 
     # Resolve a redirect Location against this URL.
     # Promoted surface: absolute URLs, scheme-relative URLs, root-relative paths,
-    # and path-relative paths with "." / ".." segment normalization.
+    # path-relative paths with "." / ".." segment normalization, query-only
+    # redirects, and fragment-only redirects.
     fn resolve_redirect_location(&self, location: str) -> str {
         I __strlen(location) == 0 {
             return location
@@ -179,8 +181,10 @@ impl Url {
                 buf as str
             } else I redirect_location_is_absolute_url(location) == 1 {
                 location
-            } else I location.char_at(0) == 63 | location.char_at(0) == 35 {
-                location
+            } else I location.char_at(0) == 63 {
+                self.resolve_query_relative_redirect_location(location)
+            } else I location.char_at(0) == 35 {
+                self.resolve_fragment_relative_redirect_location(location)
             } else {
                 self.resolve_path_relative_redirect_location(location)
             }
@@ -211,6 +215,45 @@ impl Url {
         I redirect_should_trim_final_slash(location) == 1 & pos > path_start + 1 {
             pos = pos - 1
         }
+        __store_byte(buf + pos, 0)
+        buf as str
+    }
+
+    fn resolve_query_relative_redirect_location(&self, location: str) -> str {
+        self.resolve_current_path_redirect_location(location, 0)
+    }
+
+    fn resolve_fragment_relative_redirect_location(&self, location: str) -> str {
+        self.resolve_current_path_redirect_location(location, 1)
+    }
+
+    fn resolve_current_path_redirect_location(&self, suffix: str, preserve_query: i64) -> str {
+        host := self.host_header()
+        scheme_len := __strlen(self.scheme)
+        host_len := __strlen(host)
+        path_len := __strlen(self.path)
+        suffix_len := __strlen(suffix)
+        query_len := mut 0
+        I preserve_query == 1 {
+            query_len = __strlen(self.query)
+        }
+
+        buf := __malloc(scheme_len + host_len + path_len + query_len + suffix_len + 5)
+        pos := mut __str_copy_to(buf, self.scheme)
+        __store_byte(buf + pos, 58)  # ':'
+        pos = pos + 1
+        __store_byte(buf + pos, 47)  # '/'
+        pos = pos + 1
+        __store_byte(buf + pos, 47)  # '/'
+        pos = pos + 1
+        pos = pos + __str_copy_to(buf + pos, host)
+        pos = pos + __str_copy_to(buf + pos, self.path)
+        I preserve_query == 1 & query_len > 0 {
+            __store_byte(buf + pos, 63)  # '?'
+            pos = pos + 1
+            pos = pos + __str_copy_to(buf + pos, self.query)
+        }
+        pos = pos + __str_copy_to(buf + pos, suffix)
         __store_byte(buf + pos, 0)
         buf as str
     }
