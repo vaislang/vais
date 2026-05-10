@@ -28,12 +28,12 @@ current Core contract and promoted smoke gates pass with the evidence below.
 | Std package codegen | `82/82` |
 | VaisDB package codegen | `261/261` |
 | Phase 158 backend smoke | `18/18` |
-| std/http_client runtime smoke | `13/13` |
-| VaisDB runtime smoke | `28/28` |
-| VaisDB runtime lock stability | WAL/LSN/buffer/page/checkpoint mutex release paths covered by current `28/28` smoke |
+| std/http_client runtime smoke | `14/14` |
+| VaisDB runtime smoke | `34/34` |
+| VaisDB runtime lock stability | WAL/LSN/buffer/page/checkpoint mutex release paths covered by current `34/34` smoke |
 | vais-server runtime smoke | `13/13` |
 | vais-server compiled SSR forwarding | `forward_ssr_render()` loopback upstream POST/status/content-type/body bridge plus upstream non-2xx/transport-failure/timeout/retry mapping and retry-budget observability covered by current `13/13` smoke |
-| vais-web runtime smoke | `23/23` |
+| vais-web runtime smoke | `61/77` in skip-mode CI default |
 | vais-web Cloudflare workerd in-process smoke | `Miniflare dispatchFetch` against generated `_worker.js` with real KV-backed `__STATIC_CONTENT` site binding (static index, dynamic route, 404) |
 | Rust toolchain pin | `rust-toolchain.toml` pins Rust `1.92.0` with `rustfmt` and `clippy` components |
 | Full Rust-hosted compiler test run | Last completed RC baseline: `cargo test --release` exit code `0`; latest current-batch attempt was interrupted after e2e/integrity passed because `registry_e2e_tests` hung at dyld start |
@@ -56,7 +56,7 @@ single source for current pass counts. CI fails on drift.
 | Unsafe documentation audit | `UNSAFE AUDIT OK: vais-codegen undocumented_unsafe_blocks=0` |
 | Ecosystem package codegen | `std=82/82`, `vaisdb=261/261` |
 | Backend smoke | `phase158=18/18` |
-| std/http_client runtime | `smoke=13/13` |
+| std/http_client runtime | `smoke=14/14` |
 | std/tls runtime | `smoke=2/2` |
 | VaisDB runtime | `smoke=34/34` |
 | vais-server runtime | `smoke=13/13` |
@@ -115,9 +115,9 @@ The following claims are valid:
   `302 Location: /secure/final` redirect through a local TLS server with
   explicit `HttpClient.insecure_tls()` for the self-signed test endpoint, and
   retries a stale pooled plain HTTP `GET` after the server closes an advertised
-  keep-alive socket, reports malformed HTTP status lines and malformed
-  `Content-Length` values as parse errors, and reports truncated
-  `Content-Length` response bodies as parse errors.
+  keep-alive socket, reports malformed HTTP status lines, malformed response
+  header lines, and malformed `Content-Length` values as parse errors, and
+  reports truncated `Content-Length` response bodies as parse errors.
 - Current vais-server compiled SSR forwarding smoke compiles, links, and runs
   `forward_ssr_render()` through `std/http_client` against a real loopback
   upstream SSR service, preserving upstream status, content-type, and body in

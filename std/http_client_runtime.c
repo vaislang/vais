@@ -352,6 +352,25 @@ static HcStr hc_make_str(const char* start, size_t len) {
     return out;
 }
 
+static int hc_is_header_name_char(unsigned char ch) {
+    return ch > 32 && ch < 127 && ch != ':';
+}
+
+static HcResponse hc_parse_error_with_cleanup(HcResponse* out, long* items, long count) {
+    if (items != NULL) {
+        for (long i = 0; i < count; i++) {
+            free((void*)items[i * 2]);
+            free((void*)items[i * 2 + 1]);
+        }
+        free(items);
+    }
+    free((void*)out->status_text.ptr);
+    free((void*)out->version.ptr);
+    memset(out, 0, sizeof(HcResponse));
+    out->error_code = -6;  // CLIENT_ERR_PARSE
+    return *out;
+}
+
 // Parse an HTTP response from raw bytes.
 // Returns HttpResponse struct by value to match the Vais external declaration.
 HcResponse __hc_parse_response(long buffer, long len) {
@@ -438,7 +457,19 @@ HcResponse __hc_parse_response(long buffer, long len) {
 
         // Parse header name
         const char* name_start = p;
-        while (p < end && *p != ':') p++;
+        const char* line_end = p;
+        while (line_end < end && *line_end != '\r' && *line_end != '\n') line_end++;
+        const char* colon = p;
+        while (colon < line_end && *colon != ':') colon++;
+        if (colon == line_end || colon == name_start) {
+            return hc_parse_error_with_cleanup(&out, items, count);
+        }
+        for (const char* q = name_start; q < colon; q++) {
+            if (!hc_is_header_name_char((unsigned char)*q)) {
+                return hc_parse_error_with_cleanup(&out, items, count);
+            }
+        }
+        p = colon;
         char* name = hc_strndup(name_start, (size_t)(p - name_start));
 
         // Skip ": "

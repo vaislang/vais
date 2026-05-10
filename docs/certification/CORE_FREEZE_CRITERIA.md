@@ -45,7 +45,7 @@ Core freeze:
 | Codegen invariant quarantine | `bash scripts/check-integrity.sh` reports `CODEGEN OK` |
 | Ecosystem compilation surface | `bash scripts/check-integrity.sh` reports `ECOSYSTEM OK: syntax=200/? stages=14/? std=82/82 vaisdb=261/261` |
 | Backend smoke | `bash scripts/check-integrity.sh` reports `BACKEND OK: phase158=18/18` |
-| VaisDB runtime smoke | `bash scripts/check-integrity.sh` reports `VAISDB RUNTIME OK: smoke=28/28` |
+| VaisDB runtime smoke | `bash scripts/check-integrity.sh` reports `VAISDB RUNTIME OK: smoke=34/34` |
 | Whitespace sanity | `git diff --check` is clean in `compiler/` and `lang/` |
 
 The narrative table above documents *what* each gate reports. The exact
@@ -72,7 +72,7 @@ markers is generated from `GATE_MANIFEST.toml` by
 | Unsafe documentation audit | `UNSAFE AUDIT OK: vais-codegen undocumented_unsafe_blocks=0` |
 | Ecosystem package codegen | `std=82/82`, `vaisdb=261/261` |
 | Backend smoke | `phase158=18/18` |
-| std/http_client runtime | `smoke=13/13` |
+| std/http_client runtime | `smoke=14/14` |
 | std/tls runtime | `smoke=2/2` |
 | VaisDB runtime | `smoke=34/34` |
 | vais-server runtime | `smoke=13/13` |
