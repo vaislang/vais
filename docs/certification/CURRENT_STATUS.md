@@ -28,7 +28,7 @@ current Core contract and promoted smoke gates pass with the evidence below.
 | Std package codegen | `82/82` |
 | VaisDB package codegen | `261/261` |
 | Phase 158 backend smoke | `18/18` |
-| std/http_client runtime smoke | `11/11` |
+| std/http_client runtime smoke | `12/12` |
 | VaisDB runtime smoke | `28/28` |
 | VaisDB runtime lock stability | WAL/LSN/buffer/page/checkpoint mutex release paths covered by current `28/28` smoke |
 | vais-server runtime smoke | `13/13` |
@@ -56,7 +56,7 @@ single source for current pass counts. CI fails on drift.
 | Unsafe documentation audit | `UNSAFE AUDIT OK: vais-codegen undocumented_unsafe_blocks=0` |
 | Ecosystem package codegen | `std=82/82`, `vaisdb=261/261` |
 | Backend smoke | `phase158=18/18` |
-| std/http_client runtime | `smoke=11/11` |
+| std/http_client runtime | `smoke=12/12` |
 | std/tls runtime | `smoke=2/2` |
 | VaisDB runtime | `smoke=34/34` |
 | vais-server runtime | `smoke=13/13` |
@@ -115,7 +115,8 @@ The following claims are valid:
   `302 Location: /secure/final` redirect through a local TLS server with
   explicit `HttpClient.insecure_tls()` for the self-signed test endpoint, and
   retries a stale pooled plain HTTP `GET` after the server closes an advertised
-  keep-alive socket, and reports malformed HTTP status lines as parse errors.
+  keep-alive socket, reports malformed HTTP status lines as parse errors, and
+  reports truncated `Content-Length` response bodies as parse errors.
 - Current vais-server compiled SSR forwarding smoke compiles, links, and runs
   `forward_ssr_render()` through `std/http_client` against a real loopback
   upstream SSR service, preserving upstream status, content-type, and body in

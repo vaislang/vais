@@ -12,6 +12,7 @@
 # - Keep-alive connection reuse
 # - Connection pooling with stale pooled idempotent request retry
 # - Malformed HTTP status-line responses return CLIENT_ERR_PARSE
+# - Truncated Content-Length response bodies return CLIENT_ERR_PARSE
 # - Plain HTTP runtime path plus absolute, scheme-relative, root-relative,
 #   path-relative dot-segment, and query/fragment-relative plain-HTTP
 #   redirects are promoted.
@@ -999,6 +1000,27 @@ impl ConnectionPool {
     }
 }
 
+# Return 1 only when the received response has complete headers and, when a
+# Content-Length header is present, the declared body bytes are available.
+fn http_response_body_complete(buffer: i64, len: i64) -> i64 {
+    header_end := __find_header_end(buffer, len)
+    I header_end < 0 {
+        return 0
+    }
+
+    content_len := __hc_get_content_length(buffer, len)
+    I content_len < 0 {
+        return 1
+    }
+
+    body_received := len - header_end
+    I body_received >= content_len {
+        1
+    } else {
+        0
+    }
+}
+
 # ============================================
 # HTTP Client
 # ============================================
@@ -1225,6 +1247,11 @@ impl HttpClient {
                 }
                 return HttpResponse::error(CLIENT_ERR_RECV)
             }
+            I http_response_body_complete(recv_buf, total_recv) != 1 {
+                __tcp_close(fd)
+                __free(recv_buf)
+                return HttpResponse::error(CLIENT_ERR_PARSE)
+            }
 
             response := __hc_parse_response(recv_buf, total_recv)
             __free(recv_buf)
@@ -1296,6 +1323,11 @@ impl HttpClient {
                     return HttpResponse::error(CLIENT_ERR_TIMEOUT)
                 }
                 return HttpResponse::error(CLIENT_ERR_RECV)
+            }
+            I http_response_body_complete(recv_buf, total_recv) != 1 {
+                __tcp_close(fd)
+                __free(recv_buf)
+                return HttpResponse::error(CLIENT_ERR_PARSE)
             }
 
             # Parse response

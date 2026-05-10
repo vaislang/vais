@@ -194,6 +194,86 @@ fn main() -> i64 {
 }
 
 #[test]
+fn e2e_std_http_client_loopback_truncated_content_length_parse_error_runtime_smoke() {
+    let temp = tempfile::TempDir::new().expect("temp dir");
+    let main_path = temp.path().join("main.vais");
+    let exe_path = temp
+        .path()
+        .join("http_client_truncated_content_length_smoke");
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind loopback listener");
+    listener
+        .set_nonblocking(true)
+        .expect("set listener nonblocking");
+    let port = listener.local_addr().expect("read listener address").port();
+
+    let source = r#"
+use std/http_client
+
+fn main() -> i64 {
+    response := http_get("http://127.0.0.1:__PORT__/truncated")
+    I response.error_code != -6 { return 1 }
+    I response.status != 0 { return 2 }
+    I response.body_len != 0 { return 3 }
+    I response.is_ok() != 0 { return 4 }
+    response.drop()
+    0
+}
+"#
+    .replace("__PORT__", &port.to_string());
+    std::fs::write(&main_path, source).expect("write http_client truncated body fixture");
+
+    let compiler_root = compiler_root();
+    let std_path = std_link(&compiler_root);
+    let dep_paths = format!("{}:{}", temp.path().display(), std_path.display());
+
+    let build = Command::new(env!("CARGO_BIN_EXE_vaisc"))
+        .arg("-v")
+        .arg("build")
+        .arg(&main_path)
+        .arg("-o")
+        .arg(&exe_path)
+        .arg("--force-rebuild")
+        .current_dir(temp.path())
+        .env("VAIS_STD_PATH", &std_path)
+        .env("VAIS_DEP_PATHS", dep_paths)
+        .output()
+        .expect("spawn vaisc build");
+    assert!(
+        build.status.success(),
+        "std/http_client truncated body fixture failed to build\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr)
+    );
+
+    let server = thread::spawn(move || accept_truncated_content_length_response(listener));
+    let run = Command::new(&exe_path)
+        .current_dir(temp.path())
+        .output()
+        .expect("run std/http_client truncated body fixture");
+    let request_text = server.join().expect("join loopback truncated body server");
+
+    assert_eq!(
+        run.status.code().unwrap_or(-1),
+        0,
+        "std/http_client truncated body fixture exited unexpectedly\nstdout:\n{}\nstderr:\n{}\nrequest:\n{}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr),
+        request_text
+    );
+    assert!(
+        request_text.contains("GET /truncated HTTP/1.1"),
+        "request did not contain expected request line:\n{}",
+        request_text
+    );
+    assert!(
+        request_text.contains("Host: 127.0.0.1:"),
+        "request did not contain Host header with loopback port:\n{}",
+        request_text
+    );
+}
+
+#[test]
 fn e2e_std_http_client_loopback_keep_alive_stale_get_retries_runtime_smoke() {
     let temp = tempfile::TempDir::new().expect("temp dir");
     let main_path = temp.path().join("main.vais");
@@ -1257,6 +1337,19 @@ fn accept_malformed_status_response(listener: TcpListener) -> String {
     stream
         .flush()
         .expect("flush std/http_client malformed status response");
+
+    request
+}
+
+fn accept_truncated_content_length_response(listener: TcpListener) -> String {
+    let (mut stream, request) = accept_http_request(&listener);
+    let response = "HTTP/1.1 200 OK\r\nContent-Length: 12\r\nConnection: close\r\n\r\nshort";
+    stream
+        .write_all(response.as_bytes())
+        .expect("write std/http_client truncated body response");
+    stream
+        .flush()
+        .expect("flush std/http_client truncated body response");
 
     request
 }
