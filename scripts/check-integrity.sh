@@ -7,13 +7,14 @@
 # Environment overrides (defaults shown; baseline locked 2026-05-03):
 #   INTEGRITY_STD_MIN=82                   minimum std_files pass count
 #   INTEGRITY_VAISDB_MIN=261               minimum vaisdb_files pass count
-#   INTEGRITY_HTTP_CLIENT_RUNTIME_MIN=1    minimum http_client runtime smoke
+#   INTEGRITY_HTTP_CLIENT_RUNTIME_MIN=2    minimum http_client runtime smoke
 #   INTEGRITY_TLS_RUNTIME_MIN=2            minimum std/tls runtime smoke
 #   INTEGRITY_VAISDB_RUNTIME_MIN=34        minimum vaisdb runtime smoke
 #   INTEGRITY_SERVER_RUNTIME_MIN=13        minimum vais-server runtime smoke
 #   INTEGRITY_WEB_RUNTIME_MIN=61           minimum vais-web runtime smoke
 #   INTEGRITY_WEB_UNIT_MIN=390             minimum vais-web unit tests
 #   INTEGRITY_WEB_PACKAGES_MIN=3272        minimum vais-web non-kit packages tests
+#   INTEGRITY_WEB_FULL_BUILD_MIN=24        minimum vais-web package full-build smoke
 #   INTEGRITY_BACKEND_PHASE158_MIN=18      minimum phase158 backend smoke
 #   INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=2   minimum cross_package_schema gate (positive + negative)
 #   INTEGRITY_PKG_FULL_BUILD_MIN=2         minimum package full-build smoke (Phase 1 100% Gap)
@@ -55,13 +56,14 @@ INTEGRITY_VAISDB_MIN="${INTEGRITY_VAISDB_MIN:-261}"
 # Previously the script trusted `cargo test` exit=0 only, which would not
 # catch a silent reduction in pass count if the suite count itself shrank.
 # These minima are the current promoted gate counts as of 2026-05-03.
-INTEGRITY_HTTP_CLIENT_RUNTIME_MIN="${INTEGRITY_HTTP_CLIENT_RUNTIME_MIN:-1}"
+INTEGRITY_HTTP_CLIENT_RUNTIME_MIN="${INTEGRITY_HTTP_CLIENT_RUNTIME_MIN:-2}"
 INTEGRITY_TLS_RUNTIME_MIN="${INTEGRITY_TLS_RUNTIME_MIN:-2}"
 INTEGRITY_VAISDB_RUNTIME_MIN="${INTEGRITY_VAISDB_RUNTIME_MIN:-34}"
 INTEGRITY_SERVER_RUNTIME_MIN="${INTEGRITY_SERVER_RUNTIME_MIN:-13}"
 INTEGRITY_WEB_RUNTIME_MIN="${INTEGRITY_WEB_RUNTIME_MIN:-61}"
 INTEGRITY_WEB_UNIT_MIN="${INTEGRITY_WEB_UNIT_MIN:-390}"
 INTEGRITY_WEB_PACKAGES_MIN="${INTEGRITY_WEB_PACKAGES_MIN:-3272}"
+INTEGRITY_WEB_FULL_BUILD_MIN="${INTEGRITY_WEB_FULL_BUILD_MIN:-24}"
 INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN="${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN:-2}"
 INTEGRITY_BACKEND_PHASE158_MIN="${INTEGRITY_BACKEND_PHASE158_MIN:-18}"
 # Phase 1 100% Gap (master-plan v79): package full-build smoke baseline.
@@ -332,6 +334,29 @@ else
         ) >> "${WEB_PACKAGES_LOG}" 2>&1 || WEB_PACKAGES_EXIT=$?
     done
 fi
+
+# ---------------------------------------------------------------------------
+# Run vais-web full-build smoke (Phase 1 100% Gap close, master-plan v81)
+# ---------------------------------------------------------------------------
+# vais-web has no `.vais` entry-point; it is a .vaisx/TypeScript monorepo.
+# The production build surface is the workspace package build graph:
+# `pnpm -r build` from lang/packages/vais-web. This gate locks that every
+# package with a build script completes its real package build.
+WEB_FULL_BUILD_LOG="/tmp/vais-web-full-build.log"
+WEB_FULL_BUILD_DIR="${REPO_ROOT}/../lang/packages/vais-web"
+echo "check-integrity: running vais-web full-build smoke..."
+
+WEB_FULL_BUILD_EXIT=0
+if [ ! -d "${WEB_FULL_BUILD_DIR}" ]; then
+    echo "vais-web full-build directory missing: ${WEB_FULL_BUILD_DIR}" | tee "${WEB_FULL_BUILD_LOG}"
+    WEB_FULL_BUILD_EXIT=1
+else
+    (
+        cd "${WEB_FULL_BUILD_DIR}"
+        NPM_TOKEN="${NPM_TOKEN:-}" pnpm -r build
+    ) 2>&1 | tee "${WEB_FULL_BUILD_LOG}" || WEB_FULL_BUILD_EXIT=$?
+fi
+
 # ---------------------------------------------------------------------------
 # The gate proves that a typed change to a shared schema.vais propagates
 # to .vais consumers (vaisdb-style + vais-server-style) AND to .ts
@@ -518,6 +543,19 @@ WEB_PACKAGES_PASSED="${WEB_PACKAGES_PASSED:-0}"
 WEB_PACKAGES_TOTAL="$(parse_vitest_total_sum "${WEB_PACKAGES_LOG}")"
 WEB_PACKAGES_TOTAL="${WEB_PACKAGES_TOTAL:-${WEB_PACKAGES_PASSED}}"
 WEB_PACKAGES_TOTAL="${WEB_PACKAGES_TOTAL:-0}"
+WEB_FULL_BUILD_TOTAL=0
+if [ -d "${WEB_FULL_BUILD_DIR}/packages" ]; then
+    WEB_FULL_BUILD_TOTAL="$(find "${WEB_FULL_BUILD_DIR}/packages" -mindepth 2 -maxdepth 2 -name package.json -print \
+        | xargs grep -l '"build"[[:space:]]*:' 2>/dev/null \
+        | wc -l \
+        | tr -d '[:space:]')"
+fi
+WEB_FULL_BUILD_TOTAL="${WEB_FULL_BUILD_TOTAL:-0}"
+if [ "${WEB_FULL_BUILD_EXIT}" -eq 0 ]; then
+    WEB_FULL_BUILD_PASSED="${WEB_FULL_BUILD_TOTAL}"
+else
+    WEB_FULL_BUILD_PASSED=0
+fi
 
 # ---------------------------------------------------------------------------
 # Regression checks
@@ -575,6 +613,10 @@ fi
 if [ -n "${WEB_PACKAGES_PASSED}" ] && [ "${WEB_PACKAGES_PASSED}" -lt "${INTEGRITY_WEB_PACKAGES_MIN}" ]; then
     REGRESSION=1
     REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: vais_web_packages baseline=${INTEGRITY_WEB_PACKAGES_MIN} current=${WEB_PACKAGES_PASSED}/${WEB_PACKAGES_TOTAL}\n"
+fi
+if [ -n "${WEB_FULL_BUILD_PASSED}" ] && [ "${WEB_FULL_BUILD_PASSED}" -lt "${INTEGRITY_WEB_FULL_BUILD_MIN}" ]; then
+    REGRESSION=1
+    REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: vais_web_full_build baseline=${INTEGRITY_WEB_FULL_BUILD_MIN} current=${WEB_FULL_BUILD_PASSED}/${WEB_FULL_BUILD_TOTAL}\n"
 fi
 if [ -n "${PHASE158_PASSED}" ] && [ "${PHASE158_PASSED}" -lt "${INTEGRITY_BACKEND_PHASE158_MIN}" ]; then
     REGRESSION=1
@@ -677,6 +719,12 @@ if [ "${WEB_PACKAGES_EXIT}" -ne 0 ]; then
     OVERALL_EXIT=1
 fi
 
+if [ "${WEB_FULL_BUILD_EXIT}" -ne 0 ]; then
+    echo ""
+    echo "WEB FULL BUILD SMOKE FAILED: pnpm -r build exited ${WEB_FULL_BUILD_EXIT}"
+    OVERALL_EXIT=1
+fi
+
 if [ "${CROSS_PKG_SCHEMA_EXIT}" -ne 0 ]; then
     echo ""
     echo "CROSS PACKAGE SCHEMA GATE FAILED: gate.sh exited ${CROSS_PKG_SCHEMA_EXIT}"
@@ -776,6 +824,12 @@ print_gate_summary() {
         echo "WEB PACKAGES FAIL: exit=${WEB_PACKAGES_EXIT} tests=${WEB_PACKAGES_PASSED}/${WEB_PACKAGES_TOTAL}"
     fi
 
+    if [ "${WEB_FULL_BUILD_EXIT}" -eq 0 ]; then
+        echo "WEB FULL BUILD OK: packages=${WEB_FULL_BUILD_PASSED}/${WEB_FULL_BUILD_TOTAL}"
+    else
+        echo "WEB FULL BUILD FAIL: exit=${WEB_FULL_BUILD_EXIT} packages=${WEB_FULL_BUILD_PASSED}/${WEB_FULL_BUILD_TOTAL}"
+    fi
+
     if [ "${CROSS_PKG_SCHEMA_EXIT}" -eq 0 ]; then
         echo "CROSS PACKAGE SCHEMA OK: gate=${CROSS_PKG_SCHEMA_PASSED}/${CROSS_PKG_SCHEMA_TOTAL}"
     else
@@ -790,7 +844,7 @@ if [ "${OVERALL_EXIT}" -eq 0 ]; then
     else
         PKG_FULL_BUILD_STATUS="threshold-met-${PKG_FULL_BUILD_PASSED}/${PKG_FULL_BUILD_TOTAL}"
     fi
-    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok tls_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok web_unit=ok web_packages=ok cross_package_schema=ok pkg_full_build=${PKG_FULL_BUILD_STATUS}"
+    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok tls_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok web_unit=ok web_packages=ok web_full_build=ok cross_package_schema=ok pkg_full_build=${PKG_FULL_BUILD_STATUS}"
     exit 0
 else
     print_gate_summary

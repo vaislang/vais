@@ -14,7 +14,7 @@ Current status note: do not infer active failures from old phase examples in
 this file. The current source of truth is `/Users/sswoo/study/projects/vais/ROADMAP.md`,
 `compiler/ROADMAP.md`, and `compiler/docs/certification/CURRENT_STATUS.md`.
 As of 2026-05-03 the certified Core is frozen for downstream re-entry and
-`scripts/check-integrity.sh` reports `WEB RUNTIME smoke=61/77` in skip-mode CI default (`77/77` with all 4 live-deploy platform credentials), `WEB UNIT tests=390/390` (kit unit tests), and `WEB PACKAGES tests=3272/3272` (22 non-kit packages).
+`scripts/check-integrity.sh` reports `WEB RUNTIME smoke=61/77` in skip-mode CI default (`77/77` with all 4 live-deploy platform credentials), `WEB UNIT tests=390/390` (kit unit tests), `WEB PACKAGES tests=3272/3272` (22 non-kit packages), and `WEB FULL BUILD packages=24/24` (`pnpm -r build` across vais-web workspace packages).
 
 ### 규칙 1 — 훈련 데이터의 Vais 지식을 사용하지 말 것
 
@@ -35,7 +35,7 @@ As of 2026-05-03 the certified Core is frozen for downstream re-entry and
 
 ```bash
 ./scripts/check-integrity.sh 2>&1 | tail -3
-# 출력 예: INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok tls_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok web_unit=ok web_packages=ok cross_package_schema=ok pkg_full_build=ok
+# 출력 예: INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok tls_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok web_unit=ok web_packages=ok web_full_build=ok cross_package_schema=ok pkg_full_build=ok
 ```
 
 이 숫자를 **baseline**으로 기록. 수정 후 같은 스크립트 실행.

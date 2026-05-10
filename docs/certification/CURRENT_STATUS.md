@@ -56,13 +56,14 @@ single source for current pass counts. CI fails on drift.
 | Unsafe documentation audit | `UNSAFE AUDIT OK: vais-codegen undocumented_unsafe_blocks=0` |
 | Ecosystem package codegen | `std=82/82`, `vaisdb=261/261` |
 | Backend smoke | `phase158=18/18` |
-| std/http_client runtime | `smoke=1/1` |
+| std/http_client runtime | `smoke=2/2` |
 | std/tls runtime | `smoke=2/2` |
 | VaisDB runtime | `smoke=34/34` |
 | vais-server runtime | `smoke=13/13` |
 | vais-web runtime | `smoke=61/77` |
 | vais-web unit | `tests=390/390` |
 | vais-web packages | `tests=3272/3272` |
+| vais-web full-build | `packages=24/24` |
 | Cross-package schema gate | `gate=2/2` |
 | Package full-build smoke | `smoke=2/2` |
 <!-- gate-table:auto-end -->
