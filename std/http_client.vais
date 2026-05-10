@@ -11,7 +11,8 @@
 # - Timeout support via setsockopt
 # - Keep-alive connection reuse
 # - Connection pooling basics
-# - Plain HTTP runtime path and absolute plain-HTTP redirects are promoted.
+# - Plain HTTP runtime path plus absolute and root-relative plain-HTTP redirects
+#   are promoted.
 # - HTTPS/TLS path is enabled; broad HTTPS redirect and external network
 #   reliability remain certification work.
 
@@ -137,6 +138,37 @@ impl Url {
             pos = pos + __i64_to_str(buf + pos, self.port)
             __store_byte(buf + pos, 0)  # null terminate
             buf as str
+        }
+    }
+
+    # Resolve a redirect Location against this URL.
+    # Promoted surface: absolute URLs and root-relative paths such as "/final".
+    fn resolve_redirect_location(&self, location: str) -> str {
+        I __strlen(location) == 0 {
+            return location
+        }
+
+        # Root-relative redirect. Scheme-relative URLs ("//host/path") stay
+        # outside the promoted subset and are passed through unchanged.
+        I location.char_at(0) == 47 & location.char_at(1) != 47 {
+            host := self.host_header()
+            scheme_len := __strlen(self.scheme)
+            host_len := __strlen(host)
+            location_len := __strlen(location)
+            buf := __malloc(scheme_len + host_len + location_len + 4)
+            pos := mut __str_copy_to(buf, self.scheme)
+            __store_byte(buf + pos, 58)  # ':'
+            pos = pos + 1
+            __store_byte(buf + pos, 47)  # '/'
+            pos = pos + 1
+            __store_byte(buf + pos, 47)  # '/'
+            pos = pos + 1
+            pos = pos + __str_copy_to(buf + pos, host)
+            pos = pos + __str_copy_to(buf + pos, location)
+            __store_byte(buf + pos, 0)
+            buf as str
+        } else {
+            location
         }
     }
 }
@@ -984,7 +1016,8 @@ impl HttpClient {
                 location := response.location()
                 I __strlen(location) > 0 {
                     # Build redirect request (GET for 301/302/303)
-                    redirect_req := HttpRequest::get(location)
+                    redirect_url := request.url.resolve_redirect_location(location)
+                    redirect_req := HttpRequest::get(redirect_url)
                     redirect_req.timeout_ms = request.timeout_ms
                     return self.do_send(&redirect_req, redirect_count + 1, timeout_ms)
                 } else {

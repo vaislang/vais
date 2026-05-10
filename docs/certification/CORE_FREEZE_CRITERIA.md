@@ -72,7 +72,7 @@ markers is generated from `GATE_MANIFEST.toml` by
 | Unsafe documentation audit | `UNSAFE AUDIT OK: vais-codegen undocumented_unsafe_blocks=0` |
 | Ecosystem package codegen | `std=82/82`, `vaisdb=261/261` |
 | Backend smoke | `phase158=18/18` |
-| std/http_client runtime | `smoke=3/3` |
+| std/http_client runtime | `smoke=4/4` |
 | std/tls runtime | `smoke=2/2` |
 | VaisDB runtime | `smoke=34/34` |
 | vais-server runtime | `smoke=13/13` |
