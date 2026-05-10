@@ -76,7 +76,7 @@
   },
   "playground": {
     "title": "立即试用 Vais",
-    "subtitle": "在浏览器中试用 Vais syntax 和 examples。Server-backed compilation 在 API 可用时使用；JS/WASM browser path 是 experimental。",
+    "subtitle": "在浏览器中试用 Vais syntax 和 examples。实际 compilation 使用 playground API；browser-only compile/execute 仍是 experimental。",
     "launch": "启动交互式在线试用",
     "loadHere": "在此处加载在线试用",
     "openTab": "在新标签页中打开"
