@@ -6,7 +6,7 @@ A guide to installing VaisDB and running your first query.
 
 ## Requirements
 
-- Vais compiler v1.0.0 or later (`~/.cargo/bin/vaisc`)
+- Vais compiler built from the current certified source baseline (`vaisc`)
 - OS: Linux, macOS, Windows (WSL2 recommended)
 
 ---
@@ -236,9 +236,9 @@ api_key_env = "OPENAI_API_KEY"
 
 ---
 
-## Complete First Example
+## First Example
 
-Below is a complete example that inserts documents and performs a vector similarity search.
+Below is a bounded example that inserts documents and performs a vector similarity search.
 
 ```vais
 U vaisdb::{Database, Row};

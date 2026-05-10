@@ -1189,4 +1189,4 @@ vaisc build --target wasm32-unknown-unknown program.vais -o program.wasm
 - [Standard Library](https://github.com/vaislang/vais/tree/main/std) - 74 built-in modules
 - [Examples](https://github.com/vaislang/vais/tree/main/examples) - 189 real-world code samples
 - [Memory Safety](../advanced/memory-safety.md) - Deep dive into ownership and borrowing
-- [Playground](https://vais.dev/playground/) - Try Vais online
+- [Playground](https://vaislang.dev/playground/) - Try Vais online

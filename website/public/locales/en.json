@@ -13,9 +13,9 @@
     "blog": "Blog"
   },
   "hero": {
-    "badge": "v0.1.0 — Production Ready",
+    "badge": "Certified Core + Promoted Runtime Gates",
     "title": "Write <span class=\"gradient-text\">fewer tokens</span>,<br>get <span class=\"gradient-text\">native performance</span>",
-    "subtitle": "Vais (Vibe AI Language for Systems) is a systems programming language optimized for AI code generation. Single-character keywords, expression-oriented syntax, and LLVM-powered native speed.",
+    "subtitle": "Vais (Vibe AI Language for Systems) is a systems programming language optimized for AI code generation. The current public baseline is a certified Core compiler plus named promoted runtime gates.",
     "tryBrowser": "Try in Browser",
     "install": "brew install vais"
   },
@@ -51,38 +51,38 @@
     },
     "llvm": {
       "title": "LLVM Native Speed",
-      "description": "Compiles to optimized native code via LLVM. Get C-level performance with high-level ergonomics. Supports LTO and PGO."
+      "description": "Compiles promoted native paths through LLVM. Broader optimization and backend claims are tracked by explicit certification gates."
     },
     "inference": {
       "title": "Type Inference",
       "description": "Bidirectional type checking infers types automatically. Write <code>x := 42</code> instead of explicit type annotations everywhere."
     },
     "toolchain": {
-      "title": "Full Toolchain",
-      "description": "LSP server, formatter, debugger, REPL, package manager, and IDE plugins for VSCode and IntelliJ. Production-ready tooling."
+      "title": "Tooling Workbench",
+      "description": "LSP server, formatter, debugger, REPL, package manager, and IDE plugins exist as implementation surfaces. Support level depends on named gates."
     },
     "multiTarget": {
-      "title": "Multi-Target Output",
-      "description": "Compile to native binaries, WebAssembly, or JavaScript. Run Vais code in the browser with full WASM interop and JS codegen."
+      "title": "Native First, Experimental Extra Targets",
+      "description": "The promoted path is native codegen. JavaScript, WebAssembly, and browser execution paths remain experimental unless a page names a gate."
     },
     "incremental": {
-      "title": "Incremental Compilation",
-      "description": "Per-module caching with parallel codegen. Recompile only what changed — 30K-line projects rebuild in under 100ms."
+      "title": "Parallel Compiler Pipeline",
+      "description": "Per-module dependency tracking and parallel codegen are active workbench surfaces; exact performance claims require benchmark gates."
     },
     "selfHosting": {
-      "title": "Self-Hosting Compiler",
-      "description": "Vais can compile itself. The self-hosting compiler achieves bootstrap with 50,000+ lines of Vais, backed by 2,592 E2E tests and 12,000+ total tests."
+      "title": "Self-Hosting Workbench",
+      "description": "The repository contains 50,000+ lines of Vais compiler sources used for bootstrap and conformance work. Current guarantees are the certified Core and promoted runtime gates."
     }
   },
   "playground": {
     "title": "Try Vais Now",
-    "subtitle": "Write and run Vais code directly in your browser. No installation required.",
+    "subtitle": "Try Vais syntax and examples in the browser. Server-backed compilation is used when available; browser-only JS/WASM paths are experimental.",
     "launch": "Launch Interactive Playground",
     "loadHere": "Load Playground Here",
     "openTab": "Open in New Tab"
   },
   "install": {
-    "title": "Get Started in Seconds",
+    "title": "Build From Source or Try the Playground",
     "oneClick": "One-Click Install",
     "oneClickNote": "Detects your OS & arch automatically. macOS, Linux, WSL.",
     "windows": "Windows (PowerShell)",
@@ -107,18 +107,18 @@
   "vaisx": {
     "badge": "New",
     "title": "Build Web Apps with Vais",
-    "subtitle": "VaisX is a full-stack web framework powered by the Vais compiler. Compile-time reactivity, file-based routing, and SSR — all in under 3KB.",
+    "subtitle": "VaisX is the Vais web framework workbench. Current public claims are tied to promoted runtime, unit, package, and full-build gates.",
     "compiler": {
       "title": "Compile-Time Reactivity",
-      "description": "Reactive state analyzed at build time. Zero runtime overhead for state tracking — just surgical DOM updates."
+      "description": "Reactive state analysis and DOM update generation are active implementation surfaces verified only where named gates cover them."
     },
     "routing": {
       "title": "File-Based Routing & SSR",
-      "description": "Your app/ directory structure becomes your URL routes. SSR, SSG, and streaming out of the box."
+      "description": "File-based routing and SSR/SSG modules exist; promoted behavior is documented by the current Vais Web gates."
     },
     "runtime": {
-      "title": "< 3KB Runtime",
-      "description": "The entire runtime weighs under 3KB gzipped. Most work happens at compile time, not in the browser."
+      "title": "Promoted Runtime Gates",
+      "description": "The current Vais Web baseline is runtime smoke 61/77, unit 390/390, package tests 3272/3272, and full-build 24/24. Size claims require a size gate."
     },
     "learnMore": "Learn More",
     "github": "GitHub",

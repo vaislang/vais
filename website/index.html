@@ -61,14 +61,14 @@
     <div class="hero-bg"></div>
     <div class="container">
       <div class="hero-content">
-        <div class="hero-badge" data-i18n="hero.badge">v0.1.0 — Production Ready</div>
+        <div class="hero-badge" data-i18n="hero.badge">Certified Core + Promoted Runtime Gates</div>
         <h1 class="hero-title" data-i18n="hero.title" data-i18n-html>
           Write <span class="gradient-text">fewer tokens</span>,<br>
           get <span class="gradient-text">native performance</span>
         </h1>
         <p class="hero-subtitle" data-i18n="hero.subtitle">
           Vais (Vibe AI Language for Systems) is a systems programming language optimized for AI code generation.
-          Single-character keywords, expression-oriented syntax, and LLVM-powered native speed.
+          The current public baseline is a certified Core compiler plus named promoted runtime gates.
         </p>
         <div class="hero-actions">
           <a href="#playground" class="btn btn-primary" data-i18n="hero.tryBrowser">Try in Browser</a>
@@ -386,7 +386,7 @@
         <div class="feature-card">
           <div class="feature-icon">⚡</div>
           <h3 data-i18n="features.llvm.title">LLVM Native Speed</h3>
-          <p data-i18n="features.llvm.description" data-i18n-html>Compiles to optimized native code via LLVM. Get C-level performance with high-level ergonomics. Supports LTO and PGO.</p>
+          <p data-i18n="features.llvm.description" data-i18n-html>Compiles promoted native paths through LLVM. Broader optimization and backend claims are tracked by explicit certification gates.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">T</div>
@@ -395,28 +395,28 @@
         </div>
         <div class="feature-card">
           <div class="feature-icon">🔧</div>
-          <h3 data-i18n="features.toolchain.title">Full Toolchain</h3>
-          <p data-i18n="features.toolchain.description" data-i18n-html>LSP server, formatter, debugger, REPL, package manager, and IDE plugins for VSCode and IntelliJ. Production-ready tooling.</p>
+          <h3 data-i18n="features.toolchain.title">Tooling Workbench</h3>
+          <p data-i18n="features.toolchain.description" data-i18n-html>LSP server, formatter, debugger, REPL, package manager, and IDE plugins exist as implementation surfaces. Support level depends on named gates.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🌐</div>
-          <h3 data-i18n="features.multiTarget.title">Multi-Target Output</h3>
-          <p data-i18n="features.multiTarget.description" data-i18n-html>Compile to native binaries, WebAssembly, or JavaScript. Run Vais code in the browser with full WASM interop and JS codegen.</p>
+          <h3 data-i18n="features.multiTarget.title">Native First, Experimental Extra Targets</h3>
+          <p data-i18n="features.multiTarget.description" data-i18n-html>The promoted path is native codegen. JavaScript, WebAssembly, and browser execution paths remain experimental unless a page names a gate.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🔄</div>
-          <h3 data-i18n="features.incremental.title">Incremental Compilation</h3>
-          <p data-i18n="features.incremental.description" data-i18n-html>Per-module caching with parallel codegen. Recompile only what changed — 30K-line projects rebuild in under 100ms.</p>
+          <h3 data-i18n="features.incremental.title">Parallel Compiler Pipeline</h3>
+          <p data-i18n="features.incremental.description" data-i18n-html>Per-module dependency tracking and parallel codegen are active workbench surfaces; exact performance claims require benchmark gates.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🏗️</div>
-          <h3 data-i18n="features.selfHosting.title">Self-Hosting Compiler</h3>
-          <p data-i18n="features.selfHosting.description" data-i18n-html>Vais can compile itself. The self-hosting compiler achieves bootstrap with 50,000+ lines of Vais — 152 test suites all passing, 850K lines/sec compilation speed, and near-C runtime performance.</p>
+          <h3 data-i18n="features.selfHosting.title">Self-Hosting Workbench</h3>
+          <p data-i18n="features.selfHosting.description" data-i18n-html>The repository contains 50,000+ lines of Vais compiler sources used for bootstrap and conformance work. Current guarantees are the certified Core and promoted runtime gates.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&lt;T&gt;</div>
           <h3 data-i18n="features.generics.title">Generic Monomorphization</h3>
-          <p data-i18n="features.generics.description" data-i18n-html>Full generic monomorphization — <code>Vec&lt;T&gt;</code>, <code>HashMap&lt;K,V&gt;</code>, and user-defined generic structs emit specialized, zero-overhead native code. Includes direct field access on <code>Vec&lt;struct&gt;</code>.</p>
+          <p data-i18n="features.generics.description" data-i18n-html>Generic monomorphization is promoted only where named fixtures cover it. Generic enum layout and broader specialization semantics remain gate-bound language work.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🔒</div>
@@ -430,25 +430,25 @@
   <!-- Ecosystem Section -->
   <section class="vaisx-section" id="vaisx">
     <div class="container">
-      <span class="section-badge" data-i18n="ecosystem.badge">Production Ready</span>
+      <span class="section-badge" data-i18n="ecosystem.badge">Promoted Gates</span>
       <h2 class="section-title" data-i18n="ecosystem.title">Full-Stack Vais Ecosystem</h2>
-      <p class="section-subtitle" data-i18n="ecosystem.subtitle" data-i18n-html>Three production-ready libraries — database, server, and web — all written in Vais, all shipping with v0.1.0.</p>
+      <p class="section-subtitle" data-i18n="ecosystem.subtitle" data-i18n-html>Database, server, and web packages are tracked by explicit package, runtime, unit, and full-build gates. They are not presented as product-complete v1 releases.</p>
 
       <div class="vaisx-grid">
         <div class="vaisx-card">
           <div class="vaisx-card-icon">🗄️</div>
           <h3 data-i18n="ecosystem.vaisdb.title">VaisDB — RAG-Native Database</h3>
-          <p data-i18n="ecosystem.vaisdb.description">Hybrid relational + vector database with ACID/MVCC, a full SQL parser, migration framework, and first-class RAG support. Built for AI-native workloads.</p>
+          <p data-i18n="ecosystem.vaisdb.description">Hybrid relational + vector database workbench with package codegen 261/261 and runtime smoke 34/34. Product-complete SQL/vector/FTS coverage remains outside the current claim.</p>
         </div>
         <div class="vaisx-card">
           <div class="vaisx-card-icon">🚀</div>
           <h3 data-i18n="ecosystem.server.title">vais-server — HTTP Framework</h3>
-          <p data-i18n="ecosystem.server.description">REST + GraphQL + WebSocket in one framework. JWT/OAuth/Session auth, YAML config, Docker-ready, and graceful shutdown built in.</p>
+          <p data-i18n="ecosystem.server.description">HTTP framework workbench with server runtime smoke 15/15. Broader REST, GraphQL, WebSocket, auth, and deployment guarantees require dedicated gates.</p>
         </div>
         <div class="vaisx-card">
           <div class="vaisx-card-icon">🌐</div>
           <h3 data-i18n="ecosystem.vaisweb.title">vais-web (VaisX) — Web Framework</h3>
-          <p data-i18n="ecosystem.vaisweb.description">SSR/SSG, file-based routing, 24 packages, CSRF/XSS protection, and compile-time reactivity. The entire runtime weighs under 3KB gzipped.</p>
+          <p data-i18n="ecosystem.vaisweb.description">Web framework workbench with runtime smoke 61/77, unit 390/390, ecosystem package tests 3272/3272, and full-build 24/24. Size claims require a size gate.</p>
         </div>
       </div>
 

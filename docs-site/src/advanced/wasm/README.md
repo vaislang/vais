@@ -1,10 +1,13 @@
 # WASM Components
 
-Vais provides first-class support for WebAssembly (WASM) compilation, enabling your code to run in browsers, Node.js, and WASI runtimes.
+Vais has WebAssembly (WASM) implementation surfaces, but WASM is not part of the
+current certified public baseline unless a page names a dedicated gate. Treat
+the examples in this section as experimental guidance.
 
 ## Overview
 
-WebAssembly is a portable binary instruction format designed for safe, fast execution in web browsers and beyond. Vais can compile to WASM targets, allowing you to:
+WebAssembly is a portable binary instruction format designed for safe, fast
+execution in web browsers and beyond. The Vais WASM workbench targets:
 
 - **Run in Browsers** — Build web applications with near-native performance
 - **Server-Side WASM** — Use WASI for command-line tools and microservices
@@ -13,7 +16,7 @@ WebAssembly is a portable binary instruction format designed for safe, fast exec
 
 ## Supported Targets
 
-Vais supports multiple WASM compilation targets:
+Vais tracks multiple experimental WASM compilation targets:
 
 | Target | Description | Use Case |
 |--------|-------------|----------|

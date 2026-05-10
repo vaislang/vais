@@ -1,6 +1,7 @@
 # Getting Started with WASM
 
-This guide will walk you through compiling Vais to WebAssembly and running it in a browser or Node.js environment.
+This guide documents the experimental Vais WebAssembly workbench. WASM is not
+part of the current certified public baseline unless a dedicated gate names it.
 
 ## Prerequisites
 

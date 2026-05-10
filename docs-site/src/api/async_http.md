@@ -10,7 +10,10 @@ U std/async_http
 
 ## Overview
 
-The `async_http` module provides a complete async HTTP/1.1 framework with routing, middleware support, request/response parsing, connection pooling, and a client API. It is designed for building non-blocking web services.
+The `async_http` module provides an async HTTP/1.1 implementation surface with
+routing, middleware support, request/response parsing, connection pooling, and a
+client API. Treat broad framework completeness as gate-bound until a named
+runtime gate promotes it.
 
 ## Constants
 

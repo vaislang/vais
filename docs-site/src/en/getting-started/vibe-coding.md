@@ -9,7 +9,7 @@ The goal is to reach "language + full ecosystem picture + first run" within 5 mi
 
 ```bash
 curl -fsSL https://vaislang.dev/install.sh | sh
-vaisc --version    # v0.1.0
+vaisc --version    # release-channel version; source baseline is gate-backed
 ```
 
 Windows PowerShell: `iwr https://vaislang.dev/install.ps1 | iex`
@@ -173,7 +173,7 @@ More: [VaisDB Query Guide](../ecosystem/vaisdb/queries.md)
 
 ```
 ┌──────────── VaisX (Frontend) ──────────────┐
-│ .vaisx components, < 3KB runtime, SSR/SSG  │
+│ .vaisx components, runtime 61/77 gate       │
 │ $state / $derived / $effect                │
 └────────────────────┬───────────────────────┘
                      │ HTTP / WebSocket

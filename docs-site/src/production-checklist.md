@@ -1,6 +1,8 @@
 # Production Readiness Checklist
 
-This comprehensive checklist ensures your Vais application is production-ready. It covers all Phase 33 features and critical infrastructure components.
+This checklist is a planning aid for deployment hardening. It does not certify
+that a Vais application or every listed module is deployment-ready; use the
+current gate-backed status in `PUBLIC_STATUS.md` for public claims.
 
 ## 1. TLS/HTTPS Configuration
 
@@ -186,7 +188,7 @@ repository = "https://github.com/user/my-lib"
 
 Publishing command:
 ```bash
-vais publish --registry https://registry.vais.dev
+vais publish --registry https://registry.vaislang.dev
 ```
 
 - [ ] Sign package with key: `vais publish --sign-key ./key.pem`
@@ -200,7 +202,7 @@ vais publish --registry https://registry.vais.dev
 
 Example installing with credentials:
 ```bash
-vais install --registry https://registry.vais.dev \
+vais install --registry https://registry.vaislang.dev \
   --username user \
   --token ${REGISTRY_TOKEN}
 ```
@@ -760,4 +762,3 @@ Before deploying to production:
 - [OpenSSL Documentation](https://www.openssl.org/docs/) - TLS/SSL configuration
 - [LLVM Optimization Reference](https://llvm.org/docs/Passes/) - Compiler optimizations
 - [Structured Logging Best Practices](https://www.kartar.net/2015/12/structured-logging/) - Logging patterns
-

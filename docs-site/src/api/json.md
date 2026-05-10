@@ -4,11 +4,16 @@
 
 ## Overview
 
-The JSON module provides a complete JSON parsing and serialization implementation with support for:
+The JSON module provides a JSON parsing and serialization implementation surface
+with support for:
 - Primitive types: null, boolean, numbers (integers and decimals)
 - Complex types: strings, arrays, objects
 - Recursive parsing
 - JSON to string conversion
+
+The public project status does not claim complete JSON grammar validation across
+every parser path. Treat complete JSON conformance as gate-bound until a named
+JSON gate promotes it.
 
 ## JSON Value Types
 

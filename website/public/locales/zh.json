@@ -13,9 +13,9 @@
     "blog": "博客"
   },
   "hero": {
-    "badge": "v0.1.0 — 生产就绪",
+    "badge": "Certified Core + Promoted Runtime Gates",
     "title": "编写<span class=\"gradient-text\">更少的令牌</span>，<br>获得<span class=\"gradient-text\">原生性能</span>",
-    "subtitle": "Vais（Vibe AI Language for Systems）是为 AI 代码生成优化的系统编程语言。单字符关键字、表达式导向语法和 LLVM 驱动的原生速度。",
+    "subtitle": "Vais（Vibe AI Language for Systems）是为 AI 代码生成优化的系统编程语言。当前公开基线是 certified Core compiler 加上明确命名的 promoted runtime gates。",
     "tryBrowser": "在浏览器中试用",
     "install": "brew install vais"
   },
@@ -51,38 +51,38 @@
     },
     "llvm": {
       "title": "LLVM 原生速度",
-      "description": "通过 LLVM 编译为优化的原生代码。以高级人体工程学获得 C 级性能。支持 LTO 和 PGO。"
+      "description": "通过 LLVM 提供 promoted native codegen path。更广泛的 backend/optimization claim 需要明确 gate 支撑。"
     },
     "inference": {
       "title": "类型推断",
       "description": "双向类型检查自动推断类型。在任何地方写 <code>x := 42</code> 而不是显式类型注解。"
     },
     "toolchain": {
-      "title": "完整的工具链",
-      "description": "LSP 服务器、格式化程序、调试器、REPL、包管理器以及适用于 VSCode 和 IntelliJ 的 IDE 插件。生产就绪的工具。"
+      "title": "Tooling Workbench",
+      "description": "LSP、formatter、debugger、REPL、package manager 和 IDE plugin 是 implementation surfaces。支持级别取决于 named gates。"
     },
     "multiTarget": {
-      "title": "多目标输出",
-      "description": "编译为原生二进制文件、WebAssembly 或 JavaScript。通过完整的 WASM 互操作和 JS 代码生成在浏览器中运行 Vais 代码。"
+      "title": "Native First, Experimental Extra Targets",
+      "description": "Promoted path 是 native codegen。JavaScript、WebAssembly 和 browser execution 路径在没有专门 gate 时是 experimental。"
     },
     "incremental": {
-      "title": "增量编译",
-      "description": "通过并行代码生成进行按模块缓存。仅重新编译更改的内容 — 30K 行项目在 100ms 内重建。"
+      "title": "Parallel Compiler Pipeline",
+      "description": "Module dependency tracking 和 parallel codegen 是 workbench surfaces。精确 performance claim 需要 benchmark gate。"
     },
     "selfHosting": {
-      "title": "自托管编译器",
-      "description": "Vais 可以编译自己。自托管编译器通过 50,000 多行 Vais 实现引导，由 2,592 个 E2E 测试和总共 12,000 多个测试支持。"
+      "title": "Self-Hosting Workbench",
+      "description": "Repository 包含 50,000+ 行 Vais compiler source，用于 bootstrap 和 conformance work。当前保证以 certified Core 和 promoted runtime gates 为准。"
     }
   },
   "playground": {
     "title": "立即试用 Vais",
-    "subtitle": "直接在浏览器中编写和运行 Vais 代码。无需安装。",
+    "subtitle": "在浏览器中试用 Vais syntax 和 examples。Server-backed compilation 在 API 可用时使用；JS/WASM browser path 是 experimental。",
     "launch": "启动交互式在线试用",
     "loadHere": "在此处加载在线试用",
     "openTab": "在新标签页中打开"
   },
   "install": {
-    "title": "数秒内开始",
+    "title": "Build From Source or Try the Playground",
     "oneClick": "一键安装",
     "oneClickNote": "自动检测操作系统和架构。支持 macOS、Linux、WSL。",
     "windows": "Windows (PowerShell)",
@@ -107,18 +107,18 @@
   "vaisx": {
     "badge": "新功能",
     "title": "用 Vais 构建 Web 应用",
-    "subtitle": "VaisX 是由 Vais 编译器驱动的全栈 Web 框架。编译时响应性、基于文件的路由和 SSR — 一切都在 3KB 以内。",
+    "subtitle": "VaisX 是 Vais web framework workbench。当前公开 claim 绑定到 runtime、unit、package、full-build gates。",
     "compiler": {
       "title": "编译时响应性",
-      "description": "在构建时分析的响应式状态。状态跟踪零运行时开销 — 只有精准的 DOM 更新。"
+      "description": "Reactive state analysis 和 DOM update generation 是 implementation surfaces，只在 named gates 覆盖范围内验证。"
     },
     "routing": {
       "title": "基于文件的路由 & SSR",
-      "description": "您的 app/ 目录结构即为 URL 路由。开箱即用的 SSR、SSG 和流式传输。"
+      "description": "File-based routing 和 SSR/SSG modules 存在；promoted behavior 以当前 Vais Web gates 为准。"
     },
     "runtime": {
-      "title": "< 3KB 运行时",
-      "description": "整个运行时 gzip 压缩后不足 3KB。大部分工作在编译时完成，而非在浏览器中。"
+      "title": "Promoted Runtime Gates",
+      "description": "当前 Vais Web baseline 是 runtime smoke 61/77、unit 390/390、package tests 3272/3272、full-build 24/24。Size claim 需要 size gate。"
     },
     "learnMore": "了解更多",
     "github": "GitHub",

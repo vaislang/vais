@@ -502,7 +502,7 @@ F add(a: i32, b: i32) -> i32 = a + b
 - [API 문서](./api/index.md) - 타입별 API 레퍼런스
 - [트러블슈팅](./troubleshooting.md) - 자주 묻는 질문과 해결 방법
 - [기여 가이드](./contributing/contributing.md) - 컴파일러 개발에 참여하기
-- [Playground](https://vais.dev/playground/) - 브라우저에서 Vais 실행 (40+ 예제)
+- [Playground](https://vaislang.dev/playground/) - 브라우저에서 Vais 예제 실험
 - [인터랙티브 튜토리얼](./tools/vais-tutorial/README.md) - 단계별 연습 문제
 
 ### 실전 튜토리얼
