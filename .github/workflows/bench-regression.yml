@@ -446,7 +446,7 @@ jobs:
 
       - name: Post benchmark results as PR comment
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
@@ -528,7 +528,7 @@ jobs:
 
       - name: Auto-alert on critical regressions
         if: steps.compare.outcome == 'failure'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
