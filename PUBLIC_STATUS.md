@@ -69,3 +69,7 @@ Avoid broad wording unless a named gate backs it:
 
 If a page makes a capability claim, it should name the gate, test count, or
 scope that supports the claim.
+
+The repository enforces the highest-risk public wording boundaries with
+`scripts/check-public-claims.mjs`; update that guard when promoting a non-claim
+to a certified gate.
