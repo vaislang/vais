@@ -1,6 +1,11 @@
 # Vais 생태계
 
-Vais 언어를 기반으로 구축된 풀스택 생태계입니다.
+Vais 언어를 기반으로 구축된 풀스택 ecosystem workbench입니다.
+
+현재 공개 claim은 명시된 gate 기준입니다: VaisDB package `261/261` 및
+runtime `34/34`, vais-server runtime `15/15`, vais-web runtime `61/77`, unit
+`390/390`, package `3272/3272`, full-build `24/24`. 이는 product-complete v1
+claim이 아닙니다.
 
 ## 아키텍처
 
@@ -12,13 +17,13 @@ Vais 언어를 기반으로 구축된 풀스택 생태계입니다.
 ┌─────────────────────▼───────────────────────┐
 │  VaisX (vais-web)                           │
 │  컴파일 타임 반응성 프론트엔드 프레임워크         │
-│  < 3KB 런타임 · SSR/SSG · 파일 기반 라우팅      │
+│  runtime 61/77 · unit 390/390 · full-build 24/24 │
 └─────────────────────┬───────────────────────┘
                       │ HTTP / WebSocket
 ┌─────────────────────▼───────────────────────┐
 │  vais-server                                │
 │  Express/Axum 스타일 백엔드 API 프레임워크       │
-│  미들웨어 파이프라인 · REST/GraphQL/gRPC        │
+│  미들웨어 파이프라인 · runtime smoke 15/15       │
 └─────────────────────┬───────────────────────┘
                       │ Native Query API
 ┌─────────────────────▼───────────────────────┐
@@ -32,9 +37,9 @@ Vais 언어를 기반으로 구축된 풀스택 생태계입니다.
 
 | 패키지 | 설명 | 주요 특징 |
 |--------|------|----------|
-| [VaisX](./vais-web/README.md) | 프론트엔드 프레임워크 | 컴파일 타임 반응성, < 3KB, SSR/SSG |
-| [VaisDB](./vaisdb/README.md) | 하이브리드 데이터베이스 | 4엔진 통합, ACID, RAG-native |
-| [vais-server](./vais-server/README.md) | 백엔드 프레임워크 | 미들웨어, 멀티 프로토콜, vaisdb 통합 |
+| [VaisX](./vais-web/README.md) | 프론트엔드 framework workbench | Runtime 61/77, unit 390/390, full-build 24/24 |
+| [VaisDB](./vaisdb/README.md) | 하이브리드 database workbench | Package 261/261, runtime 34/34 |
+| [vais-server](./vais-server/README.md) | 백엔드 framework workbench | Runtime smoke 15/15 |
 
 ## 풀스택 예제
 

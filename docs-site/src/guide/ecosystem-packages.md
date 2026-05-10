@@ -1,6 +1,9 @@
 # Ecosystem Packages
 
-Vais provides a growing ecosystem of pure-Vais packages for common tasks. These packages are implemented entirely in Vais, demonstrating the language's capabilities while providing production-ready functionality.
+Vais provides a growing ecosystem of pure-Vais packages for common tasks. These
+packages are implemented in Vais and tracked by explicit package/runtime gates;
+do not treat them as broadly deployment-ready unless the page names the gate that
+certifies the claim.
 
 ## Available Packages
 

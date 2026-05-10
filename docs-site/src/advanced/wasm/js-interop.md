@@ -1,6 +1,8 @@
 # WASM-JavaScript Interop
 
-Vais provides first-class WebAssembly and JavaScript interop through `#[wasm_import]` and `#[wasm_export]` attributes.
+Vais has experimental WebAssembly and JavaScript interop surfaces through
+`#[wasm_import]` and `#[wasm_export]` attributes. They are not part of the
+current certified public baseline unless a dedicated gate names them.
 
 ## Importing JS Functions
 

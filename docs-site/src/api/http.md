@@ -6,7 +6,7 @@
 
 ## Overview
 
-The HTTP module provides a full-featured HTTP/1.1 implementation with:
+The HTTP module provides an HTTP/1.1 implementation surface with:
 - HTTP client for making requests (GET, POST, PUT, DELETE, etc.)
 - HTTP server with routing support
 - Request and response objects

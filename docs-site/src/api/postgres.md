@@ -6,7 +6,7 @@
 
 ## Overview
 
-The Postgres module provides a complete PostgreSQL database client with:
+The Postgres module provides a PostgreSQL database client implementation surface with:
 - Connection management with connection strings
 - Simple SQL queries and parameterized queries
 - Prepared statements for performance
@@ -14,6 +14,10 @@ The Postgres module provides a complete PostgreSQL database client with:
 - Result set access with type conversion (int, text, float, bool)
 - Connection status and error reporting
 - Parameter builder helper for safe query construction
+
+This page documents the API surface. Product-complete PostgreSQL client behavior
+is not part of the current certified public baseline unless a later runtime gate
+names it explicitly.
 
 ## Import
 

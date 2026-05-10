@@ -818,7 +818,7 @@ You now have a comprehensive understanding of Vais! Continue learning:
 
 - **[Examples Directory](https://github.com/vaislang/vais/tree/main/examples)** - 188 example programs covering all features
 - **[REPL](../tools/repl.md)** - Interactive environment for experimentation
-- **[Playground](https://vais.dev/playground/)** - Online editor with instant compilation
+- **[Playground](https://vaislang.dev/playground/)** - Online editor with server-backed compilation when available
 
 ### Advanced Topics
 

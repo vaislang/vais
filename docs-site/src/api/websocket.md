@@ -6,13 +6,17 @@
 
 ## Overview
 
-The WebSocket module provides a full-featured WebSocket implementation with:
+The WebSocket module provides a WebSocket implementation surface with:
 - Server-side WebSocket upgrade handshake from HTTP
 - Client and server connection management
 - Frame encoding/decoding (text, binary, ping, pong, close)
 - Masking/unmasking per RFC 6455 specification
 - Close handshake and connection state management
 - Echo server pattern for simple WebSocket servers
+
+This page documents the API surface. Product-complete WebSocket behavior is not
+part of the current certified public baseline unless a later runtime gate names
+it explicitly.
 
 ## Import
 
