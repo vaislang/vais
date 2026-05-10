@@ -303,7 +303,7 @@ fn smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
 }
 
 fn main() -> i64 {
-    response := forward_ssr_render_with_timeout("http://127.0.0.1:__PORT__", "/slow", "state", 100)
+    response := forward_ssr_render_with_timeout("http://127.0.0.1:__PORT__", "/slow", "state", 300)
     I response.status.code != 504 {
         println("FAIL ssr forwarding timeout status code")
         return 1
@@ -1017,7 +1017,7 @@ fn accept_one_ssr_forwarding_request(listener: TcpListener) -> String {
 
 fn accept_one_ssr_timeout_request(listener: TcpListener) -> String {
     accept_one_ssr_request_and_then(listener, |_stream| {
-        thread::sleep(Duration::from_millis(500));
+        thread::sleep(Duration::from_millis(1000));
     })
 }
 
