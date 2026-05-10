@@ -11,6 +11,7 @@
 # - Timeout support via setsockopt
 # - Keep-alive connection reuse
 # - Connection pooling with stale pooled idempotent request retry
+# - Malformed HTTP status-line responses return CLIENT_ERR_PARSE
 # - Plain HTTP runtime path plus absolute, scheme-relative, root-relative,
 #   path-relative dot-segment, and query/fragment-relative plain-HTTP
 #   redirects are promoted.

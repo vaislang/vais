@@ -366,28 +366,56 @@ HcResponse __hc_parse_response(long buffer, long len) {
     const char* p = buf;
     const char* end = buf + len;
 
-    // Parse version (e.g., "HTTP/1.1")
+    // Validate and parse the status line before allocating response strings.
+    if ((end - p) < 5 || strncmp(p, "HTTP/", 5) != 0) {
+        out.error_code = -6;  // CLIENT_ERR_PARSE
+        return out;
+    }
+
     const char* ver_start = p;
-    while (p < end && *p != ' ') p++;
-    out.version = hc_make_str(ver_start, (size_t)(p - ver_start));
+    while (p < end && *p != ' ' && *p != '\r' && *p != '\n') p++;
+    if (p >= end || *p != ' ' || p == ver_start) {
+        out.error_code = -6;  // CLIENT_ERR_PARSE
+        return out;
+    }
+    size_t ver_len = (size_t)(p - ver_start);
 
-    // Skip space
-    if (p < end) p++;
+    p++;  // skip space before status code
 
-    // Parse status code
+    // HTTP status codes are exactly three digits.
+    if ((end - p) < 3
+        || p[0] < '0' || p[0] > '9'
+        || p[1] < '0' || p[1] > '9'
+        || p[2] < '0' || p[2] > '9') {
+        out.error_code = -6;  // CLIENT_ERR_PARSE
+        return out;
+    }
     long status = 0;
-    while (p < end && *p >= '0' && *p <= '9') {
+    for (int i = 0; i < 3; i++) {
         status = status * 10 + (*p - '0');
         p++;
     }
-    out.status = status;
+    if (status < 100 || status > 999) {
+        out.error_code = -6;  // CLIENT_ERR_PARSE
+        return out;
+    }
 
-    // Skip space
-    if (p < end) p++;
+    if (p < end && *p != ' ' && *p != '\r' && *p != '\n') {
+        out.error_code = -6;  // CLIENT_ERR_PARSE
+        return out;
+    }
+    // Skip optional space before reason phrase.
+    if (p < end && *p == ' ') p++;
 
     // Parse status text
     const char* text_start = p;
     while (p < end && *p != '\r' && *p != '\n') p++;
+    if (p >= end) {
+        out.error_code = -6;  // CLIENT_ERR_PARSE
+        return out;
+    }
+    out.status = status;
+    out.version = hc_make_str(ver_start, ver_len);
     out.status_text = hc_make_str(text_start, (size_t)(p - text_start));
 
     // Skip \r\n
