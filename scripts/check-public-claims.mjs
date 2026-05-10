@@ -60,6 +60,16 @@ requireText(
   'Complete browser-only playground compilation and execution',
   'browser-only playground compile/execute remains a public non-claim',
 );
+requireText(
+  publicStatus,
+  'Playground web mode/build gate: passed',
+  'playground web gate can be claimed only as a mode/build contract',
+);
+requireText(
+  publicStatus,
+  'Server-WASM remains API-compiled',
+  'playground status must keep the server compile boundary explicit',
+);
 
 const playgroundCompiler = 'playground/src/compiler.js';
 requireText(
@@ -103,6 +113,11 @@ requireText(
   playgroundReadme,
   'this is not a certified compile/execute path',
   'preview mode must be documented as non-certified',
+);
+requireText(
+  playgroundReadme,
+  'test:contract',
+  'playground README must document the local mode contract gate',
 );
 
 const websiteSubtitle =

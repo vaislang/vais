@@ -33,6 +33,8 @@ source_of_truth: `PUBLIC_STATUS.md`
 - Ecosystem package tests: `3272/3272`
 - Vais Web full-build gate: `24/24`
 - Package full-build gate: `2/2`
+- Playground web mode/build gate: passed; Server-WASM remains API-compiled,
+  and Preview remains a syntax/demo fallback only
 
 ### 공개 non-claim
 

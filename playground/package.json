@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test:contract": "node ../scripts/check-playground-mode-contract.mjs",
     "wasm:build": "cd .. && cargo build --release --target wasm32-unknown-unknown --package vaisc"
   },
   "dependencies": {
