@@ -32,6 +32,22 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+  # ---------- Public claim guard ----------
+  public-claims:
+    name: Public Claim Guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check public claims
+        run: node scripts/check-public-claims.mjs
+
   # ---------- Documentation check ----------
   docs:
     name: Documentation
