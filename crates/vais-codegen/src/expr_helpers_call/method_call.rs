@@ -1938,6 +1938,31 @@ impl CodeGenerator {
                 }
             }
 
+            if let Some(ResolvedType::Ref(_) | ResolvedType::RefMut(_)) = param_ty.as_ref() {
+                if let Some(pointee_ty) = arg_llvm_ty.strip_suffix('*') {
+                    if arg_llvm_ty != "ptr" {
+                        let actual_ty = self.llvm_type_of_checked(&val);
+                        if actual_ty
+                            .as_deref()
+                            .is_some_and(|actual| actual != "ptr" && !actual.ends_with('*'))
+                        {
+                            let ref_tmp = self.next_temp(counter);
+                            self.emit_entry_alloca(&ref_tmp, pointee_ty);
+                            write_ir!(
+                                ir,
+                                "  store {} {}, {}* {}",
+                                pointee_ty,
+                                val,
+                                pointee_ty,
+                                ref_tmp
+                            );
+                            self.fn_ctx.record_emitted_type(&ref_tmp, &arg_llvm_ty);
+                            val = ref_tmp;
+                        }
+                    }
+                }
+            }
+
             arg_vals.push(format!("{} {}", arg_llvm_ty, val));
         }
 

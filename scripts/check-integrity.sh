@@ -16,7 +16,7 @@
 #   INTEGRITY_WEB_PACKAGES_MIN=3272        minimum vais-web non-kit packages tests
 #   INTEGRITY_BACKEND_PHASE158_MIN=18      minimum phase158 backend smoke
 #   INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=2   minimum cross_package_schema gate (positive + negative)
-#   INTEGRITY_PKG_FULL_BUILD_MIN=1         minimum package full-build smoke (Phase 1 100% Gap)
+#   INTEGRITY_PKG_FULL_BUILD_MIN=2         minimum package full-build smoke (Phase 1 100% Gap)
 #
 # Strict-default imports (Step 11 root fix, loop 29, 2026-05-08):
 #   This script does NOT export VAIS_STRICT_IMPORTS — the compiler is
@@ -64,10 +64,10 @@ INTEGRITY_WEB_UNIT_MIN="${INTEGRITY_WEB_UNIT_MIN:-390}"
 INTEGRITY_WEB_PACKAGES_MIN="${INTEGRITY_WEB_PACKAGES_MIN:-3272}"
 INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN="${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN:-2}"
 INTEGRITY_BACKEND_PHASE158_MIN="${INTEGRITY_BACKEND_PHASE158_MIN:-18}"
-# Phase 1 100% Gap (master-plan v78): package full-build smoke baseline.
-# Current: vais-server PASS, vaisdb FAIL → 1/2. Raises monotonically as
-# cascade fixes land (target: 2/2 → Phase β entry condition, ROADMAP §"100% Gap").
-INTEGRITY_PKG_FULL_BUILD_MIN="${INTEGRITY_PKG_FULL_BUILD_MIN:-1}"
+# Phase 1 100% Gap (master-plan v79): package full-build smoke baseline.
+# Current: vais-server PASS, vaisdb PASS → 2/2. This locks the package
+# entry-point full-build gate that closes the prior vaisdb cascade.
+INTEGRITY_PKG_FULL_BUILD_MIN="${INTEGRITY_PKG_FULL_BUILD_MIN:-2}"
 
 # ---------------------------------------------------------------------------
 # Ensure /tmp/vais-lib/std symlink exists
@@ -633,9 +633,9 @@ if [ "${HTTP_CLIENT_RUNTIME_EXIT}" -ne 0 ]; then
 fi
 
 if false && [ "${PKG_FULL_BUILD_EXIT}" -ne 0 ]; then
-    # Phase 1 100% Gap intentional: baseline starts 1/2 (vaisdb FAIL).
-    # Cargo exits !=0 when any test fails, but the regression check above
-    # uses threshold instead. Only flag if PASSED count drops below threshold.
+    # Historical note: v78 allowed a non-zero cargo exit while the baseline
+    # was 1/2. v79 locks the gate at 2/2, so any failure is caught by the
+    # pass-count threshold above.
     echo ""
     echo "PKG FULL BUILD SMOKE FAILED: cargo test exited ${PKG_FULL_BUILD_EXIT}"
     OVERALL_EXIT=1
@@ -742,11 +742,8 @@ print_gate_summary() {
         echo "TLS RUNTIME FAIL: exit=${TLS_RUNTIME_EXIT} smoke=${TLS_RUNTIME_PASSED}/${TLS_RUNTIME_TOTAL}"
     fi
 
-    # Phase 1 100% Gap (master-plan v78): no exit-code fail — threshold-based.
-    # Baseline starts 1/2 (vais-server PASS, vaisdb cascade FAIL). Cargo exits
-    # !=0 when vaisdb fails but the gate uses INTEGRITY_PKG_FULL_BUILD_MIN
-    # threshold (currently 1) for OVERALL_EXIT. Display always reports the
-    # current count for visibility.
+    # Phase 1 100% Gap (master-plan v79): locked at 2/2. Display always
+    # reports the current count for visibility.
     echo "PKG FULL BUILD: smoke=${PKG_FULL_BUILD_PASSED}/${PKG_FULL_BUILD_TOTAL} (threshold=${INTEGRITY_PKG_FULL_BUILD_MIN})"
 
     if [ "${VAISDB_RUNTIME_EXIT}" -eq 0 ]; then

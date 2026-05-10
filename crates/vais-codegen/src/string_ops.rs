@@ -6,6 +6,7 @@
 
 use crate::{CodeGenerator, CodegenError, CodegenResult};
 use vais_ast::{BinOp, Expr, Spanned};
+use vais_types::ResolvedType;
 
 impl CodeGenerator {
     /// Resolve an argument value to an i8* pointer for builtins (free, memcpy, strlen, puts_ptr).
@@ -649,6 +650,157 @@ impl CodeGenerator {
                 self.emit_intermediate_free(recv_val, &mut ir);
                 Ok((result, ir))
             }
+            "split" => {
+                if args.len() != 1 {
+                    return Err(CodegenError::Unsupported(format!(
+                        "builtin 'split' requires 1 argument, got {}",
+                        args.len()
+                    )));
+                }
+
+                let recv_len = self.extract_str_len(recv_val, counter, &mut ir);
+                let (delim_val, delim_ir) = self.generate_expr(&args[0], counter)?;
+                ir.push_str(&delim_ir);
+
+                let delim_i64 = match self.llvm_type_of_checked(&delim_val).as_deref() {
+                    Some("{ i8*, i64 }") | Some("{ i8*, i64 }*") | Some("ptr") | Some("i8*") => {
+                        let delim_ptr = self.extract_str_ptr(&delim_val, counter, &mut ir);
+                        let delim_i8 = self.next_temp(counter);
+                        write_ir!(ir, "  {} = load i8, i8* {}", delim_i8, delim_ptr);
+                        self.fn_ctx.record_emitted_type(&delim_i8, "i8");
+                        let widened = self.next_temp(counter);
+                        write_ir!(ir, "  {} = zext i8 {} to i64", widened, delim_i8);
+                        self.fn_ctx.record_emitted_type(&widened, "i64");
+                        widened
+                    }
+                    Some("i8") => {
+                        let widened = self.next_temp(counter);
+                        write_ir!(ir, "  {} = zext i8 {} to i64", widened, delim_val);
+                        self.fn_ctx.record_emitted_type(&widened, "i64");
+                        widened
+                    }
+                    Some("i16") | Some("i32") => {
+                        let src_ty = self.llvm_type_of(&delim_val);
+                        let widened = self.next_temp(counter);
+                        write_ir!(ir, "  {} = zext {} {} to i64", widened, src_ty, delim_val);
+                        self.fn_ctx.record_emitted_type(&widened, "i64");
+                        widened
+                    }
+                    _ if matches!(self.infer_expr_type(&args[0]), ResolvedType::Str) => {
+                        let delim_ptr = self.extract_str_ptr(&delim_val, counter, &mut ir);
+                        let delim_i8 = self.next_temp(counter);
+                        write_ir!(ir, "  {} = load i8, i8* {}", delim_i8, delim_ptr);
+                        self.fn_ctx.record_emitted_type(&delim_i8, "i8");
+                        let widened = self.next_temp(counter);
+                        write_ir!(ir, "  {} = zext i8 {} to i64", widened, delim_i8);
+                        self.fn_ctx.record_emitted_type(&widened, "i64");
+                        widened
+                    }
+                    _ => delim_val.clone(),
+                };
+
+                let raw = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = call {{ i64, i64, i64, i64, i64 }} @__vais_str_split_char(i8* {}, i64 {}, i64 {})",
+                    raw,
+                    recv_ptr,
+                    recv_len,
+                    delim_i64
+                );
+                self.fn_ctx
+                    .record_emitted_type(&raw, "{ i64, i64, i64, i64, i64 }");
+
+                let vec_ty = ResolvedType::Named {
+                    name: "Vec".to_string(),
+                    generics: vec![ResolvedType::Str],
+                };
+                let vec_llvm_ty = self.type_to_llvm(&vec_ty);
+                let result = if vec_llvm_ty.starts_with('%') {
+                    let raw_slot = self.next_temp(counter);
+                    self.emit_entry_alloca(&raw_slot, "{ i64, i64, i64, i64, i64 }");
+                    write_ir!(
+                        ir,
+                        "  store {{ i64, i64, i64, i64, i64 }} {}, {{ i64, i64, i64, i64, i64 }}* {}",
+                        raw,
+                        raw_slot
+                    );
+                    let typed_slot = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = bitcast {{ i64, i64, i64, i64, i64 }}* {} to {}*",
+                        typed_slot,
+                        raw_slot,
+                        vec_llvm_ty
+                    );
+                    self.fn_ctx
+                        .record_emitted_type(&typed_slot, &format!("{}*", vec_llvm_ty));
+                    let loaded = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded,
+                        vec_llvm_ty,
+                        vec_llvm_ty,
+                        typed_slot
+                    );
+                    self.fn_ctx.record_emitted_type(&loaded, &vec_llvm_ty);
+                    loaded
+                } else {
+                    raw.clone()
+                };
+                self.fn_ctx.register_temp_type(&result, vec_ty);
+                Ok((result, ir))
+            }
+            "parse_f64" => {
+                let raw = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = call {{ i32, {{ i64 }} }} @__vais_str_parse_f64(i8* {})",
+                    raw,
+                    recv_ptr
+                );
+                self.fn_ctx.record_emitted_type(&raw, "{ i32, { i64 } }");
+
+                let result_ty =
+                    ResolvedType::Result(Box::new(ResolvedType::F64), Box::new(ResolvedType::Str));
+                let result_llvm_ty = self.type_to_llvm(&result_ty);
+                let result = if result_llvm_ty.starts_with('%') {
+                    let raw_slot = self.next_temp(counter);
+                    self.emit_entry_alloca(&raw_slot, "{ i32, { i64 } }");
+                    write_ir!(
+                        ir,
+                        "  store {{ i32, {{ i64 }} }} {}, {{ i32, {{ i64 }} }}* {}",
+                        raw,
+                        raw_slot
+                    );
+                    let typed_slot = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = bitcast {{ i32, {{ i64 }} }}* {} to {}*",
+                        typed_slot,
+                        raw_slot,
+                        result_llvm_ty
+                    );
+                    self.fn_ctx
+                        .record_emitted_type(&typed_slot, &format!("{}*", result_llvm_ty));
+                    let loaded = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded,
+                        result_llvm_ty,
+                        result_llvm_ty,
+                        typed_slot
+                    );
+                    self.fn_ctx.record_emitted_type(&loaded, &result_llvm_ty);
+                    loaded
+                } else {
+                    raw.clone()
+                };
+                self.fn_ctx.register_temp_type(&result, result_ty);
+                Ok((result, ir))
+            }
             "clone" | "to_string" | "as_str" => {
                 // Strings are immutable fat pointers — clone is identity
                 Ok((recv_val.to_string(), ir))
@@ -902,6 +1054,10 @@ impl CodeGenerator {
     pub(crate) fn generate_string_helper_functions(&self) -> String {
         let mut ir = String::with_capacity(4096);
 
+        ir.push_str(
+            "\n@__vais_parse_f64_error = private constant [20 x i8] c\"invalid float parse\\00\"\n",
+        );
+
         // __vais_str_concat: concatenate two strings -> { i8*, i64 }
         ir.push_str("\n; String helper: concatenate two strings\n");
         ir.push_str("define { i8*, i64 } @__vais_str_concat(i8* %a, i8* %b) {\n");
@@ -974,6 +1130,144 @@ impl CodeGenerator {
         ir.push_str("  %fp0 = insertvalue { i8*, i64 } undef, i8* %buf, 0\n");
         ir.push_str("  %fp1 = insertvalue { i8*, i64 } %fp0, i64 1, 1\n");
         ir.push_str("  ret { i8*, i64 } %fp1\n");
+        ir.push_str("}\n");
+
+        // __vais_str_split_char: split by the first byte of the delimiter string.
+        ir.push_str("\n; String helper: split by character\n");
+        ir.push_str(
+            "define { i64, i64, i64, i64, i64 } @__vais_str_split_char(i8* %s, i64 %len, i64 %delim64) {\n",
+        );
+        ir.push_str("entry:\n");
+        ir.push_str("  %delim = trunc i64 %delim64 to i8\n");
+        ir.push_str("  %count.ptr = alloca i64\n");
+        ir.push_str("  %i.ptr = alloca i64\n");
+        ir.push_str("  store i64 1, i64* %count.ptr\n");
+        ir.push_str("  store i64 0, i64* %i.ptr\n");
+        ir.push_str("  br label %count.cond\n");
+        ir.push_str("count.cond:\n");
+        ir.push_str("  %ci = load i64, i64* %i.ptr\n");
+        ir.push_str("  %cdone = icmp uge i64 %ci, %len\n");
+        ir.push_str("  br i1 %cdone, label %alloc, label %count.body\n");
+        ir.push_str("count.body:\n");
+        ir.push_str("  %cptr = getelementptr i8, i8* %s, i64 %ci\n");
+        ir.push_str("  %ch = load i8, i8* %cptr\n");
+        ir.push_str("  %isdelim = icmp eq i8 %ch, %delim\n");
+        ir.push_str("  br i1 %isdelim, label %count.inc, label %count.step\n");
+        ir.push_str("count.inc:\n");
+        ir.push_str("  %oldcount = load i64, i64* %count.ptr\n");
+        ir.push_str("  %newcount = add i64 %oldcount, 1\n");
+        ir.push_str("  store i64 %newcount, i64* %count.ptr\n");
+        ir.push_str("  br label %count.step\n");
+        ir.push_str("count.step:\n");
+        ir.push_str("  %ci2 = add i64 %ci, 1\n");
+        ir.push_str("  store i64 %ci2, i64* %i.ptr\n");
+        ir.push_str("  br label %count.cond\n");
+        ir.push_str("alloc:\n");
+        ir.push_str("  %count = load i64, i64* %count.ptr\n");
+        ir.push_str("  %bytes = mul i64 %count, 16\n");
+        ir.push_str("  %data.int = call i64 @malloc(i64 %bytes)\n");
+        ir.push_str("  %data = inttoptr i64 %data.int to { i8*, i64 }*\n");
+        ir.push_str("  %start.ptr = alloca i64\n");
+        ir.push_str("  %fi.ptr = alloca i64\n");
+        ir.push_str("  %part.idx.ptr = alloca i64\n");
+        ir.push_str("  store i64 0, i64* %start.ptr\n");
+        ir.push_str("  store i64 0, i64* %fi.ptr\n");
+        ir.push_str("  store i64 0, i64* %part.idx.ptr\n");
+        ir.push_str("  br label %fill.cond\n");
+        ir.push_str("fill.cond:\n");
+        ir.push_str("  %fi = load i64, i64* %fi.ptr\n");
+        ir.push_str("  %atend = icmp uge i64 %fi, %len\n");
+        ir.push_str("  br i1 %atend, label %emit.part, label %fill.body\n");
+        ir.push_str("fill.body:\n");
+        ir.push_str("  %fptr = getelementptr i8, i8* %s, i64 %fi\n");
+        ir.push_str("  %fch = load i8, i8* %fptr\n");
+        ir.push_str("  %fdelim = icmp eq i8 %fch, %delim\n");
+        ir.push_str("  br i1 %fdelim, label %emit.part, label %fill.step\n");
+        ir.push_str("fill.step:\n");
+        ir.push_str("  %fi.next = add i64 %fi, 1\n");
+        ir.push_str("  store i64 %fi.next, i64* %fi.ptr\n");
+        ir.push_str("  br label %fill.cond\n");
+        ir.push_str("emit.part:\n");
+        ir.push_str("  %start = load i64, i64* %start.ptr\n");
+        ir.push_str("  %part.len = sub i64 %fi, %start\n");
+        ir.push_str("  %part.size = add i64 %part.len, 1\n");
+        ir.push_str("  %part.int = call i64 @malloc(i64 %part.size)\n");
+        ir.push_str("  %part.ptr.raw = inttoptr i64 %part.int to i8*\n");
+        ir.push_str("  %src.ptr = getelementptr i8, i8* %s, i64 %start\n");
+        ir.push_str("  %src.int = ptrtoint i8* %src.ptr to i64\n");
+        ir.push_str("  call i64 @memcpy(i64 %part.int, i64 %src.int, i64 %part.len)\n");
+        ir.push_str("  %nul.ptr = getelementptr i8, i8* %part.ptr.raw, i64 %part.len\n");
+        ir.push_str("  store i8 0, i8* %nul.ptr\n");
+        ir.push_str("  %part.idx = load i64, i64* %part.idx.ptr\n");
+        ir.push_str(
+            "  %elem.ptr = getelementptr { i8*, i64 }, { i8*, i64 }* %data, i64 %part.idx\n",
+        );
+        ir.push_str(
+            "  %elem.data = getelementptr { i8*, i64 }, { i8*, i64 }* %elem.ptr, i32 0, i32 0\n",
+        );
+        ir.push_str("  store i8* %part.ptr.raw, i8** %elem.data\n");
+        ir.push_str(
+            "  %elem.len = getelementptr { i8*, i64 }, { i8*, i64 }* %elem.ptr, i32 0, i32 1\n",
+        );
+        ir.push_str("  store i64 %part.len, i64* %elem.len\n");
+        ir.push_str("  %part.idx.next = add i64 %part.idx, 1\n");
+        ir.push_str("  store i64 %part.idx.next, i64* %part.idx.ptr\n");
+        ir.push_str("  %done = icmp uge i64 %fi, %len\n");
+        ir.push_str("  br i1 %done, label %ret, label %after.delim\n");
+        ir.push_str("after.delim:\n");
+        ir.push_str("  %after = add i64 %fi, 1\n");
+        ir.push_str("  store i64 %after, i64* %fi.ptr\n");
+        ir.push_str("  store i64 %after, i64* %start.ptr\n");
+        ir.push_str("  br label %fill.cond\n");
+        ir.push_str("ret:\n");
+        ir.push_str("  %v0 = insertvalue { i64, i64, i64, i64, i64 } undef, i64 %data.int, 0\n");
+        ir.push_str("  %v1 = insertvalue { i64, i64, i64, i64, i64 } %v0, i64 %count, 1\n");
+        ir.push_str("  %v2 = insertvalue { i64, i64, i64, i64, i64 } %v1, i64 %count, 2\n");
+        ir.push_str("  %v3 = insertvalue { i64, i64, i64, i64, i64 } %v2, i64 16, 3\n");
+        ir.push_str("  %v4 = insertvalue { i64, i64, i64, i64, i64 } %v3, i64 1, 4\n");
+        ir.push_str("  ret { i64, i64, i64, i64, i64 } %v4\n");
+        ir.push_str("}\n");
+
+        // __vais_str_parse_f64: parse a string into Result<f64, str>.
+        ir.push_str("\n; String helper: parse_f64\n");
+        ir.push_str("define { i32, { i64 } } @__vais_str_parse_f64(i8* %s) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %end.slot = alloca i8*\n");
+        ir.push_str("  store i8* null, i8** %end.slot\n");
+        ir.push_str("  %value = call double @strtod(i8* %s, i8** %end.slot)\n");
+        ir.push_str("  %end = load i8*, i8** %end.slot\n");
+        ir.push_str("  %len = call i64 @strlen(i8* %s)\n");
+        ir.push_str("  %s.end = getelementptr i8, i8* %s, i64 %len\n");
+        ir.push_str("  %no.parse = icmp eq i8* %end, %s\n");
+        ir.push_str("  %consumed = icmp eq i8* %end, %s.end\n");
+        ir.push_str("  %has.parse = xor i1 %no.parse, true\n");
+        ir.push_str("  %ok = and i1 %has.parse, %consumed\n");
+        ir.push_str("  br i1 %ok, label %ok.block, label %err.block\n");
+        ir.push_str("ok.block:\n");
+        ir.push_str("  %bits.slot = alloca i64\n");
+        ir.push_str("  %dbl.ptr = bitcast i64* %bits.slot to double*\n");
+        ir.push_str("  store double %value, double* %dbl.ptr\n");
+        ir.push_str("  %bits = load i64, i64* %bits.slot\n");
+        ir.push_str("  %ok.payload = insertvalue { i64 } undef, i64 %bits, 0\n");
+        ir.push_str("  %ok.r0 = insertvalue { i32, { i64 } } undef, i32 0, 0\n");
+        ir.push_str("  %ok.r1 = insertvalue { i32, { i64 } } %ok.r0, { i64 } %ok.payload, 1\n");
+        ir.push_str("  ret { i32, { i64 } } %ok.r1\n");
+        ir.push_str("err.block:\n");
+        ir.push_str("  %err.data = getelementptr [20 x i8], [20 x i8]* @__vais_parse_f64_error, i64 0, i64 0\n");
+        ir.push_str("  %err.box.int = call i64 @malloc(i64 16)\n");
+        ir.push_str("  %err.box = inttoptr i64 %err.box.int to { i8*, i64 }*\n");
+        ir.push_str(
+            "  %err.data.slot = getelementptr { i8*, i64 }, { i8*, i64 }* %err.box, i32 0, i32 0\n",
+        );
+        ir.push_str("  store i8* %err.data, i8** %err.data.slot\n");
+        ir.push_str(
+            "  %err.len.slot = getelementptr { i8*, i64 }, { i8*, i64 }* %err.box, i32 0, i32 1\n",
+        );
+        ir.push_str("  store i64 19, i64* %err.len.slot\n");
+        ir.push_str("  %err.payload = insertvalue { i64 } undef, i64 %err.box.int, 0\n");
+        ir.push_str("  %err.r0 = insertvalue { i32, { i64 } } undef, i32 1, 0\n");
+        ir.push_str("  %err.r1 = insertvalue { i32, { i64 } } %err.r0, { i64 } %err.payload, 1\n");
+        ir.push_str("  ret { i32, { i64 } } %err.r1\n");
         ir.push_str("}\n");
 
         // __vais_str_to_upper: ASCII uppercase conversion.
@@ -1084,6 +1378,8 @@ impl CodeGenerator {
         ir.push_str("declare { i8*, i64 } @__vais_str_concat(i8*, i8*)\n");
         ir.push_str("declare i64 @__vais_str_indexOf(i8*, i8*)\n");
         ir.push_str("declare { i8*, i64 } @__vais_str_substring(i8*, i64, i64)\n");
+        ir.push_str("declare { i64, i64, i64, i64, i64 } @__vais_str_split_char(i8*, i64, i64)\n");
+        ir.push_str("declare { i32, { i64 } } @__vais_str_parse_f64(i8*)\n");
         ir.push_str("declare i64 @__vais_str_len(i8*)\n");
         ir.push_str("declare { i8*, i64 } @__vais_str_char_at(i8*, i64)\n");
         ir.push_str("declare { i8*, i64 } @__vais_str_slice(i8*, i64, i64)\n");
@@ -1109,6 +1405,7 @@ impl CodeGenerator {
         let mut ir = String::with_capacity(256);
         ir.push_str("\n; String runtime extern declarations\n");
         ir.push_str("declare i32 @snprintf(i8*, i64, i8*, ...)\n");
+        ir.push_str("declare double @strtod(i8*, i8**)\n");
         ir
     }
 
