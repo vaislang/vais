@@ -845,7 +845,7 @@ impl HttpClient {
             }
             __tls_set_hostname(ssl, host)
             hs := __tls_connect(ssl)
-            I hs <= 0 {
+            I hs != 0 {
                 __tls_free(ssl)
                 __tls_ctx_free(ctx)
                 __free(send_buf)

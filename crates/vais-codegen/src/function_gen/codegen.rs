@@ -497,8 +497,17 @@ impl CodeGenerator {
                                 )
                             })
                             .unwrap_or(false);
-                        // Check if the result is already a value (from phi node) or a pointer (from struct lit)
-                        if !last_is_stdlib_variant && self.is_block_result_value(stmts) {
+                        // Check if the result is already a value (from phi node) or a pointer (from struct lit).
+                        // Ground-truth emitted type wins over syntactic/inferred value-ness: after
+                        // block scope exit, local bindings may already be removed from fn_ctx.locals.
+                        let actual_value_llvm = self.llvm_type_of_checked(&value);
+                        let value_is_pointer = actual_value_llvm
+                            .as_deref()
+                            .is_some_and(|ty| ty == "ptr" || ty.trim_end().ends_with('*'));
+                        if !last_is_stdlib_variant
+                            && !value_is_pointer
+                            && self.is_block_result_value(stmts)
+                        {
                             // Value — check if type name matches return type.
                             // Generic calls may return %Vec while function declares %Vec$i64.
                             let mut val_llvm = self.llvm_type_of(&value);
@@ -572,11 +581,32 @@ impl CodeGenerator {
                             // specialized (`%Result$i64_VaisError`). Both
                             // share layout; bitcast the pointer first so
                             // the `load` type matches.
-                            let val_llvm = self.llvm_type_of(&value);
-                            let src_ptr = if val_llvm.starts_with('%')
-                                && val_llvm != ret_llvm
-                                && !val_llvm.ends_with('*')
-                            {
+                            let val_llvm =
+                                actual_value_llvm.unwrap_or_else(|| self.llvm_type_of(&value));
+                            let ret_ptr_llvm = format!("{}*", ret_llvm);
+                            let src_ptr = if val_llvm == "ptr" {
+                                value.clone()
+                            } else if val_llvm.ends_with('*') {
+                                if val_llvm == ret_ptr_llvm {
+                                    value.clone()
+                                } else if val_llvm.trim_end_matches('*').trim().starts_with('%')
+                                    && ret_llvm.starts_with('%')
+                                {
+                                    let cast = self.next_temp(&mut counter);
+                                    write_ir!(
+                                        ir,
+                                        "  {} = bitcast {} {} to {}",
+                                        cast,
+                                        val_llvm,
+                                        value,
+                                        ret_ptr_llvm
+                                    );
+                                    self.fn_ctx.record_emitted_type(&cast, &ret_ptr_llvm);
+                                    cast
+                                } else {
+                                    value.clone()
+                                }
+                            } else if val_llvm.starts_with('%') && val_llvm != ret_llvm {
                                 let cast = self.next_temp(&mut counter);
                                 write_ir!(
                                     ir,
@@ -586,6 +616,7 @@ impl CodeGenerator {
                                     value,
                                     ret_llvm
                                 );
+                                self.fn_ctx.record_emitted_type(&cast, &ret_ptr_llvm);
                                 cast
                             } else {
                                 value.clone()
@@ -1073,8 +1104,14 @@ impl CodeGenerator {
                     if ret_type == ResolvedType::Unit {
                         write_ir!(ir, "  ret void{}", ret_dbg);
                     } else if matches!(ret_type, ResolvedType::Named { .. }) {
-                        // Check if the result is already a value (from phi node) or a pointer (from struct lit)
-                        if self.is_block_result_value(stmts) {
+                        // Check if the result is already a value (from phi node) or a pointer (from struct lit).
+                        // Ground-truth emitted type wins over syntactic/inferred value-ness:
+                        // block-scope cleanup can remove locals before this classification runs.
+                        let actual_value_llvm = self.llvm_type_of_checked(&value);
+                        let value_is_pointer = actual_value_llvm
+                            .as_deref()
+                            .is_some_and(|ty| ty == "ptr" || ty.trim_end().ends_with('*'));
+                        if !value_is_pointer && self.is_block_result_value(stmts) {
                             // Value (e.g., from if-else phi node). Reconcile
                             // specialized wrapper names before returning.
                             let mut val_llvm = self.llvm_type_of(&value);
@@ -1104,11 +1141,32 @@ impl CodeGenerator {
                             // specialized (`%Result$i64_VaisError`). Both
                             // share layout; bitcast the pointer first so
                             // the `load` type matches.
-                            let val_llvm = self.llvm_type_of(&value);
-                            let src_ptr = if val_llvm.starts_with('%')
-                                && val_llvm != ret_llvm
-                                && !val_llvm.ends_with('*')
-                            {
+                            let val_llvm =
+                                actual_value_llvm.unwrap_or_else(|| self.llvm_type_of(&value));
+                            let ret_ptr_llvm = format!("{}*", ret_llvm);
+                            let src_ptr = if val_llvm == "ptr" {
+                                value.clone()
+                            } else if val_llvm.ends_with('*') {
+                                if val_llvm == ret_ptr_llvm {
+                                    value.clone()
+                                } else if val_llvm.trim_end_matches('*').trim().starts_with('%')
+                                    && ret_llvm.starts_with('%')
+                                {
+                                    let cast = self.next_temp(&mut counter);
+                                    write_ir!(
+                                        ir,
+                                        "  {} = bitcast {} {} to {}",
+                                        cast,
+                                        val_llvm,
+                                        value,
+                                        ret_ptr_llvm
+                                    );
+                                    self.fn_ctx.record_emitted_type(&cast, &ret_ptr_llvm);
+                                    cast
+                                } else {
+                                    value.clone()
+                                }
+                            } else if val_llvm.starts_with('%') && val_llvm != ret_llvm {
                                 let cast = self.next_temp(&mut counter);
                                 write_ir!(
                                     ir,
@@ -1118,6 +1176,7 @@ impl CodeGenerator {
                                     value,
                                     ret_llvm
                                 );
+                                self.fn_ctx.record_emitted_type(&cast, &ret_ptr_llvm);
                                 cast
                             } else {
                                 value.clone()

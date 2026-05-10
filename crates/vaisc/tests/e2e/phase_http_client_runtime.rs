@@ -114,6 +114,68 @@ fn main() -> i64 {
     );
 }
 
+#[test]
+fn e2e_std_http_client_single_arg_return_ir_regression() {
+    let temp = tempfile::TempDir::new().expect("temp dir");
+    let main_path = temp.path().join("main.vais");
+    let exe_path = temp.path().join("http_client_return_ir_smoke");
+
+    let source = r#"
+use std/http_client
+
+fn main() -> i64 {
+    response := http_get("http://127.0.0.1/")
+    response.drop()
+    deleted := http_delete("http://127.0.0.1/")
+    deleted.drop()
+    0
+}
+"#;
+    std::fs::write(&main_path, source).expect("write http_client IR fixture");
+
+    let compiler_root = compiler_root();
+    let std_path = std_link(&compiler_root);
+    let dep_paths = format!("{}:{}", temp.path().display(), std_path.display());
+
+    let build = Command::new(env!("CARGO_BIN_EXE_vaisc"))
+        .arg("build")
+        .arg(&main_path)
+        .arg("-o")
+        .arg(&exe_path)
+        .arg("--force-rebuild")
+        .current_dir(temp.path())
+        .env("VAIS_STD_PATH", &std_path)
+        .env("VAIS_DEP_PATHS", dep_paths)
+        .output()
+        .expect("spawn vaisc build");
+    assert!(
+        build.status.success(),
+        "std/http_client IR fixture failed to build\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr)
+    );
+
+    let http_ir = read_http_client_cache_ir(temp.path());
+    for signature in [
+        "define %HttpResponse @http_get",
+        "define %HttpResponse @http_delete",
+    ] {
+        let fn_ir = extract_function_ir(&http_ir, signature);
+        assert!(
+            !fn_ir.contains("alloca %HttpResponse*"),
+            "{signature} must not allocate a pointer slot for its tail HttpResponse\n{fn_ir}"
+        );
+        assert!(
+            !fn_ir.contains("bitcast %HttpResponse**"),
+            "{signature} must not reinterpret a HttpResponse** as HttpResponse*\n{fn_ir}"
+        );
+        assert!(
+            fn_ir.contains("load %HttpResponse, %HttpResponse* %response"),
+            "{signature} should return by loading the HttpResponse alloca\n{fn_ir}"
+        );
+    }
+}
+
 fn accept_one_http_request(listener: TcpListener) -> String {
     let deadline = Instant::now() + Duration::from_secs(10);
     let (mut stream, _) = loop {
@@ -170,6 +232,39 @@ fn accept_one_http_request(listener: TcpListener) -> String {
     stream.flush().expect("flush std/http_client response");
 
     String::from_utf8_lossy(&request).into_owned()
+}
+
+fn read_http_client_cache_ir(temp_root: &Path) -> String {
+    let cache_dir = temp_root.join(".vais-cache");
+    let entries = std::fs::read_dir(&cache_dir)
+        .unwrap_or_else(|err| panic!("failed to read cache dir {}: {err}", cache_dir.display()));
+    for entry in entries {
+        let path = entry.expect("cache entry").path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("ll") {
+            continue;
+        }
+        let ir = std::fs::read_to_string(&path)
+            .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
+        if ir.contains("define %HttpResponse @http_get") {
+            return ir;
+        }
+    }
+    panic!(
+        "failed to find std/http_client IR in {}",
+        cache_dir.display()
+    );
+}
+
+fn extract_function_ir<'a>(ir: &'a str, signature: &str) -> &'a str {
+    let start = ir
+        .find(signature)
+        .unwrap_or_else(|| panic!("missing function signature {signature}"));
+    let rest = &ir[start..];
+    let end = rest
+        .find("\n}")
+        .unwrap_or_else(|| panic!("missing function terminator for {signature}"))
+        + 2;
+    &rest[..end]
 }
 
 fn compiler_root() -> PathBuf {
