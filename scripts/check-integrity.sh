@@ -7,7 +7,7 @@
 # Environment overrides (defaults shown; baseline locked 2026-05-03):
 #   INTEGRITY_STD_MIN=82                   minimum std/*.vais standalone codegen pass count
 #   INTEGRITY_VAISDB_MIN=261               minimum vaisdb_files pass count
-#   INTEGRITY_HTTP_CLIENT_RUNTIME_MIN=7    minimum http_client runtime smoke
+#   INTEGRITY_HTTP_CLIENT_RUNTIME_MIN=8    minimum http_client runtime smoke
 #   INTEGRITY_TLS_RUNTIME_MIN=2            minimum std/tls runtime smoke
 #   INTEGRITY_VAISDB_RUNTIME_MIN=34        minimum vaisdb runtime smoke
 #   INTEGRITY_SERVER_RUNTIME_MIN=13        minimum vais-server runtime smoke
@@ -56,7 +56,7 @@ INTEGRITY_VAISDB_MIN="${INTEGRITY_VAISDB_MIN:-261}"
 # Previously the script trusted `cargo test` exit=0 only, which would not
 # catch a silent reduction in pass count if the suite count itself shrank.
 # These minima are the current promoted gate counts as of 2026-05-03.
-INTEGRITY_HTTP_CLIENT_RUNTIME_MIN="${INTEGRITY_HTTP_CLIENT_RUNTIME_MIN:-7}"
+INTEGRITY_HTTP_CLIENT_RUNTIME_MIN="${INTEGRITY_HTTP_CLIENT_RUNTIME_MIN:-8}"
 INTEGRITY_TLS_RUNTIME_MIN="${INTEGRITY_TLS_RUNTIME_MIN:-2}"
 INTEGRITY_VAISDB_RUNTIME_MIN="${INTEGRITY_VAISDB_RUNTIME_MIN:-34}"
 INTEGRITY_SERVER_RUNTIME_MIN="${INTEGRITY_SERVER_RUNTIME_MIN:-13}"
@@ -126,7 +126,8 @@ echo "check-integrity: running codegen invariant quarantine gate..."
 
 CODEGEN_INVARIANT_EXIT=0
 (
-    cargo test -p vais-codegen --test ret_invariant_test --release &&
+    cargo test -p vais-codegen --test entry_alloca_invariant_test --release &&
+        cargo test -p vais-codegen --test ret_invariant_test --release &&
         cargo test -p vais-codegen --test index_invariant_test --release &&
         cargo test -p vais-codegen --test call_arg_invariant_test --release
 ) 2>&1 | tee "${CODEGEN_INVARIANT_LOG}" || CODEGEN_INVARIANT_EXIT=$?
@@ -755,7 +756,7 @@ print_gate_summary() {
     fi
 
     if [ "${CODEGEN_INVARIANT_EXIT}" -eq 0 ]; then
-        echo "CODEGEN OK: ret/index/call-arg invariant tests"
+        echo "CODEGEN OK: entry-alloca/ret/index/call-arg invariant tests"
     else
         echo "CODEGEN FAIL: exit=${CODEGEN_INVARIANT_EXIT}"
     fi

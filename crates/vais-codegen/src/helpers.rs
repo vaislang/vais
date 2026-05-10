@@ -120,6 +120,12 @@ impl CodeGenerator {
         self.fn_ctx
             .entry_allocas
             .push(format!("  {} = alloca {}", var_name, llvm_type));
+        if llvm_type.starts_with('%') {
+            self.fn_ctx.entry_allocas.push(format!(
+                "  store {} zeroinitializer, {}* {}",
+                llvm_type, llvm_type, var_name
+            ));
+        }
         self.fn_ctx
             .record_emitted_type(var_name, &format!("{}*", llvm_type));
         if llvm_type == "i8*" && var_name.contains("__alloc_slot_") {
