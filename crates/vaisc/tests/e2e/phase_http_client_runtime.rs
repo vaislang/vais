@@ -436,6 +436,105 @@ fn main() -> i64 {
 }
 
 #[test]
+fn e2e_std_http_client_loopback_chunked_response_runtime_smoke() {
+    let temp = tempfile::TempDir::new().expect("temp dir");
+    let main_path = temp.path().join("main.vais");
+    let exe_path = temp.path().join("http_client_chunked_response_smoke");
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind loopback listener");
+    listener
+        .set_nonblocking(true)
+        .expect("set listener nonblocking");
+    let port = listener.local_addr().expect("read listener address").port();
+
+    let source = r#"
+use std/http_client
+
+fn smoke_contains(haystack: str, needle: str) -> i64 {
+    smoke_contains_rec(haystack, needle, 0)
+}
+
+fn smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
+    I needle.len() == 0 { return 1 }
+    I i >= haystack.len() { return 0 }
+    I smoke_match_prefix(haystack, needle, i, 0) == 1 { return 1 }
+    smoke_contains_rec(haystack, needle, i + 1)
+}
+
+fn smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
+    nc := needle.char_at(ni)
+    I nc == 0 { return 1 }
+    hc := haystack.char_at(hi)
+    I hc == 0 { return 0 }
+    I hc != nc { return 0 }
+    smoke_match_prefix(haystack, needle, hi + 1, ni + 1)
+}
+
+fn main() -> i64 {
+    response := http_get("http://127.0.0.1:__PORT__/chunked")
+    I response.error_code != 0 { return 1 }
+    I response.status != 200 { return 2 }
+    I response.body_len != 11 { return 3 }
+    body := response.body_text()
+    I smoke_contains(body, "hello world") != 1 { return 4 }
+    response.drop()
+    0
+}
+"#
+    .replace("__PORT__", &port.to_string());
+    std::fs::write(&main_path, source).expect("write http_client chunked fixture");
+
+    let compiler_root = compiler_root();
+    let std_path = std_link(&compiler_root);
+    let dep_paths = format!("{}:{}", temp.path().display(), std_path.display());
+
+    let build = Command::new(env!("CARGO_BIN_EXE_vaisc"))
+        .arg("-v")
+        .arg("build")
+        .arg(&main_path)
+        .arg("-o")
+        .arg(&exe_path)
+        .arg("--force-rebuild")
+        .current_dir(temp.path())
+        .env("VAIS_STD_PATH", &std_path)
+        .env("VAIS_DEP_PATHS", dep_paths)
+        .output()
+        .expect("spawn vaisc build");
+    assert!(
+        build.status.success(),
+        "std/http_client chunked fixture failed to build\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr)
+    );
+
+    let server = thread::spawn(move || accept_chunked_response(listener));
+    let run = Command::new(&exe_path)
+        .current_dir(temp.path())
+        .output()
+        .expect("run std/http_client chunked fixture");
+    let request_text = server.join().expect("join loopback chunked server");
+
+    assert_eq!(
+        run.status.code().unwrap_or(-1),
+        0,
+        "std/http_client chunked fixture exited unexpectedly\nstdout:\n{}\nstderr:\n{}\nrequest:\n{}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr),
+        request_text
+    );
+    assert!(
+        request_text.contains("GET /chunked HTTP/1.1"),
+        "request did not contain expected request line:\n{}",
+        request_text
+    );
+    assert!(
+        request_text.contains("Host: 127.0.0.1:"),
+        "request did not contain Host header with loopback port:\n{}",
+        request_text
+    );
+}
+
+#[test]
 fn e2e_std_http_client_loopback_keep_alive_stale_get_retries_runtime_smoke() {
     let temp = tempfile::TempDir::new().expect("temp dir");
     let main_path = temp.path().join("main.vais");
@@ -1538,6 +1637,25 @@ fn accept_malformed_header_line_response(listener: TcpListener) -> String {
     stream
         .flush()
         .expect("flush std/http_client malformed header response");
+
+    request
+}
+
+fn accept_chunked_response(listener: TcpListener) -> String {
+    let (mut stream, request) = accept_http_request(&listener);
+    let headers = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n";
+    stream
+        .write_all(headers.as_bytes())
+        .expect("write std/http_client chunked headers");
+    stream
+        .flush()
+        .expect("flush std/http_client chunked headers");
+    thread::sleep(Duration::from_millis(50));
+    let chunks = "5\r\nhello\r\n1\r\n \r\n5\r\nworld\r\n0\r\n\r\n";
+    stream
+        .write_all(chunks.as_bytes())
+        .expect("write std/http_client chunked body");
+    stream.flush().expect("flush std/http_client chunked body");
 
     request
 }

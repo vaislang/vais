@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -356,6 +357,180 @@ static int hc_is_header_name_char(unsigned char ch) {
     return ch > 32 && ch < 127 && ch != ':';
 }
 
+static int hc_hex_digit_value(unsigned char ch) {
+    if (ch >= '0' && ch <= '9') return ch - '0';
+    if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+    if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+    return -1;
+}
+
+static const char* hc_body_start(const char* buf, const char* end) {
+    const char* p = buf;
+    while (p < end) {
+        if (p + 3 < end && p[0] == '\r' && p[1] == '\n' && p[2] == '\r' && p[3] == '\n') {
+            return p + 4;
+        }
+        if (p + 1 < end && p[0] == '\n' && p[1] == '\n') {
+            return p + 2;
+        }
+        p++;
+    }
+    return NULL;
+}
+
+static int hc_contains_chunked_token(const char* value, size_t len) {
+    const char* end = value + len;
+    for (const char* p = value; p + 7 <= end; p++) {
+        if (strncasecmp(p, "chunked", 7) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int hc_response_uses_chunked(const char* buf, const char* end) {
+    const char* body = hc_body_start(buf, end);
+    if (body == NULL) return 0;
+
+    const char* p = buf;
+    while (p < body && *p != '\r' && *p != '\n') p++;
+    if (p < body && *p == '\r') p++;
+    if (p < body && *p == '\n') p++;
+
+    while (p < body) {
+        if (*p == '\r' || *p == '\n') break;
+        const char* line_start = p;
+        const char* line_end = p;
+        while (line_end < body && *line_end != '\r' && *line_end != '\n') line_end++;
+        const char* colon = line_start;
+        while (colon < line_end && *colon != ':') colon++;
+        if (colon < line_end && (size_t)(colon - line_start) == 17
+            && strncasecmp(line_start, "Transfer-Encoding", 17) == 0
+            && hc_contains_chunked_token(colon + 1, (size_t)(line_end - colon - 1))) {
+            return 1;
+        }
+        p = line_end;
+        if (p < body && *p == '\r') p++;
+        if (p < body && *p == '\n') p++;
+    }
+    return 0;
+}
+
+static int hc_consume_line_end(const char** cursor, const char* end) {
+    const char* p = *cursor;
+    if (p >= end) return 0;
+    if (*p == '\r') {
+        if (p + 1 >= end) return 0;
+        if (p[1] != '\n') return -2;
+        *cursor = p + 2;
+        return 1;
+    }
+    if (*p == '\n') {
+        *cursor = p + 1;
+        return 1;
+    }
+    return -2;
+}
+
+static int hc_parse_chunked_body_bytes(
+    const char* body,
+    size_t body_len,
+    char** decoded_out,
+    size_t* decoded_len_out
+) {
+    char* decoded = NULL;
+    size_t decoded_len = 0;
+    if (decoded_out != NULL) {
+        decoded = (char*)malloc(body_len + 1);
+        if (decoded == NULL) return -2;
+    }
+
+    const char* p = body;
+    const char* end = body + body_len;
+    while (1) {
+        size_t chunk_size = 0;
+        int saw_digit = 0;
+
+        while (p < end) {
+            int digit = hc_hex_digit_value((unsigned char)*p);
+            if (digit >= 0) {
+                if (chunk_size > (((size_t)-1) - (size_t)digit) / 16) {
+                    free(decoded);
+                    return -2;
+                }
+                chunk_size = chunk_size * 16 + (size_t)digit;
+                saw_digit = 1;
+                p++;
+                continue;
+            }
+            if (*p == ';') {
+                while (p < end && *p != '\r' && *p != '\n') p++;
+                break;
+            }
+            if (*p == '\r' || *p == '\n') break;
+            free(decoded);
+            return -2;
+        }
+
+        if (p >= end) {
+            free(decoded);
+            return 0;
+        }
+        if (!saw_digit) {
+            free(decoded);
+            return -2;
+        }
+
+        int line_end = hc_consume_line_end(&p, end);
+        if (line_end != 1) {
+            free(decoded);
+            return line_end;
+        }
+
+        if (chunk_size == 0) {
+            while (1) {
+                if (p >= end) {
+                    free(decoded);
+                    return 0;
+                }
+                if (*p == '\r' || *p == '\n') {
+                    line_end = hc_consume_line_end(&p, end);
+                    if (line_end == 1) {
+                        if (decoded != NULL) decoded[decoded_len] = '\0';
+                        if (decoded_out != NULL) *decoded_out = decoded;
+                        if (decoded_len_out != NULL) *decoded_len_out = decoded_len;
+                        return 1;
+                    }
+                    free(decoded);
+                    return line_end;
+                }
+                while (p < end && *p != '\r' && *p != '\n') p++;
+                line_end = hc_consume_line_end(&p, end);
+                if (line_end != 1) {
+                    free(decoded);
+                    return line_end;
+                }
+            }
+        }
+
+        if ((size_t)(end - p) < chunk_size) {
+            free(decoded);
+            return 0;
+        }
+        if (decoded != NULL) {
+            memcpy(decoded + decoded_len, p, chunk_size);
+        }
+        decoded_len += chunk_size;
+        p += chunk_size;
+
+        line_end = hc_consume_line_end(&p, end);
+        if (line_end != 1) {
+            free(decoded);
+            return line_end;
+        }
+    }
+}
+
 static HcResponse hc_parse_error_with_cleanup(HcResponse* out, long* items, long count) {
     if (items != NULL) {
         for (long i = 0; i < count; i++) {
@@ -446,6 +621,7 @@ HcResponse __hc_parse_response(long buffer, long len) {
     long capacity = 16;
     long* items = (long*)malloc((size_t)(capacity * 16));
     long count = 0;
+    int transfer_chunked = 0;
 
     while (p < end) {
         // Check for end of headers (\r\n or \n)
@@ -480,6 +656,11 @@ HcResponse __hc_parse_response(long buffer, long len) {
         const char* val_start = p;
         while (p < end && *p != '\r' && *p != '\n') p++;
         char* value = hc_strndup(val_start, (size_t)(p - val_start));
+        if (name != NULL && value != NULL
+            && strcasecmp(name, "Transfer-Encoding") == 0
+            && hc_contains_chunked_token(value, (size_t)(p - val_start))) {
+            transfer_chunked = 1;
+        }
 
         // Skip \r\n
         if (p < end && *p == '\r') p++;
@@ -506,13 +687,24 @@ HcResponse __hc_parse_response(long buffer, long len) {
     // Make a copy so the caller can free the receive buffer independently
     if (p < end) {
         size_t body_len = (size_t)(end - p);
-        char* body_copy = (char*)malloc(body_len + 1);
-        if (body_copy) {
-            memcpy(body_copy, p, body_len);
-            body_copy[body_len] = '\0';
+        if (transfer_chunked) {
+            char* body_copy = NULL;
+            size_t decoded_len = 0;
+            int chunk_state = hc_parse_chunked_body_bytes(p, body_len, &body_copy, &decoded_len);
+            if (chunk_state != 1) {
+                return hc_parse_error_with_cleanup(&out, items, count);
+            }
+            out.body = (long)body_copy;
+            out.body_len = (long)decoded_len;
+        } else {
+            char* body_copy = (char*)malloc(body_len + 1);
+            if (body_copy) {
+                memcpy(body_copy, p, body_len);
+                body_copy[body_len] = '\0';
+            }
+            out.body = (long)body_copy;
+            out.body_len = (long)body_len;
         }
-        out.body = (long)body_copy;
-        out.body_len = (long)body_len;
     }
 
     out.error_code = 0;  // Success
@@ -566,6 +758,20 @@ long __hc_get_content_length(long buffer, long len) {
     }
 
     return -1;  // Not found
+}
+
+// Return chunked response body state: 1 complete, 0 incomplete, -1 not chunked,
+// or -2 malformed.
+long __hc_chunked_body_complete(long buffer, long len) {
+    const char* buf = (const char*)buffer;
+    if (buf == NULL || len <= 0) return -1;
+
+    const char* end = buf + len;
+    const char* body = hc_body_start(buf, end);
+    if (body == NULL) return 0;
+    if (!hc_response_uses_chunked(buf, end)) return -1;
+
+    return (long)hc_parse_chunked_body_bytes(body, (size_t)(end - body), NULL, NULL);
 }
 
 // ============================================

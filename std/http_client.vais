@@ -12,6 +12,7 @@
 # - Keep-alive connection reuse
 # - Connection pooling with stale pooled idempotent request retry
 # - Malformed HTTP status-line responses return CLIENT_ERR_PARSE
+# - Chunked Transfer-Encoding responses are read to the terminating chunk and decoded
 # - Malformed Content-Length response headers return CLIENT_ERR_PARSE
 # - Truncated Content-Length response bodies return CLIENT_ERR_PARSE
 # - Plain HTTP runtime path plus absolute, scheme-relative, root-relative,
@@ -1009,6 +1010,14 @@ fn http_response_body_complete(buffer: i64, len: i64) -> i64 {
         return 0
     }
 
+    chunked_state := __hc_chunked_body_complete(buffer, len)
+    I chunked_state == 1 {
+        return 1
+    }
+    I chunked_state == 0 | chunked_state == -2 {
+        return 0
+    }
+
     content_len := __hc_get_content_length(buffer, len)
     I content_len == -2 {
         return 0
@@ -1226,14 +1235,20 @@ impl HttpClient {
                 total_recv = total_recv + n
                 header_end := __find_header_end(recv_buf, total_recv)
                 I header_end >= 0 {
-                    content_len := __hc_get_content_length(recv_buf, total_recv)
-                    I content_len >= 0 {
-                        body_received := total_recv - header_end
-                        I body_received >= content_len {
+                    chunked_state := __hc_chunked_body_complete(recv_buf, total_recv)
+                    I chunked_state == 1 | chunked_state == -2 {
+                        B
+                    }
+                    I chunked_state != 0 {
+                        content_len := __hc_get_content_length(recv_buf, total_recv)
+                        I content_len >= 0 {
+                            body_received := total_recv - header_end
+                            I body_received >= content_len {
+                                B
+                            }
+                        } else {
                             B
                         }
-                    } else {
-                        B
                     }
                 }
             }
@@ -1304,15 +1319,21 @@ impl HttpClient {
                 # Check for complete headers
                 header_end := __find_header_end(recv_buf, total_recv)
                 I header_end >= 0 {
-                    # Check Content-Length to see if we need more body data
-                    content_len := __hc_get_content_length(recv_buf, total_recv)
-                    I content_len >= 0 {
-                        body_received := total_recv - header_end
-                        I body_received >= content_len {
+                    chunked_state := __hc_chunked_body_complete(recv_buf, total_recv)
+                    I chunked_state == 1 | chunked_state == -2 {
+                        B
+                    }
+                    I chunked_state != 0 {
+                        # Check Content-Length to see if we need more body data
+                        content_len := __hc_get_content_length(recv_buf, total_recv)
+                        I content_len >= 0 {
+                            body_received := total_recv - header_end
+                            I body_received >= content_len {
+                                B
+                            }
+                        } else {
                             B
                         }
-                    } else {
-                        B
                     }
                 }
             }
@@ -2005,6 +2026,7 @@ impl fn __hc_parse_url_query(url: str) -> str
 impl fn __hc_parse_url_scheme(url: str) -> str
 impl fn __hc_parse_response(buffer: i64, len: i64) -> HttpResponse
 impl fn __hc_get_content_length(buffer: i64, len: i64) -> i64
+impl fn __hc_chunked_body_complete(buffer: i64, len: i64) -> i64
 impl fn __hc_str_from_buffer(ptr: i64, len: i64) -> str
 
 # HTTP parsing (shared with http_runtime.c)
