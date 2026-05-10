@@ -11,8 +11,8 @@
 # - Timeout support via setsockopt
 # - Keep-alive connection reuse
 # - Connection pooling basics
-# - Plain HTTP runtime path plus absolute, scheme-relative, and root-relative
-#   plain-HTTP redirects are promoted.
+# - Plain HTTP runtime path plus absolute, scheme-relative, root-relative, and
+#   path-relative dot-segment plain-HTTP redirects are promoted.
 # - HTTPS/TLS path is enabled; broad HTTPS redirect and external network
 #   reliability remain certification work.
 
@@ -142,7 +142,8 @@ impl Url {
     }
 
     # Resolve a redirect Location against this URL.
-    # Promoted surface: absolute URLs, scheme-relative URLs, and root-relative paths.
+    # Promoted surface: absolute URLs, scheme-relative URLs, root-relative paths,
+    # and path-relative paths with "." / ".." segment normalization.
     fn resolve_redirect_location(&self, location: str) -> str {
         I __strlen(location) == 0 {
             return location
@@ -176,11 +177,180 @@ impl Url {
                 pos = pos + __str_copy_to(buf + pos, location)
                 __store_byte(buf + pos, 0)
                 buf as str
-            } else {
+            } else I redirect_location_is_absolute_url(location) == 1 {
                 location
+            } else I location.char_at(0) == 63 | location.char_at(0) == 35 {
+                location
+            } else {
+                self.resolve_path_relative_redirect_location(location)
             }
         }
     }
+
+    fn resolve_path_relative_redirect_location(&self, location: str) -> str {
+        host := self.host_header()
+        scheme_len := __strlen(self.scheme)
+        host_len := __strlen(host)
+        path_len := __strlen(self.path)
+        location_len := __strlen(location)
+        base_dir_len := redirect_base_dir_len(self.path)
+        buf := __malloc(scheme_len + host_len + path_len + location_len + 5)
+        pos := mut __str_copy_to(buf, self.scheme)
+        __store_byte(buf + pos, 58)  # ':'
+        pos = pos + 1
+        __store_byte(buf + pos, 47)  # '/'
+        pos = pos + 1
+        __store_byte(buf + pos, 47)  # '/'
+        pos = pos + 1
+        pos = pos + __str_copy_to(buf + pos, host)
+        path_start := pos
+        __store_byte(buf + pos, 47)  # '/'
+        pos = pos + 1
+        pos = redirect_copy_normalized_segments(buf, pos, path_start, self.path, 1, base_dir_len)
+        pos = redirect_copy_normalized_segments(buf, pos, path_start, location, 0, location_len)
+        I redirect_should_trim_final_slash(location) == 1 & pos > path_start + 1 {
+            pos = pos - 1
+        }
+        __store_byte(buf + pos, 0)
+        buf as str
+    }
+}
+
+fn redirect_location_is_absolute_url(location: str) -> i64 {
+    len := __strlen(location)
+    I len <= 1 { return 0 }
+    I redirect_is_scheme_start(location.char_at(0)) != 1 { return 0 }
+
+    i := mut 1
+    L {
+        I i >= len { return 0 }
+        c := location.char_at(i)
+        I c == 58 { return 1 }
+        I c == 47 | c == 63 | c == 35 { return 0 }
+        I redirect_is_scheme_char(c) != 1 { return 0 }
+        i = i + 1
+    }
+    0
+}
+
+fn redirect_is_scheme_start(c: i64) -> i64 {
+    I c >= 65 & c <= 90 {
+        1
+    } else I c >= 97 & c <= 122 {
+        1
+    } else {
+        0
+    }
+}
+
+fn redirect_is_scheme_char(c: i64) -> i64 {
+    I redirect_is_scheme_start(c) == 1 {
+        1
+    } else I c >= 48 & c <= 57 {
+        1
+    } else I c == 43 | c == 45 | c == 46 {
+        1
+    } else {
+        0
+    }
+}
+
+fn redirect_base_dir_len(path: str) -> i64 {
+    len := __strlen(path)
+    I len <= 0 { return 1 }
+
+    i := mut len - 1
+    L {
+        I i <= 0 { return 1 }
+        I path.char_at(i) == 47 { return i + 1 }
+        i = i - 1
+    }
+    1
+}
+
+fn redirect_copy_normalized_segments(
+    buf: i64,
+    pos: i64,
+    path_start: i64,
+    src: str,
+    start: i64,
+    end: i64
+) -> i64 {
+    p := mut pos
+    seg_start := mut start
+    i := mut start
+    L {
+        I i >= end {
+            return redirect_append_normalized_segment(buf, p, path_start, src, seg_start, i)
+        }
+        I src.char_at(i) == 47 {
+            p = redirect_append_normalized_segment(buf, p, path_start, src, seg_start, i)
+            seg_start = i + 1
+        }
+        i = i + 1
+    }
+    p
+}
+
+fn redirect_append_normalized_segment(
+    buf: i64,
+    pos: i64,
+    path_start: i64,
+    src: str,
+    start: i64,
+    end: i64
+) -> i64 {
+    seg_len := end - start
+    I seg_len <= 0 { return pos }
+    I seg_len == 1 & src.char_at(start) == 46 { return pos }
+    I seg_len == 2 & src.char_at(start) == 46 & src.char_at(start + 1) == 46 {
+        return redirect_pop_segment(buf, pos, path_start)
+    }
+
+    p := mut pos
+    i := mut start
+    L {
+        I i >= end {
+            __store_byte(buf + p, 47)  # '/'
+            return p + 1
+        }
+        __store_byte(buf + p, src.char_at(i))
+        p = p + 1
+        i = i + 1
+    }
+    p
+}
+
+fn redirect_pop_segment(buf: i64, pos: i64, path_start: i64) -> i64 {
+    p := mut pos
+    I p <= path_start + 1 { return path_start + 1 }
+
+    p = p - 1
+    L {
+        I p <= path_start { return path_start + 1 }
+        p = p - 1
+        I load_byte(buf + p) == 47 { return p + 1 }
+    }
+    path_start + 1
+}
+
+fn redirect_should_trim_final_slash(location: str) -> i64 {
+    len := __strlen(location)
+    I len <= 0 { return 0 }
+    I location.char_at(len - 1) == 47 { return 0 }
+
+    last_start := mut 0
+    i := mut 0
+    L {
+        I i >= len { B }
+        I location.char_at(i) == 47 { last_start = i + 1 }
+        i = i + 1
+    }
+
+    seg_len := len - last_start
+    I seg_len == 1 & location.char_at(last_start) == 46 { return 0 }
+    I seg_len == 2 & location.char_at(last_start) == 46 & location.char_at(last_start + 1) == 46 { return 0 }
+    1
 }
 
 # ============================================
