@@ -777,6 +777,123 @@ fn main() -> i64 {
     );
 }
 
+#[test]
+fn e2e_vais_server_15_ssr_json_grammar_runtime_smoke() {
+    let listener =
+        TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR JSON grammar upstream listener");
+    listener
+        .set_nonblocking(true)
+        .expect("set SSR JSON grammar upstream listener nonblocking");
+    let port = listener
+        .local_addr()
+        .expect("read SSR JSON grammar upstream address")
+        .port();
+
+    let source = r#"
+use src/api/ssr
+use src/http/header
+
+fn smoke_contains(haystack: str, needle: str) -> i64 {
+    smoke_contains_rec(haystack, needle, 0)
+}
+
+fn smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
+    I needle.len() == 0 { return 1 }
+    I i >= haystack.len() { return 0 }
+    I smoke_match_prefix(haystack, needle, i, 0) == 1 { return 1 }
+    smoke_contains_rec(haystack, needle, i + 1)
+}
+
+fn smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
+    nc := needle.char_at(ni)
+    I nc == 0 { return 1 }
+    hc := haystack.char_at(hi)
+    I hc == 0 { return 0 }
+    I hc != nc { return 0 }
+    smoke_match_prefix(haystack, needle, hi + 1, ni + 1)
+}
+
+fn main() -> i64 {
+    valid := "{\"text\":\"line\\nnext\",\"arr\":[true,false,null,-12.5e+2],\"nested\":{\"x\":0}}"
+    local_valid := do_hydrate("/json-valid", valid)
+    I local_valid.status.code != 200 {
+        println("FAIL ssr json grammar valid local status")
+        return 1
+    }
+    I local_valid.headers.get(CONTENT_TYPE) != "application/json" {
+        println("FAIL ssr json grammar valid local content type")
+        return 2
+    }
+    I smoke_contains(local_valid.body, "\"arr\":[true,false,null,-12.5e+2]") != 1 {
+        println("FAIL ssr json grammar valid array")
+        return 3
+    }
+    I smoke_contains(local_valid.body, "\"nested\":{\"x\":0}") != 1 {
+        println("FAIL ssr json grammar valid object")
+        return 4
+    }
+    println(local_valid.body)
+
+    invalid := "{\"bad\":[1,]}"
+    local_invalid := do_hydrate("/json-invalid", invalid)
+    I local_invalid.status.code != 200 {
+        println("FAIL ssr json grammar invalid local status")
+        return 10
+    }
+    println(local_invalid.body)
+
+    response := forward_ssr_render("http://127.0.0.1:__PORT__", "/json-invalid", invalid)
+    I response.status.code != 202 {
+        println("FAIL ssr json grammar forwarding status")
+        return 20
+    }
+    I response.headers.get(CONTENT_TYPE) != "application/json" {
+        println("FAIL ssr json grammar forwarding content type")
+        return 21
+    }
+    I smoke_contains(response.body, "from-node") != 1 {
+        println("FAIL ssr json grammar forwarding body")
+        return 22
+    }
+
+    println("VAIS_SERVER_SSR_JSON_GRAMMAR_RUNTIME_OK")
+    0
+}
+"#
+    .replace("__PORT__", &port.to_string());
+
+    let (run, request_text) = run_vais_server_generated_loopback_smoke(
+        "ssr_json_grammar_runtime_smoke.vais",
+        &source,
+        listener,
+    );
+
+    assert_eq!(
+        run.status.code().unwrap_or(-1),
+        0,
+        "vais-server SSR JSON grammar smoke exited unexpectedly.\nstdout:\n{}\nstderr:\n{}\nrequest:\n{}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr),
+        request_text
+    );
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    assert!(
+        stdout.contains(r#""data": {"text":"line\nnext","arr":[true,false,null,-12.5e+2],"nested":{"x":0}}"#),
+        "SSR hydrate response did not preserve complete valid JSON grammar values as raw JSON.\nstdout:\n{}",
+        stdout
+    );
+    assert!(
+        stdout.contains(r#""data": "{\"bad\":[1,]}""#),
+        "SSR hydrate response did not escape invalid JSON props as a string.\nstdout:\n{}",
+        stdout
+    );
+    assert!(
+        request_text.contains(r#"{"route":"/json-invalid","props":"{\"bad\":[1,]}"}"#),
+        "SSR forwarding request did not escape invalid JSON props as a string:\n{}",
+        request_text
+    );
+}
+
 fn run_vais_server_generated_retry_budget_smoke(
     fixture: &str,
     source: &str,

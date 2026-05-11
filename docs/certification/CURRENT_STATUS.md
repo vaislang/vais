@@ -1,6 +1,6 @@
 # Current Compiler Certification Status
 
-Date: 2026-05-03
+Date: 2026-05-11
 
 ## Verdict
 
@@ -31,8 +31,8 @@ current Core contract and promoted smoke gates pass with the evidence below.
 | std/http_client runtime smoke | `15/15` |
 | VaisDB runtime smoke | `34/34` |
 | VaisDB runtime lock stability | WAL/LSN/buffer/page/checkpoint mutex release paths covered by current `34/34` smoke |
-| vais-server runtime smoke | `15/15` |
-| vais-server compiled SSR forwarding | `forward_ssr_render()` loopback upstream POST/status/content-type/body bridge plus upstream non-2xx/transport-failure/timeout/retry mapping, retry-budget observability, nested JSON props preservation, and JSON string escaping covered by current `15/15` smoke |
+| vais-server runtime smoke | `16/16` |
+| vais-server compiled SSR forwarding | `forward_ssr_render()` loopback upstream POST/status/content-type/body bridge plus upstream non-2xx/transport-failure/timeout/retry mapping, retry-budget observability, nested JSON props preservation, JSON string escaping, and SSR raw-props JSON value grammar validation covered by current `16/16` smoke |
 | vais-web runtime smoke | `61/77` in skip-mode CI default |
 | vais-web Cloudflare workerd in-process smoke | `Miniflare dispatchFetch` against generated `_worker.js` with real KV-backed `__STATIC_CONTENT` site binding (static index, dynamic route, 404) |
 | Rust toolchain pin | `rust-toolchain.toml` pins Rust `1.92.0` with `rustfmt` and `clippy` components |
@@ -59,7 +59,7 @@ single source for current pass counts. CI fails on drift.
 | std/http_client runtime | `smoke=15/15` |
 | std/tls runtime | `smoke=2/2` |
 | VaisDB runtime | `smoke=34/34` |
-| vais-server runtime | `smoke=15/15` |
+| vais-server runtime | `smoke=16/16` |
 | vais-web runtime | `smoke=61/77` |
 | vais-web unit | `tests=390/390` |
 | vais-web packages | `tests=3272/3272` |
@@ -126,9 +126,10 @@ The following claims are valid:
 - Current vais-server SSR JSON escaping smoke compiles, links, and runs through
   local hydrate and compiled SSR forwarding paths, escaping quotes,
   backslashes, and control characters in route and string props payload fields.
-- Current vais-server SSR raw props embedding only treats object/array/string
-  props as raw JSON when the promoted scanner finds a complete balanced value
-  plus trailing whitespace; incomplete values fall back to escaped strings.
+- Current vais-server SSR raw props embedding treats complete object, array,
+  string, number, boolean, and null values as raw JSON when the promoted JSON
+  value parser consumes the full value plus trailing whitespace; malformed or
+  incomplete values fall back to escaped strings.
 - Current vais-server SSR forwarding error/status smoke preserves upstream
   non-2xx status reason, content-type, and body, and maps transport failure to
   `502 Bad Gateway` with a JSON error response.
@@ -281,9 +282,10 @@ The following claims are not valid yet:
 - "std/http_client broad external network behavior or production network
   reliability is certified."
 - "Compiled vais-server SSR forwarding real delay sleep, probabilistic jitter,
-  HTTPS/TLS, complete JSON grammar validation, external network stability, or
-  deployed Node SSR bridge operation are certified."
-- "vais-server SSR API parsing is a complete JSON grammar validator."
+  HTTPS/TLS, complete JSON validation across every parser path, external
+  network stability, or deployed Node SSR bridge operation are certified."
+- "vais-server request-body and SSR API parsing validate every JSON parser path
+  as a complete JSON grammar validator."
 - "vais-web live deployed cloud platform runtime (i.e., a real upload through
   `wrangler deploy` to the Cloudflare edge, or equivalent for Vercel/Netlify/AWS),
   production browser/device hydration beyond the promoted local

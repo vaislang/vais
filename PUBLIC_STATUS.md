@@ -1,6 +1,6 @@
 # Vais Public Status
 
-Last verified: 2026-05-10
+Last verified: 2026-05-11
 
 This document is the public wording boundary for the Vais repositories and
 website. It separates the gates that are currently certified from broader
@@ -23,7 +23,7 @@ The latest local integrity pass covers:
 - `std/http_client` runtime smoke: `15/15`
 - TLS runtime smoke: `2/2`
 - VaisDB runtime smoke: `34/34`
-- Vais Server runtime smoke: `15/15`
+- Vais Server runtime smoke: `16/16`
 - Vais Web runtime smoke: `61/77` with credential/network-gated cases skipped
 - Vais Web unit tests: `390/390`
 - Ecosystem package tests: `3272/3272`

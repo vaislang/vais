@@ -2,7 +2,7 @@
 
 > Status: Certified Core frozen for downstream re-entry.
 > Canonical workspace roadmap: `/Users/sswoo/study/projects/vais/ROADMAP.md`
-> Last verified: 2026-05-03
+> Last verified: 2026-05-11
 
 This file is intentionally short. Historical drive plans and old candidate
 lists live in `docs/history/`. Do not resume work from those archived plans
@@ -23,12 +23,12 @@ Use these gates as the floor for any compiler change:
 | Std package codegen | `82/82` |
 | VaisDB package codegen | `261/261` |
 | Phase 158 backend smoke | `18/18` |
-| std/http_client runtime smoke | `1/1` |
-| VaisDB runtime smoke | `28/28` |
-| VaisDB runtime lock stability | WAL/LSN/buffer/page/checkpoint mutex release paths covered by current `28/28` smoke |
-| vais-server runtime smoke | `13/13` |
-| vais-server compiled SSR forwarding | `forward_ssr_render()` loopback upstream POST/status/content-type/body bridge plus upstream non-2xx/transport-failure/timeout/retry mapping and retry-budget observability covered by current `13/13` smoke |
-| vais-web runtime smoke | `20/20` |
+| std/http_client runtime smoke | `15/15` |
+| VaisDB runtime smoke | `34/34` |
+| VaisDB runtime lock stability | WAL/LSN/buffer/page/checkpoint mutex release paths covered by current `34/34` smoke |
+| vais-server runtime smoke | `16/16` |
+| vais-server compiled SSR forwarding | `forward_ssr_render()` loopback upstream POST/status/content-type/body bridge plus upstream non-2xx/transport-failure/timeout/retry mapping, retry-budget observability, nested JSON props preservation, JSON string escaping, and SSR raw-props JSON value grammar validation covered by current `16/16` smoke |
+| vais-web runtime smoke | `61/77` |
 | Rust toolchain pin | `rust-toolchain.toml` pins Rust `1.92.0` with `rustfmt` and `clippy` components |
 | Full Rust-hosted compiler test run | Last completed RC baseline: `cargo test --release` exit code `0`; latest current-batch attempt was interrupted after e2e/integrity passed because `registry_e2e_tests` hung at dyld start |
 | Formatting sanity | `git diff --check` clean |
@@ -38,15 +38,13 @@ system. The statement above means the current certified Core compiler gate is
 green. Broader product surfaces remain outside Core until they are promoted by
 fixture-backed gates.
 
-Latest downstream promotion: `vais-web` now has a local server action file
-upload production runtime smoke. The certified path scans a temporary
-`app/upload/page.vaisx` route with `action()`, verifies that prerender skips the
-SSR action route, serves multipart action POSTs through `handleServerAction()`,
-preserves uploaded `File` name/type/size/text, and loads a minified code-split
-production browser bundle in Playwright Chromium. This certifies local server
-action file upload production runtime behavior only; live deployed platforms,
-full dynamic production apps, and broader device coverage remain outside the
-certified surface.
+Latest downstream promotion: `vais-server` SSR raw props now use JSON value
+grammar validation before raw embedding. The certified path accepts complete
+object, array, string, number, boolean, and null values with trailing
+whitespace only, and falls back to escaped strings for malformed values.
+This certifies only the promoted SSR raw-props embedding path; request-body
+JSON parsing and every other parser path remain outside the certified complete
+JSON validator claim.
 
 ## Active Policy
 

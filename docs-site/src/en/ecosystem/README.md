@@ -3,7 +3,7 @@
 A full-stack ecosystem workbench built on top of the Vais language.
 
 Current public claims are gate-backed: VaisDB package `261/261` and runtime
-`34/34`, vais-server runtime `15/15`, and vais-web runtime `61/77`, unit
+`34/34`, vais-server runtime `16/16`, and vais-web runtime `61/77`, unit
 `390/390`, package `3272/3272`, full-build `24/24`. These are not
 product-complete v1 claims.
 
@@ -23,7 +23,7 @@ product-complete v1 claims.
 ┌─────────────────────▼───────────────────────┐
 │  vais-server                                │
 │  Express/Axum-style backend API framework   │
-│  middleware pipeline · runtime smoke 15/15  │
+│  middleware pipeline · runtime smoke 16/16  │
 └─────────────────────┬───────────────────────┘
                       │ Native Query API
 ┌─────────────────────▼───────────────────────┐
@@ -39,7 +39,7 @@ product-complete v1 claims.
 |---------|-------------|--------------|
 | [VaisX](./vais-web/README.md) | Frontend framework workbench | Runtime 61/77, unit 390/390, full-build 24/24 |
 | [VaisDB](./vaisdb/README.md) | Hybrid database workbench | Package 261/261, runtime 34/34 |
-| [vais-server](./vais-server/README.md) | Backend framework workbench | Runtime smoke 15/15 |
+| [vais-server](./vais-server/README.md) | Backend framework workbench | Runtime smoke 16/16 |
 
 ## Full-stack example
 
