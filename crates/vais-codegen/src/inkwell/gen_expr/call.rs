@@ -4,6 +4,7 @@ use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, IntValue};
 use inkwell::AddressSpace;
 
 use vais_ast::{Expr, Spanned};
+use vais_types::ResolvedType;
 
 use super::super::generator::InkwellCodeGenerator;
 use crate::{CodegenError, CodegenResult};
@@ -13,7 +14,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// return the trait name. Otherwise None. Used by call-site fat-pointer
     /// wrapping (DEFERRED #18 sub-task 2b-5b).
     fn dyn_trait_name(ty: &vais_types::ResolvedType) -> Option<String> {
-        use vais_types::ResolvedType;
         match ty {
             ResolvedType::DynTrait { trait_name, .. } => Some(trait_name.clone()),
             ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
@@ -25,6 +25,121 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
             _ => None,
         }
+    }
+
+    fn is_slice_semantic(ty: &ResolvedType) -> bool {
+        match ty {
+            ResolvedType::Slice(_) | ResolvedType::SliceMut(_) => true,
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                matches!(
+                    inner.as_ref(),
+                    ResolvedType::Slice(_) | ResolvedType::SliceMut(_)
+                )
+            }
+            _ => false,
+        }
+    }
+
+    fn vec_semantic_type(ty: &ResolvedType) -> Option<ResolvedType> {
+        match ty {
+            ResolvedType::Named { name, generics } if name == "Vec" && !generics.is_empty() => {
+                Some(ty.clone())
+            }
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => match inner.as_ref() {
+                ResolvedType::Named { name, generics }
+                    if name == "Vec" && !generics.is_empty() =>
+                {
+                    Some(inner.as_ref().clone())
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    fn infer_call_arg_type(&self, arg: &Expr) -> Option<ResolvedType> {
+        match arg {
+            Expr::Ident(name) => self.var_resolved_types.get(name).cloned(),
+            Expr::Ref(inner) => self
+                .infer_call_arg_type(&inner.node)
+                .map(|ty| ResolvedType::Ref(Box::new(ty))),
+            Expr::Deref(inner) => match self.infer_call_arg_type(&inner.node) {
+                Some(ResolvedType::Ref(inner_ty))
+                | Some(ResolvedType::RefMut(inner_ty))
+                | Some(ResolvedType::Pointer(inner_ty)) => Some(*inner_ty),
+                Some(other) => Some(other),
+                None => None,
+            },
+            Expr::Call { func, .. } => {
+                if let Expr::Ident(fn_name) = &func.node {
+                    self.resolved_function_sigs
+                        .get(fn_name.as_str())
+                        .map(|sig| sig.ret.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn materialize_vec_slice_arg(
+        &mut self,
+        val: BasicValueEnum<'ctx>,
+        arg_ty: &ResolvedType,
+    ) -> CodegenResult<Option<BasicValueEnum<'ctx>>> {
+        let Some(vec_ty) = Self::vec_semantic_type(arg_ty) else {
+            return Ok(None);
+        };
+
+        let vec_struct_ty = self.type_mapper.map_type(&vec_ty).into_struct_type();
+        let vec_val = if val.is_struct_value() {
+            val.into_struct_value()
+        } else if val.is_pointer_value() {
+            self.builder
+                .build_load(vec_struct_ty, val.into_pointer_value(), "vec_for_slice")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                .into_struct_value()
+        } else {
+            return Ok(None);
+        };
+
+        let data_field = self
+            .builder
+            .build_extract_value(vec_val, 0, "vec_slice_data_raw")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let i8_ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
+        let data_ptr = if data_field.is_pointer_value() {
+            self.builder
+                .build_pointer_cast(data_field.into_pointer_value(), i8_ptr_type, "vec_slice_data")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        } else if data_field.is_int_value() {
+            self.builder
+                .build_int_to_ptr(data_field.into_int_value(), i8_ptr_type, "vec_slice_data")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        } else {
+            return Ok(None);
+        };
+
+        let len = self
+            .builder
+            .build_extract_value(vec_val, 1, "vec_slice_len")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        let slice_type = self
+            .context
+            .struct_type(&[i8_ptr_type.into(), self.context.i64_type().into()], false);
+        let slice = self
+            .builder
+            .build_insert_value(slice_type.get_undef(), data_ptr, 0, "vec_slice_pair")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+        let slice = self
+            .builder
+            .build_insert_value(slice, len, 1, "vec_slice_pair")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+        Ok(Some(slice.into()))
     }
 
     pub(super) fn generate_call(
@@ -694,16 +809,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // 2b-5b: look up callee's semantic param types from resolved_function_sigs.
         // If a param is dyn Trait, we need to wrap the arg in a fat pointer.
-        let semantic_param_dyn: Vec<Option<String>> = self
+        let semantic_param_types: Vec<Option<ResolvedType>> = self
             .resolved_function_sigs
             .get(&fn_name)
-            .map(|sig| {
-                sig.params
-                    .iter()
-                    .map(|(_n, ty, _mut)| Self::dyn_trait_name(ty))
-                    .collect()
-            })
+            .map(|sig| sig.params.iter().map(|(_n, ty, _mut)| Some(ty.clone())).collect())
             .unwrap_or_else(|| vec![None; args.len()]);
+        let semantic_param_dyn: Vec<Option<String>> = semantic_param_types
+            .iter()
+            .map(|ty| ty.as_ref().and_then(Self::dyn_trait_name))
+            .collect();
 
         let mut arg_values: Vec<BasicMetadataValueEnum> = Vec::with_capacity(args.len());
         for (i, arg) in args.iter().enumerate() {
@@ -736,6 +850,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // If we couldn't determine the concrete type or the vtable
                 // generation failed, fall through to standard coercion;
                 // the F-23 GUARD downstream will catch it as needed.
+            }
+
+            if let Some(param_ty) = semantic_param_types.get(i).and_then(|ty| ty.as_ref()) {
+                if Self::is_slice_semantic(param_ty) {
+                    if let Some(arg_ty) = self.infer_call_arg_type(&arg.node) {
+                        if let Some(slice_val) = self.materialize_vec_slice_arg(val, &arg_ty)? {
+                            arg_values.push(slice_val.into());
+                            continue;
+                        }
+                    }
+                }
             }
 
             let coerced: BasicMetadataValueEnum = if let Some(param_ty) = param_types.get(i) {

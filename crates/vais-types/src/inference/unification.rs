@@ -187,9 +187,44 @@ impl TypeChecker {
             }
         }
 
-        // Phase 239+240: &Vec<T> ↔ &[T] ↔ Vec<T> ↔ [T] slice coercion.
-        // vaisdb passes &Vec<u8> where &[u8] expected, and Vec<u8> where
-        // &[u8]/[u8] expected. Element types must unify.
+        // Phase 239+240: slice-like element unification.
+        //
+        // A4-14: Vec<T> / &Vec<T> ↔ &[T] is a specified slice coercion.
+        // Codegen must materialize a real slice fat value before the call
+        // boundary; passing the Vec storage layout directly is forbidden. Set
+        // VAIS_REJECT_A4_14=1 to force a strict migration audit.
+        let is_vec_like = |t: &ResolvedType| -> bool {
+            match t {
+                ResolvedType::Named { name, generics } => name == "Vec" && generics.len() == 1,
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                    matches!(inner.as_ref(), ResolvedType::Named { name, generics } if name == "Vec" && generics.len() == 1)
+                }
+                _ => false,
+            }
+        };
+        let is_slice_like = |t: &ResolvedType| -> bool {
+            match t {
+                ResolvedType::Slice(_) | ResolvedType::SliceMut(_) => true,
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                    matches!(
+                        inner.as_ref(),
+                        ResolvedType::Slice(_) | ResolvedType::SliceMut(_)
+                    )
+                }
+                _ => false,
+            }
+        };
+        if ((is_vec_like(&expected) && is_slice_like(&found))
+            || (is_slice_like(&expected) && is_vec_like(&found)))
+            && std::env::var("VAIS_REJECT_A4_14").as_deref() == Ok("1")
+        {
+            return Err(crate::TypeError::Mismatch {
+                expected: expected.to_string(),
+                found: found.to_string(),
+                span: None,
+            });
+        }
+
         let extract_slice_elem = |t: &ResolvedType| -> Option<ResolvedType> {
             match t {
                 ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => match inner.as_ref() {

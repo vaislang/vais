@@ -1,4 +1,4 @@
-surface=Vec ↔ Slice (.len() path) silent accept
+surface=Vec ↔ Slice (.len() path) specified-safe coercion
 expected_per_design=exit 3 (Vec length)
-actual_observed=exit 232 (memory-load corruption — Vec fat pointer misread as Slice header)
-assertion=exit_not, forbidden_set=[3]
+actual_observed=exit 3 after call-site slice materialization
+assertion=exit_eq, expected=3

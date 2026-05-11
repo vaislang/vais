@@ -395,7 +395,14 @@ impl CodeGenerator {
             let param_ty = fn_info
                 .as_ref()
                 .and_then(|f| f.signature.params.get(i))
-                .map(|(_, ty, _)| ty.clone());
+                .map(|(_, ty, _)| ty.clone())
+                .or_else(|| {
+                    self.types
+                        .resolved_function_sigs
+                        .get(&fn_name)
+                        .and_then(|sig| sig.params.get(i))
+                        .map(|(_, ty, _)| ty.clone())
+                });
 
             // For extern C functions with Str or &str parameters, extract the raw i8*
             // pointer from the fat pointer { i8*, i64 } and use i8* as the argument type.
@@ -1081,7 +1088,14 @@ impl CodeGenerator {
                         let param_ty = fn_info
                             .as_ref()
                             .and_then(|f| f.signature.params.get(i))
-                            .map(|(_, ty, _)| ty.clone());
+                            .map(|(_, ty, _)| ty.clone())
+                            .or_else(|| {
+                                self.types
+                                    .resolved_function_sigs
+                                    .get(&fn_name)
+                                    .and_then(|sig| sig.params.get(i))
+                                    .map(|(_, ty, _)| ty.clone())
+                            });
                         let arg_ty = if let Some(ref pt) = param_ty {
                             self.type_to_llvm(pt)
                         } else {

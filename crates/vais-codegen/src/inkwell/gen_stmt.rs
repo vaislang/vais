@@ -13,6 +13,19 @@ use super::generator::{InkwellCodeGenerator, LoopContext};
 use crate::{CodegenError, CodegenResult};
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
+    fn static_elem_size(ty: &ResolvedType) -> u64 {
+        match ty {
+            ResolvedType::Bool | ResolvedType::I8 | ResolvedType::U8 => 1,
+            ResolvedType::I16 | ResolvedType::U16 => 2,
+            ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
+            ResolvedType::Str
+            | ResolvedType::Slice(_)
+            | ResolvedType::SliceMut(_)
+            | ResolvedType::Tuple(_) => 16,
+            _ => 8,
+        }
+    }
+
     pub(super) fn generate_block(
         &mut self,
         stmts: &[Spanned<Stmt>],
@@ -231,7 +244,72 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // would write 8 bytes (the pointer) into the N*sizeof(T)-byte
                 // alloca slot, leaving the rest as garbage. Load the array
                 // value through the pointer first, then store by-value.
-                let store_val = if var_type.is_array_type() && store_val.is_pointer_value() {
+                let store_val = if let (Some(t), Expr::Array(elements)) =
+                    (ty.as_ref(), &value.node)
+                {
+                    let resolved = self.ast_type_to_resolved(&t.node);
+                    if let ResolvedType::Named { name, generics } = &resolved {
+                        if name == "Vec" && !generics.is_empty() && store_val.is_pointer_value() {
+                            let i64_type = self.context.i64_type();
+                            let ptr_as_i64 = self
+                                .builder
+                                .build_ptr_to_int(
+                                    store_val.into_pointer_value(),
+                                    i64_type,
+                                    "vec_literal_data",
+                                )
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            let len = i64_type.const_int(elements.len() as u64, false);
+                            let elem_size =
+                                i64_type.const_int(Self::static_elem_size(&generics[0]), false);
+                            let owned = i64_type.const_zero();
+                            let vec_ty = var_type.into_struct_type();
+                            let mut vec_val = vec_ty.get_undef();
+                            vec_val = self
+                                .builder
+                                .build_insert_value(vec_val, ptr_as_i64, 0, "vec_literal")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_struct_value();
+                            vec_val = self
+                                .builder
+                                .build_insert_value(vec_val, len, 1, "vec_literal")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_struct_value();
+                            vec_val = self
+                                .builder
+                                .build_insert_value(vec_val, len, 2, "vec_literal")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_struct_value();
+                            vec_val = self
+                                .builder
+                                .build_insert_value(vec_val, elem_size, 3, "vec_literal")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_struct_value();
+                            vec_val = self
+                                .builder
+                                .build_insert_value(vec_val, owned, 4, "vec_literal")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_struct_value();
+                            vec_val.into()
+                        } else if var_type.is_array_type() && store_val.is_pointer_value() {
+                            let array_val = self
+                                .builder
+                                .build_load(var_type, store_val.into_pointer_value(), "arr_init")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            array_val
+                        } else {
+                            store_val
+                        }
+                    } else if var_type.is_array_type() && store_val.is_pointer_value() {
+                        let array_val = self
+                            .builder
+                            .build_load(var_type, store_val.into_pointer_value(), "arr_init")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        array_val
+                    } else {
+                        store_val
+                    }
+                } else if var_type.is_array_type() && store_val.is_pointer_value() {
                     let array_val = self
                         .builder
                         .build_load(var_type, store_val.into_pointer_value(), "arr_init")
