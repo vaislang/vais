@@ -1,1 +1,1 @@
-check_succeeds (silent A4 surface): vaisc check accepts take_i64(b) where b: Box<i64>; expected per design is E001 type mismatch
+check_fails: vaisc check rejects take_i64(b) where b: Box<i64> with E001 type mismatch

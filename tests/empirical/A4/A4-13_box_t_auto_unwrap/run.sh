@@ -1,14 +1,9 @@
 #!/usr/bin/env bash
 # A4-13 — Box<T> ↔ T silent accept at call site (master-plan v23 → v24).
 #
-# Probe asserts CURRENT BEHAVIOR (silent accept). Master-plan v23
-# classifies this surface as Rejected; STEP7_FINDINGS F-24 (2026-05-05)
-# proves it is in fact silent. This fixture pins the empirical
-# evidence so reclassification to A4-13 in master-plan v24 has a
-# permanent referent.
-#
-# When the hard-block phase lands (Step 13 stage 1+ for A4-13), flip
-# this fixture from check_succeeds → check_fails with E001/Box patterns.
+# Probe asserts the hardened behavior: direct Box<T> where T is expected must
+# fail with a stable type mismatch. Set VAIS_REJECT_A4_13=0 only for legacy
+# drift investigation; default compiler behavior must stay strict.
 
 set -euo pipefail
 
@@ -31,18 +26,22 @@ CHECK_EXIT=0
 "$VAISC" check "$WORK/probe.vais" >/dev/null 2>&1 \
   && CHECK_EXIT=0 || CHECK_EXIT=$?
 
-if [[ "$CHECK_EXIT" != "0" ]]; then
-  echo "DRIFT: A4-13 vaisc check now FAILS — silent surface may have" >&2
-  echo "  been hard-blocked. Update master-plan and flip this fixture" >&2
-  echo "  to check_fails with E001/Box patterns." >&2
+if [[ "$CHECK_EXIT" == "0" ]]; then
+  echo "DRIFT: A4-13 vaisc check silently accepted Box<i64> where i64 is expected:" >&2
   echo "$CHECK_OUTPUT" >&2
   exit 1
 fi
 
-if ! grep -qF "OK No errors found" <<< "$CHECK_OUTPUT"; then
-  echo "DRIFT: A4-13 check exited 0 but stdout lacks 'OK No errors found':" >&2
+if ! grep -qF "E001" <<< "$CHECK_OUTPUT"; then
+  echo "DRIFT: A4-13 check failed without stable E001 diagnostic:" >&2
   echo "$CHECK_OUTPUT" >&2
   exit 1
 fi
 
-echo "A4-13 OK: vaisc check silently accepts Box<i64> where i64 expected (call site)."
+if ! grep -qF "Box<i64>" <<< "$CHECK_OUTPUT"; then
+  echo "DRIFT: A4-13 check failed without Box<i64> in diagnostic:" >&2
+  echo "$CHECK_OUTPUT" >&2
+  exit 1
+fi
+
+echo "A4-13 OK: vaisc check rejects direct Box<i64> where i64 is expected."

@@ -3,9 +3,9 @@
 This file records empirical findings during Order step 13 (A4 removal queue).
 Mirrors STEP7 / STEP10 / STEP11 / STEP17 structure.
 
-Master Plan v24 §[phase.A4] inventory (7 entries total):
-- runtime_silent (5): A4-01 / A4-02 / A4-04 / A4-06 / A4-13
-- late_codegen_silent (2): A4-08 / A4-09
+Master Plan v99 §[phase.A4] inventory (12 entries total):
+- strict_default_landed (10): A4-01 / A4-02 / A4-04 / A4-06 / A4-08 / A4-09 / A4-10 / A4-11 / A4-13 / A4-15
+- still_silent (2): A4-14 / A4-03
 
 Step 2 LANDED `vaisc fix --explicit --site=A4-NN [--dry-run]` skeleton.
 A4-01 detection is implemented; A4-02..A4-09 stubbed `NotImplemented`.
@@ -84,7 +84,7 @@ in `crates/vais-types/src/inference/unification.rs`:
 | A4-06 | **strict reject** (env opt-out: `VAIS_REJECT_A4_06=0`) | runtime_silent (stale) |
 | A4-08 | **strict reject** (env opt-out: `VAIS_REJECT_A4_08=0`) | late_codegen_silent (stale) |
 | A4-09 | **strict reject** (env opt-out: `VAIS_REJECT_A4_09=0`) | late_codegen_silent (stale) |
-| A4-13 | silent accept | runtime_silent (correct, this session 2026-05-05) |
+| A4-13 | **strict reject** (env opt-out: `VAIS_REJECT_A4_13=0`) | strict_default_landed (v99) |
 | A4-03 | opt-in strict (env opt-in: `VAIS_REJECT_A4_03=1`) | controlled (v17 reclass, correct) |
 | A4-05 | opt-in strict (env opt-in: `VAIS_REJECT_A4_05=1`) | controlled (v17 reclass, correct) |
 | A4-07 | opt-in strict (env opt-in: `VAIS_REJECT_A4_07=1`) | controlled (v17 reclass, correct) |
@@ -102,8 +102,11 @@ Implications:
    inventory at all — additional drift.
 3. Step 13 stage 1 work for A4-01..A4-09 is therefore **mostly retrospective
    inventory cleanup** rather than new compiler work. The remaining
-   compiler-side gap is A4-13 (silent today, blocked on Box constructor for
-   runtime probe) and the A4-10 / A4-11 inventory bring-in.
+   compiler-side gap was A4-13 until v99. A4-13 now rejects the direct
+   Box<T> to T call-site form with E001 while keeping reference-level
+   &Box<T> to &T projection. The vaisdb baseline was migrated to explicit
+   `.as_ref()` recursive AST/plan calls so this stricter rule keeps
+   `INTEGRITY vaisdb_files pass=261 fail=0 total=261`.
 
 Recommendation: a follow-up session should re-audit A4 entries empirically
 (probe each, observe default-mode behavior, classify as
@@ -139,14 +142,16 @@ Empirical re-audit results — all 12 A4 fixtures run from
 | A4-09_lifetime_ref_erasure | rejects probe with E001 (silent surface removed; default-mode strict) |
 | A4-10_struct_partial_init | rejects probe with 'missing fields: age' (silent surface removed; default-mode strict) |
 | A4-11_try_in_non_result | rejects probe with E001 'expected Result<_,_> or Option<_>' (silent surface removed; default-mode strict) |
-| A4-13_box_t_auto_unwrap | silently accepts Box<i64> where i64 expected (call site) |
+| A4-13_box_t_auto_unwrap | rejects Box<i64> where i64 expected with E001 (strict default; `VAIS_REJECT_A4_13=0` legacy opt-out) |
+| A4-14_vec_slice_len | still silent; runtime exit differs from expected Vec length |
+| A4-15_escape_closure | rejects escaping capture closure with E001 (silent surface removed; default-mode strict) |
 
-Classification (informational schema additions in v25):
+Classification (current as of master-plan v99):
 
-- strict_default_landed (8): A4-01, A4-02, A4-04, A4-06, A4-08, A4-09,
-  A4-10, A4-11.
-- still_silent (1): A4-13.
-- controlled (3): A4-03, A4-05, A4-07 — already moved out of A4 in v17.
+- strict_default_landed (10): A4-01, A4-02, A4-04, A4-06, A4-08, A4-09,
+  A4-10, A4-11, A4-13, A4-15.
+- still_silent (2): A4-14, A4-03.
+- controlled (2): A4-05, A4-07. A4-03 was reclassified back into A4 in v47.
 
 Schema changes in master-plan v25 (informational, no checker impact):
 per-entry current_status + current_evidence; [phase.A4] gains

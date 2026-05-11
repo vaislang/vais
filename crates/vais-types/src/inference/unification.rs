@@ -127,10 +127,13 @@ impl TypeChecker {
             return Ok(());
         }
 
-        // Phase 268: Box<T> ↔ T coercion (both directions, at any ref depth).
-        // vaisdb uses Box<T> for recursive types (Expr, SelectQuery) and
-        // passes &Box<T> where &T is expected. Codegen already handles the
-        // deref automatically.
+        // Phase 268: legacy Box<T> ↔ T coercion.
+        //
+        // A4-13: direct Box<T> ↔ T at call sites is now rejected by default
+        // because it silently unwraps a user-facing value without an explicit
+        // deref. The narrower &Box<T> ↔ &T / &mut Box<T> ↔ &mut T path below
+        // stays enabled because downstream recursive AST/codegen paths depend
+        // on reference-level projection.
         let unbox = |t: &ResolvedType| -> Option<ResolvedType> {
             if let ResolvedType::Named { name, generics } = t {
                 if name == "Box" && generics.len() == 1 {
@@ -141,12 +144,26 @@ impl TypeChecker {
         };
         if let Some(e_inner) = unbox(&expected) {
             if self.unify(&e_inner, &found).is_ok() {
-                return Ok(());
+                if std::env::var("VAIS_REJECT_A4_13").as_deref() == Ok("0") {
+                    return Ok(());
+                }
+                return Err(crate::TypeError::Mismatch {
+                    expected: expected.to_string(),
+                    found: found.to_string(),
+                    span: None,
+                });
             }
         }
         if let Some(f_inner) = unbox(&found) {
             if self.unify(&expected, &f_inner).is_ok() {
-                return Ok(());
+                if std::env::var("VAIS_REJECT_A4_13").as_deref() == Ok("0") {
+                    return Ok(());
+                }
+                return Err(crate::TypeError::Mismatch {
+                    expected: expected.to_string(),
+                    found: found.to_string(),
+                    span: None,
+                });
             }
         }
         // &Box<T> ↔ &T / &mut Box<T> ↔ &mut T
