@@ -3,13 +3,18 @@
 This file records empirical findings during Order step 13 (A4 removal queue).
 Mirrors STEP7 / STEP10 / STEP11 / STEP17 structure.
 
-Master Plan v99 §[phase.A4] inventory (12 entries total):
+Master Plan v102 §[phase.A4] inventory (12 entries total):
 - strict_default_landed (10): A4-01 / A4-02 / A4-04 / A4-06 / A4-08 / A4-09 / A4-10 / A4-11 / A4-13 / A4-15
-- still_silent (2): A4-14 / A4-03
+- specified_safe_landed (1): A4-14
+- still_silent (1): A4-03
 
 2026-05-11 update: A4-03 remains default-silent, but strict audit mode now
 rejects concrete Ref/value mismatches and the baseline impact is reduced to
 54 vaisdb files. `std/` is strict-clean under `VAIS_REJECT_A4_03=1`.
+
+2026-05-12 update: A4-03 strict-mode migration is clean for all vaisdb files
+(`261/261`). Default legacy behavior remains silent pending default flip
+measurement and runtime subset recheck.
 
 Step 2 LANDED `vaisc fix --explicit --site=A4-NN [--dry-run]` skeleton.
 A4-01 detection is implemented; A4-02..A4-09 stubbed `NotImplemented`.
@@ -20,8 +25,32 @@ A4-01 detection is implemented; A4-02..A4-09 stubbed `NotImplemented`.
 |---|---|
 | F-13-01 | A4-01 (Unit ↔ i64) baseline scan: 0 findings across 404 .vais files (2026-05-05) |
 | F-13-04 | A4-03 strict audit narrowed: std 82/82, vaisdb 207/261; default baseline unchanged (2026-05-11) |
+| F-13-05 | A4-03 strict vaisdb migration clean: std 82/82, vaisdb 261/261; default baseline unchanged (2026-05-12) |
 
 ## Findings
+
+### F-13-05 — A4-03 strict vaisdb migration clean (2026-05-12)
+
+Scope:
+- `lang/packages/vaisdb/src/`
+- `tests/empirical/A4/A4-03_auto_deref/`
+
+Result:
+- strict `vaisdb`: improved from `207/261` to `261/261`
+- default `vaisdb`: remains `261/261`
+- default A4-03 behavior: still silent for the legacy fixture
+
+Source migration performed:
+- Made the remaining planner, SQL executor/parser, RAG, security/server,
+  storage/WAL, and vector/HNSW ref/value contracts explicit.
+- Replaced clone-through-reference and reference-return ambiguity with explicit
+  `(*x).clone()` and `&self.items[i]` forms.
+- Normalized HashMap key APIs to by-value `contains_key` and borrowed `get`
+  where required.
+
+Remaining work:
+- Run A4-03 default flip measurement and promoted runtime subset recheck before
+  reclassifying A4-03 as strict-default.
 
 ### F-13-04 — A4-03 strict audit narrowed (2026-05-11)
 
@@ -57,6 +86,7 @@ Remaining work:
   `Option<&T>` / `Vec<&T>` return contracts whose bodies produce owned values,
   planner/SQL/Expr value-vs-reference calls, RAG reference collections, and a
   few server/storage call signatures.
+- Resolved by F-13-05; the 54 remaining strict vaisdb files are now 0.
 
 Status: A4-03 is **not** default-closed. It is now a smaller, explicit source
 migration queue with a strict audit gate and no default baseline regression.

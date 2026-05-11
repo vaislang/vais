@@ -6,7 +6,7 @@ classification = "still_silent (default legacy auto-deref remains; strict audit 
 surface = "Reference &i64 silently unified with i64 in function call (no explicit deref)"
 site = "unification.rs:754"
 site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:754"
-master_plan_version = 101
+master_plan_version = 102
 
 [v1_evidence]
 probe_summary = "take_i64(r) where r: &i64 = &val"
@@ -33,8 +33,8 @@ strict_probe = "rejects probe.vais with E001 expected i64, found &i64"
 std_files_before = "78/82"
 std_files_after = "82/82"
 vaisdb_files_before = "114/261"
-vaisdb_files_after = "207/261"
-notes = "Strict mode now ignores generic inference glue containing unresolved Vars, reports concrete expected/found types, and preserves default legacy mode until remaining vaisdb explicit ref/value migration is complete."
+vaisdb_files_after = "261/261"
+notes = "Strict mode now ignores generic inference glue containing unresolved Vars, reports concrete expected/found types, preserves default legacy mode, and the vaisdb source migration is strict-clean at 261/261."
 
 [assertion_kind]
 kind = "exit_not"
