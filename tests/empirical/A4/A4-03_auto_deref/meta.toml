@@ -2,11 +2,11 @@
 
 [entry]
 id = "A4-03"
-classification = "Controlled (IR-internal lowering, reclass v17 per F-22; opt-in strict via VAIS_REJECT_A4_NN=1)"
+classification = "still_silent (default legacy auto-deref remains; strict audit mode via VAIS_REJECT_A4_03=1 rejects concrete Ref↔value mismatches)"
 surface = "Reference &i64 silently unified with i64 in function call (no explicit deref)"
-site = "unification.rs:570"
-site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:570"
-master_plan_version = 17
+site = "unification.rs:754"
+site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:754"
+master_plan_version = 101
 
 [v1_evidence]
 probe_summary = "take_i64(r) where r: &i64 = &val"
@@ -25,6 +25,16 @@ Switched to exit_not per Step 7 protocol revision.
 [migration]
 post_removal_expected = "vaisc check exits non-zero (proposal: E_TYPE_REF_DEREF_REQUIRED)"
 post_removal_action = "Replace with negative fixture; companion positive uses explicit *r."
+
+[strict_audit_2026_05_11]
+env = "VAIS_REJECT_A4_03=1"
+default_status = "still_silent"
+strict_probe = "rejects probe.vais with E001 expected i64, found &i64"
+std_files_before = "78/82"
+std_files_after = "82/82"
+vaisdb_files_before = "114/261"
+vaisdb_files_after = "207/261"
+notes = "Strict mode now ignores generic inference glue containing unresolved Vars, reports concrete expected/found types, and preserves default legacy mode until remaining vaisdb explicit ref/value migration is complete."
 
 [assertion_kind]
 kind = "exit_not"

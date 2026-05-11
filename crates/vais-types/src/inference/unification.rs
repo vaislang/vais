@@ -94,6 +94,17 @@ impl TypeChecker {
         if str_ref(&expected) && str_ref(&found) {
             return Ok(());
         }
+        let ref_to_str_alias = |t: &ResolvedType| -> bool {
+            matches!(t,
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                    if str_aliases(inner)
+            )
+        };
+        if (str_aliases(&expected) && ref_to_str_alias(&found))
+            || (ref_to_str_alias(&expected) && str_aliases(&found))
+        {
+            return Ok(());
+        }
 
         // Phase 276: Optional<T> ↔ T coercion (one direction only — accept
         // bare T where Option<T> expected, NOT vice versa). This is a
@@ -301,8 +312,22 @@ impl TypeChecker {
                 self.unify(&generics[0], ok)?;
                 self.unify(&generics[1], err)
             }
-            (ResolvedType::Ref(a), ResolvedType::Ref(b)) => self.unify(a, b),
+            (ResolvedType::Ref(a), ResolvedType::Ref(b)) => match (a.as_ref(), b.as_ref()) {
+                // Treat redundant reborrows as reference-level normalization:
+                // &T ↔ &&T should not route through the A4-03 value
+                // auto-deref fallback below.
+                (ResolvedType::Ref(inner), other) | (other, ResolvedType::Ref(inner))
+                    if inner.as_ref() == other =>
+                {
+                    Ok(())
+                }
+                _ => self.unify(a, b),
+            },
             (ResolvedType::RefMut(a), ResolvedType::RefMut(b)) => self.unify(a, b),
+            // Reference mutability is a separate language audit surface from
+            // A4-03. Keep it out of the Ref↔value strict-mode measurement.
+            (ResolvedType::Ref(a), ResolvedType::RefMut(b))
+            | (ResolvedType::RefMut(b), ResolvedType::Ref(a)) => self.unify(a, b),
             (ResolvedType::Slice(a), ResolvedType::Slice(b)) => self.unify(a, b),
             (ResolvedType::SliceMut(a), ResolvedType::SliceMut(b)) => self.unify(a, b),
             (ResolvedType::Pointer(a), ResolvedType::Pointer(b)) => self.unify(a, b),
@@ -720,23 +745,17 @@ impl TypeChecker {
             // DynTrait: dyn Trait accepts any concrete type that implements the trait
             (ResolvedType::DynTrait { .. }, _) | (_, ResolvedType::DynTrait { .. }) => Ok(()),
             // ImplTrait / HigherKinded were removed in ROADMAP #18.
-            // Auto-deref: &T unifies with T (implicit dereference)
-            // A4-03 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode
-            // via VAIS_REJECT_A4_03=1. Default preserves the legacy silent
-            // coercion so the baseline does not move.
+            // Auto-deref: &T unifies with T (implicit dereference).
             //
-            // 2026-05-04 NOTE: strict mode also fires on (Ref(X), Ref(Var))
-            // generic-inference unifications because Var sides do NOT match
-            // the (Ref(a), Ref(b)) arm at line 252 cleanly under all paths.
-            // This makes A4-03 strict mode produce false positives in
-            // generic-method receivers (e.g. ByteBuffer.from_buf(&self)
-            // where the param is `other: &ByteBuffer` but inference produces
-            // `Ref(Var)` first). Treating A4-03 as a reclass candidate
-            // (Controlled, IR-internal) per F-17 — see STEP7_FINDINGS.
+            // A4-03 strict mode only rejects fully concrete Ref↔value
+            // mismatches. If either side still contains an inference variable,
+            // this arm is acting as generic inference glue, not as a
+            // user-facing implicit deref decision.
             (ResolvedType::Ref(inner), other) | (other, ResolvedType::Ref(inner)) => {
-                if std::env::var("VAIS_REJECT_A4_03").as_deref() == Ok("1") {
+                let inference_glue = Self::contains_var(inner) || Self::contains_var(other);
+                if std::env::var("VAIS_REJECT_A4_03").as_deref() == Ok("1") && !inference_glue {
                     Err(crate::TypeError::Mismatch {
-                        expected: format!("&T"),
+                        expected: expected.to_string(),
                         found: found.to_string(),
                         span: None,
                     })
@@ -745,9 +764,10 @@ impl TypeChecker {
                 }
             }
             (ResolvedType::RefMut(inner), other) | (other, ResolvedType::RefMut(inner)) => {
-                if std::env::var("VAIS_REJECT_A4_03").as_deref() == Ok("1") {
+                let inference_glue = Self::contains_var(inner) || Self::contains_var(other);
+                if std::env::var("VAIS_REJECT_A4_03").as_deref() == Ok("1") && !inference_glue {
                     Err(crate::TypeError::Mismatch {
-                        expected: format!("&mut T"),
+                        expected: expected.to_string(),
                         found: found.to_string(),
                         span: None,
                     })

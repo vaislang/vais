@@ -186,7 +186,7 @@ impl Set {
 
     # Create a new set containing the union of this set and another
     # Returns a new Set containing all elements from both sets
-    fn union(&self, other: Set) -> Set {
+    fn union(&self, other: &Set) -> Set {
         result := Set.with_capacity(self.size + other.size)
 
         # Add all elements from self
@@ -222,7 +222,7 @@ impl Set {
 
     # Create a new set containing the intersection of this set and another
     # Returns a new Set containing only elements present in both sets
-    fn intersection(&self, other: Set) -> Set {
+    fn intersection(&self, other: &Set) -> Set {
         result := Set.with_capacity(8)
 
         # Iterate through smaller set and check if elements exist in larger set
@@ -253,7 +253,7 @@ impl Set {
 
     # Create a new set containing the difference (self - other)
     # Returns a new Set containing elements in self but not in other
-    fn difference(&self, other: Set) -> Set {
+    fn difference(&self, other: &Set) -> Set {
         result := Set.with_capacity(self.size)
 
         # Add elements from self that are not in other
@@ -277,7 +277,7 @@ impl Set {
 
     # Create a new set containing the symmetric difference
     # Returns a new Set containing elements in either set but not both
-    fn symmetric_difference(&self, other: Set) -> Set {
+    fn symmetric_difference(&self, other: &Set) -> Set {
         result := Set.with_capacity(self.size + other.size)
 
         # Add elements from self that are not in other
@@ -317,7 +317,7 @@ impl Set {
 
     # Check if this set is a subset of another
     # Returns 1 if all elements in self are in other, 0 otherwise
-    fn is_subset(&self, other: Set) -> i64 {
+    fn is_subset(&self, other: &Set) -> i64 {
         # Empty set is subset of any set
         I self.size == 0 { return 1 }
 
@@ -345,13 +345,13 @@ impl Set {
 
     # Check if this set is a superset of another
     # Returns 1 if all elements in other are in self, 0 otherwise
-    fn is_superset(&self, other: Set) -> i64 {
+    fn is_superset(&self, other: &Set) -> i64 {
         other.is_subset(self)
     }
 
     # Check if this set is disjoint from another (no common elements)
     # Returns 1 if sets have no elements in common, 0 otherwise
-    fn is_disjoint(&self, other: Set) -> i64 {
+    fn is_disjoint(&self, other: &Set) -> i64 {
         # Iterate through smaller set for efficiency
         smaller := mut self
         larger := mut other

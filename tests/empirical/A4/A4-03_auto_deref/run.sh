@@ -3,7 +3,7 @@
 #
 # Surface: &i64 silently unified with i64 in function call (auto-deref
 # without explicit deref operator).
-# Site: unification.rs:570
+# Site: unification.rs:754
 # assertion_kind = "exit_not"
 # Forbidden set: [42] — well-typed take_i64(*r) where val=42 returns 42.
 
@@ -28,6 +28,11 @@ if ! "$VAISC" check "$WORK/probe.vais" >/dev/null 2>&1; then
   exit 1
 fi
 
+if VAIS_REJECT_A4_03=1 "$VAISC" check "$WORK/probe.vais" >/dev/null 2>&1; then
+  echo "DRIFT: strict A4-03 mode no longer rejects implicit &T -> T." >&2
+  exit 1
+fi
+
 ( cd "$WORK" && "$VAISC" probe.vais >/dev/null 2>&1 )
 if [[ ! -x "$WORK/probe" ]]; then
   echo "FIXTURE_BROKEN: vaisc did not produce binary" >&2
@@ -45,4 +50,4 @@ for f in "${FORBIDDEN[@]}"; do
   fi
 done
 
-echo "A4-03 OK: probe type-checks, compiles, runs, exits ${ACTUAL_EXIT} (≠ forbidden $(IFS=,; echo "${FORBIDDEN[*]}") — silent corruption confirmed)."
+echo "A4-03 OK: default still silent; strict mode rejects; default run exits ${ACTUAL_EXIT} (≠ forbidden $(IFS=,; echo "${FORBIDDEN[*]}"))."

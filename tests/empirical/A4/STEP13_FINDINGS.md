@@ -7,6 +7,10 @@ Master Plan v99 §[phase.A4] inventory (12 entries total):
 - strict_default_landed (10): A4-01 / A4-02 / A4-04 / A4-06 / A4-08 / A4-09 / A4-10 / A4-11 / A4-13 / A4-15
 - still_silent (2): A4-14 / A4-03
 
+2026-05-11 update: A4-03 remains default-silent, but strict audit mode now
+rejects concrete Ref/value mismatches and the baseline impact is reduced to
+54 vaisdb files. `std/` is strict-clean under `VAIS_REJECT_A4_03=1`.
+
 Step 2 LANDED `vaisc fix --explicit --site=A4-NN [--dry-run]` skeleton.
 A4-01 detection is implemented; A4-02..A4-09 stubbed `NotImplemented`.
 
@@ -15,8 +19,47 @@ A4-01 detection is implemented; A4-02..A4-09 stubbed `NotImplemented`.
 | ID | 한 줄 요약 |
 |---|---|
 | F-13-01 | A4-01 (Unit ↔ i64) baseline scan: 0 findings across 404 .vais files (2026-05-05) |
+| F-13-04 | A4-03 strict audit narrowed: std 82/82, vaisdb 207/261; default baseline unchanged (2026-05-11) |
 
 ## Findings
+
+### F-13-04 — A4-03 strict audit narrowed (2026-05-11)
+
+Scope:
+- `crates/vais-types/src/inference/unification.rs`
+- `compiler/std/`
+- `lang/packages/vaisdb/src/`
+- `tests/empirical/A4/A4-03_auto_deref/`
+
+Result:
+- default A4-03 behavior: still silent for the legacy fixture
+- strict A4-03 behavior: `VAIS_REJECT_A4_03=1` rejects the fixture with E001
+  (`expected i64, found &i64`)
+- strict `std/`: improved from `78/82` to `82/82`
+- strict `vaisdb`: improved from `114/261` to `207/261`
+- default `std/`: `82/82`
+- default `vaisdb`: `261/261`
+
+Compiler-side change:
+- A4-03 strict mode now rejects only fully concrete Ref/value mismatches.
+  Unifications containing unresolved inference variables remain generic
+  inference glue rather than user-facing implicit deref decisions.
+- A4-03 diagnostics now report the concrete expected/found types instead of
+  the placeholder `&T`.
+
+Source migration performed:
+- `std/set.vais` set algebra APIs now take `&Set` explicitly.
+- `vaisdb` ByteBuffer readers, metadata snapshots, selected clone-on-reference
+  sites, and shared storage/graph/fulltext references were made explicit.
+
+Remaining work:
+- 54 `vaisdb` files still fail strict A4-03. The dominant categories are
+  `Option<&T>` / `Vec<&T>` return contracts whose bodies produce owned values,
+  planner/SQL/Expr value-vs-reference calls, RAG reference collections, and a
+  few server/storage call signatures.
+
+Status: A4-03 is **not** default-closed. It is now a smaller, explicit source
+migration queue with a strict audit gate and no default baseline regression.
 
 ### F-13-01 — A4-01 baseline scan: 0 findings (2026-05-05)
 
