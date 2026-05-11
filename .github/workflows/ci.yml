@@ -63,9 +63,20 @@ jobs:
           cache: 'npm'
           cache-dependency-path: playground/package-lock.json
 
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
       - name: Install playground dependencies
         working-directory: playground
         run: npm ci
+
+      - name: Build browser compiler
+        working-directory: playground
+        run: npm run browser-compiler:build
+
+      - name: Check browser compiler gate
+        working-directory: playground
+        run: npm run browser-compiler:check
 
       - name: Check playground mode contract
         working-directory: playground
@@ -177,6 +188,7 @@ jobs:
           cargo clippy
           -p vais-ast -p vais-lexer -p vais-parser -p vais-types
           -p vais-mir -p vais-codegen-js -p vais-i18n -p vais-macro
+          -p vais-browser-compiler
           -p vais-gc -p vais-gpu -p vais-plugin -p vais-bindgen
           -p vais-profiler -p vais-security -p vais-supply-chain
           -p vais-testgen -p vais-hotreload -p vais-dynload
@@ -245,6 +257,7 @@ jobs:
           cargo check
           -p vais-ast -p vais-lexer -p vais-parser -p vais-types
           -p vais-mir -p vais-codegen-js -p vais-i18n -p vais-macro
+          -p vais-browser-compiler
           -p vais-gc -p vais-gpu -p vais-plugin -p vais-bindgen
           -p vais-profiler -p vais-security -p vais-supply-chain
           -p vais-testgen -p vais-hotreload -p vais-dynload
@@ -313,6 +326,7 @@ jobs:
           cargo test
           -p vais-ast -p vais-lexer -p vais-parser -p vais-types
           -p vais-mir -p vais-codegen-js -p vais-i18n -p vais-macro
+          -p vais-browser-compiler
           -p vais-gc -p vais-gpu -p vais-plugin -p vais-bindgen
           -p vais-profiler -p vais-security -p vais-supply-chain
           -p vais-testgen -p vais-hotreload -p vais-dynload

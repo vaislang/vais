@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "browser-compiler:build": "cd ../crates/vais-browser-compiler && wasm-pack build --target web --out-dir ../../playground/public/wasm --out-name vais_browser_compiler",
+    "browser-compiler:check": "node ../scripts/check-browser-compiler-gate.mjs",
     "test:contract": "node ../scripts/check-playground-mode-contract.mjs",
     "wasm:build": "cd .. && cargo build --release --target wasm32-unknown-unknown --package vaisc"
   },

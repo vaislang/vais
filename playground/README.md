@@ -117,8 +117,10 @@ The playground uses automatic fallback. The current certified public baseline
 does not include browser-only compilation or execution.
 
 1. **Server mode** — Sends code to the playground API for real compilation via `vaisc`
-2. **Server-WASM mode** — The API compiles a WASM binary, then the browser executes that binary
-3. **Preview mode** — Client-side syntax/demo fallback when the API is unavailable; this is not a certified compile/execute path
+2. **Browser-JS mode** — Loads `vais-browser-compiler` in the browser, compiles
+   through parser + JavaScript codegen, then executes the generated JavaScript
+3. **Server-WASM mode** — The API compiles a WASM binary, then the browser executes that binary
+4. **Preview mode** — Client-side syntax/demo fallback when the API is unavailable; this is not a certified compile/execute path
 
 ## Development
 
@@ -126,11 +128,15 @@ does not include browser-only compilation or execution.
 
 ```bash
 npm run test:contract
+npm run browser-compiler:build
+npm run browser-compiler:check
 npm run build
 ```
 
 `test:contract` verifies the public mode boundary: Server-WASM is API-compiled,
 and Preview is only a syntax/demo fallback.
+`browser-compiler:check` verifies the Browser-JS parser + JavaScript codegen
+compile/execute smoke without the playground API.
 
 ### Adding New Examples
 
