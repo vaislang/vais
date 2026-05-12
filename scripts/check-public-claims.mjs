@@ -82,18 +82,33 @@ requireText(
 );
 requireText(
   publicStatus,
+  'not yet reproducible from `origin/main`',
+  'integration evidence must not be presented as main-reproducible yet',
+);
+requireText(
+  publicStatus,
+  'Aggregate integrity runner: pending main port',
+  'aggregate integrity status must be explicit until the runner is on main',
+);
+forbidText(
+  publicStatus,
+  'Final integrity gate: passed via `scripts/check-integrity.sh`',
+  'origin/main does not currently contain the aggregate integrity runner',
+);
+requireText(
+  publicStatus,
   'Vais Server runtime smoke: `20/20`',
-  'server public baseline must match the promoted runtime gate',
+  'server public evidence count must remain explicit',
 );
 requireText(
   publicStatus,
   'Cross-package schema gate: `15/15`',
-  'schema propagation must be named as a gate-backed public claim',
+  'schema propagation must be named as an evidence-scoped public claim',
 );
 requireText(
   publicStatus,
   'Multi-domain product schema gate: `9/9`',
-  'shared-schema product propagation must be named as a gate-backed public claim',
+  'shared-schema product propagation must be named as evidence-scoped public claim',
 );
 
 const playgroundCompiler = 'playground/src/compiler.js';
@@ -159,11 +174,13 @@ const websiteSubtitle =
   'Try Vais syntax and examples in the browser. Real compilation uses the playground API; browser-only compile/execute remains experimental.';
 requireText('website/index.html', websiteSubtitle, 'homepage playground copy must match public claim boundary');
 requireText('website/public/locales/en.json', websiteSubtitle, 'English locale must match public claim boundary');
-requireText('website/index.html', 'server runtime smoke 20/20', 'homepage server claim must match the promoted runtime gate');
-requireText('website/index.html', 'shared-schema product gate 9/9', 'homepage web claim must name the shared-schema product gate');
-requireText('website/ecosystem/index.html', 'server runtime 20/20', 'ecosystem server claim must match the promoted runtime gate');
-requireText('website/ecosystem/index.html', 'shared-schema product 9/9 gate', 'ecosystem web claim must name the shared-schema product gate');
-requireText('website/vaisx/index.html', 'shared-schema product gate 9/9', 'VaisX page must name the shared-schema product gate');
+requireText('website/index.html', 'Evidence Snapshot', 'homepage must scope gate counts as evidence');
+requireText('website/index.html', 'pending main port', 'homepage must disclose aggregate/product gate main-port status');
+requireText('website/index.html', 'server runtime integration evidence 20/20', 'homepage server claim must be evidence-scoped');
+requireText('website/index.html', 'shared-schema product evidence 9/9', 'homepage web claim must be evidence-scoped');
+requireText('website/ecosystem/index.html', 'server runtime 20/20', 'ecosystem server evidence count must remain explicit');
+requireText('website/ecosystem/index.html', 'integration evidence', 'ecosystem page must disclose evidence scope');
+requireText('website/vaisx/index.html', 'shared-schema product evidence 9/9', 'VaisX page must be evidence-scoped');
 requireText('playground/src/examples.js', "'shared-schema-product'", 'playground must expose the shared-schema product example');
 
 for (const locale of ['ko', 'ja', 'zh']) {

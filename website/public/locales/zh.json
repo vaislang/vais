@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Vais - AI优化的系统编程语言",
-    "description": "Vais 是面向 AI code generation 的 systems programming language，提供 native LLVM performance 和 gate-backed public claims。"
+    "description": "Vais 是面向 AI code generation 的 systems programming language，提供 native LLVM performance 和 evidence-scoped public claims。"
   },
   "nav": {
     "compare": "Gates",
@@ -13,19 +13,19 @@
     "blog": "博客"
   },
   "hero": {
-    "badge": "Certified Core + Promoted Runtime Gates",
+    "badge": "Certified Core + Scoped Evidence",
     "title": "编写 <span class=\"gradient-text\">clear Vais</span>，<br>获得 <span class=\"gradient-text\">native performance</span>",
-    "subtitle": "Vais（Vibe AI Language for Systems）是为 AI 代码生成优化的系统编程语言。当前公开基线是 certified Core compiler 加上明确命名的 promoted runtime gates。",
+    "subtitle": "Vais（Vibe AI Language for Systems）是为 AI 代码生成优化的系统编程语言。当前公开基线区分 main-reproducible gates 与等待 main port 的 integration evidence。",
     "tryBrowser": "在浏览器中试用",
     "install": "brew install vais"
   },
   "compare": {
-    "title": "Canonical Syntax, Gate-Backed Claims",
-    "subtitle": "Step 19 已移除旧 single-letter keyword form。当前公开 claim 绑定到 canonical syntax 以及 integrity、package、runtime、full-build、product schema 等 named gates。",
+    "title": "Canonical Syntax, Evidence-Scoped Claims",
+    "subtitle": "Step 19 已移除旧 single-letter keyword form。公开 claim 区分 main-reproducible gates 与等待 main gate port 的 integration evidence。",
     "vais": "Vais",
     "tokens": "令牌",
-    "barTitle": "Gate Snapshot — 2026-05-12",
-    "barNote": "Baseline 来自当前 integrity manifest：cross-package schema 15/15 和 multi-domain product schema 9/9 是 locked gates。"
+    "barTitle": "Evidence Snapshot — 2026-05-12",
+    "barNote": "这些数字是 gate branch 的 integration evidence。public main branch 当前强制 wording/build boundary；aggregate gate 和 product fixture 仍在等待 main port。"
   },
   "performance": {
     "title": "原生性能",
@@ -107,7 +107,7 @@
   "vaisx": {
     "badge": "新功能",
     "title": "用 Vais 构建 Web 应用",
-    "subtitle": "VaisX 是 Vais web framework workbench。当前公开 claim 绑定到 promoted runtime、unit、package、full-build 和 shared-schema product gates。",
+    "subtitle": "VaisX 是 Vais web framework workbench。当前公开 claim 区分 main-reproducible gates 与等待 main port 的 integration evidence。",
     "compiler": {
       "title": "编译时响应性",
       "description": "Reactive state analysis 和 DOM update generation 是 implementation surfaces，只在 named gates 覆盖范围内验证。"
@@ -117,8 +117,8 @@
       "description": "File-based routing 和 SSR/SSG modules 存在；promoted behavior 以当前 Vais Web gates 为准。"
     },
     "runtime": {
-      "title": "Promoted Runtime Gates",
-      "description": "当前 Vais Web baseline 是 runtime smoke 61/77、unit 390/390、package tests 3272/3272、full-build 24/24、shared-schema product gate 9/9。Size claim 需要 size gate。"
+      "title": "Runtime Evidence",
+      "description": "当前 Vais Web integration evidence 是 runtime smoke 61/77、unit 390/390、package tests 3272/3272、full-build 24/24、shared-schema product evidence 9/9。Size claim 需要 size gate。"
     },
     "learnMore": "了解更多",
     "github": "GitHub",
