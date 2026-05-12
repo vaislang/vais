@@ -31,11 +31,12 @@ current Core contract and promoted smoke gates pass with the evidence below.
 | std/http_client runtime smoke | `15/15` |
 | VaisDB runtime smoke | `34/34` |
 | VaisDB runtime lock stability | WAL/LSN/buffer/page/checkpoint mutex release paths covered by current `34/34` smoke |
-| vais-server runtime smoke | `19/19` |
-| vais-server auth password policy | strong-password acceptance, short/no-uppercase/no-digit rejection, minimal policy acceptance, and malformed-hash rejection covered by current `19/19` smoke |
-| vais-server auth session lifecycle | create/get/get_session/destroy, data-bag insert/update/missing lookup, expired-session rejection, and cleanup retaining live sessions covered by current `19/19` smoke |
-| vais-server auth OAuth state/exchange | Google/GitHub authorization URL construction with explicit/generated state, state validation success/error cases, and bounded mock authorization-code exchange covered by current `19/19` smoke |
-| vais-server compiled SSR forwarding | `forward_ssr_render()` loopback upstream POST/status/content-type/body bridge plus upstream non-2xx/transport-failure/timeout/retry mapping, retry-budget observability, nested JSON props preservation, JSON string escaping, and SSR raw-props JSON value grammar validation covered by current `19/19` smoke |
+| vais-server runtime smoke | `20/20` |
+| vais-server auth password policy | strong-password acceptance, short/no-uppercase/no-digit rejection, minimal policy acceptance, and malformed-hash rejection covered by current `20/20` smoke |
+| vais-server auth session lifecycle | create/get/get_session/destroy, data-bag insert/update/missing lookup, expired-session rejection, and cleanup retaining live sessions covered by current `20/20` smoke |
+| vais-server auth OAuth state/exchange | Google/GitHub authorization URL construction with explicit/generated state, state validation success/error cases, and bounded mock authorization-code exchange covered by current `20/20` smoke |
+| vais-server auth JWT token/verify | role-free deterministic access/refresh token encode/generation, token pair generation, verification success, and empty/malformed/bad-signature/expired/issuer-mismatch errors covered by current `20/20` smoke |
+| vais-server compiled SSR forwarding | `forward_ssr_render()` loopback upstream POST/status/content-type/body bridge plus upstream non-2xx/transport-failure/timeout/retry mapping, retry-budget observability, nested JSON props preservation, JSON string escaping, and SSR raw-props JSON value grammar validation covered by current `20/20` smoke |
 | vais-web runtime smoke | `61/77` in skip-mode CI default |
 | vais-web Cloudflare workerd in-process smoke | `Miniflare dispatchFetch` against generated `_worker.js` with real KV-backed `__STATIC_CONTENT` site binding (static index, dynamic route, 404) |
 | Rust toolchain pin | `rust-toolchain.toml` pins Rust `1.92.0` with `rustfmt` and `clippy` components |
@@ -62,7 +63,7 @@ single source for current pass counts. CI fails on drift.
 | std/http_client runtime | `smoke=15/15` |
 | std/tls runtime | `smoke=2/2` |
 | VaisDB runtime | `smoke=34/34` |
-| vais-server runtime | `smoke=19/19` |
+| vais-server runtime | `smoke=20/20` |
 | vais-web runtime | `smoke=61/77` |
 | vais-web unit | `tests=390/390` |
 | vais-web packages | `tests=3272/3272` |
