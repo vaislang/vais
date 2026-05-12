@@ -61,7 +61,12 @@ fn e2e_vais_server_09_auth_session_runtime_smoke() {
 }
 
 #[test]
-fn e2e_vais_server_10_ssr_forwarding_runtime_smoke() {
+fn e2e_vais_server_10_auth_oauth_runtime_smoke() {
+    assert_vais_server_smoke_runs("auth_oauth_runtime_smoke.vais", 0);
+}
+
+#[test]
+fn e2e_vais_server_11_ssr_forwarding_runtime_smoke() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR upstream listener");
     listener
         .set_nonblocking(true)
@@ -160,7 +165,7 @@ fn main() -> i64 {
 }
 
 #[test]
-fn e2e_vais_server_11_ssr_forwarding_error_mapping_runtime_smoke() {
+fn e2e_vais_server_12_ssr_forwarding_error_mapping_runtime_smoke() {
     let status_listener =
         TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR status upstream listener");
     status_listener
@@ -278,7 +283,7 @@ fn main() -> i64 {
 }
 
 #[test]
-fn e2e_vais_server_12_ssr_forwarding_timeout_runtime_smoke() {
+fn e2e_vais_server_13_ssr_forwarding_timeout_runtime_smoke() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR timeout listener");
     listener
         .set_nonblocking(true)
@@ -358,7 +363,7 @@ fn main() -> i64 {
 }
 
 #[test]
-fn e2e_vais_server_13_ssr_forwarding_retry_runtime_smoke() {
+fn e2e_vais_server_14_ssr_forwarding_retry_runtime_smoke() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR retry listener");
     listener
         .set_nonblocking(true)
@@ -444,7 +449,7 @@ fn main() -> i64 {
 }
 
 #[test]
-fn e2e_vais_server_14_ssr_forwarding_retry_budget_observability_runtime_smoke() {
+fn e2e_vais_server_15_ssr_forwarding_retry_budget_observability_runtime_smoke() {
     let listener =
         TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR retry budget observability listener");
     listener
@@ -556,7 +561,7 @@ fn main() -> i64 {
 }
 
 #[test]
-fn e2e_vais_server_15_ssr_nested_json_props_runtime_smoke() {
+fn e2e_vais_server_16_ssr_nested_json_props_runtime_smoke() {
     let listener =
         TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR nested JSON upstream listener");
     listener
@@ -686,7 +691,7 @@ fn main() -> i64 {
 }
 
 #[test]
-fn e2e_vais_server_16_ssr_json_escape_runtime_smoke() {
+fn e2e_vais_server_17_ssr_json_escape_runtime_smoke() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR escape upstream listener");
     listener
         .set_nonblocking(true)
@@ -788,7 +793,7 @@ fn main() -> i64 {
 }
 
 #[test]
-fn e2e_vais_server_17_ssr_json_grammar_runtime_smoke() {
+fn e2e_vais_server_18_ssr_json_grammar_runtime_smoke() {
     let listener =
         TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR JSON grammar upstream listener");
     listener
