@@ -379,8 +379,12 @@ automatically.
   fixture with both gates passing in CI.
 - **Step 7** (surface inventory lock + retro-validation) creates the
   `compiler/tests/empirical/` directory used here. Step 7 starts in parallel.
-- **Step 14** (I-3 multi-domain product, 4-6 months) builds on Step 8: live
-  deploy adapter smoke + crash matrix.
+- **Step 14** (I-3 multi-domain product) is closed in master-plan v115:
+  root `examples/schema/user.vais` now feeds a product gate that emits TS,
+  runs VaisDB catalog and vais-server response consumers natively, type-checks
+  a vais-web DB schema-builder consumer, and proves field-rename propagation.
+  Earlier live deploy plus crash/recovery/transaction smokes remain the
+  product-side runtime coverage for this initiative.
 
 ## Self-audit (Master Plan v16 invariant compliance)
 

@@ -81,6 +81,7 @@ markers is generated from `GATE_MANIFEST.toml` by
 | vais-web packages | `tests=3272/3272` |
 | vais-web full-build | `packages=24/24` |
 | Cross-package schema gate | `gate=15/15` |
+| Multi-domain product gate | `gate=9/9` |
 | Package full-build smoke | `smoke=2/2` |
 <!-- gate-table:auto-end -->
 

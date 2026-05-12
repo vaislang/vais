@@ -17,6 +17,7 @@
 #   INTEGRITY_WEB_FULL_BUILD_MIN=24        minimum vais-web package full-build smoke
 #   INTEGRITY_BACKEND_PHASE158_MIN=18      minimum phase158 backend smoke
 #   INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=15  minimum cross_package_schema assertions (positive 11 + negative 4)
+#   INTEGRITY_MULTI_DOMAIN_PRODUCT_MIN=9   minimum shared-schema multi-domain product assertions
 #   INTEGRITY_PKG_FULL_BUILD_MIN=2         minimum package full-build smoke (Phase 1 100% Gap)
 #
 # Strict-default imports (Step 11 root fix, loop 29, 2026-05-08):
@@ -65,6 +66,7 @@ INTEGRITY_WEB_UNIT_MIN="${INTEGRITY_WEB_UNIT_MIN:-390}"
 INTEGRITY_WEB_PACKAGES_MIN="${INTEGRITY_WEB_PACKAGES_MIN:-3272}"
 INTEGRITY_WEB_FULL_BUILD_MIN="${INTEGRITY_WEB_FULL_BUILD_MIN:-24}"
 INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN="${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN:-15}"
+INTEGRITY_MULTI_DOMAIN_PRODUCT_MIN="${INTEGRITY_MULTI_DOMAIN_PRODUCT_MIN:-9}"
 INTEGRITY_BACKEND_PHASE158_MIN="${INTEGRITY_BACKEND_PHASE158_MIN:-18}"
 # Phase 1 100% Gap (master-plan v79): package full-build smoke baseline.
 # Current: vais-server PASS, vaisdb PASS → 2/2. This locks the package
@@ -406,6 +408,33 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Run multi-domain product gate (Step 14 I-3).
+# This uses root examples/schema/user.vais as the shared product contract and
+# proves that VaisDB catalog, vais-server response, and vais-web DB schema
+# consumers all build/type-check against it, then all fail after a typed field
+# rename. The lower-level cross_package_schema fixture keeps the compiler-level
+# propagation semantics locked; this gate locks the product-level path.
+# ---------------------------------------------------------------------------
+MULTI_DOMAIN_PRODUCT_LOG="/tmp/vais-multi-domain-product.log"
+MULTI_DOMAIN_PRODUCT_EXIT=0
+MULTI_DOMAIN_PRODUCT_PASSED=0
+MULTI_DOMAIN_PRODUCT_TOTAL=9
+MULTI_DOMAIN_PRODUCT_GATE="${REPO_ROOT}/tests/product/multi_domain_schema/tests/gate.sh"
+
+if [ -x "${MULTI_DOMAIN_PRODUCT_GATE}" ]; then
+    echo "check-integrity: running multi_domain_product gate (9 assertions)..."
+    bash "${MULTI_DOMAIN_PRODUCT_GATE}" > "${MULTI_DOMAIN_PRODUCT_LOG}" 2>&1 || MULTI_DOMAIN_PRODUCT_EXIT=$?
+    MULTI_DOMAIN_PRODUCT_LINE="$(grep -E 'GATE ASSERTIONS: [0-9]+/[0-9]+' "${MULTI_DOMAIN_PRODUCT_LOG}" | tail -n 1 || true)"
+    if [[ "${MULTI_DOMAIN_PRODUCT_LINE}" =~ GATE[[:space:]]ASSERTIONS:[[:space:]]([0-9]+)/([0-9]+) ]]; then
+        MULTI_DOMAIN_PRODUCT_PASSED="${BASH_REMATCH[1]}"
+        MULTI_DOMAIN_PRODUCT_TOTAL="${BASH_REMATCH[2]}"
+    fi
+else
+    echo "check-integrity: multi_domain_product gate.sh missing at ${MULTI_DOMAIN_PRODUCT_GATE}" | tee "${MULTI_DOMAIN_PRODUCT_LOG}"
+    MULTI_DOMAIN_PRODUCT_EXIT=1
+fi
+
+# ---------------------------------------------------------------------------
 # Parse summary lines from logs
 # ---------------------------------------------------------------------------
 CORE_SUMMARY="$(grep "CORE_CERTIFICATION pass=" "${CORE_LOG}" 2>/dev/null | tail -1 || true)"
@@ -640,6 +669,10 @@ if [ "${CROSS_PKG_SCHEMA_PASSED}" -lt "${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN}" ];
     REGRESSION=1
     REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: cross_package_schema baseline=${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN} current=${CROSS_PKG_SCHEMA_PASSED}/${CROSS_PKG_SCHEMA_TOTAL}\n"
 fi
+if [ "${MULTI_DOMAIN_PRODUCT_PASSED}" -lt "${INTEGRITY_MULTI_DOMAIN_PRODUCT_MIN}" ]; then
+    REGRESSION=1
+    REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: multi_domain_product baseline=${INTEGRITY_MULTI_DOMAIN_PRODUCT_MIN} current=${MULTI_DOMAIN_PRODUCT_PASSED}/${MULTI_DOMAIN_PRODUCT_TOTAL}\n"
+fi
 
 # ---------------------------------------------------------------------------
 # Final result
@@ -746,6 +779,13 @@ if [ "${CROSS_PKG_SCHEMA_EXIT}" -ne 0 ]; then
     OVERALL_EXIT=1
 fi
 
+if [ "${MULTI_DOMAIN_PRODUCT_EXIT}" -ne 0 ]; then
+    echo ""
+    echo "MULTI DOMAIN PRODUCT GATE FAILED: gate.sh exited ${MULTI_DOMAIN_PRODUCT_EXIT}"
+    cat "${MULTI_DOMAIN_PRODUCT_LOG}" 2>/dev/null | tail -20
+    OVERALL_EXIT=1
+fi
+
 if [ "${REGRESSION}" -ne 0 ]; then
     echo ""
     echo "ECOSYSTEM REGRESSION FAILED: threshold regression detected"
@@ -849,6 +889,12 @@ print_gate_summary() {
     else
         echo "CROSS PACKAGE SCHEMA FAIL: exit=${CROSS_PKG_SCHEMA_EXIT} gate=${CROSS_PKG_SCHEMA_PASSED}/${CROSS_PKG_SCHEMA_TOTAL}"
     fi
+
+    if [ "${MULTI_DOMAIN_PRODUCT_EXIT}" -eq 0 ]; then
+        echo "MULTI DOMAIN PRODUCT OK: gate=${MULTI_DOMAIN_PRODUCT_PASSED}/${MULTI_DOMAIN_PRODUCT_TOTAL}"
+    else
+        echo "MULTI DOMAIN PRODUCT FAIL: exit=${MULTI_DOMAIN_PRODUCT_EXIT} gate=${MULTI_DOMAIN_PRODUCT_PASSED}/${MULTI_DOMAIN_PRODUCT_TOTAL}"
+    fi
 }
 
 if [ "${OVERALL_EXIT}" -eq 0 ]; then
@@ -858,7 +904,7 @@ if [ "${OVERALL_EXIT}" -eq 0 ]; then
     else
         PKG_FULL_BUILD_STATUS="threshold-met-${PKG_FULL_BUILD_PASSED}/${PKG_FULL_BUILD_TOTAL}"
     fi
-    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok tls_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok web_unit=ok web_packages=ok web_full_build=ok cross_package_schema=ok pkg_full_build=${PKG_FULL_BUILD_STATUS}"
+    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok tls_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok web_unit=ok web_packages=ok web_full_build=ok cross_package_schema=ok multi_domain_product=ok pkg_full_build=${PKG_FULL_BUILD_STATUS}"
     exit 0
 else
     print_gate_summary

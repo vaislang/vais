@@ -1,0 +1,50 @@
+use sql/catalog/schema
+use sql/types
+use std/bytebuffer
+
+# __SHARED_USER_SCHEMA__
+
+fn make_user(id: i64, email: str, name: str) -> User {
+    User { id: id, email: email, name: name }
+}
+
+fn smoke_catalog_from_user_schema() -> i64 {
+    table := mut TableInfo.new(501 as u32, "users", 3 as u16, 77 as u32)
+    I table.name != "users" { return 10 }
+    I table.column_count as i64 != 3 { return 11 }
+    I table.is_system { return 12 }
+
+    id_col := mut ColumnInfo.new_primary_key(501 as u32, 0 as u16, "id", SqlType.Int)
+    email_col := mut ColumnInfo.new(501 as u32, 1 as u16, "email", SqlType.Text)
+    name_col := mut ColumnInfo.new(501 as u32, 2 as u16, "name", SqlType.Text)
+
+    I id_col.name != "id" { return 13 }
+    I !id_col.is_primary_key { return 14 }
+    I email_col.name != "email" { return 15 }
+    I name_col.name != "name" { return 16 }
+
+    match email_col.data_type {
+        Text => {},
+        _ => { return 17 },
+    }
+
+    buf := mut ByteBuffer.new()
+    email_col.serialize(&mut buf)
+    rt := mut match ColumnInfo.deserialize(&buf) {
+        Ok(v) => v,
+        Err(_) => { return 18 },
+    }
+    I rt.table_id as i64 != 501 { return 19 }
+    I rt.column_index as i64 != 1 { return 20 }
+    I rt.name != "email" { return 21 }
+
+    0
+}
+
+fn main() -> i64 {
+    u: User = make_user(7, "ada@vais.dev", "Ada")
+    I u.id != 7 { return 1 }
+    I u.email != "ada@vais.dev" { return 2 }
+    I u.name != "Ada" { return 3 }
+    smoke_catalog_from_user_schema()
+}
