@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Vais - AI最適化システムプログラミング言語",
-    "description": "Vais は native LLVM performance と gate-backed public claims を持つ、AI code generation 向け systems programming language です。"
+    "description": "Vais は native LLVM performance と evidence-scoped public claims を持つ、AI code generation 向け systems programming language です。"
   },
   "nav": {
     "compare": "Gates",
@@ -13,19 +13,19 @@
     "blog": "ブログ"
   },
   "hero": {
-    "badge": "Certified Core + Promoted Runtime Gates",
+    "badge": "Certified Core + Scoped Evidence",
     "title": "<span class=\"gradient-text\">clear Vais</span> を書き、<br><span class=\"gradient-text\">native performance</span> を得る",
-    "subtitle": "Vais（Vibe AI Language for Systems）は、AIコード生成に最適化されたシステムプログラミング言語です。現在の公開基準は certified Core compiler と明示された promoted runtime gates です。",
+    "subtitle": "Vais（Vibe AI Language for Systems）は、AIコード生成に最適化されたシステムプログラミング言語です。現在の公開基準は main-reproducible gates と main port 待ちの integration evidence を区別します。",
     "tryBrowser": "ブラウザで試す",
     "install": "brew install vais"
   },
   "compare": {
-    "title": "Canonical Syntax, Gate-Backed Claims",
-    "subtitle": "Step 19 で旧 single-letter keyword form は削除されました。現在の公開 claim は canonical syntax と integrity、package、runtime、full-build、product schema などの named gates に紐づきます。",
+    "title": "Canonical Syntax, Evidence-Scoped Claims",
+    "subtitle": "Step 19 で旧 single-letter keyword form は削除されました。公開 claim は main-reproducible gates と main gate port 待ちの integration evidence を区別します。",
     "vais": "Vais",
     "tokens": "トークン",
-    "barTitle": "Gate Snapshot — 2026-05-12",
-    "barNote": "Baseline は現在の integrity manifest から生成されます。cross-package schema 15/15 と multi-domain product schema 9/9 が locked gate です。"
+    "barTitle": "Evidence Snapshot — 2026-05-12",
+    "barNote": "数値は gate branch の integration evidence です。public main branch は現在 wording/build boundary を強制し、aggregate gate と product fixture は main port 待ちです。"
   },
   "performance": {
     "title": "ネイティブパフォーマンス",
@@ -107,7 +107,7 @@
   "vaisx": {
     "badge": "新機能",
     "title": "VaisでWebアプリを構築",
-    "subtitle": "VaisX は Vais web framework workbench です。現在の公開 claim は promoted runtime、unit、package、full-build、shared-schema product gates に紐づきます。",
+    "subtitle": "VaisX は Vais web framework workbench です。現在の公開 claim は main-reproducible gates と main port 待ちの integration evidence を区別します。",
     "compiler": {
       "title": "コンパイル時リアクティビティ",
       "description": "Reactive state analysis と DOM update generation は named gates が覆盖する範囲でのみ検証された implementation surface です。"
@@ -117,8 +117,8 @@
       "description": "File-based routing と SSR/SSG module は存在します。promoted behavior は現在の Vais Web gate で判断します。"
     },
     "runtime": {
-      "title": "Promoted Runtime Gates",
-      "description": "現在の Vais Web baseline は runtime smoke 61/77、unit 390/390、package tests 3272/3272、full-build 24/24、shared-schema product gate 9/9 です。Size claim には size gate が必要です。"
+      "title": "Runtime Evidence",
+      "description": "現在の Vais Web integration evidence は runtime smoke 61/77、unit 390/390、package tests 3272/3272、full-build 24/24、shared-schema product evidence 9/9 です。Size claim には size gate が必要です。"
     },
     "learnMore": "詳しく見る",
     "github": "GitHub",
