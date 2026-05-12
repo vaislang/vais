@@ -30,6 +30,8 @@ The current `origin/main` tree directly enforces:
 - Browser-JS playground smoke gate: passed for parser + JavaScript codegen
   compile/execute in the browser; this is not a complete browser-only language
   implementation claim
+- Main-scoped integrity runner:
+  `bash scripts/check-integrity.sh`
 - `vaisc emit-ts` schema declaration tests:
   `cargo test --locked -p vaisc --test emit_ts_skeleton --test emit_ts_exhaustiveness`
 - Cross-package schema gate: `15/15` via
@@ -45,13 +47,13 @@ runtime coverage remains integration evidence below.
 
 The following counts are integration evidence from
 `codex/ssr-json-grammar-gate` and the local workspace as of 2026-05-12. They
-are public evidence, but the full aggregate runtime gate is not yet reproducible from `origin/main`
-until the aggregate integrity runner and ecosystem runtime gates are ported to
-main:
+are public evidence, but the full ecosystem runtime aggregate is not yet reproducible from `origin/main`
+until the DB/server/web runtime gates are ported to main:
 
 - Core compiler freeze bundle: passed
 - Downstream re-entry criteria: passed
-- Aggregate integrity runner: pending main port
+- Full ecosystem runtime aggregate runner: pending DB/server/web runtime main
+  port
 - Standard library package tests: `82/82`
 - VaisDB package tests: `261/261`
 - Backend package tests: `18/18`
@@ -81,8 +83,8 @@ The current baseline does not certify:
 - Broad external network reliability outside the promoted local smoke gates
 - Product-complete VaisDB, Vais Server, or Vais Web behavior
 - Complete API documentation for every standard-library module
-- Main-branch reproducibility for the full aggregate integrity gate until the
-  pending main-port work lands
+- Main-branch reproducibility for the full ecosystem runtime aggregate until
+  the pending DB/server/web runtime main-port work lands
 
 ## Public Wording Policy
 
