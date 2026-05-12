@@ -87,13 +87,13 @@ requireText(
 );
 requireText(
   publicStatus,
-  'Aggregate integrity runner: pending main port',
-  'aggregate integrity status must be explicit until the runner is on main',
+  'Main-scoped integrity runner:',
+  'main-scoped integrity runner must be named without promoting full ecosystem runtime scope',
 );
-forbidText(
+requireText(
   publicStatus,
-  'Final integrity gate: passed via `scripts/check-integrity.sh`',
-  'origin/main does not currently contain the aggregate integrity runner',
+  'Full ecosystem runtime aggregate runner: pending DB/server/web runtime main',
+  'full ecosystem runtime aggregate must remain explicitly pending',
 );
 requireText(
   publicStatus,

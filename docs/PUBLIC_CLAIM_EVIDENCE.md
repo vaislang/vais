@@ -11,6 +11,7 @@ gate branch.
 | Claim area | Evidence in `origin/main` |
 |---|---|
 | Public wording boundary | `node scripts/check-public-claims.mjs` |
+| Main-scoped integrity runner | `bash scripts/check-integrity.sh` |
 | Website/docs/playground deployment | `.github/workflows/website.yml` |
 | Playground mode boundary | `scripts/check-playground-mode-contract.mjs` |
 | Browser-JS playground smoke | `scripts/check-browser-compiler-gate.mjs` |
@@ -30,12 +31,12 @@ These gates are present in the compiler tree and passed locally on
 ## Integration Evidence Pending Main Port
 
 The following counts are public evidence from `codex/ssr-json-grammar-gate`
-and the local multi-repository workspace, but the aggregate runner and
-ecosystem runtime gates are not yet present on `origin/main`.
+and the local multi-repository workspace, but the full DB/server/web runtime
+aggregate gates are not yet present on `origin/main`.
 
 | Claim area | Integration evidence | Main status |
 |---|---:|---|
-| Aggregate integrity runner | `scripts/check-integrity.sh` | Pending main port |
+| Full ecosystem runtime aggregate runner | `scripts/check-integrity.sh` on the gate branch | Pending DB/server/web runtime main port |
 | Std package codegen | `82/82` | Pending aggregate gate port |
 | VaisDB package codegen | `261/261` | Pending aggregate gate port |
 | Backend smoke | `18/18` | Pending aggregate gate port |
@@ -52,5 +53,6 @@ ecosystem runtime gates are not yet present on `origin/main`.
 ## Required Resolution
 
 Public pages may cite these numbers only as evidence-scoped claims. They must
-not imply that the full aggregate gate is reproducible from `origin/main` until
-the aggregate runner and ecosystem package gates are ported and passing there.
+not imply that the full ecosystem runtime aggregate is reproducible from
+`origin/main` until the DB/server/web runtime and ecosystem package gates are
+ported and passing there.
