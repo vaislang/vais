@@ -665,3 +665,32 @@ fn main() -> i64 {
         "admin,user",
     );
 }
+
+#[test]
+fn e2e_phase191_mut_str_loop_assign_concat_return() {
+    assert_stdout_contains(
+        r#"
+fn build() -> str {
+    out := mut ""
+    i := mut 0
+    L i < 2 {
+        I i == 0 {
+            out = "admin"
+        } else {
+            out = out + "," + "user"
+        }
+        i = i + 1
+    }
+    out
+}
+
+fn main() -> i64 {
+    value := build()
+    println(value)
+    I value != "admin,user" { return 1 }
+    0
+}
+"#,
+        "admin,user",
+    );
+}

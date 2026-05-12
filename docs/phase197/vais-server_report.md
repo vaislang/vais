@@ -4,6 +4,12 @@
 **Compiler**: /Users/sswoo/study/projects/vais/compiler/target/release/vaisc (built 2026-04-18 07:53)
 **Method**: fresh build.sh with this repo's vaisc via `VAISC=` env override.
 
+**2026-05-12 v110 update**: the `tests/auth/test_jwt.vais` part of the
+historical Category B finding is resolved. JWT now imports `std/error`
+explicitly and the test compares current string error codes
+(`VAIS-SERVER-JWT-*`). The rest of this Phase 197 scan remains a historical
+snapshot unless the full 22-file test scan is rerun.
+
 ---
 
 ## Build flow executed

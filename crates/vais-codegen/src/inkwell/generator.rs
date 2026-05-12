@@ -195,6 +195,13 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// list; the null one is already a no-op in emit_alloc_cleanup.
     pub(super) var_string_slots_multi: HashMap<String, Vec<inkwell::values::PointerValue<'ctx>>>,
 
+    /// Variable name -> scope-string frame index where the variable was
+    /// declared. Assignment of a fresh owned string must move the allocation
+    /// slot from the current expression/block frame into this declaration
+    /// frame; otherwise loop-body cleanup frees the buffer while the variable
+    /// still points at it.
+    pub(super) var_string_scope_depth: HashMap<String, usize>,
+
     /// For PHI results that represent a merge of multiple tracked concat
     /// results (if/match-as-expression producing a string), the PHI's SSA is
     /// registered in `string_value_slot` with its first incoming slot; any
@@ -314,6 +321,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             scope_str_stack: Vec::new(),
             var_string_slot: HashMap::new(),
             var_string_slots_multi: HashMap::new(),
+            var_string_scope_depth: HashMap::new(),
             phi_extra_slots: HashMap::new(),
             tco_state: None,
             resolved_function_sigs: HashMap::new(),

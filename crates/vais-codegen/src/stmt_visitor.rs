@@ -153,9 +153,11 @@ impl StmtVisitor for CodeGenerator {
 
             // Move transferred slots into the outer frame (ownership handoff).
             for ts in &transfer_slots {
-                if let Some(outer) = self.fn_ctx.scope_str_stack.last_mut() {
-                    if !outer.iter().any(|slot| slot == ts) {
-                        outer.push(ts.clone());
+                if str_frame.iter().any(|slot| slot == ts) {
+                    if let Some(outer) = self.fn_ctx.scope_str_stack.last_mut() {
+                        if !outer.iter().any(|slot| slot == ts) {
+                            outer.push(ts.clone());
+                        }
                     }
                 }
             }
@@ -632,14 +634,11 @@ impl CodeGenerator {
             if let Some(n) = array_len {
                 local = local.with_array_length(n);
             }
-            let is_str = matches!(local.ty, ResolvedType::Str);
             self.fn_ctx.locals.insert(name.node.clone(), local);
-            if is_str {
-                let depth = self.fn_ctx.scope_str_stack.len().saturating_sub(1);
-                self.fn_ctx
-                    .var_string_scope_depth
-                    .insert(name.node.clone(), depth);
-            }
+            let depth = self.fn_ctx.scope_str_stack.len().saturating_sub(1);
+            self.fn_ctx
+                .var_string_scope_depth
+                .insert(name.node.clone(), depth);
 
             // Register in current scope for block-scoped drop (if inside a scope block)
             if is_named {

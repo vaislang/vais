@@ -3,6 +3,7 @@
 //! Contains generate_assign_expr, generate_ident_expr, and generate_assign_op_expr.
 //! Core binary/unary/cast helpers are in expr_helpers.
 
+use crate::helpers::is_str_like_resolved;
 use crate::{format_did_you_mean, suggest_similar, CodeGenerator, CodegenError, CodegenResult};
 use vais_ast::{BinOp, Expr, Spanned};
 use vais_types::ResolvedType;
@@ -203,7 +204,7 @@ impl CodeGenerator {
                             local.llvm_name
                         );
                     }
-                    if matches!(local.ty, ResolvedType::Str) {
+                    if is_str_like_resolved(&local.ty) {
                         let val_key = val
                             .strip_prefix("{ i8*, i64 } ")
                             .unwrap_or(&val)
@@ -550,7 +551,7 @@ impl CodeGenerator {
                 // of falling back to i64. This is the single biggest source
                 // of "i64 vs <N-bit>" mismatches across vaisdb tests.
                 self.fn_ctx.register_temp_type(&tmp, local.ty.clone());
-                if matches!(local.ty, ResolvedType::Str) {
+                if is_str_like_resolved(&local.ty) {
                     if let Some(slots) = self.fn_ctx.var_string_slots_multi.get(name).cloned() {
                         if let Some(first) = slots.first() {
                             self.fn_ctx

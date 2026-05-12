@@ -26,6 +26,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     self.builder
                         .build_store(ptr, val)
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    self.record_string_assignment_owner(name, &val)?;
                     Ok(val)
                 } else if let Some((global, _ty)) = self.globals.get(name).copied() {
                     self.builder

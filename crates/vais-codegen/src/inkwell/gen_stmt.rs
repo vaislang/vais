@@ -136,47 +136,32 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     }
                 }
 
-                // Owning-string binding: if the RHS is a tracked concat result,
-                // record the slot under this variable's name. A later
-                // `return x` or `x + y` reaches through the alloca load (which
-                // produces a fresh SSA), and we use var_string_slot to recover
-                // the slot for ownership transfer / intermediate free. If the
-                // RHS is a PHI merging multiple concat results (if/match as
-                // expression), transfer the extra slots into the multi-slot
-                // map. See RFC-001 §4.5 / §4.6 (team-review fix 2026-04-14).
-                if val.is_struct_value() {
-                    use inkwell::values::AsValueRef;
-                    let key = val.into_struct_value().as_value_ref() as usize;
-                    if let Some(slot) = self.string_value_slot.get(&key).copied() {
-                        self.var_string_slot.insert(name.node.clone(), slot);
-                        let extras = self.phi_extra_slots.remove(&key).unwrap_or_default();
-                        if !extras.is_empty() {
-                            let owned: Vec<_> = std::iter::once(slot).chain(extras).collect();
-                            self.var_string_slots_multi.insert(name.node.clone(), owned);
-                        }
-                        // Ownership stays with the enclosing block's scope
-                        // frame. The variable and the scope frame share the
-                        // slot: `return x` via var_string_slot hands the slot
-                        // to the caller; otherwise the scope-drop at block
-                        // exit frees it. This keeps loop-body allocations
-                        // freed per iteration.
+                let owned_string_slots = self.take_owned_string_slots_for_value(&val);
+                if let Some(slots) = &owned_string_slots {
+                    if let Some(first) = slots.first().copied() {
+                        self.var_string_slot.insert(name.node.clone(), first);
+                    }
+                    if slots.len() > 1 {
+                        self.var_string_slots_multi
+                            .insert(name.node.clone(), slots.clone());
+                    } else {
+                        self.var_string_slots_multi.remove(&name.node);
                     }
                 }
+
+                let binding_resolved = if let Some(t) = ty.as_ref() {
+                    Some(self.ast_type_to_resolved(&t.node))
+                } else {
+                    self.infer_resolved_type_from_rhs(&value.node)
+                };
                 // Track resolved type for variables with type annotations
                 // (used for element/pointee type inference in slice indexing and deref)
-                if let Some(t) = ty.as_ref() {
-                    let resolved = self.ast_type_to_resolved(&t.node);
-                    self.var_resolved_types.insert(name.node.clone(), resolved);
-                } else if let Some(resolved) = self.infer_resolved_type_from_rhs(&value.node) {
-                    // B.2: when there's no explicit annotation, try to recover
-                    // the resolved type from the RHS expression. Currently
-                    // handles known str builtins (`s.parse_*()`, `s.char_at()`)
-                    // and named function calls whose signatures we know.
-                    // This lets `r := s.parse_f64(); M r { Ok(v) => ... }`
-                    // propagate the Result<f64, str> type to the match
-                    // scrutinee resolver so `v` decodes as f64 instead of i64.
+                if let Some(resolved) = binding_resolved.clone() {
                     self.var_resolved_types.insert(name.node.clone(), resolved);
                 }
+                let is_str_binding = matches!(binding_resolved.as_ref(), Some(ResolvedType::Str))
+                    || matches!(&value.node, Expr::String(_) | Expr::StringInterp(_))
+                    || owned_string_slots.is_some();
 
                 let var_type = if let Some(t) = ty.as_ref() {
                     let resolved = self.ast_type_to_resolved(&t.node);
@@ -244,8 +229,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // would write 8 bytes (the pointer) into the N*sizeof(T)-byte
                 // alloca slot, leaving the rest as garbage. Load the array
                 // value through the pointer first, then store by-value.
-                let store_val = if let (Some(t), Expr::Array(elements)) =
-                    (ty.as_ref(), &value.node)
+                let store_val = if let (Some(t), Expr::Array(elements)) = (ty.as_ref(), &value.node)
                 {
                     let resolved = self.ast_type_to_resolved(&t.node);
                     if let ResolvedType::Named { name, generics } = &resolved {
@@ -322,6 +306,18 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .build_store(alloca, store_val)
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 self.locals.insert(name.node.clone(), (alloca, var_type));
+                if is_str_binding {
+                    let depth = self.scope_str_stack.len().saturating_sub(1);
+                    self.var_string_scope_depth.insert(name.node.clone(), depth);
+                    self.var_resolved_types
+                        .entry(name.node.clone())
+                        .or_insert(ResolvedType::Str);
+                    if let Some(slots) = &owned_string_slots {
+                        for slot in slots {
+                            self.transfer_string_slot_to_var_scope(&name.node, *slot);
+                        }
+                    }
+                }
 
                 // Record struct type for variable (from StructLit, function return type, or type annotation)
                 if let Some(sn) = struct_type_name {
@@ -1054,6 +1050,113 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         Ok(())
     }
 
+    pub(super) fn take_owned_string_slots_for_value(
+        &mut self,
+        val: &inkwell::values::BasicValueEnum<'ctx>,
+    ) -> Option<Vec<inkwell::values::PointerValue<'ctx>>> {
+        if !val.is_struct_value() {
+            return None;
+        }
+        use inkwell::values::AsValueRef;
+        let key = val.into_struct_value().as_value_ref() as usize;
+        let slot = self.string_value_slot.get(&key).copied()?;
+        let extras = self.phi_extra_slots.remove(&key).unwrap_or_default();
+        Some(std::iter::once(slot).chain(extras).collect())
+    }
+
+    pub(super) fn transfer_string_slot_to_var_scope(
+        &mut self,
+        var_name: &str,
+        slot: inkwell::values::PointerValue<'ctx>,
+    ) {
+        let Some(target_depth) = self.var_string_scope_depth.get(var_name).copied() else {
+            return;
+        };
+        if target_depth >= self.scope_str_stack.len() {
+            return;
+        }
+
+        for (idx, frame) in self.scope_str_stack.iter_mut().enumerate() {
+            if idx != target_depth {
+                frame.retain(|existing| *existing != slot);
+            }
+        }
+        let target = &mut self.scope_str_stack[target_depth];
+        if !target.iter().any(|existing| *existing == slot) {
+            target.push(slot);
+        }
+    }
+
+    fn release_replaced_string_slot(
+        &mut self,
+        slot: inkwell::values::PointerValue<'ctx>,
+    ) -> CodegenResult<()> {
+        let still_tracked = self.string_value_slot.values().any(|s| *s == slot);
+        if still_tracked {
+            self.emit_free_slot(slot)?;
+            self.string_value_slot.retain(|_, s| *s != slot);
+        }
+        for frame in self.scope_str_stack.iter_mut() {
+            frame.retain(|existing| *existing != slot);
+        }
+        Ok(())
+    }
+
+    pub(super) fn record_string_assignment_owner(
+        &mut self,
+        name: &str,
+        val: &inkwell::values::BasicValueEnum<'ctx>,
+    ) -> CodegenResult<()> {
+        let is_string_local = matches!(self.var_resolved_types.get(name), Some(ResolvedType::Str))
+            || self.var_string_scope_depth.contains_key(name)
+            || self.var_string_slot.contains_key(name)
+            || self.var_string_slots_multi.contains_key(name);
+        if !is_string_local {
+            return Ok(());
+        }
+
+        let old_slots = self
+            .var_string_slots_multi
+            .get(name)
+            .cloned()
+            .or_else(|| {
+                self.var_string_slot
+                    .get(name)
+                    .copied()
+                    .map(|slot| vec![slot])
+            })
+            .unwrap_or_default();
+        let new_slots = self.take_owned_string_slots_for_value(val);
+
+        if let Some(slots) = &new_slots {
+            for old in old_slots {
+                if !slots.contains(&old) {
+                    self.release_replaced_string_slot(old)?;
+                }
+            }
+            if let Some(first) = slots.first().copied() {
+                self.var_string_slot.insert(name.to_string(), first);
+            }
+            if slots.len() > 1 {
+                self.var_string_slots_multi
+                    .insert(name.to_string(), slots.clone());
+            } else {
+                self.var_string_slots_multi.remove(name);
+            }
+            for slot in slots {
+                self.transfer_string_slot_to_var_scope(name, *slot);
+            }
+        } else {
+            for old in old_slots {
+                self.release_replaced_string_slot(old)?;
+            }
+            self.var_string_slot.remove(name);
+            self.var_string_slots_multi.remove(name);
+        }
+
+        Ok(())
+    }
+
     /// Find the alloc_slot(s) that own the heap buffer behind the returned
     /// string value, consulting the SSA→slot map (for direct `return a + b`),
     /// the variable→slot map (for `let x = a+b; return x`), and the multi-slot
@@ -1349,6 +1452,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ) -> Option<vais_types::ResolvedType> {
         use vais_types::ResolvedType as R;
         match rhs {
+            Expr::String(_) | Expr::StringInterp(_) => Some(R::Str),
+            Expr::Ident(name) => self.var_resolved_types.get(name).cloned(),
+            Expr::Binary { op, left, right } if matches!(*op, vais_ast::BinOp::Add) => {
+                let left_ty = self.infer_resolved_type_from_rhs(&left.node);
+                let right_ty = self.infer_resolved_type_from_rhs(&right.node);
+                if matches!(left_ty, Some(R::Str)) || matches!(right_ty, Some(R::Str)) {
+                    Some(R::Str)
+                } else {
+                    None
+                }
+            }
             Expr::MethodCall { method, .. } => match method.node.as_str() {
                 "parse_i64" | "parse_int" => Some(R::Result(Box::new(R::I64), Box::new(R::Str))),
                 "parse_i32" => Some(R::Result(Box::new(R::I32), Box::new(R::Str))),

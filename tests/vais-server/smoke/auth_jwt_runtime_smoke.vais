@@ -194,6 +194,24 @@ fn smoke_jwt_role_claim_verify() -> i64 {
         },
     }
 
+    three_roles := verify_token("user1|issuer|4600|1000|admin,user,viewer.4d5", config)
+    match three_roles {
+        Err(_) => {
+            println("FAIL jwt three-role verify rejected")
+            return 86
+        },
+        Ok(decoded) => {
+            I decoded.roles.len() != 3 {
+                println("FAIL jwt three-role decoded len")
+                return 87
+            }
+            I decoded.roles.get(2) != "viewer" {
+                println("FAIL jwt three-role decoded third")
+                return 88
+            }
+        },
+    }
+
     0
 }
 
@@ -289,6 +307,61 @@ fn smoke_jwt_role_claim_generation() -> i64 {
             I pair.refresh.token != "user1|issuer|605800|1000|.400" {
                 println("FAIL jwt role pair refresh token")
                 return 81
+            }
+        },
+    }
+
+    many_roles: Vec<str> := mut Vec.with_capacity(3)
+    many_roles.push("admin")
+    many_roles.push("user")
+    many_roles.push("viewer")
+    many_claims := JwtClaims.new("user1", "issuer", 4600, 1000, many_roles)
+    many_joined := jwt_join_roles(many_claims.roles, 0, "")
+    I many_joined != "admin,user,viewer" {
+        println("FAIL jwt many-role direct join")
+        println(many_joined)
+        return 89
+    }
+    many_encoded := many_claims.encode()
+    I many_encoded != "user1|issuer|4600|1000|admin,user,viewer" {
+        println("FAIL jwt many-role claims encode")
+        println(many_encoded)
+        return 90
+    }
+
+    many_token_roles: Vec<str> := mut Vec.with_capacity(3)
+    many_token_roles.push("admin")
+    many_token_roles.push("user")
+    many_token_roles.push("viewer")
+    many_token_claims := JwtClaims.new("user1", "issuer", 4600, 1000, many_token_roles)
+    many_token_result := generate_access_token(many_token_claims, config)
+    match many_token_result {
+        Err(_) => {
+            println("FAIL jwt many-role generation rejected")
+            return 91
+        },
+        Ok(token) => {
+            I token.token != "user1|issuer|4600|1000|admin,user,viewer.4d5" {
+                println("FAIL jwt many-role token")
+                println(token.token)
+                return 92
+            }
+            verified := verify_token(token.token, config)
+            match verified {
+                Err(_) => {
+                    println("FAIL jwt generated many-role verify rejected")
+                    return 93
+                },
+                Ok(decoded) => {
+                    I decoded.roles.len() != 3 {
+                        println("FAIL jwt generated many-role decoded len")
+                        return 94
+                    }
+                    I decoded.roles.get(2) != "viewer" {
+                        println("FAIL jwt generated many-role decoded third")
+                        return 100
+                    }
+                },
             }
         },
     }

@@ -404,6 +404,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.scope_str_stack.clear();
         self.var_string_slot.clear();
         self.var_string_slots_multi.clear();
+        self.var_string_scope_depth.clear();
         self.phi_extra_slots.clear();
 
         // Set up generic substitutions from parent struct and method generics

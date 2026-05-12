@@ -25,6 +25,15 @@ pub(crate) fn is_void_result(llvm_type: &str, resolved: &vais_types::ResolvedTyp
     llvm_type == "void" || *resolved == vais_types::ResolvedType::Unit
 }
 
+pub(crate) fn is_str_like_resolved(ty: &vais_types::ResolvedType) -> bool {
+    matches!(ty, vais_types::ResolvedType::Str)
+        || matches!(
+            ty,
+            vais_types::ResolvedType::Ref(inner) | vais_types::ResolvedType::RefMut(inner)
+                if matches!(inner.as_ref(), vais_types::ResolvedType::Str)
+        )
+}
+
 /// Generate an LLVM IR instruction that acts as a void/Unit placeholder.
 ///
 /// LLVM IR does not allow `phi void` — void is not a first-class type. When
