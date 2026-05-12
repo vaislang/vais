@@ -15,5 +15,8 @@ fn lookup_email(u: User) -> str {
 
 fn main() -> i64 {
     u: User = build_user(1, "a@b.c", "alice")
+    I lookup_email(u) != "a@b.c" {
+        return 1
+    }
     return 0
 }

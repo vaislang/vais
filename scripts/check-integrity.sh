@@ -16,7 +16,7 @@
 #   INTEGRITY_WEB_PACKAGES_MIN=3272        minimum vais-web non-kit packages tests
 #   INTEGRITY_WEB_FULL_BUILD_MIN=24        minimum vais-web package full-build smoke
 #   INTEGRITY_BACKEND_PHASE158_MIN=18      minimum phase158 backend smoke
-#   INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=13  minimum cross_package_schema assertions (positive 9 + negative 4)
+#   INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=15  minimum cross_package_schema assertions (positive 11 + negative 4)
 #   INTEGRITY_PKG_FULL_BUILD_MIN=2         minimum package full-build smoke (Phase 1 100% Gap)
 #
 # Strict-default imports (Step 11 root fix, loop 29, 2026-05-08):
@@ -64,7 +64,7 @@ INTEGRITY_WEB_RUNTIME_MIN="${INTEGRITY_WEB_RUNTIME_MIN:-61}"
 INTEGRITY_WEB_UNIT_MIN="${INTEGRITY_WEB_UNIT_MIN:-390}"
 INTEGRITY_WEB_PACKAGES_MIN="${INTEGRITY_WEB_PACKAGES_MIN:-3272}"
 INTEGRITY_WEB_FULL_BUILD_MIN="${INTEGRITY_WEB_FULL_BUILD_MIN:-24}"
-INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN="${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN:-13}"
+INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN="${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN:-15}"
 INTEGRITY_BACKEND_PHASE158_MIN="${INTEGRITY_BACKEND_PHASE158_MIN:-18}"
 # Phase 1 100% Gap (master-plan v79): package full-build smoke baseline.
 # Current: vais-server PASS, vaisdb PASS → 2/2. This locks the package
@@ -389,11 +389,11 @@ add_cross_pkg_schema_assertions() {
 }
 
 if [ -x "${CROSS_PKG_SCHEMA_GATE}" ]; then
-    echo "check-integrity: running cross_package_schema gate (positive + negative, 13 assertions)..."
+    echo "check-integrity: running cross_package_schema gate (positive + negative, 15 assertions)..."
     : > "${CROSS_PKG_SCHEMA_LOG}"
     POS_EXIT=0
     bash "${CROSS_PKG_SCHEMA_GATE}" positive >> "${CROSS_PKG_SCHEMA_LOG}" 2>&1 || POS_EXIT=$?
-    add_cross_pkg_schema_assertions 9
+    add_cross_pkg_schema_assertions 11
     NEG_EXIT=0
     bash "${CROSS_PKG_SCHEMA_GATE}" negative >> "${CROSS_PKG_SCHEMA_LOG}" 2>&1 || NEG_EXIT=$?
     add_cross_pkg_schema_assertions 4

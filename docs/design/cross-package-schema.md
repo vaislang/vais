@@ -258,10 +258,12 @@ final exit code reflects the actual phase that failed.
 
 **Phase 0 — pre-change baseline (FIXTURE_DRIFT if any fails)**
 
-The pristine schema produces a `.d.ts`, and ALL THREE consumer checks
-succeed against it:
+The pristine schema produces a `.d.ts`, both `.vais` consumers type-check
+and run natively, and the TypeScript consumer compiles against it:
 - `vaisc check consumers/vaisdb_table.vais` exits 0
+- native build/run of `consumers/vaisdb_table.vais` exits 0
 - `vaisc check consumers/vais_server_api.vais` exits 0
+- native build/run of `consumers/vais_server_api.vais` exits 0
 - TypeScript compile of `consumers/vais_web_consumer.ts` against the
   generated `.d.ts` exits 0
 
@@ -295,33 +297,28 @@ still references the renamed field:
 If any consumer now succeeds, the schema change failed to propagate to
 that consumer. Runner exits 1 (Gate FAIL) and reports which consumer.
 
-**Cleanup invariant**: the runner restores the pristine schema regardless
-of which phase exited. Cleanup uses `trap` so it runs on every exit path,
-including assertion failure. Cleanup itself must not mask the gate's
-exit code (the failure code is recorded in a variable before cleanup and
-re-applied at the end; codex v3 defect 2).
+**Cleanup invariant**: the runner copies the fixture into a per-run temp
+workspace before mutating it. Cleanup uses `trap` so temporary files are
+removed on every exit path, including assertion failure. Cleanup itself
+must not mask the gate's exit code (the failure code is recorded in a
+variable before cleanup and re-applied at the end; codex v3 defect 2).
 
 ### Negative gate semantics
 
-Tests that **adding** a required field propagates to consumer constructor
-sites. The pristine `schema/user.vais` carries an insertion marker
-comment that the mutation primitive replaces (NOT EOF append, because EOF
-would be after the struct's closing `}` and yield a malformed file —
-codex v2 defect 3).
+Tests that a field type change propagates to consumer return contracts. The
+mutation flips `email: str` to `email: i64`; consumers that read `u.email`
+as `str` must then fail at `vaisc check`.
 
-Three assertions:
+Four assertions:
 
-1. After the marker is replaced with `age: i64,`, the mutation must
-   produce a real diff (exit 2 FIXTURE_DRIFT otherwise).
-2. The mutated schema must remain well-typed (`vaisc check schema/user.vais`
-   exits 0; otherwise exit 2 — the marker was placed wrong).
-3. At least one consumer constructs `User { id, email, name }` literally;
-   that consumer's `vaisc check` must now exit non-zero (the new
-   required field is missing). If it succeeds, the schema change failed
-   to propagate — exit 1 Gate FAIL.
-
-The fixture intentionally constructs `User` in `consumers/vaisdb_table.vais`
-to force this assertion to be meaningful.
+1. The type-change mutation must produce a real diff (exit 2
+   FIXTURE_DRIFT otherwise).
+2. The mutated schema must remain well-typed (`vaisc check
+   schema/user.vais` exits 0; otherwise exit 2).
+3. `vaisc emit-ts` on the mutated schema must exit 0.
+4. The `vaisdb_table.vais` consumer's `vaisc check` must now exit non-zero
+   because `lookup_email(u) -> str` returns an `i64` field. If it succeeds,
+   the schema change failed to propagate — exit 1 Gate FAIL.
 
 ### Self-audit on gate semantics (north-star alignment)
 
@@ -337,9 +334,11 @@ The gate is added to `compiler/scripts/check-integrity.sh` as a new
 section. The exact assertion count is computed by the gate runner from
 the assertions defined in this document:
 
-- **Positive gate** (9 assertions):
-  - Phase 0 baseline (4): emit-ts succeeds; vaisdb_table.vais checks
-    OK; vais_server_api.vais checks OK; vais_web_consumer.ts compiles OK.
+- **Positive gate** (11 assertions):
+  - Phase 0 baseline (6): emit-ts succeeds; vaisdb_table.vais checks
+    OK; vaisdb_table.vais native build/run exits 0; vais_server_api.vais
+    checks OK; vais_server_api.vais native build/run exits 0;
+    vais_web_consumer.ts compiles OK.
   - Phase 1 mutation (2): mutation produces real diff; re-emit succeeds.
   - Phase 2 propagation (3): vaisdb_table.vais now fails;
     vais_server_api.vais now fails; vais_web_consumer.ts now fails.
@@ -348,11 +347,11 @@ the assertions defined in this document:
   schema; vaisdb_table.vais consumer (which constructs `User { ... }`
   literally) now fails.
 
-Total: 13. `INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=13` is added to
+Total: 15. `INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=15` is added to
 `master-plan.toml` `[[baseline_lock.threshold]]` when this gate is
 implemented in Step 8. The threshold is computed from the spec, not
 declared independently — gate-runner reports
-`CROSS_PACKAGE_SCHEMA OK: <N>/13` and the threshold script catches
+`CROSS_PACKAGE_SCHEMA OK: <N>/15` and the threshold script catches
 regressions. (codex v5 defect 3 fix — count derived from spec, no
 drift surface.)
 

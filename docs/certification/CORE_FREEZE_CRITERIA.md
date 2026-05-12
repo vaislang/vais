@@ -80,7 +80,7 @@ markers is generated from `GATE_MANIFEST.toml` by
 | vais-web unit | `tests=390/390` |
 | vais-web packages | `tests=3272/3272` |
 | vais-web full-build | `packages=24/24` |
-| Cross-package schema gate | `gate=13/13` |
+| Cross-package schema gate | `gate=15/15` |
 | Package full-build smoke | `smoke=2/2` |
 <!-- gate-table:auto-end -->
 
