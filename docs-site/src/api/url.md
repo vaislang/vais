@@ -5,13 +5,13 @@
 ## Import
 
 ```vais
-U std/url
+use std/url
 ```
 
 ## Struct
 
 ```vais
-S Url {
+struct Url {
     scheme: String,    # Protocol (http, https, etc.)
     username: String,  # Optional username
     password: String,  # Optional password
@@ -48,9 +48,9 @@ S Url {
 ## Usage
 
 ```vais
-U std/url
+use std/url
 
-F main() -> i64 {
+fn main() -> i64 {
     u := url_parse("https://example.com:8080/api?q=test#section")
     # u.scheme = "https", u.host = "example.com", u.port = 8080
     u.drop()

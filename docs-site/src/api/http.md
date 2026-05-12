@@ -62,7 +62,7 @@ The HTTP module provides an HTTP/1.1 implementation surface with:
 ### Request Struct
 
 ```vais
-S Request {
+struct Request {
     method: i64,
     path: str,
     version: str,
@@ -77,7 +77,7 @@ S Request {
 #### new
 
 ```vais
-F new(method: i64, path: str) -> Request
+fn new(method: i64, path: str) -> Request
 ```
 
 Create a new HTTP request.
@@ -85,10 +85,10 @@ Create a new HTTP request.
 #### get / post / put / delete
 
 ```vais
-F get(path: str) -> Request
-F post(path: str) -> Request
-F put(path: str) -> Request
-F delete(path: str) -> Request
+fn get(path: str) -> Request
+fn post(path: str) -> Request
+fn put(path: str) -> Request
+fn delete(path: str) -> Request
 ```
 
 Create a request with the specified HTTP method.
@@ -96,7 +96,7 @@ Create a request with the specified HTTP method.
 #### with_body
 
 ```vais
-F with_body(&self, data: i64, len: i64) -> Request
+fn with_body(&self, data: i64, len: i64) -> Request
 ```
 
 Set the request body.
@@ -104,7 +104,7 @@ Set the request body.
 #### with_json
 
 ```vais
-F with_json(&self, json_str: str) -> Request
+fn with_json(&self, json_str: str) -> Request
 ```
 
 Set JSON body and Content-Type header.
@@ -112,7 +112,7 @@ Set JSON body and Content-Type header.
 #### header
 
 ```vais
-F header(&self, name: str, value: str) -> Request
+fn header(&self, name: str, value: str) -> Request
 ```
 
 Add a header to the request.
@@ -122,7 +122,7 @@ Add a header to the request.
 ### Response Struct
 
 ```vais
-S Response {
+struct Response {
     status: i64,
     status_text: str,
     version: str,
@@ -137,11 +137,11 @@ S Response {
 #### new / ok / not_found / bad_request / internal_error
 
 ```vais
-F new(status: i64) -> Response
-F ok() -> Response
-F not_found() -> Response
-F bad_request() -> Response
-F internal_error() -> Response
+fn new(status: i64) -> Response
+fn ok() -> Response
+fn not_found() -> Response
+fn bad_request() -> Response
+fn internal_error() -> Response
 ```
 
 Create response objects with common status codes.
@@ -149,10 +149,10 @@ Create response objects with common status codes.
 #### with_body / with_text / with_json / with_html
 
 ```vais
-F with_body(&self, data: i64, len: i64) -> Response
-F with_text(&self, text: str) -> Response
-F with_json(&self, json_str: str) -> Response
-F with_html(&self, html: str) -> Response
+fn with_body(&self, data: i64, len: i64) -> Response
+fn with_text(&self, text: str) -> Response
+fn with_json(&self, json_str: str) -> Response
+fn with_html(&self, html: str) -> Response
 ```
 
 Set response body with appropriate Content-Type.
@@ -160,10 +160,10 @@ Set response body with appropriate Content-Type.
 #### Status checking
 
 ```vais
-F is_success(&self) -> i64
-F is_redirect(&self) -> i64
-F is_client_error(&self) -> i64
-F is_server_error(&self) -> i64
+fn is_success(&self) -> i64
+fn is_redirect(&self) -> i64
+fn is_client_error(&self) -> i64
+fn is_server_error(&self) -> i64
 ```
 
 Check response status category.
@@ -173,7 +173,7 @@ Check response status category.
 ### Client Struct
 
 ```vais
-S Client {
+struct Client {
     timeout_ms: i64,
     follow_redirects: i64,
     max_redirects: i64
@@ -185,7 +185,7 @@ S Client {
 #### new
 
 ```vais
-F new() -> Client
+fn new() -> Client
 ```
 
 Create a new HTTP client with default settings.
@@ -193,7 +193,7 @@ Create a new HTTP client with default settings.
 #### execute
 
 ```vais
-F execute(&self, host: str, port: i64, request: &Request) -> Response?
+fn execute(&self, host: str, port: i64, request: &Request) -> Response?
 ```
 
 Execute an HTTP request.
@@ -201,8 +201,8 @@ Execute an HTTP request.
 #### get / post
 
 ```vais
-F get(&self, url: str) -> Response?
-F post(&self, url: str, body: str) -> Response?
+fn get(&self, url: str) -> Response?
+fn post(&self, url: str, body: str) -> Response?
 ```
 
 Convenience methods for common operations.
@@ -212,7 +212,7 @@ Convenience methods for common operations.
 ### Server Struct
 
 ```vais
-S Server {
+struct Server {
     host: str,
     port: i64,
     router: Router,
@@ -225,8 +225,8 @@ S Server {
 #### new
 
 ```vais
-F new(port: i64) -> Server
-F bind(host: str, port: i64) -> Server
+fn new(port: i64) -> Server
+fn bind(host: str, port: i64) -> Server
 ```
 
 Create a new HTTP server.
@@ -234,7 +234,7 @@ Create a new HTTP server.
 #### routes
 
 ```vais
-F routes(&self, router: Router) -> Server
+fn routes(&self, router: Router) -> Server
 ```
 
 Add routes to the server.
@@ -242,7 +242,7 @@ Add routes to the server.
 #### run
 
 ```vais
-F run(&self) -> i64
+fn run(&self) -> i64
 ```
 
 Run the server (blocking).
@@ -252,8 +252,8 @@ Run the server (blocking).
 ### Handler Trait
 
 ```vais
-W Handler {
-    F handle(&self, req: &Request) -> Response
+trait Handler {
+    fn handle(&self, req: &Request) -> Response
 }
 ```
 
@@ -264,7 +264,7 @@ The Handler trait defines the interface for request handlers. Any type implement
 ### Route Struct
 
 ```vais
-S Route {
+struct Route {
     method: i64,
     path: str,
     handler_ptr: i64
@@ -278,7 +278,7 @@ Represents a single route mapping an HTTP method and path to a handler function.
 ### Router Struct
 
 ```vais
-S Router {
+struct Router {
     routes: i64,
     count: i64,
     capacity: i64
@@ -290,7 +290,7 @@ S Router {
 #### new
 
 ```vais
-F new() -> Router
+fn new() -> Router
 ```
 
 Create a new router.
@@ -298,10 +298,10 @@ Create a new router.
 #### get / post / put / delete
 
 ```vais
-F get(&self, path: str, handler: i64) -> Router
-F post(&self, path: str, handler: i64) -> Router
-F put(&self, path: str, handler: i64) -> Router
-F delete(&self, path: str, handler: i64) -> Router
+fn get(&self, path: str, handler: i64) -> Router
+fn post(&self, path: str, handler: i64) -> Router
+fn put(&self, path: str, handler: i64) -> Router
+fn delete(&self, path: str, handler: i64) -> Router
 ```
 
 Add routes for specific HTTP methods.
@@ -309,11 +309,11 @@ Add routes for specific HTTP methods.
 ## Convenience Functions
 
 ```vais
-F client() -> Client
-F server(port: i64) -> Server
-F router() -> Router
-F get(url: str) -> Response?
-F post(url: str, body: str) -> Response?
+fn client() -> Client
+fn server(port: i64) -> Server
+fn router() -> Router
+fn get(url: str) -> Response?
+fn post(url: str, body: str) -> Response?
 ```
 
 Quick access to common operations.
@@ -326,7 +326,7 @@ Quick access to common operations.
 # Simple GET request
 response := get("http://api.example.com/users")
 
-M response {
+match response {
     Some(resp) => {
         I resp.is_success() == 1 {
             body := resp.body_text()
@@ -368,12 +368,12 @@ server := server(8080)
 ### Custom Handler
 
 ```vais
-F handle_index(req: &Request) -> Response {
+fn handle_index(req: &Request) -> Response {
     Response::ok()
         .with_html("<h1>Welcome</h1>")
 }
 
-F handle_users(req: &Request) -> Response {
+fn handle_users(req: &Request) -> Response {
     json := '{"users":["Alice","Bob","Charlie"]}'
     Response::ok()
         .with_json(json)

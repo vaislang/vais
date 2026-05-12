@@ -1,10 +1,10 @@
 {
   "meta": {
     "title": "Vais - AI-Optimized Systems Programming Language",
-    "description": "Vais is a token-efficient systems programming language designed for AI code generation with native LLVM performance."
+    "description": "Vais is a systems programming language designed for AI code generation with native LLVM performance and gate-backed public claims."
   },
   "nav": {
-    "compare": "Compare",
+    "compare": "Gates",
     "performance": "Performance",
     "features": "Features",
     "playground": "Playground",
@@ -14,18 +14,18 @@
   },
   "hero": {
     "badge": "Certified Core + Promoted Runtime Gates",
-    "title": "Write <span class=\"gradient-text\">fewer tokens</span>,<br>get <span class=\"gradient-text\">native performance</span>",
+    "title": "Write <span class=\"gradient-text\">clear Vais</span>,<br>get <span class=\"gradient-text\">native performance</span>",
     "subtitle": "Vais (Vibe AI Language for Systems) is a systems programming language optimized for AI code generation. The current public baseline is a certified Core compiler plus named promoted runtime gates.",
     "tryBrowser": "Try in Browser",
     "install": "brew install vais"
   },
   "compare": {
-    "title": "Token Efficiency Matters",
-    "subtitle": "AI models pay per token. Vais uses <strong>33% fewer tokens than Rust</strong> and <strong>40% fewer than C</strong> for equivalent programs — single-char keywords, expression bodies, and auto-return add up across codebases.",
+    "title": "Canonical Syntax, Gate-Backed Claims",
+    "subtitle": "Step 19 retired the old single-letter keyword forms. Current public claims are tied to canonical syntax and named gates, including integrity, package, runtime, full-build, and product schema checks.",
     "vais": "Vais",
     "tokens": "tokens",
-    "barTitle": "Token Count — 4 Benchmark Programs",
-    "barNote": "fibonacci + quicksort + http_types + linked_list (tiktoken cl100k_base). See <a href=\"https://github.com/vaislang/vais/blob/main/benches/COMPARISON.md\" style=\"color: var(--primary);\">benchmarks</a>."
+    "barTitle": "Gate Snapshot — 2026-05-12",
+    "barNote": "Baseline is generated from the current integrity manifest: cross-package schema 15/15 and multi-domain product schema 9/9 are locked gates."
   },
   "performance": {
     "title": "Native Performance",
@@ -38,8 +38,8 @@
     "title": "Why Vais?",
     "subtitle": "Designed from the ground up for AI-assisted development without sacrificing performance.",
     "singleChar": {
-      "title": "Single-Char Keywords",
-      "description": "<code>F</code> for function, <code>S</code> for struct, <code>I</code>/<code>E</code> for if/else, <code>L</code> for loop, <code>M</code> for match. Minimal tokens, maximum clarity."
+      "title": "Canonical Keywords",
+      "description": "<code>fn</code>, <code>struct</code>, <code>enum</code>, <code>else</code>, <code>match</code>, <code>return</code>, <code>use</code>, and <code>pub</code> are canonical. Retired single-letter forms are no longer accepted."
     },
     "selfRecursion": {
       "title": "Self-Recursion Operator",
@@ -107,7 +107,7 @@
   "vaisx": {
     "badge": "New",
     "title": "Build Web Apps with Vais",
-    "subtitle": "VaisX is the Vais web framework workbench. Current public claims are tied to promoted runtime, unit, package, and full-build gates.",
+    "subtitle": "VaisX is the Vais web framework workbench. Current public claims are tied to promoted runtime, unit, package, full-build, and shared-schema product gates.",
     "compiler": {
       "title": "Compile-Time Reactivity",
       "description": "Reactive state analysis and DOM update generation are active implementation surfaces verified only where named gates cover them."
@@ -118,7 +118,7 @@
     },
     "runtime": {
       "title": "Promoted Runtime Gates",
-      "description": "The current Vais Web baseline is runtime smoke 61/77, unit 390/390, package tests 3272/3272, and full-build 24/24. Size claims require a size gate."
+      "description": "The current Vais Web baseline is runtime smoke 61/77, unit 390/390, package tests 3272/3272, full-build 24/24, and shared-schema product gate 9/9. Size claims require a size gate."
     },
     "learnMore": "Learn More",
     "github": "GitHub",

@@ -15,7 +15,7 @@ D expr
 여러 `D` 문이 있을 경우 **LIFO(Last In, First Out)** 순서로 실행됩니다. 나중에 등록된 defer가 먼저 실행됩니다:
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     D puts("third")
     D puts("second")
     D puts("first")
@@ -35,7 +35,7 @@ F main() -> i64 {
 ### 파일 핸들
 
 ```vais
-F read_file(path: str) -> i64 {
+fn read_file(path: str) -> i64 {
     fd := open(path, 0)
     D close(fd)
 
@@ -48,7 +48,7 @@ F read_file(path: str) -> i64 {
 ### 메모리 해제
 
 ```vais
-F process() -> i64 {
+fn process() -> i64 {
     buf := malloc(1024)
     D free(buf)
 
@@ -63,12 +63,12 @@ F process() -> i64 {
 `D`는 조기 반환(`R`)이나 에러 상황에서도 실행이 보장됩니다:
 
 ```vais
-F safe_operation() -> i64 {
+fn safe_operation() -> i64 {
     resource := acquire()
     D release(resource)
 
     I check_error() {
-        R -1   # 에러로 조기 반환해도 release()가 실행됨
+        return -1   # 에러로 조기 반환해도 release()가 실행됨
     }
 
     do_work(resource)
@@ -81,7 +81,7 @@ F safe_operation() -> i64 {
 `D`는 선언된 블록 스코프에 바인딩됩니다:
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     D puts("outer defer")
 
     {

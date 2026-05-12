@@ -3,9 +3,10 @@
 Vais 언어를 기반으로 구축된 풀스택 ecosystem workbench입니다.
 
 현재 공개 claim은 명시된 gate 기준입니다: VaisDB package `261/261` 및
-runtime `34/34`, vais-server runtime `16/16`, vais-web runtime `61/77`, unit
-`390/390`, package `3272/3272`, full-build `24/24`. 이는 product-complete v1
-claim이 아닙니다.
+runtime `34/34`, vais-server runtime `20/20`, vais-web runtime `61/77`, unit
+`390/390`, package `3272/3272`, full-build `24/24`, cross-package schema
+`15/15`, multi-domain product schema `9/9`. 이는 product-complete v1 claim이
+아닙니다.
 
 ## 아키텍처
 
@@ -23,7 +24,7 @@ claim이 아닙니다.
 ┌─────────────────────▼───────────────────────┐
 │  vais-server                                │
 │  Express/Axum 스타일 백엔드 API 프레임워크       │
-│  미들웨어 파이프라인 · runtime smoke 16/16       │
+│  미들웨어 파이프라인 · runtime smoke 20/20       │
 └─────────────────────┬───────────────────────┘
                       │ Native Query API
 ┌─────────────────────▼───────────────────────┐
@@ -39,7 +40,7 @@ claim이 아닙니다.
 |--------|------|----------|
 | [VaisX](./vais-web/README.md) | 프론트엔드 framework workbench | Runtime 61/77, unit 390/390, full-build 24/24 |
 | [VaisDB](./vaisdb/README.md) | 하이브리드 database workbench | Package 261/261, runtime 34/34 |
-| [vais-server](./vais-server/README.md) | 백엔드 framework workbench | Runtime smoke 16/16 |
+| [vais-server](./vais-server/README.md) | 백엔드 framework workbench | Runtime smoke 20/20 |
 
 ## 풀스택 예제
 
@@ -49,7 +50,7 @@ claim이 아닙니다.
 # <script>
 todos := $state([])
 
-A F load() -> Vec<Todo> {
+A fn load() -> Vec<Todo> {
     fetch("/api/todos").json()
 }
 # </script>
@@ -60,10 +61,10 @@ A F load() -> Vec<Todo> {
 # </template>
 
 # === Backend (vais-server) ===
-U core/app
-U db/query
+use core/app
+use db/query
 
-F handle_todos(ctx: Context) -> Response {
+fn handle_todos(ctx: Context) -> Response {
     sql := QueryBuilder.new()
         .select("todos")
         .order_by("id", SortDirection.Asc)
@@ -71,7 +72,7 @@ F handle_todos(ctx: Context) -> Response {
     ctx.json(200, db.execute(sql))
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     app := mut App.new(ServerConfig.default())
     app.get("/api/todos", "handle_todos")
     app.listen(":8080")

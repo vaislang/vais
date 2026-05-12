@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/allocator
+use std/allocator
 ```
 
 ## Overview
@@ -26,7 +26,7 @@ All allocators support explicit memory management with pointer-based state mutat
 Describes memory requirements with size and alignment.
 
 ```vais
-S Layout {
+struct Layout {
     size: i64,        # Required size in bytes
     align: i64        # Required alignment (must be power of 2)
 }
@@ -48,7 +48,7 @@ S Layout {
 Result of an allocation operation with pointer and actual size.
 
 ```vais
-S Allocation {
+struct Allocation {
     ptr: i64,         # Pointer to allocated memory (0 if failed)
     size: i64         # Actual allocated size (may be >= requested)
 }
@@ -70,7 +70,7 @@ Wraps system malloc/free with alignment support.
 A simple bump allocator that allocates linearly from a buffer. Extremely fast allocation, but can only free all at once.
 
 ```vais
-S BumpAllocator {
+struct BumpAllocator {
     buffer: i64,      # Start of buffer
     capacity: i64,    # Total capacity
     offset: i64,      # Current allocation offset
@@ -103,7 +103,7 @@ S BumpAllocator {
 A pool allocator for fixed-size objects. Very fast allocation/deallocation with no fragmentation.
 
 ```vais
-S PoolAllocator {
+struct PoolAllocator {
     buffer: i64,       # Start of buffer
     capacity: i64,     # Total capacity in bytes
     block_size: i64,   # Size of each block
@@ -138,7 +138,7 @@ S PoolAllocator {
 A general-purpose free list allocator with first-fit allocation strategy.
 
 ```vais
-S FreeListAllocator {
+struct FreeListAllocator {
     buffer: i64,      # Start of buffer
     capacity: i64,    # Total capacity
     free_list: i64,   # Pointer to first free block
@@ -149,7 +149,7 @@ S FreeListAllocator {
 ### Block Header
 
 ```vais
-S FreeBlock {
+struct FreeBlock {
     size: i64,        # Size of this block (including header)
     next: i64         # Pointer to next free block
 }
@@ -185,7 +185,7 @@ S FreeBlock {
 A stack-based allocator with LIFO allocation pattern.
 
 ```vais
-S StackAllocator {
+struct StackAllocator {
     buffer: i64,      # Start of buffer
     capacity: i64,    # Total capacity
     offset: i64,      # Current stack top
@@ -221,9 +221,9 @@ S StackAllocator {
 ### Global Allocator
 
 ```vais
-U std/allocator
+use std/allocator
 
-F main() -> i64 {
+fn main() -> i64 {
     layout := layout_for_i64()
     alloc := global_alloc(layout)
 
@@ -238,9 +238,9 @@ F main() -> i64 {
 ### Bump Allocator
 
 ```vais
-U std/allocator
+use std/allocator
 
-F main() -> i64 {
+fn main() -> i64 {
     bump := BumpAllocator::new(4096)  # 4KB buffer
 
     # Fast sequential allocations
@@ -262,9 +262,9 @@ F main() -> i64 {
 ### Pool Allocator
 
 ```vais
-U std/allocator
+use std/allocator
 
-F main() -> i64 {
+fn main() -> i64 {
     # Pool of 100 blocks, each 64 bytes
     pool := PoolAllocator::new(64, 100)
 
@@ -287,9 +287,9 @@ F main() -> i64 {
 ### Free List Allocator
 
 ```vais
-U std/allocator
+use std/allocator
 
-F main() -> i64 {
+fn main() -> i64 {
     freelist := FreeListAllocator::new(8192)  # 8KB buffer
 
     # Variable-size allocations
@@ -312,9 +312,9 @@ F main() -> i64 {
 ### Stack Allocator
 
 ```vais
-U std/allocator
+use std/allocator
 
-F main() -> i64 {
+fn main() -> i64 {
     stack := StackAllocator::new(2048)
 
     # LIFO allocation
@@ -339,9 +339,9 @@ F main() -> i64 {
 ### Layout Extension
 
 ```vais
-U std/allocator
+use std/allocator
 
-F main() -> i64 {
+fn main() -> i64 {
     # Create layout for struct { i64, i32, ptr }
     base := layout_for_i64()
     layout2 := layout_extend(base, layout_for_i32())
@@ -357,9 +357,9 @@ F main() -> i64 {
 ### Zeroed Allocation
 
 ```vais
-U std/allocator
+use std/allocator
 
-F main() -> i64 {
+fn main() -> i64 {
     # Global allocator with zeroing
     alloc := global_alloc_zeroed(layout_array(8, 8, 100))
 
@@ -399,9 +399,9 @@ F main() -> i64 {
 ### Custom Arena Pattern
 
 ```vais
-U std/allocator
+use std/allocator
 
-F main() -> i64 {
+fn main() -> i64 {
     # Create arena from large buffer
     buffer := malloc(1048576)  # 1MB
     arena := BumpAllocator::from_buffer(buffer, 1048576)

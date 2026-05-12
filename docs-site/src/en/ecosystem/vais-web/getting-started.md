@@ -102,7 +102,7 @@ Open `app/page.vaisx` to write your first component.
   greeting := "Hello, VaisX!"
   count := $state(0)
 
-  F increment() {
+  fn increment() {
     count += 1
   }
 </script>

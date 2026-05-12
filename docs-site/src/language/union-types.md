@@ -32,7 +32,7 @@ O Value {
     b: bool
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Value { i: 42 }
     # v.i, v.f, v.b 모두 같은 메모리를 참조
     # 어떤 필드가 활성인지는 프로그래머가 관리
@@ -70,7 +70,7 @@ O FloatBits {
     bits: u64
 }
 
-F float_to_bits(val: f64) -> u64 {
+fn float_to_bits(val: f64) -> u64 {
     fb := FloatBits { f: val }
     fb.bits
 }

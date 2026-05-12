@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/dynload
+use std/dynload
 ```
 
 ## Overview
@@ -49,7 +49,7 @@ The `dynload` module provides comprehensive support for:
 Represents a loaded dynamic module.
 
 ```vais
-S ModuleHandle {
+struct ModuleHandle {
     handle: i64,      # dlopen handle
     path: i64,        # Path to the module (string pointer)
     version: i64,     # Module version (incremented on reload)
@@ -70,7 +70,7 @@ S ModuleHandle {
 Resource limits for sandboxed execution.
 
 ```vais
-S ResourceLimits {
+struct ResourceLimits {
     max_memory_bytes: i64,     # Maximum memory in bytes
     max_time_ms: i64,          # Maximum execution time in milliseconds
     max_stack_bytes: i64,      # Maximum stack size
@@ -91,7 +91,7 @@ S ResourceLimits {
 WASM sandbox handle for plugin execution.
 
 ```vais
-S WasmSandbox {
+struct WasmSandbox {
     handle: i64,
     capabilities: i64
 }
@@ -113,7 +113,7 @@ S WasmSandbox {
 WASM instance handle for calling functions.
 
 ```vais
-S WasmInstance {
+struct WasmInstance {
     handle: i64,
     sandbox: i64
 }
@@ -133,7 +133,7 @@ S WasmInstance {
 Configuration for hot reload.
 
 ```vais
-S HotReloadConfig {
+struct HotReloadConfig {
     source_path: i64,      # Path to source file
     output_dir: i64,       # Output directory for compiled modules
     debounce_ms: i64,      # Debounce time for file changes
@@ -152,7 +152,7 @@ S HotReloadConfig {
 Hot reloader handle.
 
 ```vais
-S HotReloader {
+struct HotReloader {
     handle: i64,
     version: i64,
     running: i64
@@ -213,9 +213,9 @@ S HotReloader {
 ### Basic Dynamic Loading
 
 ```vais
-U std/dynload
+use std/dynload
 
-F main() -> i64 {
+fn main() -> i64 {
     # Load a dynamic library
     module := load_module("/path/to/plugin.dylib")
 
@@ -228,7 +228,7 @@ F main() -> i64 {
 
         # Unload when done
         unload_module(module)
-    } E {
+    } else {
         # Error loading
         err := get_load_error()
         # Handle error
@@ -241,9 +241,9 @@ F main() -> i64 {
 ### WASM Sandbox with Capabilities
 
 ```vais
-U std/dynload
+use std/dynload
 
-F main() -> i64 {
+fn main() -> i64 {
     # Create restrictive sandbox
     sandbox := sandbox_restrictive()
 
@@ -271,9 +271,9 @@ F main() -> i64 {
 ### Hot Reload
 
 ```vais
-U std/dynload
+use std/dynload
 
-F main() -> i64 {
+fn main() -> i64 {
     # Create hot reloader for a source file
     reloader := hot_reloader_new("./src/plugin.vais")
     reloader = hot_reloader_start(reloader)
@@ -300,20 +300,20 @@ F main() -> i64 {
 ### Capability Checking
 
 ```vais
-U std/dynload
+use std/dynload
 
-F verify_plugin_safety(plugin_caps: i64) -> i64 {
+fn verify_plugin_safety(plugin_caps: i64) -> i64 {
     # Check if plugin has dangerous capabilities
     I has_dangerous_capabilities(plugin_caps) == 1 {
         # Warn user or reject plugin
         0
-    } E {
+    } else {
         # Safe to load
         1
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # Build capability set for a plugin
     caps := CAP_CONSOLE
     caps = add_capability(caps, CAP_TIME)

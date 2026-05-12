@@ -49,7 +49,7 @@ Vais는 4가지 캡처 모드를 제공합니다:
 값을 복사하여 캡처합니다. 원본 변수는 영향받지 않습니다:
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
 
     # x를 값으로 캡처 (복사)
@@ -67,7 +67,7 @@ F main() -> i64 {
 `move` 키워드를 사용하여 소유권을 클로저로 이전합니다:
 
 ```vais
-F process_data() -> i64 {
+fn process_data() -> i64 {
     data := 100
 
     # data의 소유권을 클로저로 이전
@@ -87,7 +87,7 @@ F process_data() -> i64 {
 불변 참조로 캡처합니다. 캡처된 변수를 읽을 수 있지만 수정할 수 없습니다:
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     counter := 42
 
     # 불변 참조로 캡처
@@ -107,7 +107,7 @@ F main() -> i64 {
 가변 참조로 캡처합니다. 클로저 내부에서 캡처된 변수를 수정할 수 있습니다:
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     counter := mut 0
 
     # 가변 참조로 캡처
@@ -131,12 +131,12 @@ F main() -> i64 {
 
 ```vais
 # 고차 함수: 함수를 파라미터로 받음
-F apply_twice(f, x: i64) -> i64 {
+fn apply_twice(f, x: i64) -> i64 {
     temp := f(x)
     f(temp)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     double := |n| n * 2
 
     result := apply_twice(double, 3)  # ((3 * 2) * 2) = 12
@@ -147,7 +147,7 @@ F main() -> i64 {
 ### 컬렉션과 함께 사용
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     numbers := vec![1, 2, 3, 4, 5]
 
     # map: 각 요소에 함수 적용
@@ -171,7 +171,7 @@ F main() -> i64 {
 여러 고차 함수를 연쇄적으로 사용할 수 있습니다:
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     result := vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         .filter(|x| x % 2 == 0)           # 짝수만
         .map(|x| x * x)                    # 제곱
@@ -187,11 +187,11 @@ F main() -> i64 {
 ### 커링(Currying)
 
 ```vais
-F make_adder(n: i64) {
+fn make_adder(n: i64) {
     |x| n + x
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     add_10 := make_adder(10)
 
     result1 := add_10(5)   # 15
@@ -204,13 +204,13 @@ F main() -> i64 {
 ### 콜백 패턴
 
 ```vais
-F process_async(data: i64, callback) -> i64 {
+fn process_async(data: i64, callback) -> i64 {
     # 비동기 처리 시뮬레이션
     processed := data * 2
     callback(processed)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := process_async(21, |x| {
         # 결과 처리
         x + 10
@@ -223,7 +223,7 @@ F main() -> i64 {
 ### 지연 실행
 
 ```vais
-F defer_execution(action) -> i64 {
+fn defer_execution(action) -> i64 {
     # 일부 초기화 작업
     init := 100
 
@@ -231,7 +231,7 @@ F defer_execution(action) -> i64 {
     action(init)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     defer_execution(|value| {
         # 지연된 작업
         value * 3

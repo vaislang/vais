@@ -3,7 +3,7 @@
 VaisX is a compile-time reactivity frontend framework workbench built on top of
 the Vais language. Current public claims are tied to the promoted Vais Web
 gates: runtime `61/77`, unit `390/390`, package `3272/3272`, full-build
-`24/24`.
+`24/24`, shared-schema product `9/9`.
 
 ## Features
 
@@ -22,7 +22,7 @@ Each component is written as a single file with the `.vaisx` extension. One file
   name := "VaisX"
   count := $state(0)
 
-  F increment() {
+  fn increment() {
     count += 1
   }
 </script>
@@ -74,7 +74,7 @@ VaisX uses the Vais language's type system and syntax directly. Component logic 
 | `mut name := value` | Mutable variable |
 | `I cond { }` | if conditional |
 | `E I cond { }` | else if |
-| `E { }` | else |
+| `else { }` | else |
 | `R value` | Return |
 
 ---
@@ -156,7 +156,7 @@ and package gates, not by historical phase numbers.
 
 | Item | VaisX | React | Vue 3 | Svelte |
 |---|---|---|---|---|
-| Runtime gate | 61/77 smoke | n/a | n/a | n/a |
+| Runtime gate | 61/77 smoke + shared schema 9/9 | n/a | n/a | n/a |
 | Reactivity model | Compile-time | Virtual DOM | Proxy | Compile-time |
 | Language | Vais | JSX/TSX | SFC + TSX | Svelte |
 | SSR/SSG | Built-in | Requires Next.js | Requires Nuxt | Requires SvelteKit |

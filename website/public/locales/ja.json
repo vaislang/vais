@@ -1,10 +1,10 @@
 {
   "meta": {
     "title": "Vais - AI最適化システムプログラミング言語",
-    "description": "VaisはネイティブLLVMパフォーマンスを備えた、AI コード生成のために設計されたトークン効率的なシステムプログラミング言語です。"
+    "description": "Vais は native LLVM performance と gate-backed public claims を持つ、AI code generation 向け systems programming language です。"
   },
   "nav": {
-    "compare": "比較",
+    "compare": "Gates",
     "performance": "パフォーマンス",
     "features": "特徴",
     "playground": "プレイグラウンド",
@@ -14,18 +14,18 @@
   },
   "hero": {
     "badge": "Certified Core + Promoted Runtime Gates",
-    "title": "<span class=\"gradient-text\">少ないトークン</span>で書き、<br><span class=\"gradient-text\">ネイティブパフォーマンス</span>を得る",
+    "title": "<span class=\"gradient-text\">clear Vais</span> を書き、<br><span class=\"gradient-text\">native performance</span> を得る",
     "subtitle": "Vais（Vibe AI Language for Systems）は、AIコード生成に最適化されたシステムプログラミング言語です。現在の公開基準は certified Core compiler と明示された promoted runtime gates です。",
     "tryBrowser": "ブラウザで試す",
     "install": "brew install vais"
   },
   "compare": {
-    "title": "トークン効率が重要",
-    "subtitle": "AIモデルはトークンごとに課金されます。Vaisは同等のプログラムで<strong>Rustより33%少ないトークン</strong>、<strong>Cより40%少ないトークン</strong>を使用します — 単一文字キーワード、式本体、自動returnがコードベース全体で積み重なります。",
+    "title": "Canonical Syntax, Gate-Backed Claims",
+    "subtitle": "Step 19 で旧 single-letter keyword form は削除されました。現在の公開 claim は canonical syntax と integrity、package、runtime、full-build、product schema などの named gates に紐づきます。",
     "vais": "Vais",
     "tokens": "トークン",
-    "barTitle": "トークン数 — 4つのベンチマークプログラム",
-    "barNote": "fibonacci + quicksort + http_types + linked_list (tiktoken cl100k_base)。<a href=\"https://github.com/vaislang/vais/blob/main/benches/COMPARISON.md\" style=\"color: var(--primary);\">ベンチマーク</a>を参照。"
+    "barTitle": "Gate Snapshot — 2026-05-12",
+    "barNote": "Baseline は現在の integrity manifest から生成されます。cross-package schema 15/15 と multi-domain product schema 9/9 が locked gate です。"
   },
   "performance": {
     "title": "ネイティブパフォーマンス",
@@ -38,8 +38,8 @@
     "title": "なぜVaisなのか？",
     "subtitle": "パフォーマンスを犠牲にすることなく、AI支援開発のためにゼロから設計されました。",
     "singleChar": {
-      "title": "単一文字キーワード",
-      "description": "関数は<code>F</code>、構造体は<code>S</code>、if/elseは<code>I</code>/<code>E</code>、ループは<code>L</code>、パターンマッチは<code>M</code>。最小限のトークン、最大限の明確性。"
+      "title": "Canonical Keywords",
+      "description": "<code>fn</code>、<code>struct</code>、<code>enum</code>、<code>else</code>、<code>match</code>、<code>return</code>、<code>use</code>、<code>pub</code> が canonical です。Retired single-letter form はもう受け付けません。"
     },
     "selfRecursion": {
       "title": "自己再帰演算子",
@@ -107,7 +107,7 @@
   "vaisx": {
     "badge": "新機能",
     "title": "VaisでWebアプリを構築",
-    "subtitle": "VaisX は Vais web framework workbench です。現在の公開 claim は runtime、unit、package、full-build gate に紐づきます。",
+    "subtitle": "VaisX は Vais web framework workbench です。現在の公開 claim は promoted runtime、unit、package、full-build、shared-schema product gates に紐づきます。",
     "compiler": {
       "title": "コンパイル時リアクティビティ",
       "description": "Reactive state analysis と DOM update generation は named gates が覆盖する範囲でのみ検証された implementation surface です。"
@@ -118,7 +118,7 @@
     },
     "runtime": {
       "title": "Promoted Runtime Gates",
-      "description": "現在の Vais Web baseline は runtime smoke 61/77、unit 390/390、package tests 3272/3272、full-build 24/24 です。Size claim には size gate が必要です。"
+      "description": "現在の Vais Web baseline は runtime smoke 61/77、unit 390/390、package tests 3272/3272、full-build 24/24、shared-schema product gate 9/9 です。Size claim には size gate が必要です。"
     },
     "learnMore": "詳しく見る",
     "github": "GitHub",

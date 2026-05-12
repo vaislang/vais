@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/async_io
+use std/async_io
 ```
 
 ## Overview
@@ -27,7 +27,7 @@ The `async_io` module provides asynchronous file I/O with buffered reading and w
 ### `AsyncFile`
 
 ```vais
-S AsyncFile {
+struct AsyncFile {
     fd: i64,
     path: str,
     mode: i64,
@@ -49,7 +49,7 @@ Async file handle.
 ### `AsyncFileReader`
 
 ```vais
-S AsyncFileReader {
+struct AsyncFileReader {
     file: AsyncFile,
     buffer: i64,
     buf_pos: i64,
@@ -69,7 +69,7 @@ Buffered line reader for async files.
 ### `AsyncFileWriter`
 
 ```vais
-S AsyncFileWriter {
+struct AsyncFileWriter {
     file: AsyncFile,
     buffer: i64,
     buf_pos: i64,
@@ -91,7 +91,7 @@ Buffered writer for async files.
 ### async_read_file
 
 ```vais
-F async_read_file(path: str) -> str
+fn async_read_file(path: str) -> str
 ```
 
 Read an entire file and return its content as a string. Returns `""` on error.
@@ -99,7 +99,7 @@ Read an entire file and return its content as a string. Returns `""` on error.
 ### async_write_file
 
 ```vais
-F async_write_file(path: str, content: str) -> i64
+fn async_write_file(path: str, content: str) -> i64
 ```
 
 Write a string to a file (creates/overwrites). Returns bytes written or `-1` on error.
@@ -107,7 +107,7 @@ Write a string to a file (creates/overwrites). Returns bytes written or `-1` on 
 ### async_copy_file
 
 ```vais
-F async_copy_file(src: str, dst: str) -> i64
+fn async_copy_file(src: str, dst: str) -> i64
 ```
 
 Copy a file from `src` to `dst`. Returns total bytes copied or `-1` on error.
@@ -115,9 +115,9 @@ Copy a file from `src` to `dst`. Returns total bytes copied or `-1` on error.
 ## Example
 
 ```vais
-U std/async_io
+use std/async_io
 
-F main() {
+fn main() {
     # Write a file
     async_write_file("/tmp/hello.txt", "Hello, World!")
 

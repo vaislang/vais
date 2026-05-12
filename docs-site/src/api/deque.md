@@ -5,13 +5,13 @@
 ## Import
 
 ```vais
-U std/deque
+use std/deque
 ```
 
 ## Struct
 
 ```vais
-S Deque { data: i64, head: i64, tail: i64, len: i64, cap: i64 }
+struct Deque { data: i64, head: i64, tail: i64, len: i64, cap: i64 }
 ```
 
 ## Methods
@@ -47,9 +47,9 @@ S Deque { data: i64, head: i64, tail: i64, len: i64, cap: i64 }
 ## Usage
 
 ```vais
-U std/deque
+use std/deque
 
-F main() -> i64 {
+fn main() -> i64 {
     dq := deque_new()
     dq.push_back(1)
     dq.push_front(0)

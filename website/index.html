@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vais - AI-Optimized Systems Programming Language</title>
-  <meta name="description" content="Vais is a token-efficient systems programming language designed for AI code generation with native LLVM performance.">
+  <meta name="description" content="Vais is a systems programming language designed for AI code generation with native LLVM performance and gate-backed public claims.">
   <meta property="og:title" content="Vais - AI-Optimized Systems Programming Language">
-  <meta property="og:description" content="Token-efficient syntax, LLVM backend, type inference. Write fewer tokens, get native performance.">
+  <meta property="og:description" content="Canonical syntax, LLVM backend, type inference, and gate-backed public claims. Write clear Vais, get native performance.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="/logo-icon.png">
   <meta property="og:url" content="https://vaislang.dev/">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Vais - AI-Optimized Systems Programming Language">
-  <meta name="twitter:description" content="Token-efficient syntax, LLVM backend, type inference. Write fewer tokens, get native performance.">
+  <meta name="twitter:description" content="Canonical syntax, LLVM backend, type inference, and gate-backed public claims. Write clear Vais, get native performance.">
   <meta name="twitter:image" content="/logo-icon.png">
   <link rel="canonical" href="https://vaislang.dev/">
   <link rel="icon" type="image/png" href="/logo-icon.png">
@@ -63,7 +63,7 @@
       <div class="hero-content">
         <div class="hero-badge" data-i18n="hero.badge">Certified Core + Promoted Runtime Gates</div>
         <h1 class="hero-title" data-i18n="hero.title" data-i18n-html>
-          Write <span class="gradient-text">fewer tokens</span>,<br>
+          Write <span class="gradient-text">clear Vais</span>,<br>
           get <span class="gradient-text">native performance</span>
         </h1>
         <p class="hero-subtitle" data-i18n="hero.subtitle">
@@ -89,30 +89,30 @@
               <button class="code-tab" data-tab="2">match.vais</button>
             </div>
           </div>
-          <pre class="code-body" aria-label="Vais code example"><code class="code-panel active" data-panel="0"><span class="kw">F</span> <span class="fn">fib</span>(<span class="param">n</span>: <span class="type">i64</span>) -> <span class="type">i64</span> {
+          <pre class="code-body" aria-label="Vais code example"><code class="code-panel active" data-panel="0"><span class="kw">fn</span> <span class="fn">fib</span>(<span class="param">n</span>: <span class="type">i64</span>) -> <span class="type">i64</span> {
   <span class="kw">I</span> n &lt;= <span class="num">1</span> { n }
-  <span class="kw">E</span> { <span class="self">@</span>(n - <span class="num">1</span>) + <span class="self">@</span>(n - <span class="num">2</span>) }
+  <span class="kw">else</span> { <span class="self">@</span>(n - <span class="num">1</span>) + <span class="self">@</span>(n - <span class="num">2</span>) }
 }
 
-<span class="kw">F</span> <span class="fn">main</span>() {
+<span class="kw">fn</span> <span class="fn">main</span>() {
   result <span class="op">:=</span> <span class="fn">fib</span>(<span class="num">10</span>)
   <span class="fn">puts</span>(<span class="str">"fib(10) = ~{result}"</span>)
-}</code><code class="code-panel" data-panel="1"><span class="kw">S</span> <span class="type">Vec2</span> { x: <span class="type">f64</span>, y: <span class="type">f64</span> }
+}</code><code class="code-panel" data-panel="1"><span class="kw">struct</span> <span class="type">Vec2</span> { x: <span class="type">f64</span>, y: <span class="type">f64</span> }
 
-<span class="kw">F</span> <span class="fn">len</span>(v: <span class="type">Vec2</span>) -> <span class="type">f64</span> {
+<span class="kw">fn</span> <span class="fn">len</span>(v: <span class="type">Vec2</span>) -> <span class="type">f64</span> {
   <span class="fn">sqrt</span>(v.x * v.x + v.y * v.y)
 }
 
-<span class="kw">F</span> <span class="fn">main</span>() {
+<span class="kw">fn</span> <span class="fn">main</span>() {
   p <span class="op">:=</span> <span class="type">Vec2</span> { x: <span class="num">3.0</span>, y: <span class="num">4.0</span> }
   <span class="fn">puts</span>(<span class="str">"len = ~{<span class="fn">len</span>(p)}"</span>)
-}</code><code class="code-panel" data-panel="2"><span class="kw">E</span> <span class="type">Shape</span> {
+}</code><code class="code-panel" data-panel="2"><span class="kw">enum</span> <span class="type">Shape</span> {
   Circle(<span class="type">f64</span>),
   Rect(<span class="type">f64</span>, <span class="type">f64</span>),
 }
 
-<span class="kw">F</span> <span class="fn">area</span>(s: <span class="type">Shape</span>) -> <span class="type">f64</span> {
-  <span class="kw">M</span> s {
+<span class="kw">fn</span> <span class="fn">area</span>(s: <span class="type">Shape</span>) -> <span class="type">f64</span> {
+  <span class="kw">match</span> s {
     Circle(r) => <span class="num">3.14159</span> * r * r,
     Rect(w, h) => w * h,
   }
@@ -125,32 +125,31 @@
   <!-- Token Comparison Section -->
   <section class="compare" id="compare">
     <div class="container">
-      <h2 class="section-title" data-i18n="compare.title">Token Efficiency Matters</h2>
+      <h2 class="section-title" data-i18n="compare.title">Canonical Syntax, Gate-Backed Claims</h2>
       <p class="section-subtitle" data-i18n="compare.subtitle" data-i18n-html>
-        AI models pay per token. Vais uses <strong>33% fewer tokens than Rust</strong> and <strong>40% fewer than C</strong>
-        for equivalent programs — single-char keywords, expression bodies, and auto-return add up across codebases.
+        Step 19 retired the old single-letter keyword forms. Current public claims are tied to canonical syntax and named gates, including integrity, package, runtime, full-build, and product schema checks.
       </p>
       <div class="compare-grid">
         <!-- Vais (always visible) -->
         <div class="compare-card compare-card-vais">
           <div class="compare-header">
             <span class="compare-lang">Vais</span>
-            <span class="compare-tokens">88 tokens</span>
+            <span class="compare-tokens">canonical</span>
           </div>
-          <pre class="compare-code"><code><span class="kw">E</span> <span class="type">Shape</span> { Circle(<span class="type">f64</span>), Rect(<span class="type">f64</span>, <span class="type">f64</span>) }
+          <pre class="compare-code"><code><span class="kw">enum</span> <span class="type">Shape</span> { Circle(<span class="type">f64</span>), Rect(<span class="type">f64</span>, <span class="type">f64</span>) }
 
-<span class="kw">F</span> <span class="fn">area</span>(s: <span class="type">Shape</span>) -> <span class="type">f64</span> {
-  <span class="kw">M</span> s {
+<span class="kw">fn</span> <span class="fn">area</span>(s: <span class="type">Shape</span>) -> <span class="type">f64</span> {
+  <span class="kw">match</span> s {
     Circle(r) => <span class="num">3.14</span> * r * r,
     Rect(w, h) => w * h,
   }
 }
 
-<span class="kw">F</span> <span class="fn">classify</span>(s: <span class="type">Shape</span>) -> <span class="type">str</span> {
+<span class="kw">fn</span> <span class="fn">classify</span>(s: <span class="type">Shape</span>) -> <span class="type">str</span> {
   a <span class="op">:=</span> <span class="fn">area</span>(s)
   <span class="kw">I</span> a > <span class="num">100.0</span> { <span class="str">"large"</span> }
-  <span class="kw">E</span> <span class="kw">I</span> a > <span class="num">10.0</span> { <span class="str">"medium"</span> }
-  <span class="kw">E</span> { <span class="str">"small"</span> }
+  <span class="kw">else</span> <span class="kw">I</span> a > <span class="num">10.0</span> { <span class="str">"medium"</span> }
+  <span class="kw">else</span> { <span class="str">"small"</span> }
 }</code></pre>
         </div>
         <!-- Right side: tabbed language comparison -->
@@ -162,7 +161,7 @@
               <button class="compare-tab" data-lang="go">Go</button>
               <button class="compare-tab" data-lang="c">C</button>
             </div>
-            <span class="compare-tokens" id="compare-token-count">97 tokens</span>
+            <span class="compare-tokens" id="compare-token-count">reference</span>
           </div>
           <!-- Rust -->
           <pre class="compare-code compare-lang-panel active" data-lang="rust"><code><span class="kw">enum</span> <span class="type">Shape</span> { Circle(<span class="type">f64</span>), Rect(<span class="type">f64</span>, <span class="type">f64</span>) }
@@ -243,46 +242,46 @@
         </div>
       </div>
       <div class="compare-bar-section">
-        <h3 class="compare-bar-title" data-i18n="compare.barTitle">Token Count — 4 Benchmark Programs</h3>
+        <h3 class="compare-bar-title" data-i18n="compare.barTitle">Gate Snapshot — 2026-05-12</h3>
         <div class="compare-bars">
           <div class="bar-item">
-            <span class="bar-label">Vais</span>
+            <span class="bar-label">Integrity</span>
             <div class="bar-track">
-              <div class="bar-fill bar-vais" style="width: 60%"></div>
+              <div class="bar-fill bar-vais" style="width: 100%"></div>
             </div>
-            <span class="bar-value">721</span>
+            <span class="bar-value">OK</span>
           </div>
           <div class="bar-item">
-            <span class="bar-label">Python</span>
+            <span class="bar-label">VaisDB runtime</span>
             <div class="bar-track">
-              <div class="bar-fill bar-python" style="width: 73%"></div>
+              <div class="bar-fill bar-python" style="width: 100%"></div>
             </div>
-            <span class="bar-value">889</span>
+            <span class="bar-value">34/34</span>
           </div>
           <div class="bar-item">
-            <span class="bar-label">Go</span>
+            <span class="bar-label">Server runtime</span>
             <div class="bar-track">
-              <div class="bar-fill bar-go" style="width: 74%"></div>
+              <div class="bar-fill bar-go" style="width: 100%"></div>
             </div>
-            <span class="bar-value">893</span>
+            <span class="bar-value">20/20</span>
           </div>
           <div class="bar-item">
-            <span class="bar-label">Rust</span>
+            <span class="bar-label">Web full build</span>
             <div class="bar-track">
-              <div class="bar-fill bar-rust" style="width: 89%"></div>
+              <div class="bar-fill bar-rust" style="width: 100%"></div>
             </div>
-            <span class="bar-value">1,080</span>
+            <span class="bar-value">24/24</span>
           </div>
           <div class="bar-item">
-            <span class="bar-label">C</span>
+            <span class="bar-label">Product schema</span>
             <div class="bar-track">
               <div class="bar-fill bar-c" style="width: 100%"></div>
             </div>
-            <span class="bar-value">1,211</span>
+            <span class="bar-value">9/9</span>
           </div>
         </div>
         <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.75rem; text-align: center;" data-i18n="compare.barNote" data-i18n-html>
-          fibonacci + quicksort + http_types + linked_list (tiktoken cl100k_base). See <a href="https://github.com/vaislang/vais/blob/main/benches/COMPARISON.md" style="color: var(--primary);">benchmarks</a>.
+          Baseline is generated from the current integrity manifest: cross-package schema 15/15 and multi-domain product schema 9/9 are locked gates.
         </p>
       </div>
     </div>
@@ -369,9 +368,9 @@
       </p>
       <div class="features-grid">
         <div class="feature-card">
-          <div class="feature-icon">V</div>
-          <h3 data-i18n="features.singleChar.title">Single-Char Keywords</h3>
-          <p data-i18n="features.singleChar.description" data-i18n-html><code>F</code> for function, <code>S</code> for struct, <code>I</code>/<code>E</code> for if/else, <code>L</code> for loop, <code>M</code> for match. Minimal tokens, maximum clarity.</p>
+          <div class="feature-icon">fn</div>
+          <h3 data-i18n="features.singleChar.title">Canonical Keywords</h3>
+          <p data-i18n="features.singleChar.description" data-i18n-html><code>fn</code>, <code>struct</code>, <code>enum</code>, <code>else</code>, <code>match</code>, <code>return</code>, <code>use</code>, and <code>pub</code> are canonical. Retired single-letter forms are no longer accepted.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">@</div>
@@ -432,7 +431,7 @@
     <div class="container">
       <span class="section-badge" data-i18n="ecosystem.badge">Promoted Gates</span>
       <h2 class="section-title" data-i18n="ecosystem.title">Full-Stack Vais Ecosystem</h2>
-      <p class="section-subtitle" data-i18n="ecosystem.subtitle" data-i18n-html>Database, server, and web packages are tracked by explicit package, runtime, unit, and full-build gates. They are not presented as product-complete v1 releases.</p>
+      <p class="section-subtitle" data-i18n="ecosystem.subtitle" data-i18n-html>Database, server, and web packages are tracked by explicit package, runtime, unit, full-build, cross-package schema, and shared-schema product gates. They are not presented as product-complete v1 releases.</p>
 
       <div class="vaisx-grid">
         <div class="vaisx-card">
@@ -443,12 +442,12 @@
         <div class="vaisx-card">
           <div class="vaisx-card-icon">🚀</div>
           <h3 data-i18n="ecosystem.server.title">vais-server — HTTP Framework</h3>
-          <p data-i18n="ecosystem.server.description">HTTP framework workbench with server runtime smoke 16/16. Broader REST, GraphQL, WebSocket, auth, and deployment guarantees require dedicated gates.</p>
+          <p data-i18n="ecosystem.server.description">HTTP framework workbench with server runtime smoke 20/20. Broader REST, GraphQL, WebSocket, auth, and deployment guarantees require dedicated gates.</p>
         </div>
         <div class="vaisx-card">
           <div class="vaisx-card-icon">🌐</div>
           <h3 data-i18n="ecosystem.vaisweb.title">vais-web (VaisX) — Web Framework</h3>
-          <p data-i18n="ecosystem.vaisweb.description">Web framework workbench with runtime smoke 61/77, unit 390/390, ecosystem package tests 3272/3272, and full-build 24/24. Size claims require a size gate.</p>
+          <p data-i18n="ecosystem.vaisweb.description">Web framework workbench with runtime smoke 61/77, unit 390/390, ecosystem package tests 3272/3272, full-build 24/24, and shared-schema product gate 9/9. Size claims require a size gate.</p>
         </div>
       </div>
 

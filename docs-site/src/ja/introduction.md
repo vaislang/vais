@@ -1,12 +1,12 @@
 # Vaisプログラミング言語
 
-**Vais** (Vibe AI Language for Systems) は、AI支援開発とLLMコード生成に最適化された、トークン効率の高いシステムプログラミング言語です。トークン使用量を最小化しながらコード表現力を最大化するよう設計されています。
+**Vais** (Vibe AI Language for Systems) は、AI支援開発とLLMコード生成に最適化されたシステムプログラミング言語です。現在の公開説明は canonical syntax と gate-backed claims を基準にしています。
 
 > **現在の公開ステータス:** Vais は certified Core compiler と明示された promoted runtime gate を公開基準としています。product-complete v1.0 release ではありません。公開 claim の境界は [`PUBLIC_STATUS.md`](https://github.com/vaislang/vais/blob/main/PUBLIC_STATUS.md) を参照してください。
 
 ## 主な特徴
 
-- **単一文字キーワード** - `F`(function)、`S`(struct)、`E`(enum/else)、`I`(if)、`L`(loop)、`M`(match)
+- **Canonical keywords** - `fn`, `struct`, `enum`, `else`, `match`, `return`, `use`, `pub` が現在の標準です。`F/S/E/EN/EL/M/R/T/U/P/W/X` は retired form です。
 - **自己再帰演算子 `@`** - 現在の関数を再帰的に呼び出す
 - **式指向** - すべてが式として値を返す
 - **LLVMバックエンド** - LLVM 17による promoted native codegen path
@@ -21,13 +21,13 @@
 
 ```vais
 # 自己再帰によるフィボナッチ
-F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
+fn fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
 
 # 構造体定義
-S Point { x:f64, y:f64 }
+struct Point { x:f64, y:f64 }
 
 # 配列の合計をループで計算
-F sum(arr:[i64])->i64 {
+fn sum(arr:[i64])->i64 {
     s := 0
     L x:arr { s += x }
     s
@@ -38,12 +38,12 @@ F sum(arr:[i64])->i64 {
 
 | キーワード | 意味 | 例 |
 |---------|---------|---------|
-| `F` | Function | `F add(a:i64,b:i64)->i64=a+b` |
-| `S` | Struct | `S Point{x:f64,y:f64}` |
-| `E` | Enum/Else | `E Option<T>{Some(T),None}` |
-| `I` | If | `I x>0{1}E{-1}` |
-| `L` | Loop | `L i:0..10{print(i)}` |
-| `M` | Match | `M opt{Some(v)=>v,None=>0}` |
+| `fn` | Function | `fn add(a:i64,b:i64)->i64=a+b` |
+| `struct` | Struct | `struct Point{x:f64,y:f64}` |
+| `enum` / `else` | Enum / Else | `enum Option<T>{Some(T),None}` / `else {-1}` |
+| `I` | If | `I x>0{1}else{-1}` |
+| `LF` | Range loop | `LF i:0..10{print(i)}` |
+| `match` | Match | `match opt{Some(v)=>v,None=>0}` |
 | `@` | Self-call | `@(n-1)` (再帰呼び出し) |
 | `:=` | Infer & assign | `x := 42` |
 

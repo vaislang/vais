@@ -11,7 +11,7 @@ One `.vaisx` file equals one component. Other components are used as tags inside
 ```vais
 <!-- Button.vaisx -->
 <script>
-  P { label: String }
+  pub { label: String }
 </script>
 
 <template>
@@ -48,7 +48,7 @@ Declare the props a component accepts using a `P { }` block. Each field consists
 
 ```vais
 <script>
-  P {
+  pub {
     title: String,
     count: Int,
     isActive: Bool,
@@ -70,7 +70,7 @@ Default values can be specified for props.
 
 ```vais
 <script>
-  P {
+  pub {
     title: String = "Untitled",
     size: String = "medium",
     disabled: Bool = false
@@ -123,16 +123,16 @@ Use `emit` to pass data from a child component to the parent.
 ```vais
 <!-- Counter.vaisx -->
 <script>
-  P { initialValue: Int = 0 }
+  pub { initialValue: Int = 0 }
 
   count := $state(initialValue)
 
-  F increment() {
+  fn increment() {
     count += 1
     emit change(count)   # Pass new value to parent
   }
 
-  F decrement() {
+  fn decrement() {
     count -= 1
     emit change(count)
   }
@@ -158,7 +158,7 @@ Listen to child component events with `@eventName={handler}`.
 
   total := $state(0)
 
-  F handleChange(newValue: Int) {
+  fn handleChange(newValue: Int) {
     total = newValue
     console.log("Counter changed:", newValue)
   }
@@ -180,16 +180,16 @@ A component can emit multiple events.
 ```vais
 <!-- SearchInput.vaisx -->
 <script>
-  P { placeholder: String = "Search..." }
+  pub { placeholder: String = "Search..." }
 
   query := $state("")
 
-  F handleInput(e) {
+  fn handleInput(e) {
     query = e.target.value
     emit input(query)     # Emitted on each keystroke
   }
 
-  F handleSubmit() {
+  fn handleSubmit() {
     emit submit(query)    # Emitted on submit
     emit clear()          # Event with no arguments
   }
@@ -316,7 +316,7 @@ Data from the child component can be used within the slot content.
 ```vais
 <!-- List.vaisx -->
 <script>
-  P { items: Array<Item> }
+  pub { items: Array<Item> }
 </script>
 
 <template>
@@ -355,14 +355,14 @@ Provide data from a parent component using `setContext`.
 <script>
   import { setContext } from "vaisx"
 
-  P {
+  pub {
     theme: String = "light"
   }
 
   # Accessible from all descendant components
   setContext("theme", {
     current: theme,
-    toggle: F() {
+    toggle: fn() {
       # Theme toggle logic
     }
   })
@@ -406,7 +406,7 @@ Combining `$state` with context means descendant components automatically update
   user := $state(null)
   isLoading := $state(true)
 
-  A F login(credentials) {
+  A fn login(credentials) {
     isLoading = true
     result := await authenticate(credentials)
     user = result.user
@@ -414,7 +414,7 @@ Combining `$state` with context means descendant components automatically update
     emit login(user)
   }
 
-  F logout() {
+  fn logout() {
     user = null
     emit logout()
   }
@@ -462,7 +462,7 @@ Components declared with `<script context="server">` are rendered only on the se
 ```vais
 <!-- BlogPost.vaisx — server component -->
 <script context="server">
-  P { slug: String }
+  pub { slug: String }
 
   # Runs on server only — direct DB access is allowed
   post := getPostBySlug(slug)
@@ -485,7 +485,7 @@ When a client component is used inside a server component, only that portion inc
   import BlogPost from "../components/BlogPost.vaisx"
   import LikeButton from "../components/LikeButton.vaisx"  # Client component
 
-  P { slug: String }
+  pub { slug: String }
   post := getPostBySlug(slug)
 </script>
 
@@ -509,7 +509,7 @@ VaisX is based on compile-time reactivity, so lifecycle is handled with `$effect
     console.log("Component mounted")
 
     # Cleanup function: runs when the component is destroyed
-    R () => {
+    return () => {
       console.log("Component destroyed")
     }
   }
@@ -536,9 +536,9 @@ VaisX is based on compile-time reactivity, so lifecycle is handled with `$effect
   import PostList from "./PostList.vaisx"
 
   #[server]
-  A F load() -> PageData {
+  A fn load() -> PageData {
     posts := await fetchPosts()
-    R PageData { posts }
+    return PageData { posts }
   }
 </script>
 
@@ -550,7 +550,7 @@ VaisX is based on compile-time reactivity, so lifecycle is handled with `$effect
 ```vais
 <!-- PostList.vaisx — presentation only -->
 <script>
-  P { posts: Array<Post> }
+  pub { posts: Array<Post> }
 </script>
 
 <template>
@@ -570,15 +570,15 @@ Extract reactivity logic into a regular Vais module to reuse across multiple com
 
 ```vais
 <!-- lib/useCounter.vais -->
-F useCounter(initial: Int = 0) {
+fn useCounter(initial: Int = 0) {
   count := $state(initial)
   doubled := $derived(count * 2)
 
-  F increment() { count += 1 }
-  F decrement() { count -= 1 }
-  F reset() { count = initial }
+  fn increment() { count += 1 }
+  fn decrement() { count -= 1 }
+  fn reset() { count = initial }
 
-  R { count, doubled, increment, decrement, reset }
+  return { count, doubled, increment, decrement, reset }
 }
 ```
 

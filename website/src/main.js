@@ -95,7 +95,7 @@ document.querySelectorAll('.code-tab').forEach((tab) => {
 });
 
 // Compare language tabs
-const tokenCounts = { rust: '97 tokens', python: '112 tokens', go: '108 tokens', c: '115 tokens' };
+const tokenCounts = { rust: 'reference', python: 'reference', go: 'reference', c: 'reference' };
 document.querySelectorAll('.compare-tab').forEach((tab) => {
   tab.addEventListener('click', () => {
     const lang = tab.dataset.lang;

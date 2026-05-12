@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/collections
+use std/collections
 ```
 
 ## Re-exported Modules
@@ -24,7 +24,7 @@ Importing `std/collections` gives access to:
 Doubly-linked list included directly in this module.
 
 ```vais
-S LinkedList { head: i64, tail: i64, len: i64 }
+struct LinkedList { head: i64, tail: i64, len: i64 }
 ```
 
 | Method | Signature | Description |
@@ -46,7 +46,7 @@ S LinkedList { head: i64, tail: i64, len: i64 }
 Fixed-capacity circular buffer included directly in this module.
 
 ```vais
-S RingBuffer { data: i64, capacity: i64, head: i64, tail: i64, len: i64 }
+struct RingBuffer { data: i64, capacity: i64, head: i64, tail: i64, len: i64 }
 ```
 
 | Method | Signature | Description |
@@ -64,9 +64,9 @@ S RingBuffer { data: i64, capacity: i64, head: i64, tail: i64, len: i64 }
 ## Usage
 
 ```vais
-U std/collections
+use std/collections
 
-F main() -> i64 {
+fn main() -> i64 {
     list := LinkedList::new()
     list.push_back(1)
     list.push_back(2)

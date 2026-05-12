@@ -152,9 +152,9 @@ src/
 ### Usage from Vais Code
 
 ```vais
-U vaisdb::{Database, QueryResult};
+use vaisdb::{Database, QueryResult};
 
-F main() {
+fn main() {
     db := Database::open("knowledge.vaisdb")?;
 
     # Store a document

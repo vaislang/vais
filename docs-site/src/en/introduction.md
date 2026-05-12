@@ -1,6 +1,6 @@
 # Vais Programming Language
 
-**Vais** (Vibe AI Language for Systems) is an AI-optimized systems programming language designed for maximum token efficiency and developer productivity.
+**Vais** (Vibe AI Language for Systems) is an AI-optimized systems programming language designed for clear generated code, native execution, and gate-backed public claims.
 
 > **Current public status:** Vais is currently presented as a certified Core
 > compiler plus named promoted runtime gates, not a product-complete v1.0
@@ -9,12 +9,12 @@
 
 ## Key Features
 
-### Token-Efficient Syntax
+### Canonical Syntax
 
-- **Single-Character Keywords**: `F` for function, `S` for struct, `E` for enum/else, `I` for if, `L` for loop, `M` for match, `R` for return
+- **Canonical Keywords**: `fn`, `struct`, `enum`, `else`, `match`, `return`, `use`, and `pub` are the current forms. Retired forms `F/S/E/EN/EL/M/R/T/U/P/W/X` are no longer accepted.
 - **Self-Recursion Operator `@`**: Call the current function recursively with minimal tokens
 - **Concise Operators**: `:=` for variable binding, `?` for error propagation, `!` for unwrap, `|>` for piping
-- **50-70% fewer tokens** compared to Rust/C++ in AI-generated code
+- **Gate-backed claims**: syntax, runtime, package, and product statements are tied to named gates rather than historical phase claims
 
 ### Modern Type System
 
@@ -38,7 +38,7 @@
 ### Advanced Features
 
 - **Expression-Oriented**: Everything returns a value, no statements vs expressions distinction
-- **Pattern Matching**: Exhaustive matching with `M` keyword
+- **Pattern Matching**: Exhaustive matching with `match`
 - **Error Handling**: `Result<T,E>` and `Option<T>` types with `?` try operator
 - **Async/Await**: First-class async support with `A` and `Y` keywords
 - **Macro System**: Declarative macros for metaprogramming
@@ -47,7 +47,7 @@
 
 Vais is built from the ground up to excel in AI-assisted development:
 
-- **Token Efficiency**: Single-character keywords minimize token usage in LLM context windows
+- **Clarity for AI-generated code**: canonical keywords align generated code with the current lexer and public docs
 - **Self-Hosting Workbench**: 50,000+ lines of Vais compiler sources used for
   bootstrap and conformance work
 - **Gate-backed status**: Current guarantees are the certified Core and promoted
@@ -109,7 +109,7 @@ Outputs:
 ### Hello World
 
 ```vais
-F main() {
+fn main() {
     puts("Hello, Vais!")
 }
 ```
@@ -118,9 +118,9 @@ F main() {
 
 ```vais
 # Fibonacci with @ operator
-F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
 
-F main() {
+fn main() {
     puts("fib(10) = ")
     print_i64(fib(10))  # Prints: 55
 }
@@ -129,15 +129,15 @@ F main() {
 ### Structs and Methods
 
 ```vais
-S Point { x: f64, y: f64 }
+struct Point { x: f64, y: f64 }
 
-X Point {
-    F distance(self) -> f64 {
+impl Point {
+    fn distance(self) -> f64 {
         sqrt(self.x * self.x + self.y * self.y)
     }
 }
 
-F main() {
+fn main() {
     p := Point { x: 3.0, y: 4.0 }
     print_f64(p.distance())  # Prints: 5.0
 }
@@ -146,10 +146,10 @@ F main() {
 ### Pattern Matching
 
 ```vais
-E Option<T> { Some(T), None }
+enum Option<T> { Some(T), None }
 
-F unwrap_or<T>(opt: Option<T>, default: T) -> T {
-    M opt {
+fn unwrap_or<T>(opt: Option<T>, default: T) -> T {
+    match opt {
         Some(v) => v,
         None => default
     }
@@ -159,14 +159,14 @@ F unwrap_or<T>(opt: Option<T>, default: T) -> T {
 ### Error Handling
 
 ```vais
-E Result<T, E> { Ok(T), Err(E) }
+enum Result<T, E> { Ok(T), Err(E) }
 
-F divide(a: i64, b: i64) -> Result<i64, str> {
-    I b == 0 { R Err("Division by zero") }
+fn divide(a: i64, b: i64) -> Result<i64, str> {
+    I b == 0 { return Err("Division by zero") }
     Ok(a / b)
 }
 
-F compute() -> Result<i64, str> {
+fn compute() -> Result<i64, str> {
     x := divide(10, 2)?  # Propagates error if Err
     y := divide(x, 0)?   # Returns Err("Division by zero")
     Ok(y)

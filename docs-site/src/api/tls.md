@@ -7,7 +7,7 @@
 ## Import
 
 ```vais
-U std/tls
+use std/tls
 ```
 
 ## Features
@@ -111,10 +111,10 @@ Active TLS connection.
 ## Usage
 
 ```vais
-U std/tls
-U std/net
+use std/tls
+use std/net
 
-F main() -> i64 {
+fn main() -> i64 {
     ctx := TlsContext::client()
     stream := TcpStream.connect("93.184.216.34", 443)
     conn := TlsConn::new(stream.fd, ctx.handle)

@@ -25,25 +25,25 @@ G ERROR_INVALID_INPUT: i64 = 2
 G ERROR_PERMISSION_DENIED: i64 = 3
 
 # 함수에서 에러 코드 반환
-F read_config(path: str) -> i64 {
+fn read_config(path: str) -> i64 {
     I path.len() == 0 {
-        R ERROR_INVALID_INPUT
+        return ERROR_INVALID_INPUT
     }
 
     # 파일 읽기 시뮬레이션
-    R SUCCESS
+    return SUCCESS
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     status := read_config("")
 
     I status == SUCCESS {
         puts("Configuration loaded")
-    } E I status == ERROR_INVALID_INPUT {
+    } else I status == ERROR_INVALID_INPUT {
         puts("Error: Invalid file path")
-    } E I status == ERROR_FILE_NOT_FOUND {
+    } else I status == ERROR_FILE_NOT_FOUND {
         puts("Error: File not found")
-    } E {
+    } else {
         puts("Error: Unknown error")
     }
 
@@ -57,18 +57,18 @@ F main() -> i64 {
 
 ```vais
 # errors.vais - 에러 정의 모듈
-S ErrorCode {
+struct ErrorCode {
     code: i64
     message: str
 }
 
-F error_success() -> ErrorCode = ErrorCode { code: 0, message: "Success" }
-F error_not_found() -> ErrorCode = ErrorCode { code: 1, message: "Not found" }
-F error_invalid_arg() -> ErrorCode = ErrorCode { code: 2, message: "Invalid argument" }
-F error_io() -> ErrorCode = ErrorCode { code: 3, message: "I/O error" }
+fn error_success() -> ErrorCode = ErrorCode { code: 0, message: "Success" }
+fn error_not_found() -> ErrorCode = ErrorCode { code: 1, message: "Not found" }
+fn error_invalid_arg() -> ErrorCode = ErrorCode { code: 2, message: "Invalid argument" }
+fn error_io() -> ErrorCode = ErrorCode { code: 3, message: "I/O error" }
 
-F is_error(err: ErrorCode) -> bool = err.code != 0
-F error_message(err: ErrorCode) -> str = err.message
+fn is_error(err: ErrorCode) -> bool = err.code != 0
+fn error_message(err: ErrorCode) -> str = err.message
 ```
 
 ## 2. Option 패턴
@@ -77,24 +77,24 @@ F error_message(err: ErrorCode) -> str = err.message
 
 ```vais
 # Option 구조체 정의
-E Option<T> {
+enum Option<T> {
     Some(T),
     None
 }
 
 # Option을 반환하는 함수
-F find_user(id: i64) -> Option<str> {
+fn find_user(id: i64) -> Option<str> {
     I id == 1 {
-        R Option.Some("Alice")
+        return Option.Some("Alice")
     }
-    R Option.None
+    return Option.None
 }
 
 # Option 값 처리
-F main() -> i64 {
+fn main() -> i64 {
     user := find_user(1)
 
-    M user {
+    match user {
         Option.Some(name) => puts("Found user: {name}"),
         Option.None => puts("User not found")
     }
@@ -108,31 +108,31 @@ F main() -> i64 {
 여러 Option 연산을 연쇄적으로 수행합니다:
 
 ```vais
-S User {
+struct User {
     id: i64
     name: str
     email: str
 }
 
 # Option 반환 함수들
-F find_user_by_id(id: i64) -> Option<User> {
+fn find_user_by_id(id: i64) -> Option<User> {
     I id > 0 {
-        R Option.Some(User { id: id, name: "User", email: "user@example.com" })
+        return Option.Some(User { id: id, name: "User", email: "user@example.com" })
     }
-    R Option.None
+    return Option.None
 }
 
-F get_email(user: User) -> Option<str> {
+fn get_email(user: User) -> Option<str> {
     I user.email.len() > 0 {
-        R Option.Some(user.email)
+        return Option.Some(user.email)
     }
-    R Option.None
+    return Option.None
 }
 
 # 함수 조합
-F get_user_email(user_id: i64) -> Option<str> {
+fn get_user_email(user_id: i64) -> Option<str> {
     user := find_user_by_id(user_id)
-    M user {
+    match user {
         Option.Some(u) => get_email(u),
         Option.None => Option.None
     }
@@ -145,26 +145,26 @@ F get_user_email(user_id: i64) -> Option<str> {
 
 ```vais
 # Result 구조체 정의
-E Result<T> {
+enum Result<T> {
     Ok(T),
     Err(str)
 }
 
 # Result를 반환하는 함수
-F parse_number(s: str) -> Result<i64> {
+fn parse_number(s: str) -> Result<i64> {
     # 간단한 파싱 (실제로는 더 복잡함)
     I s.len() == 0 {
-        R Result.Err("Empty string")
+        return Result.Err("Empty string")
     }
 
     # 성공 케이스
-    R Result.Ok(42)
+    return Result.Ok(42)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := parse_number("123")
 
-    M result {
+    match result {
         Result.Ok(num) => puts("Parsed: {num}"),
         Result.Err(err) => puts("Error: {err}")
     }
@@ -178,41 +178,41 @@ F main() -> i64 {
 에러를 상위 함수로 전파합니다:
 
 ```vais
-E FileError {
+enum FileError {
     NotFound,
     PermissionDenied,
     IoError
 }
 
-E Result<T> {
+enum Result<T> {
     Ok(T),
     Err(FileError)
 }
 
 # 파일 읽기 함수
-F read_file(path: str) -> Result<str> {
+fn read_file(path: str) -> Result<str> {
     I path.len() == 0 {
-        R Result.Err(FileError.NotFound)
+        return Result.Err(FileError.NotFound)
     }
 
     # 파일 내용 읽기
     content := "file content"
-    R Result.Ok(content)
+    return Result.Ok(content)
 }
 
 # 파일 처리 함수 (에러 전파)
-F process_file(path: str) -> Result<i64> {
+fn process_file(path: str) -> Result<i64> {
     content := read_file(path)
 
-    M content {
+    match content {
         Result.Ok(data) => {
             # 데이터 처리
             line_count := 1
-            R Result.Ok(line_count)
+            return Result.Ok(line_count)
         },
         Result.Err(err) => {
             # 에러 전파
-            R Result.Err(err)
+            return Result.Err(err)
         }
     }
 }
@@ -223,12 +223,12 @@ F process_file(path: str) -> Result<i64> {
 ### 기본값 제공
 
 ```vais
-F get_config_value(key: str) -> i64 {
+fn get_config_value(key: str) -> i64 {
     # 기본값 반환
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # 에러 발생 시 기본값 사용
     timeout := get_config_value("timeout")
 
@@ -243,17 +243,17 @@ F main() -> i64 {
 ### 조건부 처리
 
 ```vais
-F divide(a: i64, b: i64) -> Result<i64> {
+fn divide(a: i64, b: i64) -> Result<i64> {
     I b == 0 {
-        R Result.Err("Division by zero")
+        return Result.Err("Division by zero")
     }
-    R Result.Ok(a / b)
+    return Result.Ok(a / b)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := divide(10, 2)
 
-    M result {
+    match result {
         Result.Ok(value) => puts("Result: {value}"),
         Result.Err(msg) => puts("Cannot divide: {msg}")
     }
@@ -269,7 +269,7 @@ F main() -> i64 {
 ```vais
 # log.vais 사용 (표준 라이브러리)
 
-E LogLevel {
+enum LogLevel {
     Debug,
     Info,
     Warn,
@@ -277,13 +277,13 @@ E LogLevel {
     Fatal
 }
 
-S Logger {
+struct Logger {
     level: LogLevel
 }
 
-X Logger {
-    F log(&self, level: LogLevel, msg: str) {
-        M level {
+impl Logger {
+    fn log(&self, level: LogLevel, msg: str) {
+        match level {
             LogLevel.Error => puts("[ERROR] {msg}"),
             LogLevel.Warn => puts("[WARN] {msg}"),
             LogLevel.Info => puts("[INFO] {msg}"),
@@ -295,21 +295,21 @@ X Logger {
         }
     }
 
-    F error(&self, msg: str) {
+    fn error(&self, msg: str) {
         self.log(LogLevel.Error, msg)
     }
 
-    F warn(&self, msg: str) {
+    fn warn(&self, msg: str) {
         self.log(LogLevel.Warn, msg)
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     logger := Logger { level: LogLevel.Info }
 
     result := divide(10, 0)
 
-    M result {
+    match result {
         Result.Ok(value) => logger.log(LogLevel.Info, "Division successful"),
         Result.Err(msg) => logger.error("Division failed: {msg}")
     }
@@ -323,12 +323,12 @@ F main() -> i64 {
 에러 발생 후에도 리소스를 정리하는 패턴입니다:
 
 ```vais
-F read_and_process(filename: str) -> Result<i64> {
+fn read_and_process(filename: str) -> Result<i64> {
     # 파일 열기
     handle := fopen(filename, "r")
 
     I handle == 0 {
-        R Result.Err("Failed to open file")
+        return Result.Err("Failed to open file")
     }
 
     # defer를 사용하여 파일 닫기 보장
@@ -338,7 +338,7 @@ F read_and_process(filename: str) -> Result<i64> {
     line_count := 0
     # ... 파일 읽기 로직 ...
 
-    R Result.Ok(line_count)
+    return Result.Ok(line_count)
 }
 ```
 
@@ -347,22 +347,22 @@ F read_and_process(filename: str) -> Result<i64> {
 실제 시나리오에서의 에러 처리:
 
 ```vais
-S Config {
+struct Config {
     host: str
     port: i64
     timeout: i64
 }
 
-E ConfigError {
+enum ConfigError {
     NotFound,
     InvalidFormat,
     MissingField
 }
 
-F load_config(path: str) -> Result<Config> {
+fn load_config(path: str) -> Result<Config> {
     # 1. 파일 존재 확인
     I path.len() == 0 {
-        R Result.Err(ConfigError.NotFound)
+        return Result.Err(ConfigError.NotFound)
     }
 
     # 2. 파일 읽기
@@ -370,7 +370,7 @@ F load_config(path: str) -> Result<Config> {
 
     # 3. 파싱
     I content.len() == 0 {
-        R Result.Err(ConfigError.InvalidFormat)
+        return Result.Err(ConfigError.InvalidFormat)
     }
 
     # 4. 구성 객체 생성
@@ -380,31 +380,31 @@ F load_config(path: str) -> Result<Config> {
         timeout: 30
     }
 
-    R Result.Ok(config)
+    return Result.Ok(config)
 }
 
-F validate_config(config: Config) -> Result<bool> {
+fn validate_config(config: Config) -> Result<bool> {
     I config.port <= 0 || config.port > 65535 {
-        R Result.Err(ConfigError.InvalidFormat)
+        return Result.Err(ConfigError.InvalidFormat)
     }
 
     I config.timeout <= 0 {
-        R Result.Err(ConfigError.InvalidFormat)
+        return Result.Err(ConfigError.InvalidFormat)
     }
 
-    R Result.Ok(true)
+    return Result.Ok(true)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # 설정 로드
     config_result := load_config("config.txt")
 
     I config_result {
-        M config_result {
+        match config_result {
             Result.Ok(cfg) => {
                 # 설정 검증
                 valid := validate_config(cfg)
-                M valid {
+                match valid {
                     Result.Ok(_) => {
                         puts("Configuration loaded and validated")
                         puts("Host: {cfg.host}:{cfg.port}")
@@ -413,7 +413,7 @@ F main() -> i64 {
                 }
             },
             Result.Err(err) => {
-                M err {
+                match err {
                     ConfigError.NotFound => puts("Config file not found"),
                     ConfigError.InvalidFormat => puts("Invalid config format"),
                     ConfigError.MissingField => puts("Missing required field")
@@ -432,15 +432,15 @@ F main() -> i64 {
 
 ```vais
 # Good: 명확한 에러 타입
-E DatabaseError {
+enum DatabaseError {
     ConnectionFailed,
     QueryFailed,
     TimeoutError
 }
 
 # Bad: 문자열만 사용
-F bad_db_operation() -> Result<str> {
-    R Result.Err("Some error occurred")
+fn bad_db_operation() -> Result<str> {
+    return Result.Err("Some error occurred")
 }
 ```
 
@@ -448,7 +448,7 @@ F bad_db_operation() -> Result<str> {
 
 ```vais
 # 에러 전파를 함수 시그니처에 명시
-F fetch_user_data(id: i64) -> Result<str> {
+fn fetch_user_data(id: i64) -> Result<str> {
     # ...에러 처리...
 }
 ```
@@ -456,25 +456,25 @@ F fetch_user_data(id: i64) -> Result<str> {
 ### 3. 컨텍스트 제공
 
 ```vais
-F process_records(count: i64) -> Result<bool> {
+fn process_records(count: i64) -> Result<bool> {
     I count <= 0 {
         # 좋은 에러 메시지: 무엇이 잘못되었는지 알 수 있음
-        R Result.Err("Record count must be positive, got {count}")
+        return Result.Err("Record count must be positive, got {count}")
     }
-    R Result.Ok(true)
+    return Result.Ok(true)
 }
 ```
 
 ### 4. 조기 반환
 
 ```vais
-F validate_user(name: str, age: i64) -> Result<bool> {
+fn validate_user(name: str, age: i64) -> Result<bool> {
     # 각 조건을 빠르게 검사하고 반환
-    I name.len() == 0 { R Result.Err("Name is required") }
-    I age < 0 { R Result.Err("Age cannot be negative") }
-    I age > 150 { R Result.Err("Age seems invalid") }
+    I name.len() == 0 { return Result.Err("Name is required") }
+    I age < 0 { return Result.Err("Age cannot be negative") }
+    I age > 150 { return Result.Err("Age seems invalid") }
 
-    R Result.Ok(true)
+    return Result.Ok(true)
 }
 ```
 
@@ -482,24 +482,24 @@ F validate_user(name: str, age: i64) -> Result<bool> {
 
 ```vais
 # 에러를 예상하는 테스트
-F test_division_by_zero() {
+fn test_division_by_zero() {
     result := divide(10, 0)
 
-    M result {
+    match result {
         Result.Ok(_) => puts("Test failed: should have returned error"),
         Result.Err(_) => puts("Test passed: error caught correctly")
     }
 }
 
 # 성공을 예상하는 테스트
-F test_valid_division() {
+fn test_valid_division() {
     result := divide(10, 2)
 
-    M result {
+    match result {
         Result.Ok(value) => {
             I value == 5 {
                 puts("Test passed: correct result")
-            } E {
+            } else {
                 puts("Test failed: wrong result")
             }
         },
