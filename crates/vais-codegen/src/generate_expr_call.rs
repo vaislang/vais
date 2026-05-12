@@ -1679,6 +1679,27 @@ impl CodeGenerator {
                     write_ir!(ir, "  {} = bitcast double {} to i64", result, tmp2);
                 }
             }
+            n if matches!(resolved_t, ResolvedType::Str) && is_specialized => {
+                let llvm_ty = self.type_to_llvm(&resolved_t);
+                let src_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = inttoptr i64 {} to {}*",
+                    src_ptr,
+                    ptr_val,
+                    llvm_ty
+                );
+                write_ir!(
+                    ir,
+                    "  {} = load {}, {}* {}",
+                    result,
+                    llvm_ty,
+                    llvm_ty,
+                    src_ptr
+                );
+                debug_assert_eq!(n, 16);
+                self.fn_ctx.record_emitted_type(&result, &llvm_ty);
+            }
             n if matches!(resolved_t, ResolvedType::Named { .. } | ResolvedType::Str) => {
                 // Struct/str type: copy via memcpy from the array slot to a stack
                 // alloca. Return the alloca pointer — struct values in Text IR

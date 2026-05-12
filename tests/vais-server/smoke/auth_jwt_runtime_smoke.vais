@@ -197,6 +197,105 @@ fn smoke_jwt_role_claim_verify() -> i64 {
     0
 }
 
+fn smoke_jwt_role_claim_generation() -> i64 {
+    config := JwtConfig.new("secret", "issuer")
+
+    roles: Vec<str> := mut Vec.with_capacity(2)
+    I roles.elem_size != 16 {
+        println("FAIL jwt role elem size")
+        println(jwt_i64_to_cert_str(roles.elem_size))
+        return 82
+    }
+    roles.push("admin")
+    roles.push("user")
+    I roles.get(0) != "admin" {
+        println("FAIL jwt role generated first")
+        return 72
+    }
+    I roles.get(1) != "user" {
+        println("FAIL jwt role generated second")
+        return 73
+    }
+
+    claims := JwtClaims.new("user1", "issuer", 4600, 1000, roles)
+    I claims.roles.get(0) != "admin" {
+        println("FAIL jwt role claims field first")
+        println(claims.roles.get(0))
+        return 83
+    }
+    I claims.roles.get(1) != "user" {
+        println("FAIL jwt role claims field second")
+        println(claims.roles.get(1))
+        return 84
+    }
+    joined := jwt_join_roles(claims.roles, 0, "")
+    I joined != "admin,user" {
+        println("FAIL jwt role direct join")
+        println(joined)
+        return 85
+    }
+    encoded := claims.encode()
+    I encoded != "user1|issuer|4600|1000|admin,user" {
+        println("FAIL jwt role claims encode")
+        println(encoded)
+        return 74
+    }
+
+    token_roles: Vec<str> := mut Vec.with_capacity(2)
+    token_roles.push("admin")
+    token_roles.push("user")
+    token_claims := JwtClaims.new("user1", "issuer", 4600, 1000, token_roles)
+    token_result := generate_access_token(token_claims, config)
+    match token_result {
+        Err(_) => {
+            println("FAIL jwt role generation rejected")
+            return 75
+        },
+        Ok(token) => {
+            I token.token != "user1|issuer|4600|1000|admin,user.419" {
+                println("FAIL jwt role token")
+                println(token.token)
+                return 76
+            }
+            verified := verify_token(token.token, config)
+            match verified {
+                Err(_) => {
+                    println("FAIL jwt generated role verify rejected")
+                    return 77
+                },
+                Ok(decoded) => {
+                    I decoded.roles.len() != 2 {
+                        println("FAIL jwt generated role decoded len")
+                        return 78
+                    }
+                },
+            }
+        },
+    }
+
+    pair_roles: Vec<str> := mut Vec.with_capacity(1)
+    pair_roles.push("admin")
+    pair_result := generate_token_pair("user1", pair_roles, config)
+    match pair_result {
+        Err(_) => {
+            println("FAIL jwt role pair generation rejected")
+            return 79
+        },
+        Ok(pair) => {
+            I pair.access.token != "user1|issuer|4600|1000|admin.3be" {
+                println("FAIL jwt role pair access token")
+                return 80
+            }
+            I pair.refresh.token != "user1|issuer|605800|1000|.400" {
+                println("FAIL jwt role pair refresh token")
+                return 81
+            }
+        },
+    }
+
+    0
+}
+
 fn smoke_jwt_error_paths() -> i64 {
     bad_config := JwtConfig.new("", "issuer")
     roles := Vec.new()
@@ -325,6 +424,7 @@ fn main() -> i64 {
     failures += smoke_jwt_access_token_generation_and_verify()
     failures += smoke_jwt_refresh_and_pair_generation()
     failures += smoke_jwt_role_claim_verify()
+    failures += smoke_jwt_role_claim_generation()
     failures += smoke_jwt_error_paths()
 
     I failures > 0 {

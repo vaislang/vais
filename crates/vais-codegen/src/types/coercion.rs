@@ -137,6 +137,23 @@ impl CodeGenerator {
             return (coerced, ir);
         }
 
+        // Case 2b: pointer-form str alloca -> value ABI str.
+        // `load_typed` returns an alloca pointer for `str`/struct payloads.
+        // Some return emit sites only route through this shared coercion point,
+        // so normalize the pointer form here instead of relying on per-site
+        // post-processing.
+        if val_ty == "{ i8*, i64 }*" && ret_llvm == "{ i8*, i64 }" {
+            let loaded = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* {}",
+                loaded,
+                val
+            );
+            self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+            return (loaded, ir);
+        }
+
         // Case 3: Vec struct pointer → slice fat-ptr.
         // Pattern: function returns &[T] (slice) but body returns &self.field
         // where self.field: Vec<T>. Construct fat-ptr from Vec.data (field 0,
