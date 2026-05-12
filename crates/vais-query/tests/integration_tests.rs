@@ -401,7 +401,7 @@ fn test_parser_error_propagation() {
         "fn incomplete_func(",          // Missing closing paren and body
         "fn no_body() -> i64",          // Missing function body
         "fn bad_syntax() -> i64 { = }", // Invalid expression
-        "struct BadStruct { field }",       // Missing type annotation
+        "struct BadStruct { field }",   // Missing type annotation
     ];
 
     for source in invalid_sources {

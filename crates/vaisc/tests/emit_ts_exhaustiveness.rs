@@ -133,9 +133,7 @@ fn exhaustiveness_top_level_item() {
             // ── Lowered to TS declarations ────────────────────────────────
             Item::Struct(_) => "lowered: interface (when pub) or skipped",
             Item::Enum(_) => "lowered: discriminated union (when pub) or skipped",
-            Item::TypeAlias(_) => {
-                "lowered (when pub) or rejected EMIT_TS_008 if RHS unsupported"
-            }
+            Item::TypeAlias(_) => "lowered (when pub) or rejected EMIT_TS_008 if RHS unsupported",
 
             // ── Rejected with stable error codes ─────────────────────────
             Item::Function(_) => "rejected: EMIT_TS_007 (when pub)",

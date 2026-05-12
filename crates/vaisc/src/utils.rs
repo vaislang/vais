@@ -259,10 +259,7 @@ pub(crate) fn print_plugin_diagnostics(diagnostics: &[Diagnostic], source: &str,
 ///
 /// `path_display` is the user-facing path (e.g. `"foo.vais"`) prefixed
 /// to each warning so multi-file builds remain attributable.
-pub fn emit_deprecation_warnings(
-    warnings: &[vais_lexer::DeprecationWarning],
-    path_display: &str,
-) {
+pub fn emit_deprecation_warnings(warnings: &[vais_lexer::DeprecationWarning], path_display: &str) {
     if warnings.is_empty() {
         return;
     }

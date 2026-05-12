@@ -258,9 +258,7 @@ pub(crate) fn cmd_build(
     // warnings. The lex is a pre-pass that does not affect parser output;
     // the parser will lex independently. Cost is small (Phase 129 baseline:
     // 50K LOC ≈ 3.4ms lex), and suppressed via VAIS_SUPPRESS_SINGLE_CHAR_WARN=1.
-    if let Ok((_tokens, deprecation_warnings)) =
-        vais_lexer::tokenize_with_warnings(&main_source)
-    {
+    if let Ok((_tokens, deprecation_warnings)) = vais_lexer::tokenize_with_warnings(&main_source) {
         crate::utils::emit_deprecation_warnings(
             &deprecation_warnings,
             &input.display().to_string(),

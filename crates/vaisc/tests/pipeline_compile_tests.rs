@@ -132,7 +132,10 @@ fn test_linear_dependency_chain() {
     let path_c = PathBuf::from("/test/c.vais");
 
     // Module A: leaf (no dependencies)
-    modules.insert(path_a.clone(), "fn func_a() -> i32 { return 10 }".to_string());
+    modules.insert(
+        path_a.clone(),
+        "fn func_a() -> i32 { return 10 }".to_string(),
+    );
     // Module B: depends on A
     modules.insert(
         path_b.clone(),
@@ -176,7 +179,10 @@ fn test_diamond_dependency_pattern() {
     let path_top = PathBuf::from("/test/top.vais");
 
     // Diamond: top -> (left, right) -> base
-    modules.insert(path_base.clone(), "fn base() -> i32 { return 1 }".to_string());
+    modules.insert(
+        path_base.clone(),
+        "fn base() -> i32 { return 1 }".to_string(),
+    );
     modules.insert(
         path_left.clone(),
         "fn left() -> i32 { return base() * 2 }".to_string(),
@@ -304,8 +310,14 @@ fn test_error_propagation() {
     let path_ok = PathBuf::from("/test/ok.vais");
     let path_err = PathBuf::from("/test/err.vais");
 
-    modules.insert(path_ok.clone(), "fn valid() -> i32 { return 42 }".to_string());
-    modules.insert(path_err.clone(), "fn invalid( -> i32 { return 42 }".to_string()); // Parse error
+    modules.insert(
+        path_ok.clone(),
+        "fn valid() -> i32 { return 42 }".to_string(),
+    );
+    modules.insert(
+        path_err.clone(),
+        "fn invalid( -> i32 { return 42 }".to_string(),
+    ); // Parse error
 
     // Simulate parsing with error handling
     let parse_ok = vais_parser::parse(&modules[&path_ok]);

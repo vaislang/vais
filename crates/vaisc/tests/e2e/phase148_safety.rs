@@ -79,8 +79,14 @@ fn e2e_keyword_enum_name_definition_compiles() {
 /// Keyword letter as trait name — definition compiles
 #[test]
 fn e2e_keyword_trait_name_definition_compiles() {
-    assert_exit_code("trait X { F foo() -> i64 }\nfn main() -> i64 { return 0 }", 0);
-    assert_exit_code("trait A { F bar() -> i64 }\nfn main() -> i64 { return 0 }", 0);
+    assert_exit_code(
+        "trait X { F foo() -> i64 }\nfn main() -> i64 { return 0 }",
+        0,
+    );
+    assert_exit_code(
+        "trait A { F bar() -> i64 }\nfn main() -> i64 { return 0 }",
+        0,
+    );
 }
 
 /// Keyword letter as union name — definition compiles

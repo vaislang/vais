@@ -46,9 +46,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 Some(ty.clone())
             }
             ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => match inner.as_ref() {
-                ResolvedType::Named { name, generics }
-                    if name == "Vec" && !generics.is_empty() =>
-                {
+                ResolvedType::Named { name, generics } if name == "Vec" && !generics.is_empty() => {
                     Some(inner.as_ref().clone())
                 }
                 _ => None,
@@ -111,7 +109,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let i8_ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
         let data_ptr = if data_field.is_pointer_value() {
             self.builder
-                .build_pointer_cast(data_field.into_pointer_value(), i8_ptr_type, "vec_slice_data")
+                .build_pointer_cast(
+                    data_field.into_pointer_value(),
+                    i8_ptr_type,
+                    "vec_slice_data",
+                )
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?
         } else if data_field.is_int_value() {
             self.builder
@@ -812,7 +814,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let semantic_param_types: Vec<Option<ResolvedType>> = self
             .resolved_function_sigs
             .get(&fn_name)
-            .map(|sig| sig.params.iter().map(|(_n, ty, _mut)| Some(ty.clone())).collect())
+            .map(|sig| {
+                sig.params
+                    .iter()
+                    .map(|(_n, ty, _mut)| Some(ty.clone()))
+                    .collect()
+            })
             .unwrap_or_else(|| vec![None; args.len()]);
         let semantic_param_dyn: Vec<Option<String>> = semantic_param_types
             .iter()

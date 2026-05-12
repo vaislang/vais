@@ -71,11 +71,9 @@ impl fmt::Display for FixError {
         match self {
             FixError::Io(msg) => write!(f, "I/O error: {}", msg),
             FixError::Parse(msg) => write!(f, "Parse error: {}", msg),
-            FixError::NotImplemented(site) => write!(
-                f,
-                "A4 site '{}' is not yet implemented in stage 0",
-                site
-            ),
+            FixError::NotImplemented(site) => {
+                write!(f, "A4 site '{}' is not yet implemented in stage 0", site)
+            }
         }
     }
 }
@@ -205,11 +203,7 @@ pub fn run_explicit_fix(
 /// Returns `1` if any findings are present, `0` otherwise.
 pub fn print_report_and_exit_code(input: &Path, report: &ExplicitFixReport, dry_run: bool) -> i32 {
     if report.findings.is_empty() {
-        println!(
-            "{} No A4 issues found in {}",
-            "OK".green(),
-            input.display()
-        );
+        println!("{} No A4 issues found in {}", "OK".green(), input.display());
         return 0;
     }
 
@@ -282,10 +276,15 @@ fn check_a4_01(module: &Module, source: &str) -> Vec<FixFinding> {
         };
 
         for stmt in stmts {
-            if let Stmt::Let { name: _, ty, value, .. } = &stmt.node {
+            if let Stmt::Let {
+                name: _, ty, value, ..
+            } = &stmt.node
+            {
                 // Only flag bindings with an explicit `i64` type annotation.
                 let is_i64_binding = match ty {
-                    Some(t) => matches!(&t.node, Type::Named { name, generics } if name == "i64" && generics.is_empty()),
+                    Some(t) => {
+                        matches!(&t.node, Type::Named { name, generics } if name == "i64" && generics.is_empty())
+                    }
                     None => false,
                 };
                 if !is_i64_binding {
@@ -336,7 +335,6 @@ fn extract_let_name(stmt: &Stmt) -> &str {
         "_"
     }
 }
-
 
 /// Convert a byte offset in `source` to a 1-based line number.
 fn byte_offset_to_line(source: &str, offset: usize) -> usize {

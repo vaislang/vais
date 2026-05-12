@@ -887,10 +887,12 @@ impl FunctionLowerer {
                         Pattern::Literal(Literal::Bool(v)) => {
                             targets.push((if *v { 1 } else { 0 }, bb));
                         }
-                        pattern if matches!(
-                            self.enum_pattern_discriminant(&match_ty, pattern),
-                            Some(_)
-                        ) => {
+                        pattern
+                            if matches!(
+                                self.enum_pattern_discriminant(&match_ty, pattern),
+                                Some(_)
+                            ) =>
+                        {
                             // Safe: the guard above proved Some(_); pull it out
                             // without unwrap.
                             if let Some(discriminant) =

@@ -1,5 +1,28 @@
 use std/error
 use src/auth/jwt
+use src/auth/runtime
+
+fn smoke_auth_runtime_clock() -> i64 {
+    auth_clear_test_time_sec()
+    live_now := auth_current_time_sec()
+    I live_now < 1700000000 {
+        println("FAIL auth runtime live clock")
+        auth_set_test_time_sec(1000)
+        return 101
+    }
+
+    auth_set_test_time_sec(1000)
+    I auth_current_time_sec() != 1000 {
+        println("FAIL auth runtime pinned seconds")
+        return 102
+    }
+    I auth_current_time_ms() != 1000000 {
+        println("FAIL auth runtime pinned milliseconds")
+        return 103
+    }
+
+    0
+}
 
 fn smoke_jwt_access_token_generation_and_verify() -> i64 {
     direct := JwtToken.new("abc", 12)
@@ -29,7 +52,7 @@ fn smoke_jwt_access_token_generation_and_verify() -> i64 {
         return 99
     }
     sig := jwt_sign(encoded, config.secret)
-    I sig != "364" {
+    I sig != "60eb304932744c3077f949a83e4a49005300f80aa9355ca9f6b6e4a6e35ab51e" {
         println("FAIL jwt direct sign")
         println(sig)
         return 97
@@ -48,7 +71,7 @@ fn smoke_jwt_access_token_generation_and_verify() -> i64 {
                 println("FAIL jwt access expires_at")
                 return 2
             }
-            I token.token != "user1|issuer|4600|1000|.364" {
+            I token.token != "user1|issuer|4600|1000|.60eb304932744c3077f949a83e4a49005300f80aa9355ca9f6b6e4a6e35ab51e" {
                 println("FAIL jwt access token")
                 return 3
             }
@@ -101,7 +124,7 @@ fn smoke_jwt_refresh_and_pair_generation() -> i64 {
                 println("FAIL jwt refresh expires_at")
                 return 21
             }
-            I token.token != "user1|issuer|605800|1000|.400" {
+            I token.token != "user1|issuer|605800|1000|.382670870228248f28c84db00f72995f050feaac7e6cf0286af08ae8e82b65a3" {
                 println("FAIL jwt refresh token")
                 return 22
             }
@@ -133,11 +156,11 @@ fn smoke_jwt_refresh_and_pair_generation() -> i64 {
             return 26
         },
         Ok(pair) => {
-            I pair.access.token != "user1|issuer|4600|1000|.364" {
+            I pair.access.token != "user1|issuer|4600|1000|.60eb304932744c3077f949a83e4a49005300f80aa9355ca9f6b6e4a6e35ab51e" {
                 println("FAIL jwt pair access token")
                 return 27
             }
-            I pair.refresh.token != "user1|issuer|605800|1000|.400" {
+            I pair.refresh.token != "user1|issuer|605800|1000|.382670870228248f28c84db00f72995f050feaac7e6cf0286af08ae8e82b65a3" {
                 println("FAIL jwt pair refresh token")
                 return 28
             }
@@ -150,7 +173,7 @@ fn smoke_jwt_refresh_and_pair_generation() -> i64 {
 fn smoke_jwt_role_claim_verify() -> i64 {
     config := JwtConfig.new("secret", "issuer")
 
-    two_roles := verify_token("user1|issuer|4600|1000|admin,user.419", config)
+    two_roles := verify_token("user1|issuer|4600|1000|admin,user.271a21b55902aab49eeb6f9d022086fcced28587820995cc95b7e15f7130d77e", config)
     match two_roles {
         Err(_) => {
             println("FAIL jwt role verify rejected")
@@ -176,7 +199,7 @@ fn smoke_jwt_role_claim_verify() -> i64 {
         },
     }
 
-    one_role := verify_token("user1|issuer|4600|1000|admin.3be", config)
+    one_role := verify_token("user1|issuer|4600|1000|admin.50ce59dd82e971030259db1777bbd7151876dab8b58876b347605395b92cc1d9", config)
     match one_role {
         Err(_) => {
             println("FAIL jwt one-role verify rejected")
@@ -194,7 +217,7 @@ fn smoke_jwt_role_claim_verify() -> i64 {
         },
     }
 
-    three_roles := verify_token("user1|issuer|4600|1000|admin,user,viewer.4d5", config)
+    three_roles := verify_token("user1|issuer|4600|1000|admin,user,viewer.3f0d0e79deb88e2ec146468566775c6146358cb0853b4de9de4cc8f7e32be660", config)
     match three_roles {
         Err(_) => {
             println("FAIL jwt three-role verify rejected")
@@ -270,7 +293,7 @@ fn smoke_jwt_role_claim_generation() -> i64 {
             return 75
         },
         Ok(token) => {
-            I token.token != "user1|issuer|4600|1000|admin,user.419" {
+            I token.token != "user1|issuer|4600|1000|admin,user.271a21b55902aab49eeb6f9d022086fcced28587820995cc95b7e15f7130d77e" {
                 println("FAIL jwt role token")
                 println(token.token)
                 return 76
@@ -300,11 +323,11 @@ fn smoke_jwt_role_claim_generation() -> i64 {
             return 79
         },
         Ok(pair) => {
-            I pair.access.token != "user1|issuer|4600|1000|admin.3be" {
+            I pair.access.token != "user1|issuer|4600|1000|admin.50ce59dd82e971030259db1777bbd7151876dab8b58876b347605395b92cc1d9" {
                 println("FAIL jwt role pair access token")
                 return 80
             }
-            I pair.refresh.token != "user1|issuer|605800|1000|.400" {
+            I pair.refresh.token != "user1|issuer|605800|1000|.382670870228248f28c84db00f72995f050feaac7e6cf0286af08ae8e82b65a3" {
                 println("FAIL jwt role pair refresh token")
                 return 81
             }
@@ -341,7 +364,7 @@ fn smoke_jwt_role_claim_generation() -> i64 {
             return 91
         },
         Ok(token) => {
-            I token.token != "user1|issuer|4600|1000|admin,user,viewer.4d5" {
+            I token.token != "user1|issuer|4600|1000|admin,user,viewer.3f0d0e79deb88e2ec146468566775c6146358cb0853b4de9de4cc8f7e32be660" {
                 println("FAIL jwt many-role token")
                 println(token.token)
                 return 92
@@ -461,7 +484,7 @@ fn smoke_jwt_error_paths() -> i64 {
         },
     }
 
-    expired_token := verify_token("expired|issuer|999|1000|.370", config)
+    expired_token := verify_token("expired|issuer|999|1000|.17a70114090ee12c23341d6397ec7b6fa7b313c23bb800ef5adec3caa19bea77", config)
     match expired_token {
         Ok(_) => {
             println("FAIL jwt expired token accepted")
@@ -475,7 +498,7 @@ fn smoke_jwt_error_paths() -> i64 {
         },
     }
 
-    wrong_issuer := verify_token("user1|other|4600|1000|.372", config)
+    wrong_issuer := verify_token("user1|other|4600|1000|.4b47efe399a9f587da16f6f3d8932eefb8ae2d1469c62f7a472f292131e28c3b", config)
     match wrong_issuer {
         Ok(_) => {
             println("FAIL jwt wrong issuer accepted")
@@ -492,13 +515,99 @@ fn smoke_jwt_error_paths() -> i64 {
     0
 }
 
+fn smoke_jwt_custom_ttl_payload() -> i64 {
+    config := JwtConfig.new("custom-secret", "custom-issuer")
+
+    roles: Vec<str> := mut Vec.with_capacity(3)
+    roles.push("owner")
+    roles.push("auditor")
+    roles.push("ops")
+
+    generated := generate_access_token_with_ttl("custom-user", roles, 90, config)
+    match generated {
+        Err(e) => {
+            println("FAIL jwt custom ttl generation rejected")
+            println(e.message)
+            return 110
+        },
+        Ok(token) => {
+            I token.expires_at != 1090 {
+                println("FAIL jwt custom ttl expires_at")
+                return 111
+            }
+            verified := verify_token(token.token, config)
+            match verified {
+                Err(e) => {
+                    println("FAIL jwt custom ttl verify rejected")
+                    println(e.message)
+                    return 112
+                },
+                Ok(decoded) => {
+                    I decoded.sub != "custom-user" {
+                        println("FAIL jwt custom subject")
+                        return 113
+                    }
+                    I decoded.iss != "custom-issuer" {
+                        println("FAIL jwt custom issuer")
+                        return 114
+                    }
+                    I decoded.exp != 1090 {
+                        println("FAIL jwt custom exp")
+                        return 115
+                    }
+                    I decoded.iat != 1000 {
+                        println("FAIL jwt custom iat")
+                        return 116
+                    }
+                    I decoded.roles.len() != 3 {
+                        println("FAIL jwt custom roles len")
+                        return 117
+                    }
+                    I decoded.roles.get(0) != "owner" {
+                        println("FAIL jwt custom role 0")
+                        return 118
+                    }
+                    I decoded.roles.get(1) != "auditor" {
+                        println("FAIL jwt custom role 1")
+                        return 119
+                    }
+                    I decoded.roles.get(2) != "ops" {
+                        println("FAIL jwt custom role 2")
+                        return 120
+                    }
+                },
+            }
+        },
+    }
+
+    bad_roles := Vec.new()
+    rejected := generate_access_token_with_ttl("custom-user", bad_roles, 0, config)
+    match rejected {
+        Ok(token) => {
+            println("FAIL jwt zero ttl accepted")
+            println(token.token)
+            return 121
+        },
+        Err(e) => {
+            I e.code != "VAIS-SERVER-JWT-400" {
+                println("FAIL jwt zero ttl error code")
+                return 122
+            }
+        },
+    }
+
+    0
+}
+
 fn main() -> i64 {
     failures := mut 0
+    failures += smoke_auth_runtime_clock()
     failures += smoke_jwt_access_token_generation_and_verify()
     failures += smoke_jwt_refresh_and_pair_generation()
     failures += smoke_jwt_role_claim_verify()
     failures += smoke_jwt_role_claim_generation()
     failures += smoke_jwt_error_paths()
+    failures += smoke_jwt_custom_ttl_payload()
 
     I failures > 0 {
         println("VAIS_SERVER_AUTH_JWT_RUNTIME_FAIL")

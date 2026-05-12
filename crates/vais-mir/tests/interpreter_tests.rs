@@ -149,12 +149,9 @@ fn empty_mir_module() -> vais_mir::MirModule {
 #[test]
 fn intercept_print_str_captures_string() {
     let mir = empty_mir_module();
-    let out = interpret_function_with_io(
-        &mir,
-        "print_str",
-        vec![MirValue::Str("hello".to_string())],
-    )
-    .expect("intercept");
+    let out =
+        interpret_function_with_io(&mir, "print_str", vec![MirValue::Str("hello".to_string())])
+            .expect("intercept");
     assert_eq!(out.stdout, "hello");
     assert_eq!(out.return_value, MirValue::Unit);
 }
@@ -162,20 +159,16 @@ fn intercept_print_str_captures_string() {
 #[test]
 fn intercept_println_appends_newline() {
     let mir = empty_mir_module();
-    let out = interpret_function_with_io(
-        &mir,
-        "println",
-        vec![MirValue::Str("hi".to_string())],
-    )
-    .expect("intercept");
+    let out = interpret_function_with_io(&mir, "println", vec![MirValue::Str("hi".to_string())])
+        .expect("intercept");
     assert_eq!(out.stdout, "hi\n");
 }
 
 #[test]
 fn intercept_print_int_formats_integer() {
     let mir = empty_mir_module();
-    let out = interpret_function_with_io(&mir, "print_int", vec![MirValue::Int(42)])
-        .expect("intercept");
+    let out =
+        interpret_function_with_io(&mir, "print_int", vec![MirValue::Int(42)]).expect("intercept");
     assert_eq!(out.stdout, "42");
 }
 
@@ -202,19 +195,12 @@ fn intercept_print_bool_formats_true_false() {
 fn intercept_eprint_eprintln_route_to_same_sink_as_print() {
     // Stage 5a does not split stdout/stderr; eprint/eprintln share the sink.
     let mir = empty_mir_module();
-    let out_e = interpret_function_with_io(
-        &mir,
-        "eprint",
-        vec![MirValue::Str("err".to_string())],
-    )
-    .expect("intercept");
+    let out_e = interpret_function_with_io(&mir, "eprint", vec![MirValue::Str("err".to_string())])
+        .expect("intercept");
     assert_eq!(out_e.stdout, "err");
-    let out_eln = interpret_function_with_io(
-        &mir,
-        "eprintln",
-        vec![MirValue::Str("err".to_string())],
-    )
-    .expect("intercept");
+    let out_eln =
+        interpret_function_with_io(&mir, "eprintln", vec![MirValue::Str("err".to_string())])
+            .expect("intercept");
     assert_eq!(out_eln.stdout, "err\n");
 }
 
@@ -223,11 +209,8 @@ fn intercept_unknown_builtin_falls_through_to_body_lookup_error() {
     // A non-builtin name with no body should error (body-not-found),
     // proving the intercept does NOT swallow arbitrary names.
     let mir = empty_mir_module();
-    let result = interpret_function_with_io(
-        &mir,
-        "this_is_not_a_recognized_builtin_or_body",
-        vec![],
-    );
+    let result =
+        interpret_function_with_io(&mir, "this_is_not_a_recognized_builtin_or_body", vec![]);
     assert!(
         result.is_err(),
         "unknown name must propagate as error, not be silently intercepted"

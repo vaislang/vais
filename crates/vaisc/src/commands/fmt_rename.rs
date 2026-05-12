@@ -33,8 +33,8 @@ use vais_ast::*;
 /// pub / impl / trait / const`). Order is alphabetical (sorted helper
 /// per LESSONS L-007).
 pub const STEP15_CANDIDATE_KEYWORDS: &[&str] = &[
-    "const", "else", "enum", "fn", "impl", "match", "mod", "pub",
-    "return", "struct", "trait", "type", "use",
+    "const", "else", "enum", "fn", "impl", "match", "mod", "pub", "return", "struct", "trait",
+    "type", "use",
 ];
 
 /// Options forwarded from the CLI.
@@ -207,12 +207,9 @@ fn check_ident(
 }
 
 /// Run the rename codemod against a single source file.
-pub fn run_rename(
-    input: &Path,
-    options: &RenameOptions,
-) -> Result<RenameReport, String> {
-    let source = std::fs::read_to_string(input)
-        .map_err(|e| format!("read {}: {}", input.display(), e))?;
+pub fn run_rename(input: &Path, options: &RenameOptions) -> Result<RenameReport, String> {
+    let source =
+        std::fs::read_to_string(input).map_err(|e| format!("read {}: {}", input.display(), e))?;
 
     let module = vais_parser::parse(&source).map_err(|e| format!("parse: {:?}", e))?;
 
@@ -238,17 +235,13 @@ pub fn run_rename(
         // Find the first token whose lexeme equals the identifier.
         // The AST loses token positions for non-Spanned fields, so this
         // is a best-effort linear scan.
-        if let Some(line) = source
-            .lines()
-            .enumerate()
-            .find_map(|(i, line)| {
-                if line.contains(&f.identifier) {
-                    Some(i + 1)
-                } else {
-                    None
-                }
-            })
-        {
+        if let Some(line) = source.lines().enumerate().find_map(|(i, line)| {
+            if line.contains(&f.identifier) {
+                Some(i + 1)
+            } else {
+                None
+            }
+        }) {
             f.line = line;
         }
     }
@@ -258,10 +251,7 @@ pub fn run_rename(
 }
 
 /// CLI entry point.
-pub fn cmd_fmt_rename_keywords(
-    input: &Path,
-    options: &RenameOptions,
-) -> Result<(), String> {
+pub fn cmd_fmt_rename_keywords(input: &Path, options: &RenameOptions) -> Result<(), String> {
     let report = run_rename(input, options)?;
 
     if report.findings.is_empty() {

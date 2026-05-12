@@ -37,8 +37,7 @@ fn a4_01_probe() -> PathBuf {
     // During `cargo test` the working directory is the package root
     // (compiler/crates/vaisc).  We need to go up two levels.
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    PathBuf::from(manifest_dir)
-        .join("../../tests/empirical/A4/A4-01_unit_i64/probe.vais")
+    PathBuf::from(manifest_dir).join("../../tests/empirical/A4/A4-01_unit_i64/probe.vais")
 }
 
 // ---------------------------------------------------------------------------
@@ -97,15 +96,14 @@ fn fix_explicit_unimplemented_site_errors() {
     let vaisc = vaisc_binary();
     let probe = a4_01_probe();
 
-    assert!(probe.exists(), "A4-01 probe not found at {}", probe.display());
+    assert!(
+        probe.exists(),
+        "A4-01 probe not found at {}",
+        probe.display()
+    );
 
     let output = Command::new(&vaisc)
-        .args([
-            "fix",
-            "--explicit",
-            "--site=A4-02",
-            probe.to_str().unwrap(),
-        ])
+        .args(["fix", "--explicit", "--site=A4-02", probe.to_str().unwrap()])
         .env("VAIS_NO_UPDATE_CHECK", "1")
         .output()
         .expect("failed to run vaisc");
@@ -135,31 +133,28 @@ fn fix_explicit_dry_run_no_modification() {
     let vaisc = vaisc_binary();
     let probe = a4_01_probe();
 
-    assert!(probe.exists(), "A4-01 probe not found at {}", probe.display());
+    assert!(
+        probe.exists(),
+        "A4-01 probe not found at {}",
+        probe.display()
+    );
 
     // Record the file modification time and content hash before the run.
     let before_mtime = std::fs::metadata(&probe)
         .expect("cannot stat probe")
         .modified()
         .unwrap_or(SystemTime::UNIX_EPOCH);
-    let before_content =
-        std::fs::read_to_string(&probe).expect("cannot read probe before dry-run");
+    let before_content = std::fs::read_to_string(&probe).expect("cannot read probe before dry-run");
 
     let output = Command::new(&vaisc)
-        .args([
-            "fix",
-            "--explicit",
-            "--dry-run",
-            probe.to_str().unwrap(),
-        ])
+        .args(["fix", "--explicit", "--dry-run", probe.to_str().unwrap()])
         .env("VAIS_NO_UPDATE_CHECK", "1")
         .output()
         .expect("failed to run vaisc");
 
     // The tool may exit non-zero (finding detected) — that is expected.
     // What we care about is that the file was not changed.
-    let after_content =
-        std::fs::read_to_string(&probe).expect("cannot read probe after dry-run");
+    let after_content = std::fs::read_to_string(&probe).expect("cannot read probe after dry-run");
     let after_mtime = std::fs::metadata(&probe)
         .expect("cannot stat probe after dry-run")
         .modified()

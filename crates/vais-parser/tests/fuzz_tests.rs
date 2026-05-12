@@ -444,7 +444,8 @@ fn fuzz_unicode_and_special_chars() {
 fn fuzz_empty_and_minimal_inputs() {
     let test_cases = vec![
         "", " ", "\n", "\t", "\r\n", "F", "S", "E", "T", "I", "(", ")", "{", "}", "[", "]", ":",
-        ";", ",", "=", "->", "<>", "F()", "F f", "fn f(", "F f)", "fn f()=", "fn f()->", "S{", "E{",
+        ";", ",", "=", "->", "<>", "F()", "F f", "fn f(", "F f)", "fn f()=", "fn f()->", "S{",
+        "E{",
     ];
 
     let mut failures = Vec::new();

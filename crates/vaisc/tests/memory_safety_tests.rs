@@ -401,10 +401,10 @@ fn test_error_recovery_no_leaks() {
         "fn f(",               // Incomplete function
         "fn f() ->",           // Incomplete return type
         "fn f() -> i64",       // Missing body
-        "struct Point {",          // Incomplete struct
-        "enum Color {",          // Incomplete enum
-        "{ { { {",            // Unbalanced braces
-        "))))",               // Unbalanced parentheses
+        "struct Point {",      // Incomplete struct
+        "enum Color {",        // Incomplete enum
+        "{ { { {",             // Unbalanced braces
+        "))))",                // Unbalanced parentheses
         "fn f() -> i64 = 1 +", // Incomplete expression
     ];
 

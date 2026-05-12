@@ -160,7 +160,9 @@ fn test_generate_multi_module_project() {
         // Check for public declarations (except main)
         if filename != "main.vais" {
             assert!(
-                code.contains("pub struct ") || code.contains("pub enum ") || code.contains("pub fn "),
+                code.contains("pub struct ")
+                    || code.contains("pub enum ")
+                    || code.contains("pub fn "),
                 "Module {} should have public declarations",
                 filename
             );

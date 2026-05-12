@@ -1123,7 +1123,8 @@ fn main() -> i64 {
 #[test]
 fn selfhost_verify_punct_comma() {
     // Commas in function parameters
-    let source = "fn add(a: i64, b: i64, c: i64) -> i64 = a + b + c\nfn main() -> i64 = add(1, 2, 3)";
+    let source =
+        "fn add(a: i64, b: i64, c: i64) -> i64 = a + b + c\nfn main() -> i64 = add(1, 2, 3)";
     // 1+2+3 = 6
     assert_exit_code(source, 6);
 }
@@ -1465,10 +1466,18 @@ fn selfhost_rust_lexer_cross_check_keywords() {
     use vais_lexer::Token;
 
     let tokens = tokenize("F").unwrap();
-    assert_eq!(tokens[0].token, Token::Function, "fn should lex as Function");
+    assert_eq!(
+        tokens[0].token,
+        Token::Function,
+        "fn should lex as Function"
+    );
 
     let tokens = tokenize("S").unwrap();
-    assert_eq!(tokens[0].token, Token::Struct, "struct should lex as Struct");
+    assert_eq!(
+        tokens[0].token,
+        Token::Struct,
+        "struct should lex as Struct"
+    );
 
     let tokens = tokenize("I").unwrap();
     assert_eq!(tokens[0].token, Token::If, "I should lex as If");
@@ -1487,7 +1496,11 @@ fn selfhost_rust_lexer_cross_check_keywords() {
     assert_eq!(tokens[0].token, Token::Match, "match should lex as Match");
 
     let tokens = tokenize("R").unwrap();
-    assert_eq!(tokens[0].token, Token::Return, "return should lex as Return");
+    assert_eq!(
+        tokens[0].token,
+        Token::Return,
+        "return should lex as Return"
+    );
 
     let tokens = tokenize("B").unwrap();
     assert_eq!(tokens[0].token, Token::Break, "B should lex as Break");

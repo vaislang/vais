@@ -224,6 +224,10 @@ pub(crate) fn optimize_and_output(
         // Extract used modules from AST for smart C runtime linking
         let mut used_modules = extract_used_modules(final_ast);
         for module_path in loaded_modules {
+            if module_path.ends_with(Path::new("src/auth/runtime.vais")) {
+                used_modules.insert("src::auth::runtime".to_string());
+                continue;
+            }
             let is_std_file = module_path
                 .parent()
                 .and_then(|parent| parent.file_name())
@@ -242,6 +246,10 @@ pub(crate) fn optimize_and_output(
         }
         if let Some(modules_map) = &final_ast.modules_map {
             for module_path in modules_map.keys() {
+                if module_path.ends_with(Path::new("src/auth/runtime.vais")) {
+                    used_modules.insert("src::auth::runtime".to_string());
+                    continue;
+                }
                 let is_std_file = module_path
                     .parent()
                     .and_then(|parent| parent.file_name())

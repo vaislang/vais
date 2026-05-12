@@ -737,18 +737,15 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
                     s.clone()
                 };
                 let ptr = self.compile_string_literal(&payload)?;
-                let len = self
-                    .builder
-                    .ins()
-                    .iconst(types::I64, payload.len() as i64);
+                let len = self.builder.ins().iconst(types::I64, payload.len() as i64);
 
                 let mut sig = self.module.make_signature();
-                sig.params.push(AbiParam::new(self.type_mapper.pointer_type()));
+                sig.params
+                    .push(AbiParam::new(self.type_mapper.pointer_type()));
                 sig.params.push(AbiParam::new(types::I64));
                 // Return type: void — represented as no returns in Cranelift sig.
 
-                let func_id = if let Some(&id) = self.external_functions.get("vais_runtime_print")
-                {
+                let func_id = if let Some(&id) = self.external_functions.get("vais_runtime_print") {
                     id
                 } else {
                     let id = self.module.declare_function(
@@ -1108,7 +1105,8 @@ mod tests {
     #[test]
     fn test_nested_calls() {
         let result =
-            compile_and_run("fn double(x:i64)->i64{x*2} fn main()->i64{double(double(5))}").unwrap();
+            compile_and_run("fn double(x:i64)->i64{x*2} fn main()->i64{double(double(5))}")
+                .unwrap();
         assert_eq!(result, 20);
     }
 

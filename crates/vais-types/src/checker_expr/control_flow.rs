@@ -66,7 +66,11 @@ fn expr_is_statement_like(expr: &Spanned<Expr>, self_method_name: Option<&str>) 
             }
             // Last stmt must be an Expr whose value is discarded (the
             // parser produces Stmt::Expr for trailing exprs).
-            match &stmts.last().expect("invariant: stmts non-empty confirmed by is_empty() guard above").node {
+            match &stmts
+                .last()
+                .expect("invariant: stmts non-empty confirmed by is_empty() guard above")
+                .node
+            {
                 Stmt::Expr(inner) => expr_is_statement_like(inner, self_method_name),
                 // Return/Break/Continue never "produce" a value that
                 // must unify with siblings

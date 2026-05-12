@@ -82,22 +82,58 @@ const DUAL_PAIRS: &[KeywordPair] = &[
     // single-form canonical pass. The contextual `E` remains in the table
     // so that legacy sources written with `E Foo {}` still convert to
     // `enum Foo {}` under `--to=multi`. Step 19 P4 retires both.
-    KeywordPair { single: "EN", multi: "enum" },
+    KeywordPair {
+        single: "EN",
+        multi: "enum",
+    },
     // wave 1 (v27)
-    KeywordPair { single: "S",  multi: "struct" },
-    KeywordPair { single: "E",  multi: "enum" },
-    KeywordPair { single: "W",  multi: "trait" },
-    KeywordPair { single: "X",  multi: "impl" },
-    KeywordPair { single: "P",  multi: "pub" },
+    KeywordPair {
+        single: "S",
+        multi: "struct",
+    },
+    KeywordPair {
+        single: "E",
+        multi: "enum",
+    },
+    KeywordPair {
+        single: "W",
+        multi: "trait",
+    },
+    KeywordPair {
+        single: "X",
+        multi: "impl",
+    },
+    KeywordPair {
+        single: "P",
+        multi: "pub",
+    },
     // wave 2 batch 1 (v28)
-    KeywordPair { single: "EL", multi: "else" },
-    KeywordPair { single: "M",  multi: "match" },
-    KeywordPair { single: "R",  multi: "return" },
+    KeywordPair {
+        single: "EL",
+        multi: "else",
+    },
+    KeywordPair {
+        single: "M",
+        multi: "match",
+    },
+    KeywordPair {
+        single: "R",
+        multi: "return",
+    },
     // wave 2 batch 2 (v29)
-    KeywordPair { single: "U",  multi: "use" },
-    KeywordPair { single: "T",  multi: "type" },
+    KeywordPair {
+        single: "U",
+        multi: "use",
+    },
+    KeywordPair {
+        single: "T",
+        multi: "type",
+    },
     // wave 2 fn (v30)
-    KeywordPair { single: "F",  multi: "fn" },
+    KeywordPair {
+        single: "F",
+        multi: "fn",
+    },
 ];
 
 /// Lookup the canonical replacement for a span lexeme under the target
@@ -130,8 +166,8 @@ pub struct DualOptions {
 
 /// Run the `--to=` codemod against a single source file.
 pub fn run_dual(input: &Path, options: &DualOptions) -> Result<String, String> {
-    let source = std::fs::read_to_string(input)
-        .map_err(|e| format!("read {}: {}", input.display(), e))?;
+    let source =
+        std::fs::read_to_string(input).map_err(|e| format!("read {}: {}", input.display(), e))?;
 
     let converted = convert_source(&source, options.target)?;
 
@@ -166,8 +202,7 @@ pub fn run_dual(input: &Path, options: &DualOptions) -> Result<String, String> {
 /// param identifiers (which are conventionally single-letter), so the
 /// guard only applies to single-letter retired forms.
 pub fn convert_source(source: &str, target: DualForm) -> Result<String, String> {
-    let tokens = tokenize(source)
-        .map_err(|e| format!("lex error: {:?}", e))?;
+    let tokens = tokenize(source).map_err(|e| format!("lex error: {:?}", e))?;
 
     let mut out = String::with_capacity(source.len());
     let mut cursor = 0usize;
@@ -262,10 +297,14 @@ pub fn cmd_fmt_dual(input: &Path, options: &DualOptions) -> Result<(), String> {
     if options.check {
         print!("{}", converted);
     } else {
-        eprintln!("Wrote {} ({} form)", input.display(), match options.target {
-            DualForm::Multi => "multi",
-            DualForm::Single => "single",
-        });
+        eprintln!(
+            "Wrote {} ({} form)",
+            input.display(),
+            match options.target {
+                DualForm::Multi => "multi",
+                DualForm::Single => "single",
+            }
+        );
     }
     Ok(())
 }
@@ -373,10 +412,7 @@ mod tests {
         // never fires on the substring `fn`.
         let src = "F call_test_fn(fn_ptr: i64) -> i64 { fn_ptr }\n";
         let multi = convert_source(src, DualForm::Multi).unwrap();
-        assert_eq!(
-            multi,
-            "fn call_test_fn(fn_ptr: i64) -> i64 { fn_ptr }\n"
-        );
+        assert_eq!(multi, "fn call_test_fn(fn_ptr: i64) -> i64 { fn_ptr }\n");
         let back = convert_source(&multi, DualForm::Single).unwrap();
         assert_eq!(back, src);
     }

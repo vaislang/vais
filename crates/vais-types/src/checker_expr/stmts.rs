@@ -162,8 +162,7 @@ impl TypeChecker {
                 // safe under default).
                 if let Some(ret_expr) = expr {
                     if let Expr::Lambda { params, body, .. } = &ret_expr.node {
-                        let opt_out = std::env::var("VAIS_REJECT_A4_15")
-                            .as_deref() == Ok("0");
+                        let opt_out = std::env::var("VAIS_REJECT_A4_15").as_deref() == Ok("0");
                         if !opt_out {
                             let param_names: std::collections::HashSet<_> =
                                 params.iter().map(|p| p.name.node.clone()).collect();

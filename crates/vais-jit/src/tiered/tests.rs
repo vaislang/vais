@@ -137,7 +137,8 @@ fn test_hot_function_detection() {
         baseline_to_optimizing: 50,
     };
 
-    let source = "fn loop_func()->i64{x:=0;L{I x>=10{return x} x:=x+1}0} fn main()->i64{loop_func()}";
+    let source =
+        "fn loop_func()->i64{x:=0;L{I x>=10{return x} x:=x+1}0} fn main()->i64{loop_func()}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::with_thresholds(thresholds.clone());
@@ -217,7 +218,8 @@ fn test_branch_profiling() {
 
 #[test]
 fn test_loop_profiling() {
-    let source = "fn loop_test()->i64{i:=0;L{I i>=5{return i} i:=i+1}0} fn main()->i64{loop_test()}";
+    let source =
+        "fn loop_test()->i64{i:=0;L{I i>=5{return i} i:=i+1}0} fn main()->i64{loop_test()}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::new();
@@ -257,7 +259,8 @@ fn test_tiered_jit_with_custom_thresholds() {
 
 #[test]
 fn test_hot_path_score_calculation() {
-    let source = "fn loop_heavy()->i64{x:=0;L{I x>=100{return x} x:=x+1}0} fn main()->i64{loop_heavy()}";
+    let source =
+        "fn loop_heavy()->i64{x:=0;L{I x>=100{return x} x:=x+1}0} fn main()->i64{loop_heavy()}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::new();

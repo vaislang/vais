@@ -370,6 +370,24 @@ pub(super) fn add_runtime_and_native_libs(
     let mut linked_libs: HashSet<&str> = HashSet::new();
     let mut linked_runtimes: Vec<String> = Vec::new();
 
+    if let Some(rt_path) = find_runtime_file("auth_runtime.c") {
+        let rt_str = rt_path.to_str().unwrap_or("auth_runtime.c").to_string();
+        linked_runtimes.push(rt_str.clone());
+        args.push(rt_str);
+        if verbose {
+            println!(
+                "{} Linking auth runtime from: {}",
+                "info:".blue().bold(),
+                rt_path.display()
+            );
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        linked_libs.insert("-lcrypto");
+        args.push("-lcrypto".to_string());
+    }
+
     for module in used_modules {
         if let Some(runtime_info) = get_runtime_for_module(module) {
             for runtime_file in runtime_files_for_module(module, runtime_info.file) {
@@ -598,6 +616,17 @@ pub(crate) fn add_runtime_libs(
     let mut needs_pthread = false;
     let mut linked_libs: HashSet<&str> = HashSet::new();
     let mut linked_runtimes: Vec<String> = Vec::new();
+
+    if let Some(rt_path) = find_runtime_file("auth_runtime.c") {
+        let rt_str = rt_path.to_str().unwrap_or("auth_runtime.c").to_string();
+        linked_runtimes.push(rt_str.clone());
+        args.push(rt_str);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        linked_libs.insert("-lcrypto");
+        args.push("-lcrypto".to_string());
+    }
 
     for module in used_modules {
         if let Some(runtime_info) = get_runtime_for_module(module) {

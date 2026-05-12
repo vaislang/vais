@@ -1096,7 +1096,10 @@ fn main() -> i64 {
 fn syntax_neg_match_unclosed() {
     let src = "fn main() -> i64 { match x { ";
     let (_d, p) = write_tmp("neg_match_unclosed.vais", src);
-    assert!(!ok_parse(&p), "should not parse: match x with unclosed brace");
+    assert!(
+        !ok_parse(&p),
+        "should not parse: match x with unclosed brace"
+    );
 }
 
 #[test]
@@ -1985,7 +1988,10 @@ fn main() -> i64 {
 fn syntax_misc_empty_struct() {
     let src = "struct Empty {}\nfn main() -> i64 { _e := Empty {}\n 0 }";
     let (_d, p) = write_tmp("misc_empty_struct.vais", src);
-    assert!(ok_parse(&p), "ok_parse failed: empty struct struct Empty {{}}");
+    assert!(
+        ok_parse(&p),
+        "ok_parse failed: empty struct struct Empty {{}}"
+    );
 }
 
 #[test]

@@ -130,7 +130,10 @@ fn main() -> i64 {
 fn vaisc_path() -> PathBuf {
     let exe = std::env::current_exe().expect("current_exe");
     let mut dir = exe.parent().expect("test binary parent dir").to_path_buf();
-    while dir.file_name().is_some_and(|f| f != "release" && f != "debug") {
+    while dir
+        .file_name()
+        .is_some_and(|f| f != "release" && f != "debug")
+    {
         dir = dir.parent().expect("walk to release/debug").to_path_buf();
     }
     dir.join("vaisc")
@@ -142,7 +145,10 @@ fn std_dir() -> String {
     }
     let mut path = Path::new(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     while !path.join("std").is_dir() {
-        path = path.parent().expect("walk up to compiler root").to_path_buf();
+        path = path
+            .parent()
+            .expect("walk up to compiler root")
+            .to_path_buf();
     }
     path.join("std")
         .to_str()

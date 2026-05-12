@@ -64,6 +64,11 @@ pub(crate) fn get_runtime_for_module(module_path: &str) -> Option<RuntimeInfo> {
                 "-lcrypto",
             ],
         }),
+        "src::auth" | "src::auth::runtime" => Some(RuntimeInfo {
+            file: "auth_runtime.c",
+            needs_pthread: false,
+            libs: &[],
+        }),
 
         // Concurrency modules
         "std::thread" => Some(RuntimeInfo {
@@ -172,11 +177,7 @@ pub(crate) fn runtime_files_for_module(
         // std::tls reuses TCP helpers from http_runtime.c (`__tcp_close` etc.)
         // and connection-establishment from http_client_runtime.c (`__hc_tcp_connect`).
         // Linking only tls_runtime.c leaves these two helpers as undefined symbols.
-        "std::tls" => vec![
-            "http_runtime.c",
-            "http_client_runtime.c",
-            primary_file,
-        ],
+        "std::tls" => vec!["http_runtime.c", "http_client_runtime.c", primary_file],
         _ => vec![primary_file],
     }
 }

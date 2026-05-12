@@ -108,7 +108,7 @@ fn generate_malformed_program(variant: usize) -> String {
         2 => "fn div(a: i64, b: i64) -> i64 { return a / }".to_string(), // Incomplete expression
         3 => "fn sub(x: i64) { return x - 1 }".to_string(), // Missing return type
         4 => "struct Point { x: i64 y: i64 }".to_string(), // Missing comma in struct
-        5 => "fn test() -> i64 { a := 5 R }".to_string(), // Incomplete return
+        5 => "fn test() -> i64 { a := 5 R }".to_string(),  // Incomplete return
         6 => "fn loop_test() -> i64 { L { B } return 0".to_string(), // Missing closing brace
         7 => "fn bad_if(x: i64) -> i64 { I x > 0 { return x } E }".to_string(), // Incomplete else
         _ => "fn broken() -> i64 { return }".to_string(),  // Incomplete return value

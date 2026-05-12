@@ -1,4 +1,5 @@
 use src/auth/session
+use src/auth/runtime
 
 fn smoke_session_create_get_destroy() -> i64 {
     store := mut SessionStore.new()
@@ -11,6 +12,14 @@ fn smoke_session_create_get_destroy() -> i64 {
     I created.session_id == "" {
         println("FAIL session non-empty id")
         return 2
+    }
+    I !created.session_id.starts_with("sess_") {
+        println("FAIL session id prefix")
+        return 10
+    }
+    I created.session_id.len() != 69 {
+        println("FAIL session id random hex length")
+        return 11
     }
     I created.user_id != "user1" {
         println("FAIL session user id")
@@ -28,6 +37,13 @@ fn smoke_session_create_get_destroy() -> i64 {
         println("FAIL session get live")
         return 6
     }
+
+    second := store.create("user1", 60)
+    I second.session_id == created.session_id {
+        println("FAIL session random id uniqueness")
+        return 12
+    }
+    store.destroy(second.session_id)
 
     full := store.get_session(created.session_id)
     I full.user_id != "user1" {
@@ -110,6 +126,8 @@ fn smoke_session_expiry_and_cleanup() -> i64 {
 }
 
 fn main() -> i64 {
+    auth_set_test_time_sec(1000)
+
     failures := mut 0
     failures += smoke_session_create_get_destroy()
     failures += smoke_session_data_bag()

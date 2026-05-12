@@ -412,7 +412,30 @@ pub(crate) fn compile_per_module(
     let mut linked_libs: std::collections::HashSet<&str> = std::collections::HashSet::new();
     let mut linked_runtimes: Vec<String> = Vec::new();
     let mut used_modules = crate::runtime::extract_used_modules(final_ast);
+
+    if let Some(rt_path) = find_runtime_file("auth_runtime.c") {
+        let rt_str = rt_path.to_str().unwrap_or("auth_runtime.c").to_string();
+        linked_runtimes.push(rt_str.clone());
+        link_args.push(rt_str);
+        if verbose {
+            println!(
+                "{} Linking auth runtime from: {}",
+                "info:".blue().bold(),
+                rt_path.display()
+            );
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        linked_libs.insert("-lcrypto");
+        link_args.push("-lcrypto".to_string());
+    }
+
     for module_path in modules_map.keys() {
+        if module_path.ends_with(Path::new("src/auth/runtime.vais")) {
+            used_modules.insert("src::auth::runtime".to_string());
+            continue;
+        }
         let is_std_file = module_path
             .parent()
             .and_then(|parent| parent.file_name())

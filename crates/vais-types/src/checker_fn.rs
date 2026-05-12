@@ -113,13 +113,16 @@ impl TypeChecker {
         let trailing_expr: Option<&Spanned<Expr>> = match &f.body {
             FunctionBody::Expr(expr) => Some(expr),
             FunctionBody::Block(stmts) => stmts.last().and_then(|s| {
-                if let Stmt::Expr(e) = &s.node { Some(&**e) } else { None }
+                if let Stmt::Expr(e) = &s.node {
+                    Some(&**e)
+                } else {
+                    None
+                }
             }),
         };
         if let Some(trailing) = trailing_expr {
             if let Expr::Lambda { params, body, .. } = &trailing.node {
-                let opt_out = std::env::var("VAIS_REJECT_A4_15")
-                    .as_deref() == Ok("0");
+                let opt_out = std::env::var("VAIS_REJECT_A4_15").as_deref() == Ok("0");
                 if !opt_out {
                     let param_names: std::collections::HashSet<_> =
                         params.iter().map(|p| p.name.node.clone()).collect();

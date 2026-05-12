@@ -1612,7 +1612,11 @@ utils = "1.0.0"
         "[package]\nname = \"my-lib\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
-    fs::write(member_dir.join("src/lib.vais"), "fn greet() -> i64 { 42 }\n").unwrap();
+    fs::write(
+        member_dir.join("src/lib.vais"),
+        "fn greet() -> i64 { 42 }\n",
+    )
+    .unwrap();
 
     let output = std::process::Command::new(vaisc_bin())
         .args(["pkg", "check", "--workspace"])

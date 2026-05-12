@@ -21,7 +21,11 @@ fn create_vais_file(dir: &std::path::Path, name: &str, content: &str) -> PathBuf
 fn test_single_module_codegen() {
     let temp_dir = TempDir::new().unwrap();
 
-    let main_file = create_vais_file(temp_dir.path(), "main.vais", "fn main() -> i32 { return 42 }");
+    let main_file = create_vais_file(
+        temp_dir.path(),
+        "main.vais",
+        "fn main() -> i32 { return 42 }",
+    );
 
     // Run vaisc to compile
     let output = Command::new("cargo")

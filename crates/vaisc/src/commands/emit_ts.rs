@@ -192,21 +192,12 @@ impl fmt::Display for EmitTsError {
 /// or when I/O / parse fails.
 pub fn run_emit_ts(opts: EmitTsOptions) -> Result<EmitTsReport, EmitTsError> {
     // Step 1 — read source.
-    let source = std::fs::read_to_string(&opts.input).map_err(|e| {
-        EmitTsError::Io(format!(
-            "cannot read '{}': {}",
-            opts.input.display(),
-            e
-        ))
-    })?;
+    let source = std::fs::read_to_string(&opts.input)
+        .map_err(|e| EmitTsError::Io(format!("cannot read '{}': {}", opts.input.display(), e)))?;
 
     // Step 2 — parse.
     let ast = vais_parser::parse(&source).map_err(|e| {
-        EmitTsError::Parse(format!(
-            "parse error in '{}': {}",
-            opts.input.display(),
-            e
-        ))
+        EmitTsError::Parse(format!("parse error in '{}': {}", opts.input.display(), e))
     })?;
 
     // Step 3 — type-check (we run TC for correctness but do not use the
@@ -291,16 +282,15 @@ pub fn run_emit_ts(opts: EmitTsOptions) -> Result<EmitTsReport, EmitTsError> {
 
                 for field in &s.fields {
                     let field_name = field.name.node.clone();
-                    let ts_type =
-                        lower_type(&field.ty.node, &known_types).ok_or_else(|| {
-                            let code = classify_type_error_code(&field.ty.node);
-                            EmitTsError::UnsupportedField {
-                                code,
-                                struct_name: struct_name.clone(),
-                                field_name: field_name.clone(),
-                                vais_type: format_type(&field.ty.node),
-                            }
-                        })?;
+                    let ts_type = lower_type(&field.ty.node, &known_types).ok_or_else(|| {
+                        let code = classify_type_error_code(&field.ty.node);
+                        EmitTsError::UnsupportedField {
+                            code,
+                            struct_name: struct_name.clone(),
+                            field_name: field_name.clone(),
+                            vais_type: format_type(&field.ty.node),
+                        }
+                    })?;
 
                     ts_fields.push(TsField {
                         name: field_name,
@@ -311,7 +301,13 @@ pub fn run_emit_ts(opts: EmitTsOptions) -> Result<EmitTsReport, EmitTsError> {
                 // Also add to the flat interfaces list for backward-compat.
                 report.interfaces.push(TsInterface {
                     name: struct_name.clone(),
-                    fields: ts_fields.iter().map(|f| TsField { name: f.name.clone(), ts_type: f.ts_type.clone() }).collect(),
+                    fields: ts_fields
+                        .iter()
+                        .map(|f| TsField {
+                            name: f.name.clone(),
+                            ts_type: f.ts_type.clone(),
+                        })
+                        .collect(),
                 });
 
                 decls.push(TsDecl::Interface(TsInterface {
@@ -363,16 +359,17 @@ pub fn run_emit_ts(opts: EmitTsOptions) -> Result<EmitTsReport, EmitTsError> {
                         VariantFields::Tuple(types) => {
                             let mut parts = format!("{{ kind: \"{}\"", vname);
                             for (idx, ty_spanned) in types.iter().enumerate() {
-                                let ts_t =
-                                    lower_type(&ty_spanned.node, &known_types).ok_or_else(|| {
+                                let ts_t = lower_type(&ty_spanned.node, &known_types).ok_or_else(
+                                    || {
                                         let code = classify_type_error_code(&ty_spanned.node);
                                         EmitTsError::UnsupportedField {
                                             code,
                                             struct_name: enum_name.clone(),
-                                            field_name: format!("{}._{}",vname, idx),
+                                            field_name: format!("{}._{}", vname, idx),
                                             vais_type: format_type(&ty_spanned.node),
                                         }
-                                    })?;
+                                    },
+                                )?;
                                 parts.push_str(&format!(", _{}: {}", idx, ts_t));
                             }
                             parts.push_str(" }");
@@ -536,13 +533,8 @@ pub fn run_emit_ts(opts: EmitTsOptions) -> Result<EmitTsReport, EmitTsError> {
             })?;
         }
     }
-    std::fs::write(&opts.output, &dts_content).map_err(|e| {
-        EmitTsError::Io(format!(
-            "cannot write '{}': {}",
-            opts.output.display(),
-            e
-        ))
-    })?;
+    std::fs::write(&opts.output, &dts_content)
+        .map_err(|e| EmitTsError::Io(format!("cannot write '{}': {}", opts.output.display(), e)))?;
 
     report.written = true;
     Ok(report)
@@ -579,12 +571,7 @@ fn topo_sort(decls: Vec<TsDecl>) -> Vec<TsDecl> {
     let mut visited = vec![false; n];
     let mut order: Vec<usize> = Vec::with_capacity(n);
 
-    fn visit(
-        idx: usize,
-        deps: &[HashSet<usize>],
-        visited: &mut Vec<bool>,
-        order: &mut Vec<usize>,
-    ) {
+    fn visit(idx: usize, deps: &[HashSet<usize>], visited: &mut Vec<bool>, order: &mut Vec<usize>) {
         if visited[idx] {
             return;
         }
@@ -604,9 +591,9 @@ fn topo_sort(decls: Vec<TsDecl>) -> Vec<TsDecl> {
     order
         .into_iter()
         .map(|i| {
-            decls_opt[i]
-                .take()
-                .expect("invariant: topo order is a permutation of 0..n; each index taken exactly once")
+            decls_opt[i].take().expect(
+                "invariant: topo order is a permutation of 0..n; each index taken exactly once",
+            )
         })
         .collect()
 }
@@ -619,7 +606,12 @@ fn topo_sort(decls: Vec<TsDecl>) -> Vec<TsDecl> {
 /// AST walking infrastructure.
 fn referenced_type_names(decl: &TsDecl) -> Vec<String> {
     let rendered = match decl {
-        TsDecl::Interface(i) => i.fields.iter().map(|f| f.ts_type.clone()).collect::<Vec<_>>().join(" "),
+        TsDecl::Interface(i) => i
+            .fields
+            .iter()
+            .map(|f| f.ts_type.clone())
+            .collect::<Vec<_>>()
+            .join(" "),
         TsDecl::TypeAlias(a) => a.rhs.clone(),
     };
     // Extract bare identifiers that start with an uppercase letter — these
@@ -733,18 +725,18 @@ fn lower_type(ty: &Type, known_types: &HashSet<String>) -> Option<String> {
                 // Integer types → branded number (Stage 4 per design v6).
                 // i64 → f64 schema change shows up as a typed change in TS
                 // because each width has a distinct brand.
-                "i8"   => Some("VaisI8".to_string()),
-                "i16"  => Some("VaisI16".to_string()),
-                "i32"  => Some("VaisI32".to_string()),
-                "i64"  => Some("VaisI64".to_string()),
+                "i8" => Some("VaisI8".to_string()),
+                "i16" => Some("VaisI16".to_string()),
+                "i32" => Some("VaisI32".to_string()),
+                "i64" => Some("VaisI64".to_string()),
                 "i128" => Some("VaisI128".to_string()),
-                "u8"   => Some("VaisU8".to_string()),
-                "u16"  => Some("VaisU16".to_string()),
-                "u32"  => Some("VaisU32".to_string()),
-                "u64"  => Some("VaisU64".to_string()),
+                "u8" => Some("VaisU8".to_string()),
+                "u16" => Some("VaisU16".to_string()),
+                "u32" => Some("VaisU32".to_string()),
+                "u64" => Some("VaisU64".to_string()),
                 "u128" => Some("VaisU128".to_string()),
-                "f32"  => Some("VaisF32".to_string()),
-                "f64"  => Some("VaisF64".to_string()),
+                "f32" => Some("VaisF32".to_string()),
+                "f64" => Some("VaisF64".to_string()),
                 // Boolean → boolean
                 "bool" => Some("boolean".to_string()),
                 // String types → string
@@ -799,9 +791,7 @@ fn lower_type(ty: &Type, known_types: &HashSet<String>) -> Option<String> {
         }
 
         // ── References &T / &mut T → T_lowered (ownership erased) ────────
-        Type::Ref(inner) | Type::RefMut(inner) => {
-            lower_type(&inner.node, known_types)
-        }
+        Type::Ref(inner) | Type::RefMut(inner) => lower_type(&inner.node, known_types),
         Type::RefLifetime { inner, .. } | Type::RefMutLifetime { inner, .. } => {
             lower_type(&inner.node, known_types)
         }
@@ -863,10 +853,7 @@ fn render_dts_stage1(decls: &[TsDecl]) -> String {
             TsDecl::Interface(iface) => {
                 out.push_str(&format!("export interface {} {{\n", iface.name));
                 for field in &iface.fields {
-                    out.push_str(&format!(
-                        "  readonly {}: {};\n",
-                        field.name, field.ts_type
-                    ));
+                    out.push_str(&format!("  readonly {}: {};\n", field.name, field.ts_type));
                 }
                 out.push_str("}\n");
             }
@@ -890,10 +877,7 @@ fn render_dts(interfaces: &[TsInterface]) -> String {
         out.push('\n');
         out.push_str(&format!("export interface {} {{\n", iface.name));
         for field in &iface.fields {
-            out.push_str(&format!(
-                "  readonly {}: {};\n",
-                field.name, field.ts_type
-            ));
+            out.push_str(&format!("  readonly {}: {};\n", field.name, field.ts_type));
         }
         out.push_str("}\n");
     }
@@ -985,7 +969,9 @@ pub(crate) fn cmd_emit_ts(input: &Path, output: &Path) -> Result<(), String> {
                 code, kind, item_name
             ))
         }
-        Err(e @ EmitTsError::Io(_)) | Err(e @ EmitTsError::Parse(_)) | Err(e @ EmitTsError::TypeCheck(_)) => {
+        Err(e @ EmitTsError::Io(_))
+        | Err(e @ EmitTsError::Parse(_))
+        | Err(e @ EmitTsError::TypeCheck(_)) => {
             // Exit code 2 for I/O / parse / type-check errors.
             Err(format!("{}", e))
         }
@@ -999,21 +985,38 @@ mod tests {
     use super::*;
 
     fn make_named(name: &str) -> Type {
-        Type::Named { name: name.to_string(), generics: vec![] }
+        Type::Named {
+            name: name.to_string(),
+            generics: vec![],
+        }
     }
 
     fn make_named_generic(name: &str, args: Vec<Type>) -> Type {
         Type::Named {
             name: name.to_string(),
-            generics: args.into_iter().map(|t| vais_ast::Spanned {
-                node: t,
-                span: vais_ast::Span { file_id: 0, start: 0, end: 0 },
-            }).collect(),
+            generics: args
+                .into_iter()
+                .map(|t| vais_ast::Spanned {
+                    node: t,
+                    span: vais_ast::Span {
+                        file_id: 0,
+                        start: 0,
+                        end: 0,
+                    },
+                })
+                .collect(),
         }
     }
 
     fn spanned(t: Type) -> vais_ast::Spanned<Type> {
-        vais_ast::Spanned { node: t, span: vais_ast::Span { file_id: 0, start: 0, end: 0 } }
+        vais_ast::Spanned {
+            node: t,
+            span: vais_ast::Span {
+                file_id: 0,
+                start: 0,
+                end: 0,
+            },
+        }
     }
 
     fn empty_known() -> HashSet<String> {
@@ -1026,16 +1029,24 @@ mod tests {
     fn lower_integer_types() {
         // Stage 4: each width has a distinct branded TS alias.
         for (name, expected) in &[
-            ("i8", "VaisI8"), ("i16", "VaisI16"), ("i32", "VaisI32"),
-            ("i64", "VaisI64"), ("i128", "VaisI128"),
-            ("u8", "VaisU8"), ("u16", "VaisU16"), ("u32", "VaisU32"),
-            ("u64", "VaisU64"), ("u128", "VaisU128"),
+            ("i8", "VaisI8"),
+            ("i16", "VaisI16"),
+            ("i32", "VaisI32"),
+            ("i64", "VaisI64"),
+            ("i128", "VaisI128"),
+            ("u8", "VaisU8"),
+            ("u16", "VaisU16"),
+            ("u32", "VaisU32"),
+            ("u64", "VaisU64"),
+            ("u128", "VaisU128"),
         ] {
             let ty = make_named(name);
             assert_eq!(
                 lower_type(&ty, &empty_known()),
                 Some(expected.to_string()),
-                "expected '{}' for {}", expected, name
+                "expected '{}' for {}",
+                expected,
+                name
             );
         }
     }
@@ -1111,7 +1122,10 @@ mod tests {
 
     #[test]
     fn lower_unit() {
-        assert_eq!(lower_type(&Type::Unit, &empty_known()), Some("null".to_string()));
+        assert_eq!(
+            lower_type(&Type::Unit, &empty_known()),
+            Some("null".to_string())
+        );
     }
 
     #[test]
@@ -1150,9 +1164,18 @@ mod tests {
         let interfaces = vec![TsInterface {
             name: "User".to_string(),
             fields: vec![
-                TsField { name: "id".to_string(), ts_type: "number".to_string() },
-                TsField { name: "name".to_string(), ts_type: "string".to_string() },
-                TsField { name: "active".to_string(), ts_type: "boolean".to_string() },
+                TsField {
+                    name: "id".to_string(),
+                    ts_type: "number".to_string(),
+                },
+                TsField {
+                    name: "name".to_string(),
+                    ts_type: "string".to_string(),
+                },
+                TsField {
+                    name: "active".to_string(),
+                    ts_type: "boolean".to_string(),
+                },
             ],
         }];
         let rendered = render_dts(&interfaces);

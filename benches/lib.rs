@@ -137,7 +137,10 @@ pub mod utils {
                     }
                     2 => {
                         // Conditional chain
-                        code.push_str(&format!("fn mod{}_conditional_{}(x: i64) -> i64 {{\n", m, f));
+                        code.push_str(&format!(
+                            "fn mod{}_conditional_{}(x: i64) -> i64 {{\n",
+                            m, f
+                        ));
                         code.push_str(&format!("    I x < {} {{\n", f * 5));
                         code.push_str(&format!("        return x * {}\n", f % 4 + 2));
                         code.push_str(&format!("    }} else I x < {} {{\n", f * 10));
@@ -328,7 +331,10 @@ pub mod utils {
                         lines += 8;
                     }
                     1 => {
-                        code.push_str(&format!("pub fn calculate_{}(a: i64, b: i64) -> i64 {{\n", f));
+                        code.push_str(&format!(
+                            "pub fn calculate_{}(a: i64, b: i64) -> i64 {{\n",
+                            f
+                        ));
                         code.push_str("    L {\n");
                         code.push_str("        I a <= b {\n");
                         code.push_str("            return a + b\n");

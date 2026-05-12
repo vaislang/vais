@@ -234,10 +234,7 @@ pub(crate) fn cmd_check(
             // close marked the 9 A3 fixtures as DONE but left the default
             // unchanged, which the user flagged as a non-root close. This
             // commit lands the actual root fix.
-            let opt_out = std::env::var("VAIS_STRICT_IMPORTS")
-                .ok()
-                .as_deref()
-                == Some("0");
+            let opt_out = std::env::var("VAIS_STRICT_IMPORTS").ok().as_deref() == Some("0");
             if !opt_out {
                 return Err(format!(
                     "error[E_IMPORT_NOT_FOUND]: import resolution failed\n  {}\n  Set VAIS_STRICT_IMPORTS=0 to fall back to single-file parse (legacy harness only — uncertified surfaces stay rejected).",

@@ -893,14 +893,8 @@ impl TypeChecker {
                             .collect();
                         if !missing.is_empty() {
                             return Some(Err(TypeError::Mismatch {
-                                expected: format!(
-                                    "all required fields of struct `{}`",
-                                    name.node
-                                ),
-                                found: format!(
-                                    "missing fields: {}",
-                                    missing.join(", ")
-                                ),
+                                expected: format!("all required fields of struct `{}`", name.node),
+                                found: format!("missing fields: {}", missing.join(", ")),
                                 span: Some(name.span),
                             }));
                         }
