@@ -29,6 +29,10 @@ if [[ $# -ne 1 || ( "$1" != "positive" && "$1" != "negative" ) ]]; then
   exit 2
 fi
 MODE="$1"
+case "$MODE" in
+  positive) ASSERTION_TOTAL=9 ;;
+  negative) ASSERTION_TOTAL=4 ;;
+esac
 
 # ── Path resolution ──────────────────────────────────────────────────────
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -258,6 +262,10 @@ esac
 
 if [[ "$GATE_EXIT" == "0" ]]; then
   echo ""
+  echo "GATE ASSERTIONS: ${ASSERTION_TOTAL}/${ASSERTION_TOTAL}"
   echo "GATE PASS ($MODE): all assertions held."
+else
+  echo ""
+  echo "GATE ASSERTIONS: 0/${ASSERTION_TOTAL}"
 fi
 # Cleanup trap fires now and exits with $GATE_EXIT.

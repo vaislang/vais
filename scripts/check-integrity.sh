@@ -16,7 +16,7 @@
 #   INTEGRITY_WEB_PACKAGES_MIN=3272        minimum vais-web non-kit packages tests
 #   INTEGRITY_WEB_FULL_BUILD_MIN=24        minimum vais-web package full-build smoke
 #   INTEGRITY_BACKEND_PHASE158_MIN=18      minimum phase158 backend smoke
-#   INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=2   minimum cross_package_schema gate (positive + negative)
+#   INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=13  minimum cross_package_schema assertions (positive 9 + negative 4)
 #   INTEGRITY_PKG_FULL_BUILD_MIN=2         minimum package full-build smoke (Phase 1 100% Gap)
 #
 # Strict-default imports (Step 11 root fix, loop 29, 2026-05-08):
@@ -64,7 +64,7 @@ INTEGRITY_WEB_RUNTIME_MIN="${INTEGRITY_WEB_RUNTIME_MIN:-61}"
 INTEGRITY_WEB_UNIT_MIN="${INTEGRITY_WEB_UNIT_MIN:-390}"
 INTEGRITY_WEB_PACKAGES_MIN="${INTEGRITY_WEB_PACKAGES_MIN:-3272}"
 INTEGRITY_WEB_FULL_BUILD_MIN="${INTEGRITY_WEB_FULL_BUILD_MIN:-24}"
-INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN="${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN:-2}"
+INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN="${INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN:-13}"
 INTEGRITY_BACKEND_PHASE158_MIN="${INTEGRITY_BACKEND_PHASE158_MIN:-18}"
 # Phase 1 100% Gap (master-plan v79): package full-build smoke baseline.
 # Current: vais-server PASS, vaisdb PASS → 2/2. This locks the package
@@ -368,22 +368,35 @@ fi
 CROSS_PKG_SCHEMA_LOG="/tmp/vais-cross-package-schema.log"
 CROSS_PKG_SCHEMA_EXIT=0
 CROSS_PKG_SCHEMA_PASSED=0
-CROSS_PKG_SCHEMA_TOTAL=2  # positive + negative
+CROSS_PKG_SCHEMA_TOTAL=0  # positive + negative assertion totals, reported by gate.sh
 CROSS_PKG_SCHEMA_GATE="${REPO_ROOT}/tests/empirical/cross_package_schema/tests/gate.sh"
 
+add_cross_pkg_schema_assertions() {
+    local fallback_total="$1"
+    local line
+    local passed
+    local total
+    line="$(grep -E 'GATE ASSERTIONS: [0-9]+/[0-9]+' "${CROSS_PKG_SCHEMA_LOG}" | tail -n 1 || true)"
+    if [[ "${line}" =~ GATE[[:space:]]ASSERTIONS:[[:space:]]([0-9]+)/([0-9]+) ]]; then
+        passed="${BASH_REMATCH[1]}"
+        total="${BASH_REMATCH[2]}"
+    else
+        passed=0
+        total="${fallback_total}"
+    fi
+    CROSS_PKG_SCHEMA_PASSED=$((CROSS_PKG_SCHEMA_PASSED + passed))
+    CROSS_PKG_SCHEMA_TOTAL=$((CROSS_PKG_SCHEMA_TOTAL + total))
+}
+
 if [ -x "${CROSS_PKG_SCHEMA_GATE}" ]; then
-    echo "check-integrity: running cross_package_schema gate (positive + negative)..."
+    echo "check-integrity: running cross_package_schema gate (positive + negative, 13 assertions)..."
     : > "${CROSS_PKG_SCHEMA_LOG}"
     POS_EXIT=0
     bash "${CROSS_PKG_SCHEMA_GATE}" positive >> "${CROSS_PKG_SCHEMA_LOG}" 2>&1 || POS_EXIT=$?
+    add_cross_pkg_schema_assertions 9
     NEG_EXIT=0
     bash "${CROSS_PKG_SCHEMA_GATE}" negative >> "${CROSS_PKG_SCHEMA_LOG}" 2>&1 || NEG_EXIT=$?
-    if [ "${POS_EXIT}" -eq 0 ]; then
-        CROSS_PKG_SCHEMA_PASSED=$((CROSS_PKG_SCHEMA_PASSED + 1))
-    fi
-    if [ "${NEG_EXIT}" -eq 0 ]; then
-        CROSS_PKG_SCHEMA_PASSED=$((CROSS_PKG_SCHEMA_PASSED + 1))
-    fi
+    add_cross_pkg_schema_assertions 4
     if [ "${POS_EXIT}" -ne 0 ] || [ "${NEG_EXIT}" -ne 0 ]; then
         CROSS_PKG_SCHEMA_EXIT=1
     fi
