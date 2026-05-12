@@ -1,0 +1,6 @@
+P S User {
+    id: i64,
+    email: str,
+    name: str,
+    # PRODUCT_PROPAGATION_TEST_INSERT_HERE
+}

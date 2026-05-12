@@ -15,17 +15,17 @@
   "hero": {
     "badge": "Certified Core + Scoped Evidence",
     "title": "<span class=\"gradient-text\">명확한 Vais</span>를 작성하고,<br><span class=\"gradient-text\">네이티브 성능</span>을 얻으세요",
-    "subtitle": "Vais (Vibe AI Language for Systems)는 AI 코드 생성에 최적화된 시스템 프로그래밍 언어입니다. 현재 공개 기준은 main-reproducible gate와 main port 대기 중인 integration evidence를 구분합니다.",
+    "subtitle": "Vais (Vibe AI Language for Systems)는 AI 코드 생성에 최적화된 시스템 프로그래밍 언어입니다. 현재 공개 기준은 main-reproducible gate, main fixture로 port된 schema gate, aggregate main port 대기 중인 integration evidence를 구분합니다.",
     "tryBrowser": "브라우저에서 시도하기",
     "install": "brew install vais"
   },
   "compare": {
     "title": "Canonical 문법과 Evidence-scoped Claim",
-    "subtitle": "Step 19에서 기존 single-letter keyword form은 제거되었습니다. 공개 claim은 main에서 재현되는 gate와 main gate port 대기 중인 integration evidence를 구분합니다.",
+    "subtitle": "Step 19에서 기존 single-letter keyword form은 제거되었습니다. 공개 claim은 main에서 재현되는 gate, main fixture로 port된 schema gate, aggregate main port 대기 중인 integration evidence를 구분합니다.",
     "vais": "Vais",
     "tokens": "토큰",
-    "barTitle": "Evidence Snapshot — 2026-05-12",
-    "barNote": "수치는 gate branch의 integration evidence입니다. public main branch는 현재 wording/build boundary를 강제하며 aggregate gate와 product fixture는 main port 대기 중입니다."
+    "barTitle": "Evidence Snapshot — 2026-05-13",
+    "barNote": "schema gate는 compiler main fixture/local workspace에서 재현됩니다: cross-package schema 15/15, shared-schema product evidence 9/9. Runtime/package 수치는 gate branch integration evidence이며 aggregate runtime gate는 main port 대기 중입니다."
   },
   "performance": {
     "title": "네이티브 성능",
@@ -107,7 +107,7 @@
   "vaisx": {
     "badge": "신규",
     "title": "Vais로 웹 앱 만들기",
-    "subtitle": "VaisX는 Vais web framework workbench입니다. 현재 공개 claim은 main-reproducible gate와 main port 대기 중인 integration evidence를 구분합니다.",
+    "subtitle": "VaisX는 Vais web framework workbench입니다. 현재 공개 claim은 main-reproducible gate, main fixture schema gate, aggregate main port 대기 중인 integration evidence를 구분합니다.",
     "compiler": {
       "title": "컴파일 타임 반응성",
       "description": "Reactive state 분석과 DOM update generation은 명시된 gate가 덮는 범위에서만 검증된 구현 표면입니다."
@@ -118,7 +118,7 @@
     },
     "runtime": {
       "title": "Runtime Evidence",
-      "description": "현재 Vais Web integration evidence는 runtime smoke 61/77, unit 390/390, package tests 3272/3272, full-build 24/24, shared-schema product evidence 9/9입니다. Size claim은 size gate가 필요합니다."
+      "description": "현재 Vais Web integration evidence는 runtime smoke 61/77, unit 390/390, package tests 3272/3272, full-build 24/24이며 shared-schema product evidence 9/9은 compiler main-fixture workspace gate로 port되었습니다. Size claim은 size gate가 필요합니다."
     },
     "learnMore": "더 알아보기",
     "github": "GitHub",

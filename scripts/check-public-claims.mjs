@@ -175,7 +175,8 @@ const websiteSubtitle =
 requireText('website/index.html', websiteSubtitle, 'homepage playground copy must match public claim boundary');
 requireText('website/public/locales/en.json', websiteSubtitle, 'English locale must match public claim boundary');
 requireText('website/index.html', 'Evidence Snapshot', 'homepage must scope gate counts as evidence');
-requireText('website/index.html', 'pending main port', 'homepage must disclose aggregate/product gate main-port status');
+requireText('website/index.html', 'pending main port', 'homepage must disclose aggregate runtime gate main-port status');
+requireText('website/index.html', 'main-fixture/local-workspace reproducible', 'homepage must disclose schema gate main-fixture status');
 requireText('website/index.html', 'server runtime integration evidence 20/20', 'homepage server claim must be evidence-scoped');
 requireText('website/index.html', 'shared-schema product evidence 9/9', 'homepage web claim must be evidence-scoped');
 requireText('website/ecosystem/index.html', 'server runtime 20/20', 'ecosystem server evidence count must remain explicit');
