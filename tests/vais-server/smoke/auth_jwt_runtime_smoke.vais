@@ -147,6 +147,56 @@ fn smoke_jwt_refresh_and_pair_generation() -> i64 {
     0
 }
 
+fn smoke_jwt_role_claim_verify() -> i64 {
+    config := JwtConfig.new("secret", "issuer")
+
+    two_roles := verify_token("user1|issuer|4600|1000|admin,user.419", config)
+    match two_roles {
+        Err(_) => {
+            println("FAIL jwt role verify rejected")
+            return 61
+        },
+        Ok(decoded) => {
+            I decoded.sub != "user1" {
+                println("FAIL jwt role decoded sub")
+                return 62
+            }
+            I decoded.roles.len() != 2 {
+                println("FAIL jwt role decoded len")
+                return 63
+            }
+            I decoded.roles.get(0) != "admin" {
+                println("FAIL jwt role decoded first")
+                return 64
+            }
+            I decoded.roles.get(1) != "user" {
+                println("FAIL jwt role decoded second")
+                return 65
+            }
+        },
+    }
+
+    one_role := verify_token("user1|issuer|4600|1000|admin.3be", config)
+    match one_role {
+        Err(_) => {
+            println("FAIL jwt one-role verify rejected")
+            return 69
+        },
+        Ok(decoded) => {
+            I decoded.roles.len() != 1 {
+                println("FAIL jwt one-role decoded len")
+                return 70
+            }
+            I decoded.roles.get(0) != "admin" {
+                println("FAIL jwt one-role decoded value")
+                return 71
+            }
+        },
+    }
+
+    0
+}
+
 fn smoke_jwt_error_paths() -> i64 {
     bad_config := JwtConfig.new("", "issuer")
     roles := Vec.new()
@@ -274,6 +324,7 @@ fn main() -> i64 {
     failures := mut 0
     failures += smoke_jwt_access_token_generation_and_verify()
     failures += smoke_jwt_refresh_and_pair_generation()
+    failures += smoke_jwt_role_claim_verify()
     failures += smoke_jwt_error_paths()
 
     I failures > 0 {
