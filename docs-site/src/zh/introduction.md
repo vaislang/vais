@@ -1,17 +1,17 @@
 # Vais 编程语言
 
-**Vais (Vibe AI Language for Systems)** 是一种为最大化令牌效率和开发者生产力而设计的 AI 优化系统编程语言。
+**Vais (Vibe AI Language for Systems)** 是一种面向 AI 辅助开发的系统编程语言。当前公开说明以 canonical syntax 和 gate-backed claims 为准。
 
 [![CI](https://github.com/vaislang/vais/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/vaislang/vais/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/vaislang/vais/branch/main/graph/badge.svg)](https://codecov.io/gh/vaislang/vais)
 
-Vais 旨在最小化令牌使用量，同时最大化代码表达性，使其成为 AI 辅助开发和 LLM 代码生成的理想选择。
+Vais 旨在让 AI 生成的代码保持清晰、可编译，并通过明确 gate 说明公开 claim 的边界。
 
 > **当前公开状态:** Vais 当前公开基线是 certified Core compiler 加上明确命名的 promoted runtime gates，不是 product-complete v1.0 release。公开 claim 边界见 [`PUBLIC_STATUS.md`](https://github.com/vaislang/vais/blob/main/PUBLIC_STATUS.md)。
 
 ## 主要特性
 
-- **单字符关键字** - `F`(函数)、`S`(结构体)、`E`(枚举/else)、`I`(if)、`L`(循环)、`M`(匹配)
+- **Canonical keywords** - `fn`, `struct`, `enum`, `else`, `match`, `return`, `use`, `pub` 是当前标准。`F/S/E/EN/EL/M/R/T/U/P/W/X` 是 retired form。
 - **自递归运算符** `@` - 递归调用当前函数
 - **表达式导向** - 一切皆为表达式
 - **LLVM 后端** - 基于 LLVM 17 的 promoted native codegen path
@@ -26,13 +26,13 @@ Vais 旨在最小化令牌使用量，同时最大化代码表达性，使其成
 
 ```vais
 # 使用自递归的斐波那契
-F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
+fn fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
 
 # 结构体定义
-S Point { x:f64, y:f64 }
+struct Point { x:f64, y:f64 }
 
 # 使用循环的求和
-F sum(arr:[i64])->i64 {
+fn sum(arr:[i64])->i64 {
     s := 0
     L x:arr { s += x }
     s
@@ -43,12 +43,12 @@ F sum(arr:[i64])->i64 {
 
 | 关键字 | 含义 | 示例 |
 |---------|---------|---------|
-| `F` | 函数 | `F add(a:i64,b:i64)->i64=a+b` |
-| `S` | 结构体 | `S Point{x:f64,y:f64}` |
-| `E` | 枚举/Else | `E Option<T>{Some(T),None}` |
-| `I` | If | `I x>0{1}E{-1}` |
-| `L` | 循环 | `L i:0..10{print(i)}` |
-| `M` | 匹配 | `M opt{Some(v)=>v,None=>0}` |
+| `fn` | 函数 | `fn add(a:i64,b:i64)->i64=a+b` |
+| `struct` | 结构体 | `struct Point{x:f64,y:f64}` |
+| `enum` / `else` | 枚举 / Else | `enum Option<T>{Some(T),None}` / `else {-1}` |
+| `I` | If | `I x>0{1}else{-1}` |
+| `LF` | Range loop | `LF i:0..10{print(i)}` |
+| `match` | 匹配 | `match opt{Some(v)=>v,None=>0}` |
 | `@` | 自调用 | `@(n-1)` (递归调用) |
 | `:=` | 推导并赋值 | `x := 42` |
 

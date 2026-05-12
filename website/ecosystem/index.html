@@ -520,7 +520,7 @@
       </h1>
       <p class="eco-hero-subtitle">
         하나의 언어로 프론트엔드, 백엔드, 데이터베이스를 모두.
-        현재 공개 기준은 제품 완성이 아니라 명시된 package/runtime/full-build gate로 검증된 범위입니다.
+        현재 공개 기준은 제품 완성이 아니라 명시된 package/runtime/full-build/schema gate로 검증된 범위입니다.
       </p>
       <div class="eco-hero-actions">
         <a href="https://docs.vaislang.dev/ecosystem/" class="btn btn-primary">Get Started</a>
@@ -533,7 +533,7 @@
 
         <div class="arch-layer arch-layer-browser">
           <span class="arch-label">[ Browser ]</span>
-          <span class="arch-desc">VaisX (vais-web) — runtime 61/77, unit 390/390, full-build 24/24</span>
+          <span class="arch-desc">VaisX (vais-web) — runtime 61/77, unit 390/390, full-build 24/24, schema 9/9</span>
         </div>
 
         <div class="arch-arrow">↕  HTTP / WebSocket  ↕</div>
@@ -577,7 +577,7 @@
           <div class="product-tagline">vais-web · 웹 프레임워크 workbench</div>
           <p class="product-desc">
             컴파일 타임 반응성과 DOM 업데이트 생성을 목표로 하는 웹 프레임워크.
-            현재 공개 claim은 runtime 61/77, unit 390/390, full-build 24/24 gate에 묶입니다.
+            현재 공개 claim은 runtime 61/77, unit 390/390, full-build 24/24, shared-schema product 9/9 gate에 묶입니다.
           </p>
           <ul class="product-features">
             <li>컴파일 타임 반응성 구현 표면</li>
@@ -619,7 +619,7 @@
           <div class="product-tagline">백엔드 프레임워크 workbench</div>
           <p class="product-desc">
             Express/Axum 스타일 라우팅 API를 제공하는 HTTP 서버 workbench.
-            현재 gate는 server runtime 15/15이며, broad protocol/auth/deploy claim은 별도 gate가 필요합니다.
+            현재 gate는 server runtime 20/20이며, broad protocol/auth/deploy claim은 별도 gate가 필요합니다.
           </p>
           <ul class="product-features">
             <li>Express / Axum 스타일 선언형 라우팅</li>
@@ -662,13 +662,13 @@
           <!-- Frontend tab -->
           <div class="code-fs-panel active" id="tab-frontend">
             <pre><code><span class="cm"># vais-web: 컴파일 타임 반응성, SSR 지원</span>
-<span class="kw">U</span> vais_web::{<span class="type">Component</span>, <span class="fn">signal</span>, <span class="fn">effect</span>}
-<span class="kw">U</span> vais_web::html::{<span class="fn">div</span>, <span class="fn">input</span>, <span class="fn">ul</span>, <span class="fn">li</span>}
+<span class="kw">use</span> vais_web::{<span class="type">Component</span>, <span class="fn">signal</span>, <span class="fn">effect</span>}
+<span class="kw">use</span> vais_web::html::{<span class="fn">div</span>, <span class="fn">input</span>, <span class="fn">ul</span>, <span class="fn">li</span>}
 
-<span class="kw">S</span> <span class="type">SearchResult</span> { title: <span class="type">str</span>, score: <span class="type">f32</span> }
+<span class="kw">struct</span> <span class="type">SearchResult</span> { title: <span class="type">str</span>, score: <span class="type">f32</span> }
 
 <span class="cm"># 컴포넌트 정의 — 컴파일 타임에 DOM 업데이트 코드 생성</span>
-<span class="kw">P</span> <span class="kw">F</span> <span class="fn">SearchPage</span>() -> <span class="type">Component</span> {
+<span class="kw">pub</span> <span class="kw">fn</span> <span class="fn">SearchPage</span>() -> <span class="type">Component</span> {
   query   <span class="op">:=</span> <span class="fn">signal</span>(<span class="str">""</span>)
   results <span class="op">:=</span> <span class="fn">signal</span>(<span class="type">Vec</span>::<span class="fn">new</span>())
 
@@ -686,7 +686,7 @@
       on_input: |e| query.<span class="fn">set</span>(e.value)
     )
     <span class="fn">ul</span>(|| {
-      <span class="kw">F</span> <span class="fn">render_item</span>(r: <span class="type">SearchResult</span>) {
+      <span class="kw">fn</span> <span class="fn">render_item</span>(r: <span class="type">SearchResult</span>) {
         <span class="fn">li</span>(<span class="str">"~{r.title}  (score: ~{r.score:.2})"</span>)
       }
       results.<span class="fn">get</span>().<span class="fn">iter</span>() |> <span class="fn">map</span>(<span class="fn">render_item</span>)
@@ -698,14 +698,14 @@
           <!-- Server tab -->
           <div class="code-fs-panel" id="tab-server">
             <pre><code><span class="cm"># vais-server: Express/Axum 스타일 라우팅</span>
-<span class="kw">U</span> vais_server::{<span class="type">App</span>, <span class="type">Router</span>, <span class="type">Json</span>}
-<span class="kw">U</span> vaisdb::{<span class="type">Db</span>, <span class="type">HybridQuery</span>}
+<span class="kw">use</span> vais_server::{<span class="type">App</span>, <span class="type">Router</span>, <span class="type">Json</span>}
+<span class="kw">use</span> vaisdb::{<span class="type">Db</span>, <span class="type">HybridQuery</span>}
 
-<span class="kw">S</span> <span class="type">SearchReq</span>  { q: <span class="type">str</span>, limit: <span class="type">i32</span> }
-<span class="kw">S</span> <span class="type">SearchResp</span> { results: <span class="type">Vec</span>&lt;<span class="type">Hit</span>&gt;, took_ms: <span class="type">f64</span> }
+<span class="kw">struct</span> <span class="type">SearchReq</span>  { q: <span class="type">str</span>, limit: <span class="type">i32</span> }
+<span class="kw">struct</span> <span class="type">SearchResp</span> { results: <span class="type">Vec</span>&lt;<span class="type">Hit</span>&gt;, took_ms: <span class="type">f64</span> }
 
 <span class="cm"># GET /api/search?q=...&limit=10</span>
-<span class="kw">A</span> <span class="kw">F</span> <span class="fn">handle_search</span>(req: <span class="type">SearchReq</span>, db: <span class="type">Db</span>) -> <span class="type">Json</span>&lt;<span class="type">SearchResp</span>&gt; {
+<span class="kw">A</span> <span class="kw">fn</span> <span class="fn">handle_search</span>(req: <span class="type">SearchReq</span>, db: <span class="type">Db</span>) -> <span class="type">Json</span>&lt;<span class="type">SearchResp</span>&gt; {
   <span class="cm"># HybridQuery: 벡터 + 키워드 동시 검색 (RAG-native)</span>
   hits <span class="op">:=</span> <span class="kw">Y</span> db.<span class="fn">hybrid_query</span>(<span class="type">HybridQuery</span> {
     text:    req.q,
@@ -719,7 +719,7 @@
   })
 }
 
-<span class="kw">F</span> <span class="fn">main</span>() {
+<span class="kw">fn</span> <span class="fn">main</span>() {
   db  <span class="op">:=</span> <span class="type">Db</span>::<span class="fn">open</span>(<span class="str">"./data/vais.db"</span>)<span class="op">!</span>
   app <span class="op">:=</span> <span class="type">App</span>::<span class="fn">new</span>()
     .<span class="fn">state</span>(db)
@@ -732,9 +732,9 @@
           <!-- DB tab -->
           <div class="code-fs-panel" id="tab-db">
             <pre><code><span class="cm"># VaisDB: Vector + Graph + SQL + FTS 하이브리드</span>
-<span class="kw">U</span> vaisdb::{<span class="type">Db</span>, <span class="type">Collection</span>, <span class="type">EmbedModel</span>}
+<span class="kw">use</span> vaisdb::{<span class="type">Db</span>, <span class="type">Collection</span>, <span class="type">EmbedModel</span>}
 
-<span class="kw">S</span> <span class="type">Article</span> {
+<span class="kw">struct</span> <span class="type">Article</span> {
   id:      <span class="type">i64</span>,
   title:   <span class="type">str</span>,
   body:    <span class="type">str</span>,
@@ -744,7 +744,7 @@
   vec:     <span class="type">Vec</span>&lt;<span class="type">f32</span>&gt;,
 }
 
-<span class="kw">F</span> <span class="fn">setup_db</span>() -> <span class="type">Db</span> {
+<span class="kw">fn</span> <span class="fn">setup_db</span>() -> <span class="type">Db</span> {
   db <span class="op">:=</span> <span class="type">Db</span>::<span class="fn">open</span>(<span class="str">"./data/vais.db"</span>)<span class="op">!</span>
 
   <span class="cm"># 컬렉션 생성: SQL 테이블 + 벡터 인덱스 + FTS 인덱스 자동 설정</span>
@@ -758,7 +758,7 @@
 }
 
 <span class="cm"># RAG 파이프라인 — 한 줄로 완성</span>
-<span class="kw">A</span> <span class="kw">F</span> <span class="fn">rag_query</span>(db: <span class="type">Db</span>, question: <span class="type">str</span>) -> <span class="type">str</span> {
+<span class="kw">A</span> <span class="kw">fn</span> <span class="fn">rag_query</span>(db: <span class="type">Db</span>, question: <span class="type">str</span>) -> <span class="type">str</span> {
   context <span class="op">:=</span> <span class="kw">Y</span> db.<span class="fn">rag</span>(question, top_k: <span class="num">5</span>)<span class="op">?</span>
   <span class="fn">llm_complete</span>(<span class="str">"~{context}\n\nQ: ~{question}"</span>)<span class="op">!</span>
 }</code></pre>

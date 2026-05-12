@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/async_http
+use std/async_http
 ```
 
 ## Overview
@@ -138,23 +138,23 @@ Reusable connection pool for managing file descriptors.
 ## Convenience Functions
 
 ```vais
-F async_http_server(host: str, port: i64) -> AsyncHttpServer
-F async_http_client() -> AsyncHttpClient
-F async_http_client_for(url: str) -> AsyncHttpClient
-F text_response(status: i64, text: str) -> AsyncHttpResponse
-F json_response(status: i64, json: str) -> AsyncHttpResponse
-F html_response(status: i64, html: str) -> AsyncHttpResponse
-F connection_pool(capacity: i64) -> ConnectionPool
-F logging_middleware() -> Middleware
-F cors_middleware() -> Middleware
+fn async_http_server(host: str, port: i64) -> AsyncHttpServer
+fn async_http_client() -> AsyncHttpClient
+fn async_http_client_for(url: str) -> AsyncHttpClient
+fn text_response(status: i64, text: str) -> AsyncHttpResponse
+fn json_response(status: i64, json: str) -> AsyncHttpResponse
+fn html_response(status: i64, html: str) -> AsyncHttpResponse
+fn connection_pool(capacity: i64) -> ConnectionPool
+fn logging_middleware() -> Middleware
+fn cors_middleware() -> Middleware
 ```
 
 ## Example
 
 ```vais
-U std/async_http
+use std/async_http
 
-F main() {
+fn main() {
     server := mut async_http_server("127.0.0.1", 8080)
     server.route_get("/health", health_handler)
     server.bind()

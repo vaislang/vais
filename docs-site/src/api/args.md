@@ -11,7 +11,7 @@ Command-line argument parsing.
 Builder-style argument parser.
 
 ```vais
-S ArgParser {
+struct ArgParser {
     # internal implementation
 }
 ```
@@ -76,7 +76,7 @@ Prints the help message with all registered flags and options.
 ## Example
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     parser := ArgParser {}
     parser.add_flag("verbose", "v", "Enable verbose output")
     parser.add_option("output", "o", "Output file", "a.out")

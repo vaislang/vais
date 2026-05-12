@@ -2,7 +2,7 @@
 
 VaisX는 Vais 언어 위에서 동작하는 컴파일 타임 반응성 frontend framework
 workbench입니다. 현재 공개 claim은 runtime `61/77`, unit `390/390`, package
-`3272/3272`, full-build `24/24` gate에 묶입니다.
+`3272/3272`, full-build `24/24`, shared-schema product `9/9` gate에 묶입니다.
 
 ## 특징
 
@@ -73,7 +73,7 @@ VaisX는 Vais 언어의 타입 시스템과 문법을 그대로 사용합니다.
 | `mut name := value` | 가변 변수 |
 | `I cond { }` | if 조건문 |
 | `E I cond { }` | else if |
-| `E { }` | else |
+| `else { }` | else |
 | `R value` | 반환 |
 
 ---
@@ -155,7 +155,7 @@ package gate로 판단합니다.
 
 | 항목 | VaisX | React | Vue 3 | Svelte |
 |---|---|---|---|---|
-| Runtime gate | 61/77 smoke | n/a | n/a | n/a |
+| Runtime gate | 61/77 smoke + shared schema 9/9 | n/a | n/a | n/a |
 | 반응성 방식 | 컴파일 타임 | 가상 DOM | 프록시 | 컴파일 타임 |
 | 언어 | Vais | JSX/TSX | SFC + TSX | Svelte |
 | SSR/SSG | 내장 | Next.js 필요 | Nuxt 필요 | SvelteKit 필요 |

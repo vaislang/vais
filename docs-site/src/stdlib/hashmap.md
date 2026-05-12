@@ -7,14 +7,14 @@
 ## Quick Start
 
 ```vais
-U std/hashmap
+use std/hashmap
 
-F main() -> i64 {
+fn main() -> i64 {
     m := HashMap::new()
     m.set(1, 100)
     m.set(2, 200)
     val := m.get(1)  # 100
-    R 0
+    return 0
 }
 ```
 
@@ -37,9 +37,9 @@ F main() -> i64 {
 ### 예제 1: 기본 사용법
 
 ```vais
-U std/hashmap
+use std/hashmap
 
-F main() -> i64 {
+fn main() -> i64 {
     scores := HashMap::new()
 
     # 삽입
@@ -55,29 +55,29 @@ F main() -> i64 {
 
     # 제거
     scores.remove(102)
-    R 0
+    return 0
 }
 ```
 
 ### 예제 2: 빈도 카운팅
 
 ```vais
-U std/hashmap
-U std/vec
+use std/hashmap
+use std/vec
 
-F count_frequencies(numbers: Vec<i64>) -> HashMap<i64,i64> {
+fn count_frequencies(numbers: Vec<i64>) -> HashMap<i64,i64> {
     freq := HashMap::new()
     i := 0
     L i < numbers.len() {
         num := numbers.get(i)
-        count := I freq.contains(num) { freq.get(num) } E { 0 }
+        count := I freq.contains(num) { freq.get(num) } else { 0 }
         freq.set(num, count + 1)
         i = i + 1
     }
-    R freq
+    return freq
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec::new()
     v.push(1)
     v.push(2)
@@ -88,31 +88,31 @@ F main() -> i64 {
 
     freq := count_frequencies(v)
     print_i64(freq.get(1))  # 3 (1이 3번 등장)
-    R 0
+    return 0
 }
 ```
 
 ### 예제 3: 캐시 구현
 
 ```vais
-U std/hashmap
+use std/hashmap
 
-S Cache<K,V> {
+struct Cache<K,V> {
     map: HashMap<K,V>,
     max_size: i64
 }
 
-X Cache<K,V> {
-    F new(max_size: i64) -> Cache<K,V> {
+impl Cache<K,V> {
+    fn new(max_size: i64) -> Cache<K,V> {
         Cache {
             map: HashMap::with_capacity(max_size),
             max_size: max_size
         }
     }
 
-    F get_or_compute(&self, key: K, compute_fn: F(K) -> V) -> V {
+    fn get_or_compute(&self, key: K, compute_fn: fn(K) -> V) -> V {
         I self.map.contains(key) {
-            R self.map.get(key)
+            return self.map.get(key)
         }
 
         # 캐시 미스 - 계산 후 저장
@@ -120,7 +120,7 @@ X Cache<K,V> {
         I self.map.len() < self.max_size {
             self.map.set(key, value)
         }
-        R value
+        return value
     }
 }
 ```
@@ -128,9 +128,9 @@ X Cache<K,V> {
 ### 예제 4: StringMap 사용 (문자열 키 최적화)
 
 ```vais
-U std/stringmap
+use std/stringmap
 
-F main() -> i64 {
+fn main() -> i64 {
     config := StringMap::new()
 
     # 문자열 키-값 저장
@@ -144,16 +144,16 @@ F main() -> i64 {
         print_str(host)  # "127.0.0.1"
     }
 
-    R 0
+    return 0
 }
 ```
 
 ### 예제 5: 해시 충돌 처리 확인
 
 ```vais
-U std/hashmap
+use std/hashmap
 
-F main() -> i64 {
+fn main() -> i64 {
     m := HashMap::with_capacity(4)  # 작은 capacity로 충돌 유도
 
     # 많은 키 삽입 (자동 rehash)
@@ -166,7 +166,7 @@ F main() -> i64 {
     # 모두 정상 조회 가능
     print_i64(m.get(50))  # 100
     print_i64(m.len())    # 100
-    R 0
+    return 0
 }
 ```
 
@@ -177,10 +177,10 @@ F main() -> i64 {
 
 ```vais
 # 커스텀 해시 필요
-S CustomKey { id: i64, name: i64 }
+struct CustomKey { id: i64, name: i64 }
 
-F hash_custom(k: CustomKey) -> i64 {
-    R k.id * 31 + hash_str(k.name)
+fn hash_custom(k: CustomKey) -> i64 {
+    return k.id * 31 + hash_str(k.name)
 }
 ```
 
@@ -220,16 +220,16 @@ HashMap은 해시 순서로 저장되므로, 삽입 순서와 무관합니다. �
 HashMap은 thread-safe하지 않습니다. 멀티스레드 환경에서는 `Mutex<HashMap<K,V>>`로 래핑하세요.
 
 ```vais
-U std/sync
-U std/hashmap
+use std/sync
+use std/hashmap
 
 global_cache := Mutex::new(HashMap::new())
 
-F thread_safe_insert(key: i64, val: i64) -> i64 {
+fn thread_safe_insert(key: i64, val: i64) -> i64 {
     guard := global_cache.lock()
     cache := guard.get_inner()
     cache.set(key, val)
-    R 0
+    return 0
 }
 ```
 

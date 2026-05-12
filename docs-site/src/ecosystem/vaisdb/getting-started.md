@@ -52,9 +52,9 @@ VaisDB는 두 가지 모드로 실행할 수 있습니다.
 ### 데이터베이스 열기
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F main() {
+fn main() {
     # 새 DB 생성 또는 기존 DB 열기 (.vaisdb 파일)
     db := Database::open("myapp.vaisdb")?;
     println("데이터베이스 열기 성공");
@@ -78,9 +78,9 @@ CREATE TABLE documents (
 Vais에서 실행:
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F main() {
+fn main() {
     db := Database::open("myapp.vaisdb")?;
 
     db.execute("
@@ -103,9 +103,9 @@ F main() {
 #### 일반 텍스트 삽입
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F main() {
+fn main() {
     db := Database::open("myapp.vaisdb")?;
 
     # 단건 삽입
@@ -123,9 +123,9 @@ F main() {
 `EMBED()` 함수를 사용하면 텍스트에서 임베딩 벡터를 자동으로 생성합니다.
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F main() {
+fn main() {
     db := Database::open("myapp.vaisdb")?;
 
     # EMBED() 함수로 자동 임베딩 생성
@@ -146,9 +146,9 @@ F main() {
 #### 배치 삽입
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F main() {
+fn main() {
     db := Database::open("myapp.vaisdb")?;
 
     # 트랜잭션으로 묶어 배치 삽입
@@ -195,9 +195,9 @@ F main() {
 ### 클라이언트로 접속
 
 ```vais
-U vaisdb::{Client};
+use vaisdb::{Client};
 
-F main() {
+fn main() {
     # TCP 클라이언트로 원격 서버에 접속
     client := Client::connect("vaisdb://localhost:5432/knowledge")?;
 
@@ -241,9 +241,9 @@ api_key_env = "OPENAI_API_KEY"
 아래는 문서를 삽입하고 벡터 유사도 검색을 수행하는 완전한 예제입니다.
 
 ```vais
-U vaisdb::{Database, Row};
+use vaisdb::{Database, Row};
 
-F main() {
+fn main() {
     # 1. 데이터베이스 열기
     db := Database::open("demo.vaisdb")?;
 

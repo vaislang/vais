@@ -19,7 +19,7 @@ cargo install vaisc
 다음 코드를 `hello.vais` 파일로 저장합니다:
 
 ```vais
-F main() {
+fn main() {
     puts("Hello, Vais!")
 }
 ```
@@ -45,7 +45,7 @@ Hello, Vais!
 ### 변수
 
 ```vais
-F main() {
+fn main() {
     x := 42              # i64 타입으로 추론됨
     y := 3.14            # f64 타입으로 추론됨
     name := "Alice"      # str 타입으로 추론됨
@@ -58,11 +58,11 @@ F main() {
 ### 함수
 
 ```vais
-F add(a: i64, b: i64) -> i64 {
+fn add(a: i64, b: i64) -> i64 {
     a + b  # 마지막 표현식이 반환값
 }
 
-F main() {
+fn main() {
     result := add(10, 20)
     print_i64(result)  # 출력: 30
 }
@@ -71,11 +71,11 @@ F main() {
 ### 제어 흐름
 
 ```vais
-F main() {
+fn main() {
     x := 10
 
     # if 표현식
-    msg := I x > 5 { "big" } E { "small" }
+    msg := I x > 5 { "big" } else { "small" }
     puts(msg)
 
     # 반복문
@@ -90,12 +90,12 @@ F main() {
 `@`를 사용하여 현재 함수를 호출합니다:
 
 ```vais
-F factorial(n: i64) -> i64 {
-    I n <= 1 { R 1 }
+fn factorial(n: i64) -> i64 {
+    I n <= 1 { return 1 }
     n * @(n - 1)
 }
 
-F main() {
+fn main() {
     print_i64(factorial(5))  # 출력: 120
 }
 ```

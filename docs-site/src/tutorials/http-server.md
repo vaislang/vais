@@ -27,14 +27,14 @@ HTTP 서버는 TCP 소켓 위에 동작합니다. Vais에서는 C 런타임 함�
 ```vais
 # 외부 함수 선언
 N "C" {
-    F __tcp_listen(port: i64) -> i64
-    F __tcp_accept(listener_fd: i64) -> i64
-    F __tcp_send(fd: i64, data: i64, len: i64) -> i64
-    F __tcp_recv(fd: i64, buffer: i64, len: i64) -> i64
-    F __tcp_close(fd: i64) -> i64
-    F strlen(s: str) -> i64
-    F malloc(size: i64) -> i64
-    F free(ptr: i64) -> i64
+    fn __tcp_listen(port: i64) -> i64
+    fn __tcp_accept(listener_fd: i64) -> i64
+    fn __tcp_send(fd: i64, data: i64, len: i64) -> i64
+    fn __tcp_recv(fd: i64, buffer: i64, len: i64) -> i64
+    fn __tcp_close(fd: i64) -> i64
+    fn strlen(s: str) -> i64
+    fn malloc(size: i64) -> i64
+    fn free(ptr: i64) -> i64
 }
 ```
 
@@ -51,14 +51,14 @@ HTTP 요청의 첫 줄에서 메서드와 경로를 추출합니다:
 
 ```vais
 # HTTP 요청 정보
-S HttpRequest {
+struct HttpRequest {
     method: i64    # 0=GET, 1=POST, 2=PUT, 3=DELETE
     path_start: i64
     path_len: i64
     buffer: i64
 }
 
-F parse_request(buf: i64, len: i64) -> HttpRequest {
+fn parse_request(buf: i64, len: i64) -> HttpRequest {
     # 메서드 판별 (첫 바이트)
     first := load_byte(buf, 0)
     method := mut 0
@@ -83,7 +83,7 @@ F parse_request(buf: i64, len: i64) -> HttpRequest {
         }
     }
 
-    R HttpRequest {
+    return HttpRequest {
         method: method,
         path_start: path_s,
         path_len: path_e - path_s,
@@ -105,7 +105,7 @@ F parse_request(buf: i64, len: i64) -> HttpRequest {
 HTTP 응답을 구성하는 헬퍼 함수를 만듭니다:
 
 ```vais
-F send_response(fd: i64, status: i64, body: str) {
+fn send_response(fd: i64, status: i64, body: str) {
     # 응답 헤더 구성
     header := mut "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n"
     I status == 404 {
@@ -134,33 +134,33 @@ F send_response(fd: i64, status: i64, body: str) {
 경로에 따라 다른 핸들러를 실행하는 라우터를 만듭니다:
 
 ```vais
-F path_equals(buf: i64, start: i64, len: i64, target: str) -> i64 {
+fn path_equals(buf: i64, start: i64, len: i64, target: str) -> i64 {
     target_len := strlen(target)
-    I len != target_len { R 0 }
+    I len != target_len { return 0 }
 
     L i:0..len {
         I load_byte(buf, start + i) != load_byte(target, i) {
-            R 0
+            return 0
         }
     }
-    R 1
+    return 1
 }
 
-F handle_request(fd: i64, req: HttpRequest) {
+fn handle_request(fd: i64, req: HttpRequest) {
     # 라우트 매칭
     I path_equals(req.buffer, req.path_start, req.path_len, "/") == 1 {
         send_response(fd, 200, "{\"service\":\"Vais API\",\"version\":\"1.0\"}")
-        R 0
+        return 0
     }
 
     I path_equals(req.buffer, req.path_start, req.path_len, "/api/hello") == 1 {
         send_response(fd, 200, "{\"message\":\"Hello from Vais!\"}")
-        R 0
+        return 0
     }
 
     I path_equals(req.buffer, req.path_start, req.path_len, "/health") == 1 {
         send_response(fd, 200, "{\"status\":\"ok\"}")
-        R 0
+        return 0
     }
 
     # 404 Not Found
@@ -180,14 +180,14 @@ F handle_request(fd: i64, req: HttpRequest) {
 요청을 수신하고 처리하는 메인 루프를 작성합니다:
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     port := 8080
     puts("Starting Vais HTTP Server on port {port}...")
 
     listener := __tcp_listen(port)
     I listener < 0 {
         puts("ERROR: Failed to listen on port {port}")
-        R 1
+        return 1
     }
 
     puts("Server listening on port {port}")
@@ -233,7 +233,7 @@ F main() -> i64 {
 
 ```vais
 # 간단한 JSON key:value 응답 생성
-F json_kv(key: str, value: str) -> i64 {
+fn json_kv(key: str, value: str) -> i64 {
     buf := malloc(512)
     pos := mut 0
 
@@ -289,7 +289,7 @@ F json_kv(key: str, value: str) -> i64 {
 # 전역 카운터
 G request_count := 0
 
-F handle_request_with_counter(fd: i64, req: HttpRequest) {
+fn handle_request_with_counter(fd: i64, req: HttpRequest) {
     request_count = request_count + 1
 
     I path_equals(req.buffer, req.path_start, req.path_len, "/stats") == 1 {
@@ -298,7 +298,7 @@ F handle_request_with_counter(fd: i64, req: HttpRequest) {
         body := json_kv("requests", "{request_count}")
         send_response(fd, 200, body)
         free(body)
-        R 0
+        return 0
     }
 
     # 기존 라우트...

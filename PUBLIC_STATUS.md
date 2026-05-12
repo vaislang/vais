@@ -1,6 +1,6 @@
 # Vais Public Status
 
-Last verified: 2026-05-10
+Last verified: 2026-05-12
 
 This document is the public wording boundary for the Vais repositories and
 website. It separates the gates that are currently certified from broader
@@ -23,12 +23,14 @@ The latest local integrity pass covers:
 - `std/http_client` runtime smoke: `15/15`
 - TLS runtime smoke: `2/2`
 - VaisDB runtime smoke: `34/34`
-- Vais Server runtime smoke: `15/15`
+- Vais Server runtime smoke: `20/20`
 - Vais Web runtime smoke: `61/77` with credential/network-gated cases skipped
 - Vais Web unit tests: `390/390`
 - Ecosystem package tests: `3272/3272`
 - Vais Web full-build gate: `24/24`
 - Package full-build gate: `2/2`
+- Cross-package schema gate: `15/15`
+- Multi-domain product schema gate: `9/9`
 - Playground web mode/build gate: passed; Server-WASM remains API-compiled,
   and Preview remains a syntax/demo fallback only
 - Browser-JS playground smoke gate: passed for parser + JavaScript codegen

@@ -7,7 +7,7 @@
 ## Import
 
 ```vais
-U std/http_server
+use std/http_server
 ```
 
 ## Overview
@@ -79,7 +79,7 @@ top of `std/http` and `std/net`. It includes:
 Represents a single path parameter captured from a route pattern.
 
 ```vais
-S PathParam {
+struct PathParam {
     name: str,
     value: str
 }
@@ -90,7 +90,7 @@ S PathParam {
 Collection of path parameters extracted from a matched route.
 
 ```vais
-S PathParams {
+struct PathParams {
     items: i64,      # Pointer to array of PathParam
     count: i64,
     capacity: i64
@@ -111,7 +111,7 @@ S PathParams {
 Represents a single query string parameter.
 
 ```vais
-S QueryParam {
+struct QueryParam {
     key: str,
     value: str
 }
@@ -122,7 +122,7 @@ S QueryParam {
 Collection of query string parameters parsed from the request URL.
 
 ```vais
-S QueryParams {
+struct QueryParams {
     items: i64,      # Pointer to array of QueryParam
     count: i64,
     capacity: i64
@@ -144,7 +144,7 @@ S QueryParams {
 Enhanced request context with path parameters, query parameters, and helper methods.
 
 ```vais
-S RequestCtx {
+struct RequestCtx {
     method: i64,
     path: str,
     full_path: str,     # Original path including query string
@@ -175,7 +175,7 @@ S RequestCtx {
 Fluent builder for HTTP responses with method chaining.
 
 ```vais
-S ResponseBuilder {
+struct ResponseBuilder {
     status: i64,
     status_text: str,
     headers: i64,       # Pointer to header array
@@ -218,7 +218,7 @@ S ResponseBuilder {
 Internal struct representing a parsed route pattern with segments.
 
 ```vais
-S RoutePattern {
+struct RoutePattern {
     method: i64,
     pattern: str,
     handler_ptr: i64,
@@ -238,7 +238,7 @@ S RoutePattern {
 Represents a middleware handler with priority.
 
 ```vais
-S Middleware {
+struct Middleware {
     name: str,
     handler_ptr: i64,   # Function pointer
     priority: i64       # Lower = runs first
@@ -250,7 +250,7 @@ S Middleware {
 Collection of middleware handlers executed in priority order.
 
 ```vais
-S MiddlewareChain {
+struct MiddlewareChain {
     items: i64,      # Array of Middleware
     count: i64,
     capacity: i64
@@ -269,7 +269,7 @@ S MiddlewareChain {
 Static file server with MIME type detection and security checks.
 
 ```vais
-S StaticFiles {
+struct StaticFiles {
     root_dir: str,
     prefix: str,       # URL prefix (e.g., "/static")
     index_file: str    # Default index file (e.g., "index.html")
@@ -289,7 +289,7 @@ S StaticFiles {
 Main HTTP server application with routing, middleware, and static files.
 
 ```vais
-S App {
+struct App {
     host: str,
     port: i64,
     routes: i64,        # Array of RoutePattern pointers
@@ -329,7 +329,7 @@ S App {
 ### App Creation
 
 ```vais
-F app(port: i64) -> App
+fn app(port: i64) -> App
 ```
 
 Create a new HTTP server app on the specified port.
@@ -337,12 +337,12 @@ Create a new HTTP server app on the specified port.
 ### Response Builders
 
 ```vais
-F response(status: i64) -> ResponseBuilder
-F ok() -> ResponseBuilder
-F created() -> ResponseBuilder
-F not_found() -> ResponseBuilder
-F bad_request() -> ResponseBuilder
-F internal_error() -> ResponseBuilder
+fn response(status: i64) -> ResponseBuilder
+fn ok() -> ResponseBuilder
+fn created() -> ResponseBuilder
+fn not_found() -> ResponseBuilder
+fn bad_request() -> ResponseBuilder
+fn internal_error() -> ResponseBuilder
 ```
 
 Quick response builder functions.
@@ -350,9 +350,9 @@ Quick response builder functions.
 ### Response Helpers
 
 ```vais
-F json_response(data: str) -> ResponseBuilder
-F html_response(content: str) -> ResponseBuilder
-F text_response(content: str) -> ResponseBuilder
+fn json_response(data: str) -> ResponseBuilder
+fn html_response(content: str) -> ResponseBuilder
+fn text_response(content: str) -> ResponseBuilder
 ```
 
 Create common response types with appropriate Content-Type headers.
@@ -362,7 +362,7 @@ Create common response types with appropriate Content-Type headers.
 ### CORS Middleware
 
 ```vais
-F cors_middleware(origin: str) -> i64
+fn cors_middleware(origin: str) -> i64
 ```
 
 Create CORS middleware handler for specific origin.
@@ -370,7 +370,7 @@ Create CORS middleware handler for specific origin.
 ### Logging Middleware
 
 ```vais
-F logging_middleware_handler(ctx: &RequestCtx, response: ResponseBuilder) -> ResponseBuilder
+fn logging_middleware_handler(ctx: &RequestCtx, response: ResponseBuilder) -> ResponseBuilder
 ```
 
 Log request details (METHOD PATH -> STATUS).
@@ -378,7 +378,7 @@ Log request details (METHOD PATH -> STATUS).
 ### Default CORS Handler
 
 ```vais
-F default_cors_handler(ctx: &RequestCtx, response: ResponseBuilder) -> ResponseBuilder
+fn default_cors_handler(ctx: &RequestCtx, response: ResponseBuilder) -> ResponseBuilder
 ```
 
 Add CORS headers allowing all origins (*).
@@ -388,13 +388,13 @@ Add CORS headers allowing all origins (*).
 ### Basic Server
 
 ```vais
-U std/http_server
+use std/http_server
 
-F handle_index(ctx: &RequestCtx) -> ResponseBuilder {
+fn handle_index(ctx: &RequestCtx) -> ResponseBuilder {
     ResponseBuilder::ok().html("<h1>Hello, World!</h1>")
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     app := App::new(8080)
         .get("/", handle_index as i64)
 
@@ -405,9 +405,9 @@ F main() -> i64 {
 ### Path Parameters
 
 ```vais
-F handle_user(ctx: &RequestCtx) -> ResponseBuilder {
+fn handle_user(ctx: &RequestCtx) -> ResponseBuilder {
     user_id := ctx.param("id")
-    M user_id {
+    match user_id {
         Some(id) => {
             json := __str_concat3("{\"user_id\": \"", id, "\"}")
             ResponseBuilder::ok().json(json)
@@ -416,7 +416,7 @@ F handle_user(ctx: &RequestCtx) -> ResponseBuilder {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     app := App::new(8080)
         .get("/users/:id", handle_user as i64)
 
@@ -427,11 +427,11 @@ F main() -> i64 {
 ### Query Parameters
 
 ```vais
-F handle_search(ctx: &RequestCtx) -> ResponseBuilder {
+fn handle_search(ctx: &RequestCtx) -> ResponseBuilder {
     query := ctx.query_param("q")
     page := ctx.query_param("page")
 
-    M query {
+    match query {
         Some(q) => {
             # Search with query parameter
             ResponseBuilder::ok().json("{\"results\": []}")
@@ -440,7 +440,7 @@ F handle_search(ctx: &RequestCtx) -> ResponseBuilder {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     app := App::new(8080)
         .get("/search", handle_search as i64)
 
@@ -451,9 +451,9 @@ F main() -> i64 {
 ### POST with JSON Body
 
 ```vais
-F handle_create_user(ctx: &RequestCtx) -> ResponseBuilder {
+fn handle_create_user(ctx: &RequestCtx) -> ResponseBuilder {
     I ctx.is_json() != 1 {
-        R ResponseBuilder::bad_request().json("{\"error\": \"Content-Type must be application/json\"}")
+        return ResponseBuilder::bad_request().json("{\"error\": \"Content-Type must be application/json\"}")
     }
 
     body := ctx.body_text()
@@ -461,7 +461,7 @@ F handle_create_user(ctx: &RequestCtx) -> ResponseBuilder {
     ResponseBuilder::created().json("{\"id\": 123}")
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     app := App::new(8080)
         .post("/users", handle_create_user as i64)
 
@@ -472,9 +472,9 @@ F main() -> i64 {
 ### Middleware
 
 ```vais
-F auth_middleware(ctx: &RequestCtx, response: ResponseBuilder) -> ResponseBuilder {
+fn auth_middleware(ctx: &RequestCtx, response: ResponseBuilder) -> ResponseBuilder {
     auth_header := ctx.get_header("Authorization")
-    M auth_header {
+    match auth_header {
         Some(token) => {
             # Validate token
             response
@@ -483,7 +483,7 @@ F auth_middleware(ctx: &RequestCtx, response: ResponseBuilder) -> ResponseBuilde
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     app := App::new(8080)
         .use_middleware("auth", auth_middleware as i64)
         .get("/protected", handle_protected as i64)
@@ -495,7 +495,7 @@ F main() -> i64 {
 ### Static Files
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     app := App::new(8080)
         .serve_static("/static", "./public")
         .get("/", handle_index as i64)
@@ -509,7 +509,7 @@ Static files at `./public/style.css` will be served at `/static/style.css` with 
 ### HTTPS Server
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     app := App::new(8443)
         .with_tls("cert.pem", "key.pem")
         .get("/", handle_index as i64)
@@ -521,7 +521,7 @@ F main() -> i64 {
 ### Multiple Routes and Methods
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     app := App::new(8080)
         .get("/", handle_index as i64)
         .get("/users", handle_list_users as i64)
@@ -540,7 +540,7 @@ F main() -> i64 {
 ### CORS Configuration
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     app := App::new(8080)
         .get("/api/data", handle_data as i64)
         .use_middleware("cors", default_cors_handler as i64)
@@ -552,7 +552,7 @@ F main() -> i64 {
 ### Custom Response Headers
 
 ```vais
-F handle_download(ctx: &RequestCtx) -> ResponseBuilder {
+fn handle_download(ctx: &RequestCtx) -> ResponseBuilder {
     file_data := __read_file("report.pdf" as i64)
     file_size := __file_size("report.pdf" as i64)
 
@@ -566,11 +566,11 @@ F handle_download(ctx: &RequestCtx) -> ResponseBuilder {
 ### Redirects
 
 ```vais
-F handle_old_url(ctx: &RequestCtx) -> ResponseBuilder {
+fn handle_old_url(ctx: &RequestCtx) -> ResponseBuilder {
     ResponseBuilder::redirect_permanent("/new-url")
 }
 
-F handle_login_redirect(ctx: &RequestCtx) -> ResponseBuilder {
+fn handle_login_redirect(ctx: &RequestCtx) -> ResponseBuilder {
     ResponseBuilder::redirect("/login?redirect=/dashboard")
 }
 ```
@@ -578,7 +578,7 @@ F handle_login_redirect(ctx: &RequestCtx) -> ResponseBuilder {
 ### Cache Control
 
 ```vais
-F handle_static_asset(ctx: &RequestCtx) -> ResponseBuilder {
+fn handle_static_asset(ctx: &RequestCtx) -> ResponseBuilder {
     ResponseBuilder::ok()
         .content_type("application/javascript")
         .cache(3600)  # Cache for 1 hour

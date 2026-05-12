@@ -5,13 +5,13 @@
 ## Import
 
 ```vais
-U std/stringmap
+use std/stringmap
 ```
 
 ## Struct
 
 ```vais
-S StringMap { buckets: i64, size: i64, cap: i64 }
+struct StringMap { buckets: i64, size: i64, cap: i64 }
 ```
 
 ## Methods
@@ -37,9 +37,9 @@ Unlike HashMap which uses integer key comparison, StringMap compares keys by str
 ## Usage
 
 ```vais
-U std/stringmap
+use std/stringmap
 
-F main() -> i64 {
+fn main() -> i64 {
     m := StringMap.with_capacity(16)
     m.set("name", 42)
     val := m.get("name")  # 42

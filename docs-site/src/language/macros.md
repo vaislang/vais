@@ -22,7 +22,7 @@ macro hello! {
     () => { puts("Hello, Vais!") }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     hello!()
     0
 }
@@ -33,11 +33,11 @@ F main() -> i64 {
 ```vais
 macro max! {
     ($a:expr, $b:expr) => {
-        I $a > $b { $a } E { $b }
+        I $a > $b { $a } else { $b }
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := max!(10, 20)   # 20
     result
 }
@@ -73,7 +73,7 @@ macro vec! {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     empty := vec!()
     nums := vec!(1, 2, 3, 4, 5)
     0
@@ -89,7 +89,7 @@ macro sum! {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := sum!(1, 2, 3, 4, 5)   # 15
     result
 }
@@ -121,7 +121,7 @@ macro_name!{...}     # 중괄호
 `P` 키워드로 다른 모듈에서 사용 가능하게 합니다:
 
 ```vais
-P macro assert_eq! {
+pub macro assert_eq! {
     ($left:expr, $right:expr) => {
         I $left != $right {
             puts("Assertion failed!")
@@ -153,7 +153,7 @@ macro when! {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     x := 42
     when!(x > 0, {
         puts("positive")

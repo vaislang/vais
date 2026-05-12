@@ -27,7 +27,7 @@ Bytes: 256
 # vwc — Vais Word Count
 # 텍스트 파일의 줄/단어/바이트를 센다
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Vais Word Count (vwc) ===")
     0
 }
@@ -49,19 +49,19 @@ vaisc run tutorial_wc.vais
 
 ```vais
 # 카운트 결과를 저장하는 구조체
-S WcResult {
+struct WcResult {
     lines: i64
     words: i64
     bytes: i64
 }
 
 # 메서드 정의
-X WcResult {
-    F new() -> WcResult {
-        R WcResult { lines: 0, words: 0, bytes: 0 }
+impl WcResult {
+    fn new() -> WcResult {
+        return WcResult { lines: 0, words: 0, bytes: 0 }
     }
 
-    F print(&self) {
+    fn print(&self) {
         puts("Lines: {self.lines}")
         puts("Words: {self.words}")
         puts("Bytes: {self.bytes}")
@@ -84,11 +84,11 @@ X WcResult {
 
 ```vais
 N "C" {
-    F strlen(s: str) -> i64
+    fn strlen(s: str) -> i64
 }
 
-F count_bytes(text: str) -> i64 {
-    R strlen(text)
+fn count_bytes(text: str) -> i64 {
+    return strlen(text)
 }
 ```
 
@@ -103,7 +103,7 @@ F count_bytes(text: str) -> i64 {
 문자열을 순회하며 줄바꿈 문자(`\n`, ASCII 10)를 세는 함수입니다:
 
 ```vais
-F count_lines(text: str, len: i64) -> i64 {
+fn count_lines(text: str, len: i64) -> i64 {
     count := mut 0
     L i:0..len {
         byte := load_byte(text, i)
@@ -135,16 +135,16 @@ F count_lines(text: str, len: i64) -> i64 {
 공백, 탭, 줄바꿈을 구분자로 사용하여 단어를 셉니다:
 
 ```vais
-F is_whitespace(b: i64) -> i64 {
+fn is_whitespace(b: i64) -> i64 {
     # 공백(32), 탭(9), 줄바꿈(10), 캐리지 리턴(13)
-    I b == 32 { R 1 }
-    I b == 9 { R 1 }
-    I b == 10 { R 1 }
-    I b == 13 { R 1 }
+    I b == 32 { return 1 }
+    I b == 9 { return 1 }
+    I b == 10 { return 1 }
+    I b == 13 { return 1 }
     0
 }
 
-F count_words(text: str, len: i64) -> i64 {
+fn count_words(text: str, len: i64) -> i64 {
     count := mut 0
     in_word := mut 0
 
@@ -155,7 +155,7 @@ F count_words(text: str, len: i64) -> i64 {
                 count = count + 1
                 in_word = 0
             }
-        } E {
+        } else {
             in_word = 1
         }
     }
@@ -181,16 +181,16 @@ F count_words(text: str, len: i64) -> i64 {
 모든 함수를 조합하여 완성합니다:
 
 ```vais
-F analyze(text: str) -> WcResult {
+fn analyze(text: str) -> WcResult {
     len := strlen(text)
-    R WcResult {
+    return WcResult {
         lines: count_lines(text, len),
         words: count_words(text, len),
         bytes: len
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Vais Word Count (vwc) ===")
 
     # 테스트 텍스트
@@ -209,15 +209,15 @@ F main() -> i64 {
 여러 텍스트를 처리하고 합계를 구하는 기능을 추가합니다:
 
 ```vais
-F add_results(a: WcResult, b: WcResult) -> WcResult {
-    R WcResult {
+fn add_results(a: WcResult, b: WcResult) -> WcResult {
+    return WcResult {
         lines: a.lines + b.lines,
         words: a.words + b.words,
         bytes: a.bytes + b.bytes
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Vais Word Count (vwc) ===")
 
     text1 := "Hello Vais World\nThis is a test\n"
@@ -267,13 +267,13 @@ vaisc run examples/tutorial_wc.vais
 
 | 개념 | Vais 문법 | 설명 |
 |------|-----------|------|
-| 함수 | `F name(params) -> T { body }` | 단일 문자 키워드 |
-| 구조체 | `S Name { fields }` | 데이터 타입 정의 |
-| 메서드 | `X Name { F method(&self) { } }` | impl 블록 |
+| 함수 | `fn name(params) -> T { body }` | canonical keyword |
+| 구조체 | `struct Name { fields }` | 데이터 타입 정의 |
+| 메서드 | `impl Name { fn method(&self) { } }` | impl 블록 |
 | 변수 | `x := 42`, `x := mut 0` | 추론 + 가변성 |
-| 루프 | `L i:0..n { }` | 범위 루프 |
-| 조건 | `I cond { } E { }` | if/else |
-| FFI | `N "C" { F func() }` | C 함수 호출 |
+| 루프 | `LF i:0..n { }` | 범위 루프 |
+| 조건 | `I cond { } else { }` | if/else |
+| FFI | `N "C" { fn func() }` | C 함수 호출 |
 | 보간 | `"{expr}"` | 문자열 내 표현식 |
 
 다음 튜토리얼: [HTTP Server 만들기](./http-server.md)

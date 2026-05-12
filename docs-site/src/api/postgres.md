@@ -22,7 +22,7 @@ names it explicitly.
 ## Import
 
 ```vais
-U std/postgres
+use std/postgres
 ```
 
 ## Compilation
@@ -65,7 +65,7 @@ vaisc myapp.vais && clang myapp.ll std/postgres_runtime.c -lpq -o myapp
 ### PgResult Struct
 
 ```vais
-S PgResult {
+struct PgResult {
     handle: i64,       # PGresult* from libpq
     row_count: i64,    # Number of rows
     col_count: i64     # Number of columns
@@ -77,7 +77,7 @@ S PgResult {
 #### from_handle
 
 ```vais
-F from_handle(h: i64) -> PgResult
+fn from_handle(h: i64) -> PgResult
 ```
 
 Wrap a raw libpq PGresult pointer.
@@ -85,7 +85,7 @@ Wrap a raw libpq PGresult pointer.
 #### is_valid
 
 ```vais
-F is_valid(&self) -> i64
+fn is_valid(&self) -> i64
 ```
 
 Check if the result is valid (not null). Returns 1 if valid, 0 otherwise.
@@ -93,7 +93,7 @@ Check if the result is valid (not null). Returns 1 if valid, 0 otherwise.
 #### is_ok
 
 ```vais
-F is_ok(&self) -> i64
+fn is_ok(&self) -> i64
 ```
 
 Check if the query was successful (COMMAND_OK or TUPLES_OK). Returns 1 if successful, 0 otherwise.
@@ -101,7 +101,7 @@ Check if the query was successful (COMMAND_OK or TUPLES_OK). Returns 1 if succes
 #### status
 
 ```vais
-F status(&self) -> i64
+fn status(&self) -> i64
 ```
 
 Get the result status code (one of PG_RESULT_* constants).
@@ -109,7 +109,7 @@ Get the result status code (one of PG_RESULT_* constants).
 #### rows
 
 ```vais
-F rows(&self) -> i64
+fn rows(&self) -> i64
 ```
 
 Get number of rows in the result set.
@@ -117,7 +117,7 @@ Get number of rows in the result set.
 #### cols
 
 ```vais
-F cols(&self) -> i64
+fn cols(&self) -> i64
 ```
 
 Get number of columns in the result set.
@@ -125,7 +125,7 @@ Get number of columns in the result set.
 #### get_text
 
 ```vais
-F get_text(&self, row: i64, col: i64) -> str
+fn get_text(&self, row: i64, col: i64) -> str
 ```
 
 Get a value as text (raw string). Returns empty string if out of bounds.
@@ -133,7 +133,7 @@ Get a value as text (raw string). Returns empty string if out of bounds.
 #### get_int
 
 ```vais
-F get_int(&self, row: i64, col: i64) -> i64
+fn get_int(&self, row: i64, col: i64) -> i64
 ```
 
 Get a value as integer. Returns 0 if NULL or out of bounds.
@@ -141,7 +141,7 @@ Get a value as integer. Returns 0 if NULL or out of bounds.
 #### get_float
 
 ```vais
-F get_float(&self, row: i64, col: i64) -> f64
+fn get_float(&self, row: i64, col: i64) -> f64
 ```
 
 Get a value as float. Returns 0.0 if NULL or out of bounds.
@@ -149,7 +149,7 @@ Get a value as float. Returns 0.0 if NULL or out of bounds.
 #### get_bool
 
 ```vais
-F get_bool(&self, row: i64, col: i64) -> i64
+fn get_bool(&self, row: i64, col: i64) -> i64
 ```
 
 Get a value as boolean. Returns 1 for "t"/"true"/"1", 0 otherwise.
@@ -157,7 +157,7 @@ Get a value as boolean. Returns 1 for "t"/"true"/"1", 0 otherwise.
 #### is_null
 
 ```vais
-F is_null(&self, row: i64, col: i64) -> i64
+fn is_null(&self, row: i64, col: i64) -> i64
 ```
 
 Check if a value is NULL. Returns 1 if NULL, 0 otherwise.
@@ -165,7 +165,7 @@ Check if a value is NULL. Returns 1 if NULL, 0 otherwise.
 #### clear
 
 ```vais
-F clear(&self) -> i64
+fn clear(&self) -> i64
 ```
 
 Free the result resources.
@@ -173,7 +173,7 @@ Free the result resources.
 #### drop
 
 ```vais
-F drop(&self) -> i64
+fn drop(&self) -> i64
 ```
 
 Alias for clear (RAII pattern).
@@ -183,7 +183,7 @@ Alias for clear (RAII pattern).
 ### PgConnection Struct
 
 ```vais
-S PgConnection {
+struct PgConnection {
     handle: i64,        # PGconn* from libpq
     host: str,
     port: i64,
@@ -198,7 +198,7 @@ S PgConnection {
 #### connect
 
 ```vais
-F connect(conninfo: str) -> PgConnection
+fn connect(conninfo: str) -> PgConnection
 ```
 
 Connect using a full connection string (e.g., "host=localhost port=5432 dbname=mydb user=myuser password=secret").
@@ -206,7 +206,7 @@ Connect using a full connection string (e.g., "host=localhost port=5432 dbname=m
 #### connect_params
 
 ```vais
-F connect_params(host: str, port: i64, dbname: str, user: str, password: str) -> PgConnection
+fn connect_params(host: str, port: i64, dbname: str, user: str, password: str) -> PgConnection
 ```
 
 Connect using individual parameters.
@@ -214,7 +214,7 @@ Connect using individual parameters.
 #### is_connected
 
 ```vais
-F is_connected(&self) -> i64
+fn is_connected(&self) -> i64
 ```
 
 Check if connection is active and OK. Returns 1 if connected, 0 otherwise.
@@ -222,7 +222,7 @@ Check if connection is active and OK. Returns 1 if connected, 0 otherwise.
 #### status
 
 ```vais
-F status(&self) -> i64
+fn status(&self) -> i64
 ```
 
 Get connection status code (PG_CONNECTION_OK or PG_CONNECTION_BAD).
@@ -230,7 +230,7 @@ Get connection status code (PG_CONNECTION_OK or PG_CONNECTION_BAD).
 #### error_message
 
 ```vais
-F error_message(&self) -> str
+fn error_message(&self) -> str
 ```
 
 Get error message from the connection.
@@ -238,7 +238,7 @@ Get error message from the connection.
 #### exec
 
 ```vais
-F exec(&self, sql: str) -> i64
+fn exec(&self, sql: str) -> i64
 ```
 
 Execute a simple SQL command (no results expected). Returns 1 on success, 0 on failure.
@@ -246,7 +246,7 @@ Execute a simple SQL command (no results expected). Returns 1 on success, 0 on f
 #### query
 
 ```vais
-F query(&self, sql: str) -> PgResult
+fn query(&self, sql: str) -> PgResult
 ```
 
 Execute a SQL query and return results.
@@ -254,7 +254,7 @@ Execute a SQL query and return results.
 #### exec_params
 
 ```vais
-F exec_params(&self, sql: str, nparams: i64, params: i64) -> i64
+fn exec_params(&self, sql: str, nparams: i64, params: i64) -> i64
 ```
 
 Execute a parameterized query (no results expected). `params` is a pointer to an array of string pointers. Returns 1 on success, 0 on failure.
@@ -262,7 +262,7 @@ Execute a parameterized query (no results expected). `params` is a pointer to an
 #### query_params
 
 ```vais
-F query_params(&self, sql: str, nparams: i64, params: i64) -> PgResult
+fn query_params(&self, sql: str, nparams: i64, params: i64) -> PgResult
 ```
 
 Execute a parameterized query and return results.
@@ -270,7 +270,7 @@ Execute a parameterized query and return results.
 #### prepare
 
 ```vais
-F prepare(&self, name: str, sql: str, nparams: i64) -> i64
+fn prepare(&self, name: str, sql: str, nparams: i64) -> i64
 ```
 
 Prepare a named statement. Returns 1 on success, 0 on failure.
@@ -278,7 +278,7 @@ Prepare a named statement. Returns 1 on success, 0 on failure.
 #### exec_prepared
 
 ```vais
-F exec_prepared(&self, name: str, nparams: i64, params: i64) -> i64
+fn exec_prepared(&self, name: str, nparams: i64, params: i64) -> i64
 ```
 
 Execute a prepared statement (no results expected). Returns 1 on success, 0 on failure.
@@ -286,7 +286,7 @@ Execute a prepared statement (no results expected). Returns 1 on success, 0 on f
 #### query_prepared
 
 ```vais
-F query_prepared(&self, name: str, nparams: i64, params: i64) -> PgResult
+fn query_prepared(&self, name: str, nparams: i64, params: i64) -> PgResult
 ```
 
 Execute a prepared statement and return results.
@@ -294,7 +294,7 @@ Execute a prepared statement and return results.
 #### begin
 
 ```vais
-F begin(&self) -> i64
+fn begin(&self) -> i64
 ```
 
 Begin a transaction. Returns 1 on success, 0 on failure.
@@ -302,7 +302,7 @@ Begin a transaction. Returns 1 on success, 0 on failure.
 #### commit
 
 ```vais
-F commit(&self) -> i64
+fn commit(&self) -> i64
 ```
 
 Commit a transaction. Returns 1 on success, 0 on failure.
@@ -310,7 +310,7 @@ Commit a transaction. Returns 1 on success, 0 on failure.
 #### rollback
 
 ```vais
-F rollback(&self) -> i64
+fn rollback(&self) -> i64
 ```
 
 Rollback a transaction. Returns 1 on success, 0 on failure.
@@ -318,7 +318,7 @@ Rollback a transaction. Returns 1 on success, 0 on failure.
 #### disconnect
 
 ```vais
-F disconnect(&self) -> i64
+fn disconnect(&self) -> i64
 ```
 
 Disconnect from the database.
@@ -326,7 +326,7 @@ Disconnect from the database.
 #### drop
 
 ```vais
-F drop(&self) -> i64
+fn drop(&self) -> i64
 ```
 
 Alias for disconnect (RAII pattern).
@@ -336,7 +336,7 @@ Alias for disconnect (RAII pattern).
 ### PgParams Struct
 
 ```vais
-S PgParams {
+struct PgParams {
     values: i64,      # Pointer to array of str pointers
     count: i64,
     capacity: i64
@@ -350,7 +350,7 @@ Helper for building parameter arrays for parameterized queries.
 #### new
 
 ```vais
-F new() -> PgParams
+fn new() -> PgParams
 ```
 
 Create a new parameter builder.
@@ -358,7 +358,7 @@ Create a new parameter builder.
 #### add_text
 
 ```vais
-F add_text(&self, value: str) -> PgParams
+fn add_text(&self, value: str) -> PgParams
 ```
 
 Add a string parameter. Returns self for chaining.
@@ -366,7 +366,7 @@ Add a string parameter. Returns self for chaining.
 #### add_int
 
 ```vais
-F add_int(&self, value: i64) -> PgParams
+fn add_int(&self, value: i64) -> PgParams
 ```
 
 Add an integer parameter (converted to string). Returns self for chaining.
@@ -374,7 +374,7 @@ Add an integer parameter (converted to string). Returns self for chaining.
 #### ptr
 
 ```vais
-F ptr(&self) -> i64
+fn ptr(&self) -> i64
 ```
 
 Get the raw pointer to pass to query functions.
@@ -382,7 +382,7 @@ Get the raw pointer to pass to query functions.
 #### len
 
 ```vais
-F len(&self) -> i64
+fn len(&self) -> i64
 ```
 
 Get the number of parameters.
@@ -390,7 +390,7 @@ Get the number of parameters.
 #### clear
 
 ```vais
-F clear(&self) -> i64
+fn clear(&self) -> i64
 ```
 
 Free the parameter builder.
@@ -398,7 +398,7 @@ Free the parameter builder.
 #### drop
 
 ```vais
-F drop(&self) -> i64
+fn drop(&self) -> i64
 ```
 
 Alias for clear.
@@ -406,25 +406,25 @@ Alias for clear.
 ## Convenience Functions
 
 ```vais
-F pg_connect(host: str, port: i64, dbname: str, user: str, password: str) -> PgConnection
+fn pg_connect(host: str, port: i64, dbname: str, user: str, password: str) -> PgConnection
 ```
 
 Quick connect with individual parameters.
 
 ```vais
-F pg_connect_str(conninfo: str) -> PgConnection
+fn pg_connect_str(conninfo: str) -> PgConnection
 ```
 
 Quick connect with connection string.
 
 ```vais
-F pg_connect_local(dbname: str, user: str) -> PgConnection
+fn pg_connect_local(dbname: str, user: str) -> PgConnection
 ```
 
 Quick connect to localhost with defaults (no password).
 
 ```vais
-F build_conninfo(host: str, port: i64, dbname: str, user: str, password: str) -> str
+fn build_conninfo(host: str, port: i64, dbname: str, user: str, password: str) -> str
 ```
 
 Build a libpq connection info string from individual parameters.
@@ -434,14 +434,14 @@ Build a libpq connection info string from individual parameters.
 ### Simple Query
 
 ```vais
-U std/postgres
+use std/postgres
 
-F main() -> i64 {
+fn main() -> i64 {
     conn := pg_connect("localhost", 5432, "mydb", "myuser", "password")
 
     I conn.is_connected() == 0 {
         # Handle connection error
-        R -1
+        return -1
     }
 
     result := conn.query("SELECT id, name, age FROM users")
@@ -466,9 +466,9 @@ F main() -> i64 {
 ### Parameterized Query
 
 ```vais
-U std/postgres
+use std/postgres
 
-F find_user(conn: &PgConnection, min_age: i64) -> i64 {
+fn find_user(conn: &PgConnection, min_age: i64) -> i64 {
     params := PgParams::new()
         .add_int(min_age)
 
@@ -496,11 +496,11 @@ F find_user(conn: &PgConnection, min_age: i64) -> i64 {
 ### Transactions
 
 ```vais
-U std/postgres
+use std/postgres
 
-F transfer_funds(conn: &PgConnection, from_id: i64, to_id: i64, amount: i64) -> i64 {
+fn transfer_funds(conn: &PgConnection, from_id: i64, to_id: i64, amount: i64) -> i64 {
     I conn.begin() == 0 {
-        R -1
+        return -1
     }
 
     # Debit from account
@@ -514,7 +514,7 @@ F transfer_funds(conn: &PgConnection, from_id: i64, to_id: i64, amount: i64) -> 
 
     I success == 0 {
         conn.rollback()
-        R -1
+        return -1
     }
 
     # Credit to account
@@ -528,7 +528,7 @@ F transfer_funds(conn: &PgConnection, from_id: i64, to_id: i64, amount: i64) -> 
 
     I success == 0 {
         conn.rollback()
-        R -1
+        return -1
     }
 
     conn.commit()
@@ -538,9 +538,9 @@ F transfer_funds(conn: &PgConnection, from_id: i64, to_id: i64, amount: i64) -> 
 ### Prepared Statements
 
 ```vais
-U std/postgres
+use std/postgres
 
-F batch_insert(conn: &PgConnection, names: i64, count: i64) -> i64 {
+fn batch_insert(conn: &PgConnection, names: i64, count: i64) -> i64 {
     # Prepare statement
     success := conn.prepare(
         "insert_user",
@@ -549,7 +549,7 @@ F batch_insert(conn: &PgConnection, names: i64, count: i64) -> i64 {
     )
 
     I success == 0 {
-        R -1
+        return -1
     }
 
     # Execute multiple times
@@ -571,9 +571,9 @@ F batch_insert(conn: &PgConnection, names: i64, count: i64) -> i64 {
 ### Connection String Building
 
 ```vais
-U std/postgres
+use std/postgres
 
-F main() -> i64 {
+fn main() -> i64 {
     # Build connection string
     conninfo := build_conninfo(
         "db.example.com",
@@ -589,7 +589,7 @@ F main() -> i64 {
     I conn.is_connected() == 1 {
         # Use connection...
         conn.disconnect()
-    } E {
+    } else {
         error := conn.error_message()
         # Handle error...
     }
@@ -601,22 +601,22 @@ F main() -> i64 {
 ### Error Handling
 
 ```vais
-U std/postgres
+use std/postgres
 
-F safe_query(conn: &PgConnection, sql: str) -> PgResult {
+fn safe_query(conn: &PgConnection, sql: str) -> PgResult {
     result := conn.query(sql)
 
     I result.is_valid() == 0 {
         # Result is null - connection error
         error := conn.error_message()
         # Log or handle error...
-        R result
+        return result
     }
 
     I result.is_ok() == 0 {
         # Query failed
         status := result.status()
-        M status {
+        match status {
             PG_RESULT_FATAL_ERROR => {
                 # Handle fatal error
             },

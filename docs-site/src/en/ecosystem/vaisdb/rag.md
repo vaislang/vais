@@ -65,9 +65,9 @@ FROM SEMANTIC_CHUNK(
 Usage from Vais:
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F ingest_document(db: &Database, doc_id: i64, title: str, content: str) {
+fn ingest_document(db: &Database, doc_id: i64, title: str, content: str) {
     tx := db.begin()?;
 
     # Store the original document
@@ -123,9 +123,9 @@ CREATE TABLE chunk_edges (
 Automatically building chunk relationships:
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F build_chunk_graph(db: &Database, document_id: i64) {
+fn build_chunk_graph(db: &Database, document_id: i64) {
     # 1. Build sequential relationships (next/prev)
     db.execute("
         INSERT INTO chunk_edges (src_chunk_id, dst_chunk_id, edge_type, weight)
@@ -193,9 +193,9 @@ SET embedding.local_path = '/models/nomic-embed-text-v1.5.gguf';
 Vais configuration:
 
 ```vais
-U vaisdb::{Database, EmbeddingConfig};
+use vaisdb::{Database, EmbeddingConfig};
 
-F main() {
+fn main() {
     config := EmbeddingConfig {
         model: "text-embedding-3-small",
         dimensions: 1536,
@@ -265,15 +265,15 @@ FROM RAG_SEARCH(
 Assembling a RAG pipeline from Vais:
 
 ```vais
-U vaisdb::{Database, RagResult};
+use vaisdb::{Database, RagResult};
 
-S RagContext {
+struct RagContext {
     chunks:  Vec<str>,
     sources: Vec<str>,
     scores:  Vec<f32>,
 }
 
-F build_rag_context(db: &Database, question: str) -> Result<RagContext, str> {
+fn build_rag_context(db: &Database, question: str) -> Result<RagContext, str> {
     results := db.query("
         SELECT
             dc.content,
@@ -296,10 +296,10 @@ F build_rag_context(db: &Database, question: str) -> Result<RagContext, str> {
         scores:  results.map(|r| r.relevance_score),
     };
 
-    R Ok(ctx);
+    return Ok(ctx);
 }
 
-F answer_question(db: &Database, llm: &LlmClient, question: str) -> str {
+fn answer_question(db: &Database, llm: &LlmClient, question: str) -> str {
     ctx := build_rag_context(db, question)?;
 
     # Pass the context and question to the LLM
@@ -400,9 +400,9 @@ CREATE VECTOR INDEX idx_memory_embedding ON agent_memory(embedding)
 ### Storing and Retrieving Memory
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-S AgentMemory {
+struct AgentMemory {
     agent_id:    str,
     session_id:  str,
     memory_type: str,
@@ -410,7 +410,7 @@ S AgentMemory {
     importance:  f32,
 }
 
-F store_memory(db: &Database, memory: &AgentMemory) {
+fn store_memory(db: &Database, memory: &AgentMemory) {
     db.execute("
         INSERT INTO agent_memory
             (agent_id, session_id, memory_type, content, embedding, importance)
@@ -424,7 +424,7 @@ F store_memory(db: &Database, memory: &AgentMemory) {
     ])?;
 }
 
-F recall_memories(
+fn recall_memories(
     db:       &Database,
     agent_id: str,
     context:  str,
@@ -456,7 +456,7 @@ F recall_memories(
           )
     ", [agent_id, context, limit])?;
 
-    R Ok(results.map(|r| r.content));
+    return Ok(results.map(|r| r.content));
 }
 ```
 
@@ -465,9 +465,9 @@ F recall_memories(
 Summarize older episodic memories into semantic memories.
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F consolidate_episodic_memories(
+fn consolidate_episodic_memories(
     db:       &Database,
     agent_id: str,
     llm:      &LlmClient
@@ -483,7 +483,7 @@ F consolidate_episodic_memories(
         ORDER BY created_at
     ", [agent_id])?;
 
-    I episodes.len() == 0 { R; }
+    I episodes.len() == 0 { return; }
 
     # Generate a summary with the LLM
     episode_texts := episodes.map(|e| e.content).join("\n");
@@ -519,12 +519,12 @@ F consolidate_episodic_memories(
 Below is a full RAG pipeline from document ingestion through question answering.
 
 ```vais
-U vaisdb::{Database};
-U std::env;
+use vaisdb::{Database};
+use std::env;
 
 # --- Step 1: Document ingestion and indexing ---
 
-F index_document(db: &Database, title: str, content: str) {
+fn index_document(db: &Database, title: str, content: str) {
     tx := db.begin()?;
 
     # Store the original document
@@ -559,13 +559,13 @@ F index_document(db: &Database, title: str, content: str) {
 
 # --- Step 2: RAG retrieval ---
 
-S RagResult {
+struct RagResult {
     content: str,
     source:  str,
     score:   f32,
 }
 
-F rag_retrieve(db: &Database, question: str) -> Vec<RagResult> {
+fn rag_retrieve(db: &Database, question: str) -> Vec<RagResult> {
     db.query("
         SELECT
             dc.content,
@@ -589,7 +589,7 @@ F rag_retrieve(db: &Database, question: str) -> Vec<RagResult> {
 
 # --- Step 3: Prompt construction + LLM call ---
 
-F answer(db: &Database, question: str) -> str {
+fn answer(db: &Database, question: str) -> str {
     chunks := rag_retrieve(db, question);
 
     context := chunks.map(|c| "Source: {c.source}\n{c.content}").join("\n\n---\n\n");
@@ -600,7 +600,7 @@ F answer(db: &Database, question: str) -> str {
     llm_call(prompt)
 }
 
-F main() {
+fn main() {
     db := Database::open("knowledge.vaisdb")?;
 
     # Index documents

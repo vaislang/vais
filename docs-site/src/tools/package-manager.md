@@ -423,10 +423,10 @@ vais-uuid = "0.1.0"
 ```
 
 ```vais
-U json::{parse, stringify}
-U uuid::v4
+use json::{parse, stringify}
+use uuid::v4
 
-F main() {
+fn main() {
     # JSON 파싱
     data := parse(~{"name": "Vais", "version": 1})!
 

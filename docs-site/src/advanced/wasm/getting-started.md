@@ -39,17 +39,17 @@ Create `hello.vais`:
 ```vais
 # Import console API from JavaScript host
 #[wasm_import("env", "console_log")]
-N F console_log(ptr: i64, len: i64)
+N fn console_log(ptr: i64, len: i64)
 
 # Export a function for JavaScript to call
 #[wasm_export("hello")]
-F hello() {
+fn hello() {
     msg := "Hello from Vais WASM!"
     console_log(str_to_ptr(msg), strlen(msg))
 }
 
 # WASM entry point
-F _start() {
+fn _start() {
     hello()
 }
 ```
@@ -122,10 +122,10 @@ Open `http://localhost:8000` in your browser. You should see "Hello from Vais WA
 The `std/web.vais` module provides pre-built bindings for common browser APIs:
 
 ```vais
-U std/web
+use std/web
 
 #[wasm_export("init")]
-F init() {
+fn init() {
     # Console logging
     log_str("Application initialized")
 

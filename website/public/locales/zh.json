@@ -1,10 +1,10 @@
 {
   "meta": {
     "title": "Vais - AI优化的系统编程语言",
-    "description": "Vais 是为 AI 代码生成设计的高效令牌系统编程语言，具有原生 LLVM 性能。"
+    "description": "Vais 是面向 AI code generation 的 systems programming language，提供 native LLVM performance 和 gate-backed public claims。"
   },
   "nav": {
-    "compare": "比较",
+    "compare": "Gates",
     "performance": "性能",
     "features": "特性",
     "playground": "在线试用",
@@ -14,18 +14,18 @@
   },
   "hero": {
     "badge": "Certified Core + Promoted Runtime Gates",
-    "title": "编写<span class=\"gradient-text\">更少的令牌</span>，<br>获得<span class=\"gradient-text\">原生性能</span>",
+    "title": "编写 <span class=\"gradient-text\">clear Vais</span>，<br>获得 <span class=\"gradient-text\">native performance</span>",
     "subtitle": "Vais（Vibe AI Language for Systems）是为 AI 代码生成优化的系统编程语言。当前公开基线是 certified Core compiler 加上明确命名的 promoted runtime gates。",
     "tryBrowser": "在浏览器中试用",
     "install": "brew install vais"
   },
   "compare": {
-    "title": "令牌效率很重要",
-    "subtitle": "AI 模型按令牌收费。对于等效程序，Vais 使用的令牌比 <strong>Rust 少 33%</strong>，比 <strong>C 少 40%</strong> — 单字符关键字、表达式体和自动返回在整个代码库中累积。",
+    "title": "Canonical Syntax, Gate-Backed Claims",
+    "subtitle": "Step 19 已移除旧 single-letter keyword form。当前公开 claim 绑定到 canonical syntax 以及 integrity、package、runtime、full-build、product schema 等 named gates。",
     "vais": "Vais",
     "tokens": "令牌",
-    "barTitle": "令牌数 — 4 个基准程序",
-    "barNote": "fibonacci + quicksort + http_types + linked_list (tiktoken cl100k_base)。参见<a href=\"https://github.com/vaislang/vais/blob/main/benches/COMPARISON.md\" style=\"color: var(--primary);\">基准测试</a>。"
+    "barTitle": "Gate Snapshot — 2026-05-12",
+    "barNote": "Baseline 来自当前 integrity manifest：cross-package schema 15/15 和 multi-domain product schema 9/9 是 locked gates。"
   },
   "performance": {
     "title": "原生性能",
@@ -38,8 +38,8 @@
     "title": "为什么选择 Vais？",
     "subtitle": "从零开始为 AI 辅助开发设计，不牺牲性能。",
     "singleChar": {
-      "title": "单字符关键字",
-      "description": "函数用 <code>F</code>，结构体用 <code>S</code>，if/else 用 <code>I</code>/<code>E</code>，循环用 <code>L</code>，模式匹配用 <code>M</code>。最少的令牌，最大的清晰度。"
+      "title": "Canonical Keywords",
+      "description": "<code>fn</code>、<code>struct</code>、<code>enum</code>、<code>else</code>、<code>match</code>、<code>return</code>、<code>use</code>、<code>pub</code> 是 canonical。Retired single-letter form 不再接受。"
     },
     "selfRecursion": {
       "title": "自递归运算符",
@@ -107,7 +107,7 @@
   "vaisx": {
     "badge": "新功能",
     "title": "用 Vais 构建 Web 应用",
-    "subtitle": "VaisX 是 Vais web framework workbench。当前公开 claim 绑定到 runtime、unit、package、full-build gates。",
+    "subtitle": "VaisX 是 Vais web framework workbench。当前公开 claim 绑定到 promoted runtime、unit、package、full-build 和 shared-schema product gates。",
     "compiler": {
       "title": "编译时响应性",
       "description": "Reactive state analysis 和 DOM update generation 是 implementation surfaces，只在 named gates 覆盖范围内验证。"
@@ -118,7 +118,7 @@
     },
     "runtime": {
       "title": "Promoted Runtime Gates",
-      "description": "当前 Vais Web baseline 是 runtime smoke 61/77、unit 390/390、package tests 3272/3272、full-build 24/24。Size claim 需要 size gate。"
+      "description": "当前 Vais Web baseline 是 runtime smoke 61/77、unit 390/390、package tests 3272/3272、full-build 24/24、shared-schema product gate 9/9。Size claim 需要 size gate。"
     },
     "learnMore": "了解更多",
     "github": "GitHub",

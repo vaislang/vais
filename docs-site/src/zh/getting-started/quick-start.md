@@ -19,7 +19,7 @@ cargo install vaisc
 创建名为 `hello.vais` 的文件:
 
 ```vais
-F main() {
+fn main() {
     puts("Hello, Vais!")
 }
 ```
@@ -45,7 +45,7 @@ Hello, Vais!
 ### 变量
 
 ```vais
-F main() {
+fn main() {
     x := 42              # 推导为 i64
     y := 3.14            # 推导为 f64
     name := "Alice"      # 推导为 str
@@ -58,11 +58,11 @@ F main() {
 ### 函数
 
 ```vais
-F add(a: i64, b: i64) -> i64 {
+fn add(a: i64, b: i64) -> i64 {
     a + b  # 最后一个表达式是返回值
 }
 
-F main() {
+fn main() {
     result := add(10, 20)
     print_i64(result)  # 输出: 30
 }
@@ -71,11 +71,11 @@ F main() {
 ### 控制流
 
 ```vais
-F main() {
+fn main() {
     x := 10
 
     # if 表达式
-    msg := I x > 5 { "big" } E { "small" }
+    msg := I x > 5 { "big" } else { "small" }
     puts(msg)
 
     # 循环
@@ -90,12 +90,12 @@ F main() {
 使用 `@` 调用当前函数:
 
 ```vais
-F factorial(n: i64) -> i64 {
-    I n <= 1 { R 1 }
+fn factorial(n: i64) -> i64 {
+    I n <= 1 { return 1 }
     n * @(n - 1)
 }
 
-F main() {
+fn main() {
     print_i64(factorial(5))  # 输出: 120
 }
 ```

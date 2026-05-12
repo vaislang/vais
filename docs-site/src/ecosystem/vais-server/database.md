@@ -16,16 +16,16 @@ vaisdb (Vector + Graph + SQL + Full-text)
 ### 임베디드 모드 (파일 기반)
 
 ```vais
-U db/connection
+use db/connection
 
 config := DbConfig.embedded("./data/myapp.vaisdb")
-M DbConnection.connect(config) {
+match DbConnection.connect(config) {
     Ok(conn) => {
         println("연결 성공: {conn.to_string()}")
     },
     Err(e) => {
         println("연결 실패: {e.message}")
-        R 1
+        return 1
     },
 }
 ```
@@ -34,7 +34,7 @@ M DbConnection.connect(config) {
 
 ```vais
 config := DbConfig.tcp("127.0.0.1", 7300)
-M DbConnection.connect(config) {
+match DbConnection.connect(config) {
     Ok(conn) => { /* ... */ },
     Err(e)   => { /* ... */ },
 }
@@ -53,7 +53,7 @@ M DbConnection.connect(config) {
 
 ```vais
 sql := "SELECT id, name FROM users WHERE id = 1"
-M conn.execute(sql) {
+match conn.execute(sql) {
     Ok(result) => {
         println("결과 행 수: {result.row_count()}")
         I i = 0; i < result.row_count(); i = i + 1 {
@@ -84,13 +84,13 @@ M conn.execute(sql) {
 ### 풀 생성
 
 ```vais
-U db/connection
-U db/pool
+use db/connection
+use db/pool
 
 db_config   := DbConfig.embedded("./data/myapp.vaisdb")
 pool_config := PoolConfig.default()   # min=2, max=10, idle_timeout=30s
 
-M ConnectionPool.new(db_config, pool_config) {
+match ConnectionPool.new(db_config, pool_config) {
     Ok(mut pool) => {
         # 풀 사용
         stats := pool.stats()
@@ -98,7 +98,7 @@ M ConnectionPool.new(db_config, pool_config) {
     },
     Err(e) => {
         println("풀 생성 실패: {e.message}")
-        R 1
+        return 1
     },
 }
 ```
@@ -106,10 +106,10 @@ M ConnectionPool.new(db_config, pool_config) {
 ### 연결 획득 및 반환
 
 ```vais
-M pool.acquire() {
+match pool.acquire() {
     Ok(conn) => {
         # 쿼리 수행
-        M conn.execute("SELECT 1") {
+        match conn.execute("SELECT 1") {
             Ok(_)  => { println("헬스 체크 성공") },
             Err(e) => { println("오류: {e.message}") },
         }
@@ -161,7 +161,7 @@ pool.health_check()   # 유휴 연결에 SELECT 1 핑을 보내고 죽은 연결
 ### SELECT
 
 ```vais
-U db/query
+use db/query
 
 sql := QueryBuilder.new()
     .select("users")
@@ -260,12 +260,12 @@ begin_sql  := QueryBuilder.new().begin_transaction().build()  # "BEGIN"
 commit_sql := QueryBuilder.new().commit().build()             # "COMMIT"
 rb_sql     := QueryBuilder.new().rollback().build()           # "ROLLBACK"
 
-M conn.execute(begin_sql) {
+match conn.execute(begin_sql) {
     Ok(_)  => {},
-    Err(e) => { R Err(e) },
+    Err(e) => { return Err(e) },
 }
 # ... DML 쿼리 실행 ...
-M conn.execute(commit_sql) {
+match conn.execute(commit_sql) {
     Ok(_)  => { println("트랜잭션 커밋 성공") },
     Err(e) => {
         conn.execute(rb_sql)
@@ -333,13 +333,13 @@ sql := QueryBuilder.new()
 ### 마이그레이션 정의 및 실행
 
 ```vais
-U db/connection
-U db/migrate
+use db/connection
+use db/migrate
 
-F run_migrations(conn: DbConnection) -> Result<i64, VaisDbError> {
+fn run_migrations(conn: DbConnection) -> Result<i64, VaisDbError> {
     migrator_result := Migrator.new(conn)
-    M migrator_result {
-        Err(e) => { R Err(e) },
+    match migrator_result {
+        Err(e) => { return Err(e) },
         Ok(mut migrator) => {
             # 버전 1 — users 테이블 생성
             m1 := Migration.new(
@@ -379,7 +379,7 @@ F run_migrations(conn: DbConnection) -> Result<i64, VaisDbError> {
 
 ```vais
 # 버전 1까지 롤백 (버전 2, 3이 있으면 역순으로 실행)
-M migrator.run_down(1) {
+match migrator.run_down(1) {
     Ok(count) => { println("{count}개 마이그레이션 롤백 완료") },
     Err(e)    => { println("롤백 실패: {e.message}") },
 }
@@ -403,18 +403,18 @@ m := Migration.new(
 아래는 서버 시작 시 DB를 연결하고 마이그레이션을 수행한 뒤, 핸들러에서 QueryBuilder로 데이터를 조회하는 전체 흐름입니다.
 
 ```vais
-U core/app
-U core/config
-U core/context
-U db/connection
-U db/migrate
-U db/query
-U src/util/json
+use core/app
+use core/config
+use core/context
+use db/connection
+use db/migrate
+use db/query
+use src/util/json
 
 C PORT:    u16 = 8080
 C DB_PATH: str = "./data/app.vaisdb"
 
-F handle_get_user(ctx: Context) -> Response {
+fn handle_get_user(ctx: Context) -> Response {
     id := ctx.path_params
 
     sql := QueryBuilder.new()
@@ -436,22 +436,22 @@ F handle_get_user(ctx: Context) -> Response {
     ctx.json(200, json_encode(pairs))
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # 1. DB 연결
     db_config := DbConfig.embedded(DB_PATH)
-    db := M DbConnection.connect(db_config) {
+    db := match DbConnection.connect(db_config) {
         Err(e) => {
             println("DB 연결 실패: {e.message}")
-            R 1
+            return 1
         },
         Ok(conn) => { conn },
     }
 
     # 2. 마이그레이션 실행
-    M Migrator.new(db) {
+    match Migrator.new(db) {
         Err(e) => {
             println("Migrator 초기화 실패: {e.message}")
-            R 1
+            return 1
         },
         Ok(mut migrator) => {
             m1 := Migration.new(
@@ -460,9 +460,9 @@ F main() -> i64 {
                 "DROP TABLE IF EXISTS users"
             )
             migrator.add_migration(m1)
-            M migrator.run_up() {
+            match migrator.run_up() {
                 Ok(count) => { println("마이그레이션 {count}개 적용") },
-                Err(e)    => { println("마이그레이션 실패: {e.message}") R 1 },
+                Err(e)    => { println("마이그레이션 실패: {e.message}") return 1 },
             }
         },
     }
@@ -476,9 +476,9 @@ F main() -> i64 {
     app.get("/users/:id", "handle_get_user")
 
     println("서버 시작: :{PORT}")
-    M app.listen(":{PORT}") {
+    match app.listen(":{PORT}") {
         Ok(_) => {},
-        Err(e) => { println("서버 오류: {e.message}") R 1 },
+        Err(e) => { println("서버 오류: {e.message}") return 1 },
     }
     0
 }

@@ -55,7 +55,7 @@ The Compress module provides RFC-compliant compression with:
 ### CompressResult
 
 ```vais
-S CompressResult {
+struct CompressResult {
     data_ptr: i64,      # Pointer to output data (caller must free)
     data_len: i64,      # Length of output data
     status: i64         # COMPRESS_OK or error code
@@ -71,7 +71,7 @@ Result structure returned by compression/decompression operations.
 ### Compressor
 
 ```vais
-S Compressor {
+struct Compressor {
     handle: i64,        # Opaque pointer to z_stream
     mode: i64,          # COMPRESS_DEFLATE or COMPRESS_GZIP
     level: i64,         # Compression level (1-9)
@@ -86,8 +86,8 @@ Stateful compressor for compression operations.
 ### deflate / gzip
 
 ```vais
-F deflate(level: i64) -> Compressor
-F gzip(level: i64) -> Compressor
+fn deflate(level: i64) -> Compressor
+fn gzip(level: i64) -> Compressor
 ```
 
 Create a new deflate or gzip compressor with the specified compression level.
@@ -102,7 +102,7 @@ Create a new deflate or gzip compressor with the specified compression level.
 ### is_valid
 
 ```vais
-F is_valid(&self) -> i64
+fn is_valid(&self) -> i64
 ```
 
 Check if compressor was created successfully.
@@ -114,7 +114,7 @@ Check if compressor was created successfully.
 ### compress
 
 ```vais
-F compress(&self, data_ptr: i64, data_len: i64) -> CompressResult
+fn compress(&self, data_ptr: i64, data_len: i64) -> CompressResult
 ```
 
 Perform one-shot compression (entire input at once).
@@ -130,7 +130,7 @@ Perform one-shot compression (entire input at once).
 ### decompress
 
 ```vais
-F decompress(&self, data_ptr: i64, data_len: i64) -> CompressResult
+fn decompress(&self, data_ptr: i64, data_len: i64) -> CompressResult
 ```
 
 Perform one-shot decompression (entire input at once).
@@ -146,7 +146,7 @@ Perform one-shot decompression (entire input at once).
 ### stream_begin
 
 ```vais
-F stream_begin(&self) -> i64
+fn stream_begin(&self) -> i64
 ```
 
 Begin streaming compression.
@@ -158,7 +158,7 @@ Begin streaming compression.
 ### stream_write
 
 ```vais
-F stream_write(&self, chunk_ptr: i64, chunk_len: i64) -> CompressResult
+fn stream_write(&self, chunk_ptr: i64, chunk_len: i64) -> CompressResult
 ```
 
 Write a chunk to the compression stream.
@@ -174,7 +174,7 @@ Write a chunk to the compression stream.
 ### stream_finish
 
 ```vais
-F stream_finish(&self) -> CompressResult
+fn stream_finish(&self) -> CompressResult
 ```
 
 Finish streaming compression and get final chunk.
@@ -186,7 +186,7 @@ Finish streaming compression and get final chunk.
 ### free
 
 ```vais
-F free(&self) -> i64
+fn free(&self) -> i64
 ```
 
 Free compressor resources.
@@ -198,7 +198,7 @@ Free compressor resources.
 ### gzip_compress
 
 ```vais
-F gzip_compress(data_ptr: i64, data_len: i64) -> CompressResult
+fn gzip_compress(data_ptr: i64, data_len: i64) -> CompressResult
 ```
 
 One-shot gzip compression (for HTTP Content-Encoding: gzip).
@@ -208,7 +208,7 @@ One-shot gzip compression (for HTTP Content-Encoding: gzip).
 ### gzip_decompress
 
 ```vais
-F gzip_decompress(data_ptr: i64, data_len: i64) -> CompressResult
+fn gzip_decompress(data_ptr: i64, data_len: i64) -> CompressResult
 ```
 
 One-shot gzip decompression (for HTTP Content-Encoding: gzip).
@@ -218,7 +218,7 @@ One-shot gzip decompression (for HTTP Content-Encoding: gzip).
 ### deflate_compress
 
 ```vais
-F deflate_compress(data_ptr: i64, data_len: i64) -> CompressResult
+fn deflate_compress(data_ptr: i64, data_len: i64) -> CompressResult
 ```
 
 One-shot deflate compression (raw deflate).
@@ -228,7 +228,7 @@ One-shot deflate compression (raw deflate).
 ### deflate_decompress
 
 ```vais
-F deflate_decompress(data_ptr: i64, data_len: i64) -> CompressResult
+fn deflate_decompress(data_ptr: i64, data_len: i64) -> CompressResult
 ```
 
 One-shot deflate decompression (raw deflate).
@@ -238,7 +238,7 @@ One-shot deflate decompression (raw deflate).
 ### compress_error_text
 
 ```vais
-F compress_error_text(code: i64) -> str
+fn compress_error_text(code: i64) -> str
 ```
 
 Get human-readable error description for an error code.
@@ -268,7 +268,7 @@ result := gzip_decompress(compressed_ptr, compressed_len)
 I result.is_ok() == 1 {
     # result.data_ptr and result.data_len contain decompressed data
     __free(result.data_ptr)
-} E {
+} else {
     error := compress_error_text(result.status)
     log_error(error)
 }
