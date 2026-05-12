@@ -38,20 +38,20 @@ CLI 프로그램의 핵심은 명령행 인자를 읽는 것입니다. Vais에�
 ```vais
 # C 런타임 함수
 N "C" {
-    F __get_argc() -> i64
-    F __get_argv(index: i64) -> str
-    F __strlen(s: str) -> i64
-    F __strcmp(a: str, b: str) -> i64
-    F __atoi(s: str) -> i64
+    fn __get_argc() -> i64
+    fn __get_argv(index: i64) -> str
+    fn __strlen(s: str) -> i64
+    fn __strcmp(a: str, b: str) -> i64
+    fn __atoi(s: str) -> i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     argc := __get_argc()
 
     I argc < 2 {
         puts("Usage: mycli <command> [args...]")
         puts("Try: mycli help")
-        R 1
+        return 1
     }
 
     cmd := __get_argv(1)
@@ -73,7 +73,7 @@ F main() -> i64 {
 
 ```vais
 # 서브커맨드 핸들러들
-F cmd_help() -> i64 {
+fn cmd_help() -> i64 {
     puts("mycli v1.0 — Vais CLI Framework Demo")
     puts("")
     puts("Commands:")
@@ -84,28 +84,28 @@ F cmd_help() -> i64 {
     0
 }
 
-F cmd_greet() -> i64 {
+fn cmd_greet() -> i64 {
     argc := __get_argc()
     I argc < 3 {
         puts("Error: greet requires a name")
         puts("Usage: mycli greet <name>")
-        R 1
+        return 1
     }
     name := __get_argv(2)
     puts("Hello, {name}!")
     0
 }
 
-F cmd_count() -> i64 {
+fn cmd_count() -> i64 {
     argc := __get_argc()
     I argc < 3 {
         puts("Error: count requires a number")
-        R 1
+        return 1
     }
     n := __atoi(__get_argv(2))
     I n <= 0 {
         puts("Error: n must be positive")
-        R 1
+        return 1
     }
 
     L i:1..n+1 {
@@ -117,11 +117,11 @@ F cmd_count() -> i64 {
     0
 }
 
-F cmd_fib() -> i64 {
+fn cmd_fib() -> i64 {
     argc := __get_argc()
     I argc < 3 {
         puts("Error: fib requires a number")
-        R 1
+        return 1
     }
     n := __atoi(__get_argv(2))
     result := fib(n)
@@ -130,24 +130,24 @@ F cmd_fib() -> i64 {
 }
 
 # 피보나치 (자재귀)
-F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
 
 # 디스패처
-F dispatch(cmd: str) -> i64 {
-    I __strcmp(cmd, "help") == 0 { R cmd_help() }
-    I __strcmp(cmd, "greet") == 0 { R cmd_greet() }
-    I __strcmp(cmd, "count") == 0 { R cmd_count() }
-    I __strcmp(cmd, "fib") == 0 { R cmd_fib() }
+fn dispatch(cmd: str) -> i64 {
+    I __strcmp(cmd, "help") == 0 { return cmd_help() }
+    I __strcmp(cmd, "greet") == 0 { return cmd_greet() }
+    I __strcmp(cmd, "count") == 0 { return cmd_count() }
+    I __strcmp(cmd, "fib") == 0 { return cmd_fib() }
 
     puts("Unknown command: {cmd}")
     puts("Try: mycli help")
     1
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     argc := __get_argc()
     I argc < 2 {
-        R cmd_help()
+        return cmd_help()
     }
 
     cmd := __get_argv(1)
@@ -173,23 +173,23 @@ G verbose: i64 = mut 0
 G output_file: str = ""
 
 # 문자열 접두사 비교
-F starts_with(s: str, prefix: str) -> i64 {
+fn starts_with(s: str, prefix: str) -> i64 {
     s_len := __strlen(s)
     p_len := __strlen(prefix)
-    I p_len > s_len { R 0 }
+    I p_len > s_len { return 0 }
 
     i := mut 0
     L i < p_len {
         sc := load_byte(s as i64 + i)
         pc := load_byte(prefix as i64 + i)
-        I sc != pc { R 0 }
+        I sc != pc { return 0 }
         i = i + 1
     }
     1
 }
 
 # 옵션 파싱 — 옵션이 아닌 첫 인자의 인덱스 반환
-F parse_options() -> i64 {
+fn parse_options() -> i64 {
     argc := __get_argc()
     i := mut 1    # argv[0]은 프로그램 이름
 
@@ -240,12 +240,12 @@ C EXIT_OK: i64 = 0
 C EXIT_USAGE: i64 = 1
 C EXIT_ERROR: i64 = 2
 
-F error(msg: str) -> i64 {
+fn error(msg: str) -> i64 {
     puts("Error: {msg}")
     EXIT_ERROR
 }
 
-F usage_error(msg: str) -> i64 {
+fn usage_error(msg: str) -> i64 {
     puts("Error: {msg}")
     puts("")
     cmd_help()
@@ -253,15 +253,15 @@ F usage_error(msg: str) -> i64 {
 }
 
 # 개선된 디스패처
-F dispatch_v2(cmd: str) -> i64 {
+fn dispatch_v2(cmd: str) -> i64 {
     I verbose == 1 {
         puts("[verbose] Dispatching command: {cmd}")
     }
 
-    I __strcmp(cmd, "help") == 0 { R cmd_help() }
-    I __strcmp(cmd, "greet") == 0 { R cmd_greet() }
-    I __strcmp(cmd, "count") == 0 { R cmd_count() }
-    I __strcmp(cmd, "fib") == 0 { R cmd_fib() }
+    I __strcmp(cmd, "help") == 0 { return cmd_help() }
+    I __strcmp(cmd, "greet") == 0 { return cmd_greet() }
+    I __strcmp(cmd, "count") == 0 { return cmd_count() }
+    I __strcmp(cmd, "fib") == 0 { return cmd_fib() }
 
     usage_error("unknown command")
 }
@@ -272,13 +272,13 @@ F dispatch_v2(cmd: str) -> i64 {
 ## Step 5: 전체 프로그램 (10분)
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     # 1) 옵션 파싱
     cmd_start := parse_options()
 
     argc := __get_argc()
     I cmd_start >= argc {
-        R cmd_help()
+        return cmd_help()
     }
 
     # 2) 커맨드 실행
@@ -317,7 +317,7 @@ clang -o mycli tutorial_cli_framework.ll
 
 ```vais
 # 함수 포인터 배열로 커맨드 등록
-S Command {
+struct Command {
     name: str,
     description: str,
     handler: i64    # 함수 포인터
@@ -327,7 +327,7 @@ S Command {
 ### 2. 자동 완성 힌트
 
 ```vais
-F suggest_command(partial: str) -> i64 {
+fn suggest_command(partial: str) -> i64 {
     # "co" → "count"
     # "fi" → "fib"
     # 접두사 매칭으로 후보 출력
@@ -339,13 +339,13 @@ F suggest_command(partial: str) -> i64 {
 
 ```vais
 N "C" {
-    F getenv(name: str) -> str
+    fn getenv(name: str) -> str
 }
 
-F get_config_dir() -> str {
+fn get_config_dir() -> str {
     dir := getenv("MYCLI_CONFIG")
     I __strlen(dir) == 0 {
-        R "/etc/mycli"
+        return "/etc/mycli"
     }
     dir
 }

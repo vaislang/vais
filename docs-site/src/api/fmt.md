@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/fmt
+use std/fmt
 ```
 
 ## Constants
@@ -66,9 +66,9 @@ Helper for structured debug output.
 ## Usage
 
 ```vais
-U std/fmt
+use std/fmt
 
-F main() -> i64 {
+fn main() -> i64 {
     fb := FormatBuilder::new()
     fb.write_str("Count: ")
     fb.write_int(42)

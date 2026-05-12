@@ -39,7 +39,7 @@ app.get("/articles/:slug/comments/:comment_id", "handle_get_comment")
 Read parameter values inside the handler via `ctx.path_params`.
 
 ```vais
-F handle_get_user(ctx: Context) -> Response {
+fn handle_get_user(ctx: Context) -> Response {
     # ctx.path_params — "id=<value>" format string
     id := ctx.path_params
 
@@ -69,7 +69,7 @@ The router returns one of three states.
 `app.group("/prefix")` returns a sub-router with the given prefix applied. Use it to logically group related routes.
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     config := ServerConfig.default()
     app    := mut App.new(config)
 
@@ -91,9 +91,9 @@ F main() -> i64 {
         app._add_route(r.method, r.path, r.handler_id)
     }
 
-    M app.listen(":8080") {
+    match app.listen(":8080") {
         Ok(_) => {},
-        Err(e) => { println("Error: {e.message}") R 1 },
+        Err(e) => { println("Error: {e.message}") return 1 },
     }
     0
 }
@@ -115,7 +115,7 @@ users := mut admin.group("/users")   # effective prefix: /admin/users
 All handlers follow the same signature.
 
 ```vais
-F <handler_name>(ctx: Context) -> Response {
+fn <handler_name>(ctx: Context) -> Response {
     # ...
 }
 ```
@@ -136,12 +136,12 @@ F <handler_name>(ctx: Context) -> Response {
 
 ```vais
 # JSON response
-F handle_list(ctx: Context) -> Response {
+fn handle_list(ctx: Context) -> Response {
     ctx.json(200, "[{\"id\":1,\"name\":\"Alice\"}]")
 }
 
 # Error response
-F handle_not_found(ctx: Context) -> Response {
+fn handle_not_found(ctx: Context) -> Response {
     pairs := Vec.new()
     pairs.push("error")
     pairs.push("Resource not found.")
@@ -149,7 +149,7 @@ F handle_not_found(ctx: Context) -> Response {
 }
 
 # Created (201)
-F handle_create(ctx: Context) -> Response {
+fn handle_create(ctx: Context) -> Response {
     pairs := Vec.new()
     pairs.push("id")
     pairs.push("99")
@@ -159,12 +159,12 @@ F handle_create(ctx: Context) -> Response {
 }
 
 # No Content (204)
-F handle_delete(ctx: Context) -> Response {
+fn handle_delete(ctx: Context) -> Response {
     ctx.status(204)
 }
 
 # Redirect
-F handle_old_path(ctx: Context) -> Response {
+fn handle_old_path(ctx: Context) -> Response {
     ctx.redirect("/new/path")
 }
 ```
@@ -172,7 +172,7 @@ F handle_old_path(ctx: Context) -> Response {
 ### Setting Response Headers
 
 ```vais
-F handle_with_header(ctx: Context) -> Response {
+fn handle_with_header(ctx: Context) -> Response {
     ctx2 := ctx.set_header("X-Request-Id", "abc-123")
     ctx2.json(200, "{\"ok\":true}")
 }
@@ -217,33 +217,33 @@ app.use("recovery")    # panic recovery
 Custom middleware is created as a struct implementing two functions: `before` and `after`.
 
 ```vais
-U middleware/pipeline
-U core/context
+use middleware/pipeline
+use core/context
 
-S AuthMiddleware {
+struct AuthMiddleware {
     secret: str,
 }
 
-X AuthMiddleware {
-    F new(secret: str) -> AuthMiddleware {
+impl AuthMiddleware {
+    fn new(secret: str) -> AuthMiddleware {
         AuthMiddleware { secret }
     }
 
     # before: validate the Authorization header
-    F before(self, ctx: Context) -> BeforeResult {
+    fn before(self, ctx: Context) -> BeforeResult {
         token := ctx.query_params   # in practice, extract from header
         I token == "" {
             pairs := Vec.new()
             pairs.push("error")
             pairs.push("Authentication token required.")
             err_response := ctx.json(401, json_encode(pairs))
-            R BeforeResult.respond(err_response)
+            return BeforeResult.respond(err_response)
         }
         BeforeResult.next()
     }
 
     # after: add security headers to the response
-    F after(self, ctx: Context, response: Response) -> Response {
+    fn after(self, ctx: Context, response: Response) -> Response {
         # in a real implementation, add headers to response before returning
         response
     }
@@ -256,7 +256,7 @@ X AuthMiddleware {
 ### Pipeline Internal Structure
 
 ```vais
-S Pipeline {
+struct Pipeline {
     entries: Vec<PipelineEntry>,
     count:   i64,
 }
@@ -274,14 +274,14 @@ Because Vais does not allow loops that mutate external structs, the pipeline int
 ## Full Routing Example — CRUD REST API
 
 ```vais
-U core/app
-U core/config
-U core/context
-U src/util/json
+use core/app
+use core/config
+use core/context
+use src/util/json
 
 C PORT: u16 = 8080
 
-F handle_list_users(ctx: Context) -> Response {
+fn handle_list_users(ctx: Context) -> Response {
     user := Vec.new()
     user.push("id")
     user.push("1")
@@ -291,7 +291,7 @@ F handle_list_users(ctx: Context) -> Response {
     ctx.json(200, body)
 }
 
-F handle_get_user(ctx: Context) -> Response {
+fn handle_get_user(ctx: Context) -> Response {
     id := ctx.path_params
     pairs := Vec.new()
     pairs.push("id")
@@ -301,7 +301,7 @@ F handle_get_user(ctx: Context) -> Response {
     ctx.json(200, json_encode(pairs))
 }
 
-F handle_create_user(ctx: Context) -> Response {
+fn handle_create_user(ctx: Context) -> Response {
     pairs := Vec.new()
     pairs.push("id")
     pairs.push("2")
@@ -310,7 +310,7 @@ F handle_create_user(ctx: Context) -> Response {
     ctx.json(201, json_encode(pairs))
 }
 
-F handle_update_user(ctx: Context) -> Response {
+fn handle_update_user(ctx: Context) -> Response {
     id := ctx.path_params
     pairs := Vec.new()
     pairs.push("id")
@@ -320,11 +320,11 @@ F handle_update_user(ctx: Context) -> Response {
     ctx.json(200, json_encode(pairs))
 }
 
-F handle_delete_user(ctx: Context) -> Response {
+fn handle_delete_user(ctx: Context) -> Response {
     ctx.status(204)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     config := ServerConfig.default()
     app    := mut App.new(config)
 
@@ -345,9 +345,9 @@ F main() -> i64 {
 
     println("REST API server starting: :{PORT} (routes: {app.route_count()})")
 
-    M app.listen(":{PORT}") {
+    match app.listen(":{PORT}") {
         Ok(_) => {},
-        Err(e) => { println("Error: {e.message}") R 1 },
+        Err(e) => { println("Error: {e.message}") return 1 },
     }
     0
 }

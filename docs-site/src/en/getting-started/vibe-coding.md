@@ -34,19 +34,20 @@ the AI will immediately understand the full scope of Vais syntax, standard libra
 
 ## 3. Language Essentials in 5 Minutes
 
-### Single-Character Keywords (designed to reduce AI token usage)
+### Current Canonical Keywords
 
-| Key | Meaning | Key | Meaning |
-|-----|---------|-----|---------|
-| `F` | function | `W` | trait |
-| `S` | struct | `X` | impl |
-| `E` | enum / else | `P` | pub |
-| `I` | if | `D` | defer |
-| `L` | loop | `A` | async |
-| `M` | match | `Y` | await |
-| `R` | return | `N` | extern |
-| `T` | type alias | `G` | global |
-| `U` | use (import) | `O` | union |
+After Step 19, new code should not use retired single-character forms. `F/S/E/EN/EL/M/R/T/U/P/W/X` are removed; the multi-character forms below are canonical.
+
+| Keyword | Meaning | Keyword | Meaning |
+|---------|---------|---------|---------|
+| `fn` | function | `trait` | trait |
+| `struct` | struct | `impl` | impl |
+| `enum` | enum | `pub` | public item |
+| `else` | else branch | `use` | import |
+| `match` | pattern match | `type` | type alias |
+| `return` | early return | `N` | extern |
+
+The remaining single-character core control forms are still current: `I` for if, `L` for loop, `A` for async, `Y` for await, `D` for defer, `G` for global, and `O` for union.
 
 ### Operators
 
@@ -76,7 +77,7 @@ f: f64 := (42 as f64)
 
 ```vais
 # hello.vais
-F main() -> i64 {
+fn main() -> i64 {
     puts("Hello, Vais!")
     0
 }
@@ -95,40 +96,40 @@ vaisc run hello.vais      # build + run
 ### Example 1: CLI Tool — FizzBuzz
 
 ```vais
-F fizzbuzz(n: i64) -> i64 {
+fn fizzbuzz(n: i64) -> i64 {
     LF i:1..n+1 {
         I i % 15 == 0      { puts("FizzBuzz") }
-        EL I i % 3 == 0    { puts("Fizz") }
-        EL I i % 5 == 0    { puts("Buzz") }
-        EL                 { puts("{i}") }
+        else I i % 3 == 0  { puts("Fizz") }
+        else I i % 5 == 0  { puts("Buzz") }
+        else               { puts("{i}") }
     }
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== FizzBuzz 1..20 ===")
     fizzbuzz(20)
 }
 ```
 
-Key: `LF` loop, `I/EL` if-else-if chain, string interpolation `{i}`.
+Key: `LF` range loop, `I/else I/else` if-else-if chain, string interpolation `{i}`.
 
 ### Example 2: HTTP Server (vais-server)
 
 ```vais
-U core/app::{App, ServerConfig}
-U core/context::{Context, Response}
+use core/app::{App, ServerConfig}
+use core/context::{Context, Response}
 
-F handle_hello(ctx: Context) -> Response {
+fn handle_hello(ctx: Context) -> Response {
     ctx.text(200, "Hello from vais-server!")
 }
 
-F handle_user(ctx: Context) -> Response {
+fn handle_user(ctx: Context) -> Response {
     id := ctx.param("id")
     ctx.json(200, "{\"id\": \"{id}\", \"name\": \"Alice\"}")
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     app := mut App.new(ServerConfig.default())
     app.get("/",          "handle_hello")
     app.get("/users/:id", "handle_user")
@@ -142,9 +143,9 @@ More: [vais-server Guide](../ecosystem/vais-server/README.md)
 ### Example 3: VaisDB — Hybrid Query
 
 ```vais
-U vaisdb::{Database}
+use vaisdb::{Database}
 
-F main() -> i64 {
+fn main() -> i64 {
     db := Database.open("myapp.vaisdb")?
 
     # SQL + vector search in a single transaction
@@ -196,9 +197,9 @@ More: [VaisDB Query Guide](../ecosystem/vaisdb/queries.md)
 
 - **Provide context**: At the start of a conversation, share the `llms.txt` link or attach `llms-full.txt`.
 - **Warn about type coercion**: Add one line: "Vais requires strict type coercion. No implicit coercion; use `as` explicitly."
-- **Watch for removed keywords**: `weak`, `clone`, `consume` have been removed. Reject them if AI tries to use them.
+- **Watch for removed keywords**: `F/S/E/EN/EL/M/R/T/U/P/W/X`, `weak`, `clone`, and `consume` have been removed. Convert them to canonical forms or reject them if AI tries to use them.
 - **Avoid experimental features**: `lazy`, `force`, HKT, `impl Trait` (non-dyn) are still limited. Exclude from production code.
-- **Ecosystem imports**: VaisDB uses `U vaisdb::{Database}`, vais-server uses `U core/app::{App}`.
+- **Ecosystem imports**: VaisDB uses `use vaisdb::{Database}`, vais-server uses `use core/app::{App}`.
 
 ---
 

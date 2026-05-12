@@ -30,13 +30,13 @@ vaisc --target js --module input.vais -o output.mjs
 **Vais source:**
 
 ```vais
-S Point { x: f64, y: f64 }
+struct Point { x: f64, y: f64 }
 
-F dist(p: Point) -> f64 {
+fn dist(p: Point) -> f64 {
     sqrt(p.x * p.x + p.y * p.y)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Point { x: 3.0, y: 4.0 }
     puts("distance = {dist(p)}")
     0

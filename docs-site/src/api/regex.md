@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/regex
+use std/regex
 ```
 
 ## Overview
@@ -32,7 +32,7 @@ The regex module provides a lightweight regular expression engine using recursiv
 ### regex_compile
 
 ```vais
-F regex_compile(pattern: i64) -> i64
+fn regex_compile(pattern: i64) -> i64
 ```
 
 Compile a regular expression pattern into an internal representation.
@@ -52,7 +52,7 @@ re := regex_compile("a+b*")
 ### regex_match
 
 ```vais
-F regex_match(regex: i64, text: i64) -> i64
+fn regex_match(regex: i64, text: i64) -> i64
 ```
 
 Match a compiled regex against text. Returns 1 if the pattern matches anywhere in the text.
@@ -74,7 +74,7 @@ result := regex_match(re, "abc123def")  # 1
 ### regex_test
 
 ```vais
-F regex_test(pattern: i64, text: i64) -> i64
+fn regex_test(pattern: i64, text: i64) -> i64
 ```
 
 Convenience function that compiles pattern, matches text, and frees the regex. Use this for one-time matches.
@@ -97,7 +97,7 @@ I regex_test("^hello", "hello world") {
 ### regex_free
 
 ```vais
-F regex_free(regex: i64) -> i64
+fn regex_free(regex: i64) -> i64
 ```
 
 Free a compiled regex and all associated memory.
@@ -119,9 +119,9 @@ regex_free(re)
 ### Basic Matching
 
 ```vais
-U std/regex
+use std/regex
 
-F main() -> i64 {
+fn main() -> i64 {
     # Quick test (compile + match + free)
     result := regex_test("^he.*o$", "hello")  # 1 (match)
 
@@ -135,9 +135,9 @@ F main() -> i64 {
 ### Reusing Compiled Patterns
 
 ```vais
-U std/regex
+use std/regex
 
-F main() -> i64 {
+fn main() -> i64 {
     # Compile once, use multiple times
     re := regex_compile("[0-9]+")
 
@@ -153,9 +153,9 @@ F main() -> i64 {
 ### Character Classes
 
 ```vais
-U std/regex
+use std/regex
 
-F main() -> i64 {
+fn main() -> i64 {
     # Match vowels
     I regex_test("[aeiou]", "hello") {
         puts("Contains vowel")
@@ -178,9 +178,9 @@ F main() -> i64 {
 ### Quantifiers
 
 ```vais
-U std/regex
+use std/regex
 
-F main() -> i64 {
+fn main() -> i64 {
     # * = zero or more
     regex_test("ab*c", "ac")      # 1 (zero b's)
     regex_test("ab*c", "abc")     # 1 (one b)
@@ -202,9 +202,9 @@ F main() -> i64 {
 ### Anchors
 
 ```vais
-U std/regex
+use std/regex
 
-F main() -> i64 {
+fn main() -> i64 {
     # ^ = start of string
     regex_test("^hello", "hello world")  # 1
     regex_test("^hello", "say hello")    # 0

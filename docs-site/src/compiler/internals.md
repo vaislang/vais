@@ -297,12 +297,12 @@ pub fn unify(&mut self, a: &ResolvedType, b: &ResolvedType)
 Vais는 enum 기반 에러 처리를 사용합니다:
 
 ```vais
-E Result<T, E> {
+enum Result<T, E> {
     Ok(T),
     Err(E),
 }
 
-E Option<T> {
+enum Option<T> {
     Some(T),
     None,
 }

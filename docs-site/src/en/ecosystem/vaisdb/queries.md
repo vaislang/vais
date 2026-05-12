@@ -181,9 +181,9 @@ REINDEX VECTOR INDEX idx_doc_embedding;
 ### Usage from Vais
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F semantic_search(db: &Database, query: str, threshold: f32) {
+fn semantic_search(db: &Database, query: str, threshold: f32) {
     results := db.query("
         SELECT d.title, d.content, v.similarity
         FROM documents d
@@ -277,9 +277,9 @@ LIMIT 1;
 ### Inserting Graph Data from Vais
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F build_knowledge_graph(db: &Database) {
+fn build_knowledge_graph(db: &Database) {
     # Insert nodes
     db.execute("
         INSERT INTO knowledge_nodes (id, label, name)
@@ -438,9 +438,9 @@ LIMIT 20;
 ### Hybrid Query — Encapsulated as a Vais Function
 
 ```vais
-U vaisdb::{Database, QueryResult};
+use vaisdb::{Database, QueryResult};
 
-S HybridSearchConfig {
+struct HybridSearchConfig {
     vector_weight: f32,
     text_weight:   f32,
     graph_weight:  f32,
@@ -448,7 +448,7 @@ S HybridSearchConfig {
     min_similarity: f32,
 }
 
-F hybrid_search(
+fn hybrid_search(
     db:     &Database,
     query:  str,
     config: &HybridSearchConfig
@@ -480,7 +480,7 @@ F hybrid_search(
     ])
 }
 
-F main() {
+fn main() {
     db := Database::open("knowledge.vaisdb")?;
 
     config := HybridSearchConfig {
@@ -507,9 +507,9 @@ F main() {
 All engine operations can be wrapped in a single ACID transaction.
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F atomic_document_insert(db: &Database, title: str, content: str) {
+fn atomic_document_insert(db: &Database, title: str, content: str) {
     tx := db.begin()?;
 
     # 1. Insert the document (SQL engine)

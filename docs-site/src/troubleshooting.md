@@ -10,11 +10,11 @@
 
 **예시**:
 ```vais
-F add(x: i64, y: i64) -> i64 {
-  R x + y
+fn add(x: i64, y: i64) -> i64 {
+  return x + y
 }
 
-F main() {
+fn main() {
   result := add(5, "hello")  # E001: 기대 i64, 실제 str
 }
 ```
@@ -24,13 +24,13 @@ F main() {
 - 필요시 타입 변환을 수행하세요.
 
 ```vais
-F main() {
+fn main() {
   result := add(5, 10)  # 올바름
 }
 ```
 
 **특수 케이스**:
-- `()` (void) vs `i64`: `store_i64()`는 void 반환이므로 `I cond { store_i64(...); 0 } E { 0 }` 형태로 작성
+- `()` (void) vs `i64`: `store_i64()`는 void 반환이므로 `I cond { store_i64(...); 0 } else { 0 }` 형태로 작성
 - match arm에서 서로 다른 타입 반환 시 phi node 충돌 가능
 
 ### E002: Undefined variable (정의되지 않은 변수)
@@ -39,7 +39,7 @@ F main() {
 
 **예시**:
 ```vais
-F main() {
+fn main() {
   print(x)  # E002: x가 정의되지 않음
 }
 ```
@@ -48,7 +48,7 @@ F main() {
 - 변수를 사용하기 전에 `:=`로 선언하세요.
 
 ```vais
-F main() {
+fn main() {
   x := 42
   print(x)  # 올바름
 }
@@ -60,7 +60,7 @@ F main() {
 
 **예시**:
 ```vais
-F process(data: MyStruct) {  # E003: MyStruct가 정의되지 않음
+fn process(data: MyStruct) {  # E003: MyStruct가 정의되지 않음
   # ...
 }
 ```
@@ -70,11 +70,11 @@ F process(data: MyStruct) {  # E003: MyStruct가 정의되지 않음
 - 표준 라이브러리 타입은 `U std/xxx`로 import하세요.
 
 ```vais
-S MyStruct {
+struct MyStruct {
   value: i64
 }
 
-F process(data: MyStruct) {  # 올바름
+fn process(data: MyStruct) {  # 올바름
   # ...
 }
 ```
@@ -85,7 +85,7 @@ F process(data: MyStruct) {  # 올바름
 
 **예시**:
 ```vais
-F main() {
+fn main() {
   result := calculate(5)  # E004: calculate가 정의되지 않음
 }
 ```
@@ -94,11 +94,11 @@ F main() {
 - 함수를 호출하기 전에 `F`로 정의하거나 import하세요.
 
 ```vais
-F calculate(x: i64) -> i64 {
-  R x * 2
+fn calculate(x: i64) -> i64 {
+  return x * 2
 }
 
-F main() {
+fn main() {
   result := calculate(5)  # 올바름
 }
 ```
@@ -109,7 +109,7 @@ F main() {
 
 **예시**:
 ```vais
-F main() {
+fn main() {
   x := 42
   x()  # E005: i64는 호출할 수 없음
 }
@@ -124,11 +124,11 @@ F main() {
 
 **예시**:
 ```vais
-F add(x: i64, y: i64) -> i64 {
-  R x + y
+fn add(x: i64, y: i64) -> i64 {
+  return x + y
 }
 
-F main() {
+fn main() {
   result := add(5)  # E006: 2개 기대, 1개 전달
 }
 ```
@@ -137,7 +137,7 @@ F main() {
 - 함수 시그니처에 맞춰 정확한 개수의 인수를 전달하세요.
 
 ```vais
-F main() {
+fn main() {
   result := add(5, 10)  # 올바름
 }
 ```
@@ -148,7 +148,7 @@ F main() {
 
 **예시**:
 ```vais
-F main() {
+fn main() {
   x := []  # E007: 빈 배열의 타입을 추론할 수 없음
 }
 ```
@@ -157,7 +157,7 @@ F main() {
 - 명시적으로 타입을 지정하세요.
 
 ```vais
-F main() {
+fn main() {
   x: [i64] = []  # 올바름
 }
 ```
@@ -168,8 +168,8 @@ F main() {
 
 **예시**:
 ```vais
-F foo() { }
-F foo() { }  # E008: foo가 중복 정의됨
+fn foo() { }
+fn foo() { }  # E008: foo가 중복 정의됨
 ```
 
 **해결법**:
@@ -181,7 +181,7 @@ F foo() { }  # E008: foo가 중복 정의됨
 
 **예시**:
 ```vais
-F main() {
+fn main() {
   x := 5
   x = 10  # E009: x는 불변
 }
@@ -191,7 +191,7 @@ F main() {
 - 변수를 변경 가능하게 선언하려면 `:= mut`를 사용하세요.
 
 ```vais
-F main() {
+fn main() {
   x := mut 5
   x = 10  # 올바름
 }
@@ -203,15 +203,15 @@ F main() {
 
 **예시**:
 ```vais
-E Status {
+enum Status {
   Ok,
   Error,
   Pending
 }
 
-F main() {
+fn main() {
   status := Status.Ok
-  M status {
+  match status {
     Status.Ok => print("ok"),
     Status.Error => print("error")
     # E010: Pending 케이스가 누락됨
@@ -223,9 +223,9 @@ F main() {
 - 모든 케이스를 처리하거나 `_` (와일드카드)를 추가하세요.
 
 ```vais
-F main() {
+fn main() {
   status := Status.Ok
-  M status {
+  match status {
     Status.Ok => print("ok"),
     Status.Error => print("error"),
     _ => print("other")  # 올바름
@@ -239,11 +239,11 @@ F main() {
 
 **예시**:
 ```vais
-F take_ownership(s: str) {
+fn take_ownership(s: str) {
   print(s)
 }
 
-F main() {
+fn main() {
   x := "hello"
   take_ownership(x)
   print(x)  # E016: x는 이미 이동됨
@@ -259,7 +259,7 @@ F main() {
 
 **예시**:
 ```vais
-F main() {
+fn main() {
   s := "test"
   len := strlen(s)
   memcpy_str(dest, src, s)  # E022: s는 이미 strlen에서 move됨
@@ -270,7 +270,7 @@ F main() {
 - `str_to_ptr(s)`로 포인터 변환 후 사용하거나, 순서를 조정하세요.
 
 ```vais
-F main() {
+fn main() {
   s := "test"
   ptr := str_to_ptr(s)
   len := calculate_length(ptr)
@@ -284,7 +284,7 @@ F main() {
 
 **예시**:
 ```vais
-F main() {
+fn main() {
   x := mut 5
   r := &x
   x = 10  # E024: x가 r에 의해 차용됨
@@ -308,12 +308,12 @@ F main() {
 
 **예시**:
 ```vais
-S Point {
+struct Point {
   x: i64,
   y: i64
 }
 
-F main() {
+fn main() {
   p := Point { x: 1, y: 2 }
   print(p.z)  # E030: Point에 z 필드가 없음
 }
@@ -323,7 +323,7 @@ F main() {
 - 올바른 필드 이름을 사용하거나, 필요하면 구조체 정의에 필드를 추가하세요.
 
 ```vais
-F main() {
+fn main() {
   p := Point { x: 1, y: 2 }
   print(p.x)  # 올바름
 }
@@ -345,9 +345,9 @@ undefined symbol: _my_external_function
 - 라이브러리 링크가 필요하면 `-l` 플래그를 추가하세요.
 
 ```vais
-extern F puts(s: i64) -> i64
+extern fn puts(s: i64) -> i64
 
-F main() {
+fn main() {
   puts(str_to_ptr("hello"))
 }
 ```
@@ -424,11 +424,11 @@ bt
 - 메모리 해제 후 포인터를 다시 사용하지 않기
 
 ```vais
-F safe_access(arr: [i64], idx: i64) -> i64 {
+fn safe_access(arr: [i64], idx: i64) -> i64 {
   I idx < 0 || idx >= arr.len() {
-    R 0  # 기본값 반환
+    return 0  # 기본값 반환
   }
-  R arr[idx]
+  return arr[idx]
 }
 ```
 
@@ -438,7 +438,7 @@ F safe_access(arr: [i64], idx: i64) -> i64 {
 
 **예시**:
 ```vais
-F infinite() {
+fn infinite() {
   @()  # 자기 재귀, 종료 조건 없음
 }
 ```
@@ -447,11 +447,11 @@ F infinite() {
 - 재귀 함수에 기저 조건(base case)을 추가하세요.
 
 ```vais
-F factorial(n: i64) -> i64 {
+fn factorial(n: i64) -> i64 {
   I n <= 1 {
-    R 1  # 기저 조건
+    return 1  # 기저 조건
   }
-  R n * @(n - 1)
+  return n * @(n - 1)
 }
 ```
 
@@ -472,7 +472,7 @@ F factorial(n: i64) -> i64 {
 - `=` (등호): 기존 변수에 새 값 대입 (reassignment)
 
 ```vais
-F main() {
+fn main() {
   x := 5      # 새 변수 선언
   x = 10      # E009: x는 불변이므로 에러
 
@@ -486,7 +486,7 @@ F main() {
 **E009 에러**가 발생합니다. Vais는 기본적으로 불변(immutable)입니다.
 
 ```vais
-F main() {
+fn main() {
   counter := 0
   counter = counter + 1  # E009 에러
 }
@@ -495,7 +495,7 @@ F main() {
 **해결법**: `:= mut`로 선언하세요.
 
 ```vais
-F main() {
+fn main() {
   counter := mut 0
   counter = counter + 1  # 올바름
 }
@@ -509,14 +509,14 @@ F main() {
 ```vais
 I x > 0 {
   print("positive")
-} E {
+} else {
   print("non-positive")
 }
 ```
 
 **enum으로 사용**:
 ```vais
-E Status {
+enum Status {
   Ok,
   Error
 }
@@ -529,11 +529,11 @@ E Status {
 `@`는 현재 함수를 재귀 호출하는 연산자입니다. 함수 이름을 반복하지 않아도 됩니다.
 
 ```vais
-F factorial(n: i64) -> i64 {
+fn factorial(n: i64) -> i64 {
   I n <= 1 {
-    R 1
+    return 1
   }
-  R n * @(n - 1)  # factorial(n - 1)과 동일
+  return n * @(n - 1)  # factorial(n - 1)과 동일
 }
 ```
 
@@ -551,7 +551,7 @@ F factorial(n: i64) -> i64 {
 
 ```vais
 # 수동 관리
-F main() {
+fn main() {
   ptr := malloc(1024)
   # ... 사용 ...
   free(ptr)
@@ -587,18 +587,18 @@ llvm-config --version
 - `B` (break): 현재 루프만 탈출
 
 ```vais
-F find_value(arr: [i64], target: i64) -> i64 {
+fn find_value(arr: [i64], target: i64) -> i64 {
   i := mut 0
   L {
     I i >= arr.len() {
       B  # 루프 탈출
     }
     I arr[i] == target {
-      R i  # 함수에서 반환
+      return i  # 함수에서 반환
     }
     i = i + 1
   }
-  R -1  # 루프 후 기본 반환값
+  return -1  # 루프 후 기본 반환값
 }
 ```
 
@@ -646,9 +646,9 @@ E2E 테스트에서는 `U std/xxx` import가 제한될 수 있습니다.
 # U std/math
 
 # 직접 구현
-F abs(x: i64) -> i64 {
-  I x < 0 { R -x }
-  R x
+fn abs(x: i64) -> i64 {
+  I x < 0 { return -x }
+  return x
 }
 ```
 

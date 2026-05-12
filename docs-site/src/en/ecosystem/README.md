@@ -3,8 +3,9 @@
 A full-stack ecosystem workbench built on top of the Vais language.
 
 Current public claims are gate-backed: VaisDB package `261/261` and runtime
-`34/34`, vais-server runtime `15/15`, and vais-web runtime `61/77`, unit
-`390/390`, package `3272/3272`, full-build `24/24`. These are not
+`34/34`, vais-server runtime `20/20`, vais-web runtime `61/77`, unit
+`390/390`, package `3272/3272`, full-build `24/24`, cross-package schema
+`15/15`, and multi-domain product schema `9/9`. These are not
 product-complete v1 claims.
 
 ## Architecture
@@ -23,7 +24,7 @@ product-complete v1 claims.
 ┌─────────────────────▼───────────────────────┐
 │  vais-server                                │
 │  Express/Axum-style backend API framework   │
-│  middleware pipeline · runtime smoke 15/15  │
+│  middleware pipeline · runtime smoke 20/20  │
 └─────────────────────┬───────────────────────┘
                       │ Native Query API
 ┌─────────────────────▼───────────────────────┐
@@ -39,7 +40,7 @@ product-complete v1 claims.
 |---------|-------------|--------------|
 | [VaisX](./vais-web/README.md) | Frontend framework workbench | Runtime 61/77, unit 390/390, full-build 24/24 |
 | [VaisDB](./vaisdb/README.md) | Hybrid database workbench | Package 261/261, runtime 34/34 |
-| [vais-server](./vais-server/README.md) | Backend framework workbench | Runtime smoke 15/15 |
+| [vais-server](./vais-server/README.md) | Backend framework workbench | Runtime smoke 20/20 |
 
 ## Full-stack example
 
@@ -49,7 +50,7 @@ product-complete v1 claims.
 # <script>
 todos := $state([])
 
-A F load() -> Vec<Todo> {
+A fn load() -> Vec<Todo> {
     fetch("/api/todos").json()
 }
 # </script>
@@ -60,10 +61,10 @@ A F load() -> Vec<Todo> {
 # </template>
 
 # === Backend (vais-server) ===
-U core/app
-U db/query
+use core/app
+use db/query
 
-F handle_todos(ctx: Context) -> Response {
+fn handle_todos(ctx: Context) -> Response {
     sql := QueryBuilder.new()
         .select("todos")
         .order_by("id", SortDirection.Asc)
@@ -71,7 +72,7 @@ F handle_todos(ctx: Context) -> Response {
     ctx.json(200, db.execute(sql))
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     app := mut App.new(ServerConfig.default())
     app.get("/api/todos", "handle_todos")
     app.listen(":8080")
