@@ -7,6 +7,10 @@ use crate::types::{ResolvedType, TypeError, TypeResult};
 use crate::TypeChecker;
 
 impl TypeChecker {
+    pub(crate) fn allow_legacy_a4_03_auto_deref() -> bool {
+        std::env::var("VAIS_REJECT_A4_03").as_deref() == Ok("0")
+    }
+
     /// Check if a type variable `id` occurs anywhere inside `ty`.
     /// Prevents creating cyclic substitutions (e.g., T0 -> `Vec<T0>`) which would
     /// cause `apply_substitutions` to recurse infinitely.
@@ -745,15 +749,14 @@ impl TypeChecker {
             // DynTrait: dyn Trait accepts any concrete type that implements the trait
             (ResolvedType::DynTrait { .. }, _) | (_, ResolvedType::DynTrait { .. }) => Ok(()),
             // ImplTrait / HigherKinded were removed in ROADMAP #18.
-            // Auto-deref: &T unifies with T (implicit dereference).
+            // A4-03: default-strict rejection of &T ↔ T implicit deref.
             //
-            // A4-03 strict mode only rejects fully concrete Ref↔value
-            // mismatches. If either side still contains an inference variable,
-            // this arm is acting as generic inference glue, not as a
-            // user-facing implicit deref decision.
+            // Keep unresolved inference-variable glue working; it is not a
+            // concrete user-facing implicit deref decision. Set
+            // VAIS_REJECT_A4_03=0 only for legacy drift investigation.
             (ResolvedType::Ref(inner), other) | (other, ResolvedType::Ref(inner)) => {
                 let inference_glue = Self::contains_var(inner) || Self::contains_var(other);
-                if std::env::var("VAIS_REJECT_A4_03").as_deref() == Ok("1") && !inference_glue {
+                if !Self::allow_legacy_a4_03_auto_deref() && !inference_glue {
                     Err(crate::TypeError::Mismatch {
                         expected: expected.to_string(),
                         found: found.to_string(),
@@ -765,7 +768,7 @@ impl TypeChecker {
             }
             (ResolvedType::RefMut(inner), other) | (other, ResolvedType::RefMut(inner)) => {
                 let inference_glue = Self::contains_var(inner) || Self::contains_var(other);
-                if std::env::var("VAIS_REJECT_A4_03").as_deref() == Ok("1") && !inference_glue {
+                if !Self::allow_legacy_a4_03_auto_deref() && !inference_glue {
                     Err(crate::TypeError::Mismatch {
                         expected: expected.to_string(),
                         found: found.to_string(),

@@ -1,14 +1,15 @@
 # LIVING_SPEC/04_stdlib/vec_max.vais
 # Key concept: Vec<i64>에서 최댓값 찾기 (LF 순회 + 비교).
-# Phase 2.12: `.get(i)`의 Some(n)에서 n은 &i64지만 산술/비교 context에서
-# auto-deref. `*n` 수동 deref 불필요.
+# `.get(i)`의 Some(n)에서 n은 &i64이므로 산술/비교 전에 명시적으로
+# `*n`을 사용한다.
 
 fn max_of(v: Vec<i64>) -> i64 {
     max := mut 0
     LF i: 0..v.len() {
         match v.get(i) {
             Some(n) => {
-                I n > max { max = n }
+                value := *n
+                I value > max { max = value }
             },
             None => {}
         }

@@ -139,7 +139,7 @@ impl TlsContext {
         I self.handle != 0 {
             __tls_ctx_set_verify(self.handle, mode)
         }
-        self
+        (*self)
     }
 
     # Disable certificate verification (use with caution)
@@ -195,7 +195,7 @@ impl TlsConn {
         I self.handle != 0 {
             __tls_set_hostname(self.handle, hostname)
         }
-        self
+        (*self)
     }
 
     # Perform TLS client handshake (connect)

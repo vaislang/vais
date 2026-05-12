@@ -3,10 +3,10 @@
 This file records empirical findings during Order step 13 (A4 removal queue).
 Mirrors STEP7 / STEP10 / STEP11 / STEP17 structure.
 
-Master Plan v102 §[phase.A4] inventory (12 entries total):
-- strict_default_landed (10): A4-01 / A4-02 / A4-04 / A4-06 / A4-08 / A4-09 / A4-10 / A4-11 / A4-13 / A4-15
+Master Plan v103 §[phase.A4] inventory (12 entries total):
+- strict_default_landed (11): A4-01 / A4-02 / A4-03 / A4-04 / A4-06 / A4-08 / A4-09 / A4-10 / A4-11 / A4-13 / A4-15
 - specified_safe_landed (1): A4-14
-- still_silent (1): A4-03
+- still_silent (0): none
 
 2026-05-11 update: A4-03 remains default-silent, but strict audit mode now
 rejects concrete Ref/value mismatches and the baseline impact is reduced to
@@ -15,6 +15,9 @@ rejects concrete Ref/value mismatches and the baseline impact is reduced to
 2026-05-12 update: A4-03 strict-mode migration is clean for all vaisdb files
 (`261/261`). Default legacy behavior remains silent pending default flip
 measurement and runtime subset recheck.
+
+2026-05-12 default update: A4-03 is default-strict. `VAIS_REJECT_A4_03=0`
+is now the legacy drift opt-out, and full integrity is green.
 
 Step 2 LANDED `vaisc fix --explicit --site=A4-NN [--dry-run]` skeleton.
 A4-01 detection is implemented; A4-02..A4-09 stubbed `NotImplemented`.
@@ -26,8 +29,52 @@ A4-01 detection is implemented; A4-02..A4-09 stubbed `NotImplemented`.
 | F-13-01 | A4-01 (Unit ↔ i64) baseline scan: 0 findings across 404 .vais files (2026-05-05) |
 | F-13-04 | A4-03 strict audit narrowed: std 82/82, vaisdb 207/261; default baseline unchanged (2026-05-11) |
 | F-13-05 | A4-03 strict vaisdb migration clean: std 82/82, vaisdb 261/261; default baseline unchanged (2026-05-12) |
+| F-13-06 | A4-03 default-strict landed: full integrity OK; A4 still_silent=0 (2026-05-12) |
 
 ## Findings
+
+### F-13-06 — A4-03 default-strict landed (2026-05-12)
+
+Scope:
+- `crates/vais-types/src/inference/unification.rs`
+- `crates/vais-types/src/checker_fn.rs`
+- `crates/vais-types/src/checker_expr/stmts.rs`
+- `crates/vais-codegen/src/inkwell/gen_expr/misc.rs`
+- `compiler/std/`
+- `docs/language/LIVING_SPEC/`
+- `lang/packages/vaisdb/src/`
+- `lang/packages/vais-server/src/`
+- `tests/empirical/A4/A4-03_auto_deref/`
+
+Result:
+- default A4-03 behavior: strict reject with E001 (`expected i64, found &i64`)
+- legacy opt-out: `VAIS_REJECT_A4_03=0` accepts the old probe for drift
+  investigation only
+- positive explicit deref: `positive.vais` exits 42
+- `std`: `82/82`
+- `LIVING_SPEC`: `117/117`
+- `vaisdb`: `261/261`
+- `vais-server` runtime: `16/16`
+- full integrity: `INTEGRITY OK`
+
+Compiler-side change:
+- A4-03 unification is default-strict; legacy behavior requires
+  `VAIS_REJECT_A4_03=0`.
+- Function, method, trailing-expression, and return-statement hidden
+  auto-deref bypasses were removed.
+- Inkwell explicit deref now treats already-materialized aggregate pointee
+  values as no-op, avoiding ICE when source writes `(*self)`.
+
+Source migration performed:
+- Builder-style self returns use explicit `(*self)`, not implicit return of
+  `self`.
+- `(*self)` is parenthesized because a line-start `*self` can be parsed as
+  multiplication with the previous line in current grammar.
+- LIVING_SPEC HashMap/Vec examples now use explicit borrowed keys and deref.
+- vais-server router/header generic Vec locals were annotated to avoid
+  unspecialized `%Vec` monomorph drift in promoted runtime smoke tests.
+
+Status: A4-03 is default-closed. The A4 queue now has 0 still-silent entries.
 
 ### F-13-05 — A4-03 strict vaisdb migration clean (2026-05-12)
 
@@ -38,7 +85,8 @@ Scope:
 Result:
 - strict `vaisdb`: improved from `207/261` to `261/261`
 - default `vaisdb`: remains `261/261`
-- default A4-03 behavior: still silent for the legacy fixture
+- default A4-03 behavior: still silent for the legacy fixture at this point;
+  resolved by F-13-06.
 
 Source migration performed:
 - Made the remaining planner, SQL executor/parser, RAG, security/server,
@@ -49,8 +97,8 @@ Source migration performed:
   where required.
 
 Remaining work:
-- Run A4-03 default flip measurement and promoted runtime subset recheck before
-  reclassifying A4-03 as strict-default.
+- Resolved by F-13-06; default flip and promoted runtime subset recheck are
+  complete.
 
 ### F-13-04 — A4-03 strict audit narrowed (2026-05-11)
 

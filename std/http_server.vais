@@ -475,7 +475,7 @@ impl ResponseBuilder {
         __store_ptr(self.headers + offset, name as i64)
         __store_ptr(self.headers + offset + 8, value as i64)
         self.header_count = self.header_count + 1
-        self
+        (*self)
     }
 
     # Set text body
@@ -503,7 +503,7 @@ impl ResponseBuilder {
     fn body(&self, data: i64, len: i64) -> ResponseBuilder {
         self.body = data
         self.body_len = len
-        self
+        (*self)
     }
 
     # Set content type
@@ -792,14 +792,14 @@ impl MiddlewareChain {
     # Add a middleware
     fn add(&self, name: str, handler: i64, priority: i64) -> MiddlewareChain {
         I self.count >= self.capacity {
-            return self
+            return (*self)
         }
         offset := self.count * 24
         __store_ptr(self.items + offset, name as i64)
         __store_ptr(self.items + offset + 8, handler)
         __store_i64(self.items + offset + 16, priority)
         self.count = self.count + 1
-        self
+        (*self)
     }
 
     # Execute all middleware in priority order
@@ -845,7 +845,7 @@ impl StaticFiles {
 
     fn with_index(&self, index: str) -> StaticFiles {
         self.index_file = index
-        self
+        (*self)
     }
 
     # Determine MIME type from file extension
@@ -1021,27 +1021,27 @@ impl App {
     fn with_tls(&self, cert_path: str, key_path: str) -> App {
         ctx := __tls_ctx_new(1)  # server mode
         I ctx == 0 {
-            return self
+            return (*self)
         }
         cert_result := __tls_ctx_load_cert(ctx, cert_path)
         I cert_result != 0 {
             __tls_ctx_free(ctx)
-            return self
+            return (*self)
         }
         key_result := __tls_ctx_load_key(ctx, key_path)
         I key_result != 0 {
             __tls_ctx_free(ctx)
-            return self
+            return (*self)
         }
         self.tls_ctx = ctx
         self.tls_enabled = 1
-        self
+        (*self)
     }
 
     # Add a route with pattern matching
     fn route(&self, method: i64, pattern: str, handler: i64) -> App {
         I self.route_count >= self.route_capacity {
-            return self
+            return (*self)
         }
 
         # Allocate and store RoutePattern
@@ -1051,7 +1051,7 @@ impl App {
 
         __store_ptr(self.routes + self.route_count * 8, rp)
         self.route_count = self.route_count + 1
-        self
+        (*self)
     }
 
     # Convenience methods for common HTTP methods
@@ -1078,12 +1078,12 @@ impl App {
     # Add middleware
     fn use_middleware(&self, name: str, handler: i64) -> App {
         self.middleware.add(name, handler, self.middleware.len())
-        self
+        (*self)
     }
 
     fn use_middleware_with_priority(&self, name: str, handler: i64, priority: i64) -> App {
         self.middleware.add(name, handler, priority)
-        self
+        (*self)
     }
 
     # Set static file serving
@@ -1092,7 +1092,7 @@ impl App {
         static_files := StaticFiles::new(root_dir, prefix)
         __memcpy(sf, &static_files as i64, 24)
         self.static_files = sf
-        self
+        (*self)
     }
 
     # Run the server (blocking)

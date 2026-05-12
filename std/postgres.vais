@@ -514,7 +514,7 @@ impl PgParams {
         }
         store_i64(self.values + self.count * 8, value as i64)
         self.count = self.count + 1
-        self
+        (*self)
     }
 
     # Add an integer parameter (converted to string)

@@ -5,8 +5,9 @@ fn main() -> i64 {
     m: HashMap<i64, i64> = HashMap::new()
     m.insert(1, 100)
     m.insert(2, 200)
-    match m.get(1) {
-        Some(v) => v,
+    key: i64 = 1
+    match m.get(&key) {
+        Some(v) => *v,
         None => -1
     }
 }

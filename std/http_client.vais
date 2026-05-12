@@ -483,7 +483,7 @@ impl HttpRequest {
         __store_ptr(self.headers + offset, name as i64)
         __store_ptr(self.headers + offset + 8, value as i64)
         self.header_count = self.header_count + 1
-        self
+        (*self)
     }
 
     # Set or replace a header
@@ -496,7 +496,7 @@ impl HttpRequest {
             I __str_eq_ignore_case(header_name, name) == 1 {
                 # Replace value
                 __store_ptr(self.headers + offset + 8, value as i64)
-                return self
+                return (*self)
             }
             i = i + 1
         }
@@ -521,11 +521,11 @@ impl HttpRequest {
                     j = j + 1
                 }
                 self.header_count = self.header_count - 1
-                return self
+                return (*self)
             }
             i = i + 1
         }
-        self
+        (*self)
     }
 
     # Get a header value by name. Returns "" if not found.
@@ -547,7 +547,7 @@ impl HttpRequest {
     fn with_body(&self, data: i64, len: i64) -> HttpRequest {
         self.body = data
         self.body_len = len
-        self
+        (*self)
     }
 
     # Set string body
@@ -574,7 +574,7 @@ impl HttpRequest {
     # Set request timeout in milliseconds
     fn with_timeout(&self, ms: i64) -> HttpRequest {
         self.timeout_ms = ms
-        self
+        (*self)
     }
 
     # Build the next request for an HTTP redirect.
@@ -1070,31 +1070,31 @@ impl HttpClient {
     # Set timeout in milliseconds
     fn timeout(&self, ms: i64) -> HttpClient {
         self.timeout_ms = ms
-        self
+        (*self)
     }
 
     # Enable or disable redirect following (1 = on, 0 = off)
     fn follow_redirects(&self, follow: i64) -> HttpClient {
         self.follow_redirects = follow
-        self
+        (*self)
     }
 
     # Set maximum number of redirects to follow
     fn max_redirects(&self, max: i64) -> HttpClient {
         self.max_redirects = max
-        self
+        (*self)
     }
 
     # Enable or disable keep-alive connection reuse
     fn keep_alive(&self, enabled: i64) -> HttpClient {
         self.keep_alive = enabled
-        self
+        (*self)
     }
 
     # Set TLS certificate verification mode (1 = verify peer, 0 = insecure).
     fn tls_verify(&self, verify: i64) -> HttpClient {
         self.tls_verify_peer = verify
-        self
+        (*self)
     }
 
     # Disable TLS certificate verification for explicit local/self-signed endpoints.
@@ -1116,7 +1116,7 @@ impl HttpClient {
         __store_ptr(self.default_headers + offset, name as i64)
         __store_ptr(self.default_headers + offset + 8, value as i64)
         self.default_header_count = self.default_header_count + 1
-        self
+        (*self)
     }
 
     # Execute an HttpRequest and return an HttpResponse

@@ -68,7 +68,7 @@ impl TemplateCtx {
     # Set a string variable in the context
     fn set_str(&self, key: str, value: str) -> TemplateCtx {
         __template_ctx_set(self.handle, key, value)
-        self
+        (*self)
     }
 
     # Set an integer variable in the context (converts to string)
@@ -78,7 +78,7 @@ impl TemplateCtx {
         len := __i64_to_str(buf, value)
         __store_byte(buf + len, 0)  # null terminate
         __template_ctx_set(self.handle, key, buf as str)
-        self
+        (*self)
     }
 
     # Get a variable value from the context

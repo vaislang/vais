@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# A4-03 Auto-deref &T ↔ T — empirical fixture runner (exit_not).
+# A4-03 Auto-deref &T ↔ T — empirical fixture runner (check_fails).
 #
 # Surface: &i64 silently unified with i64 in function call (auto-deref
 # without explicit deref operator).
 # Site: unification.rs:754
-# assertion_kind = "exit_not"
-# Forbidden set: [42] — well-typed take_i64(*r) where val=42 returns 42.
+# assertion_kind = "check_fails"
 
 set -euo pipefail
 
@@ -22,32 +21,53 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 cp "$DIR/probe.vais" "$WORK/probe.vais"
+cp "$DIR/positive.vais" "$WORK/positive.vais"
 
-if ! "$VAISC" check "$WORK/probe.vais" >/dev/null 2>&1; then
-  echo "DRIFT: probe no longer type-checks (A4-03 may be removed)." >&2
+CHECK_OUTPUT="$( "$VAISC" check "$WORK/probe.vais" 2>&1 || true )"
+CHECK_EXIT=0
+"$VAISC" check "$WORK/probe.vais" >/dev/null 2>&1 \
+  && CHECK_EXIT=0 || CHECK_EXIT=$?
+
+if [[ "$CHECK_EXIT" == "0" ]]; then
+  echo "DRIFT: A4-03 check silently accepted implicit &T -> T:" >&2
+  echo "$CHECK_OUTPUT" >&2
   exit 1
 fi
 
-if VAIS_REJECT_A4_03=1 "$VAISC" check "$WORK/probe.vais" >/dev/null 2>&1; then
-  echo "DRIFT: strict A4-03 mode no longer rejects implicit &T -> T." >&2
+if ! grep -qF "E001" <<< "$CHECK_OUTPUT"; then
+  echo "DRIFT: A4-03 check failed without stable E001 diagnostic:" >&2
+  echo "$CHECK_OUTPUT" >&2
   exit 1
 fi
 
-( cd "$WORK" && "$VAISC" probe.vais >/dev/null 2>&1 )
-if [[ ! -x "$WORK/probe" ]]; then
-  echo "FIXTURE_BROKEN: vaisc did not produce binary" >&2
+if ! grep -qF "&i64" <<< "$CHECK_OUTPUT"; then
+  echo "DRIFT: A4-03 check failed without &i64 in diagnostic:" >&2
+  echo "$CHECK_OUTPUT" >&2
+  exit 1
+fi
+
+if ! VAIS_REJECT_A4_03=0 "$VAISC" check "$WORK/probe.vais" >/dev/null 2>&1; then
+  echo "DRIFT: A4-03 legacy opt-out no longer reproduces the old accept path." >&2
+  exit 1
+fi
+
+if ! "$VAISC" check "$WORK/positive.vais" >/dev/null 2>&1; then
+  echo "FIXTURE_BROKEN: explicit deref positive no longer type-checks." >&2
+  "$VAISC" check "$WORK/positive.vais" >&2 || true
   exit 2
 fi
 
-ACTUAL_EXIT=0
-"$WORK/probe" || ACTUAL_EXIT=$?
+( cd "$WORK" && "$VAISC" positive.vais >/dev/null 2>&1 )
+if [[ ! -x "$WORK/positive" ]]; then
+  echo "FIXTURE_BROKEN: vaisc did not produce positive binary" >&2
+  exit 2
+fi
 
-FORBIDDEN=(42)
-for f in "${FORBIDDEN[@]}"; do
-  if [[ "$ACTUAL_EXIT" == "$f" ]]; then
-    echo "DRIFT: A4-03 exit $f is in forbidden_set — surface no longer firing." >&2
-    exit 1
-  fi
-done
+POSITIVE_EXIT=0
+"$WORK/positive" || POSITIVE_EXIT=$?
+if [[ "$POSITIVE_EXIT" != "42" ]]; then
+  echo "FIXTURE_BROKEN: explicit deref positive exited $POSITIVE_EXIT, expected 42." >&2
+  exit 2
+fi
 
-echo "A4-03 OK: default still silent; strict mode rejects; default run exits ${ACTUAL_EXIT} (≠ forbidden $(IFS=,; echo "${FORBIDDEN[*]}"))."
+echo "A4-03 OK: default check rejects implicit &T -> T; legacy opt-out accepts; explicit deref exits 42."

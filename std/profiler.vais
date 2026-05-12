@@ -35,7 +35,7 @@ impl Timer {
     fn start(&self) -> Timer {
         self.start_ns = __time_now_ns()
         self.running = 1
-        self
+        (*self)
     }
 
     # Stop the timer
@@ -44,7 +44,7 @@ impl Timer {
             self.end_ns = __time_now_ns()
             self.running = 0
         }
-        self
+        (*self)
     }
 
     # Get elapsed time in nanoseconds
@@ -71,7 +71,7 @@ impl Timer {
         self.start_ns = 0
         self.end_ns = 0
         self.running = 0
-        self
+        (*self)
     }
 }
 
@@ -181,13 +181,13 @@ impl Profiler {
     fn enable(&self) -> Profiler {
         self.enabled = PROFILER_ENABLED
         self.start_time = __time_now_ns()
-        self
+        (*self)
     }
 
     # Disable profiling
     fn disable(&self) -> Profiler {
         self.enabled = PROFILER_DISABLED
-        self
+        (*self)
     }
 
     # Enable sampling mode
@@ -195,7 +195,7 @@ impl Profiler {
         self.enabled = PROFILER_SAMPLING
         self.sample_interval = interval_ms
         self.start_time = __time_now_ns()
-        self
+        (*self)
     }
 
     # Check if profiling is enabled
@@ -386,12 +386,12 @@ impl MemoryProfiler {
 
     fn enable(&self) -> MemoryProfiler {
         self.enabled = 1
-        self
+        (*self)
     }
 
     fn disable(&self) -> MemoryProfiler {
         self.enabled = 0
-        self
+        (*self)
     }
 
     # Track an allocation

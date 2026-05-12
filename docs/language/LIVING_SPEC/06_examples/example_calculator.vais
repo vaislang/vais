@@ -37,7 +37,7 @@ impl Tokenizer {
     # Peek at current char (returns 0 at end-of-input)
     fn peek(&self) -> i64 {
         match self.chars.get(self.pos) {
-            Some(c) => c,
+            Some(c) => *c,
             None    => 0
         }
     }
@@ -110,7 +110,7 @@ impl Parser {
     # Return current token without consuming it
     fn current(&self) -> Token {
         match self.tokens.get(self.pos) {
-            Some(t) => t,
+            Some(t) => *t,
             None    => Token { kind: TEof, value: 0 }
         }
     }

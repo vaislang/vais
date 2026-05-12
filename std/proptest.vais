@@ -253,12 +253,12 @@ impl Property {
 
     fn with_tests(&self, n: i64) -> Property {
         self.num_tests = n
-        self
+        (*self)
     }
 
     fn with_seed(&self, seed: i64) -> Property {
         self.seed = seed
-        self
+        (*self)
     }
 
     # Run the property test

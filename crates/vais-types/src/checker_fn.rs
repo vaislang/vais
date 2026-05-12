@@ -181,13 +181,18 @@ impl TypeChecker {
             }
         }
 
-        // Check return type (with auto-deref: &T unifies with T)
+        // Check return type. A4-03 keeps implicit &T -> T return deref
+        // available only through the legacy opt-out.
         let expected_ret = self.current_fn_ret.clone().expect(
             "Internal compiler error: current_fn_ret should be set during function checking",
         );
-        let body_type_deref = if let ResolvedType::Ref(inner) = &body_type {
-            if self.unify(&expected_ret, inner).is_ok() {
-                *inner.clone()
+        let body_type_deref = if Self::allow_legacy_a4_03_auto_deref() {
+            if let ResolvedType::Ref(inner) = &body_type {
+                if self.unify(&expected_ret, inner).is_ok() {
+                    *inner.clone()
+                } else {
+                    body_type.clone()
+                }
             } else {
                 body_type.clone()
             }
@@ -662,13 +667,18 @@ impl TypeChecker {
             }
         };
 
-        // Check return type (with auto-deref: &T unifies with T)
+        // Check return type. A4-03 keeps implicit &T -> T return deref
+        // available only through the legacy opt-out.
         let expected_ret = self.current_fn_ret.clone().expect(
             "Internal compiler error: current_fn_ret should be set during function checking",
         );
-        let body_type_deref = if let ResolvedType::Ref(inner) = &body_type {
-            if self.unify(&expected_ret, inner).is_ok() {
-                *inner.clone()
+        let body_type_deref = if Self::allow_legacy_a4_03_auto_deref() {
+            if let ResolvedType::Ref(inner) = &body_type {
+                if self.unify(&expected_ret, inner).is_ok() {
+                    *inner.clone()
+                } else {
+                    body_type.clone()
+                }
             } else {
                 body_type.clone()
             }

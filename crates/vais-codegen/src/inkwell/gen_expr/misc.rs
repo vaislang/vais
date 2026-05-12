@@ -116,9 +116,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         };
 
         let ptr = self.generate_expr(inner)?;
+        if ptr.get_type() == pointee_llvm_type {
+            return Ok(ptr);
+        }
         let ptr_val = if ptr.is_pointer_value() {
             ptr.into_pointer_value()
-        } else {
+        } else if ptr.is_int_value() {
             // IntValue (i64) → PointerValue via inttoptr
             let int_val = ptr.into_int_value();
             self.builder
@@ -130,6 +133,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     "deref_ptr",
                 )
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        } else {
+            return Ok(ptr);
         };
         // Load using the inferred pointee type (context-based, not hardcoded i64)
         self.builder

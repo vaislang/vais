@@ -136,7 +136,7 @@ impl Schema {
     # Add a column to the schema
     fn add_column(&self, name: str, col_type: i64) -> Schema {
         I self.column_count >= SQL_MAX_COLUMNS {
-            return self
+            return (*self)
         }
         offset := self.column_count * 40
         __store_ptr(self.columns + offset, name as i64)
@@ -145,7 +145,7 @@ impl Schema {
         __store_i64(self.columns + offset + 24, 0)   # is_nullable = 0
         __store_ptr(self.columns + offset + 32, "" as i64)  # default_value = ""
         self.column_count = self.column_count + 1
-        self
+        (*self)
     }
 
     # Mark the last added column as primary key
@@ -154,7 +154,7 @@ impl Schema {
             offset := (self.column_count - 1) * 40
             __store_i64(self.columns + offset + 16, 1)
         }
-        self
+        (*self)
     }
 
     # Mark the last added column as nullable
@@ -163,7 +163,7 @@ impl Schema {
             offset := (self.column_count - 1) * 40
             __store_i64(self.columns + offset + 24, 1)
         }
-        self
+        (*self)
     }
 
     # Set default value on the last added column
@@ -172,7 +172,7 @@ impl Schema {
             offset := (self.column_count - 1) * 40
             __store_ptr(self.columns + offset + 32, val as i64)
         }
-        self
+        (*self)
     }
 
     # Get column type string from type id
@@ -404,7 +404,7 @@ impl QueryBuilder {
     # Set the FROM table
     fn from(&self, table: str) -> QueryBuilder {
         self.table = table
-        self
+        (*self)
     }
 
     # WHERE column = value
@@ -414,7 +414,7 @@ impl QueryBuilder {
         } else {
             self.where_clause.add("AND", column, "=", value)
         }
-        self
+        (*self)
     }
 
     # WHERE column > value
@@ -424,7 +424,7 @@ impl QueryBuilder {
         } else {
             self.where_clause.add("AND", column, ">", value)
         }
-        self
+        (*self)
     }
 
     # WHERE column < value
@@ -434,38 +434,38 @@ impl QueryBuilder {
         } else {
             self.where_clause.add("AND", column, "<", value)
         }
-        self
+        (*self)
     }
 
     # AND column = value
     fn and_eq(&self, column: str, value: str) -> QueryBuilder {
         self.where_clause.add("AND", column, "=", value)
-        self
+        (*self)
     }
 
     # OR column = value
     fn or_eq(&self, column: str, value: str) -> QueryBuilder {
         self.where_clause.add("OR", column, "=", value)
-        self
+        (*self)
     }
 
     # ORDER BY column direction
     fn order_by(&self, column: str, direction: str) -> QueryBuilder {
         self.order_col = column
         self.order_dir = direction
-        self
+        (*self)
     }
 
     # LIMIT n
     fn limit(&self, n: i64) -> QueryBuilder {
         self.limit_val = n
-        self
+        (*self)
     }
 
     # OFFSET n
     fn offset(&self, n: i64) -> QueryBuilder {
         self.offset_val = n
-        self
+        (*self)
     }
 
     # Build an INSERT query
@@ -663,7 +663,7 @@ impl MigrationRunner {
     # Add a migration
     fn add(&self, migration: Migration) -> MigrationRunner {
         I self.count >= self.capacity {
-            return self
+            return (*self)
         }
         # Store migration data (copy the 4 fields = 32 bytes)
         m_ptr := __malloc(32)
@@ -673,7 +673,7 @@ impl MigrationRunner {
         __store_ptr(m_ptr + 24, migration.down_sql as i64)
         __store_ptr(self.migrations + self.count * 8, m_ptr)
         self.count = self.count + 1
-        self
+        (*self)
     }
 
     # Get all up-migration SQL statements concatenated

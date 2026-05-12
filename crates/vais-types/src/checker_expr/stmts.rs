@@ -196,10 +196,15 @@ impl TypeChecker {
                     ResolvedType::Unit
                 };
                 if let Some(expected) = self.current_fn_ret.clone() {
-                    // Auto-deref: if returning &T but expected is T, allow implicit deref
-                    let ret_type_deref = if let ResolvedType::Ref(inner) = &ret_type {
-                        if self.unify(&expected, inner).is_ok() {
-                            *inner.clone()
+                    // A4-03 keeps implicit &T -> T return deref available
+                    // only through the legacy opt-out.
+                    let ret_type_deref = if Self::allow_legacy_a4_03_auto_deref() {
+                        if let ResolvedType::Ref(inner) = &ret_type {
+                            if self.unify(&expected, inner).is_ok() {
+                                *inner.clone()
+                            } else {
+                                ret_type.clone()
+                            }
                         } else {
                             ret_type.clone()
                         }

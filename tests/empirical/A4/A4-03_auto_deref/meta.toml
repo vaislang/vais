@@ -2,11 +2,11 @@
 
 [entry]
 id = "A4-03"
-classification = "still_silent (default legacy auto-deref remains; strict audit mode via VAIS_REJECT_A4_03=1 rejects concrete Ref↔value mismatches)"
+classification = "strict_default_landed (legacy opt-out via VAIS_REJECT_A4_03=0)"
 surface = "Reference &i64 silently unified with i64 in function call (no explicit deref)"
 site = "unification.rs:754"
 site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:754"
-master_plan_version = 102
+master_plan_version = 103
 
 [v1_evidence]
 probe_summary = "take_i64(r) where r: &i64 = &val"
@@ -36,7 +36,19 @@ vaisdb_files_before = "114/261"
 vaisdb_files_after = "261/261"
 notes = "Strict mode now ignores generic inference glue containing unresolved Vars, reports concrete expected/found types, preserves default legacy mode, and the vaisdb source migration is strict-clean at 261/261."
 
+[default_strict_2026_05_12]
+default_status = "strict_default_landed"
+default_probe = "rejects probe.vais with E001 expected i64, found &i64"
+legacy_opt_out = "VAIS_REJECT_A4_03=0 accepts probe.vais for drift investigation only"
+positive_probe = "positive.vais with explicit *r exits 42"
+living_spec_files = "117/117"
+std_files = "82/82"
+vaisdb_files = "261/261"
+server_runtime = "16/16"
+full_integrity = "INTEGRITY OK"
+notes = "Default mode is strict. Function, method, trailing-expression, and return-statement hidden &T -> T auto-deref bypasses are removed."
+
 [assertion_kind]
-kind = "exit_not"
-forbidden_set = [42]
-forbidden_set_rationale = "well-typed take_i64(*r) where val=42 returns 42."
+kind = "check_fails"
+required_stderr_patterns = ["E001", "&i64"]
+rationale = "The fixture asserts default-strict rejection of implicit &T -> T. The companion positive.vais proves explicit *r remains valid and exits 42."

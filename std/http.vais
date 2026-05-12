@@ -207,7 +207,7 @@ impl Request {
     fn with_body(&self, data: i64, len: i64) -> Request {
         self.body = data
         self.body_len = len
-        self
+        (*self)
     }
 
     # Set JSON body
@@ -215,13 +215,13 @@ impl Request {
         self.body = json_str as i64
         self.body_len = __strlen(json_str)
         self.headers.add("Content-Type", "application/json")
-        self
+        (*self)
     }
 
     # Add header
     fn header(&self, name: str, value: str) -> Request {
         self.headers.add(name, value)
-        self
+        (*self)
     }
 
     # Get method string
@@ -340,7 +340,7 @@ impl Response {
     fn with_body(&self, data: i64, len: i64) -> Response {
         self.body = data
         self.body_len = len
-        self
+        (*self)
     }
 
     # Set text body
@@ -348,7 +348,7 @@ impl Response {
         self.body = text as i64
         self.body_len = __strlen(text)
         self.headers.add("Content-Type", "text/plain; charset=utf-8")
-        self
+        (*self)
     }
 
     # Set JSON body
@@ -356,7 +356,7 @@ impl Response {
         self.body = json_str as i64
         self.body_len = __strlen(json_str)
         self.headers.add("Content-Type", "application/json")
-        self
+        (*self)
     }
 
     # Set HTML body
@@ -364,13 +364,13 @@ impl Response {
         self.body = html as i64
         self.body_len = __strlen(html)
         self.headers.add("Content-Type", "text/html; charset=utf-8")
-        self
+        (*self)
     }
 
     # Add header
     fn header(&self, name: str, value: str) -> Response {
         self.headers.add(name, value)
-        self
+        (*self)
     }
 
     # Check if successful (2xx)
@@ -505,13 +505,13 @@ impl Client {
     # Set timeout in milliseconds
     fn timeout(&self, ms: i64) -> Client {
         self.timeout_ms = ms
-        self
+        (*self)
     }
 
     # Set redirect following
     fn follow_redirects(&self, follow: i64) -> Client {
         self.follow_redirects = follow
-        self
+        (*self)
     }
 
     # Execute a request
@@ -645,7 +645,7 @@ impl Router {
         __store_ptr(self.routes + offset + 8, path as i64)
         __store_ptr(self.routes + offset + 16, handler)
         self.count = self.count + 1
-        self
+        (*self)
     }
 
     # Add GET route
@@ -714,7 +714,7 @@ impl Server {
     # Add routes
     fn routes(&self, router: Router) -> Server {
         self.router = router
-        self
+        (*self)
     }
 
     # Run the server (blocking)

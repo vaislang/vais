@@ -319,7 +319,7 @@ impl TestSuite {
 
         __store_test_case(self.tests + self.test_count * 88, &test)
         self.test_count = self.test_count + 1
-        self
+        (*self)
     }
 
     # Add a simple test
@@ -330,25 +330,25 @@ impl TestSuite {
     # Set before_all hook
     fn before_all(&self, fn_ptr: i64) -> TestSuite {
         self.before_all_fn = fn_ptr
-        self
+        (*self)
     }
 
     # Set after_all hook
     fn after_all(&self, fn_ptr: i64) -> TestSuite {
         self.after_all_fn = fn_ptr
-        self
+        (*self)
     }
 
     # Set before_each hook
     fn before_each(&self, fn_ptr: i64) -> TestSuite {
         self.before_each_fn = fn_ptr
-        self
+        (*self)
     }
 
     # Set after_each hook
     fn after_each(&self, fn_ptr: i64) -> TestSuite {
         self.after_each_fn = fn_ptr
-        self
+        (*self)
     }
 
     # Run all tests in the suite
@@ -773,25 +773,25 @@ impl TestRunner {
 
         __store_ptr(self.suites + self.suite_count * 8, suite as i64)
         self.suite_count = self.suite_count + 1
-        self
+        (*self)
     }
 
     # Set verbose mode
     fn verbose(&self) -> TestRunner {
         self.verbose = 1
-        self
+        (*self)
     }
 
     # Set filter
     fn filter(&self, filter: str) -> TestRunner {
         self.filter = filter
-        self
+        (*self)
     }
 
     # Enable fail-fast mode
     fn fail_fast(&self) -> TestRunner {
         self.fail_fast = 1
-        self
+        (*self)
     }
 
     # Run all tests

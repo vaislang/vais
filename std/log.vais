@@ -128,21 +128,21 @@ impl Logger {
     # Set log level
     fn set_level(&self, level: i64) -> Logger {
         I level < LOG_LEVEL_TRACE | level > LOG_LEVEL_ERROR {
-            return self
+            return (*self)
         }
         self.level = level
         __log_set_level(level)
-        self
+        (*self)
     }
 
     # Set output target
     fn set_output(&self, target: i64) -> Logger {
         I target < LOG_OUTPUT_STDOUT | target > LOG_OUTPUT_FILE {
-            return self
+            return (*self)
         }
         self.output = target
         __log_set_output(target)
-        self
+        (*self)
     }
 
     # Set log file path (only effective if output is LOG_OUTPUT_FILE)
@@ -154,11 +154,11 @@ impl Logger {
     # Set output format
     fn set_format(&self, format: i64) -> Logger {
         I format < LOG_FORMAT_TEXT | format > LOG_FORMAT_JSON {
-            return self
+            return (*self)
         }
         self.format = format
         __log_set_format(format)
-        self
+        (*self)
     }
 
     # Check if logger is initialized
