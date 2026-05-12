@@ -30,12 +30,24 @@ The current `origin/main` tree directly enforces:
 - Browser-JS playground smoke gate: passed for parser + JavaScript codegen
   compile/execute in the browser; this is not a complete browser-only language
   implementation claim
+- `vaisc emit-ts` schema declaration tests:
+  `cargo test --locked -p vaisc --test emit_ts_skeleton --test emit_ts_exhaustiveness`
+- Cross-package schema gate: `15/15` via
+  `tests/empirical/cross_package_schema/tests/gate.sh positive|negative`
+- Multi-domain product schema gate: `9/9` via
+  `tests/product/multi_domain_schema/tests/gate.sh`
+
+The schema gates above are main-tree fixtures with local workspace
+requirements: a built `vaisc` binary and the sibling `lang/packages/vais-web`
+TypeScript toolchain. The multi-domain product gate currently certifies
+type-check propagation across the DB/server/web consumers; DB/server native
+runtime coverage remains integration evidence below.
 
 The following counts are integration evidence from
 `codex/ssr-json-grammar-gate` and the local workspace as of 2026-05-12. They
-are public evidence, but are not yet reproducible from `origin/main` until the
-aggregate integrity runner, product fixtures, and ecosystem runtime gates are
-ported to main:
+are public evidence, but the full aggregate runtime gate is not yet reproducible from `origin/main`
+until the aggregate integrity runner and ecosystem runtime gates are ported to
+main:
 
 - Core compiler freeze bundle: passed
 - Downstream re-entry criteria: passed
@@ -52,8 +64,6 @@ ported to main:
 - Ecosystem package tests: `3272/3272`
 - Vais Web full-build gate: `24/24`
 - Package full-build gate: `2/2`
-- Cross-package schema gate: `15/15`
-- Multi-domain product schema gate: `9/9`
 
 ## Public Non-Claims
 

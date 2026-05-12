@@ -15,17 +15,17 @@
   "hero": {
     "badge": "Certified Core + Scoped Evidence",
     "title": "Write <span class=\"gradient-text\">clear Vais</span>,<br>get <span class=\"gradient-text\">native performance</span>",
-    "subtitle": "Vais (Vibe AI Language for Systems) is a systems programming language optimized for AI code generation. The current public baseline separates main-reproducible gates from integration evidence pending main port.",
+    "subtitle": "Vais (Vibe AI Language for Systems) is a systems programming language optimized for AI code generation. The current public baseline separates main-reproducible gates, main-fixture schema gates, and integration evidence pending aggregate main port.",
     "tryBrowser": "Try in Browser",
     "install": "brew install vais"
   },
   "compare": {
     "title": "Canonical Syntax, Evidence-Scoped Claims",
-    "subtitle": "Step 19 retired the old single-letter keyword forms. Public claims now distinguish main-reproducible gates from integration evidence that is pending main gate port.",
+    "subtitle": "Step 19 retired the old single-letter keyword forms. Public claims now distinguish main-reproducible gates, schema gates ported to main fixtures, and integration evidence that is pending aggregate main port.",
     "vais": "Vais",
     "tokens": "tokens",
-    "barTitle": "Evidence Snapshot — 2026-05-12",
-    "barNote": "Counts are integration evidence from the gate branch. The public main branch currently enforces wording/build boundaries; aggregate gate and product fixtures are pending main port."
+    "barTitle": "Evidence Snapshot — 2026-05-13",
+    "barNote": "Schema gates are now main-fixture/local-workspace reproducible: cross-package schema 15/15 and shared-schema product evidence 9/9. Runtime and package counts remain integration evidence from the gate branch; the aggregate runtime gate is pending main port."
   },
   "performance": {
     "title": "Native Performance",
@@ -107,7 +107,7 @@
   "vaisx": {
     "badge": "New",
     "title": "Build Web Apps with Vais",
-    "subtitle": "VaisX is the Vais web framework workbench. Current public claims distinguish main-reproducible gates from integration evidence pending main port.",
+    "subtitle": "VaisX is the Vais web framework workbench. Current public claims distinguish main-reproducible gates, main-fixture schema gates, and integration evidence pending aggregate main port.",
     "compiler": {
       "title": "Compile-Time Reactivity",
       "description": "Reactive state analysis and DOM update generation are active implementation surfaces verified only where named gates cover them."
@@ -118,7 +118,7 @@
     },
     "runtime": {
       "title": "Runtime Evidence",
-      "description": "Current Vais Web integration evidence is runtime smoke 61/77, unit 390/390, package tests 3272/3272, full-build 24/24, and shared-schema product evidence 9/9. Size claims require a size gate."
+      "description": "Current Vais Web integration evidence is runtime smoke 61/77, unit 390/390, package tests 3272/3272, full-build 24/24, and shared-schema product evidence 9/9 ported as a compiler main-fixture workspace gate. Size claims require a size gate."
     },
     "learnMore": "Learn More",
     "github": "GitHub",

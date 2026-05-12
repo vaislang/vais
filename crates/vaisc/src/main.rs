@@ -607,6 +607,16 @@ enum Commands {
         /// Package name to uninstall
         package: String,
     },
+
+    /// Emit a TypeScript declaration file (.d.ts) from a Vais schema source
+    EmitTs {
+        /// Input .vais schema file
+        input: PathBuf,
+
+        /// Output .d.ts file path
+        #[arg(short, long, value_name = "FILE")]
+        output: PathBuf,
+    },
 }
 
 fn main() {
@@ -1094,6 +1104,7 @@ fn main_inner() {
             commands::pkg::cmd_install(&package, release, cli.verbose, &plugins)
         }
         Some(Commands::Uninstall { package }) => commands::pkg::cmd_uninstall(&package),
+        Some(Commands::EmitTs { input, output }) => commands::emit_ts::cmd_emit_ts(&input, &output),
         None => {
             // Direct file compilation
             if let Some(input) = cli.input {
