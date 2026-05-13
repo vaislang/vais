@@ -39,13 +39,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let (Some(username), Some(password)) = (&config.admin_username, &config.admin_password) {
         if db::get_user_by_username(&pool, username).await?.is_none() {
             use argon2::{
-                password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
+                password_hash::{PasswordHasher, SaltString},
                 Argon2,
             };
             use chrono::Utc;
             use uuid::Uuid;
 
-            let salt = SaltString::generate(&mut OsRng);
+            let mut salt_bytes = [0u8; 16];
+            rand::fill(&mut salt_bytes);
+            let salt = SaltString::encode_b64(&salt_bytes)
+                .map_err(|e| format!("Failed to generate password salt: {}", e))?;
             let argon2 = Argon2::default();
             let password_hash = argon2
                 .hash_password(password.as_bytes(), &salt)
