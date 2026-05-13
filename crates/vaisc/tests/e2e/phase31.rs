@@ -2127,7 +2127,7 @@ F good2() -> i64 = 2
         .filter(|i| !matches!(i.node, vais_ast::Item::Error { .. }))
         .collect();
     assert!(
-        valid.len() >= 1,
+        !valid.is_empty(),
         "Should recover at least 1 valid item, got {}",
         valid.len()
     );

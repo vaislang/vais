@@ -262,8 +262,8 @@ fn test_endurance_scaling() {
         }
 
         // Assert that parsing always succeeds
-        assert!(tokens.len() > 0, "Tokenization produced no tokens");
-        assert!(module.items.len() > 0, "Parsing produced no items");
+        assert!(!tokens.is_empty(), "Tokenization produced no tokens");
+        assert!(!module.items.is_empty(), "Parsing produced no items");
     }
 
     println!("\nStatus: PASSED (all sizes compiled)");
@@ -289,15 +289,11 @@ fn test_endurance_concurrent() {
                     let source = generate_large_program(100 + thread_id * 10);
 
                     // Compile
-                    match parse(&source) {
-                        Ok(module) => {
-                            let mut checker = TypeChecker::new();
-                            match checker.check_module(&module) {
-                                Ok(_) => success += 1,
-                                Err(_) => {}
-                            }
+                    if let Ok(module) = parse(&source) {
+                        let mut checker = TypeChecker::new();
+                        if checker.check_module(&module).is_ok() {
+                            success += 1;
                         }
-                        Err(_) => {}
                     }
                 }
                 (thread_id, success, iterations_per_thread)
@@ -515,7 +511,7 @@ fn test_endurance_parser_stress() {
     match result {
         Ok(module) => {
             println!("  Success: parsed in {:?}", elapsed);
-            assert!(module.items.len() > 0);
+            assert!(!module.items.is_empty());
         }
         Err(e) => {
             println!("  Parse failed (expected for very deep nesting): {:?}", e);

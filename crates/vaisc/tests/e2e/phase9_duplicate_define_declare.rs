@@ -6,7 +6,8 @@
 //!   - `declare void @__store_byte(i64, i64)` — from the extern registration
 //!   - `define void @__store_byte(i64 %ptr, i64 %val) { … }` — from
 //!     `generate_helper_functions`
-//! in the **same** main module. LLVM rejects that as a symbol redefinition,
+//!
+//! In the **same** main module. LLVM rejects that as a symbol redefinition,
 //! which is why `vais-apps/signature/build.sh` had a python3 post-processing
 //! step to strip the redundant declares.
 //!
@@ -24,6 +25,7 @@ use crate::helpers::compile_to_ir;
 ///   - `declare i64 @strlen(i64)` — prefix "declare", name "strlen"
 ///   - `define void @__store_byte(i64 %ptr, i64 %val) {` — prefix "define",
 ///     name "__store_byte"
+///
 /// The intervening `{ret_type}` is skipped by matching the prefix at the
 /// start of the trimmed line and `@{name}(` anywhere after.
 fn count_prefix_at(ir: &str, prefix: &str, name: &str) -> usize {

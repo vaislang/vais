@@ -2,11 +2,11 @@
 //!
 //! Tests for regex engine, HTTP client helpers, and SQLite utility functions:
 //! - Regex: literal match, dot wildcard, quantifiers (*, +, ?), char classes,
-//!          anchors (^, $), ranges, escaping, complex patterns
+//!   anchors (^, $), ranges, escaping, complex patterns
 //! - HTTP:  status code classification, hex digit utilities, URL encoding,
-//!          chunked parsing, method constants, query building
+//!   chunked parsing, method constants, query building
 //! - SQLite: result codes, is_ok/has_row/is_done helpers, column type constants,
-//!           extended result codes, combined checks
+//!   extended result codes, combined checks
 
 use super::helpers::*;
 

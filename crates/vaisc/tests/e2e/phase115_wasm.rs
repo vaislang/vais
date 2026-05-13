@@ -570,7 +570,7 @@ fn test_wit_record_construction() {
 fn test_wit_enum_construction() {
     use vais_codegen::wasm_component::WitEnumCase;
 
-    let cases = vec![
+    let cases = [
         WitEnumCase {
             name: "red".to_string(),
             docs: None,

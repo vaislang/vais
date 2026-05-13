@@ -89,7 +89,7 @@ fn test_literal_display() {
     assert_token_display(&Token::Int(42), "42");
     assert_token_display(&Token::Int(0), "0");
     assert_token_display(&Token::Int(9999), "9999");
-    assert_token_display(&Token::Float(3.14), "3.14");
+    assert_token_display(&Token::Float(2.5), "2.5");
     assert_token_display(&Token::Float(0.0), "0");
     assert_token_display(&Token::String("hello".to_string()), "\"hello\"");
     assert_token_display(&Token::Ident("foo".to_string()), "foo");
