@@ -1,0 +1,12 @@
+[package]
+name = "vais-json"
+version = "1.0.0"
+authors = ["Vais Team"]
+description = "JSON parser and generator for Vais - parse and serialize JSON data structures"
+license = "MIT"
+
+[dependencies]
+
+[dev-dependencies]
+
+[build]

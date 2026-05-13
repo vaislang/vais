@@ -1,13 +1,13 @@
 # Array slicing test
+# Each slice consumes the source array under Vais ownership rules,
+# so we create a fresh array literal for each demo.
 
 F main() -> i64 {
     puts("Testing array slicing:")
 
-    # Create an array
-    arr := [10, 20, 30, 40, 50]
-
     # Basic slice: arr[1..3] -> [20, 30]
-    slice1 := arr[1..3]
+    arr1 := [10, 20, 30, 40, 50]
+    slice1 := arr1[1..3]
     puts("arr[1..3]:")
     putchar(slice1[0] / 10 + 48)
     putchar(slice1[0] % 10 + 48)
@@ -17,7 +17,8 @@ F main() -> i64 {
     putchar(10)
 
     # Inclusive slice: arr[1..=3] -> [20, 30, 40]
-    slice2 := arr[1..=3]
+    arr2 := [10, 20, 30, 40, 50]
+    slice2 := arr2[1..=3]
     puts("arr[1..=3]:")
     putchar(slice2[0] / 10 + 48)
     putchar(slice2[0] % 10 + 48)
@@ -30,7 +31,8 @@ F main() -> i64 {
     putchar(10)
 
     # Slice from start: arr[0..2] -> [10, 20]
-    slice3 := arr[0..2]
+    arr3 := [10, 20, 30, 40, 50]
+    slice3 := arr3[0..2]
     puts("arr[0..2]:")
     putchar(slice3[0] / 10 + 48)
     putchar(slice3[0] % 10 + 48)

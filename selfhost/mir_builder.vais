@@ -108,7 +108,7 @@ F mir_builder_new_local(builder: i64, type_ptr: i64, name_idx: i64) -> i64 {
         new_locals := malloc(8 * new_cap)
         i := mut 0
         L {
-            I i >= locals_len { B } E { 0 }
+            I i >= locals_len { B } EL { 0 }
             store_i64(new_locals + i * 8, load_i64(locals + i * 8))
             i = i + 1
         }
@@ -137,7 +137,7 @@ F mir_builder_new_block(builder: i64) -> i64 {
         new_blocks := malloc(8 * new_cap)
         i := mut 0
         L {
-            I i >= blocks_len { B } E { 0 }
+            I i >= blocks_len { B } EL { 0 }
             store_i64(new_blocks + i * 8, load_i64(blocks + i * 8))
             i = i + 1
         }
@@ -246,6 +246,14 @@ F mir_builder_call(builder: i64, func_idx: i64, args_ptr: i64, args_len: i64, de
     mir_builder_terminate(builder, term_call(func_idx, args_ptr, args_len, dest, next_bb))
 }
 
+# Convenience: conditional branch (switch_int on cond, true→then_bb, false→else_bb)
+F mir_builder_cond_br(builder: i64, cond_local: i64, then_bb: i64, else_bb: i64) -> i64 {
+    targets := malloc(16)
+    store_i64(targets, 1)            # value = 1 (true)
+    store_i64(targets + 8, then_bb)  # target block
+    mir_builder_terminate(builder, term_switch_int(operand_copy(cond_local), targets, 1, else_bb))
+}
+
 # ============================================================================
 # Build — finalize the builder into a MirBody
 # ============================================================================
@@ -263,7 +271,7 @@ F mir_builder_build(builder: i64) -> i64 {
     params := malloc(8 * param_count)
     i := mut 0
     L {
-        I i >= param_count { B } E { 0 }
+        I i >= param_count { B } EL { 0 }
         local_decl := load_i64(locals_ptr + (i + 1) * 8)
         type_ptr := load_i64(local_decl + 8)
         store_i64(params + i * 8, type_ptr)

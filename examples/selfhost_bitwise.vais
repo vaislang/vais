@@ -1,0 +1,44 @@
+# Selfhost bitwise operations verification
+# Tests all bitwise operators and shift operations
+
+F popcount(x: i64) -> i64 {
+    I x == 0 { R 0 }
+    (x & 1) + @(x / 2)
+}
+
+F is_power_of_2(x: i64) -> i64 {
+    I x <= 0 { R 0 }
+    I (x & (x - 1)) == 0 { R 1 }
+    R 0
+}
+
+F highest_bit(x: i64) -> i64 {
+    I x <= 0 { R 0 }
+    I x < 2 { R 0 }
+    1 + @(x / 2)
+}
+
+F swap_nibbles(x: i64) -> i64 {
+    low := x & 15
+    high := (x / 16) & 15
+    (low * 16) | high
+}
+
+F main() -> i64 {
+    # popcount(255) = 8
+    pc := popcount(255)
+    # is_power_of_2: 16→1, 15→0, 64→1, 0→0 = 2
+    p2 := is_power_of_2(16) + is_power_of_2(15) + is_power_of_2(64) + is_power_of_2(0)
+    # highest_bit(128) = 7
+    hb := highest_bit(128)
+    # swap_nibbles(0xAB = 171): low=B=11, high=A=10 → 11*16+10 = 186
+    # But we need to keep it simple: swap_nibbles(0x12 = 18): low=2, high=1 → 2*16+1 = 33
+    sn := swap_nibbles(18)
+    # Bitwise ops: 0xFF & 0x0F = 15, 0xF0 | 0x0F = 255, 0xFF ^ 0x0F = 240
+    b1 := 255 & 15
+    b2 := 240 | 15
+    b3 := 255 ^ 15
+    # Total: 8 + 2 + 7 + 33 + 15 + 255 + 240 = 560
+    # Reduce: 560 % 256 = 48
+    (pc + p2 + hb + sn + b1 + b2 + b3) % 256
+}

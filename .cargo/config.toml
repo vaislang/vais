@@ -2,29 +2,29 @@
 # Contains custom aliases for common development tasks
 
 [alias]
-# Test coverage measurement (all formats configured in tarpaulin.toml)
+# Test coverage measurement using cargo-llvm-cov
+# Requires: cargo install cargo-llvm-cov && rustup component add llvm-tools-preview
+# Excluded crates synced with tarpaulin.toml and CI workflow
+
+# Quick coverage summary (terminal output)
 # Usage: cargo coverage
-coverage = "tarpaulin --config tarpaulin.toml"
+coverage = "llvm-cov --workspace --exclude vais-python --exclude vais-node --exclude vais-dap --exclude vais-playground-server"
 
-# Quick coverage with HTML output only
+# Coverage with HTML output
 # Usage: cargo coverage-html
-coverage-html = "tarpaulin --config tarpaulin.toml --out Html --output-dir target/coverage"
+coverage-html = "llvm-cov --workspace --exclude vais-python --exclude vais-node --exclude vais-dap --exclude vais-playground-server --html --output-dir target/coverage"
 
-# Coverage with Lcov format (for CI/CD integration)
+# Coverage with Lcov format (for CI/Codecov integration)
 # Usage: cargo coverage-lcov
-coverage-lcov = "tarpaulin --config tarpaulin.toml --out Lcov --output-dir target/coverage"
+coverage-lcov = "llvm-cov --workspace --exclude vais-python --exclude vais-node --exclude vais-dap --exclude vais-playground-server --lcov --output-path target/coverage/lcov.info"
 
 # Coverage with JSON format (for automated processing)
 # Usage: cargo coverage-json
-coverage-json = "tarpaulin --config tarpaulin.toml --out Json --output-dir target/coverage"
+coverage-json = "llvm-cov --workspace --exclude vais-python --exclude vais-node --exclude vais-dap --exclude vais-playground-server --json --output-path target/coverage/coverage.json"
 
-# Full coverage report (HTML + Lcov + JSON)
-# Usage: cargo coverage-full
-coverage-full = "tarpaulin --config tarpaulin.toml --out Html --out Lcov --out Json --output-dir target/coverage"
-
-# Coverage for a specific package
-# Usage: cargo coverage-pkg -- vais-lexer
-coverage-pkg = "tarpaulin --config tarpaulin.toml -p"
+# Clean coverage profraw data
+# Usage: cargo coverage-clean
+coverage-clean = "llvm-cov clean --workspace"
 
 # Run tests with output
 # Usage: cargo test-verbose

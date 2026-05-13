@@ -65,13 +65,13 @@ F server_parse_document(server: i64, src: i64, src_len: i64) -> i64 {
     items := malloc(4096 * 8)
     item_count: mut i64 = 0
     L {
-        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
         item := parser_parse_item(p)
         I item != 0 {
             store_i64(items + item_count * 8, item)
             item_count = item_count + 1
             0
-        } E {
+        } EL {
             # Skip problematic token
             parser_advance(p)
             0
@@ -123,7 +123,7 @@ F publish_diagnostics(server: i64) -> i64 {
 
 F handle_did_open(params: i64, server: i64) -> i64 {
     td := json_object_get(params, "textDocument")
-    I td == 0 { R 0 } E { 0 }
+    I td == 0 { R 0 } EL { 0 }
 
     # Get URI
     uri_val := json_object_get(td, "uri")
@@ -131,8 +131,8 @@ F handle_did_open(params: i64, server: i64) -> i64 {
         I json_type(uri_val) == JSON_STRING() {
             server_set_uri(server, json_string_ptr(uri_val), json_string_len(uri_val))
             0
-        } E { 0 }
-    } E { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     # Get text
     text_val := json_object_get(td, "text")
@@ -143,8 +143,8 @@ F handle_did_open(params: i64, server: i64) -> i64 {
             server_parse_document(server, src, src_len)
             publish_diagnostics(server)
             0
-        } E { 0 }
-    } E { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     0
 }
@@ -157,23 +157,23 @@ F handle_did_change(params: i64, server: i64) -> i64 {
             I json_type(uri_val) == JSON_STRING() {
                 server_set_uri(server, json_string_ptr(uri_val), json_string_len(uri_val))
                 0
-            } E { 0 }
-        } E { 0 }
-    } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     # Get content changes array
     changes := json_object_get(params, "contentChanges")
-    I changes == 0 { R 0 } E { 0 }
-    I json_type(changes) != JSON_ARRAY() { R 0 } E { 0 }
+    I changes == 0 { R 0 } EL { 0 }
+    I json_type(changes) != JSON_ARRAY() { R 0 } EL { 0 }
     count := json_array_count(changes)
-    I count == 0 { R 0 } E { 0 }
+    I count == 0 { R 0 } EL { 0 }
 
     # Full sync: take the last change
     last := json_array_get(changes, count - 1)
-    I last == 0 { R 0 } E { 0 }
+    I last == 0 { R 0 } EL { 0 }
     text_val := json_object_get(last, "text")
-    I text_val == 0 { R 0 } E { 0 }
-    I json_type(text_val) != JSON_STRING() { R 0 } E { 0 }
+    I text_val == 0 { R 0 } EL { 0 }
+    I json_type(text_val) != JSON_STRING() { R 0 } EL { 0 }
 
     src := json_string_ptr(text_val)
     src_len := json_string_len(text_val)
@@ -191,27 +191,27 @@ F lsp_main() -> i64 {
     running: mut i64 = 1
 
     L {
-        I running == 0 { B } E { 0 }
+        I running == 0 { B } EL { 0 }
 
         # Read message
         content_len := lsp_read_header()
         I content_len <= 0 {
             running = 0
             B
-        } E { 0 }
+        } EL { 0 }
 
         body := lsp_read_body(content_len)
         I body == 0 {
             running = 0
             B
-        } E { 0 }
+        } EL { 0 }
 
         # Parse JSON
         msg := json_parse(body, content_len)
         I msg == 0 {
             free(body)
             C
-        } E { 0 }
+        } EL { 0 }
 
         # Get method
         method_out := malloc(16)
@@ -230,43 +230,43 @@ F lsp_main() -> i64 {
             I lsp_streq(method_ptr, method_len, "initialize") == 1 {
                 handle_initialize(id)
                 0
-            } E I lsp_streq(method_ptr, method_len, "initialized") == 1 {
+            } EL I lsp_streq(method_ptr, method_len, "initialized") == 1 {
                 # No response needed
                 0
-            } E I lsp_streq(method_ptr, method_len, "shutdown") == 1 {
+            } EL I lsp_streq(method_ptr, method_len, "shutdown") == 1 {
                 sb := jb_new()
                 jb_null(sb)
                 lsp_response(id, sb)
                 sb_free(sb)
                 0
-            } E I lsp_streq(method_ptr, method_len, "exit") == 1 {
+            } EL I lsp_streq(method_ptr, method_len, "exit") == 1 {
                 running = 0
                 0
-            } E I lsp_streq(method_ptr, method_len, "textDocument/didOpen") == 1 {
+            } EL I lsp_streq(method_ptr, method_len, "textDocument/didOpen") == 1 {
                 handle_did_open(params, server)
                 0
-            } E I lsp_streq(method_ptr, method_len, "textDocument/didChange") == 1 {
+            } EL I lsp_streq(method_ptr, method_len, "textDocument/didChange") == 1 {
                 handle_did_change(params, server)
                 0
-            } E I lsp_streq(method_ptr, method_len, "textDocument/didClose") == 1 {
+            } EL I lsp_streq(method_ptr, method_len, "textDocument/didClose") == 1 {
                 # No action needed for now
                 0
-            } E I lsp_streq(method_ptr, method_len, "textDocument/hover") == 1 {
+            } EL I lsp_streq(method_ptr, method_len, "textDocument/hover") == 1 {
                 handle_hover(id, params, server)
                 0
-            } E I lsp_streq(method_ptr, method_len, "textDocument/definition") == 1 {
+            } EL I lsp_streq(method_ptr, method_len, "textDocument/definition") == 1 {
                 handle_definition(id, params, server)
                 0
-            } E I lsp_streq(method_ptr, method_len, "textDocument/references") == 1 {
+            } EL I lsp_streq(method_ptr, method_len, "textDocument/references") == 1 {
                 handle_references(id, params, server)
                 0
-            } E I lsp_streq(method_ptr, method_len, "textDocument/completion") == 1 {
+            } EL I lsp_streq(method_ptr, method_len, "textDocument/completion") == 1 {
                 handle_completion(id, params, server)
                 0
-            } E I lsp_streq(method_ptr, method_len, "textDocument/documentSymbol") == 1 {
+            } EL I lsp_streq(method_ptr, method_len, "textDocument/documentSymbol") == 1 {
                 handle_document_symbols(id, server)
                 0
-            } E {
+            } EL {
                 # Unknown method — if it has an id, respond with null
                 I id > 0 {
                     sb := jb_new()
@@ -274,9 +274,9 @@ F lsp_main() -> i64 {
                     lsp_response(id, sb)
                     sb_free(sb)
                     0
-                } E { 0 }
+                } EL { 0 }
             }
-        } E { 0 }
+        } EL { 0 }
 
         free(method_out)
         free(body)

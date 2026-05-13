@@ -9,7 +9,7 @@ mod tests {
     fn test_type_to_llvm_cache_basic_types() {
         let codegen = CodeGenerator::new("test");
 
-        // Test basic types are cached correctly
+        // Test basic types work correctly (fast-path, no cache needed)
         let i32_1 = codegen.type_to_llvm(&ResolvedType::I32);
         let i32_2 = codegen.type_to_llvm(&ResolvedType::I32);
 
@@ -17,11 +17,12 @@ mod tests {
         assert_eq!(i32_2, "i32");
         assert_eq!(i32_1, i32_2);
 
-        // Check cache was populated
+        // Primitive types use the fast-path and bypass the cache entirely.
+        // The cache is only used for complex/composite types.
         let cache_size = codegen.type_to_llvm_cache.borrow().len();
-        assert!(
-            cache_size > 0,
-            "Cache should contain entries after type_to_llvm calls"
+        assert_eq!(
+            cache_size, 0,
+            "Primitive types use fast-path, not the cache"
         );
     }
 
@@ -62,7 +63,7 @@ mod tests {
             (ResolvedType::F32, "float"),
             (ResolvedType::F64, "double"),
             (ResolvedType::Bool, "i1"),
-            (ResolvedType::Str, "i8*"),
+            (ResolvedType::Str, "{ i8*, i64 }"),
             (ResolvedType::Unit, "void"),
         ];
 
@@ -75,16 +76,10 @@ mod tests {
             );
         }
 
-        // Verify cache has entries
-        let cache = codegen.type_to_llvm_cache.borrow();
-        assert!(
-            !cache.is_empty(),
-            "Cache should be populated after type conversions"
-        );
-        assert!(
-            cache.len() >= 15,
-            "Cache should have at least 15 entries for all tested types"
-        );
+        // Primitive types use the fast-path and bypass the cache.
+        // Only complex types (Str with struct representation) go through the cache.
+        // Str is { i8*, i64 } which is handled by the fast-path too, so cache may be empty.
+        // This is intentional: fast-path avoids format!("{:?}") + HashMap overhead for primitives.
     }
 
     #[test]
@@ -196,14 +191,18 @@ mod tests {
         let codegen2 = CodeGenerator::new("test2");
 
         // Each CodeGenerator should have its own cache
-        let _result1 = codegen1.type_to_llvm(&ResolvedType::I32);
-        let _result2 = codegen2.type_to_llvm(&ResolvedType::I64);
+        // Use composite types (not primitives) so they go through the cache
+        let type1 = ResolvedType::Pointer(Box::new(ResolvedType::I32));
+        let type2 = ResolvedType::Pointer(Box::new(ResolvedType::I64));
+
+        let _result1 = codegen1.type_to_llvm(&type1);
+        let _result2 = codegen2.type_to_llvm(&type2);
 
         let cache1_size = codegen1.type_to_llvm_cache.borrow().len();
         let cache2_size = codegen2.type_to_llvm_cache.borrow().len();
 
-        // Both should have entries, but caches are independent
-        assert!(cache1_size > 0);
-        assert!(cache2_size > 0);
+        // Both should have entries, and caches are independent
+        assert!(cache1_size > 0, "codegen1 cache should have entries");
+        assert!(cache2_size > 0, "codegen2 cache should have entries");
     }
 }

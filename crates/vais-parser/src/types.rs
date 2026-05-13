@@ -132,6 +132,7 @@ impl Parser {
     }
 
     /// Helper: parse a single type generic parameter
+    /// Also detects higher-kinded type parameters: `F<_>`, `F<_, _>`, `F<_>: Functor`
     fn parse_type_generic_param(&mut self) -> ParseResult<GenericParam> {
         // Check for variance annotation: +T (covariant), -T (contravariant)
         let variance = if self.check(&Token::Plus) {
@@ -145,6 +146,9 @@ impl Parser {
         };
 
         let name = self.parse_ident()?;
+
+        // Higher-kinded type parameters (F<_>, F<_, _>) were removed in ROADMAP #18.
+
         let bounds = if self.check(&Token::Colon) {
             self.advance();
             self.parse_trait_bounds()?
@@ -226,6 +230,45 @@ impl Parser {
         Ok(bounds)
     }
 
+    /// Parse where clause: `where T: Display + Clone, U: Default`
+    pub(crate) fn parse_where_clause(&mut self) -> ParseResult<Vec<WherePredicate>> {
+        use vais_ast::WherePredicate;
+
+        if !self.check(&Token::Where) {
+            return Ok(Vec::new());
+        }
+        self.advance(); // consume 'where'
+
+        let mut predicates = Vec::new();
+
+        loop {
+            // Parse type name (generic parameter)
+            let ty = self.parse_ident()?;
+
+            // Expect ':'
+            self.expect(&Token::Colon)?;
+
+            // Parse trait bounds
+            let bounds = self.parse_trait_bounds()?;
+
+            predicates.push(WherePredicate { ty, bounds });
+
+            // Check for more predicates (separated by comma)
+            // Stop at `{` or `=` which indicate start of body
+            if self.check(&Token::Comma) {
+                self.advance();
+                // Check if next token starts a body (stop parsing where clause)
+                if self.check(&Token::LBrace) || self.check(&Token::Eq) {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(predicates)
+    }
+
     /// Parse function parameters
     pub(crate) fn parse_params(&mut self) -> ParseResult<Vec<Param>> {
         let mut params = Vec::new();
@@ -239,8 +282,19 @@ impl Parser {
                 self.advance();
                 Ownership::Affine
             } else if self.check(&Token::Move) {
-                self.advance();
-                Ownership::Move
+                // Peek ahead: if next token is |, this is a move lambda, not ownership
+                if let Some(next) = self.peek_next() {
+                    if next.token == Token::Pipe {
+                        // Don't consume move - let the expression parser handle it
+                        Ownership::Regular
+                    } else {
+                        self.advance();
+                        Ownership::Move
+                    }
+                } else {
+                    self.advance();
+                    Ownership::Move
+                }
             } else {
                 Ownership::Regular
             };
@@ -251,7 +305,9 @@ impl Parser {
             }
 
             // Handle &self and &mut self (or &~ self)
+            // Save position so we can restore if & is not followed by [mut] self
             if self.check(&Token::Amp) {
+                let saved_pos = self.pos;
                 self.advance();
                 let is_self_mut = self.check(&Token::Mut) || self.check(&Token::Tilde);
                 if is_self_mut {
@@ -292,6 +348,8 @@ impl Parser {
                     }
                     continue;
                 }
+                // & not followed by [mut] self — restore position
+                self.pos = saved_pos;
             }
 
             let name = self.parse_ident()?;
@@ -347,6 +405,13 @@ impl Parser {
 
     /// Parse type
     pub(crate) fn parse_type(&mut self) -> ParseResult<Spanned<Type>> {
+        self.enter_depth()?;
+        let result = self.parse_type_inner();
+        self.exit_depth();
+        result
+    }
+
+    fn parse_type_inner(&mut self) -> ParseResult<Spanned<Type>> {
         let start = self.current_span().start;
 
         let base_type = self.parse_base_type()?;
@@ -397,6 +462,24 @@ impl Parser {
                     Type::Tuple(types)
                 }
             }
+        } else if self.check(&Token::Pipe) {
+            // Closure type: `|T1, T2| -> U` — equivalent to `(T1, T2) -> U`.
+            self.advance();
+            let mut types = Vec::new();
+            if !self.check(&Token::Pipe) {
+                types.push(self.parse_type()?);
+                while self.check(&Token::Comma) {
+                    self.advance();
+                    types.push(self.parse_type()?);
+                }
+            }
+            self.expect(&Token::Pipe)?;
+            self.expect(&Token::Arrow)?;
+            let ret = self.parse_type()?;
+            Type::Fn {
+                params: types,
+                ret: Box::new(ret),
+            }
         } else if self.check(&Token::LBracket) {
             let lbracket_span = self.current_span();
             self.advance();
@@ -442,18 +525,31 @@ impl Parser {
             if is_mut {
                 self.advance();
             }
-            let inner = self.parse_base_type()?;
-            match (lifetime, is_mut) {
-                (Some(lt), true) => Type::RefMutLifetime {
-                    lifetime: lt,
-                    inner: Box::new(inner),
-                },
-                (Some(lt), false) => Type::RefLifetime {
-                    lifetime: lt,
-                    inner: Box::new(inner),
-                },
-                (None, true) => Type::RefMut(Box::new(inner)),
-                (None, false) => Type::Ref(Box::new(inner)),
+            // Check for slice type: &[T] or &mut [T]
+            if lifetime.is_none() && self.check(&Token::LBracket) {
+                let lbracket_span = self.current_span();
+                self.advance();
+                let elem_type = self.parse_type()?;
+                self.expect_closing(&Token::RBracket, lbracket_span)?;
+                if is_mut {
+                    Type::SliceMut(Box::new(elem_type))
+                } else {
+                    Type::Slice(Box::new(elem_type))
+                }
+            } else {
+                let inner = self.parse_base_type()?;
+                match (lifetime, is_mut) {
+                    (Some(lt), true) => Type::RefMutLifetime {
+                        lifetime: lt,
+                        inner: Box::new(inner),
+                    },
+                    (Some(lt), false) => Type::RefLifetime {
+                        lifetime: lt,
+                        inner: Box::new(inner),
+                    },
+                    (None, true) => Type::RefMut(Box::new(inner)),
+                    (None, false) => Type::Ref(Box::new(inner)),
+                }
             }
         } else if self.check(&Token::Dyn) {
             // dyn Trait or dyn Trait<T>
@@ -462,13 +558,13 @@ impl Parser {
             let generics = if self.check(&Token::Lt) {
                 self.advance();
                 let mut generics = Vec::new();
-                while !self.check(&Token::Gt) && !self.is_at_end() {
+                while !self.check_gt() && !self.is_at_end() {
                     generics.push(self.parse_type()?);
-                    if !self.check(&Token::Gt) {
+                    if !self.check_gt() {
                         self.expect(&Token::Comma)?;
                     }
                 }
-                self.expect(&Token::Gt)?;
+                self.consume_gt()?;
                 generics
             } else {
                 Vec::new()
@@ -516,13 +612,13 @@ impl Parser {
             let generics = if self.check(&Token::Lt) {
                 self.advance();
                 let mut generics = Vec::new();
-                while !self.check(&Token::Gt) && !self.is_at_end() {
+                while !self.check_gt() && !self.is_at_end() {
                     generics.push(self.parse_type()?);
-                    if !self.check(&Token::Gt) {
+                    if !self.check_gt() {
                         self.expect(&Token::Comma)?;
                     }
                 }
-                self.expect(&Token::Gt)?;
+                self.consume_gt()?;
                 generics
             } else {
                 Vec::new()
@@ -542,13 +638,13 @@ impl Parser {
             let assoc_generics = if self.check(&Token::Lt) {
                 self.advance();
                 let mut generics = Vec::new();
-                while !self.check(&Token::Gt) && !self.is_at_end() {
+                while !self.check_gt() && !self.is_at_end() {
                     generics.push(self.parse_type()?);
-                    if !self.check(&Token::Gt) {
+                    if !self.check_gt() {
                         self.expect(&Token::Comma)?;
                     }
                 }
-                self.expect(&Token::Gt)?;
+                self.consume_gt()?;
                 generics
             } else {
                 Vec::new()
@@ -601,7 +697,13 @@ impl Parser {
             Token::Vec8i32 => "Vec8i32",
             Token::Vec2i64 => "Vec2i64",
             Token::Vec4i64 => "Vec4i64",
-            Token::Ident(s) => return Ok(s.clone()),
+            Token::Ident(s) => {
+                // Type alias: `i` → `i64` (only in type position)
+                if s == "i" {
+                    return Ok("i64".to_string());
+                }
+                return Ok(s.clone());
+            }
             // Single-letter keywords can be used as type names in generics
             Token::TypeKeyword => "T",
             Token::Function => "F",
@@ -616,6 +718,13 @@ impl Parser {
             Token::Continue => "C",
             Token::Use => "U",
             Token::Pub => "P",
+            Token::Global => "G",
+            Token::Extern => "N",
+            Token::Union => "O",
+            Token::Trait => "W",
+            Token::Impl => "X",
+            Token::Await => "Y",
+            Token::Defer => "D",
             _ => {
                 return Err(ParseError::UnexpectedToken {
                     found: tok.token.clone(),
@@ -631,12 +740,38 @@ impl Parser {
     /// Parse a const expression: `N`, `10`, `N + 1`, `A * B`, etc.
     /// Supports basic arithmetic operations for const generics.
     pub(crate) fn parse_const_expr(&mut self) -> ParseResult<ConstExpr> {
-        self.parse_const_additive()
+        self.parse_const_bitwise()
+    }
+
+    /// Parse bitwise const expressions: `A & B`, `A | B`, `A ^ B`
+    fn parse_const_bitwise(&mut self) -> ParseResult<ConstExpr> {
+        let mut left = self.parse_const_additive()?;
+
+        while self.check(&Token::Amp) || self.check(&Token::Pipe) || self.check(&Token::Caret) {
+            let op = if self.check(&Token::Amp) {
+                self.advance();
+                ConstBinOp::BitAnd
+            } else if self.check(&Token::Pipe) {
+                self.advance();
+                ConstBinOp::BitOr
+            } else {
+                self.advance();
+                ConstBinOp::BitXor
+            };
+            let right = self.parse_const_additive()?;
+            left = ConstExpr::BinOp {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(left)
     }
 
     /// Parse additive const expressions: `A + B` or `A - B`
     fn parse_const_additive(&mut self) -> ParseResult<ConstExpr> {
-        let mut left = self.parse_const_multiplicative()?;
+        let mut left = self.parse_const_shift()?;
 
         while self.check(&Token::Plus) || self.check(&Token::Minus) {
             let op = if self.check(&Token::Plus) {
@@ -645,6 +780,29 @@ impl Parser {
             } else {
                 self.advance();
                 ConstBinOp::Sub
+            };
+            let right = self.parse_const_shift()?;
+            left = ConstExpr::BinOp {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(left)
+    }
+
+    /// Parse shift const expressions: `A << B` or `A >> B`
+    fn parse_const_shift(&mut self) -> ParseResult<ConstExpr> {
+        let mut left = self.parse_const_multiplicative()?;
+
+        while self.check(&Token::Shl) || self.check(&Token::Shr) {
+            let op = if self.check(&Token::Shl) {
+                self.advance();
+                ConstBinOp::Shl
+            } else {
+                self.advance();
+                ConstBinOp::Shr
             };
             let right = self.parse_const_multiplicative()?;
             left = ConstExpr::BinOp {
@@ -657,17 +815,20 @@ impl Parser {
         Ok(left)
     }
 
-    /// Parse multiplicative const expressions: `A * B` or `A / B`
+    /// Parse multiplicative const expressions: `A * B`, `A / B`, or `A % B`
     fn parse_const_multiplicative(&mut self) -> ParseResult<ConstExpr> {
         let mut left = self.parse_const_primary()?;
 
-        while self.check(&Token::Star) || self.check(&Token::Slash) {
+        while self.check(&Token::Star) || self.check(&Token::Slash) || self.check(&Token::Percent) {
             let op = if self.check(&Token::Star) {
                 self.advance();
                 ConstBinOp::Mul
-            } else {
+            } else if self.check(&Token::Slash) {
                 self.advance();
                 ConstBinOp::Div
+            } else {
+                self.advance();
+                ConstBinOp::Mod
             };
             let right = self.parse_const_primary()?;
             left = ConstExpr::BinOp {
@@ -680,9 +841,16 @@ impl Parser {
         Ok(left)
     }
 
-    /// Parse primary const expression: `N`, `10`, or `(expr)`
+    /// Parse primary const expression: `N`, `10`, `-N`, or `(expr)`
     fn parse_const_primary(&mut self) -> ParseResult<ConstExpr> {
         let span = self.current_span();
+
+        // Handle unary negation
+        if self.check(&Token::Minus) {
+            self.advance();
+            let inner = self.parse_const_primary()?;
+            return Ok(ConstExpr::Negate(Box::new(inner)));
+        }
 
         // Handle parenthesized expressions
         if self.check(&Token::LParen) {

@@ -106,9 +106,9 @@ fn greet(name: &str) -> String {
 
 ```vais
 # Vais
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 
-F greet(name: str) -> str {
+fn greet(name: str) -> str {
     "Hello, " + name
 }
 ```
@@ -128,10 +128,10 @@ fn max<T: Ord>(a: T, b: T) -> T {
 
 ```vais
 # Vais
-F identity<T>(x: T) -> T = x
+fn identity<T>(x: T) -> T = x
 
-F max<T: Ord>(a: T, b: T) -> T {
-    I a > b { a } E { b }
+fn max<T: Ord>(a: T, b: T) -> T {
+    I a > b { a } else { b }
 }
 ```
 
@@ -152,12 +152,12 @@ impl Point {
 
 ```vais
 # Vais
-X Point {
-    F new(x: f64, y: f64) -> Point {
+impl Point {
+    fn new(x: f64, y: f64) -> Point {
         Point { x, y }
     }
 
-    F distance(&self) -> f64 {
+    fn distance(&self) -> f64 {
         (self.x * self.x + self.y * self.y).sqrt()
     }
 }
@@ -184,19 +184,19 @@ struct Color(u8, u8, u8);
 
 ```vais
 # Vais
-S Point {
+struct Point {
     x: f64,
     y: f64,
 }
 
-S Rectangle {
+struct Rectangle {
     top_left: Point,
     width: f64,
     height: f64,
 }
 
 # 튜플 구조체
-S Color(u8, u8, u8)
+struct Color(u8, u8, u8)
 ```
 
 ## 열거형
@@ -221,13 +221,13 @@ enum Message {
 
 ```vais
 # Vais
-E Color {
+enum Color {
     Red,
     Green,
     Blue,
 }
 
-E Message {
+enum Message {
     Quit,
     Move { x: i32, y: i32 },
     Write(str),
@@ -254,15 +254,15 @@ fn parse_number(s: &str) -> Result<i64, String> {
 
 ```vais
 # Vais
-F divide(a: i64, b: i64) -> Option<i64> {
+fn divide(a: i64, b: i64) -> Option<i64> {
     I b == 0 {
         None
-    } E {
+    } else {
         Some(a / b)
     }
 }
 
-F parse_number(s: str) -> Result<i64, str> {
+fn parse_number(s: str) -> Result<i64, str> {
     # parse 함수 사용
     parse_i64(s)
 }
@@ -288,17 +288,17 @@ fn process() -> Result<i64, String> {
 
 ```vais
 # Vais
-U std/io
+use std/io
 
-F read_file(path: str) -> Result<str, str> {
+fn read_file(path: str) -> Result<str, str> {
     content := read_to_string(path)?
-    R Ok(content.to_uppercase())
+    return Ok(content.to_uppercase())
 }
 
-F process() -> Result<i64, str> {
+fn process() -> Result<i64, str> {
     x := parse_number("42")?
     y := parse_number("10")?
-    R Ok(x + y)
+    return Ok(x + y)
 }
 ```
 
@@ -334,8 +334,8 @@ fn describe(n: i32) -> &'static str {
 
 ```vais
 # Vais
-F describe(n: i32) -> str {
-    M n {
+fn describe(n: i32) -> str {
+    match n {
         0 => "zero",
         1 => "one",
         2..=10 => "small",
@@ -359,8 +359,8 @@ fn area(shape: Shape) -> f64 {
 
 ```vais
 # Vais
-F area(shape: Shape) -> f64 {
-    M shape {
+fn area(shape: Shape) -> f64 {
+    match shape {
         Circle(r) => 3.14159 * r * r,
         Rectangle(w, h) => w * h,
         Triangle(b, h) => 0.5 * b * h,
@@ -389,15 +389,15 @@ fn process_result(res: Result<i32, String>) -> i32 {
 
 ```vais
 # Vais
-F process_option(opt: Option<i32>) -> i32 {
-    M opt {
+fn process_option(opt: Option<i32>) -> i32 {
+    match opt {
         Some(x) => x * 2,
         None => 0,
     }
 }
 
-F process_result(res: Result<i32, str>) -> i32 {
-    M res {
+fn process_result(res: Result<i32, str>) -> i32 {
+    match res {
         Ok(x) => x,
         Err(_) => -1,
     }
@@ -422,13 +422,13 @@ trait Add<T> {
 
 ```vais
 # Vais
-W Display {
-    F display(&self) -> str;
+trait Display {
+    fn display(&self) -> str;
 }
 
-W Add<T> {
-    T Output;
-    F add(self, rhs: T) -> Output;
+trait Add<T> {
+    type Output;
+    fn add(self, rhs: T) -> Output;
 }
 ```
 
@@ -456,16 +456,16 @@ impl Add<Point> for Point {
 
 ```vais
 # Vais
-X Display for Point {
-    F display(&self) -> str {
+impl Point: Display {
+    fn display(&self) -> str {
         "(" + self.x.to_string() + ", " + self.y.to_string() + ")"
     }
 }
 
-X Add<Point> for Point {
-    T Output = Point;
+impl Point: Add<Point> {
+    type Output = Point;
 
-    F add(self, rhs: Point) -> Point {
+    fn add(self, rhs: Point) -> Point {
         Point {
             x: self.x + rhs.x,
             y: self.y + rhs.y,
@@ -489,12 +489,12 @@ fn compare<T: Ord + Clone>(a: T, b: T) -> T {
 
 ```vais
 # Vais
-F print_if_display<T: Display>(value: T) {
+fn print_if_display<T: Display>(value: T) {
     println(value.display())
 }
 
-F compare<T: Ord + Clone>(a: T, b: T) -> T {
-    I a > b { a.clone() } E { b.clone() }
+fn compare<T: Ord + Clone>(a: T, b: T) -> T {
+    I a > b { a.clone() } else { b.clone() }
 }
 ```
 
@@ -520,19 +520,19 @@ async fn process_data() -> Result<(), Box<dyn std::error::Error>> {
 
 ```vais
 # Vais
-A F fetch_url(url: str) -> Result<str, str> {
+A fn fetch_url(url: str) -> Result<str, str> {
     response := http_get(url).Y
     body := response.text().Y
-    R Ok(body)
+    return Ok(body)
 }
 
-A F process_data() -> Result<(), str> {
+A fn process_data() -> Result<(), str> {
     data1 := fetch_url("https://api.example.com/1").Y
     data2 := fetch_url("https://api.example.com/2").Y
 
     # Process data...
 
-    R Ok(())
+    return Ok(())
 }
 ```
 
@@ -555,11 +555,11 @@ fn main() {
 
 ```vais
 # Vais
-F take_ownership(s: str) {
+fn take_ownership(s: str) {
     println(s)
 }
 
-F main() {
+fn main() {
     s := "hello"
     take_ownership(s)
     # s는 더 이상 사용 불가
@@ -589,15 +589,15 @@ fn main() {
 
 ```vais
 # Vais
-F calculate_length(s: &str) -> i64 {
+fn calculate_length(s: &str) -> i64 {
     s.len()
 }
 
-F append(s: &mut str, suffix: str) {
+fn append(s: &mut str, suffix: str) {
     s.push_str(suffix)
 }
 
-F main() {
+fn main() {
     s := "hello"
     len := calculate_length(&s)
 
@@ -634,13 +634,13 @@ fn main() {
 ```vais
 # Vais
 # math.vais
-F add(a: i64, b: i64) -> i64 = a + b
-F multiply(a: i64, b: i64) -> i64 = a * b
+fn add(a: i64, b: i64) -> i64 = a + b
+fn multiply(a: i64, b: i64) -> i64 = a * b
 
 # main.vais
-U math
+use math
 
-F main() {
+fn main() {
     sum := add(1, 2)
     product := multiply(3, 4)
 }
@@ -668,17 +668,17 @@ fn main() -> io::Result<()> {
 
 ```vais
 # Vais
-U std/collections
-U std/io
+use std/collections
+use std/io
 
-F main() -> Result<(), str> {
+fn main() -> Result<(), str> {
     file := File::open("data.txt")?
     contents := file.read_to_string()?
 
     map := HashMap::new()
     map.insert("key", "value")
 
-    R Ok(())
+    return Ok(())
 }
 ```
 
@@ -707,12 +707,12 @@ fn fibonacci(n: i64) -> i64 {
 
 ```vais
 # Vais
-F factorial(n: i64) -> i64 {
-    I n <= 1 { 1 } E { n * @(n - 1) }
+fn factorial(n: i64) -> i64 {
+    I n <= 1 { 1 } else { n * @(n - 1) }
 }
 
-F fibonacci(n: i64) -> i64 {
-    I n <= 1 { n } E { @(n - 1) + @(n - 2) }
+fn fibonacci(n: i64) -> i64 {
+    I n <= 1 { n } else { @(n - 1) + @(n - 2) }
 }
 ```
 
@@ -778,7 +778,7 @@ for item in vec.iter() {
 range := 0..10
 L {
     opt := range.next()
-    M opt {
+    match opt {
         Some(i) => println(i),
         None => B,
     }
@@ -788,7 +788,7 @@ L {
 iter := vec.iter()
 L {
     opt := iter.next()
-    M opt {
+    match opt {
         Some(item) => println(item),
         None => B,
     }

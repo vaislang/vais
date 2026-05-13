@@ -10,6 +10,9 @@
 //! This complements error_message_tests.rs by testing additional error scenarios
 //! and validating the complete compilation pipeline error handling.
 
+use std::fs;
+use std::process::Command;
+use tempfile::TempDir;
 use vais_codegen::CodeGenerator;
 use vais_lexer::tokenize;
 use vais_parser::parse;
@@ -25,6 +28,7 @@ fn compile_to_ir(source: &str) -> Result<String, String> {
         .map_err(|e| format!("Type error: {:?}", e))?;
     let mut gen = CodeGenerator::new("error_test");
     gen.set_resolved_functions(checker.get_all_functions().clone());
+    gen.set_type_aliases(checker.get_type_aliases().clone());
     let ir = gen
         .generate_module(&module)
         .map_err(|e| format!("Codegen error: {:?}", e))?;
@@ -46,17 +50,58 @@ fn assert_error_contains(source: &str, expected_fragment: &str) {
         Err(e) => assert!(
             e.contains(expected_fragment),
             "Error message does not contain {:?}.\nActual error: {}",
-            expected_fragment, e
+            expected_fragment,
+            e
         ),
     }
 }
 
-/// Assert that compilation succeeds
-fn assert_compiles(source: &str) {
-    match compile_to_ir(source) {
-        Ok(_) => (),
-        Err(e) => panic!("Expected compilation to succeed, but it failed: {}", e),
-    }
+/// Assert that source compiles, runs via clang, and returns the expected exit code.
+/// Note: This duplicates logic from e2e/helpers.rs but is necessary because
+/// this file is a separate integration test binary that cannot import e2e modules,
+/// and uses its own compile_to_ir() with a distinct module name ("error_test").
+fn assert_exit_code(source: &str, expected: i32) {
+    let ir = compile_to_ir(source).expect("Compilation failed");
+
+    let tmp_dir = TempDir::new().expect("Failed to create temp dir");
+    let ll_path = tmp_dir.path().join("test.ll");
+    let exe_name = if cfg!(target_os = "windows") {
+        "test_exe.exe"
+    } else {
+        "test_exe"
+    };
+    let exe_path = tmp_dir.path().join(exe_name);
+
+    fs::write(&ll_path, &ir).expect("Failed to write IR");
+
+    let clang_output = Command::new("clang")
+        .arg(&ll_path)
+        .arg("-o")
+        .arg(&exe_path)
+        .arg("-Wno-override-module")
+        .output()
+        .expect("Failed to run clang");
+
+    assert!(
+        clang_output.status.success(),
+        "clang compilation failed:\n{}",
+        String::from_utf8_lossy(&clang_output.stderr)
+    );
+
+    let run_output = Command::new(&exe_path)
+        .output()
+        .expect("Failed to run executable");
+
+    let exit_code = run_output.status.code().unwrap_or(-1);
+    assert_eq!(
+        exit_code,
+        expected,
+        "Expected exit code {}, got {}.\nstdout: {}\nstderr: {}",
+        expected,
+        exit_code,
+        String::from_utf8_lossy(&run_output.stdout),
+        String::from_utf8_lossy(&run_output.stderr)
+    );
 }
 
 // ==================== Undefined Symbol Errors ====================
@@ -104,14 +149,12 @@ F main() -> i64 = add(1)
 
 #[test]
 fn error_duplicate_function_definition() {
-    // Note: Current implementation allows duplicate function definitions
-    // This test verifies the current behavior - may change in future
+    // Phase 73: TC now detects duplicate function definitions (E034/Duplicate)
     let source = r#"
 F main() -> i64 = 0
 F main() -> i64 = 1
 "#;
-    // Currently this compiles (later definition overrides earlier one)
-    assert_compiles(source);
+    assert_error_contains(source, "Duplicate");
 }
 
 #[test]
@@ -125,7 +168,11 @@ fn error_recursive_without_return_type() {
     // Phase 61: Recursive function without return type - but with constrained params
     // The parameters here are constrained by the comparison and arithmetic operations
     // So this actually compiles successfully with inferred types
-    assert_compiles("F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)");
+    // Wrap with main() to verify execution: fib(10) = 55
+    assert_exit_code(
+        "F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)\nF main() -> i64 = fib(10)",
+        55,
+    );
 }
 
 // ==================== Struct Errors ====================
@@ -206,7 +253,8 @@ F main() -> i64 {
 }
 "#;
     // Currently this compiles - mutability checking may be added in future
-    assert_compiles(source);
+    // x is reassigned to 10 and returned, so exit code is 10
+    assert_exit_code(source, 10);
 }
 
 // ==================== Edge Cases ====================
@@ -236,19 +284,25 @@ fn error_division_by_zero_literal() {
 
 #[test]
 fn positive_constrained_type_inference() {
-    // This should compile successfully - parameters are constrained by usage
-    assert_compiles(
+    // This should compile and run successfully - parameters are constrained by usage
+    // add(1, 2) = 3, so exit code is 3
+    assert_exit_code(
         r#"
 F add(a: i64, b: i64) -> i64 = a + b
 F main() -> i64 = add(1, 2)
 "#,
+        3,
     );
 }
 
 #[test]
 fn positive_explicit_types() {
-    // With explicit types, should always compile
-    assert_compiles("F add(a: i64, b: i64) -> i64 { R a + b }");
+    // With explicit types, should always compile and run
+    // Wrap with main() to verify execution: add(20, 22) = 42
+    assert_exit_code(
+        "F add(a: i64, b: i64) -> i64 { R a + b }\nF main() -> i64 = add(20, 22)",
+        42,
+    );
 }
 
 // ==================== Enum/Match Errors ====================

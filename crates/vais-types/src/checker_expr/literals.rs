@@ -1,0 +1,46 @@
+//! Literal and identifier expression checking
+
+use crate::types::{ResolvedType, TypeResult};
+use crate::TypeChecker;
+use vais_ast::*;
+
+impl TypeChecker {
+    /// Check literal expressions and identifiers
+    #[inline]
+    pub(crate) fn check_literal_or_ident(
+        &mut self,
+        expr: &Spanned<Expr>,
+    ) -> Option<TypeResult<ResolvedType>> {
+        match &expr.node {
+            Expr::Int(_) => Some(Ok(ResolvedType::I64)),
+            Expr::Float(_) => Some(Ok(ResolvedType::F64)),
+            Expr::Bool(_) => Some(Ok(ResolvedType::Bool)),
+            Expr::String(_) => Some(Ok(ResolvedType::Str)),
+            Expr::StringInterp(parts) => {
+                // Type-check each interpolated expression
+                for part in parts {
+                    if let StringInterpPart::Expr(expr) = part {
+                        if let Err(e) = self.check_expr(expr) {
+                            return Some(Err(e));
+                        }
+                    }
+                }
+                Some(Ok(ResolvedType::Str))
+            }
+            Expr::Unit => Some(Ok(ResolvedType::Unit)),
+            Expr::Ident(name) => {
+                // Warn if the variable has been moved (passed by value as a struct to a function)
+                if self.moved_vars.contains(name.as_str()) {
+                    self.warnings.push(format!(
+                        "warning: use of moved variable '{}' — value may have been moved",
+                        name
+                    ));
+                }
+                // Mark variable as used for linear type tracking
+                self.mark_var_used(name);
+                Some(self.lookup_var_or_err(name))
+            }
+            _ => None,
+        }
+    }
+}

@@ -70,7 +70,7 @@ impl CodeGenerator {
                     )));
                 }
                 // Check if it's a known struct
-                if let Some(_struct_info) = self.structs.get(name) {
+                if let Some(_struct_info) = self.types.structs.get(name) {
                     // Struct is valid for FFI
                     Ok(())
                 } else {
@@ -133,6 +133,7 @@ impl CodeGenerator {
     }
 
     /// Validate all types in an extern function signature
+    #[inline(never)]
     pub(crate) fn _validate_ffi_function(
         &self,
         func_name: &str,
@@ -153,6 +154,7 @@ impl CodeGenerator {
     }
 
     /// Generate LLVM IR for extern block
+    #[inline(never)]
     pub(crate) fn _generate_extern_block(&mut self, block: &ExternBlock) -> CodegenResult<String> {
         let mut ir = String::new();
 
@@ -201,23 +203,17 @@ impl CodeGenerator {
         // Register the function signature
         let func_sig = vais_types::FunctionSig {
             name: func_name.clone(),
-            generics: vec![],
-            generic_bounds: std::collections::HashMap::new(),
             params: param_types
                 .iter()
                 .enumerate()
                 .map(|(i, ty)| (format!("arg{}", i), ty.clone(), false))
                 .collect(),
             ret: ret_type.clone(),
-            is_async: false,
             is_vararg: func.is_vararg,
-            required_params: None,
-            contracts: None,
-            effect_annotation: vais_types::EffectAnnotation::Infer,
-            inferred_effects: None,
+            ..Default::default()
         };
 
-        self.functions.insert(
+        self.types.functions.insert(
             func_name.clone(),
             FunctionInfo {
                 signature: func_sig,
@@ -230,7 +226,7 @@ impl CodeGenerator {
         // Large structs use sret (struct return) parameter
         let ret_llvm = self.type_to_llvm(&ret_type);
         let (actual_ret_type, sret_param) = if let ResolvedType::Named { name, .. } = &ret_type {
-            if let Some(_struct_info) = self.structs.get(name) {
+            if let Some(_struct_info) = self.types.structs.get(name) {
                 let struct_size = self._type_size(&ret_type);
                 if !Self::_should_pass_struct_by_value(struct_size) {
                     // Large struct: use sret parameter, return void
@@ -260,7 +256,7 @@ impl CodeGenerator {
         for (i, ty) in param_types.iter().enumerate() {
             let llvm_ty = self.type_to_llvm(ty);
             let param_str = if let ResolvedType::Named { name, .. } = ty {
-                if let Some(_struct_info) = self.structs.get(name) {
+                if let Some(_struct_info) = self.types.structs.get(name) {
                     let struct_size = self._type_size(ty);
                     if !Self::_should_pass_struct_by_value(struct_size) {
                         // Large struct: pass by pointer with byval
@@ -363,6 +359,7 @@ impl CodeGenerator {
     }
 
     /// Generate function pointer type in LLVM
+    #[inline(never)]
     pub(crate) fn _generate_fn_ptr_type(
         &self,
         params: &[ResolvedType],
@@ -384,6 +381,7 @@ impl CodeGenerator {
 
     /// Generate variadic function call
     /// For vararg calls, extra arguments are passed without type checking
+    #[inline(never)]
     pub(crate) fn _generate_vararg_call(
         &mut self,
         func_name: &str,
@@ -394,6 +392,7 @@ impl CodeGenerator {
 
         // Look up function signature
         let func_info = self
+            .types
             .functions
             .get(func_name)
             .ok_or_else(|| CodegenError::UndefinedFunction(func_name.to_string()))?;
@@ -409,16 +408,25 @@ impl CodeGenerator {
         let ret_llvm = self.type_to_llvm(ret_type);
 
         // Build call instruction with all arguments
-        let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = call {} @{}({})\n",
-            result,
-            ret_llvm,
-            func_name,
-            args.join(", ")
-        ));
-
-        Ok((result, ir))
+        if ret_llvm == "void" {
+            // Void-returning calls must not be assigned to a named variable
+            ir.push_str(&format!(
+                "  call void @{}({})\n",
+                func_name,
+                args.join(", ")
+            ));
+            Ok(("void".to_string(), ir))
+        } else {
+            let result = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = call {} @{}({})\n",
+                result,
+                ret_llvm,
+                func_name,
+                args.join(", ")
+            ));
+            Ok((result, ir))
+        }
     }
 }
 
@@ -697,7 +705,10 @@ mod tests {
                 name: Spanned::new("msg".to_string(), Span::new(0, 3)),
                 ty: Spanned::new(
                     Type::Pointer(Box::new(Spanned::new(
-                        Type::Named { name: "i8".to_string(), generics: vec![] },
+                        Type::Named {
+                            name: "i8".to_string(),
+                            generics: vec![],
+                        },
                         Span::new(0, 2),
                     ))),
                     Span::new(0, 3),
@@ -737,8 +748,12 @@ mod tests {
         use crate::TargetTriple;
 
         let mut gen = CodeGenerator::new_with_target("test", TargetTriple::Wasm32Unknown);
-        gen.wasm_imports.insert("js_alert".to_string(), ("env".to_string(), "alert".to_string()));
-        gen.wasm_exports.insert("add".to_string(), "add".to_string());
+        gen.wasm_imports.insert(
+            "js_alert".to_string(),
+            ("env".to_string(), "alert".to_string()),
+        );
+        gen.wasm_exports
+            .insert("add".to_string(), "add".to_string());
 
         let metadata = gen.generate_wasm_metadata();
         assert!(metadata.contains("wasm-import-module"));

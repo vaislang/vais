@@ -1,0 +1,417 @@
+# std/wasi_p2 - WASI Preview 2 interface bindings
+# Provides Vais bindings for WASI Preview 2 (Component Model) interfaces.
+#
+# WASI Preview 2 uses the Component Model's canonical ABI with typed resources
+# and streams instead of the linear-memory-based Preview 1 syscalls.
+#
+# References:
+# - WASI Preview 2 spec: https://github.com/WebAssembly/WASI/tree/main/preview2
+# - Component Model: https://github.com/WebAssembly/component-model
+
+# ==============================================================================
+# wasi:io/streams@0.2.0 — Stream-based I/O primitives
+# ==============================================================================
+
+# Stream error type (0 = success, nonzero = error code)
+T StreamError = i64
+
+# Input stream handle (resource handle)
+T InputStream = i64
+
+# Output stream handle (resource handle)
+T OutputStream = i64
+
+# Read from an input stream into a buffer
+# Returns number of bytes read, or negative on error
+#[wasm_import("wasi:io/streams@0.2.0", "read")]
+N "C" {
+    F wasi_io_stream_read(stream: i64, buf_ptr: i64, buf_len: i64) -> i64;
+}
+
+# Write data to an output stream
+# Returns number of bytes written, or negative on error
+#[wasm_import("wasi:io/streams@0.2.0", "write")]
+N "C" {
+    F wasi_io_stream_write(stream: i64, buf_ptr: i64, buf_len: i64) -> i64;
+}
+
+# Subscribe to readiness on an input stream (pollable)
+#[wasm_import("wasi:io/streams@0.2.0", "subscribe-to-input-stream")]
+N "C" {
+    F wasi_io_subscribe_input(stream: i64) -> i64;
+}
+
+# Subscribe to readiness on an output stream (pollable)
+#[wasm_import("wasi:io/streams@0.2.0", "subscribe-to-output-stream")]
+N "C" {
+    F wasi_io_subscribe_output(stream: i64) -> i64;
+}
+
+# Drop (close) an input stream
+#[wasm_import("wasi:io/streams@0.2.0", "drop-input-stream")]
+N "C" {
+    F wasi_io_drop_input(stream: i64);
+}
+
+# Drop (close) an output stream
+#[wasm_import("wasi:io/streams@0.2.0", "drop-output-stream")]
+N "C" {
+    F wasi_io_drop_output(stream: i64);
+}
+
+# ==============================================================================
+# wasi:io/poll@0.2.0 — Pollable handles for async I/O
+# ==============================================================================
+
+# Pollable handle type
+T Pollable = i64
+
+# Poll a single pollable, blocking until ready
+#[wasm_import("wasi:io/poll@0.2.0", "poll-one")]
+N "C" {
+    F wasi_poll_one(pollable: i64);
+}
+
+# ==============================================================================
+# wasi:cli/stdin@0.2.0 — Standard input stream
+# ==============================================================================
+
+# Get the stdin input stream handle
+#[wasm_import("wasi:cli/stdin@0.2.0", "get-stdin")]
+N "C" {
+    F wasi_cli_get_stdin() -> i64;
+}
+
+# ==============================================================================
+# wasi:cli/stdout@0.2.0 — Standard output stream
+# ==============================================================================
+
+# Get the stdout output stream handle
+#[wasm_import("wasi:cli/stdout@0.2.0", "get-stdout")]
+N "C" {
+    F wasi_cli_get_stdout() -> i64;
+}
+
+# ==============================================================================
+# wasi:cli/stderr@0.2.0 — Standard error stream
+# ==============================================================================
+
+# Get the stderr output stream handle
+#[wasm_import("wasi:cli/stderr@0.2.0", "get-stderr")]
+N "C" {
+    F wasi_cli_get_stderr() -> i64;
+}
+
+# ==============================================================================
+# wasi:filesystem/types@0.2.0 — Filesystem type definitions
+# ==============================================================================
+
+# Descriptor handle (file or directory)
+T Descriptor = i64
+
+# Directory entry stream handle
+T DirectoryEntryStream = i64
+
+# File type constants
+C FILETYPE_UNKNOWN: i64 = 0
+C FILETYPE_BLOCK_DEVICE: i64 = 1
+C FILETYPE_CHARACTER_DEVICE: i64 = 2
+C FILETYPE_DIRECTORY: i64 = 3
+C FILETYPE_REGULAR_FILE: i64 = 4
+C FILETYPE_SYMBOLIC_LINK: i64 = 7
+
+# Descriptor flags
+C DFLAG_READ: i64 = 1
+C DFLAG_WRITE: i64 = 2
+C DFLAG_SYNC: i64 = 4
+C DFLAG_NONBLOCK: i64 = 8
+
+# Open flags
+C OFLAG_CREATE: i64 = 1
+C OFLAG_DIRECTORY: i64 = 2
+C OFLAG_EXCLUSIVE: i64 = 4
+C OFLAG_TRUNCATE: i64 = 8
+
+# Stat result structure
+S WasiStat {
+    file_type: i64,
+    size: i64,
+    mtime_seconds: i64,
+    mtime_nanoseconds: i64,
+    atime_seconds: i64,
+    atime_nanoseconds: i64
+}
+
+# Open a path relative to a directory descriptor
+# Returns a new descriptor handle or negative error code
+#[wasm_import("wasi:filesystem/types@0.2.0", "open-at")]
+N "C" {
+    F wasi_fs_open_at(
+        dir_fd: i64,
+        path_flags: i64,
+        path_ptr: i64,
+        path_len: i64,
+        open_flags: i64,
+        desc_flags: i64
+    ) -> i64;
+}
+
+# Read from a file descriptor at an offset
+#[wasm_import("wasi:filesystem/types@0.2.0", "read")]
+N "C" {
+    F wasi_fs_read(fd: i64, buf_ptr: i64, buf_len: i64, offset: i64) -> i64;
+}
+
+# Write to a file descriptor at an offset
+#[wasm_import("wasi:filesystem/types@0.2.0", "write")]
+N "C" {
+    F wasi_fs_write(fd: i64, buf_ptr: i64, buf_len: i64, offset: i64) -> i64;
+}
+
+# Get file stat information
+#[wasm_import("wasi:filesystem/types@0.2.0", "stat")]
+N "C" {
+    F wasi_fs_stat(fd: i64, stat_ptr: i64) -> i64;
+}
+
+# Read directory entries
+#[wasm_import("wasi:filesystem/types@0.2.0", "read-directory")]
+N "C" {
+    F wasi_fs_readdir(fd: i64) -> i64;
+}
+
+# Read next directory entry from stream
+#[wasm_import("wasi:filesystem/types@0.2.0", "read-directory-entry")]
+N "C" {
+    F wasi_fs_readdir_entry(
+        stream: i64,
+        name_ptr: i64,
+        name_len_ptr: i64,
+        type_ptr: i64
+    ) -> i64;
+}
+
+# Close a descriptor
+#[wasm_import("wasi:filesystem/types@0.2.0", "drop-descriptor")]
+N "C" {
+    F wasi_fs_close(fd: i64);
+}
+
+# ==============================================================================
+# wasi:filesystem/preopens@0.2.0 — Pre-opened directories
+# ==============================================================================
+
+# Get the list of pre-opened directory descriptors
+# Returns number of preopens, fills array at dirs_ptr
+#[wasm_import("wasi:filesystem/preopens@0.2.0", "get-directories")]
+N "C" {
+    F wasi_fs_get_directories(dirs_ptr: i64, dirs_len: i64) -> i64;
+}
+
+# ==============================================================================
+# wasi:clocks/monotonic-clock@0.2.0 — Monotonic clock
+# ==============================================================================
+
+# Get current monotonic time in nanoseconds
+#[wasm_import("wasi:clocks/monotonic-clock@0.2.0", "now")]
+N "C" {
+    F wasi_clock_now() -> i64;
+}
+
+# Get clock resolution in nanoseconds
+#[wasm_import("wasi:clocks/monotonic-clock@0.2.0", "resolution")]
+N "C" {
+    F wasi_clock_resolution() -> i64;
+}
+
+# Subscribe to a clock event (returns a pollable)
+#[wasm_import("wasi:clocks/monotonic-clock@0.2.0", "subscribe-duration")]
+N "C" {
+    F wasi_clock_subscribe_duration(duration_ns: i64) -> i64;
+}
+
+# Subscribe to an absolute time (returns a pollable)
+#[wasm_import("wasi:clocks/monotonic-clock@0.2.0", "subscribe-instant")]
+N "C" {
+    F wasi_clock_subscribe_instant(instant_ns: i64) -> i64;
+}
+
+# ==============================================================================
+# wasi:random/random@0.2.0 — Cryptographic random
+# ==============================================================================
+
+# Get cryptographically-secure random bytes
+#[wasm_import("wasi:random/random@0.2.0", "get-random-bytes")]
+N "C" {
+    F wasi_random_get_bytes(buf_ptr: i64, buf_len: i64) -> i64;
+}
+
+# Get a cryptographically-secure random u64
+#[wasm_import("wasi:random/random@0.2.0", "get-random-u64")]
+N "C" {
+    F wasi_random_get_u64() -> i64;
+}
+
+# ==============================================================================
+# wasi:http/types@0.2.0 — HTTP types and outgoing handler
+# ==============================================================================
+
+# HTTP method constants
+C HTTP_METHOD_GET: i64 = 0
+C HTTP_METHOD_HEAD: i64 = 1
+C HTTP_METHOD_POST: i64 = 2
+C HTTP_METHOD_PUT: i64 = 3
+C HTTP_METHOD_DELETE: i64 = 4
+C HTTP_METHOD_PATCH: i64 = 5
+C HTTP_METHOD_OPTIONS: i64 = 6
+
+# HTTP status code ranges
+C HTTP_OK: i64 = 200
+C HTTP_CREATED: i64 = 201
+C HTTP_NOT_FOUND: i64 = 404
+C HTTP_INTERNAL_ERROR: i64 = 500
+
+# Create a new outgoing HTTP request
+#[wasm_import("wasi:http/types@0.2.0", "new-outgoing-request")]
+N "C" {
+    F wasi_http_new_request(method: i64, path_ptr: i64, path_len: i64) -> i64;
+}
+
+# Set request headers
+#[wasm_import("wasi:http/types@0.2.0", "set-header")]
+N "C" {
+    F wasi_http_set_header(
+        request: i64,
+        name_ptr: i64,
+        name_len: i64,
+        value_ptr: i64,
+        value_len: i64
+    ) -> i64;
+}
+
+# Get the outgoing request body stream
+#[wasm_import("wasi:http/types@0.2.0", "outgoing-request-body")]
+N "C" {
+    F wasi_http_request_body(request: i64) -> i64;
+}
+
+# Get response status code
+#[wasm_import("wasi:http/types@0.2.0", "incoming-response-status")]
+N "C" {
+    F wasi_http_response_status(response: i64) -> i64;
+}
+
+# Get response body stream
+#[wasm_import("wasi:http/types@0.2.0", "incoming-response-body")]
+N "C" {
+    F wasi_http_response_body(response: i64) -> i64;
+}
+
+# Get response headers
+#[wasm_import("wasi:http/types@0.2.0", "incoming-response-headers")]
+N "C" {
+    F wasi_http_response_headers(response: i64) -> i64;
+}
+
+# Drop (free) a request handle
+#[wasm_import("wasi:http/types@0.2.0", "drop-outgoing-request")]
+N "C" {
+    F wasi_http_drop_request(request: i64);
+}
+
+# Drop (free) a response handle
+#[wasm_import("wasi:http/types@0.2.0", "drop-incoming-response")]
+N "C" {
+    F wasi_http_drop_response(response: i64);
+}
+
+# ==============================================================================
+# wasi:http/outgoing-handler@0.2.0 — Send HTTP requests
+# ==============================================================================
+
+# Send an HTTP request and get a future response handle
+#[wasm_import("wasi:http/outgoing-handler@0.2.0", "handle")]
+N "C" {
+    F wasi_http_handle(request: i64, options: i64) -> i64;
+}
+
+# ==============================================================================
+# Helper functions — High-level wrappers for common operations
+# ==============================================================================
+
+# Write a string to stdout using Preview 2 streams
+F wasi_p2_print(msg: str) -> i64 {
+    stdout := wasi_cli_get_stdout()
+    ptr := str_to_ptr(msg)
+    len := strlen(msg)
+    result := wasi_io_stream_write(stdout, ptr, len)
+    R result
+}
+
+# Write a string to stderr using Preview 2 streams
+F wasi_p2_eprint(msg: str) -> i64 {
+    stderr := wasi_cli_get_stderr()
+    ptr := str_to_ptr(msg)
+    len := strlen(msg)
+    result := wasi_io_stream_write(stderr, ptr, len)
+    R result
+}
+
+# Read bytes from stdin
+F wasi_p2_read_stdin(buf_ptr: i64, buf_len: i64) -> i64 {
+    stdin := wasi_cli_get_stdin()
+    R wasi_io_stream_read(stdin, buf_ptr, buf_len)
+}
+
+# Get current monotonic time in microseconds
+F wasi_p2_now_us() -> i64 {
+    R wasi_clock_now() / 1000
+}
+
+# Get current monotonic time in milliseconds
+F wasi_p2_now_ms() -> i64 {
+    R wasi_clock_now() / 1000000
+}
+
+# Sleep for a given number of nanoseconds
+F wasi_p2_sleep_ns(duration_ns: i64) {
+    pollable := wasi_clock_subscribe_duration(duration_ns)
+    wasi_poll_one(pollable)
+}
+
+# Sleep for a given number of milliseconds
+F wasi_p2_sleep_ms(duration_ms: i64) {
+    wasi_p2_sleep_ns(duration_ms * 1000000)
+}
+
+# Get a random i64 value
+F wasi_p2_random() -> i64 {
+    R wasi_random_get_u64()
+}
+
+# Fill buffer with random bytes
+F wasi_p2_random_bytes(buf_ptr: i64, buf_len: i64) -> i64 {
+    R wasi_random_get_bytes(buf_ptr, buf_len)
+}
+
+# Open a file relative to a preopened directory
+F wasi_p2_open(dir_fd: i64, path: str, flags: i64) -> i64 {
+    ptr := str_to_ptr(path)
+    len := strlen(path)
+    R wasi_fs_open_at(dir_fd, 0, ptr, len, flags, DFLAG_READ | DFLAG_WRITE)
+}
+
+# Read file contents
+F wasi_p2_file_read(fd: i64, buf_ptr: i64, buf_len: i64, offset: i64) -> i64 {
+    R wasi_fs_read(fd, buf_ptr, buf_len, offset)
+}
+
+# Write file contents
+F wasi_p2_file_write(fd: i64, buf_ptr: i64, buf_len: i64, offset: i64) -> i64 {
+    R wasi_fs_write(fd, buf_ptr, buf_len, offset)
+}
+
+# Close a file descriptor
+F wasi_p2_file_close(fd: i64) {
+    wasi_fs_close(fd)
+}

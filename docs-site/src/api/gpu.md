@@ -2,10 +2,12 @@
 
 > GPU compute support for CUDA, Metal, OpenCL with host-side runtime management
 
+> **Implementation:** Requires `--gpu cuda` compilation flag and C runtime (`gpu_runtime.c`). Kernel intrinsics are replaced by GPU codegen; host-side API links from C runtime. CUDA, Metal, and WebGPU backends available; OpenCL is planned.
+
 ## Import
 
 ```vais
-U std/gpu
+use std/gpu
 ```
 
 ## Overview
@@ -351,10 +353,10 @@ Configure kernel launch parameters.
 ### Basic Vector Addition Kernel
 
 ```vais
-U std/gpu
+use std/gpu
 
 #[gpu]
-F vector_add(a: *f64, b: *f64, c: *f64, n: i64) -> i64 {
+fn vector_add(a: *f64, b: *f64, c: *f64, n: i64) -> i64 {
     idx := global_idx()
     I idx < n {
         c[idx] = a[idx] + b[idx]
@@ -362,7 +364,7 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     n := 1000000
     size := n * 8  # 8 bytes per f64
 
@@ -396,10 +398,10 @@ F main() -> i64 {
 ### Matrix Multiplication (2D Grid)
 
 ```vais
-U std/gpu
+use std/gpu
 
 #[gpu]
-F matmul(A: *f64, B: *f64, C: *f64, N: i64) -> i64 {
+fn matmul(A: *f64, B: *f64, C: *f64, N: i64) -> i64 {
     row := global_idx_y()
     col := global_idx_x()
 
@@ -415,7 +417,7 @@ F matmul(A: *f64, B: *f64, C: *f64, N: i64) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     N := 1024
     config := kernel_config_2d(N, N, 16, 16)
 
@@ -432,10 +434,10 @@ F main() -> i64 {
 ### Using Shared Memory
 
 ```vais
-U std/gpu
+use std/gpu
 
 #[gpu]
-F reduce_sum(input: *f64, output: *f64, n: i64) -> i64 {
+fn reduce_sum(input: *f64, output: *f64, n: i64) -> i64 {
     tid := thread_idx_x()
     idx := global_idx()
 
@@ -473,10 +475,10 @@ F reduce_sum(input: *f64, output: *f64, n: i64) -> i64 {
 ### Atomic Operations
 
 ```vais
-U std/gpu
+use std/gpu
 
 #[gpu]
-F histogram(data: *i64, bins: *i64, n: i64, num_bins: i64) -> i64 {
+fn histogram(data: *i64, bins: *i64, n: i64, num_bins: i64) -> i64 {
     idx := global_idx()
     I idx < n {
         bin := data[idx] % num_bins
@@ -489,10 +491,10 @@ F histogram(data: *i64, bins: *i64, n: i64, num_bins: i64) -> i64 {
 ### Warp-Level Reduction
 
 ```vais
-U std/gpu
+use std/gpu
 
 #[gpu]
-F warp_reduce(input: *f64, output: *f64, n: i64) -> i64 {
+fn warp_reduce(input: *f64, output: *f64, n: i64) -> i64 {
     idx := global_idx()
     val := I idx < n { input[idx] } ! { 0.0 }
 
@@ -515,9 +517,9 @@ F warp_reduce(input: *f64, output: *f64, n: i64) -> i64 {
 ### Stream-Based Async Execution
 
 ```vais
-U std/gpu
+use std/gpu
 
-F main() -> i64 {
+fn main() -> i64 {
     # Create streams
     stream1 := gpu_stream_create()
     stream2 := gpu_stream_create()
@@ -549,9 +551,9 @@ F main() -> i64 {
 ### GPU Timing with Events
 
 ```vais
-U std/gpu
+use std/gpu
 
-F main() -> i64 {
+fn main() -> i64 {
     start := gpu_event_create()
     stop := gpu_event_create()
 

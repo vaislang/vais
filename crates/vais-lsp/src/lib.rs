@@ -5,14 +5,15 @@
 
 pub mod ai_completion;
 mod backend;
-mod diagnostics;
-mod semantic;
+pub mod diagnostics;
+pub mod semantic;
 
 // Backend module extensions
 mod analysis;
 mod folding;
 mod hints;
 mod symbol_analysis;
+mod type_resolve;
 
 // LSP request handlers
 pub(crate) mod handlers;

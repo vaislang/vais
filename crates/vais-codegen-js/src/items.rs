@@ -1,6 +1,6 @@
 //! Top-level item code generation: Vais Item → JavaScript declarations
 
-use crate::expr::sanitize_js_ident;
+use crate::expr_helpers::sanitize_js_ident;
 use crate::{ImplInfo, JsCodeGenerator, Result};
 use vais_ast::*;
 
@@ -15,8 +15,8 @@ impl JsCodeGenerator {
             Item::Trait(t) => self.generate_trait(t),
             Item::Const(c) => self.generate_const(c),
             Item::Global(g) => self.generate_global(g),
-            Item::TypeAlias(_) => Ok(String::new()), // No runtime representation
-            Item::Use(u) => self.generate_use(u),     // Generate ESM import
+            Item::TypeAlias(_) | Item::TraitAlias(_) => Ok(String::new()), // No runtime representation
+            Item::Use(u) => self.generate_use(u),                          // Generate ESM import
             Item::ExternBlock(ext) => self.generate_extern_block(ext),
             Item::Macro(_) => Ok(String::new()), // Macros are expanded during parsing
             Item::Union(u) => self.generate_union(u),
@@ -55,7 +55,8 @@ impl JsCodeGenerator {
 
         // Generate generic annotation comment if present
         let generic_comment = if !func.generics.is_empty() {
-            let generic_names: Vec<String> = func.generics.iter().map(|g| g.name.node.clone()).collect();
+            let generic_names: Vec<String> =
+                func.generics.iter().map(|g| g.name.node.clone()).collect();
             format!(" /* <{}> */", generic_names.join(", "))
         } else {
             String::new()
@@ -87,13 +88,17 @@ impl JsCodeGenerator {
 
         // Generate generic annotation comment if present
         let generic_comment = if !s.generics.is_empty() {
-            let generic_names: Vec<String> = s.generics.iter().map(|g| g.name.node.clone()).collect();
+            let generic_names: Vec<String> =
+                s.generics.iter().map(|g| g.name.node.clone()).collect();
             format!(" /* <{}> */", generic_names.join(", "))
         } else {
             String::new()
         };
 
-        let mut output = format!("{indent}{export_prefix}class {name}{} {{\n", generic_comment);
+        let mut output = format!(
+            "{indent}{export_prefix}class {name}{} {{\n",
+            generic_comment
+        );
         self.indent_level += 1;
         let inner = self.indent();
 
@@ -168,8 +173,7 @@ impl JsCodeGenerator {
                     ));
                 }
                 VariantFields::Tuple(types) => {
-                    let params: Vec<String> =
-                        (0..types.len()).map(|i| format!("__{i}")).collect();
+                    let params: Vec<String> = (0..types.len()).map(|i| format!("__{i}")).collect();
                     output.push_str(&format!(
                         "{inner}{vname}({}) {{ return {{ __tag: \"{vname}\", __data: [{}] }}; }},\n",
                         params.join(", "),
@@ -177,8 +181,10 @@ impl JsCodeGenerator {
                     ));
                 }
                 VariantFields::Struct(fields) => {
-                    let params: Vec<String> =
-                        fields.iter().map(|f| sanitize_js_ident(&f.name.node)).collect();
+                    let params: Vec<String> = fields
+                        .iter()
+                        .map(|f| sanitize_js_ident(&f.name.node))
+                        .collect();
                     output.push_str(&format!(
                         "{inner}{vname}({}) {{ return {{ __tag: \"{vname}\", __data: [{}] }}; }},\n",
                         params.join(", "),
@@ -205,8 +211,12 @@ impl JsCodeGenerator {
 
         if enum_name == "Result" {
             // is_Ok, is_Err
-            output.push_str(&format!("{indent}{enum_name}.is_Ok = function(val) {{ return val.__tag === \"Ok\"; }};\n"));
-            output.push_str(&format!("{indent}{enum_name}.is_Err = function(val) {{ return val.__tag === \"Err\"; }};\n"));
+            output.push_str(&format!(
+                "{indent}{enum_name}.is_Ok = function(val) {{ return val.__tag === \"Ok\"; }};\n"
+            ));
+            output.push_str(&format!(
+                "{indent}{enum_name}.is_Err = function(val) {{ return val.__tag === \"Err\"; }};\n"
+            ));
 
             // unwrap
             output.push_str(&format!("{indent}{enum_name}.unwrap = function(val) {{\n"));
@@ -218,10 +228,14 @@ impl JsCodeGenerator {
             output.push_str(&format!("{indent}}};\n"));
 
             // unwrap_or
-            output.push_str(&format!("{indent}{enum_name}.unwrap_or = function(val, defaultValue) {{\n"));
+            output.push_str(&format!(
+                "{indent}{enum_name}.unwrap_or = function(val, defaultValue) {{\n"
+            ));
             self.indent_level += 1;
             let inner = self.indent();
-            output.push_str(&format!("{inner}return val.__tag === \"Ok\" ? val.__data[0] : defaultValue;\n"));
+            output.push_str(&format!(
+                "{inner}return val.__tag === \"Ok\" ? val.__data[0] : defaultValue;\n"
+            ));
             self.indent_level -= 1;
             output.push_str(&format!("{indent}}};\n"));
 
@@ -242,16 +256,22 @@ impl JsCodeGenerator {
             output.push_str(&format!("{indent}{enum_name}.unwrap = function(val) {{\n"));
             self.indent_level += 1;
             let inner = self.indent();
-            output.push_str(&format!("{inner}if (val.__tag === \"None\") throw new Error(\"Called unwrap on None\");\n"));
+            output.push_str(&format!(
+                "{inner}if (val.__tag === \"None\") throw new Error(\"Called unwrap on None\");\n"
+            ));
             output.push_str(&format!("{inner}return val.__data[0];\n"));
             self.indent_level -= 1;
             output.push_str(&format!("{indent}}};\n"));
 
             // unwrap_or
-            output.push_str(&format!("{indent}{enum_name}.unwrap_or = function(val, defaultValue) {{\n"));
+            output.push_str(&format!(
+                "{indent}{enum_name}.unwrap_or = function(val, defaultValue) {{\n"
+            ));
             self.indent_level += 1;
             let inner = self.indent();
-            output.push_str(&format!("{inner}return val.__tag === \"Some\" ? val.__data[0] : defaultValue;\n"));
+            output.push_str(&format!(
+                "{inner}return val.__tag === \"Some\" ? val.__data[0] : defaultValue;\n"
+            ));
             self.indent_level -= 1;
             output.push_str(&format!("{indent}}};\n"));
 
@@ -284,9 +304,7 @@ impl JsCodeGenerator {
             let trait_name_sanitized = sanitize_js_ident(&trait_name.node);
 
             // Initialize __implements set if not exists
-            output.push_str(&format!(
-                "{indent}if (!{type_name}.__implements) {{\n"
-            ));
+            output.push_str(&format!("{indent}if (!{type_name}.__implements) {{\n"));
             self.indent_level += 1;
             let inner = self.indent();
             output.push_str(&format!("{inner}{type_name}.__implements = new Set();\n"));
@@ -341,13 +359,10 @@ impl JsCodeGenerator {
         }
 
         // Track impl info
-        self.impls
-            .entry(type_name)
-            .or_default()
-            .push(ImplInfo {
-                trait_name: imp.trait_name.as_ref().map(|t| t.node.clone()),
-                methods: method_entries,
-            });
+        self.impls.entry(type_name).or_default().push(ImplInfo {
+            trait_name: imp.trait_name.as_ref().map(|t| t.node.clone()),
+            methods: method_entries,
+        });
 
         Ok(output)
     }
@@ -376,10 +391,7 @@ impl JsCodeGenerator {
         let indent = self.indent();
         let async_prefix = if func.is_async { "async " } else { "" };
 
-        let mut output = format!(
-            "{indent}{async_prefix}{name}({}) {{\n",
-            params.join(", ")
-        );
+        let mut output = format!("{indent}{async_prefix}{name}({}) {{\n", params.join(", "));
         self.indent_level += 1;
         let body = self.generate_function_body(&func.body)?;
         output.push_str(&body);
@@ -490,12 +502,8 @@ impl JsCodeGenerator {
             "{inner}constructor(value) {{ this._value = value; }}\n"
         ));
         for fname in &field_names {
-            output.push_str(&format!(
-                "{inner}get {fname}() {{ return this._value; }}\n"
-            ));
-            output.push_str(&format!(
-                "{inner}set {fname}(v) {{ this._value = v; }}\n"
-            ));
+            output.push_str(&format!("{inner}get {fname}() {{ return this._value; }}\n"));
+            output.push_str(&format!("{inner}set {fname}(v) {{ this._value = v; }}\n"));
         }
         self.indent_level -= 1;
         output.push_str(&format!("{indent}}}\n"));
@@ -504,259 +512,5 @@ impl JsCodeGenerator {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_const_generation() {
-        let mut gen = JsCodeGenerator::new();
-        let c = ConstDef {
-            name: Spanned::new("MAX_SIZE".to_string(), Span::new(0, 8)),
-            ty: Spanned::new(
-                Type::Named {
-                    name: "i64".to_string(),
-                    generics: vec![],
-                },
-                Span::new(10, 13),
-            ),
-            value: Spanned::new(Expr::Int(1024), Span::new(16, 20)),
-            is_pub: true,
-            attributes: vec![],
-        };
-        let result = gen.generate_const(&c).unwrap();
-        assert_eq!(result, "export const MAX_SIZE = 1024;\n");
-    }
-
-    #[test]
-    fn test_enum_generation() {
-        let mut gen = JsCodeGenerator::new();
-        let e = Enum {
-            name: Spanned::new("Color".to_string(), Span::new(0, 5)),
-            generics: vec![],
-            variants: vec![
-                Variant {
-                    name: Spanned::new("Red".to_string(), Span::new(6, 9)),
-                    fields: VariantFields::Unit,
-                },
-                Variant {
-                    name: Spanned::new("Rgb".to_string(), Span::new(11, 14)),
-                    fields: VariantFields::Tuple(vec![
-                        Spanned::new(
-                            Type::Named {
-                                name: "i64".to_string(),
-                                generics: vec![],
-                            },
-                            Span::new(15, 18),
-                        ),
-                        Spanned::new(
-                            Type::Named {
-                                name: "i64".to_string(),
-                                generics: vec![],
-                            },
-                            Span::new(20, 23),
-                        ),
-                        Spanned::new(
-                            Type::Named {
-                                name: "i64".to_string(),
-                                generics: vec![],
-                            },
-                            Span::new(25, 28),
-                        ),
-                    ]),
-                },
-            ],
-            is_pub: false,
-        };
-        let result = gen.generate_enum(&e).unwrap();
-        assert!(result.contains("const Color = Object.freeze"));
-        assert!(result.contains("Red: Object.freeze"));
-        assert!(result.contains("Rgb(__0, __1, __2)"));
-    }
-
-    #[test]
-    fn test_result_enum_helpers() {
-        let mut gen = JsCodeGenerator::new();
-        let e = Enum {
-            name: Spanned::new("Result".to_string(), Span::new(0, 6)),
-            generics: vec![],
-            variants: vec![
-                Variant {
-                    name: Spanned::new("Ok".to_string(), Span::new(7, 9)),
-                    fields: VariantFields::Tuple(vec![Spanned::new(
-                        Type::Infer,
-                        Span::new(10, 11),
-                    )]),
-                },
-                Variant {
-                    name: Spanned::new("Err".to_string(), Span::new(12, 15)),
-                    fields: VariantFields::Tuple(vec![Spanned::new(
-                        Type::Infer,
-                        Span::new(16, 17),
-                    )]),
-                },
-            ],
-            is_pub: true,
-        };
-        let result = gen.generate_enum(&e).unwrap();
-        assert!(result.contains("Result.is_Ok = function"));
-        assert!(result.contains("Result.is_Err = function"));
-        assert!(result.contains("Result.unwrap = function"));
-        assert!(result.contains("Result.unwrap_or = function"));
-        assert!(result.contains("Result.map = function"));
-    }
-
-    #[test]
-    fn test_option_enum_helpers() {
-        let mut gen = JsCodeGenerator::new();
-        let e = Enum {
-            name: Spanned::new("Option".to_string(), Span::new(0, 6)),
-            generics: vec![],
-            variants: vec![
-                Variant {
-                    name: Spanned::new("Some".to_string(), Span::new(7, 11)),
-                    fields: VariantFields::Tuple(vec![Spanned::new(
-                        Type::Infer,
-                        Span::new(12, 13),
-                    )]),
-                },
-                Variant {
-                    name: Spanned::new("None".to_string(), Span::new(14, 18)),
-                    fields: VariantFields::Unit,
-                },
-            ],
-            is_pub: true,
-        };
-        let result = gen.generate_enum(&e).unwrap();
-        assert!(result.contains("Option.is_Some = function"));
-        assert!(result.contains("Option.is_None = function"));
-        assert!(result.contains("Option.unwrap = function"));
-        assert!(result.contains("Option.unwrap_or = function"));
-        assert!(result.contains("Option.map = function"));
-    }
-
-    #[test]
-    fn test_generic_function_comment() {
-        use vais_ast::{GenericParam, GenericParamKind, Variance};
-
-        let mut gen = JsCodeGenerator::new();
-        let func = Function {
-            name: Spanned::new("identity".to_string(), Span::new(0, 8)),
-            generics: vec![GenericParam {
-                name: Spanned::new("T".to_string(), Span::new(9, 10)),
-                bounds: vec![],
-                kind: GenericParamKind::Type { bounds: vec![] },
-                variance: Variance::Invariant,
-            }],
-            params: vec![Param {
-                name: Spanned::new("x".to_string(), Span::new(11, 12)),
-                ty: Spanned::new(Type::Infer, Span::new(14, 15)),
-                is_mut: false,
-                is_vararg: false,
-                ownership: Ownership::Regular,
-                default_value: None,
-            }],
-            ret_type: Some(Spanned::new(Type::Infer, Span::new(20, 21))),
-            body: FunctionBody::Expr(Box::new(Spanned::new(
-                Expr::Ident("x".to_string()),
-                Span::new(22, 23),
-            ))),
-            is_pub: false,
-            is_async: false,
-            attributes: vec![],
-        };
-        let result = gen.generate_function(&func, false).unwrap();
-        assert!(result.contains("/* <T> */"));
-        assert!(result.contains("function identity(x)"));
-    }
-
-    #[test]
-    fn test_generic_struct_comment() {
-        use vais_ast::{GenericParam, GenericParamKind, Variance};
-
-        let mut gen = JsCodeGenerator::new();
-        let s = Struct {
-            name: Spanned::new("Box".to_string(), Span::new(0, 3)),
-            generics: vec![GenericParam {
-                name: Spanned::new("T".to_string(), Span::new(4, 5)),
-                bounds: vec![],
-                kind: GenericParamKind::Type { bounds: vec![] },
-                variance: Variance::Invariant,
-            }],
-            fields: vec![Field {
-                name: Spanned::new("value".to_string(), Span::new(6, 11)),
-                ty: Spanned::new(Type::Infer, Span::new(13, 14)),
-                is_pub: true,
-            }],
-            methods: vec![],
-            is_pub: true,
-            attributes: vec![],
-        };
-        let result = gen.generate_struct(&s).unwrap();
-        assert!(result.contains("/* <T> */"));
-        assert!(result.contains("class Box"));
-    }
-
-    #[test]
-    fn test_trait_impl_tracking() {
-        let mut gen = JsCodeGenerator::new();
-
-        // First create a simple struct to impl on
-        let s = Struct {
-            name: Spanned::new("MyType".to_string(), Span::new(0, 6)),
-            generics: vec![],
-            fields: vec![],
-            methods: vec![],
-            is_pub: false,
-            attributes: vec![],
-        };
-        gen.generate_struct(&s).unwrap();
-
-        // Now create an impl block for a trait
-        let imp = Impl {
-            trait_name: Some(Spanned::new("Display".to_string(), Span::new(0, 7))),
-            target_type: Spanned::new(
-                Type::Named {
-                    name: "MyType".to_string(),
-                    generics: vec![],
-                },
-                Span::new(12, 18),
-            ),
-            generics: vec![],
-            associated_types: vec![],
-            methods: vec![Spanned::new(
-                Function {
-                    name: Spanned::new("to_string".to_string(), Span::new(19, 28)),
-                    generics: vec![],
-                    params: vec![Param {
-                        name: Spanned::new("self".to_string(), Span::new(29, 33)),
-                        ty: Spanned::new(Type::Infer, Span::new(35, 36)),
-                        is_mut: false,
-                        is_vararg: false,
-                        ownership: Ownership::Regular,
-                        default_value: None,
-                    }],
-                    ret_type: Some(Spanned::new(
-                        Type::Named {
-                            name: "str".to_string(),
-                            generics: vec![],
-                        },
-                        Span::new(41, 44),
-                    )),
-                    body: FunctionBody::Expr(Box::new(Spanned::new(
-                        Expr::String("MyType".to_string()),
-                        Span::new(45, 53),
-                    ))),
-                    is_pub: false,
-                    is_async: false,
-                    attributes: vec![],
-                },
-                Span::new(19, 53),
-            )],
-        };
-        let result = gen.generate_impl(&imp).unwrap();
-        assert!(result.contains("MyType.__implements = new Set()"));
-        assert!(result.contains("MyType.__implementsTrait = function"));
-        assert!(result.contains("MyType.__implements.add(\"Display\")"));
-        assert!(result.contains("MyType.prototype.to_string"));
-    }
-}
+#[path = "items_tests.rs"]
+mod items_tests;

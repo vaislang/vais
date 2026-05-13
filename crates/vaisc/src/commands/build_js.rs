@@ -9,6 +9,7 @@ use crate::imports::load_module_with_imports_internal;
 use colored::Colorize;
 use std::collections::HashSet;
 use std::fs;
+use std::path::Path;
 use std::path::PathBuf;
 use vais_ast::Item;
 use vais_codegen_js::{JsCodeGenerator, JsConfig};
@@ -66,6 +67,7 @@ pub(crate) fn cmd_build_js(
         verbose,
         &main_source,
         &query_db,
+        input.parent().map(|p| p as &Path),
     )?;
     let parse_time = parse_start.elapsed();
 
@@ -106,6 +108,32 @@ pub(crate) fn cmd_build_js(
 
     // Macro expansion
     let mut macro_registry = MacroRegistry::new();
+
+    // Register builtin panic! macro: panic!("msg") => __panic("msg")
+    {
+        use vais_ast::{
+            Delimiter, MacroDef, MacroPattern, MacroPatternElement, MacroRule, MacroTemplate,
+            MacroTemplateElement, MacroToken, MetaVarKind, Span, Spanned,
+        };
+        macro_registry.register(MacroDef {
+            name: Spanned::new("panic".to_string(), Span::new(0, 5)),
+            rules: vec![MacroRule {
+                pattern: MacroPattern::Sequence(vec![MacroPatternElement::MetaVar {
+                    name: "msg".to_string(),
+                    kind: MetaVarKind::Expr,
+                }]),
+                template: MacroTemplate::Sequence(vec![
+                    MacroTemplateElement::Token(MacroToken::Ident("__panic".to_string())),
+                    MacroTemplateElement::Group {
+                        delimiter: Delimiter::Paren,
+                        content: vec![MacroTemplateElement::MetaVar("msg".to_string())],
+                    },
+                ]),
+            }],
+            is_pub: false,
+        });
+    }
+
     collect_macros(&transformed_ast, &mut macro_registry);
     let macro_expanded_ast = expand_macros(transformed_ast, &macro_registry)
         .map_err(|e| format!("Macro expansion error: {}", e))?;
@@ -223,10 +251,7 @@ pub(crate) fn cmd_build_js(
             .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("output.js.map");
-        let js_with_sourcemap = format!(
-            "{}//# sourceMappingURL={}\n",
-            js_output, map_filename
-        );
+        let js_with_sourcemap = format!("{}//# sourceMappingURL={}\n", js_output, map_filename);
         fs::write(&out_path, js_with_sourcemap)
             .map_err(|e| format!("Cannot write '{}': {}", out_path.display(), e))?;
 
@@ -246,9 +271,7 @@ pub(crate) fn cmd_build_js(
     let total_time = start.elapsed();
 
     // Print output info
-    let file_size = fs::metadata(&out_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let file_size = fs::metadata(&out_path).map(|m| m.len()).unwrap_or(0);
     let size_str = if file_size > 1024 * 1024 {
         format!("{:.1} MB", file_size as f64 / (1024.0 * 1024.0))
     } else if file_size > 1024 {

@@ -6,14 +6,14 @@ F print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
         0
-    } E I val < 0 {
+    } EL I val < 0 {
         putchar(45)
         print_i64(0 - val)
-    } E {
+    } EL {
         I val >= 10 {
             print_i64(val / 10)
             0
-        } E { 0 }
+        } EL { 0 }
         putchar(48 + (val % 10))
         0
     }
@@ -61,7 +61,7 @@ X ModuleEntry {
         # Check if already exists
         i: mut i64 = 0
         L {
-            I i >= self.deps_len { B } E { 0 }
+            I i >= self.deps_len { B } EL { 0 }
             I load_i64(self.deps_ptr + i * 8) == dep_idx {
                 R 0  # Already exists
             }
@@ -77,7 +77,7 @@ X ModuleEntry {
             self.deps_ptr = new_ptr
             self.deps_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         store_i64(self.deps_ptr + self.deps_len * 8, dep_idx)
         self.deps_len = self.deps_len + 1
@@ -102,11 +102,11 @@ X ModuleEntry {
         I self.deps_ptr != 0 {
             free(self.deps_ptr)
             0
-        } E { 0 }
+        } EL { 0 }
         I self.source_ptr != 0 {
             free(self.source_ptr)
             0
-        } E { 0 }
+        } EL { 0 }
         1
     }
 }
@@ -161,7 +161,7 @@ X ModuleRegistry {
             self.entries_ptr = new_ptr
             self.entries_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         # Create new entry
         idx := self.entries_len
@@ -237,7 +237,7 @@ X ModuleRegistry {
         # Check if already exists
         i: mut i64 = 0
         L {
-            I i >= deps_len { B } E { 0 }
+            I i >= deps_len { B } EL { 0 }
             I load_i64(deps_ptr + i * 8) == dep_idx {
                 R 1  # Already exists
             }
@@ -255,7 +255,7 @@ X ModuleRegistry {
             store_i64(entry_ptr + 40, new_ptr)
             store_i64(entry_ptr + 56, new_cap)
             0
-        } E { 0 }
+        } EL { 0 }
 
         store_i64(deps_ptr + deps_len * 8, dep_idx)
         store_i64(entry_ptr + 48, deps_len + 1)
@@ -269,18 +269,18 @@ X ModuleRegistry {
     F drop(&self) -> i64 {
         i: mut i64 = 0
         L {
-            I i >= self.entries_len { B } E { 0 }
+            I i >= self.entries_len { B } EL { 0 }
             entry_ptr := @.get_entry_ptr(i)
             deps_ptr := load_i64(entry_ptr + 40)
             source_ptr := load_i64(entry_ptr + 24)
             I deps_ptr != 0 {
                 free(deps_ptr)
                 0
-            } E { 0 }
+            } EL { 0 }
             I source_ptr != 0 {
                 free(source_ptr)
                 0
-            } E { 0 }
+            } EL { 0 }
             i = i + 1
         }
         free(self.entries_ptr)
@@ -309,7 +309,7 @@ X CycleDetector {
         # Initialize to 0
         i: mut i64 = 0
         L {
-            I i >= capacity { B } E { 0 }
+            I i >= capacity { B } EL { 0 }
             store_byte(visited + i, 0)
             store_byte(in_stack + i, 0)
             i = i + 1
@@ -328,7 +328,7 @@ X CycleDetector {
     F reset(&self) -> i64 {
         i: mut i64 = 0
         L {
-            I i >= self.capacity { B } E { 0 }
+            I i >= self.capacity { B } EL { 0 }
             store_byte(self.visited + i, 0)
             store_byte(self.in_stack + i, 0)
             i = i + 1
@@ -376,7 +376,7 @@ X CycleDetector {
             store_i64(self.cycle_path + self.cycle_len * 8, idx)
             self.cycle_len = self.cycle_len + 1
             1
-        } E { 0 }
+        } EL { 0 }
     }
 
     # Get cycle path at position
@@ -435,7 +435,7 @@ X ModuleResolver {
         det_cycle := malloc(256 * 8)
         i: mut i64 = 0
         L {
-            I i >= 256 { B } E { 0 }
+            I i >= 256 { B } EL { 0 }
             store_byte(det_visited + i, 0)
             store_byte(det_stack + i, 0)
             i = i + 1
@@ -491,7 +491,7 @@ X ModuleResolver {
 
         i: mut i64 = 0
         L {
-            I i >= deps_len { B } E { 0 }
+            I i >= deps_len { B } EL { 0 }
             dep_idx := load_i64(deps_ptr + i * 8)
             I @.check_cycle_from(dep_idx, registry) == 1 {
                 R 1
@@ -514,7 +514,7 @@ X ModuleResolver {
 
         i: mut i64 = 0
         L {
-            I i >= det_capacity { B } E { 0 }
+            I i >= det_capacity { B } EL { 0 }
             store_byte(det_visited + i, 0)
             store_byte(det_stack + i, 0)
             i = i + 1
@@ -527,14 +527,14 @@ X ModuleResolver {
 
         i = 0
         L {
-            I i >= reg_len { B } E { 0 }
+            I i >= reg_len { B } EL { 0 }
             I load_byte(det_visited + i) == 0 {
                 I @.check_cycle_from(i, reg_entries) == 1 {
                     self.error_code = ERR_CIRCULAR_DEP()
                     R 1
                 }
                 0
-            } E { 0 }
+            } EL { 0 }
             i = i + 1
         }
 
@@ -586,7 +586,7 @@ X TopologicalSort {
 
         i: mut i64 = 0
         L {
-            I i >= capacity { B } E { 0 }
+            I i >= capacity { B } EL { 0 }
             store_byte(visited + i, 0)
             store_byte(temp + i, 0)
             i = i + 1
@@ -605,7 +605,7 @@ X TopologicalSort {
     F reset(&self) -> i64 {
         i: mut i64 = 0
         L {
-            I i >= self.capacity { B } E { 0 }
+            I i >= self.capacity { B } EL { 0 }
             store_byte(self.visited + i, 0)
             store_byte(self.temp + i, 0)
             i = i + 1
@@ -636,7 +636,7 @@ X TopologicalSort {
 
         i: mut i64 = 0
         L {
-            I i >= deps_len { B } E { 0 }
+            I i >= deps_len { B } EL { 0 }
             dep_idx := load_i64(deps_ptr + i * 8)
             I @.visit(dep_idx, registry_entries) == 1 {
                 R 1  # Cycle detected
@@ -661,13 +661,13 @@ X TopologicalSort {
 
         i: mut i64 = 0
         L {
-            I i >= module_count { B } E { 0 }
+            I i >= module_count { B } EL { 0 }
             I load_byte(self.visited + i) == 0 {
                 I @.visit(i, registry_entries) == 1 {
                     R 1
                 }
                 0
-            } E { 0 }
+            } EL { 0 }
             i = i + 1
         }
         0
@@ -723,14 +723,14 @@ F main() -> i64 {
         puts("Topological sort succeeded, order: ")
         i: mut i64 = 0
         L {
-            I i >= sorter.len() { B } E { 0 }
+            I i >= sorter.len() { B } EL { 0 }
             print_i64(sorter.get(i))
             putchar(32)
             i = i + 1
         }
         putchar(10)
         puts("PASS: No cycles detected\n")
-    } E {
+    } EL {
         puts("FAIL: Cycle detected\n")
     }
 
@@ -743,7 +743,7 @@ F main() -> i64 {
 
     I result2 == 1 {
         puts("PASS: Cycle correctly detected\n")
-    } E {
+    } EL {
         puts("FAIL: Cycle not detected\n")
     }
 

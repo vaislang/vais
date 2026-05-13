@@ -9,11 +9,16 @@ export function registerVaisLanguage(monaco) {
     tokenPostfix: '.vais',
 
     keywords: [
-      'F', 'S', 'E', 'I', 'L', 'M', 'T', 'U', 'R', 'C', 'O', 'A', 'Y',
-      'break', 'continue', 'return', 'true', 'false',
-      'async', 'await', 'pub', 'mut', 'const', 'static',
-      'impl', 'trait', 'where', 'self', 'Self', 'super',
-      'unsafe', 'extern', 'type', 'let', 'in'
+      'F', 'S', 'E', 'I', 'L', 'M', 'R',
+      'B', 'C', 'T', 'U', 'W', 'X', 'P',
+      'D', 'A', 'Y', 'N', 'G', 'O',
+      'true', 'false', 'null', 'mut', 'self',
+      'async', 'await', 'spawn', 'yield',
+      'pub', 'impl', 'trait', 'struct', 'enum',
+      'fn', 'let', 'const', 'type', 'use',
+      'if', 'else', 'match', 'for', 'while', 'loop',
+      'break', 'continue', 'return', 'defer',
+      'where', 'as', 'in'
     ],
 
     typeKeywords: [
@@ -29,7 +34,7 @@ export function registerVaisLanguage(monaco) {
       '+', '-', '*', '/', '&', '|', '^', '%',
       '<<', '>>', '>>>', '+=', '-=', '*=', '/=', '&=',
       '|=', '^=', '%=', '<<=', '>>=', '>>>=', '=>',
-      '@', ':=', '|>'
+      '@', ':=', '|>', '..'
     ],
 
     symbols: /[=><!~?:&|+\-*\/\^%@]+/,
@@ -45,7 +50,12 @@ export function registerVaisLanguage(monaco) {
             '@default': 'identifier'
           }
         }],
-        [/[A-Z][\w\$]*/, 'type.identifier'],
+        [/[A-Z][\w\$]*/, {
+          cases: {
+            '@keywords': 'keyword',
+            '@default': 'type.identifier'
+          }
+        }],
 
         // Whitespace
         { include: '@whitespace' },
@@ -82,8 +92,7 @@ export function registerVaisLanguage(monaco) {
       whitespace: [
         [/[ \t\r\n]+/, ''],
         [/#.*$/, 'comment'],
-        [/\/\*/, 'comment', '@comment'],
-        [/\/\/.*$/, 'comment']
+        [/\/\*/, 'comment', '@comment']
       ],
 
       comment: [
@@ -175,6 +184,15 @@ export function registerVaisLanguage(monaco) {
         { label: 'I', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'I ${1:condition} {\n    ${2}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
         { label: 'L', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'L ${1:i}:${2:0..10} {\n    ${3}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
         { label: 'M', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'M ${1:expr} {\n    ${2:pattern} => ${3:result}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+        { label: 'B', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'B', documentation: 'break' },
+        { label: 'W', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'W ${1:TraitName} {\n    ${2}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'trait definition' },
+        { label: 'X', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'X ${1:StructName}: ${2:TraitName} {\n    ${3}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'impl block' },
+        { label: 'D', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'D ${1:expression}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'defer statement' },
+        { label: 'U', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'U ${1:module}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'import module' },
+        { label: 'P', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'P ${1}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'pub (public visibility)' },
+        { label: 'R', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'R ${1:value}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'return value' },
+        { label: 'N', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'N F ${1:name}(${2:params}) -> ${3:type}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'extern function' },
+        { label: 'G', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'G ${1:name}: ${2:type} = ${3:value}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'global variable' },
         { label: 'break', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'break' },
         { label: 'continue', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'continue' },
         { label: 'return', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'return ${1:value}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
@@ -193,7 +211,7 @@ export function registerVaisLanguage(monaco) {
         { label: 'printf', kind: monaco.languages.CompletionItemKind.Function, insertText: 'printf("${1:format}", ${2:args})', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
 
         // Snippets
-        { label: 'main', kind: monaco.languages.CompletionItemKind.Snippet, insertText: 'F main() -> i64 {\n    ${1}\n    0\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'Main function template' },
+        { label: 'main', kind: monaco.languages.CompletionItemKind.Snippet, insertText: 'F main() {\n    ${1}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'Main function template' },
         { label: 'fn', kind: monaco.languages.CompletionItemKind.Snippet, insertText: 'F ${1:name}(${2:params}) -> ${3:i64} {\n    ${4}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'Function template' }
       ];
 

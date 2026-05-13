@@ -1,0 +1,8 @@
+# Pattern alias with literal
+F main() -> i64 {
+    x := 42
+    M x {
+        n @ 42 => n,
+        _ => 0
+    }
+}

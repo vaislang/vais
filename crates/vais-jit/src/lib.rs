@@ -56,7 +56,7 @@ mod types;
 pub use compiler::JitCompiler;
 pub use runtime::JitRuntime;
 pub use tiered::{
-    FunctionProfile, FunctionStats, Interpreter, Tier, TierThresholds, TieredJit, Value,
+    FunctionProfile, FunctionStats, Interpreter, OsrPoint, Tier, TierThresholds, TieredJit, Value,
 };
 pub use types::TypeMapper;
 
@@ -80,6 +80,18 @@ pub enum JitError {
 
     #[error("Runtime error: {0}")]
     Runtime(String),
+
+    #[error("Unsubstituted generic type in JIT")]
+    UnsubstitutedGeneric,
+
+    #[error("Unresolved type variable in JIT")]
+    UnresolvedTypeVar,
+
+    #[error("Unsubstituted const generic in JIT")]
+    UnsubstitutedConstGeneric,
+
+    #[error("Invalid type conversion: cannot convert {from} to {to}")]
+    InvalidConversion { from: String, to: String },
 }
 
 impl From<cranelift_module::ModuleError> for JitError {

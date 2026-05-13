@@ -2,10 +2,12 @@
 
 > OS-level threading with thread pools and scoped threads
 
+> **Implementation:** Requires C runtime (`thread_runtime.c`). Uses POSIX threads (`-lpthread`).
+
 ## Import
 
 ```vais
-U std/thread
+use std/thread
 ```
 
 ## Constants
@@ -102,11 +104,11 @@ Scoped threads that auto-join on scope exit.
 ## Usage
 
 ```vais
-U std/thread
+use std/thread
 
-F worker(arg: i64) -> i64 { arg * 2 }
+fn worker(arg: i64) -> i64 { arg * 2 }
 
-F main() -> i64 {
+fn main() -> i64 {
     handle := spawn(worker, 21)
     result := handle.join()  # Some(42)
     0

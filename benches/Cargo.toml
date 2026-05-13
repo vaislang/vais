@@ -58,6 +58,35 @@ name = "simd_bench"
 path = "simd_bench.rs"
 harness = false
 
+[[bench]]
+name = "parallel_bench"
+path = "parallel_bench.rs"
+harness = false
+
+[[bench]]
+name = "tcp_bench"
+path = "tcp_bench.rs"
+harness = false
+
+[[bench]]
+name = "endurance_bench"
+path = "endurance_bench.rs"
+harness = false
+
+[[bench]]
+name = "gpu_bench"
+path = "gpu_bench.rs"
+harness = false
+
+[[bench]]
+name = "incremental_bench"
+path = "incremental_bench.rs"
+harness = false
+
+[[example]]
+name = "gen_large_example"
+path = "fixtures/gen_large_example.rs"
+
 [dependencies]
 vais-lexer = { path = "../crates/vais-lexer" }
 vais-parser = { path = "../crates/vais-parser" }
@@ -65,7 +94,10 @@ vais-ast = { path = "../crates/vais-ast" }
 vais-types = { path = "../crates/vais-types" }
 vais-codegen = { path = "../crates/vais-codegen" }
 vais-gc = { path = "../crates/vais-gc" }
+vais-gpu = { path = "../crates/vais-gpu" }
 criterion = { version = "0.8", features = ["html_reports"] }
+rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = "0.4"
+tempfile = "3.15"

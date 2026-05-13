@@ -39,17 +39,25 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     } else if val.is_pointer_value() {
                         format_str.push_str("%s");
                         args.push(val.into());
+                    } else if val.is_struct_value() {
+                        // Could be a string fat pointer { ptr, i64 } — extract the raw ptr
+                        let raw_ptr = self.extract_str_raw_ptr(val)?;
+                        format_str.push_str("%s");
+                        args.push(raw_ptr.into());
                     } else {
-                        format_str.push_str("%lld");
-                        args.push(val.into());
+                        // Vector or other values cannot be passed to printf directly.
+                        // Emit a placeholder string instead of misinterpreting the bits.
+                        format_str.push_str("<struct>");
+                        // Do not push the value — no corresponding printf argument.
                     }
                 }
             }
         }
 
-        // Generate printf call
+        // Generate printf call — extract raw ptr from fat pointer for C ABI
         let fmt_val = self.generate_string_literal(&format_str)?;
-        let mut all_args: Vec<BasicMetadataValueEnum> = vec![fmt_val.into()];
+        let fmt_ptr = self.extract_str_raw_ptr(fmt_val)?;
+        let mut all_args: Vec<BasicMetadataValueEnum> = vec![fmt_ptr.into()];
         all_args.extend(args);
 
         if let Some(printf_fn) = self.module.get_function("printf") {
@@ -60,9 +68,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Ok(call
                 .try_as_basic_value()
                 .left()
-                .unwrap_or_else(|| self.context.struct_type(&[], false).const_zero().into()))
+                .unwrap_or_else(|| self.unit_value()))
         } else {
-            Ok(self.context.struct_type(&[], false).const_zero().into())
+            Ok(self.unit_value())
         }
     }
 
@@ -129,7 +137,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             _ => {}
         }
 
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
     // ========== Impl/Method Support ==========
 
@@ -357,6 +365,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Restore substitutions
         self.generic_substitutions = old_substitutions;
+        self.type_mapper
+            .set_generic_substitutions(&self.generic_substitutions);
 
         let fn_value = self.module.add_function(&method_name, fn_type, None);
         self.functions.insert(method_name.clone(), fn_value);
@@ -386,7 +396,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.current_function = Some(fn_value);
         self.locals.clear();
         self.var_struct_types.clear();
+        self.var_resolved_types.clear();
         self.defer_stack.clear();
+        self.alloc_tracker.clear();
+        self.string_value_slot.clear();
+        self.pending_return_skip_slot.clear();
+        self.scope_str_stack.clear();
+        self.var_string_slot.clear();
+        self.var_string_slots_multi.clear();
+        self.phi_extra_slots.clear();
 
         // Set up generic substitutions from parent struct and method generics
         let old_substitutions = self.generic_substitutions.clone();
@@ -408,7 +426,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Allocate parameters
         for (i, param) in func.params.iter().enumerate() {
-            let param_value = fn_value.get_nth_param(i as u32).unwrap();
+            let param_value = fn_value.get_nth_param(i as u32).ok_or_else(|| {
+                CodegenError::InternalError(format!(
+                    "ICE: parameter index {} out of bounds for method '{}'",
+                    i, func.name.node
+                ))
+            })?;
 
             if param.name.node == "self" {
                 // self is passed as a pointer to the caller's alloca
@@ -443,6 +466,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if let Some(sn) = self.extract_struct_type_name(&param.ty.node) {
                     self.var_struct_types.insert(param.name.node.clone(), sn);
                 }
+
+                // Track resolved type for parameters (for element/pointee type inference)
+                self.var_resolved_types
+                    .insert(param.name.node.clone(), substituted);
             }
         }
 
@@ -461,15 +488,31 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         match &func.body {
             ast::FunctionBody::Expr(body_expr) => {
                 let body_value = self.generate_expr(&body_expr.node)?;
-                self.emit_defer_cleanup()?;
-                if ret_substituted == ResolvedType::Unit {
-                    self.builder
-                        .build_return(None)
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                } else {
-                    self.builder
-                        .build_return(Some(&body_value))
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                // Only build return if the current block doesn't already have a terminator
+                // (an explicit `R` inside the expr body may have already emitted one)
+                if self
+                    .builder
+                    .get_insert_block()
+                    .ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "ICE: no insert block during method expr-body generation".into(),
+                        )
+                    })?
+                    .get_terminator()
+                    .is_none()
+                {
+                    self.emit_defer_cleanup()?;
+                    self.mark_return_ownership_transfer_expr(&body_value, &body_expr.node);
+                    self.emit_alloc_cleanup()?;
+                    if ret_substituted == ResolvedType::Unit {
+                        self.builder
+                            .build_return(None)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    } else {
+                        self.builder
+                            .build_return(Some(&body_value))
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    }
                 }
             }
             ast::FunctionBody::Block(stmts) => {
@@ -477,11 +520,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if self
                     .builder
                     .get_insert_block()
-                    .unwrap()
+                    .ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "ICE: no insert block during method block-body generation".into(),
+                        )
+                    })?
                     .get_terminator()
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.mark_return_ownership_transfer_block(&body_value, stmts);
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
@@ -511,6 +560,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Restore generic substitutions
         self.generic_substitutions = old_substitutions;
+        self.type_mapper
+            .set_generic_substitutions(&self.generic_substitutions);
         self.current_function = None;
         Ok(())
     }
@@ -538,8 +589,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         if args.is_empty() {
             // Just print newline
             let newline = self.generate_string_literal("\n")?;
+            let nl_ptr = self.extract_str_raw_ptr(newline)?;
             self.builder
-                .build_call(printf_fn, &[newline.into()], "println_call")
+                .build_call(printf_fn, &[nl_ptr.into()], "println_call")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
         } else {
             // Check if first arg is a string interpolation - handle it specially
@@ -550,35 +602,38 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // Just evaluate it (which prints), then print newline
                 let _ = self.generate_expr(&args[0].node)?;
                 let newline = self.generate_string_literal("\n")?;
+                let nl_ptr = self.extract_str_raw_ptr(newline)?;
                 self.builder
-                    .build_call(printf_fn, &[newline.into()], "println_nl")
+                    .build_call(printf_fn, &[nl_ptr.into()], "println_nl")
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             } else {
                 // First arg is format string - append \n
                 let mut arg_values: Vec<BasicMetadataValueEnum> = Vec::new();
                 let first_val = self.generate_expr(&args[0].node)?;
-                if first_val.is_pointer_value() {
-                    arg_values.push(first_val.into());
-                    for arg in &args[1..] {
-                        let val = self.generate_expr(&arg.node)?;
+                // Extract raw ptr from string fat pointer for printf C ABI
+                let first_ptr = self.extract_str_raw_ptr(first_val)?;
+                arg_values.push(first_ptr.into());
+                for arg in &args[1..] {
+                    let val = self.generate_expr(&arg.node)?;
+                    // If arg is a string fat pointer, extract raw ptr for %s
+                    if val.is_struct_value() {
+                        let raw_ptr = self.extract_str_raw_ptr(val)?;
+                        arg_values.push(raw_ptr.into());
+                    } else {
                         arg_values.push(val.into());
                     }
-                    self.builder
-                        .build_call(printf_fn, &arg_values, "println_fmt")
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                    let newline = self.generate_string_literal("\n")?;
-                    self.builder
-                        .build_call(printf_fn, &[newline.into()], "println_nl")
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                } else {
-                    arg_values.push(first_val.into());
-                    self.builder
-                        .build_call(printf_fn, &arg_values, "println_call")
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 }
+                self.builder
+                    .build_call(printf_fn, &arg_values, "println_fmt")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                let newline = self.generate_string_literal("\n")?;
+                let nl_ptr = self.extract_str_raw_ptr(newline)?;
+                self.builder
+                    .build_call(printf_fn, &[nl_ptr.into()], "println_nl")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             }
         }
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_print_call(
@@ -591,15 +646,22 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .get_function("printf")
             .ok_or_else(|| CodegenError::UndefinedFunction("printf".to_string()))?;
 
-        let arg_values: Vec<BasicMetadataValueEnum> = args
-            .iter()
-            .map(|arg| self.generate_expr(&arg.node).map(|v| v.into()))
-            .collect::<CodegenResult<Vec<_>>>()?;
+        let mut arg_values: Vec<BasicMetadataValueEnum> = Vec::new();
+        for arg in args {
+            let val = self.generate_expr(&arg.node)?;
+            // Extract raw ptr from string fat pointers for printf C ABI
+            if val.is_struct_value() {
+                let raw_ptr = self.extract_str_raw_ptr(val)?;
+                arg_values.push(raw_ptr.into());
+            } else {
+                arg_values.push(val.into());
+            }
+        }
 
         self.builder
             .build_call(printf_fn, &arg_values, "print_call")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_format_call(
@@ -622,9 +684,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // store_i64(ptr: i64, val: i64) -> void
         // Stores a 64-bit integer at the given pointer
         if args.len() < 2 {
-            return Err(CodegenError::Unsupported(
-                "store_i64 requires 2 args".to_string(),
-            ));
+            return Err(CodegenError::InternalError(format!(
+                "builtin 'store_i64' requires 2 argument(s), got {}",
+                args.len()
+            )));
         }
         let ptr_val = self.generate_expr(&args[0].node)?;
         let val = self.generate_expr(&args[1].node)?;
@@ -641,7 +704,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.builder
             .build_store(ptr, val)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_load_i64(
@@ -650,9 +713,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // load_i64(ptr: i64) -> i64
         if args.is_empty() {
-            return Err(CodegenError::Unsupported(
-                "load_i64 requires 1 arg".to_string(),
-            ));
+            return Err(CodegenError::InternalError(format!(
+                "builtin 'load_i64' requires 1 argument(s), got {}",
+                args.len()
+            )));
         }
         let ptr_val = self.generate_expr(&args[0].node)?;
 
@@ -670,15 +734,97 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map_err(|e| CodegenError::LlvmError(e.to_string()))
     }
 
+    pub(super) fn generate_swap(
+        &mut self,
+        args: &[Spanned<Expr>],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // swap(ptr, idx1, idx2) -> void
+        // NOTE: Uses ptrtoint/inttoptr for address arithmetic because Vais represents
+        // all pointers as i64 internally. A future optimization could use GEP when
+        // the element type is known, but this requires tracking pointer types through
+        // the codegen pipeline (non-trivial architectural change).
+        // Swaps two i64 elements in an array. ptr can be PointerValue or IntValue.
+        if args.len() < 3 {
+            return Err(CodegenError::InternalError(format!(
+                "builtin 'swap' requires 3 argument(s), got {}",
+                args.len()
+            )));
+        }
+        let ptr_val = self.generate_expr(&args[0].node)?;
+        let idx1_val = self.generate_expr(&args[1].node)?;
+        let idx2_val = self.generate_expr(&args[2].node)?;
+
+        let i64_type = self.context.i64_type();
+        let i64_ptr_type = i64_type.ptr_type(AddressSpace::default());
+
+        // Convert ptr to i64 if it's a pointer, then compute addresses
+        let ptr_int = if ptr_val.is_pointer_value() {
+            self.builder
+                .build_ptr_to_int(ptr_val.into_pointer_value(), i64_type, "swap_ptr_int")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        } else {
+            ptr_val.into_int_value()
+        };
+
+        let elem_size = i64_type.const_int(8, false);
+
+        // addr1 = ptr + idx1 * 8
+        let off1 = self
+            .builder
+            .build_int_mul(idx1_val.into_int_value(), elem_size, "off1")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let addr1 = self
+            .builder
+            .build_int_add(ptr_int, off1, "addr1")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let p1 = self
+            .builder
+            .build_int_to_ptr(addr1, i64_ptr_type, "p1")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // addr2 = ptr + idx2 * 8
+        let off2 = self
+            .builder
+            .build_int_mul(idx2_val.into_int_value(), elem_size, "off2")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let addr2 = self
+            .builder
+            .build_int_add(ptr_int, off2, "addr2")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let p2 = self
+            .builder
+            .build_int_to_ptr(addr2, i64_ptr_type, "p2")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Load, swap, store
+        let v1 = self
+            .builder
+            .build_load(i64_type, p1, "v1")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let v2 = self
+            .builder
+            .build_load(i64_type, p2, "v2")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder
+            .build_store(p1, v2)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder
+            .build_store(p2, v1)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        Ok(self.unit_value())
+    }
+
     pub(super) fn generate_store_byte(
         &mut self,
         args: &[Spanned<Expr>],
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // store_byte(ptr: i64, val: i64) -> void
         if args.len() < 2 {
-            return Err(CodegenError::Unsupported(
-                "store_byte requires 2 args".to_string(),
-            ));
+            return Err(CodegenError::InternalError(format!(
+                "builtin 'store_byte' requires 2 argument(s), got {}",
+                args.len()
+            )));
         }
         let ptr_val = self.generate_expr(&args[0].node)?;
         let val = self.generate_expr(&args[1].node)?;
@@ -700,7 +846,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.builder
             .build_store(ptr, byte_val)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_load_byte(
@@ -709,9 +855,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // load_byte(ptr: i64) -> i64
         if args.is_empty() {
-            return Err(CodegenError::Unsupported(
-                "load_byte requires 1 arg".to_string(),
-            ));
+            return Err(CodegenError::InternalError(format!(
+                "builtin 'load_byte' requires 1 argument(s), got {}",
+                args.len()
+            )));
         }
         let ptr_val = self.generate_expr(&args[0].node)?;
 
@@ -743,9 +890,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // store_f64(ptr: i64, val: f64) -> void
         if args.len() < 2 {
-            return Err(CodegenError::Unsupported(
-                "store_f64 requires 2 args".to_string(),
-            ));
+            return Err(CodegenError::InternalError(format!(
+                "builtin 'store_f64' requires 2 argument(s), got {}",
+                args.len()
+            )));
         }
         let ptr_val = self.generate_expr(&args[0].node)?;
         let val = self.generate_expr(&args[1].node)?;
@@ -762,7 +910,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.builder
             .build_store(ptr, val)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_load_f64(
@@ -771,9 +919,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // load_f64(ptr: i64) -> f64
         if args.is_empty() {
-            return Err(CodegenError::Unsupported(
-                "load_f64 requires 1 arg".to_string(),
-            ));
+            return Err(CodegenError::InternalError(format!(
+                "builtin 'load_f64' requires 1 argument(s), got {}",
+                args.len()
+            )));
         }
         let ptr_val = self.generate_expr(&args[0].node)?;
 

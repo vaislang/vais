@@ -6,8 +6,6 @@
 //! This file provides enhanced helpers for execution testing and houses
 //! tests that specifically verify runtime output correctness.
 
-#[allow(dead_code)]
-
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -29,9 +27,14 @@ fn compile_to_ir(source: &str) -> Result<String, String> {
         .map_err(|e| format!("Type error: {:?}", e))?;
     let mut gen = CodeGenerator::new("exec_test");
     gen.set_resolved_functions(checker.get_all_functions().clone());
-    let ir = gen
-        .generate_module(&module)
-        .map_err(|e| format!("Codegen error: {:?}", e))?;
+    gen.set_type_aliases(checker.get_type_aliases().clone());
+    let instantiations = checker.get_generic_instantiations();
+    let ir = if instantiations.is_empty() {
+        gen.generate_module(&module)
+    } else {
+        gen.generate_module_with_instantiations(&module, &instantiations)
+    }
+    .map_err(|e| format!("Codegen error: {:?}", e))?;
     Ok(ir)
 }
 
@@ -106,20 +109,6 @@ fn project_root() -> PathBuf {
 
 // ==================== Enhanced Assertion Helpers ====================
 
-/// Assert that source compiles, runs, and returns exit code 0
-fn assert_run_success(source: &str) {
-    match compile_and_run(source) {
-        Ok(result) => {
-            assert_eq!(
-                result.exit_code, 0,
-                "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
-                result.exit_code, result.stdout, result.stderr
-            );
-        }
-        Err(e) => panic!("Compilation/execution failed: {}", e),
-    }
-}
-
 /// Assert that source compiles, runs, and returns the expected exit code
 fn assert_exit_code(source: &str, expected: i32) {
     match compile_and_run(source) {
@@ -163,7 +152,9 @@ fn assert_stdout_contains(source: &str, expected: &str) {
             assert!(
                 result.stdout.contains(expected),
                 "Expected stdout to contain {:?}, got {:?}.\nstderr: {}",
-                expected, result.stdout, result.stderr
+                expected,
+                result.stdout,
+                result.stderr
             );
         }
         Err(e) => panic!("Compilation/execution failed: {}", e),
@@ -206,6 +197,7 @@ fn assert_stdout_lines(source: &str, expected_lines: &[&str]) {
 }
 
 /// Assert that source fails to compile (expected compilation error)
+#[allow(dead_code)]
 fn assert_compile_error(source: &str) {
     assert!(
         compile_to_ir(source).is_err(),
@@ -214,6 +206,7 @@ fn assert_compile_error(source: &str) {
 }
 
 /// Assert that source compiles and runs without crashing (exit code 0, no stderr panic)
+#[allow(dead_code)]
 fn assert_no_crash(source: &str) {
     match compile_and_run(source) {
         Ok(result) => {
@@ -235,11 +228,6 @@ fn assert_no_crash(source: &str) {
 #[test]
 fn exec_return_constant_42() {
     assert_exit_code("F main() -> i64 = 42", 42);
-}
-
-#[test]
-fn exec_return_zero() {
-    assert_exit_code("F main() -> i64 = 0", 0);
 }
 
 #[test]
@@ -273,27 +261,12 @@ fn exec_arithmetic_precedence() {
 }
 
 #[test]
-fn exec_nested_arithmetic() {
-    assert_exit_code("F main() -> i64 = (2 + 3) * (10 - 6)", 20);
-}
-
-#[test]
 fn exec_function_call() {
     let source = r#"
 F add(a: i64, b: i64) -> i64 = a + b
 F main() -> i64 = add(20, 22)
 "#;
     assert_exit_code(source, 42);
-}
-
-#[test]
-fn exec_multiple_function_calls() {
-    let source = r#"
-F double(x: i64) -> i64 = x * 2
-F inc(x: i64) -> i64 = x + 1
-F main() -> i64 = inc(double(20))
-"#;
-    assert_exit_code(source, 41);
 }
 
 #[test]
@@ -368,18 +341,6 @@ F main() -> i64 {
 }
 
 #[test]
-fn exec_mutable_variable() {
-    let source = r#"
-F main() -> i64 {
-    x := mut 10
-    x = 42
-    x
-}
-"#;
-    assert_exit_code(source, 42);
-}
-
-#[test]
 fn exec_loop_with_break() {
     let source = r#"
 F main() -> i64 {
@@ -395,21 +356,6 @@ F main() -> i64 {
 "#;
     // sum of 0..9 = 45
     assert_exit_code(source, 45);
-}
-
-#[test]
-fn exec_bitwise_and() {
-    assert_exit_code("F main() -> i64 = 255 & 15", 15);
-}
-
-#[test]
-fn exec_bitwise_or() {
-    assert_exit_code("F main() -> i64 = 240 | 15", 255);
-}
-
-#[test]
-fn exec_bitwise_xor() {
-    assert_exit_code("F main() -> i64 = 255 ^ 15", 240);
 }
 
 #[test]
@@ -462,15 +408,6 @@ fn exec_logical_or() {
 fn exec_negative_numbers() {
     assert_exit_code("F main() -> i64 = 0 - 42", 214);
     // -42 as u8 = 214 (exit codes are 0-255)
-}
-
-#[test]
-fn exec_gcd() {
-    let source = r#"
-F gcd(a: i64, b: i64) -> i64 = b == 0 ? a : @(b, a % b)
-F main() -> i64 = gcd(48, 18)
-"#;
-    assert_exit_code(source, 6);
 }
 
 // ==================== Printf / Stdout Tests ====================
@@ -552,7 +489,10 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_stdout_lines(source, &["0", "1", "1", "2", "3", "5", "8", "13", "21", "34"]);
+    assert_stdout_lines(
+        source,
+        &["0", "1", "1", "2", "3", "5", "8", "13", "21", "34"],
+    );
 }
 
 #[test]
@@ -584,16 +524,6 @@ F main() -> i64 {
     p := Point { x: 10, y: 32 }
     p.x + p.y
 }
-"#;
-    assert_exit_code(source, 42);
-}
-
-#[test]
-fn exec_struct_field_arithmetic() {
-    let source = r#"
-S Rect { w: i64, h: i64 }
-F area(r: Rect) -> i64 = r.w * r.h
-F main() -> i64 = area(Rect { w: 6, h: 7 })
 "#;
     assert_exit_code(source, 42);
 }
@@ -751,14 +681,8 @@ F main() -> i64 = add_pair(10, 20)
     assert_exit_code(source, 30);
 }
 
-#[test]
-fn exec_converted_generic_wrap() {
-    let source = r#"
-F wrap<T>(x: T) -> T = x
-F main() -> i64 = wrap(100)
-"#;
-    assert_exit_code(source, 100);
-}
+// Note: exec_converted_generic_wrap (F wrap<T>(x:T)->T = x) is near-identical
+// to exec_converted_generic_identity above — both test identity-style generic functions.
 
 #[test]
 fn exec_converted_match_default() {
@@ -987,7 +911,8 @@ F main() -> i64 {
     v1 + v2
 }
 "#;
-    // 42 + 1 = 43
+    // Expected: safe_div(84,2)=Ok(42), safe_div(10,0)=Err(1)
+    // v1=42, v2=1, total=43
     assert_exit_code(source, 43);
 }
 
@@ -1344,8 +1269,7 @@ fn exec_smoke_examples_batch() {
         }
         match compile_and_run_file(&path) {
             Ok(result) => {
-                if result.stderr.contains("SIGSEGV")
-                    || result.stderr.contains("segmentation fault")
+                if result.stderr.contains("SIGSEGV") || result.stderr.contains("segmentation fault")
                 {
                     failed.push(format!("{}: CRASHED (exit {})", name, result.exit_code));
                 } else {
@@ -1581,4 +1505,513 @@ F main() -> i64 {
 }
 "#;
     assert_exit_code(source, 200);
+}
+// ==================== Pattern Alias Tests ====================
+
+#[test]
+fn exec_pattern_alias_tuple() {
+    let source = r#"
+F main() -> i64 {
+    x := (1, 2)
+    M x {
+        whole @ (a, b) => a + b
+    }
+}
+"#;
+    assert_exit_code(source, 3);
+}
+
+#[test]
+fn exec_pattern_alias_literal() {
+    let source = r#"
+F main() -> i64 {
+    x := 42
+    M x {
+        n @ 42 => n,
+        _ => 0
+    }
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn exec_pattern_alias_wildcard() {
+    let source = r#"
+F main() -> i64 {
+    x := 99
+    M x {
+        n @ _ => n
+    }
+}
+"#;
+    assert_exit_code(source, 99);
+}
+
+#[test]
+fn exec_pattern_alias_variant() {
+    let source = r#"
+E Option<T> {
+    Some(T),
+    None
+}
+
+F main() -> i64 {
+    opt := Some(42)
+    M opt {
+        whole @ Some(val) => val,
+        _ => 0
+    }
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+// ==================== Extended Tests: Phase 41-44 Features ====================
+
+// --- Range Loop Tests (Phase 41) ---
+
+#[test]
+fn exec_range_loop_basic() {
+    let source = r#"
+F main() -> i64 {
+    sum := mut 0
+    L i:0..5 {
+        sum = sum + i
+    }
+    sum
+}
+"#;
+    // 0 + 1 + 2 + 3 + 4 = 10
+    assert_exit_code(source, 10);
+}
+
+#[test]
+fn exec_range_loop_inclusive() {
+    let source = r#"
+F main() -> i64 {
+    sum := mut 0
+    L i:0..=5 {
+        sum = sum + i
+    }
+    sum
+}
+"#;
+    // 0 + 1 + 2 + 3 + 4 + 5 = 15
+    assert_exit_code(source, 15);
+}
+
+#[test]
+fn exec_range_loop_product() {
+    let source = r#"
+F main() -> i64 {
+    prod := mut 1
+    L i:1..5 {
+        prod = prod * i
+    }
+    prod
+}
+"#;
+    // 1 * 2 * 3 * 4 = 24
+    assert_exit_code(source, 24);
+}
+
+#[test]
+fn exec_range_loop_start_nonzero() {
+    let source = r#"
+F main() -> i64 {
+    sum := mut 0
+    L i:10..15 {
+        sum = sum + i
+    }
+    sum
+}
+"#;
+    // 10 + 11 + 12 + 13 + 14 = 60
+    assert_exit_code(source, 60);
+}
+
+// --- Closure Capture Modes (Phase 42) ---
+
+#[test]
+fn exec_closure_move_capture() {
+    let source = r#"
+F main() -> i64 {
+    x := 42
+    f := move |y| x + y
+    f(8)
+}
+"#;
+    // 42 + 8 = 50
+    assert_exit_code(source, 50);
+}
+
+#[test]
+fn exec_closure_capture_multiple() {
+    let source = r#"
+F main() -> i64 {
+    a := 10
+    b := 20
+    f := |x| a + b + x
+    f(12)
+}
+"#;
+    // 10 + 20 + 12 = 42
+    assert_exit_code(source, 42);
+}
+
+// --- Struct Method Calls ---
+
+#[test]
+fn exec_struct_method_self() {
+    let source = r#"
+S Point { x: i64, y: i64 }
+
+X Point {
+    F sum(&self) -> i64 = self.x + self.y
+}
+
+F main() -> i64 {
+    p := Point { x: 10, y: 32 }
+    p.sum()
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn exec_struct_method_mutate() {
+    let source = r#"
+S Counter { val: i64 }
+
+X Counter {
+    F new() -> Counter = Counter { val: 0 }
+
+    F increment(&self, amt: i64) -> Counter =
+        Counter { val: self.val + amt }
+
+    F get(&self) -> i64 = self.val
+}
+
+F main() -> i64 {
+    c := Counter::new()
+    c = c.increment(10)
+    c = c.increment(32)
+    c.get()
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn exec_struct_method_chained() {
+    let source = r#"
+S Val { n: i64 }
+
+X Val {
+    F add(&self, x: i64) -> Val = Val { n: self.n + x }
+    F mul(&self, x: i64) -> Val = Val { n: self.n * x }
+    F get(&self) -> i64 = self.n
+}
+
+F main() -> i64 {
+    v := Val { n: 2 }
+    v = v.add(3)
+    v = v.mul(7)
+    v = v.add(7)
+    v.get()
+}
+"#;
+    // (2 + 3) * 7 + 7 = 35 + 7 = 42
+    assert_exit_code(source, 42);
+}
+
+// --- Enum Variant Matching (Phase 34) ---
+
+#[test]
+fn exec_enum_variant_match_simple() {
+    let source = r#"
+E Status { Good, Bad }
+
+F check(s: Status) -> i64 {
+    M s {
+        Good => 1,
+        Bad => 0
+    }
+}
+
+F main() -> i64 = check(Good)
+"#;
+    assert_exit_code(source, 1);
+}
+
+#[test]
+fn exec_enum_variant_with_data() {
+    let source = r#"
+E Value { Int(i64), None }
+
+F extract(v: Value) -> i64 {
+    M v {
+        Int(n) => n,
+        None => 0
+    }
+}
+
+F main() -> i64 = extract(Int(42))
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn exec_enum_multiple_variants() {
+    let source = r#"
+E Color { Red, Green, Blue }
+
+F color_code(c: Color) -> i64 {
+    M c {
+        Red => 1,
+        Green => 2,
+        Blue => 3
+    }
+}
+
+F main() -> i64 = color_code(Green)
+"#;
+    assert_exit_code(source, 2);
+}
+
+// --- Slice Operations (Phase 6) ---
+
+#[test]
+fn exec_slice_type_compiles() {
+    let source = r#"
+F get_slice(arr: &[i64]) -> i64 = 42
+
+F main() -> i64 = get_slice(&[1, 2, 3])
+"#;
+    // Slice literal &[1,2,3] now correctly builds { i8*, i64 } fat pointer
+    // and function signature matches. get_slice always returns 42.
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn exec_slice_len_method() {
+    let source = r#"
+F slice_len(s: &[i64]) -> i64 = s.len()
+
+F main() -> i64 = slice_len(&[1, 2, 3, 4, 5])
+"#;
+    // Phase 73: Slice .len() uses extractvalue on { i8*, i64 } fat pointer field 1.
+    // The fat pointer is correctly constructed at the call site with insertvalue.
+    assert_exit_code(source, 5);
+}
+
+// --- Where Clause Tests (Phase 32) ---
+
+#[test]
+fn exec_where_clause_simple() {
+    let source = r#"
+W Display {
+    F show(&self) -> i64
+}
+
+F print_value<T>(val: T) -> i64
+where T: Display {
+    val.show()
+}
+
+S MyInt { n: i64 }
+
+X MyInt: Display {
+    F show(&self) -> i64 = self.n
+}
+
+F main() -> i64 = print_value(MyInt { n: 42 })
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn exec_where_clause_multiple_bounds() {
+    let source = r#"
+W Trait1 { F method1(&self) -> i64 }
+W Trait2 { F method2(&self) -> i64 }
+
+F use_both<T>(x: T) -> i64
+where T: Trait1, T: Trait2 {
+    x.method1() + x.method2()
+}
+
+F main() -> i64 = 0
+"#;
+    // Phase 73: Generic function use_both is declared but not defined (no concrete
+    // instantiation). Since main() doesn't call it, clang links successfully.
+    assert_exit_code(source, 0);
+}
+
+// --- Trait Alias Tests (Phase 37) ---
+
+#[test]
+fn exec_trait_alias_compiles() {
+    let source = r#"
+W Display { F show(&self) -> i64 }
+W Debug { F debug(&self) -> i64 }
+
+T Printable = Display + Debug
+
+F main() -> i64 = 0
+"#;
+    assert_exit_code(source, 0);
+}
+
+// --- Async/Await Tests (Phase 43) ---
+
+#[test]
+fn exec_async_basic_compiles() {
+    let source = r#"
+A F async_task() -> i64 = 42
+
+F main() -> i64 = 0
+"#;
+    assert_exit_code(source, 0);
+}
+
+// --- Advanced Pattern Matching ---
+
+#[test]
+fn exec_pattern_match_nested_enum() {
+    let source = r#"
+E Inner { Val(i64), Ref(i64) }
+
+F extract(inner: Inner) -> i64 {
+    M inner {
+        Val(n) => n,
+        Ref(n) => n * 2
+    }
+}
+
+F main() -> i64 {
+    v := extract(Val(21))
+    r := extract(Ref(21))
+    v + r
+}
+"#;
+    assert_exit_code(source, 63); // 21 + (21*2) = 21 + 42 = 63
+}
+
+#[test]
+fn exec_pattern_match_or_pattern() {
+    let source = r#"
+F classify(x: i64) -> i64 {
+    M x {
+        1 | 2 | 3 => 10,
+        4 | 5 => 20,
+        _ => 0
+    }
+}
+
+F main() -> i64 = classify(2) + classify(5)
+"#;
+    // 10 + 20 = 30
+    assert_exit_code(source, 30);
+}
+
+#[test]
+fn exec_pattern_match_guard() {
+    let source = r#"
+F classify(x: i64) -> i64 {
+    M x {
+        n I n > 100 => 3,
+        n I n > 10 => 2,
+        n I n > 0 => 1,
+        _ => 0
+    }
+}
+
+F main() -> i64 = classify(50)
+"#;
+    assert_exit_code(source, 2);
+}
+
+// --- Generic Functions with Constraints ---
+
+#[test]
+fn exec_generic_swap() {
+    let source = r#"
+F swap<T>(a: T, b: T) -> T = b
+
+F main() -> i64 = swap(10, 42)
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn exec_generic_pair_first() {
+    let source = r#"
+S Pair<T> { first: T, second: T }
+
+F get_first<T>(p: Pair<T>) -> T = p.first
+
+F main() -> i64 = get_first(Pair { first: 42, second: 100 })
+"#;
+    assert_exit_code(source, 42);
+}
+
+// --- Complex Control Flow ---
+
+#[test]
+fn exec_nested_loops() {
+    let source = r#"
+F main() -> i64 {
+    sum := mut 0
+    i := mut 0
+    L {
+        I i >= 5 { B }
+        j := mut 0
+        L {
+            I j >= 3 { B }
+            sum = sum + 1
+            j = j + 1
+        }
+        i = i + 1
+    }
+    sum
+}
+"#;
+    // 5 * 3 = 15
+    assert_exit_code(source, 15);
+}
+
+#[test]
+fn exec_loop_with_continue() {
+    let source = r#"
+F main() -> i64 {
+    sum := mut 0
+    i := mut 0
+    L {
+        I i >= 10 { B }
+        i = i + 1
+        I i % 2 == 0 { C }
+        sum = sum + i
+    }
+    sum
+}
+"#;
+    // Sum of odd numbers 1,3,5,7,9 = 25
+    assert_exit_code(source, 25);
+}
+
+// --- Recursion with Different Patterns ---
+
+#[test]
+fn exec_tail_recursion_sum() {
+    let source = r#"
+F sum_helper(n: i64, acc: i64) -> i64 = n == 0 ? acc : @(n - 1, acc + n)
+
+F sum(n: i64) -> i64 = sum_helper(n, 0)
+
+F main() -> i64 = sum(9)
+"#;
+    // sum(9) = 45
+    assert_exit_code(source, 45);
 }

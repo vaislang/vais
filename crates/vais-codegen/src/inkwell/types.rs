@@ -7,32 +7,123 @@ use std::collections::HashMap;
 use vais_types::ResolvedType;
 
 /// Maps Vais types to LLVM types using inkwell.
-pub struct TypeMapper<'ctx> {
+pub(crate) struct TypeMapper<'ctx> {
     context: &'ctx Context,
     struct_types: HashMap<String, StructType<'ctx>>,
+    /// Generic substitutions mirrored from InkwellCodeGenerator.
+    /// Updated via `set_generic_substitutions` / `clear_generic_substitutions`.
+    pub(crate) generic_substitutions: HashMap<String, ResolvedType>,
+    /// Structured warnings collected during type mapping.
+    /// Uses RefCell for interior mutability (map_type takes &self).
+    pub(crate) warnings: std::cell::RefCell<Vec<crate::CodegenWarning>>,
+    /// When true, ICE-level fallbacks become errors instead of warnings.
+    /// Set from `InkwellCodeGenerator::set_strict_type_mode()`.
+    pub(crate) strict_type_mode: bool,
+    // Phase 191 v3 (2026-04-11): `strict_generic_mode` removed. Un-monomorphized
+    // `Generic(_)` / `ConstGeneric(_)` reaching `map_type` is always promoted to
+    // a deferred `InternalError` via `pending_error`.
+    /// Deferred error from `map_type` when strict mode is enabled.
+    /// Since `map_type` returns `BasicTypeEnum` (not `Result`), errors from
+    /// ICE-level fallbacks are stored here for the caller to check via
+    /// `take_pending_error()` after calling `map_type`.
+    pub(crate) pending_error: std::cell::RefCell<Option<crate::CodegenError>>,
 }
 
 impl<'ctx> TypeMapper<'ctx> {
     /// Creates a new type mapper with the given LLVM context.
-    pub fn new(context: &'ctx Context) -> Self {
+    pub(crate) fn new(context: &'ctx Context) -> Self {
         Self {
             context,
             struct_types: HashMap::new(),
+            generic_substitutions: HashMap::new(),
+            warnings: std::cell::RefCell::new(Vec::new()),
+            strict_type_mode: true,
+            pending_error: std::cell::RefCell::new(None),
         }
     }
 
+    /// Record a structured codegen warning.
+    fn emit_warning(&self, warning: crate::CodegenWarning) {
+        self.warnings.borrow_mut().push(warning);
+    }
+
+    /// Emit a warning, or store a deferred error for ICE-level fallbacks.
+    ///
+    /// Since `map_type` returns `BasicTypeEnum` (not `Result`), errors are stored
+    /// in `pending_error` for the caller to check via `take_pending_error()`.
+    /// The `i64` placeholder value is still returned so `map_type` can complete,
+    /// but the caller must propagate the error before using the result.
+    ///
+    /// - `strict_type_mode` promotes `UnresolvedTypeFallback` to a deferred error.
+    /// - `GenericFallback` is **always** promoted to a deferred error
+    ///   (Phase 191 v3 — unconditional).
+    fn emit_warning_or_error(&self, warning: crate::CodegenWarning) {
+        if self.strict_type_mode {
+            if let crate::CodegenWarning::UnresolvedTypeFallback {
+                ref type_desc,
+                ref backend,
+            } = warning
+            {
+                let mut pending = self.pending_error.borrow_mut();
+                if pending.is_none() {
+                    *pending = Some(crate::CodegenError::InternalError(format!(
+                        "[strict] {} in {} codegen — i64 fallback disabled",
+                        type_desc, backend
+                    )));
+                }
+                return;
+            }
+        }
+        if let crate::CodegenWarning::GenericFallback {
+            ref param,
+            ref context,
+        } = warning
+        {
+            let mut pending = self.pending_error.borrow_mut();
+            if pending.is_none() {
+                *pending = Some(crate::CodegenError::InternalError(format!(
+                    "un-monomorphized generic parameter '{}' reached codegen in '{}' — Phase 191 v3 (no fallback)",
+                    param, context
+                )));
+            }
+            return;
+        }
+        self.emit_warning(warning);
+    }
+
+    /// Take the pending error (if any) from a previous `map_type` call.
+    /// Returns `None` if no error occurred.
+    pub(crate) fn take_pending_error(&self) -> Option<crate::CodegenError> {
+        self.pending_error.borrow_mut().take()
+    }
+
+    /// Drain all collected warnings (transfers ownership to caller).
+    pub(crate) fn take_warnings(&self) -> Vec<crate::CodegenWarning> {
+        std::mem::take(&mut *self.warnings.borrow_mut())
+    }
+
+    /// Synchronise the substitution table with the generator's current map.
+    /// Skips clone when the source map is empty (common case after clear).
+    pub(crate) fn set_generic_substitutions(&mut self, subst: &HashMap<String, ResolvedType>) {
+        if subst.is_empty() {
+            self.generic_substitutions.clear();
+        } else {
+            self.generic_substitutions = subst.clone();
+        }
+    }
+
+    /// Clear the substitution table (call when leaving a generic context).
+    pub(crate) fn clear_generic_substitutions(&mut self) {
+        self.generic_substitutions.clear();
+    }
+
     /// Registers a named struct type.
-    pub fn register_struct(&mut self, name: &str, struct_type: StructType<'ctx>) {
+    pub(crate) fn register_struct(&mut self, name: &str, struct_type: StructType<'ctx>) {
         self.struct_types.insert(name.to_string(), struct_type);
     }
 
-    /// Gets a registered struct type by name.
-    pub fn get_struct(&self, name: &str) -> Option<StructType<'ctx>> {
-        self.struct_types.get(name).copied()
-    }
-
     /// Maps a Vais resolved type to an LLVM basic type.
-    pub fn map_type(&self, ty: &ResolvedType) -> BasicTypeEnum<'ctx> {
+    pub(crate) fn map_type(&self, ty: &ResolvedType) -> BasicTypeEnum<'ctx> {
         match ty {
             ResolvedType::I8 => self.context.i8_type().into(),
             ResolvedType::I16 => self.context.i16_type().into(),
@@ -47,11 +138,14 @@ impl<'ctx> TypeMapper<'ctx> {
             ResolvedType::F32 => self.context.f32_type().into(),
             ResolvedType::F64 => self.context.f64_type().into(),
             ResolvedType::Bool => self.context.bool_type().into(),
-            ResolvedType::Str => self
-                .context
-                .i8_type()
-                .ptr_type(AddressSpace::default())
-                .into(),
+            ResolvedType::Str => {
+                // String is a fat pointer: { i8* ptr, i64 len }
+                let ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
+                let len_type = self.context.i64_type();
+                self.context
+                    .struct_type(&[ptr_type.into(), len_type.into()], false)
+                    .into()
+            }
             ResolvedType::Unit => {
                 // Unit type represented as empty struct
                 self.context.struct_type(&[], false).into()
@@ -72,9 +166,7 @@ impl<'ctx> TypeMapper<'ctx> {
                 };
                 elem_llvm.array_type(sz).into()
             }
-            ResolvedType::Pointer(inner)
-            | ResolvedType::Ref(inner)
-            | ResolvedType::RefMut(inner) => {
+            ResolvedType::Pointer(inner) => {
                 // In LLVM 17+, pointers are opaque
                 let _inner_llvm = self.map_type(inner);
                 self.context
@@ -82,7 +174,48 @@ impl<'ctx> TypeMapper<'ctx> {
                     .ptr_type(AddressSpace::default())
                     .into()
             }
-            ResolvedType::Named { name, .. } => {
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                // &[T] and &mut [T] are fat pointers (same as Slice/SliceMut)
+                // — a slice reference IS a fat pointer, not a pointer to one
+                match inner.as_ref() {
+                    ResolvedType::Slice(_) | ResolvedType::SliceMut(_) => {
+                        let ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
+                        let len_type = self.context.i64_type();
+                        self.context
+                            .struct_type(&[ptr_type.into(), len_type.into()], false)
+                            .into()
+                    }
+                    _ => {
+                        // In LLVM 17+, pointers are opaque
+                        let _inner_llvm = self.map_type(inner);
+                        self.context
+                            .i8_type()
+                            .ptr_type(AddressSpace::default())
+                            .into()
+                    }
+                }
+            }
+            ResolvedType::Slice(_) | ResolvedType::SliceMut(_) => {
+                // Slice is a fat pointer: { ptr: i8*, len: i64 }
+                let ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
+                let len_type = self.context.i64_type();
+                self.context
+                    .struct_type(&[ptr_type.into(), len_type.into()], false)
+                    .into()
+            }
+            ResolvedType::Named { name, generics } => {
+                // If generics are present and all concrete, try mangled name first (e.g., "Vec$f32")
+                if !generics.is_empty() {
+                    let all_concrete = generics
+                        .iter()
+                        .all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+                    if all_concrete {
+                        let mangled = vais_types::mangle_name(name, generics);
+                        if let Some(st) = self.struct_types.get(mangled.as_str()) {
+                            return (*st).into();
+                        }
+                    }
+                }
                 if let Some(st) = self.struct_types.get(name.as_str()) {
                     (*st).into()
                 } else {
@@ -100,22 +233,35 @@ impl<'ctx> TypeMapper<'ctx> {
                     .ptr_type(AddressSpace::default())
                     .into()
             }
-            ResolvedType::Generic(_name) => {
-                // Generic types should ideally be substituted before codegen.
-                // Fallback to i64 which is the most common concrete type in Vais.
-                self.context.i64_type().into()
+            ResolvedType::Generic(name) => {
+                // Phase 191 v3: un-monomorphized generic parameters are a hard codegen
+                // error. With transitive instantiation (Phase 67) active, the
+                // `None` branch should only be reached on a Phase 67 bug. The
+                // deferred error is stored via `emit_warning_or_error`; the
+                // `i64_type()` return is a placeholder so `map_type` can finish
+                // its walk — the caller must check `take_pending_error()` before
+                // using the result.
+                if let Some(concrete) = self.generic_substitutions.get(name.as_str()).cloned() {
+                    self.map_type(&concrete)
+                } else {
+                    self.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
+                        param: name.clone(),
+                        context: String::from("<inkwell>"),
+                    });
+                    self.context.i64_type().into()
+                }
             }
             ResolvedType::Var(_) | ResolvedType::Unknown => {
-                // Should be resolved before codegen
-                eprintln!("ICE: unresolved type variable reached codegen");
+                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: String::from("unresolved type variable"),
+                    backend: String::from("inkwell"),
+                });
                 self.context.i64_type().into()
             }
             ResolvedType::Never => {
-                // Never type - use void pointer as placeholder
-                self.context
-                    .i8_type()
-                    .ptr_type(AddressSpace::default())
-                    .into()
+                // Never type — use empty struct as placeholder (consistent with void in Text IR).
+                // Never values should never exist at runtime; this is purely a type-level placeholder.
+                self.context.struct_type(&[], false).into()
             }
             ResolvedType::Tuple(elems) => {
                 let elem_types: Vec<BasicTypeEnum> =
@@ -150,10 +296,11 @@ impl<'ctx> TypeMapper<'ctx> {
                     .into()
             }
             ResolvedType::Range(_) => {
-                // Range is { start: i64, end: i64 }
+                // Range is { start: i64, end: i64, inclusive: i1 }
                 let i64_type = self.context.i64_type();
+                let bool_type = self.context.bool_type();
                 self.context
-                    .struct_type(&[i64_type.into(), i64_type.into()], false)
+                    .struct_type(&[i64_type.into(), i64_type.into(), bool_type.into()], false)
                     .into()
             }
             ResolvedType::Future(inner) => {
@@ -186,45 +333,44 @@ impl<'ctx> TypeMapper<'ctx> {
                     .ptr_type(AddressSpace::default())
                     .into()
             }
-            ResolvedType::Linear(inner)
-            | ResolvedType::Affine(inner)
-            | ResolvedType::Lazy(inner) => {
+            ResolvedType::Linear(inner) | ResolvedType::Affine(inner) => {
                 // Transparent wrappers at runtime
                 self.map_type(inner)
             }
-            // Fallback for remaining types
-            ResolvedType::ConstGeneric(_)
-            | ResolvedType::Lifetime(_)
-            | ResolvedType::Associated { .. }
-            | ResolvedType::Dependent { .. } => self.context.i64_type().into(),
-        }
-    }
-
-    /// Gets the size of a type in bytes (approximate).
-    pub fn size_of(&self, ty: &ResolvedType) -> u64 {
-        match ty {
-            ResolvedType::I8 | ResolvedType::U8 | ResolvedType::Bool => 1,
-            ResolvedType::I16 | ResolvedType::U16 => 2,
-            ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
-            ResolvedType::I64 | ResolvedType::U64 | ResolvedType::F64 => 8,
-            ResolvedType::I128 | ResolvedType::U128 => 16,
-            ResolvedType::Str
-            | ResolvedType::Pointer(_)
-            | ResolvedType::Ref(_)
-            | ResolvedType::RefMut(_) => 8,
-            ResolvedType::Unit => 0,
-            ResolvedType::ConstArray { element, size } => {
-                let sz = match size {
-                    vais_types::ResolvedConst::Value(n) => *n as u64,
-                    _ => 1,
-                };
-                self.size_of(element) * sz
+            ResolvedType::ConstGeneric(name) => {
+                // Phase 191 v3: same unconditional-error policy as `Generic` above.
+                if let Some(concrete) = self.generic_substitutions.get(name.as_str()).cloned() {
+                    self.map_type(&concrete)
+                } else {
+                    self.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
+                        param: name.clone(),
+                        context: String::from("<inkwell>"),
+                    });
+                    self.context.i64_type().into()
+                }
             }
-            ResolvedType::Array(_) => 8, // pointer
-            ResolvedType::Tuple(elems) => elems.iter().map(|e| self.size_of(e)).sum(),
-            ResolvedType::Optional(inner) => 1 + self.size_of(inner),
-            ResolvedType::Result(ok, err) => 1 + std::cmp::max(self.size_of(ok), self.size_of(err)),
-            _ => 8, // Default for structs, enums, functions
+            ResolvedType::Lifetime(_) => {
+                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: String::from("bare lifetime"),
+                    backend: String::from("inkwell"),
+                });
+                self.context.i64_type().into()
+            }
+            ResolvedType::Associated {
+                ref base,
+                ref assoc_name,
+                ..
+            } => {
+                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: format!("unresolved associated type `{}` on {:?}", assoc_name, base),
+                    backend: String::from("inkwell"),
+                });
+                self.context.i64_type().into()
+            }
+            ResolvedType::Dependent { base, .. } => {
+                // Dependent types are transparent at runtime — use base type
+                self.map_type(base)
+            }
         }
     }
 }

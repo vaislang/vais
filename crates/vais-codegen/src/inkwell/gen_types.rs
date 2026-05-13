@@ -8,11 +8,73 @@ use std::collections::HashMap;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType};
 use inkwell::values::{BasicValueEnum, FunctionValue};
 
-use vais_ast::{Expr, Type};
-use vais_types::ResolvedType;
+use vais_ast::{ConstExpr, Expr, Type};
+use vais_types::{ResolvedConst, ResolvedType};
 
 use super::generator::InkwellCodeGenerator;
 use crate::CodegenResult;
+
+/// Convert an AST `ConstExpr` (used in `[T; N]` sizes etc.) into the
+/// codegen-facing `ResolvedConst`. Literal / negate / binop are lowered to
+/// their concrete integer value when possible; symbolic parameters are kept
+/// as `Param` (unresolved const generics aren't supported downstream yet, but
+/// the value stays visible for display/errors).
+fn convert_const_expr(expr: &ConstExpr) -> ResolvedConst {
+    match expr {
+        ConstExpr::Literal(n) => ResolvedConst::Value(*n),
+        ConstExpr::Param(name) => ResolvedConst::Param(name.clone()),
+        ConstExpr::Negate(inner) => {
+            if let ResolvedConst::Value(n) = convert_const_expr(inner) {
+                ResolvedConst::Value(-n)
+            } else {
+                ResolvedConst::Negate(Box::new(convert_const_expr(inner)))
+            }
+        }
+        ConstExpr::BinOp { op, left, right } => {
+            let l = convert_const_expr(left);
+            let r = convert_const_expr(right);
+            if let (ResolvedConst::Value(lv), ResolvedConst::Value(rv)) = (&l, &r) {
+                use vais_ast::ConstBinOp;
+                let v = match op {
+                    ConstBinOp::Add => lv + rv,
+                    ConstBinOp::Sub => lv - rv,
+                    ConstBinOp::Mul => lv * rv,
+                    ConstBinOp::Div if *rv != 0 => lv / rv,
+                    _ => {
+                        return ResolvedConst::BinOp {
+                            op: convert_const_binop(op),
+                            left: Box::new(l),
+                            right: Box::new(r),
+                        }
+                    }
+                };
+                return ResolvedConst::Value(v);
+            }
+            ResolvedConst::BinOp {
+                op: convert_const_binop(op),
+                left: Box::new(l),
+                right: Box::new(r),
+            }
+        }
+    }
+}
+
+fn convert_const_binop(op: &vais_ast::ConstBinOp) -> vais_types::ConstBinOp {
+    use vais_ast::ConstBinOp as A;
+    use vais_types::ConstBinOp as R;
+    match op {
+        A::Add => R::Add,
+        A::Sub => R::Sub,
+        A::Mul => R::Mul,
+        A::Div => R::Div,
+        A::Mod => R::Mod,
+        A::BitAnd => R::BitAnd,
+        A::BitOr => R::BitOr,
+        A::BitXor => R::BitXor,
+        A::Shl => R::Shl,
+        A::Shr => R::Shr,
+    }
+}
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
     pub(super) fn ast_type_to_resolved(&self, ty: &Type) -> ResolvedType {
@@ -35,7 +97,23 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 _ => {
                     // Single uppercase letter is likely a generic type parameter
                     if name.len() == 1 && name.chars().next().is_some_and(|c| c.is_uppercase()) {
-                        ResolvedType::Generic(name.clone())
+                        if generics.is_empty() {
+                            ResolvedType::Generic(name.clone())
+                        } else {
+                            // HKT application: F<A> — keep as Named so substitute_type
+                            // can replace the constructor name
+                            let generic_types: Vec<ResolvedType> = generics
+                                .iter()
+                                .map(|g| self.ast_type_to_resolved(&g.node))
+                                .collect();
+                            ResolvedType::Named {
+                                name: name.clone(),
+                                generics: generic_types,
+                            }
+                        }
+                    } else if let Some(alias_target) = self.type_aliases.get(name) {
+                        // Resolve type alias to its underlying type
+                        alias_target.clone()
                     } else {
                         let generic_types: Vec<ResolvedType> = generics
                             .iter()
@@ -53,6 +131,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
             Type::Array(inner) => {
                 ResolvedType::Array(Box::new(self.ast_type_to_resolved(&inner.node)))
+            }
+            Type::ConstArray { element, size } => {
+                // Resolve the element type and preserve the declared size so
+                // downstream codegen can emit `[N x T]` LLVM arrays for
+                // fixed-size globals / locals instead of decaying to i64.
+                let resolved_elem = self.ast_type_to_resolved(&element.node);
+                let resolved_size = convert_const_expr(size);
+                ResolvedType::ConstArray {
+                    element: Box::new(resolved_elem),
+                    size: resolved_size,
+                }
             }
             Type::Tuple(elems) => {
                 let elem_types: Vec<ResolvedType> = elems
@@ -94,6 +183,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 Box::new(self.ast_type_to_resolved(&value.node)),
             ),
             Type::Unit => ResolvedType::Unit,
+            Type::Slice(inner) => {
+                ResolvedType::Slice(Box::new(self.ast_type_to_resolved(&inner.node)))
+            }
+            Type::SliceMut(inner) => {
+                ResolvedType::SliceMut(Box::new(self.ast_type_to_resolved(&inner.node)))
+            }
             _ => ResolvedType::I64, // Fallback for Infer, ConstArray, etc.
         }
     }
@@ -101,6 +196,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     // ========== Generic Type Handling ==========
 
     /// Get current generic substitution for a type parameter
+    #[inline]
     pub fn get_generic_substitution(&self, param: &str) -> Option<ResolvedType> {
         self.generic_substitutions.get(param).cloned()
     }
@@ -108,11 +204,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Set generic substitutions for the current context
     pub fn set_generic_substitutions(&mut self, subst: HashMap<String, ResolvedType>) {
         self.generic_substitutions = subst;
+        self.type_mapper
+            .set_generic_substitutions(&self.generic_substitutions);
     }
 
     /// Clear generic substitutions
     pub fn clear_generic_substitutions(&mut self) {
         self.generic_substitutions.clear();
+        self.type_mapper.clear_generic_substitutions();
     }
 
     /// Substitute generic type parameters with concrete types
@@ -121,21 +220,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     /// Generate mangled name for a generic struct
+    #[inline]
     pub fn mangle_struct_name(&self, name: &str, generics: &[ResolvedType]) -> String {
         vais_types::mangle_name(name, generics)
     }
 
     /// Generate mangled name for a generic function
+    #[inline]
     pub fn mangle_function_name(&self, name: &str, generics: &[ResolvedType]) -> String {
         vais_types::mangle_name(name, generics)
-    }
-
-    /// Map a type to LLVM, handling generics through substitution
-    #[allow(dead_code)]
-    pub(super) fn map_type_with_generics(&self, ty: &ResolvedType) -> BasicTypeEnum<'ctx> {
-        // First substitute any generic parameters
-        let substituted = self.substitute_type(ty);
-        self.type_mapper.map_type(&substituted)
     }
 
     /// Define a specialized (monomorphized) struct type
@@ -144,6 +237,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         base_name: &str,
         type_args: &[ResolvedType],
         fields: &[(String, ResolvedType)],
+        generic_param_names: &[String],
     ) -> CodegenResult<StructType<'ctx>> {
         let mangled_name = self.mangle_struct_name(base_name, type_args);
 
@@ -152,24 +246,36 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             return Ok(*st);
         }
 
-        // Build substitution map from generic params to type args
+        // Build substitution map from actual generic param names to type args
         let mut substitutions = HashMap::new();
-        // Assume generic params are T, U, V... in order
-        let generic_names = ["T", "U", "V", "W", "X", "Y", "Z"];
-        for (i, type_arg) in type_args.iter().enumerate() {
-            if let Some(name) = generic_names.get(i) {
-                substitutions.insert(name.to_string(), type_arg.clone());
-            }
+        for (name, type_arg) in generic_param_names.iter().zip(type_args.iter()) {
+            substitutions.insert(name.clone(), type_arg.clone());
         }
 
         // Substitute types in fields
-        let field_types: Vec<BasicTypeEnum> = fields
+        let mut field_types: Vec<BasicTypeEnum> = fields
             .iter()
             .map(|(_, ty)| {
                 let substituted = vais_types::substitute_type(ty, &substitutions);
                 self.type_mapper.map_type(&substituted)
             })
             .collect();
+
+        // Phase 191 #2b: append trailing i64 __ownership_mask when substituted
+        // fields include a heap-owned candidate (e.g., Vec<str> element).
+        // Mirrors the text-IR path (function_gen/generics.rs + type_gen.rs).
+        let substituted_fields: Vec<(String, ResolvedType)> = fields
+            .iter()
+            .map(|(n, ty)| {
+                let sub = vais_types::substitute_type(ty, &substitutions);
+                (n.clone(), sub)
+            })
+            .collect();
+        let (has_owned_mask, _heap_fields) =
+            crate::types::StructInfo::derive_ownership_mask(&substituted_fields);
+        if has_owned_mask {
+            field_types.push(self.context.i64_type().into());
+        }
 
         // Store field names
         let field_names: Vec<String> = fields.iter().map(|(name, _)| name.clone()).collect();
@@ -190,6 +296,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         type_args: &[ResolvedType],
         param_types: &[ResolvedType],
         return_type: &ResolvedType,
+        generic_param_names: &[String],
     ) -> CodegenResult<FunctionValue<'ctx>> {
         let mangled_name = self.mangle_function_name(base_name, type_args);
 
@@ -198,13 +305,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             return Ok(*fn_val);
         }
 
-        // Build substitution map
+        // Build substitution map from actual generic param names to type args
         let mut substitutions = HashMap::new();
-        let generic_names = ["T", "U", "V", "W", "X", "Y", "Z"];
-        for (i, type_arg) in type_args.iter().enumerate() {
-            if let Some(name) = generic_names.get(i) {
-                substitutions.insert(name.to_string(), type_arg.clone());
-            }
+        for (name, type_arg) in generic_param_names.iter().zip(type_args.iter()) {
+            substitutions.insert(name.clone(), type_arg.clone());
         }
 
         // Substitute types in parameters
@@ -235,14 +339,141 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     pub(super) fn generate_try(&mut self, inner: &Expr) -> CodegenResult<BasicValueEnum<'ctx>> {
         // Try (?) operator - propagate error if Result/Option is error/None
-        // For now, just evaluate the inner expression
-        self.generate_expr(inner)
+        // Result/Optional layout: { i8 tag, i64 payload } where tag 0=Ok/Some, 1=Err/None (for Result)
+        // and tag 0=None, 1=Some (for Option)
+        let val = self.generate_expr(inner)?;
+
+        // If the value is not a struct (e.g. primitive), just return it as-is (no unwrapping needed)
+        if !val.is_struct_value() {
+            return Ok(val);
+        }
+
+        let struct_val = val.into_struct_value();
+        let struct_type = struct_val.get_type();
+
+        // Only handle { i8, i64 } shaped structs (Result/Optional)
+        if struct_type.count_fields() != 2 {
+            return Ok(struct_val.into());
+        }
+
+        let fn_value = self.current_function.ok_or_else(|| {
+            crate::CodegenError::LlvmError("No current function for try operator".to_string())
+        })?;
+
+        // Extract tag (field 0)
+        let tag = self
+            .builder
+            .build_extract_value(struct_val, 0, "try_tag")
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+
+        // Check if error: for Result, tag != 0 means Err; for Option, tag == 0 means None
+        // We use the Result convention (tag 0 = Ok/Some success path)
+        // Actually in this codebase: Ok tag=0, Some tag=1, None tag=0, Err tag=1
+        // So for both Result and Option, tag != 0 means error/None needs propagation
+        // Wait - Some is tag=1 and None is tag=0 for Option. That means for Option,
+        // tag==0 is the error case (None). For Result, tag!=0 (Err=1) is error.
+        // Since we can't easily distinguish at codegen level, we use Result convention:
+        // tag != 0 means error -> propagate. This is consistent with Ok=0, Err=1.
+        let is_error = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::NE,
+                tag,
+                tag.get_type().const_int(0, false),
+                "try_is_err",
+            )
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+
+        let ok_block = self.context.append_basic_block(fn_value, "try_ok");
+        let err_block = self.context.append_basic_block(fn_value, "try_err");
+
+        self.builder
+            .build_conditional_branch(is_error, err_block, ok_block)
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+
+        // Error path: propagate by returning the same error struct
+        self.builder.position_at_end(err_block);
+        self.builder
+            .build_return(Some(&struct_val))
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+
+        // Ok path: extract payload (field 1)
+        self.builder.position_at_end(ok_block);
+        let payload = self
+            .builder
+            .build_extract_value(struct_val, 1, "try_payload")
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+
+        Ok(payload)
     }
 
     pub(super) fn generate_unwrap(&mut self, inner: &Expr) -> CodegenResult<BasicValueEnum<'ctx>> {
         // Unwrap (!) operator - panic if Result/Option is error/None
-        // For now, just evaluate the inner expression
-        self.generate_expr(inner)
+        // Result/Optional layout: { i8 tag, i64 payload } where tag 0=Ok, 1=Err
+        let val = self.generate_expr(inner)?;
+
+        // If the value is not a struct, just return it as-is
+        if !val.is_struct_value() {
+            return Ok(val);
+        }
+
+        let struct_val = val.into_struct_value();
+        let struct_type = struct_val.get_type();
+
+        // Only handle { i8, i64 } shaped structs (Result/Optional)
+        if struct_type.count_fields() != 2 {
+            return Ok(struct_val.into());
+        }
+
+        let fn_value = self.current_function.ok_or_else(|| {
+            crate::CodegenError::LlvmError("No current function for unwrap operator".to_string())
+        })?;
+
+        // Extract tag (field 0)
+        let tag = self
+            .builder
+            .build_extract_value(struct_val, 0, "unwrap_tag")
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+
+        // Check if error (tag != 0)
+        let is_error = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::NE,
+                tag,
+                tag.get_type().const_int(0, false),
+                "unwrap_is_err",
+            )
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+
+        let ok_block = self.context.append_basic_block(fn_value, "unwrap_ok");
+        let panic_block = self.context.append_basic_block(fn_value, "unwrap_panic");
+
+        self.builder
+            .build_conditional_branch(is_error, panic_block, ok_block)
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+
+        // Panic path: call abort
+        self.builder.position_at_end(panic_block);
+        if let Some(abort_fn) = self.module.get_function("abort") {
+            self.builder
+                .build_call(abort_fn, &[], "")
+                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+        }
+        self.builder
+            .build_unreachable()
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+
+        // Ok path: extract payload (field 1)
+        self.builder.position_at_end(ok_block);
+        let payload = self
+            .builder
+            .build_extract_value(struct_val, 1, "unwrap_payload")
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+
+        Ok(payload)
     }
 
     // ========== Assignment ==========

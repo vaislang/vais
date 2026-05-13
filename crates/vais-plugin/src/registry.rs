@@ -488,9 +488,10 @@ mod tests {
 
         // Should include user plugins directory if HOME is set
         if env::var_os("HOME").is_some() || env::var_os("USERPROFILE").is_some() {
-            assert!(dirs
-                .iter()
-                .any(|d| d.to_string_lossy().contains(".vais/plugins")));
+            assert!(dirs.iter().any(|d| {
+                let s = d.to_string_lossy();
+                s.contains(".vais/plugins") || s.contains(".vais\\plugins")
+            }));
         }
     }
 

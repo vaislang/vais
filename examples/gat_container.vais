@@ -1,0 +1,27 @@
+# GAT Container pattern
+# Demonstrates Generic Associated Types with container-like trait
+
+W Container {
+    T Elem
+    F get(&self, idx: i64) -> i64
+    F size(&self) -> i64
+}
+
+S IntArray {
+    len: i64
+}
+
+X IntArray: Container {
+    T Elem = i64
+    F get(&self, idx: i64) -> i64 {
+        idx
+    }
+    F size(&self) -> i64 {
+        self.len
+    }
+}
+
+F main() -> i64 {
+    arr := IntArray { len: 10 }
+    arr.size() + arr.get(5)
+}

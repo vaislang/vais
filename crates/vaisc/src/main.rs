@@ -3,14 +3,11 @@
 //! The `vaisc` command compiles Vais source files to LLVM IR or native binaries.
 
 mod commands;
-#[allow(dead_code)]
 mod doc_gen;
 mod error_formatter;
 mod imports;
-#[allow(dead_code)]
 mod incremental;
 mod package;
-#[allow(dead_code)]
 mod registry;
 mod repl;
 mod runtime;
@@ -21,6 +18,7 @@ use colored::Colorize;
 use std::path::PathBuf;
 use std::process::exit;
 use std::sync::OnceLock;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use commands::pkg::PkgCommands;
 use vais_codegen::TargetTriple;
@@ -32,8 +30,113 @@ use vais_types::TypeChecker;
 /// None = disabled, Some(true) = strict errors (default), Some(false) = warn-only
 static OWNERSHIP_MODE: OnceLock<Option<bool>> = OnceLock::new();
 
+/// Global implicit error propagation configuration (Phase 4b.1 / #7).
+///
+/// `true` enables auto-`?` at call sites whose argument is a `Result<T, E>`
+/// (or `Option<T>`) being passed to a `T` parameter. Controlled by the
+/// `--implicit-try` CLI flag. Default is `false` so existing code is
+/// unaffected.
+static IMPLICIT_TRY_MODE: OnceLock<bool> = OnceLock::new();
+
+pub(crate) fn get_implicit_try_mode() -> bool {
+    IMPLICIT_TRY_MODE.get().copied().unwrap_or(false)
+}
+
+fn check_for_update() {
+    let current = env!("CARGO_PKG_VERSION");
+
+    // Determine cache path: ~/.vais/update-check.json
+    let cache_path = dirs::home_dir().map(|h| h.join(".vais").join("update-check.json"));
+
+    // Check cache TTL (24 hours)
+    const TTL_SECS: u64 = 24 * 60 * 60;
+    if let Some(ref path) = cache_path {
+        if let Ok(data) = std::fs::read_to_string(path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&data) {
+                let cached_ts = json["checked_at"].as_u64().unwrap_or(0);
+                let latest = json["latest"].as_str().unwrap_or("").to_string();
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or(Duration::ZERO)
+                    .as_secs();
+                if now.saturating_sub(cached_ts) < TTL_SECS && !latest.is_empty() {
+                    // Use cached result
+                    let latest_ver = latest.trim_start_matches('v');
+                    let current_ver = current.trim_start_matches('v');
+                    if semver::Version::parse(latest_ver)
+                        .and_then(|l| semver::Version::parse(current_ver).map(|c| l > c))
+                        .unwrap_or(false)
+                    {
+                        eprintln!(
+                            "⚡ Update available: {} → {} (visit https://github.com/vaislang/vais/releases)",
+                            current, latest_ver
+                        );
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    // Fetch from GitHub API with 2s timeout
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(2))
+        .build();
+    let result = agent
+        .get("https://api.github.com/repos/vaislang/vais/releases/latest")
+        .set("User-Agent", &format!("vaisc/{}", current))
+        .call();
+
+    let latest_tag = match result {
+        Ok(resp) => {
+            if let Ok(json) = resp.into_json::<serde_json::Value>() {
+                json["tag_name"].as_str().unwrap_or("").to_string()
+            } else {
+                return;
+            }
+        }
+        Err(_) => return,
+    };
+
+    // Write cache
+    if let Some(ref path) = cache_path {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or(Duration::ZERO)
+            .as_secs();
+        let cache = serde_json::json!({
+            "checked_at": now,
+            "latest": latest_tag,
+        });
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(path, cache.to_string());
+    }
+
+    // Compare versions
+    let latest_ver = latest_tag.trim_start_matches('v');
+    let current_ver = current.trim_start_matches('v');
+    if semver::Version::parse(latest_ver)
+        .and_then(|l| semver::Version::parse(current_ver).map(|c| l > c))
+        .unwrap_or(false)
+    {
+        eprintln!(
+            "⚡ Update available: {} → {} (visit https://github.com/vaislang/vais/releases)",
+            current, latest_ver
+        );
+    }
+}
+
+/// Global MIR borrow checking flag
+static STRICT_BORROW: OnceLock<bool> = OnceLock::new();
+
 pub(crate) fn get_ownership_mode() -> Option<bool> {
     OWNERSHIP_MODE.get().copied().unwrap_or(Some(true))
+}
+
+pub(crate) fn get_strict_borrow() -> bool {
+    STRICT_BORROW.get().copied().unwrap_or(false)
 }
 
 /// Generate a crash report with system info, backtrace, and panic details
@@ -82,6 +185,9 @@ pub(crate) fn configure_type_checker(checker: &mut TypeChecker) {
         Some(true) => checker.set_strict_ownership(true),
         Some(false) => {} // default: warn-only
         None => checker.disable_ownership_check(),
+    }
+    if get_implicit_try_mode() {
+        checker.set_implicit_try_mode(true);
     }
 }
 
@@ -167,10 +273,32 @@ struct Cli {
     #[arg(long, global = true)]
     warn_only_ownership: bool,
 
+    /// Enable MIR-based borrow checking (use-after-move, double-free, use-after-free detection)
+    #[arg(long, global = true)]
+    strict_borrow: bool,
+
     /// Use inkwell (LLVM API) backend instead of text-based IR generation
     /// Requires compilation with --features inkwell
     #[arg(long, global = true)]
     inkwell: bool,
+
+    /// Skip the update availability check
+    #[arg(long, global = true)]
+    no_update_check: bool,
+
+    /// Enable implicit error propagation (Phase 4b.1 / #7).
+    ///
+    /// When set, a call-site argument of type `Result<T, E>` passed to a
+    /// parameter of type `T` is auto-unwrapped as if the programmer had
+    /// written `?` on the argument. The enclosing function must return a
+    /// compatible `Result<_, E>`; otherwise the type checker reports an
+    /// error rather than silently mis-propagating. The same rule applies
+    /// to `Option<T>` arguments and `Option<_>` return types.
+    ///
+    /// This is an opt-in, experimental flag (Phase 4b token reduction).
+    /// Existing code that does not use the flag is unaffected.
+    #[arg(long, global = true)]
+    implicit_try: bool,
 }
 
 #[derive(Subcommand)]
@@ -266,11 +394,37 @@ enum Commands {
         #[arg(long, value_name = "BYTES", default_value = "536870912")]
         cache_limit: u64,
 
+        /// Enable incremental compilation (hash-based change detection, skip unchanged modules)
+        /// On first run (cold): populates the cache. On subsequent runs (warm): skips
+        /// unchanged files, reusing prior type-check and codegen results.
+        #[arg(long)]
+        incremental: bool,
+
+        /// Disable incremental compilation cache entirely
+        #[arg(long)]
+        no_cache: bool,
+
+        /// Pre-populate the cache by scanning all .vais files in the project
+        #[arg(long)]
+        warm_cache: bool,
+
+        /// Clear the incremental compilation cache
+        #[arg(long)]
+        clear_cache: bool,
+
+        /// Show incremental cache statistics and exit
+        #[arg(long)]
+        cache_stats: bool,
+
         /// Enable source-based code coverage instrumentation
         /// Generates an instrumented binary; run it to produce .profraw files
         /// Optional value: output directory for coverage data (default: ./coverage)
         #[arg(long, value_name = "DIR", default_missing_value = "./coverage", num_args = 0..=1)]
         coverage: Option<String>,
+
+        /// Show detailed per-phase compilation profile (lexer/parser/TC/codegen/clang)
+        #[arg(long)]
+        profile: bool,
     },
 
     /// Run a Vais source file
@@ -281,6 +435,12 @@ enum Commands {
         /// Arguments to pass to the program
         #[arg(last = true)]
         args: Vec<String>,
+
+        /// Execute via Cranelift JIT (no LLVM, no clang link step).
+        /// Requires the `jit` cargo feature. Falls back to LLVM+clang path on JIT errors.
+        /// Currently limited to programs with `F main() -> i64` and a subset of language features.
+        #[arg(long)]
+        jit: bool,
     },
 
     /// Check a Vais source file for errors
@@ -323,6 +483,16 @@ enum Commands {
         indent: usize,
     },
 
+    /// Automatically fix code issues (unused vars, imports)
+    Fix {
+        /// Input source file
+        input: PathBuf,
+
+        /// Show what would be fixed without modifying files
+        #[arg(long)]
+        dry_run: bool,
+    },
+
     /// Package management commands
     #[command(subcommand)]
     Pkg(PkgCommands),
@@ -357,6 +527,10 @@ enum Commands {
         /// Create a library project instead of a binary
         #[arg(long)]
         lib: bool,
+
+        /// Project template: "binary" (default), "lib", "workspace"
+        #[arg(long, default_value = "binary")]
+        template: String,
     },
 
     /// Run tests in the project
@@ -388,16 +562,6 @@ enum Commands {
         /// Filter benchmarks by name pattern
         #[arg(long)]
         filter: Option<String>,
-    },
-
-    /// Auto-apply compiler suggested fixes
-    Fix {
-        /// Input source file or directory
-        input: PathBuf,
-
-        /// Show fixes without applying them
-        #[arg(long)]
-        dry_run: bool,
     },
 
     /// Run lint checks on source files
@@ -443,10 +607,43 @@ enum Commands {
         /// Package name to uninstall
         package: String,
     },
+
+    /// Emit a TypeScript declaration file (.d.ts) from a Vais schema source
+    EmitTs {
+        /// Input .vais schema file
+        input: PathBuf,
+
+        /// Output .d.ts file path
+        #[arg(short, long, value_name = "FILE")]
+        output: PathBuf,
+    },
 }
 
 fn main() {
+    // Run the actual main logic in a thread with 64MB stack to handle
+    // deep codegen for complex struct specializations (e.g., Vec<BufferFrame>)
+    let child = std::thread::Builder::new()
+        .name("vaisc-main".to_string())
+        .stack_size(512 * 1024 * 1024)
+        .spawn(main_inner)
+        .expect("failed to spawn main thread");
+
+    match child.join() {
+        Ok(()) => {}
+        Err(e) => {
+            eprintln!("vaisc panicked: {:?}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn main_inner() {
     let cli = Cli::parse();
+
+    // Run update check unless disabled by flag or env var
+    if !cli.no_update_check && std::env::var("VAIS_NO_UPDATE_CHECK").as_deref() != Ok("1") {
+        check_for_update();
+    }
 
     // Install panic handler for crash reporting
     let report_crash = cli.report_crash;
@@ -480,6 +677,12 @@ fn main() {
         Some(true) // strict (default since Phase 34)
     };
     let _ = OWNERSHIP_MODE.set(ownership_mode);
+
+    // Configure implicit error propagation mode (Phase 4b.1 / #7)
+    let _ = IMPLICIT_TRY_MODE.set(cli.implicit_try);
+
+    // Configure MIR borrow checking
+    let _ = STRICT_BORROW.set(cli.strict_borrow);
 
     // Initialize i18n system
     let locale = cli.locale.as_ref().and_then(|s| Locale::parse(s));
@@ -528,7 +731,16 @@ fn main() {
             inkwell: _build_inkwell,
             per_module,
             cache_limit,
+            // `incremental` flag is a no-op: incremental caching is ALWAYS enabled
+            // unless `--force-rebuild` or `--no-cache` is set. The flag is kept in
+            // the CLI for backwards-compat and documentation but has no behavioural effect.
+            incremental: _,
+            no_cache,
+            warm_cache,
+            clear_cache,
+            cache_stats,
             coverage,
+            profile,
         }) => {
             // Resolve directory input to entry point file
             let (resolved_input, dir_dep_paths) = if input.is_dir() {
@@ -612,8 +824,88 @@ fn main() {
                 std::env::set_var("VAIS_DEP_PATHS", combined);
             }
 
+            // Handle cache management CLI commands (exit early without building)
+            if clear_cache {
+                use incremental::get_cache_dir;
+                let cache_dir = get_cache_dir(&resolved_input);
+                // Resolve symlinks to prevent path traversal attacks
+                let cache_dir = cache_dir.canonicalize().unwrap_or(cache_dir);
+                if cache_dir.exists() {
+                    if let Err(e) = std::fs::remove_dir_all(&cache_dir) {
+                        Err(format!("cannot clear cache: {}", e))
+                    } else {
+                        println!(
+                            "{} {}",
+                            "Cache cleared:".green().bold(),
+                            cache_dir.display()
+                        );
+                        Ok(())
+                    }
+                } else {
+                    println!("No cache directory found at {}", cache_dir.display());
+                    Ok(())
+                }
+            } else if cache_stats {
+                use incremental::{get_cache_dir, IncrementalCache};
+                let cache_dir = get_cache_dir(&resolved_input);
+                match IncrementalCache::new(cache_dir.clone()) {
+                    Ok(cache) => {
+                        let stats = cache.stats();
+                        println!("{}", "Incremental Cache Statistics".cyan().bold());
+                        println!("  Cache dir:     {}", cache_dir.display());
+                        println!("  Files cached:  {}", stats.total_files);
+                        println!("  Dependencies:  {}", stats.total_dependencies);
+                        if stats.last_build > 0 {
+                            println!("  Last build:    {} (unix timestamp)", stats.last_build);
+                        } else {
+                            println!("  Last build:    (never)");
+                        }
+                        if let Ok(entries) = std::fs::read_dir(&cache_dir) {
+                            let total_size: u64 = entries
+                                .filter_map(|e| e.ok())
+                                .filter_map(|e| e.metadata().ok())
+                                .map(|m| m.len())
+                                .sum();
+                            println!(
+                                "  Cache size:    {} bytes ({:.1} MB)",
+                                total_size,
+                                total_size as f64 / 1_048_576.0
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        println!("No cache available: {}", e);
+                    }
+                }
+                Ok(())
+            } else if warm_cache {
+                use incremental::{get_cache_dir, IncrementalCache};
+                let cache_dir = get_cache_dir(&resolved_input);
+                match IncrementalCache::new(cache_dir) {
+                    Ok(mut cache) => {
+                        let project_root =
+                            resolved_input.parent().unwrap_or(std::path::Path::new("."));
+                        match cache.warm_cache(project_root) {
+                            Ok(count) => {
+                                let _ = cache.persist();
+                                println!(
+                                    "{} {} file(s) pre-cached",
+                                    "Cache warmed:".green().bold(),
+                                    count
+                                );
+                                Ok(())
+                            }
+                            Err(e) => Err(format!("warm cache failed: {}", e)),
+                        }
+                    }
+                    Err(e) => Err(format!("cannot initialize cache: {}", e)),
+                }
+            } else
             // Check if JS target is specified
-            if target.as_deref().is_some_and(commands::build_js::is_js_target) {
+            if target
+                .as_deref()
+                .is_some_and(commands::build_js::is_js_target)
+            {
                 let js_config = commands::build_js::JsBuildConfig::default();
                 commands::build_js::cmd_build_js(
                     &resolved_input,
@@ -623,7 +915,6 @@ fn main() {
                     &js_config,
                 )
             } else
-
             // Check if GPU target is specified
             if let Some(gpu_target_str) = &gpu {
                 commands::build::cmd_build_gpu(
@@ -670,11 +961,38 @@ fn main() {
                 // Configure parallel compilation
                 let parallel_config = parallel.map(vais_codegen::parallel::ParallelConfig::new);
 
-                // Default to inkwell when feature is available
+                // Default to inkwell when feature is available, unless VAIS_SINGLE_MODULE
+                // is set (deprecated — per-module codegen now supports cross-module generics)
                 #[cfg(feature = "inkwell")]
-                let use_inkwell = true;
+                let use_inkwell = {
+                    let single = std::env::var("VAIS_SINGLE_MODULE").is_ok_and(|v| v == "1");
+                    if single {
+                        eprintln!("warning: VAIS_SINGLE_MODULE=1 is deprecated — per-module codegen now supports cross-module generics");
+                    }
+                    !single
+                };
                 #[cfg(not(feature = "inkwell"))]
                 let use_inkwell = _build_inkwell || cli.inkwell;
+
+                // Phase 4b.1 / #7: implicit error propagation is currently
+                // wired for the text-IR backend (vais-codegen) only. The
+                // Inkwell backend's 2-field `{ i8, i64 }` Result layout does
+                // not line up with the multi-field `%Result` layout the
+                // text-IR emits for Result<T, Str>, so wrapping a call-site
+                // argument in `Expr::Try` triggers an "aggregate extract
+                // index out of range" verifier error. Until that is
+                // addressed separately, fail fast instead of producing
+                // invalid IR.
+                if cli.implicit_try && use_inkwell {
+                    eprintln!(
+                        "{}: `--implicit-try` is only supported with the \
+                         text-IR backend; re-run without the Inkwell path \
+                         (for example `VAIS_SINGLE_MODULE=1 vaisc build …` \
+                         or `vaisc run …`).",
+                        "error".red().bold()
+                    );
+                    exit(1);
+                }
                 commands::build::cmd_build_with_timing(
                     &resolved_input,
                     output,
@@ -683,9 +1001,10 @@ fn main() {
                     debug,
                     cli.verbose,
                     cli.time,
+                    profile,
                     &plugins,
                     target_triple,
-                    force_rebuild,
+                    force_rebuild || no_cache,
                     cli.gc,
                     cli.gc_threshold,
                     hot,
@@ -700,8 +1019,8 @@ fn main() {
                 )
             }
         }
-        Some(Commands::Run { input, args }) => {
-            commands::simple::cmd_run(&input, &args, cli.verbose, &plugins)
+        Some(Commands::Run { input, args, jit }) => {
+            commands::simple::cmd_run(&input, &args, cli.verbose, &plugins, jit)
         }
         Some(Commands::Check { input }) => {
             commands::simple::cmd_check(&input, cli.verbose, &plugins)
@@ -722,7 +1041,14 @@ fn main() {
             check,
             indent,
         }) => commands::simple::cmd_fmt(&input, check, indent),
-        Some(Commands::New { name, lib }) => commands::simple::cmd_new(&name, lib),
+        Some(Commands::Fix { input, dry_run }) => {
+            commands::fix::cmd_fix(&input, dry_run, cli.verbose)
+        }
+        Some(Commands::New {
+            name,
+            lib,
+            template,
+        }) => commands::simple::cmd_new(&name, lib, &template),
         Some(Commands::Test {
             path,
             filter,
@@ -743,9 +1069,6 @@ fn main() {
         }
         Some(Commands::Bench { path, filter }) => {
             commands::test::cmd_bench(&path, filter.as_deref(), cli.verbose)
-        }
-        Some(Commands::Fix { input, dry_run }) => {
-            commands::test::cmd_fix(&input, dry_run, cli.verbose, &plugins)
         }
         Some(Commands::Lint {
             input,
@@ -781,6 +1104,7 @@ fn main() {
             commands::pkg::cmd_install(&package, release, cli.verbose, &plugins)
         }
         Some(Commands::Uninstall { package }) => commands::pkg::cmd_uninstall(&package),
+        Some(Commands::EmitTs { input, output }) => commands::emit_ts::cmd_emit_ts(&input, &output),
         None => {
             // Direct file compilation
             if let Some(input) = cli.input {
@@ -792,6 +1116,7 @@ fn main() {
                     false,
                     cli.verbose,
                     cli.time,
+                    false, // profile
                     &plugins,
                     TargetTriple::Native,
                     false,

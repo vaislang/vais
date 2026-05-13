@@ -1,0 +1,12 @@
+[package]
+name = "vais-aes"
+version = "1.0.0"
+authors = ["Vais Team"]
+description = "AES-256 encryption library with ECB, CBC, and CTR modes"
+license = "MIT"
+
+[dependencies]
+
+[dev-dependencies]
+
+[build]

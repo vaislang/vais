@@ -4,29 +4,21 @@ Vais는 AI 최적화된 시스템 프로그래밍 언어입니다. 단일 문자
 
 ## 설치
 
-### 시스템 요구사항
-
-- Rust 1.70 이상
-- LLVM 17
-- Git
-
-### 소스에서 빌드
+### Homebrew (macOS / Linux) — 추천
 
 ```bash
-# Vais 저장소 클론
-git clone https://github.com/vaislang/vais.git
-cd vais
-
-# 컴파일러 빌드
-cargo build --release
-
-# 설치 (선택 사항)
-cargo install --path crates/vaisc
+brew tap vaislang/tap && brew install vais
 ```
 
-### 바이너리 설치
+### Cargo
 
-최신 릴리스에서 직접 다운로드할 수 있습니다:
+```bash
+cargo install vaisc
+```
+
+### 바이너리 다운로드
+
+[GitHub Releases](https://github.com/vaislang/vais/releases/latest)에서 플랫폼별 바이너리를 다운로드할 수 있습니다:
 
 ```bash
 # macOS / Linux
@@ -35,6 +27,25 @@ chmod +x vaisc
 sudo mv vaisc /usr/local/bin/
 ```
 
+### Docker
+
+```bash
+docker run -it vaislang/vais:latest
+```
+
+### 소스에서 빌드 (개발자용)
+
+컴파일러 개발에 참여하려면 소스에서 직접 빌드합니다:
+
+```bash
+git clone https://github.com/vaislang/vais.git
+cd vais
+cargo build --release
+cargo install --path crates/vaisc
+```
+
+> **요구사항**: Rust 1.70+, LLVM 17, Git
+
 ## Hello World
 
 ### 첫 번째 프로그램 작성
@@ -42,11 +53,12 @@ sudo mv vaisc /usr/local/bin/
 `hello.vais` 파일을 생성합니다:
 
 ```vais
-F main() -> i64 {
-    puts("Hello, Vais!")
-    0
+fn main() {
+    println("Hello, Vais!")
 }
 ```
+
+> **참고**: `main()` 함수는 반환 타입을 생략할 수 있습니다. 생략 시 암시적으로 `i64` 반환 타입이 적용되며, 명시적 `R`(return) 없이 종료하면 `0`을 반환합니다. 명시적으로 `F main() -> i64 { ... }` 형태도 여전히 지원됩니다.
 
 ### 컴파일 및 실행
 
@@ -134,8 +146,8 @@ name := "Vais"
 counter := mut 0
 counter = counter + 1
 
-# 축약형 (~ = mut)
-~ total := 0
+# 가변 변수 예제
+total := mut 0
 total = total + 5
 
 # 타입 명시 (선택 사항)
@@ -147,24 +159,24 @@ pi: f64 = 3.14159
 
 ```vais
 # 간단한 함수
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 
 # 함수 본문 포함
-F greet(name: str) -> str {
+fn greet(name: str) -> str {
     message := "Hello, {name}!"
     message
 }
 
 # 반환값 명시
-F factorial(n: i64) -> i64 {
+fn factorial(n: i64) -> i64 {
     I n <= 1 {
-        R 1
+        return 1
     }
-    R n * factorial(n - 1)
+    return n * factorial(n - 1)
 }
 
 # 기본값 없는 반환 (0 반환)
-F print_info(msg: str) {
+fn print_info(msg: str) {
     puts(msg)
 }
 ```
@@ -177,16 +189,16 @@ x := 42
 # if/else 기본
 I x > 0 {
     puts("positive")
-} E {
+} else {
     puts("not positive")
 }
 
 # if/else if/else
 I x > 100 {
     puts("greater than 100")
-} I x > 50 {
+} else I x > 50 {
     puts("greater than 50")
-} E {
+} else {
     puts("50 or less")
 }
 
@@ -198,15 +210,15 @@ result := x > 0 ? "positive" : "non-positive"
 
 ```vais
 # for 루프 (범위)
-F print_range() {
-    L i := 0; i < 5; i = i + 1 {
+fn print_range() {
+    L i:0..5 {
         puts("{i}")
     }
 }
 
 # 무한 루프
-F infinite_loop_example() {
-    ~ count := 0
+fn infinite_loop_example() {
+    count := mut 0
     L {
         I count >= 10 {
             B
@@ -217,8 +229,8 @@ F infinite_loop_example() {
 }
 
 # while 루프 (조건 기반)
-F while_example() {
-    ~ x := 0
+fn while_example() {
+    x := mut 0
     L x < 10 {
         puts("{x}")
         x = x + 2
@@ -230,12 +242,12 @@ F while_example() {
 
 ```vais
 # 구조체 정의
-S Point {
+struct Point {
     x: i64
     y: i64
 }
 
-S Person {
+struct Person {
     name: str
     age: i64
     email: str
@@ -248,8 +260,8 @@ p := Point { x: 10, y: 20 }
 puts("{p.x}, {p.y}")
 
 # 구조체 메서드 (impl 블록)
-X Point {
-    F distance_from_origin(&self) -> f64 {
+impl Point {
+    fn distance_from_origin(&self) -> f64 {
         a := self.x as f64
         b := self.y as f64
         sqrt(a * a + b * b)
@@ -264,14 +276,14 @@ dist := p.distance_from_origin()
 
 ```vais
 # 간단한 Enum
-E Color {
+enum Color {
     Red,
     Green,
     Blue
 }
 
 # 데이터를 포함한 Enum
-E Result<T> {
+enum Result<T> {
     Ok(T),
     Err(str)
 }
@@ -279,7 +291,7 @@ E Result<T> {
 # Enum 사용
 color := Color.Red
 
-M color {
+match color {
     Color.Red => puts("Red color"),
     Color.Green => puts("Green color"),
     Color.Blue => puts("Blue color")
@@ -292,7 +304,7 @@ M color {
 status := 200
 
 # 기본 match
-M status {
+match status {
     200 => puts("OK"),
     404 => puts("Not Found"),
     500 => puts("Server Error"),
@@ -300,14 +312,14 @@ M status {
 }
 
 # Enum과 함께 사용
-E Response {
+enum Response {
     Success(str),
     Failure(str)
 }
 
 response := Response.Success("Done")
 
-M response {
+match response {
     Response.Success(msg) => puts("Success: {msg}"),
     Response.Failure(err) => puts("Error: {err}")
 }
@@ -317,17 +329,17 @@ M response {
 
 ```vais
 # 제네릭 함수
-F max<T>(a: T, b: T) -> T {
-    I a > b { R a } E { R b }
+fn max<T>(a: T, b: T) -> T {
+    I a > b { return a } else { return b }
 }
 
 # 제네릭 구조체
-S Container<T> {
+struct Container<T> {
     value: T
 }
 
-X Container<T> {
-    F get_value(&self) -> T = self.value
+impl Container<T> {
+    fn get_value(&self) -> T = self.value
 }
 
 # 제네릭 사용
@@ -339,18 +351,18 @@ val := container.get_value()
 
 ```vais
 # Trait 정의
-W Drawable {
-    F draw(&self) -> i64
+trait Drawable {
+    fn draw(&self) -> i64
 }
 
 # 구조체 정의
-S Circle {
+struct Circle {
     radius: i64
 }
 
 # Trait 구현
-X Circle: Drawable {
-    F draw(&self) -> i64 {
+impl Circle: Drawable {
+    fn draw(&self) -> i64 {
         puts("Drawing circle with radius {self.radius}")
         0
     }
@@ -366,18 +378,18 @@ circle.draw()
 ### 간단한 계산기
 
 ```vais
-S Calculator {
+struct Calculator {
     result: i64
 }
 
-X Calculator {
-    F add(&self, n: i64) -> i64 = self.result + n
-    F subtract(&self, n: i64) -> i64 = self.result - n
-    F multiply(&self, n: i64) -> i64 = self.result * n
+impl Calculator {
+    fn add(&self, n: i64) -> i64 = self.result + n
+    fn subtract(&self, n: i64) -> i64 = self.result - n
+    fn multiply(&self, n: i64) -> i64 = self.result * n
 }
 
-F main() -> i64 {
-    ~ calc := Calculator { result: 0 }
+fn main() -> i64 {
+    calc := mut Calculator { result: 0 }
     calc.result = calc.add(10)
     calc.result = calc.multiply(2)
     calc.result = calc.subtract(5)
@@ -389,14 +401,14 @@ F main() -> i64 {
 ### 문자열 처리
 
 ```vais
-F count_chars(s: str) -> i64 {
+fn count_chars(s: str) -> i64 {
     # 문자열 길이 계산
-    ~ len := 0
+    len := mut 0
     # (실제로는 s.len() 메서드 사용)
     len
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     greeting := "Hello, Vais!"
     puts(greeting)
 
@@ -412,19 +424,46 @@ F main() -> i64 {
 ### 배열 처리
 
 ```vais
-F sum_array(arr: [i64; 5]) -> i64 {
-    ~ result := 0
-    L i := 0; i < 5; i = i + 1 {
+fn sum_array(arr: [i64; 5]) -> i64 {
+    result := mut 0
+    L i:0..5 {
         result = result + arr[i]
     }
     result
 }
 
-F main() -> i64 {
+fn main() {
     numbers := [1, 2, 3, 4, 5]
     total := sum_array(numbers)
-    puts("Sum: {total}")
-    0
+    println("Sum: {total}")
+}
+```
+
+### 빌트인 함수
+
+Vais 컴파일러가 제공하는 내장 함수입니다:
+
+| 함수 | 설명 | 예시 |
+|------|------|------|
+| `swap(ptr, i, j)` | 배열 요소 교환 | `swap(arr, 0, 2)` |
+| `sizeof(expr)` | 표현식 크기 (바이트) | `sizeof(x)` |
+| `type_size<T>()` | 타입 T의 크기 | `type_size<i64>()` |
+| `store_byte(ptr, offset, val)` | 바이트 저장 | `store_byte(buf, 0, 65)` |
+| `load_byte(ptr, offset)` | 바이트 로드 | `load_byte(buf, 0)` |
+| `puts(msg)` | 문자열 출력 + 줄바꿈 | `puts("hello")` |
+| `putchar(c)` | 문자 출력 | `putchar(65)` |
+| `println(msg)` | 문자열 출력 + 줄바꿈 | `println("hello")` |
+
+#### swap — 배열 요소 교환
+
+`swap(ptr, idx1, idx2)` 빌트인으로 배열 요소를 교환할 수 있습니다:
+
+```vais
+fn main() {
+    arr: *i64 = [10, 20, 30]
+    swap(arr, 0, 2)       # arr[0]과 arr[2] 교환
+    # arr = [30, 20, 10]
+    println("{load_i64(arr + 0 * 8)}")  # 30
 }
 ```
 

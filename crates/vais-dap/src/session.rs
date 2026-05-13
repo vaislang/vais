@@ -15,6 +15,7 @@ use crate::error::{DapError, DapResult};
 use crate::protocol::requests::*;
 use crate::protocol::types::*;
 use crate::source_map::SourceMap;
+use crate::variables::VaisPrettyPrinter;
 
 /// Check if a type name represents a compound type that has children.
 ///
@@ -715,9 +716,12 @@ impl DebugSession {
                             0
                         };
 
+                        let formatted_value =
+                            VaisPrettyPrinter::format_value(v.type_name.as_deref(), &v.value);
+
                         Variable {
                             name: v.name,
-                            value: v.value,
+                            value: formatted_value,
                             var_type: v.type_name,
                             presentation_hint: None,
                             evaluate_name: v.evaluate_name,
@@ -777,9 +781,12 @@ impl DebugSession {
                             0
                         };
 
+                        let formatted_value =
+                            VaisPrettyPrinter::format_value(v.type_name.as_deref(), &v.value);
+
                         Variable {
                             name: v.name,
-                            value: v.value,
+                            value: formatted_value,
                             var_type: v.type_name,
                             presentation_hint: None,
                             evaluate_name: v.evaluate_name,
@@ -862,7 +869,12 @@ impl DebugSession {
         };
 
         let debugger = self.debugger.read().await;
-        debugger.evaluate(expression, thread_id, frame_idx).await
+        let (value, type_name, var_ref) =
+            debugger.evaluate(expression, thread_id, frame_idx).await?;
+
+        // Apply Vais pretty printing to the evaluated result
+        let formatted = VaisPrettyPrinter::format_value(type_name.as_deref(), &value);
+        Ok((formatted, type_name, var_ref))
     }
 
     // ========================================================================

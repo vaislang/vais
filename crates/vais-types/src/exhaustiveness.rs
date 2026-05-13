@@ -77,7 +77,7 @@ impl ExhaustivenessChecker {
     /// Compute hash for a type
     fn hash_type(ty: &ResolvedType) -> u64 {
         let mut hasher = DefaultHasher::new();
-        format!("{:?}", ty).hash(&mut hasher);
+        ty.hash(&mut hasher);
         hasher.finish()
     }
 
@@ -85,12 +85,71 @@ impl ExhaustivenessChecker {
     fn hash_patterns(arms: &[MatchArm]) -> u64 {
         let mut hasher = DefaultHasher::new();
         for arm in arms {
-            format!("{:?}", arm.pattern).hash(&mut hasher);
+            Self::hash_pattern(&arm.pattern.node, &mut hasher);
             if arm.guard.is_some() {
                 "guard".hash(&mut hasher);
             }
         }
         hasher.finish()
+    }
+
+    /// Hash a pattern without format!("{:?}") allocation overhead
+    fn hash_pattern(pattern: &Pattern, hasher: &mut DefaultHasher) {
+        std::mem::discriminant(pattern).hash(hasher);
+        match pattern {
+            Pattern::Wildcard => {}
+            Pattern::Ident(name) => name.hash(hasher),
+            Pattern::Literal(lit) => match lit {
+                Literal::Int(v) => v.hash(hasher),
+                Literal::Float(v) => v.to_bits().hash(hasher),
+                Literal::Bool(v) => v.hash(hasher),
+                Literal::String(v) => v.hash(hasher),
+            },
+            Pattern::Tuple(pats) => {
+                pats.len().hash(hasher);
+                for p in pats {
+                    Self::hash_pattern(&p.node, hasher);
+                }
+            }
+            Pattern::Struct { name, fields } => {
+                name.node.hash(hasher);
+                for (fname, fpat) in fields {
+                    fname.node.hash(hasher);
+                    if let Some(p) = fpat {
+                        Self::hash_pattern(&p.node, hasher);
+                    }
+                }
+            }
+            Pattern::Variant { name, fields } => {
+                name.node.hash(hasher);
+                for p in fields {
+                    Self::hash_pattern(&p.node, hasher);
+                }
+            }
+            Pattern::Range {
+                start,
+                end,
+                inclusive,
+            } => {
+                if let Some(s) = start {
+                    Self::hash_pattern(&s.node, hasher);
+                }
+                if let Some(e) = end {
+                    Self::hash_pattern(&e.node, hasher);
+                }
+                inclusive.hash(hasher);
+            }
+            Pattern::Or(pats) => {
+                pats.len().hash(hasher);
+                for p in pats {
+                    Self::hash_pattern(&p.node, hasher);
+                }
+            }
+            Pattern::Alias { name, pattern } => {
+                name.hash(hasher);
+                Self::hash_pattern(&pattern.node, hasher);
+            }
+        }
     }
 
     /// Register enum variants for exhaustiveness checking
@@ -288,6 +347,10 @@ impl ExhaustivenessChecker {
                 name: "".to_string(),
                 fields: patterns.iter().map(|p| self.pattern_to_space(p)).collect(),
             },
+            Pattern::Alias { pattern, .. } => {
+                // For exhaustiveness, alias behaves like its inner pattern
+                self.pattern_to_space(pattern)
+            }
         }
     }
 
@@ -391,10 +454,7 @@ impl ExhaustivenessChecker {
                     PatternSpace::Empty
                 } else if new_spaces.len() == 1 {
                     // SAFETY: length checked to be exactly 1
-                    new_spaces
-                        .into_iter()
-                        .next()
-                        .expect("length verified to be 1")
+                    new_spaces.into_iter().next().unwrap_or(PatternSpace::Empty)
                 } else {
                     PatternSpace::Or(new_spaces)
                 }
@@ -486,10 +546,7 @@ impl ExhaustivenessChecker {
                     PatternSpace::Empty
                 } else if new_spaces.len() == 1 {
                     // SAFETY: length checked to be exactly 1
-                    new_spaces
-                        .into_iter()
-                        .next()
-                        .expect("length verified to be 1")
+                    new_spaces.into_iter().next().unwrap_or(PatternSpace::Empty)
                 } else {
                     PatternSpace::Or(new_spaces)
                 }
@@ -540,7 +597,9 @@ impl ExhaustivenessChecker {
             PatternSpace::Any | PatternSpace::Wildcard => vec!["_".to_string()],
             PatternSpace::Int(n) => vec![format!("{}", n)],
             PatternSpace::IntRange(start, end) => {
-                if end - start <= 5 {
+                // Use saturating_sub to avoid underflow for wide ranges
+                // (e.g., i64::MIN..=i64::MAX — computing end-start would panic).
+                if end.saturating_sub(*start) <= 5 && end >= start {
                     // List individual values for small ranges
                     (*start..=*end).map(|n| format!("{}", n)).collect()
                 } else {

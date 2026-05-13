@@ -1,0 +1,12 @@
+[package]
+name = "vais-base64"
+version = "1.0.0"
+authors = ["Vais Team"]
+description = "RFC 4648 Base64 encoding and decoding"
+license = "MIT"
+
+[dependencies]
+
+[dev-dependencies]
+
+[build]

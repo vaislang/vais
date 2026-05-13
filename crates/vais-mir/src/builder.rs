@@ -22,6 +22,7 @@ impl MirBuilder {
             name: Some("_return".into()),
             ty: return_type.clone(),
             is_mutable: true,
+            lifetime: None,
         });
         // _1.._n: parameters
         let param_count = params.len() as u32;
@@ -30,6 +31,7 @@ impl MirBuilder {
                 name: Some(format!("_arg{}", i)),
                 ty: ty.clone(),
                 is_mutable: false,
+                lifetime: None,
             });
         }
 
@@ -68,6 +70,7 @@ impl MirBuilder {
             name,
             ty,
             is_mutable: true,
+            lifetime: None,
         });
         local
     }
@@ -164,6 +167,8 @@ impl MirBuilder {
             locals: self.locals,
             basic_blocks: self.blocks,
             block_names: Default::default(),
+            lifetime_params: vec![],
+            lifetime_bounds: vec![],
         }
     }
 }

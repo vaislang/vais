@@ -7,6 +7,7 @@ use inkwell::types::{BasicMetadataTypeEnum, BasicType, StructType};
 use inkwell::values::{BasicValueEnum, FunctionValue};
 
 use vais_ast::{self as ast, Expr};
+use vais_types::ResolvedType;
 
 use super::generator::InkwellCodeGenerator;
 use crate::{CodegenError, CodegenResult};
@@ -32,16 +33,35 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         }
 
         // Build return type
-        let ret_type = if let Some(ref ty) = func.ret_type {
+        // Check resolved function signature from type checker for accurate return type
+        // Special case: main() must return i64 for C ABI compatibility, regardless of
+        // the declared return type (e.g. f64, i32, etc.)
+        let is_main = fn_name == "main";
+        let fn_type = if let Some(ref ty) = func.ret_type {
             let resolved = self.ast_type_to_resolved(&ty.node);
-            self.type_mapper.map_type(&resolved)
+            if matches!(resolved, vais_types::ResolvedType::Unit) {
+                self.context.void_type().fn_type(&param_types, false)
+            } else if is_main {
+                // main() always returns i64 for C ABI
+                let ret_type: inkwell::types::BasicTypeEnum = self.context.i64_type().into();
+                ret_type.fn_type(&param_types, false)
+            } else {
+                let ret_type = self.type_mapper.map_type(&resolved);
+                ret_type.fn_type(&param_types, false)
+            }
+        } else if let Some(sig) = self.resolved_function_sigs.get(fn_name) {
+            // Use type checker's resolved return type
+            if matches!(sig.ret, vais_types::ResolvedType::Unit) {
+                self.context.void_type().fn_type(&param_types, false)
+            } else {
+                let ret_type = self.type_mapper.map_type(&sig.ret);
+                ret_type.fn_type(&param_types, false)
+            }
         } else {
-            // Default to i64 if return type is not specified
-            self.context.i64_type().into()
+            // Default to i64 if return type is not specified and no TC info available
+            let ret_type: inkwell::types::BasicTypeEnum = self.context.i64_type().into();
+            ret_type.fn_type(&param_types, false)
         };
-
-        // Create function type
-        let fn_type = ret_type.fn_type(&param_types, false);
 
         // Add function to module
         let fn_value = self.module.add_function(fn_name, fn_type, None);
@@ -78,12 +98,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let mut field_types = Vec::new();
         let mut field_names = Vec::new();
         let mut field_type_names = Vec::new();
+        let mut resolved_fields: Vec<(String, ResolvedType)> = Vec::new();
 
         for field in &s.fields {
             let resolved = self.ast_type_to_resolved(&field.ty.node);
             let field_type = self.type_mapper.map_type(&resolved);
             field_types.push(field_type);
             field_names.push(field.name.node.clone());
+            resolved_fields.push((field.name.node.clone(), resolved));
 
             // Extract type name for nested field access
             let type_name = match &field.ty.node {
@@ -91,6 +113,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 _ => String::from("unknown"),
             };
             field_type_names.push((field.name.node.clone(), type_name));
+        }
+
+        // Phase 191 #2b: append trailing i64 __ownership_mask when this
+        // user struct carries heap-owned string fields. Parallel to the
+        // text-IR backend (types/type_gen.rs::generate_struct_type).
+        let (has_owned_mask, _heap_fields) =
+            crate::types::StructInfo::derive_ownership_mask(&resolved_fields);
+        if has_owned_mask {
+            field_types.push(self.context.i64_type().into());
         }
 
         // Create opaque struct
@@ -107,6 +138,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .insert(struct_name.clone(), field_type_names);
         self.type_mapper.register_struct(struct_name, struct_type);
 
+        // Record generic parameters for on-demand specialization
+        if !s.generics.is_empty() {
+            let param_names: Vec<String> = s.generics.iter().map(|g| g.name.node.clone()).collect();
+            self.struct_generic_params
+                .insert(struct_name.clone(), param_names);
+        }
+
         Ok(struct_type)
     }
 
@@ -118,18 +156,85 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             return Ok(*existing);
         }
 
-        // Store variant tags
+        // Validate variant count fits in i8 tag
+        if e.variants.len() > 255 {
+            return Err(CodegenError::Unsupported(format!(
+                "Enum '{}' has {} variants (max 255 due to i8 tag)",
+                enum_name,
+                e.variants.len()
+            )));
+        }
+
+        // Store variant tags, and record struct-payload variants for match binding.
         for (i, variant) in e.variants.iter().enumerate() {
             self.enum_variants
                 .insert((enum_name.clone(), variant.name.node.clone()), i as i32);
+
+            // If the variant has a single Tuple field that is a named type,
+            // record it so pattern bindings can recover the struct type.
+            // If the single field is a primitive (int/float/etc), record its
+            // LLVM type so pattern bindings can bitcast the i64 data slot back
+            // to the declared type before binding.
+            if let ast::VariantFields::Tuple(types) = &variant.fields {
+                if types.len() == 1 {
+                    if let ast::Type::Named {
+                        name: struct_name, ..
+                    } = &types[0].node
+                    {
+                        // Struct payloads: existing code path.
+                        if self.generated_structs.contains_key(struct_name) {
+                            self.enum_variant_struct_types.insert(
+                                (enum_name.clone(), variant.name.node.clone()),
+                                struct_name.clone(),
+                            );
+                        } else {
+                            // Primitive type reached here by name (e.g. "f64", "i32").
+                            let resolved = self.ast_type_to_resolved(&types[0].node);
+                            let ll_ty = self.type_mapper.map_type(&resolved);
+                            self.enum_variant_primitive_payload_types
+                                .insert((enum_name.clone(), variant.name.node.clone()), ll_ty);
+                        }
+                    } else {
+                        // Non-Named single-tuple payload (tuple of primitives, etc.).
+                        let resolved = self.ast_type_to_resolved(&types[0].node);
+                        let ll_ty = self.type_mapper.map_type(&resolved);
+                        self.enum_variant_primitive_payload_types
+                            .insert((enum_name.clone(), variant.name.node.clone()), ll_ty);
+                    }
+                } else if types.len() > 1 {
+                    // Multi-field tuple variant (e.g., Rect(f64, f64)): build an
+                    // anonymous struct type that packs all field types and record
+                    // it up-front. The constructor path (generate_call) also
+                    // registers this, but registering here too means pattern
+                    // bindings in code compiled before any construction call
+                    // (e.g., `F eval(op: Op) { M op { ... } }`) can still find
+                    // the payload layout — without this pre-registration the
+                    // match path would hit the "Payload layout unknown"
+                    // fallback and only bind the first field.
+                    let mut field_ll_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = Vec::new();
+                    for ty in types {
+                        let resolved = self.ast_type_to_resolved(&ty.node);
+                        field_ll_types.push(self.type_mapper.map_type(&resolved));
+                    }
+                    let payload_ty = self.context.struct_type(&field_ll_types, false);
+                    self.enum_variant_multi_payload_types
+                        .insert((enum_name.clone(), variant.name.node.clone()), payload_ty);
+                }
+            }
         }
 
-        // Create enum as struct: { i32 tag, i64 data }
-        let enum_type = self
-            .context
-            .struct_type(&[self.context.i32_type().into()], false);
+        // Create enum as struct: { i8 tag, i64 data }
+        // Must match the layout used in gen_expr.rs for variant construction
+        let enum_type = self.context.struct_type(
+            &[
+                self.context.i8_type().into(),
+                self.context.i64_type().into(),
+            ],
+            false,
+        );
 
         self.generated_structs.insert(enum_name.clone(), enum_type);
+        self.type_mapper.register_struct(enum_name, enum_type);
 
         Ok(enum_type)
     }
@@ -179,14 +284,38 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             return Ok(*existing);
         }
 
-        // Union is represented as a struct with a single byte array field
-        // sized to the largest variant
-        let union_type = self
-            .context
-            .struct_type(&[self.context.i64_type().into()], false);
+        // For codegen purposes a Vais union is modeled as a single-cell struct
+        // wide enough to hold the largest variant. We pick i64 — all scalar
+        // types and pointers fit, and f64 is bit-compatible at the same width.
+        // Field-name → index mapping is populated so the struct-constructor
+        // path (`UnionName { field: value }`) and field-access path can reuse
+        // the same lookup machinery as user structs. The *first* declared
+        // field dictates the wire representation; others are kept for name
+        // resolution only.
+        let union_type = self.context.opaque_struct_type(union_name);
+        union_type.set_body(&[self.context.i64_type().into()], false);
 
+        // Mirror struct registration so struct-constructor and field-access
+        // codegen can locate the union by name.
         self.generated_structs
             .insert(union_name.clone(), union_type);
+
+        let field_names: Vec<String> = u.fields.iter().map(|f| f.name.node.clone()).collect();
+        let field_type_names: Vec<(String, String)> = u
+            .fields
+            .iter()
+            .map(|f| {
+                let type_name = match &f.ty.node {
+                    ast::Type::Named { name, .. } => name.clone(),
+                    _ => String::from("unknown"),
+                };
+                (f.name.node.clone(), type_name)
+            })
+            .collect();
+        self.struct_fields.insert(union_name.clone(), field_names);
+        self.struct_field_type_names
+            .insert(union_name.clone(), field_type_names);
+        self.type_mapper.register_struct(union_name, union_type);
 
         Ok(union_type)
     }
@@ -195,6 +324,41 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let const_name = &const_def.name.node;
         let value = self.evaluate_const_expr(&const_def.value.node)?;
         self.constants.insert(const_name.clone(), value);
+        Ok(())
+    }
+
+    /// Define an LLVM global variable for a Vais `G name: T = value` declaration.
+    /// Emits `@name = global T <initializer>` and stores the pointer+type in
+    /// `self.globals` so subsequent identifier lookups and assignments can find it.
+    pub(super) fn define_global(&mut self, global_def: &ast::GlobalDef) -> CodegenResult<()> {
+        use inkwell::types::BasicTypeEnum;
+        let name = &global_def.name.node;
+        let resolved = self.ast_type_to_resolved(&global_def.ty.node);
+        let ll_type = self.type_mapper.map_type(&resolved);
+
+        let global = self.module.add_global(ll_type, None, name);
+
+        // Zero-initialize every global first; override with a constant init below when
+        // `evaluate_const_expr` succeeds and the types match. Non-constant initializers
+        // (e.g. array literals with dynamic elements) stay at zero — callers write to
+        // the global at runtime.
+        let zero: BasicValueEnum<'ctx> = match ll_type {
+            BasicTypeEnum::IntType(it) => it.const_zero().into(),
+            BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
+            BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
+            BasicTypeEnum::StructType(st) => st.const_zero().into(),
+            BasicTypeEnum::ArrayType(at) => at.const_zero().into(),
+            BasicTypeEnum::VectorType(vt) => vt.const_zero().into(),
+        };
+        global.set_initializer(&zero);
+
+        if let Ok(init_val) = self.evaluate_const_expr(&global_def.value.node) {
+            if init_val.get_type() == ll_type {
+                global.set_initializer(&init_val);
+            }
+        }
+
+        self.globals.insert(name.clone(), (global, ll_type));
         Ok(())
     }
 
@@ -215,6 +379,20 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 .bool_type()
                 .const_int(if *b { 1 } else { 0 }, false)
                 .into()),
+            Expr::Unary { op, expr } => {
+                use vais_ast::UnaryOp;
+                match op {
+                    UnaryOp::Neg => {
+                        let val = self.evaluate_const_expr(&expr.node)?;
+                        let int_val = val.into_int_value();
+                        Ok(int_val.const_neg().into())
+                    }
+                    _ => Err(CodegenError::Unsupported(format!(
+                        "Const expr unary op: {:?}",
+                        op
+                    ))),
+                }
+            }
             Expr::Binary { left, op, right } => {
                 let lhs_val = self.evaluate_const_expr(&left.node)?;
                 let rhs_val = self.evaluate_const_expr(&right.node)?;
@@ -226,7 +404,71 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     BinOp::Add => lhs_int.const_add(rhs_int),
                     BinOp::Sub => lhs_int.const_sub(rhs_int),
                     BinOp::Mul => lhs_int.const_mul(rhs_int),
-                    // Division not currently supported in const context
+                    BinOp::BitAnd => lhs_int.const_and(rhs_int),
+                    BinOp::BitOr => lhs_int.const_or(rhs_int),
+                    BinOp::BitXor => lhs_int.const_xor(rhs_int),
+                    BinOp::Shl => {
+                        if let Some(shift) = rhs_int.get_zero_extended_constant() {
+                            if shift >= 64 {
+                                return Err(CodegenError::InternalError(format!(
+                                    "Const expr shift left amount {shift} >= 64 (undefined behavior)"
+                                )));
+                            }
+                        }
+                        lhs_int.const_shl(rhs_int)
+                    }
+                    BinOp::Shr => {
+                        if let Some(shift) = rhs_int.get_zero_extended_constant() {
+                            if shift >= 64 {
+                                return Err(CodegenError::InternalError(format!(
+                                    "Const expr shift right amount {shift} >= 64 (undefined behavior)"
+                                )));
+                            }
+                        }
+                        lhs_int.const_ashr(rhs_int)
+                    }
+                    BinOp::Div => {
+                        // LLVM 17 removed LLVMConstSDiv — evaluate in Rust and emit constant
+                        let lhs_val = lhs_int.get_sign_extended_constant().ok_or_else(|| {
+                            CodegenError::Unsupported(
+                                "Const expr div: non-constant operand".to_string(),
+                            )
+                        })?;
+                        let rhs_val = rhs_int.get_sign_extended_constant().ok_or_else(|| {
+                            CodegenError::Unsupported(
+                                "Const expr div: non-constant operand".to_string(),
+                            )
+                        })?;
+                        if rhs_val == 0 {
+                            return Err(CodegenError::InternalError(
+                                "Const expr division by zero".to_string(),
+                            ));
+                        }
+                        self.context
+                            .i64_type()
+                            .const_int((lhs_val / rhs_val) as u64, true)
+                    }
+                    BinOp::Mod => {
+                        // LLVM 17 removed LLVMConstSRem — evaluate in Rust and emit constant
+                        let lhs_val = lhs_int.get_sign_extended_constant().ok_or_else(|| {
+                            CodegenError::Unsupported(
+                                "Const expr mod: non-constant operand".to_string(),
+                            )
+                        })?;
+                        let rhs_val = rhs_int.get_sign_extended_constant().ok_or_else(|| {
+                            CodegenError::Unsupported(
+                                "Const expr mod: non-constant operand".to_string(),
+                            )
+                        })?;
+                        if rhs_val == 0 {
+                            return Err(CodegenError::InternalError(
+                                "Const expr modulo by zero".to_string(),
+                            ));
+                        }
+                        self.context
+                            .i64_type()
+                            .const_int((lhs_val % rhs_val) as u64, true)
+                    }
                     _ => {
                         return Err(CodegenError::Unsupported(format!(
                             "Const expr binary op: {:?}",
