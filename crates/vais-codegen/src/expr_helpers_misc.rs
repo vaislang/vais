@@ -445,13 +445,9 @@ impl CodeGenerator {
 
         ir.push_str("  ; Try expression (?)\n");
 
-        // Determine the tag type based on the inner type:
-        // - Optional/Result use i8 tag: { i8, T }
-        // - User-defined enums use i32 tag: { i32, { T } }
-        let (tag_type, extract_payload) = match &inner_type {
-            ResolvedType::Optional(_) | ResolvedType::Result(_, _) => ("i8", false),
-            _ => ("i32", true),
-        };
+        // Option/Result and user-defined enums share the canonical enum ABI:
+        // { i32 tag, { i64 payload... } }.
+        let (tag_type, extract_payload) = ("i32", true);
 
         // Extract tag (field 0)
         let tag = self.next_temp(counter);
@@ -478,36 +474,6 @@ impl CodeGenerator {
             ok_label
         );
 
-        // Err branch: early return
-        write_ir!(ir, "{}:", err_label);
-        write_ir!(
-            ir,
-            "  ret {} {}  ; early return on Err\n",
-            llvm_type,
-            inner_val
-        );
-
-        // Ok branch: extract payload value
-        write_ir!(ir, "{}:", ok_label);
-        let value = self.next_temp(counter);
-        if extract_payload {
-            write_ir!(
-                ir,
-                "  {} = extractvalue {} {}, 1, 0",
-                value,
-                llvm_type,
-                inner_val
-            );
-        } else {
-            write_ir!(
-                ir,
-                "  {} = extractvalue {} {}, 1",
-                value,
-                llvm_type,
-                inner_val
-            );
-        }
-        // For non-i64 types, convert ptrtoint'd pointer back to original type
         let try_unwrap_type = match &inner_type {
             ResolvedType::Result(ok, _) => Some(ok.as_ref().clone()),
             ResolvedType::Optional(inner) => Some(inner.as_ref().clone()),
@@ -520,78 +486,125 @@ impl CodeGenerator {
             _ => None,
         };
 
-        let final_value = if let Some(ref try_ty) = try_unwrap_type {
-            let try_llvm = self.type_to_llvm(try_ty);
-            let needs_cast = try_llvm != "i64"
-                && try_llvm != "i32"
-                && try_llvm != "i16"
-                && try_llvm != "i8"
-                && try_llvm != "i1"
-                && !try_llvm.ends_with('*');
-            if needs_cast {
-                let type_size = self.compute_sizeof(try_ty);
-                if type_size > 8 {
-                    // Large struct: payload holds a heap pointer (from Ok/Err constructor)
-                    let typed_ptr = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = inttoptr i64 {} to {}*",
-                        typed_ptr,
-                        value,
-                        try_llvm
-                    );
-                    let loaded = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = load {}, {}* {}",
-                        loaded,
-                        try_llvm,
-                        try_llvm,
-                        typed_ptr
-                    );
-                    loaded
-                } else {
-                    // Small struct: stored directly via bitcast in payload
-                    let tmp_result = self.next_temp(counter);
-                    self.emit_entry_alloca(&tmp_result, &llvm_type);
-                    write_ir!(
-                        ir,
-                        "  store {} {}, {}* {}",
-                        llvm_type,
-                        inner_val,
-                        llvm_type,
-                        tmp_result
-                    );
-                    let payload_ptr = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = getelementptr {}, {}* {}, i32 0, i32 1, i32 0",
-                        payload_ptr,
-                        llvm_type,
-                        llvm_type,
-                        tmp_result
-                    );
-                    let cast_ptr = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = bitcast i64* {} to {}*",
-                        cast_ptr,
-                        payload_ptr,
-                        try_llvm
-                    );
-                    let loaded = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = load {}, {}* {}",
-                        loaded,
-                        try_llvm,
-                        try_llvm,
-                        cast_ptr
-                    );
-                    loaded
-                }
+        // Err branch: early return
+        write_ir!(ir, "{}:", err_label);
+        write_ir!(
+            ir,
+            "  ret {} {}  ; early return on Err\n",
+            llvm_type,
+            inner_val
+        );
+
+        // Ok branch: extract payload value
+        write_ir!(ir, "{}:", ok_label);
+        let value = if matches!(try_unwrap_type, Some(ResolvedType::Unit)) {
+            "void".to_string()
+        } else {
+            let value = self.next_temp(counter);
+            if extract_payload {
+                write_ir!(
+                    ir,
+                    "  {} = extractvalue {} {}, 1, 0",
+                    value,
+                    llvm_type,
+                    inner_val
+                );
             } else {
+                write_ir!(
+                    ir,
+                    "  {} = extractvalue {} {}, 1",
+                    value,
+                    llvm_type,
+                    inner_val
+                );
+            }
+            value
+        };
+
+        let final_value = if let Some(ref try_ty) = try_unwrap_type {
+            if matches!(try_ty, ResolvedType::Unit) {
                 value
+            } else {
+                let try_llvm = self.type_to_llvm(try_ty);
+                let needs_cast = try_llvm != "i64"
+                    && try_llvm != "i32"
+                    && try_llvm != "i16"
+                    && try_llvm != "i8"
+                    && try_llvm != "i1"
+                    && !try_llvm.ends_with('*');
+                if Self::int_type_width(&try_llvm) > 0 && try_llvm != "i64" {
+                    let narrowed = self.next_temp(counter);
+                    write_ir!(ir, "  {} = trunc i64 {} to {}", narrowed, value, try_llvm);
+                    narrowed
+                } else if try_llvm.ends_with('*') {
+                    let ptr = self.next_temp(counter);
+                    write_ir!(ir, "  {} = inttoptr i64 {} to {}", ptr, value, try_llvm);
+                    ptr
+                } else if needs_cast {
+                    let type_size = self.compute_sizeof(try_ty);
+                    if type_size > 8 {
+                        // Large struct: payload holds a heap pointer (from Ok/Err constructor)
+                        let typed_ptr = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = inttoptr i64 {} to {}*",
+                            typed_ptr,
+                            value,
+                            try_llvm
+                        );
+                        let loaded = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
+                            loaded,
+                            try_llvm,
+                            try_llvm,
+                            typed_ptr
+                        );
+                        loaded
+                    } else {
+                        // Small struct: stored directly via bitcast in payload
+                        let tmp_result = self.next_temp(counter);
+                        self.emit_entry_alloca(&tmp_result, &llvm_type);
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* {}",
+                            llvm_type,
+                            inner_val,
+                            llvm_type,
+                            tmp_result
+                        );
+                        let payload_ptr = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = getelementptr {}, {}* {}, i32 0, i32 1, i32 0",
+                            payload_ptr,
+                            llvm_type,
+                            llvm_type,
+                            tmp_result
+                        );
+                        let cast_ptr = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = bitcast i64* {} to {}*",
+                            cast_ptr,
+                            payload_ptr,
+                            try_llvm
+                        );
+                        let loaded = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
+                            loaded,
+                            try_llvm,
+                            try_llvm,
+                            cast_ptr
+                        );
+                        loaded
+                    }
+                } else {
+                    value
+                }
             }
         } else {
             value
@@ -599,7 +612,9 @@ impl CodeGenerator {
 
         // Register the Try result type for downstream tracking
         if let Some(ref try_ty) = try_unwrap_type {
-            self.fn_ctx.register_temp_type(&final_value, try_ty.clone());
+            if !matches!(try_ty, ResolvedType::Unit) {
+                self.fn_ctx.register_temp_type(&final_value, try_ty.clone());
+            }
         }
 
         write_ir!(ir, "  br label %{}\n", merge_label);
@@ -626,13 +641,9 @@ impl CodeGenerator {
 
         ir.push_str("  ; Unwrap expression\n");
 
-        // Determine the tag type based on the inner type:
-        // - Optional/Result use i8 tag: { i8, T }
-        // - User-defined enums use i32 tag: { i32, { T } }
-        let (tag_type, extract_payload) = match &inner_type {
-            ResolvedType::Optional(_) | ResolvedType::Result(_, _) => ("i8", false),
-            _ => ("i32", true),
-        };
+        // Option/Result and user-defined enums share the canonical enum ABI:
+        // { i32 tag, { i64 payload... } }.
+        let (tag_type, extract_payload) = ("i32", true);
 
         // Extract tag (field 0)
         let tag = self.next_temp(counter);
@@ -710,6 +721,24 @@ impl CodeGenerator {
                 && unwrap_llvm != "i8"
                 && unwrap_llvm != "i1"
                 && !unwrap_llvm.ends_with('*');
+            if Self::int_type_width(&unwrap_llvm) > 0 && unwrap_llvm != "i64" {
+                let narrowed = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = trunc i64 {} to {}",
+                    narrowed,
+                    value,
+                    unwrap_llvm
+                );
+                self.fn_ctx.register_temp_type(&narrowed, unwrap_ty.clone());
+                return Ok((narrowed, ir));
+            }
+            if unwrap_llvm.ends_with('*') {
+                let ptr = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to {}", ptr, value, unwrap_llvm);
+                self.fn_ctx.register_temp_type(&ptr, unwrap_ty.clone());
+                return Ok((ptr, ir));
+            }
             if needs_cast {
                 let type_size = self.compute_sizeof(unwrap_ty);
                 if type_size > 8 {

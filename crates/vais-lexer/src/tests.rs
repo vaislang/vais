@@ -287,6 +287,23 @@ fn test_all_keywords() {
 }
 
 #[test]
+fn test_multi_char_keyword_aliases() {
+    let source = "fn struct enum match return type use pub trait impl else";
+    let tokens = tokenize(source).unwrap();
+    assert_eq!(tokens[0].token, Token::Function);
+    assert_eq!(tokens[1].token, Token::Struct);
+    assert_eq!(tokens[2].token, Token::Enum);
+    assert_eq!(tokens[3].token, Token::Match);
+    assert_eq!(tokens[4].token, Token::Return);
+    assert_eq!(tokens[5].token, Token::TypeKeyword);
+    assert_eq!(tokens[6].token, Token::Use);
+    assert_eq!(tokens[7].token, Token::Pub);
+    assert_eq!(tokens[8].token, Token::Trait);
+    assert_eq!(tokens[9].token, Token::Impl);
+    assert_eq!(tokens[10].token, Token::Else);
+}
+
+#[test]
 fn test_all_type_keywords() {
     let source = "i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 bool str";
     let tokens = tokenize(source).unwrap();

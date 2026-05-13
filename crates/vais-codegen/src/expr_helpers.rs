@@ -29,9 +29,15 @@ impl CodeGenerator {
             }
         }
         if let Some((enum_name, tag)) = found {
+            let enum_ty = ResolvedType::Named {
+                name: enum_name.clone(),
+                generics: vec![],
+            };
             let mut ir = String::new();
             let enum_ptr = self.next_temp(counter);
             self.emit_entry_alloca(&enum_ptr, &format!("%{}", enum_name));
+            self.fn_ctx
+                .register_temp_type(&enum_ptr, ResolvedType::Pointer(Box::new(enum_ty)));
             // Store tag
             let tag_ptr = self.next_temp(counter);
             write_ir!(
@@ -67,8 +73,21 @@ impl CodeGenerator {
 
         // Handle string operations
         let left_type = self.infer_expr_type(left);
-        if matches!(left_type, ResolvedType::Str) {
-            return self.generate_string_binary_op(op, &left_val, &right_val, ir, counter);
+        let right_type_for_string = self.infer_expr_type(right);
+        let left_is_string_like = self.is_string_like_type(&left_type);
+        let right_is_string_like = self.is_string_like_type(&right_type_for_string);
+        if left_is_string_like || right_is_string_like {
+            return self.generate_string_like_binary_op(
+                op,
+                &left_val,
+                &left_type,
+                self.is_expr_value(left),
+                &right_val,
+                &right_type_for_string,
+                self.is_expr_value(right),
+                ir,
+                counter,
+            );
         }
 
         // Handle comparison and logical operations (result is i1)

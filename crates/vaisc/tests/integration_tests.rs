@@ -450,10 +450,93 @@ fn test_use_statement() {
 }
 
 #[test]
+fn test_multi_char_use_statement() {
+    let source = "use std::fs";
+    assert!(compiles(source));
+}
+
+#[test]
 fn test_pub_function() {
     let source = "P F public_fn() -> () = ()";
     let ir = compile_to_ir(source).unwrap();
     assert!(ir.contains("define void @public_fn"));
+}
+
+#[test]
+fn test_multi_char_pub_fn_return() {
+    let source = "pub fn public_fn() -> i64 { return 42 }";
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("define i64 @public_fn"));
+}
+
+#[test]
+fn test_format_interpolation_ref_str_method_arg_uses_c_string_pointer() {
+    let source = r#"
+S Checker {}
+
+X Checker {
+    F message(self, name: &str) -> str {
+        "Identifier must start with a letter or underscore: '{name}'"
+    }
+}
+"#;
+    let ir = compile_to_ir(source).expect("source should compile");
+    assert!(
+        ir.contains("extractvalue { i8*, i64 } %name, 0"),
+        "format interpolation should extract the raw C string pointer from &str"
+    );
+    assert!(
+        !ir.contains("i64 %name"),
+        "format interpolation must not pass a &str fat pointer as i64 to snprintf"
+    );
+}
+
+#[test]
+fn test_f64_return_from_i64_expression_emits_numeric_cast() {
+    let source = r#"
+F scale() -> f64 {
+    x := 4
+    y := 2
+    x / y
+}
+"#;
+    let ir = compile_to_ir(source).expect("source should compile");
+    let scale_start = ir.find("define double @scale()").expect("scale IR exists");
+    let scale_rest = &ir[scale_start..];
+    let scale_end = scale_rest.find("\n}").expect("scale IR has an end");
+    let scale_ir = &scale_rest[..scale_end];
+    assert!(
+        scale_ir.contains("sitofp i64"),
+        "i64 expression returned from f64 function should be converted before ret"
+    );
+    let cast_tmp = scale_ir
+        .lines()
+        .find_map(|line| line.trim().split_once(" = sitofp i64").map(|(tmp, _)| tmp))
+        .expect("scale IR should contain a cast temp");
+    assert!(scale_ir.contains(&format!("ret double {}", cast_tmp)));
+}
+
+#[test]
+fn test_try_result_unit_does_not_emit_void_pointer_payload_load() {
+    let source = r#"
+F validate() -> Result<(), str> {
+    Ok(())
+}
+
+F make() -> Result<i64, str> {
+    validate()?;
+    Ok(42)
+}
+"#;
+    let ir = compile_to_ir(source).expect("source should compile");
+    assert!(
+        !ir.contains("void*"),
+        "Result<(), E> try must not bitcast payload storage to void*"
+    );
+    assert!(
+        !ir.contains("load void"),
+        "Result<(), E> try must not load a void payload"
+    );
 }
 
 // ==================== Async Tests ====================

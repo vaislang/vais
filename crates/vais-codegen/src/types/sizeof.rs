@@ -115,17 +115,7 @@ impl CodeGenerator {
             ResolvedType::Unit => 0,
             ResolvedType::Pointer(_) | ResolvedType::Ref(_) | ResolvedType::RefMut(_) => 8,
             ResolvedType::Array(_) => 8, // pointer to heap
-            ResolvedType::Optional(inner) => {
-                // Option<T> is { i8 tag, T value } — actual size depends on T
-                let inner_size = self.compute_sizeof(inner);
-                1 + inner_size // i8 tag + payload
-            }
-            ResolvedType::Result(ok, err) => {
-                // Result<T, E> is { i8 tag, max(T, E) value }
-                let ok_size = self.compute_sizeof(ok);
-                let err_size = self.compute_sizeof(err);
-                1 + std::cmp::max(ok_size, err_size) // i8 tag + largest payload
-            }
+            ResolvedType::Optional(_) | ResolvedType::Result(_, _) => 16,
             ResolvedType::Tuple(elems) => elems.iter().map(|e| self.compute_sizeof(e)).sum(),
             ResolvedType::Named { name, generics } => {
                 // Visited check is done in compute_sizeof() wrapper
@@ -270,17 +260,7 @@ impl CodeGenerator {
             | ResolvedType::Ref(_)
             | ResolvedType::RefMut(_) => 8,
             ResolvedType::Unit => 1,
-            ResolvedType::Optional(inner) => {
-                // Option<T> alignment is max(1, align(T))
-                std::cmp::max(1, self.compute_alignof(inner))
-            }
-            ResolvedType::Result(ok, err) => {
-                // Result<T, E> alignment is max(1, align(T), align(E))
-                std::cmp::max(
-                    1,
-                    std::cmp::max(self.compute_alignof(ok), self.compute_alignof(err)),
-                )
-            }
+            ResolvedType::Optional(_) | ResolvedType::Result(_, _) => 8,
             ResolvedType::Tuple(elems) => elems
                 .iter()
                 .map(|e| self.compute_alignof(e))

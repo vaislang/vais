@@ -15,6 +15,7 @@
 #   String::with_capacity(n)    - n 바이트 용량의 빈 String 생성
 #   String::from_str(s)         - str 리터럴로부터 String 생성
 #   .push_char(c)               - 문자(i8) 하나 추가
+#   .push_byte(b)               - 바이트 하나 추가
 #   .push_str(s)                - str 슬라이스 추가
 #   .append(other)              - 다른 String 뒤에 이어 붙이기
 #   .len()                      - 바이트 길이 반환
@@ -118,6 +119,11 @@ X String {
         # Null terminate
         store_byte(self.data + self.len, 0)
         self.len
+    }
+
+    # Push a raw byte to the end
+    F push_byte(&self, b: i64) -> i64 {
+        @.push_char(b)
     }
 
     # Grow the string capacity (double it)
@@ -644,6 +650,28 @@ F str_join_fill(split_result: i64, count: i64, delim: i64, idx: i64, buf: i64, p
         str_join_fill(split_result, count, delim, idx + 1, buf, new_pos + part_len)
     }
 }
+
+# =====================================================
+# Primitive `str` byte access (free function API)
+# =====================================================
+
+# Return the byte at position `i` of primitive `str` `s`, or 0 if out of bounds.
+F str_byte_at(s: str, i: i64) -> i64 {
+    len := str_len(s)
+    I i < 0 || i >= len {
+        0
+    } EL {
+        ptr := str_to_ptr(s)
+        load_byte(ptr + i)
+    }
+}
+
+# Return the length of primitive `str` `s` in bytes.
+F str_len(s: str) -> i64 {
+    __strlen(s)
+}
+
+X F __strlen(s: str) -> i64
 
 # =====================================================
 # String to integer conversion (raw pointer API)

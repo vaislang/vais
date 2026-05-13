@@ -232,6 +232,33 @@ impl CodeGenerator {
             } else {
                 // Replace "void" with 0 for Unit/() values in enum payloads
                 let store_val = if arg_val == "void" { "0" } else { arg_val };
+                let store_val = if effective_ty.ends_with('*') && store_val.starts_with('%') {
+                    let ptr_i64 = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = ptrtoint {} {} to i64",
+                        ptr_i64,
+                        effective_ty,
+                        store_val
+                    );
+                    ptr_i64
+                } else if matches!(effective_ty.as_str(), "i1" | "i8" | "i16" | "i32")
+                    && store_val.starts_with('%')
+                {
+                    let widened = self.next_temp(counter);
+                    let op = if effective_ty == "i1" { "zext" } else { "sext" };
+                    write_ir!(
+                        ir,
+                        "  {} = {} {} {} to i64",
+                        widened,
+                        op,
+                        effective_ty,
+                        store_val
+                    );
+                    widened
+                } else {
+                    store_val.to_string()
+                };
                 write_ir!(ir, "  store i64 {}, i64* {}", store_val, payload_field_ptr);
             }
         }

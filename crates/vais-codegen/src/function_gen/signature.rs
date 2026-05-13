@@ -70,6 +70,7 @@ impl CodeGenerator {
             "malloc" => return "declare i8* @malloc(i64)".to_string(),
             "free" => return "declare void @free(i8*)".to_string(),
             "realloc" => return "declare i8* @realloc(i8*, i64)".to_string(),
+            "gettimeofday" => return "declare i32 @gettimeofday(i8*, i8*)".to_string(),
             _ => {}
         }
 

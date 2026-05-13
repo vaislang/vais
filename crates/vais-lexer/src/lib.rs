@@ -46,37 +46,49 @@ pub enum Token {
     #[token("<!--", skip_html_comment)]
     // === VaisX Template Doctype (HTML5 doctype declaration) ===
     #[regex(r"<!DOCTYPE[^>]*>", logos::skip, ignore(case))]
-    // === Keywords (single-letter for token efficiency) ===
-    // Higher priority than identifiers
+    // === Keywords ===
+    // Multi-character spellings are accepted as canonical source syntax while
+    // the existing single-letter spellings remain supported for compatibility.
+    // Higher priority than identifiers.
     #[token("F", priority = 3)]
+    #[token("fn", priority = 3)]
     Function,
     #[token("S", priority = 3)]
+    #[token("struct", priority = 3)]
     Struct,
     #[token("E", priority = 3)]
+    #[token("enum", priority = 3)]
     Enum,
     #[token("I", priority = 3)]
     If,
     #[token("L", priority = 3)]
     Loop,
     #[token("M", priority = 3)]
+    #[token("match", priority = 3)]
     Match,
     #[token("A", priority = 3)]
     Async,
     #[token("R", priority = 3)]
+    #[token("return", priority = 3)]
     Return,
     #[token("B", priority = 3)]
     Break,
     #[token("C", priority = 3)]
     Continue,
     #[token("T", priority = 3)]
+    #[token("type", priority = 3)]
     TypeKeyword,
     #[token("U", priority = 3)]
+    #[token("use", priority = 3)]
     Use,
     #[token("P", priority = 3)]
+    #[token("pub", priority = 3)]
     Pub,
     #[token("W", priority = 3)]
+    #[token("trait", priority = 3)]
     Trait,
     #[token("X", priority = 3)]
+    #[token("impl", priority = 3)]
     Impl,
     #[token("D", priority = 3)]
     Defer,
@@ -91,6 +103,7 @@ pub enum Token {
     #[token("EN", priority = 4)]
     EnumKeyword, // Unambiguous enum (replaces contextual E)
     #[token("EL", priority = 4)]
+    #[token("else", priority = 4)]
     Else, // Unambiguous else (replaces contextual E after if)
     #[token("LF", priority = 4)]
     ForEach, // Unambiguous for-each loop (replaces contextual L pattern:iter)

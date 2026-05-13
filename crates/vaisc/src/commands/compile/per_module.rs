@@ -273,6 +273,10 @@ pub(crate) fn compile_per_module(
         link_args.push("-lm".to_string());
     }
 
+    let used_modules = crate::runtime::extract_used_modules(final_ast);
+    let native_deps = HashMap::new();
+    super::native::add_runtime_libs(&mut link_args, verbose, &used_modules, &native_deps, false)?;
+
     // Phase 4c.4 / Task #55 — reproducible linker metadata.
     // Shared with `compile_to_native` so both the per-module and
     // whole-program link paths produce bit-identical binaries.

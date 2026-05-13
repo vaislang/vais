@@ -7,7 +7,7 @@
 use vais_ast::*;
 use vais_types::ResolvedType;
 
-use crate::{CodeGenerator, CodegenResult};
+use crate::{format_did_you_mean, suggest_similar, CodeGenerator, CodegenError, CodegenResult};
 
 impl CodeGenerator {
     /// Generate code for a reference expression (`&expr`).
@@ -27,6 +27,22 @@ impl CodeGenerator {
         if let Expr::Ident(name) = &inner.node {
             if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
                 if local.is_alloca() {
+                    if matches!(
+                        &local.ty,
+                        ResolvedType::Str
+                            | ResolvedType::Slice(_)
+                            | ResolvedType::SliceMut(_)
+                            | ResolvedType::DynTrait { .. }
+                    ) {
+                        let loaded = self.next_temp(counter);
+                        let llvm_ty = self.type_to_llvm(&local.ty);
+                        let ir = format!(
+                            "  {} = load {}, {}* %{}\n",
+                            loaded, llvm_ty, llvm_ty, local.llvm_name
+                        );
+                        self.fn_ctx.register_temp_type(&loaded, local.ty);
+                        return Ok((loaded, ir));
+                    }
                     // Alloca variables already have an address.
                     return Ok((format!("%{}", local.llvm_name), String::new()));
                 } else {
@@ -35,8 +51,157 @@ impl CodeGenerator {
                 }
             }
         }
+
+        if let Expr::Field { expr, field } = &inner.node {
+            if let Some(field_ref) = self.generate_ref_field_expr(expr, field, counter)? {
+                return Ok(field_ref);
+            }
+        }
+
         // For complex expressions, evaluate and return
         self.generate_expr(inner, counter)
+    }
+
+    fn generate_ref_field_expr(
+        &mut self,
+        obj: &Spanned<Expr>,
+        field: &Spanned<String>,
+        counter: &mut usize,
+    ) -> CodegenResult<Option<(String, String)>> {
+        let (obj_val, obj_ir) = self.generate_expr(obj, counter)?;
+        let mut ir = obj_ir;
+        let obj_type = self.infer_expr_type(obj);
+        let resolved_type = match &obj_type {
+            ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Pointer(inner) => inner.as_ref(),
+            other => other,
+        };
+
+        let ResolvedType::Named {
+            name: orig_type_name,
+            generics: type_generics,
+        } = resolved_type
+        else {
+            return Ok(None);
+        };
+
+        let type_name = if !type_generics.is_empty()
+            && type_generics
+                .iter()
+                .all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)))
+        {
+            let mangled = self.mangle_struct_name(orig_type_name, type_generics);
+            if self.types.structs.contains_key(&mangled)
+                || self.generics.generated_structs.contains_key(&mangled)
+            {
+                mangled
+            } else {
+                self.resolve_struct_name(orig_type_name)
+            }
+        } else {
+            self.resolve_struct_name(orig_type_name)
+        };
+        let type_name = if self.types.structs.contains_key(&type_name)
+            || self.generics.generated_structs.contains_key(&type_name)
+        {
+            type_name
+        } else if type_name.contains('$') {
+            let base = type_name
+                .split('$')
+                .next()
+                .unwrap_or(&type_name)
+                .to_string();
+            if self.types.structs.contains_key(&base) {
+                base
+            } else {
+                type_name
+            }
+        } else {
+            type_name
+        };
+
+        if let Some(struct_info) = self.types.structs.get(&type_name).cloned() {
+            let field_idx = struct_info
+                .fields
+                .iter()
+                .position(|(n, _)| n == &field.node)
+                .ok_or_else(|| {
+                    let candidates: Vec<&str> =
+                        struct_info.fields.iter().map(|(n, _)| n.as_str()).collect();
+                    let suggestions = suggest_similar(&field.node, &candidates, 3);
+                    let suggestion_text = format_did_you_mean(&suggestions);
+                    CodegenError::TypeError(format!(
+                        "Unknown field '{}' in struct '{}'{}",
+                        field.node, type_name, suggestion_text
+                    ))
+                })?;
+            let field_ptr = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
+                field_ptr,
+                type_name,
+                type_name,
+                obj_val,
+                field_idx
+            );
+            let field_ty = struct_info.fields[field_idx].1.clone();
+            if matches!(
+                field_ty,
+                ResolvedType::Str
+                    | ResolvedType::Slice(_)
+                    | ResolvedType::SliceMut(_)
+                    | ResolvedType::DynTrait { .. }
+            ) {
+                let loaded = self.next_temp(counter);
+                let llvm_ty = self.type_to_llvm(&field_ty);
+                write_ir!(
+                    ir,
+                    "  {} = load {}, {}* {}",
+                    loaded,
+                    llvm_ty,
+                    llvm_ty,
+                    field_ptr
+                );
+                self.fn_ctx.register_temp_type(&loaded, field_ty);
+                return Ok(Some((loaded, ir)));
+            }
+            self.fn_ctx
+                .register_temp_type(&field_ptr, ResolvedType::Pointer(Box::new(field_ty)));
+            return Ok(Some((field_ptr, ir)));
+        }
+
+        if let Some(union_info) = self.types.unions.get(&type_name).cloned() {
+            let field_ty = union_info
+                .fields
+                .iter()
+                .find(|(n, _)| n == &field.node)
+                .map(|(_, ty)| ty.clone())
+                .ok_or_else(|| {
+                    let candidates: Vec<&str> =
+                        union_info.fields.iter().map(|(n, _)| n.as_str()).collect();
+                    let suggestions = suggest_similar(&field.node, &candidates, 3);
+                    let suggestion_text = format_did_you_mean(&suggestions);
+                    CodegenError::TypeError(format!(
+                        "Unknown field '{}' in union '{}'{}",
+                        field.node, type_name, suggestion_text
+                    ))
+                })?;
+            let llvm_ty = self.type_to_llvm(&field_ty);
+            let field_ptr = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = bitcast %{}* {} to {}*",
+                field_ptr,
+                type_name,
+                obj_val,
+                llvm_ty
+            );
+            return Ok(Some((field_ptr, ir)));
+        }
+
+        Ok(None)
     }
 
     /// Generate a slice fat pointer `{ i8*, i64 }` from `&[elem, ...]`.
@@ -134,6 +299,16 @@ impl CodeGenerator {
         let (val, val_ir) = self.generate_expr(inner, counter)?;
         ir.push_str(&val_ir);
 
+        if matches!(
+            &local.ty,
+            ResolvedType::Str
+                | ResolvedType::Slice(_)
+                | ResolvedType::SliceMut(_)
+                | ResolvedType::DynTrait { .. }
+        ) {
+            return Ok((val, ir));
+        }
+
         // If the local is a struct-typed SSA value whose LLVM name is an alloca
         // pointer (e.g., %__test_ptr from function entry, or %self for methods),
         // the value is already a pointer to the struct — return it directly.
@@ -155,6 +330,10 @@ impl CodeGenerator {
             llvm_ty,
             tmp_alloca
         );
+        self.fn_ctx.register_temp_type(
+            &tmp_alloca,
+            ResolvedType::Pointer(Box::new(local.ty.clone())),
+        );
         Ok((tmp_alloca, ir))
     }
 
@@ -170,10 +349,33 @@ impl CodeGenerator {
 
         // Infer the pointee type from the pointer expression
         let ptr_type = self.infer_expr_type(inner);
+        if matches!(
+            &ptr_type,
+            ResolvedType::Str
+                | ResolvedType::Slice(_)
+                | ResolvedType::SliceMut(_)
+                | ResolvedType::DynTrait { .. }
+        ) {
+            return Ok((ptr_val, ir));
+        }
+        if matches!(
+            &ptr_type,
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                if matches!(
+                    inner.as_ref(),
+                    ResolvedType::Str
+                        | ResolvedType::Slice(_)
+                        | ResolvedType::SliceMut(_)
+                        | ResolvedType::DynTrait { .. }
+                )
+        ) {
+            return Ok((ptr_val, ir));
+        }
         let pointee_llvm = match &ptr_type {
             ResolvedType::Pointer(inner) => self.type_to_llvm(inner),
             ResolvedType::Ref(inner) => self.type_to_llvm(inner),
             ResolvedType::RefMut(inner) => self.type_to_llvm(inner),
+            ResolvedType::Named { .. } => self.type_to_llvm(&ptr_type),
             _ => "i64".to_string(),
         };
 
