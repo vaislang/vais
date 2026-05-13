@@ -4,11 +4,13 @@
 
 use crate::{ResolvedType, TypeChecker, TypeError, TypeResult};
 use std::collections::{HashMap, HashSet};
+use vais_ast::Span;
 
 /// Trait method signature
 #[derive(Debug, Clone)]
 pub struct TraitMethodSig {
     pub name: String,
+    pub generics: Vec<String>, // Method-level generic parameters (e.g., ["T"] for F get<T>)
     pub params: Vec<(String, ResolvedType, bool)>, // (name, type, is_mut) - first param is &self
     pub ret: ResolvedType,
     pub has_default: bool,
@@ -177,6 +179,7 @@ impl TypeChecker {
         generic_names: &[String],
         concrete_types: &[ResolvedType],
         bounds: &HashMap<String, Vec<String>>,
+        call_span: Option<Span>,
     ) -> TypeResult<()> {
         for (generic_name, concrete_type) in generic_names.iter().zip(concrete_types) {
             if let Some(required_traits) = bounds.get(generic_name) {
@@ -188,7 +191,7 @@ impl TypeChecker {
                                 "type '{}' which does not implement '{}'",
                                 concrete_type, trait_name
                             ),
-                            span: None,
+                            span: call_span,
                         });
                     }
                 }
@@ -197,11 +200,11 @@ impl TypeChecker {
         Ok(())
     }
 
-    /// Verify ImplTrait/DynTrait bounds against a concrete type.
-    /// When an expected type is `impl Trait` or `dyn Trait`, the concrete type
-    /// must implement all the required trait bounds. Non-fatal: logs warning
-    /// but does not fail compilation (bounds checking is best-effort for now
-    /// since not all trait impls are tracked).
+    /// Verify DynTrait bounds against a concrete type.
+    /// When an expected type is `dyn Trait`, the concrete type must implement
+    /// the required trait bound. Non-fatal: logs warning but does not fail
+    /// compilation (bounds checking is best-effort since not all trait impls
+    /// are tracked).
     pub(crate) fn verify_trait_type_bounds(
         &self,
         expected: &ResolvedType,
@@ -215,25 +218,14 @@ impl TypeChecker {
             return;
         }
 
-        let bounds = match expected {
-            ResolvedType::ImplTrait { bounds } => bounds,
-            ResolvedType::DynTrait {
-                trait_name,
-                generics: _,
-            } => {
-                // DynTrait has a single trait name
-                if !self.type_implements_trait(concrete, trait_name) {
-                    // Best-effort: don't fail compilation since trait impl tracking
-                    // may not be complete for all types
-                }
-                return;
-            }
-            _ => return,
-        };
-
-        for bound in bounds {
-            // Best-effort bounds checking — trait impl tracking may not be complete
-            let _implements = self.type_implements_trait(concrete, bound);
+        if let ResolvedType::DynTrait {
+            trait_name,
+            generics: _,
+        } = expected
+        {
+            // Best-effort: don't fail compilation since trait impl tracking
+            // may not be complete for all types
+            let _implements = self.type_implements_trait(concrete, trait_name);
         }
     }
 }

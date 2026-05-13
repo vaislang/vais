@@ -46,7 +46,7 @@ impl ExprVisitor for CodeGenerator {
                 self.generate_expr(expr, counter)
             }
             Expr::Tuple(elements) => self.visit_tuple(elements, counter),
-            Expr::StructLit { name, fields } => self.visit_struct_lit(name, fields, counter),
+            Expr::StructLit { name, fields, .. } => self.visit_struct_lit(name, fields, counter),
             Expr::Index { expr: array, index } => {
                 // Check if this is a slice operation (index is a Range expression)
                 if let Expr::Range {
@@ -66,6 +66,11 @@ impl ExprVisitor for CodeGenerator {
                 self.visit_index(array, index, counter)
             }
             Expr::Field { expr: obj, field } => self.visit_field(obj, field, counter),
+            Expr::TupleFieldAccess { expr: obj, index } => {
+                // Treat tuple field access as regular field access with index as field name
+                let field_name = Spanned::new(index.to_string(), obj.span);
+                self.visit_field(obj, &field_name, counter)
+            }
             Expr::MethodCall {
                 receiver,
                 method,
@@ -93,7 +98,6 @@ impl ExprVisitor for CodeGenerator {
                 inclusive,
             } => self.visit_range(start.as_deref(), end.as_deref(), *inclusive, counter),
             Expr::Await(inner) => self.visit_await(inner, counter),
-            Expr::Spawn(inner) => self.visit_spawn(inner, counter),
             Expr::Yield(inner) => self.visit_expr(inner, counter),
             Expr::Lambda { params, body, .. } => self.visit_lambda(params, body, counter),
             Expr::Try(inner) => self.visit_try(inner, counter),
@@ -105,8 +109,39 @@ impl ExprVisitor for CodeGenerator {
                 self.visit_assert(condition, message.as_deref(), counter)
             }
             Expr::Assume(inner) => self.visit_assume(inner, counter),
-            Expr::Lazy(inner) => self.visit_lazy(inner, counter),
-            Expr::Force(inner) => self.visit_force(inner, counter),
+            // Enum namespace access: EnumName::VariantName
+            // Delegate to the same unit-enum-variant path used for bare variant names.
+            Expr::EnumAccess {
+                enum_name: _,
+                variant,
+                data: None,
+            } => {
+                // Unit variant: look up by variant name (same as bare Ident path)
+                if self.is_unit_enum_variant(variant) {
+                    self.generate_unit_enum_variant(variant, counter)
+                } else {
+                    self.visit_ident(variant, counter)
+                }
+            }
+            Expr::EnumAccess {
+                enum_name: _,
+                variant,
+                data: Some(data_expr),
+            } => {
+                // Tuple variant with data: treat as a call `VariantName(data)`
+                let span = expr.span;
+                let call_expr = vais_ast::Spanned::new(
+                    vais_ast::Expr::Call {
+                        func: Box::new(vais_ast::Spanned::new(
+                            vais_ast::Expr::Ident(variant.clone()),
+                            span,
+                        )),
+                        args: vec![*data_expr.clone()],
+                    },
+                    span,
+                );
+                self.generate_expr(&call_expr, counter)
+            }
             Expr::Error { message, .. } => {
                 // Error nodes should not reach codegen - they indicate parsing failures
                 Err(CodegenError::Unsupported(format!(
@@ -130,9 +165,7 @@ impl ExprVisitor for CodeGenerator {
     }
 
     fn visit_string(&mut self, s: &str, _counter: &mut usize) -> GenResult {
-        let name = self.make_string_name();
-        self.strings.counter += 1;
-        self.strings.constants.push((name.clone(), s.to_string()));
+        let name = self.get_or_create_string_constant(s);
 
         let len = s.len() + 1;
         Ok((
@@ -180,7 +213,10 @@ impl ExprVisitor for CodeGenerator {
 
     fn visit_self_call(&mut self) -> GenResult {
         if let Some(fn_name) = &self.fn_ctx.current_function {
-            Ok((format!("@{}", fn_name), String::new()))
+            // In async poll functions, current_function is "name__poll"
+            // but @ should refer to the original create function.
+            let call_name = fn_name.strip_suffix("__poll").unwrap_or(fn_name);
+            Ok((format!("@{}", call_name), String::new()))
         } else {
             Err(CodegenError::UndefinedFunction("@".to_string()))
         }
@@ -341,6 +377,15 @@ impl ExprVisitor for CodeGenerator {
                 if local.is_alloca() {
                     // Alloca variables already have an address
                     return Ok((format!("%{}", local.llvm_name), String::new()));
+                } else if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_ssa() {
+                    // Named SSA locals (self, struct params) are already pointers
+                    // from alloca pattern at function entry — return directly
+                    let (val, val_ir) = self.visit_expr(inner, counter)?;
+                    return Ok((val, val_ir));
+                } else if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_param() {
+                    // Named param (e.g., `self` in methods) is passed as %Struct* —
+                    // already a pointer, return directly for &self
+                    return Ok((format!("%{}", local.llvm_name), String::new()));
                 } else {
                     // SSA/Param values need to be spilled to stack to take their address
                     let mut ir = String::new();
@@ -348,11 +393,15 @@ impl ExprVisitor for CodeGenerator {
                     let (val, val_ir) = self.visit_expr(inner, counter)?;
                     ir.push_str(&val_ir);
                     let tmp_alloca = self.next_temp(counter);
-                    ir.push_str(&format!("  {} = alloca {}\n", tmp_alloca, llvm_ty));
-                    ir.push_str(&format!(
-                        "  store {} {}, {}* {}\n",
-                        llvm_ty, val, llvm_ty, tmp_alloca
-                    ));
+                    write_ir!(ir, "  {} = alloca {}", tmp_alloca, llvm_ty);
+                    write_ir!(
+                        ir,
+                        "  store {} {}, {}* {}",
+                        llvm_ty,
+                        val,
+                        llvm_ty,
+                        tmp_alloca
+                    );
                     return Ok((tmp_alloca, ir));
                 }
             }
@@ -375,10 +424,14 @@ impl ExprVisitor for CodeGenerator {
         };
 
         let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = load {}, {}* {}\n",
-            result, llvm_ty, llvm_ty, ptr_val
-        ));
+        write_ir!(
+            ir,
+            "  {} = load {}, {}* {}",
+            result,
+            llvm_ty,
+            llvm_ty,
+            ptr_val
+        );
 
         Ok((result, ir))
     }
@@ -419,20 +472,13 @@ impl ExprVisitor for CodeGenerator {
         self.generate_await_expr(inner, counter)
     }
 
-    fn visit_spawn(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
-        let (future_ptr, future_ir) = self.visit_expr(inner, counter)?;
-        let mut ir = future_ir;
-        ir.push_str(&format!("; Spawned task at {}\n", future_ptr));
-        Ok((future_ptr, ir))
-    }
-
     fn visit_lambda(
         &mut self,
         params: &[Param],
         body: &Spanned<Expr>,
         counter: &mut usize,
     ) -> GenResult {
-        self.generate_lambda_expr(params, body, counter)
+        self.generate_lambda_expr(params, body, &vais_ast::CaptureMode::ByValue, counter)
     }
 
     fn visit_try(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
@@ -460,10 +506,8 @@ impl ExprVisitor for CodeGenerator {
                 Ok((if b { "1" } else { "0" }.to_string(), String::new()))
             }
             vais_types::ComptimeValue::String(s) => {
-                // Create a global string constant
-                let name = self.make_string_name();
-                self.strings.counter += 1;
-                self.strings.constants.push((name.clone(), s.clone()));
+                // Create a global string constant (deduplicated)
+                let name = self.get_or_create_string_constant(&s);
                 let len = s.len() + 1;
                 Ok((
                     format!(
@@ -502,15 +546,20 @@ impl ExprVisitor for CodeGenerator {
                 let len = elements.len();
 
                 // For now, assume i64 elements (we'd need better type inference for mixed types)
-                ir.push_str(&format!("  {} = alloca [{} x i64]\n", array_name, len));
+                write_ir!(ir, "  {} = alloca [{} x i64]", array_name, len);
 
                 for (i, elem_val) in elements.iter().enumerate() {
                     let elem_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = getelementptr [{} x i64], [{} x i64]* {}, i64 0, i64 {}\n",
-                        elem_ptr, len, len, array_name, i
-                    ));
-                    ir.push_str(&format!("  store i64 {}, i64* {}\n", elem_val, elem_ptr));
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr [{} x i64], [{} x i64]* {}, i64 0, i64 {}",
+                        elem_ptr,
+                        len,
+                        len,
+                        array_name,
+                        i
+                    );
+                    write_ir!(ir, "  store i64 {}, i64* {}", elem_val, elem_ptr);
                 }
 
                 Ok((array_name, ir))
@@ -565,315 +614,5 @@ impl ExprVisitor for CodeGenerator {
         } else {
             self.generate_assume(inner, counter)
         }
-    }
-
-    fn visit_lazy(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
-        // Lazy evaluation: Create a thunk function that captures free variables
-        // and returns { i1 computed=false, T zeroinit, i8* thunk_fn_ptr }
-        // The thunk is called on first `force`, which caches the result.
-
-        let inner_type = self.infer_expr_type(inner);
-        let inner_llvm_ty = self.type_to_llvm(&inner_type);
-        let lazy_ty = format!("{{ i1, {}, i8* }}", inner_llvm_ty);
-
-        // Generate a thunk function that computes the lazy value
-        let thunk_name = format!("__lazy_thunk_{}", self.fn_ctx.label_counter);
-        self.fn_ctx.label_counter += 1;
-
-        // Find free variables in the lazy expression (for capture)
-        // param_names is empty because lazy has no parameters of its own —
-        // all identifiers from the outer scope (including function params) are free variables
-        // that need to be captured by the thunk function.
-        let param_names = std::collections::HashSet::new();
-        let mut free_vars = Vec::new();
-        self.collect_free_vars_in_expr(&inner.node, &param_names, &mut free_vars);
-        let mut seen = std::collections::HashSet::new();
-        free_vars.retain(|v| seen.insert(v.clone()));
-
-        // Collect captured variable info
-        let mut captured_vars: Vec<(String, crate::ResolvedType, String)> = Vec::new();
-        let mut capture_ir = String::new();
-
-        for cap_name in &free_vars {
-            if let Some(local) = self.fn_ctx.locals.get(cap_name) {
-                let ty = local.ty.clone();
-                let llvm_ty = self.type_to_llvm(&ty);
-                if local.is_param() {
-                    captured_vars.push((cap_name.clone(), ty, format!("%{}", local.llvm_name)));
-                } else if local.is_ssa() {
-                    captured_vars.push((cap_name.clone(), ty, local.llvm_name.clone()));
-                } else {
-                    let tmp = self.next_temp(counter);
-                    capture_ir.push_str(&format!(
-                        "  {} = load {}, {}* %{}\n",
-                        tmp, llvm_ty, llvm_ty, local.llvm_name
-                    ));
-                    captured_vars.push((cap_name.clone(), ty, tmp));
-                }
-            }
-        }
-
-        // Build thunk parameter list (captured vars only — thunk takes no explicit args)
-        let mut thunk_param_strs = Vec::new();
-        let mut thunk_param_types = Vec::new();
-        for (cap_name, cap_ty, _) in &captured_vars {
-            let llvm_ty = self.type_to_llvm(cap_ty);
-            thunk_param_strs.push(format!("{} %__cap_{}", llvm_ty, cap_name));
-            thunk_param_types.push(llvm_ty);
-        }
-
-        // Save and set up thunk context
-        let saved_function = self.fn_ctx.current_function.take();
-        let saved_locals = std::mem::take(&mut self.fn_ctx.locals);
-
-        self.fn_ctx.current_function = Some(thunk_name.clone());
-
-        // Register captured variables as locals in thunk
-        for (cap_name, cap_ty, _) in &captured_vars {
-            self.fn_ctx.locals.insert(
-                cap_name.clone(),
-                crate::types::LocalVar::param(cap_ty.clone(), format!("__cap_{}", cap_name)),
-            );
-        }
-
-        // Generate thunk body
-        let mut thunk_counter = 0;
-        let (body_val, body_ir) = self.generate_expr(inner, &mut thunk_counter)?;
-
-        // Build thunk function IR (returns the inner type)
-        let ret_ty = &inner_llvm_ty;
-        let mut thunk_ir = format!(
-            "define {} @{}({}) {{\nentry:\n",
-            ret_ty,
-            thunk_name,
-            thunk_param_strs.join(", ")
-        );
-        thunk_ir.push_str(&body_ir);
-        thunk_ir.push_str(&format!("  ret {} {}\n}}\n", ret_ty, body_val));
-
-        self.lambdas.generated_ir.push(thunk_ir);
-
-        // Restore context
-        self.fn_ctx.current_function = saved_function;
-        self.fn_ctx.locals = saved_locals;
-
-        // Build the lazy struct: { i1 false, T zeroinitializer, i8* thunk_ptr }
-        let mut ir = capture_ir;
-
-        // Allocate the lazy struct
-        let lazy_ptr = self.next_temp(counter);
-        ir.push_str(&format!("  {} = alloca {}\n", lazy_ptr, lazy_ty));
-
-        // Store computed = false
-        let computed_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr {}, {}* {}, i32 0, i32 0\n",
-            computed_ptr, lazy_ty, lazy_ty, lazy_ptr
-        ));
-        ir.push_str(&format!("  store i1 0, i1* {}\n", computed_ptr));
-
-        // Store zero-initialized value (will be filled on first force)
-        let value_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr {}, {}* {}, i32 0, i32 1\n",
-            value_ptr, lazy_ty, lazy_ty, lazy_ptr
-        ));
-        ir.push_str(&format!(
-            "  store {} 0, {}* {}\n",
-            inner_llvm_ty, inner_llvm_ty, value_ptr
-        ));
-
-        // Store thunk function pointer (cast to i8*)
-        let thunk_fn_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = bitcast {} ({})* @{} to i8*\n",
-            thunk_fn_ptr,
-            ret_ty,
-            thunk_param_types.join(", "),
-            thunk_name
-        ));
-        let thunk_slot = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr {}, {}* {}, i32 0, i32 2\n",
-            thunk_slot, lazy_ty, lazy_ty, lazy_ptr
-        ));
-        ir.push_str(&format!(
-            "  store i8* {}, i8** {}\n",
-            thunk_fn_ptr, thunk_slot
-        ));
-
-        // Load and return the lazy struct
-        let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = load {}, {}* {}\n",
-            result, lazy_ty, lazy_ty, lazy_ptr
-        ));
-
-        // Store lazy thunk info for force to use at call sites
-        self.lambdas.last_lazy_info = Some(crate::types::LazyThunkInfo {
-            thunk_name: thunk_name.clone(),
-            captures: captured_vars
-                .iter()
-                .map(|(name, ty, val)| (name.clone(), self.type_to_llvm(ty), val.clone()))
-                .collect(),
-            inner_llvm_ty: inner_llvm_ty.clone(),
-        });
-
-        Ok((result, ir))
-    }
-
-    fn visit_force(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
-        // Force evaluation: Check computed flag, call thunk if needed, cache result
-
-        let lazy_type = self.infer_expr_type(inner);
-        let inner_type = match &lazy_type {
-            ResolvedType::Lazy(inner) => inner.as_ref().clone(),
-            other => other.clone(),
-        };
-
-        // If not a Lazy type, just return the value directly
-        if !matches!(lazy_type, ResolvedType::Lazy(_)) {
-            return self.visit_expr(inner, counter);
-        }
-
-        let inner_llvm_ty = self.type_to_llvm(&inner_type);
-        let lazy_ty = format!("{{ i1, {}, i8* }}", inner_llvm_ty);
-
-        // Look up lazy thunk info if the inner is an identifier
-        let lazy_info = if let Expr::Ident(name) = &inner.node {
-            self.lambdas.lazy_bindings.get(name.as_str()).cloned()
-        } else {
-            None
-        };
-
-        // If we have thunk info, generate proper conditional evaluation
-        if let (Expr::Ident(name), Some(info)) = (&inner.node, &lazy_info) {
-            if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
-                let mut ir = String::new();
-
-                // The lazy value must be in an alloca so we can update computed/value fields
-                // If SSA, we need to spill it first
-                let lazy_alloca = if local.is_ssa() {
-                    let alloca = self.next_temp(counter);
-                    ir.push_str(&format!("  {} = alloca {}\n", alloca, lazy_ty));
-                    ir.push_str(&format!(
-                        "  store {} {}, {}* {}\n",
-                        lazy_ty, local.llvm_name, lazy_ty, alloca
-                    ));
-                    alloca
-                } else {
-                    format!("%{}", local.llvm_name)
-                };
-
-                // Load computed flag
-                let computed_ptr = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = getelementptr {}, {}* {}, i32 0, i32 0\n",
-                    computed_ptr, lazy_ty, lazy_ty, lazy_alloca
-                ));
-                let computed = self.next_temp(counter);
-                ir.push_str(&format!("  {} = load i1, i1* {}\n", computed, computed_ptr));
-
-                // Branch on computed flag
-                let label_id = self.fn_ctx.label_counter;
-                self.fn_ctx.label_counter += 3;
-                let cached_label = format!("lazy.cached.{}", label_id);
-                let compute_label = format!("lazy.compute.{}", label_id + 1);
-                let merge_label = format!("lazy.merge.{}", label_id + 2);
-
-                ir.push_str(&format!(
-                    "  br i1 {}, label %{}, label %{}\n",
-                    computed, cached_label, compute_label
-                ));
-
-                // Cached path: load value from struct
-                ir.push_str(&format!("{}:\n", cached_label));
-                let cached_val_ptr = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = getelementptr {}, {}* {}, i32 0, i32 1\n",
-                    cached_val_ptr, lazy_ty, lazy_ty, lazy_alloca
-                ));
-                let cached_val = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = load {}, {}* {}\n",
-                    cached_val, inner_llvm_ty, inner_llvm_ty, cached_val_ptr
-                ));
-                ir.push_str(&format!("  br label %{}\n", merge_label));
-
-                // Compute path: call thunk, store result, set computed=true
-                ir.push_str(&format!("{}:\n", compute_label));
-
-                // Build thunk call args (captured values)
-                let mut thunk_args = Vec::new();
-                for (cap_name, cap_llvm_ty_stored, cap_val) in &info.captures {
-                    // Re-load captured value from current scope (it may have changed)
-                    if let Some(cap_local) = self.fn_ctx.locals.get(cap_name.as_str()) {
-                        let cap_llvm_ty = self.type_to_llvm(&cap_local.ty);
-                        if cap_local.is_param() {
-                            thunk_args.push(format!("{} %{}", cap_llvm_ty, cap_local.llvm_name));
-                        } else if cap_local.is_ssa() {
-                            thunk_args.push(format!("{} {}", cap_llvm_ty, cap_local.llvm_name));
-                        } else {
-                            let tmp = self.next_temp(counter);
-                            ir.push_str(&format!(
-                                "  {} = load {}, {}* %{}\n",
-                                tmp, cap_llvm_ty, cap_llvm_ty, cap_local.llvm_name
-                            ));
-                            thunk_args.push(format!("{} {}", cap_llvm_ty, tmp));
-                        }
-                    } else {
-                        // Fallback: use the captured value and stored type from thunk creation time
-                        thunk_args.push(format!("{} {}", cap_llvm_ty_stored, cap_val));
-                    }
-                }
-
-                let computed_val = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = call {} @{}({})\n",
-                    computed_val,
-                    inner_llvm_ty,
-                    info.thunk_name,
-                    thunk_args.join(", ")
-                ));
-
-                // Store computed value into lazy struct
-                let store_val_ptr = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = getelementptr {}, {}* {}, i32 0, i32 1\n",
-                    store_val_ptr, lazy_ty, lazy_ty, lazy_alloca
-                ));
-                ir.push_str(&format!(
-                    "  store {} {}, {}* {}\n",
-                    inner_llvm_ty, computed_val, inner_llvm_ty, store_val_ptr
-                ));
-
-                // Set computed = true
-                ir.push_str(&format!("  store i1 1, i1* {}\n", computed_ptr));
-
-                ir.push_str(&format!("  br label %{}\n", merge_label));
-
-                // Merge: phi node
-                ir.push_str(&format!("{}:\n", merge_label));
-                let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = phi {} [{}, %{}], [{}, %{}]\n",
-                    result, inner_llvm_ty, cached_val, cached_label, computed_val, compute_label
-                ));
-
-                return Ok((result, ir));
-            }
-        }
-
-        // Fallback: for non-identifier or no thunk info, use simple extractvalue
-        let (lazy_val, lazy_ir) = self.visit_expr(inner, counter)?;
-        let mut ir = lazy_ir;
-
-        let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = extractvalue {} {}, 1\n",
-            result, lazy_ty, lazy_val
-        ));
-
-        Ok((result, ir))
     }
 }

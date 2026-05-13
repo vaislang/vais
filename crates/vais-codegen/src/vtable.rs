@@ -19,11 +19,22 @@
 
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::fmt::Write;
 use vais_types::{ResolvedType, TraitDef};
 
 /// LLVM IR type for trait object (fat pointer)
 pub const TRAIT_OBJECT_TYPE: &str = "{ i8*, i8* }";
+
+pub(crate) fn vtable_ret_type(ret: &ResolvedType, is_async: bool) -> &'static str {
+    if is_async {
+        "i64"
+    } else {
+        match ret {
+            ResolvedType::Unit => "void",
+            ResolvedType::Str => "{ i8*, i64 }",
+            _ => "i64",
+        }
+    }
+}
 
 /// Information about a vtable for a specific type implementing a trait
 #[derive(Debug, Clone)]
@@ -73,7 +84,7 @@ impl VtableGenerator {
         let mut ir = String::new();
 
         for drop_fn in &self.drop_functions {
-            write!(
+            write_ir_no_newline!(
                 ir,
                 r#"
 define void @{}(i8* %ptr) {{
@@ -91,8 +102,7 @@ done:
 }}
 "#,
                 drop_fn
-            )
-            .unwrap();
+            );
         }
 
         ir
@@ -184,14 +194,7 @@ done:
                 param_types.push("i64".to_string()); // Simplified: all args as i64
             }
 
-            // For async methods, return type is always i64 (Future handle)
-            let ret_type = if method_sig.is_async {
-                "i64" // Async methods return a Future handle (i64 pointer to state)
-            } else if matches!(method_sig.ret, ResolvedType::Unit) {
-                "void"
-            } else {
-                "i64" // Simplified: all returns as i64
-            };
+            let ret_type = vtable_ret_type(&method_sig.ret, method_sig.is_async);
 
             let fn_type = format!("{}({})*", ret_type, param_types.join(", "));
             fields.push(fn_type);
@@ -232,13 +235,7 @@ done:
                     for _ in &method_sig.params[1..] {
                         vtable_param_types.push("i64".to_string());
                     }
-                    let ret_type = if method_sig.is_async {
-                        "i64"
-                    } else if matches!(method_sig.ret, ResolvedType::Unit) {
-                        "void"
-                    } else {
-                        "i64"
-                    };
+                    let ret_type = vtable_ret_type(&method_sig.ret, method_sig.is_async);
 
                     // Build concrete function type (uses %Type* for self)
                     let mut concrete_param_types = vec![format!("%{}*", info.impl_type)];
@@ -285,24 +282,27 @@ done:
         let alloc_name = format!("%trait_data_{}", *temp_counter);
         *temp_counter += 1;
 
-        writeln!(ir, "  {} = call i8* @malloc(i64 8)", alloc_name).unwrap(); // Simplified: assume 8 bytes
+        write_ir!(ir, "  {} = call i8* @malloc(i64 8)", alloc_name); // Simplified: assume 8 bytes
 
         // Store the concrete value
         let cast_ptr = format!("%trait_cast_{}", *temp_counter);
         *temp_counter += 1;
 
-        writeln!(
+        write_ir!(
             ir,
             "  {} = bitcast i8* {} to {}*",
-            cast_ptr, alloc_name, concrete_type
-        )
-        .unwrap();
-        writeln!(
+            cast_ptr,
+            alloc_name,
+            concrete_type
+        );
+        write_ir!(
             ir,
             "  store {} {}, {}* {}",
-            concrete_type, concrete_value, concrete_type, cast_ptr
-        )
-        .unwrap();
+            concrete_type,
+            concrete_value,
+            concrete_type,
+            cast_ptr
+        );
 
         // Build the trait object struct
         let trait_obj_tmp1 = format!("%trait_obj_{}", *temp_counter);
@@ -314,26 +314,29 @@ done:
         let vtable_cast = format!("%vtable_cast_{}", *temp_counter);
         *temp_counter += 1;
 
-        writeln!(
+        write_ir!(
             ir,
             "  {} = bitcast %vtable_type* {} to i8*",
-            vtable_cast, vtable_info.global_name
-        )
-        .unwrap(); // Placeholder type
+            vtable_cast,
+            vtable_info.global_name
+        );
 
         // Create the trait object { data_ptr, vtable_ptr }
-        writeln!(
+        write_ir!(
             ir,
             "  {} = insertvalue {} undef, i8* {}, 0",
-            trait_obj_tmp1, TRAIT_OBJECT_TYPE, alloc_name
-        )
-        .unwrap();
-        writeln!(
+            trait_obj_tmp1,
+            TRAIT_OBJECT_TYPE,
+            alloc_name
+        );
+        write_ir!(
             ir,
             "  {} = insertvalue {} {}, i8* {}, 1",
-            trait_obj_tmp2, TRAIT_OBJECT_TYPE, trait_obj_tmp1, vtable_cast
-        )
-        .unwrap();
+            trait_obj_tmp2,
+            TRAIT_OBJECT_TYPE,
+            trait_obj_tmp1,
+            vtable_cast
+        );
 
         (ir, trait_obj_tmp2)
     }
@@ -355,35 +358,38 @@ done:
         let data_ptr = format!("%dyn_data_{}", *temp_counter);
         *temp_counter += 1;
 
-        writeln!(
+        write_ir!(
             ir,
             "  {} = extractvalue {} {}, 0",
-            data_ptr, TRAIT_OBJECT_TYPE, trait_object
-        )
-        .unwrap();
+            data_ptr,
+            TRAIT_OBJECT_TYPE,
+            trait_object
+        );
 
         // Extract vtable pointer from trait object
         let vtable_ptr = format!("%dyn_vtable_{}", *temp_counter);
         *temp_counter += 1;
 
-        writeln!(
+        write_ir!(
             ir,
             "  {} = extractvalue {} {}, 1",
-            vtable_ptr, TRAIT_OBJECT_TYPE, trait_object
-        )
-        .unwrap();
+            vtable_ptr,
+            TRAIT_OBJECT_TYPE,
+            trait_object
+        );
 
         // Cast vtable pointer to the correct vtable type
         let vtable_type = Self::vtable_struct_type(trait_def);
         let vtable_cast = format!("%vtable_typed_{}", *temp_counter);
         *temp_counter += 1;
 
-        writeln!(
+        write_ir!(
             ir,
             "  {} = bitcast i8* {} to {}*",
-            vtable_cast, vtable_ptr, vtable_type
-        )
-        .unwrap();
+            vtable_cast,
+            vtable_ptr,
+            vtable_type
+        );
 
         // Get the method function pointer from vtable
         // Method index is offset by 3 (drop, size, align)
@@ -391,12 +397,15 @@ done:
         let fn_ptr_ptr = format!("%fn_ptr_ptr_{}", *temp_counter);
         *temp_counter += 1;
 
-        writeln!(
+        write_ir!(
             ir,
             "  {} = getelementptr {}, {}* {}, i32 0, i32 {}",
-            fn_ptr_ptr, vtable_type, vtable_type, vtable_cast, vtable_slot
-        )
-        .unwrap();
+            fn_ptr_ptr,
+            vtable_type,
+            vtable_type,
+            vtable_cast,
+            vtable_slot
+        );
 
         // Load the function pointer
         let fn_ptr = format!("%fn_ptr_{}", *temp_counter);
@@ -410,12 +419,14 @@ done:
             format!("{}(i8*, {})*", ret_type, extra_arg_types)
         };
 
-        writeln!(
+        write_ir!(
             ir,
             "  {} = load {}, {}* {}",
-            fn_ptr, fn_type, fn_type, fn_ptr_ptr
-        )
-        .unwrap();
+            fn_ptr,
+            fn_type,
+            fn_type,
+            fn_ptr_ptr
+        );
 
         // Build argument list: data_ptr followed by method arguments
         let mut call_args = vec![format!("i8* {}", data_ptr)];
@@ -425,28 +436,26 @@ done:
 
         // Generate the indirect call
         let result = if ret_type == "void" {
-            writeln!(
+            write_ir!(
                 ir,
                 "  call {} {}({})",
                 ret_type,
                 fn_ptr,
                 call_args.join(", ")
-            )
-            .unwrap();
+            );
             "".to_string()
         } else {
             let result_name = format!("%dyn_result_{}", *temp_counter);
             *temp_counter += 1;
 
-            writeln!(
+            write_ir!(
                 ir,
                 "  {} = call {} {}({})",
                 result_name,
                 ret_type,
                 fn_ptr,
                 call_args.join(", ")
-            )
-            .unwrap();
+            );
             result_name
         };
 
@@ -469,6 +478,7 @@ mod tests {
         methods.insert(
             "speak".to_string(),
             TraitMethodSig {
+                generics: vec![],
                 name: "speak".to_string(),
                 params: vec![(
                     "self".to_string(),
@@ -484,6 +494,7 @@ mod tests {
         methods.insert(
             "move_to".to_string(),
             TraitMethodSig {
+                generics: vec![],
                 name: "move_to".to_string(),
                 params: vec![
                     (

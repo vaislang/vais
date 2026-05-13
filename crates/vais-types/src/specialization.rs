@@ -29,11 +29,11 @@ pub enum ImplTargetType {
     /// Most specific - applies to exactly one type
     Concrete(String),
 
-    /// Generic with bounds: impl<T: Bar> Foo for T
+    /// Generic with bounds: `impl<T: Bar> Foo for T`
     /// More specific than unbounded - applies to types satisfying bounds
     Generic(String, Vec<String>),
 
-    /// Blanket impl: impl<T> Foo for T
+    /// Blanket impl: `impl<T> Foo for T`
     /// Least specific - applies to all types
     Blanket(String),
 }
@@ -274,7 +274,28 @@ impl ImplRegistry {
         }
 
         // Then check for positive impls
-        let matching_impls: Vec<_> = self
+        self.impls.iter().any(|impl_info| {
+            impl_info.trait_name == trait_name
+                && !impl_info.is_negative
+                && type_matches(&impl_info.impl_type, type_name)
+        })
+    }
+
+    /// Resolve which impl applies to a specific type
+    ///
+    /// Uses specialization rules to select the most specific impl
+    pub fn resolve_impl(&self, type_name: &str, trait_name: &str) -> Option<&TraitImplInfo> {
+        // Early return if no matching trait impls exist
+        if !self
+            .impls
+            .iter()
+            .any(|impl_info| impl_info.trait_name == trait_name)
+        {
+            return None;
+        }
+
+        // Find the most specific impl
+        let mut candidates: Vec<&TraitImplInfo> = self
             .impls
             .iter()
             .filter(|impl_info| {
@@ -282,32 +303,6 @@ impl ImplRegistry {
                     && !impl_info.is_negative
                     && type_matches(&impl_info.impl_type, type_name)
             })
-            .collect();
-
-        !matching_impls.is_empty()
-    }
-
-    /// Resolve which impl applies to a specific type
-    ///
-    /// Uses specialization rules to select the most specific impl
-    pub fn resolve_impl(&self, type_name: &str, trait_name: &str) -> Option<&TraitImplInfo> {
-        let matching_impls: Vec<&TraitImplInfo> = self
-            .impls
-            .iter()
-            .filter(|impl_info| impl_info.trait_name == trait_name)
-            .collect();
-
-        if matching_impls.is_empty() {
-            return None;
-        }
-
-        // Find the most specific impl
-        let mut candidates: Vec<&TraitImplInfo> = matching_impls
-            .iter()
-            .filter(|impl_info| {
-                !impl_info.is_negative && type_matches(&impl_info.impl_type, type_name)
-            })
-            .copied()
             .collect();
 
         if candidates.is_empty() {

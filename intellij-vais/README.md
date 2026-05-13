@@ -94,29 +94,41 @@ Vais uses single-character keywords for conciseness:
 |---------|---------|
 | `F` | Function definition |
 | `S` | Struct definition |
-| `E` | Enum definition |
-| `T` | Trait definition |
+| `E` | Enum / Else |
 | `I` | If statement |
 | `L` | Loop |
 | `M` | Match |
+| `W` | Trait (interface) |
+| `T` | Type alias |
+| `X` | Implementation block |
+| `P` | Pub (public visibility) |
+| `C` | Continue |
+| `R` | Return |
+| `B` | Break |
+| `N` | Extern (foreign function) |
 | `U` | Use (import) |
+| `D` | Defer |
+| `O` | Union |
+| `G` | Global variable |
 | `A` | Async |
+| `Y` | Await |
 
 Example:
 ```vais
-// Function definition
+# Function definition
 F add(a: i64, b: i64) -> i64 = a + b
 
-// Struct with methods
+# Struct with methods
 S Point {
     x: f64,
     y: f64
 }
 
-// Main function
-F main() {
-    let p = Point { x: 1.0, y: 2.0 }
+# Main function
+F main() -> i64 {
+    p := Point { x: 1.0, y: 2.0 }
     puts("Hello, Vais!")
+    0
 }
 ```
 

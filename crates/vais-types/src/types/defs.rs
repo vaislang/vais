@@ -50,8 +50,12 @@ pub struct FunctionSig {
     pub effect_annotation: EffectAnnotation,
     /// Inferred effects (populated during type checking)
     pub inferred_effects: Option<EffectSet>,
-    /// Higher-kinded type parameters: maps HKT param name to expected arity
-    pub hkt_params: HashMap<String, usize>,
+    /// Generic callees: tracks generic functions called from this function's body.
+    /// Each entry is (callee_name, Vec<param_index_or_generic_name>) — the generic args
+    /// passed to the callee, expressed as indices into this function's generic params
+    /// or as literal type strings for non-generic args.
+    /// Used for transitive instantiation collection during monomorphization.
+    pub generic_callees: Vec<GenericCallee>,
 }
 
 impl Default for FunctionSig {
@@ -68,7 +72,7 @@ impl Default for FunctionSig {
             contracts: None,
             effect_annotation: EffectAnnotation::Infer,
             inferred_effects: None,
-            hkt_params: HashMap::new(),
+            generic_callees: vec![],
         }
     }
 }
@@ -157,7 +161,7 @@ impl Linearity {
 /// Variable info (internal to type checker).
 /// Reserved for linear/affine type tracking.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
+#[allow(dead_code)] // Fields used by check_linear_vars_at_scope_exit (linear type enforcement, reserved)
 pub(crate) struct VarInfo {
     pub(crate) ty: ResolvedType,
     pub(crate) is_mut: bool,
@@ -165,6 +169,19 @@ pub(crate) struct VarInfo {
     pub(crate) use_count: usize,
     /// Span where the variable was defined (for error messages)
     pub(crate) defined_at: Option<Span>,
+}
+
+/// Tracks a generic function call from within another generic function body.
+/// Used for transitive instantiation: when `foo<T>` calls `bar<T>`,
+/// and `foo<i64>` is instantiated, we derive that `bar<i64>` is also needed.
+#[derive(Debug, Clone)]
+pub struct GenericCallee {
+    /// Name of the called generic function
+    pub callee_name: String,
+    /// The type arguments passed to the callee, expressed as ResolvedType.
+    /// Generic params (e.g., T) appear as ResolvedType::Generic("T").
+    /// These are later substituted with concrete types during transitive propagation.
+    pub type_args: Vec<ResolvedType>,
 }
 
 /// Generic instantiation tracking for monomorphization

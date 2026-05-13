@@ -11,7 +11,7 @@ File path manipulation utilities.
 Immutable path reference with methods for inspection and manipulation.
 
 ```vais
-S Path {
+struct Path {
     raw: str,
 }
 ```
@@ -21,7 +21,7 @@ S Path {
 Owned, mutable path buffer for building paths.
 
 ```vais
-S PathBuf {
+struct PathBuf {
     buf: str,
 }
 ```

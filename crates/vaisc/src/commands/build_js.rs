@@ -9,6 +9,7 @@ use crate::imports::load_module_with_imports_internal;
 use colored::Colorize;
 use std::collections::HashSet;
 use std::fs;
+use std::path::Path;
 use std::path::PathBuf;
 use vais_ast::Item;
 use vais_codegen_js::{JsCodeGenerator, JsConfig};
@@ -66,6 +67,7 @@ pub(crate) fn cmd_build_js(
         verbose,
         &main_source,
         &query_db,
+        input.parent().map(|p| p as &Path),
     )?;
     let parse_time = parse_start.elapsed();
 
@@ -106,6 +108,32 @@ pub(crate) fn cmd_build_js(
 
     // Macro expansion
     let mut macro_registry = MacroRegistry::new();
+
+    // Register builtin panic! macro: panic!("msg") => __panic("msg")
+    {
+        use vais_ast::{
+            Delimiter, MacroDef, MacroPattern, MacroPatternElement, MacroRule, MacroTemplate,
+            MacroTemplateElement, MacroToken, MetaVarKind, Span, Spanned,
+        };
+        macro_registry.register(MacroDef {
+            name: Spanned::new("panic".to_string(), Span::new(0, 5)),
+            rules: vec![MacroRule {
+                pattern: MacroPattern::Sequence(vec![MacroPatternElement::MetaVar {
+                    name: "msg".to_string(),
+                    kind: MetaVarKind::Expr,
+                }]),
+                template: MacroTemplate::Sequence(vec![
+                    MacroTemplateElement::Token(MacroToken::Ident("__panic".to_string())),
+                    MacroTemplateElement::Group {
+                        delimiter: Delimiter::Paren,
+                        content: vec![MacroTemplateElement::MetaVar("msg".to_string())],
+                    },
+                ]),
+            }],
+            is_pub: false,
+        });
+    }
+
     collect_macros(&transformed_ast, &mut macro_registry);
     let macro_expanded_ast = expand_macros(transformed_ast, &macro_registry)
         .map_err(|e| format!("Macro expansion error: {}", e))?;

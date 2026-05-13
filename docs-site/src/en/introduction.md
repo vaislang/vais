@@ -1,35 +1,44 @@
 # Vais Programming Language
 
-**Vais** (Vibe AI Language for Systems) is an AI-optimized systems programming language designed for maximum token efficiency and developer productivity.
+**Vais** (Vibe AI Language for Systems) is an AI-optimized systems programming language designed for clear generated code, native execution, and gate-backed public claims.
+
+> **Current public status:** Vais is currently presented as a certified Core
+> compiler plus named promoted runtime gates, not a product-complete v1.0
+> release. See [`PUBLIC_STATUS.md`](https://github.com/vaislang/vais/blob/main/PUBLIC_STATUS.md)
+> in the repository for the gate-backed claim boundary.
 
 ## Key Features
 
-### Token-Efficient Syntax
+### Canonical Syntax
 
-- **Single-Character Keywords**: `F` for function, `S` for struct, `E` for enum/else, `I` for if, `L` for loop, `M` for match, `R` for return
+- **Canonical Keywords**: `fn`, `struct`, `enum`, `else`, `match`, `return`, `use`, and `pub` are the current forms. Retired forms `F/S/E/EN/EL/M/R/T/U/P/W/X` are no longer accepted.
 - **Self-Recursion Operator `@`**: Call the current function recursively with minimal tokens
 - **Concise Operators**: `:=` for variable binding, `?` for error propagation, `!` for unwrap, `|>` for piping
-- **50-70% fewer tokens** compared to Rust/C++ in AI-generated code
+- **Gate-backed claims**: syntax, runtime, package, and product statements are tied to named gates rather than historical phase claims
 
 ### Modern Type System
 
-- **Full Type Inference**: Minimal type annotations with complete constraint solving
-- **Generics**: Generic functions, structs, and enums with type parameters
+- **Type Inference**: Minimal annotations on the certified Core surface, with
+  broader inference work under active hardening
+- **Generics**: Generic functions, structs, and enums where covered by named
+  fixtures; broader specialization semantics remain gate-bound
 - **Traits**: Interface-based polymorphism with trait bounds
 - **Memory Safety**: Borrow checker with Non-Lexical Lifetimes (NLL) and `--strict-borrow` mode
 - **Slice Types**: `&[T]` and `&mut [T]` with fat pointer implementation
 
 ### Performance & Compilation
 
-- **LLVM Backend**: Native performance with LLVM 17 code generation
-- **Parallel Compilation**: DAG-based parallel type-check and codegen (2-4x speedup)
-- **774K lines/second** compilation speed (50K LOC in 64.6ms)
-- **Multiple Targets**: Native binaries, JavaScript (ESM), WebAssembly (WASM)
+- **LLVM Backend**: Promoted native codegen path with LLVM 17
+- **Parallel Compilation**: DAG-based type-check and codegen workbench
+- **Benchmarked compilation**: performance numbers are useful regression context
+  and should be read with the corresponding benchmark date
+- **Targets**: Native is the promoted path; JavaScript and WebAssembly remain
+  experimental unless a page names a gate
 
 ### Advanced Features
 
 - **Expression-Oriented**: Everything returns a value, no statements vs expressions distinction
-- **Pattern Matching**: Exhaustive matching with `M` keyword
+- **Pattern Matching**: Exhaustive matching with `match`
 - **Error Handling**: `Result<T,E>` and `Option<T>` types with `?` try operator
 - **Async/Await**: First-class async support with `A` and `Y` keywords
 - **Macro System**: Declarative macros for metaprogramming
@@ -38,9 +47,11 @@
 
 Vais is built from the ground up to excel in AI-assisted development:
 
-- **Token Efficiency**: Single-character keywords minimize token usage in LLM context windows
-- **Self-Hosting**: 50,000+ LOC bootstrap compiler written in Vais itself
-- **Production-Ready**: 2,500+ tests across 28+ crates, 655 E2E tests
+- **Clarity for AI-generated code**: canonical keywords align generated code with the current lexer and public docs
+- **Self-Hosting Workbench**: 50,000+ lines of Vais compiler sources used for
+  bootstrap and conformance work
+- **Gate-backed status**: Current guarantees are the certified Core and promoted
+  runtime gates listed in `PUBLIC_STATUS.md`
 - **Rich Ecosystem**: 74 standard library modules, 9 official packages
 - **Fast Iteration**: JIT compiler, REPL, hot reloading, incremental compilation
 
@@ -65,12 +76,12 @@ crates/
 ├── vais-registry-server/    # Package registry
 └── vais-playground-server/  # Web playground backend
 
-std/               # Standard library (74 modules)
-selfhost/          # Self-hosting compiler (50,000+ LOC)
+std/               # Standard library (80 modules)
+selfhost/          # Self-hosting compiler (51,190 LOC, 58 .vais files)
 vscode-vais/       # VSCode extension
 intellij-vais/     # IntelliJ plugin
 docs-site/         # mdBook documentation
-examples/          # Example programs (189 files)
+examples/          # Example programs (188 files)
 ```
 
 ## Compilation Pipeline
@@ -83,21 +94,22 @@ Vais uses a multi-stage compilation pipeline:
 Outputs:
   → LLVM IR (.ll) → clang → native binary
   → JavaScript ESM (.mjs)
-  → WebAssembly (.wasm)
+  → WebAssembly (.wasm, experimental unless gated)
 ```
 
 **Key Stages:**
 - **Lexer**: Tokenizes source code using logos library (~2M tokens/sec)
 - **Parser**: Builds AST with recursive descent parser (~800K nodes/sec)
 - **Type Checker**: Performs type inference and constraint solving (~400K types/sec)
-- **Codegen**: Generates LLVM IR, JavaScript, or WASM (~300K IR lines/sec)
+- **Codegen**: Generates LLVM IR on the promoted native path; JavaScript and
+  WASM paths are experimental unless a page names a gate
 
 ## Quick Examples
 
 ### Hello World
 
 ```vais
-F main() {
+fn main() {
     puts("Hello, Vais!")
 }
 ```
@@ -106,9 +118,9 @@ F main() {
 
 ```vais
 # Fibonacci with @ operator
-F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
 
-F main() {
+fn main() {
     puts("fib(10) = ")
     print_i64(fib(10))  # Prints: 55
 }
@@ -117,15 +129,15 @@ F main() {
 ### Structs and Methods
 
 ```vais
-S Point { x: f64, y: f64 }
+struct Point { x: f64, y: f64 }
 
-X Point {
-    F distance(self) -> f64 {
+impl Point {
+    fn distance(self) -> f64 {
         sqrt(self.x * self.x + self.y * self.y)
     }
 }
 
-F main() {
+fn main() {
     p := Point { x: 3.0, y: 4.0 }
     print_f64(p.distance())  # Prints: 5.0
 }
@@ -134,10 +146,10 @@ F main() {
 ### Pattern Matching
 
 ```vais
-E Option<T> { Some(T), None }
+enum Option<T> { Some(T), None }
 
-F unwrap_or<T>(opt: Option<T>, default: T) -> T {
-    M opt {
+fn unwrap_or<T>(opt: Option<T>, default: T) -> T {
+    match opt {
         Some(v) => v,
         None => default
     }
@@ -147,14 +159,14 @@ F unwrap_or<T>(opt: Option<T>, default: T) -> T {
 ### Error Handling
 
 ```vais
-E Result<T, E> { Ok(T), Err(E) }
+enum Result<T, E> { Ok(T), Err(E) }
 
-F divide(a: i64, b: i64) -> Result<i64, str> {
-    I b == 0 { R Err("Division by zero") }
+fn divide(a: i64, b: i64) -> Result<i64, str> {
+    I b == 0 { return Err("Division by zero") }
     Ok(a / b)
 }
 
-F compute() -> Result<i64, str> {
+fn compute() -> Result<i64, str> {
     x := divide(10, 2)?  # Propagates error if Err
     y := divide(x, 0)?   # Returns Err("Division by zero")
     Ok(y)
@@ -173,7 +185,9 @@ F compute() -> Result<i64, str> {
 | Code Generator | ~3.0ms/1K LOC | ~300K IR lines/sec |
 | **Full Pipeline** | **~1.25ms/1K LOC** | **~800K lines/sec** |
 
-**Self-Hosting Bootstrap:** 50,000+ LOC compiles to LLVM IR with 21/21 clang success (100%)
+**Self-Hosting:** The repository contains 50,000+ lines of Vais compiler
+sources used for bootstrap and conformance work. Current correctness is judged
+by the certified Core gate and promoted runtime fixtures.
 
 ### Runtime Performance
 
@@ -190,7 +204,8 @@ Fibonacci(35) benchmark (Apple M-series ARM64):
 
 1. **[Install Vais](./getting-started/installation.md)** - Download pre-built binaries or build from source
 2. **[Quick Start](./getting-started/quick-start.md)** - Write your first program in 5 minutes
-3. **[Tutorial](./getting-started/tutorial.md)** - Complete guide from basics to advanced features
+3. **[Tutorial](./getting-started/tutorial.md)** - Guided path from basics to
+   advanced workbench topics
 4. **[Language Specification](./language/language-spec.md)** - Full syntax and semantics reference
 
 ## Ecosystem
@@ -209,7 +224,7 @@ Fibonacci(35) benchmark (Apple M-series ARM64):
 
 ### Standard Library
 
-74 modules covering:
+80 modules covering:
 - Collections (Vec, HashMap, HashSet, LinkedList, BTree)
 - I/O (File, Network, Async I/O)
 - Concurrency (Thread, Channel, Mutex, RwLock)
@@ -220,8 +235,8 @@ Fibonacci(35) benchmark (Apple M-series ARM64):
 ## Community & Support
 
 - **GitHub**: [vaislang/vais](https://github.com/vaislang/vais)
-- **Documentation**: [vais.dev/docs](https://vais.dev/docs/)
-- **Playground**: [vais.dev/playground](https://vais.dev/playground/)
+- **Documentation**: [vaislang.dev/docs](https://vaislang.dev/docs/)
+- **Playground**: [vaislang.dev/playground](https://vaislang.dev/playground/)
 - **Issues**: [Report bugs and request features](https://github.com/vaislang/vais/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/vaislang/vais/discussions)
 

@@ -1,3 +1,69 @@
+# ============================================================================
+# Module: net
+# ============================================================================
+#
+# TCP/UDP 소켓 네트워크 연산 모듈입니다.
+# BSD 소켓 API를 extern C 함수로 감싸 플랫폼 중립적인 인터페이스를 제공합니다.
+# 호스트 주소는 null-terminated 문자열(예: "127.0.0.1"), 포트는 i64로 전달합니다.
+#
+# 주요 상수:
+#   AF_INET           = 2    # IPv4 주소 패밀리
+#   AF_INET6          = 30   # IPv6 주소 패밀리 (macOS), 10 (Linux)
+#   SOCK_STREAM       = 1    # TCP 소켓
+#   SOCK_DGRAM        = 2    # UDP 소켓
+#   IPPROTO_TCP       = 6    # TCP 프로토콜
+#   IPPROTO_UDP       = 17   # UDP 프로토콜
+#   INADDR_ANY        = 0    # 모든 인터페이스에 바인딩
+#   NET_ERR_SOCKET    = -1   # 소켓 생성 실패
+#   NET_ERR_CONNECT   = -2   # 연결 실패
+#   NET_ERR_BIND      = -3   # 바인드 실패
+#
+# 주요 함수:
+#   tcp_connect(host, port)           - TCP 클라이언트 소켓 연결 (Result<i64, i64>)
+#   tcp_listen(port, backlog)         - TCP 서버 소켓 바인딩 + 리슨 (Result<i64, i64>)
+#   tcp_accept(server_fd)             - 클라이언트 연결 수락 (Result<i64, i64>)
+#   net_send(fd, buf, len)            - 데이터 송신 (Result<i64, i64>)
+#   net_recv(fd, buf, len)            - 데이터 수신 (Result<i64, i64>)
+#   net_close(fd)                     - 소켓 닫기
+#   udp_socket()                      - UDP 소켓 생성 (Result<i64, i64>)
+#   udp_bind(fd, port)                - UDP 소켓 바인딩 (Result<i64, i64>)
+#   udp_sendto(fd, buf, len, host, port) - UDP 데이터그램 송신
+#   udp_recvfrom(fd, buf, len)        - UDP 데이터그램 수신
+#
+# 사용 예제:
+#
+#   U std/net
+#
+#   # TCP 클라이언트 연결
+#   conn := tcp_connect("127.0.0.1", 8080)
+#   M conn {
+#       Ok(fd) => {
+#           msg := "GET / HTTP/1.0\r\n\r\n"
+#           net_send(fd, msg, strlen(msg))
+#           buf := malloc(4096)
+#           n := net_recv(fd, buf, 4096)
+#           net_close(fd)
+#           free(buf)
+#       },
+#       Err(e) => print("connect error: {e}")
+#   }
+#
+#   # TCP 서버
+#   server := tcp_listen(8080, 128)
+#   M server {
+#       Ok(srv_fd) => {
+#           client := tcp_accept(srv_fd)
+#           M client {
+#               Ok(cli_fd) => {
+#                   net_send(cli_fd, "Hello!\n", 7)
+#                   net_close(cli_fd)
+#               },
+#               Err(e) => print("accept error: {e}")
+#           }
+#       },
+#       Err(e) => print("listen error: {e}")
+#   }
+#
 # Net library - network operations (TCP/UDP sockets)
 # Uses BSD socket API via extern C functions
 #
@@ -231,11 +297,11 @@ F make_sockaddr_in6(host: i64, port: i64) -> i64 {
     # Validate port range
     I port < MIN_PORT | port > MAX_PORT {
         0
-    } E {
+    } EL {
         addr := malloc(SOCKADDR_IN6_SIZE)
         I addr == 0 {
             0
-        } E {
+        } EL {
             memset(addr, 0, SOCKADDR_IN6_SIZE)
 
             # sin6_family (2 bytes at offset 0) - use store_i16
@@ -254,12 +320,12 @@ F make_sockaddr_in6(host: i64, port: i64) -> i64 {
                 I result <= 0 {
                     free(addr)
                     0
-                } E {
+                } EL {
                     # sin6_scope_id (4 bytes at offset 24) - set to 0
                     store_i32(addr + 24, 0)
                     addr
                 }
-            } E {
+            } EL {
                 # IN6ADDR_ANY (::)
                 # sin6_addr is already zeroed by memset
                 # sin6_scope_id (4 bytes at offset 24) - set to 0
@@ -285,11 +351,11 @@ F make_sockaddr_in(host: i64, port: i64) -> i64 {
     # Validate port range
     I port < MIN_PORT | port > MAX_PORT {
         0
-    } E {
+    } EL {
         addr := malloc(SOCKADDR_IN_SIZE)
         I addr == 0 {
             0
-        } E {
+        } EL {
             memset(addr, 0, SOCKADDR_IN_SIZE)
 
             # sin_family (2 bytes at offset 0) - use store_i16
@@ -305,10 +371,10 @@ F make_sockaddr_in(host: i64, port: i64) -> i64 {
                 I result <= 0 {
                     free(addr)
                     0
-                } E {
+                } EL {
                     addr
                 }
-            } E {
+            } EL {
                 # INADDR_ANY (0.0.0.0)
                 store_i32(addr + 4, 0)
                 addr
@@ -338,12 +404,12 @@ X TcpListener {
         # Validate port range
         I port < MIN_PORT | port > MAX_PORT {
             TcpListener { fd: -1, port: 0 }
-        } E {
+        } EL {
             # Create socket
             fd := socket(AF_INET, SOCK_STREAM, 0)
             I fd < 0 {
                 TcpListener { fd: -1, port: 0 }
-            } E {
+            } EL {
                 # Set SO_REUSEADDR option
                 optval := malloc(4)
                 store_i32(optval, 1)
@@ -355,7 +421,7 @@ X TcpListener {
                 I addr == 0 {
                     close(fd)
                     TcpListener { fd: -1, port: 0 }
-                } E {
+                } EL {
                     # Bind socket
                     result := bind(fd, addr, SOCKADDR_IN_SIZE)
                     free(addr)
@@ -363,13 +429,13 @@ X TcpListener {
                     I result < 0 {
                         close(fd)
                         TcpListener { fd: -1, port: 0 }
-                    } E {
+                    } EL {
                         # Listen for connections
                         result2 := listen(fd, NET_DEFAULT_BACKLOG)
                         I result2 < 0 {
                             close(fd)
                             TcpListener { fd: -1, port: 0 }
-                        } E {
+                        } EL {
                             TcpListener { fd: fd, port: port }
                         }
                     }
@@ -384,12 +450,12 @@ X TcpListener {
         # Validate port range
         I port < MIN_PORT | port > MAX_PORT {
             TcpListener { fd: -1, port: 0 }
-        } E {
+        } EL {
             # Create socket
             fd := socket(AF_INET6, SOCK_STREAM, 0)
             I fd < 0 {
                 TcpListener { fd: -1, port: 0 }
-            } E {
+            } EL {
                 # Set SO_REUSEADDR option
                 optval := malloc(4)
                 store_i32(optval, 1)
@@ -401,7 +467,7 @@ X TcpListener {
                 I addr == 0 {
                     close(fd)
                     TcpListener { fd: -1, port: 0 }
-                } E {
+                } EL {
                     # Bind socket
                     result := bind(fd, addr, SOCKADDR_IN6_SIZE)
                     free(addr)
@@ -409,13 +475,13 @@ X TcpListener {
                     I result < 0 {
                         close(fd)
                         TcpListener { fd: -1, port: 0 }
-                    } E {
+                    } EL {
                         # Listen for connections
                         result2 := listen(fd, NET_DEFAULT_BACKLOG)
                         I result2 < 0 {
                             close(fd)
                             TcpListener { fd: -1, port: 0 }
-                        } E {
+                        } EL {
                             TcpListener { fd: fd, port: port }
                         }
                     }
@@ -426,7 +492,7 @@ X TcpListener {
 
     # Check if listener is valid
     F is_valid(&self) -> i64 {
-        I self.fd >= 0 { 1 } E { 0 }
+        I self.fd >= 0 { 1 } EL { 0 }
     }
 
     # Accept incoming connection
@@ -434,11 +500,11 @@ X TcpListener {
     F accept(&self) -> TcpStream {
         I self.fd < 0 {
             TcpStream { fd: -1 }
-        } E {
+        } EL {
             client_fd := accept(self.fd, 0, 0)
             I client_fd < 0 {
                 TcpStream { fd: -1 }
-            } E {
+            } EL {
                 TcpStream { fd: client_fd }
             }
         }
@@ -481,20 +547,20 @@ X TcpStream {
         # Validate inputs
         I host == 0 {
             TcpStream { fd: -1 }
-        } EI port < MIN_PORT | port > MAX_PORT {
+        } EL I port < MIN_PORT | port > MAX_PORT {
             TcpStream { fd: -1 }
-        } E {
+        } EL {
             # Create socket
             fd := socket(AF_INET, SOCK_STREAM, 0)
             I fd < 0 {
                 TcpStream { fd: -1 }
-            } E {
+            } EL {
                 # Create address structure
                 addr := make_sockaddr_in(host, port)
                 I addr == 0 {
                     close(fd)
                     TcpStream { fd: -1 }
-                } E {
+                } EL {
                     # Connect to server
                     result := connect(fd, addr, SOCKADDR_IN_SIZE)
                     free(addr)
@@ -502,7 +568,7 @@ X TcpStream {
                     I result < 0 {
                         close(fd)
                         TcpStream { fd: -1 }
-                    } E {
+                    } EL {
                         TcpStream { fd: fd }
                     }
                 }
@@ -518,20 +584,20 @@ X TcpStream {
         # Validate inputs
         I host == 0 {
             TcpStream { fd: -1 }
-        } EI port < MIN_PORT | port > MAX_PORT {
+        } EL I port < MIN_PORT | port > MAX_PORT {
             TcpStream { fd: -1 }
-        } E {
+        } EL {
             # Create socket
             fd := socket(AF_INET6, SOCK_STREAM, 0)
             I fd < 0 {
                 TcpStream { fd: -1 }
-            } E {
+            } EL {
                 # Create address structure
                 addr := make_sockaddr_in6(host, port)
                 I addr == 0 {
                     close(fd)
                     TcpStream { fd: -1 }
-                } E {
+                } EL {
                     # Connect to server
                     result := connect(fd, addr, SOCKADDR_IN6_SIZE)
                     free(addr)
@@ -539,7 +605,7 @@ X TcpStream {
                     I result < 0 {
                         close(fd)
                         TcpStream { fd: -1 }
-                    } E {
+                    } EL {
                         TcpStream { fd: fd }
                     }
                 }
@@ -549,7 +615,7 @@ X TcpStream {
 
     # Check if stream is valid
     F is_valid(&self) -> i64 {
-        I self.fd >= 0 { 1 } E { 0 }
+        I self.fd >= 0 { 1 } EL { 0 }
     }
 
     # Read data into buffer
@@ -557,11 +623,11 @@ X TcpStream {
     F read(&self, buffer: i64, len: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EI buffer == 0 {
+        } EL I buffer == 0 {
             -1
-        } EI len <= 0 {
+        } EL I len <= 0 {
             -1
-        } E {
+        } EL {
             recv(self.fd, buffer, len, 0)
         }
     }
@@ -571,11 +637,11 @@ X TcpStream {
     F write(&self, data: i64, len: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EI data == 0 {
+        } EL I data == 0 {
             -1
-        } EI len <= 0 {
+        } EL I len <= 0 {
             -1
-        } E {
+        } EL {
             send(self.fd, data, len, 0)
         }
     }
@@ -585,13 +651,13 @@ X TcpStream {
     F write_all(&self, data: i64, len: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EI data == 0 {
+        } EL I data == 0 {
             -1
-        } EI len <= 0 {
+        } EL I len <= 0 {
             -1
-        } E {
+        } EL {
             total := 0
-            L total < len {
+            LW total < len {
                 sent := send(self.fd, data + total, len - total, 0)
                 I sent <= 0 {
                     B -1
@@ -637,7 +703,7 @@ X UdpSocket {
         fd := socket(AF_INET, SOCK_DGRAM, 0)
         I fd < 0 {
             UdpSocket { fd: -1, port: 0 }
-        } E {
+        } EL {
             UdpSocket { fd: fd, port: 0 }
         }
     }
@@ -647,7 +713,7 @@ X UdpSocket {
         fd := socket(AF_INET6, SOCK_DGRAM, 0)
         I fd < 0 {
             UdpSocket { fd: -1, port: 0 }
-        } E {
+        } EL {
             UdpSocket { fd: fd, port: 0 }
         }
     }
@@ -657,11 +723,11 @@ X UdpSocket {
         # Validate port range
         I port < MIN_PORT | port > MAX_PORT {
             UdpSocket { fd: -1, port: 0 }
-        } E {
+        } EL {
             fd := socket(AF_INET, SOCK_DGRAM, 0)
             I fd < 0 {
                 UdpSocket { fd: -1, port: 0 }
-            } E {
+            } EL {
                 # Set SO_REUSEADDR option
                 optval := malloc(4)
                 store_i32(optval, 1)
@@ -673,7 +739,7 @@ X UdpSocket {
                 I addr == 0 {
                     close(fd)
                     UdpSocket { fd: -1, port: 0 }
-                } E {
+                } EL {
                     # Bind socket
                     result := bind(fd, addr, SOCKADDR_IN_SIZE)
                     free(addr)
@@ -681,7 +747,7 @@ X UdpSocket {
                     I result < 0 {
                         close(fd)
                         UdpSocket { fd: -1, port: 0 }
-                    } E {
+                    } EL {
                         UdpSocket { fd: fd, port: port }
                     }
                 }
@@ -694,11 +760,11 @@ X UdpSocket {
         # Validate port range
         I port < MIN_PORT | port > MAX_PORT {
             UdpSocket { fd: -1, port: 0 }
-        } E {
+        } EL {
             fd := socket(AF_INET6, SOCK_DGRAM, 0)
             I fd < 0 {
                 UdpSocket { fd: -1, port: 0 }
-            } E {
+            } EL {
                 # Set SO_REUSEADDR option
                 optval := malloc(4)
                 store_i32(optval, 1)
@@ -710,7 +776,7 @@ X UdpSocket {
                 I addr == 0 {
                     close(fd)
                     UdpSocket { fd: -1, port: 0 }
-                } E {
+                } EL {
                     # Bind socket
                     result := bind(fd, addr, SOCKADDR_IN6_SIZE)
                     free(addr)
@@ -718,7 +784,7 @@ X UdpSocket {
                     I result < 0 {
                         close(fd)
                         UdpSocket { fd: -1, port: 0 }
-                    } E {
+                    } EL {
                         UdpSocket { fd: fd, port: port }
                     }
                 }
@@ -728,7 +794,7 @@ X UdpSocket {
 
     # Check if socket is valid
     F is_valid(&self) -> i64 {
-        I self.fd >= 0 { 1 } E { 0 }
+        I self.fd >= 0 { 1 } EL { 0 }
     }
 
     # Send data to specific address (IPv4)
@@ -736,19 +802,19 @@ X UdpSocket {
     F send_to(&self, data: i64, len: i64, host: i64, port: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EI data == 0 {
+        } EL I data == 0 {
             -1
-        } EI len <= 0 {
+        } EL I len <= 0 {
             -1
-        } EI host == 0 {
+        } EL I host == 0 {
             -1
-        } EI port < MIN_PORT | port > MAX_PORT {
+        } EL I port < MIN_PORT | port > MAX_PORT {
             -1
-        } E {
+        } EL {
             addr := make_sockaddr_in(host, port)
             I addr == 0 {
                 -1
-            } E {
+            } EL {
                 result := sendto(self.fd, data, len, 0, addr, SOCKADDR_IN_SIZE)
                 free(addr)
                 result
@@ -761,19 +827,19 @@ X UdpSocket {
     F send_to6(&self, data: i64, len: i64, host: i64, port: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EI data == 0 {
+        } EL I data == 0 {
             -1
-        } EI len <= 0 {
+        } EL I len <= 0 {
             -1
-        } EI host == 0 {
+        } EL I host == 0 {
             -1
-        } EI port < MIN_PORT | port > MAX_PORT {
+        } EL I port < MIN_PORT | port > MAX_PORT {
             -1
-        } E {
+        } EL {
             addr := make_sockaddr_in6(host, port)
             I addr == 0 {
                 -1
-            } E {
+            } EL {
                 result := sendto(self.fd, data, len, 0, addr, SOCKADDR_IN6_SIZE)
                 free(addr)
                 result
@@ -786,11 +852,11 @@ X UdpSocket {
     F recv(&self, buffer: i64, len: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EI buffer == 0 {
+        } EL I buffer == 0 {
             -1
-        } EI len <= 0 {
+        } EL I len <= 0 {
             -1
-        } E {
+        } EL {
             recvfrom(self.fd, buffer, len, 0, 0, 0)
         }
     }
@@ -802,11 +868,11 @@ X UdpSocket {
     F recv_from(&self, buffer: i64, len: i64, src_addr_out: i64, src_port_out: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EI buffer == 0 {
+        } EL I buffer == 0 {
             -1
-        } EI len <= 0 {
+        } EL I len <= 0 {
             -1
-        } E {
+        } EL {
             # Allocate sockaddr_in for source address
             src_addr := malloc(SOCKADDR_IN_SIZE)
             addrlen := malloc(8)
@@ -839,11 +905,11 @@ X UdpSocket {
     F recv_from6(&self, buffer: i64, len: i64, src_addr_out: i64, src_port_out: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EI buffer == 0 {
+        } EL I buffer == 0 {
             -1
-        } EI len <= 0 {
+        } EL I len <= 0 {
             -1
-        } E {
+        } EL {
             # Allocate sockaddr_in6 for source address
             src_addr := malloc(SOCKADDR_IN6_SIZE)
             addrlen := malloc(8)
@@ -913,7 +979,7 @@ F tcp_listen_result(port: i64) -> Result<i64, i64> {
     listener := TcpListener.bind(port)
     I listener.fd < 0 {
         Err(ERR_IO())
-    } E {
+    } EL {
         Ok(listener.fd)
     }
 }
@@ -931,7 +997,7 @@ F tcp_listen6_result(port: i64) -> Result<i64, i64> {
     listener := TcpListener.bind6(port)
     I listener.fd < 0 {
         Err(ERR_IO())
-    } E {
+    } EL {
         Ok(listener.fd)
     }
 }
@@ -941,7 +1007,7 @@ F tcp_listen6_result(port: i64) -> Result<i64, i64> {
 F tcp_accept(listener_fd: i64) -> i64 {
     I listener_fd < 0 {
         -1
-    } E {
+    } EL {
         accept(listener_fd, 0, 0)
     }
 }
@@ -951,11 +1017,11 @@ F tcp_accept(listener_fd: i64) -> i64 {
 F tcp_accept_result(listener_fd: i64) -> Result<i64, i64> {
     I listener_fd < 0 {
         Err(ERR_INVALID())
-    } E {
+    } EL {
         client_fd := accept(listener_fd, 0, 0)
         I client_fd < 0 {
             Err(ERR_IO())
-        } E {
+        } EL {
             Ok(client_fd)
         }
     }
@@ -984,7 +1050,7 @@ F tcp_connect_result(host: i64, port: i64) -> Result<i64, i64> {
     stream := TcpStream.connect(host, port)
     I stream.fd < 0 {
         Err(ERR_IO())
-    } E {
+    } EL {
         Ok(stream.fd)
     }
 }
@@ -1002,7 +1068,7 @@ F tcp_connect6_result(host: i64, port: i64) -> Result<i64, i64> {
     stream := TcpStream.connect6(host, port)
     I stream.fd < 0 {
         Err(ERR_IO())
-    } E {
+    } EL {
         Ok(stream.fd)
     }
 }
@@ -1012,11 +1078,11 @@ F tcp_connect6_result(host: i64, port: i64) -> Result<i64, i64> {
 F tcp_read(stream_fd: i64, buffer: i64, len: i64) -> i64 {
     I stream_fd < 0 {
         -1
-    } EI buffer == 0 {
+    } EL I buffer == 0 {
         -1
-    } EI len <= 0 {
+    } EL I len <= 0 {
         -1
-    } E {
+    } EL {
         recv(stream_fd, buffer, len, 0)
     }
 }
@@ -1026,11 +1092,11 @@ F tcp_read(stream_fd: i64, buffer: i64, len: i64) -> i64 {
 F tcp_write(stream_fd: i64, data: i64, len: i64) -> i64 {
     I stream_fd < 0 {
         -1
-    } EI data == 0 {
+    } EL I data == 0 {
         -1
-    } EI len <= 0 {
+    } EL I len <= 0 {
         -1
-    } E {
+    } EL {
         send(stream_fd, data, len, 0)
     }
 }
@@ -1064,19 +1130,19 @@ F udp_bind6(port: i64) -> i64 {
 F udp_send_to(socket_fd: i64, data: i64, len: i64, host: i64, port: i64) -> i64 {
     I socket_fd < 0 {
         -1
-    } EI data == 0 {
+    } EL I data == 0 {
         -1
-    } EI len <= 0 {
+    } EL I len <= 0 {
         -1
-    } EI host == 0 {
+    } EL I host == 0 {
         -1
-    } EI port < MIN_PORT | port > MAX_PORT {
+    } EL I port < MIN_PORT | port > MAX_PORT {
         -1
-    } E {
+    } EL {
         addr := make_sockaddr_in(host, port)
         I addr == 0 {
             -1
-        } E {
+        } EL {
             result := sendto(socket_fd, data, len, 0, addr, SOCKADDR_IN_SIZE)
             free(addr)
             result
@@ -1089,19 +1155,19 @@ F udp_send_to(socket_fd: i64, data: i64, len: i64, host: i64, port: i64) -> i64 
 F udp_send_to6(socket_fd: i64, data: i64, len: i64, host: i64, port: i64) -> i64 {
     I socket_fd < 0 {
         -1
-    } EI data == 0 {
+    } EL I data == 0 {
         -1
-    } EI len <= 0 {
+    } EL I len <= 0 {
         -1
-    } EI host == 0 {
+    } EL I host == 0 {
         -1
-    } EI port < MIN_PORT | port > MAX_PORT {
+    } EL I port < MIN_PORT | port > MAX_PORT {
         -1
-    } E {
+    } EL {
         addr := make_sockaddr_in6(host, port)
         I addr == 0 {
             -1
-        } E {
+        } EL {
             result := sendto(socket_fd, data, len, 0, addr, SOCKADDR_IN6_SIZE)
             free(addr)
             result
@@ -1114,11 +1180,11 @@ F udp_send_to6(socket_fd: i64, data: i64, len: i64, host: i64, port: i64) -> i64
 F udp_recv_from(socket_fd: i64, buffer: i64, len: i64) -> i64 {
     I socket_fd < 0 {
         -1
-    } EI buffer == 0 {
+    } EL I buffer == 0 {
         -1
-    } EI len <= 0 {
+    } EL I len <= 0 {
         -1
-    } E {
+    } EL {
         recvfrom(socket_fd, buffer, len, 0, 0, 0)
     }
 }
@@ -1141,7 +1207,7 @@ F is_valid_ip(host: i64) -> i64 {
     tmp := malloc(4)
     result := inet_pton(AF_INET, host, tmp)
     free(tmp)
-    I result == 1 { 1 } E { 0 }
+    I result == 1 { 1 } EL { 0 }
 }
 
 # Check if an IPv6 address string is valid
@@ -1150,23 +1216,23 @@ F is_valid_ip6(host: i64) -> i64 {
     tmp := malloc(16)
     result := inet_pton(AF_INET6, host, tmp)
     free(tmp)
-    I result == 1 { 1 } E { 0 }
+    I result == 1 { 1 } EL { 0 }
 }
 
 # Convert error code to string (returns static string pointer)
 F net_error_string(err: i64) -> i64 {
     I err == NET_ERR_NONE { "Success" }
-    EI err == NET_ERR_SOCKET { "Socket creation failed" }
-    EI err == NET_ERR_BIND { "Bind failed" }
-    EI err == NET_ERR_LISTEN { "Listen failed" }
-    EI err == NET_ERR_ACCEPT { "Accept failed" }
-    EI err == NET_ERR_CONNECT { "Connect failed" }
-    EI err == NET_ERR_SEND { "Send failed" }
-    EI err == NET_ERR_RECV { "Receive failed" }
-    EI err == NET_ERR_CLOSE { "Close failed" }
-    EI err == NET_ERR_INVALID { "Invalid argument" }
-    EI err == NET_ERR_RESOLVE { "Address resolution failed" }
-    EI err == NET_ERR_INVALID_PORT { "Invalid port number (must be 0-65535)" }
-    EI err == NET_ERR_INVALID_BUFFER { "Invalid buffer (null or negative size)" }
-    E { "Unknown error" }
+    EL I err == NET_ERR_SOCKET { "Socket creation failed" }
+    EL I err == NET_ERR_BIND { "Bind failed" }
+    EL I err == NET_ERR_LISTEN { "Listen failed" }
+    EL I err == NET_ERR_ACCEPT { "Accept failed" }
+    EL I err == NET_ERR_CONNECT { "Connect failed" }
+    EL I err == NET_ERR_SEND { "Send failed" }
+    EL I err == NET_ERR_RECV { "Receive failed" }
+    EL I err == NET_ERR_CLOSE { "Close failed" }
+    EL I err == NET_ERR_INVALID { "Invalid argument" }
+    EL I err == NET_ERR_RESOLVE { "Address resolution failed" }
+    EL I err == NET_ERR_INVALID_PORT { "Invalid port number (must be 0-65535)" }
+    EL I err == NET_ERR_INVALID_BUFFER { "Invalid buffer (null or negative size)" }
+    EL { "Unknown error" }
 }

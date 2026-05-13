@@ -125,7 +125,7 @@ The implementation is in `/Users/sswoo/study/projects/vais/crates/vais-types/src
 
 Potential future improvements:
 1. Support for associated types in trait definitions
-2. Generic iterator implementations (Iterator<T>)
+2. Generic iterator implementations (`Iterator<T>`)
 3. More sophisticated IntoIterator pattern matching
 4. Iterator adapters (map, filter, etc.)
-5. Better handling of Option<T> return types from iterators
+5. Better handling of `Option<T>` return types from iterators

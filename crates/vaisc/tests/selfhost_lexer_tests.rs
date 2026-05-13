@@ -22,6 +22,7 @@ fn compile_to_ir(source: &str) -> Result<String, String> {
         .map_err(|e| format!("Type error: {:?}", e))?;
     let mut gen = CodeGenerator::new("selfhost_test");
     gen.set_resolved_functions(checker.get_all_functions().clone());
+    gen.set_type_aliases(checker.get_type_aliases().clone());
     let ir = gen
         .generate_module(&module)
         .map_err(|e| format!("Codegen error: {:?}", e))?;
@@ -36,10 +37,78 @@ fn compile_file_to_ir(path: &str) -> Result<String, String> {
 }
 
 /// Assert that the given source compiles to LLVM IR successfully.
+#[allow(dead_code)]
 fn assert_compiles(source: &str) {
     match compile_to_ir(source) {
         Ok(_ir) => {}
         Err(e) => panic!("Expected compilation to succeed, but got error: {}", e),
+    }
+}
+
+/// Result of running a compiled program
+struct RunResult {
+    exit_code: i32,
+    #[allow(dead_code)]
+    stdout: String,
+    #[allow(dead_code)]
+    stderr: String,
+}
+
+/// Compile source, build executable with clang, run it, return exit code + output
+fn compile_and_run(source: &str) -> Result<RunResult, String> {
+    let ir = compile_to_ir(source)?;
+
+    let tmp_dir =
+        tempfile::TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
+    let ll_path = tmp_dir.path().join("test.ll");
+    let exe_name = if cfg!(target_os = "windows") {
+        "test_exe.exe"
+    } else {
+        "test_exe"
+    };
+    let exe_path = tmp_dir.path().join(exe_name);
+
+    std::fs::write(&ll_path, &ir).map_err(|e| format!("Failed to write IR: {}", e))?;
+
+    let clang_output = std::process::Command::new("clang")
+        .arg(&ll_path)
+        .arg("-o")
+        .arg(&exe_path)
+        .arg("-Wno-override-module")
+        .output()
+        .map_err(|e| format!("Failed to run clang: {}", e))?;
+
+    if !clang_output.status.success() {
+        let stderr = String::from_utf8_lossy(&clang_output.stderr);
+        return Err(format!("clang compilation failed:\n{}", stderr));
+    }
+
+    let run_output = std::process::Command::new(&exe_path)
+        .output()
+        .map_err(|e| format!("Failed to run executable: {}", e))?;
+
+    let exit_code = run_output.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&run_output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&run_output.stderr).to_string();
+
+    Ok(RunResult {
+        exit_code,
+        stdout,
+        stderr,
+    })
+}
+
+/// Assert that source compiles, runs, and returns the expected exit code
+fn assert_exit_code(source: &str, expected: i32) {
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(
+                result.exit_code, expected,
+                "Expected exit code {}, got {}.\nstdout: {}\nstderr: {}",
+                expected, result.exit_code, result.stdout, result.stderr
+            );
+        }
+        Err(e) => panic!("Compilation/execution failed: {}", e),
     }
 }
 
@@ -66,19 +135,34 @@ fn assert_ir_contains(source: &str, expected: &str) {
 
 #[test]
 fn selfhost_token_module_compiles() {
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let path = format!("{}/../..", project_root);
-    let token_path = format!("{}/selfhost/token.vais", path);
-    match compile_file_to_ir(&token_path) {
-        Ok(ir) => {
-            // Verify the IR contains function definitions for token constants
-            assert!(
-                ir.contains("TOK_KW_F") || ir.contains("tok_kw_f") || ir.contains("define"),
-                "Token module IR should contain token constant function definitions"
-            );
-        }
-        Err(e) => panic!("selfhost/token.vais failed to compile: {}", e),
-    }
+    // Use the real vaisc subprocess so `U constants` import resolution runs.
+    // The in-process `compile_file_to_ir` helper parses a single source file
+    // only; selfhost/token.vais imports constants.vais and the call sites
+    // like `TOK_KW_F()` fail NotCallable without the import graph.
+    use std::path::PathBuf;
+    use std::process::Command;
+
+    let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("canonicalize project root");
+    let token_path = project_root.join("selfhost/token.vais");
+    let std_path = project_root.join("std");
+    let vaisc = env!("CARGO_BIN_EXE_vaisc");
+
+    let output = Command::new(vaisc)
+        .arg("build")
+        .arg(&token_path)
+        .arg("--emit-ir")
+        .arg("--no-cache")
+        .env("VAIS_STD_PATH", &std_path)
+        .output()
+        .expect("spawn vaisc");
+    assert!(
+        output.status.success(),
+        "selfhost/token.vais failed to compile: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]
@@ -141,7 +225,8 @@ F hex_digit_value(c: i64) -> i64 {
 
 F main() -> i64 = 0
 "#;
-    assert_compiles(helpers);
+    // All mock functions, main returns 0
+    assert_exit_code(helpers, 0);
 }
 
 // ============================================================================
@@ -452,7 +537,8 @@ F main() -> i64 {
     tok.is_keyword()
 }
 "#;
-    assert_compiles(source);
+    // TOK_KW_F()=1, is_keyword: 1 >= 1 && 1 <= 30 → 1
+    assert_exit_code(source, 1);
 }
 
 // ============================================================================
@@ -466,7 +552,7 @@ F main() -> i64 {
 fn selfhost_verify_single_char_keywords_f_function() {
     // F keyword = function declaration
     let source = "F foo() -> i64 = 42\nF main() -> i64 = foo()";
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -479,7 +565,8 @@ F main() -> i64 {
     p.x + p.y
 }
 "#;
-    assert_compiles(source);
+    // 10 + 20 = 30
+    assert_exit_code(source, 30);
 }
 
 #[test]
@@ -491,7 +578,8 @@ F main() -> i64 {
     I x > 3 { 1 } E { 0 }
 }
 "#;
-    assert_compiles(source);
+    // x=5 > 3 → 1
+    assert_exit_code(source, 1);
 }
 
 #[test]
@@ -507,7 +595,8 @@ F main() -> i64 {
     x
 }
 "#;
-    assert_compiles(source);
+    // loop increments x from 0 to 10, returns 10
+    assert_exit_code(source, 10);
 }
 
 #[test]
@@ -523,7 +612,8 @@ F main() -> i64 {
     }
 }
 "#;
-    assert_compiles(source);
+    // x=2, match 2 => 20
+    assert_exit_code(source, 20);
 }
 
 #[test]
@@ -536,7 +626,8 @@ F foo(x: i64) -> i64 {
 }
 F main() -> i64 = foo(42)
 "#;
-    assert_compiles(source);
+    // foo(42): x=42 > 0 → R 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -552,7 +643,8 @@ F main() -> i64 {
     x
 }
 "#;
-    assert_compiles(source);
+    // loop increments x until x==5, then breaks → 5
+    assert_exit_code(source, 5);
 }
 
 #[test]
@@ -571,7 +663,8 @@ F main() -> i64 {
     count
 }
 "#;
-    assert_compiles(source);
+    // x goes 1..10, odd numbers: 1,3,5,7,9 → count=5
+    assert_exit_code(source, 5);
 }
 
 #[test]
@@ -587,7 +680,8 @@ F main() -> i64 {
     n.get()
 }
 "#;
-    assert_compiles(source);
+    // Num { val: 7 }.get() → 7
+    assert_exit_code(source, 7);
 }
 
 #[test]
@@ -599,7 +693,7 @@ W Printable {
 }
 F main() -> i64 = 0
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -609,7 +703,7 @@ fn selfhost_verify_single_char_keywords_t_type() {
 T MyInt = i64
 F main() -> i64 = 0
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -619,7 +713,8 @@ fn selfhost_verify_single_char_keywords_p_pub() {
 P F add(a: i64, b: i64) -> i64 = a + b
 F main() -> i64 = add(1, 2)
 "#;
-    assert_compiles(source);
+    // add(1,2) = 3
+    assert_exit_code(source, 3);
 }
 
 #[test]
@@ -629,7 +724,7 @@ fn selfhost_verify_single_char_keywords_a_async() {
 A F async_val() -> i64 = 42
 F main() -> i64 = 0
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ============================================================================
@@ -645,7 +740,7 @@ F main() -> i64 {
     x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -657,7 +752,8 @@ F main() -> i64 {
     I a { 1 } E { 0 }
 }
 "#;
-    assert_compiles(source);
+    // a=true → 1
+    assert_exit_code(source, 1);
 }
 
 // ============================================================================
@@ -667,75 +763,84 @@ F main() -> i64 {
 #[test]
 fn selfhost_verify_type_i8() {
     let source = "F main() -> i8 = 42";
-    assert_compiles(source);
+    // i8(42) is sign-extended to i64(42); OS truncates exit code to 42 % 256 = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_i16() {
     let source = "F main() -> i16 = 42";
-    assert_compiles(source);
+    // i16(42) is sign-extended to i64(42); exit code = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_i32() {
     let source = "F main() -> i32 = 42";
-    assert_compiles(source);
+    // i32(42) is sign-extended to i64(42); exit code = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_i64() {
     let source = "F main() -> i64 = 42";
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_u8() {
     let source = "F main() -> u8 = 42";
-    assert_compiles(source);
+    // u8(42) is zero-extended to i64(42); exit code = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_u16() {
     let source = "F main() -> u16 = 42";
-    assert_compiles(source);
+    // u16(42) is zero-extended to i64(42); exit code = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_u32() {
     let source = "F main() -> u32 = 42";
-    assert_compiles(source);
+    // u32(42) is zero-extended to i64(42); exit code = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_u64() {
     let source = "F main() -> u64 = 42";
-    assert_compiles(source);
+    // u64(42) maps to i64(42) in LLVM; exit code = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_f32() {
     // Float literals default to f64; use explicit f32 parameter type to verify f32 token
     let source = "F foo(x: f32) -> f32 = x\nF main() -> i64 = 0";
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
 fn selfhost_verify_type_f64() {
     let source = "F main() -> f64 = 1.5";
-    assert_compiles(source);
+    // fptosi(1.5) truncates toward zero → i64(1); exit code = 1
+    assert_exit_code(source, 1);
 }
 
 #[test]
 fn selfhost_verify_type_bool() {
     let source = "F foo() -> bool = true\nF main() -> i64 { I foo() { 1 } E { 0 } }";
-    assert_compiles(source);
+    // foo() returns true → 1
+    assert_exit_code(source, 1);
 }
 
 #[test]
 fn selfhost_verify_type_str() {
     let source = r#"F foo() -> str = "hello"
 F main() -> i64 = 0"#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ============================================================================
@@ -745,13 +850,14 @@ F main() -> i64 = 0"#;
 #[test]
 fn selfhost_verify_integer_decimal() {
     let source = "F main() -> i64 = 12345";
-    assert_compiles(source);
+    // 12345 % 256 = 57 (exit codes are 0-255)
+    assert_exit_code(source, 57);
 }
 
 #[test]
 fn selfhost_verify_integer_zero() {
     let source = "F main() -> i64 = 0";
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -780,7 +886,8 @@ F main() -> i64 {
     a + b + c + d
 }
 "#;
-    assert_compiles(source);
+    // a=1, b=1, c=1, d=0 → 3
+    assert_exit_code(source, 3);
 }
 
 // ============================================================================
@@ -790,7 +897,8 @@ F main() -> i64 {
 #[test]
 fn selfhost_verify_float_simple() {
     let source = "F main() -> f64 = 1.5";
-    assert_compiles(source);
+    // fptosi(1.5) truncates toward zero → i64(1); exit code = 1
+    assert_exit_code(source, 1);
 }
 
 #[test]
@@ -813,13 +921,16 @@ F main() -> i64 {
     a + b + c
 }
 "#;
-    assert_compiles(source);
+    // a=1 (e), b=1 (E), c=0 (digit) → 2
+    assert_exit_code(source, 2);
 }
 
 #[test]
 fn selfhost_verify_float_zero_point() {
     let source = "F main() -> f64 = 0.0";
-    assert_compiles(source);
+    // main() declared as f64 but codegen forces i64 return with fptosi conversion.
+    // 0.0 -> fptosi -> 0
+    assert_exit_code(source, 0);
 }
 
 // ============================================================================
@@ -829,19 +940,19 @@ fn selfhost_verify_float_zero_point() {
 #[test]
 fn selfhost_verify_string_literal() {
     let source = r#"F main() -> i64 { x := "hello"; 0 }"#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
 fn selfhost_verify_string_empty() {
     let source = r#"F main() -> i64 { x := ""; 0 }"#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
 fn selfhost_verify_string_with_spaces() {
     let source = r#"F main() -> i64 { x := "hello world"; 0 }"#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ============================================================================
@@ -851,31 +962,31 @@ fn selfhost_verify_string_with_spaces() {
 #[test]
 fn selfhost_verify_op_plus() {
     let source = "F main() -> i64 = 3 + 4";
-    assert_compiles(source);
+    assert_exit_code(source, 7);
 }
 
 #[test]
 fn selfhost_verify_op_minus() {
     let source = "F main() -> i64 = 10 - 3";
-    assert_compiles(source);
+    assert_exit_code(source, 7);
 }
 
 #[test]
 fn selfhost_verify_op_star() {
     let source = "F main() -> i64 = 6 * 7";
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_op_slash() {
     let source = "F main() -> i64 = 42 / 6";
-    assert_compiles(source);
+    assert_exit_code(source, 7);
 }
 
 #[test]
 fn selfhost_verify_op_percent() {
     let source = "F main() -> i64 = 10 % 3";
-    assert_compiles(source);
+    assert_exit_code(source, 1);
 }
 
 // ============================================================================
@@ -885,37 +996,37 @@ fn selfhost_verify_op_percent() {
 #[test]
 fn selfhost_verify_op_lt() {
     let source = "F main() -> i64 { I 1 < 2 { 1 } E { 0 } }";
-    assert_compiles(source);
+    assert_exit_code(source, 1);
 }
 
 #[test]
 fn selfhost_verify_op_gt() {
     let source = "F main() -> i64 { I 2 > 1 { 1 } E { 0 } }";
-    assert_compiles(source);
+    assert_exit_code(source, 1);
 }
 
 #[test]
 fn selfhost_verify_op_lteq() {
     let source = "F main() -> i64 { I 1 <= 2 { 1 } E { 0 } }";
-    assert_compiles(source);
+    assert_exit_code(source, 1);
 }
 
 #[test]
 fn selfhost_verify_op_gteq() {
     let source = "F main() -> i64 { I 2 >= 1 { 1 } E { 0 } }";
-    assert_compiles(source);
+    assert_exit_code(source, 1);
 }
 
 #[test]
 fn selfhost_verify_op_eqeq() {
     let source = "F main() -> i64 { I 5 == 5 { 1 } E { 0 } }";
-    assert_compiles(source);
+    assert_exit_code(source, 1);
 }
 
 #[test]
 fn selfhost_verify_op_neq() {
     let source = "F main() -> i64 { I 5 != 3 { 1 } E { 0 } }";
-    assert_compiles(source);
+    assert_exit_code(source, 1);
 }
 
 // ============================================================================
@@ -925,13 +1036,13 @@ fn selfhost_verify_op_neq() {
 #[test]
 fn selfhost_verify_op_and() {
     let source = "F main() -> i64 { I true && true { 1 } E { 0 } }";
-    assert_compiles(source);
+    assert_exit_code(source, 1);
 }
 
 #[test]
 fn selfhost_verify_op_or() {
     let source = "F main() -> i64 { I false || true { 1 } E { 0 } }";
-    assert_compiles(source);
+    assert_exit_code(source, 1);
 }
 
 // ============================================================================
@@ -941,25 +1052,29 @@ fn selfhost_verify_op_or() {
 #[test]
 fn selfhost_verify_op_bitand() {
     let source = "F main() -> i64 = 7 & 3";
-    assert_compiles(source);
+    // 7 & 3 = 3
+    assert_exit_code(source, 3);
 }
 
 #[test]
 fn selfhost_verify_op_bitor() {
     let source = "F main() -> i64 = 5 | 3";
-    assert_compiles(source);
+    // 5 | 3 = 7
+    assert_exit_code(source, 7);
 }
 
 #[test]
 fn selfhost_verify_op_bitxor() {
     let source = "F main() -> i64 = 5 ^ 3";
-    assert_compiles(source);
+    // 5 ^ 3 = 6
+    assert_exit_code(source, 6);
 }
 
 #[test]
 fn selfhost_verify_op_bitnot() {
     let source = "F main() -> i64 = ~0";
-    assert_compiles(source);
+    // ~0 = -1, exit code = 255 (0xFF)
+    assert_exit_code(source, 255);
 }
 
 // ============================================================================
@@ -970,7 +1085,8 @@ fn selfhost_verify_op_bitnot() {
 fn selfhost_verify_delimiters_parens() {
     // Parentheses in function calls and grouping
     let source = "F add(a: i64, b: i64) -> i64 = a + b\nF main() -> i64 = add((1 + 2), 3)";
-    assert_compiles(source);
+    // add(3, 3) = 6
+    assert_exit_code(source, 6);
 }
 
 #[test]
@@ -983,7 +1099,8 @@ F main() -> i64 {
     p.a + p.b
 }
 "#;
-    assert_compiles(source);
+    // 1 + 2 = 3
+    assert_exit_code(source, 3);
 }
 
 #[test]
@@ -995,7 +1112,8 @@ F main() -> i64 {
     arr[0]
 }
 "#;
-    assert_compiles(source);
+    // arr[0] = 1
+    assert_exit_code(source, 1);
 }
 
 // ============================================================================
@@ -1006,21 +1124,22 @@ F main() -> i64 {
 fn selfhost_verify_punct_comma() {
     // Commas in function parameters
     let source = "F add(a: i64, b: i64, c: i64) -> i64 = a + b + c\nF main() -> i64 = add(1, 2, 3)";
-    assert_compiles(source);
+    // 1+2+3 = 6
+    assert_exit_code(source, 6);
 }
 
 #[test]
 fn selfhost_verify_punct_colon() {
     // Colons in type annotations
     let source = "F main() -> i64 { x: i64 = 42; x }";
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_punct_semicolon() {
     // Semicolons as statement separators
     let source = "F main() -> i64 { x := 1; y := 2; x + y }";
-    assert_compiles(source);
+    assert_exit_code(source, 3);
 }
 
 #[test]
@@ -1033,7 +1152,7 @@ F main() -> i64 {
     p.x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 10);
 }
 
 #[test]
@@ -1045,14 +1164,14 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
 fn selfhost_verify_punct_arrow() {
     // Arrow -> in return type
     let source = "F foo() -> i64 = 42\nF main() -> i64 = foo()";
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -1067,14 +1186,15 @@ F main() -> i64 {
     }
 }
 "#;
-    assert_compiles(source);
+    // x=1, match 1 => 10
+    assert_exit_code(source, 10);
 }
 
 #[test]
 fn selfhost_verify_punct_question_ternary() {
     // Question mark in ternary
     let source = "F main() -> i64 = true ? 1 : 0";
-    assert_compiles(source);
+    assert_exit_code(source, 1);
 }
 
 #[test]
@@ -1087,7 +1207,8 @@ F factorial(n: i64) -> i64 {
 }
 F main() -> i64 = factorial(5)
 "#;
-    assert_compiles(source);
+    // 5! = 120
+    assert_exit_code(source, 120);
 }
 
 // ============================================================================
@@ -1103,14 +1224,14 @@ F main() -> i64 {
     x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_assign_colon_eq() {
     // := for variable binding
     let source = "F main() -> i64 { x := 42; x }";
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -1122,7 +1243,8 @@ F main() -> i64 {
     x
 }
 "#;
-    assert_compiles(source);
+    // 0 + 42 = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -1134,7 +1256,8 @@ F main() -> i64 {
     x
 }
 "#;
-    assert_compiles(source);
+    // 50 - 8 = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -1146,7 +1269,8 @@ F main() -> i64 {
     x
 }
 "#;
-    assert_compiles(source);
+    // 6 * 7 = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -1158,7 +1282,8 @@ F main() -> i64 {
     x
 }
 "#;
-    assert_compiles(source);
+    // 84 / 2 = 42
+    assert_exit_code(source, 42);
 }
 
 // ============================================================================
@@ -1172,7 +1297,7 @@ fn selfhost_verify_line_comment() {
 # This is a comment
 F main() -> i64 = 42 # trailing comment
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -1183,7 +1308,7 @@ fn selfhost_verify_comment_only_lines() {
 # comment line 3
 F main() -> i64 = 0
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ============================================================================
@@ -1192,7 +1317,11 @@ F main() -> i64 = 0
 
 #[test]
 fn selfhost_verify_complex_function_with_all_constructs() {
-    // A program that exercises many token types together
+    // A program that exercises many token types together.
+    // Verifies mutable struct field assignment (self.value = ...) through a method
+    // with &self receiver, combined with a loop, break, and compound assignment.
+    // Counter starts at 0, limit is 10: increment() runs 10 times returning 1 each
+    // time, then returns 0 when value >= limit, triggering break. main returns 10.
     let source = r#"
 S Counter {
     value: i64,
@@ -1225,7 +1354,7 @@ F main() -> i64 {
     total
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 10);
 }
 
 #[test]
@@ -1240,7 +1369,8 @@ F main() -> i64 {
     result
 }
 "#;
-    assert_compiles(source);
+    // (10+20)*3 - 10/2 + 20%7 = 90 - 5 + 6 = 91
+    assert_exit_code(source, 91);
 }
 
 #[test]
@@ -1267,7 +1397,8 @@ F main() -> i64 {
     sum % 256
 }
 "#;
-    assert_compiles(source);
+    // i incremented first: values 1..20, skip multiples of 3 → 14 values, each classify=2 → sum=28
+    assert_exit_code(source, 28);
 }
 
 #[test]
@@ -1290,7 +1421,8 @@ F main() -> i64 {
     d + m
 }
 "#;
-    assert_compiles(source);
+    // dot(b) = 3*1 + 4*2 = 11, mag_squared() = 9+16 = 25, d + m = 36
+    assert_exit_code(source, 36);
 }
 
 #[test]
@@ -1317,7 +1449,8 @@ F main() -> i64 {
     a + b + c
 }
 "#;
-    assert_compiles(source);
+    // day_type(1)=0, day_type(6)=1, day_type(99)=2 → 3
+    assert_exit_code(source, 3);
 }
 
 // ============================================================================
@@ -1616,7 +1749,6 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::SelfUpper => 26, // TOK_KW_SELF_UPPER
         Token::As => 27,        // TOK_KW_AS
         Token::Const => 28,     // TOK_KW_CONST
-        Token::Spawn => 29,     // TOK_KW_SPAWN
         Token::Macro => 30,     // TOK_KW_MACRO
 
         // Additional keywords (121-128)
@@ -1625,9 +1757,6 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::Linear => 123,   // TOK_KW_LINEAR
         Token::Affine => 124,   // TOK_KW_AFFINE
         Token::Move => 125,     // TOK_KW_MOVE
-        Token::Consume => 126,  // TOK_KW_CONSUME
-        Token::Lazy => 127,     // TOK_KW_LAZY
-        Token::Force => 128,    // TOK_KW_FORCE
         Token::Where => 129,    // TOK_KW_WHERE
 
         // Type keywords (31-44)
@@ -1692,6 +1821,12 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::MinusEq => 84,
         Token::StarEq => 85,
         Token::SlashEq => 86,
+        Token::PercentEq => 87,
+        Token::AmpEq => 88,
+        Token::PipeEq => 89,
+        Token::CaretEq => 90,
+        Token::ShlEq => -1, // Not yet in selfhost lexer
+        Token::ShrEq => -1, // Not yet in selfhost lexer
 
         // Delimiters (91-96)
         Token::LParen => 91,
@@ -1727,13 +1862,17 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         // Tokens not yet in selfhost lexer (return -1 for "not mapped")
         // These are rarely used features that can be added later if needed
         Token::DocComment(_) => -1, // Doc comments are stripped by the lexer anyway
-        Token::Weak => -1,          // weak references (rare)
-        Token::Clone => -1,         // clone (rare)
         Token::Pure => -1,          // pure functions (effect system)
         Token::Effect => -1,        // effect system
         Token::Io => -1,            // io effect
         Token::Unsafe => -1,        // unsafe blocks
+        Token::Partial => -1,       // totality marker (Phase 4c.2 / Task #53)
         Token::Yield => -1,         // yield keyword
+        // New unambiguous keyword variants
+        Token::EnumKeyword => 3, // same as Token::Enum (TOK_KW_E)
+        Token::Else => -1, // else is context-dependent (E token reused), not a separate selfhost token
+        Token::ForEach => 5, // same as Token::Loop (TOK_KW_L)
+        Token::While => -1, // while is context-dependent (L token reused), not a separate selfhost token
     }
 }
 
@@ -1817,6 +1956,10 @@ fn selfhost_id_to_name(id: i64) -> &'static str {
         84 => "TOK_MINUS_EQ",
         85 => "TOK_STAR_EQ",
         86 => "TOK_SLASH_EQ",
+        87 => "TOK_PERCENT_EQ",
+        88 => "TOK_AMP_EQ",
+        89 => "TOK_PIPE_EQ",
+        90 => "TOK_CARET_EQ",
         91 => "TOK_LPAREN",
         92 => "TOK_RPAREN",
         93 => "TOK_LBRACE",

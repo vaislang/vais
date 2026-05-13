@@ -650,7 +650,7 @@ F main() -> i64 {
 
 ## 표준 라이브러리 제네릭
 
-### Vec<T> - 동적 배열
+### `Vec<T>` - 동적 배열
 
 ```vais
 U std/vec
@@ -683,7 +683,7 @@ F main() -> i64 {
 }
 ```
 
-### Option<T> - 선택적 값
+### `Option<T>` - 선택적 값
 
 ```vais
 U std/option
@@ -721,7 +721,7 @@ F main() -> i64 {
 }
 ```
 
-### Result<T, E> - 에러 처리
+### `Result<T, E>` - 에러 처리
 
 ```vais
 E Result<T, E> {
@@ -769,7 +769,7 @@ F main() -> i64 {
 }
 ```
 
-### HashMap<K, V> - 해시맵
+### `HashMap<K, V>` - 해시맵
 
 ```vais
 U std/hashmap

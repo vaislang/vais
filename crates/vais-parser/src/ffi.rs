@@ -36,7 +36,7 @@ impl Parser {
     }
 
     /// Parse extern function declaration: `F name(params) -> ret_type;`
-    /// Supports attributes like `#[wasm_import("env", "js_alert")]` before the function keyword.
+    /// Supports attributes like `#\[wasm_import("env", "js_alert")\]` before the function keyword.
     fn parse_extern_function(&mut self) -> ParseResult<ExternFunction> {
         // Parse optional attributes before function keyword
         let attributes = self.parse_attributes()?;

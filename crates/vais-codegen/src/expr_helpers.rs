@@ -1,40 +1,56 @@
 //! Expression generation helper methods for CodeGenerator
 //!
 //! This module contains core expression helpers: enum variants,
-//! binary/unary operations, casts, and assignment operations.
+//! binary/unary operations, and cast operations.
+//! Assignment and identifier expression helpers are in expr_helpers_assign.
 
 use crate::{CodeGenerator, CodegenError, CodegenResult};
 use vais_ast::{BinOp, Expr, Span, Spanned, Type, UnaryOp};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
+    #[inline(never)]
     pub(crate) fn generate_unit_enum_variant(
         &mut self,
         name: &str,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
+        // Clone enum info to avoid borrow conflict with self.next_temp/emit_entry_alloca
+        let mut found = None;
         for enum_info in self.types.enums.values() {
             for (tag, variant) in enum_info.variants.iter().enumerate() {
                 if variant.name == name {
-                    let mut ir = String::new();
-                    let enum_ptr = self.next_temp(counter);
-                    ir.push_str(&format!("  {} = alloca %{}\n", enum_ptr, enum_info.name));
-                    // Store tag
-                    let tag_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0\n",
-                        tag_ptr, enum_info.name, enum_info.name, enum_ptr
-                    ));
-                    ir.push_str(&format!("  store i32 {}, i32* {}\n", tag, tag_ptr));
-                    return Ok((enum_ptr, ir));
+                    found = Some((enum_info.name.clone(), tag));
+                    break;
                 }
             }
+            if found.is_some() {
+                break;
+            }
+        }
+        if let Some((enum_name, tag)) = found {
+            let mut ir = String::new();
+            let enum_ptr = self.next_temp(counter);
+            self.emit_entry_alloca(&enum_ptr, &format!("%{}", enum_name));
+            // Store tag
+            let tag_ptr = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
+                tag_ptr,
+                enum_name,
+                enum_name,
+                enum_ptr
+            );
+            write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
+            return Ok((enum_ptr, ir));
         }
         // Fallback if not found (shouldn't happen)
         Ok((format!("@{}", name), String::new()))
     }
 
     /// Generate binary expression
+    #[inline(never)]
     pub(crate) fn generate_binary_expr(
         &mut self,
         op: &BinOp,
@@ -64,39 +80,51 @@ impl CodeGenerator {
 
         if is_logical {
             // For logical And/Or, convert operands to i1 first, then perform operation
-            let left_bool = self.next_temp(counter);
-            ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", left_bool, left_val));
-            let right_bool = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = icmp ne i64 {}, 0\n",
-                right_bool, right_val
-            ));
+            // If operand is already i1 (bool), skip the conversion
+            let left_bool = if matches!(left_type, ResolvedType::Bool) {
+                left_val.clone()
+            } else {
+                let tmp = self.next_temp(counter);
+                let left_llvm = self.type_to_llvm(&left_type);
+                write_ir!(ir, "  {} = icmp ne {} {}, 0", tmp, left_llvm, left_val);
+                tmp
+            };
+            let right_type = self.infer_expr_type(right);
+            let right_bool = if matches!(right_type, ResolvedType::Bool) {
+                right_val.clone()
+            } else {
+                let tmp = self.next_temp(counter);
+                let right_llvm = self.type_to_llvm(&right_type);
+                write_ir!(ir, "  {} = icmp ne {} {}, 0", tmp, right_llvm, right_val);
+                tmp
+            };
 
             let op_str = match op {
                 BinOp::And => "and",
                 BinOp::Or => "or",
                 _ => {
-                    eprintln!(
-                        "[ICE] unexpected BinOp variant in logical operation: {:?}",
+                    return Err(CodegenError::InternalError(format!(
+                        "BinOp {:?} in logical codegen path",
                         op
-                    );
-                    return Err(CodegenError::Unsupported(format!(
-                        "unexpected logical operator {:?}",
-                        op
-                    )));
+                    )))
                 }
             };
 
             let result_bool = self.next_temp(counter);
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
-            ir.push_str(&format!(
-                "  {} = {} i1 {}, {}{}\n",
-                result_bool, op_str, left_bool, right_bool, dbg_info
-            ));
+            write_ir!(
+                ir,
+                "  {} = {} i1 {}, {}{}",
+                result_bool,
+                op_str,
+                left_bool,
+                right_bool,
+                dbg_info
+            );
 
             // Extend back to i64 for consistency
             let result = self.next_temp(counter);
-            ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, result_bool));
+            write_ir!(ir, "  {} = zext i1 {} to i64", result, result_bool);
             Ok((result, ir))
         } else if is_comparison {
             // Comparison returns i1, extend to i64
@@ -116,20 +144,50 @@ impl CodeGenerator {
                     BinOp::Eq => "fcmp oeq",
                     BinOp::Neq => "fcmp one",
                     _ => {
-                        eprintln!(
-                            "[ICE] unexpected BinOp variant in float comparison: {:?}",
+                        return Err(CodegenError::InternalError(format!(
+                            "BinOp {:?} in float_cmp codegen path",
                             op
-                        );
-                        return Err(CodegenError::Unsupported(format!(
-                            "unexpected float comparison operator {:?}",
-                            op
-                        )));
+                        )))
                     }
                 };
-                ir.push_str(&format!(
-                    "  {} = {} double {}, {}{}\n",
-                    cmp_tmp, op_str, left_val, right_val, dbg_info
-                ));
+                // Handle mixed f32/f64 comparisons
+                let left_is_f32 = matches!(left_type, ResolvedType::F32);
+                let right_is_f32 = matches!(right_type, ResolvedType::F32);
+                let left_is_f64 = matches!(left_type, ResolvedType::F64);
+                let right_is_f64 = matches!(right_type, ResolvedType::F64);
+
+                let float_llvm;
+                let mut actual_left = left_val.clone();
+                let mut actual_right = right_val.clone();
+
+                if (left_is_f32 && right_is_f64) || (left_is_f64 && right_is_f32) {
+                    float_llvm = "double";
+                    if left_is_f32 {
+                        let ext = self.next_temp(counter);
+                        write_ir!(ir, "  {} = fpext float {} to double", ext, left_val);
+                        actual_left = ext;
+                    }
+                    if right_is_f32 {
+                        let ext = self.next_temp(counter);
+                        write_ir!(ir, "  {} = fpext float {} to double", ext, right_val);
+                        actual_right = ext;
+                    }
+                } else if left_is_f32 || right_is_f32 {
+                    float_llvm = "float";
+                } else {
+                    float_llvm = "double";
+                }
+
+                write_ir!(
+                    ir,
+                    "  {} = {} {} {}, {}{}",
+                    cmp_tmp,
+                    op_str,
+                    float_llvm,
+                    actual_left,
+                    actual_right,
+                    dbg_info
+                );
             } else {
                 let op_str = match op {
                     BinOp::Lt => "icmp slt",
@@ -139,25 +197,43 @@ impl CodeGenerator {
                     BinOp::Eq => "icmp eq",
                     BinOp::Neq => "icmp ne",
                     _ => {
-                        eprintln!(
-                            "[ICE] unexpected BinOp variant in integer comparison: {:?}",
+                        return Err(CodegenError::InternalError(format!(
+                            "BinOp {:?} in int_cmp codegen path",
                             op
-                        );
-                        return Err(CodegenError::Unsupported(format!(
-                            "unexpected integer comparison operator {:?}",
-                            op
-                        )));
+                        )))
                     }
                 };
-                ir.push_str(&format!(
-                    "  {} = {} i64 {}, {}{}\n",
-                    cmp_tmp, op_str, left_val, right_val, dbg_info
-                ));
+                // Use inferred type for integer comparison width
+                let cmp_llvm = match &left_type {
+                    ResolvedType::I8 | ResolvedType::U8 => "i8",
+                    ResolvedType::I16 | ResolvedType::U16 => "i16",
+                    ResolvedType::I32 | ResolvedType::U32 => "i32",
+                    ResolvedType::I128 | ResolvedType::U128 => "i128",
+                    ResolvedType::Bool => "i1",
+                    _ => "i64",
+                };
+                // Coerce operands to the comparison width if they differ
+                let actual_left_ty = self.llvm_type_of(&left_val);
+                let actual_right_ty = self.llvm_type_of(&right_val);
+                let coerced_left =
+                    self.coerce_int_width(&left_val, &actual_left_ty, cmp_llvm, counter, &mut ir);
+                let coerced_right =
+                    self.coerce_int_width(&right_val, &actual_right_ty, cmp_llvm, counter, &mut ir);
+                write_ir!(
+                    ir,
+                    "  {} = {} {} {}, {}{}",
+                    cmp_tmp,
+                    op_str,
+                    cmp_llvm,
+                    coerced_left,
+                    coerced_right,
+                    dbg_info
+                );
             }
 
             // Extend i1 to i64
             let result = self.next_temp(counter);
-            ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, cmp_tmp));
+            write_ir!(ir, "  {} = zext i1 {} to i64", result, cmp_tmp);
             Ok((result, ir))
         } else {
             // Arithmetic and bitwise operations
@@ -183,20 +259,83 @@ impl CodeGenerator {
                     BinOp::Div => "fdiv",
                     BinOp::Mod => "frem",
                     _ => {
-                        eprintln!(
-                            "[ICE] unexpected BinOp variant in float arithmetic: {:?}",
+                        return Err(CodegenError::InternalError(format!(
+                            "BinOp {:?} in float_arith codegen path",
                             op
-                        );
-                        return Err(CodegenError::Unsupported(format!(
-                            "unexpected float arithmetic operator {:?}",
-                            op
-                        )));
+                        )))
                     }
                 };
-                ir.push_str(&format!(
-                    "  {} = {} double {}, {}{}\n",
-                    tmp, op_str, left_val, right_val, dbg_info
-                ));
+                // Determine target float type
+                let left_is_f32 = matches!(left_type, ResolvedType::F32);
+                let right_is_f32 = matches!(right_type, ResolvedType::F32);
+                let left_is_f64 = matches!(left_type, ResolvedType::F64);
+                let right_is_f64 = matches!(right_type, ResolvedType::F64);
+
+                let float_llvm;
+                let mut actual_left = left_val.clone();
+                let mut actual_right = right_val.clone();
+
+                // Check for int operands that need sitofp conversion
+                let left_is_int = !left_is_f32 && !left_is_f64;
+                let right_is_int = !right_is_f32 && !right_is_f64;
+
+                if (left_is_f32 && right_is_f64) || (left_is_f64 && right_is_f32) {
+                    // Mixed f32/f64 — promote f32 to f64
+                    float_llvm = "double";
+                    if left_is_f32 {
+                        let ext = self.next_temp(counter);
+                        write_ir!(ir, "  {} = fpext float {} to double", ext, left_val);
+                        actual_left = ext;
+                    }
+                    if right_is_f32 {
+                        let ext = self.next_temp(counter);
+                        write_ir!(ir, "  {} = fpext float {} to double", ext, right_val);
+                        actual_right = ext;
+                    }
+                } else if left_is_f32 || right_is_f32 {
+                    float_llvm = "float";
+                } else {
+                    float_llvm = "double";
+                }
+
+                // Convert int operands to float (sitofp) for mixed int*float arithmetic
+                if left_is_int {
+                    let conv = self.next_temp(counter);
+                    let int_llvm = self.type_to_llvm(&left_type);
+                    write_ir!(
+                        ir,
+                        "  {} = sitofp {} {} to {}",
+                        conv,
+                        int_llvm,
+                        actual_left,
+                        float_llvm
+                    );
+                    actual_left = conv;
+                }
+                if right_is_int {
+                    let conv = self.next_temp(counter);
+                    let int_llvm = self.type_to_llvm(&right_type);
+                    write_ir!(
+                        ir,
+                        "  {} = sitofp {} {} to {}",
+                        conv,
+                        int_llvm,
+                        actual_right,
+                        float_llvm
+                    );
+                    actual_right = conv;
+                }
+
+                write_ir!(
+                    ir,
+                    "  {} = {} {} {}, {}{}",
+                    tmp,
+                    op_str,
+                    float_llvm,
+                    actual_left,
+                    actual_right,
+                    dbg_info
+                );
             } else {
                 let op_str = match op {
                     BinOp::Add => "add",
@@ -210,26 +349,53 @@ impl CodeGenerator {
                     BinOp::Shl => "shl",
                     BinOp::Shr => "ashr",
                     _ => {
-                        eprintln!(
-                            "[ICE] unexpected BinOp variant in integer arithmetic: {:?}",
+                        return Err(CodegenError::InternalError(format!(
+                            "BinOp {:?} in int_arith codegen path",
                             op
-                        );
-                        return Err(CodegenError::Unsupported(format!(
-                            "unexpected integer arithmetic operator {:?}",
-                            op
-                        )));
+                        )))
                     }
                 };
-                ir.push_str(&format!(
-                    "  {} = {} i64 {}, {}{}\n",
-                    tmp, op_str, left_val, right_val, dbg_info
-                ));
+                // Use MAX of both operand widths as the target so that narrower
+                // operands are promoted before the instruction (fixes P3: e.g.,
+                // shl i16 %t20, %t23 where %t20 is actually i8).
+                let left_bits = self.get_integer_bits(&left_type);
+                let right_bits = self.get_integer_bits(&right_type);
+                let target_bits = if left_bits > 0 && right_bits > 0 {
+                    std::cmp::max(left_bits, right_bits)
+                } else if left_bits > 0 {
+                    left_bits
+                } else if right_bits > 0 {
+                    right_bits
+                } else {
+                    64 // default
+                };
+                let int_llvm_owned = format!("i{}", target_bits);
+                let int_llvm: &str = &int_llvm_owned;
+
+                // Coerce both operands to the target width (using inferred types, not llvm_type_of)
+                let left_ty_str = format!("i{}", if left_bits > 0 { left_bits } else { 64 });
+                let right_ty_str = format!("i{}", if right_bits > 0 { right_bits } else { 64 });
+                let coerced_left =
+                    self.coerce_int_width(&left_val, &left_ty_str, int_llvm, counter, &mut ir);
+                let coerced_right =
+                    self.coerce_int_width(&right_val, &right_ty_str, int_llvm, counter, &mut ir);
+                write_ir!(
+                    ir,
+                    "  {} = {} {} {}, {}{}",
+                    tmp,
+                    op_str,
+                    int_llvm,
+                    coerced_left,
+                    coerced_right,
+                    dbg_info
+                );
             }
             Ok((tmp, ir))
         }
     }
 
     /// Generate unary expression
+    #[inline(never)]
     pub(crate) fn generate_unary_expr(
         &mut self,
         op: &UnaryOp,
@@ -242,15 +408,34 @@ impl CodeGenerator {
 
         let mut ir = val_ir;
         let dbg_info = self.debug_info.dbg_ref_from_span(span);
+        let expr_type = self.infer_expr_type(expr);
+        let int_llvm = match &expr_type {
+            ResolvedType::I8 | ResolvedType::U8 => "i8",
+            ResolvedType::I16 | ResolvedType::U16 => "i16",
+            ResolvedType::I32 | ResolvedType::U32 => "i32",
+            ResolvedType::I128 | ResolvedType::U128 => "i128",
+            ResolvedType::Bool => "i1",
+            _ => "i64",
+        };
         match op {
             UnaryOp::Neg => {
-                ir.push_str(&format!("  {} = sub i64 0, {}{}\n", tmp, val, dbg_info));
+                write_ir!(ir, "  {} = sub {} 0, {}{}", tmp, int_llvm, val, dbg_info);
             }
             UnaryOp::Not => {
-                ir.push_str(&format!("  {} = xor i1 {}, 1{}\n", tmp, val, dbg_info));
+                // Logical NOT: convert to i1 via icmp ne, then xor to flip
+                let val_ty = self.llvm_type_of(&val);
+                let bool_val = if val_ty == "i1" {
+                    val.clone()
+                } else {
+                    let to_bool = self.next_temp(counter);
+                    write_ir!(ir, "  {} = icmp ne {} {}, 0", to_bool, val_ty, val);
+                    to_bool
+                };
+                // xor i1 produces i1 — keep as i1 and let callers zext if needed
+                write_ir!(ir, "  {} = xor i1 {}, 1{}", tmp, bool_val, dbg_info);
             }
             UnaryOp::BitNot => {
-                ir.push_str(&format!("  {} = xor i64 {}, -1{}\n", tmp, val, dbg_info));
+                write_ir!(ir, "  {} = xor {} {}, -1{}", tmp, int_llvm, val, dbg_info);
             }
         }
 
@@ -258,6 +443,7 @@ impl CodeGenerator {
     }
 
     /// Generate ternary expression
+    #[inline(never)]
     pub(crate) fn generate_cast_expr(
         &mut self,
         expr: &Spanned<Expr>,
@@ -270,6 +456,171 @@ impl CodeGenerator {
         let target_type = self.ast_type_to_resolved(&ty.node);
         let llvm_type = self.type_to_llvm(&target_type);
 
+        // Check source type for str→i64 cast: extract data pointer from fat pointer
+        let src_llvm_ty = self.llvm_type_of(&val);
+        if src_llvm_ty == "{ i8*, i64 }" && llvm_type == "i64" {
+            // str → i64: extract the data pointer (field 0) and ptrtoint
+            let ptr_val = self.next_temp(counter);
+            let result = self.next_temp(counter);
+            write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr_val, val);
+            write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, ptr_val);
+            return Ok((result, ir));
+        }
+
+        // i64 → str cast: convert pointer-as-i64 to fat pointer { i8*, i64 }
+        if src_llvm_ty == "i64" && llvm_type == "{ i8*, i64 }" {
+            let ptr_val = self.next_temp(counter);
+            let fat1 = self.next_temp(counter);
+            let result = self.next_temp(counter);
+            write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr_val, val);
+            write_ir!(
+                ir,
+                "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+                fat1,
+                ptr_val
+            );
+            write_ir!(
+                ir,
+                "  {} = insertvalue {{ i8*, i64 }} {}, i64 0, 1",
+                result,
+                fat1
+            );
+            return Ok((result, ir));
+        }
+
+        // pointer/struct → i64 cast: ptrtoint
+        if llvm_type == "i64" && (src_llvm_ty.ends_with('*') || src_llvm_ty.starts_with('%')) {
+            let result = self.next_temp(counter);
+            if src_llvm_ty.ends_with('*') {
+                write_ir!(ir, "  {} = ptrtoint {} {} to i64", result, src_llvm_ty, val);
+            } else {
+                // Named struct type — the SSA value is actually a pointer (from alloca)
+                write_ir!(
+                    ir,
+                    "  {} = ptrtoint {}* {} to i64",
+                    result,
+                    src_llvm_ty,
+                    val
+                );
+            }
+            return Ok((result, ir));
+        }
+
+        // Integer width coercion: only apply when source type is reliably known
+        // (not fallback i64). The "everything-is-i64" body convention means that
+        // i64→i32 truncation would break downstream code that expects i64 values.
+        // Only widen (i8/i16/i32 → i64) from known types, not narrow.
+        {
+            let has_known_type = self.fn_ctx.get_temp_type(&val).is_some()
+                || self
+                    .fn_ctx
+                    .locals
+                    .contains_key(val.strip_prefix('%').unwrap_or(&val));
+            if has_known_type
+                && src_llvm_ty.starts_with('i')
+                && llvm_type.starts_with('i')
+                && src_llvm_ty != llvm_type
+            {
+                let src_bits: u32 = src_llvm_ty[1..].parse().unwrap_or(0);
+                let dst_bits: u32 = llvm_type[1..].parse().unwrap_or(0);
+                if src_bits > 0 && dst_bits > 0 && src_bits != dst_bits {
+                    let result = self.next_temp(counter);
+                    if src_bits > dst_bits {
+                        write_ir!(
+                            ir,
+                            "  {} = trunc {} {} to {}",
+                            result,
+                            src_llvm_ty,
+                            val,
+                            llvm_type
+                        );
+                    } else {
+                        write_ir!(
+                            ir,
+                            "  {} = sext {} {} to {}",
+                            result,
+                            src_llvm_ty,
+                            val,
+                            llvm_type
+                        );
+                    }
+                    return Ok((result, ir));
+                }
+            }
+        }
+
+        // Float literal → integer: a float literal (e.g., "3.140000e+00") typed as i64 by
+        // the "everything is i64" fallback needs fptosi when cast to i64. Without this,
+        // `ret i64 3.140000e+00` is emitted which is invalid LLVM IR.
+        if src_llvm_ty.starts_with('i') && llvm_type.starts_with('i') {
+            let is_float_literal =
+                !val.starts_with('%') && (val.contains("e+") || val.contains("e-"));
+            if is_float_literal {
+                let result = self.next_temp(counter);
+                write_ir!(ir, "  {} = fptosi double {} to {}", result, val, llvm_type);
+                return Ok((result, ir));
+            }
+        }
+
+        // Float width coercion: f32 ↔ f64 (fpext/fptrunc)
+        if (src_llvm_ty == "float" && llvm_type == "double")
+            || (src_llvm_ty == "double" && llvm_type == "float")
+        {
+            let result = self.next_temp(counter);
+            if src_llvm_ty == "float" {
+                write_ir!(ir, "  {} = fpext float {} to double", result, val);
+            } else {
+                write_ir!(ir, "  {} = fptrunc double {} to float", result, val);
+            }
+            return Ok((result, ir));
+        }
+
+        // Integer ↔ float coercion (as f64, as f32 from int, as i64 from float)
+        if src_llvm_ty.starts_with('i') && (llvm_type == "float" || llvm_type == "double") {
+            // Check if the value is actually a float literal (e.g., "5.000000e+00")
+            // that was given i64 type by the "everything is i64" fallback.
+            // Float literals don't start with '%' and contain 'e+' or 'e-' (scientific notation).
+            let is_float_literal =
+                !val.starts_with('%') && (val.contains("e+") || val.contains("e-"));
+            if is_float_literal {
+                if llvm_type == "float" {
+                    // f32 target: parse double literal → truncate to f32 → emit as LLVM hex.
+                    // LLVM requires float constants to be exactly representable or in hex form.
+                    // Hex format uses the double-precision encoding of the f32 value.
+                    if let Ok(d) = val.parse::<f64>() {
+                        let f = d as f32;
+                        let f_as_double = f as f64;
+                        let bits = f_as_double.to_bits();
+                        return Ok((format!("0x{:016X}", bits), ir));
+                    }
+                }
+                // double target: return the literal directly
+                return Ok((val.clone(), ir));
+            }
+            let result = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = sitofp {} {} to {}",
+                result,
+                src_llvm_ty,
+                val,
+                llvm_type
+            );
+            return Ok((result, ir));
+        }
+        if (src_llvm_ty == "float" || src_llvm_ty == "double") && llvm_type.starts_with('i') {
+            let result = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = fptosi {} {} to {}",
+                result,
+                src_llvm_ty,
+                val,
+                llvm_type
+            );
+            return Ok((result, ir));
+        }
+
         // Simple cast - in many cases just bitcast or pass through
         let result = self.next_temp(counter);
         match (&target_type, llvm_type.as_str()) {
@@ -277,140 +628,11 @@ impl CodeGenerator {
             (ResolvedType::Pointer(_), _)
             | (ResolvedType::Ref(_), _)
             | (ResolvedType::RefMut(_), _) => {
-                ir.push_str(&format!(
-                    "  {} = inttoptr i64 {} to {}\n",
-                    result, val, llvm_type
-                ));
+                write_ir!(ir, "  {} = inttoptr i64 {} to {}", result, val, llvm_type);
             }
             // Default: just use the value as-is (same size types)
             _ => {
                 return Ok((val, ir));
-            }
-        }
-
-        Ok((result, ir))
-    }
-
-    /// Generate assign expression
-    pub(crate) fn generate_assign_expr(
-        &mut self,
-        target: &Spanned<Expr>,
-        value: &Spanned<Expr>,
-        counter: &mut usize,
-    ) -> CodegenResult<(String, String)> {
-        let (val, val_ir) = self.generate_expr(value, counter)?;
-        let mut ir = val_ir;
-
-        if let Expr::Ident(name) = &target.node {
-            if let Some(local) = self.fn_ctx.locals.get(name).cloned() {
-                if !local.is_param() {
-                    let llvm_ty = self.type_to_llvm(&local.ty);
-                    // For struct types (Named), the local is a double pointer (%Type**).
-                    // We need to alloca a new struct, store the value, then update the pointer.
-                    if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_alloca() {
-                        let tmp_ptr = self.next_temp(counter);
-                        ir.push_str(&format!("  {} = alloca {}\n", tmp_ptr, llvm_ty));
-                        ir.push_str(&format!(
-                            "  store {} {}, {}* {}\n",
-                            llvm_ty, val, llvm_ty, tmp_ptr
-                        ));
-                        ir.push_str(&format!(
-                            "  store {}* {}, {}** %{}\n",
-                            llvm_ty, tmp_ptr, llvm_ty, local.llvm_name
-                        ));
-                    } else {
-                        ir.push_str(&format!(
-                            "  store {} {}, {}* %{}\n",
-                            llvm_ty, val, llvm_ty, local.llvm_name
-                        ));
-                    }
-                }
-            }
-        } else if let Expr::Field {
-            expr: obj_expr,
-            field,
-        } = &target.node
-        {
-            let (obj_val, obj_ir) = self.generate_expr(obj_expr, counter)?;
-            ir.push_str(&obj_ir);
-
-            if let Expr::Ident(var_name) = &obj_expr.node {
-                if let Some(local) = self.fn_ctx.locals.get(var_name.as_str()).cloned() {
-                    if let ResolvedType::Named {
-                        name: struct_name, ..
-                    } = &local.ty
-                    {
-                        if let Some(struct_info) = self.types.structs.get(struct_name).cloned() {
-                            if let Some(field_idx) = struct_info
-                                .fields
-                                .iter()
-                                .position(|(n, _)| n == &field.node)
-                            {
-                                let field_ty = &struct_info.fields[field_idx].1;
-                                let llvm_ty = self.type_to_llvm(field_ty);
-
-                                let field_ptr = self.next_temp(counter);
-                                ir.push_str(&format!(
-                                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
-                                    field_ptr, struct_name, struct_name, obj_val, field_idx
-                                ));
-                                ir.push_str(&format!(
-                                    "  store {} {}, {}* {}\n",
-                                    llvm_ty, val, llvm_ty, field_ptr
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok((val, ir))
-    }
-
-    /// Generate compound assignment expression
-    pub(crate) fn generate_assign_op_expr(
-        &mut self,
-        op: &BinOp,
-        target: &Spanned<Expr>,
-        value: &Spanned<Expr>,
-        counter: &mut usize,
-    ) -> CodegenResult<(String, String)> {
-        let (current_val, load_ir) = self.generate_expr(target, counter)?;
-        let (rhs_val, rhs_ir) = self.generate_expr(value, counter)?;
-
-        let mut ir = load_ir;
-        ir.push_str(&rhs_ir);
-
-        let op_str = match op {
-            BinOp::Add => "add",
-            BinOp::Sub => "sub",
-            BinOp::Mul => "mul",
-            BinOp::Div => "sdiv",
-            BinOp::Mod => "srem",
-            BinOp::BitAnd => "and",
-            BinOp::BitOr => "or",
-            BinOp::BitXor => "xor",
-            BinOp::Shl => "shl",
-            BinOp::Shr => "ashr",
-            _ => return Err(CodegenError::Unsupported(format!("compound {:?}", op))),
-        };
-
-        let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = {} i64 {}, {}\n",
-            result, op_str, current_val, rhs_val
-        ));
-
-        if let Expr::Ident(name) = &target.node {
-            if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
-                if !local.is_param() {
-                    let llvm_ty = self.type_to_llvm(&local.ty);
-                    ir.push_str(&format!(
-                        "  store {} {}, {}* %{}\n",
-                        llvm_ty, result, llvm_ty, local.llvm_name
-                    ));
-                }
             }
         }
 

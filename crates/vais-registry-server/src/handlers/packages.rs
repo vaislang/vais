@@ -568,3 +568,199 @@ fn validate_version(version: &str) -> ServerResult<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ========== validate_package_name tests ==========
+
+    #[test]
+    fn test_valid_package_name() {
+        assert!(validate_package_name("my-package").is_ok());
+    }
+
+    #[test]
+    fn test_valid_package_name_underscore() {
+        assert!(validate_package_name("my_package").is_ok());
+    }
+
+    #[test]
+    fn test_valid_package_name_digits() {
+        assert!(validate_package_name("pkg123").is_ok());
+    }
+
+    #[test]
+    fn test_valid_package_name_single_char() {
+        assert!(validate_package_name("a").is_ok());
+    }
+
+    #[test]
+    fn test_valid_package_name_all_digits() {
+        assert!(validate_package_name("123").is_ok());
+    }
+
+    #[test]
+    fn test_valid_package_name_mixed() {
+        assert!(validate_package_name("my-pkg_v2").is_ok());
+    }
+
+    #[test]
+    fn test_invalid_package_name_empty() {
+        assert!(validate_package_name("").is_err());
+    }
+
+    #[test]
+    fn test_invalid_package_name_too_long() {
+        let name = "a".repeat(65);
+        assert!(validate_package_name(&name).is_err());
+    }
+
+    #[test]
+    fn test_valid_package_name_64_chars() {
+        let name = "a".repeat(64);
+        assert!(validate_package_name(&name).is_ok());
+    }
+
+    #[test]
+    fn test_invalid_package_name_uppercase() {
+        assert!(validate_package_name("MyPackage").is_err());
+    }
+
+    #[test]
+    fn test_invalid_package_name_spaces() {
+        assert!(validate_package_name("my package").is_err());
+    }
+
+    #[test]
+    fn test_invalid_package_name_special_chars() {
+        assert!(validate_package_name("my@package").is_err());
+        assert!(validate_package_name("my.package").is_err());
+        assert!(validate_package_name("my!package").is_err());
+        assert!(validate_package_name("my#package").is_err());
+    }
+
+    #[test]
+    fn test_invalid_package_name_starts_with_dash() {
+        assert!(validate_package_name("-pkg").is_err());
+    }
+
+    #[test]
+    fn test_invalid_package_name_starts_with_underscore() {
+        assert!(validate_package_name("_pkg").is_err());
+    }
+
+    #[test]
+    fn test_reserved_package_names() {
+        assert!(validate_package_name("std").is_err());
+        assert!(validate_package_name("core").is_err());
+        assert!(validate_package_name("vais").is_err());
+        assert!(validate_package_name("test").is_err());
+        assert!(validate_package_name("main").is_err());
+        assert!(validate_package_name("lib").is_err());
+    }
+
+    #[test]
+    fn test_non_reserved_similar_names() {
+        assert!(validate_package_name("stdlib").is_ok());
+        assert!(validate_package_name("my-test").is_ok());
+        assert!(validate_package_name("mainloop").is_ok());
+        assert!(validate_package_name("libfoo").is_ok());
+    }
+
+    // ========== validate_version tests ==========
+
+    #[test]
+    fn test_valid_version_basic() {
+        assert!(validate_version("1.0.0").is_ok());
+    }
+
+    #[test]
+    fn test_valid_version_zeros() {
+        assert!(validate_version("0.0.0").is_ok());
+    }
+
+    #[test]
+    fn test_valid_version_large_numbers() {
+        assert!(validate_version("100.200.300").is_ok());
+    }
+
+    #[test]
+    fn test_valid_version_prerelease() {
+        assert!(validate_version("1.0.0-alpha").is_ok());
+    }
+
+    #[test]
+    fn test_valid_version_build_metadata() {
+        assert!(validate_version("1.0.0+build123").is_ok());
+    }
+
+    #[test]
+    fn test_valid_version_prerelease_and_build() {
+        assert!(validate_version("1.0.0-beta+20240101").is_ok());
+    }
+
+    #[test]
+    fn test_invalid_version_two_parts() {
+        assert!(validate_version("1.0").is_err());
+    }
+
+    #[test]
+    fn test_invalid_version_one_part() {
+        assert!(validate_version("1").is_err());
+    }
+
+    #[test]
+    fn test_invalid_version_empty() {
+        assert!(validate_version("").is_err());
+    }
+
+    #[test]
+    fn test_invalid_version_non_numeric_major() {
+        assert!(validate_version("abc.0.0").is_err());
+    }
+
+    #[test]
+    fn test_invalid_version_non_numeric_minor() {
+        assert!(validate_version("1.abc.0").is_err());
+    }
+
+    #[test]
+    fn test_invalid_version_non_numeric_patch() {
+        assert!(validate_version("1.0.abc").is_err());
+    }
+
+    #[test]
+    fn test_valid_version_four_parts() {
+        assert!(validate_version("1.0.0.0").is_ok());
+    }
+
+    // ========== BrowseParams serde tests ==========
+
+    #[test]
+    fn test_browse_params_defaults() {
+        let json = "{}";
+        let params: BrowseParams = serde_json::from_str(json).unwrap();
+        assert_eq!(params.limit, 20);
+        assert_eq!(params.offset, 0);
+        assert_eq!(params.sort, "downloads");
+    }
+
+    #[test]
+    fn test_browse_params_custom() {
+        let json = r#"{"limit": 50, "offset": 10, "sort": "newest"}"#;
+        let params: BrowseParams = serde_json::from_str(json).unwrap();
+        assert_eq!(params.limit, 50);
+        assert_eq!(params.offset, 10);
+        assert_eq!(params.sort, "newest");
+    }
+
+    #[test]
+    fn test_browse_params_partial() {
+        let json = r#"{"limit": 5}"#;
+        let params: BrowseParams = serde_json::from_str(json).unwrap();
+        assert_eq!(params.limit, 5);
+        assert_eq!(params.offset, 0);
+        assert_eq!(params.sort, "downloads");
+    }
+}

@@ -2,8 +2,8 @@
 //!
 //! Generates .js binding files that:
 //! 1. Load and instantiate the WASM module
-//! 2. Provide import functions from JS to WASM (for #[wasm_import])
-//! 3. Wrap exported WASM functions with JS-friendly APIs (for #[wasm_export])
+//! 2. Provide import functions from JS to WASM (for `#[wasm_import]`)
+//! 3. Wrap exported WASM functions with JS-friendly APIs (for `#[wasm_export]`)
 //! 4. Handle type serialization across the boundary
 
 use std::collections::HashMap;

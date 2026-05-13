@@ -12,6 +12,7 @@ use super::helpers::*;
 
 // ===== Range struct codegen =====
 
+// REGRESSION(phase-41): range struct {i64, i64, i1} codegen must produce valid insertvalue chain
 #[test]
 fn e2e_phase41_range_basic() {
     // Basic range creation — verifies {i64, i64, i1} struct works
@@ -21,7 +22,7 @@ F main() -> i64 {
     R 0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -33,7 +34,7 @@ F main() -> i64 {
     R 0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -86,8 +87,8 @@ F main() -> i64 {
 // ===== i64 fallback removal — explicit type handling =====
 
 #[test]
-fn e2e_phase41_optional_type_codegen() {
-    // Optional<i64> should use {i8, i64} struct, not i64 fallback
+fn e2e_phase41_integer_literal_return() {
+    // Integer literal binding and return compiles and exits correctly
     let source = r#"
 F main() -> i64 {
     x := 42
@@ -192,7 +193,7 @@ F main() -> i64 {
     R 0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -205,7 +206,7 @@ F main() -> i64 {
     R 0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]

@@ -1,10 +1,13 @@
 # WASM Components
 
-Vais provides first-class support for WebAssembly (WASM) compilation, enabling your code to run in browsers, Node.js, and WASI runtimes.
+Vais has WebAssembly (WASM) implementation surfaces, but WASM is not part of the
+current certified public baseline unless a page names a dedicated gate. Treat
+the examples in this section as experimental guidance.
 
 ## Overview
 
-WebAssembly is a portable binary instruction format designed for safe, fast execution in web browsers and beyond. Vais can compile to WASM targets, allowing you to:
+WebAssembly is a portable binary instruction format designed for safe, fast
+execution in web browsers and beyond. The Vais WASM workbench targets:
 
 - **Run in Browsers** — Build web applications with near-native performance
 - **Server-Side WASM** — Use WASI for command-line tools and microservices
@@ -13,7 +16,7 @@ WebAssembly is a portable binary instruction format designed for safe, fast exec
 
 ## Supported Targets
 
-Vais supports multiple WASM compilation targets:
+Vais tracks multiple experimental WASM compilation targets:
 
 | Target | Description | Use Case |
 |--------|-------------|----------|
@@ -28,13 +31,13 @@ Vais supports multiple WASM compilation targets:
 Import JavaScript functions into Vais:
 ```vais
 #[wasm_import("env", "console_log")]
-N F console_log(ptr: i64, len: i64)
+N fn console_log(ptr: i64, len: i64)
 ```
 
 Export Vais functions to JavaScript:
 ```vais
 #[wasm_export("add")]
-F add(a: i64, b: i64) -> i64 {
+fn add(a: i64, b: i64) -> i64 {
     a + b
 }
 ```
@@ -180,10 +183,10 @@ These are WASM platform limitations, not specific to Vais.
 
 ### Web Application
 ```vais
-U std/web
+use std/web
 
 #[wasm_export("init")]
-F init() {
+fn init() {
     log_str("App initialized")
     elem := get_element_by_id("root")
     set_text_content(elem, "Hello from Vais!")
@@ -192,9 +195,9 @@ F init() {
 
 ### CLI Tool with WASI
 ```vais
-U std/wasm
+use std/wasm
 
-F main() -> i64 {
+fn main() -> i64 {
     # Read from stdin
     input := wasi_read_stdin(1024)
 
@@ -202,16 +205,16 @@ F main() -> i64 {
     output := process(input)
     wasi_write_stdout(output)
 
-    R 0
+    return 0
 }
 ```
 
 ### Computational Kernel
 ```vais
 #[wasm_export("fib")]
-F fib(n: i64) -> i64 {
-    I n <= 1 { R n }
-    R @(n - 1) + @(n - 2)
+fn fib(n: i64) -> i64 {
+    I n <= 1 { return n }
+    return @(n - 1) + @(n - 2)
 }
 ```
 

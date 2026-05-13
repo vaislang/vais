@@ -1,7 +1,7 @@
 //! Variable registration and reference tracking
 
-use crate::types::{ResolvedType, TypeError, TypeResult};
 use super::{OwnershipChecker, OwnershipInfo, OwnershipState, ReferenceInfo};
+use crate::types::{ResolvedType, TypeError, TypeResult};
 use vais_ast::{Expr, Span, Spanned};
 
 impl OwnershipChecker {

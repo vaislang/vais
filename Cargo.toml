@@ -23,6 +23,7 @@ members = [
     "crates/vais-python",
     "crates/vais-node",
     "crates/vais-bindgen",
+    "crates/vais-browser-compiler",
     "crates/vais-codegen-js",
     "crates/vais-query",
     "crates/vais-mir",
@@ -56,6 +57,7 @@ default-members = [
     "crates/vais-playground-server",
     "crates/vais-tutorial",
     "crates/vais-bindgen",
+    "crates/vais-browser-compiler",
     "crates/vais-codegen-js",
     "crates/vais-query",
     "crates/vais-mir",
@@ -68,7 +70,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "1.0.0"
+version = "0.1.0"
 edition = "2021"
 authors = ["Vais Team"]
 license = "MIT"
@@ -112,6 +114,7 @@ colored = "3"
 
 # Testing
 pretty_assertions = "1.4"
+proptest = "1.5"
 
 [profile.release]
 strip = true

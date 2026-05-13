@@ -31,4 +31,3 @@ mod gen_stmt;
 mod gen_types;
 
 pub use generator::InkwellCodeGenerator;
-pub use types::TypeMapper;

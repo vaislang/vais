@@ -4,7 +4,7 @@ use vais_tutorial::{Tutorial, TutorialError};
 #[test]
 fn test_tutorial_initialization() {
     let tutorial = Tutorial::new();
-    assert_eq!(tutorial.chapters.len(), 5);
+    assert_eq!(tutorial.chapters.len(), 8);
     assert_eq!(tutorial.progress.current_chapter, 0);
     assert_eq!(tutorial.progress.current_lesson, 0);
 }

@@ -147,3 +147,81 @@ impl ServerConfig {
         format!("{}:{}", self.host, self.port)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config() {
+        let config = ServerConfig::default();
+        assert_eq!(config.host, "0.0.0.0");
+        assert_eq!(config.port, 3000);
+        assert_eq!(config.database_path, PathBuf::from("./data/registry.db"));
+        assert_eq!(config.storage_path, PathBuf::from("./data/packages"));
+        assert_eq!(config.max_upload_size, 50 * 1024 * 1024);
+        assert_eq!(config.token_expiration_days, 365);
+        assert!(!config.cors_allow_all);
+        assert!(config.cors_origins.is_empty());
+        assert!(config.enable_logging);
+        assert!(config.admin_username.is_none());
+        assert!(config.admin_password.is_none());
+    }
+
+    #[test]
+    fn test_bind_addr() {
+        let config = ServerConfig::default();
+        assert_eq!(config.bind_addr(), "0.0.0.0:3000");
+    }
+
+    #[test]
+    fn test_bind_addr_custom() {
+        let mut config = ServerConfig::default();
+        config.host = "127.0.0.1".to_string();
+        config.port = 8080;
+        assert_eq!(config.bind_addr(), "127.0.0.1:8080");
+    }
+
+    #[test]
+    fn test_config_serde_roundtrip() {
+        let config = ServerConfig::default();
+        let toml_str = toml::to_string(&config).unwrap();
+        let parsed: ServerConfig = toml::from_str(&toml_str).unwrap();
+        assert_eq!(parsed.host, config.host);
+        assert_eq!(parsed.port, config.port);
+        assert_eq!(parsed.max_upload_size, config.max_upload_size);
+    }
+
+    #[test]
+    fn test_config_serde_with_custom_values() {
+        let toml_str = r#"
+            host = "localhost"
+            port = 9090
+            max_upload_size = 1024
+            token_expiration_days = 7
+            cors_allow_all = true
+            enable_logging = false
+        "#;
+        let config: ServerConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.host, "localhost");
+        assert_eq!(config.port, 9090);
+        assert_eq!(config.max_upload_size, 1024);
+        assert_eq!(config.token_expiration_days, 7);
+        assert!(config.cors_allow_all);
+        assert!(!config.enable_logging);
+    }
+
+    #[test]
+    fn test_config_from_file_not_found() {
+        let result = ServerConfig::from_file(std::path::Path::new("/nonexistent/config.toml"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_config_clone() {
+        let config = ServerConfig::default();
+        let cloned = config.clone();
+        assert_eq!(config.host, cloned.host);
+        assert_eq!(config.port, cloned.port);
+    }
+}

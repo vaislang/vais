@@ -146,18 +146,7 @@ impl<'a> ErrorReporter<'a> {
             }
             current_pos = idx;
         }
-
-        // Ensure we're at or past the span start
-        if current_pos < span.start && line_start < span.start {
-            // Move line_start forward if needed
-            while line_start < span.start && line_start < self.source.len() {
-                if self.source.as_bytes().get(line_start) == Some(&b'\n') {
-                    line_start += 1;
-                    break;
-                }
-                line_start += 1;
-            }
-        }
+        let _ = current_pos; // used only for iteration
 
         // Find the end of the line
         let line_end = self.source[line_start..]

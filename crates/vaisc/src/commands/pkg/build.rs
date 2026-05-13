@@ -215,6 +215,7 @@ pub(super) fn cmd_pkg_build_single(
         false,
         false,
         536870912,
+        None, // profile_out
     )?;
 
     if is_lib {
@@ -278,6 +279,7 @@ pub(super) fn run_build_script(
         false,
         false,
         536870912,
+        None, // profile_out
     )?;
 
     // Run the build script with environment variables

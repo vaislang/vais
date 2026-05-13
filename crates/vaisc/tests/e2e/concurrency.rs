@@ -2,18 +2,22 @@ use super::helpers::*;
 
 // ==================== Void Phi Node Bug Fix ====================
 
+// REGRESSION(phase-42): void phi node — `phi void` is invalid LLVM IR
 #[test]
 fn e2e_void_phi_if_else_with_assert() {
     // Regression test for void phi node bug:
     // If-else expressions where both branches return Unit (void) type
     // should not generate phi nodes, as "phi void" is invalid LLVM IR.
     // This test uses assert expressions which return Unit type.
+    // Phase 4c.2: `assert` is a panic source, so main must be `partial`
+    // to opt out of the totality gate. The regression being tested
+    // (void phi node with assert in both arms) is orthogonal.
     let source = r#"
 N "C" {
     F printf(fmt: str, ...) -> i64
 }
 
-F main() -> i64 {
+partial F main() -> i64 {
     x := 5
 
     # if-else with assert (Unit type) in both branches

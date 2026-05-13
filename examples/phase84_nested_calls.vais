@@ -1,0 +1,18 @@
+# Phase 84: Nested function calls
+F double(x: i64) -> i64 = x * 2
+F add1(x: i64) -> i64 = x + 1
+F square(x: i64) -> i64 = x * x
+
+F compose(x: i64) -> i64 {
+    a := double(x)
+    b := add1(a)
+    c := square(b)
+    c
+}
+
+F main() -> i64 {
+    # compose(3) = square(add1(double(3))) = square(add1(6)) = square(7) = 49
+    result := compose(3)
+    puts("nested calls done")
+    result
+}

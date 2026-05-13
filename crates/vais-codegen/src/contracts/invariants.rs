@@ -1,13 +1,13 @@
 //! Struct invariant checks.
 
-use std::fmt::Write;
-use vais_types::ResolvedType;
 use crate::{CodeGenerator, CodegenResult};
+use vais_types::ResolvedType;
 
 impl CodeGenerator {
     /// Generate invariant checks for a struct type
     ///
     /// Called after struct construction/modification to verify invariants.
+    #[inline(never)]
     pub(crate) fn _generate_invariant_checks(
         &mut self,
         struct_name: &str,
@@ -67,17 +67,18 @@ impl CodeGenerator {
 
             let cond_i1 = format!("%invariant_cond_i1_{}", *counter);
             *counter += 1;
-            writeln!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, cond_value).unwrap();
+            write_ir!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, cond_value);
 
-            writeln!(
+            write_ir!(
                 ir,
                 "  br i1 {}, label %{}, label %{}",
-                cond_i1, ok_label, fail_label
-            )
-            .unwrap();
+                cond_i1,
+                ok_label,
+                fail_label
+            );
 
             // Failure block
-            writeln!(ir, "{}:", fail_label).unwrap();
+            write_ir!(ir, "{}:", fail_label);
 
             let kind_value = 3; // CONTRACT_INVARIANT
             let condition_str = self
@@ -98,16 +99,20 @@ impl CodeGenerator {
             let func_str = self.get_or_create_contract_string(&func_name);
             let line = self.debug_info.offset_to_line(invariant_expr.span.start) as i64;
 
-            writeln!(
+            write_ir!(
                 ir,
                 "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 {}, i8* {})",
-                kind_value, condition_str, file_str, line, func_str
-            )
-            .unwrap();
+                kind_value,
+                condition_str,
+                file_str,
+                line,
+                func_str
+            );
+
             ir.push_str("  unreachable\n");
 
             // Success block
-            writeln!(ir, "{}:", ok_label).unwrap();
+            write_ir!(ir, "{}:", ok_label);
         }
 
         Ok(ir)

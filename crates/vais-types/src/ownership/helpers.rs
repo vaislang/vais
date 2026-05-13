@@ -1,11 +1,10 @@
 //! Type conversion helpers
 
-use crate::types::ResolvedType;
 use super::OwnershipChecker;
+use crate::types::ResolvedType;
 use vais_ast::*;
 
 impl OwnershipChecker {
-
     /// Convert AST type to a simplified ResolvedType for ownership tracking
     /// Infer a basic type from an expression for ownership tracking purposes.
     /// This is a lightweight inference - the real type checker has already validated types.

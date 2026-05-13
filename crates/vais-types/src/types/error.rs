@@ -106,6 +106,16 @@ pub enum TypeError {
         span: Option<Span>,
     },
 
+    #[error("Total function '{function_name}' may panic ({reason}); mark it as `partial` if panics are intentional")]
+    TotalFunctionViolation {
+        function_name: String,
+        /// A short, human-readable description of the first panic-source
+        /// encountered (e.g. "contains `panic!`", "contains division",
+        /// "contains Option unwrap", "calls partial function `foo`").
+        reason: String,
+        span: Option<Span>,
+    },
+
     #[error("Lifetime inference failed for function '{function_name}': cannot determine output lifetime with {input_count} input lifetimes (use explicit lifetime annotations)")]
     LifetimeElisionFailed {
         function_name: String,
@@ -217,6 +227,9 @@ pub enum TypeError {
         span: Option<Span>,
         suggestion: Option<String>,
     },
+
+    #[error("ICE: {message}")]
+    InternalError { message: String, span: Option<Span> },
 }
 
 impl TypeError {
@@ -241,6 +254,7 @@ impl TypeError {
             TypeError::MoveAfterUse { move_at, .. } => *move_at,
             TypeError::DependentPredicateNotBool { span, .. } => *span,
             TypeError::RefinementViolation { span, .. } => *span,
+            TypeError::TotalFunctionViolation { span, .. } => *span,
             TypeError::LifetimeElisionFailed { span, .. } => *span,
             TypeError::LifetimeOutlivesStatic { span, .. } => *span,
             TypeError::LifetimeTooShort { span, .. } => *span,
@@ -255,6 +269,7 @@ impl TypeError {
             TypeError::NoSuchField { span, .. } => *span,
             TypeError::ExternSignatureMismatch { span, .. } => *span,
             TypeError::InferFailed { span, .. } => *span,
+            TypeError::InternalError { span, .. } => *span,
         }
     }
 
@@ -345,6 +360,7 @@ impl TypeError {
             TypeError::MoveAfterUse { .. } => "E016",
             TypeError::DependentPredicateNotBool { .. } => "E017",
             TypeError::RefinementViolation { .. } => "E018",
+            TypeError::TotalFunctionViolation { .. } => "E034",
             TypeError::LifetimeElisionFailed { .. } => "E019",
             TypeError::LifetimeOutlivesStatic { .. } => "E020",
             TypeError::LifetimeTooShort { .. } => "E021",
@@ -359,6 +375,7 @@ impl TypeError {
             TypeError::NoSuchField { .. } => "E030",
             TypeError::ExternSignatureMismatch { .. } => "E031",
             TypeError::InferFailed { .. } => "E032",
+            TypeError::InternalError { .. } => "E033",
         }
     }
 
@@ -502,6 +519,9 @@ impl TypeError {
             TypeError::InferFailed { suggestion, .. } => {
                 suggestion.clone()
             }
+            TypeError::InternalError { .. } => {
+                Some("this is likely a compiler bug -- please report it".to_string())
+            }
             TypeError::NotCallable(type_name, _) => {
                 Some(format!("expression of type `{}` is not callable; only functions and closures can be called", type_name))
             }
@@ -530,6 +550,14 @@ impl TypeError {
             TypeError::RefinementViolation { predicate, .. } => {
                 Some(format!("the value does not satisfy the refinement predicate `{}`; ensure the value meets the constraint", predicate))
             }
+            TypeError::TotalFunctionViolation {
+                function_name,
+                reason,
+                ..
+            } => Some(format!(
+                "function `{}` is total by default but its body {}; add the `partial` modifier (e.g. `partial F {}(...) {{ ... }}`) if the panic is intentional, or refactor the body to eliminate the panic source",
+                function_name, reason, function_name
+            )),
         }
     }
 
@@ -605,6 +633,14 @@ impl TypeError {
             TypeError::RefinementViolation { predicate, .. } => {
                 vais_i18n::get(&key, &[("predicate", predicate)])
             }
+            TypeError::TotalFunctionViolation {
+                function_name,
+                reason,
+                ..
+            } => vais_i18n::get(
+                &key,
+                &[("function_name", function_name), ("reason", reason)],
+            ),
             TypeError::LifetimeElisionFailed {
                 function_name,
                 input_count,
@@ -677,6 +713,9 @@ impl TypeError {
                 &key,
                 &[("kind", kind), ("name", name), ("context", context)],
             ),
+            TypeError::InternalError { message, .. } => {
+                vais_i18n::get(&key, &[("message", message)])
+            }
         }
     }
 
@@ -700,3 +739,239 @@ impl TypeError {
 
 /// Type checking result
 pub type TypeResult<T> = Result<T, TypeError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ========== Error Display ==========
+
+    #[test]
+    fn test_mismatch_display() {
+        let err = TypeError::Mismatch {
+            expected: "i64".to_string(),
+            found: "bool".to_string(),
+            span: None,
+        };
+        assert_eq!(err.to_string(), "Type mismatch: expected i64, found bool");
+    }
+
+    #[test]
+    fn test_undefined_var_display() {
+        let err = TypeError::UndefinedVar {
+            name: "x".to_string(),
+            span: None,
+            suggestion: None,
+        };
+        assert_eq!(err.to_string(), "Undefined variable: x");
+    }
+
+    #[test]
+    fn test_undefined_function_display() {
+        let err = TypeError::UndefinedFunction {
+            name: "foo".to_string(),
+            span: None,
+            suggestion: None,
+        };
+        assert_eq!(err.to_string(), "Undefined function: foo");
+    }
+
+    #[test]
+    fn test_arg_count_display() {
+        let err = TypeError::ArgCount {
+            expected: 2,
+            got: 3,
+            span: None,
+        };
+        assert_eq!(
+            err.to_string(),
+            "Wrong number of arguments: expected 2, got 3"
+        );
+    }
+
+    // ========== Error Codes ==========
+
+    #[test]
+    fn test_error_codes_unique() {
+        let errors = vec![
+            TypeError::Mismatch {
+                expected: String::new(),
+                found: String::new(),
+                span: None,
+            },
+            TypeError::UndefinedVar {
+                name: String::new(),
+                span: None,
+                suggestion: None,
+            },
+            TypeError::UndefinedType {
+                name: String::new(),
+                span: None,
+                suggestion: None,
+            },
+            TypeError::UndefinedFunction {
+                name: String::new(),
+                span: None,
+                suggestion: None,
+            },
+            TypeError::NotCallable(String::new(), None),
+            TypeError::ArgCount {
+                expected: 0,
+                got: 0,
+                span: None,
+            },
+            TypeError::CannotInfer,
+            TypeError::Duplicate(String::new(), None),
+            TypeError::ImmutableAssign(String::new(), None),
+            TypeError::NonExhaustiveMatch(String::new(), None),
+            TypeError::UnreachablePattern(0, None),
+        ];
+
+        let codes: Vec<&str> = errors.iter().map(|e| e.error_code()).collect();
+        let mut unique = codes.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(codes.len(), unique.len(), "Error codes must be unique");
+    }
+
+    #[test]
+    fn test_error_code_format() {
+        let err = TypeError::Mismatch {
+            expected: String::new(),
+            found: String::new(),
+            span: None,
+        };
+        assert_eq!(err.error_code(), "E001");
+    }
+
+    // ========== Span ==========
+
+    #[test]
+    fn test_span_none() {
+        let err = TypeError::CannotInfer;
+        assert!(err.span().is_none());
+    }
+
+    #[test]
+    fn test_span_some() {
+        let span = vais_ast::Span { start: 0, end: 10 };
+        let err = TypeError::Mismatch {
+            expected: "i64".to_string(),
+            found: "bool".to_string(),
+            span: Some(span),
+        };
+        assert_eq!(err.span(), Some(span));
+    }
+
+    // ========== Help messages ==========
+
+    #[test]
+    fn test_help_undefined_var_with_suggestion() {
+        let err = TypeError::UndefinedVar {
+            name: "x".to_string(),
+            span: None,
+            suggestion: Some("y".to_string()),
+        };
+        let help = err.help().unwrap();
+        assert!(help.contains("did you mean 'y'?"));
+    }
+
+    #[test]
+    fn test_help_undefined_var_no_suggestion() {
+        let err = TypeError::UndefinedVar {
+            name: "x".to_string(),
+            span: None,
+            suggestion: None,
+        };
+        let help = err.help().unwrap();
+        assert!(help.contains("x"));
+        assert!(help.contains("not found"));
+    }
+
+    #[test]
+    fn test_help_immutable_assign() {
+        let err = TypeError::ImmutableAssign("x".to_string(), None);
+        let help = err.help().unwrap();
+        assert!(help.contains("mutable"));
+    }
+
+    #[test]
+    fn test_help_cannot_infer() {
+        let err = TypeError::CannotInfer;
+        let help = err.help().unwrap();
+        assert!(help.contains("type annotation"));
+    }
+
+    #[test]
+    fn test_help_arg_count() {
+        let err = TypeError::ArgCount {
+            expected: 2,
+            got: 3,
+            span: None,
+        };
+        let help = err.help().unwrap();
+        assert!(help.contains("2"));
+    }
+
+    #[test]
+    fn test_help_arg_count_zero() {
+        let err = TypeError::ArgCount {
+            expected: 0,
+            got: 1,
+            span: None,
+        };
+        let help = err.help().unwrap();
+        assert!(help.contains("no arguments"));
+    }
+
+    // ========== Secondary Spans ==========
+
+    #[test]
+    fn test_secondary_spans_use_after_move() {
+        let span = vais_ast::Span { start: 10, end: 20 };
+        let err = TypeError::UseAfterMove {
+            var_name: "x".to_string(),
+            moved_at: Some(span),
+            use_at: None,
+        };
+        let spans = err.secondary_spans();
+        assert_eq!(spans.len(), 1);
+        assert!(spans[0].1.contains("moved here"));
+    }
+
+    #[test]
+    fn test_secondary_spans_no_secondaries() {
+        let err = TypeError::CannotInfer;
+        assert!(err.secondary_spans().is_empty());
+    }
+
+    #[test]
+    fn test_secondary_spans_borrow_conflict() {
+        let span = vais_ast::Span { start: 5, end: 15 };
+        let err = TypeError::BorrowConflict {
+            var_name: "x".to_string(),
+            existing_borrow_at: Some(span),
+            new_borrow_at: None,
+            existing_is_mut: true,
+            new_is_mut: false,
+        };
+        let spans = err.secondary_spans();
+        assert_eq!(spans.len(), 1);
+        assert!(spans[0].1.contains("mutable borrow"));
+    }
+
+    #[test]
+    fn test_secondary_spans_borrow_conflict_immutable() {
+        let span = vais_ast::Span { start: 5, end: 15 };
+        let err = TypeError::BorrowConflict {
+            var_name: "x".to_string(),
+            existing_borrow_at: Some(span),
+            new_borrow_at: None,
+            existing_is_mut: false,
+            new_is_mut: true,
+        };
+        let spans = err.secondary_spans();
+        assert_eq!(spans.len(), 1);
+        assert!(spans[0].1.contains("first borrow"));
+    }
+}

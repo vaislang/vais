@@ -11,6 +11,7 @@ impl CodeGenerator {
     }
 
     /// Register a trait from AST definition (converts AST Trait to TraitDef)
+    #[inline(never)]
     pub(crate) fn register_trait_from_ast(&mut self, t: &vais_ast::Trait) {
         let mut methods = HashMap::new();
         for m in &t.methods {
@@ -34,10 +35,12 @@ impl CodeGenerator {
                 .map(|t| self.ast_type_to_resolved(&t.node))
                 .unwrap_or(ResolvedType::Unit);
 
+            let meth_name = m.name.node.clone();
             methods.insert(
-                m.name.node.clone(),
+                meth_name.clone(),
                 vais_types::TraitMethodSig {
-                    name: m.name.node.clone(),
+                    name: meth_name,
+                    generics: m.generics.iter().map(|g| g.name.node.clone()).collect(),
                     params,
                     ret,
                     has_default: m.default_body.is_some(),
@@ -73,10 +76,11 @@ impl CodeGenerator {
                 .as_ref()
                 .map(|d| self.ast_type_to_resolved(&d.node));
 
+            let assoc_name = assoc.name.node.clone();
             associated_types.insert(
-                assoc.name.node.clone(),
+                assoc_name.clone(),
                 vais_types::AssociatedTypeDef {
-                    name: assoc.name.node.clone(),
+                    name: assoc_name,
                     generics,
                     generic_bounds,
                     bounds,
@@ -95,13 +99,29 @@ impl CodeGenerator {
         self.register_trait(trait_def);
     }
 
-    /// Register a trait implementation for vtable generation
+    /// Register a trait implementation for vtable generation.
+    /// If the trait is "Drop", also registers the drop function in drop_registry
+    /// so that scope-exit codegen can automatically call it.
     pub fn register_trait_impl(
         &mut self,
         impl_type: &str,
         trait_name: &str,
         method_impls: HashMap<String, String>,
     ) {
+        // If this is a Drop trait impl, register the drop function for auto-call at scope exit
+        if trait_name == "Drop" {
+            if let Some(drop_fn_name) = method_impls.get("drop") {
+                self.types
+                    .drop_registry
+                    .insert(impl_type.to_string(), drop_fn_name.clone());
+            } else {
+                // Convention: Type_drop is the mangled name for Drop.drop()
+                let drop_fn_name = format!("{}_drop", impl_type);
+                self.types
+                    .drop_registry
+                    .insert(impl_type.to_string(), drop_fn_name);
+            }
+        }
         self.types.trait_impl_methods.insert(
             (impl_type.to_string(), trait_name.to_string()),
             method_impls,
@@ -165,12 +185,18 @@ impl CodeGenerator {
     ) -> CodegenResult<(String, String)> {
         let vtable_info = self.get_or_generate_vtable(impl_type, trait_name)?;
 
-        Ok(self.vtable_generator.create_trait_object(
+        // Remember the counter value — create_trait_object will use it for the malloc register
+        let alloc_counter = *counter;
+        let result = self.vtable_generator.create_trait_object(
             concrete_value,
             concrete_type,
             &vtable_info,
             counter,
-        ))
+        );
+        // Track the trait data allocation for automatic cleanup at scope exit
+        let (val, mut ir) = result;
+        ir.push_str(&self.track_alloc(format!("%trait_data_{}", alloc_counter)));
+        Ok((val, ir))
     }
 
     /// Generate code for a dynamic method call on a trait object
@@ -207,11 +233,7 @@ impl CodeGenerator {
             ))
         })?;
 
-        let ret_type = if matches!(method_sig.ret, ResolvedType::Unit) {
-            "void"
-        } else {
-            "i64" // Simplified
-        };
+        let ret_type = super::vtable::vtable_ret_type(&method_sig.ret, method_sig.is_async);
 
         Ok(self.vtable_generator.generate_dynamic_call(
             trait_object,

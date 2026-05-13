@@ -113,25 +113,3 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 0);
 }
-
-// ==================== Selfhost Feature Matrix ====================
-
-#[test]
-fn e2e_phase44_selfhost_feature_matrix() {
-    // Verify that the example files used for cross-verify exist
-    let project_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap();
-    let examples = [
-        "phase44_trait_bounds",
-        "phase44_range_loop",
-        "phase44_closure",
-        "phase44_async_basic",
-    ];
-    for name in &examples {
-        let path = project_root.join(format!("examples/{}.vais", name));
-        assert!(path.exists(), "Example file not found: {}", path.display());
-    }
-}

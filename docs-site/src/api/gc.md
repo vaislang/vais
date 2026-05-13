@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/gc
+use std/gc
 ```
 
 ## Overview
@@ -44,7 +44,7 @@ Both collectors provide automatic memory management with explicit root registrat
 Statistics snapshot for basic GC.
 
 ```vais
-S GcStats {
+struct GcStats {
     bytes_allocated: i64,
     objects_count: i64,
     collections: i64,
@@ -61,7 +61,7 @@ S GcStats {
 RAII-style automatic root registration/unregistration.
 
 ```vais
-S GcRootGuard {
+struct GcRootGuard {
     ptr: i64
 }
 ```
@@ -140,7 +140,7 @@ S GcRootGuard {
 Statistics snapshot for generational GC.
 
 ```vais
-S GenGcStats {
+struct GenGcStats {
     young_objects: i64,
     old_objects: i64,
     minor_collections: i64,
@@ -158,9 +158,9 @@ S GenGcStats {
 ### Basic GC
 
 ```vais
-U std/gc
+use std/gc
 
-F main() -> i64 {
+fn main() -> i64 {
     gc_init()
 
     # Allocate GC-managed memory
@@ -185,9 +185,9 @@ F main() -> i64 {
 ### GC Statistics
 
 ```vais
-U std/gc
+use std/gc
 
-F main() -> i64 {
+fn main() -> i64 {
     gc_init()
 
     ptr1 := gc_alloc_simple(100)
@@ -211,9 +211,9 @@ F main() -> i64 {
 ### GC Root Guard (RAII)
 
 ```vais
-U std/gc
+use std/gc
 
-F main() -> i64 {
+fn main() -> i64 {
     gc_init()
 
     ptr := gc_alloc_simple(128)
@@ -230,9 +230,9 @@ F main() -> i64 {
 ### GC Scoped Blocks
 
 ```vais
-U std/gc
+use std/gc
 
-F main() -> i64 {
+fn main() -> i64 {
     gc_init()
 
     start := gc_scope_begin()
@@ -251,9 +251,9 @@ F main() -> i64 {
 ### Custom Threshold
 
 ```vais
-U std/gc
+use std/gc
 
-F main() -> i64 {
+fn main() -> i64 {
     gc_init()
 
     # Set to 4MB threshold (more collections)
@@ -271,9 +271,9 @@ F main() -> i64 {
 ### Generational GC Basic
 
 ```vais
-U std/gc
+use std/gc
 
-F main() -> i64 {
+fn main() -> i64 {
     gen_gc_init()
 
     # Allocate in young generation
@@ -299,14 +299,14 @@ F main() -> i64 {
 ### Write Barrier
 
 ```vais
-U std/gc
+use std/gc
 
-S Node {
+struct Node {
     value: i64,
     next: i64  # Pointer to another Node
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     gen_gc_init()
 
     # Allocate two nodes
@@ -329,9 +329,9 @@ F main() -> i64 {
 ### Generational GC Statistics
 
 ```vais
-U std/gc
+use std/gc
 
-F main() -> i64 {
+fn main() -> i64 {
     gen_gc_init()
 
     # Allocate objects
@@ -358,9 +358,9 @@ F main() -> i64 {
 ### Low-Latency Tuning
 
 ```vais
-U std/gc
+use std/gc
 
-F main() -> i64 {
+fn main() -> i64 {
     gen_gc_init()
 
     # Optimize for low pause times
@@ -381,9 +381,9 @@ F main() -> i64 {
 ### Throughput Tuning
 
 ```vais
-U std/gc
+use std/gc
 
-F main() -> i64 {
+fn main() -> i64 {
     gen_gc_init()
 
     # Optimize for throughput
@@ -407,9 +407,9 @@ F main() -> i64 {
 ### Custom Generational Configuration
 
 ```vais
-U std/gc
+use std/gc
 
-F main() -> i64 {
+fn main() -> i64 {
     gen_gc_init()
 
     # Custom tuning
@@ -430,9 +430,9 @@ F main() -> i64 {
 ### Full Collection Cycle
 
 ```vais
-U std/gc
+use std/gc
 
-F main() -> i64 {
+fn main() -> i64 {
     gen_gc_init()
 
     # Phase 1: Allocate many short-lived objects
@@ -542,10 +542,10 @@ Objects surviving `promotion_age` minor collections are promoted from young to o
 ### Mixing Allocators
 
 ```vais
-U std/gc
-U std/allocator
+use std/gc
+use std/allocator
 
-F main() -> i64 {
+fn main() -> i64 {
     gc_init()
 
     # GC for dynamic data structures
@@ -566,9 +566,9 @@ F main() -> i64 {
 ### Hybrid Manual/GC Management
 
 ```vais
-U std/gc
+use std/gc
 
-F main() -> i64 {
+fn main() -> i64 {
     gen_gc_init()
 
     # Long-lived objects: GC-managed

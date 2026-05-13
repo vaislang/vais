@@ -1,5 +1,13 @@
-//! Expression code generation: Vais Expr → JavaScript expression string
+//! Expression code generation: Vais Expr -> JavaScript expression string
+//!
+//! # Submodules
+//!
+//! - `expr_helpers`: Free helper functions (binop_to_js, escape_js_string, sanitize_js_ident, etc.)
+//! - `expr_tests`: Unit tests
 
+use crate::expr_helpers::{
+    binop_to_js, escape_js_string, escape_template_literal, sanitize_js_ident, unaryop_to_js,
+};
 use crate::{JsCodeGenerator, Result};
 use vais_ast::*;
 
@@ -65,7 +73,7 @@ impl JsCodeGenerator {
 
             // --- Function calls ---
             Expr::Call { func, args } => {
-                // Struct tuple literal: `Response(200, 1)` → desugar to StructLit
+                // Struct tuple literal: `Response(200, 1)` -> desugar to StructLit
                 if let Expr::Ident(name) = &func.node {
                     if let Some(field_defs) = self.structs.get(name.as_str()).cloned() {
                         let field_strs: std::result::Result<Vec<String>, _> = field_defs
@@ -117,6 +125,10 @@ impl JsCodeGenerator {
                 let e = self.generate_expr(&expr.node)?;
                 Ok(format!("{e}.{}", sanitize_js_ident(&field.node)))
             }
+            Expr::TupleFieldAccess { expr, index } => {
+                let e = self.generate_expr(&expr.node)?;
+                Ok(format!("{e}[{index}]"))
+            }
             Expr::Index { expr, index } => {
                 let e = self.generate_expr(&expr.node)?;
                 let i = self.generate_expr(&index.node)?;
@@ -134,7 +146,7 @@ impl JsCodeGenerator {
                     items.iter().map(|e| self.generate_expr(&e.node)).collect();
                 Ok(format!("[{}]", parts?.join(", ")))
             }
-            Expr::StructLit { name, fields } => {
+            Expr::StructLit { name, fields, .. } => {
                 let field_strs: std::result::Result<Vec<String>, _> = fields
                     .iter()
                     .map(|(fname, fval)| {
@@ -197,10 +209,6 @@ impl JsCodeGenerator {
                 let e = self.generate_expr(&inner.node)?;
                 Ok(format!("(await {e})"))
             }
-            Expr::Spawn(inner) => {
-                let e = self.generate_expr(&inner.node)?;
-                Ok(format!("Promise.resolve().then(() => {e})"))
-            }
 
             // --- Error handling ---
             Expr::Try(inner) => {
@@ -257,16 +265,6 @@ impl JsCodeGenerator {
                 Ok(format!("yield {e}"))
             }
 
-            // --- Lazy / Force ---
-            Expr::Lazy(inner) => {
-                let e = self.generate_expr(&inner.node)?;
-                Ok(format!("(() => {e})"))
-            }
-            Expr::Force(inner) => {
-                let e = self.generate_expr(&inner.node)?;
-                Ok(format!("{e}()"))
-            }
-
             // --- Assert ---
             Expr::Assert { condition, message } => {
                 let c = self.generate_expr(&condition.node)?;
@@ -292,6 +290,13 @@ impl JsCodeGenerator {
                 ))
             }
             Expr::Error { message, .. } => Ok(format!("/* codegen error: {} */", message)),
+            Expr::EnumAccess {
+                enum_name, variant, ..
+            } => Ok(format!(
+                "{}.{}",
+                sanitize_js_ident(enum_name),
+                sanitize_js_ident(variant)
+            )),
         }
     }
 
@@ -466,7 +471,7 @@ impl JsCodeGenerator {
             let keyword = if i == 0 { "if" } else { "else if" };
 
             if cond == "true" && i == arms.len() - 1 {
-                // Wildcard as last arm → else
+                // Wildcard as last arm -> else
                 output.push_str(&format!("{inner}else {{\n"));
             } else {
                 let guard = if let Some(g) = &arm.guard {
@@ -704,129 +709,5 @@ impl JsCodeGenerator {
         if !self.helpers.iter().any(|h| h.contains("__range")) {
             self.helpers.push(helper);
         }
-    }
-}
-
-/// Convert Vais BinOp to JavaScript operator string
-fn binop_to_js(op: &BinOp) -> &'static str {
-    match op {
-        BinOp::Add => "+",
-        BinOp::Sub => "-",
-        BinOp::Mul => "*",
-        BinOp::Div => "/",
-        BinOp::Mod => "%",
-        BinOp::Lt => "<",
-        BinOp::Lte => "<=",
-        BinOp::Gt => ">",
-        BinOp::Gte => ">=",
-        BinOp::Eq => "===",
-        BinOp::Neq => "!==",
-        BinOp::And => "&&",
-        BinOp::Or => "||",
-        BinOp::BitAnd => "&",
-        BinOp::BitOr => "|",
-        BinOp::BitXor => "^",
-        BinOp::Shl => "<<",
-        BinOp::Shr => ">>",
-    }
-}
-
-/// Convert Vais UnaryOp to JavaScript operator string
-fn unaryop_to_js(op: &UnaryOp) -> &'static str {
-    match op {
-        UnaryOp::Neg => "-",
-        UnaryOp::Not => "!",
-        UnaryOp::BitNot => "~",
-    }
-}
-
-/// Escape special characters in a JavaScript string
-fn escape_js_string(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            '\\' => result.push_str("\\\\"),
-            '"' => result.push_str("\\\""),
-            '\n' => result.push_str("\\n"),
-            '\r' => result.push_str("\\r"),
-            '\t' => result.push_str("\\t"),
-            '\0' => result.push_str("\\0"),
-            _ => result.push(ch),
-        }
-    }
-    result
-}
-
-/// Escape special characters in a template literal
-fn escape_template_literal(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            '`' => result.push_str("\\`"),
-            '$' => result.push_str("\\$"),
-            '\\' => result.push_str("\\\\"),
-            _ => result.push(ch),
-        }
-    }
-    result
-}
-
-/// Sanitize a Vais identifier for use in JavaScript
-pub(crate) fn sanitize_js_ident(name: &str) -> String {
-    // JS reserved words that need renaming
-    match name {
-        "class" => "_class".to_string(),
-        "delete" => "_delete".to_string(),
-        "export" => "_export".to_string(),
-        "import" => "_import".to_string(),
-        "new" => "_new".to_string(),
-        "super" => "_super".to_string(),
-        "switch" => "_switch".to_string(),
-        "this" => "_this".to_string(),
-        "throw" => "_throw".to_string(),
-        "typeof" => "_typeof".to_string(),
-        "var" => "_var".to_string(),
-        "void" => "_void".to_string(),
-        "with" => "_with".to_string(),
-        "yield" => "_yield".to_string(),
-        "await" => "_await".to_string(),
-        "enum" => "_enum".to_string(),
-        "implements" => "_implements".to_string(),
-        "interface" => "_interface".to_string(),
-        "package" => "_package".to_string(),
-        "private" => "_private".to_string(),
-        "protected" => "_protected".to_string(),
-        "public" => "_public".to_string(),
-        "static" => "_static".to_string(),
-        "arguments" => "_arguments".to_string(),
-        "eval" => "_eval".to_string(),
-        _ => name.to_string(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_escape_js_string() {
-        assert_eq!(escape_js_string("hello"), "hello");
-        assert_eq!(escape_js_string("he\"llo"), "he\\\"llo");
-        assert_eq!(escape_js_string("line\nnew"), "line\\nnew");
-    }
-
-    #[test]
-    fn test_sanitize_js_ident() {
-        assert_eq!(sanitize_js_ident("foo"), "foo");
-        assert_eq!(sanitize_js_ident("class"), "_class");
-        assert_eq!(sanitize_js_ident("yield"), "_yield");
-    }
-
-    #[test]
-    fn test_binop_to_js() {
-        assert_eq!(binop_to_js(&BinOp::Add), "+");
-        assert_eq!(binop_to_js(&BinOp::Eq), "===");
-        assert_eq!(binop_to_js(&BinOp::Neq), "!==");
-        assert_eq!(binop_to_js(&BinOp::And), "&&");
     }
 }

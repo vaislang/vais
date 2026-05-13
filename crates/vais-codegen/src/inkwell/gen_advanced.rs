@@ -27,6 +27,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         .build_store(ptr, val)
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                     Ok(val)
+                } else if let Some((global, _ty)) = self.globals.get(name).copied() {
+                    self.builder
+                        .build_store(global.as_pointer_value(), val)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    Ok(val)
                 } else {
                     Err(CodegenError::UndefinedVar(name.clone()))
                 }
@@ -60,16 +65,46 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 ))
             }
             Expr::Index { expr: arr, index } => {
-                // Array index assignment
+                // Array/slice index assignment
                 let arr_val = self.generate_expr(&arr.node)?;
                 let idx_val = self.generate_expr(&index.node)?;
-
-                let arr_ptr = arr_val.into_pointer_value();
                 let idx_int = idx_val.into_int_value();
 
+                // Check if this is a slice fat pointer { ptr, i64 } — extract data pointer
+                let arr_ptr = if arr_val.is_struct_value() {
+                    let struct_val = arr_val.into_struct_value();
+                    let struct_type = struct_val.get_type();
+                    if struct_type.count_fields() == 2 {
+                        // Slice fat pointer: extract field 0 (data pointer)
+                        self.builder
+                            .build_extract_value(struct_val, 0, "slice_data_ptr")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            .into_pointer_value()
+                    } else {
+                        arr_val.into_pointer_value()
+                    }
+                } else if arr_val.is_pointer_value() {
+                    arr_val.into_pointer_value()
+                } else {
+                    // Fallback: treat as pointer (e.g. i64 interpreted as ptr)
+                    self.builder
+                        .build_int_to_ptr(
+                            arr_val.into_int_value(),
+                            val.get_type().ptr_type(AddressSpace::default()),
+                            "idx_assign_ptr",
+                        )
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                };
+
+                // Use the stored value's type for GEP element type.
+                // This is correct when val's type matches the array's element type,
+                // which is the common case since you store one element at a time.
+                let elem_type = val.get_type();
+                // SAFETY: Runtime index from user code — bounds checking is the caller's
+                // responsibility. arr_ptr is a valid array/pointer from a prior allocation.
                 let elem_ptr = unsafe {
                     self.builder
-                        .build_gep(val.get_type(), arr_ptr, &[idx_int], "elem_ptr")
+                        .build_gep(elem_type, arr_ptr, &[idx_int], "elem_ptr")
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                 };
 
@@ -230,7 +265,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         self.builder.position_at_end(then_block);
         let then_val = self.generate_expr(then_expr)?;
-        let then_end = self.builder.get_insert_block().unwrap();
+        let then_end = self.builder.get_insert_block().ok_or_else(|| {
+            CodegenError::LlvmError("ICE: no insert block after ternary then branch".into())
+        })?;
         let then_terminated = then_end.get_terminator().is_some();
         if !then_terminated {
             self.builder
@@ -240,7 +277,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         self.builder.position_at_end(else_block);
         let else_val = self.generate_expr(else_expr)?;
-        let else_end = self.builder.get_insert_block().unwrap();
+        let else_end = self.builder.get_insert_block().ok_or_else(|| {
+            CodegenError::LlvmError("ICE: no insert block after ternary else branch".into())
+        })?;
         let else_terminated = else_end.get_terminator().is_some();
         if !else_terminated {
             self.builder
@@ -254,7 +293,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.builder
                 .build_unreachable()
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            return Ok(self.context.struct_type(&[], false).const_zero().into());
+            return Ok(self.unit_value());
         }
 
         let mut incoming: Vec<(
@@ -294,10 +333,60 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             field_name_values.push((field_name.node.clone(), val));
         }
 
-        let struct_type = *self
+        let base_struct_type = *self
             .generated_structs
             .get(name)
             .ok_or_else(|| CodegenError::UndefinedVar(format!("Struct not found: {}", name)))?;
+
+        // For generic structs, check if field value types differ from the base definition.
+        // If so, create a specialized struct type with the actual field types.
+        let struct_type = if self.struct_generic_params.contains_key(name) {
+            let field_names = self.struct_fields.get(name).cloned().unwrap_or_default();
+            let mut actual_field_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = Vec::new();
+            let mut needs_specialization = false;
+
+            for (i, def_field_name) in field_names.iter().enumerate() {
+                let val_type = field_name_values
+                    .iter()
+                    .find(|(n, _)| n == def_field_name)
+                    .map(|(_, v)| v.get_type());
+
+                if let Some(vt) = val_type {
+                    let base_field_type = base_struct_type.get_field_type_at_index(i as u32);
+                    if let Some(bft) = base_field_type {
+                        if vt != bft {
+                            needs_specialization = true;
+                        }
+                    }
+                    actual_field_types.push(vt);
+                } else if let Some(bft) = base_struct_type.get_field_type_at_index(i as u32) {
+                    actual_field_types.push(bft);
+                } else {
+                    actual_field_types.push(self.context.i64_type().into());
+                }
+            }
+
+            if needs_specialization {
+                // Create a specialized struct type with the actual field types
+                let specialized_type = self.context.struct_type(&actual_field_types, false);
+                // Register it with a mangled name so field access can find it
+                let mangled_name = format!("{}$specialized_{}", name, self.label_counter);
+                self.label_counter += 1;
+                self.generated_structs
+                    .insert(mangled_name.clone(), specialized_type);
+                self.struct_fields
+                    .insert(mangled_name.clone(), field_names.clone());
+                // Also update the base name to point to the specialized type
+                // so field access on this variable resolves correctly
+                self.generated_structs
+                    .insert(name.to_string(), specialized_type);
+                specialized_type
+            } else {
+                base_struct_type
+            }
+        } else {
+            base_struct_type
+        };
 
         // Check if this is a union (single LLVM field, multiple logical fields)
         let num_llvm_fields = struct_type.count_fields();
@@ -308,7 +397,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         if is_union {
             // Union: all fields share index 0, need to bitcast if types differ
             if let Some((_, val)) = field_name_values.first() {
-                let field_llvm_type = struct_type.get_field_type_at_index(0).unwrap();
+                let field_llvm_type = struct_type.get_field_type_at_index(0).ok_or_else(|| {
+                    CodegenError::LlvmError("ICE: union struct has no field at index 0".into())
+                })?;
                 let coerced_val = if val.get_type() != field_llvm_type {
                     // Bitcast through memory for type punning (e.g., f64 -> i64)
                     if val.is_float_value() && field_llvm_type.is_int_type() {
@@ -342,7 +433,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .iter()
                     .find(|(n, _)| n == def_field_name)
                     .map(|(_, v)| *v)
-                    .unwrap_or_else(|| self.context.i64_type().const_int(0, false).into());
+                    .unwrap_or_else(|| {
+                        // Use the actual field type's zero value from the struct definition
+                        if let Some(field_type) = struct_type.get_field_type_at_index(i as u32) {
+                            self.get_default_value(field_type)
+                        } else {
+                            self.context.i64_type().const_int(0, false).into()
+                        }
+                    });
                 struct_val = self
                     .builder
                     .build_insert_value(struct_val, val, i as u32, &format!("field_{}", i))

@@ -22,7 +22,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Extract version from tag or input
         id: version
@@ -35,20 +35,19 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Publishing version: $VERSION"
 
-      - name: Validate vais.toml exists
+      - name: Validate version matches Cargo.toml
         run: |
-          if [ ! -f "vais.toml" ]; then
-            echo "Error: vais.toml not found"
+          # Extract workspace version from root Cargo.toml
+          MANIFEST_VERSION=$(sed -n '/\[workspace\.package\]/,/^\[/{ s/^version *= *"\(.*\)"/\1/p; }' Cargo.toml | head -1)
+          if [ -z "$MANIFEST_VERSION" ]; then
+            echo "Error: Could not extract version from Cargo.toml [workspace.package]"
             exit 1
           fi
-
-      - name: Validate version matches vais.toml
-        run: |
-          MANIFEST_VERSION=$(grep '^version' vais.toml | head -1 | sed 's/.*= *"\(.*\)"/\1/')
+          echo "Cargo.toml workspace version: $MANIFEST_VERSION"
           if [ "$MANIFEST_VERSION" != "${{ steps.version.outputs.version }}" ]; then
             echo "Error: Version mismatch"
             echo "  Tag version: ${{ steps.version.outputs.version }}"
-            echo "  Manifest version: $MANIFEST_VERSION"
+            echo "  Cargo.toml version: $MANIFEST_VERSION"
             exit 1
           fi
 
@@ -57,13 +56,13 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             ~/.cargo/registry
@@ -83,7 +82,7 @@ jobs:
           ls -la target/package/
 
       - name: Upload package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: package
           path: target/package/*.tar.gz
@@ -95,19 +94,19 @@ jobs:
     runs-on: ubuntu-latest
     environment: registry
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Download package artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
           name: package
           path: target/package/
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             ~/.cargo/registry
@@ -130,7 +129,7 @@ jobs:
           echo "✓ Package ${{ needs.validate.outputs.version }} published successfully"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: target/package/*.tar.gz

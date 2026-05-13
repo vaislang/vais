@@ -1710,7 +1710,7 @@ F main() -> i64 {
 }
 
 #[test]
-fn test_spawn_generates_call() {
+fn test_plain_call_generates_call() {
     let source = r#"
 F worker() -> i64 {
     R 1
@@ -1722,7 +1722,6 @@ F main() -> i64 {
 }
 "#;
     let ir = compile_to_ir(source).unwrap();
-    // spawn expression should generate function call
     assert!(ir.contains("call i64 @worker()"));
 }
 
@@ -3262,14 +3261,6 @@ F main() -> i64 {
 
 // ==================== Slice Type Tests ====================
 
-/// Assert that source compiles successfully (parse + type check + codegen to IR)
-fn assert_compiles(source: &str) {
-    match compile_to_ir(source) {
-        Ok(_) => {}
-        Err(e) => panic!("Expected compilation to succeed, but got error: {}", e),
-    }
-}
-
 #[test]
 fn test_slice_type_parse() {
     let source = r#"
@@ -3281,7 +3272,7 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -3295,7 +3286,9 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_compiles(source);
+    // bar() uses &mut [T] index-assignment (s[0] = 42) — fat pointer extraction in Assign/Index.
+    // main() returns 0 and never calls bar — exit code is 0
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -3309,7 +3302,9 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_compiles(source);
+    // baz() uses slice .len() via extractvalue { i8*, i64 } %s, 1
+    // main() returns 0 and never calls baz — exit code is 0
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -3323,7 +3318,7 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -3337,7 +3332,7 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -3351,7 +3346,7 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -3365,7 +3360,7 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -3379,7 +3374,9 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_compiles(source);
+    // len_mut() uses &mut [f64] slice .len() via extractvalue { i8*, i64 } %s, 1
+    // main() returns 0 and never calls len_mut — exit code is 0
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -3393,7 +3390,7 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -3407,7 +3404,7 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ==================== String Comparison Tests (Phase 13) ====================

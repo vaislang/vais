@@ -2,13 +2,13 @@
 # Tests ALL core Vais language features in one file
 
 # ===== 1. ENUM DEFINITION =====
-E Status {
+EN Status {
     Pending,
     Active,
     Done
 }
 
-E Result {
+EN Result {
     Success(i64),
     Error
 }
@@ -205,7 +205,7 @@ F main() -> i64 {
     # ===== TEST 9: IF-ELSE EXPRESSIONS =====
     puts("Test 9: If-Else Expressions")
     num := 8
-    result := I num > 5 { 1 } E { 0 }
+    result := I num > 5 { 1 } EL { 0 }
 
     puts("  (8 > 5) ? 1 : 0 = 1")
     putchar(result + 48)

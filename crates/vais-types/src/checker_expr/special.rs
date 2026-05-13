@@ -1,12 +1,15 @@
 //! Special expression types (try, unwrap, cast, assign, lambda, comptime, etc.)
 
-use vais_ast::*;
-use crate::TypeChecker;
 use crate::comptime;
 use crate::types::{self, ResolvedType, TypeError, TypeResult, VariantFieldTypes};
+use crate::TypeChecker;
+use vais_ast::*;
 
 impl TypeChecker {
-    pub(crate) fn check_special_expr(&mut self, expr: &Spanned<Expr>) -> Option<TypeResult<ResolvedType>> {
+    pub(crate) fn check_special_expr(
+        &mut self,
+        expr: &Spanned<Expr>,
+    ) -> Option<TypeResult<ResolvedType>> {
         match &expr.node {
             Expr::Try(inner) => {
                 let inner_type = match self.check_expr(inner) {
@@ -20,8 +23,12 @@ impl TypeChecker {
                     ResolvedType::Result(ok_type, _err_type) => Some(Ok(*ok_type.clone())),
                     ResolvedType::Optional(some_type) => Some(Ok(*some_type.clone())),
                     // Also support user-defined enums named "Result" with Ok variant
-                    ResolvedType::Named { name, .. } if name == "Result" => {
-                        if let Some(enum_def) = self.enums.get("Result") {
+                    // Use generics from Named type directly (concrete types)
+                    ResolvedType::Named { name, generics } if name == "Result" => {
+                        if !generics.is_empty() {
+                            // Result<T, E> — first generic is the Ok type
+                            Some(Ok(generics[0].clone()))
+                        } else if let Some(enum_def) = self.enums.get("Result") {
                             if let Some(variant_fields) = enum_def.variants.get("Ok") {
                                 match variant_fields {
                                     VariantFieldTypes::Tuple(types) if !types.is_empty() => {
@@ -37,8 +44,12 @@ impl TypeChecker {
                         }
                     }
                     // Also support user-defined enums named "Option" with Some variant
-                    ResolvedType::Named { name, .. } if name == "Option" => {
-                        if let Some(enum_def) = self.enums.get("Option") {
+                    // Use generics from Named type directly (concrete types)
+                    ResolvedType::Named { name, generics } if name == "Option" => {
+                        if !generics.is_empty() {
+                            // Option<T> — first generic is the Some type
+                            Some(Ok(generics[0].clone()))
+                        } else if let Some(enum_def) = self.enums.get("Option") {
                             if let Some(variant_fields) = enum_def.variants.get("Some") {
                                 match variant_fields {
                                     VariantFieldTypes::Tuple(types) if !types.is_empty() => {
@@ -70,8 +81,12 @@ impl TypeChecker {
                     ResolvedType::Optional(inner) => Some(Ok(*inner.clone())),
                     ResolvedType::Result(ok, _err) => Some(Ok(*ok.clone())),
                     // Support user-defined Result/Option enums
-                    ResolvedType::Named { name, .. } if name == "Result" => {
-                        if let Some(enum_def) = self.enums.get("Result") {
+                    // Use generics from Named type directly (concrete types)
+                    ResolvedType::Named { name, generics } if name == "Result" => {
+                        if !generics.is_empty() {
+                            // Result<T, E> — first generic is the Ok type
+                            Some(Ok(generics[0].clone()))
+                        } else if let Some(enum_def) = self.enums.get("Result") {
                             if let Some(VariantFieldTypes::Tuple(types)) =
                                 enum_def.variants.get("Ok")
                             {
@@ -87,8 +102,11 @@ impl TypeChecker {
                             Some(Ok(ResolvedType::I64))
                         }
                     }
-                    ResolvedType::Named { name, .. } if name == "Option" => {
-                        if let Some(enum_def) = self.enums.get("Option") {
+                    ResolvedType::Named { name, generics } if name == "Option" => {
+                        if !generics.is_empty() {
+                            // Option<T> — first generic is the inner type
+                            Some(Ok(generics[0].clone()))
+                        } else if let Some(enum_def) = self.enums.get("Option") {
                             if let Some(VariantFieldTypes::Tuple(types)) =
                                 enum_def.variants.get("Some")
                             {

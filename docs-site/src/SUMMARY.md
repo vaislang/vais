@@ -4,11 +4,22 @@
 
 # 시작하기
 
+- [AI 바이브코딩 5분 가이드](./getting-started/vibe-coding.md)
 - [설치](./getting-started/installation.md)
 - [빠른 시작](./getting-started/quick-start.md)
 - [튜토리얼](./getting-started/tutorial.md)
 - [Getting Started (상세)](./guide/getting-started.md)
 - [에디터 지원](./getting-started/editors.md)
+- [학습 경로](./learning-path.md)
+
+# 실전 튜토리얼
+
+- [CLI Tool 만들기](./tutorials/cli-tool.md)
+- [HTTP Server 만들기](./tutorials/http-server.md)
+- [Data Pipeline 만들기](./tutorials/data-pipeline.md)
+- [WebSocket Chat Server](./tutorials/websocket-chat.md)
+- [JSON Parser 만들기](./tutorials/json-parser.md)
+- [CLI Framework 만들기](./tutorials/cli-framework.md)
 
 # 가이드
 
@@ -20,8 +31,26 @@
 - [Cookbook — 실전 레시피](./guides/cookbook.md)
 - [테스트 가이드](./guides/testing.md)
 - [에러 처리 Best Practices](./guides/error-handling.md)
-- [Ecosystem Packages](./guide/ecosystem-packages.md)
 - [트러블슈팅 & FAQ](./troubleshooting.md)
+
+# 생태계 (Ecosystem)
+
+- [생태계 개요](./ecosystem/README.md)
+- [VaisX (vais-web)]()
+  - [개요](./ecosystem/vais-web/README.md)
+  - [빠른 시작](./ecosystem/vais-web/getting-started.md)
+  - [VaisX 문법](./ecosystem/vais-web/syntax.md)
+  - [컴포넌트](./ecosystem/vais-web/components.md)
+- [VaisDB]()
+  - [개요](./ecosystem/vaisdb/README.md)
+  - [빠른 시작](./ecosystem/vaisdb/getting-started.md)
+  - [쿼리 가이드](./ecosystem/vaisdb/queries.md)
+  - [RAG 기능](./ecosystem/vaisdb/rag.md)
+- [vais-server]()
+  - [개요](./ecosystem/vais-server/README.md)
+  - [빠른 시작](./ecosystem/vais-server/getting-started.md)
+  - [라우팅 & 미들웨어](./ecosystem/vais-server/routing.md)
+  - [데이터베이스 통합](./ecosystem/vais-server/database.md)
 
 # 언어 레퍼런스
 
@@ -34,7 +63,10 @@
 - [Lifetimes & Borrow Checking](./language/lifetimes.md)
 - [비동기 프로그래밍](./language/async-tutorial.md)
 - [클로저 & 람다](./language/closures.md)
-- [지연 평가 (Lazy/Force)](./language/lazy-evaluation.md)
+- [Defer 문](./language/defer-statement.md)
+- [전역 변수](./language/globals.md)
+- [Union 타입](./language/union-types.md)
+- [매크로 시스템](./language/macros.md)
 - [컴파일 타임 기능](./language/comptime-feature.md)
 
 # 표준 라이브러리
@@ -54,6 +86,7 @@
 # 컴파일러
 
 - [아키텍처](./compiler/architecture.md)
+- [구조/동작 한눈에 보기](./compiler/at-a-glance.md)
 - [기술 사양](./compiler/tech-spec.md)
 - [JIT 컴파일](./compiler/jit-compilation.md)
 - [GPU 코드 생성](./compiler/gpu-codegen.md)
@@ -107,6 +140,10 @@
 - [임포트 경로 보안](./security/import-path-security.md)
 - [보안 강화](./security/security-enhancement.md)
 
+# Examples Gallery
+
+- [Examples Gallery](./examples/gallery.md)
+
 ---
 
 # API Reference
@@ -141,12 +178,18 @@
 - [DateTime](./api/datetime.md)
 - [Channel](./api/channel.md)
 - [Args](./api/args.md)
+- [Env](./api/env.md)
+- [Error](./api/error.md)
+- [Iter](./api/iter.md)
+- [Process](./api/process.md)
+- [Signal](./api/signal.md)
 
 ## I/O and Filesystem
 
 - [IO](./api/io.md)
 - [File](./api/file.md)
 - [Filesystem](./api/filesystem.md)
+- [Async I/O](./api/async_io.md)
 
 ## Networking and Web
 
@@ -157,6 +200,8 @@
 - [WebSocket](./api/websocket.md)
 - [TLS](./api/tls.md)
 - [URL](./api/url.md)
+- [Async HTTP](./api/async_http.md)
+- [Async Net](./api/async_net.md)
 
 ## Concurrency
 
@@ -174,6 +219,10 @@
 - [Base64](./api/base64.md)
 - [Template](./api/template.md)
 - [Compress](./api/compress.md)
+- [TOML](./api/toml.md)
+- [YAML](./api/yaml.md)
+- [MessagePack](./api/msgpack.md)
+- [Protobuf](./api/protobuf.md)
 
 ## Databases
 
@@ -188,6 +237,7 @@
 - [Random](./api/random.md)
 - [UUID](./api/uuid.md)
 - [CRC32](./api/crc32.md)
+- [SIMD](./api/simd.md)
 
 ## Security and Crypto
 
@@ -211,6 +261,12 @@
 - [GPU](./api/gpu.md)
 - [Hot Reload](./api/hot.md)
 - [DynLoad](./api/dynload.md)
+
+## WebAssembly
+
+- [WASM](./api/wasm.md)
+- [WASI Preview 2](./api/wasi_p2.md)
+- [Web](./api/web.md)
 
 ---
 

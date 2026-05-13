@@ -1,6 +1,6 @@
 //! Derive macro framework
 //!
-//! Provides automatic code generation for common traits via #[derive(...)] attributes.
+//! Provides automatic code generation for common traits via `#[derive(...)]` attributes.
 //! Scans struct and enum definitions for `#[derive(...)]` and generates corresponding
 //! trait impl blocks that are injected back into the module AST.
 //!
@@ -130,6 +130,13 @@ fn make_fn(name: &str, params: Vec<Param>, ret_type: Option<Type>, body_expr: Ex
         body: FunctionBody::Block(vec![sp(Stmt::Expr(Box::new(sp(body_expr))))]),
         is_pub: false,
         is_async: false,
+        // Derive-generated methods (Debug/Clone/PartialEq/...) are held to
+        // the default totality contract. If a derive-backed body needs to
+        // panic it must construct a `partial`-marked function explicitly.
+        is_partial: false,
+        // Derive-generated methods carry no declared effect — the
+        // subtype rule only kicks in when the user writes a prefix.
+        declared_effect: None,
         attributes: vec![],
         where_clause: vec![],
     }
@@ -169,6 +176,7 @@ fn generate_clone_impl(s: &Struct) -> Impl {
     let clone_body = Expr::StructLit {
         name: sp(name.clone()),
         fields,
+        enum_name: None,
     };
 
     let self_param = make_param(
@@ -291,6 +299,7 @@ fn generate_default_impl(s: &Struct) -> Impl {
     let default_body = Expr::StructLit {
         name: sp(name.clone()),
         fields,
+        enum_name: None,
     };
 
     let ret = Type::Named {

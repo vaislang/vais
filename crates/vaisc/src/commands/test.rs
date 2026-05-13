@@ -2,6 +2,7 @@
 
 use crate::commands::build::cmd_build;
 use crate::configure_type_checker;
+use crate::error_formatter;
 use crate::utils::walkdir;
 use colored::Colorize;
 use std::fs;
@@ -228,6 +229,7 @@ pub(crate) fn cmd_bench(path: &Path, filter: Option<&str>, verbose: bool) -> Res
             false,
             false,
             536870912,
+            None, // profile_out
         );
 
         match compile_result {
@@ -285,104 +287,6 @@ pub(crate) fn cmd_bench(path: &Path, filter: Option<&str>, verbose: bool) -> Res
     } else {
         Ok(())
     }
-}
-
-/// Auto-apply compiler suggested fixes
-pub(crate) fn cmd_fix(
-    input: &Path,
-    dry_run: bool,
-    verbose: bool,
-    _plugins: &PluginRegistry,
-) -> Result<(), String> {
-    let files = if input.is_dir() {
-        walkdir(&input.to_path_buf(), "vais")
-    } else {
-        vec![input.to_path_buf()]
-    };
-
-    if files.is_empty() {
-        return Err(format!("no .vais files found in '{}'", input.display()));
-    }
-
-    let total_fixes = 0;
-    let fixed_files = 0;
-
-    for file in &files {
-        if verbose {
-            println!("{} Checking {}", "Fix".cyan(), file.display());
-        }
-
-        let source = fs::read_to_string(file)
-            .map_err(|e| format!("failed to read {}: {}", file.display(), e))?;
-
-        // Parse to check for syntax errors
-        let tokens = vais_lexer::tokenize(&source);
-        let _tokens = match tokens {
-            Ok(t) => t,
-            Err(_) => {
-                if verbose {
-                    println!(
-                        "  {} {} — lexer error, skipping",
-                        "⚠".yellow(),
-                        file.display()
-                    );
-                }
-                continue;
-            }
-        };
-
-        let module = match vais_parser::parse(&source) {
-            Ok(m) => m,
-            Err(_) => {
-                if verbose {
-                    println!(
-                        "  {} {} — parse error, skipping",
-                        "⚠".yellow(),
-                        file.display()
-                    );
-                }
-                continue;
-            }
-        };
-
-        // Type check
-        let mut checker = TypeChecker::new();
-        configure_type_checker(&mut checker);
-
-        // For now, just report that fix functionality is limited
-        // (TypeChecker returns a single error, not a list with suggestions)
-        if let Err(_e) = checker.check_module(&module) {
-            // TypeErrors don't consistently have suggestions
-            // This is a simplified implementation
-            if verbose {
-                println!("  {} {} — has type errors", "→".cyan(), file.display());
-            }
-        }
-    }
-
-    if total_fixes == 0 {
-        println!("{} No automatic fixes available", "✓".green());
-        println!(
-            "{}",
-            "Note: The fix command currently has limited functionality.".dimmed()
-        );
-    } else if dry_run {
-        println!(
-            "\n{} {} fix(es) available in {} file(s) (dry run — no changes made)",
-            "→".cyan(),
-            total_fixes,
-            fixed_files
-        );
-    } else {
-        println!(
-            "\n{} Applied {} fix(es) in {} file(s)",
-            "✓".green(),
-            total_fixes,
-            fixed_files
-        );
-    }
-
-    Ok(())
 }
 
 /// Run lint checks on source files
@@ -567,6 +471,102 @@ pub(crate) fn cmd_lint(
                 eprintln!("  {} {}", "-->".blue().bold(), file.display());
             }
         }
+
+        // Run static analysis lint checks (dead code, unused imports, naming, complexity, unsafe)
+        let mut lint_analyzer = vais_security::LintAnalyzer::new();
+        let lint_diagnostics = lint_analyzer.analyze(&module);
+        for lint_diag in &lint_diagnostics {
+            let is_warning = lint_diag.level != vais_security::LintLevel::Error;
+
+            if is_warning {
+                if level == 0 {
+                    continue;
+                }
+                total_warnings += 1;
+                if level == 2 {
+                    total_errors += 1;
+                }
+            } else {
+                total_errors += 1;
+            }
+
+            if format == "json" {
+                let mut json_diag = serde_json::json!({
+                    "file": file.display().to_string(),
+                    "code": &lint_diag.code,
+                    "category": lint_diag.category.to_string(),
+                    "message": &lint_diag.message,
+                    "severity": lint_diag.level.to_string(),
+                    "line": source[..lint_diag.span.start.min(source.len())].matches('\n').count() + 1,
+                });
+                if let Some(ref sug) = lint_diag.suggestion {
+                    json_diag["suggestion"] = serde_json::json!(sug);
+                }
+                all_diagnostics.push(json_diag);
+            } else {
+                let severity_str = if is_warning && level < 2 {
+                    "warning".yellow().bold().to_string()
+                } else {
+                    "error".red().bold().to_string()
+                };
+
+                let line = source[..lint_diag.span.start.min(source.len())]
+                    .matches('\n')
+                    .count()
+                    + 1;
+                eprintln!(
+                    "{}: [{}] {} ({})",
+                    severity_str, lint_diag.code, lint_diag.message, lint_diag.category
+                );
+                eprintln!("  {} {}:{}", "-->".blue().bold(), file.display(), line);
+                if let Some(ref sug) = lint_diag.suggestion {
+                    eprintln!("  {} {}", "=".blue().bold(), sug);
+                }
+            }
+        }
+
+        // Run security audit
+        let mut sec_analyzer = vais_security::SecurityAnalyzer::new();
+        let sec_findings = sec_analyzer.analyze(&module);
+        for finding in &sec_findings {
+            if level == 0 {
+                continue;
+            }
+            total_warnings += 1;
+            if level == 2 {
+                total_errors += 1;
+            }
+
+            if format == "json" {
+                let json_diag = serde_json::json!({
+                    "file": file.display().to_string(),
+                    "code": format!("SEC-{}", finding.category),
+                    "category": "security",
+                    "message": &finding.description,
+                    "severity": finding.severity.to_string().to_lowercase(),
+                    "recommendation": &finding.recommendation,
+                    "line": source[..finding.location.start.min(source.len())].matches('\n').count() + 1,
+                });
+                all_diagnostics.push(json_diag);
+            } else {
+                let severity_str = match finding.severity {
+                    vais_security::Severity::Critical | vais_security::Severity::High => {
+                        "warning".red().bold().to_string()
+                    }
+                    _ => "warning".yellow().bold().to_string(),
+                };
+                let line = source[..finding.location.start.min(source.len())]
+                    .matches('\n')
+                    .count()
+                    + 1;
+                eprintln!(
+                    "{}: [SEC] {} ({})",
+                    severity_str, finding.description, finding.category
+                );
+                eprintln!("  {} {}:{}", "-->".blue().bold(), file.display(), line);
+                eprintln!("  {} {}", "=".blue().bold(), finding.recommendation);
+            }
+        }
     }
 
     if format == "json" {
@@ -747,15 +747,27 @@ pub(crate) fn compile_to_ir_for_test(path: &Path) -> Result<String, String> {
     // Codegen
     let module_name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("test");
     let mut codegen = CodeGenerator::new_with_target(module_name, TargetTriple::Native);
-    codegen.set_resolved_functions(checker.get_all_functions().clone());
+    codegen.set_resolved_functions(checker.get_all_functions_with_methods());
+    codegen.set_type_aliases(checker.get_type_aliases().clone());
+    codegen.set_expr_types(checker.get_expr_types().clone());
+    codegen.set_implicit_try_sites(checker.get_implicit_try_sites().clone());
 
     let instantiations = checker.get_generic_instantiations();
-    let ir = if instantiations.is_empty() {
+    let result = if instantiations.is_empty() {
         codegen.generate_module(&ast)
     } else {
-        codegen.generate_module_with_instantiations(&ast, instantiations)
-    }
-    .map_err(|e| format!("codegen error: {}", e))?;
+        codegen.generate_module_with_instantiations(&ast, &instantiations)
+    };
+    let ir = result.map_err(|e| {
+        let spanned = vais_codegen::SpannedCodegenError {
+            span: codegen.last_error_span(),
+            error: e,
+        };
+        error_formatter::format_spanned_codegen_error(&spanned, &source, path)
+    })?;
+
+    // Verify IR structural integrity for test builds.
+    crate::utils::verify_ir_and_log(&ir, &path.display().to_string());
 
     Ok(ir)
 }

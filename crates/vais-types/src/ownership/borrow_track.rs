@@ -1,7 +1,7 @@
 //! Borrow checking and tracking
 
-use crate::types::{TypeError, TypeResult};
 use super::{BorrowInfo, OwnershipChecker, OwnershipState};
+use crate::types::{TypeError, TypeResult};
 use vais_ast::Span;
 
 impl OwnershipChecker {

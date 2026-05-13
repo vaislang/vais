@@ -1,8 +1,8 @@
 //! Statement type checking
 
-use vais_ast::*;
-use crate::TypeChecker;
 use crate::types::{Linearity, ResolvedType, TypeError, TypeResult};
+use crate::TypeChecker;
+use vais_ast::*;
 
 impl TypeChecker {
     /// Check a block of statements
@@ -30,6 +30,46 @@ impl TypeChecker {
                 let var_type = if let Some(ty) = ty {
                     let expected = self.resolve_type(&ty.node);
                     self.unify(&expected, &value_type)?;
+
+                    // Validate dependent type predicate at compile time for literal values
+                    if let Type::Dependent {
+                        var_name,
+                        base,
+                        predicate,
+                    } = &ty.node
+                    {
+                        let resolved_base = self.resolve_type(&base.node);
+                        if resolved_base.is_float() {
+                            // f64/f32 dependent type: check float literals
+                            if let Some(lit_val) =
+                                Self::extract_float_literal_from_expr(&value.node)
+                            {
+                                let predicate_str = format!("{:?}", predicate.node);
+                                if let Some(false) = Self::try_evaluate_predicate_f64(
+                                    &predicate.node,
+                                    var_name,
+                                    lit_val,
+                                ) {
+                                    return Err(TypeError::RefinementViolation {
+                                        predicate: predicate_str,
+                                        span: Some(value.span),
+                                    });
+                                }
+                            }
+                        } else if let Some(lit_val) =
+                            Self::extract_integer_literal_from_expr(&value.node)
+                        {
+                            let predicate_str = format!("{:?}", predicate.node);
+                            self.check_refinement(
+                                var_name,
+                                &predicate.node,
+                                &predicate_str,
+                                lit_val,
+                                Some(value.span),
+                            )?;
+                        }
+                    }
+
                     expected
                 } else {
                     value_type
@@ -92,7 +132,29 @@ impl TypeChecker {
                 Ok(ResolvedType::Never)
             }
             // Break and Continue have "Never" type because execution doesn't continue past them
-            Stmt::Break(_) | Stmt::Continue => Ok(ResolvedType::Never),
+            Stmt::Break(maybe_expr) => {
+                if self.loop_depth == 0 {
+                    return Err(TypeError::Mismatch {
+                        expected: "loop context".to_string(),
+                        found: "break outside of loop".to_string(),
+                        span: None,
+                    });
+                }
+                if let Some(expr) = maybe_expr {
+                    self.check_expr(expr)?;
+                }
+                Ok(ResolvedType::Never)
+            }
+            Stmt::Continue => {
+                if self.loop_depth == 0 {
+                    return Err(TypeError::Mismatch {
+                        expected: "loop context".to_string(),
+                        found: "continue outside of loop".to_string(),
+                        span: None,
+                    });
+                }
+                Ok(ResolvedType::Never)
+            }
 
             Stmt::Defer(expr) => {
                 // Type check the deferred expression

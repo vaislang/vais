@@ -436,6 +436,186 @@ fn type_to_kind(type_name: &str) -> String {
     }
 }
 
+/// Vais-specific pretty printer for displaying runtime values
+/// Translates raw LLDB output into Vais-friendly representations
+pub struct VaisPrettyPrinter;
+
+impl VaisPrettyPrinter {
+    /// Format a variable value based on its Vais type
+    pub fn format_value(type_name: Option<&str>, raw_value: &str) -> String {
+        let Some(ty) = type_name else {
+            return raw_value.to_string();
+        };
+
+        // Vec<T> display: show as [elem1, elem2, ...]
+        if ty.starts_with("Vec<") || ty.contains("Vec") {
+            return Self::format_vec(raw_value);
+        }
+
+        // Option<T> display: show as Some(value) or None
+        if ty.starts_with("Option<") || ty.contains("Option") {
+            return Self::format_option(raw_value);
+        }
+
+        // Result<T, E> display: show as Ok(value) or Err(error)
+        if ty.starts_with("Result<") || ty.contains("Result") {
+            return Self::format_result(raw_value);
+        }
+
+        // HashMap<K, V> display
+        if ty.starts_with("HashMap<") || ty.contains("HashMap") {
+            return Self::format_hashmap(raw_value);
+        }
+
+        // Enum variant display: translate i8 tag to variant name
+        // Vais enums are represented as {i8 tag, i64 data}
+        if Self::looks_like_enum_struct(raw_value) {
+            return Self::format_enum_variant(raw_value);
+        }
+
+        // Bool display: translate 0/1 to false/true for bool types
+        if ty == "bool" || ty == "i1" {
+            return match raw_value.trim() {
+                "0" | "false" => "false".to_string(),
+                "1" | "true" => "true".to_string(),
+                _ => raw_value.to_string(),
+            };
+        }
+
+        // Char display: show character representation
+        if ty == "char" || ty == "u8" {
+            if let Ok(code) = raw_value.trim().parse::<u32>() {
+                if let Some(c) = char::from_u32(code) {
+                    if c.is_ascii_graphic() || c == ' ' {
+                        return format!("'{}' ({})", c, code);
+                    }
+                }
+            }
+        }
+
+        // String/str display: ensure quoted
+        if ty == "str" || ty == "&str" || ty == "String" {
+            let trimmed = raw_value.trim();
+            if !trimmed.starts_with('"') {
+                return format!("\"{}\"", trimmed);
+            }
+        }
+
+        raw_value.to_string()
+    }
+
+    /// Format Vec display value
+    fn format_vec(raw: &str) -> String {
+        let trimmed = raw.trim();
+        // If already formatted as array-like, return as-is
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            return trimmed.to_string();
+        }
+        // Try to parse LLDB struct output for Vec
+        // Vec is typically {ptr, len, capacity}
+        if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            // Extract the length if visible
+            let inner = &trimmed[1..trimmed.len() - 1];
+            let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+            if parts.len() >= 2 {
+                // Try to extract length
+                if let Some(len_str) = parts.get(1) {
+                    let len_str = len_str.trim();
+                    if let Ok(len) = len_str.parse::<usize>() {
+                        return format!("Vec (len: {})", len);
+                    }
+                }
+            }
+        }
+        raw.to_string()
+    }
+
+    /// Format Option display value
+    fn format_option(raw: &str) -> String {
+        let trimmed = raw.trim();
+        // Option is typically {i8 tag, i64 data} where tag 0=None, 1=Some
+        if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            let inner = &trimmed[1..trimmed.len() - 1];
+            let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+            if parts.len() >= 2 {
+                let tag = parts[0].trim();
+                let value = parts[1].trim();
+                return match tag {
+                    "0" => "None".to_string(),
+                    "1" => format!("Some({})", value),
+                    _ => raw.to_string(),
+                };
+            }
+        }
+        raw.to_string()
+    }
+
+    /// Format Result display value
+    fn format_result(raw: &str) -> String {
+        let trimmed = raw.trim();
+        // Result is typically {i8 tag, i64 data} where tag 0=Ok, 1=Err
+        if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            let inner = &trimmed[1..trimmed.len() - 1];
+            let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+            if parts.len() >= 2 {
+                let tag = parts[0].trim();
+                let value = parts[1].trim();
+                return match tag {
+                    "0" => format!("Ok({})", value),
+                    "1" => format!("Err({})", value),
+                    _ => raw.to_string(),
+                };
+            }
+        }
+        raw.to_string()
+    }
+
+    /// Format HashMap display value
+    fn format_hashmap(raw: &str) -> String {
+        let trimmed = raw.trim();
+        if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            // Try to show entry count
+            let inner = &trimmed[1..trimmed.len() - 1];
+            let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+            if parts.len() >= 2 {
+                return format!("HashMap (entries: ~{})", parts.len() / 2);
+            }
+        }
+        raw.to_string()
+    }
+
+    /// Check if value looks like an enum struct {tag, data}
+    fn looks_like_enum_struct(raw: &str) -> bool {
+        let trimmed = raw.trim();
+        if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            let inner = &trimmed[1..trimmed.len() - 1];
+            let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+            // Enum is exactly {i8 tag, i64 data}
+            if parts.len() == 2 {
+                if let Ok(tag) = parts[0].trim().parse::<i64>() {
+                    return (0..256).contains(&tag);
+                }
+            }
+        }
+        false
+    }
+
+    /// Format enum variant from {tag, data} representation
+    fn format_enum_variant(raw: &str) -> String {
+        let trimmed = raw.trim();
+        if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            let inner = &trimmed[1..trimmed.len() - 1];
+            let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+            if parts.len() == 2 {
+                let tag = parts[0].trim();
+                let data = parts[1].trim();
+                return format!("variant#{} (data: {})", tag, data);
+            }
+        }
+        raw.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -617,6 +797,85 @@ mod tests {
         // Test Repl context (default)
         let repl_result = manager.evaluate_expression("x", 1, EvaluateContext::Repl);
         assert_eq!(repl_result.value, "42");
+    }
+
+    #[test]
+    fn test_pretty_printer_bool() {
+        assert_eq!(VaisPrettyPrinter::format_value(Some("bool"), "0"), "false");
+        assert_eq!(VaisPrettyPrinter::format_value(Some("bool"), "1"), "true");
+        assert_eq!(VaisPrettyPrinter::format_value(Some("i1"), "0"), "false");
+    }
+
+    #[test]
+    fn test_pretty_printer_option() {
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("Option<i64>"), "{0, 42}"),
+            "None"
+        );
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("Option<i64>"), "{1, 42}"),
+            "Some(42)"
+        );
+    }
+
+    #[test]
+    fn test_pretty_printer_result() {
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("Result<i64, str>"), "{0, 99}"),
+            "Ok(99)"
+        );
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("Result<i64, str>"), "{1, 99}"),
+            "Err(99)"
+        );
+    }
+
+    #[test]
+    fn test_pretty_printer_vec() {
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("Vec<i64>"), "[1, 2, 3]"),
+            "[1, 2, 3]"
+        );
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("Vec<i64>"), "{0x1234, 5, 10}"),
+            "Vec (len: 5)"
+        );
+    }
+
+    #[test]
+    fn test_pretty_printer_string() {
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("str"), "hello"),
+            "\"hello\""
+        );
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("str"), "\"hello\""),
+            "\"hello\""
+        );
+    }
+
+    #[test]
+    fn test_pretty_printer_char() {
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("char"), "65"),
+            "'A' (65)"
+        );
+    }
+
+    #[test]
+    fn test_pretty_printer_enum() {
+        // Enum-like struct {tag, data} without a known type name
+        assert_eq!(
+            VaisPrettyPrinter::format_value(None, "{2, 100}"),
+            "{2, 100}" // No type info, no enum formatting
+        );
+    }
+
+    #[test]
+    fn test_pretty_printer_passthrough() {
+        // Regular i64 should pass through unchanged
+        assert_eq!(VaisPrettyPrinter::format_value(Some("i64"), "42"), "42");
+        assert_eq!(VaisPrettyPrinter::format_value(None, "42"), "42");
     }
 
     #[test]

@@ -1,0 +1,14 @@
+# Consumer: vais-server-style API handler returning email.
+# See vaisdb_table.vais header for the cat-based concatenation note.
+
+F handler_email(u: User) -> str {
+    R u.email
+}
+
+F main() -> i64 {
+    u: User = User { id: 2, email: "api@b.c", name: "ada" }
+    I handler_email(u) != "api@b.c" {
+        R 1
+    }
+    R 0
+}

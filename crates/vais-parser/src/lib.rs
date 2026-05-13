@@ -2,6 +2,7 @@
 //!
 //! Recursive descent parser for AI-optimized syntax.
 
+mod error_display;
 mod expr;
 mod ffi;
 mod item;
@@ -37,6 +38,14 @@ pub enum ParseError {
     /// Invalid or malformed expression
     #[error("Invalid expression")]
     InvalidExpression,
+    /// Maximum recursion depth exceeded during parsing
+    #[error("Maximum parse depth exceeded ({max}) - expression too deeply nested")]
+    DepthExceeded {
+        /// The maximum depth that was exceeded
+        max: usize,
+        /// Source location where the depth was exceeded
+        span: std::ops::Range<usize>,
+    },
 }
 
 impl ParseError {
@@ -46,6 +55,7 @@ impl ParseError {
             ParseError::UnexpectedToken { span, .. } => Some(span.clone()),
             ParseError::UnexpectedEof { span } => Some(span.clone()),
             ParseError::InvalidExpression => None,
+            ParseError::DepthExceeded { span, .. } => Some(span.clone()),
         }
     }
 
@@ -55,6 +65,7 @@ impl ParseError {
             ParseError::UnexpectedToken { .. } => "P001",
             ParseError::UnexpectedEof { .. } => "P002",
             ParseError::InvalidExpression => "P003",
+            ParseError::DepthExceeded { .. } => "P004",
         }
     }
 
@@ -76,6 +87,9 @@ impl ParseError {
             ),
             ParseError::UnexpectedEof { .. } => vais_i18n::get_simple(&key),
             ParseError::InvalidExpression => vais_i18n::get_simple(&key),
+            ParseError::DepthExceeded { max, .. } => {
+                vais_i18n::get(&key, &[("max", &max.to_string())])
+            }
         }
     }
 }
@@ -121,9 +135,27 @@ pub struct Parser {
     /// Stored as String instead of &str to avoid lifetime parameters on Parser struct.
     /// The one-time allocation is acceptable as parsing happens once per file.
     source: String,
+    /// Pre-computed newline byte positions for O(log n) newline detection.
+    /// Built once from source; used by has_newline_between() to avoid repeated scanning.
+    newline_positions: Vec<usize>,
     /// Compile-time cfg key-value pairs for conditional compilation.
     /// When set, items with `#[cfg(key = "value")]` are filtered out if they don't match.
     cfg_values: std::collections::HashMap<String, String>,
+    /// Pending `>` count from splitting `>>` (Token::Shr) or `>>>` (Token::Shr + Token::Gt) in nested generics.
+    /// When `Vec<Vec<Vec<i64>>>` is tokenized, multiple `>>` tokens appear.
+    /// We split each into two `>` tokens: the first closes the inner generic,
+    /// and this counter records how many additional `>` tokens are still pending.
+    pending_gt_count: usize,
+}
+
+/// Build a sorted vec of byte positions where '\n' occurs in source.
+/// Used for O(log n) newline-between queries via binary search.
+fn build_newline_positions(source: &str) -> Vec<usize> {
+    source
+        .bytes()
+        .enumerate()
+        .filter_map(|(i, b)| if b == b'\n' { Some(i) } else { None })
+        .collect()
 }
 
 impl Parser {
@@ -137,7 +169,9 @@ impl Parser {
             allow_struct_literal: true,
             depth: 0,
             source: String::new(),
+            newline_positions: Vec::new(),
             cfg_values: std::collections::HashMap::new(),
+            pending_gt_count: 0,
         }
     }
 
@@ -148,6 +182,7 @@ impl Parser {
     /// since it happens once per file parse (not in a hot loop), and the source is only
     /// used for newline detection in postfix operator parsing.
     pub fn new_with_source(tokens: Vec<SpannedToken>, source: &str) -> Self {
+        let newline_positions = build_newline_positions(source);
         Self {
             tokens,
             pos: 0,
@@ -156,7 +191,9 @@ impl Parser {
             allow_struct_literal: true,
             depth: 0,
             source: source.to_string(),
+            newline_positions,
             cfg_values: std::collections::HashMap::new(),
+            pending_gt_count: 0,
         }
     }
 
@@ -173,7 +210,9 @@ impl Parser {
             allow_struct_literal: true,
             depth: 0,
             source: String::new(),
+            newline_positions: Vec::new(),
             cfg_values: std::collections::HashMap::new(),
+            pending_gt_count: 0,
         }
     }
 
@@ -185,13 +224,16 @@ impl Parser {
     }
 
     /// Check if there is a newline between two byte positions in the source.
+    /// Uses pre-computed newline positions with binary search for O(log n) lookup.
+    #[inline]
     fn has_newline_between(&self, start: usize, end: usize) -> bool {
-        if self.source.is_empty() {
+        if self.newline_positions.is_empty() {
             return false;
         }
-        let s = start.min(self.source.len());
-        let e = end.min(self.source.len());
-        self.source[s..e].contains('\n')
+        // Binary search for the first newline position >= start
+        let idx = self.newline_positions.partition_point(|&pos| pos < start);
+        // Check if that newline is within [start, end)
+        idx < self.newline_positions.len() && self.newline_positions[idx] < end
     }
 
     /// Increment the recursion depth, returning an error if MAX_PARSE_DEPTH is exceeded.
@@ -199,16 +241,9 @@ impl Parser {
         self.depth += 1;
         if self.depth > MAX_PARSE_DEPTH {
             let span = self.current_span();
-            Err(ParseError::UnexpectedToken {
-                found: self
-                    .peek()
-                    .map(|t| t.token.clone())
-                    .unwrap_or(Token::Ident("EOF".to_string())),
+            Err(ParseError::DepthExceeded {
+                max: MAX_PARSE_DEPTH,
                 span,
-                expected: format!(
-                    "expression (maximum nesting depth of {} exceeded)",
-                    MAX_PARSE_DEPTH
-                ),
             })
         } else {
             Ok(())
@@ -266,17 +301,20 @@ impl Parser {
                     | Token::Defer
                     | Token::If
                     | Token::Loop
+                    | Token::ForEach
+                    | Token::While
                     | Token::Match => {
                         break;
                     }
                     // Item-level keywords - if we hit these, we've gone too far
                     // (likely missing a closing brace in the function body)
+                    // Note: Token::Trait (W) excluded — also used as while loop keyword
                     Token::Function
                     | Token::Struct
                     | Token::Enum
+                    | Token::EnumKeyword
                     | Token::Union
                     | Token::Use
-                    | Token::Trait
                     | Token::Impl
                     | Token::Macro
                     | Token::Pub
@@ -316,13 +354,14 @@ impl Parser {
             if let Some(tok) = self.peek() {
                 match &tok.token {
                     // Top-level item keywords
+                    // Note: Token::Trait (W) excluded — also used as while loop keyword
                     Token::Function
                     | Token::Struct
                     | Token::Enum
+                    | Token::EnumKeyword
                     | Token::Union
                     | Token::TypeKeyword
                     | Token::Use
-                    | Token::Trait
                     | Token::Impl
                     | Token::Macro
                     | Token::Pub
@@ -331,65 +370,6 @@ impl Parser {
                     }
                     // Attributes can also start items
                     Token::HashBracket => {
-                        break;
-                    }
-                    _ => {}
-                }
-            }
-
-            // Skip this token
-            if let Some(tok) = self.advance() {
-                skipped.push(format!("{:?}", tok.token));
-            }
-        }
-
-        skipped
-    }
-
-    /// Synchronize to the next expression boundary for error recovery.
-    /// Skips tokens until an expression delimiter is found.
-    /// Returns the list of skipped tokens (as strings for debugging).
-    ///
-    /// Reserved for IDE/LSP error recovery mode.
-    #[allow(dead_code)]
-    fn synchronize_expression(&mut self) -> Vec<String> {
-        let mut skipped = Vec::new();
-        let mut brace_depth = 0;
-        let mut paren_depth = 0;
-        let mut bracket_depth = 0;
-
-        while !self.is_at_end() {
-            if let Some(tok) = self.peek() {
-                match &tok.token {
-                    // Track nesting
-                    Token::LBrace => brace_depth += 1,
-                    Token::RBrace => {
-                        if brace_depth > 0 {
-                            brace_depth -= 1;
-                        } else {
-                            break;
-                        }
-                    }
-                    Token::LParen => paren_depth += 1,
-                    Token::RParen => {
-                        if paren_depth > 0 {
-                            paren_depth -= 1;
-                        } else {
-                            break;
-                        }
-                    }
-                    Token::LBracket => bracket_depth += 1,
-                    Token::RBracket => {
-                        if bracket_depth > 0 {
-                            bracket_depth -= 1;
-                        } else {
-                            break;
-                        }
-                    }
-                    // At top level (not nested), these are boundaries
-                    Token::Comma | Token::Semi
-                        if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 =>
-                    {
                         break;
                     }
                     _ => {}
@@ -414,8 +394,41 @@ impl Parser {
     /// inserted into the AST. Use `errors()` to retrieve all collected errors.
     pub fn parse_module(&mut self) -> ParseResult<Module> {
         let mut items = Vec::new();
+        let mut describe_test_names: Vec<String> = Vec::new();
 
         while !self.is_at_end() {
+            // Check for describe("...", |t| { ... }) test blocks
+            if self.check_ident("describe") {
+                match self.parse_describe_block() {
+                    Ok(test_fns) => {
+                        for (name, func) in test_fns {
+                            describe_test_names.push(name);
+                            items.push(func);
+                        }
+                        continue;
+                    }
+                    Err(e) => {
+                        if self.recovery_mode {
+                            let start = self.current_span().start;
+                            let message = e.to_string();
+                            self.record_error(e);
+                            let skipped_tokens = self.synchronize_item();
+                            let end = self.prev_span().end;
+                            items.push(Spanned::new(
+                                Item::Error {
+                                    message,
+                                    skipped_tokens,
+                                },
+                                Span::new(start, end),
+                            ));
+                            continue;
+                        } else {
+                            return Err(e);
+                        }
+                    }
+                }
+            }
+
             match self.parse_item() {
                 Ok(item) => {
                     // Apply cfg filtering: skip items whose #[cfg(...)] doesn't match
@@ -449,6 +462,62 @@ impl Parser {
             }
         }
 
+        // If we found describe blocks, generate a main() function that calls all test functions
+        if !describe_test_names.is_empty() {
+            // Check if a main already exists
+            let has_main = items
+                .iter()
+                .any(|item| matches!(&item.node, Item::Function(f) if f.name.node == "main"));
+            if !has_main {
+                let span = Span::new(0, 0);
+                let mut stmts = Vec::new();
+                for name in &describe_test_names {
+                    // Generate: test_name();
+                    stmts.push(Spanned::new(
+                        Stmt::Expr(Box::new(Spanned::new(
+                            Expr::Call {
+                                func: Box::new(Spanned::new(Expr::Ident(name.clone()), span)),
+                                args: vec![],
+                            },
+                            span,
+                        ))),
+                        span,
+                    ));
+                }
+                // return 0
+                stmts.push(Spanned::new(
+                    Stmt::Return(Some(Box::new(Spanned::new(Expr::Int(0), span)))),
+                    span,
+                ));
+                let main_fn = Function {
+                    name: Spanned::new("main".to_string(), span),
+                    generics: vec![],
+                    params: vec![],
+                    ret_type: Some(Spanned::new(
+                        Type::Named {
+                            name: "i64".to_string(),
+                            generics: vec![],
+                        },
+                        span,
+                    )),
+                    body: FunctionBody::Block(stmts),
+                    is_pub: false,
+                    is_async: false,
+                    // Synthetic main wrapper — exempt from Phase 4c.2
+                    // totality gate (it hoists top-level user statements
+                    // whose panic-freedom was never declared).
+                    is_partial: true,
+                    // Synthetic main wrapper carries no declared effect —
+                    // user code is inferred; the Phase 4c.3 subtype rule
+                    // only fires on explicit `pure/io/alloc` prefixes.
+                    declared_effect: None,
+                    attributes: vec![],
+                    where_clause: vec![],
+                };
+                items.push(Spanned::new(Item::Function(main_fn), span));
+            }
+        }
+
         Ok(Module {
             items,
             modules_map: None,
@@ -464,7 +533,7 @@ impl Parser {
     ///
     /// # Returns
     ///
-    /// A tuple of (Module, Vec<ParseError>) containing the parsed module
+    /// A tuple of `(Module, Vec<ParseError>)` containing the parsed module
     /// and all errors encountered during parsing.
     pub fn parse_module_with_recovery(&mut self) -> (Module, Vec<ParseError>) {
         self.recovery_mode = true;
@@ -547,6 +616,44 @@ impl Parser {
 
     // === Helper methods ===
 
+    /// Parse an identifier, also accepting single-character keyword tokens
+    /// in positions where an identifier is expected (e.g., type names, struct names).
+    /// This allows `S C { }` where C is a struct name, not Continue.
+    pub(crate) fn parse_ident_or_keyword(&mut self) -> ParseResult<Spanned<String>> {
+        // parse_ident() already accepts all single-char keyword tokens as identifiers,
+        // so this is a thin wrapper that makes the intent explicit at call sites.
+        self.parse_ident()
+    }
+
+    /// Convert a single-character keyword token to its string representation
+    /// for use as an identifier. Returns None for non-keyword tokens.
+    #[allow(dead_code)]
+    pub(crate) fn keyword_to_ident(token: &Token) -> Option<&'static str> {
+        match token {
+            Token::Break => Some("B"),
+            Token::Continue => Some("C"),
+            Token::Enum => Some("E"),
+            Token::Function => Some("F"),
+            Token::Global => Some("G"),
+            Token::If => Some("I"),
+            Token::Loop => Some("L"),
+            Token::Match => Some("M"),
+            Token::Extern => Some("N"),
+            Token::Union => Some("O"),
+            Token::Pub => Some("P"),
+            Token::Return => Some("R"),
+            Token::Struct => Some("S"),
+            Token::TypeKeyword => Some("T"),
+            Token::Use => Some("U"),
+            Token::Trait => Some("W"),
+            Token::Impl => Some("X"),
+            Token::Await => Some("Y"),
+            Token::Async => Some("A"),
+            Token::Defer => Some("D"),
+            _ => None,
+        }
+    }
+
     pub(crate) fn peek(&self) -> Option<&SpannedToken> {
         self.tokens.get(self.pos)
     }
@@ -555,14 +662,62 @@ impl Parser {
         self.tokens.get(self.pos + 1)
     }
 
-    /// Save the current parser position for backtracking
-    pub(crate) fn save_position(&self) -> usize {
-        self.pos
+    /// Check if the current "token" is `>`, accounting for a pending `>`
+    /// left over from splitting a `>>` (Token::Shr) in nested generic contexts.
+    /// Also returns true for `>>` (Token::Shr) because `>>` will be split into
+    /// two `>` tokens when consumed via `consume_gt()`.
+    pub(crate) fn check_gt(&self) -> bool {
+        if self.pending_gt_count > 0 {
+            return true;
+        }
+        matches!(
+            self.peek().map(|t| &t.token),
+            Some(Token::Gt) | Some(Token::Shr)
+        )
     }
 
-    /// Restore the parser to a previously saved position
-    pub(crate) fn restore_position(&mut self, pos: usize) {
-        self.pos = pos;
+    /// Consume a single `>`, which may either be:
+    /// 1. A pending second `>` from a previously split `>>`, or
+    /// 2. A real `Token::Gt` in the stream, or
+    /// 3. A `Token::Shr` (`>>`) which we split: consume it and increment `pending_gt_count`
+    ///    so the next `consume_gt()` call returns the second `>`.
+    ///
+    /// Returns a synthetic `>` SpannedToken in the pending-gt and Shr cases.
+    pub(crate) fn consume_gt(&mut self) -> ParseResult<SpannedToken> {
+        if self.pending_gt_count > 0 {
+            self.pending_gt_count -= 1;
+            // Return a synthetic Gt token at the current span
+            let span = self.current_span();
+            return Ok(SpannedToken {
+                token: Token::Gt,
+                span,
+            });
+        }
+        if self.check(&Token::Gt) {
+            return self.advance().ok_or_else(|| ParseError::UnexpectedEof {
+                span: self.current_span(),
+            });
+        }
+        if self.check(&Token::Shr) {
+            // Split `>>` into two `>` tokens: consume it and remember one pending `>`
+            let tok = self.advance().ok_or_else(|| ParseError::UnexpectedEof {
+                span: self.current_span(),
+            })?;
+            self.pending_gt_count += 1;
+            // Return a synthetic Gt with the span of the Shr token
+            return Ok(SpannedToken {
+                token: Token::Gt,
+                span: tok.span,
+            });
+        }
+        Err(ParseError::UnexpectedToken {
+            found: self
+                .peek()
+                .map(|t| t.token.clone())
+                .unwrap_or(Token::Ident("EOF".into())),
+            span: self.current_span(),
+            expected: "'>'".to_string(),
+        })
     }
 
     /// Check if the current token is an identifier with the given name
@@ -582,6 +737,15 @@ impl Parser {
         }
     }
 
+    /// Advance the parser position without cloning the token.
+    /// Use this when the token's content is not needed (just consuming it).
+    #[inline]
+    pub(crate) fn advance_skip(&mut self) {
+        if !self.is_at_end() {
+            self.pos += 1;
+        }
+    }
+
     pub(crate) fn check(&self, expected: &Token) -> bool {
         self.peek().map(|t| &t.token == expected).unwrap_or(false)
     }
@@ -593,6 +757,25 @@ impl Parser {
                 span: self.current_span(),
                 expected: Self::token_to_friendly_name(expected),
             })
+        } else {
+            Err(ParseError::UnexpectedToken {
+                found: self
+                    .peek()
+                    .map(|t| t.token.clone())
+                    .unwrap_or(Token::Ident("EOF".into())),
+                span: self.current_span(),
+                expected: Self::token_to_friendly_name(expected),
+            })
+        }
+    }
+
+    /// Expect a token and advance without cloning it.
+    /// Use this when the token value is not needed (just ensuring syntax correctness).
+    #[inline]
+    pub(crate) fn expect_skip(&mut self, expected: &Token) -> ParseResult<()> {
+        if self.check(expected) {
+            self.advance_skip();
+            Ok(())
         } else {
             Err(ParseError::UnexpectedToken {
                 found: self
@@ -695,7 +878,12 @@ impl Parser {
                     Token::Semi => {
                         return; // Don't consume - let the caller handle it
                     }
-                    Token::Function | Token::Struct | Token::Enum | Token::Trait | Token::Impl
+                    Token::Function
+                    | Token::Struct
+                    | Token::Enum
+                    | Token::EnumKeyword
+                    | Token::Trait
+                    | Token::Impl
                         if depth == 0 =>
                     {
                         return; // At a top-level item - stop
@@ -709,88 +897,226 @@ impl Parser {
 
     /// Convert a token to a user-friendly name for error messages
     fn token_to_friendly_name(token: &Token) -> String {
-        match token {
-            // Delimiters
-            Token::LParen => "'('".to_string(),
-            Token::RParen => "')'".to_string(),
-            Token::LBrace => "'{'".to_string(),
-            Token::RBrace => "'}'".to_string(),
-            Token::LBracket => "'['".to_string(),
-            Token::RBracket => "']'".to_string(),
-            Token::Comma => "','".to_string(),
-            Token::Colon => "':'".to_string(),
-            Token::ColonColon => "'::'".to_string(),
-            Token::Semi => "';'".to_string(),
-            Token::Dot => "'.'".to_string(),
-            Token::DotDot => "'..'".to_string(),
-            Token::DotDotEq => "'..='".to_string(),
-            Token::Arrow => "'->'".to_string(),
-            Token::FatArrow => "'=>'".to_string(),
-            // Operators
-            Token::Eq => "'='".to_string(),
-            Token::ColonEq => "':=' (let binding)".to_string(),
-            Token::EqEq => "'=='".to_string(),
-            Token::Neq => "'!='".to_string(),
-            Token::Lt => "'<'".to_string(),
-            Token::Lte => "'<='".to_string(),
-            Token::Gt => "'>'".to_string(),
-            Token::Gte => "'>='".to_string(),
-            Token::Plus => "'+'".to_string(),
-            Token::PlusEq => "'+='".to_string(),
-            Token::Minus => "'-'".to_string(),
-            Token::MinusEq => "'-='".to_string(),
-            Token::Star => "'*'".to_string(),
-            Token::StarEq => "'*='".to_string(),
-            Token::Slash => "'/'".to_string(),
-            Token::SlashEq => "'/='".to_string(),
-            Token::Percent => "'%'".to_string(),
-            Token::Amp => "'&'".to_string(),
-            Token::PipeArrow => "'|>'".to_string(),
-            Token::Pipe => "'|'".to_string(),
-            Token::Bang => "'!'".to_string(),
-            Token::Tilde => "'~'".to_string(),
-            Token::Caret => "'^'".to_string(),
-            Token::Shl => "'<<'".to_string(),
-            Token::Shr => "'>>'".to_string(),
-            Token::Question => "'?'".to_string(),
-            Token::At => "'@' (self-recursion)".to_string(),
-            Token::HashBracket => "'#[' (attribute)".to_string(),
-            // Keywords
-            Token::Function => "function keyword 'F'".to_string(),
-            Token::Struct => "struct keyword 'S'".to_string(),
-            Token::Enum => "enum keyword 'E'".to_string(),
-            Token::Trait => "trait keyword 'W'".to_string(),
-            Token::Impl => "impl keyword 'X'".to_string(),
-            Token::If => "if keyword 'I'".to_string(),
-            Token::Loop => "loop keyword 'L'".to_string(),
-            Token::Match => "match keyword 'M'".to_string(),
-            Token::Return => "return keyword 'R'".to_string(),
-            Token::Break => "break keyword 'B'".to_string(),
-            Token::Continue => "continue keyword 'C'".to_string(),
-            Token::Use => "use keyword 'U'".to_string(),
-            Token::Pub => "pub keyword 'P'".to_string(),
-            Token::Async => "async keyword 'A'".to_string(),
-            Token::Await => "await keyword 'Y'".to_string(),
-            Token::Spawn => "'spawn' keyword".to_string(),
-            Token::Yield => "'yield' keyword".to_string(),
-            Token::True => "'true'".to_string(),
-            Token::False => "'false'".to_string(),
-            Token::Defer => "defer keyword 'D'".to_string(),
-            Token::Union => "union keyword 'O'".to_string(),
-            Token::Comptime => "'comptime' keyword".to_string(),
-            Token::Const => "'const' keyword".to_string(),
-            Token::Mut => "'mut' keyword".to_string(),
-            Token::SelfLower => "'self'".to_string(),
-            Token::SelfUpper => "'Self'".to_string(),
-            Token::TypeKeyword => "type keyword 'T'".to_string(),
-            // Literals
-            Token::Ident(name) => format!("identifier '{}'", name),
-            Token::Int(_) => "integer literal".to_string(),
-            Token::Float(_) => "float literal".to_string(),
-            Token::String(_) => "string literal".to_string(),
-            // Default for any other token
-            _ => format!("{:?}", token),
+        error_display::token_to_friendly_name(token)
+    }
+
+    /// Parse a describe("name", |t| { it("test", || { body }); ... }); block
+    /// and desugar it into individual test functions.
+    ///
+    /// Returns a list of (function_name, Item::Function) pairs.
+    fn parse_describe_block(&mut self) -> ParseResult<Vec<(String, Spanned<Item>)>> {
+        let start = self.current_span().start;
+
+        // consume "describe"
+        self.advance_skip();
+
+        // expect "("
+        self.expect_skip(&Token::LParen)?;
+
+        // expect string literal for describe name
+        let describe_name = if let Some(tok) = self.peek() {
+            if let Token::String(s) = &tok.token {
+                let name = s.clone();
+                self.advance_skip();
+                name
+            } else {
+                return Err(ParseError::UnexpectedToken {
+                    found: tok.token.clone(),
+                    span: tok.span.clone(),
+                    expected: "string literal for describe name".into(),
+                });
+            }
+        } else {
+            return Err(ParseError::UnexpectedEof {
+                span: self.current_span(),
+            });
+        };
+
+        // Handle two syntax forms:
+        // Form 1 (VaisDB): describe("name") { ... }
+        // Form 2 (closure): describe("name", |t| { ... })
+        if self.check(&Token::RParen) {
+            // Form 1: consume ")" then expect "{"
+            self.advance_skip();
+            self.expect_skip(&Token::LBrace)?;
+        } else if self.check(&Token::Comma) {
+            // Form 2: consume "," then skip closure params until "{"
+            self.advance_skip();
+            let mut brace_depth = 0;
+            while !self.is_at_end() {
+                if self.check(&Token::LBrace) && brace_depth == 0 {
+                    break;
+                }
+                if let Some(tok) = self.peek() {
+                    if tok.token == Token::LBrace {
+                        brace_depth += 1;
+                    } else if tok.token == Token::RBrace {
+                        brace_depth -= 1;
+                    }
+                }
+                self.advance();
+            }
+            self.expect_skip(&Token::LBrace)?;
+        } else {
+            return Err(ParseError::UnexpectedToken {
+                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Semi),
+                span: self.current_span(),
+                expected: "')' or ',' after describe name".into(),
+            });
         }
+
+        let mut test_fns = Vec::new();
+
+        // Parse it() blocks inside describe
+        while !self.is_at_end() && !self.check(&Token::RBrace) {
+            if self.check_ident("it") {
+                match self.parse_it_block(&describe_name, start) {
+                    Ok((name, func)) => {
+                        test_fns.push((name, func));
+                    }
+                    Err(e) => {
+                        if self.recovery_mode {
+                            self.record_error(e);
+                            self.synchronize_item();
+                        } else {
+                            return Err(e);
+                        }
+                    }
+                }
+            } else {
+                // Skip non-it content (comments, etc.)
+                self.advance();
+            }
+        }
+
+        // consume "}" of describe block
+        if self.check(&Token::RBrace) {
+            self.advance_skip();
+        }
+
+        // consume ");" at the end of describe(...)
+        if self.check(&Token::RParen) {
+            self.advance_skip();
+        }
+        if self.check(&Token::Semi) {
+            self.advance_skip();
+        }
+
+        Ok(test_fns)
+    }
+
+    /// Parse an it("test name", || { body }); block inside a describe block.
+    /// Returns (function_name, Item::Function).
+    fn parse_it_block(
+        &mut self,
+        describe_name: &str,
+        _outer_start: usize,
+    ) -> ParseResult<(String, Spanned<Item>)> {
+        let start = self.current_span().start;
+
+        // consume "it"
+        self.advance_skip();
+
+        // expect "("
+        self.expect_skip(&Token::LParen)?;
+
+        // expect string literal for test name
+        let test_name = if let Some(tok) = self.peek() {
+            if let Token::String(s) = &tok.token {
+                let name = s.clone();
+                self.advance_skip();
+                name
+            } else {
+                return Err(ParseError::UnexpectedToken {
+                    found: tok.token.clone(),
+                    span: tok.span.clone(),
+                    expected: "string literal for it test name".into(),
+                });
+            }
+        } else {
+            return Err(ParseError::UnexpectedEof {
+                span: self.current_span(),
+            });
+        };
+
+        // Handle two syntax forms:
+        // Form 1 (VaisDB): it("name") { ... }
+        // Form 2 (closure): it("name", || { ... })
+        let stmts = if self.check(&Token::RParen) {
+            // Form 1: consume ")" then expect "{"
+            self.advance_skip();
+            self.expect_skip(&Token::LBrace)?;
+            let stmts = self.parse_block_contents()?;
+            self.expect_skip(&Token::RBrace)?;
+            stmts
+        } else if self.check(&Token::Comma) {
+            // Form 2: consume "," then "||" then "{"
+            self.advance_skip();
+            if self.check(&Token::Pipe) {
+                self.advance_skip();
+                if self.check(&Token::Pipe) {
+                    self.advance_skip();
+                }
+            }
+            self.expect_skip(&Token::LBrace)?;
+            let stmts = self.parse_block_contents()?;
+            self.expect_skip(&Token::RBrace)?;
+            self.expect_skip(&Token::RParen)?;
+            stmts
+        } else {
+            return Err(ParseError::UnexpectedToken {
+                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Semi),
+                span: self.current_span(),
+                expected: "')' or ',' after it test name".into(),
+            });
+        };
+
+        // optional ";"
+        if self.check(&Token::Semi) {
+            self.advance_skip();
+        }
+
+        // Build function name: test_{describe_snake}_{it_snake}
+        let fn_name = format!(
+            "test_{}_{}",
+            to_snake_case(describe_name),
+            to_snake_case(&test_name)
+        );
+
+        let span = Span::new(start, self.prev_span().end);
+
+        // Add "return 0" at the end
+        let mut body_stmts = stmts;
+        body_stmts.push(Spanned::new(
+            Stmt::Return(Some(Box::new(Spanned::new(Expr::Int(0), span)))),
+            span,
+        ));
+
+        let func = Function {
+            name: Spanned::new(fn_name.clone(), span),
+            generics: vec![],
+            params: vec![],
+            ret_type: Some(Spanned::new(
+                Type::Named {
+                    name: "i64".to_string(),
+                    generics: vec![],
+                },
+                span,
+            )),
+            body: FunctionBody::Block(body_stmts),
+            is_pub: false,
+            is_async: false,
+            // Synthetic test wrapper — exempt from totality gate, same as
+            // the synthetic main hoist above.
+            is_partial: true,
+            // Synthetic test wrapper — no declared effect, same rationale
+            // as the synthetic main hoist.
+            declared_effect: None,
+            attributes: vec![],
+            where_clause: vec![],
+        };
+
+        Ok((fn_name, Spanned::new(Item::Function(func), span)))
     }
 
     pub(crate) fn is_at_end(&self) -> bool {
@@ -810,6 +1136,27 @@ impl Parser {
             0..0
         }
     }
+}
+
+/// Convert a string to snake_case for test function naming.
+/// "name returns correct string" → "name_returns_correct_string"
+/// "HybridCost" → "hybridcost"
+fn to_snake_case(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    for c in s.chars() {
+        if c.is_alphanumeric() {
+            result.push(c.to_ascii_lowercase());
+        } else if (c == ' ' || c == '-' || c == '_') && !result.is_empty() && !result.ends_with('_')
+        {
+            result.push('_');
+        }
+        // Skip other chars (punctuation, etc.)
+    }
+    // Remove trailing underscore
+    while result.ends_with('_') {
+        result.pop();
+    }
+    result
 }
 
 /// Parses Vais source code into an Abstract Syntax Tree.
@@ -876,7 +1223,7 @@ pub fn parse_with_cfg(
 ///
 /// # Returns
 ///
-/// A tuple of (Module, Vec<ParseError>) containing the parsed AST
+/// A tuple of `(Module, Vec<ParseError>)` containing the parsed AST
 /// (with Error nodes for problematic sections) and all collected errors.
 ///
 /// # Examples
@@ -913,6 +1260,7 @@ pub fn parse_with_recovery(source: &str) -> (Module, Vec<ParseError>) {
     };
 
     let mut parser = Parser::new_with_recovery(tokens);
+    parser.newline_positions = build_newline_positions(source);
     parser.source = source.to_string();
     parser.parse_module_with_recovery()
 }

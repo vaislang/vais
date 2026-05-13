@@ -147,55 +147,7 @@ impl Parser {
 
         let name = self.parse_ident()?;
 
-        // Check for HKT pattern: Name<_> or Name<_, _>
-        if self.check(&Token::Lt) {
-            // Save position to backtrack if this isn't actually HKT
-            let saved_pos = self.save_position();
-
-            self.advance(); // consume '<'
-
-            // Check if first token inside is '_' (underscore identifier)
-            let mut arity = 0usize;
-            let mut is_hkt = false;
-
-            if self.check_ident("_") {
-                arity = 1;
-                self.advance(); // consume '_'
-
-                // Count additional underscore parameters: <_, _, _>
-                // Arity is capped at 32 to prevent excessive memory usage
-                const MAX_HKT_ARITY: usize = 32;
-                while self.check(&Token::Comma) && arity < MAX_HKT_ARITY {
-                    self.advance(); // consume ','
-                    if self.check_ident("_") {
-                        arity += 1;
-                        self.advance(); // consume '_'
-                    } else {
-                        // Not a valid HKT pattern — backtrack
-                        break;
-                    }
-                }
-
-                if self.check(&Token::Gt) {
-                    self.advance(); // consume '>'
-                    is_hkt = true;
-                }
-            }
-
-            if is_hkt {
-                // Parse optional bounds: F<_>: Functor
-                let bounds = if self.check(&Token::Colon) {
-                    self.advance();
-                    self.parse_trait_bounds()?
-                } else {
-                    Vec::new()
-                };
-                return Ok(GenericParam::new_higher_kinded(name, arity, bounds));
-            }
-
-            // Not HKT — restore position and fall through to normal parsing
-            self.restore_position(saved_pos);
-        }
+        // Higher-kinded type parameters (F<_>, F<_, _>) were removed in ROADMAP #18.
 
         let bounds = if self.check(&Token::Colon) {
             self.advance();
@@ -353,7 +305,9 @@ impl Parser {
             }
 
             // Handle &self and &mut self (or &~ self)
+            // Save position so we can restore if & is not followed by [mut] self
             if self.check(&Token::Amp) {
+                let saved_pos = self.pos;
                 self.advance();
                 let is_self_mut = self.check(&Token::Mut) || self.check(&Token::Tilde);
                 if is_self_mut {
@@ -394,6 +348,8 @@ impl Parser {
                     }
                     continue;
                 }
+                // & not followed by [mut] self — restore position
+                self.pos = saved_pos;
             }
 
             let name = self.parse_ident()?;
@@ -449,6 +405,13 @@ impl Parser {
 
     /// Parse type
     pub(crate) fn parse_type(&mut self) -> ParseResult<Spanned<Type>> {
+        self.enter_depth()?;
+        let result = self.parse_type_inner();
+        self.exit_depth();
+        result
+    }
+
+    fn parse_type_inner(&mut self) -> ParseResult<Spanned<Type>> {
         let start = self.current_span().start;
 
         let base_type = self.parse_base_type()?;
@@ -498,6 +461,24 @@ impl Parser {
                 } else {
                     Type::Tuple(types)
                 }
+            }
+        } else if self.check(&Token::Pipe) {
+            // Closure type: `|T1, T2| -> U` — equivalent to `(T1, T2) -> U`.
+            self.advance();
+            let mut types = Vec::new();
+            if !self.check(&Token::Pipe) {
+                types.push(self.parse_type()?);
+                while self.check(&Token::Comma) {
+                    self.advance();
+                    types.push(self.parse_type()?);
+                }
+            }
+            self.expect(&Token::Pipe)?;
+            self.expect(&Token::Arrow)?;
+            let ret = self.parse_type()?;
+            Type::Fn {
+                params: types,
+                ret: Box::new(ret),
             }
         } else if self.check(&Token::LBracket) {
             let lbracket_span = self.current_span();
@@ -577,13 +558,13 @@ impl Parser {
             let generics = if self.check(&Token::Lt) {
                 self.advance();
                 let mut generics = Vec::new();
-                while !self.check(&Token::Gt) && !self.is_at_end() {
+                while !self.check_gt() && !self.is_at_end() {
                     generics.push(self.parse_type()?);
-                    if !self.check(&Token::Gt) {
+                    if !self.check_gt() {
                         self.expect(&Token::Comma)?;
                     }
                 }
-                self.expect(&Token::Gt)?;
+                self.consume_gt()?;
                 generics
             } else {
                 Vec::new()
@@ -602,11 +583,6 @@ impl Parser {
             self.advance();
             let inner = self.parse_base_type()?;
             Type::Affine(Box::new(inner))
-        } else if self.check(&Token::Impl) {
-            // Existential type: X Trait or X Trait + Trait2 (impl Trait)
-            self.advance();
-            let bounds = self.parse_trait_bounds()?;
-            Type::ImplTrait { bounds }
         } else if self.check(&Token::LBrace) {
             // Dependent type (refinement type): {x: T | predicate}
             self.advance();
@@ -636,13 +612,13 @@ impl Parser {
             let generics = if self.check(&Token::Lt) {
                 self.advance();
                 let mut generics = Vec::new();
-                while !self.check(&Token::Gt) && !self.is_at_end() {
+                while !self.check_gt() && !self.is_at_end() {
                     generics.push(self.parse_type()?);
-                    if !self.check(&Token::Gt) {
+                    if !self.check_gt() {
                         self.expect(&Token::Comma)?;
                     }
                 }
-                self.expect(&Token::Gt)?;
+                self.consume_gt()?;
                 generics
             } else {
                 Vec::new()
@@ -662,13 +638,13 @@ impl Parser {
             let assoc_generics = if self.check(&Token::Lt) {
                 self.advance();
                 let mut generics = Vec::new();
-                while !self.check(&Token::Gt) && !self.is_at_end() {
+                while !self.check_gt() && !self.is_at_end() {
                     generics.push(self.parse_type()?);
-                    if !self.check(&Token::Gt) {
+                    if !self.check_gt() {
                         self.expect(&Token::Comma)?;
                     }
                 }
-                self.expect(&Token::Gt)?;
+                self.consume_gt()?;
                 generics
             } else {
                 Vec::new()
@@ -742,6 +718,13 @@ impl Parser {
             Token::Continue => "C",
             Token::Use => "U",
             Token::Pub => "P",
+            Token::Global => "G",
+            Token::Extern => "N",
+            Token::Union => "O",
+            Token::Trait => "W",
+            Token::Impl => "X",
+            Token::Await => "Y",
+            Token::Defer => "D",
             _ => {
                 return Err(ParseError::UnexpectedToken {
                     found: tok.token.clone(),

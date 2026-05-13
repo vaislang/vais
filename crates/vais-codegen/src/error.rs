@@ -1,8 +1,35 @@
 //! Code generation error types
 //!
 //! Defines error types for code generation failures.
+//!
+//! # Error type architecture
+//!
+//! This module provides two error types with a clear separation of concerns:
+//!
+//! - **[`CodegenError`]**: The "inner" error type used throughout the codegen
+//!   pipeline. It carries the error variant and message but no source location.
+//!   All internal codegen functions return `CodegenResult<T> = Result<T, CodegenError>`.
+//!
+//! - **[`SpannedCodegenError`]**: The "outer" error type used at the boundary
+//!   between codegen and the compiler driver. It wraps a `CodegenError` with
+//!   an optional [`Span`] for source-location diagnostics.
+//!
+//! This two-layer design avoids threading `Span` through every internal codegen
+//! function (which would be pervasive and noisy), while still providing precise
+//! error locations when reporting to users. The [`WithSpan`] extension trait
+//! makes span attachment ergonomic at boundary call sites.
+//!
+//! # Span support
+//!
+//! `CodegenError` can be paired with source location information via
+//! [`SpannedCodegenError`].  The internal codegen pipeline continues to use
+//! `CodegenResult<T> = Result<T, CodegenError>` without any changes.
+//! Span attachment happens at the boundary (e.g., in the expression
+//! dispatcher) using [`CodegenError::with_span`] or the [`WithSpan`]
+//! extension trait.
 
 use thiserror::Error;
+use vais_ast::Span;
 
 /// Error type for code generation failures.
 ///
@@ -35,7 +62,7 @@ pub enum CodegenError {
     RecursionLimitExceeded(String),
 
     /// Internal compiler error: a type that should have been resolved before codegen
-    /// (e.g., generic, associated type, ImplTrait) was not resolved.
+    /// (e.g., generic, associated type) was not resolved.
     #[error("ICE: {0}")]
     InternalError(String),
 }
@@ -87,10 +114,222 @@ impl CodegenError {
             }
         }
     }
+
+    /// Attach a source span to this error, producing a [`SpannedCodegenError`].
+    pub fn with_span(self, span: Span) -> SpannedCodegenError {
+        SpannedCodegenError {
+            error: self,
+            span: Some(span),
+        }
+    }
+
+    /// Get the error message (the inner string payload)
+    pub fn message(&self) -> &str {
+        match self {
+            CodegenError::UndefinedVar(s)
+            | CodegenError::UndefinedFunction(s)
+            | CodegenError::TypeError(s)
+            | CodegenError::LlvmError(s)
+            | CodegenError::Unsupported(s)
+            | CodegenError::RecursionLimitExceeded(s)
+            | CodegenError::InternalError(s) => s,
+        }
+    }
+
+    /// Get the error title (without the inner payload)
+    pub fn title(&self) -> &'static str {
+        match self {
+            CodegenError::UndefinedVar(_) => "Undefined variable",
+            CodegenError::UndefinedFunction(_) => "Undefined function",
+            CodegenError::TypeError(_) => "Type error",
+            CodegenError::LlvmError(_) => "LLVM error",
+            CodegenError::Unsupported(_) => "Unsupported feature",
+            CodegenError::RecursionLimitExceeded(_) => "Recursion depth limit exceeded",
+            CodegenError::InternalError(_) => "Internal compiler error",
+        }
+    }
 }
 
 /// Result type for code generation operations
 pub type CodegenResult<T> = Result<T, CodegenError>;
+
+/// A [`CodegenError`] paired with an optional source [`Span`].
+///
+/// Used at the boundary between codegen and the compiler driver to
+/// provide source-location diagnostics.  Internal codegen functions
+/// continue to return plain `CodegenResult<T>`.
+#[derive(Debug, Error)]
+#[error("{error}")]
+pub struct SpannedCodegenError {
+    /// The underlying codegen error
+    pub error: CodegenError,
+    /// Optional source location
+    pub span: Option<Span>,
+}
+
+impl SpannedCodegenError {
+    /// Create a spanned error with a known span.
+    pub fn new(error: CodegenError, span: Span) -> Self {
+        Self {
+            error,
+            span: Some(span),
+        }
+    }
+
+    /// Create a spanned error without span (for backward compatibility).
+    pub fn without_span(error: CodegenError) -> Self {
+        Self { error, span: None }
+    }
+
+    /// Delegate to the underlying error code.
+    pub fn error_code(&self) -> &str {
+        self.error.error_code()
+    }
+
+    /// Delegate to the underlying help message.
+    pub fn help(&self) -> Option<String> {
+        self.error.help()
+    }
+
+    /// Delegate to the underlying title.
+    pub fn title(&self) -> &'static str {
+        self.error.title()
+    }
+
+    /// Delegate to the underlying message.
+    pub fn message(&self) -> &str {
+        self.error.message()
+    }
+}
+
+impl From<CodegenError> for SpannedCodegenError {
+    fn from(error: CodegenError) -> Self {
+        SpannedCodegenError { error, span: None }
+    }
+}
+
+/// Structured codegen warning emitted during code generation.
+///
+/// Unlike [`CodegenError`] which halts compilation, warnings are collected
+/// and can be inspected after codegen completes. They signal situations
+/// where the compiler made a best-effort decision (e.g., i64 fallback for
+/// an unresolved generic parameter) that may produce suboptimal code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CodegenWarning {
+    /// A generic type parameter was not resolved via monomorphization
+    /// and fell back to `i64`. This is expected for un-specialized
+    /// fallback versions of generic functions but may indicate a
+    /// missing instantiation in other contexts.
+    GenericFallback {
+        /// Name of the generic parameter (e.g., "T")
+        param: String,
+        /// The function or context where the fallback occurred
+        context: String,
+    },
+
+    /// An associated type could not be resolved and fell back to `i64`.
+    AssociatedTypeFallback {
+        /// The associated type name (e.g., "Output")
+        assoc_name: String,
+        /// The base type on which the associated type was referenced
+        base_type: String,
+    },
+
+    /// A generic function template had no concrete instantiations
+    /// recorded by the type checker. A fallback i64 version was
+    /// generated for backward compatibility.
+    UninstantiatedGeneric {
+        /// Function name
+        function_name: String,
+        /// Generic parameter names
+        params: Vec<String>,
+    },
+
+    /// An ICE-level type (Var, Unknown, Lifetime) reached codegen and fell
+    /// back to i64.
+    UnresolvedTypeFallback {
+        /// Description of the type that was unresolved
+        type_desc: String,
+        /// The codegen backend where it occurred ("text" or "inkwell")
+        backend: String,
+    },
+}
+
+impl std::fmt::Display for CodegenWarning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CodegenWarning::GenericFallback { param, context } => {
+                write!(
+                    f,
+                    "generic parameter '{}' not monomorphized in '{}' — using i64 fallback",
+                    param, context
+                )
+            }
+            CodegenWarning::AssociatedTypeFallback {
+                assoc_name,
+                base_type,
+            } => {
+                write!(
+                    f,
+                    "unresolved associated type '{}' on '{}' — using i64 fallback",
+                    assoc_name, base_type
+                )
+            }
+            CodegenWarning::UninstantiatedGeneric {
+                function_name,
+                params,
+            } => {
+                write!(
+                    f,
+                    "generic function '{}' has no concrete instantiations (params: {}) — generating i64 fallback version",
+                    function_name,
+                    params.join(", ")
+                )
+            }
+            CodegenWarning::UnresolvedTypeFallback { type_desc, backend } => {
+                write!(
+                    f,
+                    "[ICE] unresolved {} in {} codegen — using i64 fallback",
+                    type_desc, backend
+                )
+            }
+        }
+    }
+}
+
+/// Extension trait for attaching span information to a `CodegenResult`.
+///
+/// # Example
+/// ```ignore
+/// use vais_codegen::{CodegenError, CodegenResult, WithSpan};
+/// use vais_ast::Span;
+///
+/// fn example(span: Span) -> CodegenResult<()> {
+///     Err(CodegenError::UndefinedVar("x".into())).with_span(span)
+/// }
+/// ```
+pub trait WithSpan<T> {
+    /// Attach a span to the error inside this `Result`, converting it to
+    /// `Result<T, SpannedCodegenError>`.
+    fn with_span(self, span: Span) -> Result<T, SpannedCodegenError>;
+}
+
+impl<T> WithSpan<T> for CodegenResult<T> {
+    fn with_span(self, span: Span) -> Result<T, SpannedCodegenError> {
+        self.map_err(|e| e.with_span(span))
+    }
+}
+
+impl<T> WithSpan<T> for Result<T, SpannedCodegenError> {
+    fn with_span(self, span: Span) -> Result<T, SpannedCodegenError> {
+        self.map_err(|mut e| {
+            if e.span.is_none() {
+                e.span = Some(span);
+            }
+            e
+        })
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -124,5 +363,292 @@ mod tests {
         let codes: Vec<String> = errors.iter().map(|e| e.error_code().to_string()).collect();
         let unique: std::collections::HashSet<String> = codes.iter().cloned().collect();
         assert_eq!(codes.len(), unique.len(), "All error codes must be unique");
+    }
+
+    // ========== Error Display ==========
+
+    #[test]
+    fn test_error_display() {
+        assert_eq!(
+            CodegenError::UndefinedVar("x".to_string()).to_string(),
+            "Undefined variable: x"
+        );
+        assert_eq!(
+            CodegenError::UndefinedFunction("foo".to_string()).to_string(),
+            "Undefined function: foo"
+        );
+        assert_eq!(
+            CodegenError::TypeError("mismatch".to_string()).to_string(),
+            "Type error: mismatch"
+        );
+        assert_eq!(
+            CodegenError::LlvmError("segfault".to_string()).to_string(),
+            "LLVM error: segfault"
+        );
+        assert_eq!(
+            CodegenError::Unsupported("async".to_string()).to_string(),
+            "Unsupported feature: async"
+        );
+        assert_eq!(
+            CodegenError::RecursionLimitExceeded("deep".to_string()).to_string(),
+            "Recursion depth limit exceeded: deep"
+        );
+        assert_eq!(
+            CodegenError::InternalError("ICE".to_string()).to_string(),
+            "ICE: ICE"
+        );
+    }
+
+    // ========== Error Codes ==========
+
+    #[test]
+    fn test_error_code_values() {
+        assert_eq!(CodegenError::UndefinedVar("".into()).error_code(), "C001");
+        assert_eq!(
+            CodegenError::UndefinedFunction("".into()).error_code(),
+            "C002"
+        );
+        assert_eq!(CodegenError::TypeError("".into()).error_code(), "C003");
+        assert_eq!(CodegenError::LlvmError("".into()).error_code(), "C004");
+        assert_eq!(CodegenError::Unsupported("".into()).error_code(), "C005");
+        assert_eq!(
+            CodegenError::RecursionLimitExceeded("".into()).error_code(),
+            "C006"
+        );
+        assert_eq!(CodegenError::InternalError("".into()).error_code(), "C007");
+    }
+
+    // ========== Help messages ==========
+
+    #[test]
+    fn test_help_undefined_var() {
+        let err = CodegenError::UndefinedVar("x".to_string());
+        let help = err.help().unwrap();
+        assert!(help.contains("defined before use"));
+    }
+
+    #[test]
+    fn test_help_undefined_var_with_suggestion() {
+        let err = CodegenError::UndefinedVar("Did you mean 'y'?".to_string());
+        assert!(err.help().is_none());
+    }
+
+    #[test]
+    fn test_help_undefined_function() {
+        let err = CodegenError::UndefinedFunction("foo".to_string());
+        let help = err.help().unwrap();
+        assert!(help.contains("defined before calling"));
+    }
+
+    #[test]
+    fn test_help_undefined_function_with_suggestion() {
+        let err = CodegenError::UndefinedFunction("Did you mean 'bar'?".to_string());
+        assert!(err.help().is_none());
+    }
+
+    #[test]
+    fn test_help_type_error() {
+        let err = CodegenError::TypeError("mismatch".to_string());
+        let help = err.help().unwrap();
+        assert!(help.contains("compatible types"));
+    }
+
+    #[test]
+    fn test_help_unsupported() {
+        let err = CodegenError::Unsupported("async generators".to_string());
+        let help = err.help().unwrap();
+        assert!(help.contains("async generators"));
+    }
+
+    #[test]
+    fn test_help_recursion_limit() {
+        let err = CodegenError::RecursionLimitExceeded("deep nesting".to_string());
+        let help = err.help().unwrap();
+        assert!(help.contains("reducing nesting"));
+    }
+
+    #[test]
+    fn test_help_llvm_error() {
+        let err = CodegenError::LlvmError("crash".to_string());
+        assert!(err.help().is_none());
+    }
+
+    // ========== Span support ==========
+
+    #[test]
+    fn test_with_span() {
+        let err = CodegenError::UndefinedVar("x".to_string());
+        let spanned = err.with_span(Span::new(10, 11));
+        assert_eq!(spanned.span, Some(Span::new(10, 11)));
+        assert_eq!(spanned.error_code(), "C001");
+        assert_eq!(spanned.title(), "Undefined variable");
+        assert_eq!(spanned.message(), "x");
+    }
+
+    #[test]
+    fn test_spanned_error_display() {
+        let err = CodegenError::TypeError("mismatch".to_string());
+        let spanned = SpannedCodegenError::new(err, Span::new(5, 20));
+        assert_eq!(spanned.to_string(), "Type error: mismatch");
+    }
+
+    #[test]
+    fn test_spanned_error_without_span() {
+        let err = CodegenError::LlvmError("oops".to_string());
+        let spanned = SpannedCodegenError::without_span(err);
+        assert!(spanned.span.is_none());
+        assert_eq!(spanned.error_code(), "C004");
+    }
+
+    #[test]
+    fn test_from_codegen_error() {
+        let err = CodegenError::Unsupported("feature".to_string());
+        let spanned: SpannedCodegenError = err.into();
+        assert!(spanned.span.is_none());
+        assert_eq!(spanned.error_code(), "C005");
+    }
+
+    #[test]
+    fn test_with_span_on_result() {
+        let result: CodegenResult<()> = Err(CodegenError::UndefinedFunction("foo".to_string()));
+        let spanned_result = result.with_span(Span::new(0, 3));
+        let err = spanned_result.unwrap_err();
+        assert_eq!(err.span, Some(Span::new(0, 3)));
+    }
+
+    #[test]
+    fn test_with_span_preserves_existing_span() {
+        let err =
+            SpannedCodegenError::new(CodegenError::TypeError("t".to_string()), Span::new(10, 20));
+        let result: Result<(), SpannedCodegenError> = Err(err);
+        let spanned_result = result.with_span(Span::new(0, 5));
+        let err = spanned_result.unwrap_err();
+        // Should preserve the original span (10, 20), not overwrite with (0, 5)
+        assert_eq!(err.span, Some(Span::new(10, 20)));
+    }
+
+    #[test]
+    fn test_with_span_on_ok_is_noop() {
+        let result: CodegenResult<i32> = Ok(42);
+        let spanned = result.with_span(Span::new(0, 1));
+        assert_eq!(spanned.unwrap(), 42);
+    }
+
+    #[test]
+    fn test_message_method() {
+        assert_eq!(CodegenError::UndefinedVar("x".into()).message(), "x");
+        assert_eq!(CodegenError::UndefinedFunction("f".into()).message(), "f");
+        assert_eq!(CodegenError::TypeError("t".into()).message(), "t");
+        assert_eq!(CodegenError::LlvmError("l".into()).message(), "l");
+        assert_eq!(CodegenError::Unsupported("u".into()).message(), "u");
+        assert_eq!(
+            CodegenError::RecursionLimitExceeded("r".into()).message(),
+            "r"
+        );
+        assert_eq!(CodegenError::InternalError("i".into()).message(), "i");
+    }
+
+    #[test]
+    fn test_title_method() {
+        assert_eq!(
+            CodegenError::UndefinedVar("".into()).title(),
+            "Undefined variable"
+        );
+        assert_eq!(
+            CodegenError::UndefinedFunction("".into()).title(),
+            "Undefined function"
+        );
+        assert_eq!(CodegenError::TypeError("".into()).title(), "Type error");
+        assert_eq!(CodegenError::LlvmError("".into()).title(), "LLVM error");
+        assert_eq!(
+            CodegenError::Unsupported("".into()).title(),
+            "Unsupported feature"
+        );
+        assert_eq!(
+            CodegenError::RecursionLimitExceeded("".into()).title(),
+            "Recursion depth limit exceeded"
+        );
+        assert_eq!(
+            CodegenError::InternalError("".into()).title(),
+            "Internal compiler error"
+        );
+    }
+
+    // ========== CodegenWarning ==========
+
+    #[test]
+    fn test_warning_generic_fallback_display() {
+        let w = CodegenWarning::GenericFallback {
+            param: "T".to_string(),
+            context: "identity".to_string(),
+        };
+        let msg = w.to_string();
+        assert!(msg.contains("'T'"));
+        assert!(msg.contains("'identity'"));
+        assert!(msg.contains("i64 fallback"));
+    }
+
+    #[test]
+    fn test_warning_associated_type_fallback_display() {
+        let w = CodegenWarning::AssociatedTypeFallback {
+            assoc_name: "Output".to_string(),
+            base_type: "MyStruct".to_string(),
+        };
+        let msg = w.to_string();
+        assert!(msg.contains("'Output'"));
+        assert!(msg.contains("'MyStruct'"));
+        assert!(msg.contains("i64 fallback"));
+    }
+
+    #[test]
+    fn test_warning_uninstantiated_generic_display() {
+        let w = CodegenWarning::UninstantiatedGeneric {
+            function_name: "foo".to_string(),
+            params: vec!["T".to_string(), "U".to_string()],
+        };
+        let msg = w.to_string();
+        assert!(msg.contains("'foo'"));
+        assert!(msg.contains("T, U"));
+        assert!(msg.contains("no concrete instantiations"));
+    }
+
+    #[test]
+    fn test_warning_unresolved_type_fallback_display() {
+        let w = CodegenWarning::UnresolvedTypeFallback {
+            type_desc: "bare lifetime".to_string(),
+            backend: "inkwell".to_string(),
+        };
+        let msg = w.to_string();
+        assert!(msg.contains("bare lifetime"));
+        assert!(msg.contains("inkwell"));
+        assert!(msg.contains("i64 fallback"));
+    }
+
+    #[test]
+    fn test_warning_equality() {
+        let w1 = CodegenWarning::GenericFallback {
+            param: "T".to_string(),
+            context: "foo".to_string(),
+        };
+        let w2 = CodegenWarning::GenericFallback {
+            param: "T".to_string(),
+            context: "foo".to_string(),
+        };
+        let w3 = CodegenWarning::GenericFallback {
+            param: "U".to_string(),
+            context: "foo".to_string(),
+        };
+        assert_eq!(w1, w2);
+        assert_ne!(w1, w3);
+    }
+
+    #[test]
+    fn test_warning_clone() {
+        let w = CodegenWarning::UninstantiatedGeneric {
+            function_name: "bar".to_string(),
+            params: vec!["A".to_string()],
+        };
+        let w2 = w.clone();
+        assert_eq!(w, w2);
     }
 }

@@ -926,6 +926,7 @@ F main() -> i64 {
 
 // ==================== Edge Cases & Regression ====================
 
+// REGRESSION: division by zero guard must not crash at runtime
 #[test]
 fn e2e_zero_division_guard() {
     let source = r#"

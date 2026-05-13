@@ -50,12 +50,37 @@ impl RateLimiter {
         // Remove expired timestamps
         timestamps.retain(|t| now.duration_since(*t) < window);
 
-        if timestamps.len() >= self.max_requests {
+        // Cleanup: remove the entry if it's empty after expiring old timestamps
+        let should_allow = if timestamps.len() >= self.max_requests {
             false
         } else {
             timestamps.push(now);
             true
+        };
+
+        // If this IP's timestamps are empty (either expired or rejected), remove the entry
+        if timestamps.is_empty() {
+            self.requests.remove(&ip);
         }
+
+        // Periodically clean up all empty entries (1% probability per request)
+        // This prevents unbounded growth from IPs that no longer make requests
+        if self.requests.len() > 100 && fastrand::u32(..100) == 0 {
+            self.cleanup();
+        }
+
+        should_allow
+    }
+
+    /// Remove all IP entries that have no active timestamps.
+    /// This prevents unbounded HashMap growth from IPs that no longer make requests.
+    fn cleanup(&mut self) {
+        let now = Instant::now();
+        let window = std::time::Duration::from_secs(self.window_secs);
+        self.requests.retain(|_, timestamps| {
+            timestamps.retain(|t| now.duration_since(*t) < window);
+            !timestamps.is_empty()
+        });
     }
 }
 

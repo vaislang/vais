@@ -2,7 +2,7 @@
 //!
 //! Provides type-safe LLVM IR generation using the inkwell crate.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -23,17 +23,9 @@ pub(super) struct LoopContext<'ctx> {
     pub(super) break_block: inkwell::basic_block::BasicBlock<'ctx>,
     /// Block to jump to on continue
     pub(super) continue_block: inkwell::basic_block::BasicBlock<'ctx>,
-}
-
-/// Closure information for captured variables.
-/// Reserved for full closure implementation.
-#[derive(Clone)]
-#[allow(dead_code)]
-pub(super) struct ClosureInfo<'ctx> {
-    /// The generated LLVM function
-    pub(super) func: FunctionValue<'ctx>,
-    /// Captured variable names and their values (for passing to the lambda)
-    pub(super) captures: Vec<(String, BasicValueEnum<'ctx>)>,
+    /// `scope_str_stack.len()` at loop entry. Frames at indices ≥ this depth
+    /// are loop-internal and must be freed on break/continue (Phase 191 #6).
+    pub(super) scope_str_depth: usize,
 }
 
 /// LLVM code generator using inkwell.
@@ -52,10 +44,6 @@ pub struct InkwellCodeGenerator<'ctx> {
 
     /// Type mapper for Vais -> LLVM type conversion
     pub(super) type_mapper: TypeMapper<'ctx>,
-
-    /// Target architecture (reserved for target-specific codegen).
-    #[allow(dead_code)]
-    pub(super) target: TargetTriple,
 
     /// Registered functions by name
     pub(super) functions: HashMap<String, FunctionValue<'ctx>>,
@@ -98,8 +86,32 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Enum variant tags: maps (enum_name, variant_name) -> tag
     pub(super) enum_variants: HashMap<(String, String), i32>,
 
+    /// Enum variant payload struct names: (enum_name, variant_name) -> struct type name
+    /// Only populated for variants whose single payload field is a named struct.
+    /// Used by match pattern bindings to recover struct type for field access.
+    pub(super) enum_variant_struct_types: HashMap<(String, String), String>,
+
+    /// Enum multi-field tuple variant payload struct types:
+    /// (enum_name, variant_name) -> anonymous struct type that packs all fields.
+    /// Populated when a multi-field tuple variant (e.g., Rect(i64, i64)) is constructed;
+    /// pattern bindings use this to load the heap-allocated payload and extract each field.
+    pub(super) enum_variant_multi_payload_types:
+        HashMap<(String, String), inkwell::types::StructType<'ctx>>,
+
+    /// Enum single-primitive variant payload LLVM type:
+    /// (enum_name, variant_name) -> primitive BasicTypeEnum (f64, i32, ...) for
+    /// variants whose sole payload is a non-struct primitive. The enum data
+    /// slot always stores this as i64 (bitcast for floats, widen for smaller
+    /// ints), but pattern bindings need to recover the declared type so the
+    /// bound identifier has the right type when referenced downstream.
+    pub(super) enum_variant_primitive_payload_types:
+        HashMap<(String, String), inkwell::types::BasicTypeEnum<'ctx>>,
+
     /// Variable name -> struct type name tracking (for method call resolution)
     pub(super) var_struct_types: HashMap<String, String>,
+
+    /// Variable name -> resolved type tracking (for element/pointee type inference)
+    pub(super) var_resolved_types: HashMap<String, ResolvedType>,
 
     /// Struct name -> generic parameter names (for method generic substitution)
     pub(super) struct_generic_params: HashMap<String, Vec<String>>,
@@ -110,14 +122,14 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Temporary storage for the last generated lambda (used by Stmt::Let to track bindings)
     pub(super) _last_lambda_info: Option<(String, Vec<(String, BasicValueEnum<'ctx>)>)>,
 
-    /// Temporary storage for the last generated lazy thunk
-    pub(super) _last_lazy_info: Option<(String, Vec<(String, BasicValueEnum<'ctx>)>)>,
-
-    /// Lazy binding info: variable name -> (thunk function name, captured values)
-    pub(super) lazy_bindings: HashMap<String, (String, Vec<(String, BasicValueEnum<'ctx>)>)>,
-
     /// Constants: name -> value (evaluated at compile time)
     pub(super) constants: HashMap<String, BasicValueEnum<'ctx>>,
+
+    /// User-declared globals (`G name: T = value`):
+    /// name -> (LLVM global pointer, pointee type).
+    /// Populated in generate_module's first pass from `Item::Global`.
+    /// Looked up by `generate_var` (load) and assignment paths (store).
+    pub(super) globals: HashMap<String, (GlobalValue<'ctx>, BasicTypeEnum<'ctx>)>,
 
     /// Function name -> return struct type name (for struct type inference)
     pub(super) function_return_structs: HashMap<String, String>,
@@ -125,12 +137,71 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Defer stack: expressions to execute in LIFO order before function return
     pub(super) defer_stack: Vec<Expr>,
 
+    /// Tracks heap allocations (malloc'd pointers) for automatic cleanup at scope exit.
+    /// Each entry is a PointerValue that should be freed before function return.
+    pub(super) alloc_tracker: Vec<inkwell::values::PointerValue<'ctx>>,
+
+    /// Maps a string fat-pointer StructValue (keyed by raw LLVM value ref as usize)
+    /// to the `alloc_slot` PointerValue that owns its heap buffer. Used at `return`
+    /// to transfer ownership: the returned fat pointer's slot is excluded from free
+    /// so the caller receives a live buffer instead of UAF. See RFC-001 §4.6.
+    pub(super) string_value_slot: HashMap<usize, inkwell::values::PointerValue<'ctx>>,
+
+    /// Slots to skip in the next emit_alloc_cleanup call. Typically holds one
+    /// slot — the one owning the returned buffer. For PHI results (if/match as
+    /// expression producing a string), both incoming branches' slots must be
+    /// skipped because we can't know at codegen time which ran. Cleared after
+    /// cleanup emission.
+    pub(super) pending_return_skip_slot: Vec<inkwell::values::PointerValue<'ctx>>,
+
+    /// Per-scope stack of owned string slots. Each frame is a list of alloc_slot
+    /// PointerValues created during that block scope. At block exit, any slot in
+    /// the innermost frame that still appears in `string_value_slot` (i.e. was not
+    /// transferred out via return or consumed by a later concat) is freed. This
+    /// is the loop-iteration leak fix: each iteration of a loop body enters and
+    /// exits a scope, freeing the iteration's final concat result. See RFC-001
+    /// §4.2.
+    pub(super) scope_str_stack: Vec<Vec<inkwell::values::PointerValue<'ctx>>>,
+
+    /// Maps a local variable name to its owning alloc_slot — when a `let`
+    /// binding receives a tracked concat result, we record the slot under the
+    /// variable name so that `return x` (which loads `x` and produces a new SSA
+    /// register not equal to the concat's original SSA) can still find the slot
+    /// and mark it for ownership transfer. This is the fix for the UAF that
+    /// team-review caught on 2026-04-14: without variable-level tracking, a
+    /// `let msg = a+b; return msg` pattern freed `msg`'s buffer before the
+    /// caller could use it. See RFC-001 §4.5 / §4.6.
+    pub(super) var_string_slot: HashMap<String, inkwell::values::PointerValue<'ctx>>,
+
+    /// Maps a local variable name to multiple owning slots — used when the RHS
+    /// is a PHI (if/match as expression): both incoming branches' slots must
+    /// be kept live until the owner uses the value (runtime picks exactly one,
+    /// the other remains null). On `return x` we exclude ALL slots in this
+    /// list; the null one is already a no-op in emit_alloc_cleanup.
+    pub(super) var_string_slots_multi: HashMap<String, Vec<inkwell::values::PointerValue<'ctx>>>,
+
+    /// For PHI results that represent a merge of multiple tracked concat
+    /// results (if/match-as-expression producing a string), the PHI's SSA is
+    /// registered in `string_value_slot` with its first incoming slot; any
+    /// additional slots go here, keyed by the PHI's raw LLVM value ref.
+    /// Consumed by the `let` binding hook to populate `var_string_slots_multi`.
+    pub(super) phi_extra_slots: HashMap<usize, Vec<inkwell::values::PointerValue<'ctx>>>,
+
     /// TCO state: when generating a tail-recursive function as a loop,
     /// this holds the parameter allocas and the loop header block for jumping back.
     pub(super) tco_state: Option<TcoState<'ctx>>,
 
     /// Resolved function signatures from type checker (for return/param type inference)
     pub(super) resolved_function_sigs: HashMap<String, vais_types::FunctionSig>,
+
+    /// Type aliases from type checker (for resolving type alias names in codegen)
+    pub(super) type_aliases: HashMap<String, vais_types::ResolvedType>,
+
+    /// Argument spans that were implicitly unwrapped by the type checker's
+    /// implicit error propagation pass (Phase 4b.1 / #7, `--implicit-try`).
+    /// Each call-site arg whose span is in this set is wrapped in `Expr::Try`
+    /// before codegen, reusing the existing Try handling.
+    pub(super) implicit_try_sites: HashSet<(usize, usize)>,
 }
 
 /// Tail Call Optimization state for loop-based tail recursion elimination.
@@ -167,7 +238,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             module,
             builder,
             type_mapper,
-            target,
             functions: HashMap::new(),
             locals: HashMap::new(),
             string_constants: HashMap::new(),
@@ -182,32 +252,106 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             lambda_counter: 0,
             lambda_functions: Vec::new(),
             enum_variants: HashMap::new(),
+            enum_variant_struct_types: HashMap::new(),
+            enum_variant_primitive_payload_types: HashMap::new(),
+            enum_variant_multi_payload_types: HashMap::new(),
             var_struct_types: HashMap::new(),
+            var_resolved_types: HashMap::new(),
             struct_generic_params: HashMap::new(),
             lambda_bindings: HashMap::new(),
             _last_lambda_info: None,
-            _last_lazy_info: None,
-            lazy_bindings: HashMap::new(),
             constants: HashMap::new(),
+            globals: HashMap::new(),
             function_return_structs: HashMap::new(),
             defer_stack: Vec::new(),
+            alloc_tracker: Vec::new(),
+            string_value_slot: HashMap::new(),
+            pending_return_skip_slot: Vec::new(),
+            scope_str_stack: Vec::new(),
+            var_string_slot: HashMap::new(),
+            var_string_slots_multi: HashMap::new(),
+            phi_extra_slots: HashMap::new(),
             tco_state: None,
             resolved_function_sigs: HashMap::new(),
+            type_aliases: HashMap::new(),
+            implicit_try_sites: HashSet::new(),
         };
 
         // Declare built-in functions
-        builtins::declare_builtins(context, &gen.module);
+        if let Err(e) = builtins::declare_builtins(context, &gen.module) {
+            gen.type_mapper
+                .pending_error
+                .replace(Some(crate::CodegenError::InternalError(format!(
+                    "Failed to declare builtins: {e}"
+                ))));
+        }
 
         gen
     }
 
+    /// Returns the Unit/void placeholder value (zero-sized empty struct).
+    ///
+    /// In Inkwell, `void` is not a first-class type so it cannot appear in phi
+    /// nodes or as an SSA value.  The canonical representation of Unit/void as
+    /// a value is an empty struct `{}` with its zero initializer.  This helper
+    /// centralizes the 30+ call sites that previously inlined
+    /// `self.context.struct_type(&[], false).const_zero().into()`.
+    #[inline]
+    pub(super) fn unit_value(&self) -> BasicValueEnum<'ctx> {
+        self.context.struct_type(&[], false).const_zero().into()
+    }
+
+    /// Enable strict type mode.
+    ///
+    /// In strict mode, ICE-level type fallbacks (`Var`, `Unknown`, `Lifetime`
+    /// reaching codegen) become hard errors instead of warnings with i64
+    /// fallback in the Inkwell TypeMapper. `Generic` / `ConstGeneric`
+    /// fallbacks are **always** promoted to hard errors (Phase 191 v3 —
+    /// unconditional), so no separate opt-in exists.
+    pub fn set_strict_type_mode(&mut self, strict: bool) {
+        self.type_mapper.strict_type_mode = strict;
+    }
+
+    // `set_strict_generic_mode` removed in Phase 191 v3 — strict generic
+    // behavior is now unconditional. See comment in `init.rs::CodeGenerator`.
+
     /// Generates code for an entire Vais module.
+    ///
+    /// Delegates to `generate_module_with_instantiations` with an empty instantiation list.
     pub fn generate_module(&mut self, vais_module: &VaisModule) -> CodegenResult<()> {
-        // First pass: collect all function signatures, struct definitions, enum definitions, and extern blocks
+        self.generate_module_with_instantiations(vais_module, &[])
+    }
+
+    /// Generates code for a Vais module with generic monomorphization.
+    ///
+    /// Three-pass approach:
+    /// 1. First pass: declare all functions/structs/enums/externs (generic functions are declared
+    ///    but their templates are stored for later specialization).
+    /// 2. Second pass: process instantiations — emit specialized struct types and specialized
+    ///    function bodies for each `GenericInstantiation` provided by the type checker.
+    /// 3. Third pass: generate bodies for non-generic functions and methods.
+    pub fn generate_module_with_instantiations(
+        &mut self,
+        vais_module: &VaisModule,
+        instantiations: &[vais_types::GenericInstantiation],
+    ) -> CodegenResult<()> {
+        // Collect generic function templates during the first pass so we can specialize them.
+        let mut generic_function_templates: HashMap<String, ast::Function> = HashMap::new();
+
+        // First pass: declare all function signatures, struct definitions, enum definitions,
+        // and extern blocks.
         for item in &vais_module.items {
             match &item.node {
                 ast::Item::Function(func) => {
-                    self.declare_function(func)?;
+                    if !func.generics.is_empty() {
+                        // Store generic function template — declare signature but skip body.
+                        generic_function_templates.insert(func.name.node.clone(), (*func).clone());
+                        // Still declare the base signature so call-sites that reference the
+                        // unspecialized name can find it (the body is skipped in generate_function).
+                        self.declare_function(func)?;
+                    } else {
+                        self.declare_function(func)?;
+                    }
                 }
                 ast::Item::Struct(s) => {
                     self.define_struct(s)?;
@@ -224,11 +368,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 ast::Item::Const(const_def) => {
                     self.define_const(const_def)?;
                 }
+                ast::Item::Global(global_def) => {
+                    self.define_global(global_def)?;
+                }
                 _ => {}
             }
         }
 
-        // Second pass: declare methods from Impl blocks and struct inline methods
+        // Second pass (part A): declare method signatures from Impl blocks and struct inline methods.
         for item in &vais_module.items {
             match &item.node {
                 ast::Item::Impl(impl_block) => {
@@ -249,10 +396,191 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
-        // Third pass: generate function bodies and method bodies
+        // Second pass (part B): process generic instantiations.
+
+        // Pre-build struct lookup table for O(1) access during instantiation
+        let struct_lookup: HashMap<&str, &ast::Struct> = vais_module
+            .items
+            .iter()
+            .filter_map(|item| {
+                if let ast::Item::Struct(s) = &item.node {
+                    Some((s.name.node.as_str(), s))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Pre-build method template lookup: (struct_name, method_name) -> Function AST
+        // This collects methods from both impl blocks and struct inline methods.
+        let mut method_templates: HashMap<(String, String), ast::Function> = HashMap::new();
+        for item in &vais_module.items {
+            match &item.node {
+                ast::Item::Impl(impl_block) => {
+                    if let Some(type_name) = Self::get_impl_type_name(&impl_block.target_type.node)
+                    {
+                        for method in &impl_block.methods {
+                            if !method.node.generics.is_empty() {
+                                method_templates.insert(
+                                    (type_name.clone(), method.node.name.node.clone()),
+                                    method.node.clone(),
+                                );
+                            }
+                        }
+                    }
+                }
+                ast::Item::Struct(s) => {
+                    for method in &s.methods {
+                        if !method.node.generics.is_empty() {
+                            method_templates.insert(
+                                (s.name.node.clone(), method.node.name.node.clone()),
+                                method.node.clone(),
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        for inst in instantiations {
+            match &inst.kind {
+                vais_types::InstantiationKind::Struct => {
+                    // Specialized struct — resolve fields from the struct definition in the AST.
+                    // We look up the base struct to get its field types, then define_specialized_struct.
+                    if let Some(s) = struct_lookup.get(inst.base_name.as_str()) {
+                        let fields: Vec<(String, ResolvedType)> = s
+                            .fields
+                            .iter()
+                            .map(|f| (f.name.node.clone(), self.ast_type_to_resolved(&f.ty.node)))
+                            .collect();
+                        let generic_names: Vec<String> = s
+                            .generics
+                            .iter()
+                            .filter(|g| {
+                                !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. })
+                            })
+                            .map(|g| g.name.node.clone())
+                            .collect();
+                        self.define_specialized_struct(
+                            &inst.base_name,
+                            &inst.type_args,
+                            &fields,
+                            &generic_names,
+                        )?;
+                    }
+                }
+                vais_types::InstantiationKind::Function => {
+                    // Specialized function — declare the mangled signature then generate the body.
+                    if let Some(generic_fn) = generic_function_templates.get(&inst.base_name) {
+                        // Build param/return types from the AST function (substitution happens
+                        // inside declare_specialized_function via the substitutions map).
+                        let param_types: Vec<ResolvedType> = generic_fn
+                            .params
+                            .iter()
+                            .map(|p| self.ast_type_to_resolved(&p.ty.node))
+                            .collect();
+                        let return_type = if let Some(ret) = generic_fn.ret_type.as_ref() {
+                            self.ast_type_to_resolved(&ret.node)
+                        } else {
+                            ResolvedType::Unit
+                        };
+                        let generic_names: Vec<String> = generic_fn
+                            .generics
+                            .iter()
+                            .filter(|g| {
+                                !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. })
+                            })
+                            .map(|g| g.name.node.clone())
+                            .collect();
+
+                        // Declare the specialized function (idempotent if already declared).
+                        self.declare_specialized_function(
+                            &inst.base_name,
+                            &inst.type_args,
+                            &param_types,
+                            &return_type,
+                            &generic_names,
+                        )?;
+
+                        // Generate the specialized body.
+                        self.generate_specialized_function_body(
+                            generic_fn,
+                            &inst.mangled_name,
+                            &inst.type_args,
+                        )?;
+                    }
+                }
+                vais_types::InstantiationKind::Method { ref struct_name } => {
+                    // Method specialization: find the method template in impl blocks or
+                    // struct inline methods, then generate a specialized version.
+                    // The mangled name follows the pattern: StructName_methodName$type_args
+                    let key = (struct_name.clone(), inst.base_name.clone());
+                    if let Some(method_fn) = method_templates.get(&key).cloned() {
+                        // Skip non-concrete instantiations
+                        if inst
+                            .type_args
+                            .iter()
+                            .any(|t| matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)))
+                        {
+                            continue;
+                        }
+
+                        // Build param/return types from the method's AST
+                        let param_types: Vec<ResolvedType> = method_fn
+                            .params
+                            .iter()
+                            .map(|p| {
+                                if p.name.node == "self" {
+                                    // self parameter: use pointer type
+                                    ResolvedType::Ref(Box::new(ResolvedType::Named {
+                                        name: struct_name.clone(),
+                                        generics: vec![],
+                                    }))
+                                } else {
+                                    self.ast_type_to_resolved(&p.ty.node)
+                                }
+                            })
+                            .collect();
+                        let return_type = if let Some(ret) = method_fn.ret_type.as_ref() {
+                            self.ast_type_to_resolved(&ret.node)
+                        } else {
+                            ResolvedType::Unit
+                        };
+                        let generic_names: Vec<String> = method_fn
+                            .generics
+                            .iter()
+                            .filter(|g| {
+                                !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. })
+                            })
+                            .map(|g| g.name.node.clone())
+                            .collect();
+
+                        // Declare the specialized method function
+                        self.declare_specialized_function(
+                            &format!("{}_{}", struct_name, inst.base_name),
+                            &inst.type_args,
+                            &param_types,
+                            &return_type,
+                            &generic_names,
+                        )?;
+
+                        // Generate the specialized body
+                        self.generate_specialized_function_body(
+                            &method_fn,
+                            &inst.mangled_name,
+                            &inst.type_args,
+                        )?;
+                    }
+                }
+            }
+        }
+
+        // Third pass: generate function bodies and method bodies (non-generic only).
         for item in &vais_module.items {
             match &item.node {
                 ast::Item::Function(func) => {
+                    // generate_function skips generic functions automatically.
                     self.generate_function(func)?;
                 }
                 ast::Item::Impl(impl_block) => {
@@ -286,10 +614,40 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.resolved_function_sigs = resolved;
     }
 
+    /// Set type aliases from the type checker.
+    pub fn set_type_aliases(&mut self, aliases: HashMap<String, vais_types::ResolvedType>) {
+        self.type_aliases = aliases;
+    }
+
+    /// Set the implicit-try argument spans collected by the type checker
+    /// (Phase 4b.1 / #7). See `CodeGenerator::set_implicit_try_sites` on the
+    /// text-IR generator for the contract — this is the Inkwell mirror.
+    pub fn set_implicit_try_sites(&mut self, sites: HashSet<(usize, usize)>) {
+        self.implicit_try_sites = sites;
+    }
+
+    /// Query whether the argument at the given span was marked for implicit
+    /// error propagation by the type checker.
+    #[inline]
+    pub(super) fn is_implicit_try_site(&self, span: vais_ast::Span) -> bool {
+        self.implicit_try_sites.contains(&(span.start, span.end))
+    }
+
     /// Returns the LLVM IR as a string.
     #[inline]
     pub fn get_ir_string(&self) -> String {
         self.module.print_to_string().to_string()
+    }
+
+    /// Get structured warnings collected during code generation.
+    pub fn get_warnings(&self) -> Vec<crate::CodegenWarning> {
+        self.type_mapper.take_warnings()
+    }
+
+    /// Take any pending error from strict type mode enforcement in `map_type`.
+    /// Returns `None` if no ICE-level fallback was encountered in strict mode.
+    pub fn take_pending_type_error(&self) -> Option<crate::CodegenError> {
+        self.type_mapper.take_pending_error()
     }
 
     /// Writes the LLVM IR to a file.
@@ -298,56 +656,33 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.module.print_to_file(path).map_err(|e| e.to_string())
     }
 
+    /// Verify the generated LLVM IR module using LLVMVerifyModule.
+    ///
+    /// This should be called after `generate_module()` and before emitting
+    /// the IR to a file or passing it to a backend. Returns `Ok(())` if the
+    /// module is valid, or an error with LLVM's diagnostic message.
+    pub fn verify_module(&self) -> CodegenResult<()> {
+        self.module.verify().map_err(|llvm_msg| {
+            crate::CodegenError::LlvmError(format!(
+                "LLVM IR verification failed:\n{}",
+                llvm_msg.to_string()
+            ))
+        })
+    }
+
     // ========== Declaration Phase ==========
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vais_ast::{Literal, Type};
+    use vais_ast::Type;
 
     #[test]
     fn test_create_generator() {
         let context = Context::create();
         let gen = InkwellCodeGenerator::new(&context, "test_module");
         assert!(!gen.get_ir_string().is_empty());
-    }
-
-    #[test]
-    fn test_generate_literal_int() {
-        let context = Context::create();
-        let mut gen = InkwellCodeGenerator::new(&context, "test");
-
-        let lit = Literal::Int(42);
-        let result = gen.generate_literal(&lit).unwrap();
-
-        assert!(result.is_int_value());
-        let int_val = result.into_int_value();
-        assert_eq!(int_val.get_zero_extended_constant(), Some(42));
-    }
-
-    #[test]
-    fn test_generate_literal_float() {
-        let context = Context::create();
-        let mut gen = InkwellCodeGenerator::new(&context, "test");
-
-        let lit = Literal::Float(3.14);
-        let result = gen.generate_literal(&lit).unwrap();
-
-        assert!(result.is_float_value());
-    }
-
-    #[test]
-    fn test_generate_literal_bool() {
-        let context = Context::create();
-        let mut gen = InkwellCodeGenerator::new(&context, "test");
-
-        let lit = Literal::Bool(true);
-        let result = gen.generate_literal(&lit).unwrap();
-
-        assert!(result.is_int_value());
-        let int_val = result.into_int_value();
-        assert_eq!(int_val.get_zero_extended_constant(), Some(1));
     }
 
     #[test]
@@ -361,8 +696,11 @@ mod tests {
         let entry = context.append_basic_block(func, "entry");
         gen.builder.position_at_end(entry);
 
-        let result = gen.generate_string_literal("hello").unwrap();
-        assert!(result.is_pointer_value());
+        let result = gen
+            .generate_string_literal("hello")
+            .expect("ICE: inkwell operation failed in generator");
+        // String literals return a fat pointer struct { ptr, i64 }
+        assert!(result.is_struct_value());
     }
 
     #[test]

@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/async_reactor
+use std/async_reactor
 ```
 
 ## Constants
@@ -48,7 +48,7 @@ U std/async_reactor
 A single I/O event.
 
 ```vais
-S ReactorEvent { fd: i64, filter: i64 }
+struct ReactorEvent { fd: i64, filter: i64 }
 ```
 
 | Method | Signature | Description |
@@ -63,7 +63,7 @@ S ReactorEvent { fd: i64, filter: i64 }
 Tracks what a task is waiting on.
 
 ```vais
-S ReactorSource { source_type: i64, fd: i64, task_ptr: i64, deadline_ms: i64, next: i64 }
+struct ReactorSource { source_type: i64, fd: i64, task_ptr: i64, deadline_ms: i64, next: i64 }
 ```
 
 ### Reactor
@@ -71,7 +71,7 @@ S ReactorSource { source_type: i64, fd: i64, task_ptr: i64, deadline_ms: i64, ne
 Platform-independent event loop.
 
 ```vais
-S Reactor {
+struct Reactor {
     backend_fd: i64,
     platform: i64,
     waker_read_fd: i64,
@@ -127,9 +127,9 @@ These functions operate on the global reactor instance.
 ### Using a local Reactor instance
 
 ```vais
-U std/async_reactor
+use std/async_reactor
 
-F main() -> i64 {
+fn main() -> i64 {
     reactor := Reactor::new()
     platform := reactor.get_platform()  # 1, 2, or 3
 
@@ -147,9 +147,9 @@ F main() -> i64 {
 ### Using the global reactor
 
 ```vais
-U std/async_reactor
+use std/async_reactor
 
-F main() -> i64 {
+fn main() -> i64 {
     reactor_register_read(socket_fd, task_ptr)
 
     n := reactor_poll(1000)

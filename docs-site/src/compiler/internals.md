@@ -115,7 +115,8 @@ pub enum Token {
 - `?` - try operator (Result/Option)
 - `!` - unwrap operator
 - `|>` - pipe operator
-- `~` - 문자열 보간 (예: `~{expr}`)
+- `~` - 비트 NOT
+- `{expr}` in strings - 문자열 보간
 
 ### 성능 특성
 
@@ -296,12 +297,12 @@ pub fn unify(&mut self, a: &ResolvedType, b: &ResolvedType)
 Vais는 enum 기반 에러 처리를 사용합니다:
 
 ```vais
-E Result<T, E> {
+enum Result<T, E> {
     Ok(T),
     Err(E),
 }
 
-E Option<T> {
+enum Option<T> {
     Some(T),
     None,
 }

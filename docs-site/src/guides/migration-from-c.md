@@ -115,11 +115,11 @@ void print_message(const char* msg) {
 
 ```vais
 # Vais
-F add(a: i32, b: i32) -> i32 = a + b
+fn add(a: i32, b: i32) -> i32 = a + b
 
-F square(x: f64) -> f64 = x * x
+fn square(x: f64) -> f64 = x * x
 
-F print_message(msg: str) {
+fn print_message(msg: str) {
     println(msg)
 }
 ```
@@ -146,17 +146,17 @@ int main() {
 
 ```vais
 # Vais
-T BinaryOp = F(i32, i32) -> i32
+type BinaryOp = fn(i32, i32) -> i32
 
-F apply(a: i32, b: i32, op: BinaryOp) -> i32 {
-    R op(a, b)
+fn apply(a: i32, b: i32, op: BinaryOp) -> i32 {
+    return op(a, b)
 }
 
-F multiply(a: i32, b: i32) -> i32 = a * b
+fn multiply(a: i32, b: i32) -> i32 = a * b
 
-F main() -> i32 {
+fn main() -> i32 {
     result := apply(3, 4, multiply)
-    R result
+    return result
 }
 ```
 
@@ -186,18 +186,18 @@ typedef struct {
 
 ```vais
 # Vais
-S Point {
+struct Point {
     x: f64,
     y: f64,
 }
 
-S Rectangle {
+struct Rectangle {
     top_left: Point,
     width: f64,
     height: f64,
 }
 
-S Color {
+struct Color {
     r: i32,
     g: i32,
     b: i32,
@@ -225,23 +225,23 @@ struct Point point_new(double x, double y) {
 
 ```vais
 # Vais
-S Point {
+struct Point {
     x: f64,
     y: f64,
 }
 
-X Point {
-    F new(x: f64, y: f64) -> Point {
+impl Point {
+    fn new(x: f64, y: f64) -> Point {
         Point { x, y }
     }
 
-    F distance(&self) -> f64 {
+    fn distance(&self) -> f64 {
         (self.x * self.x + self.y * self.y).sqrt()
     }
 }
 
 # 사용
-F main() {
+fn main() {
     p := Point::new(3.0, 4.0)
     d := p.distance()    # 5.0
 }
@@ -269,13 +269,13 @@ int main() {
 
 ```vais
 # Vais
-F swap(a: &mut i32, b: &mut i32) {
+fn swap(a: &mut i32, b: &mut i32) {
     temp := *a
     *a = *b
     *b = temp
 }
 
-F main() {
+fn main() {
     x := mut 10
     y := mut 20
     swap(&mut x, &mut y)
@@ -309,7 +309,7 @@ void use_array() {
 
 ```vais
 # Vais
-F allocate_array(n: i64) -> Vec<i32> {
+fn allocate_array(n: i64) -> Vec<i32> {
     arr := Vec::new()
     i := mut 0
     L {
@@ -317,10 +317,10 @@ F allocate_array(n: i64) -> Vec<i32> {
         arr.push(i as i32)
         i = i + 1
     }
-    R arr
+    return arr
 }
 
-F use_array() {
+fn use_array() {
     arr := allocate_array(10)
     # use arr...
     # 자동으로 메모리 해제됨
@@ -365,20 +365,20 @@ int read_number(const char* path) {
 
 ```vais
 # Vais
-U std/io
+use std/io
 
-F open_file(path: str) -> Result<File, str> {
-    M File::open(path) {
+fn open_file(path: str) -> Result<File, str> {
+    match File::open(path) {
         Ok(f) => Ok(f),
         Err(e) => Err("Failed to open file: " + e),
     }
 }
 
-F read_number(path: str) -> Result<i32, str> {
+fn read_number(path: str) -> Result<i32, str> {
     f := open_file(path)?
     line := f.read_line()?
     number := parse_i32(line)?
-    R Ok(number)
+    return Ok(number)
 }
 ```
 
@@ -418,22 +418,22 @@ public:
 
 ```vais
 # Vais
-F max<T: Ord>(a: T, b: T) -> T {
-    I a > b { a } E { b }
+fn max<T: Ord>(a: T, b: T) -> T {
+    I a > b { a } else { b }
 }
 
-S Vec<T> {
-    data: *mut T,
+struct Vec<T> {
+    data: *mut type,
     size: i64,
     capacity: i64,
 }
 
-X Vec<T> {
-    F new() -> Vec<T> {
+impl Vec<T> {
+    fn new() -> Vec<T> {
         Vec { data: null(), size: 0, capacity: 0 }
     }
 
-    F push(&mut self, value: T) {
+    fn push(&mut self, value: T) {
         I self.size >= self.capacity {
             self.resize()
         }
@@ -441,7 +441,7 @@ X Vec<T> {
         self.size = self.size + 1
     }
 
-    F get(&self, index: i64) -> &T {
+    fn get(&self, index: i64) -> &type {
         # return reference...
     }
 }
@@ -482,20 +482,20 @@ void process_color(enum Color c) {
 
 ```vais
 # Vais
-E Color {
+enum Color {
     Red,
     Green,
     Blue,
 }
 
-E Status {
+enum Status {
     Ok,
     Error,
     Pending,
 }
 
-F process_color(c: Color) {
-    M c {
+fn process_color(c: Color) {
+    match c {
         Red => println("Red"),
         Green => println("Green"),
         Blue => println("Blue"),
@@ -534,20 +534,20 @@ double shape_area(const struct Shape* s) {
 
 ```vais
 # Vais
-E Shape {
+enum Shape {
     Circle(f64),
     Rectangle(f64, f64),
 }
 
-F shape_area(s: Shape) -> f64 {
-    M s {
+fn shape_area(s: Shape) -> f64 {
+    match s {
         Circle(r) => 3.14159 * r * r,
         Rectangle(w, h) => w * h,
     }
 }
 
 # 사용
-F main() {
+fn main() {
     circle := Circle(5.0)
     rect := Rectangle(3.0, 4.0)
 
@@ -583,26 +583,26 @@ int main() {
 ```vais
 # Vais
 # 매크로 대신 인라인 함수 또는 상수 사용
-F max(a: i32, b: i32) -> i32 = I a > b { a } E { b }
-F square(x: f64) -> f64 = x * x
+fn max(a: i32, b: i32) -> i32 = I a > b { a } else { b }
+fn square(x: f64) -> f64 = x * x
 
 PI := 3.14159
 
 #[cfg(debug)]
-F log(msg: str) {
+fn log(msg: str) {
     println("DEBUG: " + msg)
 }
 
 #[cfg(not(debug))]
-F log(msg: str) {
+fn log(msg: str) {
     # no-op
 }
 
-F main() -> i32 {
+fn main() -> i32 {
     x := max(10, 20)
     area := PI * square(5.0)
     log("Starting program")
-    R 0
+    return 0
 }
 ```
 
@@ -639,11 +639,11 @@ void process_string() {
 
 ```vais
 # Vais
-F concat(a: str, b: str) -> str {
-    R a + b
+fn concat(a: str, b: str) -> str {
+    return a + b
 }
 
-F process_string() {
+fn process_string() {
     s1 := "Hello"
     s2 := " World"
     s3 := concat(s1, s2)
@@ -691,27 +691,27 @@ void read_file(const char* path) {
 
 ```vais
 # Vais
-U std/io
+use std/io
 
-F write_file(path: str, content: str) -> Result<(), str> {
+fn write_file(path: str, content: str) -> Result<(), str> {
     f := File::create(path)?
     f.write_all(content)?
-    R Ok(())
+    return Ok(())
 }
 
-F read_file(path: str) -> Result<str, str> {
+fn read_file(path: str) -> Result<str, str> {
     f := File::open(path)?
     content := f.read_to_string()?
-    R Ok(content)
+    return Ok(content)
 }
 
-F main() {
-    M write_file("test.txt", "Hello, World!") {
+fn main() {
+    match write_file("test.txt", "Hello, World!") {
         Ok(_) => println("Written successfully"),
         Err(e) => println("Error: " + e),
     }
 
-    M read_file("test.txt") {
+    match read_file("test.txt") {
         Ok(content) => println(content),
         Err(e) => println("Error: " + e),
     }

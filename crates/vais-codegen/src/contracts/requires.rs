@@ -1,14 +1,14 @@
 //! Precondition (requires) checks.
 
-use std::fmt::Write;
-use vais_ast::{Function, Spanned, Expr};
 use crate::{CodeGenerator, CodegenResult};
+use vais_ast::{Expr, Function, Spanned};
 
 impl CodeGenerator {
     /// Generate requires (precondition) checks for a function
     ///
     /// Inserts condition checks after function entry, calling __contract_fail
     /// if any precondition fails.
+    #[inline(never)]
     pub(crate) fn generate_requires_checks(
         &mut self,
         f: &Function,
@@ -69,18 +69,19 @@ impl CodeGenerator {
         // VAIS uses i64 for bool, but LLVM branch needs i1
         let cond_i1 = format!("%contract_cond_i1_{}", *counter);
         *counter += 1;
-        writeln!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, cond_value).unwrap();
+        write_ir!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, cond_value);
 
         // Branch based on condition
-        writeln!(
+        write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}",
-            cond_i1, ok_label, fail_label
-        )
-        .unwrap();
+            cond_i1,
+            ok_label,
+            fail_label
+        );
 
         // Failure block
-        writeln!(ir, "{}:", fail_label).unwrap();
+        write_ir!(ir, "{}:", fail_label);
 
         // Contract kind: 1 = requires, 2 = ensures
         let kind_value = if kind == "requires" { 1 } else { 2 };
@@ -101,16 +102,20 @@ impl CodeGenerator {
         let line = self.debug_info.offset_to_line(expr.span.start) as i64;
 
         // Call __contract_fail
-        writeln!(
+        write_ir!(
             ir,
             "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 {}, i8* {})",
-            kind_value, condition_str, file_str, line, func_str
-        )
-        .unwrap();
+            kind_value,
+            condition_str,
+            file_str,
+            line,
+            func_str
+        );
+
         ir.push_str("  unreachable\n");
 
         // Success block
-        writeln!(ir, "{}:", ok_label).unwrap();
+        write_ir!(ir, "{}:", ok_label);
 
         Ok(ir)
     }

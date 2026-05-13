@@ -23,8 +23,8 @@ pub mod utils;
 
 // Re-exports for public API
 pub use defs::{
-    ContractClause, ContractSpec, EnumDef, FunctionSig, GenericInstantiation, InstantiationKind,
-    Linearity, StructDef, UnionDef, VariantFieldTypes,
+    ContractClause, ContractSpec, EnumDef, FunctionSig, GenericCallee, GenericInstantiation,
+    InstantiationKind, Linearity, StructDef, UnionDef, VariantFieldTypes,
 };
 pub use effects::{Effect, EffectAnnotation, EffectSet};
 pub use error::{TypeError, TypeResult};

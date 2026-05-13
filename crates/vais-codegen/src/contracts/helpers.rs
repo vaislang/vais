@@ -1,10 +1,9 @@
 //! Contract helper utilities.
 
-use std::fmt::Write;
 use crate::CodeGenerator;
 
 impl CodeGenerator {
-    pub(super) fn get_or_create_contract_string(&mut self, s: &str) -> String {
+    pub(crate) fn get_or_create_contract_string(&mut self, s: &str) -> String {
         // Check if we already have this string
         if let Some(name) = self.contracts.contract_constants.get(s) {
             return format!(
@@ -32,11 +31,10 @@ impl CodeGenerator {
 
         gep_expr
     }
-
 }
 
 /// Escape a string for LLVM IR constant
-pub(super) fn escape_string_for_llvm(s: &str) -> String {
+pub(crate) fn escape_string_for_llvm(s: &str) -> String {
     let mut result = String::new();
     for c in s.chars() {
         match c {
@@ -49,7 +47,7 @@ pub(super) fn escape_string_for_llvm(s: &str) -> String {
             c => {
                 // Escape non-printable characters as hex
                 for byte in c.to_string().as_bytes() {
-                    write!(result, "\\{:02X}", byte).unwrap();
+                    write_ir_no_newline!(result, "\\{:02X}", byte);
                 }
             }
         }

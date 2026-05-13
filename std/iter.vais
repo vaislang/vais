@@ -27,9 +27,9 @@ X Range {
     # Check if range has more elements
     F has_next(&self) -> i64 {
         I self.step > 0 {
-            I self.current < self.end { 1 } E { 0 }
-        } E {
-            I self.current > self.end { 1 } E { 0 }
+            I self.current < self.end { 1 } EL { 0 }
+        } EL {
+            I self.current > self.end { 1 } EL { 0 }
         }
     }
 }
@@ -41,7 +41,7 @@ X Range: Iterator {
             value := self.current
             self.current = self.current + self.step
             value
-        } E {
+        } EL {
             0 - 1  # Return -1 to signal end
         }
     }
@@ -58,14 +58,14 @@ S VecIter {
 X VecIter {
     # Check if has more elements
     F has_next(&self) -> i64 {
-        I self.index < self.len { 1 } E { 0 }
+        I self.index < self.len { 1 } EL { 0 }
     }
 
     # Peek at current element without advancing
     F peek(&self) -> i64 {
         I self.index < self.len {
             load_i64(self.data + self.index * 8)
-        } E {
+        } EL {
             0 - 1
         }
     }
@@ -78,7 +78,7 @@ X VecIter: Iterator {
             value := load_i64(self.data + self.index * 8)
             self.index = self.index + 1
             value
-        } E {
+        } EL {
             0 - 1
         }
     }
@@ -94,7 +94,7 @@ S SliceIter {
 
 X SliceIter {
     F has_next(&self) -> i64 {
-        I self.ptr < self.end { 1 } E { 0 }
+        I self.ptr < self.end { 1 } EL { 0 }
     }
 }
 
@@ -104,7 +104,7 @@ X SliceIter: Iterator {
             value := load_i64(self.ptr)
             self.ptr = self.ptr + self.elem_size
             value
-        } E {
+        } EL {
             0 - 1
         }
     }
@@ -220,7 +220,7 @@ F iter_filter(data: i64, len: i64, pred: fn(i64) -> i64, out_count_ptr: i64) -> 
 
 # Take: return new array with first n elements (or fewer if len < n)
 F iter_take(data: i64, len: i64, n: i64) -> i64 {
-    count := I n < len { n } E { len }
+    count := I n < len { n } EL { len }
     out := malloc(count * 8)
     i := mut 0
     L {
@@ -233,7 +233,7 @@ F iter_take(data: i64, len: i64, n: i64) -> i64 {
 
 # Skip: return new array skipping first n elements
 F iter_skip(data: i64, len: i64, n: i64) -> i64 {
-    start := I n < len { n } E { len }
+    start := I n < len { n } EL { len }
     new_len := len - start
     out := malloc(new_len * 8)
     i := mut 0
@@ -268,7 +268,7 @@ F iter_chain(data1: i64, len1: i64, data2: i64, len2: i64) -> i64 {
 # Zip: pair elements from two arrays as (a, b) stored as consecutive i64 pairs
 # Returns pointer to 2*min(len1,len2) elements [a0,b0,a1,b1,...]
 F iter_zip(data1: i64, len1: i64, data2: i64, len2: i64) -> i64 {
-    min_len := I len1 < len2 { len1 } E { len2 }
+    min_len := I len1 < len2 { len1 } EL { len2 }
     out := malloc(min_len * 16)
     i := mut 0
     L {

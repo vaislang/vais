@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/hash
+use std/hash
 ```
 
 ## Functions
@@ -52,9 +52,9 @@ Combines two hashes using shift and XOR operations for uniform distribution.
 ### Hash Integers
 
 ```vais
-U std/hash
+use std/hash
 
-F main() -> i64 {
+fn main() -> i64 {
     h := hash_i64(42)
     # Use in hash table or set
     0
@@ -64,9 +64,9 @@ F main() -> i64 {
 ### Hash Strings
 
 ```vais
-U std/hash
+use std/hash
 
-F main() -> i64 {
+fn main() -> i64 {
     str := "hello world"
     h := hash_string(str)
     0
@@ -76,9 +76,9 @@ F main() -> i64 {
 ### Hash Composite Keys
 
 ```vais
-U std/hash
+use std/hash
 
-F main() -> i64 {
+fn main() -> i64 {
     # Hash a pair (e.g., for (x, y) coordinate key)
     x := 10
     y := 20
@@ -100,21 +100,21 @@ F main() -> i64 {
 ### Custom Struct Hash
 
 ```vais
-U std/hash
+use std/hash
 
-S Point {
+struct Point {
     x: i64,
     y: i64
 }
 
-X Point {
+impl Point {
     # Custom hash for Point
-    F hash(&self) -> i64 {
+    fn hash(&self) -> i64 {
         hash_pair(self.x, self.y)
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Point { x: 10, y: 20 }
     h := p.hash()
     0

@@ -95,7 +95,7 @@ F send_404(fd: i64) -> i64 {
 # Extract HTTP method from raw request buffer
 F extract_method(buffer: i64, len: i64) -> str {
     pos := 0
-    L pos < len {
+    LW pos < len {
         I load_byte(buffer + pos) == 32 { B }
         pos = pos + 1
     }
@@ -108,13 +108,13 @@ F extract_method(buffer: i64, len: i64) -> str {
 # Extract HTTP path from raw request buffer
 F extract_path(buffer: i64, len: i64) -> str {
     pos := 0
-    L pos < len {
+    LW pos < len {
         I load_byte(buffer + pos) == 32 { B }
         pos = pos + 1
     }
     pos = pos + 1
     path_start := pos
-    L pos < len {
+    LW pos < len {
         I load_byte(buffer + pos) == 32 { B }
         pos = pos + 1
     }
@@ -136,14 +136,14 @@ F main() -> i64 {
     }
 
     # Accept and handle connections in a loop
-    L true {
+    LW true {
         client := __tcp_accept(listener)
         I client < 0 { C }
 
         # Read request data
         buffer := __malloc(8192)
         total := 0
-        L true {
+        LW true {
             n := __tcp_recv(client, buffer + total, 4096)
             I n <= 0 { B }
             total = total + n

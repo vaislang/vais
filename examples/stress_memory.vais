@@ -144,9 +144,9 @@ F test_mixed_allocations(iterations: i64) -> i64 {
         pattern := i % 3
         size := I pattern == 0 {
             R 64
-        } E I pattern == 1 {
+        } EL I pattern == 1 {
             R 4096
-        } E {
+        } EL {
             R 131072
         }
 
@@ -191,7 +191,7 @@ F main() -> i64 {
     I total == expected {
         print_str("SUCCESS: All allocations successful\n")
         R 0
-    } E {
+    } EL {
         print_str("FAILURE: Some allocations failed\n")
         R 1
     }

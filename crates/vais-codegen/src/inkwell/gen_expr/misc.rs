@@ -1,6 +1,6 @@
-//! Miscellaneous expression generation (cast, deref, etc.).
+//! Miscellaneous expression generation (cast, deref, coerce, etc.).
 
-use inkwell::values::BasicValueEnum;
+use inkwell::values::{BasicValueEnum, IntValue, PointerValue};
 
 use vais_ast::{Expr, Type};
 
@@ -8,7 +8,88 @@ use super::super::generator::InkwellCodeGenerator;
 use crate::{CodegenError, CodegenResult};
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
+    /// Extract the raw i8* pointer from a string fat pointer `{ ptr, i64 }`.
+    /// If the value is already a pointer, returns it as-is.
+    /// If the value is a struct (fat pointer), extracts field 0 (the raw ptr).
+    #[inline(never)]
+    pub(crate) fn extract_str_raw_ptr(
+        &self,
+        val: BasicValueEnum<'ctx>,
+    ) -> CodegenResult<PointerValue<'ctx>> {
+        if val.is_pointer_value() {
+            Ok(val.into_pointer_value())
+        } else if val.is_struct_value() {
+            let struct_val = val.into_struct_value();
+            let ptr = self
+                .builder
+                .build_extract_value(struct_val, 0, "str_raw_ptr")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            Ok(ptr.into_pointer_value())
+        } else {
+            // Fallback: inttoptr
+            let i8_ptr_type = self
+                .context
+                .i8_type()
+                .ptr_type(inkwell::AddressSpace::default());
+            self.builder
+                .build_int_to_ptr(val.into_int_value(), i8_ptr_type, "str_raw_ptr_cast")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))
+        }
+    }
+
+    /// Coerce any BasicValueEnum to an i64 IntValue.
+    /// - IntValue: widen/truncate to i64
+    /// - FloatValue: bitcast f64 to i64
+    /// - PointerValue: ptrtoint to i64
+    /// - StructValue: extract first int field, or return 0
+    #[inline(never)]
+    pub(crate) fn coerce_to_i64(&self, v: BasicValueEnum<'ctx>) -> CodegenResult<IntValue<'ctx>> {
+        let i64_type = self.context.i64_type();
+        if v.is_int_value() {
+            let iv = v.into_int_value();
+            if iv.get_type().get_bit_width() == 64 {
+                Ok(iv)
+            } else {
+                self.builder
+                    .build_int_cast(iv, i64_type, "coerce_int")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))
+            }
+        } else if v.is_float_value() {
+            // Bitcast f64 to i64 to preserve the bits
+            let fv = v.into_float_value();
+            let bitcast = self
+                .builder
+                .build_bitcast(fv, i64_type, "coerce_f2i")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            Ok(bitcast.into_int_value())
+        } else if v.is_pointer_value() {
+            self.builder
+                .build_ptr_to_int(v.into_pointer_value(), i64_type, "coerce_ptr")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))
+        } else {
+            // StructValue or other: return 0 as fallback
+            Ok(i64_type.const_int(0, false))
+        }
+    }
+
     pub(super) fn generate_deref(&mut self, inner: &Expr) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // Infer pointee type from the expression's resolved type before generating.
+        // For Pointer(T), Ref(T), RefMut(T) the pointee type is T.
+        let pointee_llvm_type = if let Expr::Ident(name) = inner {
+            if let Some(
+                vais_types::ResolvedType::Pointer(inner_ty)
+                | vais_types::ResolvedType::Ref(inner_ty)
+                | vais_types::ResolvedType::RefMut(inner_ty),
+            ) = self.var_resolved_types.get(name)
+            {
+                self.type_mapper.map_type(inner_ty)
+            } else {
+                self.context.i64_type().into()
+            }
+        } else {
+            self.context.i64_type().into()
+        };
+
         let ptr = self.generate_expr(inner)?;
         let ptr_val = if ptr.is_pointer_value() {
             ptr.into_pointer_value()
@@ -25,8 +106,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 )
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?
         };
+        // Load using the inferred pointee type (context-based, not hardcoded i64)
         self.builder
-            .build_load(self.context.i64_type(), ptr_val, "deref")
+            .build_load(pointee_llvm_type, ptr_val, "deref")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))
     }
 
@@ -108,6 +190,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     target_type.into_int_type(),
                     "cast_ptrtoi",
                 )
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            Ok(result.into())
+        } else if val.is_struct_value() && target_type.is_int_type() {
+            // str fat ptr { ptr, i64 } -> i64
+            // Extract the raw data pointer (field 0) and ptrtoint it. Examples
+            // like `load_byte(text as i64 + i)` rely on getting the underlying
+            // address, not the struct bits.
+            let raw_ptr = self.extract_str_raw_ptr(val)?;
+            let result = self
+                .builder
+                .build_ptr_to_int(raw_ptr, target_type.into_int_type(), "cast_strtoi")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             Ok(result.into())
         } else {

@@ -221,3 +221,210 @@ pub enum EffectAnnotation {
     /// Explicitly declared with specific effects
     Declared(EffectSet),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ========== Effect Display ==========
+
+    #[test]
+    fn test_effect_display() {
+        assert_eq!(Effect::Pure.to_string(), "pure");
+        assert_eq!(Effect::Read.to_string(), "read");
+        assert_eq!(Effect::Write.to_string(), "write");
+        assert_eq!(Effect::Alloc.to_string(), "alloc");
+        assert_eq!(Effect::IO.to_string(), "io");
+        assert_eq!(Effect::Async.to_string(), "async");
+        assert_eq!(Effect::Panic.to_string(), "panic");
+        assert_eq!(Effect::NonDet.to_string(), "nondet");
+        assert_eq!(Effect::Unsafe.to_string(), "unsafe");
+        assert_eq!(Effect::Diverge.to_string(), "diverge");
+    }
+
+    // ========== EffectSet constructors ==========
+
+    #[test]
+    fn test_effect_set_pure() {
+        let set = EffectSet::pure();
+        assert!(set.is_pure());
+        assert_eq!(set.to_string(), "pure");
+    }
+
+    #[test]
+    fn test_effect_set_single() {
+        let set = EffectSet::single(Effect::IO);
+        assert!(!set.is_pure());
+        assert!(set.contains(Effect::IO));
+        assert!(!set.contains(Effect::Read));
+    }
+
+    #[test]
+    fn test_effect_set_single_pure_ignored() {
+        let set = EffectSet::single(Effect::Pure);
+        assert!(set.is_pure());
+    }
+
+    #[test]
+    fn test_effect_set_from_effects() {
+        let set = EffectSet::from_effects([Effect::Read, Effect::Write, Effect::Pure]);
+        assert!(set.contains(Effect::Read));
+        assert!(set.contains(Effect::Write));
+        assert!(!set.is_pure());
+    }
+
+    // ========== EffectSet operations ==========
+
+    #[test]
+    fn test_effect_set_add() {
+        let mut set = EffectSet::pure();
+        set.add(Effect::IO);
+        assert!(set.contains(Effect::IO));
+        assert!(!set.is_pure());
+    }
+
+    #[test]
+    fn test_effect_set_add_pure_no_op() {
+        let mut set = EffectSet::pure();
+        set.add(Effect::Pure);
+        assert!(set.is_pure());
+    }
+
+    #[test]
+    fn test_effect_set_union() {
+        let a = EffectSet::single(Effect::Read);
+        let b = EffectSet::single(Effect::Write);
+        let result = a.union(&b);
+        assert!(result.contains(Effect::Read));
+        assert!(result.contains(Effect::Write));
+    }
+
+    #[test]
+    fn test_effect_set_intersection() {
+        let a = EffectSet::from_effects([Effect::Read, Effect::Write]);
+        let b = EffectSet::from_effects([Effect::Write, Effect::IO]);
+        let result = a.intersection(&b);
+        assert!(result.contains(Effect::Write));
+        assert!(!result.contains(Effect::Read));
+        assert!(!result.contains(Effect::IO));
+    }
+
+    #[test]
+    fn test_effect_set_is_subset_of() {
+        let small = EffectSet::single(Effect::Read);
+        let big = EffectSet::from_effects([Effect::Read, Effect::Write]);
+        assert!(small.is_subset_of(&big));
+        assert!(!big.is_subset_of(&small));
+    }
+
+    #[test]
+    fn test_effect_set_pure_is_subset_of_everything() {
+        let pure = EffectSet::pure();
+        let any = EffectSet::single(Effect::IO);
+        assert!(pure.is_subset_of(&any));
+    }
+
+    // ========== EffectSet predicates ==========
+
+    #[test]
+    fn test_effect_set_is_readonly() {
+        let pure = EffectSet::pure();
+        assert!(pure.is_readonly());
+
+        let read_only = EffectSet::single(Effect::Read);
+        assert!(read_only.is_readonly());
+
+        let with_write = EffectSet::single(Effect::Write);
+        assert!(!with_write.is_readonly());
+
+        let with_io = EffectSet::single(Effect::IO);
+        assert!(!with_io.is_readonly());
+
+        let with_alloc = EffectSet::single(Effect::Alloc);
+        assert!(!with_alloc.is_readonly());
+    }
+
+    #[test]
+    fn test_effect_set_contains_pure() {
+        let pure = EffectSet::pure();
+        assert!(pure.contains(Effect::Pure));
+
+        let non_pure = EffectSet::single(Effect::IO);
+        assert!(!non_pure.contains(Effect::Pure));
+    }
+
+    // ========== Common constructors ==========
+
+    #[test]
+    fn test_effect_set_io() {
+        let set = EffectSet::io();
+        assert!(set.contains(Effect::IO));
+        assert!(set.contains(Effect::Panic));
+        assert!(!set.contains(Effect::Read));
+    }
+
+    #[test]
+    fn test_effect_set_alloc() {
+        let set = EffectSet::alloc();
+        assert!(set.contains(Effect::Alloc));
+        assert!(set.contains(Effect::Panic));
+    }
+
+    #[test]
+    fn test_effect_set_read_write() {
+        let set = EffectSet::read_write();
+        assert!(set.contains(Effect::Read));
+        assert!(set.contains(Effect::Write));
+    }
+
+    #[test]
+    fn test_effect_set_total() {
+        let set = EffectSet::total();
+        assert!(set.contains(Effect::Read));
+        assert!(set.contains(Effect::Write));
+        assert!(set.contains(Effect::Alloc));
+        assert!(set.contains(Effect::IO));
+        assert!(set.contains(Effect::Async));
+        assert!(set.contains(Effect::Panic));
+        assert!(set.contains(Effect::NonDet));
+        assert!(set.contains(Effect::Unsafe));
+        assert!(set.contains(Effect::Diverge));
+    }
+
+    // ========== EffectAnnotation ==========
+
+    #[test]
+    fn test_effect_annotation_default() {
+        let ann: EffectAnnotation = Default::default();
+        assert_eq!(ann, EffectAnnotation::Infer);
+    }
+
+    // ========== Display ==========
+
+    #[test]
+    fn test_effect_set_display_pure() {
+        assert_eq!(EffectSet::pure().to_string(), "pure");
+    }
+
+    #[test]
+    fn test_effect_set_display_single() {
+        let set = EffectSet::single(Effect::IO);
+        let display = set.to_string();
+        assert!(display.contains("io"));
+    }
+
+    // ========== Equality & Hash ==========
+
+    #[test]
+    fn test_effect_set_equality() {
+        let a = EffectSet::from_effects([Effect::Read, Effect::Write]);
+        let b = EffectSet::from_effects([Effect::Write, Effect::Read]);
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_effect_set_default_is_pure() {
+        let set: EffectSet = Default::default();
+        assert!(set.is_pure());
+    }
+}
