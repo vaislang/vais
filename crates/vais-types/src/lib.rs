@@ -22,10 +22,12 @@ mod builtins;
 mod checker_expr;
 mod checker_fn;
 mod checker_module;
+mod effect_purity;
 mod free_vars;
 mod lookup;
 mod resolve;
 mod scope;
+mod totality;
 // Re-export bidirectional type checking support
 pub use inference::CheckMode;
 
@@ -104,6 +106,7 @@ pub struct TypeChecker {
     pub(crate) traits: HashMap<String, TraitDef>,
     pub(crate) trait_impls: Vec<TraitImpl>, // (type_name, trait_name) pairs
     pub(crate) constants: HashMap<String, ResolvedType>, // Constant name -> type
+    pub(crate) globals: HashMap<String, ResolvedType>, // Global variable name -> type
 
     // Scope stack
     pub(crate) scopes: Vec<HashMap<String, VarInfo>>,
@@ -120,9 +123,6 @@ pub struct TypeChecker {
 
     // Current const generic parameters (maps const param name to its type)
     pub(crate) current_const_generics: HashMap<String, ResolvedType>,
-
-    // Current higher-kinded type parameters (maps HKT param name to arity)
-    pub(crate) current_hkt_generics: HashMap<String, usize>,
 
     // Type variable counter for inference
     pub(crate) next_type_var: Cell<usize>,
@@ -170,6 +170,34 @@ pub struct TypeChecker {
     // Cache of dependent type predicate expressions (predicate_string -> original AST Expr)
     // Used to evaluate refinement predicates at function call sites
     pub(crate) dependent_predicates: RefCell<HashMap<String, vais_ast::Expr>>,
+
+    // Implicit error propagation mode (--implicit-try opt-in, Phase 4b.1 / #7).
+    //
+    // When enabled, a call-site argument whose type is `Result<T, E>` or `Option<T>`
+    // passed to a parameter of type `T` is automatically treated as if `?` had been
+    // written on the argument, provided the enclosing function returns a compatible
+    // `Result<_, E>` or `Option<_>`. The set of argument spans that were implicitly
+    // unwrapped is recorded in `implicit_try_sites` so that codegen can emit the
+    // same IR path as an explicit `Expr::Try`.
+    pub implicit_try_mode: bool,
+    pub(crate) implicit_try_sites: HashSet<(usize, usize)>,
+
+    // Loop nesting depth — used to validate break/continue are inside a loop
+    pub(crate) loop_depth: usize,
+
+    // Variables that have been moved (passed by value to a function as a struct type)
+    pub(crate) moved_vars: HashSet<String>,
+
+    /// Expression types from type checking, keyed by expression span.
+    /// Used by codegen to get accurate types instead of re-inferring.
+    pub(crate) expr_types: HashMap<(usize, usize), ResolvedType>,
+
+    /// Pending method instantiations accumulated while checking a function body
+    /// when type args still contain fresh type variables. Drained at end of
+    /// `check_function` after body/return unification so vars resolve to
+    /// concrete types (e.g., `Vec.with_capacity(n)` inside `fn -> Vec<i64>`).
+    /// Entries: (struct_name, method_name, type_args-possibly-with-vars).
+    pub(crate) pending_method_instantiations: Vec<(String, String, Vec<ResolvedType>)>,
 }
 
 impl TypeChecker {
@@ -185,13 +213,13 @@ impl TypeChecker {
             traits: HashMap::with_capacity(16),
             trait_impls: Vec::with_capacity(16),
             constants: HashMap::with_capacity(16),
+            globals: HashMap::with_capacity(16),
             scopes: vec![HashMap::with_capacity(32)],
             current_fn_ret: None,
             current_fn_name: None,
             current_generics: Vec::new(),
             current_generic_bounds: HashMap::new(),
             current_const_generics: HashMap::new(),
-            current_hkt_generics: HashMap::new(),
             next_type_var: Cell::new(0),
             substitutions: HashMap::with_capacity(32),
             exhaustiveness_checker: ExhaustivenessChecker::new(),
@@ -206,6 +234,12 @@ impl TypeChecker {
             multi_error_mode: false,
             collected_errors: Vec::new(),
             dependent_predicates: RefCell::new(HashMap::new()),
+            implicit_try_mode: false,
+            implicit_try_sites: HashSet::new(),
+            loop_depth: 0,
+            moved_vars: HashSet::new(),
+            expr_types: HashMap::new(),
+            pending_method_instantiations: Vec::new(),
         };
         checker.register_builtins();
         checker
@@ -214,6 +248,24 @@ impl TypeChecker {
     /// Enable strict ownership checking (errors instead of warnings)
     pub fn set_strict_ownership(&mut self, strict: bool) {
         self.ownership_check_mode = Some(strict);
+    }
+
+    /// Enable implicit error propagation (Phase 4b.1 / #7).
+    ///
+    /// When on, a call-site argument of type `Result<T, E>` passed to a `T`
+    /// parameter is auto-unwrapped via the same semantics as `?`, provided
+    /// the enclosing function returns a matching `Result<_, E>` (ditto for
+    /// `Option<T>`). The transformation is recorded per argument span so that
+    /// codegen can emit the same IR path as an explicit `Expr::Try`.
+    pub fn set_implicit_try_mode(&mut self, enable: bool) {
+        self.implicit_try_mode = enable;
+    }
+
+    /// Query whether a given argument span was implicitly unwrapped by the
+    /// implicit error propagation pass. Codegen uses this to wrap the
+    /// argument in Try semantics on the fly.
+    pub fn is_implicit_try_site(&self, span: (usize, usize)) -> bool {
+        self.implicit_try_sites.contains(&span)
     }
 
     /// Disable ownership checking entirely
@@ -231,7 +283,7 @@ impl TypeChecker {
         match result {
             Ok(()) => Ok(()),
             Err(e) => {
-                if self.multi_error_mode && self.collected_errors.len() < 20 {
+                if self.multi_error_mode && self.collected_errors.len() < 200 {
                     self.collected_errors.push(e);
                     Ok(())
                 } else {
@@ -297,9 +349,39 @@ impl TypeChecker {
         &self.functions
     }
 
+    /// Get all function signatures INCLUDING struct methods with mangled names.
+    /// E.g., TestSuite's `new` method becomes key `TestSuite_new`.
+    /// This is needed for codegen return type resolution in monolithic builds
+    /// where methods from imported modules may not be in the flat `functions` map.
+    pub fn get_all_functions_with_methods(&self) -> HashMap<String, FunctionSig> {
+        let mut result = self.functions.clone();
+        for (struct_name, struct_def) in &self.structs {
+            for (method_name, method_sig) in &struct_def.methods {
+                let mangled = format!("{}_{}", struct_name, method_name);
+                result.entry(mangled).or_insert_with(|| method_sig.clone());
+            }
+        }
+        result
+    }
+
     /// Get all type aliases (for passing to codegen)
     pub fn get_type_aliases(&self) -> &HashMap<String, ResolvedType> {
         &self.type_aliases
+    }
+
+    /// Get expression types recorded during type checking (for passing to codegen).
+    /// Keyed by (span.start, span.end) tuples.
+    pub fn get_expr_types(&self) -> &HashMap<(usize, usize), ResolvedType> {
+        &self.expr_types
+    }
+
+    /// Get the set of argument spans that were auto-unwrapped by the
+    /// implicit error propagation pass (Phase 4b.1 / #7).
+    ///
+    /// Codegen consumes this via `set_implicit_try_sites` to wrap the
+    /// corresponding call-site arguments in `Expr::Try` semantics.
+    pub fn get_implicit_try_sites(&self) -> &HashSet<(usize, usize)> {
+        &self.implicit_try_sites
     }
 
     /// Get the struct definition (for codegen)
@@ -334,6 +416,7 @@ impl TypeChecker {
         self.traits = other.traits.clone();
         self.trait_impls = other.trait_impls.clone();
         self.constants = other.constants.clone();
+        self.globals = other.globals.clone();
     }
 
     /// Merge type definitions from another checker (for parallel type-checking).
@@ -348,6 +431,7 @@ impl TypeChecker {
         self.traits.extend(other.traits);
         self.trait_impls.extend(other.trait_impls);
         self.constants.extend(other.constants);
+        self.globals.extend(other.globals);
         self.warnings.extend(other.warnings);
         self.collected_errors.extend(other.collected_errors);
 

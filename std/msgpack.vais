@@ -55,11 +55,11 @@ F msgpack_strlen(s: i64) -> i64 {
 
 F msgpack_strlen_rec(s: i64, len: i64) -> i64 {
     I load_byte(s + len) == 0 { len }
-    E { msgpack_strlen_rec(s, len + 1) }
+    EL { msgpack_strlen_rec(s, len + 1) }
 }
 
 F msgpack_init_mem(ptr: i64, count: i64, idx: i64) -> i64 {
-    I idx >= count { 0 } E {
+    I idx >= count { 0 } EL {
         store_i64(ptr + idx * 8, 0)
         msgpack_init_mem(ptr, count, idx + 1)
     }
@@ -70,10 +70,10 @@ F msgpack_hash_str(s: i64, len: i64) -> i64 {
 }
 
 F msgpack_hash_rec(s: i64, len: i64, idx: i64, h: i64) -> i64 {
-    I idx >= len { h } E {
+    I idx >= len { h } EL {
         c := load_byte(s + idx)
         new_h := h * 33 + c
-        abs_h := I new_h < 0 { 0 - new_h } E { new_h }
+        abs_h := I new_h < 0 { 0 - new_h } EL { new_h }
         msgpack_hash_rec(s, len, idx + 1, abs_h)
     }
 }
@@ -84,8 +84,8 @@ F msgpack_str_eq(a: i64, b: i64, len: i64) -> i64 {
 
 F msgpack_str_eq_rec(a: i64, b: i64, len: i64, idx: i64) -> i64 {
     I idx >= len { 1 }
-    E I load_byte(a + idx) != load_byte(b + idx) { 0 }
-    E { msgpack_str_eq_rec(a, b, len, idx + 1) }
+    EL I load_byte(a + idx) != load_byte(b + idx) { 0 }
+    EL { msgpack_str_eq_rec(a, b, len, idx + 1) }
 }
 
 # =====================================================
@@ -128,12 +128,12 @@ F msgpack_map_set(m: i64, key: i64, key_len: i64, value_ptr: i64) -> i64 {
 }
 
 F msgpack_map_get_rec(node: i64, key: i64, key_len: i64) -> i64 {
-    I node == 0 { 0 } E {
+    I node == 0 { 0 } EL {
         nk := load_i64(node)
         nkl := load_i64(node + 8)
         I nkl == key_len && msgpack_str_eq(nk, key, key_len) == 1 {
             load_i64(node + 16)
-        } E {
+        } EL {
             msgpack_map_get_rec(load_i64(node + 24), key, key_len)
         }
     }
@@ -142,7 +142,7 @@ F msgpack_map_get_rec(node: i64, key: i64, key_len: i64) -> i64 {
 F msgpack_map_get(m: i64, key: i64, key_len: i64) -> i64 {
     buckets := load_i64(m)
     cap := load_i64(m + 16)
-    I cap == 0 { 0 } E {
+    I cap == 0 { 0 } EL {
         h := msgpack_hash_str(key, key_len) % cap
         node := load_i64(buckets + h * 8)
         msgpack_map_get_rec(node, key, key_len)
@@ -248,7 +248,7 @@ F msgpack_array_create() -> i64 {
 }
 
 F msgpack_array_add(arr_v: i64, elem: i64) -> i64 {
-    I load_i64(arr_v) != 5 { 0 } E {
+    I load_i64(arr_v) != 5 { 0 } EL {
         arr := load_i64(arr_v + 8)
         msgpack_array_push(arr, elem)
         len := load_i64(arr + 8)
@@ -267,7 +267,7 @@ F msgpack_map_create() -> i64 {
 }
 
 F msgpack_map_put(map_v: i64, key: str, value: i64) -> i64 {
-    I load_i64(map_v) != 6 { 0 } E {
+    I load_i64(map_v) != 6 { 0 } EL {
         m := load_i64(map_v + 8)
         key_ptr := str_to_ptr(key)
         key_len := strlen(key)
@@ -283,67 +283,67 @@ F msgpack_map_put(map_v: i64, key: str, value: i64) -> i64 {
 # =====================================================
 
 F msgpack_type(v: i64) -> i64 {
-    I v == 0 { 0 } E { load_i64(v) }
+    I v == 0 { 0 } EL { load_i64(v) }
 }
 
 F msgpack_get_bool(v: i64) -> i64 {
     I v == 0 { 0 }
-    E I load_i64(v) == 1 { load_i64(v + 8) }
-    E { 0 }
+    EL I load_i64(v) == 1 { load_i64(v + 8) }
+    EL { 0 }
 }
 
 F msgpack_get_int(v: i64) -> i64 {
     I v == 0 { 0 }
-    E I load_i64(v) == 2 { load_i64(v + 8) }
-    E { 0 }
+    EL I load_i64(v) == 2 { load_i64(v + 8) }
+    EL { 0 }
 }
 
 F msgpack_get_str(v: i64) -> i64 {
     I v == 0 { 0 }
-    E I load_i64(v) == 3 { load_i64(v + 8) }
-    E { 0 }
+    EL I load_i64(v) == 3 { load_i64(v + 8) }
+    EL { 0 }
 }
 
 F msgpack_get_str_len(v: i64) -> i64 {
     I v == 0 { 0 }
-    E I load_i64(v) == 3 { load_i64(v + 16) }
-    E { 0 }
+    EL I load_i64(v) == 3 { load_i64(v + 16) }
+    EL { 0 }
 }
 
 F msgpack_get_bin(v: i64) -> i64 {
     I v == 0 { 0 }
-    E I load_i64(v) == 4 { load_i64(v + 8) }
-    E { 0 }
+    EL I load_i64(v) == 4 { load_i64(v + 8) }
+    EL { 0 }
 }
 
 F msgpack_get_bin_len(v: i64) -> i64 {
     I v == 0 { 0 }
-    E I load_i64(v) == 4 { load_i64(v + 16) }
-    E { 0 }
+    EL I load_i64(v) == 4 { load_i64(v + 16) }
+    EL { 0 }
 }
 
 F msgpack_array_len(v: i64) -> i64 {
     I v == 0 || load_i64(v) != 5 { 0 }
-    E { load_i64(v + 16) }
+    EL { load_i64(v + 16) }
 }
 
 F msgpack_array_get(v: i64, index: i64) -> i64 {
-    I v == 0 || load_i64(v) != 5 { 0 } E {
+    I v == 0 || load_i64(v) != 5 { 0 } EL {
         arr := load_i64(v + 8)
         arr_data := load_i64(arr)
         arr_len := load_i64(arr + 8)
         I index < 0 || index >= arr_len { 0 }
-        E { load_i64(arr_data + index * 8) }
+        EL { load_i64(arr_data + index * 8) }
     }
 }
 
 F msgpack_map_size(v: i64) -> i64 {
     I v == 0 || load_i64(v) != 6 { 0 }
-    E { load_i64(v + 16) }
+    EL { load_i64(v + 16) }
 }
 
 F msgpack_map_lookup(v: i64, key: str) -> i64 {
-    I v == 0 || load_i64(v) != 6 { 0 } E {
+    I v == 0 || load_i64(v) != 6 { 0 } EL {
         m := load_i64(v + 8)
         key_ptr := str_to_ptr(key)
         key_len := strlen(key)
@@ -369,7 +369,7 @@ F msgpack_buf_new() -> i64 {
 F msgpack_buf_ensure(buf: i64, needed: i64) -> i64 {
     len := load_i64(buf + 8)
     cap := load_i64(buf + 16)
-    I len + needed <= cap { 0 } E {
+    I len + needed <= cap { 0 } EL {
         new_cap := cap * 2
         I new_cap < len + needed { new_cap = len + needed + 256 }
         new_data := malloc(new_cap)
@@ -444,19 +444,19 @@ F msgpack_buf_write_bytes(buf: i64, src: i64, count: i64) -> i64 {
 F msgpack_encode_value(buf: i64, v: i64) -> i64 {
     I v == 0 {
         msgpack_buf_write_byte(buf, 192)  # 0xc0 = nil
-    } E {
+    } EL {
         tag := load_i64(v)
         data := load_i64(v + 8)
         extra := load_i64(v + 16)
 
         I tag == 0 { msgpack_encode_nil(buf) }
-        E I tag == 1 { msgpack_encode_bool(buf, data) }
-        E I tag == 2 { msgpack_encode_int(buf, data) }
-        E I tag == 3 { msgpack_encode_str(buf, data, extra) }
-        E I tag == 4 { msgpack_encode_bin(buf, data, extra) }
-        E I tag == 5 { msgpack_encode_array(buf, load_i64(v + 8)) }
-        E I tag == 6 { msgpack_encode_map(buf, load_i64(v + 8)) }
-        E { msgpack_buf_write_byte(buf, 192) }
+        EL I tag == 1 { msgpack_encode_bool(buf, data) }
+        EL I tag == 2 { msgpack_encode_int(buf, data) }
+        EL I tag == 3 { msgpack_encode_str(buf, data, extra) }
+        EL I tag == 4 { msgpack_encode_bin(buf, data, extra) }
+        EL I tag == 5 { msgpack_encode_array(buf, load_i64(v + 8)) }
+        EL I tag == 6 { msgpack_encode_map(buf, load_i64(v + 8)) }
+        EL { msgpack_buf_write_byte(buf, 192) }
     }
 }
 
@@ -467,7 +467,7 @@ F msgpack_encode_nil(buf: i64) -> i64 {
 F msgpack_encode_bool(buf: i64, b: i64) -> i64 {
     I b == 0 {
         msgpack_buf_write_byte(buf, 194)  # 0xc2 = false
-    } E {
+    } EL {
         msgpack_buf_write_byte(buf, 195)  # 0xc3 = true
     }
 }
@@ -478,47 +478,47 @@ F msgpack_encode_int(buf: i64, n: i64) -> i64 {
         msgpack_buf_write_byte(buf, n)
     }
     # negative fixint: 0xe0-0xff (-32 to -1)
-    E I n >= 0 - 32 && n < 0 {
+    EL I n >= 0 - 32 && n < 0 {
         msgpack_buf_write_byte(buf, 256 + n)
     }
     # uint 8: 0-255
-    E I n >= 0 && n <= 255 {
+    EL I n >= 0 && n <= 255 {
         msgpack_buf_write_byte(buf, 204)  # 0xcc
         msgpack_buf_write_byte(buf, n)
     }
     # uint 16: 0-65535
-    E I n >= 0 && n <= 65535 {
+    EL I n >= 0 && n <= 65535 {
         msgpack_buf_write_byte(buf, 205)  # 0xcd
         msgpack_buf_write_u16_be(buf, n)
     }
     # uint 32: 0-4294967295
-    E I n >= 0 && n <= 4294967295 {
+    EL I n >= 0 && n <= 4294967295 {
         msgpack_buf_write_byte(buf, 206)  # 0xce
         msgpack_buf_write_u32_be(buf, n)
     }
     # int 8: -128 to -33
-    E I n >= 0 - 128 && n < 0 - 32 {
+    EL I n >= 0 - 128 && n < 0 - 32 {
         msgpack_buf_write_byte(buf, 208)  # 0xd0
         msgpack_buf_write_byte(buf, (n + 256) & 255)
     }
     # int 16: -32768 to -129
-    E I n >= 0 - 32768 && n < 0 - 128 {
+    EL I n >= 0 - 32768 && n < 0 - 128 {
         msgpack_buf_write_byte(buf, 209)  # 0xd1
         v := n + 65536
         msgpack_buf_write_u16_be(buf, v & 65535)
     }
     # int 32: -2147483648 to -32769
-    E I n >= 0 - 2147483648 && n < 0 - 32768 {
+    EL I n >= 0 - 2147483648 && n < 0 - 32768 {
         msgpack_buf_write_byte(buf, 210)  # 0xd2
         v := n + 4294967296
         msgpack_buf_write_u32_be(buf, v & 4294967295)
     }
     # int 64 or uint 64 for everything else
-    E I n >= 0 {
+    EL I n >= 0 {
         msgpack_buf_write_byte(buf, 207)  # 0xcf = uint 64
         msgpack_buf_write_u64_be(buf, n)
     }
-    E {
+    EL {
         msgpack_buf_write_byte(buf, 211)  # 0xd3 = int 64
         msgpack_buf_write_u64_be(buf, n)
     }
@@ -530,17 +530,17 @@ F msgpack_encode_str(buf: i64, s: i64, len: i64) -> i64 {
         msgpack_buf_write_byte(buf, 160 + len)  # 0xa0 + len
     }
     # str 8
-    E I len <= 255 {
+    EL I len <= 255 {
         msgpack_buf_write_byte(buf, 217)  # 0xd9
         msgpack_buf_write_byte(buf, len)
     }
     # str 16
-    E I len <= 65535 {
+    EL I len <= 65535 {
         msgpack_buf_write_byte(buf, 218)  # 0xda
         msgpack_buf_write_u16_be(buf, len)
     }
     # str 32
-    E {
+    EL {
         msgpack_buf_write_byte(buf, 219)  # 0xdb
         msgpack_buf_write_u32_be(buf, len)
     }
@@ -554,12 +554,12 @@ F msgpack_encode_bin(buf: i64, data: i64, len: i64) -> i64 {
         msgpack_buf_write_byte(buf, len)
     }
     # bin 16
-    E I len <= 65535 {
+    EL I len <= 65535 {
         msgpack_buf_write_byte(buf, 197)  # 0xc5
         msgpack_buf_write_u16_be(buf, len)
     }
     # bin 32
-    E {
+    EL {
         msgpack_buf_write_byte(buf, 198)  # 0xc6
         msgpack_buf_write_u32_be(buf, len)
     }
@@ -575,12 +575,12 @@ F msgpack_encode_array(buf: i64, arr: i64) -> i64 {
         msgpack_buf_write_byte(buf, 144 + arr_len)  # 0x90 + n
     }
     # array 16
-    E I arr_len <= 65535 {
+    EL I arr_len <= 65535 {
         msgpack_buf_write_byte(buf, 220)  # 0xdc
         msgpack_buf_write_u16_be(buf, arr_len)
     }
     # array 32
-    E {
+    EL {
         msgpack_buf_write_byte(buf, 221)  # 0xdd
         msgpack_buf_write_u32_be(buf, arr_len)
     }
@@ -588,7 +588,7 @@ F msgpack_encode_array(buf: i64, arr: i64) -> i64 {
 }
 
 F msgpack_encode_array_items(buf: i64, data: i64, len: i64, idx: i64) -> i64 {
-    I idx >= len { 0 } E {
+    I idx >= len { 0 } EL {
         elem := load_i64(data + idx * 8)
         msgpack_encode_value(buf, elem)
         msgpack_encode_array_items(buf, data, len, idx + 1)
@@ -603,12 +603,12 @@ F msgpack_encode_map(buf: i64, m: i64) -> i64 {
         msgpack_buf_write_byte(buf, 128 + size)  # 0x80 + n
     }
     # map 16
-    E I size <= 65535 {
+    EL I size <= 65535 {
         msgpack_buf_write_byte(buf, 222)  # 0xde
         msgpack_buf_write_u16_be(buf, size)
     }
     # map 32
-    E {
+    EL {
         msgpack_buf_write_byte(buf, 223)  # 0xdf
         msgpack_buf_write_u32_be(buf, size)
     }
@@ -619,7 +619,7 @@ F msgpack_encode_map(buf: i64, m: i64) -> i64 {
 }
 
 F msgpack_encode_map_buckets(buf: i64, buckets: i64, cap: i64, idx: i64) -> i64 {
-    I idx >= cap { 0 } E {
+    I idx >= cap { 0 } EL {
         node := load_i64(buckets + idx * 8)
         msgpack_encode_map_entries(buf, node)
         msgpack_encode_map_buckets(buf, buckets, cap, idx + 1)
@@ -627,7 +627,7 @@ F msgpack_encode_map_buckets(buf: i64, buckets: i64, cap: i64, idx: i64) -> i64 
 }
 
 F msgpack_encode_map_entries(buf: i64, node: i64) -> i64 {
-    I node == 0 { 0 } E {
+    I node == 0 { 0 } EL {
         key := load_i64(node)
         key_len := load_i64(node + 8)
         value := load_i64(node + 16)
@@ -658,7 +658,7 @@ F msgpack_reader_new(data: i64, len: i64) -> i64 {
 F msgpack_reader_read_byte(r: i64) -> i64 {
     pos := load_i64(r + 8)
     len := load_i64(r + 16)
-    I pos >= len { 0 - 1 } E {
+    I pos >= len { 0 - 1 } EL {
         data := load_i64(r)
         b := load_byte(data + pos)
         store_i64(r + 8, pos + 1)
@@ -670,7 +670,7 @@ F msgpack_reader_read_u16_be(r: i64) -> i64 {
     b0 := msgpack_reader_read_byte(r)
     b1 := msgpack_reader_read_byte(r)
     I b0 < 0 || b1 < 0 { 0 - 1 }
-    E { (b0 << 8) | b1 }
+    EL { (b0 << 8) | b1 }
 }
 
 F msgpack_reader_read_u32_be(r: i64) -> i64 {
@@ -679,7 +679,7 @@ F msgpack_reader_read_u32_be(r: i64) -> i64 {
     b2 := msgpack_reader_read_byte(r)
     b3 := msgpack_reader_read_byte(r)
     I b0 < 0 { 0 - 1 }
-    E { (b0 << 24) | (b1 << 16) | (b2 << 8) | b3 }
+    EL { (b0 << 24) | (b1 << 16) | (b2 << 8) | b3 }
 }
 
 F msgpack_reader_read_u64_be(r: i64) -> i64 {
@@ -692,13 +692,13 @@ F msgpack_reader_read_u64_be(r: i64) -> i64 {
     b6 := msgpack_reader_read_byte(r)
     b7 := msgpack_reader_read_byte(r)
     I b0 < 0 { 0 - 1 }
-    E { (b0 << 56) | (b1 << 48) | (b2 << 40) | (b3 << 32) | (b4 << 24) | (b5 << 16) | (b6 << 8) | b7 }
+    EL { (b0 << 56) | (b1 << 48) | (b2 << 40) | (b3 << 32) | (b4 << 24) | (b5 << 16) | (b6 << 8) | b7 }
 }
 
 F msgpack_reader_read_bytes(r: i64, dst: i64, count: i64) -> i64 {
     pos := load_i64(r + 8)
     len := load_i64(r + 16)
-    I pos + count > len { 0 - 1 } E {
+    I pos + count > len { 0 - 1 } EL {
         data := load_i64(r)
         memcpy(dst, data + pos, count)
         store_i64(r + 8, pos + count)
@@ -708,17 +708,17 @@ F msgpack_reader_read_bytes(r: i64, dst: i64, count: i64) -> i64 {
 
 # Sign-extend i8 to i64
 F msgpack_sign_extend_i8(v: i64) -> i64 {
-    I v >= 128 { v - 256 } E { v }
+    I v >= 128 { v - 256 } EL { v }
 }
 
 # Sign-extend i16 to i64
 F msgpack_sign_extend_i16(v: i64) -> i64 {
-    I v >= 32768 { v - 65536 } E { v }
+    I v >= 32768 { v - 65536 } EL { v }
 }
 
 # Sign-extend i32 to i64
 F msgpack_sign_extend_i32(v: i64) -> i64 {
-    I v >= 2147483648 { v - 4294967296 } E { v }
+    I v >= 2147483648 { v - 4294967296 } EL { v }
 }
 
 F msgpack_decode_value(r: i64) -> i64 {
@@ -726,138 +726,138 @@ F msgpack_decode_value(r: i64) -> i64 {
     I b < 0 { 0 }
 
     # positive fixint: 0x00-0x7f
-    E I b <= 127 {
+    EL I b <= 127 {
         msgpack_int(b)
     }
     # fixmap: 0x80-0x8f
-    E I b >= 128 && b <= 143 {
+    EL I b >= 128 && b <= 143 {
         count := b - 128
         msgpack_decode_map_entries(r, count)
     }
     # fixarray: 0x90-0x9f
-    E I b >= 144 && b <= 159 {
+    EL I b >= 144 && b <= 159 {
         count := b - 144
         msgpack_decode_array_entries(r, count)
     }
     # fixstr: 0xa0-0xbf
-    E I b >= 160 && b <= 191 {
+    EL I b >= 160 && b <= 191 {
         len := b - 160
         msgpack_decode_str_data(r, len)
     }
     # nil: 0xc0
-    E I b == 192 {
+    EL I b == 192 {
         msgpack_nil()
     }
     # false: 0xc2
-    E I b == 194 {
+    EL I b == 194 {
         msgpack_bool(0)
     }
     # true: 0xc3
-    E I b == 195 {
+    EL I b == 195 {
         msgpack_bool(1)
     }
     # bin 8: 0xc4
-    E I b == 196 {
+    EL I b == 196 {
         len := msgpack_reader_read_byte(r)
         msgpack_decode_bin_data(r, len)
     }
     # bin 16: 0xc5
-    E I b == 197 {
+    EL I b == 197 {
         len := msgpack_reader_read_u16_be(r)
         msgpack_decode_bin_data(r, len)
     }
     # bin 32: 0xc6
-    E I b == 198 {
+    EL I b == 198 {
         len := msgpack_reader_read_u32_be(r)
         msgpack_decode_bin_data(r, len)
     }
     # uint 8: 0xcc
-    E I b == 204 {
+    EL I b == 204 {
         val := msgpack_reader_read_byte(r)
         msgpack_int(val)
     }
     # uint 16: 0xcd
-    E I b == 205 {
+    EL I b == 205 {
         val := msgpack_reader_read_u16_be(r)
         msgpack_int(val)
     }
     # uint 32: 0xce
-    E I b == 206 {
+    EL I b == 206 {
         val := msgpack_reader_read_u32_be(r)
         msgpack_int(val)
     }
     # uint 64: 0xcf
-    E I b == 207 {
+    EL I b == 207 {
         val := msgpack_reader_read_u64_be(r)
         msgpack_int(val)
     }
     # int 8: 0xd0
-    E I b == 208 {
+    EL I b == 208 {
         val := msgpack_reader_read_byte(r)
         msgpack_int(msgpack_sign_extend_i8(val))
     }
     # int 16: 0xd1
-    E I b == 209 {
+    EL I b == 209 {
         val := msgpack_reader_read_u16_be(r)
         msgpack_int(msgpack_sign_extend_i16(val))
     }
     # int 32: 0xd2
-    E I b == 210 {
+    EL I b == 210 {
         val := msgpack_reader_read_u32_be(r)
         msgpack_int(msgpack_sign_extend_i32(val))
     }
     # int 64: 0xd3
-    E I b == 211 {
+    EL I b == 211 {
         val := msgpack_reader_read_u64_be(r)
         msgpack_int(val)
     }
     # str 8: 0xd9
-    E I b == 217 {
+    EL I b == 217 {
         len := msgpack_reader_read_byte(r)
         msgpack_decode_str_data(r, len)
     }
     # str 16: 0xda
-    E I b == 218 {
+    EL I b == 218 {
         len := msgpack_reader_read_u16_be(r)
         msgpack_decode_str_data(r, len)
     }
     # str 32: 0xdb
-    E I b == 219 {
+    EL I b == 219 {
         len := msgpack_reader_read_u32_be(r)
         msgpack_decode_str_data(r, len)
     }
     # array 16: 0xdc
-    E I b == 220 {
+    EL I b == 220 {
         count := msgpack_reader_read_u16_be(r)
         msgpack_decode_array_entries(r, count)
     }
     # array 32: 0xdd
-    E I b == 221 {
+    EL I b == 221 {
         count := msgpack_reader_read_u32_be(r)
         msgpack_decode_array_entries(r, count)
     }
     # map 16: 0xde
-    E I b == 222 {
+    EL I b == 222 {
         count := msgpack_reader_read_u16_be(r)
         msgpack_decode_map_entries(r, count)
     }
     # map 32: 0xdf
-    E I b == 223 {
+    EL I b == 223 {
         count := msgpack_reader_read_u32_be(r)
         msgpack_decode_map_entries(r, count)
     }
     # negative fixint: 0xe0-0xff (-32 to -1)
-    E I b >= 224 {
+    EL I b >= 224 {
         msgpack_int(b - 256)
     }
-    E {
+    EL {
         # Unsupported type
         msgpack_nil()
     }
 }
 
 F msgpack_decode_str_data(r: i64, len: i64) -> i64 {
-    I len < 0 { msgpack_nil() } E {
+    I len < 0 { msgpack_nil() } EL {
         buf := malloc(len + 1)
         msgpack_reader_read_bytes(r, buf, len)
         store_byte(buf + len, 0)
@@ -870,7 +870,7 @@ F msgpack_decode_str_data(r: i64, len: i64) -> i64 {
 }
 
 F msgpack_decode_bin_data(r: i64, len: i64) -> i64 {
-    I len < 0 { msgpack_nil() } E {
+    I len < 0 { msgpack_nil() } EL {
         buf := malloc(len)
         msgpack_reader_read_bytes(r, buf, len)
         v := malloc(24)
@@ -892,7 +892,7 @@ F msgpack_decode_array_entries(r: i64, count: i64) -> i64 {
 }
 
 F msgpack_decode_array_items_rec(r: i64, arr: i64, count: i64, idx: i64) -> i64 {
-    I idx >= count { 0 } E {
+    I idx >= count { 0 } EL {
         elem := msgpack_decode_value(r)
         msgpack_array_push(arr, elem)
         msgpack_decode_array_items_rec(r, arr, count, idx + 1)
@@ -910,7 +910,7 @@ F msgpack_decode_map_entries(r: i64, count: i64) -> i64 {
 }
 
 F msgpack_decode_map_items_rec(r: i64, m: i64, count: i64, idx: i64) -> i64 {
-    I idx >= count { 0 } E {
+    I idx >= count { 0 } EL {
         key_v := msgpack_decode_value(r)
         value_v := msgpack_decode_value(r)
         # Extract key string

@@ -558,6 +558,133 @@ fn test_cpp_virtual_and_const_methods() {
     assert!(result.contains("getId"));
 }
 
+// C++ class → vais struct mapping tests
+#[test]
+fn test_cpp_class_to_vais_struct_mapping() {
+    let header = r#"
+        class Calculator {
+        public:
+            int add(int a, int b);
+            int subtract(int a, int b);
+        };
+    "#;
+
+    let mut bindgen = Bindgen::new_cpp();
+    bindgen.parse_header(header).unwrap();
+    let result = bindgen.generate().unwrap();
+
+    // Should generate vais struct for the C++ class
+    assert!(result.contains("struct Calculator"));
+    // Should generate constructor
+    assert!(result.contains("Calculator_new"));
+    // Should generate destructor with drop convention
+    assert!(result.contains("Calculator_drop"));
+    // Should generate method wrappers with self parameter
+    assert!(result.contains("Calculator_add"));
+    assert!(result.contains("Calculator_subtract"));
+    assert!(result.contains("self:"));
+}
+
+#[test]
+fn test_cpp_class_self_parameter_style() {
+    let header = r#"
+        class Counter {
+        public:
+            void increment();
+            int get() const;
+            void reset();
+        };
+    "#;
+
+    let mut bindgen = Bindgen::new_cpp();
+    bindgen.parse_header(header).unwrap();
+    let result = bindgen.generate().unwrap();
+
+    // Non-const methods should use *mut self
+    assert!(result.contains("self: *mut Counter"));
+    // Const methods should use *const self
+    assert!(result.contains("self: *const Counter"));
+}
+
+#[test]
+fn test_cpp_class_with_public_fields_struct_mapping() {
+    let header = r#"
+        class Point {
+        public:
+            int x;
+            int y;
+            double distance();
+        private:
+            int id;
+        };
+    "#;
+
+    let mut bindgen = Bindgen::new_cpp();
+    bindgen.parse_header(header).unwrap();
+    let result = bindgen.generate().unwrap();
+
+    // Should map class to struct with public fields
+    assert!(result.contains("struct Point"));
+    assert!(result.contains("x: i32"));
+    assert!(result.contains("y: i32"));
+    // Private field should not appear in public struct
+    // (id is private, so no field accessor for it in struct)
+    // Constructor and destructor should exist
+    assert!(result.contains("Point_new"));
+    assert!(result.contains("Point_drop"));
+    // Method wrapper should exist
+    assert!(result.contains("Point_distance"));
+}
+
+#[test]
+fn test_cpp_struct_with_member_functions() {
+    // C++ struct (public by default) with member functions
+    let header = r#"
+        class Vector2 {
+        public:
+            float x;
+            float y;
+            float length() const;
+            void normalize();
+        };
+    "#;
+
+    let mut bindgen = Bindgen::new_cpp();
+    bindgen.parse_header(header).unwrap();
+    let result = bindgen.generate().unwrap();
+
+    assert!(result.contains("struct Vector2"));
+    assert!(result.contains("x: f32"));
+    assert!(result.contains("y: f32"));
+    assert!(result.contains("Vector2_new"));
+    assert!(result.contains("Vector2_drop"));
+    assert!(result.contains("Vector2_length"));
+    assert!(result.contains("Vector2_normalize"));
+}
+
+#[test]
+fn test_cpp_class_constructor_destructor_mapping() {
+    let header = r#"
+        class FileReader {
+        public:
+            int read(char* buf, int len);
+            void close();
+        };
+    "#;
+
+    let mut bindgen = Bindgen::new_cpp();
+    bindgen.parse_header(header).unwrap();
+    let result = bindgen.generate().unwrap();
+
+    // Constructor should return an opaque handle or pointer
+    assert!(result.contains("fn FileReader_new()"));
+    // Destructor should use drop naming convention
+    assert!(result.contains("fn FileReader_drop("));
+    // Method wrappers should exist
+    assert!(result.contains("fn FileReader_read("));
+    assert!(result.contains("fn FileReader_close("));
+}
+
 // Parser edge case test (1개)
 #[test]
 fn test_typedef_chain_and_arrays() {

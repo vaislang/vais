@@ -64,6 +64,7 @@
 
     <!-- Product and plugin compatibility requirements -->
     <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.lang</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- File Type -->
@@ -113,6 +114,12 @@
 
         <!-- Debug Configuration -->
         <configurationType implementation="com.vais.intellij.debug.VaisDebugConfigurationType"/>
+
+        <!-- Debug Runner: drives the XDebug session via vais-dap -->
+        <programRunner implementation="com.vais.intellij.debug.VaisDebugRunner"/>
+
+        <!-- Breakpoint type for .vais source files -->
+        <xdebugger.breakpointType implementation="com.vais.intellij.debug.VaisLineBreakpointType"/>
     </extensions>
 
     <applicationListeners>

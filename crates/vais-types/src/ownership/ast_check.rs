@@ -41,7 +41,12 @@ impl OwnershipChecker {
         // Register parameters (at function scope depth, treated as "parameter" scope)
         for param in &f.params {
             let ty = self.ast_type_to_resolved(&param.ty.node);
-            self.define_var(&param.name.node, ty.clone(), param.is_mut, Some(param.name.span));
+            self.define_var(
+                &param.name.node,
+                ty.clone(),
+                param.is_mut,
+                Some(param.name.span),
+            );
 
             // Register parameter lifetime for reference types
             if self.is_ref_ast_type(&param.ty.node) {
@@ -272,17 +277,33 @@ impl OwnershipChecker {
                 self.check_expr_ownership(func)?;
                 for arg in args {
                     self.check_expr_ownership(arg)?;
-                    // Function arguments move non-Copy values
-                    self.check_move_from_expr(arg)?;
+                    // Don't mark args as moved — function signatures determine ownership
+                    // (args passed by &T or &mut T should not be moved)
                 }
                 Ok(())
             }
 
             Expr::MethodCall { receiver, args, .. } => {
-                self.check_expr_ownership(receiver)?;
+                // Method call receiver is borrowed, not moved.
+                // Only check it hasn't already been moved, but don't mark it as moved.
+                if let Expr::Ident(name) = &receiver.node {
+                    if let Some(info) = self.lookup_var(name) {
+                        if let OwnershipState::Moved { moved_at, .. } = &info.state {
+                            let err = TypeError::UseAfterMove {
+                                var_name: name.clone(),
+                                moved_at: *moved_at,
+                                use_at: Some(expr.span),
+                            };
+                            return self.report_error(err);
+                        }
+                    }
+                } else {
+                    self.check_expr_ownership(receiver)?;
+                }
                 for arg in args {
                     self.check_expr_ownership(arg)?;
-                    self.check_move_from_expr(arg)?;
+                    // Don't mark args as moved — method signatures determine ownership
+                    // (args passed by &T or &mut T should not be moved)
                 }
                 Ok(())
             }
@@ -304,7 +325,7 @@ impl OwnershipChecker {
 
             Expr::Assign { target, value } => {
                 self.check_expr_ownership(value)?;
-                self.check_move_from_expr(value)?;
+                // Assignment moves the value into the target — don't double-mark
 
                 if let Expr::Ident(name) = &target.node {
                     // Check for active borrows before assigning
@@ -330,14 +351,36 @@ impl OwnershipChecker {
 
             Expr::If { cond, then, else_ } => {
                 self.check_expr_ownership(cond)?;
+
+                // Save ownership state before branches for proper merge
+                let before_snapshot = self.save_ownership_snapshot();
+
+                // Check then-branch
                 self.push_scope();
                 for stmt in then {
                     self.check_stmt(stmt)?;
                 }
                 self.pop_scope();
+
+                let after_then_snapshot = self.save_ownership_snapshot();
+
                 if let Some(else_branch) = else_ {
+                    // Restore to pre-then state before checking else
+                    self.restore_ownership_snapshot(before_snapshot.clone());
                     self.check_if_else(else_branch)?;
+
+                    let after_else_snapshot = self.save_ownership_snapshot();
+
+                    // Merge: variable is moved only if BOTH branches moved it
+                    self.merge_branch_ownership(
+                        &before_snapshot,
+                        &after_then_snapshot,
+                        &after_else_snapshot,
+                    );
                 }
+                // If no else branch, keep the then-branch state as-is
+                // (conservative: if then might move, assume it could happen)
+
                 Ok(())
             }
 
@@ -425,9 +468,11 @@ impl OwnershipChecker {
             }
 
             Expr::StructLit { fields, .. } => {
+                // check_expr_ownership already handles the move via use_var,
+                // so we don't need check_move_from_expr here (which would
+                // incorrectly report E022 since the value is already marked as moved)
                 for (_, e) in fields {
                     self.check_expr_ownership(e)?;
-                    self.check_move_from_expr(e)?;
                 }
                 Ok(())
             }
@@ -472,7 +517,7 @@ impl OwnershipChecker {
                 Ok(())
             }
 
-            Expr::Spawn(inner) | Expr::Await(inner) | Expr::Try(inner) | Expr::Unwrap(inner) => {
+            Expr::Await(inner) | Expr::Try(inner) | Expr::Unwrap(inner) => {
                 self.check_expr_ownership(inner)?;
                 Ok(())
             }
@@ -500,13 +545,26 @@ impl OwnershipChecker {
         match if_else {
             IfElse::ElseIf(cond, stmts, else_branch) => {
                 self.check_expr_ownership(cond)?;
+
+                let before_snapshot = self.save_ownership_snapshot();
+
                 self.push_scope();
                 for stmt in stmts {
                     self.check_stmt(stmt)?;
                 }
                 self.pop_scope();
+
+                let after_then_snapshot = self.save_ownership_snapshot();
+
                 if let Some(else_b) = else_branch {
+                    self.restore_ownership_snapshot(before_snapshot.clone());
                     self.check_if_else(else_b)?;
+                    let after_else_snapshot = self.save_ownership_snapshot();
+                    self.merge_branch_ownership(
+                        &before_snapshot,
+                        &after_then_snapshot,
+                        &after_else_snapshot,
+                    );
                 }
                 Ok(())
             }

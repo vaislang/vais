@@ -5,13 +5,13 @@
 ## Import
 
 ```vais
-U std/set
+use std/set
 ```
 
 ## Struct
 
 ```vais
-S Set { buckets: i64, size: i64, cap: i64 }
+struct Set { buckets: i64, size: i64, cap: i64 }
 ```
 
 ## Methods
@@ -44,9 +44,9 @@ S Set { buckets: i64, size: i64, cap: i64 }
 ## Usage
 
 ```vais
-U std/set
+use std/set
 
-F main() -> i64 {
+fn main() -> i64 {
     s1 := set_new()
     s1.insert(10)
     s1.insert(20)

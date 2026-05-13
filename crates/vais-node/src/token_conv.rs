@@ -22,13 +22,10 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Impl => "Impl",
         Token::Pub => "Pub",
         Token::Mut => "Mut",
-        Token::Spawn => "Spawn",
         Token::Await => "Await",
         Token::Yield => "Yield",
         Token::SelfLower => "self",
         Token::SelfUpper => "Self",
-        Token::Weak => "Weak",
-        Token::Clone => "Clone",
         Token::Const => "Const",
         Token::True => "True",
         Token::False => "False",
@@ -127,14 +124,15 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Linear => "Linear",
         Token::Affine => "Affine",
         Token::Move => "Move",
-        Token::Consume => "Consume",
-        // Lazy evaluation keywords
-        Token::Lazy => "Lazy",
-        Token::Force => "Force",
         // Where clause
         Token::Where => "Where",
         // Lifetime tokens
         Token::Lifetime(lt) => return format!("Lifetime({})", lt),
+        // New unambiguous keyword variants — map to same string as their legacy equivalents
+        Token::EnumKeyword => "Enum",
+        Token::Else => "Else",
+        Token::ForEach => "Loop",
+        Token::While => "Loop",
     }
     .to_string()
 }

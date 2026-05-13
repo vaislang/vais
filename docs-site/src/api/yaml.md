@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/yaml
+use std/yaml
 ```
 
 ## Overview
@@ -28,7 +28,7 @@ The `yaml` module provides a recursive-descent YAML parser and generator. It sup
 ### Parsing
 
 ```vais
-F yaml_parse(input: str) -> i64
+fn yaml_parse(input: str) -> i64
 ```
 
 Parse a YAML string into a tagged value tree. Returns a pointer to the root value.
@@ -36,38 +36,38 @@ Parse a YAML string into a tagged value tree. Returns a pointer to the root valu
 ### Value Access
 
 ```vais
-F yaml_get_type(value: i64) -> i64     # Get value tag/type
-F yaml_get_int(value: i64) -> i64      # Get integer value
-F yaml_get_bool(value: i64) -> i64     # Get boolean value
-F yaml_get_str(value: i64) -> str      # Get string value
+fn yaml_get_type(value: i64) -> i64     # Get value tag/type
+fn yaml_get_int(value: i64) -> i64      # Get integer value
+fn yaml_get_bool(value: i64) -> i64     # Get boolean value
+fn yaml_get_str(value: i64) -> str      # Get string value
 ```
 
 ### Mapping Operations
 
 ```vais
-F yaml_map_get(map: i64, key: str) -> i64    # Lookup key in mapping
-F yaml_map_len(map: i64) -> i64              # Number of keys
+fn yaml_map_get(map: i64, key: str) -> i64    # Lookup key in mapping
+fn yaml_map_len(map: i64) -> i64              # Number of keys
 ```
 
 ### Sequence Operations
 
 ```vais
-F yaml_seq_get(seq: i64, index: i64) -> i64  # Get element at index
-F yaml_seq_len(seq: i64) -> i64               # Number of elements
+fn yaml_seq_get(seq: i64, index: i64) -> i64  # Get element at index
+fn yaml_seq_len(seq: i64) -> i64               # Number of elements
 ```
 
 ### Generation
 
 ```vais
-F yaml_to_string(value: i64) -> str    # Serialize value to YAML string
+fn yaml_to_string(value: i64) -> str    # Serialize value to YAML string
 ```
 
 ## Example
 
 ```vais
-U std/yaml
+use std/yaml
 
-F main() {
+fn main() {
     input := "name: vais\nversion: 1\nfeatures:\n  - fast\n  - safe"
     doc := yaml_parse(input)
     name := yaml_get_str(yaml_map_get(doc, "name"))

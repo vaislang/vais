@@ -38,7 +38,7 @@ F test_disjoint_stack_heap() -> i64 {
     I result == ALIAS_NO() {
         print_str("PASS: test_disjoint_stack_heap\n")
         R 1
-    } E {
+    } EL {
         print_str("FAIL: test_disjoint_stack_heap - expected ALIAS_NO, got ")
         print_i64(result)
         print_str("\n")
@@ -71,7 +71,7 @@ F test_same_base_must_alias() -> i64 {
     I result == ALIAS_MUST() {
         print_str("PASS: test_same_base_must_alias\n")
         R 1
-    } E {
+    } EL {
         print_str("FAIL: test_same_base_must_alias - expected ALIAS_MUST, got ")
         print_i64(result)
         print_str("\n")
@@ -142,7 +142,7 @@ F test_escape_analysis() -> i64 {
     I escapes == 1 {
         print_str("PASS: test_escape_analysis\n")
         R 1
-    } E {
+    } EL {
         print_str("FAIL: test_escape_analysis - pointer should escape\n")
         R 0
     }
@@ -190,7 +190,7 @@ F test_function_summary_purity() -> i64 {
     I is_pure == 1 {
         print_str("PASS: test_function_summary_purity\n")
         R 1
-    } E {
+    } EL {
         print_str("FAIL: test_function_summary_purity - expected is_pure=1, got ")
         print_i64(is_pure)
         print_str(", modifies_len=")
@@ -266,7 +266,7 @@ F test_module_analysis() -> i64 {
         print_i64(func_count)
         print_str(" functions\n")
         R 1
-    } E {
+    } EL {
         print_str("FAIL: test_module_analysis - expected 2 functions, got ")
         print_i64(func_count)
         print_str("\n")
@@ -289,35 +289,35 @@ F main() -> i64 {
     I test_disjoint_stack_heap() == 1 {
         passed = passed + 1
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Test 2
     total = total + 1
     I test_same_base_must_alias() == 1 {
         passed = passed + 1
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Test 3
     total = total + 1
     I test_escape_analysis() == 1 {
         passed = passed + 1
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Test 4
     total = total + 1
     I test_function_summary_purity() == 1 {
         passed = passed + 1
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Test 5
     total = total + 1
     I test_module_analysis() == 1 {
         passed = passed + 1
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Print summary
     print_str("\n=== Test Summary ===\n")
@@ -330,7 +330,7 @@ F main() -> i64 {
     I passed == total {
         print_str("All tests passed!\n")
         R 0
-    } E {
+    } EL {
         print_str("Some tests failed.\n")
         R 1
     }

@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/async
+use std/async
 ```
 
 ## Types
@@ -32,7 +32,7 @@ Configurable retry logic with exponential backoff.
 Races multiple futures and returns the first completed result.
 
 ```vais
-S RaceFuture { futures: i64, count: i64, completed: i64 }
+struct RaceFuture { futures: i64, count: i64, completed: i64 }
 ```
 
 | Method | Signature | Description |
@@ -47,7 +47,7 @@ S RaceFuture { futures: i64, count: i64, completed: i64 }
 Async-aware mutual exclusion (non-blocking try_lock).
 
 ```vais
-S AsyncMutex { locked: i64, value: i64, waiters: i64, waiter_head: i64 }
+struct AsyncMutex { locked: i64, value: i64, waiters: i64, waiter_head: i64 }
 ```
 
 | Method | Signature | Description |
@@ -64,7 +64,7 @@ S AsyncMutex { locked: i64, value: i64, waiters: i64, waiter_head: i64 }
 Async-aware bounded channel with non-blocking send/receive.
 
 ```vais
-S AsyncChannel { buffer: i64, capacity: i64, head: i64, tail: i64, len: i64, closed: i64 }
+struct AsyncChannel { buffer: i64, capacity: i64, head: i64, tail: i64, len: i64, closed: i64 }
 ```
 
 | Method | Signature | Description |
@@ -84,7 +84,7 @@ S AsyncChannel { buffer: i64, capacity: i64, head: i64, tail: i64, len: i64, clo
 Delays execution until input settles.
 
 ```vais
-S Debounce { delay: i64, last_trigger: i64, pending: i64 }
+struct Debounce { delay: i64, last_trigger: i64, pending: i64 }
 ```
 
 | Method | Signature | Description |
@@ -98,7 +98,7 @@ S Debounce { delay: i64, last_trigger: i64, pending: i64 }
 Limits execution rate.
 
 ```vais
-S Throttle { interval: i64, last_exec: i64 }
+struct Throttle { interval: i64, last_exec: i64 }
 ```
 
 | Method | Signature | Description |
@@ -119,9 +119,9 @@ S Throttle { interval: i64, last_exec: i64 }
 ## Usage
 
 ```vais
-U std/async
+use std/async
 
-F main() -> i64 {
+fn main() -> i64 {
     # AsyncChannel example
     ch := async_channel(32)
     ch.try_send(42)

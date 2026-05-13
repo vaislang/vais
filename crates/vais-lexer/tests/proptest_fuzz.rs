@@ -5,7 +5,7 @@
 use proptest::prelude::*;
 use vais_lexer::tokenize;
 
-/// The lexer must never panic on arbitrary UTF-8 strings.
+// The lexer must never panic on arbitrary UTF-8 strings.
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(2000))]
 

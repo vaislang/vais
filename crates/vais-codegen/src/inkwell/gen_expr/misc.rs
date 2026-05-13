@@ -11,6 +11,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Extract the raw i8* pointer from a string fat pointer `{ ptr, i64 }`.
     /// If the value is already a pointer, returns it as-is.
     /// If the value is a struct (fat pointer), extracts field 0 (the raw ptr).
+    #[inline(never)]
     pub(crate) fn extract_str_raw_ptr(
         &self,
         val: BasicValueEnum<'ctx>,
@@ -41,6 +42,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// - FloatValue: bitcast f64 to i64
     /// - PointerValue: ptrtoint to i64
     /// - StructValue: extract first int field, or return 0
+    #[inline(never)]
     pub(crate) fn coerce_to_i64(&self, v: BasicValueEnum<'ctx>) -> CodegenResult<IntValue<'ctx>> {
         let i64_type = self.context.i64_type();
         if v.is_int_value() {
@@ -188,6 +190,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     target_type.into_int_type(),
                     "cast_ptrtoi",
                 )
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            Ok(result.into())
+        } else if val.is_struct_value() && target_type.is_int_type() {
+            // str fat ptr { ptr, i64 } -> i64
+            // Extract the raw data pointer (field 0) and ptrtoint it. Examples
+            // like `load_byte(text as i64 + i)` rely on getting the underlying
+            // address, not the struct bits.
+            let raw_ptr = self.extract_str_raw_ptr(val)?;
+            let result = self
+                .builder
+                .build_ptr_to_int(raw_ptr, target_type.into_int_type(), "cast_strtoi")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             Ok(result.into())
         } else {

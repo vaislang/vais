@@ -9,7 +9,7 @@
 ### Hello World
 
 ```vais
-F main() {
+fn main() {
   print("Hello, Vais!")
 }
 ```
@@ -17,14 +17,14 @@ F main() {
 ### 명령줄 인수 처리
 
 ```vais
-U std/args
+use std/args
 
-F main() {
+fn main() {
   args := get_args()
   I args.len() > 1 {
     print("First argument: ")
     print(args.get(1))
-  } E {
+  } else {
     print("No arguments provided")
   }
 }
@@ -33,11 +33,11 @@ F main() {
 ### 환경변수 읽기
 
 ```vais
-U std/env
+use std/env
 
-F main() {
+fn main() {
   path := env_get("PATH")
-  M path {
+  match path {
     Some(p) => print(p),
     None => print("PATH not set")
   }
@@ -51,7 +51,7 @@ F main() {
 ### 문자열 결합
 
 ```vais
-F main() {
+fn main() {
   first := "Hello"
   second := "World"
   result := first + " " + second
@@ -62,9 +62,9 @@ F main() {
 ### 문자열 분할
 
 ```vais
-U std/string
+use std/string
 
-F main() {
+fn main() {
   text := "apple,banana,cherry"
   parts := str_split(text, ",")
   I parts.len() > 0 {
@@ -76,7 +76,7 @@ F main() {
 ### 문자열 포맷팅
 
 ```vais
-F main() {
+fn main() {
   name := "Alice"
   age := 30
   msg := "Name: " + name + ", Age: " + i64_to_str(age)
@@ -87,9 +87,9 @@ F main() {
 ### 문자열 트림 및 대소문자 변환
 
 ```vais
-U std/string
+use std/string
 
-F main() {
+fn main() {
   text := "  Hello  "
   trimmed := str_trim(text)
   upper := str_to_upper(trimmed)
@@ -106,9 +106,9 @@ F main() {
 ### Vec 생성 및 조작
 
 ```vais
-U std/collections
+use std/collections
 
-F main() {
+fn main() {
   v := Vec::new<i64>()
   v.push(10)
   v.push(20)
@@ -124,14 +124,14 @@ F main() {
 ### HashMap 사용
 
 ```vais
-U std/collections
+use std/collections
 
-F main() {
+fn main() {
   map := HashMap::new<str, i64>()
   map.insert("apple", 5)
   map.insert("banana", 10)
 
-  M map.get("apple") {
+  match map.get("apple") {
     Some(val) => print(i64_to_str(val)),  # "5"
     None => print("Not found")
   }
@@ -141,9 +141,9 @@ F main() {
 ### 정렬
 
 ```vais
-U std/collections
+use std/collections
 
-F main() {
+fn main() {
   v := Vec::new<i64>()
   v.push(30)
   v.push(10)
@@ -161,17 +161,17 @@ F main() {
 ### 필터 및 맵
 
 ```vais
-U std/collections
+use std/collections
 
-F is_even(x: i64) -> bool {
+fn is_even(x: i64) -> bool {
   x % 2 == 0
 }
 
-F double(x: i64) -> i64 {
+fn double(x: i64) -> i64 {
   x * 2
 }
 
-F main() {
+fn main() {
   v := Vec::new<i64>()
   v.push(1)
   v.push(2)
@@ -192,11 +192,11 @@ F main() {
 ### 파일 읽기
 
 ```vais
-U std/io
+use std/io
 
-F main() {
+fn main() {
   content := file_read("input.txt")
-  M content {
+  match content {
     Ok(data) => print(data),
     Err(e) => print("Error reading file")
   }
@@ -206,11 +206,11 @@ F main() {
 ### 파일 쓰기
 
 ```vais
-U std/io
+use std/io
 
-F main() {
+fn main() {
   result := file_write("output.txt", "Hello, file!")
-  M result {
+  match result {
     Ok(_) => print("Write successful"),
     Err(e) => print("Write failed")
   }
@@ -220,11 +220,11 @@ F main() {
 ### 디렉토리 탐색
 
 ```vais
-U std/io
+use std/io
 
-F main() {
+fn main() {
   entries := dir_read(".")
-  M entries {
+  match entries {
     Ok(files) => {
       L i:0..files.len() {
         print(files.get(i))
@@ -238,9 +238,9 @@ F main() {
 ### CSV 파싱
 
 ```vais
-U std/string
+use std/string
 
-F main() {
+fn main() {
   csv := "name,age,city\nAlice,30,NYC\nBob,25,LA"
   lines := str_split(csv, "\n")
 
@@ -264,16 +264,16 @@ F main() {
 ### Result 체이닝
 
 ```vais
-U std/io
+use std/io
 
-F process_file(path: str) -> Result<i64, str> {
+fn process_file(path: str) -> Result<i64, str> {
   content := file_read(path)?
   len := str_len(content)
   Ok(len)
 }
 
-F main() {
-  M process_file("data.txt") {
+fn main() {
+  match process_file("data.txt") {
     Ok(len) => print("File length: " + i64_to_str(len)),
     Err(e) => print("Error: " + e)
   }
@@ -283,17 +283,17 @@ F main() {
 ### ? 연산자 사용
 
 ```vais
-U std/io
+use std/io
 
-F read_and_parse(path: str) -> Result<i64, str> {
+fn read_and_parse(path: str) -> Result<i64, str> {
   content := file_read(path)?
   num := str_to_i64(content)?
   Ok(num * 2)
 }
 
-F main() {
+fn main() {
   result := read_and_parse("number.txt")
-  M result {
+  match result {
     Ok(n) => print(i64_to_str(n)),
     Err(e) => print("Failed: " + e)
   }
@@ -303,24 +303,24 @@ F main() {
 ### 커스텀 에러 타입
 
 ```vais
-E MyError {
+enum MyError {
   NotFound(str),
   InvalidInput(str),
   IoError(str)
 }
 
-F find_user(id: i64) -> Result<str, MyError> {
+fn find_user(id: i64) -> Result<str, MyError> {
   I id < 0 {
-    R Err(MyError::InvalidInput("ID must be positive"))
+    return Err(MyError::InvalidInput("ID must be positive"))
   }
   I id > 1000 {
-    R Err(MyError::NotFound("User not found"))
+    return Err(MyError::NotFound("User not found"))
   }
   Ok("User_" + i64_to_str(id))
 }
 
-F main() {
-  M find_user(1500) {
+fn main() {
+  match find_user(1500) {
     Ok(user) => print(user),
     Err(MyError::NotFound(msg)) => print("Not found: " + msg),
     Err(MyError::InvalidInput(msg)) => print("Invalid: " + msg),
@@ -336,12 +336,12 @@ F main() {
 ### 기본 async/await
 
 ```vais
-A F fetch_data() -> str {
+A fn fetch_data() -> str {
   # 비동기 작업 시뮬레이션
-  R "Data fetched"
+  return "Data fetched"
 }
 
-A F main() {
+A fn main() {
   result := fetch_data().Y
   print(result)
 }
@@ -350,15 +350,15 @@ A F main() {
 ### HTTP 요청
 
 ```vais
-U std/http
+use std/http
 
-A F fetch_url(url: str) -> Result<str, str> {
+A fn fetch_url(url: str) -> Result<str, str> {
   response := http_get(url).Y?
   Ok(response.body)
 }
 
-A F main() {
-  M fetch_url("https://api.example.com/data").Y {
+A fn main() {
+  match fetch_url("https://api.example.com/data").Y {
     Ok(body) => print(body),
     Err(e) => print("HTTP error: " + e)
   }
@@ -368,17 +368,17 @@ A F main() {
 ### 동시 작업
 
 ```vais
-U std/async
+use std/async
 
-A F task1() -> i64 {
-  R 42
+A fn task1() -> i64 {
+  return 42
 }
 
-A F task2() -> i64 {
-  R 100
+A fn task2() -> i64 {
+  return 100
 }
 
-A F main() {
+A fn main() {
   future1 := spawn(task1())
   future2 := spawn(task2())
 
@@ -397,9 +397,9 @@ A F main() {
 ### C 함수 호출
 
 ```vais
-extern F strlen(s: i64) -> i64
+extern fn strlen(s: i64) -> i64
 
-F main() {
+fn main() {
   text := "Hello"
   ptr := str_to_ptr(text)
   length := strlen(ptr)
@@ -410,9 +410,9 @@ F main() {
 ### 공유 라이브러리 사용
 
 ```vais
-extern F my_c_function(x: i64) -> i64
+extern fn my_c_function(x: i64) -> i64
 
-F main() {
+fn main() {
   result := my_c_function(10)
   print(i64_to_str(result))
 }
@@ -425,13 +425,13 @@ F main() {
 ### JSON 파싱
 
 ```vais
-U std/json
+use std/json
 
-F main() {
+fn main() {
   json_str := "{\"name\":\"Alice\",\"age\":30}"
   parsed := json_parse(json_str)
 
-  M parsed {
+  match parsed {
     Ok(obj) => {
       name := json_get_string(obj, "name")
       age := json_get_i64(obj, "age")
@@ -446,9 +446,9 @@ F main() {
 ### JSON 생성
 
 ```vais
-U std/json
+use std/json
 
-F main() {
+fn main() {
   obj := json_object_new()
   json_set_string(obj, "name", "Bob")
   json_set_i64(obj, "age", 25)
@@ -462,9 +462,9 @@ F main() {
 ### JSON 배열
 
 ```vais
-U std/json
+use std/json
 
-F main() {
+fn main() {
   arr := json_array_new()
   json_array_push_i64(arr, 10)
   json_array_push_i64(arr, 20)
@@ -482,11 +482,11 @@ F main() {
 ### TCP 서버
 
 ```vais
-U std/net
+use std/net
 
-F handle_client(conn: TcpStream) {
+fn handle_client(conn: TcpStream) {
   msg := tcp_read(conn)
-  M msg {
+  match msg {
     Ok(data) => {
       response := "Echo: " + data
       tcp_write(conn, response)
@@ -496,13 +496,13 @@ F handle_client(conn: TcpStream) {
   tcp_close(conn)
 }
 
-F main() {
+fn main() {
   listener := tcp_listen("127.0.0.1:8080")
-  M listener {
+  match listener {
     Ok(l) => {
       print("Server listening on :8080")
       L {
-        M tcp_accept(l) {
+        match tcp_accept(l) {
           Ok(conn) => handle_client(conn),
           Err(e) => print("Accept error")
         }
@@ -516,19 +516,19 @@ F main() {
 ### HTTP 서버
 
 ```vais
-U std/http
+use std/http
 
-F handler(req: HttpRequest) -> HttpResponse {
+fn handler(req: HttpRequest) -> HttpResponse {
   I req.path == "/" {
-    R http_response(200, "Hello, HTTP!")
-  } E {
-    R http_response(404, "Not Found")
+    return http_response(200, "Hello, HTTP!")
+  } else {
+    return http_response(404, "Not Found")
   }
 }
 
-F main() {
+fn main() {
   server := http_server_new("127.0.0.1:8000", handler)
-  M server {
+  match server {
     Ok(s) => {
       print("HTTP server running on :8000")
       http_serve(s)
@@ -541,16 +541,16 @@ F main() {
 ### WebSocket 서버
 
 ```vais
-U std/websocket
+use std/websocket
 
-F on_message(conn: WsConnection, msg: str) {
+fn on_message(conn: WsConnection, msg: str) {
   print("Received: " + msg)
   ws_send(conn, "Echo: " + msg)
 }
 
-F main() {
+fn main() {
   server := ws_server_new("127.0.0.1:9000", on_message)
-  M server {
+  match server {
     Ok(s) => {
       print("WebSocket server on :9000")
       ws_serve(s)
@@ -567,13 +567,13 @@ F main() {
 ### 스레드 생성
 
 ```vais
-U std/thread
+use std/thread
 
-F worker(id: i64) {
+fn worker(id: i64) {
   print("Worker " + i64_to_str(id) + " started")
 }
 
-F main() {
+fn main() {
   t1 := thread_spawn(|| { worker(1) })
   t2 := thread_spawn(|| { worker(2) })
 
@@ -587,9 +587,9 @@ F main() {
 ### 뮤텍스 (Mutex)
 
 ```vais
-U std/sync
+use std/sync
 
-F main() {
+fn main() {
   counter := mutex_new(0)
 
   t1 := thread_spawn(|| {
@@ -611,22 +611,22 @@ F main() {
 ### 채널 (Channel)
 
 ```vais
-U std/channel
+use std/channel
 
-F sender(ch: Channel<i64>) {
+fn sender(ch: Channel<i64>) {
   L i:0..10 {
     channel_send(ch, i)
   }
   channel_close(ch)
 }
 
-F main() {
+fn main() {
   ch := channel_new<i64>()
 
   thread_spawn(|| { sender(ch) })
 
   L {
-    M channel_recv(ch) {
+    match channel_recv(ch) {
       Ok(val) => print(i64_to_str(val)),
       Err(_) => B  # 채널 닫힘
     }
@@ -639,9 +639,9 @@ F main() {
 ### 여러 채널 select
 
 ```vais
-U std/channel
+use std/channel
 
-F main() {
+fn main() {
   ch1 := channel_new<i64>()
   ch2 := channel_new<i64>()
 
@@ -652,7 +652,7 @@ F main() {
   channel_set_add(set, ch1)
   channel_set_add(set, ch2)
 
-  M channel_select(set) {
+  match channel_select(set) {
     Ok((ch, val)) => print("Received: " + i64_to_str(val)),
     Err(_) => print("No data")
   }
@@ -666,14 +666,14 @@ F main() {
 ### Self-Recursion (@)
 
 ```vais
-F factorial(n: i64) -> i64 {
+fn factorial(n: i64) -> i64 {
   I n <= 1 {
-    R 1
+    return 1
   }
-  R n * @(n - 1)  # @ = self-recursion
+  return n * @(n - 1)  # @ = self-recursion
 }
 
-F main() {
+fn main() {
   result := factorial(5)
   print(i64_to_str(result))  # "120"
 }
@@ -682,7 +682,7 @@ F main() {
 ### Ternary 연산자
 
 ```vais
-F main() {
+fn main() {
   x := 10
   sign := x >= 0 ? "positive" : "negative"
   print(sign)  # "positive"
@@ -692,7 +692,7 @@ F main() {
 ### Range 반복
 
 ```vais
-F main() {
+fn main() {
   L i:0..10 {
     print(i64_to_str(i))
   }
@@ -703,20 +703,20 @@ F main() {
 ### Pattern Matching with Guards
 
 ```vais
-E Status {
+enum Status {
   Active(i64),
   Inactive
 }
 
-F check_status(s: Status) -> str {
-  M s {
+fn check_status(s: Status) -> str {
+  match s {
     Active(n) I n > 100 => "High activity",
     Active(n) => "Normal activity",
     Inactive => "No activity"
   }
 }
 
-F main() {
+fn main() {
   status := Status::Active(150)
   msg := check_status(status)
   print(msg)  # "High activity"

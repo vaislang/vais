@@ -5,13 +5,13 @@
 ## Import
 
 ```vais
-U std/priority_queue
+use std/priority_queue
 ```
 
 ## Struct
 
 ```vais
-S PriorityQueue { data: i64, size: i64, capacity: i64 }
+struct PriorityQueue { data: i64, size: i64, capacity: i64 }
 ```
 
 ## Methods
@@ -46,9 +46,9 @@ S PriorityQueue { data: i64, size: i64, capacity: i64 }
 ## Usage
 
 ```vais
-U std/priority_queue
+use std/priority_queue
 
-F main() -> i64 {
+fn main() -> i64 {
     # Using methods
     pq := PriorityQueue.with_capacity(16)
     pq.push(30)

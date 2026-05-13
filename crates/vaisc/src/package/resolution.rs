@@ -282,7 +282,10 @@ fn build_dependency_graph(
                 Dependency::Detailed(d) if d.path.is_some() => {
                     // safe: guard `d.path.is_some()` ensures this branch only matches Some
                     // SAFETY: match guard checks d.path.is_some()
-                    let path = d.path.as_ref().unwrap_or_else(|| unreachable!("guarded by is_some()"));
+                    let path = d
+                        .path
+                        .as_ref()
+                        .unwrap_or_else(|| unreachable!("guarded by is_some()"));
                     Some(base_dir.join(path))
                 }
                 Dependency::Version(v) => {

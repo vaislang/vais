@@ -151,44 +151,29 @@ F main() -> i64 {
 
 #[test]
 fn error_return_type_mismatch_string_for_int() {
-    assert_error_contains(
-        r#"F main() -> i64 = "hello""#,
-        "mismatch",
-    );
+    assert_error_contains(r#"F main() -> i64 = "hello""#, "mismatch");
 }
 
 #[test]
 fn error_binary_op_type_mismatch() {
-    assert_error_contains(
-        r#"F main() -> i64 = "hello" + 42"#,
-        "mismatch",
-    );
+    assert_error_contains(r#"F main() -> i64 = "hello" + 42"#, "mismatch");
 }
 
 #[test]
 fn error_comparison_type_mismatch() {
-    assert_error_contains(
-        r#"F main() -> bool = "hello" > 42"#,
-        "mismatch",
-    );
+    assert_error_contains(r#"F main() -> bool = "hello" > 42"#, "mismatch");
 }
 
 // ==================== F. Undefined Symbol Errors ====================
 
 #[test]
 fn error_undefined_variable() {
-    assert_error_contains(
-        r#"F main() -> i64 = unknown_var"#,
-        "undefined",
-    );
+    assert_error_contains(r#"F main() -> i64 = unknown_var"#, "undefined");
 }
 
 #[test]
 fn error_undefined_function() {
-    assert_error_contains(
-        r#"F main() -> i64 = unknown_func(42)"#,
-        "undefined",
-    );
+    assert_error_contains(r#"F main() -> i64 = unknown_func(42)"#, "undefined");
 }
 
 #[test]

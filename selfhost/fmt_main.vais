@@ -111,11 +111,11 @@ F main(argc: i64, argv: i64) -> i64 {
         I streq_ptr(flag_ptr, flag_len, check_str, check_len) == 1 {
             mode = 1
             0
-        } E I streq_ptr(flag_ptr, flag_len, write_str, write_len) == 1 {
+        } EL I streq_ptr(flag_ptr, flag_len, write_str, write_len) == 1 {
             mode = 2
             0
-        } E { 0 }
-    } E { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     # Read source file
     source := read_file_ptr(path_ptr)
@@ -150,7 +150,7 @@ F main(argc: i64, argv: i64) -> i64 {
         # Print to stdout
         print_str(out_data, out_len)
         0
-    } E I mode == 1 {
+    } EL I mode == 1 {
         # Check mode: compare with original
         I out_len != source_len {
             puts("File is not formatted\n")
@@ -174,7 +174,7 @@ F main(argc: i64, argv: i64) -> i64 {
         }
         puts("File is formatted correctly\n")
         0
-    } E {
+    } EL {
         # Write mode: overwrite file
         write_file_ptr(path_ptr, out_data, out_len)
         puts("File formatted\n")

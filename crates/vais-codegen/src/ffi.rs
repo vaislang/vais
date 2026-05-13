@@ -133,6 +133,7 @@ impl CodeGenerator {
     }
 
     /// Validate all types in an extern function signature
+    #[inline(never)]
     pub(crate) fn _validate_ffi_function(
         &self,
         func_name: &str,
@@ -153,6 +154,7 @@ impl CodeGenerator {
     }
 
     /// Generate LLVM IR for extern block
+    #[inline(never)]
     pub(crate) fn _generate_extern_block(&mut self, block: &ExternBlock) -> CodegenResult<String> {
         let mut ir = String::new();
 
@@ -357,6 +359,7 @@ impl CodeGenerator {
     }
 
     /// Generate function pointer type in LLVM
+    #[inline(never)]
     pub(crate) fn _generate_fn_ptr_type(
         &self,
         params: &[ResolvedType],
@@ -378,6 +381,7 @@ impl CodeGenerator {
 
     /// Generate variadic function call
     /// For vararg calls, extra arguments are passed without type checking
+    #[inline(never)]
     pub(crate) fn _generate_vararg_call(
         &mut self,
         func_name: &str,
@@ -404,16 +408,25 @@ impl CodeGenerator {
         let ret_llvm = self.type_to_llvm(ret_type);
 
         // Build call instruction with all arguments
-        let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = call {} @{}({})\n",
-            result,
-            ret_llvm,
-            func_name,
-            args.join(", ")
-        ));
-
-        Ok((result, ir))
+        if ret_llvm == "void" {
+            // Void-returning calls must not be assigned to a named variable
+            ir.push_str(&format!(
+                "  call void @{}({})\n",
+                func_name,
+                args.join(", ")
+            ));
+            Ok(("void".to_string(), ir))
+        } else {
+            let result = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = call {} @{}({})\n",
+                result,
+                ret_llvm,
+                func_name,
+                args.join(", ")
+            ));
+            Ok((result, ir))
+        }
     }
 }
 

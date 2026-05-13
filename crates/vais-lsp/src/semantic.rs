@@ -52,7 +52,6 @@ pub fn get_semantic_tokens(source: &str) -> Vec<SemanticToken> {
             | Token::Trait
             | Token::Impl
             | Token::Async
-            | Token::Spawn
             | Token::Await
             | Token::Mut
             | Token::Const

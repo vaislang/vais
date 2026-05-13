@@ -3,7 +3,7 @@
 #
 # Run: vaisc run examples/calculator_enum.vais
 
-E Op {
+EN Op {
     Add(i64, i64),
     Sub(i64, i64),
     Mul(i64, i64),
@@ -52,5 +52,5 @@ F main() -> i64 {
     total := r1 + r2 + r3 + r4 + r5
     # 15 + 5 + 42 + 25 + (-42) = 45
     puts("Total = {total}")
-    I total == 45 { 0 } E { 1 }
+    I total == 45 { 0 } EL { 1 }
 }

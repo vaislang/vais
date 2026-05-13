@@ -37,6 +37,10 @@ pub(crate) struct TypeRegistry {
     /// Default parameter expressions: `function_name -> Vec<Option<Box<Spanned<Expr>>>>`
     /// Each element corresponds to a parameter; Some(expr) means it has a default value.
     pub(crate) default_params: HashMap<String, Vec<Option<Box<vais_ast::Spanned<vais_ast::Expr>>>>>,
+    /// Drop trait registry: type_name -> drop function IR name.
+    /// Populated when `X Type: Drop { F drop(&self) { ... } }` is registered.
+    /// Used at scope exit to emit automatic drop calls for local variables.
+    pub(crate) drop_registry: HashMap<String, String>,
 }
 
 /// Generic type system state — templates, instantiations, substitutions
@@ -53,6 +57,10 @@ pub(crate) struct GenericState {
     pub(crate) fn_instantiations: HashMap<String, Vec<(Vec<ResolvedType>, String)>>,
     /// Generated function instantiations (mangled_name -> already_generated)
     pub(crate) generated_functions: HashMap<String, bool>,
+    /// Generic method bodies from impl blocks on generic structs.
+    /// Populated during module processing for on-demand specialization.
+    /// Key: (struct_name, method_name), Value: Function AST
+    pub(crate) generic_method_bodies: HashMap<(String, String), std::rc::Rc<vais_ast::Function>>,
     /// Generic substitutions for current function/method
     pub(crate) substitutions: HashMap<String, ResolvedType>,
 }
@@ -87,8 +95,105 @@ pub(crate) struct FunctionContext {
 
     /// Tracks heap allocations (malloc'd pointers) in the current function scope.
     /// At function exit, all tracked pointers are freed automatically.
-    /// Each entry is the LLVM register name holding the i8* pointer (e.g., "%tmp.5").
-    pub(crate) alloc_tracker: Vec<String>,
+    /// Each entry is (alloca_name, original_ptr_reg): the entry-block alloca stores the
+    /// i8* pointer so it can be loaded from any basic block at cleanup time.
+    pub(crate) alloc_tracker: Vec<(String, String)>,
+
+    /// Maps a string fat-pointer SSA value (e.g. "%4") to the alloc_slot alloca name
+    /// (e.g. "%__alloc_slot_2") that owns its heap buffer. Used at `return` to
+    /// transfer ownership: the returned fat pointer's slot is excluded from
+    /// `generate_alloc_cleanup` so the caller receives a live buffer instead of UAF.
+    /// Populated by concat / substring / push_str / format paths that push heap ptrs.
+    pub(crate) string_value_slot: std::collections::HashMap<String, String>,
+
+    /// Slot names to skip in the next `generate_alloc_cleanup` call. Normally
+    /// holds one slot — the one owning the returned buffer. For PHI results
+    /// (if/match as expression producing str), both incoming branches' slots
+    /// must be skipped because codegen can't tell which ran. Cleared after
+    /// cleanup emission.
+    pub(crate) pending_return_skip_slot: Vec<String>,
+
+    /// Maps a local variable name to multiple owning slots — used when the RHS
+    /// is a PHI (if/match as expression). Mirrors inkwell's
+    /// `var_string_slots_multi`.
+    pub(crate) var_string_slots_multi: std::collections::HashMap<String, Vec<String>>,
+
+    /// For PHI results (str-producing if/match), the PHI's SSA is registered
+    /// against its first incoming slot in `string_value_slot`; any additional
+    /// slots go here keyed by PHI SSA. The let-binding hook pulls these into
+    /// `var_string_slots_multi`.
+    pub(crate) phi_extra_slots: std::collections::HashMap<String, Vec<String>>,
+
+    /// Maps a local variable name to the alloc_slot it owns. When `let msg = a+b`
+    /// binds a tracked concat result, the variable name is registered here so
+    /// that a later `return msg` (which loads `msg`'s alloca and produces a new
+    /// SSA) can still find the owning slot for ownership transfer. Mirrors the
+    /// inkwell backend's `var_string_slot`. See RFC-001 §4.5 / §4.6
+    /// (team-review UAF fix 2026-04-14).
+    pub(crate) var_string_slot: std::collections::HashMap<String, String>,
+
+    /// Maps temporary variable names (e.g., "%5", "%t.3") to their resolved types.
+    /// Used by downstream passes to emit correct LLVM IR types instead of
+    /// falling back to i64 for every temporary. Populated by generate_expr paths
+    /// and consumed by store/binary/icmp/call emission to fix width mismatches
+    /// and void-call naming issues (R2 IR Type Tracking).
+    pub(crate) temp_var_types: HashMap<String, ResolvedType>,
+
+    /// Scope stack for block-scoped drop cleanup.
+    /// Each entry is a list of variable names declared in that scope (in declaration order).
+    /// When a block exits, variables declared in that scope are dropped in LIFO order.
+    /// The outer Vec is a stack of scopes (innermost scope last).
+    pub(crate) scope_stack: Vec<Vec<String>>,
+
+    /// Block-scope string ownership stack (text-IR backend, mirrors inkwell's scope_str_stack).
+    /// Each entry is a list of alloc_slot names (e.g., "%__alloc_slot_2") allocated within
+    /// that lexical block. When the block exits naturally (no break/continue/return), every
+    /// slot in the frame is freed via null-check+free IR, except the one transferring
+    /// ownership to the outer scope (last expression of the block). See RFC-001 §4.2, §5.4.
+    pub(crate) scope_str_stack: Vec<Vec<String>>,
+
+    /// Counter for unique label suffixes in `generate_string_scope_cleanup`.
+    /// Each block-exit free emission increments this to avoid label collisions
+    /// across multiple block exits within the same function.
+    pub(crate) scope_drop_label_counter: usize,
+
+    /// Collected alloca instructions to be hoisted to the function entry block.
+    ///
+    /// LLVM can only optimize alloca instructions that appear in the entry basic block.
+    /// Non-entry-block allocas (e.g., inside if/else branches) cause "Instruction does
+    /// not dominate all uses" errors when the allocated pointer is referenced from
+    /// another basic block.
+    ///
+    /// During expression/statement codegen, static-size allocas (struct, union, enum,
+    /// array literals) are recorded here instead of being emitted inline. After the
+    /// full function body is generated, these are spliced into the entry block.
+    ///
+    /// Each entry is a complete IR line, e.g., `"  %tmp.5 = alloca %MyStruct"`.
+    pub(crate) entry_allocas: Vec<String>,
+
+    /// IR code for on-demand generated specialized functions (e.g., Vec$str_push).
+    /// Accumulated during method call processing and emitted after the current
+    /// function's body in the final IR output.
+    pub(crate) pending_specialized_ir: Vec<String>,
+
+    /// Cross-module async poll function declarations needed by await expressions.
+    /// Collected during await codegen and emitted at module level (outside functions).
+    pub(crate) async_poll_declares: std::collections::HashSet<String>,
+}
+
+impl FunctionContext {
+    /// Register the resolved type of a named temporary variable.
+    ///
+    /// Only call this for named temporaries (`%N` format). Constants and
+    /// literals do not need registration.
+    pub(crate) fn register_temp_type(&mut self, name: &str, ty: ResolvedType) {
+        self.temp_var_types.insert(name.to_string(), ty);
+    }
+
+    /// Look up the resolved type of a temporary variable.
+    pub(crate) fn get_temp_type(&self, name: &str) -> Option<&ResolvedType> {
+        self.temp_var_types.get(name)
+    }
 }
 
 /// Lambda, closure, and async function state
@@ -105,10 +210,6 @@ pub(crate) struct LambdaState {
     pub(crate) async_await_points: Vec<crate::types::AsyncAwaitPoint>,
     /// Current async function info
     pub(crate) current_async_function: Option<crate::types::AsyncFunctionInfo>,
-    /// Last generated lazy thunk info (for Let statement to track lazy bindings)
-    pub(crate) last_lazy_info: Option<crate::types::LazyThunkInfo>,
-    /// Lazy binding info: variable name -> lazy thunk info
-    pub(crate) lazy_bindings: HashMap<String, crate::types::LazyThunkInfo>,
 }
 
 /// String constant pool — string literals, counters, module prefix

@@ -11,7 +11,7 @@ Inter-thread communication via message passing.
 An unbounded multi-producer, single-consumer channel.
 
 ```vais
-S UnboundedChannel<T> {
+struct UnboundedChannel<T> {
     # internal implementation
 }
 ```
@@ -44,7 +44,7 @@ val := channel_recv(ch)
 Attempts to receive without blocking. Returns `None` if empty.
 
 ```vais
-M channel_try_recv(ch) {
+match channel_try_recv(ch) {
     Some(val) => puts("got {val}"),
     None => puts("empty"),
 }

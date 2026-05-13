@@ -46,7 +46,7 @@ impl ReplHelper {
             // Single-letter keywords
             "F", "S", "E", "I", "L", "M", "W", "X", "A", "R", "B", "C", "T", "U", "P",
             // Common keywords
-            "mut", "self", "Self", "true", "false", "spawn", "await", "weak", "clone",
+            "mut", "self", "Self", "true", "false", "await", "weak", "clone",
             // Primitive types
             "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64",
             "bool", "str", "char",
@@ -613,12 +613,6 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
         RefLifetime { lifetime, inner } => format!("&'{} {}", lifetime, format_type(inner)),
         RefMutLifetime { lifetime, inner } => format!("&'{} mut {}", lifetime, format_type(inner)),
         Lifetime(name) => format!("'{}", name),
-        Lazy(inner) => format!("Lazy<{}>", format_type(inner)),
-        ImplTrait { bounds } => format!("impl {}", bounds.join(" + ")),
-        HigherKinded { name, arity } => {
-            let holes = (0..*arity).map(|_| "_").collect::<Vec<_>>().join(", ");
-            format!("{}<{}>", name, holes)
-        }
     }
 }
 

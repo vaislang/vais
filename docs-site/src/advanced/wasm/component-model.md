@@ -54,7 +54,7 @@ Vais types map to WIT types as follows:
 
 Vais struct:
 ```vais
-S Person {
+struct Person {
     name: str,
     age: i32,
     active: bool
@@ -74,7 +74,7 @@ record person {
 
 Vais enum:
 ```vais
-E Status {
+enum Status {
     Pending,
     Running(i64),
     Complete(str)
@@ -97,19 +97,19 @@ You can define WIT interfaces for Vais components using attributes:
 ```vais
 # Annotate with WIT interface
 #[wit_interface("calculator")]
-S Calculator {}
+struct Calculator {}
 
 #[wit_export("add")]
-F add(a: i32, b: i32) -> i32 {
+fn add(a: i32, b: i32) -> i32 {
     a + b
 }
 
 #[wit_export("divide")]
-F divide(a: f64, b: f64) -> Result<f64, str> {
+fn divide(a: f64, b: f64) -> Result<f64, str> {
     I b == 0.0 {
-        R Err("Division by zero")
+        return Err("Division by zero")
     }
-    R Ok(a / b)
+    return Ok(a / b)
 }
 ```
 
@@ -129,7 +129,7 @@ Components can import and export interfaces:
 ```vais
 # Export a logger interface
 #[wit_export("log")]
-F log_message(level: str, msg: str) {
+fn log_message(level: str, msg: str) {
     # Implementation
 }
 ```
@@ -180,23 +180,23 @@ resource database {
 In Vais:
 ```vais
 #[wit_resource("database")]
-S Database {
+struct Database {
     conn: i64  # Opaque handle
 }
 
 #[wit_constructor]
-F Database::new(url: str) -> Database {
+fn Database::new(url: str) -> Database {
     conn := internal_connect(url)
     Database { conn }
 }
 
 #[wit_method]
-F Database::query(self, sql: str) -> Vec<Row> {
+fn Database::query(self, sql: str) -> Vec<Row> {
     # Implementation
 }
 
 #[wit_destructor]
-F Database::close(self) {
+fn Database::close(self) {
     internal_close(self.conn)
 }
 ```
@@ -224,10 +224,10 @@ Vais handles this automatically through `WasmSerde`:
 ```vais
 # Automatic serialization for component exports
 #[wasm_export("process")]
-F process(data: Person) -> Result<str, str> {
+fn process(data: Person) -> Result<str, str> {
     # `data` is automatically lifted from linear memory
     # Return value is automatically lowered
-    R Ok("Processed: ~{data.name}")
+    return Ok("Processed: {data.name}")
 }
 ```
 
@@ -271,7 +271,7 @@ This generates WIT definitions for all `#[wit_export]` annotated items.
 | Standardization | W3C proposal | Rust ecosystem |
 | Browser Support | Future | Current |
 
-wasm-bindgen is production-ready for Rust+JS. Component Model is the future standard for all languages.
+wasm-bindgen is a mature Rust+JS tool. Component Model is the future standard for all languages.
 
 ## Example: Multi-Language App
 
@@ -280,7 +280,7 @@ A complete example using Vais, Rust, and JS:
 ### 1. Vais Component (logger.vais)
 ```vais
 #[wit_export("log")]
-F log(msg: str) {
+fn log(msg: str) {
     # WASI syscall
     fd_write(WASM_STDOUT, str_to_ptr(msg), strlen(msg), 0)
 }

@@ -16,11 +16,11 @@ F add(a: i64, b: i64) -> i64 = a + b
 #[wasm_export("fibonacci")]
 F fib(n: i64) -> i64 {
     I n <= 1 { n }
-    E { @(n - 1) + @(n - 2) }
+    EL { @(n - 1) + @(n - 2) }
 }
 
 #[wasm_export("factorial")]
-F factorial(n: i64) -> i64 = I n <= 1 { 1 } E { n * @(n - 1) }
+F factorial(n: i64) -> i64 = I n <= 1 { 1 } EL { n * @(n - 1) }
 
 F main() -> i64 {
     result := add(10, 20)

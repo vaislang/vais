@@ -58,7 +58,7 @@ F file_close(fp: i64) -> i64 {
 F file_read_all(path: str) -> i64 {
     path_ptr := str_to_ptr(path)
     fp := fopen_ptr(path_ptr, "rb")
-    I fp == 0 { R 0 } E { 0 }
+    I fp == 0 { R 0 } EL { 0 }
 
     # Get file size via fseek/ftell
     fseek(fp, 0, 2)    # SEEK_END = 2
@@ -82,7 +82,7 @@ F file_read_all(path: str) -> i64 {
 # Read one line from file (up to newline or EOF)
 # Returns pointer to [data_ptr: i64, len: i64], or 0 on EOF
 F file_read_line(fp: i64) -> i64 {
-    I fp == 0 { R 0 } E { 0 }
+    I fp == 0 { R 0 } EL { 0 }
 
     cap := mut 128
     data := mut malloc(cap)
@@ -92,10 +92,10 @@ F file_read_line(fp: i64) -> i64 {
     L {
         # Read one byte; fread returns 0 on EOF/error
         bytes_read := fread(byte_buf, 1, 1, fp)
-        I bytes_read == 0 { B } E { 0 }
+        I bytes_read == 0 { B } EL { 0 }
 
         byte := load_byte(byte_buf)
-        I byte == 10 { B } E { 0 }
+        I byte == 10 { B } EL { 0 }
 
         # Grow if needed
         I len >= cap {
@@ -106,7 +106,7 @@ F file_read_line(fp: i64) -> i64 {
             data = new_data
             cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
         store_byte(data + len, byte)
         len = len + 1
         0
@@ -118,7 +118,7 @@ F file_read_line(fp: i64) -> i64 {
         # Check if fread returned 0 due to EOF (no bytes read at all)
         free(data)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     store_byte(data + len, 0)  # null terminate
 
@@ -131,15 +131,15 @@ F file_read_line(fp: i64) -> i64 {
 # Read N bytes from file
 # Returns pointer to [data_ptr: i64, len: i64], or 0 on failure
 F file_read_bytes(fp: i64, count: i64) -> i64 {
-    I fp == 0 { R 0 } E { 0 }
-    I count <= 0 { R 0 } E { 0 }
+    I fp == 0 { R 0 } EL { 0 }
+    I count <= 0 { R 0 } EL { 0 }
 
     data := malloc(count)
     bytes_read := fread(data, 1, count, fp)
     I bytes_read <= 0 {
         free(data)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     result := malloc(16)
     store_i64(result, data)
@@ -156,19 +156,19 @@ F file_read_bytes(fp: i64, count: i64) -> i64 {
 F file_write_all(path: str, data_ptr: i64, len: i64) -> i64 {
     path_ptr := str_to_ptr(path)
     fp := fopen_ptr(path_ptr, "wb")
-    I fp == 0 { R 0 } E { 0 }
+    I fp == 0 { R 0 } EL { 0 }
 
     bytes_written := fwrite(data_ptr, 1, len, fp)
     fflush(fp)
     fclose(fp)
-    I bytes_written == len { 1 } E { 0 }
+    I bytes_written == len { 1 } EL { 0 }
 }
 
 # Write N bytes to file pointer
 # Returns number of bytes written
 F file_write_bytes(fp: i64, data_ptr: i64, len: i64) -> i64 {
-    I fp == 0 { R 0 } E { 0 }
-    I len <= 0 { R 0 } E { 0 }
+    I fp == 0 { R 0 } EL { 0 }
+    I len <= 0 { R 0 } EL { 0 }
 
     bytes_written := fwrite(data_ptr, 1, len, fp)
     fflush(fp)
@@ -180,12 +180,12 @@ F file_write_bytes(fp: i64, data_ptr: i64, len: i64) -> i64 {
 F file_append(path: str, data_ptr: i64, len: i64) -> i64 {
     path_ptr := str_to_ptr(path)
     fp := fopen_ptr(path_ptr, "ab")
-    I fp == 0 { R 0 } E { 0 }
+    I fp == 0 { R 0 } EL { 0 }
 
     bytes_written := fwrite(data_ptr, 1, len, fp)
     fflush(fp)
     fclose(fp)
-    I bytes_written == len { 1 } E { 0 }
+    I bytes_written == len { 1 } EL { 0 }
 }
 
 # ============================================================================
@@ -193,21 +193,21 @@ F file_append(path: str, data_ptr: i64, len: i64) -> i64 {
 # ============================================================================
 
 F file_seek(fp: i64, offset: i64, whence: i64) -> i64 {
-    I fp == 0 { R 1 } E { 0 }
+    I fp == 0 { R 1 } EL { 0 }
     fseek(fp, offset, whence)
 }
 
 F file_tell(fp: i64) -> i64 {
-    I fp == 0 { R 0 } E { 0 }
+    I fp == 0 { R 0 } EL { 0 }
     ftell(fp)
 }
 
 F file_is_eof(fp: i64) -> i64 {
-    I fp == 0 { R 0 } E { 0 }
+    I fp == 0 { R 0 } EL { 0 }
     # feof returns i32 but Vais treats as i64 — mask to 32 bits
     eof_raw := feof(fp)
     eof := eof_raw & 4294967295
-    I eof == 0 { 0 } E { 1 }
+    I eof == 0 { 0 } EL { 1 }
 }
 
 # ============================================================================
@@ -219,7 +219,7 @@ F file_exists(path: str) -> i64 {
     path_ptr := str_to_ptr(path)
     fp := fopen_ptr(path_ptr, "r")
     I fp == 0 { 0 }
-    E {
+    EL {
         fclose(fp)
         1
     }
@@ -229,7 +229,7 @@ F file_exists(path: str) -> i64 {
 F file_size(path: str) -> i64 {
     path_ptr := str_to_ptr(path)
     fp := fopen_ptr(path_ptr, "rb")
-    I fp == 0 { R 0 } E { 0 }
+    I fp == 0 { R 0 } EL { 0 }
     fseek(fp, 0, 2)
     sz := ftell(fp)
     fclose(fp)
@@ -240,8 +240,8 @@ F file_size(path: str) -> i64 {
 F file_result_free(result: i64) -> i64 {
     I result != 0 {
         data := load_i64(result)
-        I data != 0 { free(data); 0 } E { 0 }
+        I data != 0 { free(data); 0 } EL { 0 }
         free(result)
         0
-    } E { 0 }
+    } EL { 0 }
 }

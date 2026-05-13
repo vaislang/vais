@@ -1,3 +1,62 @@
+# ============================================================================
+# Module: fmt
+# ============================================================================
+#
+# 문자열 포맷팅 및 숫자-문자열 변환 유틸리티 모듈입니다.
+# 플레이스홀더 기반 포맷, 패딩, 정렬, 커스텀 Display 구현을 위한
+# FormatBuilder 등을 제공합니다.
+#
+# 주요 상수:
+#   FMT_BUF_SIZE = 256   # 기본 포맷 버퍼 크기
+#   ALIGN_LEFT   = 0     # 왼쪽 정렬
+#   ALIGN_CENTER = 1     # 중앙 정렬
+#   ALIGN_RIGHT  = 2     # 오른쪽 정렬
+#
+# 주요 함수:
+#   fmt_i64(n: i64) -> str             - i64 → 10진수 문자열
+#   fmt_i64_radix(n, radix: i64) -> str - i64 → 지정 진수 문자열
+#   fmt_f64(x: f64, prec: i64) -> str  - f64 → 소수점 prec 자리 문자열
+#   fmt_bool(b: i64) -> str            - i64 → "true"/"false"
+#   fmt_pad(s: str, width: i64, align: i64, fill: i8) -> str
+#                                       - 지정 폭/정렬/채움 문자로 패딩
+#   fmt_format(template: str, args) -> str  - {} 플레이스홀더 치환
+#   fmt_join(parts, sep: str) -> str    - 문자열 배열을 구분자로 연결
+#   fmt_repeat(s: str, n: i64) -> str  - 문자열 n회 반복
+#
+# FormatBuilder (커스텀 Display):
+#   FormatBuilder::new()               - 빈 포맷 빌더 생성
+#   .write_str(s)                      - 문자열 추가
+#   .write_i64(n)                      - 정수 추가
+#   .write_f64(x, prec)               - 실수 추가
+#   .finish() -> str                   - 최종 문자열 반환
+#
+# 사용 예제:
+#
+#   U std/fmt
+#
+#   # 정수 → 문자열
+#   s := fmt_i64(42)
+#   print(s)                       # 출력: 42
+#
+#   # 16진수 변환
+#   hex := fmt_i64_radix(255, 16)
+#   print(hex)                     # 출력: ff
+#
+#   # 실수 포맷
+#   pi_str := fmt_f64(3.14159, 2)
+#   print(pi_str)                  # 출력: 3.14
+#
+#   # 패딩
+#   padded := fmt_pad("hi", 10, ALIGN_RIGHT, 0x20)
+#   print(padded)                  # 출력: "        hi"
+#
+#   # FormatBuilder
+#   b := FormatBuilder::new()
+#   b.write_str("val=")
+#   b.write_i64(99)
+#   result := b.finish()
+#   print(result)                  # 출력: val=99
+#
 # std/fmt - Formatting utilities
 # Provides string formatting, number-to-string conversion, and format builders
 #
@@ -30,26 +89,26 @@ F itoa(value: i64) -> i64 {
     pos := 20
     store_i64(buf + pos, 0)  # null terminator
 
-    L value == 0 {
+    LW value == 0 {
         pos = pos - 1
         store_i64(buf + pos, 48)  # '0'
         R buf + pos
     }
 
     negative := 0
-    L value < 0 {
+    LW value < 0 {
         negative = 1
         value = 0 - value
     }
 
-    L value > 0 {
+    LW value > 0 {
         pos = pos - 1
         digit := value % 10
         store_i64(buf + pos, digit + 48)  # '0' + digit
         value = value / 10
     }
 
-    L negative == 1 {
+    LW negative == 1 {
         pos = pos - 1
         store_i64(buf + pos, 45)  # '-'
     }
@@ -63,16 +122,16 @@ F itoa_hex(value: i64) -> i64 {
     pos := 18
     store_i64(buf + pos, 0)
 
-    L value == 0 {
+    LW value == 0 {
         pos = pos - 1
         store_i64(buf + pos, 48)  # '0'
         R buf + pos
     }
 
-    L value > 0 {
+    LW value > 0 {
         pos = pos - 1
         digit := value % 16
-        L digit < 10 {
+        LW digit < 10 {
             store_i64(buf + pos, digit + 48)  # '0' + digit
         } ! {
             store_i64(buf + pos, digit - 10 + 97)  # 'a' + (digit-10)
@@ -89,15 +148,15 @@ F itoa_bin(value: i64) -> i64 {
     pos := 66
     store_i64(buf + pos, 0)
 
-    L value == 0 {
+    LW value == 0 {
         pos = pos - 1
         store_i64(buf + pos, 48)
         R buf + pos
     }
 
-    L value > 0 {
+    LW value > 0 {
         pos = pos - 1
-        L value % 2 == 1 {
+        LW value % 2 == 1 {
             store_i64(buf + pos, 49)  # '1'
         } ! {
             store_i64(buf + pos, 48)  # '0'
@@ -114,13 +173,13 @@ F itoa_oct(value: i64) -> i64 {
     pos := 23
     store_i64(buf + pos, 0)
 
-    L value == 0 {
+    LW value == 0 {
         pos = pos - 1
         store_i64(buf + pos, 48)
         R buf + pos
     }
 
-    L value > 0 {
+    LW value > 0 {
         pos = pos - 1
         digit := value % 8
         store_i64(buf + pos, digit + 48)
@@ -137,7 +196,7 @@ F itoa_oct(value: i64) -> i64 {
 # Get string length (null-terminated)
 F strlen(s: i64) -> i64 {
     len := 0
-    L load_i64(s + len) != 0 {
+    LW load_i64(s + len) != 0 {
         len = len + 1
     }
     len
@@ -146,10 +205,10 @@ F strlen(s: i64) -> i64 {
 # Copy string to buffer
 F strcpy(dst: i64, src: i64) -> i64 {
     i := 0
-    L 1 {
+    LW 1 {
         ch := load_i64(src + i)
         store_i64(dst + i, ch)
-        L ch == 0 {
+        LW ch == 0 {
             R i
         }
         i = i + 1
@@ -188,7 +247,7 @@ X FormatBuilder {
 
     # Write a single character
     F write_char(&self, ch: i64) -> i64 {
-        L self.pos < self.capacity - 1 {
+        LW self.pos < self.capacity - 1 {
             store_i64(self.buffer + self.pos, ch)
             self.pos = self.pos + 1
         }
@@ -210,12 +269,12 @@ X FormatBuilder {
     # Write a string
     F write_str(&self, s: i64) -> i64 {
         i := 0
-        L 1 {
+        LW 1 {
             ch := load_i64(s + i)
-            L ch == 0 {
+            LW ch == 0 {
                 R 0
             }
-            L self.pos < self.capacity - 1 {
+            LW self.pos < self.capacity - 1 {
                 store_i64(self.buffer + self.pos, ch)
                 self.pos = self.pos + 1
             }
@@ -232,7 +291,7 @@ X FormatBuilder {
     # Write N copies of a character (for padding)
     F write_repeat(&self, ch: i64, count: i64) -> i64 {
         i := 0
-        L i < count {
+        LW i < count {
             self.write_char(ch)
             i = i + 1
         }
@@ -244,15 +303,15 @@ X FormatBuilder {
         s := itoa(value)
         slen := strlen(s)
         padding := width - slen
-        L padding < 0 {
+        LW padding < 0 {
             padding = 0
         }
 
-        L align == ALIGN_RIGHT {
+        LW align == ALIGN_RIGHT {
             self.write_repeat(pad_char, padding)
             self.write_str(s)
         } ! {
-            L align == ALIGN_CENTER {
+            LW align == ALIGN_CENTER {
                 left_pad := padding / 2
                 right_pad := padding - left_pad
                 self.write_repeat(pad_char, left_pad)
@@ -314,7 +373,7 @@ X DebugStruct {
 
     # Add a field to debug output
     F field(&self, name: i64, value: i64) -> i64 {
-        L self.has_fields == 1 {
+        LW self.has_fields == 1 {
             # Write ", "
         }
         self.has_fields = 1

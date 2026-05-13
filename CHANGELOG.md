@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-04-04
+
+### Added
+- Generic monomorphization with hybrid approach (specialized + sizeof dispatch)
+- Vec<struct> direct field access in codegen (alloca+memcpy loading)
+- Cross-module struct type resolution (generated_structs lookup, prefix scan)
+- 3-strategy cascading return type lookup for generic functions
+- VaisDB migration framework (MigrationRunner, MigrationTracker)
+- vais-server: Graceful shutdown with ShutdownCoordinator
+- vais-server: Structured JSON logging (JsonLogEntry, LogFormat)
+- vais-server: GraphQL resolver execution engine (GqlExecutor)
+- vais-server: YAML configuration file loader (parse_yaml)
+- vais-server: Docker support (Dockerfile, docker-compose.yml)
+- vais-web: Generic WebSocket protocol (WsEnvelope, WsRpcRegistry, StreamWriter)
+- vais-lang: MIT LICENSE file
+
+### Changed
+- Phase 158: Strict type coercion rules (explicit `as` required for cross-type conversions)
+- Phase 182: Self-hosting compiler achieved (50,000+ LOC bootstrap, 21/21 clang success)
+- Benchmark baseline updated to Phase 182 (850K lines/sec compilation)
+- Website updated to reflect production-ready ecosystem
+
+### Removed
+- Dead keywords: `weak`, `clone`, `consume` removed from lexer, parser, and bindings
+
+### Fixed
+- Vec<struct> field access SIGSEGV (expr_helpers_data.rs: generics preservation + struct alloca)
+- Cross-module struct type resolution failure (type_inference.rs + generics_helpers.rs)
+- Generic function struct return type erasure to Unit (function_gen/generics.rs)
+
 ## [0.0.5] - 2026-02-28
 
 ### Changed
@@ -158,7 +188,7 @@ See [SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) for complete list:
 - Upgraded from v0.1.0 to v0.2.0
 - Enhanced error messages with similarity suggestions
 
-## [0.1.0] - 2026-01-20
+## [0.1.0-initial] - 2026-01-20
 
 ### Added
 - Initial release of the Vais programming language
@@ -181,8 +211,9 @@ See [SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) for complete list:
 - JIT compiler (Cranelift)
 - Self-hosting bootstrap (Stage 1+2, 17,397 lines verified)
 
-[Unreleased]: https://github.com/vaislang/vais/compare/v0.0.5...HEAD
+[Unreleased]: https://github.com/vaislang/vais/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/vaislang/vais/compare/v0.0.5...v0.1.0
 [0.0.5]: https://github.com/vaislang/vais/compare/v1.0.0-alpha...v0.0.5
 [1.0.0-alpha]: https://github.com/vaislang/vais/compare/v0.2.0...v1.0.0-alpha
-[0.2.0]: https://github.com/vaislang/vais/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/vaislang/vais/releases/tag/v0.1.0
+[0.2.0]: https://github.com/vaislang/vais/compare/v0.1.0-initial...v0.2.0
+[0.1.0-initial]: https://github.com/vaislang/vais/releases/tag/v0.1.0-initial

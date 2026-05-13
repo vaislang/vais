@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/error
+use std/error
 ```
 
 ## Overview
@@ -15,12 +15,12 @@ The `error` module provides structured error handling utilities inspired by Rust
 ## Error Category Functions
 
 ```vais
-F ERROR_CATEGORY_IO() -> i64         # 1
-F ERROR_CATEGORY_PARSE() -> i64      # 2
-F ERROR_CATEGORY_VALIDATION() -> i64 # 3
-F ERROR_CATEGORY_AUTH() -> i64       # 4
-F ERROR_CATEGORY_NETWORK() -> i64    # 5
-F ERROR_CATEGORY_INTERNAL() -> i64   # 6
+fn ERROR_CATEGORY_IO() -> i64         # 1
+fn ERROR_CATEGORY_PARSE() -> i64      # 2
+fn ERROR_CATEGORY_VALIDATION() -> i64 # 3
+fn ERROR_CATEGORY_AUTH() -> i64       # 4
+fn ERROR_CATEGORY_NETWORK() -> i64    # 5
+fn ERROR_CATEGORY_INTERNAL() -> i64   # 6
 ```
 
 Broad error categories for classification and routing.
@@ -30,7 +30,7 @@ Broad error categories for classification and routing.
 ### `ErrorChain`
 
 ```vais
-S ErrorChain {
+struct ErrorChain {
     code: i64,
     context_code: i64,
     next: i64   # pointer to next ErrorChain node (0 = end)
@@ -44,7 +44,7 @@ A linked-list chain of errors for tracking causality, similar to `anyhow::Chain`
 ### new
 
 ```vais
-F new(code: i64) -> ErrorChain
+fn new(code: i64) -> ErrorChain
 ```
 
 Create a new error chain from a root error code.
@@ -52,7 +52,7 @@ Create a new error chain from a root error code.
 ### wrap
 
 ```vais
-F wrap(code: i64, context: i64, source_ptr: i64) -> ErrorChain
+fn wrap(code: i64, context: i64, source_ptr: i64) -> ErrorChain
 ```
 
 Wrap an error with a context code, creating a new chain node.
@@ -60,7 +60,7 @@ Wrap an error with a context code, creating a new chain node.
 ### root_cause
 
 ```vais
-F root_cause(&self) -> i64
+fn root_cause(&self) -> i64
 ```
 
 Get the root cause error code (bottom of the chain).
@@ -68,7 +68,7 @@ Get the root cause error code (bottom of the chain).
 ### depth
 
 ```vais
-F depth(&self) -> i64
+fn depth(&self) -> i64
 ```
 
 Get the chain depth (1 = no wrapping).
@@ -76,7 +76,7 @@ Get the chain depth (1 = no wrapping).
 ### has_source
 
 ```vais
-F has_source(&self) -> i64
+fn has_source(&self) -> i64
 ```
 
 Check if this error has a source/cause. Returns `1` if yes, `0` if no.
@@ -86,7 +86,7 @@ Check if this error has a source/cause. Returns `1` if yes, `0` if no.
 ### `AppError`
 
 ```vais
-E AppError {
+enum AppError {
     NotFound(i64),
     InvalidInput(i64),
     IoError(i64),
@@ -104,7 +104,7 @@ Common application error variants with specific error codes.
 ### code
 
 ```vais
-F code(&self) -> i64
+fn code(&self) -> i64
 ```
 
 Get the error code from any variant.
@@ -112,7 +112,7 @@ Get the error code from any variant.
 ### category
 
 ```vais
-F category(&self) -> i64
+fn category(&self) -> i64
 ```
 
 Get the error category (returns one of the `ERROR_CATEGORY_*` values).
@@ -120,7 +120,7 @@ Get the error category (returns one of the `ERROR_CATEGORY_*` values).
 ### is_retryable
 
 ```vais
-F is_retryable(&self) -> i64
+fn is_retryable(&self) -> i64
 ```
 
 Check if this error is retryable. `Timeout` and `IoError` return `1`.
@@ -128,7 +128,7 @@ Check if this error is retryable. `Timeout` and `IoError` return `1`.
 ### to_result
 
 ```vais
-F to_result(&self) -> Result<i64, i64>
+fn to_result(&self) -> Result<i64, i64>
 ```
 
 Convert to a `Result::Err` with the error code.
@@ -136,13 +136,13 @@ Convert to a `Result::Err` with the error code.
 ## Convenience Constructors
 
 ```vais
-F not_found(detail: i64) -> AppError
-F invalid_input(detail: i64) -> AppError
-F io_error(detail: i64) -> AppError
-F parse_error(detail: i64) -> AppError
-F auth_error(detail: i64) -> AppError
-F timeout_error(detail: i64) -> AppError
-F internal_error(detail: i64) -> AppError
+fn not_found(detail: i64) -> AppError
+fn invalid_input(detail: i64) -> AppError
+fn io_error(detail: i64) -> AppError
+fn parse_error(detail: i64) -> AppError
+fn auth_error(detail: i64) -> AppError
+fn timeout_error(detail: i64) -> AppError
+fn internal_error(detail: i64) -> AppError
 ```
 
 ## Utility Functions
@@ -150,7 +150,7 @@ F internal_error(detail: i64) -> AppError
 ### from_errno
 
 ```vais
-F from_errno(errno: i64) -> AppError
+fn from_errno(errno: i64) -> AppError
 ```
 
 Convert an errno-style code to an `AppError`. Maps errno `2` to `NotFound`, `13` to `AuthError`, `22` to `InvalidInput`, and others to `IoError`.
@@ -158,7 +158,7 @@ Convert an errno-style code to an `AppError`. Maps errno `2` to `NotFound`, `13`
 ### ensure
 
 ```vais
-F ensure(condition: i64, error_code: i64) -> i64
+fn ensure(condition: i64, error_code: i64) -> i64
 ```
 
 Ensure a condition holds. Returns `0` if the condition is truthy, or `error_code` otherwise.
@@ -166,13 +166,13 @@ Ensure a condition holds. Returns `0` if the condition is truthy, or `error_code
 ## Example
 
 ```vais
-U std/error
+use std/error
 
-F validate(x: i64) -> Result<i64, i64> {
+fn validate(x: i64) -> Result<i64, i64> {
     I x < 0 {
         err := invalid_input(x)
         err.to_result()
-    } E {
+    } else {
         Ok(x)
     }
 }

@@ -7,6 +7,7 @@ impl CodeGenerator {
     /// Generate old() snapshots for ensures clauses
     ///
     /// Called at function entry to capture pre-state values for old() references.
+    #[inline(never)]
     pub(crate) fn _generate_old_snapshots(
         &mut self,
         f: &Function,
@@ -50,7 +51,7 @@ impl CodeGenerator {
                 let ty = self.infer_expr_type(inner);
                 let llvm_ty = self.type_to_llvm(&ty);
 
-                write_ir!(ir, "  %{} = alloca {}", snapshot_name, llvm_ty);
+                self.emit_entry_alloca(&format!("%{}", snapshot_name), &llvm_ty);
                 write_ir!(
                     ir,
                     "  store {} {}, {}* %{}",
@@ -150,6 +151,7 @@ impl CodeGenerator {
     ///
     /// Verifies that the decreases expression is non-negative and strictly
     /// decreasing on recursive calls.
+    #[inline(never)]
     pub(crate) fn generate_decreases_checks(
         &mut self,
         f: &Function,
@@ -171,7 +173,7 @@ impl CodeGenerator {
 
                     // Store the initial value for comparison in recursive calls
                     let storage_name = format!("__decreases_{}_{}", f.name.node, idx);
-                    write_ir!(ir, "  %{} = alloca i64", storage_name);
+                    self.emit_entry_alloca(&format!("%{}", storage_name), "i64");
                     write_ir!(ir, "  store i64 {}, i64* %{}", value, storage_name);
 
                     // Store decreases info for recursive call checking
@@ -221,6 +223,7 @@ impl CodeGenerator {
     ///
     /// This verifies that the decreases expression is strictly less than
     /// the value stored at function entry.
+    #[inline(never)]
     pub(crate) fn generate_recursive_decreases_check(
         &mut self,
         args: &[vais_ast::Spanned<Expr>],
@@ -282,7 +285,7 @@ impl CodeGenerator {
                     let temp_var = format!("__decreases_arg_{}_{}", i, *counter);
                     *counter += 1;
                     let ty = self.type_to_llvm(param_type);
-                    write_ir!(ir, "  %{} = alloca {}", temp_var, ty);
+                    self.emit_entry_alloca(&format!("%{}", temp_var), &ty);
                     write_ir!(ir, "  store {} {}, {}* %{}", ty, arg_val, ty, temp_var);
 
                     // Register in locals so generate_expr can find it
@@ -351,16 +354,19 @@ impl CodeGenerator {
     }
 
     /// Clear decreases info (called when leaving function scope)
+    #[inline(never)]
     pub(crate) fn clear_decreases_info(&mut self) {
         self.contracts.current_decreases_info = None;
     }
 
     /// Check if current function has a decreases clause
+    #[inline(never)]
     pub(crate) fn _has_decreases_clause(&self) -> bool {
         self.contracts.current_decreases_info.is_some()
     }
 
     /// Get the function name with decreases clause (if any)
+    #[inline(never)]
     pub(crate) fn _get_decreases_function_name(&self) -> Option<&str> {
         self.contracts
             .current_decreases_info

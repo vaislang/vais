@@ -11,7 +11,7 @@ Date and time manipulation.
 Represents a calendar date and time.
 
 ```vais
-S DateTime {
+struct DateTime {
     year: i64,
     month: i64,
     day: i64,
@@ -26,7 +26,7 @@ S DateTime {
 Represents a time duration.
 
 ```vais
-S Duration {
+struct Duration {
     seconds: i64,
     nanos: i64,
 }

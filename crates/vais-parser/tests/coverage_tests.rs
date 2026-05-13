@@ -4,7 +4,6 @@
 //! Focus: lib.rs error recovery, item/macros.rs, types.rs advanced parsing
 
 use vais_ast::*;
-use vais_lexer::tokenize;
 use vais_parser::parse;
 
 fn parse_ok(source: &str) -> Module {
@@ -356,13 +355,6 @@ fn test_parse_defer() {
             R 0
         }
     "#;
-    let module = parse_ok(source);
-    assert_eq!(module.items.len(), 1);
-}
-
-#[test]
-fn test_parse_spawn() {
-    let source = r#"F test() -> i64 = spawn 42"#;
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }

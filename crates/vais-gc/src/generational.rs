@@ -586,6 +586,10 @@ impl GenerationalGc {
 
         for offset in (0..size).step_by(ptr_size) {
             if offset + ptr_size <= data.len() {
+                // SAFETY: `offset + ptr_size <= data.len()` is checked above, so the
+                // read is within bounds. The pointer is aligned to `usize` boundaries
+                // via `step_by(ptr_size)`. This is conservative pointer scanning: the
+                // value is only used if it matches a known GC object address.
                 let potential_ptr =
                     unsafe { std::ptr::read(data.as_ptr().add(offset) as *const usize) };
                 if self.young.contains_key(&potential_ptr) || self.old.contains_key(&potential_ptr)
@@ -1058,5 +1062,53 @@ mod tests {
     fn test_add_root_zero() {
         let mut gc = GenerationalGc::new();
         gc.add_root(0); // should be no-op
+    }
+
+    // === Unsafe boundary tests for scan_object_data ===
+
+    #[test]
+    fn test_scan_object_smaller_than_ptr_size() {
+        let mut gc = GenerationalGc::with_config(GenGcConfig {
+            young_threshold: 1024 * 1024,
+            ..Default::default()
+        });
+        // 1-byte object: too small for a usize pointer, scan should not OOB
+        let ptr = gc.alloc(1, 1) as usize;
+        gc.add_root(ptr);
+        gc.collect_minor();
+        assert!(gc.is_alive(ptr));
+    }
+
+    #[test]
+    fn test_scan_object_exact_ptr_size() {
+        let ptr_size = std::mem::size_of::<usize>();
+        let mut gc = GenerationalGc::with_config(GenGcConfig {
+            young_threshold: 1024 * 1024,
+            ..Default::default()
+        });
+        let ptr = gc.alloc(ptr_size, 1) as usize;
+        gc.add_root(ptr);
+        gc.collect_minor();
+        assert!(gc.is_alive(ptr));
+    }
+
+    #[test]
+    fn test_scan_zero_size_object() {
+        let mut gc = GenerationalGc::with_config(GenGcConfig {
+            young_threshold: 1024 * 1024,
+            ..Default::default()
+        });
+        let ptr = gc.alloc(0, 1) as usize;
+        gc.add_root(ptr);
+        gc.collect_minor();
+        assert!(gc.is_alive(ptr));
+    }
+
+    #[test]
+    fn test_collect_empty_generations() {
+        let mut gc = GenerationalGc::new();
+        gc.collect_minor(); // Should not panic on empty young gen
+        gc.collect_major(); // Should not panic on empty old gen
+        gc.collect_full();
     }
 }

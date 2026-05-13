@@ -28,20 +28,20 @@ F ALIAS_PARTIAL() -> i64 = 4   # Partially overlap
 # Check if result indicates possible aliasing
 F alias_result_may_alias(result: i64) -> i64 {
     I result == ALIAS_MAY() { R 1 }
-    E I result == ALIAS_MUST() { R 1 }
-    E I result == ALIAS_PARTIAL() { R 1 }
-    E { R 0 }
+    EL I result == ALIAS_MUST() { R 1 }
+    EL I result == ALIAS_PARTIAL() { R 1 }
+    EL { R 0 }
 }
 
 # Merge two alias results (most conservative)
 F alias_result_merge(r1: i64, r2: i64) -> i64 {
     I r1 == ALIAS_MUST() {
-        I r2 == ALIAS_MUST() { R ALIAS_MUST() } E { R ALIAS_MAY() }
+        I r2 == ALIAS_MUST() { R ALIAS_MUST() } EL { R ALIAS_MAY() }
     }
-    E I r1 == ALIAS_NO() {
-        I r2 == ALIAS_NO() { R ALIAS_NO() } E { R ALIAS_MAY() }
+    EL I r1 == ALIAS_NO() {
+        I r2 == ALIAS_NO() { R ALIAS_NO() } EL { R ALIAS_MAY() }
     }
-    E { R ALIAS_MAY() }
+    EL { R ALIAS_MAY() }
 }
 
 # ============================================================================
@@ -61,31 +61,31 @@ F pointer_base_disjoint(kind1: i64, name1: i64, kind2: i64, name2: i64) -> i64 {
     # Different stack allocations never alias
     I kind1 == PTR_BASE_STACK() {
         I kind2 == PTR_BASE_STACK() {
-            I name1 != name2 { R 1 } E { R 0 }
-        } E { 0 }
-    } E { 0 }
+            I name1 != name2 { R 1 } EL { R 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     # Different heap allocations never alias
     I kind1 == PTR_BASE_HEAP() {
         I kind2 == PTR_BASE_HEAP() {
-            I name1 != name2 { R 1 } E { R 0 }
-        } E { 0 }
-    } E { 0 }
+            I name1 != name2 { R 1 } EL { R 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     # Stack and heap never alias
     I kind1 == PTR_BASE_STACK() {
-        I kind2 == PTR_BASE_HEAP() { R 1 } E { 0 }
-    } E { 0 }
+        I kind2 == PTR_BASE_HEAP() { R 1 } EL { 0 }
+    } EL { 0 }
     I kind1 == PTR_BASE_HEAP() {
-        I kind2 == PTR_BASE_STACK() { R 1 } E { 0 }
-    } E { 0 }
+        I kind2 == PTR_BASE_STACK() { R 1 } EL { 0 }
+    } EL { 0 }
 
     # Different globals never alias
     I kind1 == PTR_BASE_GLOBAL() {
         I kind2 == PTR_BASE_GLOBAL() {
-            I name1 != name2 { R 1 } E { R 0 }
-        } E { 0 }
-    } E { 0 }
+            I name1 != name2 { R 1 } EL { R 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     # Otherwise, may alias
     R 0
@@ -123,7 +123,7 @@ F pointer_info_add_alias(info_ptr: i64, name_idx: i64) -> i64 {
     # Check if already in set
     i := mut 0
     L {
-        I i >= alias_set_len { B } E { 0 }
+        I i >= alias_set_len { B } EL { 0 }
         I load_i64(alias_set_ptr + i * 8) == name_idx { R 0 }
         i = i + 1
     }
@@ -136,7 +136,7 @@ F pointer_info_add_alias(info_ptr: i64, name_idx: i64) -> i64 {
 
 F pointer_info_free(info_ptr: i64) -> i64 {
     alias_set := load_i64(info_ptr + 40)
-    I alias_set != 0 { free(alias_set); 0 } E { 0 }
+    I alias_set != 0 { free(alias_set); 0 } EL { 0 }
     free(info_ptr)
     1
 }
@@ -183,7 +183,7 @@ F summary_add_modify(sum_ptr: i64, param_idx: i64) -> i64 {
     # Check if already present
     i := mut 0
     L {
-        I i >= len { B } E { 0 }
+        I i >= len { B } EL { 0 }
         I load_i64(arr + i * 8) == param_idx { R 0 }
         i = i + 1
     }
@@ -200,7 +200,7 @@ F summary_add_read(sum_ptr: i64, param_idx: i64) -> i64 {
 
     i := mut 0
     L {
-        I i >= len { B } E { 0 }
+        I i >= len { B } EL { 0 }
         I load_i64(arr + i * 8) == param_idx { R 0 }
         i = i + 1
     }
@@ -217,7 +217,7 @@ F summary_add_escape(sum_ptr: i64, param_idx: i64) -> i64 {
 
     i := mut 0
     L {
-        I i >= len { B } E { 0 }
+        I i >= len { B } EL { 0 }
         I load_i64(arr + i * 8) == param_idx { R 0 }
         i = i + 1
     }
@@ -293,7 +293,7 @@ F ctx_get_pointer(ctx: i64, name_idx: i64) -> i64 {
         entry := ptrs + i * 16
         I load_i64(entry) == name_idx {
             R load_i64(entry + 8)  # Return info_ptr
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
     0
@@ -320,7 +320,7 @@ F ctx_get_function(ctx: i64, name_idx: i64) -> i64 {
         sum_ptr := load_i64(funcs + i * 8)
         I load_i64(sum_ptr) == name_idx {
             R sum_ptr
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
     0
@@ -332,7 +332,7 @@ F alias_ctx_free(ctx: i64) -> i64 {
     plen := load_i64(ctx + 8)
     i := mut 0
     L {
-        I i >= plen { B } E { 0 }
+        I i >= plen { B } EL { 0 }
         entry := ptrs + i * 16
         info_ptr := load_i64(entry + 8)
         pointer_info_free(info_ptr)
@@ -345,7 +345,7 @@ F alias_ctx_free(ctx: i64) -> i64 {
     flen := load_i64(ctx + 24)
     i = 0
     L {
-        I i >= flen { B } E { 0 }
+        I i >= flen { B } EL { 0 }
         func_summary_free(load_i64(funcs + i * 8))
         i = i + 1
     }
@@ -375,7 +375,7 @@ F alias_query(ctx: i64, name1: i64, name2: i64) -> i64 {
 
     I pointer_base_disjoint(base_kind1, base_name1, base_kind2, base_name2) == 1 {
         R ALIAS_NO()
-    } E { 0 }
+    } EL { 0 }
 
     # Same base with same known offset -> must alias
     offset1 := load_i64(info1 + 16)
@@ -385,20 +385,20 @@ F alias_query(ctx: i64, name1: i64, name2: i64) -> i64 {
             I offset1 != (0 - 1) {
                 I offset1 == offset2 {
                     R ALIAS_MUST()
-                } E { 0 }
-            } E { 0 }
-        } E { 0 }
-    } E { 0 }
+                } EL { 0 }
+            } EL { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     # Check explicit alias sets
     alias_set1 := load_i64(info1 + 40)
     alias_len1 := load_i64(info1 + 48)
     i := mut 0
     L {
-        I i >= alias_len1 { B } E { 0 }
+        I i >= alias_len1 { B } EL { 0 }
         I load_i64(alias_set1 + i * 8) == name2 {
             R ALIAS_MAY()
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
 
@@ -406,10 +406,10 @@ F alias_query(ctx: i64, name1: i64, name2: i64) -> i64 {
     alias_len2 := load_i64(info2 + 48)
     i = 0
     L {
-        I i >= alias_len2 { B } E { 0 }
+        I i >= alias_len2 { B } EL { 0 }
         I load_i64(alias_set2 + i * 8) == name1 {
             R ALIAS_MAY()
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
 
@@ -442,7 +442,7 @@ F build_function_summary(body_ptr: i64) -> i64 {
     # Scan all blocks
     bi := mut 0
     L {
-        I bi >= blocks_len { B } E { 0 }
+        I bi >= blocks_len { B } EL { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
@@ -451,7 +451,7 @@ F build_function_summary(body_ptr: i64) -> i64 {
         # Scan statements
         si := mut 0
         L {
-            I si >= stmts_len { B } E { 0 }
+            I si >= stmts_len { B } EL { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
 
@@ -467,12 +467,12 @@ F build_function_summary(body_ptr: i64) -> i64 {
                     I local_idx <= params_len {
                         summary_add_modify(summary, local_idx - 1)
                         0
-                    } E { 0 }
-                } E { 0 }
+                    } EL { 0 }
+                } EL { 0 }
 
                 # Read operands in rvalue
                 bs_scan_rvalue_reads(rvalue_ptr, summary, params_len)
-            } E { 0 }
+            } EL { 0 }
 
             si = si + 1
         }
@@ -481,7 +481,7 @@ F build_function_summary(body_ptr: i64) -> i64 {
         I term_ptr != 0 {
             bs_scan_terminator(term_ptr, summary, load_i64(body_ptr + 16))
             0
-        } E { 0 }
+        } EL { 0 }
 
         bi = bi + 1
     }
@@ -495,12 +495,12 @@ F build_function_summary(body_ptr: i64) -> i64 {
             I reads_len == 0 {
                 store_i64(summary + 80, 1)  # is_pure = true
                 0
-            } E {
+            } EL {
                 store_i64(summary + 88, 1)  # is_readonly = true
                 0
             }
-        } E { 0 }
-    } E { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     R summary
 }
@@ -512,38 +512,38 @@ F bs_scan_rvalue_reads(rvalue_ptr: i64, summary: i64, params_len: i64) -> i64 {
     I rv_kind == RVALUE_USE() {
         bs_scan_operand_read(load_i64(rvalue_ptr + 8), summary, params_len)
     }
-    E I rv_kind == RVALUE_BINOP() {
+    EL I rv_kind == RVALUE_BINOP() {
         bs_scan_operand_read(load_i64(rvalue_ptr + 24), summary, params_len)
         bs_scan_operand_read(load_i64(rvalue_ptr + 32), summary, params_len)
     }
-    E I rv_kind == RVALUE_UNOP() {
+    EL I rv_kind == RVALUE_UNOP() {
         bs_scan_operand_read(load_i64(rvalue_ptr + 8), summary, params_len)
     }
-    E I rv_kind == RVALUE_CAST() {
+    EL I rv_kind == RVALUE_CAST() {
         bs_scan_operand_read(load_i64(rvalue_ptr + 8), summary, params_len)
     }
-    E I rv_kind == RVALUE_REF() {
+    EL I rv_kind == RVALUE_REF() {
         place_ptr := load_i64(rvalue_ptr + 40)
         local_idx := load_i64(place_ptr)
         I local_idx > 0 {
             I local_idx <= params_len {
                 summary_add_read(summary, local_idx - 1)
                 0
-            } E { 0 }
-        } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
     }
-    E I rv_kind == RVALUE_AGGREGATE() {
+    EL I rv_kind == RVALUE_AGGREGATE() {
         agg_ops := load_i64(rvalue_ptr + 56)
         agg_len := load_i64(rvalue_ptr + 64)
         j := mut 0
         L {
-            I j >= agg_len { B } E { 0 }
+            I j >= agg_len { B } EL { 0 }
             bs_scan_operand_read(load_i64(agg_ops + j * 8), summary, params_len)
             j = j + 1
         }
         0
     }
-    E { 0 }
+    EL { 0 }
 }
 
 F bs_scan_operand_read(op_ptr: i64, summary: i64, params_len: i64) -> i64 {
@@ -554,19 +554,19 @@ F bs_scan_operand_read(op_ptr: i64, summary: i64, params_len: i64) -> i64 {
             I local_idx <= params_len {
                 summary_add_read(summary, local_idx - 1)
                 0
-            } E { 0 }
-        } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
     }
-    E I op_kind == OPERAND_MOVE() {
+    EL I op_kind == OPERAND_MOVE() {
         local_idx := load_i64(op_ptr + 8)
         I local_idx > 0 {
             I local_idx <= params_len {
                 summary_add_read(summary, local_idx - 1)
                 0
-            } E { 0 }
-        } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
     }
-    E { 0 }
+    EL { 0 }
 }
 
 # Scan terminator for escapes (calls, returns)
@@ -579,7 +579,7 @@ F bs_scan_terminator(term_ptr: i64, summary: i64, params_len: i64) -> i64 {
         args_len := load_i64(term_ptr + 64)
         j := mut 0
         L {
-            I j >= args_len { B } E { 0 }
+            I j >= args_len { B } EL { 0 }
             arg_ptr := load_i64(args_ptr + j * 8)
             op_kind := load_i64(arg_ptr)
             I op_kind == OPERAND_COPY() {
@@ -588,29 +588,29 @@ F bs_scan_terminator(term_ptr: i64, summary: i64, params_len: i64) -> i64 {
                     I local_idx <= params_len {
                         summary_add_escape(summary, local_idx - 1)
                         0
-                    } E { 0 }
-                } E { 0 }
+                    } EL { 0 }
+                } EL { 0 }
             }
-            E I op_kind == OPERAND_MOVE() {
+            EL I op_kind == OPERAND_MOVE() {
                 local_idx := load_i64(arg_ptr + 8)
                 I local_idx > 0 {
                     I local_idx <= params_len {
                         summary_add_escape(summary, local_idx - 1)
                         0
-                    } E { 0 }
-                } E { 0 }
+                    } EL { 0 }
+                } EL { 0 }
             }
-            E { 0 }
+            EL { 0 }
             j = j + 1
         }
         0
     }
-    E I kind == TERM_TAIL_CALL() {
+    EL I kind == TERM_TAIL_CALL() {
         args_ptr := load_i64(term_ptr + 56)
         args_len := load_i64(term_ptr + 64)
         j := mut 0
         L {
-            I j >= args_len { B } E { 0 }
+            I j >= args_len { B } EL { 0 }
             arg_ptr := load_i64(args_ptr + j * 8)
             op_kind := load_i64(arg_ptr)
             I op_kind == OPERAND_COPY() {
@@ -619,30 +619,30 @@ F bs_scan_terminator(term_ptr: i64, summary: i64, params_len: i64) -> i64 {
                     I local_idx <= params_len {
                         summary_add_escape(summary, local_idx - 1)
                         0
-                    } E { 0 }
-                } E { 0 }
+                    } EL { 0 }
+                } EL { 0 }
             }
-            E I op_kind == OPERAND_MOVE() {
+            EL I op_kind == OPERAND_MOVE() {
                 local_idx := load_i64(arg_ptr + 8)
                 I local_idx > 0 {
                     I local_idx <= params_len {
                         summary_add_escape(summary, local_idx - 1)
                         0
-                    } E { 0 }
-                } E { 0 }
+                    } EL { 0 }
+                } EL { 0 }
             }
-            E { 0 }
+            EL { 0 }
             j = j + 1
         }
         0
     }
-    E I kind == TERM_RETURN() {
+    EL I kind == TERM_RETURN() {
         # _0 implicitly returned — if it's a param-derived pointer, mark as escaped
         # (For simplicity, we assume _0 can hold param values)
         # In a real implementation, we'd track dataflow
         0
     }
-    E { 0 }
+    EL { 0 }
 }
 
 # ============================================================================
@@ -659,14 +659,14 @@ F propagate_aliases_in_body(ctx: i64, body_ptr: i64) -> i64 {
 
     bi := mut 0
     L {
-        I bi >= blocks_len { B } E { 0 }
+        I bi >= blocks_len { B } EL { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
 
         si := mut 0
         L {
-            I si >= stmts_len { B } E { 0 }
+            I si >= stmts_len { B } EL { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
 
@@ -695,10 +695,10 @@ F propagate_aliases_in_body(ctx: i64, body_ptr: i64) -> i64 {
 
                         ctx_add_pointer(ctx, local_idx, new_info)
                         0
-                    } E { 0 }
+                    } EL { 0 }
                 }
-                E { 0 }
-            } E { 0 }
+                EL { 0 }
+            } EL { 0 }
 
             si = si + 1
         }
@@ -722,7 +722,7 @@ F analyze_escapes_in_body(ctx: i64, body_ptr: i64) -> i64 {
 
     bi := mut 0
     L {
-        I bi >= blocks_len { B } E { 0 }
+        I bi >= blocks_len { B } EL { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
@@ -731,7 +731,7 @@ F analyze_escapes_in_body(ctx: i64, body_ptr: i64) -> i64 {
         # Scan statements for global stores
         si := mut 0
         L {
-            I si >= stmts_len { B } E { 0 }
+            I si >= stmts_len { B } EL { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
 
@@ -742,7 +742,7 @@ F analyze_escapes_in_body(ctx: i64, body_ptr: i64) -> i64 {
                 # If storing to a global-derived place, operands escape
                 # (Simplified: we don't track globals in this version)
                 0
-            } E { 0 }
+            } EL { 0 }
 
             si = si + 1
         }
@@ -756,15 +756,15 @@ F analyze_escapes_in_body(ctx: i64, body_ptr: i64) -> i64 {
                 I info != 0 {
                     store_i64(info + 32, 1)
                     0
-                } E { 0 }
+                } EL { 0 }
             }
-            E I tk == TERM_CALL() {
+            EL I tk == TERM_CALL() {
                 # Arguments to unknown calls escape
                 args_ptr := load_i64(term_ptr + 56)
                 args_len := load_i64(term_ptr + 64)
                 j := mut 0
                 L {
-                    I j >= args_len { B } E { 0 }
+                    I j >= args_len { B } EL { 0 }
                     arg_ptr := load_i64(args_ptr + j * 8)
                     op_kind := load_i64(arg_ptr)
                     I op_kind == OPERAND_COPY() {
@@ -773,23 +773,23 @@ F analyze_escapes_in_body(ctx: i64, body_ptr: i64) -> i64 {
                         I info != 0 {
                             store_i64(info + 32, 1)
                             0
-                        } E { 0 }
+                        } EL { 0 }
                     }
-                    E I op_kind == OPERAND_MOVE() {
+                    EL I op_kind == OPERAND_MOVE() {
                         local_idx := load_i64(arg_ptr + 8)
                         info := ctx_get_pointer(ctx, local_idx)
                         I info != 0 {
                             store_i64(info + 32, 1)
                             0
-                        } E { 0 }
+                        } EL { 0 }
                     }
-                    E { 0 }
+                    EL { 0 }
                     j = j + 1
                 }
                 0
             }
-            E { 0 }
-        } E { 0 }
+            EL { 0 }
+        } EL { 0 }
 
         bi = bi + 1
     }
@@ -826,7 +826,7 @@ F alias_analyze_module(ctx: i64, mod_ptr: i64) -> i64 {
 
     i := mut 0
     L {
-        I i >= bodies_len { B } E { 0 }
+        I i >= bodies_len { B } EL { 0 }
         body_ptr := load_i64(bodies_ptr + i * 8)
         analyze_aliases(ctx, body_ptr)
         i = i + 1
@@ -855,7 +855,7 @@ F aa_generate_report(ctx: i64) -> i64 {
 
         j := mut i + 1
         L {
-            I j >= plen { B } E { 0 }
+            I j >= plen { B } EL { 0 }
             entry_j := ptrs + j * 16
             name_j := load_i64(entry_j)
 
@@ -863,7 +863,7 @@ F aa_generate_report(ctx: i64) -> i64 {
             I result == ALIAS_NO() {
                 noalias_count = noalias_count + 1
                 0
-            } E { 0 }
+            } EL { 0 }
 
             j = j + 1
         }
@@ -898,7 +898,7 @@ F aa_count_escaping(ctx: i64) -> i64 {
         I load_i64(info_ptr + 32) == 1 {
             count = count + 1
             0
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
     count

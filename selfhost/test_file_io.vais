@@ -12,14 +12,14 @@ F print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
         0
-    } E I val < 0 {
+    } EL I val < 0 {
         putchar(45)
         print_i64(0 - val)
-    } E {
+    } EL {
         I val >= 10 {
             print_i64(val / 10)
             0
-        } E { 0 }
+        } EL { 0 }
         putchar(48 + (val % 10))
         0
     }
@@ -36,7 +36,7 @@ F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
         puts("[PASS] ")
         puts(test_name)
         1
-    } E {
+    } EL {
         puts("[FAIL] ")
         puts(test_name)
         puts("  Expected: ")
@@ -52,7 +52,7 @@ F assert_true(actual: i64, test_name: str) -> i64 {
         puts("[PASS] ")
         puts(test_name)
         1
-    } E {
+    } EL {
         puts("[FAIL] ")
         puts(test_name)
         puts("  Expected: non-zero")
@@ -72,7 +72,7 @@ F make_test_data(content: str) -> i64 {
 
     data := malloc(len)
     i := mut 0
-    L i < len {
+    LW i < len {
         byte := load_byte(ptr + i)
         store_byte(data + i, byte)
         i = i + 1
@@ -83,14 +83,14 @@ F make_test_data(content: str) -> i64 {
 # Compare buffer contents with string
 F compare_data(data_ptr: i64, len: i64, expected: str) -> i64 {
     exp_len := strlen(expected)
-    I len != exp_len { R 0 } E { 0 }
+    I len != exp_len { R 0 } EL { 0 }
 
     exp_ptr := str_to_ptr(expected)
     i := mut 0
-    L i < len {
+    LW i < len {
         actual_byte := load_byte(data_ptr + i)
         expected_byte := load_byte(exp_ptr + i)
-        I actual_byte != expected_byte { R 0 } E { 0 }
+        I actual_byte != expected_byte { R 0 } EL { 0 }
         i = i + 1
     }
     1
@@ -115,14 +115,14 @@ F test_write_read_roundtrip() -> i64 {
     I write_ok == 0 {
         puts("[FAIL] test_write_read_roundtrip: write failed")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Read
     result := file_read_all(path)
     I result == 0 {
         puts("[FAIL] test_write_read_roundtrip: read failed")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     read_data := load_i64(result)
     read_len := load_i64(result + 8)
@@ -191,7 +191,7 @@ F test_file_append() -> i64 {
     I result == 0 {
         puts("[FAIL] test_file_append: read failed")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     read_data := load_i64(result)
     read_len := load_i64(result + 8)
@@ -215,7 +215,7 @@ F test_manual_write() -> i64 {
         free(data)
         puts("[FAIL] test_manual_write: open failed")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     bytes_written := file_write_bytes(fp, data, len)
     file_close(fp)
@@ -224,14 +224,14 @@ F test_manual_write() -> i64 {
     I bytes_written != len {
         puts("[FAIL] test_manual_write: wrong byte count")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Verify by reading
     result := file_read_all(path)
     I result == 0 {
         puts("[FAIL] test_manual_write: read failed")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     read_data := load_i64(result)
     read_len := load_i64(result + 8)
@@ -263,21 +263,21 @@ F test_read_line() -> i64 {
     ptr3 := str_to_ptr(line3)
 
     i := mut 0
-    L i < len1 {
+    LW i < len1 {
         byte := load_byte(ptr1 + i)
         store_byte(data + i, byte)
         i = i + 1
     }
     offset := mut len1
     i = 0
-    L i < len2 {
+    LW i < len2 {
         byte := load_byte(ptr2 + i)
         store_byte(data + offset + i, byte)
         i = i + 1
     }
     offset = offset + len2
     i = 0
-    L i < len3 {
+    LW i < len3 {
         byte := load_byte(ptr3 + i)
         store_byte(data + offset + i, byte)
         i = i + 1
@@ -291,7 +291,7 @@ F test_read_line() -> i64 {
     I fp == 0 {
         puts("[FAIL] test_read_line: open failed")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Read first line
     result1 := file_read_line(fp)
@@ -299,7 +299,7 @@ F test_read_line() -> i64 {
         file_close(fp)
         puts("[FAIL] test_read_line: first line failed")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     data1 := load_i64(result1)
     len_read1 := load_i64(result1 + 8)
@@ -312,7 +312,7 @@ F test_read_line() -> i64 {
         file_close(fp)
         puts("[FAIL] test_read_line: second line failed")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     data2 := load_i64(result2)
     len_read2 := load_i64(result2 + 8)
@@ -325,7 +325,7 @@ F test_read_line() -> i64 {
         file_close(fp)
         puts("[FAIL] test_read_line: third line failed")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     data3 := load_i64(result3)
     len_read3 := load_i64(result3 + 8)
@@ -340,7 +340,7 @@ F test_read_line() -> i64 {
         file_result_free(result4)
         puts("[FAIL] test_read_line: expected EOF")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     all_match := match1 & match2 & match3
 
@@ -361,7 +361,7 @@ F test_seek_tell() -> i64 {
     I fp == 0 {
         puts("[FAIL] test_seek_tell: open failed")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Initial position should be 0
     pos1 := file_tell(fp)
@@ -398,7 +398,7 @@ F test_read_bytes() -> i64 {
     I fp == 0 {
         puts("[FAIL] test_read_bytes: open failed")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Read first 3 bytes
     result := file_read_bytes(fp, 3)
@@ -406,7 +406,7 @@ F test_read_bytes() -> i64 {
         file_close(fp)
         puts("[FAIL] test_read_bytes: read failed")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     read_data := load_i64(result)
     read_len := load_i64(result + 8)
@@ -438,7 +438,7 @@ F test_large_content() -> i64 {
     size := 1024
     data := malloc(size)
     i := mut 0
-    L i < size {
+    LW i < size {
         store_byte(data + i, 88)  # 'X' = 88
         i = i + 1
     }
@@ -455,7 +455,7 @@ F test_large_content() -> i64 {
     I result == 0 {
         puts("[FAIL] test_large_content: read failed")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     read_data := load_i64(result)
     read_len := load_i64(result + 8)
@@ -465,16 +465,16 @@ F test_large_content() -> i64 {
         file_result_free(result)
         puts("[FAIL] test_large_content: wrong length")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Check all bytes are 'X'
     i = 0
     all_match := mut 1
-    L i < 1024 {
+    LW i < 1024 {
         byte := load_byte(read_data + i)
         I byte != 88 {
             all_match = 0
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
 
@@ -493,7 +493,7 @@ F test_binary_data() -> i64 {
     size := 512
     data := malloc(size)
     i := mut 0
-    L i < size {
+    LW i < size {
         value := i % 256
         store_byte(data + i, value)
         i = i + 1
@@ -507,7 +507,7 @@ F test_binary_data() -> i64 {
         free(data)
         puts("[FAIL] test_binary_data: read failed")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     read_data := load_i64(result)
     read_len := load_i64(result + 8)
@@ -518,16 +518,16 @@ F test_binary_data() -> i64 {
         file_result_free(result)
         puts("[FAIL] test_binary_data: wrong length")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     i = 0
     match := mut 1
-    L i < size {
+    LW i < size {
         original := load_byte(data + i)
         read_byte := load_byte(read_data + i)
         I original != read_byte {
             match = 0
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
 
@@ -552,40 +552,40 @@ F main() -> i64 {
 
     # Run all tests
     total = total + 1
-    I test_write_read_roundtrip() != 0 { passed = passed + 1; 0 } E { 0 }
+    I test_write_read_roundtrip() != 0 { passed = passed + 1; 0 } EL { 0 }
 
     total = total + 1
-    I test_file_exists_true() != 0 { passed = passed + 1; 0 } E { 0 }
+    I test_file_exists_true() != 0 { passed = passed + 1; 0 } EL { 0 }
 
     total = total + 1
-    I test_file_exists_false() != 0 { passed = passed + 1; 0 } E { 0 }
+    I test_file_exists_false() != 0 { passed = passed + 1; 0 } EL { 0 }
 
     total = total + 1
-    I test_file_size() != 0 { passed = passed + 1; 0 } E { 0 }
+    I test_file_size() != 0 { passed = passed + 1; 0 } EL { 0 }
 
     total = total + 1
-    I test_file_append() != 0 { passed = passed + 1; 0 } E { 0 }
+    I test_file_append() != 0 { passed = passed + 1; 0 } EL { 0 }
 
     total = total + 1
-    I test_manual_write() != 0 { passed = passed + 1; 0 } E { 0 }
+    I test_manual_write() != 0 { passed = passed + 1; 0 } EL { 0 }
 
     total = total + 1
-    I test_read_line() != 0 { passed = passed + 1; 0 } E { 0 }
+    I test_read_line() != 0 { passed = passed + 1; 0 } EL { 0 }
 
     total = total + 1
-    I test_seek_tell() != 0 { passed = passed + 1; 0 } E { 0 }
+    I test_seek_tell() != 0 { passed = passed + 1; 0 } EL { 0 }
 
     total = total + 1
-    I test_read_bytes() != 0 { passed = passed + 1; 0 } E { 0 }
+    I test_read_bytes() != 0 { passed = passed + 1; 0 } EL { 0 }
 
     total = total + 1
-    I test_empty_file() != 0 { passed = passed + 1; 0 } E { 0 }
+    I test_empty_file() != 0 { passed = passed + 1; 0 } EL { 0 }
 
     total = total + 1
-    I test_large_content() != 0 { passed = passed + 1; 0 } E { 0 }
+    I test_large_content() != 0 { passed = passed + 1; 0 } EL { 0 }
 
     total = total + 1
-    I test_binary_data() != 0 { passed = passed + 1; 0 } E { 0 }
+    I test_binary_data() != 0 { passed = passed + 1; 0 } EL { 0 }
 
     # Summary
     putchar(10)
@@ -601,7 +601,7 @@ F main() -> i64 {
     I failed == 0 {
         puts("All tests passed!")
         0
-    } E {
+    } EL {
         puts("Some tests failed!")
         1
     }

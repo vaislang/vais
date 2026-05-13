@@ -384,10 +384,10 @@ pub fn copy_propagation(body: &mut Body) {
                         continue;
                     }
                     match rvalue {
-                        Rvalue::Use(Operand::Copy(src)) | Rvalue::Use(Operand::Move(src)) => {
-                            if src.projections.is_empty() {
-                                copy_map.insert(place.local, src.local);
-                            }
+                        Rvalue::Use(Operand::Copy(src)) | Rvalue::Use(Operand::Move(src))
+                            if src.projections.is_empty() =>
+                        {
+                            copy_map.insert(place.local, src.local);
                         }
                         _ => {}
                     }
@@ -826,7 +826,6 @@ pub fn tail_call_detection(body: &mut Body) {
         }
     }
 }
-
 
 #[cfg(test)]
 #[path = "optimize_tests.rs"]

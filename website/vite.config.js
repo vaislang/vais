@@ -11,6 +11,8 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         blog: resolve(__dirname, 'blog/index.html'),
         'blog-why-vais': resolve(__dirname, 'blog/why-vais.html'),
+        vaisx: resolve(__dirname, 'vaisx/index.html'),
+        ecosystem: resolve(__dirname, 'ecosystem/index.html'),
       },
     },
   },

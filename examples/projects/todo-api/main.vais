@@ -68,38 +68,38 @@ F handle_request(fd: i64, buffer: i64, len: i64) -> i64 {
         I str_eq(method, "GET") {
             I str_eq(path, "/todos") {
                 handle_get_all_todos(fd)
-            } E {
+            } EL {
                 # Check for /todos/:id pattern
                 id := parse_todo_id(path)
                 I id > 0 {
                     handle_get_todo(fd, id)
-                } E {
+                } EL {
                     send_404(fd)
                 }
             }
-        } E {
+        } EL {
             I str_eq(method, "POST") {
                 I str_eq(path, "/todos") {
                     # Parse request body for title
                     title := parse_post_body(buffer, len)
                     handle_create_todo(fd, title)
-                } E {
+                } EL {
                     send_404(fd)
                 }
-            } E {
+            } EL {
                 I str_eq(method, "DELETE") {
                     id := parse_todo_id(path)
                     I id > 0 {
                         handle_delete_todo(fd, id)
-                    } E {
+                    } EL {
                         send_404(fd)
                     }
-                } E {
+                } EL {
                     send_405(fd)
                 }
             }
         }
-    } E {
+    } EL {
         send_404(fd)
     }
 

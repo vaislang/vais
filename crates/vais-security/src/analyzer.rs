@@ -349,9 +349,6 @@ impl SecurityAnalyzer {
             Expr::Lambda { body, .. } => {
                 self.analyze_expr(&body.node, body.span);
             }
-            Expr::Spawn(expr) => {
-                self.analyze_expr(&expr.node, expr.span);
-            }
             Expr::Comptime { body } => {
                 self.analyze_expr(&body.node, body.span);
             }
@@ -365,12 +362,6 @@ impl SecurityAnalyzer {
                 self.analyze_expr(&expr.node, expr.span);
             }
             Expr::Old(expr) => {
-                self.analyze_expr(&expr.node, expr.span);
-            }
-            Expr::Lazy(expr) => {
-                self.analyze_expr(&expr.node, expr.span);
-            }
-            Expr::Force(expr) => {
                 self.analyze_expr(&expr.node, expr.span);
             }
             // Literals and simple expressions
@@ -387,6 +378,11 @@ impl SecurityAnalyzer {
                     self.analyze_expr(&v.node, v.span);
                 }
             }
+            Expr::EnumAccess { data, .. } => {
+                if let Some(d) = data {
+                    self.analyze_expr(&d.node, d.span);
+                }
+            }
             Expr::Int(_)
             | Expr::Float(_)
             | Expr::Bool(_)
@@ -396,6 +392,9 @@ impl SecurityAnalyzer {
             | Expr::MacroInvoke(_)
             | Expr::Yield(_)
             | Expr::Error { .. } => {}
+            Expr::TupleFieldAccess { expr, .. } => {
+                self.analyze_expr(&expr.node, expr.span);
+            }
         }
     }
 

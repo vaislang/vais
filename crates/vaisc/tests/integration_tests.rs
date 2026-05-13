@@ -2467,8 +2467,10 @@ F main() -> i64 {
 }
 
 #[test]
-fn test_ice_fallback_impl_trait_return() {
-    // impl Trait return should compile (even with i64 fallback)
+fn test_ice_fallback_trait_impl_with_str_method() {
+    // Trait impl block with &self method returning str should compile.
+    // (Historically named after ImplTrait but the body only exercises a plain
+    //  `X Foo: Describable` impl block, not existential return types.)
     let source = r#"
 W Describable {
     F describe(&self) -> str

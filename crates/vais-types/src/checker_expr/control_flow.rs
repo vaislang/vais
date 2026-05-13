@@ -18,9 +18,18 @@ impl TypeChecker {
 
                 if let Some(else_branch) = else_ {
                     let else_type = self.check_if_else(else_branch)?;
-                    // If branch types don't unify, treat as statement (Unit type)
+                    // If branch types don't unify:
+                    // - If both branches produce values (non-Unit), report a mismatch error
+                    // - Otherwise, treat as statement (Unit type)
                     if self.unify(&then_type, &else_type).is_ok() {
                         return Ok(then_type);
+                    }
+                    if then_type != ResolvedType::Unit && else_type != ResolvedType::Unit {
+                        return Err(crate::types::TypeError::Mismatch {
+                            expected: then_type.to_string(),
+                            found: else_type.to_string(),
+                            span: None,
+                        });
                     }
                     return Ok(ResolvedType::Unit);
                 }
@@ -90,9 +99,18 @@ impl TypeChecker {
                         Ok(t) => t,
                         Err(e) => return Some(Err(e)),
                     };
-                    // If branch types don't unify, treat if-else as statement (Unit type)
+                    // If branch types don't unify:
+                    // - If both branches produce values (non-Unit), report a mismatch error
+                    // - Otherwise, treat as statement (Unit type)
                     if self.unify(&then_type, &else_type).is_ok() {
                         Some(Ok(then_type))
+                    } else if then_type != ResolvedType::Unit && else_type != ResolvedType::Unit {
+                        // Both branches produce values but types don't match — error
+                        Some(Err(crate::types::TypeError::Mismatch {
+                            expected: then_type.to_string(),
+                            found: else_type.to_string(),
+                            span: Some(expr.span),
+                        }))
                     } else {
                         Some(Ok(ResolvedType::Unit))
                     }
@@ -107,25 +125,35 @@ impl TypeChecker {
                 body,
             } => {
                 self.push_scope();
+                self.loop_depth += 1;
 
                 if let (Some(pattern), Some(iter)) = (pattern, iter) {
                     let iter_type = match self.check_expr(iter) {
                         Ok(t) => t,
                         Err(e) => {
+                            self.loop_depth -= 1;
                             self.pop_scope();
                             return Some(Err(e));
                         }
                     };
 
                     // Try to infer the element type from the iterator
-                    if let Some(elem_type) = self.get_iterator_item_type(&iter_type) {
-                        // Bind the pattern variable with the inferred element type
-                        if let Pattern::Ident(name) = &pattern.node {
-                            self.define_var(name, elem_type, false);
-                        }
-                    } else {
-                        // Couldn't infer iterator item type - this is a warning but not an error
-                        // The loop will still work, just without type information for the pattern
+                    let elem_type = self
+                        .get_iterator_item_type(&iter_type)
+                        .unwrap_or(ResolvedType::Unknown);
+
+                    // Phase 24 Task 5: use register_pattern_bindings for full
+                    // tuple destructuring support. Previously only Pattern::Ident
+                    // was bound, so `L (i, x): vec.enumerate() { ... }` left
+                    // `i` and `x` undefined. register_pattern_bindings already
+                    // handles Pattern::Tuple vs ResolvedType::Tuple recursively.
+                    if let Err(e) = self.register_pattern_bindings(pattern, &elem_type) {
+                        self.loop_depth -= 1;
+                        self.pop_scope();
+                        return Some(Err(e));
+                    }
+
+                    if matches!(elem_type, ResolvedType::Unknown) {
                         if let Pattern::Ident(name) = &pattern.node {
                             self.warnings.push(format!(
                                 "Cannot infer iterator item type for variable '{}' in loop",
@@ -136,9 +164,11 @@ impl TypeChecker {
                 }
 
                 if let Err(e) = self.check_block(body) {
+                    self.loop_depth -= 1;
                     self.pop_scope();
                     return Some(Err(e));
                 }
+                self.loop_depth -= 1;
                 self.pop_scope();
 
                 Some(Ok(ResolvedType::Unit))
@@ -155,10 +185,13 @@ impl TypeChecker {
                 }
 
                 self.push_scope();
+                self.loop_depth += 1;
                 if let Err(e) = self.check_block(body) {
+                    self.loop_depth -= 1;
                     self.pop_scope();
                     return Some(Err(e));
                 }
+                self.loop_depth -= 1;
                 self.pop_scope();
 
                 Some(Ok(ResolvedType::Unit))
@@ -172,6 +205,11 @@ impl TypeChecker {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
+                // Resolve any type variables in the scrutinee before pattern
+                // binding — e.g. Option<?N> where ?N was later unified with a
+                // concrete type must reach register_pattern_bindings fully
+                // substituted, otherwise Some(p) binds p as ?N.
+                let expr_type = self.apply_substitutions(&expr_type);
                 let mut result_type: Option<ResolvedType> = None;
 
                 for arm in arms {
@@ -200,16 +238,33 @@ impl TypeChecker {
 
                     let arm_type = match self.check_expr(&arm.body) {
                         Ok(t) => t,
-                        Err(e) => {
-                            self.pop_scope();
-                            return Some(Err(e));
+                        Err(_e) => {
+                            // If arm body is a function/method call that failed TC,
+                            // recover as Unit (void side-effect call in match arm)
+                            use vais_ast::Expr;
+                            match &arm.body.node {
+                                Expr::Call { .. }
+                                | Expr::MethodCall { .. }
+                                | Expr::StaticMethodCall { .. } => {
+                                    self.pop_scope();
+                                    ResolvedType::Unit
+                                }
+                                _ => {
+                                    self.pop_scope();
+                                    return Some(Err(_e));
+                                }
+                            }
                         }
                     };
                     self.pop_scope();
 
                     if let Some(ref prev) = result_type {
-                        if let Err(e) = self.unify(prev, &arm_type) {
-                            return Some(Err(e));
+                        if let Err(_e) = self.unify(prev, &arm_type) {
+                            if *prev == ResolvedType::Unit || arm_type == ResolvedType::Unit {
+                                result_type = Some(ResolvedType::Unit);
+                            } else {
+                                return Some(Err(_e));
+                            }
                         }
                     } else {
                         result_type = Some(arm_type);
