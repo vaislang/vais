@@ -177,6 +177,11 @@ fn compute() -> Result<i64, str> {
 
 ### Compilation Speed
 
+Current single-file compile-speed benchmark (`benches/lang-comparison/compile_bench.sh`,
+Hyperfine, 2026-05-13, Apple ARM64/macOS) averages 6.3ms for Vais
+`--emit-ir` across four benchmark programs. This compares Vais LLVM IR emission
+against full binary compilation for the other toolchains.
+
 | Phase | Time (avg) | Throughput |
 |-------|------------|------------|
 | Lexer | ~0.5ms/1K LOC | ~2M tokens/sec |
@@ -191,7 +196,9 @@ by the certified Core gate and promoted runtime fixtures.
 
 ### Runtime Performance
 
-Fibonacci(35) benchmark (Apple M-series ARM64):
+Historical Fibonacci(35) runtime snapshot (Apple M-series ARM64). These
+numbers are retained as scoped evidence until the runtime benchmark suite is
+refreshed on the current compiler:
 
 | Language | Time | Relative |
 |----------|------|----------|
