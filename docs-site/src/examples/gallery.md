@@ -24,9 +24,9 @@ Introductory programs demonstrating core syntax and features.
 
 ```vais
 # Self-recursion with @ operator
-F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
+fn fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
 
-F main()->i64 = fib(10)   # Returns 55
+fn main()->i64 = fib(10)   # Returns 55
 ```
 
 ---
@@ -50,8 +50,8 @@ If/else, loops, match, and branching patterns.
 **Featured: Pattern Matching**
 
 ```vais
-F describe(x: i64) -> i64 {
-    M x {
+fn describe(x: i64) -> i64 {
+    match x {
         0 => 100,
         1 => 200,
         _ => 999
@@ -78,10 +78,10 @@ Functions, lambdas, closures, and the pipe operator.
 **Featured: Pipe Operator**
 
 ```vais
-F double(x: i64) -> i64 = x * 2
-F add_ten(x: i64) -> i64 = x + 10
+fn double(x: i64) -> i64 = x * 2
+fn add_ten(x: i64) -> i64 = x + 10
 
-F main() -> i64 {
+fn main() -> i64 {
     result := 5 |> double |> add_ten   # 20
     result
 }

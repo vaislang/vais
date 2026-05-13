@@ -111,9 +111,10 @@ jobs:
           find target/criterion-base -name "estimates.json" | while read f; do
             relative_path="${f#target/criterion-base/}"
             target_path="target/criterion/${relative_path}"
-            target_dir=$(dirname "$target_path")
+            dest_path="${target_path/\/base\//\/main\/}"
+            target_dir=$(dirname "$dest_path")
             mkdir -p "$target_dir"
-            cp "$f" "${target_path/\/base\//\/main\/}"
+            cp "$f" "$dest_path"
           done
 
       - name: Checkout PR branch for scripts

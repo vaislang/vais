@@ -7,7 +7,7 @@
 ## Import
 
 ```vais
-U std/sync
+use std/sync
 ```
 
 ## Mutex\<T\>
@@ -193,9 +193,9 @@ Handle to check for cancellation.
 ## Usage
 
 ```vais
-U std/sync
+use std/sync
 
-F main() -> i64 {
+fn main() -> i64 {
     m := Mutex::new(0)
     guard := m.lock()
     guard.set(42)

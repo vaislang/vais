@@ -6,34 +6,35 @@ Complete reference for the Vais programming language.
 
 Vais is a systems programming language designed for:
 
-- **Token efficiency** - Single-character keywords minimize AI token usage
+- **Canonical clarity** - current keyword forms match the promoted lexer surface
 - **Type safety** - Strong static typing with full inference
 - **Native performance** - LLVM-based compilation to native code
 - **Modern features** - Generics, traits, async/await, pattern matching
 
 ## Keywords
 
-Vais uses single-character keywords for maximum efficiency:
+Vais retired several early single-character forms in Step 19. New code uses the canonical keyword forms below.
 
 | Keyword | Meaning | Example |
 |---------|---------|---------|
-| `F` | Function | `F add(a: i64, b: i64) -> i64 { a + b }` |
-| `S` | Struct | `S Point { x: f64, y: f64 }` |
-| `E` | Enum/Else | `E Color { Red, Green, Blue }` / `E { fallback }` |
+| `fn` | Function | `fn add(a: i64, b: i64) -> i64 { a + b }` |
+| `struct` | Struct | `struct Point { x: f64, y: f64 }` |
+| `enum` / `else` | Enum / else branch | `enum Color { Red, Green, Blue }` / `else { fallback }` |
 | `I` | If | `I x > 0 { "positive" }` |
 | `L` | Loop | `L i := 0; i < 10; i += 1 { ... }` |
-| `M` | Match | `M x { 1 => "one", _ => "other" }` |
-| `R` | Return | `R 42` |
+| `LF` | Range / foreach loop | `LF i: 0..10 { ... }` |
+| `match` | Match | `match x { 1 => "one", _ => "other" }` |
+| `return` | Return | `return 42` |
 | `B` | Break | `B` |
 | `C` | Continue | `C` |
-| `W` | Trait | `W Printable { F print(self) }` |
-| `X` | Impl | `X Point: Printable { ... }` |
-| `U` | Use/Import | `U std/io` |
-| `P` | Public | `P F public_fn() {}` |
-| `T` | Type alias | `T Int = i64` |
-| `A` | Async | `A F fetch() -> str { ... }` |
+| `trait` | Trait | `trait Printable { fn print(self) }` |
+| `impl` | Impl | `impl Point: Printable { ... }` |
+| `use` | Use/Import | `use std/io` |
+| `pub` | Public | `pub fn public_fn() {}` |
+| `type` | Type alias | `type Int = i64` |
+| `A` | Async | `A fn fetch() -> str { ... }` |
 | `Y` | Await | `result := Y fetch()` |
-| `N` | Extern | `N F malloc(size: i64) -> i64` |
+| `N` | Extern | `N fn malloc(size: i64) -> i64` |
 | `G` | Global | `G counter: i64 = 0` |
 | `D` | Defer | `D cleanup()` |
 | `O` | Union | `O Data { i: i64, f: f64 }` |
@@ -148,7 +149,7 @@ c := 3
 ### Basic Function
 
 ```vais
-F add(a: i64, b: i64) -> i64 {
+fn add(a: i64, b: i64) -> i64 {
     a + b
 }
 ```
@@ -156,7 +157,7 @@ F add(a: i64, b: i64) -> i64 {
 ### No Return Value
 
 ```vais
-F greet(name: str) {
+fn greet(name: str) {
     puts("Hello, ")
     puts(name)
 }
@@ -165,8 +166,8 @@ F greet(name: str) {
 ### Self-Recursion
 
 ```vais
-F factorial(n: i64) -> i64 {
-    I n <= 1 { R 1 }
+fn factorial(n: i64) -> i64 {
+    I n <= 1 { return 1 }
     n * @(n - 1)
 }
 ```
@@ -174,12 +175,12 @@ F factorial(n: i64) -> i64 {
 ### Generic Functions
 
 ```vais
-F identity<T>(x: T) -> T {
+fn identity<T>(x: T) -> T {
     x
 }
 
-F max<T>(a: T, b: T) -> T {
-    I a > b { a } E { b }
+fn max<T>(a: T, b: T) -> T {
+    I a > b { a } else { b }
 }
 ```
 
@@ -196,18 +197,18 @@ I x > 0 {
 # If-else
 I x > 0 {
     puts("positive")
-} E {
+} else {
     puts("negative or zero")
 }
 
 # If as expression
-sign := I x > 0 { 1 } E I x < 0 { -1 } E { 0 }
+sign := I x > 0 { 1 } else I x < 0 { -1 } else { 0 }
 ```
 
 ### Match Expression
 
 ```vais
-M x {
+match x {
     0 => "zero",
     1 => "one",
     2 => "two",
@@ -240,7 +241,7 @@ L i := 0; i < 20; i += 1 {
 
 ```vais
 # Define struct
-S Point {
+struct Point {
     x: f64,
     y: f64
 }
@@ -255,12 +256,12 @@ x_coord := p.x
 ### Methods
 
 ```vais
-X Point {
-    F distance(self) -> f64 {
+impl Point {
+    fn distance(self) -> f64 {
         sqrt(self.x * self.x + self.y * self.y)
     }
 
-    F translate(self, dx: f64, dy: f64) -> Point {
+    fn translate(self, dx: f64, dy: f64) -> Point {
         Point { x: self.x + dx, y: self.y + dy }
     }
 }
@@ -270,19 +271,19 @@ X Point {
 
 ```vais
 # Simple enum
-E Color {
+enum Color {
     Red,
     Green,
     Blue
 }
 
 # Enum with data
-E Option<T> {
+enum Option<T> {
     Some(T),
     None
 }
 
-E Result<T, E> {
+enum Result<T, E> {
     Ok(T),
     Err(E)
 }
@@ -296,7 +297,7 @@ Pattern matching provides exhaustive checking of values:
 
 ```vais
 # Literal patterns
-M x {
+match x {
     0 => "zero",
     1 => "one",
     2 => "two",
@@ -304,7 +305,7 @@ M x {
 }
 
 # Variable binding
-M value {
+match value {
     x => x * 2  # Binds value to x
 }
 ```
@@ -312,19 +313,19 @@ M value {
 ### Enum Patterns
 
 ```vais
-E Option<T> { Some(T), None }
+enum Option<T> { Some(T), None }
 
-F unwrap_or<T>(opt: Option<T>, default: T) -> T {
-    M opt {
+fn unwrap_or<T>(opt: Option<T>, default: T) -> T {
+    match opt {
         Some(v) => v,    # Destructure and bind inner value
         None => default
     }
 }
 
-E Result<T, E> { Ok(T), Err(E) }
+enum Result<T, E> { Ok(T), Err(E) }
 
-F handle_result(r: Result<i64, str>) -> i64 {
-    M r {
+fn handle_result(r: Result<i64, str>) -> i64 {
+    match r {
         Ok(val) => val,
         Err(msg) => {
             puts("Error: ")
@@ -340,16 +341,16 @@ F handle_result(r: Result<i64, str>) -> i64 {
 Add additional conditions to patterns:
 
 ```vais
-M value {
+match value {
     x if x > 0 => "positive",
     x if x < 0 => "negative",
     _ => "zero"
 }
 
 # With enum destructuring
-E Result<T, E> { Ok(T), Err(E) }
+enum Result<T, E> { Ok(T), Err(E) }
 
-M result {
+match result {
     Ok(val) if val > 100 => "large success",
     Ok(val) => "small success",
     Err(msg) => "error"
@@ -361,8 +362,8 @@ M result {
 Bind a name to the matched value using `@`:
 
 ```vais
-F describe(n: i64) -> str {
-    M n {
+fn describe(n: i64) -> str {
+    match n {
         x @ 1..10 => "small: {x}",
         x @ 10..100 => "medium: {x}",
         x @ 100..1000 => "large: {x}",
@@ -371,10 +372,10 @@ F describe(n: i64) -> str {
 }
 
 # With enum variants
-E Option<T> { None, Some(T) }
+enum Option<T> { None, Some(T) }
 
-F process(opt: Option<i64>) -> i64 {
-    M opt {
+fn process(opt: Option<i64>) -> i64 {
+    match opt {
         val @ Some(x) => x * 2,  # 'val' is the whole Some, 'x' is inner value
         None => 0
     }
@@ -388,15 +389,15 @@ F process(opt: Option<i64>) -> i64 {
 Propagate errors to the caller:
 
 ```vais
-E Result<T, E> { Ok(T), Err(E) }
+enum Result<T, E> { Ok(T), Err(E) }
 
-F read_file(path: str) -> Result<str, str> {
+fn read_file(path: str) -> Result<str, str> {
     file := open(path)?        # If Err, return early
     data := file.read()?       # If Err, return early
     Ok(data)
 }
 
-F process() -> Result<i64, str> {
+fn process() -> Result<i64, str> {
     content := read_file("config.txt")?  # Propagates error
     Ok(parse(content))
 }
@@ -414,7 +415,7 @@ value := some_option!
 data := some_result!
 
 # Example
-F main() {
+fn main() {
     config := get_config()!  # Panics if None
     puts(config)
 }
@@ -424,16 +425,16 @@ F main() {
 
 ```vais
 #[derive(Error)]
-E AppError {
+enum AppError {
     NotFound(str),
     Permission(str),
     Network(str)
 }
 
-F find_user(id: i64) -> Result<str, AppError> {
+fn find_user(id: i64) -> Result<str, AppError> {
     I id < 0 {
         Err(NotFound("User ID cannot be negative"))
-    } E {
+    } else {
         Ok("User data")
     }
 }
@@ -446,27 +447,27 @@ Define shared behavior across types.
 ### Trait Definition
 
 ```vais
-W Printable {
-    F print(&self) -> i64
+trait Printable {
+    fn print(&self) -> i64
 }
 
-W Comparable {
-    F compare(&self, other: &Self) -> i64
+trait Comparable {
+    fn compare(&self, other: &Self) -> i64
 }
 
-W Shape {
-    F area(&self) -> f64
-    F perimeter(&self) -> f64
+trait Shape {
+    fn area(&self) -> f64
+    fn perimeter(&self) -> f64
 }
 ```
 
 ### Trait Implementation
 
 ```vais
-S Point { x: f64, y: f64 }
+struct Point { x: f64, y: f64 }
 
-X Point: Printable {
-    F print(&self) -> i64 {
+impl Point: Printable {
+    fn print(&self) -> i64 {
         puts("Point(")
         print_f64(self.x)
         puts(", ")
@@ -476,15 +477,15 @@ X Point: Printable {
     }
 }
 
-S Circle { radius: f64 }
+struct Circle { radius: f64 }
 
-X Circle: Shape {
-    F area(&self) -> f64 {
+impl Circle: Shape {
+    fn area(&self) -> f64 {
         pi := 3.14159
         pi * self.radius * self.radius
     }
 
-    F perimeter(&self) -> f64 {
+    fn perimeter(&self) -> f64 {
         pi := 3.14159
         2.0 * pi * self.radius
     }
@@ -496,23 +497,23 @@ X Circle: Shape {
 Implement methods without a trait:
 
 ```vais
-S Counter { value: i64 }
+struct Counter { value: i64 }
 
-X Counter {
-    F new() -> Counter {
+impl Counter {
+    fn new() -> Counter {
         Counter { value: 0 }
     }
 
-    F increment(&mut self) {
+    fn increment(&mut self) {
         self.value = self.value + 1
     }
 
-    F get(&self) -> i64 {
+    fn get(&self) -> i64 {
         self.value
     }
 }
 
-F main() {
+fn main() {
     c := Counter::new()
     c.increment()
     print_i64(c.get())  # Prints: 1
@@ -522,24 +523,24 @@ F main() {
 ### Generic Traits
 
 ```vais
-W Container<T> {
-    F add(&mut self, item: T)
-    F get(&self, index: i64) -> Option<T>
+trait Container<T> {
+    fn add(&mut self, item: T)
+    fn get(&self, index: i64) -> Option<T>
 }
 
-S Vec<T> {
-    items: [T],
+struct Vec<T> {
+    items: [type],
     len: i64
 }
 
-X Vec<T>: Container<T> {
-    F add(&mut self, item: T) {
+impl Vec<T>: Container<T> {
+    fn add(&mut self, item: T) {
         # Add item implementation
     }
 
-    F get(&self, index: i64) -> Option<T> {
+    fn get(&self, index: i64) -> Option<T> {
         I index < 0 || index >= self.len {
-            R None
+            return None
         }
         Some(self.items[index])
     }
@@ -550,17 +551,17 @@ X Vec<T>: Container<T> {
 
 ```vais
 # Function requiring trait bound
-F print_all<T: Printable>(items: [T]) {
+fn print_all<T: Printable>(items: [type]) {
     L item : items {
         item.print()
     }
 }
 
 # Multiple trait bounds
-F compare_and_print<T: Comparable + Printable>(a: T, b: T) {
+fn compare_and_print<T: Comparable + Printable>(a: T, b: T) {
     I a.compare(&b) > 0 {
         a.print()
-    } E {
+    } else {
         b.print()
     }
 }
@@ -572,7 +573,7 @@ Alternative syntax for complex constraints:
 
 ```vais
 # Basic where clause
-F find_max<T>(list: Vec<T>) -> T where T: Ord {
+fn find_max<T>(list: Vec<T>) -> T where type: Ord {
     result := mut list.get(0)!
     L i : 1..list.len() {
         I list.get(i)! > result {
@@ -583,10 +584,10 @@ F find_max<T>(list: Vec<T>) -> T where T: Ord {
 }
 
 # Multiple constraints
-F process<T, U>(a: T, b: U) -> i64
+fn process<T, use>(a: T, b: use) -> i64
 where
-    T: Printable + Clone,
-    U: Comparable
+    type: Printable + Clone,
+    use: Comparable
 {
     a.print()
     b.compare(&b)
@@ -599,10 +600,10 @@ Define aliases for trait combinations:
 
 ```vais
 # Define trait alias
-T Drawable = Printable + Shape
+type Drawable = Printable + Shape
 
 # Use in function signatures
-F draw<T: Drawable>(obj: T) {
+fn draw<T: Drawable>(obj: T) {
     obj.print()
     print_f64(obj.area())
 }
@@ -616,18 +617,18 @@ Write code that works with any type.
 
 ```vais
 # Basic generic function
-F identity<T>(x: T) -> T {
+fn identity<T>(x: T) -> T {
     x
 }
 
 # Multiple type parameters
-F swap<T, U>(a: T, b: U) -> (U, T) {
+fn swap<T, use>(a: T, b: use) -> (use, T) {
     (b, a)
 }
 
 # Generic trait
-W Container<T> {
-    F get(self) -> T
+trait Container<T> {
+    fn get(self) -> T
 }
 ```
 
@@ -636,9 +637,9 @@ W Container<T> {
 ### Option Type
 
 ```vais
-E Option<T> { Some(T), None }
+enum Option<T> { Some(T), None }
 
-F find(arr: &[i64], target: i64) -> Option<i64> {
+fn find(arr: &[i64], target: i64) -> Option<i64> {
     # ... search logic
     Some(index)  # or None
 }
@@ -647,10 +648,10 @@ F find(arr: &[i64], target: i64) -> Option<i64> {
 ### Result Type
 
 ```vais
-E Result<T, E> { Ok(T), Err(E) }
+enum Result<T, E> { Ok(T), Err(E) }
 
-F divide(a: i64, b: i64) -> Result<i64, str> {
-    I b == 0 { R Err("division by zero") }
+fn divide(a: i64, b: i64) -> Result<i64, str> {
+    I b == 0 { return Err("division by zero") }
     Ok(a / b)
 }
 ```
@@ -658,7 +659,7 @@ F divide(a: i64, b: i64) -> Result<i64, str> {
 ### Try Operator `?`
 
 ```vais
-F compute() -> Result<i64, str> {
+fn compute() -> Result<i64, str> {
     a := divide(10, 2)?   # Propagate error
     b := divide(a, 3)?
     Ok(b)
@@ -676,8 +677,8 @@ value := result!  # Panics if Err
 
 ```vais
 # Import module
-U std/io
-U std/vec
+use std/io
+use std/vec
 
 # Use items from module
 v := Vec::new()
@@ -689,7 +690,7 @@ content := read_file("data.txt")
 ```vais
 # Single-line comment
 
-F main() {
+fn main() {
     x := 42  # Inline comment
 }
 ```
@@ -739,8 +740,8 @@ sizeof(T) -> i64          # Size of type
 ### Fibonacci
 
 ```vais
-F fib(n: i64) -> i64 {
-    I n <= 1 { R n }
+fn fib(n: i64) -> i64 {
+    I n <= 1 { return n }
     @(n-1) + @(n-2)
 }
 ```
@@ -748,13 +749,13 @@ F fib(n: i64) -> i64 {
 ### Linked List
 
 ```vais
-S Node<T> {
+struct Node<T> {
     value: T,
     next: Option<Box<Node<T>>>
 }
 
-X Node<T> {
-    F new(value: T) -> Node<T> {
+impl Node<T> {
+    fn new(value: T) -> Node<T> {
         Node { value: value, next: None }
     }
 }
@@ -763,11 +764,11 @@ X Node<T> {
 ### Error Handling
 
 ```vais
-F parse_number(s: str) -> Result<i64, str> {
+fn parse_number(s: str) -> Result<i64, str> {
     # Parsing logic
     I is_valid {
         Ok(number)
-    } E {
+    } else {
         Err("Invalid number")
     }
 }
@@ -781,12 +782,12 @@ Vais supports asynchronous programming with the `A` (async) and `Y` (await/yield
 
 ```vais
 # Mark function as async with 'A'
-A F fetch_data(id: i64) -> str {
+A fn fetch_data(id: i64) -> str {
     # Async operation
     "Data loaded"
 }
 
-A F process_data(data: str) -> i64 {
+A fn process_data(data: str) -> i64 {
     # Process data
     42
 }
@@ -795,7 +796,7 @@ A F process_data(data: str) -> i64 {
 ### Awaiting Results
 
 ```vais
-F main() {
+fn main() {
     # Call async function and await the result
     data := fetch_data(1).await
     puts(data)
@@ -809,17 +810,17 @@ F main() {
 ### Spawning Concurrent Tasks
 
 ```vais
-A F task1() -> i64 {
+A fn task1() -> i64 {
     puts("Task 1 running")
     100
 }
 
-A F task2() -> i64 {
+A fn task2() -> i64 {
     puts("Task 2 running")
     200
 }
 
-F main() {
+fn main() {
     # Spawn tasks to run concurrently
     t1 := spawn task1()
     t2 := spawn task2()
@@ -840,7 +841,7 @@ F main() {
 Vais uses an ownership system for memory safety:
 
 ```vais
-F main() {
+fn main() {
     # Ownership transfer (move)
     s1 := "Hello"
     s2 := s1         # s1 is moved to s2
@@ -851,11 +852,11 @@ F main() {
 ### Borrowing
 
 ```vais
-F print_value(x: &i64) {
+fn print_value(x: &i64) {
     print_i64(*x)
 }
 
-F main() {
+fn main() {
     n := 42
     print_value(&n)  # Borrow n
     print_i64(n)     # n still valid
@@ -865,11 +866,11 @@ F main() {
 ### Mutable References
 
 ```vais
-F increment(x: &mut i64) {
+fn increment(x: &mut i64) {
     *x = *x + 1
 }
 
-F main() {
+fn main() {
     n := mut 5
     increment(&mut n)
     print_i64(n)     # Prints: 6
@@ -881,8 +882,8 @@ F main() {
 Specify explicit lifetimes for references:
 
 ```vais
-F longest<'a>(x: &'a str, y: &'a str) -> &'a str {
-    I x.len() > y.len() { x } E { y }
+fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {
+    I x.len() > y.len() { x } else { y }
 }
 ```
 
@@ -893,7 +894,7 @@ Work with contiguous sequences of elements.
 ### Immutable Slices
 
 ```vais
-F sum(s: &[i64]) -> i64 {
+fn sum(s: &[i64]) -> i64 {
     total := mut 0
     L i := 0; i < s.len(); i += 1 {
         total = total + s[i]
@@ -901,7 +902,7 @@ F sum(s: &[i64]) -> i64 {
     total
 }
 
-F main() {
+fn main() {
     arr := [1, 2, 3, 4, 5]
     slice := &arr[1..4]  # [2, 3, 4]
     result := sum(slice)
@@ -912,13 +913,13 @@ F main() {
 ### Mutable Slices
 
 ```vais
-F double_elements(s: &mut [i64]) {
+fn double_elements(s: &mut [i64]) {
     L i := 0; i < s.len(); i += 1 {
         s[i] = s[i] * 2
     }
 }
 
-F main() {
+fn main() {
     arr := mut [10, 20, 30, 40]
     mut_slice := &mut arr[0..2]
     double_elements(mut_slice)
@@ -929,7 +930,7 @@ F main() {
 ### Slice Operations
 
 ```vais
-F main() {
+fn main() {
     arr := [1, 2, 3, 4, 5]
 
     # Full slice
@@ -951,7 +952,7 @@ F main() {
 ### Basic Closures
 
 ```vais
-F main() {
+fn main() {
     # Simple closure
     add_one := |x| x + 1
     result := add_one(5)     # 6
@@ -971,7 +972,7 @@ F main() {
 ### Closure Capture
 
 ```vais
-F main() {
+fn main() {
     multiplier := 10
 
     # Closure captures 'multiplier' from environment
@@ -984,11 +985,11 @@ F main() {
 ### Higher-Order Functions
 
 ```vais
-F apply<T>(f: fn(T) -> T, x: T) -> T {
+fn apply<T>(f: fn(T) -> T, x: T) -> T {
     f(x)
 }
 
-F main() {
+fn main() {
     double := |x| x * 2
     result := apply(double, 21)  # 42
 }
@@ -999,9 +1000,9 @@ F main() {
 Execute code when function exits:
 
 ```vais
-U std/io
+use std/io
 
-F process_file(filename: str) -> Result<i64, str> {
+fn process_file(filename: str) -> Result<i64, str> {
     file := open_file(filename)?
     D close_file(file)  # Deferred - runs when function exits
 
@@ -1017,11 +1018,11 @@ Declare and call foreign functions:
 
 ```vais
 # Declare external C functions
-N F malloc(size: i64) -> i64
-N F free(ptr: i64)
-N F printf(format: str, ...) -> i64
+N fn malloc(size: i64) -> i64
+N fn free(ptr: i64)
+N fn printf(format: str, ...) -> i64
 
-F main() {
+fn main() {
     # Allocate memory
     ptr := malloc(100)
 
@@ -1058,19 +1059,19 @@ L x : arr {
 ### Iterator Traits
 
 ```vais
-W Iterator<T> {
-    F next(&mut self) -> Option<T>
+trait Iterator<T> {
+    fn next(&mut self) -> Option<T>
 }
 
-S Counter {
+struct Counter {
     current: i64,
     max: i64
 }
 
-X Counter: Iterator<i64> {
-    F next(&mut self) -> Option<i64> {
+impl Counter: Iterator<i64> {
+    fn next(&mut self) -> Option<i64> {
         I self.current >= self.max {
-            R None
+            return None
         }
         result := self.current
         self.current = self.current + 1
@@ -1088,27 +1089,27 @@ Annotate items with metadata:
 ```vais
 # Derive trait implementations
 #[derive(Clone, Debug)]
-S Point { x: f64, y: f64 }
+struct Point { x: f64, y: f64 }
 
 # Derive error trait
 #[derive(Error)]
-E MyError {
+enum MyError {
     NotFound(str),
     Invalid(str)
 }
 
 # Conditional compilation
 #[cfg(target_os = "linux")]
-F platform_specific() {
+fn platform_specific() {
     puts("Running on Linux")
 }
 
 # WASM imports/exports
 #[wasm_import("env", "log")]
-N F js_log(msg: str)
+N fn js_log(msg: str)
 
 #[wasm_export("add")]
-F add(a: i64, b: i64) -> i64 {
+fn add(a: i64, b: i64) -> i64 {
     a + b
 }
 ```
@@ -1132,7 +1133,7 @@ macro_rules! vec {
 }
 
 # Use the macro
-F main() {
+fn main() {
     v := vec!(1, 2, 3, 4, 5)
     print_i64(v.len())  # Prints: 5
 }
@@ -1189,4 +1190,4 @@ vaisc build --target wasm32-unknown-unknown program.vais -o program.wasm
 - [Standard Library](https://github.com/vaislang/vais/tree/main/std) - 74 built-in modules
 - [Examples](https://github.com/vaislang/vais/tree/main/examples) - 189 real-world code samples
 - [Memory Safety](../advanced/memory-safety.md) - Deep dive into ownership and borrowing
-- [Playground](https://vais.dev/playground/) - Try Vais online
+- [Playground](https://vaislang.dev/playground/) - Try Vais online

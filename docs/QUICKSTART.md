@@ -11,18 +11,15 @@ brew tap vaislang/tap
 brew install vais
 ```
 
-No Rust installation required. The pre-built binary includes the compiler and standard library.
+Release-channel binaries may lag behind the current certified source baseline.
+For certification-sensitive work, use the source build below and run the gates
+listed in [`../PUBLIC_STATUS.md`](../PUBLIC_STATUS.md).
 
 ### Option B: Pre-built Binaries
 
-Download from [GitHub Releases](https://github.com/vaislang/vais/releases/tag/v1.0.0):
-
-```bash
-# macOS ARM
-curl -LO https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-aarch64-apple-darwin.tar.gz
-tar -xzf vais-v1.0.0-aarch64-apple-darwin.tar.gz
-export PATH="$PWD/vais:$PATH"
-```
+Download availability is release-dependent. Check
+[GitHub Releases](https://github.com/vaislang/vais/releases/latest) for the
+currently published artifacts.
 
 ### Option C: From Source (requires Rust 1.70+ and LLVM 17)
 
@@ -285,7 +282,7 @@ vaisc hello.vais --show-ast
 ## Next Steps
 
 - [Full Tutorial](TUTORIAL.md) - In-depth language guide
-- [Language Spec](LANGUAGE_SPEC.md) - Complete language reference
+- [Language Spec](LANGUAGE_SPEC.md) - Current language reference and non-Core notes
 - [Standard Library](STDLIB.md) - Available stdlib modules
 - [Editor Support](EDITORS.md) - IDE/editor integration
 - [Examples](../examples/) - 100+ example programs

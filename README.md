@@ -1,27 +1,39 @@
-# Vais 0.1.0 (Vibe AI Language for Systems)
+# Vais (Vibe AI Language for Systems)
 
 **AI-optimized systems programming language with token-efficient syntax.**
 
 [![CI](https://github.com/vaislang/vais/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/vaislang/vais/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/vaislang/vais/branch/main/graph/badge.svg)](https://codecov.io/gh/vaislang/vais)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/vaislang/vais/blob/main/LICENSE)
-[![Docs](https://img.shields.io/badge/docs-vais.dev-purple)](https://vais.dev/docs/)
+[![Docs](https://img.shields.io/badge/docs-vaislang.dev-purple)](https://vaislang.dev/docs/)
 [![GitHub Discussions](https://img.shields.io/github/discussions/vaislang/vais)](https://github.com/vaislang/vais/discussions)
 
 Vais is designed to minimize token usage while maximizing code expressiveness, making it ideal for AI-assisted development and LLM code generation.
+
+## Current Status
+
+The current public baseline is a certified Core compiler plus named promoted
+runtime gates. It is not a product-complete v1.0 release. Use
+[`PUBLIC_STATUS.md`](PUBLIC_STATUS.md) for public wording and the gate-backed
+claim boundary.
 
 ## Key Features
 
 - **Single-letter keywords** - `F` (function), `S` (struct), `E` (enum/else), `I` (if), `L` (loop), `M` (match)
 - **Self-recursion operator** `@` - Call the current function recursively
 - **Expression-oriented** - Everything is an expression
-- **LLVM backend** - Native performance with LLVM 17
-- **Type inference** - Minimal type annotations with full constraint solving
-- **Memory Safety** - Borrow checker with Non-Lexical Lifetimes (NLL), `--strict-borrow` mode
+- **LLVM backend** - Promoted native codegen path with LLVM 17
+- **Type inference** - Minimal annotations on the certified Core surface, with
+  broader inference features under active hardening
+- **Memory Safety** - Ownership and borrow-checking work with `--strict-borrow`
+  mode; advanced destructor/FFI safety remains outside Core certification
 - **Slice Types** - `&[T]` / `&mut [T]` with fat pointer implementation
-- **Parallel Compilation** - DAG-based parallel type-check and codegen (2-4x speedup)
-- **Self-Hosting** - 50,000+ LOC bootstrap compiler, 21/21 clang 100% success
-- **Rich Ecosystem** - 29 crates, 80 stdlib modules, growing package ecosystem
+- **Parallel Compilation** - DAG-based type-check and codegen workbench
+- **Self-hosting workbench** - 50,000+ LOC of Vais compiler sources used for
+  bootstrap and conformance work; see the current certification notes for what
+  is actively guaranteed
+- **Ecosystem Workbench** - std, package, server, database, and web packages
+  tracked by explicit gates
 
 ## Quick Example
 
@@ -64,7 +76,7 @@ crates/
 ├── vais-codegen/      # LLVM IR code generator (inkwell/, advanced_opt/)
 ├── vais-codegen-js/   # JavaScript (ESM) code generator
 ├── vais-mir/          # Middle IR
-├── vaisc/             # Main compiler CLI & REPL
+├── vaisc/             # Compiler CLI and experimental REPL entrypoint
 ├── vais-lsp/          # Language Server Protocol
 ├── vais-dap/          # Debug Adapter Protocol
 ├── vais-jit/          # Cranelift JIT compiler
@@ -88,7 +100,7 @@ crates/
 └── vais-node/         # Node.js bindings (NAPI)
 
 std/               # Standard library (80 modules)
-selfhost/          # Self-hosting compiler (50,000+ LOC)
+selfhost/          # Self-hosting compiler workbench (50,000+ LOC)
 vscode-vais/       # VSCode extension
 intellij-vais/     # IntelliJ plugin
 docs-site/         # mdBook documentation
@@ -101,8 +113,8 @@ playground/        # Web playground frontend
 
 ```bash
 cargo build --release
-cargo test                                     # Run all 12,000+ tests
-cargo test -p vaisc                            # Run vaisc tests (2,500+ E2E tests)
+cargo test                                     # Run the Rust test suite
+cargo test -p vaisc                            # Run vaisc package tests
 cargo clippy --workspace --exclude vais-python --exclude vais-node
 ```
 
@@ -229,7 +241,7 @@ cd docs-site
 ./serve.sh
 ```
 
-Visit the [online documentation](https://vais.dev/docs/) or browse the individual files:
+Visit the [online documentation](https://vaislang.dev/docs/) or browse the individual files:
 
 - [LANGUAGE_SPEC.md](docs/LANGUAGE_SPEC.md) - Complete language specification
 - [STDLIB.md](docs/STDLIB.md) - Standard library reference
@@ -259,7 +271,11 @@ See [MEMORY_SAFETY.md](docs/MEMORY_SAFETY.md) for detailed information on memory
 
 ## Installation
 
-### Homebrew (macOS/Linux) - No Rust required
+### Homebrew (macOS/Linux)
+
+Release-channel binaries may lag behind the current certified source baseline.
+For certification-sensitive work, build from source and run the gates listed in
+[`PUBLIC_STATUS.md`](PUBLIC_STATUS.md).
 
 ```bash
 brew tap vaislang/tap
@@ -268,14 +284,10 @@ brew install vais
 
 ### Pre-built Binaries
 
-Download from [Releases](https://github.com/vaislang/vais/releases/latest) (Linux, macOS Intel/ARM, Windows):
-
-```bash
-# macOS ARM
-curl -LO https://github.com/vaislang/vais/releases/download/v0.1.0/vais-v0.1.0-aarch64-apple-darwin.tar.gz
-tar -xzf vais-v0.1.0-aarch64-apple-darwin.tar.gz
-./vais/vaisc --version
-```
+Download availability is release-dependent. Check
+[Releases](https://github.com/vaislang/vais/releases/latest) for the currently
+published artifacts and compare them with the source baseline before relying on
+them for certification.
 
 ### From Source (requires Rust)
 
@@ -296,9 +308,9 @@ docker run -it vaislang/vais:latest
 |----------|-----|
 | **GitHub Org** | https://github.com/vaislang |
 | **Repository** | https://github.com/vaislang/vais |
-| **Documentation** | https://vais.dev/docs/ |
-| **Playground** | https://vais.dev/playground/ |
-| **Website** | https://vais.dev/ |
+| **Documentation** | https://vaislang.dev/docs/ |
+| **Playground** | https://vaislang.dev/playground/ |
+| **Website** | https://vaislang.dev/ |
 | **Docker Hub** | `vaislang/vais` |
 | **Homebrew Tap** | `vaislang/tap` |
 | **Ecosystem Packages** | https://github.com/vaislang/vais/tree/main/packages (9 packages: vais-aes, vais-base64, vais-crc32, vais-csv, vais-json, vais-lz4, vais-regex, vais-sha256, vais-uuid) |
@@ -310,7 +322,7 @@ After installing Vais and running your first program, here's how to continue:
 ### 5-Minute Quickstart
 
 ```bash
-# 1. Install
+# 1. Install or build from source
 brew tap vaislang/tap && brew install vais
 
 # 2. Write your first program
@@ -339,7 +351,9 @@ Follow the [structured learning path](docs-site/src/learning-path.md) for a guid
 
 - **Stage 1 (2hr)**: Variables, functions, control flow, structs, enums
 - **Stage 2 (4hr)**: Generics, traits, error handling, closures, stdlib
-- **Stage 3 (4hr)**: Macros, async, FFI, WASM, performance
+- **Stage 3 (4hr)**: Macros, async, FFI, WASM, and performance workbench
+  topics; check the current certification notes before treating these as
+  stable language guarantees
 
 ### Tutorials
 
@@ -352,7 +366,7 @@ Step-by-step project tutorials:
 ## Community
 
 - [GitHub Discussions](https://github.com/vaislang/vais/discussions) - Questions, ideas, show & tell
-- [Blog](https://vais.dev/blog/) - Technical articles and language design insights
+- [Blog](https://vaislang.dev/blog/) - Technical articles and language design insights
 - [Contributing Guide](CONTRIBUTING.md) - How to contribute
 - [CHANGELOG](CHANGELOG.md) - Release history
 - [Discord](https://discord.gg/vaislang) - Real-time chat (coming soon)
@@ -365,9 +379,9 @@ Step-by-step project tutorials:
 
 ### Recent Blog Posts
 
-- [The Self-Hosting Journey: 50,000 Lines of Vais Compiling Itself](https://vais.dev/blog/self-hosting-journey.html)
-- [Vais Performance: Compilation Speed and Runtime Benchmarks](https://vais.dev/blog/performance-comparison.html)
-- [The Design Philosophy Behind Single-Character Keywords](https://vais.dev/blog/why-single-char-keywords.html)
+- [The Self-Hosting Journey: 50,000 Lines of Vais Compiling Itself](https://vaislang.dev/blog/self-hosting-journey.html)
+- [Vais Performance: Compilation Speed and Runtime Benchmarks](https://vaislang.dev/blog/performance-comparison.html)
+- [The Design Philosophy Behind Single-Character Keywords](https://vaislang.dev/blog/why-single-char-keywords.html)
 
 ## Legacy
 

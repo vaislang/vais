@@ -7,9 +7,9 @@ JSON 모듈은 가볍고 빠른 JSON 파서 및 생성기를 제공합니다. nu
 ## Quick Start
 
 ```vais
-U std/json
+use std/json
 
-F main() -> i64 {
+fn main() -> i64 {
     json_str := ~{"name": "Alice", "age": 30}
     obj := json_parse(json_str)
 
@@ -18,7 +18,7 @@ F main() -> i64 {
 
     print_str(name)  # "Alice"
     print_i64(age)   # 30
-    R 0
+    return 0
 }
 ```
 
@@ -61,9 +61,9 @@ F main() -> i64 {
 ### 예제 1: JSON 파싱 및 접근
 
 ```vais
-U std/json
+use std/json
 
-F main() -> i64 {
+fn main() -> i64 {
     json_str := ~{
         "user": {
             "id": 123,
@@ -82,16 +82,16 @@ F main() -> i64 {
     print_i64(id)       # 123
     print_str(name)     # "Bob"
     print_i64(active)   # 1
-    R 0
+    return 0
 }
 ```
 
 ### 예제 2: JSON 배열 순회
 
 ```vais
-U std/json
+use std/json
 
-F main() -> i64 {
+fn main() -> i64 {
     json_str := ~{"scores": [85, 92, 78, 90]}
 
     root := json_parse(json_str)
@@ -105,49 +105,49 @@ F main() -> i64 {
         print_i64(num)
         i = i + 1
     }
-    R 0
+    return 0
 }
 ```
 
 ### 예제 3: 구조체 → JSON 직렬화
 
 ```vais
-U std/json
+use std/json
 
-S User {
+struct User {
     id: i64,
     name: i64,
     age: i64
 }
 
-F user_to_json(user: User) -> i64 {
+fn user_to_json(user: User) -> i64 {
     obj := json_new_object()
     json_object_set(obj, "id", json_new_number(user.id))
     json_object_set(obj, "name", json_new_string(user.name))
     json_object_set(obj, "age", json_new_number(user.age))
-    R json_stringify(obj)
+    return json_stringify(obj)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     user := User { id: 456, name: "Charlie", age: 28 }
     json_str := user_to_json(user)
     print_str(json_str)  # {"id":456,"name":"Charlie","age":28}
-    R 0
+    return 0
 }
 ```
 
 ### 예제 4: JSON → 구조체 역직렬화
 
 ```vais
-U std/json
+use std/json
 
-S Config {
+struct Config {
     host: i64,
     port: i64,
     debug: i64
 }
 
-F parse_config(json_str: i64) -> Config {
+fn parse_config(json_str: i64) -> Config {
     obj := json_parse(json_str)
 
     Config {
@@ -157,23 +157,23 @@ F parse_config(json_str: i64) -> Config {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     json_str := ~{"host": "127.0.0.1", "port": 8080, "debug": true}
     config := parse_config(json_str)
 
     print_str(config.host)    # "127.0.0.1"
     print_i64(config.port)    # 8080
     print_i64(config.debug)   # 1
-    R 0
+    return 0
 }
 ```
 
 ### 예제 5: 중첩 JSON 생성
 
 ```vais
-U std/json
+use std/json
 
-F main() -> i64 {
+fn main() -> i64 {
     # {"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]}
 
     alice := json_new_object()
@@ -193,7 +193,7 @@ F main() -> i64 {
 
     json_str := json_stringify(root)
     print_str(json_str)
-    R 0
+    return 0
 }
 ```
 
@@ -207,7 +207,7 @@ val := json_get_object(root, "key")
 I json_get_type(val) == 6 {  # 6 = object
     # 안전하게 접근
     nested := json_get_string(val, "field")
-} E {
+} else {
     print_str("타입 불일치")
 }
 ```
@@ -238,9 +238,9 @@ json_str := json_stringify(val)  # "3.14"
 # 최대 깊이 32
 C MAX_JSON_DEPTH: i64 = 32
 
-F safe_parse(json_str: i64, depth: i64) -> i64 {
+fn safe_parse(json_str: i64, depth: i64) -> i64 {
     I depth > MAX_JSON_DEPTH {
-        R 0  # 에러
+        return 0  # 에러
     }
     # 파싱 로직...
 }
@@ -271,7 +271,7 @@ json_str := json_stringify(obj)  # "Hello\\nWorld"
 obj := json_parse(invalid_json)
 I json_get_type(obj) == 0 {  # 0 = null (파싱 실패)
     print_str("JSON 파싱 에러")
-    R 1
+    return 1
 }
 ```
 
@@ -283,7 +283,7 @@ I json_get_type(obj) == 0 {  # 0 = null (파싱 실패)
 
 ```vais
 # 스트림 파싱 패턴
-F parse_stream(file: File) -> Vec<i64> {
+fn parse_stream(file: File) -> Vec<i64> {
     results := Vec::new()
     L 1 {
         chunk := file.read_str(1024)
@@ -292,7 +292,7 @@ F parse_stream(file: File) -> Vec<i64> {
         obj := json_parse(chunk)
         results.push(obj)
     }
-    R results
+    return results
 }
 ```
 

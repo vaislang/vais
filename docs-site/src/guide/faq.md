@@ -37,30 +37,19 @@ Vais는 현재 **알파 단계**입니다:
 
 ## 언어 설계 질문
 
-### 왜 단일 문자 키워드를 사용하나요?
+### 왜 일부 single-char control form이 남아 있나요?
 
-단일 문자 키워드의 장점:
+초기 `F/S/E/EN/EL/M/R/T/U/P/W/X` form은 Step 19에서 retired 처리되었습니다. 새 코드는 `fn`, `struct`, `enum`, `else`, `match`, `return`, `use`, `pub` 같은 canonical keyword를 사용합니다.
 
-1. **토큰 절감**: AI 모델의 컨텍스트 윈도우 활용도 증가
-   - `if`, `else`, `while` (3 토큰) → `I`, `E`, `L` (1 토큰)
-   - 평균 토큰 수 50% 감소
+1. **명확성**: 현재 문법은 public docs, playground, lexer가 같은 keyword surface를 공유합니다.
 
-2. **입력 속도**: 사람이 타이핑할 때 빠름
-   - `function` (1 토큰) → `F` (1 토큰)
+2. **남은 축약 form**: `I`, `L`, `LF`, `A`, `Y`, `D` 등은 아직 canonical multi-char alias가 확정되지 않은 core control form입니다.
 
-3. **가독성**: 일단 익숙해지면 명확함
+3. **AI 프롬프트 규칙**: 생성 프롬프트에는 retired form을 쓰지 말고 canonical keyword를 쓰라고 명시하세요.
    ```vais
-   # 전통 문법
-   if condition {
-       for i = 0; i < 10; i++ {
-           return i * 2
-       }
-   }
-
-   # Vais
    I condition {
-       L i := 0; i < 10; i = i + 1 {
-           R i * 2
+       LF i: 0..10 {
+           return i * 2
        }
    }
    ```
@@ -76,26 +65,26 @@ def fibonacci(n):
         return n
     return fibonacci(n - 1) + fibonacci(n - 2)
 
-# Vais: 78 토큰
-F fibonacci(n: i64) -> i64 {
-    I n <= 1 { R n }
-    R fibonacci(n - 1) + fibonacci(n - 2)
+# Vais: canonical syntax
+fn fibonacci(n: i64) -> i64 {
+    I n <= 1 { return n }
+    return fibonacci(n - 1) + fibonacci(n - 2)
 }
 
-절감 효과:
-- 토큰 수: 50% 감소
-- 생성 속도: 2배 빠름
-- 비용: 50% 절감
+현재 권장 효과:
+- retired keyword 오생성 감소
+- docs / playground / compiler keyword surface 일치
+- gate-backed public claim과 일치
 ```
 
 ### Vais는 Rust와 다른 점이 무엇인가요?
 
 | 항목 | Vais | Rust |
 |------|------|------|
-| 문법 | 간결 (단일 문자) | 상세 (명시적) |
+| 문법 | canonical keyword + 일부 core control form | 상세 (명시적) |
 | 학습곡선 | 가파름 | 매우 가파름 |
 | AI 최적화 | 예 | 아니오 |
-| 토큰 수 | 50% 감소 | 기준 |
+| 공개 claim | gate-backed | release/channel-backed |
 | 성능 | 동급 | 동급 |
 | 안전성 | 높음 | 매우 높음 |
 | 커뮤니티 | 작음 | 매우 큼 |
@@ -139,19 +128,19 @@ int add(int a, int b) {
 }
 
 # Vais 코드 (동일한 기능)
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 ```
 
 #### 2단계: 고급 기능 학습 (3-5일)
 
 ```vais
 # 제네릭 (C에는 없음)
-F max<T>(a: T, b: T) -> T {
-    I a > b { R a } E { R b }
+fn max<T>(a: T, b: T) -> T {
+    I a > b { return a } else { return b }
 }
 
 # 패턴 매칭 (C에는 없음)
-M result {
+match result {
     Result.Ok(val) => puts("Success: {val}"),
     Result.Err(err) => puts("Error: {err}")
 }
@@ -182,7 +171,7 @@ fn main() {
 }
 
 # Vais 코드 (동일)
-F main() {
+fn main() {
     x := 5
     puts("x = {x}")
 }
@@ -216,7 +205,7 @@ func main() {
 
 ```vais
 # Vais (유사한 구조)
-F main() {
+fn main() {
     L i := 0; i < 10; i = i + 1 {
         puts("{i}")
     }

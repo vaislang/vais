@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/net
+use std/net
 ```
 
 ## Constants
@@ -135,7 +135,7 @@ UDP socket for connectionless datagram I/O.
 ## Usage
 
 ```vais
-U std/net
+use std/net
 
 # TCP Server
 listener := TcpListener.bind(8080)

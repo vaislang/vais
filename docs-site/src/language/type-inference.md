@@ -9,11 +9,11 @@ Vais features a powerful type inference system that reduces boilerplate while ma
 When type information can be unambiguously determined from context, Vais infers types automatically:
 
 ```vais
-F add(a: i64, b: i64) -> i64 {
+fn add(a: i64, b: i64) -> i64 {
     a + b
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     x := 5          # i64 inferred from literal
     y := add(x, 3)  # i64 inferred from function signature
     0
@@ -26,7 +26,7 @@ When the compiler cannot infer types from context, it raises an `InferFailed` er
 
 ```vais
 # ERROR: Cannot infer parameter types
-F add(a, b) {
+fn add(a, b) {
     a + b
 }
 # Error E032: Type inference failed: unconstrained type parameters
@@ -37,7 +37,7 @@ This prevents the compiler from making arbitrary assumptions about types, which 
 **Fix:** Provide explicit type annotations:
 
 ```vais
-F add(a: i64, b: i64) -> i64 {
+fn add(a: i64, b: i64) -> i64 {
     a + b
 }
 ```
@@ -50,9 +50,8 @@ Functions that use self-recursion (via `@`) **must** specify an explicit return 
 
 ```vais
 # ERROR: Missing return type in recursive function
-F fib(n: i64) {
-    I n <= 1 { n }
-    E { @(n - 1) + @(n - 2) }
+fn fib(n: i64) {
+    I n <= 1 { n } else { @(n - 1) + @(n - 2) }
 }
 # Error E032: Recursive function requires explicit return type annotation
 ```
@@ -62,9 +61,8 @@ F fib(n: i64) {
 **Fix:** Add the return type annotation:
 
 ```vais
-F fib(n: i64) -> i64 {
-    I n <= 1 { n }
-    E { @(n - 1) + @(n - 2) }
+fn fib(n: i64) -> i64 {
+    I n <= 1 { n } else { @(n - 1) + @(n - 2) }
 }
 ```
 
@@ -73,9 +71,8 @@ F fib(n: i64) -> i64 {
 The `@` operator invokes the current function recursively:
 
 ```vais
-F factorial(n: i64) -> i64 {
-    I n <= 1 { 1 }
-    E { n * @(n - 1) }
+fn factorial(n: i64) -> i64 {
+    I n <= 1 { 1 } else { n * @(n - 1) }
 }
 ```
 
@@ -84,9 +81,9 @@ F factorial(n: i64) -> i64 {
 Struct field types are inferred from the struct definition:
 
 ```vais
-S Point { x: f64, y: f64 }
+struct Point { x: f64, y: f64 }
 
-F make_point() -> Point {
+fn make_point() -> Point {
     Point { x: 3.0, y: 4.0 }  # Field types inferred from struct definition
 }
 ```
@@ -96,11 +93,11 @@ F make_point() -> Point {
 Generic type parameters are inferred from usage:
 
 ```vais
-F identity<T>(x: T) -> T {
+fn identity<T>(x: T) -> T {
     x
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := identity(42)      # T = i64 inferred
     b := identity("hello") # T = str inferred
     0
@@ -131,7 +128,7 @@ Error E032: Type inference failed: unconstrained type parameters
 
 ```vais
 # Good: Clear public API
-F process(input: str, count: i64) -> Result<Vec<str>, Error> {
+fn process(input: str, count: i64) -> Result<Vec<str>, Error> {
     # Local variables use inference
     lines := input.split("\n")
     results := Vec::new()
