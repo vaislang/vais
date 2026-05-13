@@ -184,7 +184,6 @@ impl FileWatcher {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -15,7 +15,7 @@ F partition(arr: i64, low: i64, high: i64) -> i64 {
     i := mut low - 1
     j := mut low
 
-    L j < high {
+    LW j < high {
         curr := load_i64(arr + j * 8)
         I curr < pivot {
             i = i + 1
@@ -34,7 +34,7 @@ F partition(arr: i64, low: i64, high: i64) -> i64 {
 F checksum(arr: i64, n: i64) -> i64 {
     sum := mut 0
     i := mut 0
-    L i < n {
+    LW i < n {
         sum = sum + load_i64(arr + i * 8)
         i = i + 1
     }
@@ -47,7 +47,7 @@ F main() {
 
     # Initialize with descending values
     i := mut 0
-    L i < n {
+    LW i < n {
         store_i64(arr + i * 8, n - i)
         i = i + 1
     }

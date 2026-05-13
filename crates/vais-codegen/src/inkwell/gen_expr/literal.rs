@@ -35,6 +35,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         Ok(fat_ptr.into())
     }
 
+    #[inline(never)]
     pub(crate) fn generate_string_literal(
         &mut self,
         s: &str,

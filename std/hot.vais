@@ -120,7 +120,7 @@ F hot_start(source_path: *i8) -> i64 {
     result := hot_init(source_path)
     I result != 0 {
         result
-    } E {
+    } EL {
         0
     }
 }
@@ -130,7 +130,7 @@ F hot_start(source_path: *i8) -> i64 {
 # F: Function to run each iteration (should be marked #[hot])
 # Returns: Never (runs forever until program exit)
 F hot_loop(update_fn: fn() -> i64) -> i64 {
-    L true {
+    LW true {
         # Check for reload
         reload_status := hot_check()
         I reload_status < 0 {

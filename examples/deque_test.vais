@@ -50,7 +50,7 @@ F deque_cap(dq: i64) -> i64 {
 
 # Check if deque is empty
 F deque_is_empty(dq: i64) -> i64 {
-    I deque_len(dq) == 0 { 1 } E { 0 }
+    I deque_len(dq) == 0 { 1 } EL { 0 }
 }
 
 # Push element to back
@@ -65,7 +65,7 @@ F deque_push_back(dq: i64, value: i64) -> i64 {
 
     # Update tail (wrap around)
     new_tail := tail + 1
-    wrapped_tail := I new_tail >= cap { 0 } E { new_tail }
+    wrapped_tail := I new_tail >= cap { 0 } EL { new_tail }
     store_i64(dq + 16, wrapped_tail)
 
     # Update length
@@ -82,7 +82,7 @@ F deque_push_front(dq: i64, value: i64) -> i64 {
     cap := load_i64(dq + 32)
 
     # Move head back (wrap around)
-    new_head := I head == 0 { cap - 1 } E { head - 1 }
+    new_head := I head == 0 { cap - 1 } EL { head - 1 }
     store_i64(dq + 8, new_head)
 
     # Store value at new head position
@@ -99,13 +99,13 @@ F deque_pop_back(dq: i64) -> i64 {
     len := load_i64(dq + 24)
     I len == 0 {
         0  # Return 0 if empty
-    } E {
+    } EL {
         data := load_i64(dq)
         tail := load_i64(dq + 16)
         cap := load_i64(dq + 32)
 
         # Move tail back (wrap around)
-        new_tail := I tail == 0 { cap - 1 } E { tail - 1 }
+        new_tail := I tail == 0 { cap - 1 } EL { tail - 1 }
         store_i64(dq + 16, new_tail)
 
         # Get value at new tail
@@ -123,7 +123,7 @@ F deque_pop_front(dq: i64) -> i64 {
     len := load_i64(dq + 24)
     I len == 0 {
         0  # Return 0 if empty
-    } E {
+    } EL {
         data := load_i64(dq)
         head := load_i64(dq + 8)
         cap := load_i64(dq + 32)
@@ -133,7 +133,7 @@ F deque_pop_front(dq: i64) -> i64 {
 
         # Move head forward (wrap around)
         new_head := head + 1
-        wrapped_head := I new_head >= cap { 0 } E { new_head }
+        wrapped_head := I new_head >= cap { 0 } EL { new_head }
         store_i64(dq + 8, wrapped_head)
 
         # Update length
@@ -148,7 +148,7 @@ F deque_front(dq: i64) -> i64 {
     len := load_i64(dq + 24)
     I len == 0 {
         0
-    } E {
+    } EL {
         data := load_i64(dq)
         head := load_i64(dq + 8)
         load_i64(data + head * 8)
@@ -160,11 +160,11 @@ F deque_back(dq: i64) -> i64 {
     len := load_i64(dq + 24)
     I len == 0 {
         0
-    } E {
+    } EL {
         data := load_i64(dq)
         tail := load_i64(dq + 16)
         cap := load_i64(dq + 32)
-        back_idx := I tail == 0 { cap - 1 } E { tail - 1 }
+        back_idx := I tail == 0 { cap - 1 } EL { tail - 1 }
         load_i64(data + back_idx * 8)
     }
 }
@@ -199,7 +199,7 @@ F test_push_back() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } E { 0 } } E { 0 } } E { 0 }
+    } EL { 0 } } EL { 0 } } EL { 0 }
 }
 
 F test_push_front() -> i64 {
@@ -232,7 +232,7 @@ F test_push_front() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } E { 0 } } E { 0 } } E { 0 }
+    } EL { 0 } } EL { 0 } } EL { 0 }
 }
 
 F test_pop_operations() -> i64 {
@@ -266,7 +266,7 @@ F test_pop_operations() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } E { 0 } } E { 0 } } E { 0 }
+    } EL { 0 } } EL { 0 } } EL { 0 }
 }
 
 F test_wrap_around() -> i64 {
@@ -307,7 +307,7 @@ F test_wrap_around() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } E { 0 } } E { 0 } } E { 0 }
+    } EL { 0 } } EL { 0 } } EL { 0 }
 }
 
 F main() -> i64 {
@@ -323,16 +323,16 @@ F main() -> i64 {
     I r1 == 1 { I r2 == 1 { I r3 == 1 { I r4 == 1 {
         puts("=== All Deque Tests PASSED ===")
         0
-    } E {
+    } EL {
         puts("=== Some Tests FAILED ===")
         1
-    } } E {
+    } } EL {
         puts("=== Some Tests FAILED ===")
         1
-    } } E {
+    } } EL {
         puts("=== Some Tests FAILED ===")
         1
-    } } E {
+    } } EL {
         puts("=== Some Tests FAILED ===")
         1
     }

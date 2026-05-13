@@ -7,18 +7,18 @@ Thread 모듈은 OS 레벨 스레드 생성, 조인, 스레드 로컬 저장소(
 ## Quick Start
 
 ```vais
-U std/thread
+use std/thread
 
-F worker(arg: i64) -> i64 {
+fn worker(arg: i64) -> i64 {
     print_i64(arg)
-    R arg * 2
+    return arg * 2
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     handle := thread_spawn(worker, 42)
     result := thread_join(handle)
     print_i64(result)  # 84
-    R 0
+    return 0
 }
 ```
 
@@ -38,10 +38,10 @@ F main() -> i64 {
 ### 예제 1: 병렬 계산
 
 ```vais
-U std/thread
-U std/vec
+use std/thread
+use std/vec
 
-F compute_sum(range_ptr: i64) -> i64 {
+fn compute_sum(range_ptr: i64) -> i64 {
     start := load_i64(range_ptr)
     end := load_i64(range_ptr + 8)
 
@@ -51,10 +51,10 @@ F compute_sum(range_ptr: i64) -> i64 {
         sum = sum + i
         i = i + 1
     }
-    R sum
+    return sum
 }
 
-F parallel_sum(n: i64) -> i64 {
+fn parallel_sum(n: i64) -> i64 {
     threads := Vec::new()
 
     # 4개 스레드로 분할
@@ -80,30 +80,30 @@ F parallel_sum(n: i64) -> i64 {
         i = i + 1
     }
 
-    R total
+    return total
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := parallel_sum(1000000)
     print_i64(result)
-    R 0
+    return 0
 }
 ```
 
 ### 예제 2: 백그라운드 작업 (Detached Thread)
 
 ```vais
-U std/thread
+use std/thread
 
-F background_logger(msg: i64) -> i64 {
+fn background_logger(msg: i64) -> i64 {
     L 1 {
         print_str(msg)
         thread_sleep(1000)  # 1초마다
     }
-    R 0
+    return 0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     handle := thread_spawn(background_logger, "서버 실행 중...")
     thread_detach(handle)  # 조인 없이 분리
 
@@ -114,21 +114,21 @@ F main() -> i64 {
         i = i + 1
     }
 
-    R 0
+    return 0
 }
 ```
 
 ### 예제 3: 공유 상태 + Mutex
 
 ```vais
-U std/thread
-U std/sync
+use std/thread
+use std/sync
 
-S SharedCounter {
+struct SharedCounter {
     mutex: Mutex<i64>
 }
 
-F increment_worker(counter_ptr: i64) -> i64 {
+fn increment_worker(counter_ptr: i64) -> i64 {
     counter := load_typed(counter_ptr)
     i := 0
     L i < 1000 {
@@ -138,10 +138,10 @@ F increment_worker(counter_ptr: i64) -> i64 {
         # guard 소멸 시 자동 unlock
         i = i + 1
     }
-    R 0
+    return 0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     counter := SharedCounter {
         mutex: Mutex::new(0)
     }
@@ -165,23 +165,23 @@ F main() -> i64 {
     # 최종 값 확인
     guard := counter.mutex.lock()
     print_i64(load_i64(guard.get_inner()))  # 10000
-    R 0
+    return 0
 }
 ```
 
 ### 예제 4: 스레드 풀 패턴
 
 ```vais
-U std/thread
-U std/channel
-U std/vec
+use std/thread
+use std/channel
+use std/vec
 
-S ThreadPool {
+struct ThreadPool {
     workers: Vec<i64>,
     sender: Sender<i64>
 }
 
-F worker_thread(receiver_ptr: i64) -> i64 {
+fn worker_thread(receiver_ptr: i64) -> i64 {
     receiver := load_typed(receiver_ptr)
 
     L 1 {
@@ -192,11 +192,11 @@ F worker_thread(receiver_ptr: i64) -> i64 {
         result := task()
         print_i64(result)
     }
-    R 0
+    return 0
 }
 
-X ThreadPool {
-    F new(size: i64) -> ThreadPool {
+impl ThreadPool {
+    fn new(size: i64) -> ThreadPool {
         channel := channel_new(100)
         workers := Vec::new()
 
@@ -213,11 +213,11 @@ X ThreadPool {
         }
     }
 
-    F submit(&self, task: i64) {
+    fn submit(&self, task: i64) {
         self.sender.send(task)
     }
 
-    F shutdown(&self) {
+    fn shutdown(&self) {
         # 종료 신호 전송
         i := 0
         L i < self.workers.len() {
@@ -238,34 +238,34 @@ X ThreadPool {
 ### 예제 5: 스레드 로컬 저장소 (TLS)
 
 ```vais
-U std/thread
+use std/thread
 
 # 스레드별 고유 ID 저장
 global tls_key := 0
 
-F init_tls() -> i64 {
+fn init_tls() -> i64 {
     tls_key = __tls_create()
-    R 0
+    return 0
 }
 
-F set_thread_id(id: i64) {
+fn set_thread_id(id: i64) {
     __tls_set(tls_key, id)
 }
 
-F get_thread_id() -> i64 {
-    R __tls_get(tls_key)
+fn get_thread_id() -> i64 {
+    return __tls_get(tls_key)
 }
 
-F worker(id: i64) -> i64 {
+fn worker(id: i64) -> i64 {
     set_thread_id(id)
     thread_sleep(100)
 
     my_id := get_thread_id()
     print_i64(my_id)  # 각 스레드는 고유 ID 출력
-    R 0
+    return 0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     init_tls()
 
     i := 0
@@ -275,7 +275,7 @@ F main() -> i64 {
     }
 
     thread_sleep(1000)  # 모든 스레드 대기
-    R 0
+    return 0
 }
 ```
 
@@ -305,19 +305,19 @@ thread_detach(handle)
 # 나쁜 예: 경쟁 조건
 global counter := 0
 
-F bad_worker() -> i64 {
+fn bad_worker() -> i64 {
     counter = counter + 1  # 원자성 없음!
-    R 0
+    return 0
 }
 
 # 좋은 예: Mutex 보호
 global safe_counter := Mutex::new(0)
 
-F good_worker() -> i64 {
+fn good_worker() -> i64 {
     guard := safe_counter.lock()
     val := guard.get_inner()
     store_i64(val, load_i64(val) + 1)
-    R 0
+    return 0
 }
 ```
 
@@ -326,18 +326,18 @@ F good_worker() -> i64 {
 
 ```vais
 # Deadlock 발생 가능
-F thread1() {
+fn thread1() {
     lock_a := mutex_a.lock()
     lock_b := mutex_b.lock()  # A → B 순서
 }
 
-F thread2() {
+fn thread2() {
     lock_b := mutex_b.lock()
     lock_a := mutex_a.lock()  # B → A 순서 (Deadlock!)
 }
 
 # 안전한 방법: 일관된 순서
-F safe_thread() {
+fn safe_thread() {
     lock_a := mutex_a.lock()  # 항상 A → B
     lock_b := mutex_b.lock()
 }
@@ -363,21 +363,21 @@ L i < 10000 {
 스레드 함수는 i64를 반환하므로, 에러 코드를 전달해야 합니다.
 
 ```vais
-F worker(arg: i64) -> i64 {
+fn worker(arg: i64) -> i64 {
     I arg < 0 {
-        R -1  # 에러 코드
+        return -1  # 에러 코드
     }
-    R compute(arg)
+    return compute(arg)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     handle := thread_spawn(worker, -5)
     result := thread_join(handle)
 
     I result < 0 {
         print_str("스레드 에러 발생")
     }
-    R 0
+    return 0
 }
 ```
 

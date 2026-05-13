@@ -1,6 +1,8 @@
 # WASM-JavaScript Interop
 
-Vais provides first-class WebAssembly and JavaScript interop through `#[wasm_import]` and `#[wasm_export]` attributes.
+Vais has experimental WebAssembly and JavaScript interop surfaces through
+`#[wasm_import]` and `#[wasm_export]` attributes. They are not part of the
+current certified public baseline unless a dedicated gate names them.
 
 ## Importing JS Functions
 
@@ -8,12 +10,12 @@ Use `#[wasm_import("module", "name")]` to import JavaScript functions into Vais:
 
 ```vais
 #[wasm_import("env", "console_log")]
-N F console_log(msg: str)
+N fn console_log(msg: str)
 
 #[wasm_import("env", "get_time")]
-N F get_time() -> f64
+N fn get_time() -> f64
 
-F main() -> i64 {
+fn main() -> i64 {
     console_log("Hello from Vais WASM!")
     t := get_time()
     0
@@ -28,14 +30,13 @@ Use `#[wasm_export("name")]` to export Vais functions for JavaScript consumption
 
 ```vais
 #[wasm_export("add")]
-F add(a: i64, b: i64) -> i64 {
+fn add(a: i64, b: i64) -> i64 {
     a + b
 }
 
 #[wasm_export("fibonacci")]
-F fib(n: i64) -> i64 {
-    I n <= 1 { n }
-    E { @(n - 1) + @(n - 2) }
+fn fib(n: i64) -> i64 {
+    I n <= 1 { n } else { @(n - 1) + @(n - 2) }
 }
 ```
 
@@ -46,9 +47,9 @@ These functions become callable from JavaScript after loading the WASM module.
 The `std/web.vais` module provides pre-built bindings for common Web APIs:
 
 ```vais
-U std/web
+use std/web
 
-F main() -> i64 {
+fn main() -> i64 {
     console_log("Hello, browser!")
     dom_set_text("output", "Vais is running in the browser")
     0
@@ -165,8 +166,8 @@ Strings require encoding/decoding across the boundary:
 **Vais → JavaScript** (export string):
 ```vais
 #[wasm_export("get_message")]
-F get_message() -> str {
-    R "Hello from Vais"
+fn get_message() -> str {
+    return "Hello from Vais"
 }
 ```
 
@@ -185,9 +186,9 @@ const msg = readString(ptr, len, instance.exports.memory);
 **JavaScript → Vais** (import string):
 ```vais
 #[wasm_import("env", "log_str")]
-N F log_str(ptr: i64, len: i64)
+N fn log_str(ptr: i64, len: i64)
 
-F main() {
+fn main() {
     msg := "Hello"
     log_str(str_to_ptr(msg), strlen(msg))
 }
@@ -228,13 +229,13 @@ Passing structs and arrays requires serialization.
 
 Vais struct:
 ```vais
-S Point {
+struct Point {
     x: f64,
     y: f64
 }
 
 #[wasm_export("process_point")]
-F process_point(ptr: i64) -> i64 {
+fn process_point(ptr: i64) -> i64 {
     # Read struct from linear memory
     x := load_f64(ptr)
     y := load_f64(ptr + 8)
@@ -247,7 +248,7 @@ F process_point(ptr: i64) -> i64 {
     store_f64(result_ptr, result_x)
     store_f64(result_ptr + 8, result_y)
 
-    R result_ptr
+    return result_ptr
 }
 ```
 
@@ -280,7 +281,7 @@ console.log(result); // { x: 3.0, y: 5.0 }
 Vais expects arrays as `{ptr, len}` fat pointers:
 ```vais
 #[wasm_export("sum_array")]
-F sum_array(arr_ptr: i64, arr_len: i64) -> i64 {
+fn sum_array(arr_ptr: i64, arr_len: i64) -> i64 {
     total := 0
     i := 0
     L i < arr_len {
@@ -288,7 +289,7 @@ F sum_array(arr_ptr: i64, arr_len: i64) -> i64 {
         total = total + elem
         i = i + 1
     }
-    R total
+    return total
 }
 ```
 
@@ -314,12 +315,12 @@ Vais uses `Result<T, E>` for error handling. Across WASM boundary:
 
 ```vais
 #[wasm_export("divide")]
-F divide(a: i64, b: i64) -> i64 {
+fn divide(a: i64, b: i64) -> i64 {
     I b == 0 {
         # Return error code
-        R -1
+        return -1
     }
-    R a / b
+    return a / b
 }
 ```
 
@@ -345,18 +346,18 @@ C ERR_NONE: i64 = 0
 C ERR_INVALID_INPUT: i64 = 1
 C ERR_OUT_OF_MEMORY: i64 = 2
 
-S ResultI64 {
+struct ResultI64 {
     ok: bool,
     value: i64,
     error_code: i64
 }
 
 #[wasm_export("safe_divide")]
-F safe_divide(a: i64, b: i64) -> ResultI64 {
+fn safe_divide(a: i64, b: i64) -> ResultI64 {
     I b == 0 {
-        R ResultI64 { ok: false, value: 0, error_code: ERR_INVALID_INPUT }
+        return ResultI64 { ok: false, value: 0, error_code: ERR_INVALID_INPUT }
     }
-    R ResultI64 { ok: true, value: a / b, error_code: ERR_NONE }
+    return ResultI64 { ok: true, value: a / b, error_code: ERR_NONE }
 }
 ```
 
@@ -409,11 +410,11 @@ Allocate large buffers once, reuse them:
 C BUFFER_SIZE: i64 = 1048576  # 1MB
 mut global_buffer: i64 = 0
 
-F init() {
+fn init() {
     global_buffer = wasm_heap_alloc(BUFFER_SIZE)
 }
 
-F process_data(size: i64) {
+fn process_data(size: i64) {
     # Reuse global_buffer instead of allocating
 }
 ```

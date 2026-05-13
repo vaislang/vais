@@ -307,27 +307,8 @@ fn test_display_type_ref_mut_lifetime() {
     assert_eq!(format!("{}", ty), "&'b mut Vec");
 }
 
-#[test]
-fn test_display_type_lazy() {
-    let ty = Type::Lazy(Box::new(named_type("i64")));
-    assert_eq!(format!("{}", ty), "Lazy<i64>");
-}
-
-#[test]
-fn test_display_type_impl_trait_single() {
-    let ty = Type::ImplTrait {
-        bounds: vec![sp_str("Display")],
-    };
-    assert_eq!(format!("{}", ty), "impl Display");
-}
-
-#[test]
-fn test_display_type_impl_trait_multiple() {
-    let ty = Type::ImplTrait {
-        bounds: vec![sp_str("Display"), sp_str("Clone")],
-    };
-    assert_eq!(format!("{}", ty), "impl Display + Clone");
-}
+// test_display_type_impl_trait_{single,multiple} REMOVED (ROADMAP #18):
+// Type::ImplTrait was removed from the AST.
 
 // ============================================================================
 // ConstExpr Display Tests
@@ -428,7 +409,6 @@ fn test_generic_param_new_type() {
     let param = GenericParam::new_type(sp_str("T"), vec![sp_str("Display")]);
     assert_eq!(param.name.node, "T");
     assert!(!param.is_const());
-    assert!(!param.is_higher_kinded());
     assert!(!param.is_covariant());
     assert!(!param.is_contravariant());
     assert!(matches!(param.kind, GenericParamKind::Type { .. }));
@@ -452,7 +432,6 @@ fn test_generic_param_new_type_with_variance_contravariant() {
 fn test_generic_param_new_const() {
     let param = GenericParam::new_const(sp_str("N"), named_type("u64"));
     assert!(param.is_const());
-    assert!(!param.is_higher_kinded());
     assert!(param.bounds.is_empty());
 }
 
@@ -460,7 +439,6 @@ fn test_generic_param_new_const() {
 fn test_generic_param_new_lifetime() {
     let param = GenericParam::new_lifetime(sp_str("'a"), vec!["'b".to_string()]);
     assert!(!param.is_const());
-    assert!(!param.is_higher_kinded());
     match &param.kind {
         GenericParamKind::Lifetime { bounds } => {
             assert_eq!(bounds, &["'b"]);
@@ -469,19 +447,8 @@ fn test_generic_param_new_lifetime() {
     }
 }
 
-#[test]
-fn test_generic_param_new_higher_kinded() {
-    let param = GenericParam::new_higher_kinded(sp_str("F"), 2, vec![sp_str("Functor")]);
-    assert!(param.is_higher_kinded());
-    assert!(!param.is_const());
-    match &param.kind {
-        GenericParamKind::HigherKinded { arity, bounds } => {
-            assert_eq!(*arity, 2);
-            assert_eq!(bounds.len(), 1);
-        }
-        _ => panic!("Expected HigherKinded kind"),
-    }
-}
+// test_generic_param_new_higher_kinded REMOVED (ROADMAP #18):
+// GenericParamKind::HigherKinded was removed from the AST.
 
 // ============================================================================
 // BinOp Precedence Tests - Complete coverage
@@ -754,8 +721,9 @@ fn test_expr_struct_lit() {
             (sp_str("x"), sp_expr(Expr::Int(1))),
             (sp_str("y"), sp_expr(Expr::Int(2))),
         ],
+        enum_name: None,
     };
-    if let Expr::StructLit { name, fields } = expr {
+    if let Expr::StructLit { name, fields, .. } = expr {
         assert_eq!(name.node, "Point");
         assert_eq!(fields.len(), 2);
     }
@@ -823,12 +791,6 @@ fn test_expr_lambda() {
 }
 
 #[test]
-fn test_expr_spawn() {
-    let expr = Expr::Spawn(Box::new(sp_expr(Expr::Int(42))));
-    assert!(matches!(expr, Expr::Spawn(_)));
-}
-
-#[test]
 fn test_expr_yield() {
     let expr = Expr::Yield(Box::new(sp_expr(Expr::Int(42))));
     assert!(matches!(expr, Expr::Yield(_)));
@@ -840,13 +802,6 @@ fn test_expr_comptime() {
         body: Box::new(sp_expr(Expr::Int(100))),
     };
     assert!(matches!(expr, Expr::Comptime { .. }));
-}
-
-#[test]
-fn test_expr_lazy_force() {
-    let lazy_expr = Expr::Lazy(Box::new(sp_expr(Expr::Int(42))));
-    let force_expr = Expr::Force(Box::new(sp_expr(lazy_expr)));
-    assert!(matches!(force_expr, Expr::Force(_)));
 }
 
 #[test]
@@ -1424,6 +1379,8 @@ fn test_formatter_format_function_simple() {
         }))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         attributes: vec![],
         where_clause: vec![],
     }));
@@ -1443,6 +1400,8 @@ fn test_formatter_format_function_pub_async() {
         )))))]),
         is_pub: true,
         is_async: true,
+        is_partial: false,
+        declared_effect: None,
         attributes: vec![],
         where_clause: vec![],
     }));
@@ -1659,9 +1618,12 @@ fn test_formatter_format_impl() {
                         (sp_str("x"), sp_expr(Expr::Int(0))),
                         (sp_str("y"), sp_expr(Expr::Int(0))),
                     ],
+                    enum_name: None,
                 }))),
                 is_pub: false,
                 is_async: false,
+                is_partial: false,
+                declared_effect: None,
                 attributes: vec![],
                 where_clause: vec![],
             },
@@ -1850,6 +1812,8 @@ fn test_function_clone() {
         body: FunctionBody::Expr(Box::new(sp_expr(Expr::Ident("x".to_string())))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         attributes: vec![],
         where_clause: vec![],
     };

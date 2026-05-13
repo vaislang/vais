@@ -23,7 +23,7 @@ mod pipeline;
 mod wasm;
 
 // Re-export public functions
-pub(crate) use native::compile_to_native;
+pub(crate) use native::{append_reproducible_link_flags, compile_to_native};
 pub(crate) use per_module::compile_per_module;
 pub(crate) use wasm::{compile_to_wasi, compile_to_wasi_p2, compile_to_wasm32};
 

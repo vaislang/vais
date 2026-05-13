@@ -80,6 +80,7 @@ impl LanguageServer for VaisBackend {
         self.client
             .log_message(MessageType::INFO, "Vais LSP server initialized")
             .await;
+        crate::handlers::workspace_diagnostics::publish_workspace_diagnostics(self).await;
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -102,6 +103,7 @@ impl LanguageServer for VaisBackend {
         );
 
         self.parse_document(&uri, &content).await;
+        crate::handlers::workspace_diagnostics::publish_workspace_diagnostics(self).await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
@@ -184,98 +186,11 @@ impl LanguageServer for VaisBackend {
         &self,
         params: TextDocumentPositionParams,
     ) -> Result<Option<PrepareRenameResponse>> {
-        let uri = &params.text_document.uri;
-        let position = params.position;
-
-        if let Some(doc) = self.documents.get(uri) {
-            // Convert position to offset
-            let line = position.line as usize;
-            let col = position.character as usize;
-            let line_start = doc.content.line_to_char(line);
-            let offset = line_start + col;
-            drop(doc); // Release read lock
-
-            // Check if we're on a renameable symbol
-            if let Some(symbol_name) = self.get_identifier_at(uri, offset) {
-                // Find the exact span of the symbol at the cursor using cache
-                if let Some(cache) = self.get_symbol_cache(uri) {
-                    let defs = &cache.definitions;
-                    let refs = &cache.references;
-
-                    if let Some(doc) = self.documents.get(uri) {
-                        // Check definitions
-                        for d in defs {
-                            if d.span.start <= offset && offset <= d.span.end {
-                                let range = self.span_to_range(&doc.content, &d.span);
-                                return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
-                                    range,
-                                    placeholder: symbol_name.clone(),
-                                }));
-                            }
-                        }
-
-                        // Check references
-                        for r in refs {
-                            if r.span.start <= offset && offset <= r.span.end {
-                                let range = self.span_to_range(&doc.content, &r.span);
-                                return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
-                                    range,
-                                    placeholder: symbol_name,
-                                }));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(None)
+        crate::handlers::rename::handle_prepare_rename(self, params).await
     }
 
     async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
-        let uri = &params.text_document_position.text_document.uri;
-        let position = params.text_document_position.position;
-        let new_name = params.new_name;
-
-        if let Some(doc) = self.documents.get(uri) {
-            // Convert position to offset
-            let line = position.line as usize;
-            let col = position.character as usize;
-            let line_start = doc.content.line_to_char(line);
-            let offset = line_start + col;
-            drop(doc); // Release read lock
-
-            // Get the symbol name at the position (uses cache)
-            if let Some(symbol_name) = self.get_identifier_at(uri, offset) {
-                // Find all references to this symbol
-                let spans = self.find_all_references(uri, &symbol_name);
-
-                if !spans.is_empty() {
-                    if let Some(doc) = self.documents.get(uri) {
-                        // Create text edits for all occurrences
-                        let text_edits: Vec<TextEdit> = spans
-                            .iter()
-                            .map(|span| TextEdit {
-                                range: self.span_to_range(&doc.content, span),
-                                new_text: new_name.clone(),
-                            })
-                            .collect();
-
-                        // Create workspace edit
-                        let mut changes = std::collections::HashMap::new();
-                        changes.insert(uri.clone(), text_edits);
-
-                        return Ok(Some(WorkspaceEdit {
-                            changes: Some(changes),
-                            document_changes: None,
-                            change_annotations: None,
-                        }));
-                    }
-                }
-            }
-        }
-
-        Ok(None)
+        crate::handlers::rename::handle_rename(self, params).await
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {

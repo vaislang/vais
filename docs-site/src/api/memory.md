@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/memory
+use std/memory
 ```
 
 ## Functions
@@ -81,9 +81,9 @@ U std/memory
 ## Usage
 
 ```vais
-U std/memory
+use std/memory
 
-F main() -> i64 {
+fn main() -> i64 {
     # Allocation
     buf := mem_alloc_zeroed(256)
 

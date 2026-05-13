@@ -59,7 +59,7 @@ F calculate_stats(rows: i64, count: i64) -> i64 {
         i := i + 1
     }
 
-    avg := I count > 0 { total / count } E { 0 }
+    avg := I count > 0 { total / count } EL { 0 }
 
     # Return [avg, total]
     result := malloc(16)

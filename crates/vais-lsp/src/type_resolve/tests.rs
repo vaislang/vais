@@ -296,8 +296,8 @@ fn test_ast_type_to_lsp_named_primitive() {
 #[test]
 fn test_ast_type_to_lsp_named_all_primitives() {
     for name in [
-        "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64",
-        "bool", "str", "isize", "usize", "char",
+        "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64", "bool",
+        "str", "isize", "usize", "char",
     ] {
         let ty = Type::Named {
             name: name.to_string(),
@@ -925,6 +925,7 @@ fn test_infer_struct_lit() {
     let expr = spanned(Expr::StructLit {
         name: spanned("Point".to_string()),
         fields: vec![],
+        enum_name: None,
     });
     assert_eq!(
         ctx.infer_expr_type(&expr),
@@ -1500,6 +1501,7 @@ fn test_infer_struct_lit_with_fields() {
             (spanned("debug".to_string()), spanned(Expr::Bool(true))),
             (spanned("level".to_string()), spanned(Expr::Int(3))),
         ],
+        enum_name: None,
     });
     assert_eq!(
         ctx.infer_expr_type(&expr),
@@ -1616,7 +1618,9 @@ fn test_from_module_multiple_enums() {
 
 #[test]
 fn test_from_module_impl_multiple_methods() {
-    let ast = parse_module("S Vec { len: i64 }\nX Vec { F push(self, x: i64) -> i64 { 0 }\nF pop(self) -> i64 { 0 } }");
+    let ast = parse_module(
+        "S Vec { len: i64 }\nX Vec { F push(self, x: i64) -> i64 { 0 }\nF pop(self) -> i64 { 0 } }",
+    );
     let ctx = TypeContext::from_module(&ast);
     assert_eq!(ctx.type_methods["Vec"].len(), 2);
 }

@@ -31,12 +31,11 @@ impl CodeGenerator {
         free: &mut Vec<String>,
     ) {
         match expr {
-            Expr::Ident(name) => {
+            Expr::Ident(name) if !bound.contains(name) && self.fn_ctx.locals.contains_key(name) => {
                 // Only capture if it's in our locals (exists in outer scope)
-                if !bound.contains(name) && self.fn_ctx.locals.contains_key(name) {
-                    free.push(name.clone());
-                }
+                free.push(name.clone());
             }
+            Expr::Ident(_) => {}
             Expr::Binary { left, right, .. } => {
                 self.collect_free_vars_in_expr(&left.node, bound, free);
                 self.collect_free_vars_in_expr(&right.node, bound, free);
@@ -137,10 +136,7 @@ impl CodeGenerator {
             | Expr::Try(inner)
             | Expr::Unwrap(inner)
             | Expr::Await(inner)
-            | Expr::Spawn(inner)
             | Expr::Yield(inner)
-            | Expr::Lazy(inner)
-            | Expr::Force(inner)
             | Expr::Comptime { body: inner }
             | Expr::Old(inner)
             | Expr::Assume(inner) => {
@@ -237,6 +233,14 @@ impl CodeGenerator {
                 }
                 if let Some(e) = end {
                     self.collect_free_vars_in_expr(&e.node, bound, free);
+                }
+            }
+            Expr::StringInterp(parts) => {
+                // Interpolated `{name}` references must be captured by the lambda.
+                for part in parts {
+                    if let vais_ast::StringInterpPart::Expr(e) = part {
+                        self.collect_free_vars_in_expr(&e.node, bound, free);
+                    }
                 }
             }
             // Literals and other expressions don't contain free variables

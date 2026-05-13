@@ -878,7 +878,6 @@ impl SimdGenerator {
     }
 }
 
-
 #[cfg(test)]
 #[path = "simd_tests.rs"]
 mod simd_tests;

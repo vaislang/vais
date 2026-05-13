@@ -5,7 +5,10 @@
 //! - `conversion`: CodeGenerator methods for type-to-LLVM conversion
 //! - `tests`: Unit tests for type mapping and sizeof/alignof
 
+pub mod coercion;
 mod conversion;
+pub mod sizeof;
+pub mod type_gen;
 
 #[cfg(test)]
 mod tests;
@@ -41,6 +44,10 @@ pub(crate) fn format_llvm_float(n: f64) -> String {
 pub(crate) struct LoopLabels {
     pub continue_label: String,
     pub break_label: String,
+    /// `scope_str_stack.len()` at loop entry. Frames at indices ≥ this depth
+    /// are loop-internal and must be freed on break/continue to prevent leaks
+    /// of mid-iteration concat/push_str buffers (Phase 191 #6).
+    pub scope_str_depth: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +65,49 @@ pub(crate) struct StructInfo {
     /// Invariant expressions for formal verification
     /// These are checked after struct construction/modification
     pub _invariants: Vec<vais_ast::Spanned<vais_ast::Expr>>,
+    /// True when the struct carries heap-owned string fields and codegen must
+    /// append a trailing `i64 __ownership_mask` field to the LLVM layout
+    /// (Phase 191 #2b, RFC-002 §4.2 Option D). When true, `heap_fields` lists
+    /// the user-visible field indices that participate in the bitmap.
+    pub has_owned_mask: bool,
+    /// Indices into `fields` of heap-owned candidates (Str or Vec$str). Populated
+    /// when `has_owned_mask == true`. Consumed by shallow-drop helper emission (#2b-C).
+    pub heap_fields: Vec<usize>,
+}
+
+impl StructInfo {
+    /// Classify a field as heap-owned for ownership-mask purposes.
+    ///
+    /// Returns true for direct `Str` and for the monomorphized `Vec$str` Named
+    /// container. Nested user structs with their own mask are handled by #2c.
+    pub fn field_is_heap_owned(ty: &ResolvedType) -> bool {
+        match ty {
+            ResolvedType::Str => true,
+            ResolvedType::Named { name, generics, .. } => {
+                if name == "Vec$str" {
+                    return true;
+                }
+                // Vec<str> before name-mangling: Named("Vec", [Str]).
+                if name == "Vec" && generics.len() == 1 {
+                    return matches!(generics[0], ResolvedType::Str);
+                }
+                false
+            }
+            _ => false,
+        }
+    }
+
+    /// Compute heap_fields + has_owned_mask from a field list. Keeps the two
+    /// registration sites (register_struct + generate_specialized_struct_type)
+    /// in sync.
+    pub fn derive_ownership_mask(fields: &[(String, ResolvedType)]) -> (bool, Vec<usize>) {
+        let heap_fields: Vec<usize> = fields
+            .iter()
+            .enumerate()
+            .filter_map(|(i, (_, ty))| Self::field_is_heap_owned(ty).then_some(i))
+            .collect();
+        (!heap_fields.is_empty(), heap_fields)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -121,6 +171,10 @@ pub(crate) struct LocalVar {
     pub kind: LocalVarKind,
     /// The actual LLVM IR name for this variable (may differ from source name in loops)
     pub llvm_name: String,
+    /// True when the alloca stores a pointer-to-struct (`%Type**`), requiring a
+    /// load before passing to drop/shallow-free. False for direct struct allocas
+    /// (`%Type*`) where the alloca IS the struct pointer.
+    pub is_double_ptr: bool,
 }
 
 impl LocalVar {
@@ -130,6 +184,7 @@ impl LocalVar {
             ty,
             kind: LocalVarKind::Param,
             llvm_name: llvm_name.into(),
+            is_double_ptr: false,
         }
     }
 
@@ -139,15 +194,27 @@ impl LocalVar {
             ty,
             kind: LocalVarKind::Ssa,
             llvm_name: llvm_name.into(),
+            is_double_ptr: false,
         }
     }
 
-    /// Create a new alloca variable (stack-allocated)
+    /// Create a new alloca variable (stack-allocated, single pointer `%Type*`)
     pub fn alloca(ty: ResolvedType, llvm_name: impl Into<String>) -> Self {
         Self {
             ty,
             kind: LocalVarKind::Alloca,
             llvm_name: llvm_name.into(),
+            is_double_ptr: false,
+        }
+    }
+
+    /// Create a new alloca variable that stores a pointer to struct (`%Type**`)
+    pub fn alloca_double_ptr(ty: ResolvedType, llvm_name: impl Into<String>) -> Self {
+        Self {
+            ty,
+            kind: LocalVarKind::Alloca,
+            llvm_name: llvm_name.into(),
+            is_double_ptr: true,
         }
     }
 
@@ -179,18 +246,6 @@ pub(crate) struct ClosureInfo {
     pub captures: Vec<(String, String)>,
     /// Whether captures are passed by reference (pointer) vs by value
     pub is_ref_capture: bool,
-}
-
-/// Information about a lazy thunk (deferred evaluation)
-#[derive(Debug, Clone)]
-#[allow(dead_code)] // Fields reserved for lazy evaluation codegen
-pub(crate) struct LazyThunkInfo {
-    /// The generated LLVM thunk function name
-    pub thunk_name: String,
-    /// Captured variable names, LLVM types, and loaded values (var_name, llvm_type, llvm_value)
-    pub captures: Vec<(String, String, String)>,
-    /// LLVM type of the inner (computed) value
-    pub inner_llvm_ty: String,
 }
 
 /// Information about an await point in an async function.

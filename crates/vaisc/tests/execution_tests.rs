@@ -197,6 +197,7 @@ fn assert_stdout_lines(source: &str, expected_lines: &[&str]) {
 }
 
 /// Assert that source fails to compile (expected compilation error)
+#[allow(dead_code)]
 fn assert_compile_error(source: &str) {
     assert!(
         compile_to_ir(source).is_err(),
@@ -205,6 +206,7 @@ fn assert_compile_error(source: &str) {
 }
 
 /// Assert that source compiles and runs without crashing (exit code 0, no stderr panic)
+#[allow(dead_code)]
 fn assert_no_crash(source: &str) {
     match compile_and_run(source) {
         Ok(result) => {
@@ -1629,49 +1631,6 @@ F main() -> i64 {
     assert_exit_code(source, 60);
 }
 
-// --- Lazy Evaluation Tests (Phase 42) ---
-
-#[test]
-fn exec_lazy_basic() {
-    let source = r#"
-F main() -> i64 {
-    x := lazy 42
-    y := force x
-    y
-}
-"#;
-    assert_exit_code(source, 42);
-}
-
-#[test]
-fn exec_lazy_computation() {
-    let source = r#"
-F compute(x: i64) -> i64 = x * 2 + 1
-
-F main() -> i64 {
-    x := lazy compute(20)
-    y := force x
-    y
-}
-"#;
-    // 20 * 2 + 1 = 41
-    assert_exit_code(source, 41);
-}
-
-#[test]
-fn exec_lazy_multiple_force() {
-    let source = r#"
-F main() -> i64 {
-    x := lazy 10
-    a := force x
-    b := force x
-    a + b
-}
-"#;
-    // 10 + 10 = 20
-    assert_exit_code(source, 20);
-}
-
 // --- Closure Capture Modes (Phase 42) ---
 
 #[test]
@@ -1914,20 +1873,6 @@ A F async_task() -> i64 = 42
 
 F main() -> i64 = 0
 "#;
-    assert_exit_code(source, 0);
-}
-
-#[test]
-fn exec_spawn_compiles() {
-    let source = r#"
-F task() -> i64 = 42
-
-F main() -> i64 {
-    spawn task()
-    0
-}
-"#;
-    // spawn on sync function produces valid IR — sync spawn wraps value in Future struct
     assert_exit_code(source, 0);
 }
 

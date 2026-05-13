@@ -4,7 +4,7 @@
 //! indexing, await, try (?), unwrap (!), type casts (as), and static method calls (::).
 
 use vais_ast::*;
-use vais_lexer::Token;
+use vais_lexer::{SpannedToken, Token};
 
 use crate::{ParseError, ParseResult, Parser};
 
@@ -27,9 +27,9 @@ impl Parser {
                 if self.has_newline_between(expr_end, paren_start) {
                     break;
                 }
-                self.advance();
+                self.advance_skip();
                 let args = self.parse_args()?;
-                self.expect(&Token::RParen)?;
+                self.expect_skip(&Token::RParen)?;
                 let end = self.prev_span().end;
                 expr = Spanned::new(
                     Expr::Call {
@@ -39,17 +39,39 @@ impl Parser {
                     Span::new(start, end),
                 );
             } else if self.check(&Token::Dot) {
-                self.advance();
+                self.advance_skip();
                 if self.check(&Token::Await) {
-                    self.advance();
+                    self.advance_skip();
                     let end = self.prev_span().end;
                     expr = Spanned::new(Expr::Await(Box::new(expr)), Span::new(start, end));
+                } else if let Some(SpannedToken {
+                    token: Token::Int(n),
+                    ..
+                }) = self.peek().cloned()
+                {
+                    // Tuple field access: expr.0, expr.1, etc.
+                    if n < 0 {
+                        return Err(ParseError::UnexpectedToken {
+                            found: Token::Int(n),
+                            span: self.prev_span(),
+                            expected: "non-negative integer for tuple field access".into(),
+                        });
+                    }
+                    self.advance_skip();
+                    let end = self.prev_span().end;
+                    expr = Spanned::new(
+                        Expr::TupleFieldAccess {
+                            expr: Box::new(expr),
+                            index: n as usize,
+                        },
+                        Span::new(start, end),
+                    );
                 } else {
                     let field = self.parse_ident()?;
                     if self.check(&Token::LParen) {
-                        self.advance();
+                        self.advance_skip();
                         let args = self.parse_args()?;
-                        self.expect(&Token::RParen)?;
+                        self.expect_skip(&Token::RParen)?;
                         let end = self.prev_span().end;
 
                         // Check if receiver is a type name (starts with uppercase)
@@ -86,6 +108,61 @@ impl Parser {
                                 Span::new(start, end),
                             );
                         }
+                    } else if self.check(&Token::LBrace) && self.allow_struct_literal {
+                        // Check for enum variant struct construction: Type.Variant { field: value }
+                        let is_type = if let Expr::Ident(name) = &expr.node {
+                            name.chars()
+                                .next()
+                                .map(|c| c.is_uppercase())
+                                .unwrap_or(false)
+                        } else {
+                            false
+                        };
+                        if is_type {
+                            // Parse as struct literal with variant name
+                            // If expr is an Ident (type name), this could be EnumType.Variant { fields }
+                            let parent_type_name = if let Expr::Ident(name) = &expr.node {
+                                Some(name.clone())
+                            } else {
+                                None
+                            };
+                            self.advance_skip(); // skip '{'
+                            let mut fields = Vec::new();
+                            while !self.check(&Token::RBrace) && !self.is_at_end() {
+                                let fname = self.parse_ident()?;
+                                let fval = if self.check(&Token::Colon) {
+                                    self.advance_skip();
+                                    self.parse_expr()?
+                                } else {
+                                    // Shorthand: `{ x }` means `{ x: x }`
+                                    let sp = fname.span;
+                                    Spanned::new(Expr::Ident(fname.node.clone()), sp)
+                                };
+                                fields.push((fname, fval));
+                                if !self.check(&Token::RBrace) {
+                                    self.expect_skip(&Token::Comma)?;
+                                }
+                            }
+                            self.expect_skip(&Token::RBrace)?;
+                            let end = self.prev_span().end;
+                            expr = Spanned::new(
+                                Expr::StructLit {
+                                    name: field,
+                                    fields,
+                                    enum_name: parent_type_name,
+                                },
+                                Span::new(start, end),
+                            );
+                        } else {
+                            let end = field.span.end;
+                            expr = Spanned::new(
+                                Expr::Field {
+                                    expr: Box::new(expr),
+                                    field,
+                                },
+                                Span::new(start, end),
+                            );
+                        }
                     } else {
                         let end = field.span.end;
                         expr = Spanned::new(
@@ -98,25 +175,41 @@ impl Parser {
                     }
                 }
             } else if self.check(&Token::ColonColon) {
-                // Static method call: Type::method(args)
-                self.advance();
-                let method = self.parse_ident()?;
-                self.expect(&Token::LParen)?;
-                let args = self.parse_args()?;
-                self.expect(&Token::RParen)?;
-                let end = self.prev_span().end;
+                // `Type::name` — either static method call or enum variant access.
+                self.advance_skip();
+                let method_or_variant = self.parse_ident()?;
 
                 if let Expr::Ident(type_name) = &expr.node {
                     let tn = type_name.clone();
                     let sp = expr.span;
-                    expr = Spanned::new(
-                        Expr::StaticMethodCall {
-                            type_name: Spanned::new(tn, sp),
-                            method,
-                            args,
-                        },
-                        Span::new(start, end),
-                    );
+
+                    if !self.check(&Token::LParen) {
+                        // No argument list → enum variant access (unit variant)
+                        // e.g. Color::Red, Status::Ok
+                        let end = method_or_variant.span.end;
+                        expr = Spanned::new(
+                            Expr::EnumAccess {
+                                enum_name: tn,
+                                variant: method_or_variant.node,
+                                data: None,
+                            },
+                            Span::new(start, end),
+                        );
+                    } else {
+                        // `(` follows — static method call: Type::method(args)
+                        self.advance_skip(); // consume '('
+                        let args = self.parse_args()?;
+                        self.expect_skip(&Token::RParen)?;
+                        let end = self.prev_span().end;
+                        expr = Spanned::new(
+                            Expr::StaticMethodCall {
+                                type_name: Spanned::new(tn, sp),
+                                method: method_or_variant,
+                                args,
+                            },
+                            Span::new(start, end),
+                        );
+                    }
                 } else {
                     return Err(ParseError::UnexpectedToken {
                         found: Token::ColonColon,
@@ -125,9 +218,9 @@ impl Parser {
                     });
                 }
             } else if self.check(&Token::LBracket) {
-                self.advance();
+                self.advance_skip();
                 let index = self.parse_expr()?;
-                self.expect(&Token::RBracket)?;
+                self.expect_skip(&Token::RBracket)?;
                 let end = self.prev_span().end;
                 expr = Spanned::new(
                     Expr::Index {
@@ -156,7 +249,6 @@ impl Parser {
                             | Token::If
                             | Token::Loop
                             | Token::Match
-                            | Token::Spawn
                             | Token::Pipe      // lambda
                             | Token::Move      // move lambda
                             | Token::Minus     // unary minus
@@ -176,7 +268,7 @@ impl Parser {
                     break;
                 } else {
                     // Postfix try
-                    self.advance();
+                    self.advance_skip();
                     let end = self.prev_span().end;
                     expr = Spanned::new(Expr::Try(Box::new(expr)), Span::new(start, end));
                 }
@@ -211,7 +303,7 @@ impl Parser {
                 }
             } else if self.check(&Token::As) {
                 // Type cast: expr as Type
-                self.advance();
+                self.advance_skip();
                 let ty = self.parse_type()?;
                 let end = self.prev_span().end;
                 expr = Spanned::new(

@@ -43,9 +43,9 @@ Constants for standard file descriptors:
 ## Example: Hello World with WASI
 
 ```vais
-U std/wasm
+use std/wasm
 
-F main() -> i64 {
+fn main() -> i64 {
     # Write to stdout using WASI
     msg := "Hello from WASI!\n"
     ptr := str_to_ptr(msg)
@@ -61,14 +61,14 @@ F main() -> i64 {
     result := fd_write(WASM_STDOUT, iov, 1, nwritten_ptr)
 
     I result == 0 {
-        R 0  # Success
-    } E {
-        R 1  # Failure
+        return 0  # Success
+    } else {
+        return 1  # Failure
     }
 }
 
 # WASI entry point
-F _start() {
+fn _start() {
     exit_code := main()
     proc_exit(exit_code)
 }
@@ -142,13 +142,13 @@ const wasmBuffer = fs.readFileSync('./hello.wasm');
 Reading a file with WASI:
 
 ```vais
-U std/wasm
+use std/wasm
 
-F read_file(path: str) -> str {
+fn read_file(path: str) -> str {
     # Open file (path_open syscall - simplified)
     fd := wasm_open_file(path)  # Helper function
     I fd < 0 {
-        R "Error opening file"
+        return "Error opening file"
     }
 
     # Allocate read buffer
@@ -168,10 +168,10 @@ F read_file(path: str) -> str {
         nread := load_i64(nread_ptr)
         content := ptr_to_str(buf, nread)
         fd_close(fd)
-        R content
-    } E {
+        return content
+    } else {
         fd_close(fd)
-        R "Error reading file"
+        return "Error reading file"
     }
 }
 ```
@@ -230,20 +230,20 @@ You can mix WASI syscalls with custom JavaScript imports:
 
 ```vais
 # WASI file I/O
-U std/wasm
+use std/wasm
 
 # Custom browser API
 #[wasm_import("env", "alert")]
-N F js_alert(ptr: i64, len: i64)
+N fn js_alert(ptr: i64, len: i64)
 
-F main() -> i64 {
+fn main() -> i64 {
     # Use WASI to read config
     config := read_file("config.txt")
 
     # Use custom import to show alert
     js_alert(str_to_ptr(config), strlen(config))
 
-    R 0
+    return 0
 }
 ```
 

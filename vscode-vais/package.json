@@ -2,7 +2,7 @@
   "name": "vais",
   "displayName": "Vais Language Support",
   "description": "Syntax highlighting and language support for the Vais programming language",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "publisher": "vais-lang",
   "engines": {
     "vscode": "^1.75.0"

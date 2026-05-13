@@ -31,7 +31,7 @@ F list_push(head: i64, value: i64) -> i64 {
 F list_len(head: i64) -> i64 {
     count := mut 0
     cur := mut head
-    L cur != 0 {
+    LW cur != 0 {
         count = count + 1
         cur = node_next(cur)
     }
@@ -42,7 +42,7 @@ F list_len(head: i64) -> i64 {
 F list_sum(head: i64) -> i64 {
     total := mut 0
     cur := mut head
-    L cur != 0 {
+    LW cur != 0 {
         total = total + node_value(cur)
         cur = node_next(cur)
     }
@@ -52,7 +52,7 @@ F list_sum(head: i64) -> i64 {
 # Print all values
 F list_print(head: i64) -> i64 {
     cur := mut head
-    L cur != 0 {
+    LW cur != 0 {
         v := node_value(cur)
         puts("{v}")
         cur = node_next(cur)
@@ -63,7 +63,7 @@ F list_print(head: i64) -> i64 {
 # Free all nodes
 F list_free(head: i64) -> i64 {
     cur := mut head
-    L cur != 0 {
+    LW cur != 0 {
         next := node_next(cur)
         free(cur)
         cur = next
@@ -74,7 +74,7 @@ F list_free(head: i64) -> i64 {
 F main() -> i64 {
     # Build list: 5 -> 4 -> 3 -> 2 -> 1
     head := mut 0
-    L i:1..6 {
+    LF i:1..6 {
         head = list_push(head, i)
     }
 
@@ -92,5 +92,5 @@ F main() -> i64 {
     puts("List freed")
 
     # 5+4+3+2+1 = 15
-    I total == 15 & len == 5 { 0 } E { 1 }
+    I total == 15 & len == 5 { 0 } EL { 1 }
 }

@@ -1,6 +1,6 @@
 # Test Option<T> without std/option import - inline definition
 
-E SimpleOption<T> {
+EN SimpleOption<T> {
     None,
     Some(T)
 }

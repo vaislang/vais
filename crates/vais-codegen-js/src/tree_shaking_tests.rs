@@ -10,6 +10,8 @@ fn make_function(name: &str, is_pub: bool, body: Expr) -> Spanned<Item> {
             body: FunctionBody::Expr(Box::new(Spanned::new(body, Span::new(0, 1)))),
             is_pub,
             is_async: false,
+            is_partial: false,
+            declared_effect: None,
             attributes: vec![],
             where_clause: vec![],
         }),
@@ -114,6 +116,7 @@ fn test_struct_lit_marks_struct_reachable() {
                 Expr::StructLit {
                     name: Spanned::new("Point".to_string(), Span::new(0, 5)),
                     fields: vec![],
+                    enum_name: None,
                 },
             ),
             Spanned::new(

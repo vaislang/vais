@@ -7,7 +7,7 @@
 让我们从经典的第一个程序开始:
 
 ```vais
-F main() {
+fn main() {
     puts("Hello, Vais!")
 }
 ```
@@ -24,7 +24,7 @@ F main() {
 使用 `:=` 进行自动类型推导:
 
 ```vais
-F main() {
+fn main() {
     x := 10          # 推导为 i64
     y := 3.14        # 推导为 f64
     name := "Alice"  # 推导为 str
@@ -37,7 +37,7 @@ F main() {
 在需要时指定类型:
 
 ```vais
-F main() {
+fn main() {
     count: i64 = 100
     price: f64 = 19.99
     is_active: bool = true
@@ -49,7 +49,7 @@ F main() {
 对可重新赋值的变量使用 `mut`:
 
 ```vais
-F main() {
+fn main() {
     x := mut 0
     x = 10  # OK: x 是可变的
     x = 20  # OK
@@ -61,11 +61,11 @@ F main() {
 ### 基本函数
 
 ```vais
-F add(a: i64, b: i64) -> i64 {
+fn add(a: i64, b: i64) -> i64 {
     a + b  # 最后一个表达式是返回值
 }
 
-F greet(name: str) {
+fn greet(name: str) {
     puts("Hello, ")
     puts(name)
 }
@@ -76,8 +76,8 @@ F greet(name: str) {
 使用 `R` 提前返回:
 
 ```vais
-F abs(x: i64) -> i64 {
-    I x < 0 { R -x }
+fn abs(x: i64) -> i64 {
+    I x < 0 { return -x }
     x
 }
 ```
@@ -87,13 +87,13 @@ F abs(x: i64) -> i64 {
 使用 `@` 调用当前函数:
 
 ```vais
-F factorial(n: i64) -> i64 {
-    I n <= 1 { R 1 }
+fn factorial(n: i64) -> i64 {
+    I n <= 1 { return 1 }
     n * @(n - 1)
 }
 
-F fibonacci(n: i64) -> i64 {
-    I n <= 1 { R n }
+fn fibonacci(n: i64) -> i64 {
+    I n <= 1 { return n }
     @(n-1) + @(n-2)
 }
 ```
@@ -105,20 +105,20 @@ F fibonacci(n: i64) -> i64 {
 **三元形式** (单表达式):
 
 ```vais
-F abs(x:i64)->i64 = x < 0 ? -x : x
+fn abs(x:i64)->i64 = x < 0 ? -x : x
 
-F sign(x:i64)->i64 = x < 0 ? -1 : x > 0 ? 1 : 0
+fn sign(x:i64)->i64 = x < 0 ? -1 : x > 0 ? 1 : 0
 ```
 
 **块形式:**
 
 ```vais
-F classify(x:i64)->str {
+fn classify(x:i64)->str {
     I x < 0 {
         "negative"
-    } E I x == 0 {
+    } else I x == 0 {
         "zero"
-    } E {
+    } else {
         "positive"
     }
 }
@@ -131,7 +131,7 @@ F classify(x:i64)->str {
 **无限循环:**
 
 ```vais
-F loop_forever()->i64 {
+fn loop_forever()->i64 {
     L {
         puts("Looping...")
         # 需要 break 条件
@@ -143,7 +143,7 @@ F loop_forever()->i64 {
 **范围循环:**
 
 ```vais
-F count_to_ten()->i64 {
+fn count_to_ten()->i64 {
     L i: 0..10 {
         puts("Number: ")
         print_i64(i)
@@ -156,7 +156,7 @@ F count_to_ten()->i64 {
 **使用 break 和 continue:**
 
 ```vais
-F find_first_even()->i64 {
+fn find_first_even()->i64 {
     L i: 0..100 {
         I i % 2 == 0 {
             puts("Found even number:")
@@ -172,14 +172,14 @@ F find_first_even()->i64 {
 ### 提前返回
 
 ```vais
-F validate(x: i64)->i64 {
+fn validate(x: i64)->i64 {
     I x < 0 {
         puts("Error: negative value")
-        R -1  # 提前返回
+        return -1  # 提前返回
     }
     I x == 0 {
         puts("Error: zero value")
-        R -1
+        return -1
     }
 
     # 处理有效值
@@ -193,17 +193,17 @@ F validate(x: i64)->i64 {
 ### 定义结构体
 
 ```vais
-S Point {
+struct Point {
     x: f64,
     y: f64
 }
 
-S Person {
+struct Person {
     name: str,
     age: i64
 }
 
-S Rectangle {
+struct Rectangle {
     top_left: Point,
     bottom_right: Point
 }
@@ -212,7 +212,7 @@ S Rectangle {
 ### 创建结构体实例
 
 ```vais
-F main()->i64 {
+fn main()->i64 {
     # 创建一个 Point
     p := Point { x: 10.0, y: 20.0 }
 
@@ -232,7 +232,7 @@ F main()->i64 {
 ### 访问字段
 
 ```vais
-F main()->i64 {
+fn main()->i64 {
     p := Point { x: 5.0, y: 15.0 }
 
     x_coord := p.x
@@ -251,7 +251,7 @@ F main()->i64 {
 **简单枚举:**
 
 ```vais
-E Color {
+enum Color {
     Red,
     Green,
     Blue
@@ -261,17 +261,17 @@ E Color {
 **带数据的枚举:**
 
 ```vais
-E Option {
+enum Option {
     None,
     Some(i64)
 }
 
-E Result {
+enum Result {
     Ok(i64),
     Err(str)
 }
 
-E Message {
+enum Message {
     Quit,
     Move(i64, i64),
     Write(str)
@@ -281,7 +281,7 @@ E Message {
 ### 使用枚举
 
 ```vais
-F main()->i64 {
+fn main()->i64 {
     color := Red
     opt := Some(42)
     result := Ok(100)
@@ -299,8 +299,8 @@ F main()->i64 {
 ### 基本匹配
 
 ```vais
-F describe_number(n: i64)->str {
-    M n {
+fn describe_number(n: i64)->str {
+    match n {
         0 => "zero",
         1 => "one",
         2 => "two",
@@ -314,19 +314,19 @@ F describe_number(n: i64)->str {
 从匹配的模式中提取值:
 
 ```vais
-E Option {
+enum Option {
     None,
     Some(i64)
 }
 
-F unwrap_or(opt: Option, default: i64) -> i64 {
-    M opt {
+fn unwrap_or(opt: Option, default: i64) -> i64 {
+    match opt {
         Some(x) => x,        # 将值绑定到 'x'
         None => default
     }
 }
 
-F main()->i64 {
+fn main()->i64 {
     opt1 := Some(42)
     opt2 := None
 
@@ -342,13 +342,13 @@ F main()->i64 {
 ### 匹配 Result 类型
 
 ```vais
-E Result {
+enum Result {
     Ok(i64),
     Err(str)
 }
 
-F handle_result(res: Result) -> i64 {
-    M res {
+fn handle_result(res: Result) -> i64 {
+    match res {
         Ok(value) => value,
         Err(msg) => {
             puts("Error: ")
@@ -362,21 +362,21 @@ F handle_result(res: Result) -> i64 {
 ### 完整示例
 
 ```vais
-E Color {
+enum Color {
     Red,
     Green,
     Blue
 }
 
-F color_to_code(c: Color) -> i64 {
-    M c {
+fn color_to_code(c: Color) -> i64 {
+    match c {
         Red => 0xFF0000,
         Green => 0x00FF00,
         Blue => 0x0000FF
     }
 }
 
-F main()->i64 {
+fn main()->i64 {
     red_code := color_to_code(Red)
     green_code := color_to_code(Green)
 
@@ -390,13 +390,13 @@ F main()->i64 {
 ### Result 和 Option 类型
 
 ```vais
-E Result<T, E> {
+enum Result<T, E> {
     Ok(T),
     Err(E)
 }
 
-F divide(a: i64, b: i64) -> Result<i64, str> {
-    I b == 0 { R Err("Division by zero") }
+fn divide(a: i64, b: i64) -> Result<i64, str> {
+    I b == 0 { return Err("Division by zero") }
     Ok(a / b)
 }
 ```
@@ -406,7 +406,7 @@ F divide(a: i64, b: i64) -> Result<i64, str> {
 使用 `?` 传播错误:
 
 ```vais
-F compute() -> Result<i64, str> {
+fn compute() -> Result<i64, str> {
     x := divide(10, 2)?  # 如果是 Err 则传播
     y := divide(x, 0)?   # 这里将返回 Err
     Ok(y)
@@ -418,7 +418,7 @@ F compute() -> Result<i64, str> {
 使用 `!` 解包或 panic:
 
 ```vais
-F main() {
+fn main() {
     result := divide(10, 2)
     value := result!  # 解包 Ok 值，Err 时 panic
     print_i64(value)
@@ -432,11 +432,11 @@ F main() {
 ### 泛型函数
 
 ```vais
-F identity<T>(x: T) -> T = x
+fn identity<T>(x: T) -> T = x
 
-F first<T>(a: T, b: T) -> T = a
+fn first<T>(a: T, b: T) -> T = a
 
-F swap<A, B>(a: A, b: B) -> (B, A) {
+fn swap<A, B>(a: A, b: B) -> (B, A) {
     (b, a)
 }
 ```
@@ -444,16 +444,16 @@ F swap<A, B>(a: A, b: B) -> (B, A) {
 ### 泛型结构体
 
 ```vais
-S Pair<T> {
+struct Pair<T> {
     first: T,
     second: T
 }
 
-S Box<T> {
+struct Box<T> {
     value: T
 }
 
-S Container<K, V> {
+struct Container<K, V> {
     key: K,
     value: V
 }
@@ -462,7 +462,7 @@ S Container<K, V> {
 ### 使用泛型结构体
 
 ```vais
-F main()->i64 {
+fn main()->i64 {
     # 整数的 Pair
     int_pair := Pair { first: 10, second: 20 }
 
@@ -479,22 +479,22 @@ F main()->i64 {
 ### 泛型类型的方法
 
 ```vais
-S Pair<T> {
+struct Pair<T> {
     first: T,
     second: T
 }
 
-X Pair {
-    F sum(&self) -> i64 {
+impl Pair {
+    fn sum(&self) -> i64 {
         self.first + self.second
     }
 
-    F swap(&self) -> Pair {
+    fn swap(&self) -> Pair {
         Pair { first: self.second, second: self.first }
     }
 }
 
-F main()->i64 {
+fn main()->i64 {
     p := Pair { first: 10, second: 20 }
     total := p.sum()
     swapped := p.swap()
@@ -507,17 +507,17 @@ F main()->i64 {
 ### 泛型枚举
 
 ```vais
-E Option<T> {
+enum Option<T> {
     None,
     Some(T)
 }
 
-E Result<T, E> {
+enum Result<T, E> {
     Ok(T),
     Err(E)
 }
 
-F main()->i64 {
+fn main()->i64 {
     # i64 的 Option
     opt_int := Some(42)
 
@@ -538,25 +538,25 @@ F main()->i64 {
 Trait 定义类型可以实现的接口:
 
 ```vais
-W Printable {
-    F print(&self) -> i64
+trait Printable {
+    fn print(&self) -> i64
 }
 
-W Comparable {
-    F compare(&self, other: &Self) -> i64
+trait Comparable {
+    fn compare(&self, other: &Self) -> i64
 }
 ```
 
 ### 实现 Trait
 
 ```vais
-S Counter {
+struct Counter {
     value: i64
 }
 
 # 为 Counter 实现 Printable trait
-X Counter: Printable {
-    F print(&self) -> i64 {
+impl Counter: Printable {
+    fn print(&self) -> i64 {
         puts("Counter value: ")
         print_i64(self.value)
         putchar(10)
@@ -570,16 +570,16 @@ X Counter: Printable {
 使用 `X` 添加方法，无需 trait:
 
 ```vais
-X Counter {
-    F increment(&self) -> i64 {
+impl Counter {
+    fn increment(&self) -> i64 {
         self.value + 1
     }
 
-    F double(&self) -> i64 {
+    fn double(&self) -> i64 {
         self.value * 2
     }
 
-    F reset() -> Counter {
+    fn reset() -> Counter {
         Counter { value: 0 }
     }
 }
@@ -588,7 +588,7 @@ X Counter {
 ### 使用方法
 
 ```vais
-F main()->i64 {
+fn main()->i64 {
     c := Counter { value: 10 }
 
     # 调用 trait 方法
@@ -610,33 +610,33 @@ F main()->i64 {
 ### 完整示例
 
 ```vais
-W Shape {
-    F area(&self) -> f64
+trait Shape {
+    fn area(&self) -> f64
 }
 
-S Circle {
+struct Circle {
     radius: f64
 }
 
-S Rectangle {
+struct Rectangle {
     width: f64,
     height: f64
 }
 
-X Circle: Shape {
-    F area(&self) -> f64 {
+impl Circle: Shape {
+    fn area(&self) -> f64 {
         pi := 3.14159
         pi * self.radius * self.radius
     }
 }
 
-X Rectangle: Shape {
-    F area(&self) -> f64 {
+impl Rectangle: Shape {
+    fn area(&self) -> f64 {
         self.width * self.height
     }
 }
 
-F main()->i64 {
+fn main()->i64 {
     circle := Circle { radius: 5.0 }
     rect := Rectangle { width: 4.0, height: 6.0 }
 
@@ -658,12 +658,12 @@ F main()->i64 {
 ### 使用数学库
 
 ```vais
-U std/math
+use std/math
 
-F main()->i64 {
+fn main()->i64 {
     # 常量
     pi := PI
-    e := E
+    e := enum
 
     # 基本数学
     x := abs(-10.0)          # 绝对值
@@ -690,9 +690,9 @@ F main()->i64 {
 ### 使用 I/O 库
 
 ```vais
-U std/io
+use std/io
 
-F main()->i64 {
+fn main()->i64 {
     # 打印到标准输出
     puts("Hello, World!")
     println("With newline!")
@@ -709,10 +709,10 @@ F main()->i64 {
 ### 集合
 
 ```vais
-U std/vec
-U std/hashmap
+use std/vec
+use std/hashmap
 
-F main()->i64 {
+fn main()->i64 {
     # Vector
     v := Vec::new()
     v.push(1)
@@ -740,9 +740,9 @@ F main()->i64 {
 ### 文件 I/O
 
 ```vais
-U std/fs
+use std/fs
 
-F main()->i64 {
+fn main()->i64 {
     # 读取文件
     content := read_file("data.txt")
     puts(content)

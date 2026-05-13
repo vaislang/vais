@@ -128,28 +128,6 @@ F main() -> i64 {
     assert_exit_code(source, 0);
 }
 
-// 7. Multiple spawn expressions used simultaneously
-#[test]
-fn e2e_phase32_spawn_multiple() {
-    // Multiple spawn+await via variables — future_poll_fns tracking for each
-    let source = r#"
-A F square(n: i64) -> i64 {
-    n * n
-}
-
-F main() -> i64 {
-    f1 := spawn square(3)
-    f2 := spawn square(4)
-    f3 := spawn square(5)
-    r1 := f1.await
-    r2 := f2.await
-    r3 := f3.await
-    r1 + r2 + r3 - 50
-}
-"#;
-    assert_exit_code(source, 0);
-}
-
 // 8. Async function with early return via I (conditional R)
 #[test]
 fn e2e_phase32_async_early_return() {

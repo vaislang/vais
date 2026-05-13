@@ -1,5 +1,5 @@
-# Spawn Test - Concurrent task execution
-# Tests spawn and joining multiple async futures
+# Async Test - async/await evaluation
+# (Phase 195: spawn keyword removed in ROADMAP #15; migrated to plain async/await)
 
 # Async computation that simulates work
 A F slow_compute(x: i64) -> i64 {
@@ -21,9 +21,9 @@ F main() -> i64 {
     puts("=== Spawn Test ===")
     putchar(10)
 
-    # Test 1: Simple spawn with immediate await
-    puts("Test 1: Spawn and immediate await")
-    result1 := (spawn slow_compute(10)).await
+    # Test 1: Immediate await
+    puts("Test 1: Immediate await (plain async call)")
+    result1 := slow_compute(10).await
     puts("  slow_compute(10) = ")
     putchar(result1 / 10 + 48)
     putchar(result1 % 10 + 48)
