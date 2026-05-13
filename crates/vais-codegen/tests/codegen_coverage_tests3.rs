@@ -1140,13 +1140,13 @@ fn test_target_all_targets_not_empty() {
 fn test_codegen_undefined_var_suggests_similar() {
     let result = gen_result("F test() -> i64 { abc := 1\nR abd }");
     // Should either succeed (if abd is somehow resolved) or give error with suggestion
-    match result {
-        Err(e) => assert!(
+    // Some codegen modes may accept this.
+    if let Err(e) = result {
+        assert!(
             e.contains("abd") || e.contains("abc"),
             "Error should reference var: {}",
             e
-        ),
-        Ok(_) => {} // Some codegen modes may accept this
+        );
     }
 }
 

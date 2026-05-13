@@ -2241,23 +2241,24 @@ fn selfhost_examples_token_coverage_report() {
     let mut failed_files: Vec<String> = Vec::new();
 
     // Use glob to find all .vais files
-    for entry in glob::glob(&format!("{}/**/*.vais", examples_path)).unwrap() {
-        if let Ok(path) = entry {
-            total_files += 1;
-            let path_str = path.to_string_lossy().to_string();
+    for path in glob::glob(&format!("{}/**/*.vais", examples_path))
+        .unwrap()
+        .flatten()
+    {
+        total_files += 1;
+        let path_str = path.to_string_lossy().to_string();
 
-            match analyze_example_file(&path_str) {
-                Ok((total, supported, unsupported)) => {
-                    successful_files += 1;
-                    total_tokens += total;
-                    supported_tokens += supported;
-                    for u in unsupported {
-                        all_unsupported.insert(u);
-                    }
+        match analyze_example_file(&path_str) {
+            Ok((total, supported, unsupported)) => {
+                successful_files += 1;
+                total_tokens += total;
+                supported_tokens += supported;
+                for u in unsupported {
+                    all_unsupported.insert(u);
                 }
-                Err(e) => {
-                    failed_files.push(format!("{}: {}", path_str, e));
-                }
+            }
+            Err(e) => {
+                failed_files.push(format!("{}: {}", path_str, e));
             }
         }
     }
@@ -2333,10 +2334,10 @@ fn selfhost_examples_individual_file_verification() {
             continue; // Skip if file doesn't exist
         }
 
-        let source =
-            std::fs::read_to_string(&full_path).expect(&format!("Failed to read {}", full_path));
+        let source = std::fs::read_to_string(&full_path)
+            .unwrap_or_else(|_| panic!("Failed to read {}", full_path));
 
-        let tokens = tokenize(&source).expect(&format!("Failed to lex {}", full_path));
+        let tokens = tokenize(&source).unwrap_or_else(|_| panic!("Failed to lex {}", full_path));
 
         for expected in expected_tokens {
             let found = tokens

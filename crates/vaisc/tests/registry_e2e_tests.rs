@@ -543,7 +543,7 @@ fn test_semver_invalid_versions() {
 
 #[test]
 fn test_semver_ordering() {
-    let versions = vec![
+    let versions = [
         SemVer::parse("0.1.0").unwrap(),
         SemVer::parse("1.0.0").unwrap(),
         SemVer::parse("1.0.1").unwrap(),
@@ -1004,7 +1004,7 @@ pkg-a = { path = "../pkg-a" }
 #[test]
 fn test_package_index_search_by_name() {
     // Simulate an in-memory package index and search
-    let packages = vec![
+    let packages = [
         (
             "json-parser",
             Some("A JSON parser for Vais"),
@@ -1037,7 +1037,7 @@ fn test_package_index_search_by_name() {
 
 #[test]
 fn test_package_index_search_by_keyword() {
-    let packages = vec![
+    let packages = [
         ("json-parser", vec!["json", "parser", "serialization"]),
         ("toml-parser", vec!["toml", "parser", "config"]),
         ("csv", vec!["csv", "data", "serialization"]),
@@ -1054,7 +1054,7 @@ fn test_package_index_search_by_keyword() {
 
 #[test]
 fn test_package_index_search_case_insensitive() {
-    let packages = vec![
+    let packages = [
         ("JSON-Parser", Some("A JSON parser")),
         ("csv", Some("CSV tools")),
     ];
@@ -1076,7 +1076,7 @@ fn test_package_index_search_case_insensitive() {
 #[test]
 fn test_package_list_best_version_selection() {
     // Given a list of versions, find the best (latest non-prerelease)
-    let versions = vec![
+    let versions = [
         SemVer::parse("0.9.0").unwrap(),
         SemVer::parse("1.0.0-beta").unwrap(),
         SemVer::parse("1.0.0").unwrap(),

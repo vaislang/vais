@@ -67,7 +67,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             Ok(call
                 .try_as_basic_value()
-                .left()
+                .basic()
                 .unwrap_or_else(|| self.unit_value()))
         } else {
             Ok(self.unit_value())

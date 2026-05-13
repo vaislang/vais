@@ -59,7 +59,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             let fv = v.into_float_value();
             let bitcast = self
                 .builder
-                .build_bitcast(fv, i64_type, "coerce_f2i")
+                .build_bit_cast(fv, i64_type, "coerce_f2i")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             Ok(bitcast.into_int_value())
         } else if v.is_pointer_value() {

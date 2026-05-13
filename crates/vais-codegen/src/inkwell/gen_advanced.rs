@@ -405,13 +405,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     if val.is_float_value() && field_llvm_type.is_int_type() {
                         let bits = self
                             .builder
-                            .build_bitcast(*val, field_llvm_type, "union_bitcast")
+                            .build_bit_cast(*val, field_llvm_type, "union_bitcast")
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                         bits
                     } else if val.is_int_value() && field_llvm_type.is_float_type() {
                         let bits = self
                             .builder
-                            .build_bitcast(*val, field_llvm_type, "union_bitcast")
+                            .build_bit_cast(*val, field_llvm_type, "union_bitcast")
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                         bits
                     } else {

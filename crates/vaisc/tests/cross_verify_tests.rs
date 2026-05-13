@@ -156,7 +156,7 @@ fn compile_run_selfhost(vais_file: &Path, tmp: &Path) -> Result<CompileRunResult
     // Link with clang + runtime.o
     let mut cmd = Command::new("clang");
     cmd.arg(&ir_path)
-        .arg(&runtime_o())
+        .arg(runtime_o())
         .arg("-o")
         .arg(&exe_path)
         .arg("-Wno-override-module");

@@ -485,7 +485,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .build_call(malloc_fn, &[byte_size.into()], "slice_raw")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
             .try_as_basic_value()
-            .left()
+            .basic()
             .ok_or_else(|| {
                 CodegenError::LlvmError("ICE: malloc call returned void instead of pointer".into())
             })?;
@@ -782,7 +782,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         Ok(call
             .try_as_basic_value()
-            .left()
+            .basic()
             .unwrap_or_else(|| self.unit_value()))
     }
 

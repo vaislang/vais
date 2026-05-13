@@ -331,7 +331,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Emits `@name = global T <initializer>` and stores the pointer+type in
     /// `self.globals` so subsequent identifier lookups and assignments can find it.
     pub(super) fn define_global(&mut self, global_def: &ast::GlobalDef) -> CodegenResult<()> {
-        use inkwell::types::BasicTypeEnum;
         let name = &global_def.name.node;
         let resolved = self.ast_type_to_resolved(&global_def.ty.node);
         let ll_type = self.type_mapper.map_type(&resolved);
@@ -342,14 +341,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // `evaluate_const_expr` succeeds and the types match. Non-constant initializers
         // (e.g. array literals with dynamic elements) stay at zero — callers write to
         // the global at runtime.
-        let zero: BasicValueEnum<'ctx> = match ll_type {
-            BasicTypeEnum::IntType(it) => it.const_zero().into(),
-            BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
-            BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
-            BasicTypeEnum::StructType(st) => st.const_zero().into(),
-            BasicTypeEnum::ArrayType(at) => at.const_zero().into(),
-            BasicTypeEnum::VectorType(vt) => vt.const_zero().into(),
-        };
+        let zero: BasicValueEnum<'ctx> = ll_type.const_zero();
         global.set_initializer(&zero);
 
         if let Ok(init_val) = self.evaluate_const_expr(&global_def.value.node) {
