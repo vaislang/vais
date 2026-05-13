@@ -5,12 +5,11 @@ use crate::error::{ServerError, ServerResult};
 use crate::handlers::{AppState, AuthUser};
 use crate::models::*;
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
 use axum::{extract::State, Json};
 use chrono::{Duration, Utc};
-use rand::Rng;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -52,7 +51,7 @@ pub async fn register(
     }
 
     // Hash password
-    let salt = SaltString::generate(&mut OsRng);
+    let salt = generate_salt()?;
     let argon2 = Argon2::default();
     let password_hash = argon2
         .hash_password(req.password.as_bytes(), &salt)
@@ -221,9 +220,15 @@ pub async fn me(auth: AuthUser) -> Json<UserInfo> {
 
 /// Generate a random API token
 fn generate_token() -> String {
-    let mut rng = rand::thread_rng();
-    let bytes: [u8; 32] = rng.gen();
+    let mut bytes = [0u8; 32];
+    rand::fill(&mut bytes);
     format!("vais_{}", hex::encode(bytes))
+}
+
+fn generate_salt() -> ServerResult<SaltString> {
+    let mut bytes = [0u8; 16];
+    rand::fill(&mut bytes);
+    SaltString::encode_b64(&bytes).map_err(|e| ServerError::Internal(e.to_string()))
 }
 
 /// Hash a token for storage

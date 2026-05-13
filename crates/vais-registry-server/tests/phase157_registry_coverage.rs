@@ -178,8 +178,9 @@ fn test_verify_signature_wrong_pk_length() {
 #[test]
 fn test_verify_signature_wrong_sig_length() {
     use ed25519_dalek::SigningKey;
-    use rand::rngs::OsRng;
-    let sk = SigningKey::generate(&mut OsRng);
+    let mut bytes = [0u8; 32];
+    rand::fill(&mut bytes);
+    let sk = SigningKey::from_bytes(&bytes);
     let pk_hex = hex::encode(sk.verifying_key().as_bytes());
     let short_sig = hex::encode([0u8; 16]);
     let result = verify_signature(&pk_hex, b"data", &short_sig);

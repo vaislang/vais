@@ -109,7 +109,11 @@ pub fn validate_public_key(public_key_hex: &str) -> Result<(), SignatureError> {
 mod tests {
     use super::*;
     use ed25519_dalek::{Signer, SigningKey};
-    use rand::rngs::OsRng;
+    fn random_signing_key() -> SigningKey {
+        let mut bytes = [0u8; 32];
+        rand::fill(&mut bytes);
+        SigningKey::from_bytes(&bytes)
+    }
 
     fn sign_archive(signing_key: &SigningKey, archive_data: &[u8]) -> String {
         let mut hasher = Sha256::new();
@@ -121,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_verify_valid_signature() {
-        let signing_key = SigningKey::generate(&mut OsRng);
+        let signing_key = random_signing_key();
         let verifying_key = signing_key.verifying_key();
         let pk_hex = hex::encode(verifying_key.as_bytes());
 
@@ -134,7 +138,7 @@ mod tests {
 
     #[test]
     fn test_verify_invalid_signature() {
-        let signing_key = SigningKey::generate(&mut OsRng);
+        let signing_key = random_signing_key();
         let verifying_key = signing_key.verifying_key();
         let pk_hex = hex::encode(verifying_key.as_bytes());
 
@@ -149,8 +153,8 @@ mod tests {
 
     #[test]
     fn test_verify_wrong_key() {
-        let signing_key = SigningKey::generate(&mut OsRng);
-        let other_key = SigningKey::generate(&mut OsRng);
+        let signing_key = random_signing_key();
+        let other_key = random_signing_key();
         let other_pk_hex = hex::encode(other_key.verifying_key().as_bytes());
 
         let archive_data = b"hello world package data";
@@ -175,7 +179,7 @@ mod tests {
 
     #[test]
     fn test_invalid_signature_hex() {
-        let signing_key = SigningKey::generate(&mut OsRng);
+        let signing_key = random_signing_key();
         let pk_hex = hex::encode(signing_key.verifying_key().as_bytes());
 
         let result = verify_signature(&pk_hex, b"data", "not_valid_hex!");
@@ -184,7 +188,7 @@ mod tests {
 
     #[test]
     fn test_invalid_signature_length() {
-        let signing_key = SigningKey::generate(&mut OsRng);
+        let signing_key = random_signing_key();
         let pk_hex = hex::encode(signing_key.verifying_key().as_bytes());
         let short_sig = hex::encode([0u8; 32]);
 
@@ -194,7 +198,7 @@ mod tests {
 
     #[test]
     fn test_validate_public_key_valid() {
-        let signing_key = SigningKey::generate(&mut OsRng);
+        let signing_key = random_signing_key();
         let pk_hex = hex::encode(signing_key.verifying_key().as_bytes());
         assert!(validate_public_key(&pk_hex).is_ok());
     }
@@ -212,7 +216,7 @@ mod tests {
 
     #[test]
     fn test_deterministic_signatures() {
-        let signing_key = SigningKey::generate(&mut OsRng);
+        let signing_key = random_signing_key();
         let pk_hex = hex::encode(signing_key.verifying_key().as_bytes());
         let data = b"same data";
 
@@ -229,7 +233,7 @@ mod tests {
 
     #[test]
     fn test_empty_archive() {
-        let signing_key = SigningKey::generate(&mut OsRng);
+        let signing_key = random_signing_key();
         let pk_hex = hex::encode(signing_key.verifying_key().as_bytes());
         let data = b"";
         let sig_hex = sign_archive(&signing_key, data);
@@ -239,7 +243,7 @@ mod tests {
 
     #[test]
     fn test_large_archive() {
-        let signing_key = SigningKey::generate(&mut OsRng);
+        let signing_key = random_signing_key();
         let pk_hex = hex::encode(signing_key.verifying_key().as_bytes());
         let data = vec![0xABu8; 1_000_000]; // 1MB
         let sig_hex = sign_archive(&signing_key, &data);
