@@ -32,7 +32,7 @@
     "subtitle": "Vais compiles to optimized LLVM IR — on par with C and Rust at runtime, with fast compilation.",
     "runtimeTitle": "Runtime — Fibonacci(35)",
     "compileTitle": "Compile Speed — Single File",
-    "compileNote": "Vais <code>--emit-ir</code> vs full compilation. 8.6x faster than C, 19x faster than Rust. Updated 2026-02-11."
+    "compileNote": "Vais <code>--emit-ir</code> vs full binary compilation. Hyperfine, 4 benchmark programs, Apple ARM64/macOS: 9.3x faster than C/clang and 15.6x faster than Rust. Updated 2026-05-13."
   },
   "features": {
     "title": "Why Vais?",

@@ -180,6 +180,16 @@ requireText(
   'playground README must say Browser-JS smoke does not use the API',
 );
 
+const quickstart = 'docs/QUICKSTART.md';
+requireText(quickstart, 'Functions use the canonical `fn` keyword', 'quickstart must present current function syntax');
+requireText(quickstart, 'struct Point', 'quickstart must present current struct syntax');
+forbidText(quickstart, 'F fib(n: i64)', 'quickstart must not use legacy single-letter function examples');
+forbidText(quickstart, 'S Point', 'quickstart must not use legacy single-letter struct examples');
+
+const fibonacciEpisode = 'docs/youtube-tutorials/episode-02-fibonacci.md';
+requireText(fibonacciEpisode, 'fn fib(n: i64)', 'fibonacci tutorial must use current function syntax');
+forbidText(fibonacciEpisode, 'F fib(n: i64)', 'fibonacci tutorial must not use legacy function syntax');
+
 const websiteSubtitle =
   'Try Vais syntax and examples in the browser. Real compilation uses the playground API; browser-only compile/execute remains experimental.';
 requireText('website/index.html', websiteSubtitle, 'homepage playground copy must match public claim boundary');
@@ -190,15 +200,62 @@ requireText('website/index.html', 'other runtime/package counts remain scoped ev
 requireText('website/index.html', 'main-fixture/local-workspace reproducible', 'homepage must disclose schema gate main-fixture status');
 requireText('website/index.html', 'server runtime integration evidence 20/20', 'homepage server claim must be evidence-scoped');
 requireText('website/index.html', 'shared-schema product evidence 9/9', 'homepage web claim must be evidence-scoped');
+requireText(
+  'website/index.html',
+  'Updated 2026-05-13',
+  'homepage compile-speed benchmark date must reflect the current refresh',
+);
+requireText(
+  'website/public/locales/en.json',
+  'Updated 2026-05-13',
+  'English locale compile-speed benchmark date must reflect the current refresh',
+);
+requireText(
+  'website/index.html',
+  '9.3x faster than C/clang and 15.6x faster than Rust',
+  'homepage compile-speed ratios must match the refreshed benchmark',
+);
 requireText('website/ecosystem/index.html', 'server runtime 20/20', 'ecosystem server evidence count must remain explicit');
 requireText('website/ecosystem/index.html', 'scoped evidence', 'ecosystem page must disclose evidence scope');
 requireText('website/vaisx/index.html', 'shared-schema product evidence 9/9', 'VaisX page must be evidence-scoped');
 requireText('playground/src/examples.js', "'shared-schema-product'", 'playground must expose the shared-schema product example');
 
+requireText(
+  'website/blog/performance-comparison.html',
+  'Archive note (2026-05-13)',
+  'historical performance article must not read as a current benchmark claim',
+);
+requireText(
+  'website/blog/performance-comparison.html',
+  'large-scale throughput numbers below should be rerun before citing them as current',
+  'historical throughput data must be scoped as stale until rerun',
+);
+requireText(
+  'website/blog/why-single-char-keywords.html',
+  'Archive note, 2026-05-13',
+  'single-character keyword rationale must remain explicitly archived',
+);
+requireText(
+  'website/blog/why-vais.html',
+  'The refreshed 2026-05-13 token benchmark reports',
+  'why-vais token section must use the current scoped benchmark claim',
+);
+forbidText(
+  'website/blog/why-vais.html',
+  'Vais uses single-character keywords throughout',
+  'why-vais page must not present historical single-character declarations as current syntax',
+);
+forbidText(
+  'website/blog/index.html',
+  'How Vais achieves 800K lines/sec',
+  'blog index must not promote archived throughput as a current claim',
+);
+
 for (const locale of ['ko', 'ja', 'zh']) {
   const path = `website/public/locales/${locale}.json`;
   requireText(path, 'playground API', `${locale} locale must name the API dependency`);
   requireText(path, 'browser-only compile/execute', `${locale} locale must keep browser-only status experimental`);
+  requireText(path, '2026-05-13', `${locale} locale compile-speed note must carry the current benchmark date`);
 }
 
 for (const path of [
@@ -217,6 +274,11 @@ for (const path of [
     path,
     'browser-only JS/WASM paths are experimental',
     'use the clearer compile/execute wording introduced by the claim boundary',
+  );
+  forbidText(
+    path,
+    '2026-02-11',
+    'homepage compile-speed note must not use the stale February benchmark date',
   );
 }
 

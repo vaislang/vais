@@ -327,34 +327,34 @@
           <div class="bar-item">
             <span class="bar-label">Vais</span>
             <div class="bar-track">
-              <div class="bar-fill bar-vais" style="width: 5%"></div>
+              <div class="bar-fill bar-vais" style="width: 6%"></div>
             </div>
-            <span class="bar-value">6.4ms</span>
+            <span class="bar-value">6.3ms</span>
           </div>
           <div class="bar-item">
             <span class="bar-label">Go</span>
             <div class="bar-track">
-              <div class="bar-fill bar-go" style="width: 43%"></div>
+              <div class="bar-fill bar-go" style="width: 49%"></div>
             </div>
-            <span class="bar-value">52ms</span>
+            <span class="bar-value">48ms</span>
           </div>
           <div class="bar-item">
             <span class="bar-label">C (clang)</span>
             <div class="bar-track">
-              <div class="bar-fill bar-c" style="width: 45%"></div>
+              <div class="bar-fill bar-c" style="width: 60%"></div>
             </div>
-            <span class="bar-value">55ms</span>
+            <span class="bar-value">58ms</span>
           </div>
           <div class="bar-item">
             <span class="bar-label">Rust</span>
             <div class="bar-track">
               <div class="bar-fill bar-rust" style="width: 100%"></div>
             </div>
-            <span class="bar-value">122ms</span>
+            <span class="bar-value">98ms</span>
           </div>
         </div>
         <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.75rem; text-align: center;" data-i18n="performance.compileNote" data-i18n-html>
-          Vais <code>--emit-ir</code> vs full compilation. 8.6x faster than C, 19x faster than Rust. Updated 2026-02-11.
+          Vais <code>--emit-ir</code> vs full binary compilation. Hyperfine, 4 benchmark programs, Apple ARM64/macOS: 9.3x faster than C/clang and 15.6x faster than Rust. Updated 2026-05-13.
         </p>
       </div>
     </div>

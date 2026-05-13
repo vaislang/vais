@@ -16,9 +16,9 @@ Let's start with the most elegant solution using the `@` operator:
 
 ```vais
 # Recursive Fibonacci with self-recursion operator
-F fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
 
-F main() -> i64 {
+fn main() -> i64 {
     result := fib(10)
     puts("fib(10) =")
     result  # Returns 55
@@ -38,22 +38,22 @@ This is incredibly concise! Compare to other languages - Vais achieves this in j
 Let's make our calculator interactive and show multiple results:
 
 ```vais
-F fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
 
 # Helper to print a number (digits by ASCII conversion)
-F print_num(n: i64) -> i64 {
+fn print_num(n: i64) -> i64 {
     I n >= 10 {
         print_num(n / 10)
         putchar((n % 10) + 48)
         0
-    } E {
+    } else {
         putchar(n + 48)
         0
     }
 }
 
 # Print Fibonacci result with label
-F print_fib(n: i64) -> i64 {
+fn print_fib(n: i64) -> i64 {
     puts("fib(")
     print_num(n)
     puts(") = ")
@@ -62,7 +62,7 @@ F print_fib(n: i64) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Fibonacci Calculator ===")
     print_fib(0)
     print_fib(1)
@@ -85,17 +85,17 @@ The recursive version is elegant but inefficient for large numbers. Let's build 
 
 ```vais
 # Iterative Fibonacci using a helper with accumulation
-F fib_iter_helper(n: i64, a: i64, b: i64, count: i64) -> i64 {
+fn fib_iter_helper(n: i64, a: i64, b: i64, count: i64) -> i64 {
     I count == 0 {
         a
-    } E {
+    } else {
         @(n, b, a + b, count - 1)
     }
 }
 
-F fib_iter(n: i64) -> i64 = fib_iter_helper(n, 0, 1, n)
+fn fib_iter(n: i64) -> i64 = fib_iter_helper(n, 0, 1, n)
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Recursive fib(20):")
     result1 := fib(20)
     print_num(result1)
@@ -121,24 +121,24 @@ How it works:
 Let's calculate multiple Fibonacci numbers in a range:
 
 ```vais
-F fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
 
-F print_num(n: i64) -> i64 {
+fn print_num(n: i64) -> i64 {
     I n >= 10 {
         print_num(n / 10)
         putchar((n % 10) + 48)
         0
-    } E {
+    } else {
         putchar(n + 48)
         0
     }
 }
 
 # Calculate Fibonacci for range [start, end]
-F fib_range(start: i64, end: i64) -> i64 {
+fn fib_range(start: i64, end: i64) -> i64 {
     I start > end {
         0
-    } E {
+    } else {
         puts("fib(")
         print_num(start)
         puts(") = ")
@@ -148,7 +148,7 @@ F fib_range(start: i64, end: i64) -> i64 {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Fibonacci Range: 0 to 10 ===")
     fib_range(0, 10)
     puts("=== Complete ===")
@@ -178,27 +178,27 @@ fib(10) = 55
 Let's add input validation and make it robust:
 
 ```vais
-F fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
 
-F print_num(n: i64) -> i64 {
+fn print_num(n: i64) -> i64 {
     I n >= 10 { print_num(n / 10); putchar((n % 10) + 48); 0 }
-    E { putchar(n + 48); 0 }
+    else { putchar(n + 48); 0 }
 }
 
 # Safe Fibonacci with validation
-F fib_safe(n: i64) -> i64 {
+fn fib_safe(n: i64) -> i64 {
     I n < 0 {
         puts("Error: Negative input not allowed")
         0 - 1  # Return -1 for error
-    } E I n > 40 {
+    } else I n > 40 {
         puts("Error: Input too large (max 40)")
         0 - 1
-    } E {
+    } else {
         fib(n)
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Safe Fibonacci Calculator ===")
 
     # Valid input

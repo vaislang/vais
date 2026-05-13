@@ -1,11 +1,11 @@
 # Fibonacci - recursive and iterative
-F fib_rec(n) -> i =
-    I n <= 1 { n } E { @(n - 1) + @(n - 2) }
+fn fib_rec(n: i64) -> i64 =
+    I n <= 1 { n } else { @(n - 1) + @(n - 2) }
 
-F fib_iter(n) {
+fn fib_iter(n: i64) -> i64 {
     a := mut 0
     b := mut 1
-    L _:0..n {
+    LF _:0..n {
         t := a + b
         a = b
         b = t
@@ -13,7 +13,8 @@ F fib_iter(n) {
     a
 }
 
-F main() {
-    println("~{fib_rec(20)}")
-    println("~{fib_iter(50)}")
+fn main() -> i64 {
+    println("{fib_rec(20)}")
+    println("{fib_iter(50)}")
+    0
 }

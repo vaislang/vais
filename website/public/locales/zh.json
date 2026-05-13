@@ -32,7 +32,7 @@
     "subtitle": "Vais 编译为优化的 LLVM IR — 运行时与 C 和 Rust 相当，并具有快速的编译速度。",
     "runtimeTitle": "运行时间 — Fibonacci(35)",
     "compileTitle": "编译速度 — 单个文件",
-    "compileNote": "Vais <code>--emit-ir</code> vs 完整编译。比 C 快 8.6 倍，比 Rust 快 19 倍。更新于 2026-02-11。"
+    "compileNote": "Vais <code>--emit-ir</code> vs full binary compilation。Hyperfine、4 个 benchmark programs、Apple ARM64/macOS 基准：比 C/clang 快 9.3 倍，比 Rust 快 15.6 倍。更新于 2026-05-13。"
   },
   "features": {
     "title": "为什么选择 Vais？",
