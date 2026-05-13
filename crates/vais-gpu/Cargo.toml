@@ -5,10 +5,19 @@ edition = "2021"
 description = "GPU code generation for Vais programming language"
 license = "MIT"
 
+[features]
+default = []
+cuda = []
+metal = []
+opencl = []
+webgpu = []
+# Convenience feature to enable all backends
+all = ["cuda", "metal", "opencl", "webgpu"]
+
 [dependencies]
 vais-ast = { path = "../vais-ast" }
 vais-types = { path = "../vais-types" }
-thiserror = "2.0"
+thiserror = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.8"

@@ -13,7 +13,7 @@
 //!     assert(x >= 0 && x <= 100)
 //! })
 //!
-//! // Using #[prop] attribute
+//! // Using `#[prop]` attribute
 //! #[prop(cases=100)]
 //! F prop_addition_commutative(x: i64, y: i64) {
 //!     assert_eq(x + y, y + x)
@@ -233,7 +233,7 @@ pub fn register_property_macros(registry: &mut crate::MacroRegistry) {
     registry.register(quickcheck_def);
 }
 
-/// Process #[prop] attribute on functions
+/// Process `#[prop]` attribute on functions
 /// Transforms a function definition into a property test
 pub fn process_prop_attribute(func: &Function, attr_args: &[String]) -> Option<Function> {
     // Parse attribute arguments (e.g., cases=100, seed=42)
@@ -267,7 +267,7 @@ pub fn process_prop_attribute(func: &Function, attr_args: &[String]) -> Option<F
     let _ = (num_cases, seed, func);
 
     // Return None for now - the actual implementation would require
-    // more complex AST construction. The #[prop] attribute is recognized
+    // more complex AST construction. The `#[prop]` attribute is recognized
     // by the test runner when scanning for property tests.
     None
 }

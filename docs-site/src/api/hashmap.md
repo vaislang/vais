@@ -5,13 +5,13 @@
 ## Import
 
 ```vais
-U std/hashmap
+use std/hashmap
 ```
 
 ## Struct
 
 ```vais
-S HashMap<K, V> {
+struct HashMap<K, V> {
     buckets: i64,   # Bucket array pointer
     size: i64,      # Number of key-value pairs
     cap: i64        # Number of buckets
@@ -43,9 +43,9 @@ S HashMap<K, V> {
 ## Usage
 
 ```vais
-U std/hashmap
+use std/hashmap
 
-F main() -> i64 {
+fn main() -> i64 {
     m := hashmap_new()
     m.set(1, 100)
     m.set(2, 200)

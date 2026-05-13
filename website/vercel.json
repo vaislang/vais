@@ -36,16 +36,14 @@
       ]
     }
   ],
-  "redirects": [
+  "rewrites": [
     {
-      "source": "/docs",
-      "destination": "https://docs.vais-lang.org",
-      "permanent": false
+      "source": "/docs/:path*",
+      "destination": "/docs/:path*"
     },
     {
-      "source": "/playground",
-      "destination": "https://play.vais-lang.org",
-      "permanent": false
+      "source": "/playground/:path*",
+      "destination": "/playground/:path*"
     }
   ]
 }

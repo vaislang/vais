@@ -1,8 +1,8 @@
 //! Utility functions (walkdir, plugin loading, diagnostics).
 
+use colored::Colorize;
 use std::fs;
 use std::path::{Path, PathBuf};
-use colored::Colorize;
 use vais_plugin::{find_config, Diagnostic, DiagnosticLevel, PluginRegistry, PluginsConfig};
 
 pub(crate) fn walkdir(dir: &PathBuf, ext: &str) -> Vec<PathBuf> {
@@ -21,8 +21,11 @@ pub(crate) fn walkdir(dir: &PathBuf, ext: &str) -> Vec<PathBuf> {
 }
 
 /// Load plugins from configuration and CLI arguments
-
-pub(crate) fn load_plugins(extra_plugins: &[PathBuf], verbose: bool, allow_plugins: bool) -> PluginRegistry {
+pub(crate) fn load_plugins(
+    extra_plugins: &[PathBuf],
+    verbose: bool,
+    allow_plugins: bool,
+) -> PluginRegistry {
     let mut registry = PluginRegistry::new();
     registry.set_allow_plugins(allow_plugins);
 
@@ -115,7 +118,6 @@ pub(crate) fn load_plugins(extra_plugins: &[PathBuf], verbose: bool, allow_plugi
 /// 1. Build with instrumentation (--profile-generate)
 /// 2. Run to collect profile data
 /// 3. Merge profiles and rebuild with optimization (--profile-use)
-
 pub(crate) fn print_suggested_fixes(error: &vais_types::TypeError, _source: &str) {
     use vais_types::TypeError;
 
@@ -172,6 +174,17 @@ pub(crate) fn print_suggested_fixes(error: &vais_types::TypeError, _source: &str
         }
     }
     eprintln!();
+}
+
+/// Run the LLVM IR structural verification gate and log any errors.
+///
+/// This is the single integration point for `verify_text_ir_or_error`.
+/// All codegen output paths should call this instead of duplicating the
+/// verification + logging logic.
+pub(crate) fn verify_ir_and_log(ir: &str, context: &str) {
+    if let Err(verify_err) = vais_codegen::ir_verify::verify_text_ir_or_error(ir) {
+        eprintln!("[IR verify] {}: {}", context, verify_err);
+    }
 }
 
 pub(crate) fn print_plugin_diagnostics(diagnostics: &[Diagnostic], source: &str, path: &Path) {

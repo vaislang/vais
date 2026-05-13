@@ -1,0 +1,12 @@
+[package]
+name = "vais-lz4"
+version = "1.0.0"
+authors = ["Vais Team"]
+description = "Pure Vais LZ4 compression and decompression library"
+license = "MIT"
+
+[dependencies]
+
+[dev-dependencies]
+
+[build]

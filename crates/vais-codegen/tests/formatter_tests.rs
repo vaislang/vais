@@ -7,8 +7,8 @@
 //! - Expression formatting (nested expressions, operators)
 //! - Indentation configuration
 
+use vais_ast::formatter::{FormatConfig, Formatter};
 use vais_ast::*;
-use vais_codegen::formatter::{FormatConfig, Formatter};
 
 // ============================================================================
 // Helper Functions for Creating AST Nodes
@@ -90,8 +90,11 @@ fn test_format_simple_function() {
         }))),
         is_pub: true,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -114,8 +117,11 @@ fn test_format_function_with_no_params() {
         body: FunctionBody::Expr(Box::new(spanned(int_expr(42)))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -146,7 +152,10 @@ fn test_format_function_with_generics() {
         body: FunctionBody::Expr(Box::new(spanned(ident_expr("x")))),
         is_pub: true,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -180,7 +189,10 @@ fn test_format_function_with_bounded_generics() {
         body: FunctionBody::Expr(Box::new(spanned(Expr::Unit))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -203,8 +215,11 @@ fn test_format_async_function() {
         body: FunctionBody::Expr(Box::new(spanned(string_expr("data")))),
         is_pub: true,
         is_async: true,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -247,8 +262,11 @@ fn test_format_function_with_block_body() {
         ]),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -274,6 +292,8 @@ fn test_format_function_with_attributes() {
         body: FunctionBody::Expr(Box::new(spanned(Expr::Unit))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![
             Attribute {
@@ -287,6 +307,7 @@ fn test_format_function_with_attributes() {
                 expr: None,
             },
         ],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -317,8 +338,11 @@ fn test_format_function_with_mut_params() {
         body: FunctionBody::Expr(Box::new(spanned(Expr::Unit))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -356,6 +380,7 @@ fn test_format_simple_struct() {
         is_pub: true,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -385,6 +410,7 @@ fn test_format_generic_struct() {
         methods: vec![],
         is_pub: true,
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -418,11 +444,15 @@ fn test_format_struct_with_methods() {
                 (ident("x"), spanned(ident_expr("x"))),
                 (ident("y"), spanned(int_expr(0))),
             ],
+            enum_name: None,
         }))),
         is_pub: true,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let s = Struct {
@@ -443,6 +473,7 @@ fn test_format_struct_with_methods() {
         is_pub: true,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -482,6 +513,7 @@ fn test_format_simple_enum() {
         ],
         is_pub: true,
         generics: vec![],
+        attributes: vec![],
     };
 
     let module = Module {
@@ -514,6 +546,7 @@ fn test_format_enum_with_tuple_variants() {
             },
         ],
         is_pub: true,
+        attributes: vec![],
     };
 
     let module = Module {
@@ -556,6 +589,7 @@ fn test_format_enum_with_struct_variants() {
         ],
         is_pub: true,
         generics: vec![],
+        attributes: vec![],
     };
 
     let module = Module {
@@ -594,8 +628,11 @@ fn test_format_if_else() {
         body: FunctionBody::Block(vec![spanned(Stmt::Expr(Box::new(spanned(if_expr))))]),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -639,8 +676,11 @@ fn test_format_else_if_chain() {
         body: FunctionBody::Block(vec![spanned(Stmt::Expr(Box::new(spanned(if_expr))))]),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -678,8 +718,11 @@ fn test_format_loop() {
         body: FunctionBody::Block(vec![spanned(Stmt::Expr(Box::new(spanned(loop_expr))))]),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -725,8 +768,11 @@ fn test_format_match_expression() {
         )))))]),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -765,8 +811,11 @@ fn test_format_match_with_guard() {
         body: FunctionBody::Expr(Box::new(spanned(match_expr))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -803,8 +852,11 @@ fn test_format_binary_expressions() {
         body: FunctionBody::Expr(Box::new(spanned(expr))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -835,8 +887,11 @@ fn test_format_unary_expressions() {
         body: FunctionBody::Expr(Box::new(spanned(expr))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -865,8 +920,11 @@ fn test_format_method_call() {
         body: FunctionBody::Expr(Box::new(spanned(expr))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -895,8 +953,11 @@ fn test_format_array_literal() {
         body: FunctionBody::Expr(Box::new(spanned(expr))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -929,8 +990,11 @@ fn test_format_tuple() {
         body: FunctionBody::Expr(Box::new(spanned(expr))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -952,6 +1016,7 @@ fn test_format_struct_literal() {
             (ident("x"), spanned(int_expr(10))),
             (ident("y"), spanned(int_expr(20))),
         ],
+        enum_name: None,
     };
 
     let func = Function {
@@ -961,8 +1026,11 @@ fn test_format_struct_literal() {
         body: FunctionBody::Expr(Box::new(spanned(expr))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -1082,8 +1150,11 @@ fn test_custom_indent_size() {
         })]),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -1119,8 +1190,11 @@ fn test_use_tabs_indentation() {
         })]),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         generics: vec![],
         attributes: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -1184,8 +1258,11 @@ fn test_format_multiple_items() {
                 }))),
                 is_pub: true,
                 is_async: false,
+                is_partial: false,
+                declared_effect: None,
                 generics: vec![],
                 attributes: vec![],
+                where_clause: vec![],
             })),
         ],
     };
@@ -1206,6 +1283,7 @@ fn test_format_use_statement() {
     let use_stmt = Use {
         path: vec![ident("std"), ident("io"), ident("println")],
         alias: None,
+        items: None,
     };
 
     let module = Module {
@@ -1224,6 +1302,7 @@ fn test_format_use_with_alias() {
     let use_stmt = Use {
         path: vec![ident("std"), ident("collections"), ident("HashMap")],
         alias: Some(ident("Map")),
+        items: None,
     };
 
     let module = Module {

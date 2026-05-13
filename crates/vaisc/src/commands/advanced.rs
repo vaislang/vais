@@ -1,12 +1,59 @@
 //! Advanced commands (PGO, watch).
 
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use crate::commands::build::cmd_build;
 use colored::Colorize;
+use std::fs;
+use std::path::PathBuf;
+use std::process::Command;
 use vais_codegen::TargetTriple;
 use vais_plugin::PluginRegistry;
-use crate::commands::build::cmd_build;
+
+/// Parse a command string respecting quoted arguments.
+/// Rejects shell metacharacters for safety.
+fn parse_command(cmd: &str) -> Result<Vec<String>, String> {
+    // Reject shell metacharacters
+    for ch in cmd.chars() {
+        if matches!(ch, ';' | '|' | '&' | '$' | '`' | '>' | '<') {
+            return Err(format!("command contains unsafe character '{}'", ch));
+        }
+    }
+
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+
+    for ch in cmd.chars() {
+        match ch {
+            '\'' if !in_double_quote => {
+                in_single_quote = !in_single_quote;
+            }
+            '"' if !in_single_quote => {
+                in_double_quote = !in_double_quote;
+            }
+            ' ' | '\t' if !in_single_quote && !in_double_quote => {
+                if !current.is_empty() {
+                    args.push(std::mem::take(&mut current));
+                }
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    if in_single_quote || in_double_quote {
+        return Err("unterminated quote in command".to_string());
+    }
+
+    if !current.is_empty() {
+        args.push(current);
+    }
+
+    if args.is_empty() {
+        return Err("empty run command".to_string());
+    }
+
+    Ok(args)
+}
 
 pub(crate) fn cmd_pgo(
     input: &PathBuf,
@@ -20,7 +67,7 @@ pub(crate) fn cmd_pgo(
     let bin_name = input
         .file_stem()
         .and_then(|s| s.to_str())
-        .unwrap_or("a.out");
+        .ok_or_else(|| format!("invalid input file stem: {}", input.display()))?;
     let output_path = output.unwrap_or_else(|| PathBuf::from(bin_name));
     let profdata_path = format!("{}/default.profdata", profile_dir);
 
@@ -48,11 +95,12 @@ pub(crate) fn cmd_pgo(
             vais_codegen::optimize::LtoMode::None,
             vais_codegen::optimize::PgoMode::Generate(profile_dir.to_string()),
             vais_codegen::optimize::CoverageMode::None,
-            false, // suggest_fixes
-            None,  // parallel_config
-            false, // use_inkwell
-            false, // per_module
+            false,     // suggest_fixes
+            None,      // parallel_config
+            false,     // use_inkwell
+            false,     // per_module
             536870912, // cache_limit (512MB default)
+            None,      // profile_out
         )?;
 
         println!(
@@ -68,9 +116,11 @@ pub(crate) fn cmd_pgo(
         );
         let run_command = run_cmd.unwrap_or_else(|| instrumented_bin.display().to_string());
 
-        let status = Command::new("sh")
-            .arg("-c")
-            .arg(&run_command)
+        // Parse command safely respecting quotes and rejecting shell metacharacters
+        let parts = parse_command(&run_command)?;
+
+        let status = Command::new(&parts[0])
+            .args(&parts[1..])
             .env(
                 "LLVM_PROFILE_FILE",
                 format!("{}/default-%p.profraw", profile_dir),
@@ -150,11 +200,12 @@ pub(crate) fn cmd_pgo(
         vais_codegen::optimize::LtoMode::Thin,
         vais_codegen::optimize::PgoMode::Use(profdata_path),
         vais_codegen::optimize::CoverageMode::None,
-        false, // suggest_fixes
-        None,  // parallel_config
-        false, // use_inkwell
-        false, // per_module
+        false,     // suggest_fixes
+        None,      // parallel_config
+        false,     // use_inkwell
+        false,     // per_module
         536870912, // cache_limit (512MB default)
+        None,      // profile_out
     )?;
 
     println!(
@@ -179,7 +230,10 @@ pub(crate) fn cmd_watch(
     use std::time::Duration;
 
     // Determine watch directory (parent of input file or current directory)
-    let watch_dir = input.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let watch_dir = input
+        .parent()
+        .ok_or_else(|| format!("cannot determine parent directory of {}", input.display()))?
+        .to_path_buf();
 
     println!(
         "{} {} (directory: {})",
@@ -190,7 +244,14 @@ pub(crate) fn cmd_watch(
 
     // Collect all .vais files to watch (for import tracking)
     let mut watched_files: HashSet<PathBuf> = HashSet::new();
-    watched_files.insert(input.canonicalize().unwrap_or_else(|_| input.clone()));
+    let canonical_input = input.canonicalize().map_err(|e| {
+        format!(
+            "failed to canonicalize input path {}: {}",
+            input.display(),
+            e
+        )
+    })?;
+    watched_files.insert(canonical_input);
 
     // Scan for import statements and add imported files
     if let Ok(content) = std::fs::read_to_string(input) {
@@ -243,10 +304,11 @@ pub(crate) fn cmd_watch(
         vais_codegen::optimize::PgoMode::None,
         vais_codegen::optimize::CoverageMode::None,
         false,
-        None,  // parallel_config
-        false, // use_inkwell
-        false, // per_module
+        None,      // parallel_config
+        false,     // use_inkwell
+        false,     // per_module
         536870912, // cache_limit (512MB default)
+        None,      // profile_out
     )?;
 
     // Execute initial run if requested
@@ -335,10 +397,11 @@ pub(crate) fn cmd_watch(
                         vais_codegen::optimize::PgoMode::None,
                         vais_codegen::optimize::CoverageMode::None,
                         false,
-                        None,  // parallel_config
-                        false, // use_inkwell
-                        false, // per_module
+                        None,      // parallel_config
+                        false,     // use_inkwell
+                        false,     // per_module
                         536870912, // cache_limit (512MB default)
+                        None,      // profile_out
                     ) {
                         Ok(_) => {
                             println!("{} Compilation successful", "✓".green().bold());
@@ -362,5 +425,132 @@ pub(crate) fn cmd_watch(
                 return Err("Watcher channel closed".to_string());
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_command_simple() {
+        let result = parse_command("./program arg1 arg2").unwrap();
+        assert_eq!(result, vec!["./program", "arg1", "arg2"]);
+    }
+
+    #[test]
+    fn test_parse_command_double_quotes() {
+        let result = parse_command(r#"./program "arg with spaces" arg2"#).unwrap();
+        assert_eq!(result, vec!["./program", "arg with spaces", "arg2"]);
+    }
+
+    #[test]
+    fn test_parse_command_single_quotes() {
+        let result = parse_command("./program 'arg with spaces' arg2").unwrap();
+        assert_eq!(result, vec!["./program", "arg with spaces", "arg2"]);
+    }
+
+    #[test]
+    fn test_parse_command_mixed_quotes() {
+        let result = parse_command(r#"./program "double quoted" 'single quoted' normal"#).unwrap();
+        assert_eq!(
+            result,
+            vec!["./program", "double quoted", "single quoted", "normal"]
+        );
+    }
+
+    #[test]
+    fn test_parse_command_nested_quotes() {
+        let result = parse_command(r#"./program "it's ok" 'he said "hi"'"#).unwrap();
+        assert_eq!(result, vec!["./program", "it's ok", r#"he said "hi""#]);
+    }
+
+    #[test]
+    fn test_parse_command_empty() {
+        let result = parse_command("");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "empty run command");
+    }
+
+    #[test]
+    fn test_parse_command_whitespace_only() {
+        let result = parse_command("   ");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "empty run command");
+    }
+
+    #[test]
+    fn test_parse_command_unterminated_double_quote() {
+        let result = parse_command(r#"./program "unterminated"#);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "unterminated quote in command");
+    }
+
+    #[test]
+    fn test_parse_command_unterminated_single_quote() {
+        let result = parse_command("./program 'unterminated");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "unterminated quote in command");
+    }
+
+    #[test]
+    fn test_parse_command_reject_semicolon() {
+        let result = parse_command("./program; rm -rf /");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsafe character ';'"));
+    }
+
+    #[test]
+    fn test_parse_command_reject_pipe() {
+        let result = parse_command("./program | cat");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsafe character '|'"));
+    }
+
+    #[test]
+    fn test_parse_command_reject_ampersand() {
+        let result = parse_command("./program && echo hi");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsafe character '&'"));
+    }
+
+    #[test]
+    fn test_parse_command_reject_dollar() {
+        let result = parse_command("./program $(whoami)");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsafe character '$'"));
+    }
+
+    #[test]
+    fn test_parse_command_reject_backtick() {
+        let result = parse_command("./program `ls`");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsafe character '`'"));
+    }
+
+    #[test]
+    fn test_parse_command_reject_redirect_out() {
+        let result = parse_command("./program > output.txt");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsafe character '>'"));
+    }
+
+    #[test]
+    fn test_parse_command_reject_redirect_in() {
+        let result = parse_command("./program < input.txt");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsafe character '<'"));
+    }
+
+    #[test]
+    fn test_parse_command_tabs() {
+        let result = parse_command("./program\targ1\t\targ2").unwrap();
+        assert_eq!(result, vec!["./program", "arg1", "arg2"]);
+    }
+
+    #[test]
+    fn test_parse_command_multiple_spaces() {
+        let result = parse_command("./program    arg1     arg2").unwrap();
+        assert_eq!(result, vec!["./program", "arg1", "arg2"]);
     }
 }

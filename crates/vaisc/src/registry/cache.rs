@@ -277,7 +277,15 @@ impl PackageCache {
 
 impl Default for PackageCache {
     fn default() -> Self {
-        Self::new().expect("Failed to create default package cache")
+        Self::new().unwrap_or_else(|e| {
+            eprintln!("Warning: Failed to create package cache: {}", e);
+            // Create a fallback cache in temp directory
+            let temp_root = std::env::temp_dir().join(".vais-fallback-registry");
+            Self::with_root(temp_root).unwrap_or_else(|e| {
+                eprintln!("FATAL: Failed to create fallback package cache: {}", e);
+                std::process::abort();
+            })
+        })
     }
 }
 

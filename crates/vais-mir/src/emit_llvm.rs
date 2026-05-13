@@ -7,9 +7,35 @@
 use crate::types::*;
 use std::collections::HashMap;
 
+/// Optimization level for emitting LLVM IR.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OptLevel {
+    /// No optimizations (O0). Functions get `optnone` attribute.
+    None,
+    /// Default optimization (O2). No special attributes.
+    Default,
+    /// Size optimization (Os). Functions get `optsize` attribute.
+    Size,
+    /// Aggressive size optimization (Oz). Functions get `minsize` attribute.
+    MinSize,
+}
+
 /// Emit a MIR module as LLVM IR text.
 pub fn emit_llvm_ir(module: &MirModule, target_triple: &str) -> String {
     let mut emitter = LlvmEmitter::new(target_triple);
+    emitter.emit_module(module)
+}
+
+/// Emit a MIR module as LLVM IR text with optimization level and debug info.
+pub fn emit_llvm_ir_with_options(
+    module: &MirModule,
+    target_triple: &str,
+    opt_level: OptLevel,
+    emit_debug: bool,
+) -> String {
+    let mut emitter = LlvmEmitter::new(target_triple);
+    emitter.opt_level = opt_level;
+    emitter.emit_debug = emit_debug;
     emitter.emit_module(module)
 }
 
@@ -18,6 +44,10 @@ struct LlvmEmitter {
     output: String,
     local_names: HashMap<Local, String>,
     next_unnamed: u32,
+    opt_level: OptLevel,
+    emit_debug: bool,
+    /// Counter for debug metadata node IDs.
+    next_dbg_id: u32,
 }
 
 impl LlvmEmitter {
@@ -27,6 +57,9 @@ impl LlvmEmitter {
             output: String::new(),
             local_names: HashMap::new(),
             next_unnamed: 0,
+            opt_level: OptLevel::Default,
+            emit_debug: false,
+            next_dbg_id: 0,
         }
     }
 
@@ -62,6 +95,11 @@ impl LlvmEmitter {
             self.output.push('\n');
         }
 
+        // Debug info metadata (if enabled)
+        if self.emit_debug {
+            self.emit_debug_metadata(&module.name);
+        }
+
         self.output.clone()
     }
 
@@ -94,7 +132,23 @@ impl LlvmEmitter {
             self.output.push_str(&format!("{} {}", llvm_ty, name));
         }
 
-        self.output.push_str(") {\n");
+        self.output.push(')');
+
+        // Add function attributes based on optimization level
+        match self.opt_level {
+            OptLevel::None => {
+                self.output.push_str(" #0"); // optnone + noinline
+            }
+            OptLevel::Size => {
+                self.output.push_str(" #1"); // optsize
+            }
+            OptLevel::MinSize => {
+                self.output.push_str(" #2"); // minsize
+            }
+            OptLevel::Default => {} // no special attributes
+        }
+
+        self.output.push_str(" {\n");
 
         // Allocate local variables (alloca for return place and temporaries)
         for (i, local_decl) in body.locals.iter().enumerate() {
@@ -454,6 +508,9 @@ impl LlvmEmitter {
             MirType::Unit => "void".to_string(),
             MirType::Pointer(inner) => format!("{}*", self.mir_type_to_llvm(inner)),
             MirType::Ref(inner) => format!("{}*", self.mir_type_to_llvm(inner)),
+            MirType::RefLifetime { inner, .. } | MirType::RefMutLifetime { inner, .. } => {
+                format!("{}*", self.mir_type_to_llvm(inner))
+            }
             MirType::Array(elem) => format!("[0 x {}]", self.mir_type_to_llvm(elem)),
             MirType::Tuple(elems) => {
                 let parts: Vec<String> = elems.iter().map(|t| self.mir_type_to_llvm(t)).collect();
@@ -469,6 +526,47 @@ impl LlvmEmitter {
             }
             MirType::Never => "void".to_string(),
         }
+    }
+
+    /// Emit LLVM debug metadata for the module.
+    fn emit_debug_metadata(&mut self, module_name: &str) {
+        self.output.push_str("\n; Debug metadata\n");
+
+        // Compile unit
+        let cu_id = self.next_dbg_id();
+        self.output.push_str(&format!(
+            "!{} = distinct !DICompileUnit(language: DW_LANG_C99, file: !{}, producer: \"vaisc\", isOptimized: true, emissionKind: FullDebug)\n",
+            cu_id,
+            cu_id + 1
+        ));
+
+        // File
+        let file_id = self.next_dbg_id();
+        self.output.push_str(&format!(
+            "!{} = !DIFile(filename: \"{}.vais\", directory: \".\")\n",
+            file_id, module_name
+        ));
+
+        // Named metadata
+        self.output
+            .push_str(&format!("!llvm.dbg.cu = !{{!{}}}\n", cu_id));
+        self.output.push_str("!llvm.module.flags = !{!9999}\n");
+        self.output
+            .push_str("!9999 = !{i32 2, !\"Debug Info Version\", i32 3}\n");
+
+        // Attribute groups (for optimization level)
+        self.output.push_str("\n; Attribute groups\n");
+        self.output
+            .push_str("attributes #0 = { noinline optnone }\n");
+        self.output.push_str("attributes #1 = { optsize }\n");
+        self.output.push_str("attributes #2 = { minsize }\n");
+    }
+
+    /// Get the next debug metadata ID.
+    fn next_dbg_id(&mut self) -> u32 {
+        let id = self.next_dbg_id;
+        self.next_dbg_id += 1;
+        id
     }
 
     fn binop_to_llvm(&self, op: &BinOp, ty: &MirType) -> &'static str {
@@ -626,5 +724,237 @@ mod tests {
         assert!(ir.contains("icmp eq i64"));
         assert!(ir.contains("br i1"));
         assert!(ir.contains("sub i64 0,"));
+    }
+
+    #[test]
+    fn test_emit_float_operations() {
+        let mut builder = MirBuilder::new("fmul", vec![MirType::F64, MirType::F64], MirType::F64);
+
+        let result = builder.new_local(MirType::F64, None);
+        let param_a = Operand::Copy(Place::local(builder.param(0)));
+        let param_b = Operand::Copy(Place::local(builder.param(1)));
+
+        builder.assign_binop(result, BinOp::Mul, param_a, param_b);
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(result))),
+        );
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test");
+        module.bodies.push(body);
+
+        let ir = emit_llvm_ir(&module, "x86_64-unknown-linux-gnu");
+        assert!(ir.contains("define double @fmul("));
+        assert!(ir.contains("fmul double"));
+        assert!(ir.contains("ret double"));
+    }
+
+    #[test]
+    fn test_emit_struct_type() {
+        let mut module = MirModule::new("test");
+        module.structs.insert(
+            "Point".into(),
+            vec![("x".into(), MirType::I64), ("y".into(), MirType::I64)],
+        );
+
+        let ir = emit_llvm_ir(&module, "x86_64-unknown-linux-gnu");
+        assert!(ir.contains("%Point = type { i64, i64 }"));
+    }
+
+    #[test]
+    fn test_emit_multi_way_switch() {
+        let mut builder = MirBuilder::new("classify", vec![MirType::I64], MirType::I64);
+
+        let bb1 = builder.new_block();
+        let bb2 = builder.new_block();
+        let bb3 = builder.new_block();
+        let bb_default = builder.new_block();
+
+        let param = Operand::Copy(Place::local(builder.param(0)));
+
+        // Switch with 3 cases
+        builder.switch_int(param, vec![(0, bb1), (1, bb2), (2, bb3)], bb_default);
+
+        builder.switch_to_block(bb1);
+        builder.assign_const(builder.return_place().local, Constant::Int(100));
+        builder.return_();
+
+        builder.switch_to_block(bb2);
+        builder.assign_const(builder.return_place().local, Constant::Int(200));
+        builder.return_();
+
+        builder.switch_to_block(bb3);
+        builder.assign_const(builder.return_place().local, Constant::Int(300));
+        builder.return_();
+
+        builder.switch_to_block(bb_default);
+        builder.assign_const(builder.return_place().local, Constant::Int(0));
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test");
+        module.bodies.push(body);
+
+        let ir = emit_llvm_ir(&module, "x86_64-unknown-linux-gnu");
+        assert!(ir.contains("switch i64"));
+        assert!(ir.contains("i64 0, label %bb1"));
+        assert!(ir.contains("i64 1, label %bb2"));
+        assert!(ir.contains("i64 2, label %bb3"));
+    }
+
+    #[test]
+    fn test_emit_unary_not() {
+        let mut builder = MirBuilder::new("bitflip", vec![MirType::I64], MirType::I64);
+
+        let result = builder.new_local(MirType::I64, None);
+        let param = Operand::Copy(Place::local(builder.param(0)));
+
+        builder.assign(Place::local(result), Rvalue::UnaryOp(UnOp::Not, param));
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(result))),
+        );
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test");
+        module.bodies.push(body);
+
+        let ir = emit_llvm_ir(&module, "x86_64-unknown-linux-gnu");
+        assert!(ir.contains("xor i64"));
+        assert!(ir.contains(", -1"));
+    }
+
+    #[test]
+    fn test_emit_comparison_ops() {
+        let mut builder =
+            MirBuilder::new("compare", vec![MirType::I64, MirType::I64], MirType::I64);
+
+        let result = builder.new_local(MirType::I64, None);
+        let param_a = Operand::Copy(Place::local(builder.param(0)));
+        let param_b = Operand::Copy(Place::local(builder.param(1)));
+
+        // Test less-than comparison (result stored as i64, not bool)
+        builder.assign_binop(result, BinOp::Lt, param_a, param_b);
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(result))),
+        );
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test");
+        module.bodies.push(body);
+
+        let ir = emit_llvm_ir(&module, "x86_64-unknown-linux-gnu");
+        // Comparison ops emit "icmp slt" instruction
+        assert!(ir.contains("icmp slt"));
+    }
+
+    #[test]
+    fn test_emit_with_debug_info() {
+        let mut builder = MirBuilder::new("dbg_test", vec![MirType::I64], MirType::I64);
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(builder.param(0)))),
+        );
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test_mod");
+        module.bodies.push(body);
+
+        let ir =
+            emit_llvm_ir_with_options(&module, "x86_64-unknown-linux-gnu", OptLevel::Default, true);
+        assert!(ir.contains("DICompileUnit"));
+        assert!(ir.contains("DIFile"));
+        assert!(ir.contains("test_mod.vais"));
+        assert!(ir.contains("llvm.dbg.cu"));
+        assert!(ir.contains("Debug Info Version"));
+    }
+
+    #[test]
+    fn test_emit_with_optnone() {
+        let mut builder = MirBuilder::new("no_opt", vec![MirType::I64], MirType::I64);
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(builder.param(0)))),
+        );
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test");
+        module.bodies.push(body);
+
+        let ir =
+            emit_llvm_ir_with_options(&module, "x86_64-unknown-linux-gnu", OptLevel::None, true);
+        assert!(ir.contains("#0")); // function has attribute group reference
+        assert!(ir.contains("noinline optnone")); // attribute group defined
+    }
+
+    #[test]
+    fn test_emit_with_optsize() {
+        let mut builder = MirBuilder::new("small_fn", vec![MirType::I64], MirType::I64);
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(builder.param(0)))),
+        );
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test");
+        module.bodies.push(body);
+
+        let ir =
+            emit_llvm_ir_with_options(&module, "x86_64-unknown-linux-gnu", OptLevel::Size, true);
+        assert!(ir.contains("#1"));
+        assert!(ir.contains("optsize"));
+    }
+
+    #[test]
+    fn test_emit_with_minsize() {
+        let mut builder = MirBuilder::new("tiny_fn", vec![MirType::I64], MirType::I64);
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(builder.param(0)))),
+        );
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test");
+        module.bodies.push(body);
+
+        let ir =
+            emit_llvm_ir_with_options(&module, "x86_64-unknown-linux-gnu", OptLevel::MinSize, true);
+        assert!(ir.contains("#2"));
+        assert!(ir.contains("minsize"));
+    }
+
+    #[test]
+    fn test_emit_default_no_attr() {
+        let mut builder = MirBuilder::new("default_fn", vec![MirType::I64], MirType::I64);
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(builder.param(0)))),
+        );
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test");
+        module.bodies.push(body);
+
+        // Default optimization without debug info
+        let ir = emit_llvm_ir_with_options(
+            &module,
+            "x86_64-unknown-linux-gnu",
+            OptLevel::Default,
+            false,
+        );
+        // Should not contain attribute group references on the function
+        assert!(!ir.contains("define i64 @default_fn(i64 %_1) #"));
+        // Should not contain debug metadata
+        assert!(!ir.contains("DICompileUnit"));
     }
 }

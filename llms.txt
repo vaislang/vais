@@ -1,0 +1,122 @@
+# Vais
+
+> Vais (Vibe AI Language for Systems) is an AI-optimized systems programming language.
+> Single-character keywords for token efficiency, LLVM backend, full type inference,
+> strict type coercion (no implicit casts — `as` required), and a self-hosting compiler
+> (v0.9.0, 51,190 LOC bootstrap).
+>
+> Full-stack ecosystem: frontend (VaisX) + backend (vais-server) + database (VaisDB),
+> all written in Vais itself.
+
+The public documentation site is at [vaislang.dev](https://vaislang.dev).
+All links below are mdBook pages unless otherwise noted.
+
+## Core language
+
+- [Introduction](https://vaislang.dev/introduction.html): What Vais is, why single-character keywords, how the compiler is organized.
+- [5-Minute Vibe Coding Guide](https://vaislang.dev/getting-started/vibe-coding.html): The fastest path for AI-assisted coding — install, syntax summary, three runnable examples (CLI, HTTP server, VaisDB query), AI context tips.
+- [Installation](https://vaislang.dev/getting-started/installation.html): `curl -fsSL https://vaislang.dev/install.sh | sh` and platform notes.
+- [Quick Start](https://vaislang.dev/getting-started/quick-start.html): Hello World, `vaisc build/run`, project layout.
+- [Tutorial](https://vaislang.dev/getting-started/tutorial.html): Variables, functions, pattern matching, generics, traits — walked through with runnable code.
+- [Language Specification](https://vaislang.dev/language/language-spec.html): Complete reference for syntax, type system, and semantics.
+
+## Single-character keyword reference
+
+`F`=function, `S`=struct, `E`=enum/else, `I`=if, `L`=loop, `M`=match, `R`=return,
+`B`=break, `C`=continue, `T`=type alias, `U`=use (import), `W`=trait, `X`=impl,
+`P`=pub, `D`=defer, `A`=async, `Y`=await, `N`=extern, `G`=global, `O`=union.
+
+Operators: `:=` bind, `:= mut` mutable bind, `@` self-recursion, `?` try / ternary,
+`!` unwrap, `|>` pipe, `..` range, `{expr}` string interpolation, `as` explicit cast.
+
+## Type coercion rules (critical — do not guess)
+
+- **Allowed implicitly**: integer widening (`i8→i16→i32→i64`, `u8→...→u64`), float literal inference (`f32↔f64`).
+- **Forbidden**: `bool↔i64`, `int↔float`, `str↔i64`, integer narrowing. Use `as`.
+- Example: `flag := 1 as bool` is required, `flag := 1` is an error.
+
+## Ecosystem
+
+- [Ecosystem Overview](https://vaislang.dev/ecosystem/README.html): Architecture diagram and full-stack example.
+- [VaisX (vais-web)](https://vaislang.dev/ecosystem/vais-web/README.html): Compile-time reactive frontend framework. Runtime under 3 KB gzipped, file-based routing, single-file `.vaisx` components with `$state`/`$derived`/`$effect`.
+  - [Getting Started](https://vaislang.dev/ecosystem/vais-web/getting-started.html)
+  - [VaisX Syntax](https://vaislang.dev/ecosystem/vais-web/syntax.html)
+  - [Components](https://vaislang.dev/ecosystem/vais-web/components.html)
+- [VaisDB](https://vaislang.dev/ecosystem/vaisdb/README.html): RAG-native hybrid database. Vector + graph + SQL + full-text in a single `.vaisdb` file, single transaction. Embedded mode or TCP server mode.
+  - [Getting Started](https://vaislang.dev/ecosystem/vaisdb/getting-started.html)
+  - [Query Guide](https://vaislang.dev/ecosystem/vaisdb/queries.html)
+  - [RAG Features](https://vaislang.dev/ecosystem/vaisdb/rag.html)
+- [vais-server](https://vaislang.dev/ecosystem/vais-server/README.html): Express/Axum-style backend API framework. Pure Vais, no FFI, RadixTree routing, middleware pipeline, built-in JWT auth.
+  - [Getting Started](https://vaislang.dev/ecosystem/vais-server/getting-started.html)
+  - [Routing & Middleware](https://vaislang.dev/ecosystem/vais-server/routing.html)
+  - [Database Integration](https://vaislang.dev/ecosystem/vais-server/database.html)
+
+## Tutorials (real-world apps)
+
+- [CLI Tool](https://vaislang.dev/tutorials/cli-tool.html): Arg parsing + stdin + file I/O.
+- [CLI Framework](https://vaislang.dev/tutorials/cli-framework.html): Subcommand dispatch.
+- [JSON Parser](https://vaislang.dev/tutorials/json-parser.html): Recursive descent parser from scratch.
+- [HTTP Server](https://vaislang.dev/tutorials/http-server.html): REST API with vais-server.
+- [WebSocket Chat](https://vaislang.dev/tutorials/websocket-chat.html): Real-time bidirectional messaging.
+- [Data Pipeline](https://vaislang.dev/tutorials/data-pipeline.html): ETL with VaisDB.
+
+## Standard library (81 `.vais` files)
+
+Key modules reached via `U std/<module>::{Symbol}`:
+- `std/vec` — `Vec<T>` dynamic array
+- `std/hashmap` — `HashMap<K, V>`
+- `std/option` — `Option<T>` with `Some`/`None`
+- `std/result` — `Result<T, E>` with `Ok`/`Err`
+- `std/string` — string manipulation
+- `std/io` — stdin/stdout/file I/O
+- `std/fmt` — formatting
+- `std/math` — math functions
+- `std/iter` — iterator protocol (`.iter()`, `.enumerate()`, `.map()`, `.filter()`)
+- `std/fs` — filesystem
+
+## Writing Vais code — quick patterns
+
+```vais
+# Hello world
+F main() -> i64 {
+    puts("Hello, Vais!")
+    0
+}
+
+# FizzBuzz (range loop + modulo)
+F main() -> i64 {
+    LF i:1..21 {
+        I i % 15 == 0 { puts("FizzBuzz") }
+        EL I i % 3 == 0 { puts("Fizz") }
+        EL I i % 5 == 0 { puts("Buzz") }
+        EL { puts("{i}") }
+    }
+    0
+}
+
+# Struct + trait
+S Point { x: i64, y: i64 }
+
+W Distance {
+    F from_origin(self: Point) -> f64
+}
+
+X Distance for Point {
+    F from_origin(self: Point) -> f64 {
+        ((self.x * self.x + self.y * self.y) as f64).sqrt()
+    }
+}
+
+# Option / Result
+F divide(a: i64, b: i64) -> Result<i64, str> {
+    I b == 0 { R Err("division by zero") }
+    Ok(a / b)
+}
+```
+
+## Optional
+
+- [Full documentation concat (llms-full.txt)](https://vaislang.dev/llms-full.txt): Single-file concat of the entire docs set — drop into Cursor/Claude context.
+- [GitHub](https://github.com/vaislang/vais): Source code, issues, releases.
+- [Playground](https://play.vaislang.dev): Try Vais in the browser (40+ examples).
+- [IntelliJ plugin](https://plugins.jetbrains.com/) and VSCode extension for editor integration.

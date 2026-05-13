@@ -2,7 +2,7 @@
 
 ## Overview
 
-Vais (Vibe AI Language for Systems) is an AI-optimized systems programming language with single-character keywords, LLVM backend, and full type inference. The compiler is written in Rust.
+Vais (Vibe AI Language for Systems) is an AI-optimized systems programming language with single-character keywords, LLVM backend, and full type inference. The compiler is written in Rust. Self-hosting compiler (bootstrap) achieved with 50,000+ lines.
 
 ## GitHub & Links
 
@@ -16,6 +16,8 @@ cargo build                                    # Build all
 cargo test                                     # Run all tests
 cargo clippy --workspace --exclude vais-python --exclude vais-node  # Lint
 cargo run --bin vaisc -- examples/hello.vais    # Compile a .vais file
+cargo run --bin vaisc -- --target js file.vais  # Compile to JavaScript
+cargo run --bin vaisc -- --target wasm32-unknown-unknown file.vais  # Compile to WASM
 ```
 
 Python/Node bindings require separate build:
@@ -30,22 +32,23 @@ cd crates/vais-node && npm run build            # Node.js (NAPI)
 crates/
 ├── vais-ast/          # AST definitions
 ├── vais-lexer/        # Tokenizer (logos-based)
-├── vais-parser/       # Recursive descent parser
-├── vais-types/        # Type checker & inference
-├── vais-codegen/      # LLVM IR code generator
+├── vais-parser/       # Recursive descent parser (modular: types.rs, item.rs)
+├── vais-types/        # Type checker & inference (modular: checker_expr, checker_fn, checker_module)
+├── vais-codegen/      # LLVM IR code generator (inkwell/, advanced_opt/)
+├── vais-codegen-js/   # JavaScript (ESM) code generator
 ├── vais-mir/          # Middle IR
-├── vaisc/             # Main compiler CLI & REPL
+├── vaisc/             # Main compiler CLI & REPL (commands/ submodules)
 ├── vais-lsp/          # Language Server Protocol
 ├── vais-dap/          # Debug Adapter Protocol
 ├── vais-jit/          # Cranelift JIT compiler
 ├── vais-gc/           # Optional garbage collector
-├── vais-gpu/          # GPU codegen (CUDA/Metal)
+├── vais-gpu/          # GPU codegen (CUDA/Metal/OpenCL/WebGPU)
 ├── vais-i18n/         # Internationalized error messages
 ├── vais-plugin/       # Plugin system
 ├── vais-macro/        # Declarative macro system
 ├── vais-hotreload/    # Hot reloading
 ├── vais-dynload/      # Dynamic module loading & WASM sandbox
-├── vais-bindgen/      # FFI binding generator
+├── vais-bindgen/      # FFI binding generator (C/WASM-JS)
 ├── vais-query/        # Salsa-style query database
 ├── vais-profiler/     # Compiler profiler
 ├── vais-security/     # Security analysis & audit
@@ -57,10 +60,10 @@ crates/
 ├── vais-python/       # Python bindings (PyO3)
 └── vais-node/         # Node.js bindings (NAPI)
 
-std/               # Standard library (.vais files)
-examples/          # Example programs (105+ files)
-selfhost/          # Self-hosting compiler
-benches/           # Benchmark suite (criterion)
+std/               # Standard library (80 .vais files)
+examples/          # Example programs (188 .vais files)
+selfhost/          # Self-hosting compiler (50,000+ LOC)
+benches/           # Benchmark suite (criterion + language comparison)
 playground/        # Web playground frontend
 docs-site/         # mdBook documentation
 vscode-vais/       # VSCode extension
@@ -71,39 +74,94 @@ intellij-vais/     # IntelliJ plugin
 
 ```
 .vais source → Lexer → Parser → AST → Type Checker → Codegen → .ll (LLVM IR) → clang → binary
+                                                     ↘ JS Codegen → .mjs (ESM)
+                                                     ↘ WASM Codegen → .wasm (wasm32)
 ```
 
 ## Vais Language Syntax Quick Reference
 
-- `F` = function, `S` = struct, `E` = enum, `I` = if, `E` = else, `L` = loop, `M` = match, `R` = return
-- `@` = self-recursion operator
+### Single-Character Keywords
+- `F` = function, `S` = struct, `E` = enum/else, `I` = if, `L` = loop, `M` = match, `R` = return
+- `B` = break, `C` = continue, `T` = type alias, `U` = use (import)
+- `W` = trait, `X` = impl, `P` = pub, `D` = defer
+- `A` = async, `Y` = await, `N` = extern, `G` = global, `O` = union
+
+### Operators & Syntax
+- `@` = self-recursion operator (calls current function)
 - `:=` = variable binding (`x := 5`), `mut` for mutable (`x := mut 5`)
-- `?` ternary: `cond ? a : b`
+- `?` = ternary (`cond ? a : b`) or try operator on Result/Option
+- `!` = unwrap operator on Result/Option
+- `|>` = pipe operator
+- `~` = bitwise NOT
+- `{expr}` inside strings = string interpolation
+- `..` = range operator
 - `#` = line comment
-- Traits: `T MyTrait { ... }`, impl: `impl MyTrait for MyStruct { ... }`
+
+### Declarations
+- Traits: `W MyTrait { ... }`, impl: `X MyStruct: MyTrait { ... }`
 - Generics: `F foo<T>(x: T) -> T`
 - Pattern matching: `M expr { pattern => result, _ => default }`
+- Closures: `|x| x * 2`, `|x, y| { x + y }`
+- Async: `A F name() -> T { ... }` + `.await` (no `spawn` — removed in Phase 195)
+
+### Removed keywords
+> `lazy` / `force` (Phase 194, commit 8c60c075) and `spawn` (Phase 195,
+> commit 12592076) were deleted across lexer/AST/parser/types/codegen.
+> Migration guide: `docs/language/removed_keywords.md`. Do not re-introduce
+> these in new examples or std/.
+
+### Attributes
+- `#[cfg(target_os = "linux")]` — conditional compilation
+- `#[wasm_import("module", "name")]` — WASM import
+- `#[wasm_export("name")]` — WASM export
+
+### Types
+- Primitives: `i8`, `i16`, `i32`, `i64`, `i128`, `u8`–`u128`, `f32`, `f64`, `bool`, `str`
+- Generics: `Vec<T>`, `HashMap<K,V>`, `Result<T,E>`, `Option<T>`
+
+### Type Conversion Rules (CRITICAL — DO NOT CHANGE)
+> **Rust 스타일 엄격한 타입 변환**. 암시적 coercion 추가 금지. Phase 158에서 확정.
+> 이 규칙은 `unification.rs`의 coercion이 5회 토글된 요요 패턴을 근본 방지하기 위해 제정됨.
+> 변경 시 반드시 RFC + E2E 보호 테스트 업데이트 필요.
+
+- ✅ **허용 (암시적)**: 정수 widening — `i8→i16→i32→i64`, `u8→u16→u32→u64`
+- ✅ **허용 (암시적)**: float 리터럴 추론 — `f32↔f64` (Rust와 동일, float 리터럴이 컨텍스트에 맞게 추론)
+- ❌ **금지**: `bool↔i64`, `int↔float`, `str↔i64`, 정수 narrowing (`i64→i32`)
+- 모든 타입 변환은 `as` 키워드로 명시: `x as i64`, `y as f64`, `flag as i64`
+- `unification.rs`에 `Bool`, `Str↔I64`, `Float↔Int` coercion 절대 추가하지 말 것
+- E2E 보호 테스트 (`phase158_type_strict.rs`)가 이 규칙을 검증
 
 ## Key Files
 
-- `crates/vais-codegen/src/lib.rs` - Main LLVM IR codegen
+- `crates/vais-codegen/src/lib.rs` - Main LLVM IR codegen orchestration
+- `crates/vais-codegen/src/inkwell/generator.rs` - Inkwell LLVM codegen engine
 - `crates/vais-codegen/src/expr_helpers.rs` - Expression codegen helpers
 - `crates/vais-codegen/src/type_inference.rs` - Codegen-level type inference
+- `crates/vais-codegen/src/control_flow.rs` - If/match/loop codegen
+- `crates/vais-codegen-js/src/lib.rs` - JavaScript ESM codegen
 - `crates/vais-types/src/lib.rs` - Type checker core
+- `crates/vais-types/src/checker_expr.rs` - Expression type checking
+- `crates/vais-types/src/checker_fn.rs` - Function type checking
+- `crates/vais-types/src/inference.rs` - Type inference engine
 - `crates/vais-parser/src/lib.rs` - Parser core
 - `crates/vais-lexer/src/lib.rs` - Lexer core
 - `crates/vaisc/src/main.rs` - Compiler entry point
+- `crates/vaisc/src/commands/build.rs` - Build command
+- `crates/vaisc/src/incremental.rs` - Incremental compilation cache
 
 ## Testing
 
 Tests are in `crates/<name>/tests/`. Key test suites:
-- `vaisc/tests/e2e_tests.rs` - End-to-end compilation tests (128+)
+- `vaisc/tests/e2e/` - End-to-end compilation tests (2,500+)
 - `vaisc/tests/integration_tests.rs` - Integration tests
 - `vais-types/tests/` - Type system tests (bidirectional, GAT, object safety, specialization)
 - `vais-codegen/tests/` - Formatter and error suggestion tests
+
+Total: 12,000+ tests across all crates.
 
 ## Dependencies
 
 - LLVM 17 (via inkwell 0.4)
 - Rust edition 2021
 - logos (lexer), thiserror/miette (errors), ariadne (diagnostics)
+- cranelift 0.128 (JIT), criterion (benchmarks)

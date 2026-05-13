@@ -140,6 +140,18 @@
     "E031": {
       "title": "Extern signature mismatch",
       "message": "extern function '{name}' has unexpected return type: expected '{expected}', found '{found}'"
+    },
+    "E032": {
+      "title": "Type inference failed",
+      "message": "could not infer type for '{name}': {reason}"
+    },
+    "E033": {
+      "title": "Internal type checker error",
+      "message": "internal type checker error: {detail}"
+    },
+    "E034": {
+      "title": "Total function may panic",
+      "message": "total function '{function_name}' may panic ({reason}); mark it as `partial` if panics are intentional"
     }
   },
 
@@ -172,6 +184,11 @@
       "title": "Recursion limit exceeded",
       "message": "recursion depth limit exceeded: {detail}",
       "help": "consider reducing nesting depth or refactoring recursive types"
+    },
+    "C007": {
+      "title": "Internal compiler error",
+      "message": "internal compiler error: {detail}",
+      "help": "this is likely a compiler bug — please report it at https://github.com/vaislang/vais/issues"
     }
   },
 

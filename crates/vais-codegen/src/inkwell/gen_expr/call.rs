@@ -1,0 +1,812 @@
+//! Function call generation.
+
+use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum};
+use inkwell::AddressSpace;
+
+use vais_ast::{Expr, Spanned};
+
+use super::super::generator::InkwellCodeGenerator;
+use crate::{CodegenError, CodegenResult};
+
+impl<'ctx> InkwellCodeGenerator<'ctx> {
+    pub(super) fn generate_call(
+        &mut self,
+        callee: &Expr,
+        args: &[Spanned<Expr>],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // Struct tuple literal: `Response(200, 1)` → desugar to StructLit
+        if let Expr::Ident(name) = callee {
+            if self.generated_structs.contains_key(name.as_str())
+                && self.module.get_function(name).is_none()
+            {
+                if let Some(field_names) = self.struct_fields.get(name.as_str()).cloned() {
+                    let fields: Vec<_> = field_names
+                        .iter()
+                        .zip(args.iter())
+                        .map(|(fname, val)| {
+                            (vais_ast::Spanned::new(fname.clone(), val.span), val.clone())
+                        })
+                        .collect();
+                    return self.generate_struct_literal(name, &fields);
+                }
+            }
+
+            // Higher-order param call: if the Ident is a local (function-typed
+            // parameter or a let-bound function pointer) AND is NOT a
+            // top-level function or lambda binding, dispatch through the
+            // indirect-call path so `F apply(f: (i64)->i64, ...) { f(x) }`
+            // reaches build_indirect_call instead of falling through to the
+            // named-function lookup (which errors with "Undefined function").
+            if self.locals.contains_key(name.as_str())
+                && !self.functions.contains_key(name.as_str())
+                && self.module.get_function(name).is_none()
+                && !self.lambda_bindings.contains_key(name.as_str())
+            {
+                return self.generate_indirect_call(callee, args);
+            }
+        }
+
+        // Get function name
+        let fn_name = match callee {
+            Expr::Ident(name) => name.clone(),
+            Expr::SelfCall => {
+                // @ recursive call: check if we're in TCO mode
+                if let Some(tco) = &self.tco_state {
+                    // TCO: update parameters and branch back to loop header
+                    let param_allocas = tco.param_allocas.clone();
+                    let loop_header = tco.loop_header;
+
+                    // Evaluate all arguments first (before updating any params)
+                    let arg_values: Vec<BasicValueEnum<'ctx>> = args
+                        .iter()
+                        .map(|arg| self.generate_expr(&arg.node))
+                        .collect::<CodegenResult<Vec<_>>>()?;
+
+                    // Update parameter allocas with new values
+                    for (i, (_, alloca, param_type)) in param_allocas.iter().enumerate() {
+                        if i < arg_values.len() {
+                            let mut new_val = arg_values[i];
+                            // Cast if needed
+                            if new_val.get_type() != *param_type
+                                && new_val.is_int_value()
+                                && param_type.is_int_type()
+                            {
+                                new_val = self
+                                    .builder
+                                    .build_int_cast(
+                                        new_val.into_int_value(),
+                                        param_type.into_int_type(),
+                                        "tco_cast",
+                                    )
+                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                    .into();
+                            }
+                            self.builder
+                                .build_store(*alloca, new_val)
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        }
+                    }
+
+                    // Branch back to loop header
+                    self.builder
+                        .build_unconditional_branch(loop_header)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                    // Return a dummy value (this code path is dead after the branch)
+                    return Ok(self.context.i64_type().const_int(0, false).into());
+                }
+
+                // Non-TCO: regular recursive call
+                if let Some(func) = self.current_function {
+                    let fn_name = func.get_name().to_str().unwrap_or("").to_string();
+                    fn_name
+                } else {
+                    return Err(CodegenError::Unsupported(
+                        "SelfCall outside function".to_string(),
+                    ));
+                }
+            }
+            _ => {
+                // Indirect call via callee expression (lambda literal, expr
+                // result, etc). `Expr::Ident(local)` is also routed here via
+                // the early dispatch at the top of generate_call for
+                // higher-order parameter calls.
+                return self.generate_indirect_call(callee, args);
+            }
+        };
+
+        // Handle built-in pseudo-functions that need special codegen
+        // Handle puts with string interpolation: printf the interp, then puts("") for newline
+        if fn_name == "puts" && args.len() == 1 && matches!(&args[0].node, Expr::StringInterp(_)) {
+            let _interp_val = self.generate_expr(&args[0].node)?;
+            // String interp already printed via printf; now add newline
+            let printf_fn = self
+                .module
+                .get_function("printf")
+                .ok_or_else(|| CodegenError::UndefinedFunction("printf".to_string()))?;
+            let newline = self.generate_string_literal("\n")?;
+            let nl_ptr = self.extract_str_raw_ptr(newline)?;
+            self.builder
+                .build_call(printf_fn, &[nl_ptr.into()], "puts_nl")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            return Ok(self.unit_value());
+        }
+        match fn_name.as_str() {
+            "println" => return self.generate_println_call(args),
+            "print" => return self.generate_print_call(args),
+            "format" => return self.generate_format_call(args),
+            "store_i64" => return self.generate_store_i64(args),
+            "load_i64" => return self.generate_load_i64(args),
+            "swap" => return self.generate_swap(args),
+            "store_byte" => return self.generate_store_byte(args),
+            "load_byte" => return self.generate_load_byte(args),
+            "store_f64" => return self.generate_store_f64(args),
+            "load_f64" => return self.generate_load_f64(args),
+            // Option constructors: Some(val) -> { i8 tag=1, i64 data=val }
+            "Some" => {
+                let enum_type = self.context.struct_type(
+                    &[
+                        self.context.i8_type().into(),
+                        self.context.i64_type().into(),
+                    ],
+                    false,
+                );
+                let data_val = if args.is_empty() {
+                    self.context.i64_type().const_int(0, false)
+                } else {
+                    let v = self.generate_expr(&args[0].node)?;
+                    self.coerce_to_i64(v)?
+                };
+                let mut val = enum_type.get_undef();
+                val = self
+                    .builder
+                    .build_insert_value(
+                        val,
+                        self.context.i8_type().const_int(1, false),
+                        0,
+                        "some_tag",
+                    )
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value();
+                val = self
+                    .builder
+                    .build_insert_value(val, data_val, 1, "some_data")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value();
+                return Ok(val.into());
+            }
+            // Result constructors: Ok(val) -> { i8 tag=0, i64 data=val }
+            "Ok" => {
+                let enum_type = self.context.struct_type(
+                    &[
+                        self.context.i8_type().into(),
+                        self.context.i64_type().into(),
+                    ],
+                    false,
+                );
+                let data_val = if args.is_empty() {
+                    self.context.i64_type().const_int(0, false)
+                } else {
+                    let v = self.generate_expr(&args[0].node)?;
+                    self.coerce_to_i64(v)?
+                };
+                let mut val = enum_type.get_undef();
+                val = self
+                    .builder
+                    .build_insert_value(
+                        val,
+                        self.context.i8_type().const_int(0, false),
+                        0,
+                        "ok_tag",
+                    )
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value();
+                val = self
+                    .builder
+                    .build_insert_value(val, data_val, 1, "ok_data")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value();
+                return Ok(val.into());
+            }
+            // Err(val) -> { i8 tag=1, i64 data=val }
+            "Err" => {
+                let enum_type = self.context.struct_type(
+                    &[
+                        self.context.i8_type().into(),
+                        self.context.i64_type().into(),
+                    ],
+                    false,
+                );
+                let data_val = if args.is_empty() {
+                    self.context.i64_type().const_int(0, false)
+                } else {
+                    let v = self.generate_expr(&args[0].node)?;
+                    self.coerce_to_i64(v)?
+                };
+                let mut val = enum_type.get_undef();
+                val = self
+                    .builder
+                    .build_insert_value(
+                        val,
+                        self.context.i8_type().const_int(1, false),
+                        0,
+                        "err_tag",
+                    )
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value();
+                val = self
+                    .builder
+                    .build_insert_value(val, data_val, 1, "err_data")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value();
+                return Ok(val.into());
+            }
+            "puts_ptr" => {
+                // puts_ptr(i64) -> i32: convert i64 to ptr then call puts
+                if args.is_empty() {
+                    return Err(CodegenError::InternalError(format!(
+                        "builtin 'puts_ptr' requires 1 argument(s), got {}",
+                        args.len()
+                    )));
+                }
+                let arg = self.generate_expr(&args[0].node)?;
+                let ptr = self
+                    .builder
+                    .build_int_to_ptr(
+                        arg.into_int_value(),
+                        self.context.i8_type().ptr_type(AddressSpace::default()),
+                        "puts_ptr_arg",
+                    )
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                let puts_fn = self
+                    .module
+                    .get_function("puts")
+                    .ok_or_else(|| CodegenError::UndefinedFunction("puts".to_string()))?;
+                let call = self
+                    .builder
+                    .build_call(puts_fn, &[ptr.into()], "puts_call")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                return Ok(call
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap_or_else(|| self.context.i64_type().const_int(0, false).into()));
+            }
+            "str_to_ptr" => {
+                // str_to_ptr(str_fat_ptr) -> i64: extract raw ptr from fat pointer, convert to i64
+                if args.is_empty() {
+                    return Err(CodegenError::InternalError(format!(
+                        "builtin 'str_to_ptr' requires 1 argument(s), got {}",
+                        args.len()
+                    )));
+                }
+                let arg = self.generate_expr(&args[0].node)?;
+                // Extract raw pointer from string fat pointer { ptr, i64 }
+                let raw_ptr = self.extract_str_raw_ptr(arg)?;
+                let result = self
+                    .builder
+                    .build_ptr_to_int(raw_ptr, self.context.i64_type(), "str_to_ptr_result")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                return Ok(result.into());
+            }
+            "ptr_to_str" => {
+                // ptr_to_str(i64) -> { ptr, i64 }: convert i64 to string fat pointer
+                if args.is_empty() {
+                    return Err(CodegenError::InternalError(format!(
+                        "builtin 'ptr_to_str' requires 1 argument(s), got {}",
+                        args.len()
+                    )));
+                }
+                let arg = self.generate_expr(&args[0].node)?;
+                let raw_ptr = if arg.is_int_value() {
+                    let i8_ptr_type = self
+                        .context
+                        .i8_type()
+                        .ptr_type(inkwell::AddressSpace::default());
+                    self.builder
+                        .build_int_to_ptr(arg.into_int_value(), i8_ptr_type, "ptr_to_str_ptr")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                } else if arg.is_pointer_value() {
+                    arg.into_pointer_value()
+                } else {
+                    // String fat pointer — extract the raw ptr
+                    self.extract_str_raw_ptr(arg)?
+                };
+                // Call strlen to get the length, then build fat pointer
+                let strlen_fn = self
+                    .module
+                    .get_function("strlen")
+                    .ok_or_else(|| CodegenError::UndefinedFunction("strlen".to_string()))?;
+                let len_call = self
+                    .builder
+                    .build_call(strlen_fn, &[raw_ptr.into()], "ptr_to_str_len")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                let len = len_call
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap_or_else(|| self.context.i64_type().const_int(0, false).into())
+                    .into_int_value();
+                // Build fat pointer { ptr, i64 }
+                let ptr_type = self
+                    .context
+                    .i8_type()
+                    .ptr_type(inkwell::AddressSpace::default());
+                let len_type = self.context.i64_type();
+                let str_struct_type = self
+                    .context
+                    .struct_type(&[ptr_type.into(), len_type.into()], false);
+                let undef = str_struct_type.get_undef();
+                let with_ptr = self
+                    .builder
+                    .build_insert_value(undef, raw_ptr, 0, "str_fat_ptr")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value();
+                let fat_ptr = self
+                    .builder
+                    .build_insert_value(with_ptr, len, 1, "str_fat_ptr_len")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value();
+                return Ok(fat_ptr.into());
+            }
+            "strlen_ptr" => {
+                // strlen_ptr(i64) -> i64: convert i64 to ptr then call strlen
+                if args.is_empty() {
+                    return Err(CodegenError::InternalError(format!(
+                        "builtin 'strlen_ptr' requires 1 argument(s), got {}",
+                        args.len()
+                    )));
+                }
+                let arg = self.generate_expr(&args[0].node)?;
+                let ptr = self
+                    .builder
+                    .build_int_to_ptr(
+                        arg.into_int_value(),
+                        self.context.i8_type().ptr_type(AddressSpace::default()),
+                        "strlen_ptr_arg",
+                    )
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                let strlen_fn = self
+                    .module
+                    .get_function("strlen")
+                    .ok_or_else(|| CodegenError::UndefinedFunction("strlen".to_string()))?;
+                let call = self
+                    .builder
+                    .build_call(strlen_fn, &[ptr.into()], "strlen_call")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                return Ok(call
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap_or_else(|| self.context.i64_type().const_int(0, false).into()));
+            }
+            "__strlen" => {
+                // __strlen is an alias for strlen
+                let strlen_fn = self
+                    .module
+                    .get_function("strlen")
+                    .ok_or_else(|| CodegenError::UndefinedFunction("strlen".to_string()))?;
+                let arg_values: Vec<BasicMetadataValueEnum> = args
+                    .iter()
+                    .map(|arg| self.generate_expr(&arg.node).map(|v| v.into()))
+                    .collect::<CodegenResult<Vec<_>>>()?;
+                let call = self
+                    .builder
+                    .build_call(strlen_fn, &arg_values, "strlen_call")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                return Ok(call
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap_or_else(|| self.context.i64_type().const_int(0, false).into()));
+            }
+            _ => {}
+        }
+
+        // Check if this is a lambda binding (closure call)
+        if let Some((lambda_fn_name, captured_vals)) = self.lambda_bindings.get(&fn_name).cloned() {
+            if let Some(lambda_fn) = self
+                .functions
+                .get(&lambda_fn_name)
+                .copied()
+                .or_else(|| self.module.get_function(&lambda_fn_name))
+            {
+                // Build args: captured values first, then actual args
+                let mut arg_values: Vec<BasicMetadataValueEnum> =
+                    captured_vals.iter().map(|(_, val)| (*val).into()).collect();
+                for arg in args {
+                    // Implicit error propagation (Phase 4b.1 / #7): if TC
+                    // marked this arg for auto-unwrap, take the Try branch
+                    // to reuse the existing generate_try logic.
+                    let val = if self.is_implicit_try_site(arg.span)
+                        && !matches!(&arg.node, Expr::Try(_))
+                    {
+                        self.generate_try(&arg.node)?
+                    } else {
+                        self.generate_expr(&arg.node)?
+                    };
+                    arg_values.push(val.into());
+                }
+                let call = self
+                    .builder
+                    .build_call(lambda_fn, &arg_values, "lambda_call")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                return Ok(call
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap_or_else(|| self.unit_value()));
+            }
+        }
+
+        // Get function value
+        let fn_value = self
+            .functions
+            .get(&fn_name)
+            .copied()
+            .or_else(|| self.module.get_function(&fn_name));
+
+        // If found a generic function (declaration only, no body), try monomorphized versions.
+        // Generic functions are declared but their bodies are skipped; specialized versions
+        // like "get_val$Holder" have actual bodies generated from GenericInstantiation.
+        let fn_value = if let Some(func) = fn_value {
+            if func.count_basic_blocks() == 0
+                && !func.get_name().to_str().unwrap_or("").starts_with("llvm.")
+            {
+                // This is likely a generic function without a body — try to find
+                // a monomorphized version by scanning registered functions.
+                let base = fn_name.clone();
+                let prefix = format!("{}$", base);
+                let specialized = self
+                    .functions
+                    .iter()
+                    .find(|(k, _)| k.starts_with(&prefix))
+                    .map(|(_, v)| *v)
+                    .or_else(|| {
+                        let mut f = self.module.get_first_function();
+                        while let Some(func) = f {
+                            if let Ok(name) = func.get_name().to_str() {
+                                if name.starts_with(&prefix) && func.count_basic_blocks() > 0 {
+                                    return Some(func);
+                                }
+                            }
+                            f = func.get_next_function();
+                        }
+                        None
+                    });
+                specialized.unwrap_or(func)
+            } else {
+                func
+            }
+        } else {
+            // Check if this is an enum variant constructor (tuple variant)
+            let is_enum_variant = self
+                .enum_variants
+                .iter()
+                .find(|((_, v_name), _)| v_name == &fn_name)
+                .map(|((_, _), tag)| *tag);
+
+            if let Some(tag) = is_enum_variant {
+                // Build enum value: { i8 tag, i64 data }
+                let enum_type = self.context.struct_type(
+                    &[
+                        self.context.i8_type().into(),
+                        self.context.i64_type().into(),
+                    ],
+                    false,
+                );
+                let data_val = if args.is_empty() {
+                    self.context.i64_type().const_int(0, false)
+                } else if args.len() > 1 {
+                    // Multi-field tuple variant: pack all fields into an anonymous struct,
+                    // heap-allocate, and store pointer in i64 data slot.
+                    let field_vals: Vec<BasicValueEnum<'ctx>> = args
+                        .iter()
+                        .map(|a| self.generate_expr(&a.node))
+                        .collect::<CodegenResult<Vec<_>>>()?;
+                    let field_tys: Vec<inkwell::types::BasicTypeEnum<'ctx>> =
+                        field_vals.iter().map(|v| v.get_type()).collect();
+                    let payload_ty = self.context.struct_type(&field_tys, false);
+                    let target_data = inkwell::targets::TargetData::create(
+                        &self.module.get_triple().as_str().to_string_lossy(),
+                    );
+                    let size_bytes = target_data.get_store_size(&payload_ty);
+                    let i64_ty = self.context.i64_type();
+                    let i8_ptr_ty = self.context.i8_type().ptr_type(AddressSpace::default());
+                    // Always heap-alloc for multi-field (simpler than deciding per-size).
+                    let malloc_fn = self
+                        .module
+                        .get_function("malloc")
+                        .or_else(|| {
+                            let malloc_ty = i8_ptr_ty.fn_type(&[i64_ty.into()], false);
+                            Some(self.module.add_function("malloc", malloc_ty, None))
+                        })
+                        .unwrap();
+                    let size_val = i64_ty.const_int(size_bytes, false);
+                    let heap_ptr = self
+                        .builder
+                        .build_call(malloc_fn, &[size_val.into()], "variant_multi_heap")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                        .try_as_basic_value()
+                        .left()
+                        .unwrap()
+                        .into_pointer_value();
+                    let typed_ptr = self
+                        .builder
+                        .build_bitcast(
+                            heap_ptr,
+                            payload_ty.ptr_type(AddressSpace::default()),
+                            "variant_multi_typed",
+                        )
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                        .into_pointer_value();
+                    // Build the payload struct and store it.
+                    let mut payload_val = payload_ty.get_undef();
+                    for (i, fv) in field_vals.iter().enumerate() {
+                        payload_val = self
+                            .builder
+                            .build_insert_value(
+                                payload_val,
+                                *fv,
+                                i as u32,
+                                &format!("variant_multi_field_{}", i),
+                            )
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            .into_struct_value();
+                    }
+                    self.builder
+                        .build_store(typed_ptr, payload_val)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    // Record the payload struct type so pattern binding can recover field types.
+                    // Look up the enum name that owns this tag value.
+                    let owning_enum_name = self
+                        .enum_variants
+                        .iter()
+                        .find(|((_, v_name), t)| v_name == &fn_name && **t == tag)
+                        .map(|((e_name, _), _)| e_name.clone());
+                    if let Some(enum_name) = owning_enum_name {
+                        self.enum_variant_multi_payload_types
+                            .insert((enum_name, fn_name.clone()), payload_ty);
+                    }
+                    self.builder
+                        .build_ptr_to_int(heap_ptr, i64_ty, "variant_multi_data_as_i64")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                } else {
+                    let v = self.generate_expr(&args[0].node)?;
+                    // Large struct (>8B) cannot fit in i64: heap-allocate and store pointer.
+                    // Small types (i64, f64, ptr, ≤8B struct) use bitcast/coerce_to_i64.
+                    if v.is_struct_value() {
+                        let struct_val = v.into_struct_value();
+                        let struct_ty = struct_val.get_type();
+                        let target_data = inkwell::targets::TargetData::create(
+                            &self.module.get_triple().as_str().to_string_lossy(),
+                        );
+                        let size_bytes = target_data.get_store_size(&struct_ty);
+                        if size_bytes > 8 {
+                            // Heap-allocate: malloc(size) → memcpy struct → ptrtoint to i64
+                            let i64_ty = self.context.i64_type();
+                            let i8_ptr_ty =
+                                self.context.i8_type().ptr_type(AddressSpace::default());
+                            // Call malloc(size)
+                            let malloc_fn = self
+                                .module
+                                .get_function("malloc")
+                                .or_else(|| {
+                                    let malloc_ty = i8_ptr_ty.fn_type(&[i64_ty.into()], false);
+                                    Some(self.module.add_function("malloc", malloc_ty, None))
+                                })
+                                .unwrap();
+                            let size_val = i64_ty.const_int(size_bytes, false);
+                            let heap_ptr = self
+                                .builder
+                                .build_call(malloc_fn, &[size_val.into()], "variant_heap")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .try_as_basic_value()
+                                .left()
+                                .unwrap()
+                                .into_pointer_value();
+                            // Store struct into heap memory
+                            let typed_ptr = self
+                                .builder
+                                .build_bitcast(
+                                    heap_ptr,
+                                    struct_ty.ptr_type(AddressSpace::default()),
+                                    "variant_heap_typed",
+                                )
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_pointer_value();
+                            self.builder
+                                .build_store(typed_ptr, struct_val)
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            // ptrtoint to i64 for enum data slot
+                            self.builder
+                                .build_ptr_to_int(heap_ptr, i64_ty, "variant_data_as_i64")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                        } else {
+                            // Small struct (≤8B): bitcast via stack alloca to i64
+                            let i64_ty = self.context.i64_type();
+                            let tmp_alloca = self
+                                .builder
+                                .build_alloca(struct_ty, "variant_small_tmp")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            self.builder
+                                .build_store(tmp_alloca, struct_val)
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            let i64_ptr = self
+                                .builder
+                                .build_bitcast(
+                                    tmp_alloca,
+                                    i64_ty.ptr_type(AddressSpace::default()),
+                                    "variant_small_as_i64p",
+                                )
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_pointer_value();
+                            self.builder
+                                .build_load(i64_ty, i64_ptr, "variant_small_as_i64")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_int_value()
+                        }
+                    } else {
+                        self.coerce_to_i64(v)?
+                    }
+                };
+                let mut val = enum_type.get_undef();
+                val = self
+                    .builder
+                    .build_insert_value(
+                        val,
+                        self.context.i8_type().const_int(tag as u64, false),
+                        0,
+                        "variant_tag",
+                    )
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value();
+                val = self
+                    .builder
+                    .build_insert_value(val, data_val, 1, "variant_data")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value();
+                return Ok(val.into());
+            }
+
+            // Collect all available function names for suggestions
+            let mut candidate_strings: Vec<String> = Vec::new();
+
+            // Add registered functions
+            for func_name in self.functions.keys() {
+                candidate_strings.push(func_name.clone());
+            }
+
+            // Add module functions
+            let mut current_func = self.module.get_first_function();
+            while let Some(func) = current_func {
+                if let Ok(name) = func.get_name().to_str() {
+                    candidate_strings.push(name.to_string());
+                }
+                current_func = func.get_next_function();
+            }
+
+            // Get suggestions
+            let candidates: Vec<&str> = candidate_strings.iter().map(|s| s.as_str()).collect();
+            let suggestions = crate::suggest_similar(&fn_name, &candidates, 3);
+            let suggestion_text = crate::format_did_you_mean(&suggestions);
+
+            return Err(CodegenError::UndefinedFunction(format!(
+                "{}{}",
+                fn_name, suggestion_text
+            )));
+        };
+
+        // Generate arguments, coercing types to match function parameter expectations.
+        // - String fat pointers { ptr, i64 } → extract raw ptr for extern C (printf/puts)
+        // - Integer values (i64) → inttoptr when function expects ptr (free/realloc)
+        let fn_type = fn_value.get_type();
+        let param_types: Vec<_> = fn_type.get_param_types();
+        let mut arg_values: Vec<BasicMetadataValueEnum> = Vec::with_capacity(args.len());
+        for (i, arg) in args.iter().enumerate() {
+            // Implicit error propagation (Phase 4b.1 / #7): wrap the arg in
+            // Try semantics when the type checker flagged it for auto-unwrap.
+            let val = if self.is_implicit_try_site(arg.span) && !matches!(&arg.node, Expr::Try(_)) {
+                self.generate_try(&arg.node)?
+            } else {
+                self.generate_expr(&arg.node)?
+            };
+            let coerced: BasicMetadataValueEnum = if let Some(param_ty) = param_types.get(i) {
+                if param_ty.is_pointer_type() && val.is_struct_value() {
+                    // Fat string { ptr, i64 } → extract raw ptr
+                    let raw_ptr = self.extract_str_raw_ptr(val)?;
+                    raw_ptr.into()
+                } else if param_ty.is_pointer_type() && val.is_int_value() {
+                    // i64 → inttoptr (e.g. free(ptr) called with i64 handle)
+                    let i8_ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
+                    let ptr_val = self
+                        .builder
+                        .build_int_to_ptr(val.into_int_value(), i8_ptr_type, "arg_inttoptr")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    ptr_val.into()
+                } else {
+                    val.into()
+                }
+            } else {
+                // Variadic argument beyond declared params — coerce struct fat ptrs
+                if val.is_struct_value() {
+                    let raw_ptr = self.extract_str_raw_ptr(val)?;
+                    raw_ptr.into()
+                } else {
+                    val.into()
+                }
+            };
+            arg_values.push(coerced);
+        }
+
+        // Build call
+        let call = self
+            .builder
+            .build_call(fn_value, &arg_values, "call")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Return call result or unit
+        Ok(call
+            .try_as_basic_value()
+            .left()
+            .unwrap_or_else(|| self.unit_value()))
+    }
+
+    /// Indirect call via an evaluated callee expression (function pointer).
+    ///
+    /// Used for: lambda literals invoked directly, lambdas passed through
+    /// function-typed parameters (`f: (i64)->i64` then `f(x)`), and any
+    /// other expression that yields an i64 function-pointer or a
+    /// PointerValue. The call type is uniformly built as `i64 (i64, ...) -> i64`
+    /// — Vais lambdas are emitted with this signature (see
+    /// inkwell::gen_aggregate::generate_lambda).
+    fn generate_indirect_call(
+        &mut self,
+        callee: &Expr,
+        args: &[Spanned<Expr>],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        let callee_val = self.generate_expr(callee)?;
+
+        let arg_values: Vec<BasicMetadataValueEnum> = args
+            .iter()
+            .map(|arg| self.generate_expr(&arg.node).map(|v| v.into()))
+            .collect::<CodegenResult<Vec<_>>>()?;
+
+        let i64_type = self.context.i64_type();
+        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
+            (0..arg_values.len()).map(|_| i64_type.into()).collect();
+        let fn_type = i64_type.fn_type(&param_types, false);
+
+        let fn_ptr = if callee_val.is_pointer_value() {
+            callee_val.into_pointer_value()
+        } else {
+            let i8_ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
+            self.builder
+                .build_int_to_ptr(callee_val.into_int_value(), i8_ptr_type, "indirect_fn_ptr")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        };
+
+        let coerced_args: Vec<BasicMetadataValueEnum> = arg_values
+            .into_iter()
+            .map(|v| {
+                if let BasicMetadataValueEnum::IntValue(iv) = v {
+                    if iv.get_type() != i64_type {
+                        self.builder
+                            .build_int_cast(iv, i64_type, "indirect_arg_cast")
+                            .map(BasicMetadataValueEnum::IntValue)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))
+                    } else {
+                        Ok(BasicMetadataValueEnum::IntValue(iv))
+                    }
+                } else {
+                    Ok(v)
+                }
+            })
+            .collect::<CodegenResult<Vec<_>>>()?;
+
+        let call = self
+            .builder
+            .build_indirect_call(fn_type, fn_ptr, &coerced_args, "indirect_call")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        Ok(call
+            .try_as_basic_value()
+            .left()
+            .unwrap_or_else(|| i64_type.const_int(0, false).into()))
+    }
+}

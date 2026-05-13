@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/vec
+use std/vec
 ```
 
 ## Overview
@@ -15,15 +15,15 @@ U std/vec
 ## Dependencies
 
 ```vais
-U std/option
+use std/option
 ```
 
 ## Struct
 
-### Vec<T>
+### `Vec<T>`
 
 ```vais
-S Vec<T> {
+struct Vec<T> {
     data: i64,      # Pointer to element array (all pointers are i64)
     len: i64,       # Current number of elements
     cap: i64        # Allocated capacity
@@ -42,7 +42,7 @@ A dynamically-sized array that stores elements contiguously in memory.
 ### with_capacity
 
 ```vais
-F with_capacity(capacity: i64) -> Vec<T>
+fn with_capacity(capacity: i64) -> Vec<T>
 ```
 
 Create a new empty Vec with the specified initial capacity. Allocates `capacity * 8` bytes.
@@ -62,7 +62,7 @@ v := Vec.with_capacity(100)
 ### len
 
 ```vais
-F len(&self) -> i64
+fn len(&self) -> i64
 ```
 
 Get the number of elements in the vector.
@@ -74,7 +74,7 @@ Get the number of elements in the vector.
 ### capacity
 
 ```vais
-F capacity(&self) -> i64
+fn capacity(&self) -> i64
 ```
 
 Get the allocated capacity of the vector.
@@ -86,7 +86,7 @@ Get the allocated capacity of the vector.
 ### is_empty
 
 ```vais
-F is_empty(&self) -> i64
+fn is_empty(&self) -> i64
 ```
 
 Check if the vector is empty.
@@ -98,7 +98,7 @@ Check if the vector is empty.
 ### get
 
 ```vais
-F get(&self, index: i64) -> T
+fn get(&self, index: i64) -> T
 ```
 
 Get element at the specified index. Returns `0` if index is out of bounds.
@@ -113,7 +113,7 @@ Get element at the specified index. Returns `0` if index is out of bounds.
 ### get_opt
 
 ```vais
-F get_opt(&self, index: i64) -> Option<T>
+fn get_opt(&self, index: i64) -> Option<T>
 ```
 
 Get element at index using Option type for safer access.
@@ -128,7 +128,7 @@ Get element at index using Option type for safer access.
 ### set
 
 ```vais
-F set(&self, index: i64, value: T) -> i64
+fn set(&self, index: i64, value: T) -> i64
 ```
 
 Set element at the specified index.
@@ -144,7 +144,7 @@ Set element at the specified index.
 ### push
 
 ```vais
-F push(&self, value: T) -> i64
+fn push(&self, value: T) -> i64
 ```
 
 Push an element to the end of the vector. Automatically grows capacity if needed.
@@ -159,7 +159,7 @@ Push an element to the end of the vector. Automatically grows capacity if needed
 ### pop
 
 ```vais
-F pop(&self) -> T
+fn pop(&self) -> T
 ```
 
 Pop and return the last element. Returns `0` if vector is empty.
@@ -171,7 +171,7 @@ Pop and return the last element. Returns `0` if vector is empty.
 ### pop_opt
 
 ```vais
-F pop_opt(&self) -> Option<T>
+fn pop_opt(&self) -> Option<T>
 ```
 
 Pop element using Option type for safer access.
@@ -183,7 +183,7 @@ Pop element using Option type for safer access.
 ### grow
 
 ```vais
-F grow(&self) -> i64
+fn grow(&self) -> i64
 ```
 
 Grow the vector's capacity. Doubles the current capacity, or sets it to 8 if less than 8. Called automatically by `push` when needed.
@@ -195,7 +195,7 @@ Grow the vector's capacity. Doubles the current capacity, or sets it to 8 if les
 ### clear
 
 ```vais
-F clear(&self) -> i64
+fn clear(&self) -> i64
 ```
 
 Clear all elements (sets length to 0).
@@ -207,7 +207,7 @@ Clear all elements (sets length to 0).
 ### drop
 
 ```vais
-F drop(&self) -> i64
+fn drop(&self) -> i64
 ```
 
 Free the vector's memory.
@@ -219,7 +219,7 @@ Free the vector's memory.
 ### vec_new
 
 ```vais
-F vec_new() -> Vec<i64>
+fn vec_new() -> Vec<i64>
 ```
 
 Create a new `Vec<i64>` with initial capacity of 8.
@@ -238,9 +238,9 @@ v.push(100)
 ### Basic Usage
 
 ```vais
-U std/vec
+use std/vec
 
-F main() -> i64 {
+fn main() -> i64 {
     # Create a vector
     v := Vec.with_capacity(10)
 
@@ -267,9 +267,9 @@ F main() -> i64 {
 ### Using vec_new Helper
 
 ```vais
-U std/vec
+use std/vec
 
-F main() -> i64 {
+fn main() -> i64 {
     # Create Vec<i64> with default capacity
     v := vec_new()
 
@@ -296,21 +296,21 @@ F main() -> i64 {
 ### Using Option Type for Safe Access
 
 ```vais
-U std/vec
-U std/option
+use std/vec
+use std/option
 
-F main() -> i64 {
+fn main() -> i64 {
     v := vec_new()
     v.push(42)
 
     # Safe access with Option
-    M v.get_opt(0) {
+    match v.get_opt(0) {
         Some(val) => { puts_i64(val) }
         None => { puts("Out of bounds") }
     }
 
     # Out of bounds access
-    M v.get_opt(10) {
+    match v.get_opt(10) {
         Some(val) => { puts_i64(val) }
         None => { puts("Index too large") }  # This prints
     }
@@ -323,9 +323,9 @@ F main() -> i64 {
 ### Stack Operations
 
 ```vais
-U std/vec
+use std/vec
 
-F main() -> i64 {
+fn main() -> i64 {
     v := vec_new()
 
     # Push elements (like a stack)
@@ -350,21 +350,21 @@ F main() -> i64 {
 ### Safe Pop with Option
 
 ```vais
-U std/vec
-U std/option
+use std/vec
+use std/option
 
-F main() -> i64 {
+fn main() -> i64 {
     v := vec_new()
     v.push(100)
 
     # Pop safely
-    M v.pop_opt() {
+    match v.pop_opt() {
         Some(val) => { puts_i64(val) }  # Prints 100
         None => { puts("Empty") }
     }
 
     # Pop from empty vector
-    M v.pop_opt() {
+    match v.pop_opt() {
         Some(val) => { puts_i64(val) }
         None => { puts("Empty") }  # This prints
     }
@@ -377,9 +377,9 @@ F main() -> i64 {
 ### Modifying Elements
 
 ```vais
-U std/vec
+use std/vec
 
-F main() -> i64 {
+fn main() -> i64 {
     v := vec_new()
 
     # Add elements
@@ -401,9 +401,9 @@ F main() -> i64 {
 ### Clearing and Reusing
 
 ```vais
-U std/vec
+use std/vec
 
-F main() -> i64 {
+fn main() -> i64 {
     v := vec_new()
 
     # First use

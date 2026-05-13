@@ -1,0 +1,21 @@
+# Phase 44 Cross-verify: Closures & capture (Phase 42)
+# Tests basic closure and move capture
+
+F main() -> i64 {
+    # Simple closure
+    add_one := |x: i64| x + 1
+    r1 := add_one(5)
+
+    # Move closure with captured variable
+    offset := 10
+    add_offset := move |x: i64| x + offset
+    r2 := add_offset(3)
+
+    # Multi-param closure
+    multiply := |a: i64, b: i64| a * b
+    r3 := multiply(7, 2)
+
+    # r1(6) + r2(13) + r3(14) = 33
+    result := r1 + r2 + r3
+    result - 33
+}

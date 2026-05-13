@@ -1,16 +1,23 @@
 # HTTP Client API Reference
 
-> Full-featured HTTP client library with request building, response handling, connection pooling, and TLS support
+> HTTP client implementation surface with promoted local smoke coverage for the
+> named gates below
+
+> **Implementation:** Requires C runtime (`http_client_runtime.c`). TLS support requires linking OpenSSL (`-lssl -lcrypto`).
+>
+> **Certified gate:** `std/http_client` runtime smoke `15/15`, TLS runtime smoke
+> `2/2`. Broad external network reliability, redirect policy, pooling behavior,
+> and deployment coverage require dedicated gates.
 
 ## Import
 
 ```vais
-U std/http_client
+use std/http_client
 ```
 
 ## Overview
 
-The HTTP Client module provides a complete HTTP/HTTPS client implementation with support for:
+The HTTP Client module provides an HTTP/HTTPS client implementation surface with support for:
 - All standard HTTP methods (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS)
 - URL parsing and validation
 - Header management (set, add, remove, get)
@@ -314,16 +321,16 @@ Configurable HTTP client with connection pooling and redirect support.
 ### Simple GET Request
 
 ```vais
-U std/http_client
+use std/http_client
 
-F main() -> i64 {
+fn main() -> i64 {
     resp := http_get("https://api.example.com/users")
 
     I resp.is_success() == 1 {
         body := resp.body_text()
         __println(body)
         __println("Status: ", resp.status)
-    } E {
+    } else {
         __println("Error: ", resp.error_text())
     }
 
@@ -335,9 +342,9 @@ F main() -> i64 {
 ### POST JSON Request
 
 ```vais
-U std/http_client
+use std/http_client
 
-F main() -> i64 {
+fn main() -> i64 {
     json := json_kv2("name", "Alice", "email", "alice@example.com")
     resp := http_post("https://api.example.com/users", json)
 
@@ -353,9 +360,9 @@ F main() -> i64 {
 ### Custom Request with Headers
 
 ```vais
-U std/http_client
+use std/http_client
 
-F main() -> i64 {
+fn main() -> i64 {
     req := HttpRequest::get("https://api.example.com/protected")
         .with_bearer_token("eyJhbGc...")
         .set_header("X-Custom-Header", "value")
@@ -378,9 +385,9 @@ F main() -> i64 {
 ### Reusable Client with Connection Pooling
 
 ```vais
-U std/http_client
+use std/http_client
 
-F main() -> i64 {
+fn main() -> i64 {
     client := HttpClient::new()
         .timeout(5000)
         .follow_redirects(1)
@@ -405,9 +412,9 @@ F main() -> i64 {
 ### PUT Request with JSON
 
 ```vais
-U std/http_client
+use std/http_client
 
-F main() -> i64 {
+fn main() -> i64 {
     json := json_kv2("name", "Bob", "status", "active")
 
     req := HttpRequest::put("https://api.example.com/users/123")
@@ -419,7 +426,7 @@ F main() -> i64 {
 
     I resp.is_success() == 1 {
         __println("Updated successfully")
-    } E {
+    } else {
         __println("Error: ", resp.status, " - ", resp.error_text())
     }
 
@@ -433,14 +440,14 @@ F main() -> i64 {
 ### Handling Response Headers
 
 ```vais
-U std/http_client
+use std/http_client
 
-F main() -> i64 {
+fn main() -> i64 {
     resp := http_get("https://api.example.com/data")
 
     # Get specific headers
     content_type := resp.content_type()
-    M content_type {
+    match content_type {
         Some(ct) => __println("Content-Type: ", ct),
         None => __println("No Content-Type header")
     }
@@ -453,7 +460,7 @@ F main() -> i64 {
     # Check if header exists
     I resp.has_header("X-Custom-Header") == 1 {
         custom := resp.get_header("X-Custom-Header")
-        M custom {
+        match custom {
             Some(val) => __println("Custom: ", val),
             None => 0
         }
@@ -467,9 +474,9 @@ F main() -> i64 {
 ### Basic Authentication
 
 ```vais
-U std/http_client
+use std/http_client
 
-F main() -> i64 {
+fn main() -> i64 {
     # Encode "user:password" in base64
     encoded := "dXNlcjpwYXNzd29yZA=="
 
@@ -481,7 +488,7 @@ F main() -> i64 {
 
     I resp.status == 200 {
         __println("Authenticated: ", resp.body_text())
-    } E I resp.status == 401 {
+    } else I resp.status == 401 {
         __println("Authentication failed")
     }
 
@@ -495,9 +502,9 @@ F main() -> i64 {
 ### Redirect Handling
 
 ```vais
-U std/http_client
+use std/http_client
 
-F main() -> i64 {
+fn main() -> i64 {
     client := HttpClient::new()
         .follow_redirects(1)
         .max_redirects(5)
@@ -506,7 +513,7 @@ F main() -> i64 {
 
     I resp.is_success() == 1 {
         __println("Final response: ", resp.body_text())
-    } E I resp.error_code == CLIENT_ERR_TOO_MANY_REDIRECTS {
+    } else I resp.error_code == CLIENT_ERR_TOO_MANY_REDIRECTS {
         __println("Too many redirects")
     }
 
@@ -519,13 +526,13 @@ F main() -> i64 {
 ### Error Handling
 
 ```vais
-U std/http_client
+use std/http_client
 
-F main() -> i64 {
+fn main() -> i64 {
     resp := http_get("https://invalid-domain-xyz.com")
 
     I resp.is_ok() == 0 {
-        M resp.error_code {
+        match resp.error_code {
             CLIENT_ERR_DNS => __println("DNS resolution failed"),
             CLIENT_ERR_CONNECT => __println("Connection failed"),
             CLIENT_ERR_TIMEOUT => __println("Request timed out"),
@@ -533,7 +540,7 @@ F main() -> i64 {
             CLIENT_ERR_TLS_HANDSHAKE => __println("TLS handshake failed"),
             _ => __println("Unknown error: ", resp.error_text())
         }
-    } E {
+    } else {
         __println("Status: ", resp.status)
     }
 
@@ -545,9 +552,9 @@ F main() -> i64 {
 ### Form Data POST
 
 ```vais
-U std/http_client
+use std/http_client
 
-F main() -> i64 {
+fn main() -> i64 {
     form := "username=alice&password=secret123&remember=true"
 
     req := HttpRequest::post("https://example.com/login")
@@ -558,7 +565,7 @@ F main() -> i64 {
 
     I resp.is_redirect() == 1 {
         location := resp.location()
-        M location {
+        match location {
             Some(url) => __println("Redirect to: ", url),
             None => __println("No location header")
         }

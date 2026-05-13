@@ -16,6 +16,7 @@
 //! - Inlining decisions
 //! - Drop elaboration
 
+pub mod borrow_check;
 mod builder;
 pub mod emit_llvm;
 pub mod lower;
@@ -27,3 +28,6 @@ pub use types::*;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod integration_tests;

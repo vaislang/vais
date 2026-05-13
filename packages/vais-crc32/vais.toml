@@ -1,0 +1,12 @@
+[package]
+name = "vais-crc32"
+version = "1.0.0"
+authors = ["Vais Team"]
+description = "Fast CRC32 implementation with lookup tables for IEEE and Castagnoli polynomials"
+license = "MIT"
+
+[dependencies]
+
+[dev-dependencies]
+
+[build]

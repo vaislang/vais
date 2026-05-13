@@ -39,7 +39,7 @@ impl SampleCollector {
             .iter()
             .map(|(name, samples)| (name.clone(), samples.len()))
             .collect();
-        result.sort_by(|a, b| b.1.cmp(&a.1));
+        result.sort_by_key(|entry| std::cmp::Reverse(entry.1));
         result
     }
 
@@ -66,8 +66,6 @@ impl SampleCollector {
 #[derive(Debug)]
 struct AllocationInfo {
     size: usize,
-    #[allow(dead_code)]
-    timestamp: usize,
 }
 
 #[derive(Debug)]
@@ -95,13 +93,7 @@ impl MemoryTracker {
     }
 
     pub fn record_allocation(&mut self, size: usize, address: usize) {
-        self.allocations.insert(
-            address,
-            AllocationInfo {
-                size,
-                timestamp: self.allocation_counter,
-            },
-        );
+        self.allocations.insert(address, AllocationInfo { size });
 
         self.total_allocations += 1;
         self.total_allocated_bytes += size;
@@ -156,7 +148,7 @@ impl MemoryTracker {
             .iter()
             .map(|(addr, info)| (*addr, info.size))
             .collect();
-        allocations.sort_by(|a, b| b.1.cmp(&a.1));
+        allocations.sort_by_key(|entry| std::cmp::Reverse(entry.1));
         allocations
     }
 
@@ -236,7 +228,7 @@ impl CallGraph {
 
     pub fn get_hot_edges(&self, top_n: usize) -> Vec<(String, String, usize)> {
         let mut edges = self.get_edges();
-        edges.sort_by(|a, b| b.2.cmp(&a.2));
+        edges.sort_by_key(|entry| std::cmp::Reverse(entry.2));
         edges.truncate(top_n);
         edges
     }

@@ -1,6 +1,6 @@
 # Vais Language Specification
 
-Version: 1.0.0
+Version: v0.1.0
 
 ## Table of Contents
 
@@ -21,13 +21,14 @@ Version: 1.0.0
 15. [Module System](#module-system)
 16. [Async/Await](#asyncawait)
 17. [Iterators and Generators](#iterators-and-generators)
-18. [Memory Management](#memory-management)
-19. [Built-in Functions](#built-in-functions)
-20. [Constants](#constants)
-21. [Package Ecosystem](#package-ecosystem)
-22. [Best Practices](#best-practices)
-23. [Examples](#examples)
-24. [Grammar Summary](#grammar-summary)
+18. [Closures and Lambdas](#closures-and-lambdas)
+19. [Memory Management](#memory-management)
+20. [Built-in Functions](#built-in-functions)
+21. [Constants](#constants)
+22. [Package Ecosystem](#package-ecosystem)
+23. [Best Practices](#best-practices)
+24. [Examples](#examples)
+25. [Grammar Summary](#grammar-summary)
 
 ---
 
@@ -41,6 +42,14 @@ Vais is a token-efficient, AI-optimized systems programming language designed to
 - **LLVM-based compilation** for native performance
 - **Type inference** with minimal annotations
 - **Advanced features**: Generics, Traits, Async/Await, Pattern Matching
+
+### Phase 182 Milestones
+
+As of Phase 182, the Vais compiler has reached the following milestones:
+
+- **Self-hosting compiler**: The Vais compiler (`selfhost/`) is implemented in Vais itself, totaling 50,000+ lines of Vais source code.
+- **Generic monomorphization**: Generics are compiled using a hybrid monomorphization approach — specializing concrete types at compile time while sharing code where possible, balancing binary size and performance.
+- **`Vec<struct>` direct field access**: Fields of structs stored inside `Vec<T>` can be accessed directly without intermediate bindings (e.g., `vec.get(i).field` works correctly).
 
 ---
 
@@ -128,27 +137,29 @@ Vais uses single-letter keywords for maximum token efficiency:
 | `A` | Async | Async function marker |
 | `R` | Return | Early return from function |
 | `B` | Break | Break from loop |
-| `C` | Continue | Continue to next loop iteration |
+| `C` | Continue/Const | Continue to next loop iteration, or Const for constants |
+| `D` | Defer | Deferred execution |
+| `N` | Extern | Foreign function declaration |
+| `G` | Global | Global variable declaration |
+| `O` | Union | C-style untagged union |
+| `Y` | Yield/Await | Yield value (shorthand for await) |
 
-Note: Constants are defined with the `C` keyword followed by identifier, type, and value (see [Constants](#constants)).
+Note: The `C` keyword has dual meaning - `C` for continue in loops, and `C` for constants (see [Constants](#constants)). Context determines usage.
 
 ### Multi-letter Keywords
 
-- `mut` - Mutable variable/reference (also available as `~` shorthand)
+- `mut` - Mutable variable/reference
 - `self` - Instance reference
 - `Self` - Type reference in impl
 - `true`, `false` - Boolean literals
 - `spawn` - Spawn async task
 - `await` - Await async result (also available as `Y` shorthand)
-- `weak` - Weak reference
-- `clone` - Clone operation
 - `yield` - Yield value in iterator/coroutine (simplified implementation)
 
 ### Shorthand Keywords (Phase 29)
 
 | Shorthand | Replaces | Example |
 |-----------|----------|---------|
-| `~` | `mut` | `x := ~ 0` (mutable variable) |
 | `Y` | `await` | `result.Y` (postfix await) |
 
 ---
@@ -190,6 +201,60 @@ Option<T>   # Generic Option type
 Vec<T>      # Generic vector type
 Pair<A, B>  # Multiple type parameters
 ```
+
+### Type Conversion Rules (Phase 158)
+
+Vais uses strict Rust-style type coercion. Implicit widening is allowed only in a narrow set of cases; all other conversions require an explicit `as` cast. These rules were finalized in **Phase 158** to eliminate the yo-yo pattern where `unification.rs` coercion was toggled repeatedly.
+
+**Implicit (automatic) conversions:**
+- Integer widening: `i8 → i16 → i32 → i64`, `u8 → u16 → u32 → u64`
+- Float literal inference: `f32 ↔ f64` (the literal is inferred from context, identical to Rust behavior)
+
+**Prohibited implicit conversions — explicit `as` required:**
+- `bool ↔ i64`: use `flag as i64` or `n != 0`
+- `int ↔ float`: use `x as f64` or `y as i64`
+- `str ↔ i64`: use parsing functions or `n as str`
+- Integer narrowing (`i64 → i32`): use `x as i32`
+
+```vais
+# Allowed implicit widening
+x: i8 = 10
+y: i64 = x          # OK: i8 → i64
+
+# Explicit cast required
+flag: bool = true
+n: i64 = flag as i64        # OK: explicit as
+val: f64 = 3 as f64         # OK: explicit as
+
+# Prohibited — compile error
+bad: i64 = true             # ERROR: bool → i64 implicit
+bad2: i64 = 3.14            # ERROR: float → int implicit
+```
+
+**E2E protection test:** `vais-types/tests/phase158_type_strict.rs` enforces these rules.
+
+### Linear and Affine Types (Experimental)
+
+> **[Experimental]** Linear and affine type annotations are partially implemented. The borrow checker integration is incomplete. These features may change in future releases.
+
+**Linear types** (`linear T`) enforce that a value must be used exactly once:
+
+```vais
+# [Experimental] — borrow checker integration incomplete
+x: linear i64 = acquire_resource()
+use_resource(x)   # x is consumed here; using x again is a compile error
+```
+
+**Affine types** (`affine T`) enforce that a value is used at most once (may be dropped unused):
+
+```vais
+# [Experimental] — borrow checker integration incomplete
+x: affine i64 = acquire_resource()
+# x may be dropped without use, but cannot be used twice
+use_resource(x)
+```
+
+These types appear in the grammar as `LinearType` and `AffineType` but full enforcement via the borrow checker is a work-in-progress.
 
 ---
 
@@ -253,11 +318,32 @@ Pair<A, B>  # Multiple type parameters
 | `..` | Range (exclusive) / Spread | `0..10`, `[..arr]` |
 | `..=` | Range (inclusive) | `0..=10` |
 | `\|>` | Pipe operator | `x \|> f \|> g` (equivalent to `g(f(x))`) |
-| `~` | Mutable shorthand | `x := ~ 0` (same as `x := mut 0`) |
 
 **Note on `?` operator:** The `?` operator has two uses:
 - **Ternary conditional**: `condition ? true_val : false_val`
 - **Try operator**: `result?` - propagates errors to caller (see [Error Handling](#error-handling))
+
+### Operator Precedence
+
+Operators are listed from highest to lowest precedence:
+
+| Precedence | Operators | Description |
+|------------|-----------|-------------|
+| 1 (highest) | `.`, `[]`, `()` | Member access, Index, Call |
+| 2 | `-`, `!`, `~`, `@` | Unary operators |
+| 3 | `*`, `/`, `%` | Multiplication, Division, Modulo |
+| 4 | `+`, `-` | Addition, Subtraction |
+| 5 | `<<`, `>>` | Bit shifts |
+| 6 | `&` | Bitwise AND |
+| 7 | `^` | Bitwise XOR |
+| 8 | `\|` | Bitwise OR |
+| 9 | `==`, `!=`, `<`, `>`, `<=`, `>=` | Comparison |
+| 10 | `&&` | Logical AND |
+| 11 | `\|\|` | Logical OR |
+| 12 | `?:`, `\|>` | Ternary conditional, Pipe |
+| 13 (lowest) | `=`, `:=`, `+=`, `-=`, `*=`, `/=` | Assignment |
+
+**Note:** Bitwise `&` has higher precedence than comparison operators like `==`. Use parentheses to clarify: `(a == b) & (c == d)`.
 
 ---
 
@@ -387,6 +473,34 @@ Blocks are expressions that return the value of their last expression:
 }
 ```
 
+### Auto-Return
+
+Functions in Vais automatically return the value of their last expression. No explicit `R` (return) is needed unless early return is required:
+
+```vais
+F add(a: i64, b: i64) -> i64 {
+    a + b    # Automatically returned
+}
+
+F max(a: i64, b: i64) -> i64 {
+    I a > b {
+        a    # Each branch returns its last expression
+    } E {
+        b
+    }
+}
+
+# Explicit R is only needed for early return
+F safe_divide(a: i64, b: i64) -> i64 {
+    I b == 0 {
+        R 0    # Early return
+    }
+    a / b      # Auto-returned
+}
+```
+
+This applies to all block expressions including `I`/`E`, `M`, and `L`.
+
 ---
 
 ## Statements
@@ -401,10 +515,7 @@ x := 10
 y: i64 = 20
 
 # Mutable
-mut z := 30
-
-# Mutable with ~ shorthand
-~ w := 30    # equivalent to: mut w := 30
+z := mut 30
 ```
 
 ### If-Else Expression
@@ -877,7 +988,7 @@ F describe(opt: Option) -> i64 {
 }
 ```
 
-### Match with Guards (future)
+### Match with Guards
 
 ```vais
 M value {
@@ -886,6 +997,72 @@ M value {
     _ => "zero"
 }
 ```
+
+### Pattern Alias
+
+Pattern aliases allow you to bind a name to a matched pattern using the `@` operator. This is useful when you need both the matched value and access to the whole pattern:
+
+```vais
+# Basic pattern alias with range
+F describe(n: i64) -> str {
+    M n {
+        x @ 1..10 => "small: {x}",
+        x @ 10..100 => "medium: {x}",
+        x @ 100..1000 => "large: {x}",
+        _ => "very large"
+    }
+}
+
+# Pattern alias with enum destructuring
+E Option<T> {
+    None,
+    Some(T)
+}
+
+F process(opt: Option<i64>) -> i64 {
+    M opt {
+        val @ Some(x) => {
+            # 'val' holds the entire Some variant
+            # 'x' holds the inner value
+            x * 2
+        },
+        None => 0
+    }
+}
+
+# Pattern alias with struct destructuring
+S Point {
+    x: i64,
+    y: i64
+}
+
+F classify_point(p: Point) -> str {
+    M p {
+        origin @ Point { x: 0, y: 0 } => "origin",
+        pt @ Point { x, y } if x == y => "diagonal point",
+        _ => "other point"
+    }
+}
+
+# Nested pattern aliases
+E Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+F handle_result(r: Result<i64, str>) -> str {
+    M r {
+        success @ Ok(value) if value > 0 => "positive success",
+        failure @ Err(msg) => "error: {msg}",
+        _ => "zero or negative"
+    }
+}
+```
+
+The pattern alias `x @ pattern` syntax binds `x` to the matched value while also matching against `pattern`. This is particularly useful when:
+- You need to refer to the matched value multiple times
+- You want to combine pattern matching with guards
+- You need both the whole value and destructured parts
 
 ### Destructuring
 
@@ -962,6 +1139,47 @@ F print_all<T: Printable>(items: [T]) -> i64 {
     0
 }
 ```
+
+### Where Clauses
+
+Where clauses provide an alternative syntax for specifying generic type constraints, especially useful when constraints are complex or numerous:
+
+```vais
+# Basic where clause
+F find_max<T>(list: Vec<T>) -> T where T: Ord {
+    result := mut list.get(0)
+    L i: 1..list.len() {
+        I list.get(i) > result {
+            result = list.get(i)
+        }
+    }
+    result
+}
+
+# Multiple bounds on a single type
+F serialize<T>(val: T) -> str where T: Display, T: Clone {
+    val.to_string()
+}
+
+# Multiple type parameters with bounds
+F compare_and_print<T, U>(a: T, b: U) -> i64
+    where T: Ord, U: Display
+{
+    puts(b.to_string())
+    I a > a { 1 } E { 0 }
+}
+
+# Where clauses with structs
+S Container<T> where T: Clone {
+    value: T
+}
+```
+
+Where clauses are especially useful when:
+- Type constraints are complex or lengthy
+- Multiple type parameters have constraints
+- Constraints reference associated types
+- You want to separate type parameters from their constraints for readability
 
 ---
 
@@ -1158,6 +1376,156 @@ result := numbers
     |> iter_take(5)
     |> iter_map(|x| x * 2)
 # Result: [4, 8, 12, 16, 20]
+```
+
+---
+
+## Closures and Lambdas
+
+### Basic Closures
+
+Closures (also called lambdas or anonymous functions) are inline function definitions that can capture variables from their surrounding scope:
+
+```vais
+# Basic closure syntax
+add_one := |x| x + 1
+
+# Closure with multiple parameters
+multiply := |x, y| x * y
+
+# Closure with block body
+complex := |n| {
+    result := n * 2
+    result + 10
+}
+
+# Using closures with iterator adapters
+numbers := [1, 2, 3, 4, 5]
+doubled := iter_map(numbers, |x| x * 2)
+```
+
+### Closure Capture Modes
+
+Closures can capture variables from their surrounding scope in different ways. Vais provides explicit control over how variables are captured:
+
+**By Value (Default):**
+
+By default, closures capture variables by copying their values:
+
+```vais
+F main() -> i64 {
+    x := 42
+
+    # Closure captures 'x' by value (copy)
+    add_x := |n| n + x
+
+    result := add_x(10)  # Returns 52
+    # Original 'x' is unchanged
+    0
+}
+```
+
+**Move Capture:**
+
+The `move` keyword forces the closure to take ownership of captured variables by moving them into the closure:
+
+```vais
+F create_consumer() -> i64 {
+    x := 42
+    data := allocate_data()
+
+    # Move 'x' and 'data' into the closure
+    consumer := move |n| {
+        # 'x' and 'data' are now owned by the closure
+        result := n + x
+        process(data)
+        result
+    }
+
+    # Error: 'x' and 'data' have been moved
+    # Cannot use them here anymore
+
+    consumer(10)
+}
+
+# Common use case: returning closures
+F make_adder(amount: i64) -> |i64| -> i64 {
+    # Must use 'move' to transfer ownership
+    move |x| x + amount
+}
+
+# Common use case: spawning async tasks
+F spawn_worker(task_id: i64) -> i64 {
+    data := load_task_data(task_id)
+
+    # Move 'data' into the spawned task
+    spawn move |()| {
+        # 'data' is owned by this task
+        process_task(data)
+        0
+    }
+
+    0
+}
+```
+
+### Capture Mode Summary
+
+| Capture Mode | Syntax | Behavior | Use Case |
+|--------------|--------|----------|----------|
+| **By Value** | `\|args\| body` | Copies captured values | Default, when closure doesn't outlive scope |
+| **Move** | `move \|args\| body` | Moves ownership into closure | Returning closures, spawning tasks, transferring ownership |
+
+**Note:** By-reference capture modes (`&` and `&mut`) are part of the type system but require advanced lifetime analysis. The current implementation supports by-value and move semantics.
+
+### Closure Examples
+
+**Using closures with higher-order functions:**
+
+```vais
+# Filter with closure
+F get_evens(numbers: [i64]) -> [i64] {
+    iter_filter(numbers, |x| x % 2 == 0)
+}
+
+# Map with closure
+F square_all(numbers: [i64]) -> [i64] {
+    iter_map(numbers, |x| x * x)
+}
+
+# Chaining closures
+F process_numbers(nums: [i64]) -> [i64] {
+    nums
+        |> iter_filter(|x| x > 0)
+        |> iter_map(|x| x * 2)
+        |> iter_take(10)
+}
+```
+
+**Closures capturing multiple variables:**
+
+```vais
+F calculate(base: i64, multiplier: i64) -> i64 {
+    # Closure captures both 'base' and 'multiplier'
+    compute := |x| (x + base) * multiplier
+
+    compute(5)
+}
+```
+
+**Move semantics with spawned tasks:**
+
+```vais
+F parallel_process(data: Vec<i64>) -> i64 {
+    L item: data {
+        # Each task gets its own copy via move
+        spawn move |()| {
+            process_item(item)
+            0
+        }
+    }
+    0
+}
 ```
 
 ---
@@ -1402,15 +1770,14 @@ vaisc pkg doc
 5. **Leverage generics** to reduce code duplication
 6. **Import only needed modules** to keep token count low
 7. **Use match exhaustiveness** to catch all cases
-8. **Use `~` instead of `mut`** for maximum token efficiency
-9. **Use `|>` pipe operator** for readable function chaining
-10. **Use string interpolation** `println("x={x}")` instead of manual concatenation
-11. **Omit parameter types** when they can be inferred from call sites
-12. **Use `?` operator** for error propagation instead of manual match/return
-13. **Use iterator adapters** (`iter_map`, `iter_filter`, etc.) for functional transformations
-14. **Prefer `derive(Error)`** for custom error types to reduce boilerplate
-15. **Use enum impl blocks** to add behavior to enums
-16. **Structure projects** with `vaisc new` and `Vais.toml` for better organization
+8. **Use `|>` pipe operator** for readable function chaining
+9. **Use string interpolation** `println("x={x}")` instead of manual concatenation
+10. **Omit parameter types** when they can be inferred from call sites
+11. **Use `?` operator** for error propagation instead of manual match/return
+12. **Use iterator adapters** (`iter_map`, `iter_filter`, etc.) for functional transformations
+13. **Prefer `derive(Error)`** for custom error types to reduce boilerplate
+14. **Use enum impl blocks** to add behavior to enums
+15. **Structure projects** with `vaisc new` and `Vais.toml` for better organization
 
 ---
 
@@ -1574,55 +1941,54 @@ F main() -> i64 {
 
 ## Grammar Summary
 
+The complete formal EBNF grammar is maintained at [`docs/grammar/vais.ebnf`](grammar/vais.ebnf)
+(~320 productions, generated from the parser source). Ambiguity resolution rules and notation
+conventions are documented in [`docs/grammar/README.md`](grammar/README.md).
+
+Below is a condensed quick-reference:
+
 ```
-Program      ::= Item*
-Item         ::= Function | Struct | Enum | Trait | Impl | Use | Const
+Module       ::= Item*
+Item         ::= Attribute* ['P'] (FunctionDef | StructDef | EnumDef | UnionDef
+                 | TypeAlias | TraitAlias | UseDef | TraitDef | ImplDef
+                 | MacroDef | ExternBlock | ConstDef | GlobalDef)
 
-Function     ::= 'F' Ident TypeParams? '(' Params? ')' '->' Type ('=' Expr | Block)
-               | 'A' 'F' Ident TypeParams? '(' Params? ')' '->' Type Block
-               | 'X' 'F' Ident '(' Params? ')' '->' Type
+FunctionDef  ::= ['A'] 'F' Ident Generics? '(' Params? ')' ['->' Type] WhereClause? ('=' Expr | Block)
+StructDef    ::= 'S' Ident Generics? WhereClause? '{' (Field | Method)* '}'
+EnumDef      ::= 'E' Ident Generics? '{' Variant (',' Variant)* '}'
+UnionDef     ::= 'O' Ident Generics? '{' Field (',' Field)* '}'
+TraitDef     ::= 'W' Ident Generics? [':' TraitBounds] WhereClause? '{' (AssocType | TraitMethod)* '}'
+ImplDef      ::= 'X' Generics? Type [':' Ident] WhereClause? '{' Method* '}'
+ExternBlock  ::= 'N' StringLit? '{' ExternFunc* '}' | 'X' 'F' ExternFuncSig
+UseDef       ::= 'U' Path ['.' ('{' Idents '}' | Ident)] [';']
+ConstDef     ::= 'C' Ident ':' Type '=' Expr
+GlobalDef    ::= 'G' Ident ':' Type '=' Expr
+TypeAlias    ::= 'T' Ident Generics? '=' Type
+TraitAlias   ::= 'T' Ident Generics? '=' TraitBound ('+' TraitBound)*
+MacroDef     ::= 'macro' Ident '!' '{' MacroRule* '}'
 
-Struct       ::= 'S' Ident TypeParams? '{' Fields '}'
-Enum         ::= 'E' Ident TypeParams? '{' Variants '}'
-               | '#[derive(Error)]' 'E' Ident '{' Variants '}'
-Trait        ::= 'W' Ident TypeParams? '{' TraitItems '}'
-Impl         ::= 'X' Ident TypeParams? (':' Trait)? '{' ImplItems '}'
-               # Note: Impl blocks work for both structs and enums
-Use          ::= 'U' Path
-Const        ::= 'C' Ident ':' Type '=' Expr
+Expr         ::= Assignment | Pipe | Ternary | LogicalOr | LogicalAnd
+               | BitwiseOr | BitwiseXor | BitwiseAnd | Equality | Range
+               | Comparison | Shift | Term | Factor | Unary | Postfix | Primary
 
-Expr         ::= Literal
-               | Ident
-               | BinaryExpr
-               | UnaryExpr
-               | CallExpr
-               | FieldExpr
-               | IndexExpr
-               | TernaryExpr
-               | IfExpr
-               | LoopExpr
-               | MatchExpr
-               | BlockExpr
-               | '@' '(' Args ')'
-               | Expr '|>' Expr
-               | StringInterp
-               | '..' Expr
-               | Expr '?'          # Try operator (error propagation)
-               | Expr '!'          # Unwrap operator
-               | 'yield' Expr      # Yield expression
+Stmt         ::= 'R' Expr? | 'B' Expr? | 'C' | 'D' Expr | LetStmt | Expr
 
-Stmt         ::= 'R' Expr?
-               | 'B'
-               | 'C'
-               | Let
-               | Expr
-               | 'yield' Expr
+Type         ::= BaseType ['?' | '!']
+BaseType     ::= NamedType | TupleType | FnType | ArrayType | MapType
+               | PointerType | RefType | SliceType | DynTraitType
+               | LinearType    (* [Experimental] — borrow checker integration incomplete *)
+               | AffineType    (* [Experimental] — borrow checker integration incomplete *)
+               | DependentType (* [Experimental] *)
+               | FnPtrType
 
-Type         ::= PrimitiveType
-               | Ident TypeArgs?
-               | '*' Type
-               | '[' Type ']'
+Pattern      ::= '_' | Ident ['@' Pattern] | Ident '(' Patterns ')' | Literal
+               | '(' Patterns ')' | Pattern '..' Pattern | Pattern '|' Pattern
+
+Closure      ::= '|' Params? '|' Expr | 'move' '|' Params? '|' Expr
 ```
+
+See `docs/grammar/vais.ebnf` for the complete grammar with all 18 sections,
+parser function cross-references, and operator precedence levels.
 
 ---
 

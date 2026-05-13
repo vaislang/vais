@@ -73,3 +73,31 @@ pub fn get_gc() -> Arc<Mutex<GcHeap>> {
         .get_or_init(|| Arc::new(Mutex::new(GcHeap::new())))
         .clone()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_init_gc() {
+        init_gc();
+        // Should be idempotent
+        init_gc();
+    }
+
+    #[test]
+    fn test_get_gc_returns_instance() {
+        let gc = get_gc();
+        let heap = gc.lock().unwrap();
+        let stats = heap.stats();
+        assert!(stats.gc_threshold > 0);
+    }
+
+    #[test]
+    fn test_get_gc_same_instance() {
+        let gc1 = get_gc();
+        let gc2 = get_gc();
+        // Both should point to the same Arc
+        assert!(Arc::ptr_eq(&gc1, &gc2));
+    }
+}

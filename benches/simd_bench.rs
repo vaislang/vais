@@ -413,9 +413,7 @@ fn bench_dot_product(c: &mut Criterion) {
     {
         if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
             group.bench_function("avx2_fma", |bench| {
-                bench.iter(|| unsafe {
-                    x86_simd::dot_product_avx2(black_box(&a), black_box(&b))
-                })
+                bench.iter(|| unsafe { x86_simd::dot_product_avx2(black_box(&a), black_box(&b)) })
             });
         }
     }
@@ -423,9 +421,7 @@ fn bench_dot_product(c: &mut Criterion) {
     #[cfg(target_arch = "aarch64")]
     {
         group.bench_function("neon_fma", |bench| {
-            bench.iter(|| unsafe {
-                neon_simd::dot_product_neon(black_box(&a), black_box(&b))
-            })
+            bench.iter(|| unsafe { neon_simd::dot_product_neon(black_box(&a), black_box(&b)) })
         });
     }
 
@@ -459,9 +455,7 @@ fn bench_cosine_distance(c: &mut Criterion) {
     #[cfg(target_arch = "aarch64")]
     {
         group.bench_function("neon_fma", |bench| {
-            bench.iter(|| unsafe {
-                neon_simd::cosine_distance_neon(black_box(&a), black_box(&b))
-            })
+            bench.iter(|| unsafe { neon_simd::cosine_distance_neon(black_box(&a), black_box(&b)) })
         });
     }
 
@@ -485,9 +479,7 @@ fn bench_l2_distance(c: &mut Criterion) {
     {
         if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
             group.bench_function("avx2_fma", |bench| {
-                bench.iter(|| unsafe {
-                    x86_simd::l2_distance_avx2(black_box(&a), black_box(&b))
-                })
+                bench.iter(|| unsafe { x86_simd::l2_distance_avx2(black_box(&a), black_box(&b)) })
             });
         }
     }
@@ -495,9 +487,7 @@ fn bench_l2_distance(c: &mut Criterion) {
     #[cfg(target_arch = "aarch64")]
     {
         group.bench_function("neon_fma", |bench| {
-            bench.iter(|| unsafe {
-                neon_simd::l2_distance_neon(black_box(&a), black_box(&b))
-            })
+            bench.iter(|| unsafe { neon_simd::l2_distance_neon(black_box(&a), black_box(&b)) })
         });
     }
 
@@ -554,10 +544,7 @@ fn bench_batch_cosine(c: &mut Criterion) {
                         let mut best = f32::MAX;
                         for v in &vectors {
                             let d = unsafe {
-                                x86_simd::cosine_distance_avx2(
-                                    black_box(&query),
-                                    black_box(v),
-                                )
+                                x86_simd::cosine_distance_avx2(black_box(&query), black_box(v))
                             };
                             if d < best {
                                 best = d;
@@ -580,10 +567,7 @@ fn bench_batch_cosine(c: &mut Criterion) {
                     let mut best = f32::MAX;
                     for v in &vectors {
                         let d = unsafe {
-                            neon_simd::cosine_distance_neon(
-                                black_box(&query),
-                                black_box(v),
-                            )
+                            neon_simd::cosine_distance_neon(black_box(&query), black_box(v))
                         };
                         if d < best {
                             best = d;

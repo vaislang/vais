@@ -1,18 +1,24 @@
 //! Test, benchmark, fix, and lint commands.
 
+use crate::commands::build::cmd_build;
+use crate::configure_type_checker;
+use crate::error_formatter;
+use crate::utils::walkdir;
+use colored::Colorize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use colored::Colorize;
 use vais_codegen::{CodeGenerator, TargetTriple};
 use vais_parser::parse;
 use vais_plugin::{DiagnosticLevel, PluginRegistry};
 use vais_types::TypeChecker;
-use crate::configure_type_checker;
-use crate::commands::build::cmd_build;
-use crate::utils::walkdir;
 
-pub(crate) fn cmd_test(path: &Path, filter: Option<&str>, verbose: bool, coverage_mode: &vais_codegen::optimize::CoverageMode) -> Result<(), String> {
+pub(crate) fn cmd_test(
+    path: &Path,
+    filter: Option<&str>,
+    verbose: bool,
+    coverage_mode: &vais_codegen::optimize::CoverageMode,
+) -> Result<(), String> {
     let test_dir = if path.is_dir() {
         path.to_path_buf()
     } else if path.is_file() {
@@ -105,10 +111,20 @@ pub(crate) fn cmd_test(path: &Path, filter: Option<&str>, verbose: bool, coverag
         // Print coverage instructions if enabled
         if let Some(dir) = coverage_mode.coverage_dir() {
             println!();
-            println!("{} Coverage data collected in: {}/", "Coverage:".cyan().bold(), dir);
+            println!(
+                "{} Coverage data collected in: {}/",
+                "Coverage:".cyan().bold(),
+                dir
+            );
             println!("  Generate report:");
-            println!("    llvm-profdata merge -output={}/coverage.profdata {}/*.profraw", dir, dir);
-            println!("    llvm-cov report --instr-profile={}/coverage.profdata", dir);
+            println!(
+                "    llvm-profdata merge -output={}/coverage.profdata {}/*.profraw",
+                dir, dir
+            );
+            println!(
+                "    llvm-cov report --instr-profile={}/coverage.profdata",
+                dir
+            );
         }
 
         Ok(())
@@ -213,6 +229,7 @@ pub(crate) fn cmd_bench(path: &Path, filter: Option<&str>, verbose: bool) -> Res
             false,
             false,
             536870912,
+            None, // profile_out
         );
 
         match compile_result {
@@ -226,7 +243,12 @@ pub(crate) fn cmd_bench(path: &Path, filter: Option<&str>, verbose: bool) -> Res
                 results.push((bench_file.clone(), elapsed, status.success()));
             }
             Err(e) => {
-                eprintln!("  {} {} - {}", "ERROR".red().bold(), bench_file.display(), e);
+                eprintln!(
+                    "  {} {} - {}",
+                    "ERROR".red().bold(),
+                    bench_file.display(),
+                    e
+                );
                 results.push((bench_file.clone(), std::time::Duration::ZERO, false));
             }
         }
@@ -238,11 +260,7 @@ pub(crate) fn cmd_bench(path: &Path, filter: Option<&str>, verbose: bool) -> Res
     // Display results
     println!("\n{}", "Results:".bold());
     for (path, duration, success) in &results {
-        let name = path
-            .file_stem()
-            .unwrap_or_default()
-            .to_str()
-            .unwrap_or("?");
+        let name = path.file_stem().unwrap_or_default().to_str().unwrap_or("?");
         if *success {
             println!(
                 "  {} {} ... {:.3}ms",
@@ -271,108 +289,6 @@ pub(crate) fn cmd_bench(path: &Path, filter: Option<&str>, verbose: bool) -> Res
     }
 }
 
-/// Auto-apply compiler suggested fixes
-pub(crate) fn cmd_fix(
-    input: &Path,
-    dry_run: bool,
-    verbose: bool,
-    _plugins: &PluginRegistry,
-) -> Result<(), String> {
-    let files = if input.is_dir() {
-        walkdir(&input.to_path_buf(), "vais")
-    } else {
-        vec![input.to_path_buf()]
-    };
-
-    if files.is_empty() {
-        return Err(format!("no .vais files found in '{}'", input.display()));
-    }
-
-    let total_fixes = 0;
-    let fixed_files = 0;
-
-    for file in &files {
-        if verbose {
-            println!("{} Checking {}", "Fix".cyan(), file.display());
-        }
-
-        let source =
-            fs::read_to_string(file).map_err(|e| format!("failed to read {}: {}", file.display(), e))?;
-
-        // Parse to check for syntax errors
-        let tokens = vais_lexer::tokenize(&source);
-        let _tokens = match tokens {
-            Ok(t) => t,
-            Err(_) => {
-                if verbose {
-                    println!(
-                        "  {} {} — lexer error, skipping",
-                        "⚠".yellow(),
-                        file.display()
-                    );
-                }
-                continue;
-            }
-        };
-
-        let module = match vais_parser::parse(&source) {
-            Ok(m) => m,
-            Err(_) => {
-                if verbose {
-                    println!(
-                        "  {} {} — parse error, skipping",
-                        "⚠".yellow(),
-                        file.display()
-                    );
-                }
-                continue;
-            }
-        };
-
-        // Type check
-        let mut checker = TypeChecker::new();
-        configure_type_checker(&mut checker);
-
-        // For now, just report that fix functionality is limited
-        // (TypeChecker returns a single error, not a list with suggestions)
-        if let Err(_e) = checker.check_module(&module) {
-            // TypeErrors don't consistently have suggestions
-            // This is a simplified implementation
-            if verbose {
-                println!(
-                    "  {} {} — has type errors",
-                    "→".cyan(),
-                    file.display()
-                );
-            }
-        }
-    }
-
-    if total_fixes == 0 {
-        println!("{} No automatic fixes available", "✓".green());
-        println!(
-            "{}",
-            "Note: The fix command currently has limited functionality.".dimmed()
-        );
-    } else if dry_run {
-        println!(
-            "\n{} {} fix(es) available in {} file(s) (dry run — no changes made)",
-            "→".cyan(),
-            total_fixes,
-            fixed_files
-        );
-    } else {
-        println!(
-            "\n{} Applied {} fix(es) in {} file(s)",
-            "✓".green(),
-            total_fixes,
-            fixed_files
-        );
-    }
-
-    Ok(())
-}
-
 /// Run lint checks on source files
 pub(crate) fn cmd_lint(
     input: &Path,
@@ -392,9 +308,9 @@ pub(crate) fn cmd_lint(
     }
 
     let level = match warning_level {
-        Some("allow") => 0,  // suppress warnings
-        Some("deny") => 2,   // treat warnings as errors
-        _ => 1,              // default: warn
+        Some("allow") => 0, // suppress warnings
+        Some("deny") => 2,  // treat warnings as errors
+        _ => 1,             // default: warn
     };
 
     let mut total_warnings = 0;
@@ -406,8 +322,8 @@ pub(crate) fn cmd_lint(
             println!("{} Linting {}", "Lint".cyan(), file.display());
         }
 
-        let source =
-            fs::read_to_string(file).map_err(|e| format!("failed to read {}: {}", file.display(), e))?;
+        let source = fs::read_to_string(file)
+            .map_err(|e| format!("failed to read {}: {}", file.display(), e))?;
 
         let _tokens = match vais_lexer::tokenize(&source) {
             Ok(t) => t,
@@ -422,11 +338,7 @@ pub(crate) fn cmd_lint(
                     });
                     all_diagnostics.push(diag);
                 } else {
-                    eprintln!(
-                        "{}: [L001] Lexer error: {}",
-                        "error".red().bold(),
-                        e
-                    );
+                    eprintln!("{}: [L001] Lexer error: {}", "error".red().bold(), e);
                     eprintln!("  {} {}", "-->".blue().bold(), file.display());
                 }
                 continue;
@@ -559,6 +471,102 @@ pub(crate) fn cmd_lint(
                 eprintln!("  {} {}", "-->".blue().bold(), file.display());
             }
         }
+
+        // Run static analysis lint checks (dead code, unused imports, naming, complexity, unsafe)
+        let mut lint_analyzer = vais_security::LintAnalyzer::new();
+        let lint_diagnostics = lint_analyzer.analyze(&module);
+        for lint_diag in &lint_diagnostics {
+            let is_warning = lint_diag.level != vais_security::LintLevel::Error;
+
+            if is_warning {
+                if level == 0 {
+                    continue;
+                }
+                total_warnings += 1;
+                if level == 2 {
+                    total_errors += 1;
+                }
+            } else {
+                total_errors += 1;
+            }
+
+            if format == "json" {
+                let mut json_diag = serde_json::json!({
+                    "file": file.display().to_string(),
+                    "code": &lint_diag.code,
+                    "category": lint_diag.category.to_string(),
+                    "message": &lint_diag.message,
+                    "severity": lint_diag.level.to_string(),
+                    "line": source[..lint_diag.span.start.min(source.len())].matches('\n').count() + 1,
+                });
+                if let Some(ref sug) = lint_diag.suggestion {
+                    json_diag["suggestion"] = serde_json::json!(sug);
+                }
+                all_diagnostics.push(json_diag);
+            } else {
+                let severity_str = if is_warning && level < 2 {
+                    "warning".yellow().bold().to_string()
+                } else {
+                    "error".red().bold().to_string()
+                };
+
+                let line = source[..lint_diag.span.start.min(source.len())]
+                    .matches('\n')
+                    .count()
+                    + 1;
+                eprintln!(
+                    "{}: [{}] {} ({})",
+                    severity_str, lint_diag.code, lint_diag.message, lint_diag.category
+                );
+                eprintln!("  {} {}:{}", "-->".blue().bold(), file.display(), line);
+                if let Some(ref sug) = lint_diag.suggestion {
+                    eprintln!("  {} {}", "=".blue().bold(), sug);
+                }
+            }
+        }
+
+        // Run security audit
+        let mut sec_analyzer = vais_security::SecurityAnalyzer::new();
+        let sec_findings = sec_analyzer.analyze(&module);
+        for finding in &sec_findings {
+            if level == 0 {
+                continue;
+            }
+            total_warnings += 1;
+            if level == 2 {
+                total_errors += 1;
+            }
+
+            if format == "json" {
+                let json_diag = serde_json::json!({
+                    "file": file.display().to_string(),
+                    "code": format!("SEC-{}", finding.category),
+                    "category": "security",
+                    "message": &finding.description,
+                    "severity": finding.severity.to_string().to_lowercase(),
+                    "recommendation": &finding.recommendation,
+                    "line": source[..finding.location.start.min(source.len())].matches('\n').count() + 1,
+                });
+                all_diagnostics.push(json_diag);
+            } else {
+                let severity_str = match finding.severity {
+                    vais_security::Severity::Critical | vais_security::Severity::High => {
+                        "warning".red().bold().to_string()
+                    }
+                    _ => "warning".yellow().bold().to_string(),
+                };
+                let line = source[..finding.location.start.min(source.len())]
+                    .matches('\n')
+                    .count()
+                    + 1;
+                eprintln!(
+                    "{}: [SEC] {} ({})",
+                    severity_str, finding.description, finding.category
+                );
+                eprintln!("  {} {}:{}", "-->".blue().bold(), file.display(), line);
+                eprintln!("  {} {}", "=".blue().bold(), finding.recommendation);
+            }
+        }
     }
 
     if format == "json" {
@@ -613,7 +621,11 @@ pub(crate) fn discover_test_files(dir: &Path, results: &mut Vec<PathBuf>) -> Res
     Ok(())
 }
 
-pub(crate) fn run_single_test(path: &Path, verbose: bool, coverage_mode: &vais_codegen::optimize::CoverageMode) -> Result<(), String> {
+pub(crate) fn run_single_test(
+    path: &Path,
+    verbose: bool,
+    coverage_mode: &vais_codegen::optimize::CoverageMode,
+) -> Result<(), String> {
     println!(
         "{} Running test: {}\n",
         "Testing".cyan().bold(),
@@ -635,7 +647,11 @@ pub(crate) fn run_single_test(path: &Path, verbose: bool, coverage_mode: &vais_c
     }
 }
 
-pub(crate) fn run_single_test_inner(path: &Path, verbose: bool, coverage_mode: &vais_codegen::optimize::CoverageMode) -> Result<bool, String> {
+pub(crate) fn run_single_test_inner(
+    path: &Path,
+    verbose: bool,
+    coverage_mode: &vais_codegen::optimize::CoverageMode,
+) -> Result<bool, String> {
     use std::process::Command;
 
     // Step 1: Compile to LLVM IR
@@ -650,10 +666,17 @@ pub(crate) fn run_single_test_inner(path: &Path, verbose: bool, coverage_mode: &
     fs::write(&ir_path, &ir).map_err(|e| format!("failed to write IR: {}", e))?;
 
     // Step 3: Compile IR to binary with clang
+    let ir_path_str = ir_path
+        .to_str()
+        .ok_or_else(|| "IR path contains invalid UTF-8".to_string())?;
+    let bin_path_str = bin_path
+        .to_str()
+        .ok_or_else(|| "binary path contains invalid UTF-8".to_string())?;
+
     let mut clang_args = vec![
-        ir_path.to_str().unwrap().to_string(),
+        ir_path_str.to_string(),
         "-o".to_string(),
-        bin_path.to_str().unwrap().to_string(),
+        bin_path_str.to_string(),
         "-lm".to_string(),
     ];
 
@@ -679,7 +702,10 @@ pub(crate) fn run_single_test_inner(path: &Path, verbose: bool, coverage_mode: &
         if !cov_dir.exists() {
             let _ = std::fs::create_dir_all(cov_dir);
         }
-        cmd.env("LLVM_PROFILE_FILE", format!("{}/{}_test_%m.profraw", dir, stem));
+        cmd.env(
+            "LLVM_PROFILE_FILE",
+            format!("{}/{}_test_%m.profraw", dir, stem),
+        );
     }
     let run_output = cmd
         .output()
@@ -721,16 +747,27 @@ pub(crate) fn compile_to_ir_for_test(path: &Path) -> Result<String, String> {
     // Codegen
     let module_name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("test");
     let mut codegen = CodeGenerator::new_with_target(module_name, TargetTriple::Native);
-    codegen.set_resolved_functions(checker.get_all_functions().clone());
+    codegen.set_resolved_functions(checker.get_all_functions_with_methods());
+    codegen.set_type_aliases(checker.get_type_aliases().clone());
+    codegen.set_expr_types(checker.get_expr_types().clone());
+    codegen.set_implicit_try_sites(checker.get_implicit_try_sites().clone());
 
     let instantiations = checker.get_generic_instantiations();
-    let ir = if instantiations.is_empty() {
+    let result = if instantiations.is_empty() {
         codegen.generate_module(&ast)
     } else {
-        codegen.generate_module_with_instantiations(&ast, instantiations)
-    }
-    .map_err(|e| format!("codegen error: {}", e))?;
+        codegen.generate_module_with_instantiations(&ast, &instantiations)
+    };
+    let ir = result.map_err(|e| {
+        let spanned = vais_codegen::SpannedCodegenError {
+            span: codegen.last_error_span(),
+            error: e,
+        };
+        error_formatter::format_spanned_codegen_error(&spanned, &source, path)
+    })?;
+
+    // Verify IR structural integrity for test builds.
+    crate::utils::verify_ir_and_log(&ir, &path.display().to_string());
 
     Ok(ir)
 }
-
