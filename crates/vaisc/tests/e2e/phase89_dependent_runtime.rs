@@ -36,10 +36,11 @@ F get_negative() -> i64 { R 0 - 5 }
 F main() -> i64 {
     v := get_negative()
     R check_positive(v)
-}
+    }
 "#;
     // Should abort with non-zero exit code (runtime assertion failure)
     let result = compile_and_run(source);
+    // Compilation failure is also acceptable here, but a successful run must fail at runtime.
     if let Ok(r) = result {
         assert_ne!(
             r.exit_code, 0,
