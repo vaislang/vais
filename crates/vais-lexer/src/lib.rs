@@ -23,11 +23,16 @@ use std::fmt;
 #[logos(skip r"[ \t\r\n]+")] // Skip whitespace
 pub enum Token {
     // === Doc Comments ===
-    #[regex(r"///[^\n]*", |lex| lex.slice()[3..].trim().to_string(), priority = 5)]
+    #[regex(
+        r"///[^\n]*",
+        |lex| lex.slice()[3..].trim().to_string(),
+        priority = 5,
+        allow_greedy = true
+    )]
     DocComment(String),
 
     // === Regular Comments (lower priority than doc comments) ===
-    #[regex(r"#[^/\[\n][^\n]*", logos::skip)] // Skip regular comments (but not doc comments or #[)
+    #[regex(r"#[^/\[\n][^\n]*", logos::skip, allow_greedy = true)] // Skip regular comments (but not doc comments or #[)
     #[regex(r"#\n", logos::skip)]
     // Skip empty # lines
 
@@ -40,7 +45,7 @@ pub enum Token {
     // dashes or when multiple alternatives exist).
     #[token("<!--", skip_html_comment)]
     // === VaisX Template Doctype (HTML5 doctype declaration) ===
-    #[regex(r"<!DOCTYPE[^>]*>", logos::skip, ignore(ascii_case))]
+    #[regex(r"<!DOCTYPE[^>]*>", logos::skip, ignore(case))]
     // === Keywords (single-letter for token efficiency) ===
     // Higher priority than identifiers
     #[token("F", priority = 3)]
