@@ -53,6 +53,16 @@ fn test_is_void_result_helper() {
 }
 
 #[test]
+fn test_is_llvm_integer_scalar_helper() {
+    assert!(crate::helpers::is_llvm_integer_scalar("i1"));
+    assert!(crate::helpers::is_llvm_integer_scalar("i8"));
+    assert!(crate::helpers::is_llvm_integer_scalar("i64"));
+    assert!(!crate::helpers::is_llvm_integer_scalar("i8*"));
+    assert!(!crate::helpers::is_llvm_integer_scalar("i64 (i64)*"));
+    assert!(!crate::helpers::is_llvm_integer_scalar("float"));
+}
+
+#[test]
 fn test_emit_warning_or_error_default_mode() {
     let gen = CodeGenerator::new("test");
     // Default mode is strict: UnresolvedTypeFallback should be an error

@@ -453,6 +453,7 @@ impl CodeGenerator {
                     } else {
                         write_ir!(ir, "  {} = zext {} {} to {}", conv_tmp, src_ty, val, dst_ty);
                     }
+                    self.fn_ctx.register_temp_type(&conv_tmp, pt.clone());
                     val = conv_tmp;
                 }
                 // Float coercion: fptrunc double→float or fpext float→double
@@ -482,6 +483,26 @@ impl CodeGenerator {
             // When parameter expects &dyn Trait and argument is a concrete type reference,
             // create a fat pointer { data_ptr, vtable_ptr }
             if let Some(ref param_type) = param_ty {
+                if matches!(
+                    param_type,
+                    ResolvedType::Fn { .. } | ResolvedType::FnPtr { .. }
+                ) {
+                    let val_ty = self.llvm_type_of(&val);
+                    if crate::helpers::is_llvm_integer_scalar(&val_ty) && arg_ty.ends_with('*') {
+                        let fn_ptr = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = inttoptr {} {} to {}",
+                            fn_ptr,
+                            val_ty,
+                            val,
+                            arg_ty
+                        );
+                        self.fn_ctx.register_temp_type(&fn_ptr, param_type.clone());
+                        val = fn_ptr;
+                    }
+                }
+
                 let dyn_trait = match param_type {
                     ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
                         if let ResolvedType::DynTrait { trait_name, .. } = inner.as_ref() {

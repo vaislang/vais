@@ -25,6 +25,14 @@ pub(crate) fn is_void_result(llvm_type: &str, resolved: &vais_types::ResolvedTyp
     llvm_type == "void" || *resolved == vais_types::ResolvedType::Unit
 }
 
+/// Return true only for LLVM scalar integer spellings such as `i1`, `i8`, `i32`, `i64`.
+pub(crate) fn is_llvm_integer_scalar(llvm_type: &str) -> bool {
+    let Some(width) = llvm_type.strip_prefix('i') else {
+        return false;
+    };
+    !width.is_empty() && width.bytes().all(|b| b.is_ascii_digit())
+}
+
 /// Generate an LLVM IR instruction that acts as a void/Unit placeholder.
 ///
 /// LLVM IR does not allow `phi void` — void is not a first-class type. When
@@ -363,7 +371,7 @@ impl CodeGenerator {
     }
 
     /// Generate code for array slicing: arr[start..end]
-    /// Returns a new array (allocated on heap) containing the slice
+    /// Returns a borrowed slice fat pointer `{ data, len }` over existing storage.
     #[inline(never)]
     pub(crate) fn generate_slice(
         &mut self,

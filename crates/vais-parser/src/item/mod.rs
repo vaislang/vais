@@ -159,7 +159,11 @@ impl Parser {
 
             // Record the start position for the expression string
             let expr_start = self.pos;
-            let expr = self.parse_expr()?;
+            let old_allow_contract_return_ident = self.allow_contract_return_ident;
+            self.allow_contract_return_ident = name == "ensures";
+            let expr = self.parse_expr();
+            self.allow_contract_return_ident = old_allow_contract_return_ident;
+            let expr = expr?;
 
             // Reconstruct the expression string from tokens for error messages
             // We store the original text representation
