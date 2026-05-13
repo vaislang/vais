@@ -28,29 +28,29 @@ pub fn create_router(pool: DbPool, storage: PackageStorage, config: ServerConfig
         // Index routes (compatible with existing client)
         .route("/index.json", get(handlers::index::get_full_index))
         .route(
-            "/packages/:name/index.json",
+            "/packages/{name}/index.json",
             get(handlers::index::get_package_index),
         )
         // Package routes
         .route("/packages/publish", post(handlers::packages::publish))
-        .route("/packages/:name", get(handlers::packages::get_package))
+        .route("/packages/{name}", get(handlers::packages::get_package))
         .route(
-            "/packages/:name/:version",
+            "/packages/{name}/{version}",
             get(handlers::packages::download),
         )
         .route(
-            "/packages/:name/:version/yank",
+            "/packages/{name}/{version}/yank",
             post(handlers::packages::yank),
         )
         .route(
-            "/packages/:name/:version/unyank",
+            "/packages/{name}/{version}/unyank",
             post(handlers::packages::unyank),
         )
         // Search & Discovery
         .route("/search", get(handlers::packages::search))
         .route("/categories", get(handlers::packages::list_categories))
         .route(
-            "/categories/:category",
+            "/categories/{category}",
             get(handlers::packages::browse_category),
         )
         .route("/popular", get(handlers::packages::popular))
@@ -61,13 +61,13 @@ pub fn create_router(pool: DbPool, storage: PackageStorage, config: ServerConfig
         .route("/auth/me", get(handlers::auth::me))
         .route("/auth/tokens", get(handlers::auth::list_tokens))
         .route("/auth/tokens", post(handlers::auth::create_token))
-        .route("/auth/tokens/:id", delete(handlers::auth::delete_token))
+        .route("/auth/tokens/{id}", delete(handlers::auth::delete_token))
         // User routes
-        .route("/users/:username", get(handlers::users::get_user))
+        .route("/users/{username}", get(handlers::users::get_user))
         // Owner management
-        .route("/packages/:name/owners", post(handlers::users::add_owner))
+        .route("/packages/{name}/owners", post(handlers::users::add_owner))
         .route(
-            "/packages/:name/owners/:username",
+            "/packages/{name}/owners/{username}",
             delete(handlers::users::remove_owner),
         );
 
@@ -94,7 +94,7 @@ pub fn create_router(pool: DbPool, storage: PackageStorage, config: ServerConfig
         .route("/", get(handlers::web::index))
         .route("/dashboard", get(handlers::web::dashboard))
         .route("/health", get(handlers::health)) // Root-level health check
-        .route("/packages/:name", get(handlers::web::package_detail))
+        .route("/packages/{name}", get(handlers::web::package_detail))
         .route("/static/styles.css", get(handlers::web::serve_css));
 
     let app = Router::new()

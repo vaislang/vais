@@ -176,9 +176,11 @@ mod tests {
 
     #[test]
     fn test_bind_addr_custom() {
-        let mut config = ServerConfig::default();
-        config.host = "127.0.0.1".to_string();
-        config.port = 8080;
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 8080,
+            ..ServerConfig::default()
+        };
         assert_eq!(config.bind_addr(), "127.0.0.1:8080");
     }
 

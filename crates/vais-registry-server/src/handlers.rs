@@ -54,7 +54,6 @@ impl AuthUser {
     }
 }
 
-#[axum::async_trait]
 impl FromRequestParts<AppState> for AuthUser {
     type Rejection = ServerError;
 
@@ -111,7 +110,6 @@ impl FromRequestParts<AppState> for AuthUser {
 /// Optional authentication (doesn't fail if not authenticated)
 pub struct OptionalAuth(pub Option<AuthUser>);
 
-#[axum::async_trait]
 impl FromRequestParts<AppState> for OptionalAuth {
     type Rejection = ServerError;
 
