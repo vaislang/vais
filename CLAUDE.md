@@ -60,8 +60,8 @@ crates/
 ├── vais-python/       # Python bindings (PyO3)
 └── vais-node/         # Node.js bindings (NAPI)
 
-std/               # Standard library (79 .vais files)
-examples/          # Example programs (174 .vais files)
+std/               # Standard library (80 .vais files)
+examples/          # Example programs (188 .vais files)
 selfhost/          # Self-hosting compiler (50,000+ LOC)
 benches/           # Benchmark suite (criterion + language comparison)
 playground/        # Web playground frontend
@@ -92,16 +92,23 @@ intellij-vais/     # IntelliJ plugin
 - `?` = ternary (`cond ? a : b`) or try operator on Result/Option
 - `!` = unwrap operator on Result/Option
 - `|>` = pipe operator
-- `~` = string interpolation
+- `~` = bitwise NOT
+- `{expr}` inside strings = string interpolation
 - `..` = range operator
 - `#` = line comment
 
 ### Declarations
-- Traits: `W MyTrait { ... }`, impl: `X MyTrait for MyStruct { ... }`
+- Traits: `W MyTrait { ... }`, impl: `X MyStruct: MyTrait { ... }`
 - Generics: `F foo<T>(x: T) -> T`
 - Pattern matching: `M expr { pattern => result, _ => default }`
 - Closures: `|x| x * 2`, `|x, y| { x + y }`
-- Spawn: `spawn expr`, Yield: `yield expr`
+- Async: `A F name() -> T { ... }` + `.await` (no `spawn` — removed in Phase 195)
+
+### Removed keywords
+> `lazy` / `force` (Phase 194, commit 8c60c075) and `spawn` (Phase 195,
+> commit 12592076) were deleted across lexer/AST/parser/types/codegen.
+> Migration guide: `docs/language/removed_keywords.md`. Do not re-introduce
+> these in new examples or std/.
 
 ### Attributes
 - `#[cfg(target_os = "linux")]` — conditional compilation
@@ -111,6 +118,18 @@ intellij-vais/     # IntelliJ plugin
 ### Types
 - Primitives: `i8`, `i16`, `i32`, `i64`, `i128`, `u8`–`u128`, `f32`, `f64`, `bool`, `str`
 - Generics: `Vec<T>`, `HashMap<K,V>`, `Result<T,E>`, `Option<T>`
+
+### Type Conversion Rules (CRITICAL — DO NOT CHANGE)
+> **Rust 스타일 엄격한 타입 변환**. 암시적 coercion 추가 금지. Phase 158에서 확정.
+> 이 규칙은 `unification.rs`의 coercion이 5회 토글된 요요 패턴을 근본 방지하기 위해 제정됨.
+> 변경 시 반드시 RFC + E2E 보호 테스트 업데이트 필요.
+
+- ✅ **허용 (암시적)**: 정수 widening — `i8→i16→i32→i64`, `u8→u16→u32→u64`
+- ✅ **허용 (암시적)**: float 리터럴 추론 — `f32↔f64` (Rust와 동일, float 리터럴이 컨텍스트에 맞게 추론)
+- ❌ **금지**: `bool↔i64`, `int↔float`, `str↔i64`, 정수 narrowing (`i64→i32`)
+- 모든 타입 변환은 `as` 키워드로 명시: `x as i64`, `y as f64`, `flag as i64`
+- `unification.rs`에 `Bool`, `Str↔I64`, `Float↔Int` coercion 절대 추가하지 말 것
+- E2E 보호 테스트 (`phase158_type_strict.rs`)가 이 규칙을 검증
 
 ## Key Files
 
@@ -133,12 +152,12 @@ intellij-vais/     # IntelliJ plugin
 ## Testing
 
 Tests are in `crates/<name>/tests/`. Key test suites:
-- `vaisc/tests/e2e/` - End-to-end compilation tests (1,620+)
+- `vaisc/tests/e2e/` - End-to-end compilation tests (2,500+)
 - `vaisc/tests/integration_tests.rs` - Integration tests
 - `vais-types/tests/` - Type system tests (bidirectional, GAT, object safety, specialization)
 - `vais-codegen/tests/` - Formatter and error suggestion tests
 
-Total: 9,300+ tests across all crates.
+Total: 12,000+ tests across all crates.
 
 ## Dependencies
 

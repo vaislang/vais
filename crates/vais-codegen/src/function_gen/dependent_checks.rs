@@ -48,6 +48,7 @@ impl CodeGenerator {
     ///
     /// dep_ok_N:
     /// ```
+    #[inline(never)]
     pub(crate) fn generate_dependent_type_assertions(
         &mut self,
         params: &[Param],
@@ -107,6 +108,7 @@ impl CodeGenerator {
                     ty: base_ty.clone(),
                     kind: param_local.kind,
                     llvm_name: param_local.llvm_name.clone(),
+                    is_double_ptr: param_local.is_double_ptr,
                 };
                 self.fn_ctx.locals.insert(var_name.clone(), temp_local);
 

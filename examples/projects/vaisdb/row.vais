@@ -97,7 +97,7 @@ X RowBuilder {
         @.ensure(2)
         store_byte(self.data + self.len, COL_BOOL)
         self.len = self.len + 1
-        bv := I value != 0 { 1 } E { 0 }
+        bv := I value != 0 { 1 } EL { 0 }
         store_byte(self.data + self.len, bv)
         self.len = self.len + 1
         self.col_count = self.col_count + 1
@@ -112,7 +112,7 @@ X RowBuilder {
             v = v >> 7
             I v > 0 {
                 store_byte(self.data + self.len, byte | 128)
-            } E {
+            } EL {
                 store_byte(self.data + self.len, byte)
             }
             self.len = self.len + 1
@@ -238,7 +238,7 @@ X RowReader {
     F seek_col_loop(&self, target: i64, current: i64) -> i64 {
         I current >= target {
             @.peek_type()
-        } E {
+        } EL {
             @.skip_col()
             @.seek_col_loop(target, current + 1)
         }

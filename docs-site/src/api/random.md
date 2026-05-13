@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/random
+use std/random
 ```
 
 ## Functions
@@ -32,9 +32,9 @@ U std/random
 ## Usage
 
 ```vais
-U std/random
+use std/random
 
-F main() -> i64 {
+fn main() -> i64 {
     random_init()
     dice := random_range(1, 6)
     coin := random_bool()

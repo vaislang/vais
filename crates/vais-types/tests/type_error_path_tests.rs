@@ -43,7 +43,7 @@ fn check_err(source: &str) -> TypeError {
 
 #[test]
 fn test_mismatch_return_bool_for_i64() {
-    let err = check_err("F test()->i64=true");
+    let err = check_err("F test()->i64=\"hello\"");
     assert_eq!(err.error_code(), "E001");
     assert!(err.to_string().contains("mismatch") || err.to_string().contains("Mismatch"));
 }
@@ -64,7 +64,7 @@ fn test_mismatch_return_i64_for_bool() {
 
 #[test]
 fn test_mismatch_help_message() {
-    let err = check_err("F test()->i64=true");
+    let err = check_err("F test()->i64=\"hello\"");
     let help = err.help();
     assert!(help.is_some(), "Mismatch should have help message");
 }

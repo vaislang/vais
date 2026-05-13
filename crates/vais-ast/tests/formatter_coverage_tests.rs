@@ -17,10 +17,12 @@ fn format_source(source: &str) -> String {
     fmt.format_module(&module)
 }
 
+#[allow(dead_code)]
 fn sp<T>(node: T) -> Spanned<T> {
     Spanned::new(node, Span::new(0, 1))
 }
 
+#[allow(dead_code)]
 fn sp_str(s: &str) -> Spanned<String> {
     sp(s.to_string())
 }
@@ -29,6 +31,7 @@ fn default_formatter() -> Formatter {
     Formatter::new(FormatConfig::default())
 }
 
+#[allow(dead_code)]
 fn format_item(item: Item) -> String {
     let mut fmt = default_formatter();
     let module = Module {

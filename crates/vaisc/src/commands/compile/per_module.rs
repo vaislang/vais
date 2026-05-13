@@ -45,16 +45,34 @@ pub(crate) fn compile_per_module(
     fs::create_dir_all(&cache_dir).map_err(|e| format!("Cannot create module cache dir: {}", e))?;
 
     let effective_opt_level = if debug { 0 } else { opt_level };
-    let resolved_functions = checker.get_all_functions().clone();
+    let resolved_functions = checker.get_all_functions_with_methods();
     let resolved_type_aliases = checker.get_type_aliases().clone();
-    let _instantiations = checker.get_generic_instantiations();
+    let resolved_expr_types = checker.get_expr_types().clone();
+    let resolved_implicit_try_sites = checker.get_implicit_try_sites().clone();
+    let instantiations = checker.get_generic_instantiations();
+    let instantiations = &instantiations;
 
-    // Phase 1: Generate IR for all modules (parallelized with rayon)
-    // Collect (module_stem, is_main, ir_string) tuples
-    let module_entries: Vec<_> = modules_map.iter().collect();
-    let ir_results: Vec<Result<(String, bool, String), String>> = module_entries
-        .par_iter()
-        .map(|(module_path, item_indices)| {
+    // Phase 1: Generate IR for all modules (parallelized with rayon by default).
+    //
+    // Set VAIS_PARALLEL_CODEGEN=0 to force sequential codegen. This is useful for
+    // debugging multi-error scenarios where parallel work-stealing causes the
+    // "first reported error" to be non-deterministic across runs, making RCA
+    // of multiple simultaneous codegen bugs very difficult. Sequential mode
+    // processes modules in a stable iteration order.
+    let parallel_codegen = std::env::var("VAIS_PARALLEL_CODEGEN")
+        .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+        .unwrap_or(true);
+
+    // Collect (module_stem, is_main, ir_string) tuples.
+    // In sequential mode, sort by path to guarantee deterministic error reporting order.
+    // (Parallel mode via rayon also has non-deterministic work-stealing, so sorting here
+    //  doesn't fully stabilize parallel errors but doesn't hurt.)
+    let mut module_entries: Vec<_> = modules_map.iter().collect();
+    if !parallel_codegen {
+        module_entries.sort_by(|a, b| a.0.cmp(b.0));
+    }
+    let ir_results: Vec<Result<(String, bool, String), String>> = {
+        let mapper = |(module_path, item_indices): &(&std::path::PathBuf, &Vec<usize>)| {
             let module_stem = module_path
                 .file_stem()
                 .and_then(|s| s.to_str())
@@ -66,6 +84,8 @@ pub(crate) fn compile_per_module(
             let mut codegen = CodeGenerator::new_with_target(&module_stem, target.clone());
             codegen.set_resolved_functions(resolved_functions.clone());
             codegen.set_type_aliases(resolved_type_aliases.clone());
+            codegen.set_expr_types(resolved_expr_types.clone());
+            codegen.set_implicit_try_sites(resolved_implicit_try_sites.clone());
             codegen.set_string_prefix(&module_stem);
 
             if gc {
@@ -85,16 +105,28 @@ pub(crate) fn compile_per_module(
             }
 
             // Generate IR for this module's subset
-            let result = codegen.generate_module_subset(final_ast, item_indices, is_main);
+            let result =
+                codegen.generate_module_subset(final_ast, item_indices, instantiations, is_main);
             let raw_ir = result.map_err(|e| {
                 let spanned = vais_codegen::SpannedCodegenError {
                     span: codegen.last_error_span(),
                     error: e,
                 };
+                // Error spans reference the module where the error originated,
+                // not the main entry file. Load the module's own source so the
+                // formatter renders the correct file + line + snippet.
+                let (err_source, err_path): (std::borrow::Cow<'_, str>, &Path) = if is_main {
+                    (std::borrow::Cow::Borrowed(main_source), input)
+                } else {
+                    match fs::read_to_string(module_path.as_path()) {
+                        Ok(s) => (std::borrow::Cow::Owned(s), module_path.as_path()),
+                        Err(_) => (std::borrow::Cow::Borrowed(main_source), input),
+                    }
+                };
                 format!(
                     "Codegen error for {}:\n{}",
                     module_stem,
-                    error_formatter::format_spanned_codegen_error(&spanned, main_source, input,)
+                    error_formatter::format_spanned_codegen_error(&spanned, &err_source, err_path)
                 )
             })?;
 
@@ -111,8 +143,13 @@ pub(crate) fn compile_per_module(
             let ir = vais_codegen::optimize::optimize_ir(&raw_ir, opt);
 
             Ok((module_stem, is_main, ir))
-        })
-        .collect();
+        };
+        if parallel_codegen {
+            module_entries.par_iter().map(mapper).collect()
+        } else {
+            module_entries.iter().map(mapper).collect()
+        }
+    };
 
     // Collect results, bail on first error
     let mut module_irs: Vec<(String, bool, String)> = Vec::with_capacity(ir_results.len());
@@ -128,55 +165,59 @@ pub(crate) fn compile_per_module(
         );
     }
 
-    // Phase 2: Compile .ll → .o with content-hash caching (parallelized)
+    // Phase 2: Compile .ll → .o with content-hash caching (parallelized unless
+    // VAIS_PARALLEL_CODEGEN=0, in which case sequential to match Phase 1 ordering).
     let compile_start = std::time::Instant::now();
 
-    let obj_results: Vec<Result<(PathBuf, bool), String>> = module_irs
-        .par_iter()
-        .map(|(module_stem, _is_main, ir)| {
-            // Compute content hash of the IR
-            let ir_hash = incremental::compute_content_hash(ir);
-            let cached_obj_path =
-                incremental::get_ir_cached_object_path(&cache_dir, &ir_hash, effective_opt_level);
+    let compile_one = |(module_stem, _is_main, ir): &(String, bool, String)| {
+        // Compute content hash of the IR
+        let ir_hash = incremental::compute_content_hash(ir);
+        let cached_obj_path =
+            incremental::get_ir_cached_object_path(&cache_dir, &ir_hash, effective_opt_level);
 
-            // Check cache: if .o exists for this IR hash, skip clang
-            if cached_obj_path.exists() {
-                return Ok((cached_obj_path, true)); // true = cache hit
-            }
+        // Check cache: if .o exists for this IR hash, skip clang
+        if cached_obj_path.exists() {
+            return Ok((cached_obj_path, true)); // true = cache hit
+        }
 
-            // Cache miss: write .ll, compile to .o
-            let ll_path = cache_dir.join(format!("{}.ll", module_stem));
-            fs::write(&ll_path, ir)
-                .map_err(|e| format!("Cannot write '{}': {}", ll_path.display(), e))?;
+        // Cache miss: write .ll, compile to .o
+        let ll_path = cache_dir.join(format!("{}.ll", module_stem));
+        fs::write(&ll_path, ir)
+            .map_err(|e| format!("Cannot write '{}': {}", ll_path.display(), e))?;
 
-            let opt_flag = format!("-O{}", effective_opt_level.min(3));
-            let mut compile_args = vec![
-                "-c".to_string(),
-                opt_flag,
-                ll_path.display().to_string(),
-                "-o".to_string(),
-                cached_obj_path.display().to_string(),
-            ];
-            if debug {
-                compile_args.push("-g".to_string());
-            }
+        let opt_flag = format!("-O{}", effective_opt_level.min(3));
+        let mut compile_args = vec![
+            "-c".to_string(),
+            opt_flag,
+            ll_path.display().to_string(),
+            "-o".to_string(),
+            cached_obj_path.display().to_string(),
+        ];
+        if debug {
+            compile_args.push("-g".to_string());
+        }
 
-            let compile_output = std::process::Command::new("clang")
-                .args(&compile_args)
-                .output()
-                .map_err(|e| format!("Cannot run clang: {}", e))?;
+        let compile_output = std::process::Command::new("clang")
+            .args(&compile_args)
+            .output()
+            .map_err(|e| format!("Cannot run clang: {}", e))?;
 
-            if !compile_output.status.success() {
-                let stderr = String::from_utf8_lossy(&compile_output.stderr);
-                return Err(format!(
-                    "clang compilation failed for module '{}': {}",
-                    module_stem, stderr
-                ));
-            }
+        if !compile_output.status.success() {
+            let stderr = String::from_utf8_lossy(&compile_output.stderr);
+            return Err(format!(
+                "clang compilation failed for module '{}': {}",
+                module_stem, stderr
+            ));
+        }
 
-            Ok((cached_obj_path, false)) // false = cache miss
-        })
-        .collect();
+        Ok((cached_obj_path, false)) // false = cache miss
+    };
+
+    let obj_results: Vec<Result<(PathBuf, bool), String>> = if parallel_codegen {
+        module_irs.par_iter().map(compile_one).collect()
+    } else {
+        module_irs.iter().map(compile_one).collect()
+    };
 
     // Collect .o paths
     let mut obj_files: Vec<PathBuf> = Vec::with_capacity(obj_results.len());
@@ -231,6 +272,11 @@ pub(crate) fn compile_per_module(
     {
         link_args.push("-lm".to_string());
     }
+
+    // Phase 4c.4 / Task #55 — reproducible linker metadata.
+    // Shared with `compile_to_native` so both the per-module and
+    // whole-program link paths produce bit-identical binaries.
+    append_reproducible_link_flags(&mut link_args);
 
     let link_status = std::process::Command::new("clang")
         .args(&link_args)

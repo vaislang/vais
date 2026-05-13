@@ -197,7 +197,7 @@ X Schema {
         pos = pos + __str_copy_to(buf + pos, " (")
 
         i := 0
-        L i < self.column_count {
+        LW i < self.column_count {
             I i > 0 {
                 store_byte(buf + pos, 44)  # ,
                 store_byte(buf + pos + 1, 32)  # space
@@ -313,7 +313,7 @@ X WhereClause {
         p = p + __str_copy_to(buf + p, " WHERE ")
 
         i := 0
-        L i < self.count {
+        LW i < self.count {
             offset := i * 32
             connector := __load_ptr(self.items + offset) as str
             column := __load_ptr(self.items + offset + 8) as str
@@ -411,7 +411,7 @@ X QueryBuilder {
     F where_eq(&self, column: str, value: str) -> QueryBuilder {
         I self.where_clause.count == 0 {
             self.where_clause.add("", column, "=", value)
-        } E {
+        } EL {
             self.where_clause.add("AND", column, "=", value)
         }
         self
@@ -421,7 +421,7 @@ X QueryBuilder {
     F where_gt(&self, column: str, value: str) -> QueryBuilder {
         I self.where_clause.count == 0 {
             self.where_clause.add("", column, ">", value)
-        } E {
+        } EL {
             self.where_clause.add("AND", column, ">", value)
         }
         self
@@ -431,7 +431,7 @@ X QueryBuilder {
     F where_lt(&self, column: str, value: str) -> QueryBuilder {
         I self.where_clause.count == 0 {
             self.where_clause.add("", column, "<", value)
-        } E {
+        } EL {
             self.where_clause.add("AND", column, "<", value)
         }
         self
@@ -513,7 +513,7 @@ X QueryBuilder {
                 I self.column_count > 0 {
                     col_str := __load_ptr(self.columns) as str
                     pos = pos + __str_copy_to(buf + pos, col_str)
-                } E {
+                } EL {
                     store_byte(buf + pos, 42)  # *
                     pos = pos + 1
                 }
@@ -681,7 +681,7 @@ X MigrationRunner {
         buf := __malloc(SQL_BUFFER_SIZE * 4)
         pos := 0
         i := 0
-        L i < self.count {
+        LW i < self.count {
             m_ptr := __load_ptr(self.migrations + i * 8)
             I m_ptr != 0 {
                 up_sql := __load_ptr(m_ptr + 16) as str
@@ -700,7 +700,7 @@ X MigrationRunner {
         buf := __malloc(SQL_BUFFER_SIZE * 4)
         pos := 0
         i := self.count - 1
-        L i >= 0 {
+        LW i >= 0 {
             m_ptr := __load_ptr(self.migrations + i * 8)
             I m_ptr != 0 {
                 down_sql := __load_ptr(m_ptr + 24) as str
@@ -722,7 +722,7 @@ X MigrationRunner {
     # Free memory
     F drop(&self) -> i64 {
         i := 0
-        L i < self.count {
+        LW i < self.count {
             m_ptr := __load_ptr(self.migrations + i * 8)
             I m_ptr != 0 {
                 __free(m_ptr)

@@ -8,6 +8,7 @@ impl CodeGenerator {
     ///
     /// assert(condition) or assert(condition, message)
     /// Generates runtime check that panics if condition is false.
+    #[inline(never)]
     pub(crate) fn generate_assert(
         &mut self,
         condition: &Spanned<Expr>,
@@ -75,6 +76,7 @@ impl CodeGenerator {
     ///
     /// assume(condition) tells the verifier/optimizer that condition is true.
     /// In debug mode, acts like assert. In release mode, generates llvm.assume intrinsic.
+    #[inline(never)]
     pub(crate) fn generate_assume(
         &mut self,
         condition: &Spanned<Expr>,

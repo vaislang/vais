@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/future
+use std/future
 ```
 
 ## Core Types
@@ -13,7 +13,7 @@ U std/future
 ### Poll
 
 ```vais
-E Poll {
+enum Poll {
     Pending,
     Ready(i64)
 }
@@ -30,8 +30,8 @@ Result type for polling futures.
 ### Future (trait)
 
 ```vais
-W Future {
-    F poll(&self, ctx: i64) -> Poll
+trait Future {
+    fn poll(&self, ctx: i64) -> Poll
 }
 ```
 
@@ -40,7 +40,7 @@ Trait for asynchronous values. Types implementing this can be polled for complet
 ### Context
 
 ```vais
-S Context {
+struct Context {
     waker_ptr: i64,
     runtime_ptr: i64
 }
@@ -57,7 +57,7 @@ Context passed to poll operations, contains waker and runtime information.
 ### Waker
 
 ```vais
-S Waker {
+struct Waker {
     task_ptr: i64,
     wake_fn: i64
 }
@@ -75,7 +75,7 @@ Mechanism to wake up a suspended task.
 ### MapFuture
 
 ```vais
-S MapFuture {
+struct MapFuture {
     inner_ptr: i64,     # Pointer to inner future
     inner_poll: i64,    # Poll function of inner future
     map_fn: i64,        # Mapping function pointer
@@ -92,7 +92,7 @@ Transforms the output of a future using a mapping function.
 ### AndThenFuture
 
 ```vais
-S AndThenFuture {
+struct AndThenFuture {
     first_ptr: i64,     # First future
     first_poll: i64,
     second_fn: i64,     # Function that creates second future from first result
@@ -111,7 +111,7 @@ Chains futures sequentially - runs second future after first completes.
 ### JoinFuture
 
 ```vais
-S JoinFuture {
+struct JoinFuture {
     first_ptr: i64,
     first_poll: i64,
     second_ptr: i64,
@@ -132,7 +132,7 @@ Runs two futures concurrently, completes when both finish.
 ### SelectFuture
 
 ```vais
-S SelectFuture {
+struct SelectFuture {
     first_ptr: i64,
     first_poll: i64,
     second_ptr: i64,
@@ -149,7 +149,7 @@ Returns when either future completes (race condition).
 ### ReadyFuture
 
 ```vais
-S ReadyFuture {
+struct ReadyFuture {
     value: i64
 }
 ```
@@ -163,7 +163,7 @@ Future that immediately resolves to a value.
 ### PendingFuture
 
 ```vais
-S PendingFuture {
+struct PendingFuture {
     _dummy: i64
 }
 ```
@@ -177,7 +177,7 @@ Future that never resolves (always returns Pending).
 ### TimerFuture
 
 ```vais
-S TimerFuture {
+struct TimerFuture {
     deadline: i64,      # Target tick count
     started: i64
 }
@@ -192,7 +192,7 @@ Future that completes after N iterations.
 ### YieldNow
 
 ```vais
-S YieldNow {
+struct YieldNow {
     yielded: i64
 }
 ```
@@ -208,8 +208,8 @@ Cooperative scheduling yield point. Returns Pending on first poll, Ready on seco
 ### AsyncDrop (trait)
 
 ```vais
-W AsyncDrop {
-    A F async_drop(&self) -> i64
+trait AsyncDrop {
+    A fn async_drop(&self) -> i64
 }
 ```
 
@@ -218,7 +218,7 @@ Trait for types that need async cleanup when they go out of scope.
 ### AsyncDropGuard
 
 ```vais
-S AsyncDropGuard {
+struct AsyncDropGuard {
     value_ptr: i64,         # Pointer to the value
     drop_fn: i64,           # Async drop function pointer (poll-based)
     dropped: i64            # 1 if already dropped
@@ -237,7 +237,7 @@ Wraps a value implementing AsyncDrop and ensures async_drop is called.
 ### AsyncDropScope
 
 ```vais
-S AsyncDropScope {
+struct AsyncDropScope {
     head: i64,          # First guard in linked list
     count: i64          # Number of guards
 }
@@ -270,9 +270,9 @@ Manages multiple AsyncDrop resources. All resources are dropped in reverse order
 ### Basic Future
 
 ```vais
-U std/future
+use std/future
 
-F main() -> i64 {
+fn main() -> i64 {
     # Create immediately-ready future
     f := ready(42)
 
@@ -290,9 +290,9 @@ F main() -> i64 {
 ### Join Futures
 
 ```vais
-U std/future
+use std/future
 
-F main() -> i64 {
+fn main() -> i64 {
     f1 := ready(10)
     f2 := ready(20)
 
@@ -307,21 +307,21 @@ F main() -> i64 {
 ### Async Drop
 
 ```vais
-U std/future
+use std/future
 
 # Example: Connection with async cleanup
-S MyConn {
+struct MyConn {
     handle: i64
 }
 
-X MyConn: AsyncDrop {
-    A F async_drop(&self) -> i64 {
+impl MyConn: AsyncDrop {
+    A fn async_drop(&self) -> i64 {
         # Close connection asynchronously
         close_connection(self.handle)
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     scope := async_drop_scope()
 
     # Register resource for async cleanup

@@ -564,6 +564,7 @@ F main() -> i64 {
 // Regression: Existing WASM Tests Still Pass
 // ==============================================================================
 
+// REGRESSION(phase-85): WASM target IR must not break after WASIp2 additions
 #[test]
 fn test_wasm32_unknown_still_works() {
     // Ensure wasm32-unknown-unknown target still generates correct IR

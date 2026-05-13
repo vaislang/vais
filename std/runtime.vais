@@ -101,7 +101,7 @@ X Runtime {
         store_i64(task_node_ptr + 40, 0)
 
         # Add to task queue
-        L self.tail == 0 {
+        LW self.tail == 0 {
             # First task
             self.head = task_ptr
             self.tail = task_ptr
@@ -119,15 +119,15 @@ X Runtime {
     # Run the scheduler until all tasks complete
     F run(&self) -> i64 {
         # Keep polling until no pending tasks
-        L self.task_count > 0 {
+        LW self.task_count > 0 {
             made_progress := 0
 
             # Iterate through task list
             current := self.head
-            L current != 0 {
+            LW current != 0 {
                 status := load_i64(current + 24)
 
-                L status == TASK_PENDING {
+                LW status == TASK_PENDING {
                     # Mark as running
                     store_i64(current + 24, TASK_RUNNING)
 
@@ -140,7 +140,7 @@ X Runtime {
                     poll_status := extract_poll_status(poll_result)
                     poll_value := extract_poll_value(poll_result)
 
-                    L poll_status == 1 {
+                    LW poll_status == 1 {
                         # Ready - task completed
                         store_i64(current + 24, TASK_COMPLETED)
                         store_i64(current + 32, poll_value)
@@ -166,12 +166,12 @@ X Runtime {
     # Block on a single future until completion
     F block_on(&self, future_ptr: i64, poll_fn: i64) -> i64 {
         # Simple busy-poll loop
-        L 1 {
+        LW 1 {
             poll_result := call_poll(poll_fn, future_ptr)
             poll_status := extract_poll_status(poll_result)
             poll_value := extract_poll_value(poll_result)
 
-            L poll_status == 1 {
+            LW poll_status == 1 {
                 R poll_value
             }
             # Pending - continue polling
@@ -185,7 +185,7 @@ V __GLOBAL_RUNTIME: i64 = 0
 
 # Initialize global runtime
 F runtime_init() -> i64 {
-    L __GLOBAL_RUNTIME == 0 {
+    LW __GLOBAL_RUNTIME == 0 {
         __GLOBAL_RUNTIME = malloc(40)  # Size of Runtime struct
         # Initialize all fields to 0
         store_i64(__GLOBAL_RUNTIME, 0)       # task_count
@@ -199,7 +199,7 @@ F runtime_init() -> i64 {
 
 # Get global runtime
 F get_runtime() -> i64 {
-    L __GLOBAL_RUNTIME == 0 {
+    LW __GLOBAL_RUNTIME == 0 {
         runtime_init()
     }
     __GLOBAL_RUNTIME
@@ -358,7 +358,7 @@ X EventLoop {
         store_i64(src_ptr + 24, deadline_ms)
         store_i64(src_ptr + 32, 0)  # next = null
 
-        L self.sources_tail == 0 {
+        LW self.sources_tail == 0 {
             self.sources_head = src_ptr
             self.sources_tail = src_ptr
         } ! {
@@ -375,19 +375,19 @@ X EventLoop {
         prev := 0
         current := self.sources_head
 
-        L current != 0 {
+        LW current != 0 {
             src_fd := load_i64(current + 8)
             next := load_i64(current + 32)
 
-            L src_fd == fd {
+            LW src_fd == fd {
                 # Unlink from list
-                L prev == 0 {
+                LW prev == 0 {
                     self.sources_head = next
                 } ! {
                     store_i64(prev + 32, next)
                 }
 
-                L next == 0 {
+                LW next == 0 {
                     self.sources_tail = prev
                 }
 
@@ -405,9 +405,9 @@ X EventLoop {
     # Find the task waiting on a given fd
     F find_task_for_fd(&self, fd: i64) -> i64 {
         current := self.sources_head
-        L current != 0 {
+        LW current != 0 {
             src_fd := load_i64(current + 8)
-            L src_fd == fd {
+            LW src_fd == fd {
                 R load_i64(current + 16)  # task_ptr
             }
             current = load_i64(current + 32)
@@ -445,7 +445,7 @@ X EventLoop {
     F cleanup(&self) -> i64 {
         # Free all event sources
         current := self.sources_head
-        L current != 0 {
+        LW current != 0 {
             next := load_i64(current + 32)
             free(current)
             current = next
@@ -534,7 +534,7 @@ X ReactorRuntime {
         store_i64(task_ptr + 32, 0)
         store_i64(task_ptr + 40, 0)
 
-        L self.tail == 0 {
+        LW self.tail == 0 {
             self.head = task_ptr
             self.tail = task_ptr
         } ! {
@@ -571,14 +571,14 @@ X ReactorRuntime {
     F run(&self) -> i64 {
         el := self.event_loop as *EventLoop
 
-        L self.task_count > 0 {
+        LW self.task_count > 0 {
             # Phase 1: Poll all ready/pending tasks
             made_progress := 0
             current := self.head
-            L current != 0 {
+            LW current != 0 {
                 status := load_i64(current + 24)
 
-                L status == TASK_PENDING {
+                LW status == TASK_PENDING {
                     self.current_task = current
                     store_i64(current + 24, TASK_RUNNING)
 
@@ -589,7 +589,7 @@ X ReactorRuntime {
                     poll_status := extract_poll_status(poll_result)
                     poll_value := extract_poll_value(poll_result)
 
-                    L poll_status == 1 {
+                    LW poll_status == 1 {
                         store_i64(current + 24, TASK_COMPLETED)
                         store_i64(current + 32, poll_value)
                         self.task_count = self.task_count - 1
@@ -600,7 +600,7 @@ X ReactorRuntime {
                     }
                 }
 
-                L status == TASK_READY {
+                LW status == TASK_READY {
                     # Task was woken by an event - poll it
                     self.current_task = current
                     store_i64(current + 24, TASK_RUNNING)
@@ -612,7 +612,7 @@ X ReactorRuntime {
                     poll_status := extract_poll_status(poll_result)
                     poll_value := extract_poll_value(poll_result)
 
-                    L poll_status == 1 {
+                    LW poll_status == 1 {
                         store_i64(current + 24, TASK_COMPLETED)
                         store_i64(current + 32, poll_value)
                         self.task_count = self.task_count - 1
@@ -626,7 +626,7 @@ X ReactorRuntime {
             }
 
             # Phase 2: If no progress, wait for I/O events
-            L made_progress == 0 {
+            LW made_progress == 0 {
                 # Calculate timeout: if we have pending tasks, use short timeout
                 # Otherwise wait indefinitely (-1)
                 timeout := 100  # 100ms default timeout
@@ -635,16 +635,16 @@ X ReactorRuntime {
 
                 # Process events and wake corresponding tasks
                 i := 0
-                L i < n_events {
+                LW i < n_events {
                     ev_fd := el.event_fd(i)
 
                     # Check if it's the waker pipe
-                    L ev_fd == el.waker_read_fd {
+                    LW ev_fd == el.waker_read_fd {
                         el.drain_waker()
                     } ! {
                         # Find the task waiting on this fd and mark it ready
                         task_ptr := el.find_task_for_fd(ev_fd)
-                        L task_ptr != 0 {
+                        LW task_ptr != 0 {
                             store_i64(task_ptr + 24, TASK_READY)
                         }
                     }
@@ -677,12 +677,12 @@ X ReactorRuntime {
         result := 0
         done := 0
 
-        L done == 0 {
+        LW done == 0 {
             poll_result := call_poll(poll_fn, future_ptr)
             poll_status := extract_poll_status(poll_result)
             poll_value := extract_poll_value(poll_result)
 
-            L poll_status == 1 {
+            LW poll_status == 1 {
                 result = poll_value
                 done = 1
             } ! {
@@ -690,9 +690,9 @@ X ReactorRuntime {
                 n_events := el.poll_events(100)
 
                 i := 0
-                L i < n_events {
+                LW i < n_events {
                     ev_fd := el.event_fd(i)
-                    L ev_fd == el.waker_read_fd {
+                    LW ev_fd == el.waker_read_fd {
                         el.drain_waker()
                     }
                     i = i + 1
@@ -714,7 +714,7 @@ V __GLOBAL_REACTOR: i64 = 0
 
 # Initialize global reactor runtime
 F reactor_init() -> i64 {
-    L __GLOBAL_REACTOR == 0 {
+    LW __GLOBAL_REACTOR == 0 {
         __GLOBAL_REACTOR = malloc(56)  # Size of ReactorRuntime struct (7 fields)
 
         # Create EventLoop on heap
@@ -752,7 +752,7 @@ F reactor_init() -> i64 {
 
 # Get global reactor runtime
 F get_reactor() -> i64 {
-    L __GLOBAL_REACTOR == 0 {
+    LW __GLOBAL_REACTOR == 0 {
         reactor_init()
     }
     __GLOBAL_REACTOR
@@ -877,7 +877,7 @@ X TaskGroup {
 
     # Spawn a new task into the group
     F spawn(&self, future_ptr: i64, poll_fn: i64) -> i64 {
-        L self.cancelled == 1 {
+        LW self.cancelled == 1 {
             R 0  # Don't spawn if group is cancelled
         }
 
@@ -894,7 +894,7 @@ X TaskGroup {
         store_i64(entry_ptr + 48, 0)         # next
 
         # Add to linked list
-        L self.tail == 0 {
+        LW self.tail == 0 {
             self.head = entry_ptr
             self.tail = entry_ptr
         } ! {
@@ -911,8 +911,8 @@ X TaskGroup {
     F run(&self) -> i64 {
         has_error := 0
 
-        L self.completed_count < self.task_count {
-            L self.cancelled == 1 {
+        LW self.completed_count < self.task_count {
+            LW self.cancelled == 1 {
                 # Cancel remaining tasks
                 self.cancel_remaining()
                 R 1
@@ -920,11 +920,11 @@ X TaskGroup {
 
             # Poll all pending/running tasks
             current := self.head
-            L current != 0 {
+            LW current != 0 {
                 status := load_i64(current + 24)
 
                 # Only poll pending or running tasks
-                L status < 2 {
+                LW status < 2 {
                     future_ptr := load_i64(current + 8)
                     poll_fn := load_i64(current + 16)
 
@@ -936,18 +936,18 @@ X TaskGroup {
                     poll_status := extract_poll_status(poll_result)
                     poll_value := extract_poll_value(poll_result)
 
-                    L poll_status == 1 {
+                    LW poll_status == 1 {
                         # Task completed
                         store_i64(current + 24, 3)  # COMPLETED
                         store_i64(current + 32, poll_value)
                         self.completed_count = self.completed_count + 1
 
                         # Check if result indicates an error (negative = error)
-                        L poll_value < 0 {
+                        LW poll_value < 0 {
                             store_i64(current + 40, 1)  # error flag
                             has_error = 1
 
-                            L self.cancel_on_error == 1 {
+                            LW self.cancel_on_error == 1 {
                                 self.cancelled = 1
                             }
                         }
@@ -967,10 +967,10 @@ X TaskGroup {
     # Cancel all remaining tasks
     F cancel_remaining(&self) -> i64 {
         current := self.head
-        L current != 0 {
+        LW current != 0 {
             status := load_i64(current + 24)
             # Cancel tasks that haven't completed
-            L status < 3 {
+            LW status < 3 {
                 store_i64(current + 24, 4)  # CANCELLED
                 self.completed_count = self.completed_count + 1
             }
@@ -1009,8 +1009,8 @@ X TaskGroup {
     F result(&self, index: i64) -> i64 {
         current := self.head
         i := 0
-        L current != 0 {
-            L i == index {
+        LW current != 0 {
+            LW i == index {
                 R load_i64(current + 32)
             }
             i = i + 1
@@ -1023,8 +1023,8 @@ X TaskGroup {
     F has_error(&self, index: i64) -> i64 {
         current := self.head
         i := 0
-        L current != 0 {
-            L i == index {
+        LW current != 0 {
+            LW i == index {
                 R load_i64(current + 40)
             }
             i = i + 1
@@ -1037,8 +1037,8 @@ X TaskGroup {
     F task_status(&self, index: i64) -> i64 {
         current := self.head
         i := 0
-        L current != 0 {
-            L i == index {
+        LW current != 0 {
+            LW i == index {
                 R load_i64(current + 24)
             }
             i = i + 1
@@ -1050,7 +1050,7 @@ X TaskGroup {
     # Free all task entries
     F cleanup(&self) -> i64 {
         current := self.head
-        L current != 0 {
+        LW current != 0 {
             next := load_i64(current + 48)
             free(current)
             current = next
@@ -1076,7 +1076,7 @@ X ScopedTask {
         group_ptr := malloc(72)  # 9 fields * 8 bytes
         # Initialize all fields to 0
         i := 0
-        L i < 9 {
+        LW i < 9 {
             store_i64(group_ptr + i * 8, 0)
             i = i + 1
         }
@@ -1142,7 +1142,7 @@ X SelectResult {
 
 # select2: wait for the first of 2 futures to complete
 F select2(fp1: i64, pf1: i64, fp2: i64, pf2: i64) -> SelectResult {
-    L 1 {
+    LW 1 {
         # Poll future 1
         r1 := call_poll(pf1, fp1)
         s1 := extract_poll_status(r1)
@@ -1160,7 +1160,7 @@ F select2(fp1: i64, pf1: i64, fp2: i64, pf2: i64) -> SelectResult {
 
 # select3: wait for the first of 3 futures to complete
 F select3(fp1: i64, pf1: i64, fp2: i64, pf2: i64, fp3: i64, pf3: i64) -> SelectResult {
-    L 1 {
+    LW 1 {
         r1 := call_poll(pf1, fp1)
         s1 := extract_poll_status(r1)
         v1 := extract_poll_value(r1)
@@ -1181,7 +1181,7 @@ F select3(fp1: i64, pf1: i64, fp2: i64, pf2: i64, fp3: i64, pf3: i64) -> SelectR
 
 # select4: wait for the first of 4 futures to complete
 F select4(fp1: i64, pf1: i64, fp2: i64, pf2: i64, fp3: i64, pf3: i64, fp4: i64, pf4: i64) -> SelectResult {
-    L 1 {
+    LW 1 {
         r1 := call_poll(pf1, fp1)
         s1 := extract_poll_status(r1)
         v1 := extract_poll_value(r1)
@@ -1249,8 +1249,8 @@ F join2(fp1: i64, pf1: i64, fp2: i64, pf2: i64) -> JoinResult {
     v1 := mut 0
     v2 := mut 0
 
-    L done1 == 0 {
-        L done2 == 0 {
+    LW done1 == 0 {
+        LW done2 == 0 {
             I done1 == 0 {
                 r1 := call_poll(pf1, fp1)
                 s1 := extract_poll_status(r1)
@@ -1290,7 +1290,7 @@ F join3(fp1: i64, pf1: i64, fp2: i64, pf2: i64, fp3: i64, pf3: i64) -> JoinResul
     v2 := mut 0
     v3 := mut 0
 
-    L 1 {
+    LW 1 {
         I done1 == 0 {
             r1 := call_poll(pf1, fp1)
             s1 := extract_poll_status(r1)

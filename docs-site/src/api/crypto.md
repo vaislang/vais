@@ -7,7 +7,7 @@
 ## Import
 
 ```vais
-U std/crypto
+use std/crypto
 ```
 
 ## Constants
@@ -25,7 +25,7 @@ U std/crypto
 ### Sha256
 
 ```vais
-S Sha256 {
+struct Sha256 {
     state: i64,      # Pointer to 8 x i64 state array (H0-H7)
     buffer: i64,     # Pointer to 64-byte block buffer
     buf_len: i64,    # Current buffer fill level
@@ -47,7 +47,7 @@ SHA-256 hash context for incremental hashing.
 ### Hmac
 
 ```vais
-S Hmac {
+struct Hmac {
     key: i64,           # Pointer to key data
     key_len: i64,
     inner_hasher: i64,  # Inner SHA-256 state pointer
@@ -65,7 +65,7 @@ HMAC-SHA256 message authentication code.
 ### Aes256
 
 ```vais
-S Aes256 {
+struct Aes256 {
     key: i64,           # Pointer to 32-byte key
     round_keys: i64     # Pointer to expanded round keys
 }
@@ -94,9 +94,9 @@ AES-256 block cipher (simplified/educational - uses XOR-based placeholder).
 ### SHA-256 Incremental Hashing
 
 ```vais
-U std/crypto
+use std/crypto
 
-F main() -> i64 {
+fn main() -> i64 {
     # Create hasher
     hasher := Sha256::new()
 
@@ -116,9 +116,9 @@ F main() -> i64 {
 ### One-shot Hash
 
 ```vais
-U std/crypto
+use std/crypto
 
-F main() -> i64 {
+fn main() -> i64 {
     hash := sha256("hello", 5)
     0
 }
@@ -127,9 +127,9 @@ F main() -> i64 {
 ### HMAC-SHA256
 
 ```vais
-U std/crypto
+use std/crypto
 
-F main() -> i64 {
+fn main() -> i64 {
     key := "secret"
     message := "data to authenticate"
 
@@ -141,9 +141,9 @@ F main() -> i64 {
 ### AES-256 Encryption
 
 ```vais
-U std/crypto
+use std/crypto
 
-F main() -> i64 {
+fn main() -> i64 {
     # 32-byte key
     key := malloc(32)
     # ... initialize key ...

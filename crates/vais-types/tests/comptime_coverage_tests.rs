@@ -906,8 +906,8 @@ fn test_eval_comptime_nested() {
 #[test]
 fn test_eval_unsupported_expr() {
     let mut eval = ComptimeEvaluator::new();
-    // Spawn is not comptime-evaluable
-    let result = eval.eval(&spanned(Expr::Spawn(Box::new(int_expr(1)))));
+    // Yield is not comptime-evaluable
+    let result = eval.eval(&spanned(Expr::Yield(Box::new(int_expr(1)))));
     assert!(result.is_err());
 }
 

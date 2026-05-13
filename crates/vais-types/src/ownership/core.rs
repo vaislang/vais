@@ -1,6 +1,7 @@
 //! Core OwnershipChecker struct and scope management
 
 use super::{BorrowInfo, OwnershipInfo};
+use crate::lifetime::LifetimeInferencer;
 use crate::types::{TypeError, TypeResult};
 use std::collections::HashMap;
 
@@ -24,6 +25,8 @@ pub struct OwnershipChecker {
     pub(super) errors: Vec<TypeError>,
     /// Whether to collect errors instead of returning immediately
     pub(super) collect_errors: bool,
+    /// Lifetime inferencer for lifetime bounds validation
+    pub(super) lifetime_inferencer: LifetimeInferencer,
 }
 
 impl Default for OwnershipChecker {
@@ -44,6 +47,7 @@ impl OwnershipChecker {
             function_returns_ref: false,
             errors: Vec::new(),
             collect_errors: false,
+            lifetime_inferencer: LifetimeInferencer::new(),
         }
     }
 
@@ -144,6 +148,68 @@ impl OwnershipChecker {
         }
         if self.current_scope > 0 {
             self.current_scope -= 1;
+        }
+    }
+
+    /// Save ownership states of all variables in all scopes (for branch analysis)
+    pub(super) fn save_ownership_snapshot(&self) -> Vec<HashMap<String, OwnershipInfo>> {
+        self.scopes.to_vec()
+    }
+
+    /// Restore ownership states from a snapshot (for branch analysis)
+    pub(super) fn restore_ownership_snapshot(
+        &mut self,
+        snapshot: Vec<HashMap<String, OwnershipInfo>>,
+    ) {
+        // Restore only the ownership states that existed in the snapshot
+        // (new variables declared in a branch are handled by push_scope/pop_scope)
+        for (i, saved_scope) in snapshot.iter().enumerate() {
+            if i < self.scopes.len() {
+                for (name, saved_info) in saved_scope {
+                    if let Some(current_info) = self.scopes[i].get_mut(name) {
+                        current_info.state = saved_info.state.clone();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Merge two ownership snapshots: a variable is "moved" only if BOTH branches moved it
+    pub(super) fn merge_branch_ownership(
+        &mut self,
+        before: &[HashMap<String, OwnershipInfo>],
+        after_then: &[HashMap<String, OwnershipInfo>],
+        after_else: &[HashMap<String, OwnershipInfo>],
+    ) {
+        for (i, before_scope) in before.iter().enumerate() {
+            if i >= self.scopes.len() {
+                continue;
+            }
+            for (name, before_info) in before_scope {
+                let then_moved = after_then
+                    .get(i)
+                    .and_then(|s| s.get(name))
+                    .map(|info| matches!(info.state, super::OwnershipState::Moved { .. }))
+                    .unwrap_or(false);
+
+                let else_moved = after_else
+                    .get(i)
+                    .and_then(|s| s.get(name))
+                    .map(|info| matches!(info.state, super::OwnershipState::Moved { .. }))
+                    .unwrap_or(false);
+
+                if let Some(current_info) = self.scopes[i].get_mut(name) {
+                    if then_moved && else_moved {
+                        // Both branches moved it → keep as moved (use the then-branch span)
+                        if let Some(then_info) = after_then.get(i).and_then(|s| s.get(name)) {
+                            current_info.state = then_info.state.clone();
+                        }
+                    } else {
+                        // Only one or neither branch moved it → restore to before state
+                        current_info.state = before_info.state.clone();
+                    }
+                }
+            }
         }
     }
 

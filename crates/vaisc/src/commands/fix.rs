@@ -90,7 +90,7 @@ pub(crate) fn cmd_fix(input: &PathBuf, dry_run: bool, verbose: bool) -> Result<(
 
     // Sort removals by start position in descending order (apply from end to start
     // so earlier offsets remain valid after each removal)
-    removals.sort_by(|a, b| b.start.cmp(&a.start));
+    removals.sort_by_key(|removal| std::cmp::Reverse(removal.start));
 
     // Validate no overlapping spans — overlapping removals would corrupt the source
     for window in removals.windows(2) {
@@ -372,9 +372,6 @@ fn count_ident_in_expr(expr: &Expr, name: &str) -> usize {
         | Expr::Await(e)
         | Expr::Try(e)
         | Expr::Unwrap(e)
-        | Expr::Spawn(e)
-        | Expr::Lazy(e)
-        | Expr::Force(e)
         | Expr::Old(e)
         | Expr::Assume(e) => count_ident_in_expr(&e.node, name),
         Expr::Cast { expr, .. } => count_ident_in_expr(&expr.node, name),
@@ -551,9 +548,6 @@ fn collect_used_idents_in_expr(expr: &Expr, used: &mut HashSet<String>) {
         | Expr::Await(e)
         | Expr::Try(e)
         | Expr::Unwrap(e)
-        | Expr::Spawn(e)
-        | Expr::Lazy(e)
-        | Expr::Force(e)
         | Expr::Old(e)
         | Expr::Assume(e) => collect_used_idents_in_expr(&e.node, used),
         Expr::Cast { expr, .. } => collect_used_idents_in_expr(&expr.node, used),
@@ -736,7 +730,6 @@ fn collect_type_idents(ty: &Type, used: &mut HashSet<String>) {
         | Type::Pointer(inner)
         | Type::Optional(inner)
         | Type::Result(inner)
-        | Type::Lazy(inner)
         | Type::Linear(inner)
         | Type::Affine(inner) => {
             collect_type_idents(&inner.node, used);
@@ -784,11 +777,6 @@ fn collect_type_idents(ty: &Type, used: &mut HashSet<String>) {
             used.insert(assoc_name.clone());
             for g in generics {
                 collect_type_idents(&g.node, used);
-            }
-        }
-        Type::ImplTrait { bounds } => {
-            for b in bounds {
-                used.insert(b.node.clone());
             }
         }
         Type::Dependent { base, .. } => {

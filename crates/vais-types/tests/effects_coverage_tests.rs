@@ -264,7 +264,6 @@ fn test_infer_call_with_sig_effects() {
         contracts: None,
         effect_annotation: EffectAnnotation::Infer,
         inferred_effects: Some(EffectSet::alloc()),
-        hkt_params: HashMap::new(),
         generic_callees: vec![],
     };
     let mut fns = HashMap::new();
@@ -292,7 +291,6 @@ fn test_infer_call_with_sig_no_effects() {
         contracts: None,
         effect_annotation: EffectAnnotation::Infer,
         inferred_effects: None,
-        hkt_params: HashMap::new(),
         generic_callees: vec![],
     };
     let mut fns = HashMap::new();
@@ -531,18 +529,6 @@ fn test_infer_macro_invoke() {
         tokens: vec![],
     });
     assert!(!inferrer.infer_expr_effects(&mac, &fns).is_pure());
-}
-
-#[test]
-fn test_infer_lazy_force() {
-    let mut inferrer = EffectInferrer::new();
-    let fns = empty_fns();
-    assert!(inferrer
-        .infer_expr_effects(&Expr::Lazy(Box::new(int_expr(42))), &fns)
-        .is_pure());
-    assert!(inferrer
-        .infer_expr_effects(&Expr::Force(Box::new(ident_expr("x"))), &fns)
-        .is_pure());
 }
 
 #[test]

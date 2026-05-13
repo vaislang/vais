@@ -2,10 +2,12 @@
 
 > CPU SIMD intrinsics for vector operations (SSE2/AVX2/NEON)
 
+> **Implementation:** Requires C runtime (`simd_runtime.c`) and platform-specific SIMD support. SSE2/AVX2 on x86_64, NEON on ARM64. Functions are extern declarations that link to platform intrinsics.
+
 ## Import
 
 ```vais
-U std/simd
+use std/simd
 ```
 
 ## Overview
@@ -38,7 +40,7 @@ The `simd` module provides wrappers for CPU SIMD (Single Instruction Multiple Da
 ### `SimdVec`
 
 ```vais
-S SimdVec {
+struct SimdVec {
     data: i64,      # Pointer to aligned memory
     len: i64,       # Number of elements
     elem_size: i64, # Size of each element (4 for f32, 8 for f64)
@@ -55,9 +57,9 @@ The module provides vectorized arithmetic operations (add, sub, mul, div), dot p
 ## Example
 
 ```vais
-U std/simd
+use std/simd
 
-F main() {
+fn main() {
     # Create SIMD vectors
     a := SimdVec { data: ptr_a, len: 4, elem_size: 8, width: SIMD_256 }
     b := SimdVec { data: ptr_b, len: 4, elem_size: 8, width: SIMD_256 }

@@ -27,18 +27,18 @@ F strlen_ptr(s: i64) -> i64 {
 
 F strlen_rec(s: i64, idx: i64) -> i64 {
     I load_byte(s + idx) == 0 { idx }
-    E { strlen_rec(s, idx + 1) }
+    EL { strlen_rec(s, idx + 1) }
 }
 
 F mem_zero(ptr: i64, count: i64, idx: i64) -> i64 {
-    I idx >= count { 0 } E {
+    I idx >= count { 0 } EL {
         store_i64(ptr + idx * 8, 0)
         mem_zero(ptr, count, idx + 1)
     }
 }
 
 F copy_bytes(dst: i64, src: i64, len: i64, idx: i64) -> i64 {
-    I idx >= len { 0 } E {
+    I idx >= len { 0 } EL {
         store_byte(dst + idx, load_byte(src + idx))
         copy_bytes(dst, src, len, idx + 1)
     }
@@ -79,7 +79,7 @@ F buf_ensure(b: i64, needed: i64) -> i64 {
     I buf_len(b) + needed >= buf_cap(b) {
         buf_grow(b)
         buf_ensure(b, needed)
-    } E { 0 }
+    } EL { 0 }
 }
 
 F buf_push_byte(b: i64, c: i64) -> i64 {
@@ -96,7 +96,7 @@ F buf_push_str(b: i64, s: i64, slen: i64) -> i64 {
 }
 
 F buf_push_str_rec(b: i64, s: i64, slen: i64, idx: i64) -> i64 {
-    I idx >= slen { 0 } E {
+    I idx >= slen { 0 } EL {
         buf_push_byte(b, load_byte(s + idx))
         buf_push_str_rec(b, s, slen, idx + 1)
     }
@@ -133,8 +133,8 @@ F i64_to_str(n: i64) -> i64 {
         R buf
     }
     # Handle negative
-    is_neg := I n < 0 { 1 } E { 0 }
-    abs_n := I is_neg == 1 { 0 - n } E { n }
+    is_neg := I n < 0 { 1 } EL { 0 }
+    abs_n := I is_neg == 1 { 0 - n } EL { n }
     # Count digits
     digits := count_digits(abs_n, 0)
     total := digits + is_neg
@@ -148,12 +148,12 @@ F i64_to_str(n: i64) -> i64 {
 
 F count_digits(n: i64, acc: i64) -> i64 {
     I n == 0 { acc }
-    E { count_digits(n / 10, acc + 1) }
+    EL { count_digits(n / 10, acc + 1) }
 }
 
 F fill_digits(buf: i64, n: i64, pos: i64) -> i64 {
     I n == 0 { 0 }
-    E {
+    EL {
         digit := n % 10
         store_byte(buf + pos, digit + 48)
         fill_digits(buf, n / 10, pos - 1)
@@ -170,10 +170,10 @@ F hash_str(s: i64, len: i64) -> i64 {
 }
 
 F hash_str_rec(s: i64, len: i64, idx: i64, h: i64) -> i64 {
-    I idx >= len { h } E {
+    I idx >= len { h } EL {
         c := load_byte(s + idx)
         new_h := h * 33 + c
-        abs_h := I new_h < 0 { 0 - new_h } E { new_h }
+        abs_h := I new_h < 0 { 0 - new_h } EL { new_h }
         hash_str_rec(s, len, idx + 1, abs_h)
     }
 }
@@ -185,8 +185,8 @@ F str_eq(a: i64, b: i64, len: i64) -> i64 {
 
 F str_eq_rec(a: i64, b: i64, len: i64, idx: i64) -> i64 {
     I idx >= len { 1 }
-    E I load_byte(a + idx) != load_byte(b + idx) { 0 }
-    E { str_eq_rec(a, b, len, idx + 1) }
+    EL I load_byte(a + idx) != load_byte(b + idx) { 0 }
+    EL { str_eq_rec(a, b, len, idx + 1) }
 }
 
 # Object layout: [buckets: i64, size: i64, cap: i64]
@@ -230,12 +230,12 @@ F obj_get(obj: i64, key: i64, key_len: i64) -> i64 {
 
 F obj_get_rec(node: i64, key: i64, key_len: i64) -> i64 {
     I node == 0 { 0 }
-    E {
+    EL {
         e_key := load_i64(node)
         e_key_len := load_i64(node + 8)
         I e_key_len == key_len && str_eq(e_key, key, key_len) == 1 {
             load_i64(node + 16)
-        } E {
+        } EL {
             obj_get_rec(load_i64(node + 24), key, key_len)
         }
     }
@@ -256,7 +256,7 @@ F obj_collect_entries(obj: i64) -> i64 {
 }
 
 F obj_collect_buckets(buckets: i64, cap: i64, idx: i64, result: i64) -> i64 {
-    I idx >= cap { 0 } E {
+    I idx >= cap { 0 } EL {
         entry := load_i64(buckets + idx * 8)
         obj_collect_chain(entry, result)
         obj_collect_buckets(buckets, cap, idx + 1, result)
@@ -264,7 +264,7 @@ F obj_collect_buckets(buckets: i64, cap: i64, idx: i64, result: i64) -> i64 {
 }
 
 F obj_collect_chain(node: i64, result: i64) -> i64 {
-    I node == 0 { 0 } E {
+    I node == 0 { 0 } EL {
         entries := load_i64(result)
         count := load_i64(result + 8)
         store_i64(entries + count * 8, node)
@@ -306,7 +306,7 @@ F arr_push(a: i64, value: i64) -> i64 {
 }
 
 F copy_arr_data(dst: i64, src: i64, len: i64, idx: i64) -> i64 {
-    I idx >= len { 0 } E {
+    I idx >= len { 0 } EL {
         store_i64(dst + idx * 8, load_i64(src + idx * 8))
         copy_arr_data(dst, src, len, idx + 1)
     }
@@ -337,7 +337,7 @@ F val_new(tag: i64, data: i64, extra: i64) -> i64 {
 }
 
 F val_tag(v: i64) -> i64 {
-    I v == 0 { 0 } E { load_i64(v) }
+    I v == 0 { 0 } EL { load_i64(v) }
 }
 
 F val_data(v: i64) -> i64 { load_i64(v + 8) }
@@ -393,7 +393,7 @@ F parser_set_error(p: i64, msg: i64) -> i64 {
 F parser_peek(p: i64) -> i64 {
     pos := parser_pos(p)
     I pos >= parser_len(p) { 0 }
-    E { load_byte(parser_input(p) + pos) }
+    EL { load_byte(parser_input(p) + pos) }
 }
 
 F parser_advance(p: i64) -> i64 {
@@ -407,13 +407,13 @@ F parser_skip_ws(p: i64) -> i64 {
     I c == 32 || c == 9 || c == 10 || c == 13 {
         parser_advance(p)
         parser_skip_ws(p)
-    } E { 0 }
+    } EL { 0 }
 }
 
 F parser_expect(p: i64, expected: i64) -> i64 {
     c := parser_advance(p)
     I c == expected { 1 }
-    E {
+    EL {
         parser_set_error(p, str_to_ptr("unexpected character"))
         0
     }
@@ -450,7 +450,7 @@ F parse_false(p: i64) -> i64 {
 
 # Parse number (integer only)
 F parse_number(p: i64) -> i64 {
-    is_neg := I parser_peek(p) == 45 { parser_advance(p); 1 } E { 0 }
+    is_neg := I parser_peek(p) == 45 { parser_advance(p); 1 } EL { 0 }
     # Read digits
     result := parse_digits(p, 0, 0)
     I result < 0 {
@@ -458,7 +458,7 @@ F parse_number(p: i64) -> i64 {
         R 0
     }
     I is_neg == 1 { val_int(0 - result) }
-    E { val_int(result) }
+    EL { val_int(result) }
 }
 
 F parse_digits(p: i64, acc: i64, count: i64) -> i64 {
@@ -466,9 +466,9 @@ F parse_digits(p: i64, acc: i64, count: i64) -> i64 {
     I c >= 48 && c <= 57 {
         parser_advance(p)
         parse_digits(p, acc * 10 + (c - 48), count + 1)
-    } E {
+    } EL {
         I count == 0 { 0 - 1 }  # No digits found
-        E { acc }
+        EL { acc }
     }
 }
 
@@ -504,14 +504,14 @@ F parse_string_chars(p: i64, b: i64) -> i64 {
         parser_advance(p)
         ec := parser_advance(p)
         I ec == 34 { buf_push_byte(b, 34) }
-        E I ec == 92 { buf_push_byte(b, 92) }
-        E I ec == 110 { buf_push_byte(b, 10) }  # \n
-        E I ec == 116 { buf_push_byte(b, 9) }   # \t
-        E I ec == 114 { buf_push_byte(b, 13) }  # \r
-        E I ec == 47 { buf_push_byte(b, 47) }   # \/
-        E { buf_push_byte(b, ec) }
+        EL I ec == 92 { buf_push_byte(b, 92) }
+        EL I ec == 110 { buf_push_byte(b, 10) }  # \n
+        EL I ec == 116 { buf_push_byte(b, 9) }   # \t
+        EL I ec == 114 { buf_push_byte(b, 13) }  # \r
+        EL I ec == 47 { buf_push_byte(b, 47) }   # \/
+        EL { buf_push_byte(b, ec) }
         parse_string_chars(p, b)
-    } E {
+    } EL {
         parser_advance(p)
         buf_push_byte(b, c)
         parse_string_chars(p, b)
@@ -544,11 +544,11 @@ F parse_array_elements(p: i64, arr: i64) -> i64 {
         # comma -> more elements
         parser_advance(p)
         parse_array_elements(p, arr)
-    } E I c == 93 {
+    } EL I c == 93 {
         # closing ]
         parser_advance(p)
         1
-    } E {
+    } EL {
         parser_set_error(p, str_to_ptr("expected ',' or ']' in array"))
         0
     }
@@ -590,10 +590,10 @@ F parse_object_members(p: i64, obj: i64) -> i64 {
     I c == 44 {
         parser_advance(p)
         parse_object_members(p, obj)
-    } E I c == 125 {
+    } EL I c == 125 {
         parser_advance(p)
         1
-    } E {
+    } EL {
         parser_set_error(p, str_to_ptr("expected comma or closing brace in object"))
         0
     }
@@ -604,13 +604,13 @@ F parse_value(p: i64) -> i64 {
     parser_skip_ws(p)
     c := parser_peek(p)
     I c == 34 { parse_string(p) }
-    E I c == 123 { parse_object(p) }
-    E I c == 91 { parse_array(p) }
-    E I c == 116 { parse_true(p) }
-    E I c == 102 { parse_false(p) }
-    E I c == 110 { parse_null(p) }
-    E I c == 45 || (c >= 48 && c <= 57) { parse_number(p) }
-    E {
+    EL I c == 123 { parse_object(p) }
+    EL I c == 91 { parse_array(p) }
+    EL I c == 116 { parse_true(p) }
+    EL I c == 102 { parse_false(p) }
+    EL I c == 110 { parse_null(p) }
+    EL I c == 45 || (c >= 48 && c <= 57) { parse_number(p) }
+    EL {
         parser_set_error(p, str_to_ptr("unexpected character in JSON"))
         0
     }
@@ -640,24 +640,24 @@ F toml_emit_string(b: i64, data: i64, len: i64) -> i64 {
 }
 
 F toml_emit_string_chars(b: i64, data: i64, len: i64, idx: i64) -> i64 {
-    I idx >= len { 0 } E {
+    I idx >= len { 0 } EL {
         c := load_byte(data + idx)
         I c == 34 {
             buf_push_byte(b, 92)  # backslash
             buf_push_byte(b, 34)  # "
-        } E I c == 92 {
+        } EL I c == 92 {
             buf_push_byte(b, 92)
             buf_push_byte(b, 92)
-        } E I c == 10 {
+        } EL I c == 10 {
             buf_push_byte(b, 92)
             buf_push_byte(b, 110)  # \n
-        } E I c == 9 {
+        } EL I c == 9 {
             buf_push_byte(b, 92)
             buf_push_byte(b, 116)  # \t
-        } E I c == 13 {
+        } EL I c == 13 {
             buf_push_byte(b, 92)
             buf_push_byte(b, 114)  # \r
-        } E {
+        } EL {
             buf_push_byte(b, c)
         }
         toml_emit_string_chars(b, data, len, idx + 1)
@@ -676,7 +676,7 @@ F toml_emit_int(b: i64, n: i64) -> i64 {
 F toml_emit_bool(b: i64, v: i64) -> i64 {
     I v != 0 {
         buf_push_cstr(b, str_to_ptr("true"))
-    } E {
+    } EL {
         buf_push_cstr(b, str_to_ptr("false"))
     }
 }
@@ -685,23 +685,23 @@ F toml_emit_bool(b: i64, v: i64) -> i64 {
 F is_simple_value(v: i64) -> i64 {
     tag := val_tag(v)
     I tag == 0 || tag == 1 || tag == 2 || tag == 3 { 1 }
-    E I tag == 4 {
+    EL I tag == 4 {
         # Array of non-objects is simple
         arr := val_data(v)
         len := arr_len(arr)
         I len == 0 { 1 }
-        E { is_simple_array(arr, len, 0) }
+        EL { is_simple_array(arr, len, 0) }
     }
-    E { 0 }  # objects are not simple
+    EL { 0 }  # objects are not simple
 }
 
 F is_simple_array(arr: i64, len: i64, idx: i64) -> i64 {
     I idx >= len { 1 }
-    E {
+    EL {
         elem := arr_get(arr, idx)
         tag := val_tag(elem)
         I tag == 5 { 0 }  # object in array → not simple
-        E { is_simple_array(arr, len, idx + 1) }
+        EL { is_simple_array(arr, len, idx + 1) }
     }
 }
 
@@ -712,19 +712,19 @@ F toml_emit_value(b: i64, v: i64) -> i64 {
         # null → empty string in TOML
         buf_push_cstr(b, str_to_ptr("\"\""))
     }
-    E I tag == 1 { toml_emit_bool(b, val_data(v)) }
-    E I tag == 2 { toml_emit_int(b, val_data(v)) }
-    E I tag == 3 {
+    EL I tag == 1 { toml_emit_bool(b, val_data(v)) }
+    EL I tag == 2 { toml_emit_int(b, val_data(v)) }
+    EL I tag == 3 {
         toml_emit_string(b, val_data(v), val_extra(v))
     }
-    E I tag == 4 {
+    EL I tag == 4 {
         toml_emit_array(b, v)
     }
-    E I tag == 5 {
+    EL I tag == 5 {
         # Inline table for nested object in array
         toml_emit_inline_table(b, v)
     }
-    E { 0 }
+    EL { 0 }
 }
 
 # Emit a TOML array
@@ -737,7 +737,7 @@ F toml_emit_array(b: i64, v: i64) -> i64 {
 }
 
 F toml_emit_array_elements(b: i64, arr: i64, len: i64, idx: i64) -> i64 {
-    I idx >= len { 0 } E {
+    I idx >= len { 0 } EL {
         I idx > 0 {
             buf_push_cstr(b, str_to_ptr(", "))
         }
@@ -764,7 +764,7 @@ F toml_emit_inline_table(b: i64, v: i64) -> i64 {
 }
 
 F toml_emit_inline_entries(b: i64, entries: i64, count: i64, idx: i64) -> i64 {
-    I idx >= count { 0 } E {
+    I idx >= count { 0 } EL {
         I idx > 0 { buf_push_cstr(b, str_to_ptr(", ")) }
         entry := load_i64(entries + idx * 8)
         key := load_i64(entry)
@@ -781,24 +781,24 @@ F toml_emit_inline_entries(b: i64, entries: i64, count: i64, idx: i64) -> i64 {
 # Check if a key needs quoting (bare key: [a-zA-Z0-9_-])
 F needs_quoting(key: i64, len: i64) -> i64 {
     I len == 0 { 1 }
-    E { needs_quoting_rec(key, len, 0) }
+    EL { needs_quoting_rec(key, len, 0) }
 }
 
 F needs_quoting_rec(key: i64, len: i64, idx: i64) -> i64 {
     I idx >= len { 0 }
-    E {
+    EL {
         c := load_byte(key + idx)
         # Check alphanumeric or special chars allowed in bare keys
         I (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 45 || c == 95 {
             needs_quoting_rec(key, len, idx + 1)
-        } E { 1 }
+        } EL { 1 }
     }
 }
 
 F toml_emit_key(b: i64, key: i64, key_len: i64) -> i64 {
     I needs_quoting(key, key_len) == 1 {
         toml_emit_string(b, key, key_len)
-    } E {
+    } EL {
         buf_push_str(b, key, key_len)
     }
 }
@@ -840,7 +840,7 @@ F convert_object(b: i64, v: i64, prefix: i64, prefix_len: i64) -> i64 {
 }
 
 F emit_simple_entries(b: i64, entries: i64, count: i64, idx: i64) -> i64 {
-    I idx >= count { 0 } E {
+    I idx >= count { 0 } EL {
         entry := load_i64(entries + idx * 8)
         value := load_i64(entry + 16)
         I is_simple_value(value) == 1 {
@@ -856,7 +856,7 @@ F emit_simple_entries(b: i64, entries: i64, count: i64, idx: i64) -> i64 {
 }
 
 F emit_table_entries(b: i64, entries: i64, count: i64, idx: i64, prefix: i64, prefix_len: i64) -> i64 {
-    I idx >= count { 0 } E {
+    I idx >= count { 0 } EL {
         entry := load_i64(entries + idx * 8)
         value := load_i64(entry + 16)
         tag := val_tag(value)
@@ -876,12 +876,12 @@ F emit_table_entries(b: i64, entries: i64, count: i64, idx: i64, prefix: i64, pr
             buf_push_byte(b, 10)  # newline
             # Build new prefix
             new_prefix := build_prefix(prefix, prefix_len, key, key_len)
-            new_prefix_len := I prefix_len > 0 { prefix_len + 1 + key_len } E { key_len }
+            new_prefix_len := I prefix_len > 0 { prefix_len + 1 + key_len } EL { key_len }
             # Recurse
             convert_object(b, value, new_prefix, new_prefix_len)
             free(new_prefix)
         }
-        E I tag == 4 {
+        EL I tag == 4 {
             # Check if array of objects → [[array_of_tables]]
             arr := val_data(value)
             len := arr_len(arr)
@@ -913,7 +913,7 @@ F build_prefix(old_prefix: i64, old_len: i64, key: i64, key_len: i64) -> i64 {
 
 # Emit [[array_of_tables]]
 F emit_array_of_tables(b: i64, arr: i64, len: i64, idx: i64, prefix: i64, prefix_len: i64, key: i64, key_len: i64) -> i64 {
-    I idx >= len { 0 } E {
+    I idx >= len { 0 } EL {
         buf_push_byte(b, 10)
         buf_push_byte(b, 91)   # '['
         buf_push_byte(b, 91)   # '['
@@ -927,7 +927,7 @@ F emit_array_of_tables(b: i64, arr: i64, len: i64, idx: i64, prefix: i64, prefix
         buf_push_byte(b, 10)
         elem := arr_get(arr, idx)
         new_prefix := build_prefix(prefix, prefix_len, key, key_len)
-        new_prefix_len := I prefix_len > 0 { prefix_len + 1 + key_len } E { key_len }
+        new_prefix_len := I prefix_len > 0 { prefix_len + 1 + key_len } EL { key_len }
         convert_object(b, elem, new_prefix, new_prefix_len)
         free(new_prefix)
         emit_array_of_tables(b, arr, len, idx + 1, prefix, prefix_len, key, key_len)
@@ -949,24 +949,24 @@ F json_stringify(v: i64) -> i64 {
 F json_stringify_value(b: i64, v: i64) -> i64 {
     tag := val_tag(v)
     I tag == 0 { buf_push_cstr(b, str_to_ptr("null")) }
-    E I tag == 1 {
+    EL I tag == 1 {
         I val_data(v) != 0 { buf_push_cstr(b, str_to_ptr("true")) }
-        E { buf_push_cstr(b, str_to_ptr("false")) }
+        EL { buf_push_cstr(b, str_to_ptr("false")) }
     }
-    E I tag == 2 { toml_emit_int(b, val_data(v)) }
-    E I tag == 3 {
+    EL I tag == 2 { toml_emit_int(b, val_data(v)) }
+    EL I tag == 3 {
         buf_push_byte(b, 34)
         buf_push_str(b, val_data(v), val_extra(v))
         buf_push_byte(b, 34)
     }
-    E I tag == 4 {
+    EL I tag == 4 {
         arr := val_data(v)
         len := arr_len(arr)
         buf_push_byte(b, 91)
         json_stringify_arr(b, arr, len, 0)
         buf_push_byte(b, 93)
     }
-    E I tag == 5 {
+    EL I tag == 5 {
         obj := val_data(v)
         entries_info := obj_collect_entries(obj)
         entries := load_i64(entries_info)
@@ -981,7 +981,7 @@ F json_stringify_value(b: i64, v: i64) -> i64 {
 }
 
 F json_stringify_arr(b: i64, arr: i64, len: i64, idx: i64) -> i64 {
-    I idx >= len { 0 } E {
+    I idx >= len { 0 } EL {
         I idx > 0 { buf_push_byte(b, 44) }
         json_stringify_value(b, arr_get(arr, idx))
         json_stringify_arr(b, arr, len, idx + 1)
@@ -989,7 +989,7 @@ F json_stringify_arr(b: i64, arr: i64, len: i64, idx: i64) -> i64 {
 }
 
 F json_stringify_obj_entries(b: i64, entries: i64, count: i64, idx: i64) -> i64 {
-    I idx >= count { 0 } E {
+    I idx >= count { 0 } EL {
         I idx > 0 { buf_push_byte(b, 44) }
         entry := load_i64(entries + idx * 8)
         key := load_i64(entry)
@@ -1011,13 +1011,13 @@ F json_stringify_obj_entries(b: i64, entries: i64, count: i64, idx: i64) -> i64 
 # Count total nodes in JSON value tree
 F count_nodes(v: i64) -> i64 {
     I v == 0 { 0 }
-    E {
+    EL {
         tag := val_tag(v)
         I tag == 4 {
             arr := val_data(v)
             1 + count_arr_nodes(arr, arr_len(arr), 0)
         }
-        E I tag == 5 {
+        EL I tag == 5 {
             obj := val_data(v)
             entries_info := obj_collect_entries(obj)
             entries := load_i64(entries_info)
@@ -1027,18 +1027,18 @@ F count_nodes(v: i64) -> i64 {
             free(entries_info)
             result
         }
-        E { 1 }
+        EL { 1 }
     }
 }
 
 F count_arr_nodes(arr: i64, len: i64, idx: i64) -> i64 {
     I idx >= len { 0 }
-    E { count_nodes(arr_get(arr, idx)) + count_arr_nodes(arr, len, idx + 1) }
+    EL { count_nodes(arr_get(arr, idx)) + count_arr_nodes(arr, len, idx + 1) }
 }
 
 F count_obj_nodes(entries: i64, count: i64, idx: i64) -> i64 {
     I idx >= count { 0 }
-    E {
+    EL {
         entry := load_i64(entries + idx * 8)
         value := load_i64(entry + 16)
         count_nodes(value) + count_obj_nodes(entries, count, idx + 1)
@@ -1048,13 +1048,13 @@ F count_obj_nodes(entries: i64, count: i64, idx: i64) -> i64 {
 # Count depth of value tree
 F max_depth(v: i64) -> i64 {
     I v == 0 { 0 }
-    E {
+    EL {
         tag := val_tag(v)
         I tag == 4 {
             arr := val_data(v)
             1 + max_depth_arr(arr, arr_len(arr), 0, 0)
         }
-        E I tag == 5 {
+        EL I tag == 5 {
             obj := val_data(v)
             entries_info := obj_collect_entries(obj)
             entries := load_i64(entries_info)
@@ -1064,26 +1064,26 @@ F max_depth(v: i64) -> i64 {
             free(entries_info)
             result
         }
-        E { 1 }
+        EL { 1 }
     }
 }
 
 F max_depth_arr(arr: i64, len: i64, idx: i64, best: i64) -> i64 {
     I idx >= len { best }
-    E {
+    EL {
         d := max_depth(arr_get(arr, idx))
-        new_best := I d > best { d } E { best }
+        new_best := I d > best { d } EL { best }
         max_depth_arr(arr, len, idx + 1, new_best)
     }
 }
 
 F max_depth_obj(entries: i64, count: i64, idx: i64, best: i64) -> i64 {
     I idx >= count { best }
-    E {
+    EL {
         entry := load_i64(entries + idx * 8)
         value := load_i64(entry + 16)
         d := max_depth(value)
-        new_best := I d > best { d } E { best }
+        new_best := I d > best { d } EL { best }
         max_depth_obj(entries, count, idx + 1, new_best)
     }
 }
@@ -1100,14 +1100,14 @@ F val_free(v: i64) -> i64 {
         data := val_data(v)
         I data != 0 { free(data) }
     }
-    E I tag == 4 {
+    EL I tag == 4 {
         # Free array elements
         arr := val_data(v)
         free_arr_elements(arr, arr_len(arr), 0)
         free(load_i64(arr))  # data array
         free(arr)
     }
-    E I tag == 5 {
+    EL I tag == 5 {
         # Free object entries
         obj := val_data(v)
         free_obj_entries(obj)
@@ -1119,7 +1119,7 @@ F val_free(v: i64) -> i64 {
 }
 
 F free_arr_elements(arr: i64, len: i64, idx: i64) -> i64 {
-    I idx >= len { 0 } E {
+    I idx >= len { 0 } EL {
         val_free(arr_get(arr, idx))
         free_arr_elements(arr, len, idx + 1)
     }
@@ -1132,7 +1132,7 @@ F free_obj_entries(obj: i64) -> i64 {
 }
 
 F free_obj_buckets(buckets: i64, cap: i64, idx: i64) -> i64 {
-    I idx >= cap { 0 } E {
+    I idx >= cap { 0 } EL {
         entry := load_i64(buckets + idx * 8)
         free_obj_chain(entry)
         free_obj_buckets(buckets, cap, idx + 1)
@@ -1140,7 +1140,7 @@ F free_obj_buckets(buckets: i64, cap: i64, idx: i64) -> i64 {
 }
 
 F free_obj_chain(node: i64) -> i64 {
-    I node == 0 { 0 } E {
+    I node == 0 { 0 } EL {
         next := load_i64(node + 24)
         key := load_i64(node)
         I key != 0 { free(key) }
@@ -1343,7 +1343,7 @@ F test_non_object_root() -> i64 {
     toml := convert_to_toml(v)
     # Array as root should fail
     I toml == 0 { val_free(v); R 2 }
-    E {
+    EL {
         free(toml)
         val_free(v)
         0

@@ -78,21 +78,6 @@ F main() -> i64 {
 }
 
 #[test]
-fn e2e_async_spawn_basic() {
-    let source = r#"
-A F compute(x: i64) -> i64 {
-    x * 3
-}
-
-F main() -> i64 {
-    r := (spawn compute(10)).await
-    r - 30
-}
-"#;
-    assert_exit_code(source, 0);
-}
-
-#[test]
 fn e2e_async_return_expression() {
     let source = r#"
 A F expr_body(x: i64) -> i64 = x * x
@@ -197,43 +182,6 @@ F main() -> i64 {
     assert_exit_code(source, 0);
 }
 
-#[test]
-fn e2e_async_spawn_chained() {
-    let source = r#"
-A F double(x: i64) -> i64 {
-    x * 2
-}
-
-A F add_one(x: i64) -> i64 {
-    x + 1
-}
-
-F main() -> i64 {
-    a := (spawn double(10)).await
-    b := (spawn add_one(a)).await
-    b - 21
-}
-"#;
-    assert_exit_code(source, 0);
-}
-
-#[test]
-fn e2e_async_multiple_spawn_await() {
-    let source = r#"
-A F compute(x: i64) -> i64 {
-    x * x
-}
-
-F main() -> i64 {
-    a := (spawn compute(3)).await
-    b := (spawn compute(4)).await
-    c := (spawn compute(5)).await
-    a + b + c - 50
-}
-"#;
-    assert_exit_code(source, 0);
-}
-
 // ==================== Y (await abbreviation) ====================
 
 #[test]
@@ -266,21 +214,6 @@ F main() -> i64 {
     a := double(10).Y
     b := add_one(a).Y
     b - 21
-}
-"#;
-    assert_exit_code(source, 0);
-}
-
-#[test]
-fn e2e_y_spawn_with_y() {
-    let source = r#"
-A F square(x: i64) -> i64 {
-    x * x
-}
-
-F main() -> i64 {
-    result := (spawn square(7)).Y
-    result - 49
 }
 "#;
     assert_exit_code(source, 0);

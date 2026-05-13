@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/signal
+use std/signal
 ```
 
 ## Overview
@@ -51,7 +51,7 @@ The `signal` module provides POSIX signal constants and functions for registerin
 ### signal_handle
 
 ```vais
-F signal_handle(signum: i32, handler: i64) -> i64
+fn signal_handle(signum: i32, handler: i64) -> i64
 ```
 
 Register a signal handler for the given signal.
@@ -65,7 +65,7 @@ Register a signal handler for the given signal.
 ### signal_raise
 
 ```vais
-F signal_raise(signum: i32) -> i32
+fn signal_raise(signum: i32) -> i32
 ```
 
 Send a signal to the current process.
@@ -78,9 +78,9 @@ Send a signal to the current process.
 ## Example
 
 ```vais
-U std/signal
+use std/signal
 
-F main() {
+fn main() {
     # Ignore SIGPIPE
     signal_handle(SIGPIPE, SIG_IGN)
 

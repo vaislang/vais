@@ -214,7 +214,7 @@ impl Formatter {
                 format!("({})", items_str.join(", "))
             }
 
-            Expr::StructLit { name, fields } => {
+            Expr::StructLit { name, fields, .. } => {
                 let fields_str: Vec<String> = fields
                     .iter()
                     .map(|(n, v)| format!("{}: {}", n.node, self.format_expr(&v.node)))
@@ -320,7 +320,6 @@ impl Formatter {
                 )
             }
 
-            Expr::Spawn(expr) => format!("spawn {{ {} }}", self.format_expr(&expr.node)),
             Expr::Yield(expr) => format!("yield {}", self.format_expr(&expr.node)),
             Expr::Comptime { body } => format!("comptime {{ {} }}", self.format_expr(&body.node)),
             Expr::Old(inner) => format!("old({})", self.format_expr(&inner.node)),
@@ -350,8 +349,20 @@ impl Formatter {
                 // Format error expressions as comments
                 format!("/* ERROR: {} */", message)
             }
-            Expr::Lazy(inner) => format!("lazy {}", self.format_expr(&inner.node)),
-            Expr::Force(inner) => format!("force {}", self.format_expr(&inner.node)),
+            Expr::EnumAccess {
+                enum_name,
+                variant,
+                data,
+            } => {
+                if let Some(d) = data {
+                    format!("{}::{}({})", enum_name, variant, self.format_expr(&d.node))
+                } else {
+                    format!("{}::{}", enum_name, variant)
+                }
+            }
+            Expr::TupleFieldAccess { expr, index } => {
+                format!("{}.{}", self.format_expr(&expr.node), index)
+            }
         }
     }
 

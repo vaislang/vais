@@ -111,9 +111,9 @@ F vec_candidate_free(candidate_ptr: i64) -> i64 {
     accesses_len := load_i64(candidate_ptr + 40)
     i := mut 0
     L {
-        I i >= accesses_len { B } E { 0 }
+        I i >= accesses_len { B } EL { 0 }
         access := load_i64(accesses_ptr + i * 8)
-        I access != 0 { mem_access_free(access); 0 } E { 0 }
+        I access != 0 { mem_access_free(access); 0 } EL { 0 }
         i = i + 1
     }
     free(accesses_ptr)
@@ -164,9 +164,9 @@ F vectorize_ctx_free(ctx_ptr: i64) -> i64 {
     candidates_len := load_i64(ctx_ptr + 8)
     i := mut 0
     L {
-        I i >= candidates_len { B } E { 0 }
+        I i >= candidates_len { B } EL { 0 }
         candidate := load_i64(candidates_ptr + i * 8)
-        I candidate != 0 { vec_candidate_free(candidate); 0 } E { 0 }
+        I candidate != 0 { vec_candidate_free(candidate); 0 } EL { 0 }
         i = i + 1
     }
     free(candidates_ptr)
@@ -201,7 +201,7 @@ F vectorize_analyze_body(ctx_ptr: i64, body_ptr: i64) -> i64 {
     # A back-edge is an edge src→dst where dst dominates src
     bi := mut 0
     L {
-        I bi >= blocks_len { B } E { 0 }
+        I bi >= blocks_len { B } EL { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         term_ptr := load_i64(bb_ptr + 16)
 
@@ -209,7 +209,7 @@ F vectorize_analyze_body(ctx_ptr: i64, body_ptr: i64) -> i64 {
             sc := cfg_successor_count(term_ptr)
             si := mut 0
             L {
-                I si >= sc { B } E { 0 }
+                I si >= sc { B } EL { 0 }
                 succ := cfg_successor_at(term_ptr, si)
                 I succ >= 0 {
                     I succ < blocks_len {
@@ -218,13 +218,13 @@ F vectorize_analyze_body(ctx_ptr: i64, body_ptr: i64) -> i64 {
                             # Found a loop: header=succ, latch=bi
                             vec_detect_and_add_loop(ctx_ptr, body_ptr, succ, bi, idom)
                             0
-                        } E { 0 }
-                    } E { 0 }
-                } E { 0 }
+                        } EL { 0 }
+                    } EL { 0 }
+                } EL { 0 }
                 si = si + 1
             }
             0
-        } E { 0 }
+        } EL { 0 }
         bi = bi + 1
     }
 
@@ -264,7 +264,7 @@ F vec_analyze_memory_accesses(candidate: i64, body_ptr: i64, header_bb: i64, ido
     # Scan all blocks dominated by the loop header
     bi := mut 0
     L {
-        I bi >= blocks_len { B } E { 0 }
+        I bi >= blocks_len { B } EL { 0 }
 
         # Check if bi is dominated by header (i.e., in loop body)
         I dominates(idom, header_bb, bi) == 1 {
@@ -274,7 +274,7 @@ F vec_analyze_memory_accesses(candidate: i64, body_ptr: i64, header_bb: i64, ido
 
             si := mut 0
             L {
-                I si >= stmts_len { B } E { 0 }
+                I si >= stmts_len { B } EL { 0 }
                 stmt_ptr := load_i64(stmts_ptr + si * 8)
                 kind := load_i64(stmt_ptr)
 
@@ -303,13 +303,13 @@ F vec_analyze_memory_accesses(candidate: i64, body_ptr: i64, header_bb: i64, ido
                                 index_local = load_i64(proj_ptr + 8)
                                 stride = 1  # Assume unit stride for array index
                             }
-                            E I proj_kind == PROJ_FIELD() {
+                            EL I proj_kind == PROJ_FIELD() {
                                 stride = 0  # Struct field access (loop-invariant)
                             }
-                            E I proj_kind == PROJ_DEREF() {
+                            EL I proj_kind == PROJ_DEREF() {
                                 stride = 1  # Pointer deref (assume unit stride)
                             }
-                            E { 0 }
+                            EL { 0 }
 
                             # Determine element size (simplified: assume i64 = 8 bytes)
                             element_size := 8
@@ -317,9 +317,9 @@ F vec_analyze_memory_accesses(candidate: i64, body_ptr: i64, header_bb: i64, ido
                             access := mem_access_new(base_local, index_local, stride, 0, element_size, bi)
                             vec_candidate_add_access(candidate, access)
                             0
-                        } E { 0 }
+                        } EL { 0 }
                     }
-                    E { 0 }
+                    EL { 0 }
 
                     # Detect store pattern: assign to projected place
                     proj_len := load_i64(place_ptr + 16)
@@ -334,25 +334,25 @@ F vec_analyze_memory_accesses(candidate: i64, body_ptr: i64, header_bb: i64, ido
                             index_local = load_i64(proj_ptr + 8)
                             stride = 1
                         }
-                        E I proj_kind == PROJ_FIELD() {
+                        EL I proj_kind == PROJ_FIELD() {
                             stride = 0
                         }
-                        E I proj_kind == PROJ_DEREF() {
+                        EL I proj_kind == PROJ_DEREF() {
                             stride = 1
                         }
-                        E { 0 }
+                        EL { 0 }
 
                         element_size := 8
                         access := mem_access_new(base_local, index_local, stride, 1, element_size, bi)
                         vec_candidate_add_access(candidate, access)
                         0
-                    } E { 0 }
-                } E { 0 }
+                    } EL { 0 }
+                } EL { 0 }
 
                 si = si + 1
             }
             0
-        } E { 0 }
+        } EL { 0 }
         bi = bi + 1
     }
     1
@@ -368,12 +368,12 @@ F vec_analyze_dependencies(candidate: i64) -> i64 {
 
     i := mut 0
     L {
-        I i >= accesses_len { B } E { 0 }
+        I i >= accesses_len { B } EL { 0 }
         a1 := load_i64(accesses_ptr + i * 8)
 
         j := mut i + 1
         L {
-            I j >= accesses_len { B } E { 0 }
+            I j >= accesses_len { B } EL { 0 }
             a2 := load_i64(accesses_ptr + j * 8)
 
             # Check if same base pointer → potential dependence
@@ -384,8 +384,8 @@ F vec_analyze_dependencies(candidate: i64) -> i64 {
                 I dep != DEP_NONE() {
                     vec_candidate_add_dep(candidate, dep)
                     0
-                } E { 0 }
-            } E { 0 }
+                } EL { 0 }
+            } EL { 0 }
 
             j = j + 1
         }
@@ -401,8 +401,8 @@ F vec_analyze_access_pair(a1: i64, a2: i64) -> i64 {
 
     # Read-read is never a dependence
     I is_write1 == 0 {
-        I is_write2 == 0 { R DEP_NONE() } E { 0 }
-    } E { 0 }
+        I is_write2 == 0 { R DEP_NONE() } EL { 0 }
+    } EL { 0 }
 
     # Check if indices are the same (same iteration access)
     index1 := load_i64(a1 + 8)
@@ -411,10 +411,10 @@ F vec_analyze_access_pair(a1: i64, a2: i64) -> i64 {
         # Same index → iteration-local dependence (safe for vectorization if distance >= width)
         # For now, assume distance is 0 (same iteration) → conservative: report dependence
         I is_write1 == 1 {
-            I is_write2 == 0 { R DEP_FLOW() } E { R DEP_OUTPUT() }
+            I is_write2 == 0 { R DEP_FLOW() } EL { R DEP_OUTPUT() }
         }
-        E { R DEP_ANTI() }
-    } E { 0 }
+        EL { R DEP_ANTI() }
+    } EL { 0 }
 
     # Different indices → check if stride analysis suggests independence
     stride1 := load_i64(a1 + 16)
@@ -426,13 +426,13 @@ F vec_analyze_access_pair(a1: i64, a2: i64) -> i64 {
             I index1 != index2 {
                 # Conservative: flag as unknown dependence
                 R DEP_UNKNOWN()
-            } E { 0 }
-        } E { 0 }
-    } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     # If one is stride 0 (loop-invariant) and the other varies, potential aliasing
-    I stride1 == 0 { R DEP_UNKNOWN() } E { 0 }
-    I stride2 == 0 { R DEP_UNKNOWN() } E { 0 }
+    I stride1 == 0 { R DEP_UNKNOWN() } EL { 0 }
+    I stride2 == 0 { R DEP_UNKNOWN() } EL { 0 }
 
     R DEP_NONE()
 }
@@ -456,12 +456,12 @@ F vec_determine_vectorizability(candidate: i64, target_width: i64) -> i64 {
     has_blocking_dep := mut 0
     di := mut 0
     L {
-        I di >= deps_len { B } E { 0 }
+        I di >= deps_len { B } EL { 0 }
         dep := load_i64(deps_ptr + di * 8)
         I vec_dep_prevents_vectorization(dep, vector_lanes) == 1 {
             has_blocking_dep = 1
             B
-        } E { 0 }
+        } EL { 0 }
         di = di + 1
     }
 
@@ -469,21 +469,21 @@ F vec_determine_vectorizability(candidate: i64, target_width: i64) -> i64 {
         store_i64(candidate + 64, 0)  # is_vectorizable = 0
         store_i64(candidate + 72, 0)  # reason_idx placeholder (should be StringPool index)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Check if all memory accesses have unit stride
     all_unit_stride := mut 1
     ai := mut 0
     L {
-        I ai >= accesses_len { B } E { 0 }
+        I ai >= accesses_len { B } EL { 0 }
         access := load_i64(accesses_ptr + ai * 8)
         stride := load_i64(access + 16)
         I stride != 1 {
             I stride != 0 {  # Allow stride 0 (loop-invariant)
                 all_unit_stride = 0
                 B
-            } E { 0 }
-        } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
         ai = ai + 1
     }
 
@@ -493,7 +493,7 @@ F vec_determine_vectorizability(candidate: i64, target_width: i64) -> i64 {
         store_i64(candidate + 72, 0 - 1)  # reason_idx = -1 (OK)
         store_i64(candidate + 80, vector_lanes / 2)  # recommended_width (reduced)
         R 1
-    } E { 0 }
+    } EL { 0 }
 
     # Looks good for vectorization
     store_i64(candidate + 64, 1)  # is_vectorizable = 1
@@ -510,9 +510,9 @@ F vec_dep_prevents_vectorization(dep_kind: i64, width: i64) -> i64 {
     # For flow/anti/output deps, assume distance is unknown → conservative
     # In a full implementation, we'd track distance and compare with width
     # For now, any non-NONE dependence blocks vectorization
-    I dep_kind == DEP_FLOW() { R 1 } E { 0 }
-    I dep_kind == DEP_ANTI() { R 1 } E { 0 }
-    I dep_kind == DEP_OUTPUT() { R 1 } E { 0 }
+    I dep_kind == DEP_FLOW() { R 1 } EL { 0 }
+    I dep_kind == DEP_ANTI() { R 1 } EL { 0 }
+    I dep_kind == DEP_OUTPUT() { R 1 } EL { 0 }
 
     R 0
 }
@@ -537,7 +537,7 @@ F vec_detect_reduction(body_ptr: i64, header_bb: i64, induction_local: i64) -> i
     # Simplified: look for BinOp with Add/Mul/Min/Max
     si := mut 0
     L {
-        I si >= stmts_len { B } E { 0 }
+        I si >= stmts_len { B } EL { 0 }
         stmt_ptr := load_i64(stmts_ptr + si * 8)
         kind := load_i64(stmt_ptr)
 
@@ -552,12 +552,12 @@ F vec_detect_reduction(body_ptr: i64, header_bb: i64, induction_local: i64) -> i
 
                 # Check if lhs or rhs involves a local that might be an accumulator
                 # For simplicity, detect the operation kind
-                I op == BINOP_ADD() { R RED_ADD() } E { 0 }
-                I op == BINOP_MUL() { R RED_MUL() } E { 0 }
+                I op == BINOP_ADD() { R RED_ADD() } EL { 0 }
+                I op == BINOP_MUL() { R RED_MUL() } EL { 0 }
                 # Min/Max would require checking for intrinsic calls
                 0
-            } E { 0 }
-        } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
 
         si = si + 1
     }
@@ -602,7 +602,7 @@ F vec_count_vectorizable(ctx_ptr: i64) -> i64 {
         I is_vectorizable == 1 {
             count = count + 1
             0
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
     count

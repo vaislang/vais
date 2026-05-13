@@ -4,6 +4,7 @@
 
 # 시작하기
 
+- [AI 바이브코딩 5분 가이드](./getting-started/vibe-coding.md)
 - [설치](./getting-started/installation.md)
 - [빠른 시작](./getting-started/quick-start.md)
 - [튜토리얼](./getting-started/tutorial.md)
@@ -16,6 +17,9 @@
 - [CLI Tool 만들기](./tutorials/cli-tool.md)
 - [HTTP Server 만들기](./tutorials/http-server.md)
 - [Data Pipeline 만들기](./tutorials/data-pipeline.md)
+- [WebSocket Chat Server](./tutorials/websocket-chat.md)
+- [JSON Parser 만들기](./tutorials/json-parser.md)
+- [CLI Framework 만들기](./tutorials/cli-framework.md)
 
 # 가이드
 
@@ -27,8 +31,26 @@
 - [Cookbook — 실전 레시피](./guides/cookbook.md)
 - [테스트 가이드](./guides/testing.md)
 - [에러 처리 Best Practices](./guides/error-handling.md)
-- [Ecosystem Packages](./guide/ecosystem-packages.md)
 - [트러블슈팅 & FAQ](./troubleshooting.md)
+
+# 생태계 (Ecosystem)
+
+- [생태계 개요](./ecosystem/README.md)
+- [VaisX (vais-web)]()
+  - [개요](./ecosystem/vais-web/README.md)
+  - [빠른 시작](./ecosystem/vais-web/getting-started.md)
+  - [VaisX 문법](./ecosystem/vais-web/syntax.md)
+  - [컴포넌트](./ecosystem/vais-web/components.md)
+- [VaisDB]()
+  - [개요](./ecosystem/vaisdb/README.md)
+  - [빠른 시작](./ecosystem/vaisdb/getting-started.md)
+  - [쿼리 가이드](./ecosystem/vaisdb/queries.md)
+  - [RAG 기능](./ecosystem/vaisdb/rag.md)
+- [vais-server]()
+  - [개요](./ecosystem/vais-server/README.md)
+  - [빠른 시작](./ecosystem/vais-server/getting-started.md)
+  - [라우팅 & 미들웨어](./ecosystem/vais-server/routing.md)
+  - [데이터베이스 통합](./ecosystem/vais-server/database.md)
 
 # 언어 레퍼런스
 
@@ -41,7 +63,6 @@
 - [Lifetimes & Borrow Checking](./language/lifetimes.md)
 - [비동기 프로그래밍](./language/async-tutorial.md)
 - [클로저 & 람다](./language/closures.md)
-- [지연 평가 (Lazy/Force)](./language/lazy-evaluation.md)
 - [Defer 문](./language/defer-statement.md)
 - [전역 변수](./language/globals.md)
 - [Union 타입](./language/union-types.md)

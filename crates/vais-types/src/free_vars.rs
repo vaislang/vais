@@ -1,5 +1,6 @@
 //! Free variable analysis for closure capture.
 
+use vais_ast::StringInterpPart;
 use vais_ast::*;
 
 use super::TypeChecker;
@@ -26,11 +27,10 @@ impl TypeChecker {
         free: &mut Vec<String>,
     ) {
         match expr {
-            Expr::Ident(name) => {
-                if !bound.contains(name) && self.lookup_var(name).is_some() {
-                    free.push(name.clone());
-                }
+            Expr::Ident(name) if !bound.contains(name) && self.lookup_var(name).is_some() => {
+                free.push(name.clone());
             }
+            Expr::Ident(_) => {}
             Expr::Binary { left, right, .. } => {
                 self.collect_free_vars(&left.node, bound, free);
                 self.collect_free_vars(&right.node, bound, free);
@@ -142,14 +142,7 @@ impl TypeChecker {
             | Expr::Try(inner)
             | Expr::Unwrap(inner)
             | Expr::Await(inner)
-            | Expr::Spawn(inner)
             | Expr::Yield(inner) => {
-                self.collect_free_vars(&inner.node, bound, free);
-            }
-            Expr::Lazy(inner) => {
-                self.collect_free_vars(&inner.node, bound, free);
-            }
-            Expr::Force(inner) => {
                 self.collect_free_vars(&inner.node, bound, free);
             }
             Expr::Cast { expr, .. } => {
@@ -214,6 +207,15 @@ impl TypeChecker {
                         self.collect_free_vars(&guard.node, &arm_bound, free);
                     }
                     self.collect_free_vars(&arm.body.node, &arm_bound, free);
+                }
+            }
+            Expr::StringInterp(parts) => {
+                // Interpolated `{name}` segments reference outer variables and
+                // must be visible to closure capture analysis.
+                for part in parts {
+                    if let StringInterpPart::Expr(e) = part {
+                        self.collect_free_vars(&e.node, bound, free);
+                    }
                 }
             }
             // Literals and other expressions don't contain free variables

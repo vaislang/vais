@@ -5,13 +5,13 @@
 ## Import
 
 ```vais
-U std/owned_string
+use std/owned_string
 ```
 
 ## Struct
 
 ```vais
-S OwnedString { data: i64, len: i64, cap: i64 }
+struct OwnedString { data: i64, len: i64, cap: i64 }
 ```
 
 ## Methods
@@ -51,9 +51,9 @@ Similar to `String` but designed for use in database engines and internal APIs w
 ## Usage
 
 ```vais
-U std/owned_string
+use std/owned_string
 
-F main() -> i64 {
+fn main() -> i64 {
     s := OwnedString.from_str("Hello")
     s.push_str(", World!")
 
