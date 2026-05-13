@@ -314,10 +314,7 @@ fn check_return_type_consistency(lines: &[&str], diagnostics: &mut Vec<IrDiagnos
             // The return type is always the token immediately before `@`.
             if let Some(at_pos) = after_define.find('@') {
                 let prefix = after_define[..at_pos].trim();
-                // Take last whitespace-delimited token as the return type
-                let ret_type = prefix
-                    .rsplit_once(char::is_whitespace)
-                    .map_or(prefix, |(_, last)| last);
+                let ret_type = extract_define_return_type(prefix);
                 current_ret_type = Some(ret_type.to_string());
             }
             current_fn_name = extract_define_name(trimmed).map(|s| s.to_string());
@@ -333,13 +330,7 @@ fn check_return_type_consistency(lines: &[&str], diagnostics: &mut Vec<IrDiagnos
         // Check ret instructions
         if let Some(ret_part) = trimmed.strip_prefix("ret ") {
             if let Some(ref expected) = current_ret_type {
-                let ret_type = if ret_part == "void" {
-                    "void".to_string()
-                } else if let Some(space) = ret_part.find(' ') {
-                    ret_part[..space].to_string()
-                } else {
-                    ret_part.to_string()
-                };
+                let ret_type = extract_leading_ir_type(ret_part).to_string();
 
                 if !expected.is_empty()
                     && ret_type != *expected
@@ -359,6 +350,74 @@ fn check_return_type_consistency(lines: &[&str], diagnostics: &mut Vec<IrDiagnos
             }
         }
     }
+}
+
+/// Extract the return type from the text before `@name` in a `define` line.
+///
+/// The prefix may contain linkage/visibility attributes before the type:
+/// `weak_odr { i8*, i64 }`, `dso_local i64`, etc. Aggregate LLVM types contain
+/// spaces, so splitting on whitespace is not enough.
+fn extract_define_return_type(prefix: &str) -> &str {
+    let prefix = prefix.trim();
+    if prefix.is_empty() {
+        return prefix;
+    }
+
+    match prefix.chars().last() {
+        Some('}') => find_balanced_suffix(prefix, '{', '}').unwrap_or(prefix),
+        Some(']') => find_balanced_suffix(prefix, '[', ']').unwrap_or(prefix),
+        Some('>') => find_balanced_suffix(prefix, '<', '>').unwrap_or(prefix),
+        _ => prefix
+            .rsplit_once(char::is_whitespace)
+            .map_or(prefix, |(_, last)| last),
+    }
+}
+
+/// Extract the type at the beginning of a `ret` instruction payload.
+fn extract_leading_ir_type(text: &str) -> &str {
+    let text = text.trim();
+    if text == "void" {
+        return "void";
+    }
+
+    match text.chars().next() {
+        Some('{') => find_balanced_prefix(text, '{', '}').unwrap_or(text),
+        Some('[') => find_balanced_prefix(text, '[', ']').unwrap_or(text),
+        Some('<') => find_balanced_prefix(text, '<', '>').unwrap_or(text),
+        _ => text
+            .split_once(char::is_whitespace)
+            .map_or(text, |(ty, _)| ty),
+    }
+}
+
+fn find_balanced_prefix(text: &str, open: char, close: char) -> Option<&str> {
+    let mut depth = 0usize;
+    for (idx, ch) in text.char_indices() {
+        if ch == open {
+            depth += 1;
+        } else if ch == close {
+            depth = depth.checked_sub(1)?;
+            if depth == 0 {
+                return Some(&text[..idx + ch.len_utf8()]);
+            }
+        }
+    }
+    None
+}
+
+fn find_balanced_suffix(text: &str, open: char, close: char) -> Option<&str> {
+    let mut depth = 0usize;
+    for (idx, ch) in text.char_indices().rev() {
+        if ch == close {
+            depth += 1;
+        } else if ch == open {
+            depth = depth.checked_sub(1)?;
+            if depth == 0 {
+                return Some(&text[idx..]);
+            }
+        }
+    }
+    None
 }
 
 /// Verify text IR and return an error if any Error-level diagnostics are found.
@@ -627,6 +686,46 @@ entry:
         assert!(
             ret_diags.is_empty(),
             "Should not report mismatch for linkage-prefixed define, got: {:?}",
+            ret_diags
+        );
+    }
+
+    #[test]
+    fn test_aggregate_return_type_matches_ok() {
+        let ir = r#"
+define weak_odr { i8*, i64 } @foo() {
+entry:
+  ret { i8*, i64 } zeroinitializer
+}
+"#;
+        let diags = verify_text_ir(ir);
+        let ret_diags: Vec<_> = diags
+            .iter()
+            .filter(|d| d.message.contains("return type mismatch"))
+            .collect();
+        assert!(
+            ret_diags.is_empty(),
+            "Expected no aggregate return type warnings, got: {:?}",
+            ret_diags
+        );
+    }
+
+    #[test]
+    fn test_array_return_type_matches_ok() {
+        let ir = r#"
+define [4 x i8] @foo() {
+entry:
+  ret [4 x i8] zeroinitializer
+}
+"#;
+        let diags = verify_text_ir(ir);
+        let ret_diags: Vec<_> = diags
+            .iter()
+            .filter(|d| d.message.contains("return type mismatch"))
+            .collect();
+        assert!(
+            ret_diags.is_empty(),
+            "Expected no array return type warnings, got: {:?}",
             ret_diags
         );
     }
