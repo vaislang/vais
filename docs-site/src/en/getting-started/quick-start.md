@@ -19,7 +19,7 @@ cargo install vaisc
 Create a file named `hello.vais`:
 
 ```vais
-F main() {
+fn main() {
     puts("Hello, Vais!")
 }
 ```
@@ -45,7 +45,7 @@ Hello, Vais!
 ### Variables
 
 ```vais
-F main() {
+fn main() {
     x := 42              # Type inferred as i64
     y := 3.14            # Type inferred as f64
     name := "Alice"      # Type inferred as str
@@ -58,11 +58,11 @@ F main() {
 ### Functions
 
 ```vais
-F add(a: i64, b: i64) -> i64 {
+fn add(a: i64, b: i64) -> i64 {
     a + b  # Last expression is return value
 }
 
-F main() {
+fn main() {
     result := add(10, 20)
     print_i64(result)  # Prints: 30
 }
@@ -71,11 +71,11 @@ F main() {
 ### Control Flow
 
 ```vais
-F main() {
+fn main() {
     x := 10
 
     # If expression
-    msg := I x > 5 { "big" } E { "small" }
+    msg := I x > 5 { "big" } else { "small" }
     puts(msg)
 
     # Loop
@@ -90,12 +90,12 @@ F main() {
 Use `@` to call the current function:
 
 ```vais
-F factorial(n: i64) -> i64 {
-    I n <= 1 { R 1 }
+fn factorial(n: i64) -> i64 {
+    I n <= 1 { return 1 }
     n * @(n - 1)
 }
 
-F main() {
+fn main() {
     print_i64(factorial(5))  # Prints: 120
 }
 ```

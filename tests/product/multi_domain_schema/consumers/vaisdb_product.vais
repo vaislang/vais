@@ -1,0 +1,29 @@
+U sql/catalog/schema
+U std/bytebuffer
+
+# __SHARED_USER_SCHEMA__
+
+F make_user(id: i64, email: str, name: str) -> User {
+    User { id: id, email: email, name: name }
+}
+
+F smoke_catalog_from_user_schema() -> i64 {
+    table := mut TableInfo.new(501 as u32, "users", 3 as u16, 77 as u32)
+
+    buf := mut ByteBuffer.new()
+    table.serialize(&mut buf)
+    table_rt := mut M TableInfo.deserialize(&buf) {
+        Ok(v) => v,
+        Err(_) => { R 18 },
+    }
+
+    0
+}
+
+F main() -> i64 {
+    u: User = make_user(7, "ada@vais.dev", "Ada")
+    I u.id != 7 { R 1 }
+    I u.email != "ada@vais.dev" { R 2 }
+    I u.name != "Ada" { R 3 }
+    smoke_catalog_from_user_schema()
+}

@@ -118,8 +118,7 @@ fn cmd_run_jit(input: &PathBuf, verbose: bool) -> Result<(), String> {
         .map_err(|e| format!("Type error: {}", e))?;
 
     // JIT compile and run main
-    let mut jit =
-        JitCompiler::new().map_err(|e| format!("JIT init failed: {}", e))?;
+    let mut jit = JitCompiler::new().map_err(|e| format!("JIT init failed: {}", e))?;
     let exit_code = jit
         .compile_and_run_main(&ast)
         .map_err(|e| format!("JIT execution failed: {}", e))?;
@@ -176,7 +175,11 @@ pub(crate) fn cmd_check(
         Err(import_err) => {
             // Fall back to single-file parse if import resolution fails
             if verbose {
-                println!("{} import resolution: {}", "warning:".yellow().bold(), import_err);
+                println!(
+                    "{} import resolution: {}",
+                    "warning:".yellow().bold(),
+                    import_err
+                );
             }
             let parsed = parse(&source)
                 .map_err(|e| error_formatter::format_parse_error(&e, &source, input))?;

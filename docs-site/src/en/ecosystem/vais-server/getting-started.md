@@ -18,18 +18,18 @@ This guide walks you through running your first HTTP server with vais-server, co
 Create `src/main.vais` and enter the following content.
 
 ```vais
-U core/app
-U core/config
-U core/context
+use core/app
+use core/config
+use core/context
 
 C PORT: u16 = 8080
 
 # GET / handler — plain text response
-F handle_hello(ctx: Context) -> Response {
+fn handle_hello(ctx: Context) -> Response {
     ctx.text(200, "Hello, World!")
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     config := ServerConfig.default()
     app    := mut App.new(config)
 
@@ -38,13 +38,13 @@ F main() -> i64 {
     addr := ":{PORT}"
     println("Server starting: {addr}")
 
-    M app.listen(addr) {
+    match app.listen(addr) {
         Ok(_) => {
             println("Server shut down cleanly.")
         },
         Err(e) => {
             println("Failed to start server: {e.message}")
-            R 1
+            return 1
         },
     }
     0
@@ -76,9 +76,9 @@ curl http://localhost:8080/
 ### Imports
 
 ```vais
-U core/app      # App struct — route/middleware registration, listen()
-U core/config   # ServerConfig — server configuration
-U core/context  # Context — request context, Response builder
+use core/app      # App struct — route/middleware registration, listen()
+use core/config   # ServerConfig — server configuration
+use core/context  # Context — request context, Response builder
 ```
 
 The `U` keyword is for module imports. Paths are relative to `src/`.
@@ -86,7 +86,7 @@ The `U` keyword is for module imports. Paths are relative to `src/`.
 ### Handler Signature
 
 ```vais
-F handle_hello(ctx: Context) -> Response {
+fn handle_hello(ctx: Context) -> Response {
     ctx.text(200, "Hello, World!")
 }
 ```
@@ -104,9 +104,9 @@ The second argument is the function name as a **string**. Because the current ve
 ### Handling Results
 
 ```vais
-M app.listen(addr) {
+match app.listen(addr) {
     Ok(_)  => { println("Clean shutdown") },
-    Err(e) => { println("Error: {e.message}") R 1 },
+    Err(e) => { println("Error: {e.message}") return 1 },
 }
 ```
 
@@ -119,15 +119,15 @@ M app.listen(addr) {
 An example that returns JSON responses in addition to plain text.
 
 ```vais
-U core/app
-U core/config
-U core/context
-U src/util/json
+use core/app
+use core/config
+use core/context
+use src/util/json
 
 C PORT: u16 = 8080
 
 # GET /ping — JSON health check
-F handle_ping(ctx: Context) -> Response {
+fn handle_ping(ctx: Context) -> Response {
     pairs := Vec.new()
     pairs.push("status")
     pairs.push("ok")
@@ -137,7 +137,7 @@ F handle_ping(ctx: Context) -> Response {
 }
 
 # GET /hello/:name — using path parameters
-F handle_greet(ctx: Context) -> Response {
+fn handle_greet(ctx: Context) -> Response {
     name := ctx.path_params   # "name=<value>" format
     pairs := Vec.new()
     pairs.push("message")
@@ -145,7 +145,7 @@ F handle_greet(ctx: Context) -> Response {
     ctx.json(200, json_encode(pairs))
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     config := ServerConfig.default()
     app    := mut App.new(config)
 
@@ -153,11 +153,11 @@ F main() -> i64 {
     app.get("/hello/:name",  "handle_greet")
 
     println("JSON API server starting: :{PORT}")
-    M app.listen(":{PORT}") {
+    match app.listen(":{PORT}") {
         Ok(_) => {},
         Err(e) => {
             println("Error: {e.message}")
-            R 1
+            return 1
         },
     }
     0
@@ -196,7 +196,7 @@ The value passed to `app.use()` is the middleware name as a string. Built-in mid
 Middleware before hooks run in registration order; after hooks run in reverse order.
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     config := ServerConfig.default()
     app    := mut App.new(config)
 
@@ -206,9 +206,9 @@ F main() -> i64 {
 
     app.get("/", "handle_hello")
 
-    M app.listen(":{PORT}") {
+    match app.listen(":{PORT}") {
         Ok(_) => {},
-        Err(e) => { println("Error: {e.message}") R 1 },
+        Err(e) => { println("Error: {e.message}") return 1 },
     }
     0
 }

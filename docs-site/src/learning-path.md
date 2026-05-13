@@ -30,7 +30,7 @@ cd vais && cargo build --release
 **읽기**: [Getting Started](./guide/getting-started.md) - 설치부터 첫 프로그램까지
 
 ```vais
-F main() {
+fn main() {
     println("Hello, Vais!")
 }
 ```
@@ -71,16 +71,16 @@ pi: f64 = 3.14159
 
 ```vais
 # 단일 표현식 함수
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 
 # 복수 줄 함수
-F factorial(n: i64) -> i64 {
-    I n <= 1 { R 1 }
-    R n * factorial(n - 1)
+fn factorial(n: i64) -> i64 {
+    I n <= 1 { return 1 }
+    return n * factorial(n - 1)
 }
 
 # 자재귀 연산자 @
-F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
 ```
 
 **실습**: `@` 연산자를 사용하는 재귀 함수 작성 (피보나치, 팩토리얼)
@@ -93,8 +93,7 @@ F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
 
 ```vais
 # if/else (I/E)
-I x > 0 { println("positive") }
-E { println("non-positive") }
+I x > 0 { println("positive") } else { println("non-positive") }
 
 # 삼항 연산자
 result := x > 0 ? "yes" : "no"
@@ -106,7 +105,7 @@ L i:0..10 { println("{i}") }
 L x < 100 { x = x * 2 }
 
 # 패턴 매칭
-M status {
+match status {
     200 => println("OK"),
     404 => println("Not Found"),
     _ => println("Unknown")
@@ -122,16 +121,16 @@ M status {
 **읽기**: [Getting Started - 구조체](./guide/getting-started.md#구조체)
 
 ```vais
-S Point {
+struct Point {
     x: i64
     y: i64
 }
 
-X Point {
-    F sum(&self) -> i64 = self.x + self.y
+impl Point {
+    fn sum(&self) -> i64 = self.x + self.y
 }
 
-F main() {
+fn main() {
     p := Point { x: 10, y: 20 }
     println("{p.sum()}")
 }
@@ -146,13 +145,13 @@ F main() {
 **읽기**: [Getting Started - Enum](./guide/getting-started.md#enum-열거형)
 
 ```vais
-E Shape {
+enum Shape {
     Circle(i64),
     Rectangle(i64, i64)
 }
 
-F area(s: Shape) -> i64 {
-    M s {
+fn area(s: Shape) -> i64 {
+    match s {
         Shape.Circle(r) => r * r * 3,
         Shape.Rectangle(w, h) => w * h
     }
@@ -183,16 +182,16 @@ F area(s: Shape) -> i64 {
 **읽기**: [Generics](./language/generics.md)
 
 ```vais
-F max<T>(a: T, b: T) -> T {
-    I a > b { R a } E { R b }
+fn max<T>(a: T, b: T) -> T {
+    I a > b { return a } else { return b }
 }
 
-S Container<T> {
+struct Container<T> {
     value: T
 }
 
-X Container<T> {
-    F get(&self) -> T = self.value
+impl Container<T> {
+    fn get(&self) -> T = self.value
 }
 ```
 
@@ -205,18 +204,18 @@ X Container<T> {
 **읽기**: [Advanced Types](./language/advanced-types.md)
 
 ```vais
-W Printable {
-    F to_string(&self) -> str
+trait Printable {
+    fn to_string(&self) -> str
 }
 
-S Dog { name: str }
+struct Dog { name: str }
 
-X Dog: Printable {
-    F to_string(&self) -> str = self.name
+impl Dog: Printable {
+    fn to_string(&self) -> str = self.name
 }
 
 # Trait 바운드
-F print_item<T: Printable>(item: T) {
+fn print_item<T: Printable>(item: T) {
     println(item.to_string())
 }
 ```
@@ -231,17 +230,17 @@ F print_item<T: Printable>(item: T) {
 
 ```vais
 # Option
-F find(arr: *i64, len: i64, target: i64) -> i64 {
+fn find(arr: *i64, len: i64, target: i64) -> i64 {
     L i:0..len {
-        I arr[i] == target { R i }
+        I arr[i] == target { return i }
     }
-    R -1
+    return -1
 }
 
 # Result와 ? 연산자
-F divide(a: i64, b: i64) -> i64 {
-    I b == 0 { R -1 }
-    R a / b
+fn divide(a: i64, b: i64) -> i64 {
+    I b == 0 { return -1 }
+    return a / b
 }
 ```
 
@@ -295,7 +294,7 @@ result := 5 |> double |> |x| x + 1
 **읽기**: [Defer Statement](./language/defer-statement.md)
 
 ```vais
-F process_file(path: str) -> i64 {
+fn process_file(path: str) -> i64 {
     fd := open(path, 0)
     D close(fd)    # 함수 종료 시 자동 실행
     # fd를 사용한 처리...
@@ -344,12 +343,12 @@ macro debug! {
 **읽기**: [Async Programming](./language/async-tutorial.md)
 
 ```vais
-A F fetch_data(url: str) -> str {
+A fn fetch_data(url: str) -> str {
     response := Y http_get(url)
-    R response
+    return response
 }
 
-F main() {
+fn main() {
     data := spawn fetch_data("http://example.com")
     # ...다른 작업...
     result := Y data
@@ -366,11 +365,11 @@ F main() {
 
 ```vais
 N "C" {
-    F printf(fmt: str, ...) -> i32
-    F strlen(s: str) -> i64
+    fn printf(fmt: str, ...) -> i32
+    fn strlen(s: str) -> i64
 }
 
-F main() {
+fn main() {
     len := strlen("hello")
     printf("Length: %lld\n", len)
 }
@@ -390,7 +389,7 @@ vaisc --target wasm32-unknown-unknown calculator.vais
 
 ```vais
 #[wasm_export("add")]
-F add(a: i32, b: i32) -> i32 = a + b
+fn add(a: i32, b: i32) -> i32 = a + b
 ```
 
 **실습**: 간단한 계산기를 WASM으로 컴파일하고 브라우저에서 실행
@@ -502,7 +501,7 @@ F add(a: i32, b: i32) -> i32 = a + b
 - [API 문서](./api/index.md) - 타입별 API 레퍼런스
 - [트러블슈팅](./troubleshooting.md) - 자주 묻는 질문과 해결 방법
 - [기여 가이드](./contributing/contributing.md) - 컴파일러 개발에 참여하기
-- [Playground](https://vais.dev/playground/) - 브라우저에서 Vais 실행 (40+ 예제)
+- [Playground](https://vaislang.dev/playground/) - 브라우저에서 Vais 예제 실험
 - [인터랙티브 튜토리얼](./tools/vais-tutorial/README.md) - 단계별 연습 문제
 
 ### 실전 튜토리얼

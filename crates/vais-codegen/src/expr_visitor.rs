@@ -615,5 +615,4 @@ impl ExprVisitor for CodeGenerator {
             self.generate_assume(inner, counter)
         }
     }
-
 }

@@ -922,12 +922,10 @@ impl CodeGenerator {
                     }
                 }
             }
-            Expr::Unary { op, expr: inner } => {
-                match op {
-                    vais_ast::UnaryOp::Not => ResolvedType::Bool,
-                    _ => self.infer_expr_type(inner),
-                }
-            }
+            Expr::Unary { op, expr: inner } => match op {
+                vais_ast::UnaryOp::Not => ResolvedType::Bool,
+                _ => self.infer_expr_type(inner),
+            },
             Expr::Ternary { then, .. } => {
                 // Ternary returns the type of its then branch
                 self.infer_expr_type(then)
@@ -977,7 +975,9 @@ impl CodeGenerator {
                     other => {
                         // Non-fatal: await on non-Future type, possibly cross-module async.
                         // Return the type as-is rather than panicking.
-                        eprintln!("[WARN] await on non-Future type `{other}` — treating as passthrough");
+                        eprintln!(
+                            "[WARN] await on non-Future type `{other}` — treating as passthrough"
+                        );
                         other
                     }
                 }

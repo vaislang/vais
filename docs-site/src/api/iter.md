@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/iter
+use std/iter
 ```
 
 ## Overview
@@ -19,8 +19,8 @@ The `iter` module defines the iterator pattern for Vais. It provides the `Iterat
 ### `Iterator`
 
 ```vais
-W Iterator {
-    F next(&self) -> i64
+trait Iterator {
+    fn next(&self) -> i64
 }
 ```
 
@@ -31,7 +31,7 @@ The core iterator interface. Returns the next value, or `-1` when exhausted.
 ### `Range`
 
 ```vais
-S Range {
+struct Range {
     current: i64,
     end: i64,
     step: i64
@@ -48,7 +48,7 @@ Iterates from `current` to `end` (exclusive) with a given step.
 ### `VecIter`
 
 ```vais
-S VecIter {
+struct VecIter {
     data: i64,
     len: i64,
     index: i64
@@ -66,7 +66,7 @@ Iterates over elements of a `Vec`.
 ### `SliceIter`
 
 ```vais
-S SliceIter {
+struct SliceIter {
     ptr: i64,
     end: i64,
     elem_size: i64
@@ -87,7 +87,7 @@ These operate on arrays stored as `(data_ptr, len)` pairs.
 ### iter_sum
 
 ```vais
-F iter_sum(data: i64, len: i64) -> i64
+fn iter_sum(data: i64, len: i64) -> i64
 ```
 
 Sum all elements in an array.
@@ -95,7 +95,7 @@ Sum all elements in an array.
 ### iter_product
 
 ```vais
-F iter_product(data: i64, len: i64) -> i64
+fn iter_product(data: i64, len: i64) -> i64
 ```
 
 Product of all elements.
@@ -103,7 +103,7 @@ Product of all elements.
 ### iter_count
 
 ```vais
-F iter_count(data: i64, len: i64) -> i64
+fn iter_count(data: i64, len: i64) -> i64
 ```
 
 Returns the number of elements (same as `len`).
@@ -111,8 +111,8 @@ Returns the number of elements (same as `len`).
 ### iter_min / iter_max
 
 ```vais
-F iter_min(data: i64, len: i64) -> i64
-F iter_max(data: i64, len: i64) -> i64
+fn iter_min(data: i64, len: i64) -> i64
+fn iter_max(data: i64, len: i64) -> i64
 ```
 
 Find the minimum or maximum element. Returns `0` if empty.
@@ -120,7 +120,7 @@ Find the minimum or maximum element. Returns `0` if empty.
 ### iter_contains
 
 ```vais
-F iter_contains(data: i64, len: i64, value: i64) -> i64
+fn iter_contains(data: i64, len: i64, value: i64) -> i64
 ```
 
 Check if any element equals `value`. Returns `1` if found, `0` otherwise.
@@ -132,7 +132,7 @@ These create new arrays via `malloc` and return pointers.
 ### iter_map
 
 ```vais
-F iter_map(data: i64, len: i64, f: fn(i64) -> i64) -> i64
+fn iter_map(data: i64, len: i64, f: fn(i64) -> i64) -> i64
 ```
 
 Apply function `f` to each element. Returns pointer to new array (same length).
@@ -140,7 +140,7 @@ Apply function `f` to each element. Returns pointer to new array (same length).
 ### iter_filter
 
 ```vais
-F iter_filter(data: i64, len: i64, pred: fn(i64) -> i64, out_count_ptr: i64) -> i64
+fn iter_filter(data: i64, len: i64, pred: fn(i64) -> i64, out_count_ptr: i64) -> i64
 ```
 
 Filter elements by predicate. Actual count is stored at `out_count_ptr`. Returns pointer to new array.
@@ -148,8 +148,8 @@ Filter elements by predicate. Actual count is stored at `out_count_ptr`. Returns
 ### iter_take / iter_skip
 
 ```vais
-F iter_take(data: i64, len: i64, n: i64) -> i64
-F iter_skip(data: i64, len: i64, n: i64) -> i64
+fn iter_take(data: i64, len: i64, n: i64) -> i64
+fn iter_skip(data: i64, len: i64, n: i64) -> i64
 ```
 
 Take the first `n` or skip the first `n` elements.
@@ -157,7 +157,7 @@ Take the first `n` or skip the first `n` elements.
 ### iter_chain
 
 ```vais
-F iter_chain(data1: i64, len1: i64, data2: i64, len2: i64) -> i64
+fn iter_chain(data1: i64, len1: i64, data2: i64, len2: i64) -> i64
 ```
 
 Concatenate two arrays. Total length = `len1 + len2`.
@@ -165,7 +165,7 @@ Concatenate two arrays. Total length = `len1 + len2`.
 ### iter_zip
 
 ```vais
-F iter_zip(data1: i64, len1: i64, data2: i64, len2: i64) -> i64
+fn iter_zip(data1: i64, len1: i64, data2: i64, len2: i64) -> i64
 ```
 
 Pair elements as consecutive `(a, b)` pairs. Returns pointer to `2 * min(len1, len2)` elements.
@@ -173,7 +173,7 @@ Pair elements as consecutive `(a, b)` pairs. Returns pointer to `2 * min(len1, l
 ### iter_enumerate
 
 ```vais
-F iter_enumerate(data: i64, len: i64) -> i64
+fn iter_enumerate(data: i64, len: i64) -> i64
 ```
 
 Pair each element with its index as `(index, value)`.
@@ -181,7 +181,7 @@ Pair each element with its index as `(index, value)`.
 ### iter_fold
 
 ```vais
-F iter_fold(data: i64, len: i64, init: i64, f: fn(i64, i64) -> i64) -> i64
+fn iter_fold(data: i64, len: i64, init: i64, f: fn(i64, i64) -> i64) -> i64
 ```
 
 Reduce the array to a single value using accumulator function `f`.
@@ -189,8 +189,8 @@ Reduce the array to a single value using accumulator function `f`.
 ### iter_any / iter_all
 
 ```vais
-F iter_any(data: i64, len: i64, pred: fn(i64) -> i64) -> i64
-F iter_all(data: i64, len: i64, pred: fn(i64) -> i64) -> i64
+fn iter_any(data: i64, len: i64, pred: fn(i64) -> i64) -> i64
+fn iter_all(data: i64, len: i64, pred: fn(i64) -> i64) -> i64
 ```
 
 Check if any/all elements satisfy a predicate.
@@ -198,7 +198,7 @@ Check if any/all elements satisfy a predicate.
 ### iter_find
 
 ```vais
-F iter_find(data: i64, len: i64, pred: fn(i64) -> i64) -> i64
+fn iter_find(data: i64, len: i64, pred: fn(i64) -> i64) -> i64
 ```
 
 Return the first element satisfying the predicate, or `-1` if not found.
@@ -206,7 +206,7 @@ Return the first element satisfying the predicate, or `-1` if not found.
 ### iter_position
 
 ```vais
-F iter_position(data: i64, len: i64, pred: fn(i64) -> i64) -> i64
+fn iter_position(data: i64, len: i64, pred: fn(i64) -> i64) -> i64
 ```
 
 Return the index of the first element satisfying the predicate, or `-1`.
@@ -214,9 +214,9 @@ Return the index of the first element satisfying the predicate, or `-1`.
 ## Example
 
 ```vais
-U std/iter
+use std/iter
 
-F main() {
+fn main() {
     # Range-based for loop
     L i:0..10 { print(i) }
 

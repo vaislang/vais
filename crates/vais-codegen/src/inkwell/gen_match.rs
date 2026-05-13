@@ -946,7 +946,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             let data_i64 = data_val.into_int_value();
                             let decoded: BasicValueEnum<'ctx> = if decl_ty.is_float_type() {
                                 self.builder
-                                    .build_bitcast(data_i64, decl_ty.into_float_type(), "variant_i64_to_f")
+                                    .build_bitcast(
+                                        data_i64,
+                                        decl_ty.into_float_type(),
+                                        "variant_i64_to_f",
+                                    )
                                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                             } else if decl_ty.is_int_type() {
                                 let target = decl_ty.into_int_type();
@@ -965,7 +969,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                 }
                             } else if decl_ty.is_pointer_type() {
                                 self.builder
-                                    .build_int_to_ptr(data_i64, decl_ty.into_pointer_type(), "variant_i64_to_ptr")
+                                    .build_int_to_ptr(
+                                        data_i64,
+                                        decl_ty.into_pointer_type(),
+                                        "variant_i64_to_ptr",
+                                    )
                                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                                     .into()
                             } else {

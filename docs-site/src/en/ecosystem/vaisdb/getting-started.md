@@ -6,7 +6,7 @@ A guide to installing VaisDB and running your first query.
 
 ## Requirements
 
-- Vais compiler v1.0.0 or later (`~/.cargo/bin/vaisc`)
+- Vais compiler built from the current certified source baseline (`vaisc`)
 - OS: Linux, macOS, Windows (WSL2 recommended)
 
 ---
@@ -52,9 +52,9 @@ VaisDB can run in two modes.
 ### Opening a Database
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F main() {
+fn main() {
     # Create a new DB or open an existing one (.vaisdb file)
     db := Database::open("myapp.vaisdb")?;
     println("Database opened successfully");
@@ -78,9 +78,9 @@ CREATE TABLE documents (
 Running from Vais:
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F main() {
+fn main() {
     db := Database::open("myapp.vaisdb")?;
 
     db.execute("
@@ -103,9 +103,9 @@ F main() {
 #### Inserting Plain Text
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F main() {
+fn main() {
     db := Database::open("myapp.vaisdb")?;
 
     # Single insert
@@ -123,9 +123,9 @@ F main() {
 The `EMBED()` function automatically generates an embedding vector from text.
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F main() {
+fn main() {
     db := Database::open("myapp.vaisdb")?;
 
     # Automatically generate an embedding with EMBED()
@@ -146,9 +146,9 @@ F main() {
 #### Batch Insert
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F main() {
+fn main() {
     db := Database::open("myapp.vaisdb")?;
 
     # Batch insert wrapped in a transaction
@@ -195,9 +195,9 @@ F main() {
 ### Connecting as a Client
 
 ```vais
-U vaisdb::{Client};
+use vaisdb::{Client};
 
-F main() {
+fn main() {
     # Connect to a remote server via TCP client
     client := Client::connect("vaisdb://localhost:5432/knowledge")?;
 
@@ -236,14 +236,14 @@ api_key_env = "OPENAI_API_KEY"
 
 ---
 
-## Complete First Example
+## First Example
 
-Below is a complete example that inserts documents and performs a vector similarity search.
+Below is a bounded example that inserts documents and performs a vector similarity search.
 
 ```vais
-U vaisdb::{Database, Row};
+use vaisdb::{Database, Row};
 
-F main() {
+fn main() {
     # 1. Open the database
     db := Database::open("demo.vaisdb")?;
 

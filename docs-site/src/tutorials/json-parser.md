@@ -60,25 +60,25 @@ G pos: i64 = mut 0
 G input_len: i64 = 0
 
 # 현재 문자 읽기
-F peek_char() -> i64 {
-    I pos >= input_len { R 0 }
+fn peek_char() -> i64 {
+    I pos >= input_len { return 0 }
     load_byte(input_str as i64 + pos)
 }
 
 # 다음 문자로 이동
-F advance() -> i64 {
+fn advance() -> i64 {
     I pos < input_len { pos = pos + 1 }
     0
 }
 
 # 공백 건너뛰기
-F skip_whitespace() -> i64 {
+fn skip_whitespace() -> i64 {
     L pos < input_len {
         ch := peek_char()
         # space(32), tab(9), newline(10), carriage return(13)
         I ch == 32 | ch == 9 | ch == 10 | ch == 13 {
             advance()
-        } E {
+        } else {
             B
         }
     }
@@ -86,12 +86,12 @@ F skip_whitespace() -> i64 {
 }
 
 # 다음 토큰 타입 반환
-F next_token() -> i64 {
+fn next_token() -> i64 {
     skip_whitespace()
-    I pos >= input_len { R TOK_EOF }
+    I pos >= input_len { return TOK_EOF }
 
     ch := peek_char()
-    M ch {
+    match ch {
         123 => { advance(); TOK_LBRACE },    # '{'
         125 => { advance(); TOK_RBRACE },    # '}'
         91  => { advance(); TOK_LBRACKET },  # '['
@@ -103,7 +103,7 @@ F next_token() -> i64 {
             # 숫자 또는 키워드 (true/false/null)
             I ch >= 48 & ch <= 57 | ch == 45 {
                 scan_number()
-            } E {
+            } else {
                 scan_keyword()
             }
         }
@@ -127,7 +127,7 @@ F next_token() -> i64 {
 G str_buf: i64 = 0
 G str_len: i64 = 0
 
-F scan_string() -> i64 {
+fn scan_string() -> i64 {
     advance()   # 여는 '"' 건너뛰기
     start := pos
 
@@ -137,7 +137,7 @@ F scan_string() -> i64 {
             str_len = pos - start
             str_buf = input_str as i64 + start
             advance()
-            R TOK_STRING
+            return TOK_STRING
         }
         I ch == 92 {  # '\' 이스케이프
             advance()
@@ -150,7 +150,7 @@ F scan_string() -> i64 {
 # 파싱된 숫자 값
 G num_value: i64 = 0
 
-F scan_number() -> i64 {
+fn scan_number() -> i64 {
     negative := mut 0
     I peek_char() == 45 {  # '-'
         negative = 1
@@ -163,29 +163,29 @@ F scan_number() -> i64 {
         I ch >= 48 & ch <= 57 {
             result = result * 10 + (ch - 48)
             advance()
-        } E {
+        } else {
             B
         }
     }
 
-    num_value = I negative == 1 { -result } E { result }
+    num_value = I negative == 1 { -result } else { result }
     TOK_NUMBER
 }
 
-F scan_keyword() -> i64 {
+fn scan_keyword() -> i64 {
     # true, false, null 식별
     ch := peek_char()
     I ch == 116 {  # 't'
         pos = pos + 4   # "true"
-        R TOK_TRUE
+        return TOK_TRUE
     }
     I ch == 102 {  # 'f'
         pos = pos + 5   # "false"
-        R TOK_FALSE
+        return TOK_FALSE
     }
     I ch == 110 {  # 'n'
         pos = pos + 4   # "null"
-        R TOK_NULL
+        return TOK_NULL
     }
     TOK_ERROR
 }
@@ -204,9 +204,9 @@ JSON 객체와 배열을 재귀적으로 파싱합니다:
 
 ```vais
 # JSON 값 파싱 — 재귀 진입점
-F parse_value() -> i64 {
+fn parse_value() -> i64 {
     tok := next_token()
-    M tok {
+    match tok {
         1 => {  # TOK_STRING
             puts("  string value")
             1
@@ -228,16 +228,16 @@ F parse_value() -> i64 {
 }
 
 # JSON 객체 파싱: { "key": value, ... }
-F parse_object() -> i64 {
+fn parse_object() -> i64 {
     field_count := mut 0
 
     tok := next_token()
-    I tok == TOK_RBRACE { R 0 }  # 빈 객체 {}
+    I tok == TOK_RBRACE { return 0 }  # 빈 객체 {}
 
     # 첫 번째 키-값 쌍
     I tok != TOK_STRING {
         puts("Error: expected string key")
-        R -1
+        return -1
     }
     puts("  key found")
     field_count = field_count + 1
@@ -246,11 +246,11 @@ F parse_object() -> i64 {
     colon := next_token()
     I colon != TOK_COLON {
         puts("Error: expected ':'")
-        R -1
+        return -1
     }
 
     # 값 파싱 (재귀)
-    I parse_value() < 0 { R -1 }
+    I parse_value() < 0 { return -1 }
 
     # 나머지 키-값 쌍
     L true {
@@ -258,44 +258,44 @@ F parse_object() -> i64 {
         I tok == TOK_RBRACE { B }   # 객체 끝
         I tok != TOK_COMMA {
             puts("Error: expected ',' or '}'")
-            R -1
+            return -1
         }
 
         # 다음 키-값
         tok = next_token()
-        I tok != TOK_STRING { R -1 }
+        I tok != TOK_STRING { return -1 }
         field_count = field_count + 1
 
         colon = next_token()
-        I colon != TOK_COLON { R -1 }
+        I colon != TOK_COLON { return -1 }
 
-        I parse_value() < 0 { R -1 }
+        I parse_value() < 0 { return -1 }
     }
 
     field_count
 }
 
 # JSON 배열 파싱: [ value, ... ]
-F parse_array() -> i64 {
+fn parse_array() -> i64 {
     count := mut 0
 
     # 빈 배열 체크
     skip_whitespace()
     I peek_char() == 93 {  # ']'
         advance()
-        R 0
+        return 0
     }
 
     # 첫 번째 요소
-    I parse_value() < 0 { R -1 }
+    I parse_value() < 0 { return -1 }
     count = count + 1
 
     # 나머지 요소
     L true {
         tok := next_token()
         I tok == TOK_RBRACKET { B }
-        I tok != TOK_COMMA { R -1 }
-        I parse_value() < 0 { R -1 }
+        I tok != TOK_COMMA { return -1 }
+        I parse_value() < 0 { return -1 }
         count = count + 1
     }
 
@@ -313,7 +313,7 @@ F parse_array() -> i64 {
 ## Step 5: main 함수와 통합 (10분)
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Vais JSON Parser ===")
 
     # 테스트 JSON 문자열
@@ -329,7 +329,7 @@ F main() -> i64 {
         fields := parse_object()
         I fields >= 0 {
             puts("Parse OK")
-            R 0
+            return 0
         }
     }
 
@@ -352,7 +352,7 @@ vaisc run examples/tutorial_json_parser.vais
 
 ```vais
 # 특정 키의 문자열 값을 찾기
-F find_string_value(json: str, key: str) -> i64 {
+fn find_string_value(json: str, key: str) -> i64 {
     input_str = json
     input_len = __strlen(json)
     pos = 0
@@ -372,7 +372,7 @@ F find_string_value(json: str, key: str) -> i64 {
 ### 3. 에러 위치 보고
 
 ```vais
-F report_error(msg: str) -> i64 {
+fn report_error(msg: str) -> i64 {
     puts("Error at position {pos}: {msg}")
     -1
 }

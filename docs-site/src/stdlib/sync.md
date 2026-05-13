@@ -7,14 +7,14 @@ Sync 모듈은 동시성 프로그래밍을 위한 동기화 프리미티브를 
 ## Quick Start
 
 ```vais
-U std/sync
+use std/sync
 
-F main() -> i64 {
+fn main() -> i64 {
     counter := Mutex::new(0)
     guard := counter.lock()
     val := guard.get_inner()
     store_i64(val, 42)
-    R 0
+    return 0
 }
 ```
 
@@ -69,12 +69,12 @@ F main() -> i64 {
 ### 예제 1: Mutex로 공유 상태 보호
 
 ```vais
-U std/sync
-U std/thread
+use std/sync
+use std/thread
 
 global counter := Mutex::new(0)
 
-F increment() -> i64 {
+fn increment() -> i64 {
     i := 0
     L i < 1000 {
         guard := counter.lock()
@@ -82,10 +82,10 @@ F increment() -> i64 {
         store_i64(val, load_i64(val) + 1)
         i = i + 1
     }
-    R 0
+    return 0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     threads := Vec::new()
     i := 0
     L i < 10 {
@@ -102,19 +102,19 @@ F main() -> i64 {
 
     guard := counter.lock()
     print_i64(load_i64(guard.get_inner()))  # 10000
-    R 0
+    return 0
 }
 ```
 
 ### 예제 2: RwLock으로 읽기 병렬화
 
 ```vais
-U std/sync
-U std/thread
+use std/sync
+use std/thread
 
 global cache := RwLock::new(HashMap::new())
 
-F reader(id: i64) -> i64 {
+fn reader(id: i64) -> i64 {
     L i < 100 {
         guard := cache.read()  # 여러 reader 동시 접근 가능
         data := guard.get_inner()
@@ -123,10 +123,10 @@ F reader(id: i64) -> i64 {
         thread_sleep(10)
         i = i + 1
     }
-    R 0
+    return 0
 }
 
-F writer() -> i64 {
+fn writer() -> i64 {
     L i < 10 {
         guard := cache.write()  # 독점 쓰기
         data := guard.get_inner()
@@ -134,10 +134,10 @@ F writer() -> i64 {
         thread_sleep(100)
         i = i + 1
     }
-    R 0
+    return 0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # 5개 reader + 1개 writer
     L i < 5 {
         thread_spawn(reader, i)
@@ -146,22 +146,22 @@ F main() -> i64 {
     thread_spawn(writer, 0)
 
     thread_sleep(2000)
-    R 0
+    return 0
 }
 ```
 
 ### 예제 3: Condvar로 이벤트 대기
 
 ```vais
-U std/sync
-U std/thread
+use std/sync
+use std/thread
 
-S EventQueue {
+struct EventQueue {
     mutex: Mutex<Vec<i64>>,
     condvar: Condvar
 }
 
-F producer(queue_ptr: i64) -> i64 {
+fn producer(queue_ptr: i64) -> i64 {
     queue := load_typed(queue_ptr)
     i := 0
     L i < 10 {
@@ -175,10 +175,10 @@ F producer(queue_ptr: i64) -> i64 {
         thread_sleep(100)
         i = i + 1
     }
-    R 0
+    return 0
 }
 
-F consumer(queue_ptr: i64) -> i64 {
+fn consumer(queue_ptr: i64) -> i64 {
     queue := load_typed(queue_ptr)
 
     L 1 {
@@ -195,10 +195,10 @@ F consumer(queue_ptr: i64) -> i64 {
 
         I event >= 9 { B }  # 종료 조건
     }
-    R 0
+    return 0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     queue := EventQueue {
         mutex: Mutex::new(Vec::new()),
         condvar: Condvar::new()
@@ -207,19 +207,19 @@ F main() -> i64 {
     thread_spawn(producer, &queue)
     thread_spawn(consumer, &queue)
     thread_sleep(2000)
-    R 0
+    return 0
 }
 ```
 
 ### 예제 4: Barrier로 스레드 동기화
 
 ```vais
-U std/sync
-U std/thread
+use std/sync
+use std/thread
 
 global barrier := Barrier::new(3)
 
-F phase_worker(id: i64) -> i64 {
+fn phase_worker(id: i64) -> i64 {
     # Phase 1
     print_str("스레드 {id}: Phase 1 시작")
     thread_sleep(id * 100)
@@ -236,29 +236,29 @@ F phase_worker(id: i64) -> i64 {
 
     # Phase 3
     print_str("스레드 {id}: Phase 3 시작")
-    R 0
+    return 0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     thread_spawn(phase_worker, 0)
     thread_spawn(phase_worker, 1)
     thread_spawn(phase_worker, 2)
 
     thread_sleep(2000)
-    R 0
+    return 0
 }
 ```
 
 ### 예제 5: Semaphore로 리소스 제한
 
 ```vais
-U std/sync
-U std/thread
+use std/sync
+use std/thread
 
 # 동시 접근 최대 3개로 제한
 global db_pool := Semaphore::new(3)
 
-F database_query(id: i64) -> i64 {
+fn database_query(id: i64) -> i64 {
     print_str("{id}: 연결 대기 중...")
     db_pool.acquire()  # 허가 획득
 
@@ -267,10 +267,10 @@ F database_query(id: i64) -> i64 {
 
     db_pool.release()  # 허가 반환
     print_str("{id}: 연결 해제")
-    R 0
+    return 0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # 10개 스레드가 3개 연결 공유
     i := 0
     L i < 10 {
@@ -279,7 +279,7 @@ F main() -> i64 {
     }
 
     thread_sleep(5000)
-    R 0
+    return 0
 }
 ```
 
@@ -290,18 +290,18 @@ F main() -> i64 {
 
 ```vais
 # Deadlock 발생 가능
-F thread1() {
+fn thread1() {
     lock_a := mutex_a.lock()
     lock_b := mutex_b.lock()  # A → B
 }
 
-F thread2() {
+fn thread2() {
     lock_b := mutex_b.lock()
     lock_a := mutex_a.lock()  # B → A (Deadlock!)
 }
 
 # 안전한 방법
-F safe_order() {
+fn safe_order() {
     lock_a := mutex_a.lock()  # 항상 A → B 순서
     lock_b := mutex_b.lock()
 }
@@ -373,14 +373,14 @@ barrier.wait()
 # 나쁜 예: release 누락
 semaphore.acquire()
 I error_occurred {
-    R 1  # release 없이 리턴!
+    return 1  # release 없이 리턴!
 }
 semaphore.release()
 
 # 좋은 예: defer 사용
 semaphore.acquire()
 D semaphore.release()
-I error_occurred { R 1 }
+I error_occurred { return 1 }
 ```
 
 ### 7. try_lock 패턴
@@ -389,7 +389,7 @@ I error_occurred { R 1 }
 ```vais
 L 1 {
     guard := mutex.try_lock()
-    M guard {
+    match guard {
         Some(g) => {
             # 락 획득 성공
             process(g.get_inner())
