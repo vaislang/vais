@@ -68,9 +68,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Ok(call
                 .try_as_basic_value()
                 .left()
-                .unwrap_or_else(|| self.context.struct_type(&[], false).const_zero().into()))
+                .unwrap_or_else(|| self.unit_value()))
         } else {
-            Ok(self.context.struct_type(&[], false).const_zero().into())
+            Ok(self.unit_value())
         }
     }
 
@@ -137,7 +137,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             _ => {}
         }
 
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
     // ========== Impl/Method Support ==========
 
@@ -398,6 +398,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.var_struct_types.clear();
         self.var_resolved_types.clear();
         self.defer_stack.clear();
+        self.alloc_tracker.clear();
+        self.string_value_slot.clear();
+        self.pending_return_skip_slot.clear();
+        self.scope_str_stack.clear();
+        self.var_string_slot.clear();
+        self.var_string_slots_multi.clear();
+        self.phi_extra_slots.clear();
 
         // Set up generic substitutions from parent struct and method generics
         let old_substitutions = self.generic_substitutions.clone();
@@ -495,6 +502,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.mark_return_ownership_transfer_expr(&body_value, &body_expr.node);
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
@@ -520,6 +529,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.mark_return_ownership_transfer_block(&body_value, stmts);
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
@@ -622,7 +633,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             }
         }
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_print_call(
@@ -650,7 +661,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.builder
             .build_call(printf_fn, &arg_values, "print_call")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_format_call(
@@ -693,7 +704,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.builder
             .build_store(ptr, val)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_load_i64(
@@ -801,7 +812,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .build_store(p2, v1)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_store_byte(
@@ -835,7 +846,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.builder
             .build_store(ptr, byte_val)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_load_byte(
@@ -899,7 +910,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.builder
             .build_store(ptr, val)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_load_f64(

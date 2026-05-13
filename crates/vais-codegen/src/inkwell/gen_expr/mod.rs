@@ -6,7 +6,6 @@
 // Submodules organized by expression category
 mod binary;
 mod call;
-mod lambda;
 mod literal;
 mod misc;
 mod unary;
@@ -27,7 +26,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Expr::Float(f) => Ok(self.context.f64_type().const_float(*f).into()),
             Expr::Bool(b) => Ok(self.context.bool_type().const_int(*b as u64, false).into()),
             Expr::String(s) => self.generate_string_literal(s),
-            Expr::Unit => Ok(self.context.struct_type(&[], false).const_zero().into()),
+            Expr::Unit => Ok(self.unit_value()),
 
             // Variable
             Expr::Ident(name) => self.generate_var(name),
@@ -58,8 +57,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             } => self.generate_match(match_expr, arms),
 
             // Struct
-            Expr::StructLit { name, fields } => self.generate_struct_literal(&name.node, fields),
+            Expr::StructLit { name, fields, .. } => {
+                self.generate_struct_literal(&name.node, fields)
+            }
             Expr::Field { expr: obj, field } => self.generate_field_access(&obj.node, &field.node),
+            Expr::TupleFieldAccess { expr: obj, index } => {
+                self.generate_field_access(&obj.node, &index.to_string())
+            }
 
             // Array/Tuple/Index
             Expr::Array(elements) => self.generate_array(elements),
@@ -162,9 +166,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             // Comptime: evaluate at compile time (for now, just evaluate normally)
             Expr::Comptime { body } => self.generate_expr(&body.node),
 
-            // Lazy: create deferred evaluation thunk
-            Expr::Lazy(inner) => self.generate_lazy(&inner.node),
-
             // Await: evaluate the inner expression (async functions compile as synchronous
             // in Inkwell backend, so await is effectively identity — the function has
             // already completed and returned its result directly)
@@ -190,6 +191,26 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 }
             }
 
+            // Enum namespace access: EnumName::VariantName (unit variant)
+            // Delegate to generate_var which already handles enum_variants lookup.
+            Expr::EnumAccess {
+                enum_name: _,
+                variant,
+                data: None,
+            } => self.generate_var(variant),
+
+            // Enum namespace access with data: EnumName::VariantName(data)
+            // Treat as a call `VariantName(data)` — same as tuple variant construction.
+            Expr::EnumAccess {
+                enum_name: _,
+                variant,
+                data: Some(data_expr),
+            } => {
+                let callee = vais_ast::Expr::Ident(variant.clone());
+                let args_slice = [*data_expr.clone()];
+                self.generate_call(&callee, &args_slice)
+            }
+
             // String interpolation
             Expr::StringInterp(parts) => self.generate_string_interp(parts),
 
@@ -197,19 +218,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Expr::Assume(inner) => {
                 // Evaluate the inner expression but discard result
                 let _ = self.generate_expr(&inner.node)?;
-                Ok(self.context.struct_type(&[], false).const_zero().into())
+                Ok(self.unit_value())
             }
 
             // Spread: just evaluate the inner expression
             Expr::Spread(inner) => self.generate_expr(&inner.node),
-
-            // Force: evaluate a lazy value (check computed flag, call thunk if needed)
-            Expr::Force(inner) => self.generate_force(&inner.node),
-
-            // Spawn: evaluate inner expression to create a concurrent task.
-            // In Inkwell backend, async functions compile as synchronous, so spawn
-            // evaluates the inner expression immediately (eager evaluation).
-            Expr::Spawn(inner) => self.generate_expr(&inner.node),
 
             // Yield: evaluate the inner expression and return its value.
             // Yields the value to the generator's caller. In the current synchronous

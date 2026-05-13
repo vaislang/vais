@@ -83,7 +83,7 @@ F json_array_push(arr: i64, elem: i64) -> i64 {
         store_i64(arr + 24, new_cap)
         elems = new_elems
         0
-    } E { 0 }
+    } EL { 0 }
     store_i64(elems + count * 8, elem)
     store_i64(arr + 16, count + 1)
     0
@@ -123,7 +123,7 @@ F json_object_set(obj: i64, key_ptr: i64, key_len: i64, val: i64) -> i64 {
         keys = new_keys
         vals = new_vals
         0
-    } E { 0 }
+    } EL { 0 }
     store_i64(keys + count * 16, key_ptr)
     store_i64(keys + count * 16 + 8, key_len)
     store_i64(vals + count * 8, val)
@@ -137,10 +137,10 @@ F json_object_count(obj: i64) -> i64 = load_i64(obj + 24)
 F lsp_memcmp(a: i64, b: i64, len: i64) -> i64 {
     i: mut i64 = 0
     L {
-        I i >= len { B } E { 0 }
+        I i >= len { B } EL { 0 }
         ca := load_byte(a + i)
         cb := load_byte(b + i)
-        I ca != cb { R ca - cb } E { 0 }
+        I ca != cb { R ca - cb } EL { 0 }
         i = i + 1
     }
     0
@@ -149,12 +149,12 @@ F lsp_memcmp(a: i64, b: i64, len: i64) -> i64 {
 # Compare i64 ptr with str literal
 F lsp_streq(ptr: i64, len: i64, s: str) -> i64 {
     slen := strlen(s)
-    I len != slen { R 0 } E { 0 }
+    I len != slen { R 0 } EL { 0 }
     sp := str_to_ptr(s)
     i: mut i64 = 0
     L {
-        I i >= len { B } E { 0 }
-        I load_byte(ptr + i) != load_byte(sp + i) { R 0 } E { 0 }
+        I i >= len { B } EL { 0 }
+        I load_byte(ptr + i) != load_byte(sp + i) { R 0 } EL { 0 }
         i = i + 1
     }
     1
@@ -167,14 +167,14 @@ F json_object_get(obj: i64, key: str) -> i64 {
     klen := strlen(key)
     i: mut i64 = 0
     L {
-        I i >= count { B } E { 0 }
+        I i >= count { B } EL { 0 }
         kp := load_i64(keys + i * 16)
         kl := load_i64(keys + i * 16 + 8)
         I kl == klen {
             I lsp_streq(kp, kl, key) == 1 {
                 R load_i64(vals + i * 8)
-            } E { 0 }
-        } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
         i = i + 1
     }
     0
@@ -200,7 +200,7 @@ F jp_set_pos(p: i64, pos: i64) -> i64 { store_i64(p + 16, pos); 0 }
 
 F jp_peek(p: i64) -> i64 {
     pos := jp_pos(p)
-    I pos >= jp_len(p) { R 0 } E { 0 }
+    I pos >= jp_len(p) { R 0 } EL { 0 }
     load_byte(jp_src(p) + pos)
 }
 
@@ -213,10 +213,10 @@ F jp_skip_ws(p: i64) -> i64 {
     L {
         ch := jp_peek(p)
         I ch == 32 { jp_advance(p); 0 }
-        E I ch == 9 { jp_advance(p); 0 }
-        E I ch == 10 { jp_advance(p); 0 }
-        E I ch == 13 { jp_advance(p); 0 }
-        E { B }
+        EL I ch == 9 { jp_advance(p); 0 }
+        EL I ch == 10 { jp_advance(p); 0 }
+        EL I ch == 13 { jp_advance(p); 0 }
+        EL { B }
     }
     0
 }
@@ -231,19 +231,19 @@ F jp_parse_string(p: i64) -> i64 {
         I ch == 34 {  # closing "
             jp_advance(p)
             B
-        } E I ch == 92 {  # backslash
+        } EL I ch == 92 {  # backslash
             jp_advance(p)
             esc := jp_peek(p)
             jp_advance(p)
             I esc == 110 { sb_append_byte(sb, 10); 0 }  # \n
-            E I esc == 116 { sb_append_byte(sb, 9); 0 }  # \t
-            E I esc == 114 { sb_append_byte(sb, 13); 0 }  # \r
-            E I esc == 34 { sb_append_byte(sb, 34); 0 }   # \"
-            E I esc == 92 { sb_append_byte(sb, 92); 0 }   # \\
-            E I esc == 47 { sb_append_byte(sb, 47); 0 }   # \/
-            E { sb_append_byte(sb, esc); 0 }
-        } E I ch == 0 { B }
-        E {
+            EL I esc == 116 { sb_append_byte(sb, 9); 0 }  # \t
+            EL I esc == 114 { sb_append_byte(sb, 13); 0 }  # \r
+            EL I esc == 34 { sb_append_byte(sb, 34); 0 }   # \"
+            EL I esc == 92 { sb_append_byte(sb, 92); 0 }   # \\
+            EL I esc == 47 { sb_append_byte(sb, 47); 0 }   # \/
+            EL { sb_append_byte(sb, esc); 0 }
+        } EL I ch == 0 { B }
+        EL {
             sb_append_byte(sb, ch)
             jp_advance(p)
             0
@@ -261,7 +261,7 @@ F jp_parse_number(p: i64) -> i64 {
         neg = 1
         jp_advance(p)
         0
-    } E { 0 }
+    } EL { 0 }
     val: mut i64 = 0
     L {
         ch := jp_peek(p)
@@ -270,8 +270,8 @@ F jp_parse_number(p: i64) -> i64 {
                 val = val * 10 + (ch - 48)
                 jp_advance(p)
                 0
-            } E { B }
-        } E { B }
+            } EL { B }
+        } EL { B }
     }
     # Skip decimal part if present
     I jp_peek(p) == 46 {
@@ -280,12 +280,12 @@ F jp_parse_number(p: i64) -> i64 {
             ch := jp_peek(p)
             I ch >= 48 {
                 I ch <= 57 { jp_advance(p); 0 }
-                E { B }
-            } E { B }
+                EL { B }
+            } EL { B }
         }
         0
-    } E { 0 }
-    I neg == 1 { val = 0 - val; 0 } E { 0 }
+    } EL { 0 }
+    I neg == 1 { val = 0 - val; 0 } EL { 0 }
     json_number_new(val)
 }
 
@@ -296,23 +296,23 @@ F jp_parse_value(p: i64) -> i64 {
 
     I ch == 34 {  # "
         jp_parse_string(p)
-    } E I ch == 123 {  # {
+    } EL I ch == 123 {  # {
         jp_advance(p)
         obj := json_object_new(16)
         jp_skip_ws(p)
         I jp_peek(p) == 125 {  # empty object
             jp_advance(p)
             R obj
-        } E { 0 }
+        } EL { 0 }
         L {
             jp_skip_ws(p)
             # Parse key
-            I jp_peek(p) != 34 { B } E { 0 }
+            I jp_peek(p) != 34 { B } EL { 0 }
             key := jp_parse_string(p)
             key_ptr := json_string_ptr(key)
             key_len := json_string_len(key)
             jp_skip_ws(p)
-            I jp_peek(p) == 58 { jp_advance(p); 0 } E { 0 }  # :
+            I jp_peek(p) == 58 { jp_advance(p); 0 } EL { 0 }  # :
             # Parse value
             val := jp_parse_value(p)
             json_object_set(obj, key_ptr, key_len, val)
@@ -320,19 +320,19 @@ F jp_parse_value(p: i64) -> i64 {
             I jp_peek(p) == 44 {  # ,
                 jp_advance(p)
                 0
-            } E { B }
+            } EL { B }
         }
         jp_skip_ws(p)
-        I jp_peek(p) == 125 { jp_advance(p); 0 } E { 0 }
+        I jp_peek(p) == 125 { jp_advance(p); 0 } EL { 0 }
         obj
-    } E I ch == 91 {  # [
+    } EL I ch == 91 {  # [
         jp_advance(p)
         arr := json_array_new(16)
         jp_skip_ws(p)
         I jp_peek(p) == 93 {  # empty array
             jp_advance(p)
             R arr
-        } E { 0 }
+        } EL { 0 }
         L {
             val := jp_parse_value(p)
             json_array_push(arr, val)
@@ -340,29 +340,29 @@ F jp_parse_value(p: i64) -> i64 {
             I jp_peek(p) == 44 {  # ,
                 jp_advance(p)
                 0
-            } E { B }
+            } EL { B }
         }
         jp_skip_ws(p)
-        I jp_peek(p) == 93 { jp_advance(p); 0 } E { 0 }
+        I jp_peek(p) == 93 { jp_advance(p); 0 } EL { 0 }
         arr
-    } E I ch == 116 {  # true
+    } EL I ch == 116 {  # true
         jp_advance(p); jp_advance(p); jp_advance(p); jp_advance(p)
         json_bool_new(1)
-    } E I ch == 102 {  # false
+    } EL I ch == 102 {  # false
         jp_advance(p); jp_advance(p); jp_advance(p); jp_advance(p); jp_advance(p)
         json_bool_new(0)
-    } E I ch == 110 {  # null
+    } EL I ch == 110 {  # null
         jp_advance(p); jp_advance(p); jp_advance(p); jp_advance(p)
         json_null_new()
-    } E I ch == 45 {  # negative number
+    } EL I ch == 45 {  # negative number
         jp_parse_number(p)
-    } E I ch >= 48 {
+    } EL I ch >= 48 {
         I ch <= 57 {
             jp_parse_number(p)
-        } E {
+        } EL {
             json_null_new()
         }
-    } E {
+    } EL {
         json_null_new()
     }
 }
@@ -384,14 +384,14 @@ F jb_string(sb: i64, ptr: i64, len: i64) -> i64 {
     sb_append_byte(sb, 34)  # "
     i: mut i64 = 0
     L {
-        I i >= len { B } E { 0 }
+        I i >= len { B } EL { 0 }
         ch := load_byte(ptr + i)
         I ch == 34 { sb_append_byte(sb, 92); sb_append_byte(sb, 34); 0 }
-        E I ch == 92 { sb_append_byte(sb, 92); sb_append_byte(sb, 92); 0 }
-        E I ch == 10 { sb_append_byte(sb, 92); sb_append_byte(sb, 110); 0 }
-        E I ch == 13 { sb_append_byte(sb, 92); sb_append_byte(sb, 114); 0 }
-        E I ch == 9 { sb_append_byte(sb, 92); sb_append_byte(sb, 116); 0 }
-        E { sb_append_byte(sb, ch); 0 }
+        EL I ch == 92 { sb_append_byte(sb, 92); sb_append_byte(sb, 92); 0 }
+        EL I ch == 10 { sb_append_byte(sb, 92); sb_append_byte(sb, 110); 0 }
+        EL I ch == 13 { sb_append_byte(sb, 92); sb_append_byte(sb, 114); 0 }
+        EL I ch == 9 { sb_append_byte(sb, 92); sb_append_byte(sb, 116); 0 }
+        EL { sb_append_byte(sb, ch); 0 }
         i = i + 1
     }
     sb_append_byte(sb, 34)  # "
@@ -418,7 +418,7 @@ F jb_int(sb: i64, n: i64) -> i64 {
 
 F jb_bool(sb: i64, b: i64) -> i64 {
     I b != 0 { sb_append_cstr(sb, "true") }
-    E { sb_append_cstr(sb, "false") }
+    EL { sb_append_cstr(sb, "false") }
 }
 
 F jb_null(sb: i64) -> i64 {
@@ -506,7 +506,7 @@ F lsp_getchar() -> i64 {
     I n <= 0 {
         free(buf)
         R 0 - 1
-    } E { 0 }
+    } EL { 0 }
     ch := load_byte(buf)
     free(buf)
     ch
@@ -520,15 +520,15 @@ F lsp_read_header() -> i64 {
     line := sb_new(256)
     L {
         ch := lsp_getchar()
-        I ch < 0 { R 0 - 1 } E { 0 }  # EOF
+        I ch < 0 { R 0 - 1 } EL { 0 }  # EOF
         I ch == 10 {  # \n
             # Check if line is empty (just \r or nothing)
             ll := sb_get_len(line)
             I ll == 0 { B }
-            E I ll == 1 {
+            EL I ll == 1 {
                 ld := sb_get_data(line)
-                I load_byte(ld) == 13 { B } E { 0 }
-            } E { 0 }
+                I load_byte(ld) == 13 { B } EL { 0 }
+            } EL { 0 }
             # Check for Content-Length
             I ll > 16 {
                 ld := sb_get_data(line)
@@ -539,25 +539,25 @@ F lsp_read_header() -> i64 {
                         num: mut i64 = 0
                         ni: mut i64 = 16
                         L {
-                            I ni >= ll { B } E { 0 }
+                            I ni >= ll { B } EL { 0 }
                             nch := load_byte(ld + ni)
                             I nch >= 48 {
                                 I nch <= 57 {
                                     num = num * 10 + (nch - 48)
                                     0
-                                } E { B }
-                            } E { B }
+                                } EL { B }
+                            } EL { B }
                             ni = ni + 1
                         }
                         content_len = num
                         0
-                    } E { 0 }
-                } E { 0 }
-            } E { 0 }
+                    } EL { 0 }
+                } EL { 0 }
+            } EL { 0 }
             # Reset line buffer
             sb_set_len(line, 0)
             0
-        } E {
+        } EL {
             sb_append_byte(line, ch)
             0
         }
@@ -571,9 +571,9 @@ F lsp_read_body(len: i64) -> i64 {
     buf := malloc(len + 1)
     i: mut i64 = 0
     L {
-        I i >= len { B } E { 0 }
+        I i >= len { B } EL { 0 }
         ch := lsp_getchar()
-        I ch < 0 { B } E { 0 }
+        I ch < 0 { B } EL { 0 }
         store_byte(buf + i, ch)
         i = i + 1
     }
@@ -589,12 +589,12 @@ F json_get_string_field(obj: i64, key: str, out: i64) -> i64 {
         store_i64(out, 0)
         store_i64(out + 8, 0)
         R 0
-    } E { 0 }
+    } EL { 0 }
     I json_type(val) != JSON_STRING() {
         store_i64(out, 0)
         store_i64(out + 8, 0)
         R 0
-    } E { 0 }
+    } EL { 0 }
     store_i64(out, json_string_ptr(val))
     store_i64(out + 8, json_string_len(val))
     1
@@ -602,7 +602,7 @@ F json_get_string_field(obj: i64, key: str, out: i64) -> i64 {
 
 F json_get_int_field(obj: i64, key: str) -> i64 {
     val := json_object_get(obj, key)
-    I val == 0 { R 0 } E { 0 }
+    I val == 0 { R 0 } EL { 0 }
     I json_type(val) == JSON_NUMBER() { json_number_val(val) }
-    E { 0 }
+    EL { 0 }
 }

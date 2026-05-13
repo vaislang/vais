@@ -50,7 +50,7 @@ F main() -> i64 {
         puts("  Freeing memory (last reference)")
         free(rc_ptr)
         0
-    } E {
+    } EL {
         store_i64(rc_ptr, count6 - 1)
         0
     }

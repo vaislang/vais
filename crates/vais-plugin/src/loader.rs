@@ -200,6 +200,10 @@ pub fn load_plugin(path: &Path, allow_plugins: bool) -> Result<LoadedPlugin, Str
     // The raw pointer is checked for null before being converted to a Box.
     // The library handle is kept alive in the LoadedPlugin struct to prevent unloading.
     let plugin_impl = match plugin_type {
+        // SAFETY: `library.get` retrieves a symbol from the loaded shared library.
+        // `create()` returns a heap-allocated trait object pointer; null is checked
+        // before `Box::from_raw`. The library handle lives in LoadedPlugin, preventing
+        // use-after-unload.
         PluginType::Lint => unsafe {
             let create: Symbol<CreateLintPluginFn> = library
                 .get(b"create_lint_plugin")
@@ -210,6 +214,7 @@ pub fn load_plugin(path: &Path, allow_plugins: bool) -> Result<LoadedPlugin, Str
             }
             PluginImpl::Lint(Box::from_raw(raw))
         },
+        // SAFETY: Same contract as Lint above — symbol lookup, null check, library kept alive.
         PluginType::Transform => unsafe {
             let create: Symbol<CreateTransformPluginFn> =
                 library.get(b"create_transform_plugin").map_err(|e| {
@@ -224,6 +229,7 @@ pub fn load_plugin(path: &Path, allow_plugins: bool) -> Result<LoadedPlugin, Str
             }
             PluginImpl::Transform(Box::from_raw(raw))
         },
+        // SAFETY: Same contract as Lint above — symbol lookup, null check, library kept alive.
         PluginType::Optimize => unsafe {
             let create: Symbol<CreateOptimizePluginFn> =
                 library.get(b"create_optimize_plugin").map_err(|e| {
@@ -238,6 +244,7 @@ pub fn load_plugin(path: &Path, allow_plugins: bool) -> Result<LoadedPlugin, Str
             }
             PluginImpl::Optimize(Box::from_raw(raw))
         },
+        // SAFETY: Same contract as Lint above — symbol lookup, null check, library kept alive.
         PluginType::Codegen => unsafe {
             let create: Symbol<CreateCodegenPluginFn> =
                 library.get(b"create_codegen_plugin").map_err(|e| {
@@ -252,6 +259,7 @@ pub fn load_plugin(path: &Path, allow_plugins: bool) -> Result<LoadedPlugin, Str
             }
             PluginImpl::Codegen(Box::from_raw(raw))
         },
+        // SAFETY: Same contract as Lint above — symbol lookup, null check, library kept alive.
         PluginType::Formatter => unsafe {
             let create: Symbol<CreateFormatterPluginFn> =
                 library.get(b"create_formatter_plugin").map_err(|e| {
@@ -266,6 +274,7 @@ pub fn load_plugin(path: &Path, allow_plugins: bool) -> Result<LoadedPlugin, Str
             }
             PluginImpl::Formatter(Box::from_raw(raw))
         },
+        // SAFETY: Same contract as Lint above — symbol lookup, null check, library kept alive.
         PluginType::Analysis => unsafe {
             let create: Symbol<CreateAnalysisPluginFn> =
                 library.get(b"create_analysis_plugin").map_err(|e| {

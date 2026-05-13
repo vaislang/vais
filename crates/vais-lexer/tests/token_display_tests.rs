@@ -41,10 +41,7 @@ fn test_word_keyword_display() {
     assert_token_display(&Token::SelfUpper, "Self");
     assert_token_display(&Token::True, "true");
     assert_token_display(&Token::False, "false");
-    assert_token_display(&Token::Spawn, "spawn");
     assert_token_display(&Token::Await, "Y");
-    assert_token_display(&Token::Weak, "weak");
-    assert_token_display(&Token::Clone, "clone");
     assert_token_display(&Token::Const, "const");
     assert_token_display(&Token::Comptime, "comptime");
     assert_token_display(&Token::Dyn, "dyn");
@@ -170,7 +167,6 @@ fn test_linear_type_display() {
     assert_token_display(&Token::Linear, "linear");
     assert_token_display(&Token::Affine, "affine");
     assert_token_display(&Token::Move, "move");
-    assert_token_display(&Token::Consume, "consume");
     assert_token_display(&Token::Where, "where");
 }
 
@@ -178,12 +174,6 @@ fn test_linear_type_display() {
 fn test_lifetime_display() {
     assert_token_display(&Token::Lifetime("a".to_string()), "'a");
     assert_token_display(&Token::Lifetime("static".to_string()), "'static");
-}
-
-#[test]
-fn test_lazy_force_display() {
-    assert_token_display(&Token::Lazy, "lazy");
-    assert_token_display(&Token::Force, "force");
 }
 
 #[test]

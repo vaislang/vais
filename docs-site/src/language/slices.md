@@ -55,7 +55,7 @@ len := slice.len()    # Returns 3
 Slices are commonly used for function parameters to avoid copying:
 
 ```vais
-F sum(data: &[i64]) -> i64 {
+fn sum(data: &[i64]) -> i64 {
     total := 0
     i := 0
     L i < data.len() {
@@ -65,7 +65,7 @@ F sum(data: &[i64]) -> i64 {
     total
 }
 
-F fill(data: &mut [i64], val: i64) {
+fn fill(data: &mut [i64], val: i64) {
     i := 0
     L i < data.len() {
         data[i] = val
@@ -126,7 +126,7 @@ All slice indexing operations include runtime bounds checks. Out-of-bounds acces
 
 ### Iterating Over Slices
 ```vais
-F print_all(items: &[i64]) {
+fn print_all(items: &[i64]) {
     i := 0
     L i < items.len() {
         print_i64(items[i])
@@ -140,7 +140,7 @@ print_all(data[1..4])    # Prints: 20, 30, 40
 
 ### Splitting Slices
 ```vais
-F split_at(data: &[i64], mid: i64) -> (&[i64], &[i64]) {
+fn split_at(data: &[i64], mid: i64) -> (&[i64], &[i64]) {
     left := data[0..mid]
     right := data[mid..data.len()]
     (left, right)
@@ -153,7 +153,7 @@ arr := [1, 2, 3, 4, 5, 6]
 
 ### In-place Modification
 ```vais
-F double_values(data: &mut [i64]) {
+fn double_values(data: &mut [i64]) {
     i := 0
     L i < data.len() {
         data[i] = data[i] * 2

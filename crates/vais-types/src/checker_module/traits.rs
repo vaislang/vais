@@ -172,7 +172,6 @@ impl TypeChecker {
                     contracts: None,
                     effect_annotation: EffectAnnotation::Infer,
                     inferred_effects: None,
-                    hkt_params: extract_hkt_params(&method.node.generics),
                     generic_callees: vec![],
                 },
             ));

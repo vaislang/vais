@@ -12,6 +12,7 @@ use super::helpers::*;
 
 // ===== Range struct codegen =====
 
+// REGRESSION(phase-41): range struct {i64, i64, i1} codegen must produce valid insertvalue chain
 #[test]
 fn e2e_phase41_range_basic() {
     // Basic range creation — verifies {i64, i64, i1} struct works

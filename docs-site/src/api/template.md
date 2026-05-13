@@ -2,10 +2,12 @@
 
 > Template engine with variable interpolation, conditionals, loops, filters, and partials
 
+> **Implementation:** Requires C runtime (`template_runtime.c`).
+
 ## Import
 
 ```vais
-U std/template
+use std/template
 ```
 
 ## Overview
@@ -68,7 +70,7 @@ The template module provides a lightweight template engine supporting:
 Template context stores key-value pairs for variable interpolation.
 
 ```vais
-S TemplateCtx {
+struct TemplateCtx {
     handle: i64    # Opaque pointer to C runtime context
 }
 ```
@@ -92,7 +94,7 @@ S TemplateCtx {
 Compiled template ready for rendering.
 
 ```vais
-S Template {
+struct Template {
     source: str,
     handle: i64    # Opaque pointer to parsed template
 }
@@ -181,9 +183,9 @@ S Template {
 ### Basic Example
 
 ```vais
-U std/template
+use std/template
 
-F main() -> i64 {
+fn main() -> i64 {
     ctx := TemplateCtx::new()
     ctx.set_str("name", "World")
 
@@ -200,9 +202,9 @@ F main() -> i64 {
 ### Chaining Context Variables
 
 ```vais
-U std/template
+use std/template
 
-F main() -> i64 {
+fn main() -> i64 {
     ctx := TemplateCtx::new()
         .set_str("title", "My Page")
         .set_str("user", "Alice")
@@ -221,9 +223,9 @@ F main() -> i64 {
 ### Quick Render (One-Shot)
 
 ```vais
-U std/template
+use std/template
 
-F main() -> i64 {
+fn main() -> i64 {
     ctx := TemplateCtx::new().set_str("name", "Bob")
     result := template_quick_render("Hi, {{ name }}!", &ctx)
     # result is "Hi, Bob!"
@@ -235,9 +237,9 @@ F main() -> i64 {
 ### Single Variable Render
 
 ```vais
-U std/template
+use std/template
 
-F main() -> i64 {
+fn main() -> i64 {
     result := template_render_var(
         "Welcome, {{ user }}!",
         "user",
@@ -251,9 +253,9 @@ F main() -> i64 {
 ### HTML Escaping
 
 ```vais
-U std/template
+use std/template
 
-F main() -> i64 {
+fn main() -> i64 {
     unsafe := "<script>alert('XSS')</script>"
     safe := html_escape(unsafe)
     # safe is "&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;"
@@ -264,9 +266,9 @@ F main() -> i64 {
 ### Applying Filters
 
 ```vais
-U std/template
+use std/template
 
-F main() -> i64 {
+fn main() -> i64 {
     upper := apply_filter("hello", "upper")   # "HELLO"
     lower := apply_filter("WORLD", "lower")   # "world"
     trimmed := apply_filter("  hi  ", "trim") # "hi"
@@ -278,9 +280,9 @@ F main() -> i64 {
 ### Conditionals and Truthiness
 
 ```vais
-U std/template
+use std/template
 
-F main() -> i64 {
+fn main() -> i64 {
     ctx := TemplateCtx::new()
         .set_str("user", "Alice")
         .set_str("admin", "")

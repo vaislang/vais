@@ -255,9 +255,11 @@ fn test_infer_array() {
 
 #[test]
 fn test_type_mismatch_error() {
+    // Phase 160-A: bool↔i64 numeric promotion is now allowed.
+    // Use str→i64 mismatch which is still forbidden.
     let source = r#"
         F test() -> i64 {
-            x: bool = 42
+            x: str = 42
             R 0
         }
     "#;
@@ -270,7 +272,9 @@ fn test_type_mismatch_error() {
 
 #[test]
 fn test_return_type_mismatch() {
-    let source = r#"F test() -> i64 = true"#;
+    // Phase 160-A: bool↔i64 numeric promotion is now allowed.
+    // Use str→i64 mismatch which is still forbidden.
+    let source = r#"F test() -> i64 = "hello""#;
     let module = parse(source).unwrap();
     let mut tc = TypeChecker::new();
     let result = tc.check_module(&module);

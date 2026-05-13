@@ -140,6 +140,18 @@
     "E031": {
       "title": "extern 시그니처 불일치",
       "message": "extern 함수 '{name}'의 반환 타입이 예상과 다릅니다: '{expected}'을(를) 예상했으나 '{found}'을(를) 발견"
+    },
+    "E032": {
+      "title": "타입 추론 실패",
+      "message": "'{name}'의 타입을 추론할 수 없습니다: {reason}"
+    },
+    "E033": {
+      "title": "타입 체커 내부 오류",
+      "message": "타입 체커 내부 오류: {detail}"
+    },
+    "E034": {
+      "title": "total 함수의 panic 가능성",
+      "message": "total 함수 '{function_name}'가 panic할 수 있습니다 ({reason}); 의도된 panic이라면 `partial`로 표시하세요"
     }
   },
 

@@ -1,3 +1,59 @@
+# ============================================================================
+# Module: memory
+# ============================================================================
+#
+# 저수준 메모리 연산 모듈입니다.
+# C 표준 라이브러리의 string.h(memset/memmove/memcmp 등)와 유사한
+# 직접 메모리 조작 함수를 제공합니다.
+#
+# 주요 외부(C) 함수:
+#   memset(dest, value, n) -> i64   - dest[0..n)을 value로 채움
+#   memmove(dest, src, n) -> i64    - 겹치는 영역도 안전하게 복사
+#   memcmp(s1, s2, n) -> i64        - 두 메모리 블록 비교 (0=같음, <0/>0)
+#   memchr(s, c, n) -> i64          - s[0..n)에서 바이트 c 검색 (포인터/0)
+#
+# 참고:
+#   memcpy는 컴파일러 빌트인으로 제공됨 (extern 선언 불필요)
+#   malloc/free/realloc은 전역 빌트인으로 항상 사용 가능
+#
+# 주요 래퍼 함수:
+#   mem_zero(ptr, n)               - n 바이트를 0으로 초기화
+#   mem_copy(dst, src, n)          - n 바이트 복사 (memcpy 래퍼)
+#   mem_move(dst, src, n)          - n 바이트 이동 (겹침 안전)
+#   mem_eq(a, b, n) -> i64         - n 바이트가 동일하면 1 반환
+#   mem_alloc(n) -> i64            - n 바이트 힙 할당 (0이면 패닉)
+#   mem_alloc_zeroed(n) -> i64     - n 바이트 할당 후 0 초기화
+#   mem_realloc(ptr, n) -> i64     - 기존 할당 크기 변경
+#   mem_free(ptr)                  - 힙 메모리 해제
+#   mem_read_i64(ptr) -> i64       - 포인터에서 i64 읽기
+#   mem_write_i64(ptr, val)        - 포인터에 i64 쓰기
+#   mem_read_i32(ptr) -> i32       - 포인터에서 i32 읽기
+#   mem_write_i32(ptr, val)        - 포인터에 i32 쓰기
+#
+# 사용 예제:
+#
+#   U std/memory
+#
+#   # 버퍼 할당 및 초기화
+#   buf := mem_alloc_zeroed(1024)
+#
+#   # 데이터 복사
+#   src := mem_alloc(64)
+#   mem_copy(buf, src, 64)
+#
+#   # 메모리 비교
+#   same := mem_eq(buf, src, 64)
+#   print("{same}")      # 출력: 1 (동일)
+#
+#   # 정수 읽기/쓰기
+#   mem_write_i64(buf, 999)
+#   val := mem_read_i64(buf)
+#   print("{val}")       # 출력: 999
+#
+#   # 해제
+#   mem_free(buf)
+#   mem_free(src)
+#
 // std/memory.vais - Low-level memory operations
 // Provides direct memory manipulation functions similar to C's string.h
 
@@ -30,7 +86,7 @@ F mem_zero(dest: i64, n: i64) -> i64 = memset(dest, 0, n)
 
 /// Fill memory with a pattern (i64 value repeated)
 F mem_fill_i64(dest: i64, value: i64, count: i64) -> i64 {
-    L i := 0; i < count; i = i + 1 {
+    LF i := 0; i < count; i = i + 1 {
         store_i64(dest + i * 8, value);
     }
     dest
@@ -48,7 +104,7 @@ F mem_move(dest: i64, src: i64, n: i64) -> i64 = memmove(dest, src, n)
 
 /// Copy n i64 values from src to dest
 F mem_copy_i64(dest: i64, src: i64, count: i64) -> i64 {
-    L i := 0; i < count; i = i + 1 {
+    LF i := 0; i < count; i = i + 1 {
         store_i64(dest + i * 8, load_i64(src + i * 8));
     }
     dest
@@ -68,7 +124,7 @@ F mem_eq(s1: i64, s2: i64, n: i64) -> Bool = memcmp(s1, s2, n) == 0
 /// Find first occurrence of byte in memory
 /// Returns offset from start, or -1 if not found
 F mem_chr(ptr: i64, byte: i64, n: i64) -> i64 {
-    L i := 0; i < n; i = i + 1 {
+    LF i := 0; i < n; i = i + 1 {
         I load_byte(ptr + i) == byte { R i }
     }
     -1
@@ -77,7 +133,7 @@ F mem_chr(ptr: i64, byte: i64, n: i64) -> i64 {
 /// Find last occurrence of byte in memory
 /// Returns offset from start, or -1 if not found
 F mem_rchr(ptr: i64, byte: i64, n: i64) -> i64 {
-    L i := n - 1; i >= 0; i = i - 1 {
+    LF i := n - 1; i >= 0; i = i - 1 {
         I load_byte(ptr + i) == byte { R i }
     }
     -1
@@ -96,7 +152,7 @@ F mem_find(haystack: i64, haystack_len: i64, needle: i64, needle_len: i64) -> i6
     first_byte := load_byte(needle);
     max_start := haystack_len - needle_len;
 
-    L i := 0; i <= max_start; i = i + 1 {
+    LF i := 0; i <= max_start; i = i + 1 {
         I load_byte(haystack + i) == first_byte {
             I mem_eq(haystack + i, needle, needle_len) {
                 R i
@@ -129,7 +185,7 @@ F mem_realloc(old_ptr: i64, old_size: i64, new_size: i64) -> i64 {
 
     new_ptr := malloc(new_size);
     I new_ptr != 0 {
-        copy_size := I old_size < new_size { old_size } E { new_size };
+        copy_size := I old_size < new_size { old_size } EL { new_size };
         mem_copy(new_ptr, old_ptr, copy_size);
         free(old_ptr);
     }
@@ -238,7 +294,7 @@ F ctz64(x: i64) -> i64 {
 /// Count set bits (population count) in a 64-bit value
 F popcount64(x: i64) -> i64 {
     count := 0;
-    L x != 0 {
+    LW x != 0 {
         count = count + (x & 1);
         x = x / 2;
     }

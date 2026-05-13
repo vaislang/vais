@@ -21,6 +21,7 @@ struct ContractOptions {
 
 impl CodeGenerator {
     /// Check if a function has any contract attributes
+    #[inline(never)]
     pub(crate) fn _has_contracts(f: &Function) -> bool {
         f.attributes
             .iter()
@@ -60,6 +61,7 @@ impl CodeGenerator {
     }
 
     /// Generate automatic contract checks based on #[contract] options
+    #[inline(never)]
     pub(crate) fn generate_auto_contract_checks(
         &mut self,
         f: &Function,

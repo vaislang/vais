@@ -172,7 +172,7 @@ F fmt_indent_inc(f: i64) -> i64 {
 
 F fmt_indent_dec(f: i64) -> i64 {
     level := fmt_get_indent(f)
-    I level > 0 { fmt_set_indent(f, level - 1) } E { 0 }
+    I level > 0 { fmt_set_indent(f, level - 1) } EL { 0 }
 }
 
 # ============================================================================
@@ -195,52 +195,52 @@ F fmt_type(f: i64, type_ptr: i64) -> i64 {
             i := mut 0
             L {
                 I i >= generics_len { B }
-                I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+                I i > 0 { fmt_write(f, ", "); 0 } EL { 0 }
                 gen_ptr := load_i64(generics_ptr + i * 8)
                 fmt_type(f, gen_ptr)
                 i = i + 1
             }
             fmt_write(f, ">")
-        } E { 0 }
-    } E I kind == TYPE_ARRAY() {
+        } EL { 0 }
+    } EL I kind == TYPE_ARRAY() {
         inner := load_i64(type_ptr + 24)
         fmt_write(f, "[")
         fmt_type(f, inner)
         fmt_write(f, "]")
-    } E I kind == TYPE_REF() {
+    } EL I kind == TYPE_REF() {
         inner := load_i64(type_ptr + 24)
         fmt_write(f, "&")
         fmt_type(f, inner)
-    } E I kind == TYPE_REF_MUT() {
+    } EL I kind == TYPE_REF_MUT() {
         inner := load_i64(type_ptr + 24)
         fmt_write(f, "&mut ")
         fmt_type(f, inner)
-    } E I kind == TYPE_POINTER() {
+    } EL I kind == TYPE_POINTER() {
         inner := load_i64(type_ptr + 24)
         fmt_write(f, "*")
         fmt_type(f, inner)
-    } E I kind == TYPE_OPTIONAL() {
+    } EL I kind == TYPE_OPTIONAL() {
         inner := load_i64(type_ptr + 24)
         fmt_type(f, inner)
         fmt_write(f, "?")
-    } E I kind == TYPE_RESULT() {
+    } EL I kind == TYPE_RESULT() {
         inner := load_i64(type_ptr + 24)
         fmt_type(f, inner)
         fmt_write(f, "!")
-    } E I kind == TYPE_TUPLE() {
+    } EL I kind == TYPE_TUPLE() {
         types_ptr := load_i64(type_ptr + 24)
         types_len := load_i64(type_ptr + 32)
         fmt_write(f, "(")
         i := mut 0
         L {
             I i >= types_len { B }
-            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            I i > 0 { fmt_write(f, ", "); 0 } EL { 0 }
             t := load_i64(types_ptr + i * 8)
             fmt_type(f, t)
             i = i + 1
         }
         fmt_write(f, ")")
-    } E I kind == TYPE_FN() {
+    } EL I kind == TYPE_FN() {
         params_ptr := load_i64(type_ptr + 24)
         params_len := load_i64(type_ptr + 32)
         ret_type := load_i64(type_ptr + 40)
@@ -248,16 +248,16 @@ F fmt_type(f: i64, type_ptr: i64) -> i64 {
         i := mut 0
         L {
             I i >= params_len { B }
-            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            I i > 0 { fmt_write(f, ", "); 0 } EL { 0 }
             t := load_i64(params_ptr + i * 8)
             fmt_type(f, t)
             i = i + 1
         }
         fmt_write(f, ") -> ")
         fmt_type(f, ret_type)
-    } E I kind == TYPE_UNIT() {
+    } EL I kind == TYPE_UNIT() {
         fmt_write(f, "()")
-    } E I kind == TYPE_MAP() {
+    } EL I kind == TYPE_MAP() {
         key := load_i64(type_ptr + 24)
         val := load_i64(type_ptr + 32)
         fmt_write(f, "Map<")
@@ -265,9 +265,9 @@ F fmt_type(f: i64, type_ptr: i64) -> i64 {
         fmt_write(f, ", ")
         fmt_type(f, val)
         fmt_write(f, ">")
-    } E I kind == TYPE_INFER() {
+    } EL I kind == TYPE_INFER() {
         fmt_write(f, "_")
-    } E {
+    } EL {
         fmt_write(f, "?type?")
     }
     0
@@ -285,22 +285,22 @@ F fmt_expr(f: i64, expr_ptr: i64) -> i64 {
     I kind == EXPR_INT() {
         val := load_i64(expr_ptr + 24)
         fmt_write_i64(f, val)
-    } E I kind == EXPR_BOOL() {
+    } EL I kind == EXPR_BOOL() {
         val := load_i64(expr_ptr + 24)
-        I val == 1 { fmt_write(f, "true") } E { fmt_write(f, "false") }
-    } E I kind == EXPR_STRING() {
+        I val == 1 { fmt_write(f, "true") } EL { fmt_write(f, "false") }
+    } EL I kind == EXPR_STRING() {
         str_idx := load_i64(expr_ptr + 24)
         fmt_write(f, "\"")
         fmt_write_str_idx(f, str_idx)
         fmt_write(f, "\"")
-    } E I kind == EXPR_UNIT() {
+    } EL I kind == EXPR_UNIT() {
         fmt_write(f, "()")
-    } E I kind == EXPR_IDENT() {
+    } EL I kind == EXPR_IDENT() {
         str_idx := load_i64(expr_ptr + 24)
         fmt_write_str_idx(f, str_idx)
-    } E I kind == EXPR_SELF_CALL() {
+    } EL I kind == EXPR_SELF_CALL() {
         fmt_write(f, "@")
-    } E I kind == EXPR_BINARY() {
+    } EL I kind == EXPR_BINARY() {
         left := load_i64(expr_ptr + 24)
         right := load_i64(expr_ptr + 32)
         op := load_i64(expr_ptr + 40)
@@ -309,15 +309,15 @@ F fmt_expr(f: i64, expr_ptr: i64) -> i64 {
         fmt_binop(f, op)
         fmt_write(f, " ")
         fmt_expr(f, right)
-    } E I kind == EXPR_UNARY() {
+    } EL I kind == EXPR_UNARY() {
         inner := load_i64(expr_ptr + 24)
         op := load_i64(expr_ptr + 32)
         I op == UNOP_NEG() { fmt_write(f, "-") }
-        E I op == UNOP_NOT() { fmt_write(f, "!") }
-        E I op == UNOP_BIT_NOT() { fmt_write(f, "~") }
-        E { fmt_write(f, "?unop?") }
+        EL I op == UNOP_NOT() { fmt_write(f, "!") }
+        EL I op == UNOP_BIT_NOT() { fmt_write(f, "~") }
+        EL { fmt_write(f, "?unop?") }
         fmt_expr(f, inner)
-    } E I kind == EXPR_CALL() {
+    } EL I kind == EXPR_CALL() {
         func_ptr := load_i64(expr_ptr + 24)
         args_ptr := load_i64(expr_ptr + 32)
         args_len := load_i64(expr_ptr + 40)
@@ -325,7 +325,7 @@ F fmt_expr(f: i64, expr_ptr: i64) -> i64 {
         fmt_write(f, "(")
         fmt_expr_list(f, args_ptr, args_len)
         fmt_write(f, ")")
-    } E I kind == EXPR_METHOD_CALL() {
+    } EL I kind == EXPR_METHOD_CALL() {
         recv := load_i64(expr_ptr + 24)
         method_idx := load_i64(expr_ptr + 32)
         args_ptr := load_i64(expr_ptr + 40)
@@ -336,7 +336,7 @@ F fmt_expr(f: i64, expr_ptr: i64) -> i64 {
         fmt_write(f, "(")
         fmt_expr_list(f, args_ptr, args_len)
         fmt_write(f, ")")
-    } E I kind == EXPR_STATIC_CALL() {
+    } EL I kind == EXPR_STATIC_CALL() {
         type_idx := load_i64(expr_ptr + 24)
         method_idx := load_i64(expr_ptr + 32)
         args_ptr := load_i64(expr_ptr + 40)
@@ -347,32 +347,32 @@ F fmt_expr(f: i64, expr_ptr: i64) -> i64 {
         fmt_write(f, "(")
         fmt_expr_list(f, args_ptr, args_len)
         fmt_write(f, ")")
-    } E I kind == EXPR_FIELD() {
+    } EL I kind == EXPR_FIELD() {
         inner := load_i64(expr_ptr + 24)
         field_idx := load_i64(expr_ptr + 32)
         fmt_expr(f, inner)
         fmt_write(f, ".")
         fmt_write_str_idx(f, field_idx)
-    } E I kind == EXPR_INDEX() {
+    } EL I kind == EXPR_INDEX() {
         inner := load_i64(expr_ptr + 24)
         index := load_i64(expr_ptr + 32)
         fmt_expr(f, inner)
         fmt_write(f, "[")
         fmt_expr(f, index)
         fmt_write(f, "]")
-    } E I kind == EXPR_ARRAY() {
+    } EL I kind == EXPR_ARRAY() {
         elems_ptr := load_i64(expr_ptr + 24)
         elems_len := load_i64(expr_ptr + 32)
         fmt_write(f, "[")
         fmt_expr_list(f, elems_ptr, elems_len)
         fmt_write(f, "]")
-    } E I kind == EXPR_TUPLE() {
+    } EL I kind == EXPR_TUPLE() {
         elems_ptr := load_i64(expr_ptr + 24)
         elems_len := load_i64(expr_ptr + 32)
         fmt_write(f, "(")
         fmt_expr_list(f, elems_ptr, elems_len)
         fmt_write(f, ")")
-    } E I kind == EXPR_STRUCT_LIT() {
+    } EL I kind == EXPR_STRUCT_LIT() {
         name_idx := load_i64(expr_ptr + 24)
         fields_ptr := load_i64(expr_ptr + 32)
         fields_len := load_i64(expr_ptr + 40)
@@ -383,7 +383,7 @@ F fmt_expr(f: i64, expr_ptr: i64) -> i64 {
             i := mut 0
             L {
                 I i >= fields_len { B }
-                I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+                I i > 0 { fmt_write(f, ", "); 0 } EL { 0 }
                 fi_ptr := fields_ptr + i * 32  # FieldInit.size() = 32
                 fi_name := load_i64(fi_ptr + 0)
                 fi_val := load_i64(fi_ptr + 8)
@@ -394,22 +394,22 @@ F fmt_expr(f: i64, expr_ptr: i64) -> i64 {
             }
             fmt_write(f, " ")
             0
-        } E { 0 }
+        } EL { 0 }
         fmt_write(f, "}")
-    } E I kind == EXPR_RANGE() {
+    } EL I kind == EXPR_RANGE() {
         start := load_i64(expr_ptr + 24)
         end := load_i64(expr_ptr + 32)
         inclusive := load_i64(expr_ptr + 40)
         fmt_expr(f, start)
-        I inclusive == 1 { fmt_write(f, "..=") } E { fmt_write(f, "..") }
+        I inclusive == 1 { fmt_write(f, "..=") } EL { fmt_write(f, "..") }
         fmt_expr(f, end)
-    } E I kind == EXPR_IF() {
+    } EL I kind == EXPR_IF() {
         fmt_if_expr(f, expr_ptr)
-    } E I kind == EXPR_LOOP() {
+    } EL I kind == EXPR_LOOP() {
         fmt_loop_expr(f, expr_ptr)
-    } E I kind == EXPR_WHILE() {
+    } EL I kind == EXPR_WHILE() {
         fmt_while_expr(f, expr_ptr)
-    } E I kind == EXPR_BLOCK() {
+    } EL I kind == EXPR_BLOCK() {
         stmts_ptr := load_i64(expr_ptr + 24)
         stmts_len := load_i64(expr_ptr + 32)
         fmt_write(f, "{")
@@ -419,13 +419,13 @@ F fmt_expr(f: i64, expr_ptr: i64) -> i64 {
         fmt_indent_dec(f)
         fmt_indent(f)
         fmt_write(f, "}")
-    } E I kind == EXPR_ASSIGN() {
+    } EL I kind == EXPR_ASSIGN() {
         target := load_i64(expr_ptr + 24)
         value := load_i64(expr_ptr + 32)
         fmt_expr(f, target)
         fmt_write(f, " = ")
         fmt_expr(f, value)
-    } E I kind == EXPR_ASSIGN_OP() {
+    } EL I kind == EXPR_ASSIGN_OP() {
         target := load_i64(expr_ptr + 24)
         value := load_i64(expr_ptr + 32)
         op := load_i64(expr_ptr + 40)
@@ -434,31 +434,31 @@ F fmt_expr(f: i64, expr_ptr: i64) -> i64 {
         fmt_assign_op(f, op)
         fmt_write(f, " ")
         fmt_expr(f, value)
-    } E I kind == EXPR_TRY() {
+    } EL I kind == EXPR_TRY() {
         inner := load_i64(expr_ptr + 24)
         fmt_expr(f, inner)
         fmt_write(f, "?")
-    } E I kind == EXPR_UNWRAP() {
+    } EL I kind == EXPR_UNWRAP() {
         inner := load_i64(expr_ptr + 24)
         fmt_expr(f, inner)
         fmt_write(f, "!")
-    } E I kind == EXPR_REF() {
+    } EL I kind == EXPR_REF() {
         inner := load_i64(expr_ptr + 24)
         fmt_write(f, "&")
         fmt_expr(f, inner)
-    } E I kind == EXPR_DEREF() {
+    } EL I kind == EXPR_DEREF() {
         inner := load_i64(expr_ptr + 24)
         fmt_write(f, "*")
         fmt_expr(f, inner)
-    } E I kind == EXPR_AWAIT() {
+    } EL I kind == EXPR_AWAIT() {
         inner := load_i64(expr_ptr + 24)
         fmt_expr(f, inner)
         fmt_write(f, ".Y")
-    } E I kind == EXPR_SPAWN() {
+    } EL I kind == EXPR_SPAWN() {
         inner := load_i64(expr_ptr + 24)
         fmt_write(f, "spawn ")
         fmt_expr(f, inner)
-    } E I kind == EXPR_LAMBDA() {
+    } EL I kind == EXPR_LAMBDA() {
         params_ptr := load_i64(expr_ptr + 24)
         params_len := load_i64(expr_ptr + 32)
         body := load_i64(expr_ptr + 40)
@@ -466,7 +466,7 @@ F fmt_expr(f: i64, expr_ptr: i64) -> i64 {
         i := mut 0
         L {
             I i >= params_len { B }
-            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            I i > 0 { fmt_write(f, ", "); 0 } EL { 0 }
             p_ptr := params_ptr + i * 40  # Param.size() = 40
             p_name := load_i64(p_ptr + 0)
             p_type := load_i64(p_ptr + 8)
@@ -475,12 +475,12 @@ F fmt_expr(f: i64, expr_ptr: i64) -> i64 {
                 fmt_write(f, ": ")
                 fmt_type(f, p_type)
                 0
-            } E { 0 }
+            } EL { 0 }
             i = i + 1
         }
         fmt_write(f, "| ")
         fmt_expr(f, body)
-    } E I kind == EXPR_TERNARY() {
+    } EL I kind == EXPR_TERNARY() {
         cond := load_i64(expr_ptr + 24)
         then_val := load_i64(expr_ptr + 32)
         else_val := load_i64(expr_ptr + 40)
@@ -489,7 +489,7 @@ F fmt_expr(f: i64, expr_ptr: i64) -> i64 {
         fmt_expr(f, then_val)
         fmt_write(f, " : ")
         fmt_expr(f, else_val)
-    } E I kind == EXPR_MATCH() {
+    } EL I kind == EXPR_MATCH() {
         match_val := load_i64(expr_ptr + 24)
         arms_ptr := load_i64(expr_ptr + 32)
         arms_len := load_i64(expr_ptr + 40)
@@ -502,7 +502,7 @@ F fmt_expr(f: i64, expr_ptr: i64) -> i64 {
         fmt_indent_dec(f)
         fmt_indent(f)
         fmt_write(f, "}")
-    } E {
+    } EL {
         fmt_write(f, "?expr?")
     }
     0
@@ -532,13 +532,13 @@ F fmt_expr_list(f: i64, args_ptr: i64, args_len: i64) -> i64 {
         I args_ptr != 0 {
             actual_len = fmt_count_args(args_ptr)
             0
-        } E { 0 }
-    } E { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     i := mut 0
     L {
         I i >= actual_len { B }
-        I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+        I i > 0 { fmt_write(f, ", "); 0 } EL { 0 }
         arg := load_i64(args_ptr + i * 8)
         fmt_expr(f, arg)
         i = i + 1
@@ -552,33 +552,33 @@ F fmt_expr_list(f: i64, args_ptr: i64, args_len: i64) -> i64 {
 
 F fmt_binop(f: i64, op: i64) -> i64 {
     I op == BINOP_ADD() { fmt_write(f, "+") }
-    E I op == BINOP_SUB() { fmt_write(f, "-") }
-    E I op == BINOP_MUL() { fmt_write(f, "*") }
-    E I op == BINOP_DIV() { fmt_write(f, "/") }
-    E I op == BINOP_MOD() { fmt_write(f, "%") }
-    E I op == BINOP_LT() { fmt_write(f, "<") }
-    E I op == BINOP_LTE() { fmt_write(f, "<=") }
-    E I op == BINOP_GT() { fmt_write(f, ">") }
-    E I op == BINOP_GTE() { fmt_write(f, ">=") }
-    E I op == BINOP_EQ() { fmt_write(f, "==") }
-    E I op == BINOP_NEQ() { fmt_write(f, "!=") }
-    E I op == BINOP_AND() { fmt_write(f, "&&") }
-    E I op == BINOP_OR() { fmt_write(f, "||") }
-    E I op == BINOP_BIT_AND() { fmt_write(f, "&") }
-    E I op == BINOP_BIT_OR() { fmt_write(f, "|") }
-    E I op == BINOP_BIT_XOR() { fmt_write(f, "^") }
-    E I op == BINOP_SHL() { fmt_write(f, "<<") }
-    E I op == BINOP_SHR() { fmt_write(f, ">>") }
-    E { fmt_write(f, "?op?") }
+    EL I op == BINOP_SUB() { fmt_write(f, "-") }
+    EL I op == BINOP_MUL() { fmt_write(f, "*") }
+    EL I op == BINOP_DIV() { fmt_write(f, "/") }
+    EL I op == BINOP_MOD() { fmt_write(f, "%") }
+    EL I op == BINOP_LT() { fmt_write(f, "<") }
+    EL I op == BINOP_LTE() { fmt_write(f, "<=") }
+    EL I op == BINOP_GT() { fmt_write(f, ">") }
+    EL I op == BINOP_GTE() { fmt_write(f, ">=") }
+    EL I op == BINOP_EQ() { fmt_write(f, "==") }
+    EL I op == BINOP_NEQ() { fmt_write(f, "!=") }
+    EL I op == BINOP_AND() { fmt_write(f, "&&") }
+    EL I op == BINOP_OR() { fmt_write(f, "||") }
+    EL I op == BINOP_BIT_AND() { fmt_write(f, "&") }
+    EL I op == BINOP_BIT_OR() { fmt_write(f, "|") }
+    EL I op == BINOP_BIT_XOR() { fmt_write(f, "^") }
+    EL I op == BINOP_SHL() { fmt_write(f, "<<") }
+    EL I op == BINOP_SHR() { fmt_write(f, ">>") }
+    EL { fmt_write(f, "?op?") }
 }
 
 # Assignment operator formatting (+=, -=, etc.)
 F fmt_assign_op(f: i64, op: i64) -> i64 {
     I op == BINOP_ADD() { fmt_write(f, "+=") }
-    E I op == BINOP_SUB() { fmt_write(f, "-=") }
-    E I op == BINOP_MUL() { fmt_write(f, "*=") }
-    E I op == BINOP_DIV() { fmt_write(f, "/=") }
-    E { fmt_write(f, "?aop?") }
+    EL I op == BINOP_SUB() { fmt_write(f, "-=") }
+    EL I op == BINOP_MUL() { fmt_write(f, "*=") }
+    EL I op == BINOP_DIV() { fmt_write(f, "/=") }
+    EL { fmt_write(f, "?aop?") }
 }
 
 # ============================================================================
@@ -601,10 +601,10 @@ F fmt_match_arms(f: i64, arms_ptr: i64, arms_len: i64) -> i64 {
             fmt_write(f, " I ")
             fmt_expr(f, guard)
             0
-        } E { 0 }
+        } EL { 0 }
         fmt_write(f, " => ")
         fmt_expr(f, body)
-        I i + 1 < arms_len { fmt_write(f, ",") } E { 0 }
+        I i + 1 < arms_len { fmt_write(f, ",") } EL { 0 }
         fmt_newline(f)
         i = i + 1
     }
@@ -622,26 +622,26 @@ F fmt_pattern(f: i64, pat_ptr: i64) -> i64 {
 
     I kind == PAT_WILDCARD() {
         fmt_write(f, "_")
-    } E I kind == PAT_IDENT() {
+    } EL I kind == PAT_IDENT() {
         name_idx := load_i64(pat_ptr + 24)
         fmt_write_str_idx(f, name_idx)
-    } E I kind == PAT_LITERAL() {
+    } EL I kind == PAT_LITERAL() {
         val := load_i64(pat_ptr + 24)
         fmt_write_i64(f, val)
-    } E I kind == PAT_TUPLE() {
+    } EL I kind == PAT_TUPLE() {
         pats_ptr := load_i64(pat_ptr + 24)
         pats_len := load_i64(pat_ptr + 32)
         fmt_write(f, "(")
         i := mut 0
         L {
             I i >= pats_len { B }
-            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            I i > 0 { fmt_write(f, ", "); 0 } EL { 0 }
             p := load_i64(pats_ptr + i * 8)
             fmt_pattern(f, p)
             i = i + 1
         }
         fmt_write(f, ")")
-    } E I kind == PAT_VARIANT() {
+    } EL I kind == PAT_VARIANT() {
         name_idx := load_i64(pat_ptr + 24)
         inner_ptr := load_i64(pat_ptr + 32)
         inner_len := load_i64(pat_ptr + 40)
@@ -651,33 +651,33 @@ F fmt_pattern(f: i64, pat_ptr: i64) -> i64 {
             i := mut 0
             L {
                 I i >= inner_len { B }
-                I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+                I i > 0 { fmt_write(f, ", "); 0 } EL { 0 }
                 p := load_i64(inner_ptr + i * 8)
                 fmt_pattern(f, p)
                 i = i + 1
             }
             fmt_write(f, ")")
-        } E { 0 }
-    } E I kind == PAT_OR() {
+        } EL { 0 }
+    } EL I kind == PAT_OR() {
         pats_ptr := load_i64(pat_ptr + 24)
         pats_len := load_i64(pat_ptr + 32)
         i := mut 0
         L {
             I i >= pats_len { B }
-            I i > 0 { fmt_write(f, " | "); 0 } E { 0 }
+            I i > 0 { fmt_write(f, " | "); 0 } EL { 0 }
             p := load_i64(pats_ptr + i * 8)
             fmt_pattern(f, p)
             i = i + 1
         }
         0
-    } E I kind == PAT_RANGE() {
+    } EL I kind == PAT_RANGE() {
         start := load_i64(pat_ptr + 24)
         end := load_i64(pat_ptr + 32)
         inclusive := load_i64(pat_ptr + 40)
         fmt_pattern(f, start)
-        I inclusive == 1 { fmt_write(f, "..=") } E { fmt_write(f, "..") }
+        I inclusive == 1 { fmt_write(f, "..=") } EL { fmt_write(f, "..") }
         fmt_pattern(f, end)
-    } E {
+    } EL {
         fmt_write(f, "?pat?")
     }
     0
@@ -709,7 +709,7 @@ F fmt_if_expr(f: i64, expr_ptr: i64) -> i64 {
         I else_kind == EXPR_IF() {
             fmt_write(f, " E ")
             fmt_if_expr(f, else_ptr)
-        } E {
+        } EL {
             # IfElse node: kind(8) + cond_ptr(8) + stmts_ptr(8) + stmts_len(8) + next_ptr(8)
             ie_kind := load_i64(else_ptr + 0)
             ie_stmts := load_i64(else_ptr + 16)
@@ -723,7 +723,7 @@ F fmt_if_expr(f: i64, expr_ptr: i64) -> i64 {
             fmt_write(f, "}")
         }
         0
-    } E { 0 }
+    } EL { 0 }
     0
 }
 
@@ -747,9 +747,9 @@ F fmt_loop_expr(f: i64, expr_ptr: i64) -> i64 {
             fmt_write(f, ": ")
             fmt_expr(f, iter)
             0
-        } E { 0 }
+        } EL { 0 }
         0
-    } E { 0 }
+    } EL { 0 }
 
     fmt_write(f, " {")
     fmt_newline(f)
@@ -814,44 +814,44 @@ F fmt_stmt(f: i64, stmt_ptr: i64) -> i64 {
 
         I type_ptr != 0 {
             fmt_write(f, ": ")
-            I is_mut == 1 { fmt_write(f, "mut "); 0 } E { 0 }
+            I is_mut == 1 { fmt_write(f, "mut "); 0 } EL { 0 }
             fmt_type(f, type_ptr)
             fmt_write(f, " = ")
             0
-        } E {
+        } EL {
             fmt_write(f, " := ")
-            I is_mut == 1 { fmt_write(f, "mut "); 0 } E { 0 }
+            I is_mut == 1 { fmt_write(f, "mut "); 0 } EL { 0 }
             0
         }
 
         fmt_expr(f, value_ptr)
         fmt_newline(f)
-    } E I kind == STMT_EXPR() {
+    } EL I kind == STMT_EXPR() {
         expr_ptr := load_i64(stmt_ptr + 24)
         fmt_expr(f, expr_ptr)
         fmt_newline(f)
-    } E I kind == STMT_RETURN() {
+    } EL I kind == STMT_RETURN() {
         expr_ptr := load_i64(stmt_ptr + 24)
         fmt_write(f, "R")
         I expr_ptr != 0 {
             fmt_write(f, " ")
             fmt_expr(f, expr_ptr)
             0
-        } E { 0 }
+        } EL { 0 }
         fmt_newline(f)
-    } E I kind == STMT_BREAK() {
+    } EL I kind == STMT_BREAK() {
         expr_ptr := load_i64(stmt_ptr + 24)
         fmt_write(f, "B")
         I expr_ptr != 0 {
             fmt_write(f, " ")
             fmt_expr(f, expr_ptr)
             0
-        } E { 0 }
+        } EL { 0 }
         fmt_newline(f)
-    } E I kind == STMT_CONTINUE() {
+    } EL I kind == STMT_CONTINUE() {
         fmt_write(f, "C")
         fmt_newline(f)
-    } E {
+    } EL {
         fmt_write(f, "?stmt?")
         fmt_newline(f)
     }
@@ -872,23 +872,23 @@ F fmt_items(f: i64, items_ptr: i64, items_len: i64) -> i64 {
         data_ptr := load_i64(item_ptr + 8)
 
         # Add blank line between items (not before first)
-        I i > 0 { fmt_newline(f); 0 } E { 0 }
+        I i > 0 { fmt_newline(f); 0 } EL { 0 }
 
         I kind == ITEM_FUNCTION() {
             fmt_function(f, data_ptr)
-        } E I kind == ITEM_STRUCT() {
+        } EL I kind == ITEM_STRUCT() {
             fmt_struct(f, data_ptr)
-        } E I kind == ITEM_ENUM() {
+        } EL I kind == ITEM_ENUM() {
             fmt_enum(f, data_ptr)
-        } E I kind == ITEM_IMPL() {
+        } EL I kind == ITEM_IMPL() {
             fmt_impl(f, data_ptr)
-        } E I kind == ITEM_TRAIT() {
+        } EL I kind == ITEM_TRAIT() {
             fmt_trait(f, data_ptr)
-        } E I kind == ITEM_USE() {
+        } EL I kind == ITEM_USE() {
             fmt_use(f, data_ptr)
-        } E I kind == ITEM_TYPE_ALIAS() {
+        } EL I kind == ITEM_TYPE_ALIAS() {
             fmt_type_alias(f, data_ptr)
-        } E {
+        } EL {
             fmt_write(f, "# ?unknown item?")
             fmt_newline(f)
         }
@@ -917,8 +917,8 @@ F fmt_function(f: i64, func_ptr: i64) -> i64 {
     is_async := load_i64(func_ptr + 88)
 
     fmt_indent(f)
-    I is_pub == 1 { fmt_write(f, "P "); 0 } E { 0 }
-    I is_async == 1 { fmt_write(f, "A "); 0 } E { 0 }
+    I is_pub == 1 { fmt_write(f, "P "); 0 } EL { 0 }
+    I is_async == 1 { fmt_write(f, "A "); 0 } EL { 0 }
     fmt_write(f, "F ")
     fmt_write_str_idx(f, name_idx)
 
@@ -928,7 +928,7 @@ F fmt_function(f: i64, func_ptr: i64) -> i64 {
         i := mut 0
         L {
             I i >= generics_len { B }
-            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            I i > 0 { fmt_write(f, ", "); 0 } EL { 0 }
             # GenericParam.size() = 40: name_idx(8) + bounds_ptr(8) + bounds_len(8) + span(16)
             gp := generics_ptr + i * 40
             gp_name := load_i64(gp + 0)
@@ -937,7 +937,7 @@ F fmt_function(f: i64, func_ptr: i64) -> i64 {
         }
         fmt_write(f, ">")
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Parameters
     fmt_write(f, "(")
@@ -945,7 +945,7 @@ F fmt_function(f: i64, func_ptr: i64) -> i64 {
         i := mut 0
         L {
             I i >= params_len { B }
-            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            I i > 0 { fmt_write(f, ", "); 0 } EL { 0 }
             # Param.size() = 40: name_idx(8) + type_ptr(8) + is_mut(8) + span(16)
             p := params_ptr + i * 40
             p_name := load_i64(p + 0)
@@ -964,28 +964,28 @@ F fmt_function(f: i64, func_ptr: i64) -> i64 {
                                 I p_type == 0 {
                                     is_self = 1
                                     0
-                                } E { 0 }
-                            } E { 0 }
-                        } E { 0 }
-                    } E { 0 }
-                } E { 0 }
-            } E { 0 }
+                                } EL { 0 }
+                            } EL { 0 }
+                        } EL { 0 }
+                    } EL { 0 }
+                } EL { 0 }
+            } EL { 0 }
 
             I is_self == 1 {
                 fmt_write(f, "&self")
-            } E {
-                I p_mut == 1 { fmt_write(f, "mut "); 0 } E { 0 }
+            } EL {
+                I p_mut == 1 { fmt_write(f, "mut "); 0 } EL { 0 }
                 fmt_write_str_idx(f, p_name)
                 I p_type != 0 {
                     fmt_write(f, ": ")
                     fmt_type(f, p_type)
                     0
-                } E { 0 }
+                } EL { 0 }
             }
             i = i + 1
         }
         0
-    } E { 0 }
+    } EL { 0 }
     fmt_write(f, ")")
 
     # Return type
@@ -993,7 +993,7 @@ F fmt_function(f: i64, func_ptr: i64) -> i64 {
         fmt_write(f, " -> ")
         fmt_type(f, ret_type)
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Body
     I body_kind == 0 {
@@ -1001,7 +1001,7 @@ F fmt_function(f: i64, func_ptr: i64) -> i64 {
         fmt_write(f, " = ")
         fmt_expr(f, body_expr)
         fmt_newline(f)
-    } E {
+    } EL {
         # Block body
         fmt_write(f, " {")
         fmt_newline(f)
@@ -1028,7 +1028,7 @@ F fmt_struct(f: i64, struct_ptr: i64) -> i64 {
     is_pub := load_i64(struct_ptr + 40)
 
     fmt_indent(f)
-    I is_pub == 1 { fmt_write(f, "P "); 0 } E { 0 }
+    I is_pub == 1 { fmt_write(f, "P "); 0 } EL { 0 }
     fmt_write(f, "S ")
     fmt_write_str_idx(f, name_idx)
 
@@ -1038,7 +1038,7 @@ F fmt_struct(f: i64, struct_ptr: i64) -> i64 {
         i := mut 0
         L {
             I i >= generics_len { B }
-            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            I i > 0 { fmt_write(f, ", "); 0 } EL { 0 }
             gp := generics_ptr + i * 40
             gp_name := load_i64(gp + 0)
             fmt_write_str_idx(f, gp_name)
@@ -1046,7 +1046,7 @@ F fmt_struct(f: i64, struct_ptr: i64) -> i64 {
         }
         fmt_write(f, ">")
         0
-    } E { 0 }
+    } EL { 0 }
 
     fmt_write(f, " {")
     fmt_newline(f)
@@ -1065,7 +1065,7 @@ F fmt_struct(f: i64, struct_ptr: i64) -> i64 {
         fmt_write_str_idx(f, f_name)
         fmt_write(f, ": ")
         fmt_type(f, f_type)
-        I i < fields_len - 1 { fmt_write(f, ","); 0 } E { 0 }
+        I i < fields_len - 1 { fmt_write(f, ","); 0 } EL { 0 }
         fmt_newline(f)
         i = i + 1
     }
@@ -1090,7 +1090,7 @@ F fmt_enum(f: i64, enum_ptr: i64) -> i64 {
     is_pub := load_i64(enum_ptr + 40)
 
     fmt_indent(f)
-    I is_pub == 1 { fmt_write(f, "P "); 0 } E { 0 }
+    I is_pub == 1 { fmt_write(f, "P "); 0 } EL { 0 }
     fmt_write(f, "E ")
     fmt_write_str_idx(f, name_idx)
 
@@ -1100,7 +1100,7 @@ F fmt_enum(f: i64, enum_ptr: i64) -> i64 {
         i := mut 0
         L {
             I i >= generics_len { B }
-            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            I i > 0 { fmt_write(f, ", "); 0 } EL { 0 }
             gp := generics_ptr + i * 40
             gp_name := load_i64(gp + 0)
             fmt_write_str_idx(f, gp_name)
@@ -1108,7 +1108,7 @@ F fmt_enum(f: i64, enum_ptr: i64) -> i64 {
         }
         fmt_write(f, ">")
         0
-    } E { 0 }
+    } EL { 0 }
 
     fmt_write(f, " {")
     fmt_newline(f)
@@ -1134,7 +1134,7 @@ F fmt_enum(f: i64, enum_ptr: i64) -> i64 {
             j := mut 0
             L {
                 I j >= v_fields_len { B }
-                I j > 0 { fmt_write(f, ", "); 0 } E { 0 }
+                I j > 0 { fmt_write(f, ", "); 0 } EL { 0 }
                 field := v_fields_ptr + j * 40
                 f_type := load_i64(field + 8)
                 fmt_type(f, f_type)
@@ -1142,7 +1142,7 @@ F fmt_enum(f: i64, enum_ptr: i64) -> i64 {
             }
             fmt_write(f, ")")
             0
-        } E I v_kind == 2 {
+        } EL I v_kind == 2 {
             # Struct variant
             fmt_write(f, " {")
             fmt_newline(f)
@@ -1163,9 +1163,9 @@ F fmt_enum(f: i64, enum_ptr: i64) -> i64 {
             fmt_indent_dec(f)
             fmt_indent(f)
             fmt_write(f, "}")
-        } E { 0 }  # Unit variant — no extra output
+        } EL { 0 }  # Unit variant — no extra output
 
-        I i < variants_len - 1 { fmt_write(f, ","); 0 } E { 0 }
+        I i < variants_len - 1 { fmt_write(f, ","); 0 } EL { 0 }
         fmt_newline(f)
         i = i + 1
     }
@@ -1200,7 +1200,7 @@ F fmt_impl(f: i64, impl_ptr: i64) -> i64 {
         fmt_write(f, ": ")
         fmt_write_str_idx(f, trait_name_idx)
         0
-    } E { 0 }
+    } EL { 0 }
 
     fmt_write(f, " {")
     fmt_newline(f)
@@ -1210,7 +1210,7 @@ F fmt_impl(f: i64, impl_ptr: i64) -> i64 {
     i := mut 0
     L {
         I i >= methods_len { B }
-        I i > 0 { fmt_newline(f); 0 } E { 0 }
+        I i > 0 { fmt_newline(f); 0 } EL { 0 }
         method := methods_ptr + i * 112  # FunctionDef.size() = 112
         fmt_function(f, method)
         i = i + 1
@@ -1237,7 +1237,7 @@ F fmt_trait(f: i64, trait_ptr: i64) -> i64 {
     is_pub := load_i64(trait_ptr + 56)
 
     fmt_indent(f)
-    I is_pub == 1 { fmt_write(f, "P "); 0 } E { 0 }
+    I is_pub == 1 { fmt_write(f, "P "); 0 } EL { 0 }
     fmt_write(f, "W ")
     fmt_write_str_idx(f, name_idx)
 
@@ -1247,7 +1247,7 @@ F fmt_trait(f: i64, trait_ptr: i64) -> i64 {
         i := mut 0
         L {
             I i >= generics_len { B }
-            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            I i > 0 { fmt_write(f, ", "); 0 } EL { 0 }
             gp := generics_ptr + i * 40
             gp_name := load_i64(gp + 0)
             fmt_write_str_idx(f, gp_name)
@@ -1255,7 +1255,7 @@ F fmt_trait(f: i64, trait_ptr: i64) -> i64 {
         }
         fmt_write(f, ">")
         0
-    } E { 0 }
+    } EL { 0 }
 
     fmt_write(f, " {")
     fmt_newline(f)
@@ -1265,7 +1265,7 @@ F fmt_trait(f: i64, trait_ptr: i64) -> i64 {
     i := mut 0
     L {
         I i >= methods_len { B }
-        I i > 0 { fmt_newline(f); 0 } E { 0 }
+        I i > 0 { fmt_newline(f); 0 } EL { 0 }
         method := methods_ptr + i * 112
         fmt_function(f, method)
         i = i + 1

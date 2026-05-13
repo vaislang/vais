@@ -30,11 +30,8 @@ pub fn token_to_string(token: &Token) -> String {
         Token::SelfUpper => "Self",
         Token::True => "True",
         Token::False => "False",
-        Token::Spawn => "Spawn",
         Token::Await => "Await",
         Token::Yield => "Yield",
-        Token::Weak => "Weak",
-        Token::Clone => "Clone",
         Token::Const => "Const",
         Token::Comptime => "Comptime",
         Token::Dyn => "Dyn",
@@ -47,9 +44,6 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Linear => "Linear",
         Token::Affine => "Affine",
         Token::Move => "Move",
-        Token::Consume => "Consume",
-        Token::Lazy => "Lazy",
-        Token::Force => "Force",
         Token::I8 => "i8",
         Token::I16 => "i16",
         Token::I32 => "i32",
@@ -130,6 +124,11 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Dot => "Dot",
         Token::ColonColon => "ColonColon",
         Token::HashBracket => "HashBracket",
+        // New unambiguous keyword variants — map to same string as their legacy equivalents
+        Token::EnumKeyword => "Enum",
+        Token::Else => "Else",
+        Token::ForEach => "Loop",
+        Token::While => "Loop",
     }
     .to_string()
 }

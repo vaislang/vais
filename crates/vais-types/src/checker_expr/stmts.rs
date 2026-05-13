@@ -132,7 +132,29 @@ impl TypeChecker {
                 Ok(ResolvedType::Never)
             }
             // Break and Continue have "Never" type because execution doesn't continue past them
-            Stmt::Break(_) | Stmt::Continue => Ok(ResolvedType::Never),
+            Stmt::Break(maybe_expr) => {
+                if self.loop_depth == 0 {
+                    return Err(TypeError::Mismatch {
+                        expected: "loop context".to_string(),
+                        found: "break outside of loop".to_string(),
+                        span: None,
+                    });
+                }
+                if let Some(expr) = maybe_expr {
+                    self.check_expr(expr)?;
+                }
+                Ok(ResolvedType::Never)
+            }
+            Stmt::Continue => {
+                if self.loop_depth == 0 {
+                    return Err(TypeError::Mismatch {
+                        expected: "loop context".to_string(),
+                        found: "continue outside of loop".to_string(),
+                        span: None,
+                    });
+                }
+                Ok(ResolvedType::Never)
+            }
 
             Stmt::Defer(expr) => {
                 // Type check the deferred expression

@@ -184,12 +184,6 @@ impl FileWatcher {
     }
 }
 
-impl Default for FileWatcher {
-    fn default() -> Self {
-        Self::new().expect("failed to create file watcher")
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,8 +197,8 @@ mod tests {
     }
 
     #[test]
-    fn test_file_watcher_default() {
-        let watcher = FileWatcher::default();
+    fn test_file_watcher_new() {
+        let watcher = FileWatcher::new().unwrap();
         assert!(watcher.watched_paths().is_empty());
         assert_eq!(watcher.debounce_duration, Duration::from_millis(100));
     }

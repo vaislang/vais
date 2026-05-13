@@ -76,7 +76,7 @@ S CompressResult {
 X CompressResult {
     # Check if compression was successful
     F is_ok(&self) -> i64 {
-        I self.status == COMPRESS_OK { 1 } E { 0 }
+        I self.status == COMPRESS_OK { 1 } EL { 0 }
     }
 
     # Free the result data
@@ -136,7 +136,7 @@ X Compressor {
 
     # Check if compressor was created successfully
     F is_valid(&self) -> i64 {
-        I self.handle != 0 { 1 } E { 0 }
+        I self.handle != 0 { 1 } EL { 0 }
     }
 
     # One-shot compression (entire input at once)

@@ -5,7 +5,10 @@ Web-based interactive playground for the Vais programming language.
 ## Features
 
 - **Monaco Editor** with Vais syntax highlighting
-- **Real-time compilation** and execution (Server, WASM, or Preview mode)
+- **Server-backed compilation** when the playground API is available
+- **Server-WASM execution** where the API compiles a WASM binary and the browser
+  executes it
+- **Preview fallback** for syntax/demo exploration when the API is unavailable
 - **31 example programs** demonstrating language features
 - **Auto-completion** for Vais keywords and functions
 - **Keyboard shortcuts** for quick actions
@@ -75,7 +78,7 @@ playground/
 20. **Traits** - Trait definitions and implementations
 21. **Async/Await** - Async programming (compile only)
 22. **Ownership** - Ownership and borrowing
-23. **WASM Interop** - WebAssembly interop
+23. **WASM Interop** - WebAssembly interop surface (experimental)
 24. **Lambda Capture** - Lambda closures with captures
 25. **Range Loops** - Range-based iteration
 26. **Lazy Evaluation** - Lazy evaluation (compile only)
@@ -108,15 +111,32 @@ Press `Ctrl+Space` to see suggestions for:
 - Built-in functions
 - Code snippets
 
-### 3-Tier Compilation
+### Execution Modes
 
-The playground uses a 3-tier execution model with automatic fallback:
+The playground uses automatic fallback. The current certified public baseline
+does not include browser-only compilation or execution.
 
-1. **Server mode** — Sends code to the playground server for real compilation via `vaisc`
-2. **WASM mode** — Compiles and runs code in-browser using WebAssembly
-3. **Preview mode** — Client-side mock compiler for basic syntax validation and demonstration
+1. **Server mode** — Sends code to the playground API for real compilation via `vaisc`
+2. **Browser-JS mode** — Loads `vais-browser-compiler` in the browser, compiles
+   through parser + JavaScript codegen, then executes the generated JavaScript
+3. **Server-WASM mode** — The API compiles a WASM binary, then the browser executes that binary
+4. **Preview mode** — Client-side syntax/demo fallback when the API is unavailable; this is not a certified compile/execute path
 
 ## Development
+
+### Local Gates
+
+```bash
+npm run test:contract
+npm run browser-compiler:build
+npm run browser-compiler:check
+npm run build
+```
+
+`test:contract` verifies the public mode boundary: Server-WASM is API-compiled,
+and Preview is only a syntax/demo fallback.
+`browser-compiler:check` verifies the Browser-JS parser + JavaScript codegen
+compile/execute smoke without the playground API.
 
 ### Adding New Examples
 
@@ -156,7 +176,8 @@ Edit `src/styles.css` to customize the appearance.
 - Chrome/Edge 90+
 - Firefox 88+
 - Safari 14+
-- Any modern browser with ES6+ and WebAssembly support
+- Any modern browser with ES6+ support. WebAssembly support is only needed for
+  experimental WASM paths.
 
 ## Dependencies
 
@@ -165,7 +186,7 @@ Edit `src/styles.css` to customize the appearance.
 
 ## Future Enhancements
 
-- [x] Real WASM-based compilation
+- [ ] Certified browser-only WASM compilation gate
 - [ ] Code sharing via URL
 - [ ] Multi-file projects
 - [ ] Standard library documentation integration

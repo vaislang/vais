@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/process
+use std/process
 ```
 
 ## Overview
@@ -17,7 +17,7 @@ The `process` module provides functions for spawning and managing external proce
 ### process_run
 
 ```vais
-F process_run(command: str) -> i32
+fn process_run(command: str) -> i32
 ```
 
 Run a shell command and return its exit status.
@@ -30,7 +30,7 @@ Run a shell command and return its exit status.
 ### process_open
 
 ```vais
-F process_open(command: str) -> i64
+fn process_open(command: str) -> i64
 ```
 
 Run a command and open a pipe to read its output.
@@ -43,7 +43,7 @@ Run a command and open a pipe to read its output.
 ### process_close
 
 ```vais
-F process_close(handle: i64) -> i32
+fn process_close(handle: i64) -> i32
 ```
 
 Close a process handle opened with `process_open` and get the exit status.
@@ -56,7 +56,7 @@ Close a process handle opened with `process_open` and get the exit status.
 ### process_exit
 
 ```vais
-F process_exit(status: i32)
+fn process_exit(status: i32)
 ```
 
 Exit the current process with a status code.
@@ -67,9 +67,9 @@ Exit the current process with a status code.
 ## Example
 
 ```vais
-U std/process
+use std/process
 
-F main() {
+fn main() {
     # Run a command
     status := process_run("echo hello")
 

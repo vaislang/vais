@@ -30,7 +30,7 @@ cd vais && cargo build --release
 **읽기**: [Getting Started](./guide/getting-started.md) - 설치부터 첫 프로그램까지
 
 ```vais
-F main() {
+fn main() {
     println("Hello, Vais!")
 }
 ```
@@ -71,16 +71,16 @@ pi: f64 = 3.14159
 
 ```vais
 # 단일 표현식 함수
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 
 # 복수 줄 함수
-F factorial(n: i64) -> i64 {
-    I n <= 1 { R 1 }
-    R n * factorial(n - 1)
+fn factorial(n: i64) -> i64 {
+    I n <= 1 { return 1 }
+    return n * factorial(n - 1)
 }
 
 # 자재귀 연산자 @
-F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
 ```
 
 **실습**: `@` 연산자를 사용하는 재귀 함수 작성 (피보나치, 팩토리얼)
@@ -93,20 +93,19 @@ F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
 
 ```vais
 # if/else (I/E)
-I x > 0 { println("positive") }
-E { println("non-positive") }
+I x > 0 { println("positive") } else { println("non-positive") }
 
 # 삼항 연산자
 result := x > 0 ? "yes" : "no"
 
 # 범위 루프
-L i:0..10 { println("~{i}") }
+L i:0..10 { println("{i}") }
 
 # 조건 루프
 L x < 100 { x = x * 2 }
 
 # 패턴 매칭
-M status {
+match status {
     200 => println("OK"),
     404 => println("Not Found"),
     _ => println("Unknown")
@@ -122,18 +121,18 @@ M status {
 **읽기**: [Getting Started - 구조체](./guide/getting-started.md#구조체)
 
 ```vais
-S Point {
+struct Point {
     x: i64
     y: i64
 }
 
-X Point {
-    F sum(&self) -> i64 = self.x + self.y
+impl Point {
+    fn sum(&self) -> i64 = self.x + self.y
 }
 
-F main() {
+fn main() {
     p := Point { x: 10, y: 20 }
-    println("~{p.sum()}")
+    println("{p.sum()}")
 }
 ```
 
@@ -146,13 +145,13 @@ F main() {
 **읽기**: [Getting Started - Enum](./guide/getting-started.md#enum-열거형)
 
 ```vais
-E Shape {
+enum Shape {
     Circle(i64),
     Rectangle(i64, i64)
 }
 
-F area(s: Shape) -> i64 {
-    M s {
+fn area(s: Shape) -> i64 {
+    match s {
         Shape.Circle(r) => r * r * 3,
         Shape.Rectangle(w, h) => w * h
     }
@@ -169,7 +168,7 @@ F area(s: Shape) -> i64 {
 - [ ] `F` 함수, `@` 자재귀 사용
 - [ ] `I`/`E` 조건문, `L` 루프, `M` 매칭 사용
 - [ ] `S` 구조체, `X` impl 블록, `E` enum 정의
-- [ ] `~{expr}` 문자열 보간 사용
+- [ ] `{expr}` 문자열 보간 사용
 - [ ] 간단한 프로그램을 독립적으로 작성 가능
 
 ---
@@ -183,16 +182,16 @@ F area(s: Shape) -> i64 {
 **읽기**: [Generics](./language/generics.md)
 
 ```vais
-F max<T>(a: T, b: T) -> T {
-    I a > b { R a } E { R b }
+fn max<T>(a: T, b: T) -> T {
+    I a > b { return a } else { return b }
 }
 
-S Container<T> {
+struct Container<T> {
     value: T
 }
 
-X Container<T> {
-    F get(&self) -> T = self.value
+impl Container<T> {
+    fn get(&self) -> T = self.value
 }
 ```
 
@@ -205,18 +204,18 @@ X Container<T> {
 **읽기**: [Advanced Types](./language/advanced-types.md)
 
 ```vais
-W Printable {
-    F to_string(&self) -> str
+trait Printable {
+    fn to_string(&self) -> str
 }
 
-S Dog { name: str }
+struct Dog { name: str }
 
-X Dog: Printable {
-    F to_string(&self) -> str = self.name
+impl Dog: Printable {
+    fn to_string(&self) -> str = self.name
 }
 
 # Trait 바운드
-F print_item<T: Printable>(item: T) {
+fn print_item<T: Printable>(item: T) {
     println(item.to_string())
 }
 ```
@@ -231,17 +230,17 @@ F print_item<T: Printable>(item: T) {
 
 ```vais
 # Option
-F find(arr: *i64, len: i64, target: i64) -> i64 {
+fn find(arr: *i64, len: i64, target: i64) -> i64 {
     L i:0..len {
-        I arr[i] == target { R i }
+        I arr[i] == target { return i }
     }
-    R -1
+    return -1
 }
 
 # Result와 ? 연산자
-F divide(a: i64, b: i64) -> i64 {
-    I b == 0 { R -1 }
-    R a / b
+fn divide(a: i64, b: i64) -> i64 {
+    I b == 0 { return -1 }
+    return a / b
 }
 ```
 
@@ -284,16 +283,18 @@ result := 5 |> double |> |x| x + 1
 
 ### 2.6 실전 프로젝트: CLI 도구 (30분)
 
-**읽기**: [Tutorial: CLI Tool 만들기](./tutorials/cli-tool.md)
+**읽기**: [Tutorial: CLI Tool 만들기](./tutorials/cli-tool.md), [Tutorial: CLI Framework 만들기](./tutorials/cli-framework.md)
 
-**실습**: 간단한 텍스트 처리 CLI 도구를 처음부터 작성
+**실습**: 간단한 텍스트 처리 CLI 도구를 처음부터 작성. 서브커맨드 디스패치와 옵션 파싱도 시도해보세요.
+
+**참고 예제**: [examples/tutorial_cli_framework.vais](https://github.com/vaislang/vais/blob/main/examples/tutorial_cli_framework.vais)
 
 ### 2.7 Defer와 리소스 관리 (20분)
 
 **읽기**: [Defer Statement](./language/defer-statement.md)
 
 ```vais
-F process_file(path: str) -> i64 {
+fn process_file(path: str) -> i64 {
     fd := open(path, 0)
     D close(fd)    # 함수 종료 시 자동 실행
     # fd를 사용한 처리...
@@ -328,7 +329,7 @@ F process_file(path: str) -> i64 {
 ```vais
 macro debug! {
     ($expr) => {
-        println("DEBUG: ~{$expr}")
+        println("DEBUG: {$expr}")
     }
 }
 ```
@@ -342,12 +343,12 @@ macro debug! {
 **읽기**: [Async Programming](./language/async-tutorial.md)
 
 ```vais
-A F fetch_data(url: str) -> str {
+A fn fetch_data(url: str) -> str {
     response := Y http_get(url)
-    R response
+    return response
 }
 
-F main() {
+fn main() {
     data := spawn fetch_data("http://example.com")
     # ...다른 작업...
     result := Y data
@@ -364,11 +365,11 @@ F main() {
 
 ```vais
 N "C" {
-    F printf(fmt: str, ...) -> i32
-    F strlen(s: str) -> i64
+    fn printf(fmt: str, ...) -> i32
+    fn strlen(s: str) -> i64
 }
 
-F main() {
+fn main() {
     len := strlen("hello")
     printf("Length: %lld\n", len)
 }
@@ -388,7 +389,7 @@ vaisc --target wasm32-unknown-unknown calculator.vais
 
 ```vais
 #[wasm_export("add")]
-F add(a: i32, b: i32) -> i32 = a + b
+fn add(a: i32, b: i32) -> i32 = a + b
 ```
 
 **실습**: 간단한 계산기를 WASM으로 컴파일하고 브라우저에서 실행
@@ -418,7 +419,23 @@ F add(a: i32, b: i32) -> i32 = a + b
 
 **참고 예제**: [examples/bench_fibonacci.vais](https://github.com/vaislang/vais/blob/main/examples/bench_fibonacci.vais), [examples/simd_test.vais](https://github.com/vaislang/vais/blob/main/examples/simd_test.vais)
 
-### 3.7 실전 프로젝트: REST API 서버 (40분)
+### 3.7 실전 프로젝트: WebSocket 서버 (40분)
+
+**읽기**: [Tutorial: WebSocket Chat Server](./tutorials/websocket-chat.md)
+
+**실습**: WebSocket 에코 서버를 만들고 handshake, frame encoding, 메시지 루프를 구현
+
+**참고 예제**: [examples/tutorial_ws_chat.vais](https://github.com/vaislang/vais/blob/main/examples/tutorial_ws_chat.vais), [examples/websocket_example.vais](https://github.com/vaislang/vais/blob/main/examples/websocket_example.vais)
+
+### 3.8 실전 프로젝트: JSON Parser (30분)
+
+**읽기**: [Tutorial: JSON Parser 만들기](./tutorials/json-parser.md)
+
+**실습**: 재귀 하강 파서로 JSON 문자열을 파싱하는 프로그램 작성
+
+**참고 예제**: [examples/tutorial_json_parser.vais](https://github.com/vaislang/vais/blob/main/examples/tutorial_json_parser.vais)
+
+### 3.9 실전 프로젝트: REST API 서버 (40분)
 
 **읽기**: [Tutorial: HTTP Server 만들기](./tutorials/http-server.md)
 
@@ -432,6 +449,7 @@ F add(a: i32, b: i32) -> i32 = a + b
 - [ ] WASM 타겟 컴파일 및 실행
 - [ ] 고급 타입 시스템 (where, trait alias, associated types) 활용
 - [ ] 성능 최적화 기법 적용
+- [ ] WebSocket 서버 또는 JSON 파서 구현 완료
 - [ ] 500줄 이상의 실전 프로젝트 독립 완성 가능
 
 ---
@@ -483,5 +501,16 @@ F add(a: i32, b: i32) -> i32 = a + b
 - [API 문서](./api/index.md) - 타입별 API 레퍼런스
 - [트러블슈팅](./troubleshooting.md) - 자주 묻는 질문과 해결 방법
 - [기여 가이드](./contributing/contributing.md) - 컴파일러 개발에 참여하기
-- [Playground](https://vais.dev/playground/) - 브라우저에서 Vais 실행
+- [Playground](https://vaislang.dev/playground/) - 브라우저에서 Vais 예제 실험
 - [인터랙티브 튜토리얼](./tools/vais-tutorial/README.md) - 단계별 연습 문제
+
+### 실전 튜토리얼
+
+| 튜토리얼 | 난이도 | 소요 시간 | 핵심 주제 |
+|----------|--------|-----------|-----------|
+| [CLI Tool](./tutorials/cli-tool.md) | 초급 | 30분 | 파일 I/O, 문자열 처리 |
+| [Data Pipeline](./tutorials/data-pipeline.md) | 중급 | 40분 | 구조체, 배열, 통계 |
+| [HTTP Server](./tutorials/http-server.md) | 중급 | 50분 | TCP, JSON 응답, FFI |
+| [CLI Framework](./tutorials/cli-framework.md) | 중급 | 40분 | 디스패치, 옵션 파싱, 전역 변수 |
+| [JSON Parser](./tutorials/json-parser.md) | 고급 | 50분 | 재귀 하강, 토큰화, 상태 머신 |
+| [WebSocket Chat](./tutorials/websocket-chat.md) | 고급 | 50분 | 네트워킹, 프로토콜, 메모리 관리 |

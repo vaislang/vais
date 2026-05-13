@@ -15,7 +15,7 @@ F strlen_ptr(s: i64) -> i64 {
 
 F strlen_ptr_rec(s: i64, len: i64) -> i64 {
     I load_byte(s + len) == 0 { len }
-    E { strlen_ptr_rec(s, len + 1) }
+    EL { strlen_ptr_rec(s, len + 1) }
 }
 
 # =====================================================
@@ -57,7 +57,7 @@ F regex_compile_altern(pattern: i64, pos: i64, len: i64) -> i64 {
     I pipe == -1 {
         # No alternation at top level
         regex_compile_rec(pattern, pos, len)
-    } E {
+    } EL {
         # Split at pipe position
         left := regex_compile_rec(pattern, pos, pipe)
         right := regex_compile_altern(pattern, pipe + 1, len)
@@ -77,22 +77,22 @@ F regex_find_top_pipe(pattern: i64, pos: i64, len: i64) -> i64 {
 
 F regex_find_top_pipe_rec(pattern: i64, pos: i64, len: i64, depth: i64) -> i64 {
     I pos >= len { -1 }
-    E {
+    EL {
         c := load_byte(pattern + pos)
         I c == 40 {
             # open paren, increase depth
             regex_find_top_pipe_rec(pattern, pos + 1, len, depth + 1)
-        } E I c == 41 {
+        } EL I c == 41 {
             # close paren, decrease depth
             regex_find_top_pipe_rec(pattern, pos + 1, len, depth - 1)
-        } E I c == 91 {
+        } EL I c == 91 {
             # open bracket, skip to close ]
             close := regex_find_bracket_end(pattern, pos + 1, len)
             regex_find_top_pipe_rec(pattern, close + 1, len, depth)
-        } E I c == 124 && depth == 0 {
+        } EL I c == 124 && depth == 0 {
             # found top-level pipe
             pos
-        } E {
+        } EL {
             regex_find_top_pipe_rec(pattern, pos + 1, len, depth)
         }
     }
@@ -107,7 +107,7 @@ F regex_compile_rec(pattern: i64, pos: i64, len: i64) -> i64 {
         store_i64(node + 16, 0)
         store_i64(node + 24, 0)
         node
-    } E {
+    } EL {
         c := load_byte(pattern + pos)
         regex_compile_char(pattern, pos, len, c)
     }
@@ -123,7 +123,7 @@ F regex_compile_char(pattern: i64, pos: i64, len: i64, c: i64) -> i64 {
         next := regex_compile_rec(pattern, pos + 1, len)
         store_i64(node + 24, next)
         node
-    } E I c == 36 && pos == len - 1 {
+    } EL I c == 36 && pos == len - 1 {
         # $ anchor at end
         node := malloc(32)
         store_i64(node, 4)  # END_ANCHOR
@@ -132,45 +132,45 @@ F regex_compile_char(pattern: i64, pos: i64, len: i64, c: i64) -> i64 {
         next := regex_compile_rec(pattern, pos + 1, len)
         store_i64(node + 24, next)
         node
-    } E I c == 46 {
+    } EL I c == 46 {
         # . matches any
         regex_compile_atom(pattern, pos, len, 2, 0, 0)
-    } E I c == 91 {
+    } EL I c == 91 {
         # Character class
         regex_compile_char_class(pattern, pos, len)
-    } E I c == 40 {
+    } EL I c == 40 {
         # Grouping (...)
         regex_compile_group(pattern, pos, len)
-    } E I c == 92 {
+    } EL I c == 92 {
         # Escape sequence
         I pos + 1 < len {
             escaped := load_byte(pattern + pos + 1)
             I escaped == 100 {
                 # \d = [0-9]
                 regex_compile_escape_class(pattern, pos + 1, len, 0)
-            } E I escaped == 68 {
+            } EL I escaped == 68 {
                 # \D = [^0-9]
                 regex_compile_escape_class(pattern, pos + 1, len, 1)
-            } E I escaped == 119 {
+            } EL I escaped == 119 {
                 # \w = [a-zA-Z0-9_]
                 regex_compile_escape_class(pattern, pos + 1, len, 2)
-            } E I escaped == 87 {
+            } EL I escaped == 87 {
                 # \W = [^a-zA-Z0-9_]
                 regex_compile_escape_class(pattern, pos + 1, len, 3)
-            } E I escaped == 115 {
+            } EL I escaped == 115 {
                 # \s = [ \t\n\r]
                 regex_compile_escape_class(pattern, pos + 1, len, 4)
-            } E I escaped == 83 {
+            } EL I escaped == 83 {
                 # \S = [^ \t\n\r]
                 regex_compile_escape_class(pattern, pos + 1, len, 5)
-            } E {
+            } EL {
                 # other escape: treat as literal of escaped char
                 regex_compile_atom(pattern, pos + 1, len, 1, escaped, 0)
             }
-        } E {
+        } EL {
             regex_compile_atom(pattern, pos, len, 1, c, 0)
         }
-    } E {
+    } EL {
         # Literal character
         regex_compile_atom(pattern, pos, len, 1, c, 0)
     }
@@ -186,7 +186,7 @@ F regex_compile_escape_class(pattern: i64, pos: i64, len: i64, kind: i64) -> i64
     negated := regex_escape_class_negated(kind)
 
     node := malloc(32)
-    store_i64(node, I negated == 1 { 6 } E { 5 })
+    store_i64(node, I negated == 1 { 6 } EL { 5 })
     store_i64(node + 8, buf)
     store_i64(node + 16, buf_len)
 
@@ -203,7 +203,7 @@ F regex_compile_escape_class(pattern: i64, pos: i64, len: i64, kind: i64) -> i64
             store_i64(wrapper + 24, rest)
             store_i64(node + 24, 0)
             wrapper
-        } E I next_c == 43 {
+        } EL I next_c == 43 {
             wrapper := malloc(32)
             store_i64(wrapper, 8)
             store_i64(wrapper + 8, node)
@@ -212,7 +212,7 @@ F regex_compile_escape_class(pattern: i64, pos: i64, len: i64, kind: i64) -> i64
             store_i64(wrapper + 24, rest)
             store_i64(node + 24, 0)
             wrapper
-        } E I next_c == 63 {
+        } EL I next_c == 63 {
             wrapper := malloc(32)
             store_i64(wrapper, 9)
             store_i64(wrapper + 8, node)
@@ -221,15 +221,15 @@ F regex_compile_escape_class(pattern: i64, pos: i64, len: i64, kind: i64) -> i64
             store_i64(wrapper + 24, rest)
             store_i64(node + 24, 0)
             wrapper
-        } E I next_c == 123 {
+        } EL I next_c == 123 {
             # {n,m} repetition
             regex_compile_repeat_node(node, pattern, next_pos, len)
-        } E {
+        } EL {
             next := regex_compile_rec(pattern, next_pos, len)
             store_i64(node + 24, next)
             node
         }
-    } E {
+    } EL {
         next := regex_compile_rec(pattern, next_pos, len)
         store_i64(node + 24, next)
         node
@@ -238,7 +238,7 @@ F regex_compile_escape_class(pattern: i64, pos: i64, len: i64, kind: i64) -> i64
 
 # Returns 1 if the escape class kind is negated
 F regex_escape_class_negated(kind: i64) -> i64 {
-    I kind == 1 { 1 } E I kind == 3 { 1 } E I kind == 5 { 1 } E { 0 }
+    I kind == 1 { 1 } EL I kind == 3 { 1 } EL I kind == 5 { 1 } EL { 0 }
 }
 
 # Returns the length of the class buffer for the given kind
@@ -246,10 +246,10 @@ F regex_escape_class_len(kind: i64) -> i64 {
     I kind == 0 || kind == 1 {
         # \d or \D: "0123456789" = 10 bytes
         10
-    } E I kind == 2 || kind == 3 {
+    } EL I kind == 2 || kind == 3 {
         # \w or \W: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_" = 63 bytes
         63
-    } E {
+    } EL {
         # \s or \S: space(32) tab(9) newline(10) CR(13) = 4 bytes
         4
     }
@@ -273,7 +273,7 @@ F regex_escape_class_buf(kind: i64) -> i64 {
         store_byte(buf + 9, 57)   # 9
         store_byte(buf + 10, 0)
         buf
-    } E I kind == 2 || kind == 3 {
+    } EL I kind == 2 || kind == 3 {
         # word chars: a-z A-Z 0-9 _
         buf := malloc(64)
         # a-z: 97..122
@@ -345,7 +345,7 @@ F regex_escape_class_buf(kind: i64) -> i64 {
         store_byte(buf + 62, 95)
         store_byte(buf + 63, 0)
         buf
-    } E {
+    } EL {
         # whitespace: space(32) tab(9) newline(10) CR(13)
         buf := malloc(5)
         store_byte(buf + 0, 32)
@@ -382,7 +382,7 @@ F regex_compile_group(pattern: i64, pos: i64, len: i64) -> i64 {
             store_i64(wrapper + 24, rest)
             store_i64(node + 24, 0)
             wrapper
-        } E I next_c == 43 {
+        } EL I next_c == 43 {
             wrapper := malloc(32)
             store_i64(wrapper, 8)  # PLUS
             store_i64(wrapper + 8, node)
@@ -391,7 +391,7 @@ F regex_compile_group(pattern: i64, pos: i64, len: i64) -> i64 {
             store_i64(wrapper + 24, rest)
             store_i64(node + 24, 0)
             wrapper
-        } E I next_c == 63 {
+        } EL I next_c == 63 {
             wrapper := malloc(32)
             store_i64(wrapper, 9)  # QUESTION
             store_i64(wrapper + 8, node)
@@ -400,15 +400,15 @@ F regex_compile_group(pattern: i64, pos: i64, len: i64) -> i64 {
             store_i64(wrapper + 24, rest)
             store_i64(node + 24, 0)
             wrapper
-        } E I next_c == 123 {
+        } EL I next_c == 123 {
             # {n,m} repetition
             regex_compile_repeat_node(node, pattern, next_pos, len)
-        } E {
+        } EL {
             next := regex_compile_rec(pattern, next_pos, len)
             store_i64(node + 24, next)
             node
         }
-    } E {
+    } EL {
         next := regex_compile_rec(pattern, next_pos, len)
         store_i64(node + 24, next)
         node
@@ -419,14 +419,14 @@ F regex_compile_group(pattern: i64, pos: i64, len: i64) -> i64 {
 # depth = nesting depth (0 = looking for first close at same level)
 F regex_find_group_end(pattern: i64, pos: i64, len: i64, depth: i64) -> i64 {
     I pos >= len { len }
-    E {
+    EL {
         c := load_byte(pattern + pos)
         I c == 40 {
             regex_find_group_end(pattern, pos + 1, len, depth + 1)
-        } E I c == 41 {
+        } EL I c == 41 {
             I depth == 0 { pos }
-            E { regex_find_group_end(pattern, pos + 1, len, depth - 1) }
-        } E {
+            EL { regex_find_group_end(pattern, pos + 1, len, depth - 1) }
+        } EL {
             regex_find_group_end(pattern, pos + 1, len, depth)
         }
     }
@@ -452,7 +452,7 @@ F regex_compile_atom(pattern: i64, pos: i64, len: i64, typ: i64, data: i64, extr
             store_i64(wrapper + 24, rest)
             store_i64(node + 24, 0)  # atom has no next
             wrapper
-        } E I next_c == 43 {
+        } EL I next_c == 43 {
             # + quantifier
             wrapper := malloc(32)
             store_i64(wrapper, 8)  # PLUS
@@ -462,7 +462,7 @@ F regex_compile_atom(pattern: i64, pos: i64, len: i64, typ: i64, data: i64, extr
             store_i64(wrapper + 24, rest)
             store_i64(node + 24, 0)
             wrapper
-        } E I next_c == 63 {
+        } EL I next_c == 63 {
             # ? quantifier
             wrapper := malloc(32)
             store_i64(wrapper, 9)  # QUESTION
@@ -472,16 +472,16 @@ F regex_compile_atom(pattern: i64, pos: i64, len: i64, typ: i64, data: i64, extr
             store_i64(wrapper + 24, rest)
             store_i64(node + 24, 0)
             wrapper
-        } E I next_c == 123 {
+        } EL I next_c == 123 {
             # {n,m} repetition
             regex_compile_repeat_node(node, pattern, next_pos, len)
-        } E {
+        } EL {
             # No quantifier
             next := regex_compile_rec(pattern, next_pos, len)
             store_i64(node + 24, next)
             node
         }
-    } E {
+    } EL {
         next := regex_compile_rec(pattern, next_pos, len)
         store_i64(node + 24, next)
         node
@@ -503,10 +503,10 @@ F regex_compile_repeat_node(atom_node: i64, pattern: i64, brace_pos: i64, len: i
     max_val := I comma == -1 {
         # {n} exact: max == min
         min_val
-    } E I comma + 1 == close_brace {
+    } EL I comma + 1 == close_brace {
         # {n,} unbounded: max = -1
         -1
-    } E {
+    } EL {
         # {n,m}
         regex_parse_number(pattern, comma + 1, close_brace)
     }
@@ -521,7 +521,7 @@ F regex_compile_repeat_node(atom_node: i64, pattern: i64, brace_pos: i64, len: i
     # Both min and max fit in 32 bits for any practical repetition count.
     encoded := I max_val == -1 {
         (min_val * 4294967296) + 4294967295
-    } E {
+    } EL {
         (min_val * 4294967296) + max_val
     }
     store_i64(wrapper + 16, encoded)
@@ -534,15 +534,15 @@ F regex_compile_repeat_node(atom_node: i64, pattern: i64, brace_pos: i64, len: i
 # Find position of } starting search from pos
 F regex_find_brace_end(pattern: i64, pos: i64, len: i64) -> i64 {
     I pos >= len { len }
-    E I load_byte(pattern + pos) == 125 { pos }
-    E { regex_find_brace_end(pattern, pos + 1, len) }
+    EL I load_byte(pattern + pos) == 125 { pos }
+    EL { regex_find_brace_end(pattern, pos + 1, len) }
 }
 
 # Find position of comma inside {..}, between start and end_pos; returns -1 if not found
 F regex_find_comma(pattern: i64, pos: i64, end_pos: i64) -> i64 {
     I pos >= end_pos { -1 }
-    E I load_byte(pattern + pos) == 44 { pos }
-    E { regex_find_comma(pattern, pos + 1, end_pos) }
+    EL I load_byte(pattern + pos) == 44 { pos }
+    EL { regex_find_comma(pattern, pos + 1, end_pos) }
 }
 
 # Parse a decimal number from pattern[pos..], stopping at non-digit or limit
@@ -552,18 +552,18 @@ F regex_parse_number(pattern: i64, pos: i64, limit: i64) -> i64 {
 
 F regex_parse_number_rec(pattern: i64, pos: i64, limit: i64, acc: i64) -> i64 {
     I pos >= limit { acc }
-    E {
+    EL {
         c := load_byte(pattern + pos)
         I c >= 48 && c <= 57 {
             regex_parse_number_rec(pattern, pos + 1, limit, acc * 10 + (c - 48))
-        } E { acc }
+        } EL { acc }
     }
 }
 
 F regex_compile_char_class(pattern: i64, pos: i64, len: i64) -> i64 {
     # Find closing ]
     first_char_pos := pos + 1
-    negated := I load_byte(pattern + first_char_pos) == 94 { 1 } E { 0 }
+    negated := I load_byte(pattern + first_char_pos) == 94 { 1 } EL { 0 }
     start := first_char_pos + negated  # Skip ^ if negated
     end := regex_find_bracket_end(pattern, start, len)
 
@@ -573,7 +573,7 @@ F regex_compile_char_class(pattern: i64, pos: i64, len: i64) -> i64 {
     store_byte(class_chars + class_len, 0)
 
     node := malloc(32)
-    store_i64(node, I negated == 1 { 6 } E { 5 })  # NEG_CHAR_CLASS or CHAR_CLASS
+    store_i64(node, I negated == 1 { 6 } EL { 5 })  # NEG_CHAR_CLASS or CHAR_CLASS
     store_i64(node + 8, class_chars)
     store_i64(node + 16, class_len)
 
@@ -583,21 +583,21 @@ F regex_compile_char_class(pattern: i64, pos: i64, len: i64) -> i64 {
         next_c := load_byte(pattern + next_pos)
         I next_c == 42 || next_c == 43 || next_c == 63 {
             wrapper := malloc(32)
-            store_i64(wrapper, I next_c == 42 { 7 } E I next_c == 43 { 8 } E { 9 })
+            store_i64(wrapper, I next_c == 42 { 7 } EL I next_c == 43 { 8 } EL { 9 })
             store_i64(wrapper + 8, node)
             store_i64(wrapper + 16, 0)
             rest := regex_compile_rec(pattern, next_pos + 1, len)
             store_i64(wrapper + 24, rest)
             store_i64(node + 24, 0)
             wrapper
-        } E I next_c == 123 {
+        } EL I next_c == 123 {
             regex_compile_repeat_node(node, pattern, next_pos, len)
-        } E {
+        } EL {
             next := regex_compile_rec(pattern, next_pos, len)
             store_i64(node + 24, next)
             node
         }
-    } E {
+    } EL {
         next := regex_compile_rec(pattern, next_pos, len)
         store_i64(node + 24, next)
         node
@@ -606,8 +606,8 @@ F regex_compile_char_class(pattern: i64, pos: i64, len: i64) -> i64 {
 
 F regex_find_bracket_end(pattern: i64, start: i64, len: i64) -> i64 {
     I start >= len { len }
-    E I load_byte(pattern + start) == 93 { start }
-    E { regex_find_bracket_end(pattern, start + 1, len) }
+    EL I load_byte(pattern + start) == 93 { start }
+    EL { regex_find_bracket_end(pattern, start + 1, len) }
 }
 
 # =====================================================
@@ -623,7 +623,7 @@ F regex_match(regex: i64, text: i64) -> i64 {
         # Has ^ anchor, must match from start
         next := load_i64(regex + 24)
         regex_match_here(next, text, 0, text_len)
-    } E {
+    } EL {
         # Try matching from each position
         regex_match_any_pos(regex, text, 0, text_len)
     }
@@ -631,13 +631,13 @@ F regex_match(regex: i64, text: i64) -> i64 {
 
 F regex_match_any_pos(regex: i64, text: i64, pos: i64, text_len: i64) -> i64 {
     I pos > text_len { 0 }
-    E I regex_match_here(regex, text, pos, text_len) == 1 { 1 }
-    E { regex_match_any_pos(regex, text, pos + 1, text_len) }
+    EL I regex_match_here(regex, text, pos, text_len) == 1 { 1 }
+    EL { regex_match_any_pos(regex, text, pos + 1, text_len) }
 }
 
 F regex_match_here(regex: i64, text: i64, pos: i64, text_len: i64) -> i64 {
     I regex == 0 { 1 }
-    E {
+    EL {
         typ := load_i64(regex)
         data := load_i64(regex + 8)
         next := load_i64(regex + 24)
@@ -645,55 +645,55 @@ F regex_match_here(regex: i64, text: i64, pos: i64, text_len: i64) -> i64 {
         I typ == 0 {
             # END node - success
             1
-        } E I typ == 4 {
+        } EL I typ == 4 {
             # END_ANCHOR - must be at end of text
             I pos == text_len { regex_match_here(next, text, pos, text_len) }
-            E { 0 }
-        } E I typ == 1 {
+            EL { 0 }
+        } EL I typ == 1 {
             # LITERAL
             I pos < text_len && load_byte(text + pos) == data {
                 regex_match_here(next, text, pos + 1, text_len)
-            } E { 0 }
-        } E I typ == 2 {
+            } EL { 0 }
+        } EL I typ == 2 {
             # ANY (.)
             I pos < text_len {
                 regex_match_here(next, text, pos + 1, text_len)
-            } E { 0 }
-        } E I typ == 5 {
+            } EL { 0 }
+        } EL I typ == 5 {
             # CHAR_CLASS
             I pos < text_len && regex_char_in_class(data, load_i64(regex + 16), load_byte(text + pos)) == 1 {
                 regex_match_here(next, text, pos + 1, text_len)
-            } E { 0 }
-        } E I typ == 6 {
+            } EL { 0 }
+        } EL I typ == 6 {
             # NEG_CHAR_CLASS
             I pos < text_len && regex_char_in_class(data, load_i64(regex + 16), load_byte(text + pos)) == 0 {
                 regex_match_here(next, text, pos + 1, text_len)
-            } E { 0 }
-        } E I typ == 7 {
+            } EL { 0 }
+        } EL I typ == 7 {
             # STAR - match zero or more
             regex_match_star(data, next, text, pos, text_len)
-        } E I typ == 8 {
+        } EL I typ == 8 {
             # PLUS - match one or more
             regex_match_plus(data, next, text, pos, text_len)
-        } E I typ == 9 {
+        } EL I typ == 9 {
             # QUESTION - match zero or one
             regex_match_question(data, next, text, pos, text_len)
-        } E I typ == 10 {
+        } EL I typ == 10 {
             # GROUP - match inner pattern then continue with next
             regex_match_group(data, next, text, pos, text_len)
-        } E I typ == 11 {
+        } EL I typ == 11 {
             # ALTERNATION - try left branch, then right
             extra := load_i64(regex + 16)
             I regex_match_here(data, text, pos, text_len) == 1 { 1 }
-            E { regex_match_here(extra, text, pos, text_len) }
-        } E I typ == 12 {
+            EL { regex_match_here(extra, text, pos, text_len) }
+        } EL I typ == 12 {
             # REPEAT {n,m}
             encoded := load_i64(regex + 16)
             min_r := encoded / 4294967296
             max_raw := encoded - (min_r * 4294967296)
-            max_r := I max_raw == 4294967295 { -1 } E { max_raw }
+            max_r := I max_raw == 4294967295 { -1 } EL { max_raw }
             regex_match_repeat(data, next, text, pos, text_len, min_r, max_r, 0)
-        } E {
+        } EL {
             0
         }
     }
@@ -705,7 +705,7 @@ F regex_match_group(inner: i64, next: i64, text: i64, pos: i64, text_len: i64) -
     # Use regex_match_group_end to find the end position after matching inner.
     end_pos := regex_group_match_end(inner, text, pos, text_len)
     I end_pos == -1 { 0 }
-    E { regex_match_here(next, text, end_pos, text_len) }
+    EL { regex_match_here(next, text, end_pos, text_len) }
 }
 
 # Returns the end position after matching inner pattern starting at pos, or -1 if no match.
@@ -716,8 +716,8 @@ F regex_group_match_end(inner: i64, text: i64, pos: i64, text_len: i64) -> i64 {
 
 F regex_group_match_end_try(inner: i64, text: i64, start: i64, text_len: i64, try_end: i64) -> i64 {
     I try_end > text_len { -1 }
-    E I regex_match_span(inner, text, start, try_end, text_len) == 1 { try_end }
-    E { regex_group_match_end_try(inner, text, start, text_len, try_end + 1) }
+    EL I regex_match_span(inner, text, start, try_end, text_len) == 1 { try_end }
+    EL { regex_group_match_end_try(inner, text, start, text_len, try_end + 1) }
 }
 
 # Returns 1 if inner pattern matches text[start..end] exactly (consuming exactly end-start chars)
@@ -730,43 +730,43 @@ F regex_match_span(inner: i64, text: i64, start: i64, end_pos: i64, text_len: i6
 
 F regex_match_span_check(inner: i64, text: i64, pos: i64, target_end: i64, text_len: i64) -> i64 {
     I inner == 0 {
-        I pos == target_end { 1 } E { 0 }
-    } E {
+        I pos == target_end { 1 } EL { 0 }
+    } EL {
         typ := load_i64(inner)
         data := load_i64(inner + 8)
         next := load_i64(inner + 24)
 
         I typ == 0 {
-            I pos == target_end { 1 } E { 0 }
-        } E I typ == 1 {
+            I pos == target_end { 1 } EL { 0 }
+        } EL I typ == 1 {
             I pos < target_end && load_byte(text + pos) == data {
                 regex_match_span_check(next, text, pos + 1, target_end, text_len)
-            } E { 0 }
-        } E I typ == 2 {
+            } EL { 0 }
+        } EL I typ == 2 {
             I pos < target_end {
                 regex_match_span_check(next, text, pos + 1, target_end, text_len)
-            } E { 0 }
-        } E I typ == 5 {
+            } EL { 0 }
+        } EL I typ == 5 {
             I pos < target_end && regex_char_in_class(data, load_i64(inner + 16), load_byte(text + pos)) == 1 {
                 regex_match_span_check(next, text, pos + 1, target_end, text_len)
-            } E { 0 }
-        } E I typ == 6 {
+            } EL { 0 }
+        } EL I typ == 6 {
             I pos < target_end && regex_char_in_class(data, load_i64(inner + 16), load_byte(text + pos)) == 0 {
                 regex_match_span_check(next, text, pos + 1, target_end, text_len)
-            } E { 0 }
-        } E I typ == 10 {
+            } EL { 0 }
+        } EL I typ == 10 {
             # Nested group
             inner2 := load_i64(inner + 8)
             end2 := regex_group_match_end(inner2, text, pos, target_end)
             I end2 == -1 { 0 }
-            E { regex_match_span_check(next, text, end2, target_end, text_len) }
-        } E I typ == 11 {
+            EL { regex_match_span_check(next, text, end2, target_end, text_len) }
+        } EL I typ == 11 {
             extra := load_i64(inner + 16)
             I regex_match_span_check(data, text, pos, target_end, text_len) == 1 { 1 }
-            E { regex_match_span_check(extra, text, pos, target_end, text_len) }
-        } E {
+            EL { regex_match_span_check(extra, text, pos, target_end, text_len) }
+        } EL {
             # For complex nodes fall back to regex_match_here and check pos
-            I regex_match_here(inner, text, pos, target_end) == 1 { 1 } E { 0 }
+            I regex_match_here(inner, text, pos, target_end) == 1 { 1 } EL { 0 }
         }
     }
 }
@@ -776,20 +776,20 @@ F regex_match_repeat(atom: i64, next: i64, text: i64, pos: i64, text_len: i64, m
     # If we've reached max, try to match next
     I max_r != -1 && count == max_r {
         I count >= min_r { regex_match_here(next, text, pos, text_len) }
-        E { 0 }
-    } E {
+        EL { 0 }
+    } EL {
         # Try matching next if we've met minimum
         can_stop := I count >= min_r {
             regex_match_here(next, text, pos, text_len)
-        } E { 0 }
+        } EL { 0 }
         I can_stop == 1 { 1 }
-        E {
+        EL {
             # Try consuming one more atom
             I pos < text_len && regex_atom_matches(atom, text, pos) == 1 {
                 regex_match_repeat(atom, next, text, pos + 1, text_len, min_r, max_r, count + 1)
-            } E {
+            } EL {
                 I count >= min_r { regex_match_here(next, text, pos, text_len) }
-                E { 0 }
+                EL { 0 }
             }
         }
     }
@@ -801,24 +801,24 @@ F regex_char_in_class(class_chars: i64, class_len: i64, c: i64) -> i64 {
 
 F regex_char_in_class_rec(class_chars: i64, class_len: i64, c: i64, i: i64) -> i64 {
     I i >= class_len { 0 }
-    E {
+    EL {
         char_at_i := load_byte(class_chars + i)
         # Check for range a-z
         I i + 2 < class_len && load_byte(class_chars + i + 1) == 45 {
             range_end := load_byte(class_chars + i + 2)
             I c >= char_at_i && c <= range_end { 1 }
-            E { regex_char_in_class_rec(class_chars, class_len, c, i + 3) }
-        } E I c == char_at_i { 1 }
-        E { regex_char_in_class_rec(class_chars, class_len, c, i + 1) }
+            EL { regex_char_in_class_rec(class_chars, class_len, c, i + 3) }
+        } EL I c == char_at_i { 1 }
+        EL { regex_char_in_class_rec(class_chars, class_len, c, i + 1) }
     }
 }
 
 F regex_match_star(atom: i64, next: i64, text: i64, pos: i64, text_len: i64) -> i64 {
     # Try matching zero occurrences first, then more
     I regex_match_here(next, text, pos, text_len) == 1 { 1 }
-    E I pos < text_len && regex_atom_matches(atom, text, pos) == 1 {
+    EL I pos < text_len && regex_atom_matches(atom, text, pos) == 1 {
         regex_match_star(atom, next, text, pos + 1, text_len)
-    } E { 0 }
+    } EL { 0 }
 }
 
 F regex_match_plus(atom: i64, next: i64, text: i64, pos: i64, text_len: i64) -> i64 {
@@ -826,16 +826,16 @@ F regex_match_plus(atom: i64, next: i64, text: i64, pos: i64, text_len: i64) -> 
     I pos < text_len && regex_atom_matches(atom, text, pos) == 1 {
         # After matching one, behave like star
         regex_match_star(atom, next, text, pos + 1, text_len)
-    } E { 0 }
+    } EL { 0 }
 }
 
 F regex_match_question(atom: i64, next: i64, text: i64, pos: i64, text_len: i64) -> i64 {
     # Try without matching
     I regex_match_here(next, text, pos, text_len) == 1 { 1 }
     # Try matching one
-    E I pos < text_len && regex_atom_matches(atom, text, pos) == 1 {
+    EL I pos < text_len && regex_atom_matches(atom, text, pos) == 1 {
         regex_match_here(next, text, pos + 1, text_len)
-    } E { 0 }
+    } EL { 0 }
 }
 
 F regex_atom_matches(atom: i64, text: i64, pos: i64) -> i64 {
@@ -844,21 +844,21 @@ F regex_atom_matches(atom: i64, text: i64, pos: i64) -> i64 {
 
     I typ == 1 {
         # LITERAL
-        I load_byte(text + pos) == data { 1 } E { 0 }
-    } E I typ == 2 {
+        I load_byte(text + pos) == data { 1 } EL { 0 }
+    } EL I typ == 2 {
         # ANY
         1
-    } E I typ == 5 {
+    } EL I typ == 5 {
         # CHAR_CLASS
         regex_char_in_class(data, load_i64(atom + 16), load_byte(text + pos))
-    } E I typ == 6 {
+    } EL I typ == 6 {
         # NEG_CHAR_CLASS
-        I regex_char_in_class(data, load_i64(atom + 16), load_byte(text + pos)) == 0 { 1 } E { 0 }
-    } E I typ == 10 {
+        I regex_char_in_class(data, load_i64(atom + 16), load_byte(text + pos)) == 0 { 1 } EL { 0 }
+    } EL I typ == 10 {
         # GROUP atom: check if inner matches at least one character from pos
         inner := load_i64(atom + 8)
-        I regex_group_match_end(inner, text, pos, strlen_ptr(text)) > pos { 1 } E { 0 }
-    } E { 0 }
+        I regex_group_match_end(inner, text, pos, strlen_ptr(text)) > pos { 1 } EL { 0 }
+    } EL { 0 }
 }
 
 # =====================================================
@@ -879,8 +879,8 @@ F regex_find(pattern: i64, text: i64) -> i64 {
     first_type := load_i64(regex)
     result := I first_type == 3 {
         next := load_i64(regex + 24)
-        I regex_match_here(next, text, 0, text_len) == 1 { 0 } E { -1 }
-    } E {
+        I regex_match_here(next, text, 0, text_len) == 1 { 0 } EL { -1 }
+    } EL {
         regex_find_pos(regex, text, 0, text_len)
     }
     regex_free(regex)
@@ -889,8 +889,8 @@ F regex_find(pattern: i64, text: i64) -> i64 {
 
 F regex_find_pos(regex: i64, text: i64, pos: i64, text_len: i64) -> i64 {
     I pos > text_len { -1 }
-    E I regex_match_here(regex, text, pos, text_len) == 1 { pos }
-    E { regex_find_pos(regex, text, pos + 1, text_len) }
+    EL I regex_match_here(regex, text, pos, text_len) == 1 { pos }
+    EL { regex_find_pos(regex, text, pos + 1, text_len) }
 }
 
 # Returns a new string with the first match replaced by replacement.
@@ -901,8 +901,8 @@ F regex_replace(pattern: i64, text: i64, replacement: i64) -> i64 {
     first_type := load_i64(regex)
     start := I first_type == 3 {
         next := load_i64(regex + 24)
-        I regex_match_here(next, text, 0, text_len) == 1 { 0 } E { -1 }
-    } E {
+        I regex_match_here(next, text, 0, text_len) == 1 { 0 } EL { -1 }
+    } EL {
         regex_find_pos(regex, text, 0, text_len)
     }
     result := I start == -1 {
@@ -911,7 +911,7 @@ F regex_replace(pattern: i64, text: i64, replacement: i64) -> i64 {
         memcpy(buf, text, text_len)
         store_byte(buf + text_len, 0)
         buf
-    } E {
+    } EL {
         # Find end of match
         match_end := regex_find_match_end(regex, text, start, text_len)
         repl_len := strlen_ptr(replacement)
@@ -936,19 +936,19 @@ F regex_replace(pattern: i64, text: i64, replacement: i64) -> i64 {
 # Tries end positions from start+1 to text_len.
 F regex_find_match_end(regex: i64, text: i64, start: i64, text_len: i64) -> i64 {
     first_type := load_i64(regex)
-    inner := I first_type == 3 { load_i64(regex + 24) } E { regex }
+    inner := I first_type == 3 { load_i64(regex + 24) } EL { regex }
     # Try from longest match down to empty match
     regex_find_match_end_try(inner, text, start, text_len, text_len)
 }
 
 F regex_find_match_end_try(regex: i64, text: i64, start: i64, text_len: i64, try_end: i64) -> i64 {
     I try_end < start { start }
-    E I regex_match_span(regex, text, start, try_end, text_len) == 1 { try_end }
-    E { regex_find_match_end_try(regex, text, start, text_len, try_end - 1) }
+    EL I regex_match_span(regex, text, start, try_end, text_len) == 1 { try_end }
+    EL { regex_find_match_end_try(regex, text, start, text_len, try_end - 1) }
 }
 
 F regex_free(regex: i64) -> i64 {
-    I regex == 0 { 0 } E {
+    I regex == 0 { 0 } EL {
         typ := load_i64(regex)
         next := load_i64(regex + 24)
 

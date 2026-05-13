@@ -7,8 +7,8 @@ impl CodeGenerator {
             self,
             "fopen",
             vec![
-                ("path".to_string(), ResolvedType::Str),
-                ("mode".to_string(), ResolvedType::Str),
+                (String::from("path"), ResolvedType::Str),
+                (String::from("mode"), ResolvedType::Str),
             ],
             ResolvedType::I64
         );
@@ -18,8 +18,8 @@ impl CodeGenerator {
             self,
             "fopen_ptr",
             vec![
-                ("path".to_string(), ResolvedType::I64),
-                ("mode".to_string(), ResolvedType::Str),
+                (String::from("path"), ResolvedType::I64),
+                (String::from("mode"), ResolvedType::Str),
             ],
             ResolvedType::I64
         );
@@ -28,7 +28,7 @@ impl CodeGenerator {
         register_extern!(
             self,
             "fclose",
-            vec![("stream".to_string(), ResolvedType::I64)],
+            vec![(String::from("stream"), ResolvedType::I64)],
             ResolvedType::I32
         );
 
@@ -37,10 +37,10 @@ impl CodeGenerator {
             self,
             "fread",
             vec![
-                ("ptr".to_string(), ResolvedType::I64),
-                ("size".to_string(), ResolvedType::I64),
-                ("count".to_string(), ResolvedType::I64),
-                ("stream".to_string(), ResolvedType::I64),
+                (String::from("ptr"), ResolvedType::I64),
+                (String::from("size"), ResolvedType::I64),
+                (String::from("count"), ResolvedType::I64),
+                (String::from("stream"), ResolvedType::I64),
             ],
             ResolvedType::I64
         );
@@ -50,10 +50,10 @@ impl CodeGenerator {
             self,
             "fwrite",
             vec![
-                ("ptr".to_string(), ResolvedType::I64),
-                ("size".to_string(), ResolvedType::I64),
-                ("count".to_string(), ResolvedType::I64),
-                ("stream".to_string(), ResolvedType::I64),
+                (String::from("ptr"), ResolvedType::I64),
+                (String::from("size"), ResolvedType::I64),
+                (String::from("count"), ResolvedType::I64),
+                (String::from("stream"), ResolvedType::I64),
             ],
             ResolvedType::I64
         );
@@ -62,7 +62,7 @@ impl CodeGenerator {
         register_extern!(
             self,
             "fgetc",
-            vec![("stream".to_string(), ResolvedType::I64)],
+            vec![(String::from("stream"), ResolvedType::I64)],
             ResolvedType::I64
         );
 
@@ -71,8 +71,8 @@ impl CodeGenerator {
             self,
             "fputc",
             vec![
-                ("c".to_string(), ResolvedType::I64),
-                ("stream".to_string(), ResolvedType::I64),
+                (String::from("c"), ResolvedType::I64),
+                (String::from("stream"), ResolvedType::I64),
             ],
             ResolvedType::I64
         );
@@ -80,9 +80,9 @@ impl CodeGenerator {
         // fgets_ptr: (str, i32, str) -> i64 - fgets with correct pointer types
         register_extern!(self, "fgets_ptr" => "fgets",
             vec![
-                ("buffer".to_string(), ResolvedType::Str),
-                ("n".to_string(), ResolvedType::I32),
-                ("stream".to_string(), ResolvedType::Str),
+                (String::from("buffer"), ResolvedType::Str),
+                (String::from("n"), ResolvedType::I32),
+                (String::from("stream"), ResolvedType::Str),
             ],
             ResolvedType::I64
         );
@@ -92,9 +92,9 @@ impl CodeGenerator {
             self,
             "fgets",
             vec![
-                ("str".to_string(), ResolvedType::I64),
-                ("n".to_string(), ResolvedType::I64),
-                ("stream".to_string(), ResolvedType::I64),
+                (String::from("str"), ResolvedType::I64),
+                (String::from("n"), ResolvedType::I64),
+                (String::from("stream"), ResolvedType::I64),
             ],
             ResolvedType::I64
         );
@@ -104,8 +104,8 @@ impl CodeGenerator {
             self,
             "fputs",
             vec![
-                ("str".to_string(), ResolvedType::Str),
-                ("stream".to_string(), ResolvedType::I64),
+                (String::from("str"), ResolvedType::Str),
+                (String::from("stream"), ResolvedType::I64),
             ],
             ResolvedType::I64
         );
@@ -115,9 +115,9 @@ impl CodeGenerator {
             self,
             "fseek",
             vec![
-                ("stream".to_string(), ResolvedType::I64),
-                ("offset".to_string(), ResolvedType::I64),
-                ("origin".to_string(), ResolvedType::I64),
+                (String::from("stream"), ResolvedType::I64),
+                (String::from("offset"), ResolvedType::I64),
+                (String::from("origin"), ResolvedType::I64),
             ],
             ResolvedType::I64
         );
@@ -126,7 +126,7 @@ impl CodeGenerator {
         register_extern!(
             self,
             "ftell",
-            vec![("stream".to_string(), ResolvedType::I64)],
+            vec![(String::from("stream"), ResolvedType::I64)],
             ResolvedType::I64
         );
 
@@ -134,7 +134,7 @@ impl CodeGenerator {
         register_extern!(
             self,
             "fflush",
-            vec![("stream".to_string(), ResolvedType::I64)],
+            vec![(String::from("stream"), ResolvedType::I64)],
             ResolvedType::I64
         );
 
@@ -142,7 +142,7 @@ impl CodeGenerator {
         register_extern!(
             self,
             "feof",
-            vec![("stream".to_string(), ResolvedType::I64)],
+            vec![(String::from("stream"), ResolvedType::I64)],
             ResolvedType::I64
         );
 
@@ -150,7 +150,7 @@ impl CodeGenerator {
         register_extern!(
             self,
             "fileno",
-            vec![("stream".to_string(), ResolvedType::I64)],
+            vec![(String::from("stream"), ResolvedType::I64)],
             ResolvedType::I64
         );
 
@@ -158,7 +158,7 @@ impl CodeGenerator {
         register_extern!(
             self,
             "fsync",
-            vec![("fd".to_string(), ResolvedType::I64)],
+            vec![(String::from("fd"), ResolvedType::I64)],
             ResolvedType::I64
         );
 
@@ -167,7 +167,7 @@ impl CodeGenerator {
         register_extern!(
             self,
             "fdatasync",
-            vec![("fd".to_string(), ResolvedType::I64)],
+            vec![(String::from("fd"), ResolvedType::I64)],
             ResolvedType::I64
         );
 
@@ -176,12 +176,12 @@ impl CodeGenerator {
             self,
             "mmap",
             vec![
-                ("addr".to_string(), ResolvedType::I64),
-                ("len".to_string(), ResolvedType::I64),
-                ("prot".to_string(), ResolvedType::I64),
-                ("flags".to_string(), ResolvedType::I64),
-                ("fd".to_string(), ResolvedType::I64),
-                ("offset".to_string(), ResolvedType::I64),
+                (String::from("addr"), ResolvedType::I64),
+                (String::from("len"), ResolvedType::I64),
+                (String::from("prot"), ResolvedType::I64),
+                (String::from("flags"), ResolvedType::I64),
+                (String::from("fd"), ResolvedType::I64),
+                (String::from("offset"), ResolvedType::I64),
             ],
             ResolvedType::I64
         );
@@ -191,8 +191,8 @@ impl CodeGenerator {
             self,
             "munmap",
             vec![
-                ("addr".to_string(), ResolvedType::I64),
-                ("len".to_string(), ResolvedType::I64),
+                (String::from("addr"), ResolvedType::I64),
+                (String::from("len"), ResolvedType::I64),
             ],
             ResolvedType::I64
         );
@@ -202,9 +202,9 @@ impl CodeGenerator {
             self,
             "msync",
             vec![
-                ("addr".to_string(), ResolvedType::I64),
-                ("len".to_string(), ResolvedType::I64),
-                ("flags".to_string(), ResolvedType::I64),
+                (String::from("addr"), ResolvedType::I64),
+                (String::from("len"), ResolvedType::I64),
+                (String::from("flags"), ResolvedType::I64),
             ],
             ResolvedType::I64
         );
@@ -214,9 +214,9 @@ impl CodeGenerator {
             self,
             "madvise",
             vec![
-                ("addr".to_string(), ResolvedType::I64),
-                ("len".to_string(), ResolvedType::I64),
-                ("advice".to_string(), ResolvedType::I64),
+                (String::from("addr"), ResolvedType::I64),
+                (String::from("len"), ResolvedType::I64),
+                (String::from("advice"), ResolvedType::I64),
             ],
             ResolvedType::I64
         );
@@ -224,16 +224,16 @@ impl CodeGenerator {
         // POSIX open: (path, flags, mode) -> fd
         register_extern!(self, "posix_open" => "open",
             vec![
-                ("path".to_string(), ResolvedType::Str),
-                ("flags".to_string(), ResolvedType::I64),
-                ("mode".to_string(), ResolvedType::I64),
+                (String::from("path"), ResolvedType::Str),
+                (String::from("flags"), ResolvedType::I64),
+                (String::from("mode"), ResolvedType::I64),
             ],
             ResolvedType::I64
         );
 
         // POSIX close: (fd) -> int
         register_extern!(self, "posix_close" => "close",
-            vec![("fd".to_string(), ResolvedType::I64)],
+            vec![(String::from("fd"), ResolvedType::I64)],
             ResolvedType::I64
         );
 
@@ -241,7 +241,7 @@ impl CodeGenerator {
         register_extern!(
             self,
             "remove",
-            vec![("path".to_string(), ResolvedType::Str)],
+            vec![(String::from("path"), ResolvedType::Str)],
             ResolvedType::I64
         );
 
@@ -250,8 +250,8 @@ impl CodeGenerator {
             self,
             "flock",
             vec![
-                ("fd".to_string(), ResolvedType::I64),
-                ("operation".to_string(), ResolvedType::I64),
+                (String::from("fd"), ResolvedType::I64),
+                (String::from("operation"), ResolvedType::I64),
             ],
             ResolvedType::I64
         );
@@ -261,8 +261,8 @@ impl CodeGenerator {
             self,
             "mkdir",
             vec![
-                ("path".to_string(), ResolvedType::Str),
-                ("mode".to_string(), ResolvedType::I64),
+                (String::from("path"), ResolvedType::Str),
+                (String::from("mode"), ResolvedType::I64),
             ],
             ResolvedType::I64
         );
@@ -271,7 +271,7 @@ impl CodeGenerator {
         register_extern!(
             self,
             "rmdir",
-            vec![("path".to_string(), ResolvedType::Str)],
+            vec![(String::from("path"), ResolvedType::Str)],
             ResolvedType::I64
         );
 
@@ -279,13 +279,13 @@ impl CodeGenerator {
         register_extern!(
             self,
             "opendir",
-            vec![("path".to_string(), ResolvedType::Str)],
+            vec![(String::from("path"), ResolvedType::Str)],
             ResolvedType::I64
         );
 
         // readdir: (dirp) -> dirent* (pointer to name, 0 at end)
         register_helper!(self, "readdir" => "__readdir_wrapper",
-            vec![("dirp".to_string(), ResolvedType::I64)],
+            vec![(String::from("dirp"), ResolvedType::I64)],
             ResolvedType::I64
         );
 
@@ -293,15 +293,15 @@ impl CodeGenerator {
         register_extern!(
             self,
             "closedir",
-            vec![("dirp".to_string(), ResolvedType::I64)],
+            vec![(String::from("dirp"), ResolvedType::I64)],
             ResolvedType::I64
         );
 
         // rename_file: (old, new) -> int (0 on success) - maps to C rename()
         register_extern!(self, "rename_file" => "rename",
             vec![
-                ("old".to_string(), ResolvedType::Str),
-                ("new_path".to_string(), ResolvedType::Str),
+                (String::from("old"), ResolvedType::Str),
+                (String::from("new_path"), ResolvedType::Str),
             ],
             ResolvedType::I64
         );
@@ -310,27 +310,27 @@ impl CodeGenerator {
         register_extern!(
             self,
             "unlink",
-            vec![("path".to_string(), ResolvedType::Str)],
+            vec![(String::from("path"), ResolvedType::Str)],
             ResolvedType::I64
         );
 
         // stat_size: (path) -> i64 (file size in bytes)
         register_helper!(self, "stat_size" => "__stat_size",
-            vec![("path".to_string(), ResolvedType::Str)],
+            vec![(String::from("path"), ResolvedType::Str)],
             ResolvedType::I64
         );
 
         // stat_mtime: (path) -> i64 (modification time as unix timestamp)
         register_helper!(self, "stat_mtime" => "__stat_mtime",
-            vec![("path".to_string(), ResolvedType::Str)],
+            vec![(String::from("path"), ResolvedType::Str)],
             ResolvedType::I64
         );
 
         // getcwd: (buf, size) -> i64 (pointer as i64, 0 on error) — needs wrapper for ptr→i64 conversion
         register_helper!(self, "getcwd" => "__getcwd_wrapper",
             vec![
-                ("buf".to_string(), ResolvedType::I64),
-                ("size".to_string(), ResolvedType::I64),
+                (String::from("buf"), ResolvedType::I64),
+                (String::from("size"), ResolvedType::I64),
             ],
             ResolvedType::I64
         );
@@ -339,7 +339,7 @@ impl CodeGenerator {
         register_extern!(
             self,
             "chdir",
-            vec![("path".to_string(), ResolvedType::Str)],
+            vec![(String::from("path"), ResolvedType::Str)],
             ResolvedType::I64
         );
 
@@ -348,8 +348,8 @@ impl CodeGenerator {
             self,
             "access",
             vec![
-                ("path".to_string(), ResolvedType::Str),
-                ("mode".to_string(), ResolvedType::I64),
+                (String::from("path"), ResolvedType::Str),
+                (String::from("mode"), ResolvedType::I64),
             ],
             ResolvedType::I64
         );

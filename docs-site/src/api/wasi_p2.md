@@ -2,10 +2,12 @@
 
 > WASI Preview 2 interface bindings (Component Model)
 
+> **Implementation:** WASM-only module. Requires `--target wasm32-wasi` compilation. Functions are extern declarations bound to WASI Preview 2 host APIs via the Component Model.
+
 ## Import
 
 ```vais
-U std/wasi_p2
+use std/wasi_p2
 ```
 
 ## Overview
@@ -15,9 +17,9 @@ The `wasi_p2` module provides Vais bindings for [WASI Preview 2](https://github.
 ## Type Aliases
 
 ```vais
-T StreamError = i64      # Stream error (0 = success)
-T InputStream = i64      # Input stream handle
-T OutputStream = i64     # Output stream handle
+type StreamError = i64      # Stream error (0 = success)
+type InputStream = i64      # Input stream handle
+type OutputStream = i64     # Output stream handle
 ```
 
 ## Interfaces
@@ -27,8 +29,8 @@ T OutputStream = i64     # Output stream handle
 Stream-based I/O primitives.
 
 ```vais
-F wasi_io_stream_read(stream: i64, buf_ptr: i64, buf_len: i64) -> i64
-F wasi_io_stream_write(stream: i64, buf_ptr: i64, buf_len: i64) -> i64
+fn wasi_io_stream_read(stream: i64, buf_ptr: i64, buf_len: i64) -> i64
+fn wasi_io_stream_write(stream: i64, buf_ptr: i64, buf_len: i64) -> i64
 ```
 
 ### wasi:filesystem/types@0.2.0
@@ -50,9 +52,9 @@ Cryptographically-secure random number generation.
 ## Example
 
 ```vais
-U std/wasi_p2
+use std/wasi_p2
 
-F main() {
+fn main() {
     # Read from stdin
     buf := malloc(1024)
     bytes_read := wasi_io_stream_read(0, buf, 1024)

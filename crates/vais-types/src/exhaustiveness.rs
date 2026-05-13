@@ -454,10 +454,7 @@ impl ExhaustivenessChecker {
                     PatternSpace::Empty
                 } else if new_spaces.len() == 1 {
                     // SAFETY: length checked to be exactly 1
-                    new_spaces
-                        .into_iter()
-                        .next()
-                        .expect("length verified to be 1")
+                    new_spaces.into_iter().next().unwrap_or(PatternSpace::Empty)
                 } else {
                     PatternSpace::Or(new_spaces)
                 }
@@ -549,10 +546,7 @@ impl ExhaustivenessChecker {
                     PatternSpace::Empty
                 } else if new_spaces.len() == 1 {
                     // SAFETY: length checked to be exactly 1
-                    new_spaces
-                        .into_iter()
-                        .next()
-                        .expect("length verified to be 1")
+                    new_spaces.into_iter().next().unwrap_or(PatternSpace::Empty)
                 } else {
                     PatternSpace::Or(new_spaces)
                 }
@@ -603,7 +597,9 @@ impl ExhaustivenessChecker {
             PatternSpace::Any | PatternSpace::Wildcard => vec!["_".to_string()],
             PatternSpace::Int(n) => vec![format!("{}", n)],
             PatternSpace::IntRange(start, end) => {
-                if end - start <= 5 {
+                // Use saturating_sub to avoid underflow for wide ranges
+                // (e.g., i64::MIN..=i64::MAX — computing end-start would panic).
+                if end.saturating_sub(*start) <= 5 && end >= start {
                     // List individual values for small ranges
                     (*start..=*end).map(|n| format!("{}", n)).collect()
                 } else {

@@ -1,6 +1,6 @@
 # Test - no impl methods, just enum and main function use
 
-E SimpleOption<T> {
+EN SimpleOption<T> {
     None,
     Some(T)
 }

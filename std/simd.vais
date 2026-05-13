@@ -165,7 +165,7 @@ F simd_vec_add_f32(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
 
     # Process in chunks of 4
     i := mut 0
-    L i + 4 <= dst.len {
+    LW i + 4 <= dst.len {
         dst_ptr := dst.data + (i * 4)
         a_ptr := a.data + (i * 4)
         b_ptr := b.data + (i * 4)
@@ -174,7 +174,7 @@ F simd_vec_add_f32(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
     }
 
     # Process remaining elements
-    L i < dst.len {
+    LW i < dst.len {
         val_a := a.get_f32(i)
         val_b := b.get_f32(i)
         # Note: This is scalar fallback - proper f32 arithmetic would need builtin support
@@ -196,7 +196,7 @@ F simd_vec_mul_f32(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
 
     # Process in chunks of 4
     i := mut 0
-    L i + 4 <= dst.len {
+    LW i + 4 <= dst.len {
         dst_ptr := dst.data + (i * 4)
         a_ptr := a.data + (i * 4)
         b_ptr := b.data + (i * 4)
@@ -205,7 +205,7 @@ F simd_vec_mul_f32(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
     }
 
     # Process remaining elements
-    L i < dst.len {
+    LW i < dst.len {
         val_a := a.get_f32(i)
         val_b := b.get_f32(i)
         dst.set_f32(i, val_a * val_b)
@@ -226,7 +226,7 @@ F simd_vec_sub_f32(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
 
     # Process in chunks of 4
     i := mut 0
-    L i + 4 <= dst.len {
+    LW i + 4 <= dst.len {
         dst_ptr := dst.data + (i * 4)
         a_ptr := a.data + (i * 4)
         b_ptr := b.data + (i * 4)
@@ -235,7 +235,7 @@ F simd_vec_sub_f32(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
     }
 
     # Process remaining elements
-    L i < dst.len {
+    LW i < dst.len {
         val_a := a.get_f32(i)
         val_b := b.get_f32(i)
         dst.set_f32(i, val_a - val_b)
@@ -258,7 +258,7 @@ F simd_vec_dot_f32(a: SimdVec, b: SimdVec) -> i64 {
     i := mut 0
 
     # Process in chunks of 4
-    L i + 4 <= a.len {
+    LW i + 4 <= a.len {
         a_ptr := a.data + (i * 4)
         b_ptr := b.data + (i * 4)
         partial := simd_dot_f32x4(a_ptr, b_ptr)
@@ -267,7 +267,7 @@ F simd_vec_dot_f32(a: SimdVec, b: SimdVec) -> i64 {
     }
 
     # Process remaining elements
-    L i < a.len {
+    LW i < a.len {
         val_a := a.get_f32(i)
         val_b := b.get_f32(i)
         sum = sum + (val_a * val_b)
@@ -288,7 +288,7 @@ F simd_vec_add_f64(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
 
     # Process in chunks of 2
     i := mut 0
-    L i + 2 <= dst.len {
+    LW i + 2 <= dst.len {
         dst_ptr := dst.data + (i * 8)
         a_ptr := a.data + (i * 8)
         b_ptr := b.data + (i * 8)
@@ -297,7 +297,7 @@ F simd_vec_add_f64(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
     }
 
     # Process remaining elements
-    L i < dst.len {
+    LW i < dst.len {
         val_a := a.get_f64(i)
         val_b := b.get_f64(i)
         dst.set_f64(i, val_a + val_b)
@@ -318,7 +318,7 @@ F simd_vec_mul_f64(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
 
     # Process in chunks of 2
     i := mut 0
-    L i + 2 <= dst.len {
+    LW i + 2 <= dst.len {
         dst_ptr := dst.data + (i * 8)
         a_ptr := a.data + (i * 8)
         b_ptr := b.data + (i * 8)
@@ -327,7 +327,7 @@ F simd_vec_mul_f64(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
     }
 
     # Process remaining elements
-    L i < dst.len {
+    LW i < dst.len {
         val_a := a.get_f64(i)
         val_b := b.get_f64(i)
         dst.set_f64(i, val_a * val_b)
@@ -348,7 +348,7 @@ F simd_vec_add_i32(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
 
     # Process in chunks of 4
     i := mut 0
-    L i + 4 <= dst.len {
+    LW i + 4 <= dst.len {
         dst_ptr := dst.data + (i * 4)
         a_ptr := a.data + (i * 4)
         b_ptr := b.data + (i * 4)
@@ -357,7 +357,7 @@ F simd_vec_add_i32(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
     }
 
     # Process remaining elements
-    L i < dst.len {
+    LW i < dst.len {
         val_a := a.get_i32(i)
         val_b := b.get_i32(i)
         dst.set_i32(i, val_a + val_b)
@@ -378,7 +378,7 @@ F simd_vec_mul_i32(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
 
     # Process in chunks of 4
     i := mut 0
-    L i + 4 <= dst.len {
+    LW i + 4 <= dst.len {
         dst_ptr := dst.data + (i * 4)
         a_ptr := a.data + (i * 4)
         b_ptr := b.data + (i * 4)
@@ -387,7 +387,7 @@ F simd_vec_mul_i32(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
     }
 
     # Process remaining elements
-    L i < dst.len {
+    LW i < dst.len {
         val_a := a.get_i32(i)
         val_b := b.get_i32(i)
         dst.set_i32(i, val_a * val_b)

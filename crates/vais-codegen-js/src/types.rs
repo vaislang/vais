@@ -65,7 +65,6 @@ pub fn type_to_js(ty: &Type) -> String {
         }
         Type::Ref(inner) | Type::RefMut(inner) => type_to_js(&inner.node),
         Type::Pointer(inner) => type_to_js(&inner.node),
-        Type::Lazy(inner) => format!("() => {}", type_to_js(&inner.node)),
         Type::DynTrait { trait_name, .. } => trait_name.clone(),
         Type::Infer => "any".to_string(),
         _ => "any".to_string(),
@@ -216,18 +215,6 @@ mod tests {
             Span::new(0, 3),
         )));
         assert_eq!(type_to_js(&ty), "number");
-    }
-
-    #[test]
-    fn test_lazy_type() {
-        let ty = Type::Lazy(Box::new(Spanned::new(
-            Type::Named {
-                name: "i64".to_string(),
-                generics: vec![],
-            },
-            Span::new(0, 3),
-        )));
-        assert_eq!(type_to_js(&ty), "() => number");
     }
 
     #[test]

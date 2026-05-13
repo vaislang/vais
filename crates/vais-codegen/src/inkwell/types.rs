@@ -13,6 +13,20 @@ pub(crate) struct TypeMapper<'ctx> {
     /// Generic substitutions mirrored from InkwellCodeGenerator.
     /// Updated via `set_generic_substitutions` / `clear_generic_substitutions`.
     pub(crate) generic_substitutions: HashMap<String, ResolvedType>,
+    /// Structured warnings collected during type mapping.
+    /// Uses RefCell for interior mutability (map_type takes &self).
+    pub(crate) warnings: std::cell::RefCell<Vec<crate::CodegenWarning>>,
+    /// When true, ICE-level fallbacks become errors instead of warnings.
+    /// Set from `InkwellCodeGenerator::set_strict_type_mode()`.
+    pub(crate) strict_type_mode: bool,
+    // Phase 191 v3 (2026-04-11): `strict_generic_mode` removed. Un-monomorphized
+    // `Generic(_)` / `ConstGeneric(_)` reaching `map_type` is always promoted to
+    // a deferred `InternalError` via `pending_error`.
+    /// Deferred error from `map_type` when strict mode is enabled.
+    /// Since `map_type` returns `BasicTypeEnum` (not `Result`), errors from
+    /// ICE-level fallbacks are stored here for the caller to check via
+    /// `take_pending_error()` after calling `map_type`.
+    pub(crate) pending_error: std::cell::RefCell<Option<crate::CodegenError>>,
 }
 
 impl<'ctx> TypeMapper<'ctx> {
@@ -22,7 +36,70 @@ impl<'ctx> TypeMapper<'ctx> {
             context,
             struct_types: HashMap::new(),
             generic_substitutions: HashMap::new(),
+            warnings: std::cell::RefCell::new(Vec::new()),
+            strict_type_mode: true,
+            pending_error: std::cell::RefCell::new(None),
         }
+    }
+
+    /// Record a structured codegen warning.
+    fn emit_warning(&self, warning: crate::CodegenWarning) {
+        self.warnings.borrow_mut().push(warning);
+    }
+
+    /// Emit a warning, or store a deferred error for ICE-level fallbacks.
+    ///
+    /// Since `map_type` returns `BasicTypeEnum` (not `Result`), errors are stored
+    /// in `pending_error` for the caller to check via `take_pending_error()`.
+    /// The `i64` placeholder value is still returned so `map_type` can complete,
+    /// but the caller must propagate the error before using the result.
+    ///
+    /// - `strict_type_mode` promotes `UnresolvedTypeFallback` to a deferred error.
+    /// - `GenericFallback` is **always** promoted to a deferred error
+    ///   (Phase 191 v3 — unconditional).
+    fn emit_warning_or_error(&self, warning: crate::CodegenWarning) {
+        if self.strict_type_mode {
+            if let crate::CodegenWarning::UnresolvedTypeFallback {
+                ref type_desc,
+                ref backend,
+            } = warning
+            {
+                let mut pending = self.pending_error.borrow_mut();
+                if pending.is_none() {
+                    *pending = Some(crate::CodegenError::InternalError(format!(
+                        "[strict] {} in {} codegen — i64 fallback disabled",
+                        type_desc, backend
+                    )));
+                }
+                return;
+            }
+        }
+        if let crate::CodegenWarning::GenericFallback {
+            ref param,
+            ref context,
+        } = warning
+        {
+            let mut pending = self.pending_error.borrow_mut();
+            if pending.is_none() {
+                *pending = Some(crate::CodegenError::InternalError(format!(
+                    "un-monomorphized generic parameter '{}' reached codegen in '{}' — Phase 191 v3 (no fallback)",
+                    param, context
+                )));
+            }
+            return;
+        }
+        self.emit_warning(warning);
+    }
+
+    /// Take the pending error (if any) from a previous `map_type` call.
+    /// Returns `None` if no error occurred.
+    pub(crate) fn take_pending_error(&self) -> Option<crate::CodegenError> {
+        self.pending_error.borrow_mut().take()
+    }
+
+    /// Drain all collected warnings (transfers ownership to caller).
+    pub(crate) fn take_warnings(&self) -> Vec<crate::CodegenWarning> {
+        std::mem::take(&mut *self.warnings.borrow_mut())
     }
 
     /// Synchronise the substitution table with the generator's current map.
@@ -126,7 +203,19 @@ impl<'ctx> TypeMapper<'ctx> {
                     .struct_type(&[ptr_type.into(), len_type.into()], false)
                     .into()
             }
-            ResolvedType::Named { name, .. } => {
+            ResolvedType::Named { name, generics } => {
+                // If generics are present and all concrete, try mangled name first (e.g., "Vec$f32")
+                if !generics.is_empty() {
+                    let all_concrete = generics
+                        .iter()
+                        .all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+                    if all_concrete {
+                        let mangled = vais_types::mangle_name(name, generics);
+                        if let Some(st) = self.struct_types.get(mangled.as_str()) {
+                            return (*st).into();
+                        }
+                    }
+                }
                 if let Some(st) = self.struct_types.get(name.as_str()) {
                     (*st).into()
                 } else {
@@ -145,29 +234,34 @@ impl<'ctx> TypeMapper<'ctx> {
                     .into()
             }
             ResolvedType::Generic(name) => {
-                // Check if we have a substitution for this generic parameter.
+                // Phase 191 v3: un-monomorphized generic parameters are a hard codegen
+                // error. With transitive instantiation (Phase 67) active, the
+                // `None` branch should only be reached on a Phase 67 bug. The
+                // deferred error is stored via `emit_warning_or_error`; the
+                // `i64_type()` return is a placeholder so `map_type` can finish
+                // its walk — the caller must check `take_pending_error()` before
+                // using the result.
                 if let Some(concrete) = self.generic_substitutions.get(name.as_str()).cloned() {
                     self.map_type(&concrete)
                 } else {
-                    // Generic parameter without substitution — use i64 fallback.
-                    // With transitive instantiation (Phase 67), this path is now mostly
-                    // reached only for un-specialized fallback versions of generic functions.
-                    let _ = name; // suppress unused warning
+                    self.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
+                        param: name.clone(),
+                        context: String::from("<inkwell>"),
+                    });
                     self.context.i64_type().into()
                 }
             }
             ResolvedType::Var(_) | ResolvedType::Unknown => {
-                eprintln!(
-                    "[ICE] unresolved type variable reached Inkwell codegen — using i64 fallback"
-                );
+                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: String::from("unresolved type variable"),
+                    backend: String::from("inkwell"),
+                });
                 self.context.i64_type().into()
             }
             ResolvedType::Never => {
-                // Never type - use void pointer as placeholder
-                self.context
-                    .i8_type()
-                    .ptr_type(AddressSpace::default())
-                    .into()
+                // Never type — use empty struct as placeholder (consistent with void in Text IR).
+                // Never values should never exist at runtime; this is purely a type-level placeholder.
+                self.context.struct_type(&[], false).into()
             }
             ResolvedType::Tuple(elems) => {
                 let elem_types: Vec<BasicTypeEnum> =
@@ -243,55 +337,39 @@ impl<'ctx> TypeMapper<'ctx> {
                 // Transparent wrappers at runtime
                 self.map_type(inner)
             }
-            ResolvedType::Lazy(inner) => {
-                // Lazy<T> = { i1 computed, T value, ptr thunk_fn }
-                let inner_ty = self.map_type(inner);
-                self.context
-                    .struct_type(
-                        &[
-                            self.context.bool_type().into(), // computed flag
-                            inner_ty,                        // cached value
-                            self.context
-                                .i8_type()
-                                .ptr_type(inkwell::AddressSpace::default())
-                                .into(), // thunk function pointer
-                        ],
-                        false,
-                    )
-                    .into()
-            }
             ResolvedType::ConstGeneric(name) => {
-                // Check if we have a substitution for this const generic parameter.
+                // Phase 191 v3: same unconditional-error policy as `Generic` above.
                 if let Some(concrete) = self.generic_substitutions.get(name.as_str()).cloned() {
                     self.map_type(&concrete)
                 } else {
-                    // ConstGeneric parameter without substitution — use i64 fallback.
-                    // Same rationale as Generic above: kept for backward-compatible fallback.
-                    let _ = name; // suppress unused warning
+                    self.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
+                        param: name.clone(),
+                        context: String::from("<inkwell>"),
+                    });
                     self.context.i64_type().into()
                 }
             }
             ResolvedType::Lifetime(_) => {
-                eprintln!("[ICE] bare lifetime has no runtime representation in Inkwell codegen — using i64 fallback");
+                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: String::from("bare lifetime"),
+                    backend: String::from("inkwell"),
+                });
                 self.context.i64_type().into()
             }
-            ResolvedType::Associated { .. } => {
-                eprintln!(
-                    "[ICE] unresolved associated type in Inkwell codegen — using i64 fallback"
-                );
+            ResolvedType::Associated {
+                ref base,
+                ref assoc_name,
+                ..
+            } => {
+                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: format!("unresolved associated type `{}` on {:?}", assoc_name, base),
+                    backend: String::from("inkwell"),
+                });
                 self.context.i64_type().into()
             }
             ResolvedType::Dependent { base, .. } => {
                 // Dependent types are transparent at runtime — use base type
                 self.map_type(base)
-            }
-            ResolvedType::ImplTrait { .. } => {
-                eprintln!("[ICE] unresolved ImplTrait in Inkwell codegen — using i64 fallback");
-                self.context.i64_type().into()
-            }
-            ResolvedType::HigherKinded { .. } => {
-                eprintln!("[ICE] unresolved HKT in Inkwell codegen — using i64 fallback");
-                self.context.i64_type().into()
             }
         }
     }

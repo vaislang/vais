@@ -10,12 +10,16 @@
 //! ```
 
 mod expr;
+mod expr_helpers;
 mod items;
 mod modules;
 mod sourcemap;
 mod stmt;
 pub mod tree_shaking;
 mod types;
+
+#[cfg(test)]
+mod expr_tests;
 
 pub use sourcemap::SourceMap;
 pub use types::JsType;
@@ -310,6 +314,8 @@ mod tests {
                     ))),
                     is_pub: false,
                     is_async: false,
+                    is_partial: false,
+                    declared_effect: None,
                     attributes: vec![],
                     where_clause: vec![],
                 }),
@@ -443,6 +449,8 @@ mod tests {
                     ))),
                     is_pub: true,
                     is_async: false,
+                    is_partial: false,
+                    declared_effect: None,
                     attributes: vec![],
                     where_clause: vec![],
                 }),

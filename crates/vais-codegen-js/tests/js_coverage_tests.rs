@@ -515,12 +515,12 @@ fn test_js_tree_shake_impl_methods() {
 fn test_js_tree_shake_const() {
     let js = gen_js(
         r#"
-        C PI: i64 = 3
-        C UNUSED: i64 = 99
-        F main() -> i64 = PI
+        C pi: i64 = 3
+        C unused: i64 = 99
+        F main() -> i64 = pi
     "#,
     );
-    assert!(js.contains("3") || js.contains("PI"));
+    assert!(js.contains("3") || js.contains("pi"));
 }
 
 #[test]

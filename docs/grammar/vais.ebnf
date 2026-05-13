@@ -182,7 +182,6 @@ BaseType     = NamedType
              | DynTraitType
              | LinearType
              | AffineType
-             | ImplTraitType
              | DependentType
              | FnPtrType
              | UnitType ;
@@ -216,8 +215,6 @@ LinearType   = 'linear' BaseType ;
 
 AffineType   = 'affine' BaseType ;
 
-ImplTraitType = 'X' TraitBounds ;
-
 DependentType = '{' Ident ':' Type '|' Expr '}' ;
 
 (* Parser: parse_fn_ptr_type (ffi.rs:122) *)
@@ -247,12 +244,9 @@ Generics     = '<' GenericParam { ',' GenericParam } '>' ;
 GenericParam = LifetimeParam | ConstParam | TypeParam ;
 
 (* Parser: parse_type_generic_param (types.rs:136) *)
-TypeParam    = [ Variance ] Ident [ HktSuffix ] [ ':' TraitBounds ] ;
+TypeParam    = [ Variance ] Ident [ ':' TraitBounds ] ;
 
 Variance     = '+' | '-' ;
-
-HktSuffix    = '<' '_' { ',' '_' } '>' ;
-(* Higher-kinded type: F<_> or F<_, _> *)
 
 ConstParam   = 'const' Ident ':' Type ;
 

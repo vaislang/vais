@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/base64
+use std/base64
 ```
 
 ## Functions
@@ -36,9 +36,9 @@ U std/base64
 ## Usage
 
 ```vais
-U std/base64
+use std/base64
 
-F main() -> i64 {
+fn main() -> i64 {
     encoded := base64_encode("Hello", 5)
     # encoded = "SGVsbG8="
     encoded.print()

@@ -46,7 +46,7 @@ impl ReplHelper {
             // Single-letter keywords
             "F", "S", "E", "I", "L", "M", "W", "X", "A", "R", "B", "C", "T", "U", "P",
             // Common keywords
-            "mut", "self", "Self", "true", "false", "spawn", "await", "weak", "clone",
+            "mut", "self", "Self", "true", "false", "await", "weak", "clone",
             // Primitive types
             "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64",
             "bool", "str", "char",
@@ -364,14 +364,16 @@ fn handle_command(
         _ if input.starts_with(":type ") => {
             let expr = input
                 .strip_prefix(":type ")
-                .expect(":type prefix guaranteed by match guard")
+                // SAFETY: starts_with(":type ") checked in match guard
+                .unwrap_or("")
                 .trim();
             handle_type_command(expr, definitions);
         }
         _ if input.starts_with(":disasm ") => {
             let expr = input
                 .strip_prefix(":disasm ")
-                .expect(":disasm prefix guaranteed by match guard")
+                // SAFETY: starts_with(":disasm ") checked in match guard
+                .unwrap_or("")
                 .trim();
             handle_disasm_command(expr, definitions);
         }
@@ -611,12 +613,6 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
         RefLifetime { lifetime, inner } => format!("&'{} {}", lifetime, format_type(inner)),
         RefMutLifetime { lifetime, inner } => format!("&'{} mut {}", lifetime, format_type(inner)),
         Lifetime(name) => format!("'{}", name),
-        Lazy(inner) => format!("Lazy<{}>", format_type(inner)),
-        ImplTrait { bounds } => format!("impl {}", bounds.join(" + ")),
-        HigherKinded { name, arity } => {
-            let holes = (0..*arity).map(|_| "_").collect::<Vec<_>>().join(", ");
-            format!("{}<{}>", name, holes)
-        }
     }
 }
 
@@ -793,14 +789,16 @@ fn handle_command_jit(
         _ if input.starts_with(":tier ") => {
             let func_name = input
                 .strip_prefix(":tier ")
-                .expect(":tier prefix guaranteed by match guard")
+                // SAFETY: starts_with(":tier ") checked in match guard
+                .unwrap_or("")
                 .trim();
             handle_tier_command(func_name, definitions);
         }
         _ if input.starts_with(":type ") => {
             let expr = input
                 .strip_prefix(":type ")
-                .expect(":type prefix guaranteed by match guard")
+                // SAFETY: starts_with(":type ") checked in match guard
+                .unwrap_or("")
                 .trim();
             handle_type_command(expr, definitions);
         }

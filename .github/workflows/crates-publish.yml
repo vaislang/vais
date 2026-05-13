@@ -12,7 +12,7 @@ on:
         description: 'Run in dry-run mode (do not actually publish)'
         required: false
         type: boolean
-        default: true
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -69,183 +69,125 @@ jobs:
             echo "Running in PUBLISH mode"
           fi
 
-      # Layer 0: No dependencies
-      - name: Publish vais-ast
+      - name: Compute dependency order and publish all crates
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          PUBLISH_FLAGS: ${{ steps.publish-flags.outputs.flags }}
         run: |
-          cd crates/vais-ast
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+          set -euo pipefail
 
-      - name: Publish vais-lexer
-        run: |
-          cd crates/vais-lexer
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+          # Excluded crates (require separate build systems)
+          EXCLUDE="vais-python vais-node"
 
-      - name: Publish vais-i18n
-        run: |
-          cd crates/vais-i18n
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+          # Topological sort: parse workspace Cargo.toml files to determine
+          # dependency order automatically. Uses cargo-metadata for accuracy.
+          echo "=== Computing dependency order ==="
 
-      # Layer 1: Depends on Layer 0
-      - name: Publish vais-parser
-        run: |
-          cd crates/vais-parser
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+          # Get publish order via cargo metadata (topological sort)
+          CRATES_ORDER=$(cargo metadata --no-deps --format-version 1 \
+            | python3 -c "
+          import json, sys
+          meta = json.load(sys.stdin)
+          exclude = set('$EXCLUDE'.split())
 
-      - name: Publish vais-types
-        run: |
-          cd crates/vais-types
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+          # Build dependency graph from workspace members
+          pkgs = {p['name']: p for p in meta['packages']}
+          workspace_members = set()
+          for mid in meta['workspace_members']:
+              name = mid.split(' ')[0]
+              workspace_members.add(name)
 
-      # Layer 2: Depends on Layer 0-1
-      - name: Publish vais-mir
-        run: |
-          cd crates/vais-mir
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+          # Filter to workspace crates only, excluding python/node
+          ws_pkgs = {n: p for n, p in pkgs.items()
+                     if n in workspace_members and n not in exclude}
 
-      - name: Publish vais-codegen
-        run: |
-          cd crates/vais-codegen
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+          # Build adjacency: crate -> set of workspace deps
+          deps = {}
+          for name, pkg in ws_pkgs.items():
+              deps[name] = set()
+              for dep in pkg.get('dependencies', []):
+                  dep_name = dep['name']
+                  if dep_name in ws_pkgs:
+                      deps[name].add(dep_name)
 
-      - name: Publish vais-codegen-js
-        run: |
-          cd crates/vais-codegen-js
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+          # Kahn's algorithm for topological sort
+          in_degree = {n: 0 for n in ws_pkgs}
+          for name, d in deps.items():
+              for dep in d:
+                  in_degree[dep] = in_degree.get(dep, 0)  # ensure exists
 
-      # Layer 3: Support crates
-      - name: Publish vais-query
-        run: |
-          cd crates/vais-query
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+          # Recompute in-degrees
+          in_degree = {n: 0 for n in ws_pkgs}
+          for name, d in deps.items():
+              for dep in d:
+                  if dep in in_degree:
+                      in_degree[dep] += 1
 
-      - name: Publish vais-plugin
-        run: |
-          cd crates/vais-plugin
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+          # Wait — in_degree should count how many depend ON each node
+          # Actually for publishing, we want: publish dependencies first
+          # So reverse: in_degree[x] = number of deps x has (that are in workspace)
+          in_degree = {n: len(d) for n, d in deps.items()}
+          queue = [n for n, deg in in_degree.items() if deg == 0]
+          queue.sort()  # deterministic order
 
-      - name: Publish vais-macro
-        run: |
-          cd crates/vais-macro
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+          order = []
+          while queue:
+              node = queue.pop(0)
+              order.append(node)
+              for name, d in deps.items():
+                  if node in d:
+                      in_degree[name] -= 1
+                      if in_degree[name] == 0:
+                          queue.append(name)
+              queue.sort()
 
-      - name: Publish vais-bindgen
-        run: |
-          cd crates/vais-bindgen
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+          for name in order:
+              print(name)
+          ")
 
-      - name: Publish vais-profiler
-        run: |
-          cd crates/vais-profiler
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+          echo "=== Publish order ==="
+          echo "$CRATES_ORDER"
+          echo ""
 
-      - name: Publish vais-security
-        run: |
-          cd crates/vais-security
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+          # Publish each crate in dependency order
+          TOTAL=0
+          SUCCESS=0
+          FAILED=""
 
-      - name: Publish vais-supply-chain
-        run: |
-          cd crates/vais-supply-chain
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+          while IFS= read -r crate; do
+            [ -z "$crate" ] && continue
+            TOTAL=$((TOTAL + 1))
+            CRATE_DIR="crates/$crate"
 
-      - name: Publish vais-testgen
-        run: |
-          cd crates/vais-testgen
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+            if [ ! -d "$CRATE_DIR" ]; then
+              echo "::warning::Crate directory not found: $CRATE_DIR — skipping"
+              continue
+            fi
 
-      # Layer 4: Runtime & tooling crates
-      - name: Publish vais-jit
-        run: |
-          cd crates/vais-jit
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+            echo ""
+            echo "=== [$TOTAL] Publishing $crate ==="
+            if (cd "$CRATE_DIR" && cargo publish $PUBLISH_FLAGS --token "$CARGO_REGISTRY_TOKEN"); then
+              SUCCESS=$((SUCCESS + 1))
+              echo "::notice::$crate published successfully"
+            else
+              echo "::warning::$crate publish failed (may already be published)"
+              FAILED="$FAILED $crate"
+            fi
 
-      - name: Publish vais-gc
-        run: |
-          cd crates/vais-gc
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
+            # Wait for crates.io index to update before publishing dependents
+            if [ -z "$PUBLISH_FLAGS" ]; then
+              echo "Waiting 30s for crates.io index update..."
+              sleep 30
+            fi
+          done <<< "$CRATES_ORDER"
 
-      - name: Publish vais-gpu
-        run: |
-          cd crates/vais-gpu
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
-
-      - name: Publish vais-hotreload
-        run: |
-          cd crates/vais-hotreload
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
-
-      - name: Publish vais-dynload
-        run: |
-          cd crates/vais-dynload
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
-
-      - name: Publish vais-tutorial
-        run: |
-          cd crates/vais-tutorial
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
-
-      # Layer 5: LSP, DAP, and servers
-      - name: Publish vais-lsp
-        run: |
-          cd crates/vais-lsp
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
-
-      - name: Publish vais-dap
-        run: |
-          cd crates/vais-dap
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
-
-      - name: Publish vais-registry-server
-        run: |
-          cd crates/vais-registry-server
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
-
-      - name: Publish vais-playground-server
-        run: |
-          cd crates/vais-playground-server
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
-
-      # Layer 6: Main compiler binary (depends on most other crates)
-      - name: Publish vaisc
-        run: |
-          cd crates/vaisc
-          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
-
-      # Note: vais-python and vais-node are excluded as they require
-      # separate build systems (maturin/napi) and are published to
-      # PyPI and npm respectively, not crates.io
-
-      - name: Publish summary
-        run: |
-          echo "::notice::Publication complete!"
-          if [[ "${{ steps.publish-flags.outputs.flags }}" == "--dry-run" ]]; then
+          echo ""
+          echo "=== Publish Summary ==="
+          echo "Total: $TOTAL, Success: $SUCCESS, Failed: $((TOTAL - SUCCESS))"
+          if [ -n "$FAILED" ]; then
+            echo "::warning::Failed crates:$FAILED"
+          fi
+          if [ -n "$PUBLISH_FLAGS" ]; then
             echo "::notice::This was a DRY-RUN. No crates were actually published."
           else
             echo "::notice::All crates have been published to crates.io"

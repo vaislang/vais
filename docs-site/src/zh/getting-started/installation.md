@@ -15,19 +15,19 @@ brew install vais
 
 ### 预编译二进制文件
 
-从 [GitHub Releases](https://github.com/vaislang/vais/releases/tag/v1.0.0) 下载:
+从 [GitHub Releases](https://github.com/vaislang/vais/releases/tag/v0.0.5) 下载:
 
 | 平台 | 下载 |
 |----------|----------|
-| macOS ARM (Apple Silicon) | [vais-v1.0.0-aarch64-apple-darwin.tar.gz](https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-aarch64-apple-darwin.tar.gz) |
-| macOS Intel | [vais-v1.0.0-x86_64-apple-darwin.tar.gz](https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-x86_64-apple-darwin.tar.gz) |
-| Linux x86_64 | [vais-v1.0.0-x86_64-unknown-linux-gnu.tar.gz](https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-x86_64-unknown-linux-gnu.tar.gz) |
-| Windows x86_64 | [vais-v1.0.0-x86_64-pc-windows-msvc.zip](https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-x86_64-pc-windows-msvc.zip) |
+| macOS ARM (Apple Silicon) | [vais-v0.0.5-aarch64-apple-darwin.tar.gz](https://github.com/vaislang/vais/releases/download/v0.0.5/vais-v0.0.5-aarch64-apple-darwin.tar.gz) |
+| macOS Intel | [vais-v0.0.5-x86_64-apple-darwin.tar.gz](https://github.com/vaislang/vais/releases/download/v0.0.5/vais-v0.0.5-x86_64-apple-darwin.tar.gz) |
+| Linux x86_64 | [vais-v0.0.5-x86_64-unknown-linux-gnu.tar.gz](https://github.com/vaislang/vais/releases/download/v0.0.5/vais-v0.0.5-x86_64-unknown-linux-gnu.tar.gz) |
+| Windows x86_64 | [vais-v0.0.5-x86_64-pc-windows-msvc.zip](https://github.com/vaislang/vais/releases/download/v0.0.5/vais-v0.0.5-x86_64-pc-windows-msvc.zip) |
 
 ```bash
 # 示例: macOS ARM
-curl -LO https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-aarch64-apple-darwin.tar.gz
-tar -xzf vais-v1.0.0-aarch64-apple-darwin.tar.gz
+curl -LO https://github.com/vaislang/vais/releases/download/v0.0.5/vais-v0.0.5-aarch64-apple-darwin.tar.gz
+tar -xzf vais-v0.0.5-aarch64-apple-darwin.tar.gz
 sudo cp vais/vaisc /usr/local/bin/
 ```
 
@@ -432,7 +432,7 @@ docker run -it vais:local
 
 ## 版本信息
 
-- **Vais 版本:** 1.0.0
+- **Vais 版本:** 0.0.5
 - **LLVM 要求:** 17.x
 - **Rust MSRV:** 1.70
 - **许可证:** MIT
