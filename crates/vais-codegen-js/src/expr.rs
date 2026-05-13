@@ -1,5 +1,13 @@
-//! Expression code generation: Vais Expr → JavaScript expression string
+//! Expression code generation: Vais Expr -> JavaScript expression string
+//!
+//! # Submodules
+//!
+//! - `expr_helpers`: Free helper functions (binop_to_js, escape_js_string, sanitize_js_ident, etc.)
+//! - `expr_tests`: Unit tests
 
+use crate::expr_helpers::{
+    binop_to_js, escape_js_string, escape_template_literal, sanitize_js_ident, unaryop_to_js,
+};
 use crate::{JsCodeGenerator, Result};
 use vais_ast::*;
 
@@ -45,11 +53,7 @@ impl JsCodeGenerator {
                 let op_str = unaryop_to_js(op);
                 Ok(format!("{op_str}{e}"))
             }
-            Expr::Ternary {
-                cond,
-                then,
-                else_,
-            } => {
+            Expr::Ternary { cond, then, else_ } => {
                 let c = self.generate_expr(&cond.node)?;
                 let t = self.generate_expr(&then.node)?;
                 let e = self.generate_expr(&else_.node)?;
@@ -69,6 +73,24 @@ impl JsCodeGenerator {
 
             // --- Function calls ---
             Expr::Call { func, args } => {
+                // Struct tuple literal: `Response(200, 1)` -> desugar to StructLit
+                if let Expr::Ident(name) = &func.node {
+                    if let Some(field_defs) = self.structs.get(name.as_str()).cloned() {
+                        let field_strs: std::result::Result<Vec<String>, _> = field_defs
+                            .iter()
+                            .zip(args.iter())
+                            .map(|((fname, _), fval)| {
+                                let v = self.generate_expr(&fval.node)?;
+                                Ok(format!("{}: {v}", sanitize_js_ident(fname)))
+                            })
+                            .collect();
+                        return Ok(format!(
+                            "new {}({{{}}})",
+                            sanitize_js_ident(name),
+                            field_strs?.join(", ")
+                        ));
+                    }
+                }
                 let f = self.generate_expr(&func.node)?;
                 let args_str = self.generate_args(args)?;
                 Ok(format!("{f}({args_str})"))
@@ -80,7 +102,10 @@ impl JsCodeGenerator {
             } => {
                 let recv = self.generate_expr(&receiver.node)?;
                 let args_str = self.generate_args(args)?;
-                Ok(format!("{recv}.{}({args_str})", sanitize_js_ident(&method.node)))
+                Ok(format!(
+                    "{recv}.{}({args_str})",
+                    sanitize_js_ident(&method.node)
+                ))
             }
             Expr::StaticMethodCall {
                 type_name,
@@ -100,6 +125,10 @@ impl JsCodeGenerator {
                 let e = self.generate_expr(&expr.node)?;
                 Ok(format!("{e}.{}", sanitize_js_ident(&field.node)))
             }
+            Expr::TupleFieldAccess { expr, index } => {
+                let e = self.generate_expr(&expr.node)?;
+                Ok(format!("{e}[{index}]"))
+            }
             Expr::Index { expr, index } => {
                 let e = self.generate_expr(&expr.node)?;
                 let i = self.generate_expr(&index.node)?;
@@ -117,7 +146,7 @@ impl JsCodeGenerator {
                     items.iter().map(|e| self.generate_expr(&e.node)).collect();
                 Ok(format!("[{}]", parts?.join(", ")))
             }
-            Expr::StructLit { name, fields } => {
+            Expr::StructLit { name, fields, .. } => {
                 let field_strs: std::result::Result<Vec<String>, _> = fields
                     .iter()
                     .map(|(fname, fval)| {
@@ -167,8 +196,10 @@ impl JsCodeGenerator {
 
             // --- Lambda ---
             Expr::Lambda { params, body, .. } => {
-                let param_strs: Vec<String> =
-                    params.iter().map(|p| sanitize_js_ident(&p.name.node)).collect();
+                let param_strs: Vec<String> = params
+                    .iter()
+                    .map(|p| sanitize_js_ident(&p.name.node))
+                    .collect();
                 let body_js = self.generate_expr(&body.node)?;
                 Ok(format!("({}) => {body_js}", param_strs.join(", ")))
             }
@@ -178,16 +209,12 @@ impl JsCodeGenerator {
                 let e = self.generate_expr(&inner.node)?;
                 Ok(format!("(await {e})"))
             }
-            Expr::Spawn(inner) => {
-                let e = self.generate_expr(&inner.node)?;
-                Ok(format!("Promise.resolve().then(() => {e})"))
-            }
 
             // --- Error handling ---
             Expr::Try(inner) => {
                 // ?  operator: extract value or return early
                 let e = self.generate_expr(&inner.node)?;
-                Ok(format!("__unwrapOrThrow({e})", ))
+                Ok(format!("__unwrapOrThrow({e})",))
             }
             Expr::Unwrap(inner) => {
                 let e = self.generate_expr(&inner.node)?;
@@ -208,9 +235,7 @@ impl JsCodeGenerator {
                 let e = self.generate_expr(&expr.node)?;
                 match &ty.node {
                     Type::Named { name, .. } => match name.as_str() {
-                        "i8" | "i16" | "i32" | "u8" | "u16" | "u32" => {
-                            Ok(format!("({e} | 0)"))
-                        }
+                        "i8" | "i16" | "i32" | "u8" | "u16" | "u32" => Ok(format!("({e} | 0)")),
                         "i64" | "u64" | "i128" | "u128" => Ok(format!("Number({e})")),
                         "f32" | "f64" => Ok(format!("Number({e})")),
                         "bool" => Ok(format!("Boolean({e})")),
@@ -240,21 +265,8 @@ impl JsCodeGenerator {
                 Ok(format!("yield {e}"))
             }
 
-            // --- Lazy / Force ---
-            Expr::Lazy(inner) => {
-                let e = self.generate_expr(&inner.node)?;
-                Ok(format!("(() => {e})"))
-            }
-            Expr::Force(inner) => {
-                let e = self.generate_expr(&inner.node)?;
-                Ok(format!("{e}()"))
-            }
-
             // --- Assert ---
-            Expr::Assert {
-                condition,
-                message,
-            } => {
+            Expr::Assert { condition, message } => {
                 let c = self.generate_expr(&condition.node)?;
                 match message {
                     Some(msg) => {
@@ -272,11 +284,19 @@ impl JsCodeGenerator {
             Expr::MacroInvoke(inv) => {
                 // Macro invocations are normally expanded during parsing
                 // Generate as a function call placeholder
-                Ok(format!("{}(/* macro */)", sanitize_js_ident(&inv.name.node)))
+                Ok(format!(
+                    "{}(/* macro */)",
+                    sanitize_js_ident(&inv.name.node)
+                ))
             }
-            Expr::Error { message, .. } => {
-                Ok(format!("/* codegen error: {} */", message))
-            }
+            Expr::Error { message, .. } => Ok(format!("/* codegen error: {} */", message)),
+            Expr::EnumAccess {
+                enum_name, variant, ..
+            } => Ok(format!(
+                "{}.{}",
+                sanitize_js_ident(enum_name),
+                sanitize_js_ident(variant)
+            )),
         }
     }
 
@@ -334,7 +354,7 @@ impl JsCodeGenerator {
 
         output.push('\n');
         self.indent_level -= 1;
-        output.push_str(&format!("{indent}}})()", ));
+        output.push_str(&format!("{indent}}})()",));
         Ok(output)
     }
 
@@ -433,11 +453,7 @@ impl JsCodeGenerator {
     }
 
     /// Generate match expression as switch or if-else chain (as IIFE)
-    fn generate_match_expr(
-        &mut self,
-        expr: &Spanned<Expr>,
-        arms: &[MatchArm],
-    ) -> Result<String> {
+    fn generate_match_expr(&mut self, expr: &Spanned<Expr>, arms: &[MatchArm]) -> Result<String> {
         let indent = self.indent();
         let val = self.generate_expr(&expr.node)?;
         let match_var = self.next_label();
@@ -455,7 +471,7 @@ impl JsCodeGenerator {
             let keyword = if i == 0 { "if" } else { "else if" };
 
             if cond == "true" && i == arms.len() - 1 {
-                // Wildcard as last arm → else
+                // Wildcard as last arm -> else
                 output.push_str(&format!("{inner}else {{\n"));
             } else {
                 let guard = if let Some(g) = &arm.guard {
@@ -478,7 +494,7 @@ impl JsCodeGenerator {
         }
 
         self.indent_level -= 1;
-        output.push_str(&format!("{indent}}})()", ));
+        output.push_str(&format!("{indent}}})()",));
         Ok(output)
     }
 
@@ -494,7 +510,7 @@ impl JsCodeGenerator {
         let body = self.generate_stmts_as_return(stmts)?;
         output.push_str(&format!("{}{body}\n", self.indent()));
         self.indent_level -= 1;
-        output.push_str(&format!("{indent}}})()", ));
+        output.push_str(&format!("{indent}}})()",));
         Ok(output)
     }
 
@@ -571,13 +587,12 @@ impl JsCodeGenerator {
                 };
                 Ok(format!("{val_name} === {lit_js}"))
             }
-            Pattern::Variant { name, .. } => {
-                Ok(format!("{val_name}.__tag === \"{}\"", name.node))
-            }
+            Pattern::Variant { name, .. } => Ok(format!("{val_name}.__tag === \"{}\"", name.node)),
             Pattern::Tuple(pats) => {
                 let mut conditions = Vec::new();
                 for (i, pat) in pats.iter().enumerate() {
-                    let sub = self.generate_pattern_condition(&pat.node, &format!("{val_name}[{i}]"))?;
+                    let sub =
+                        self.generate_pattern_condition(&pat.node, &format!("{val_name}[{i}]"))?;
                     if sub != "true" {
                         conditions.push(sub);
                     }
@@ -588,12 +603,10 @@ impl JsCodeGenerator {
                     Ok(conditions.join(" && "))
                 }
             }
-            Pattern::Struct { name, .. } => {
-                Ok(format!(
-                    "{val_name} instanceof {}",
-                    sanitize_js_ident(&name.node)
-                ))
-            }
+            Pattern::Struct { name, .. } => Ok(format!(
+                "{val_name} instanceof {}",
+                sanitize_js_ident(&name.node)
+            )),
             Pattern::Range {
                 start,
                 end,
@@ -629,6 +642,10 @@ impl JsCodeGenerator {
                     .collect();
                 Ok(format!("({})", parts?.join(" || ")))
             }
+            Pattern::Alias { pattern, .. } => {
+                // For pattern alias, check the inner pattern
+                self.generate_pattern_condition(&pattern.node, val_name)
+            }
         }
     }
 
@@ -639,13 +656,12 @@ impl JsCodeGenerator {
         val_name: &str,
     ) -> Result<String> {
         match pattern {
-            Pattern::Ident(name) => {
-                Ok(format!("const {} = {val_name};", sanitize_js_ident(name)))
-            }
+            Pattern::Ident(name) => Ok(format!("const {} = {val_name};", sanitize_js_ident(name))),
             Pattern::Variant { fields, .. } => {
                 let mut bindings = Vec::new();
                 for (i, f) in fields.iter().enumerate() {
-                    let b = self.generate_pattern_bindings(&f.node, &format!("{val_name}.__data[{i}]"))?;
+                    let b = self
+                        .generate_pattern_bindings(&f.node, &format!("{val_name}.__data[{i}]"))?;
                     if !b.is_empty() {
                         bindings.push(b);
                     }
@@ -673,6 +689,16 @@ impl JsCodeGenerator {
                 }
                 Ok(bindings.join(" "))
             }
+            Pattern::Alias { name, pattern } => {
+                // Bind the whole value to the alias name
+                let mut bindings = vec![format!("const {} = {val_name};", sanitize_js_ident(name))];
+                // Then bind variables from the inner pattern
+                let inner = self.generate_pattern_bindings(&pattern.node, val_name)?;
+                if !inner.is_empty() {
+                    bindings.push(inner);
+                }
+                Ok(bindings.join(" "))
+            }
             _ => Ok(String::new()),
         }
     }
@@ -683,147 +709,5 @@ impl JsCodeGenerator {
         if !self.helpers.iter().any(|h| h.contains("__range")) {
             self.helpers.push(helper);
         }
-    }
-
-    /// Ensure __unwrap helper
-    #[allow(dead_code)]
-    pub(crate) fn ensure_unwrap_helper(&mut self) {
-        let helper = "function __unwrap(val) {\n  if (val === null || val === undefined) throw new Error(\"Unwrap on null/undefined\");\n  if (val.__tag === \"Err\" || val.__tag === \"None\") throw new Error(\"Unwrap on \" + val.__tag);\n  return val.__tag !== undefined ? val.__data[0] : val;\n}".to_string();
-        if !self.helpers.iter().any(|h| h.contains("__unwrap")) {
-            self.helpers.push(helper);
-        }
-    }
-
-    /// Ensure __unwrapOrThrow helper
-    #[allow(dead_code)]
-    pub(crate) fn ensure_unwrap_or_throw_helper(&mut self) {
-        let helper = "function __unwrapOrThrow(val) {\n  if (val === null || val === undefined) throw val;\n  if (val.__tag === \"Err\" || val.__tag === \"None\") throw val;\n  return val.__tag !== undefined ? val.__data[0] : val;\n}".to_string();
-        if !self.helpers.iter().any(|h| h.contains("__unwrapOrThrow")) {
-            self.helpers.push(helper);
-        }
-    }
-}
-
-/// Convert Vais BinOp to JavaScript operator string
-fn binop_to_js(op: &BinOp) -> &'static str {
-    match op {
-        BinOp::Add => "+",
-        BinOp::Sub => "-",
-        BinOp::Mul => "*",
-        BinOp::Div => "/",
-        BinOp::Mod => "%",
-        BinOp::Lt => "<",
-        BinOp::Lte => "<=",
-        BinOp::Gt => ">",
-        BinOp::Gte => ">=",
-        BinOp::Eq => "===",
-        BinOp::Neq => "!==",
-        BinOp::And => "&&",
-        BinOp::Or => "||",
-        BinOp::BitAnd => "&",
-        BinOp::BitOr => "|",
-        BinOp::BitXor => "^",
-        BinOp::Shl => "<<",
-        BinOp::Shr => ">>",
-    }
-}
-
-/// Convert Vais UnaryOp to JavaScript operator string
-fn unaryop_to_js(op: &UnaryOp) -> &'static str {
-    match op {
-        UnaryOp::Neg => "-",
-        UnaryOp::Not => "!",
-        UnaryOp::BitNot => "~",
-    }
-}
-
-/// Escape special characters in a JavaScript string
-fn escape_js_string(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            '\\' => result.push_str("\\\\"),
-            '"' => result.push_str("\\\""),
-            '\n' => result.push_str("\\n"),
-            '\r' => result.push_str("\\r"),
-            '\t' => result.push_str("\\t"),
-            '\0' => result.push_str("\\0"),
-            _ => result.push(ch),
-        }
-    }
-    result
-}
-
-/// Escape special characters in a template literal
-fn escape_template_literal(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            '`' => result.push_str("\\`"),
-            '$' => result.push_str("\\$"),
-            '\\' => result.push_str("\\\\"),
-            _ => result.push(ch),
-        }
-    }
-    result
-}
-
-/// Sanitize a Vais identifier for use in JavaScript
-pub(crate) fn sanitize_js_ident(name: &str) -> String {
-    // JS reserved words that need renaming
-    match name {
-        "class" => "_class".to_string(),
-        "delete" => "_delete".to_string(),
-        "export" => "_export".to_string(),
-        "import" => "_import".to_string(),
-        "new" => "_new".to_string(),
-        "super" => "_super".to_string(),
-        "switch" => "_switch".to_string(),
-        "this" => "_this".to_string(),
-        "throw" => "_throw".to_string(),
-        "typeof" => "_typeof".to_string(),
-        "var" => "_var".to_string(),
-        "void" => "_void".to_string(),
-        "with" => "_with".to_string(),
-        "yield" => "_yield".to_string(),
-        "await" => "_await".to_string(),
-        "enum" => "_enum".to_string(),
-        "implements" => "_implements".to_string(),
-        "interface" => "_interface".to_string(),
-        "package" => "_package".to_string(),
-        "private" => "_private".to_string(),
-        "protected" => "_protected".to_string(),
-        "public" => "_public".to_string(),
-        "static" => "_static".to_string(),
-        "arguments" => "_arguments".to_string(),
-        "eval" => "_eval".to_string(),
-        _ => name.to_string(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_escape_js_string() {
-        assert_eq!(escape_js_string("hello"), "hello");
-        assert_eq!(escape_js_string("he\"llo"), "he\\\"llo");
-        assert_eq!(escape_js_string("line\nnew"), "line\\nnew");
-    }
-
-    #[test]
-    fn test_sanitize_js_ident() {
-        assert_eq!(sanitize_js_ident("foo"), "foo");
-        assert_eq!(sanitize_js_ident("class"), "_class");
-        assert_eq!(sanitize_js_ident("yield"), "_yield");
-    }
-
-    #[test]
-    fn test_binop_to_js() {
-        assert_eq!(binop_to_js(&BinOp::Add), "+");
-        assert_eq!(binop_to_js(&BinOp::Eq), "===");
-        assert_eq!(binop_to_js(&BinOp::Neq), "!==");
-        assert_eq!(binop_to_js(&BinOp::And), "&&");
     }
 }

@@ -218,13 +218,13 @@ Pre-release 버전은 안정 버전보다 낮은 우선순위로 취급됩니다
 
 ```bash
 # 에러 검사
-vais pkg check
+vaisc pkg check
 
 # 완전한 빌드 및 링크
-vais pkg build
+vaisc pkg build
 
 # 모든 테스트 성공
-vais pkg test
+vaisc pkg test
 ```
 
 모든 명령이 성공 상태(exit code 0)로 완료되어야 합니다.
@@ -383,7 +383,7 @@ JSON 객체를 문자열로 변환합니다.
 
 ```bash
 # 배포 전 패키지 검증
-vais pkg verify my-package-1.0.0.tar.gz
+vaisc pkg verify my-package-1.0.0.tar.gz
 ```
 
 ### SBOM 생성 (권장)
@@ -392,7 +392,7 @@ vais pkg verify my-package-1.0.0.tar.gz
 
 ```bash
 # SBOM 생성
-vais pkg sbom my-package > sbom.xml
+vaisc pkg sbom my-package > sbom.xml
 ```
 
 생성된 SBOM 파일은 패키지와 함께 배포되어야 합니다.
@@ -458,10 +458,10 @@ pub unsafe fn direct_access(ptr, len) {
 
 ```bash
 # 레지스트리에 가입
-vais pkg signup
+vaisc pkg signup
 
 # 로그인
-vais pkg login
+vaisc pkg login
 # 사용자명과 토큰 입력
 ```
 
@@ -469,7 +469,7 @@ API 토큰 생성:
 
 ```bash
 # 새로운 토큰 생성
-vais pkg token create --name "publish-token"
+vaisc pkg token create --name "publish-token"
 
 # 출력된 토큰 저장 (다시 볼 수 없음)
 # 환경 변수로 설정
@@ -480,9 +480,9 @@ export VAIS_REGISTRY_TOKEN="your-token-here"
 
 배포 전 다음을 확인하세요:
 
-- [ ] `vais pkg check` 성공
-- [ ] `vais pkg build` 성공
-- [ ] `vais pkg test` 모든 테스트 통과
+- [ ] `vaisc pkg check` 성공
+- [ ] `vaisc pkg build` 성공
+- [ ] `vaisc pkg test` 모든 테스트 통과
 - [ ] vais.toml의 버전이 git 태그와 일치
 - [ ] CHANGELOG.md 최신 버전 기록
 - [ ] README.md 최신 정보 반영
@@ -494,26 +494,26 @@ export VAIS_REGISTRY_TOKEN="your-token-here"
 
 ```bash
 # 기본 배포
-vais pkg publish
+vaisc pkg publish
 
 # 특정 버전 배포
-vais pkg publish --version 1.0.0
+vaisc pkg publish --version 1.0.0
 
 # 드라이 런 (실제 배포 전 검증)
-vais pkg publish --dry-run
+vaisc pkg publish --dry-run
 ```
 
 ### 4. 배포 후 검증
 
 ```bash
 # 레지스트리에서 패키지 확인
-vais pkg search my-package
+vaisc pkg search my-package
 
 # 패키지 정보 조회
-vais pkg info my-package
+vaisc pkg info my-package
 
 # 특정 버전 정보
-vais pkg info my-package@1.0.0
+vaisc pkg info my-package@1.0.0
 ```
 
 ### 5. 버그 발견 시 대응
@@ -523,18 +523,18 @@ vais pkg info my-package@1.0.0
 ```bash
 # 버그 수정
 # vais.toml 버전을 1.0.1로 변경
-vais pkg publish
+vaisc pkg publish
 ```
 
 **주요 버그 또는 보안 문제:**
 
 ```bash
 # 버그 있는 버전 yanked (사용 불가능하게 표시)
-vais pkg yank my-package@1.0.0
+vaisc pkg yank my-package@1.0.0
 
 # 버그 수정 후 새 버전으로 배포
 # vais.toml 버전을 1.0.1로 변경
-vais pkg publish
+vaisc pkg publish
 ```
 
 ### CI/CD 통합 (GitHub Actions 예제)
@@ -561,15 +561,15 @@ jobs:
           echo "$HOME/.vais/bin" >> $GITHUB_PATH
 
       - name: Check Package
-        run: vais pkg check
+        run: vaisc pkg check
 
       - name: Run Tests
-        run: vais pkg test
+        run: vaisc pkg test
 
       - name: Publish
         env:
           VAIS_REGISTRY_TOKEN: ${{ secrets.VAIS_REGISTRY_TOKEN }}
-        run: vais pkg publish
+        run: vaisc pkg publish
 ```
 
 설정 단계:
@@ -591,17 +591,17 @@ git push origin v1.0.0
 
 1. **심각한 버그 발견**
    ```bash
-   vais pkg yank my-package@1.0.0 --reason "Critical memory leak"
+   vaisc pkg yank my-package@1.0.0 --reason "Critical memory leak"
    ```
 
 2. **보안 취약점**
    ```bash
-   vais pkg yank my-package@0.5.0 --reason "CVE-2024-00001"
+   vaisc pkg yank my-package@0.5.0 --reason "CVE-2024-00001"
    ```
 
 3. **라이선스 문제**
    ```bash
-   vais pkg yank my-package@2.0.0 --reason "License violation"
+   vaisc pkg yank my-package@2.0.0 --reason "License violation"
    ```
 
 Yanked 버전은:
@@ -749,7 +749,7 @@ authors = [
 
 ```bash
 # 1. 패키지를 deprecated 상태로 표시
-vais pkg deprecate my-package \
+vaisc pkg deprecate my-package \
   --replacement "new-package" \
   --message "이 패키지는 new-package로 대체되었습니다"
 
@@ -757,7 +757,7 @@ vais pkg deprecate my-package \
 # README.md 및 CHANGELOG.md에 안내 작성
 
 # 3. 최소 6개월 후 yanked 처리 가능
-vais pkg yank my-package@* --reason "Project discontinued"
+vaisc pkg yank my-package@* --reason "Project discontinued"
 ```
 
 ### 7. 이슈 신고
@@ -811,6 +811,6 @@ A: 한 번 배포된 이름은 변경할 수 없습니다. 새 이름으로 새 
 
 ---
 
-**최종 업데이트**: 2024년 1월
+**최종 업데이트**: 2026년 3월
 
 Vais 레지스트리에 기여해주셔서 감사합니다!

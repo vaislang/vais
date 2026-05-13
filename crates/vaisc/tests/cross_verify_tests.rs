@@ -40,9 +40,32 @@ fn runtime_o() -> PathBuf {
     selfhost_dir().join("runtime.o")
 }
 
-/// Check if prerequisites are available
+/// Check if prerequisites are available and print helpful skip messages
 fn prerequisites_met() -> bool {
-    vaisc_bin().exists() && stage1_bin().exists() && runtime_o().exists()
+    let vaisc = vaisc_bin().exists();
+    let stage1 = stage1_bin().exists();
+    let runtime = runtime_o().exists();
+
+    if !vaisc {
+        eprintln!(
+            "SKIP: release vaisc not found at {:?}. Build with: cargo build --release",
+            vaisc_bin()
+        );
+    }
+    if !stage1 {
+        eprintln!(
+            "SKIP: selfhost stage1 not found at {:?}. Build selfhost compiler first.",
+            stage1_bin()
+        );
+    }
+    if !runtime {
+        eprintln!(
+            "SKIP: runtime.o not found at {:?}. Compile with: clang -c selfhost/runtime.c -o selfhost/runtime.o",
+            runtime_o()
+        );
+    }
+
+    vaisc && stage1 && runtime
 }
 
 struct CompileRunResult {
@@ -82,9 +105,7 @@ fn compile_run_rust(vais_file: &Path, tmp: &Path) -> Result<CompileRunResult, St
         .arg("-Wno-override-module");
     #[cfg(not(target_os = "windows"))]
     cmd.arg("-lm");
-    let output = cmd
-        .output()
-        .map_err(|e| format!("clang failed: {}", e))?;
+    let output = cmd.output().map_err(|e| format!("clang failed: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -141,9 +162,7 @@ fn compile_run_selfhost(vais_file: &Path, tmp: &Path) -> Result<CompileRunResult
         .arg("-Wno-override-module");
     #[cfg(not(target_os = "windows"))]
     cmd.arg("-lm");
-    let output = cmd
-        .output()
-        .map_err(|e| format!("clang failed: {}", e))?;
+    let output = cmd.output().map_err(|e| format!("clang failed: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -252,6 +271,80 @@ fn cross_verify_opt_test() {
     cross_verify("opt_test.vais");
 }
 
+#[test]
+#[ignore]
+fn cross_verify_phase44_trait_bounds() {
+    cross_verify("phase44_trait_bounds.vais");
+}
+
+#[test]
+#[ignore]
+fn cross_verify_phase44_range_loop() {
+    cross_verify("phase44_range_loop.vais");
+}
+
+#[test]
+#[ignore]
+fn cross_verify_phase44_closure() {
+    cross_verify("phase44_closure.vais");
+}
+
+#[test]
+#[ignore]
+fn cross_verify_phase44_async() {
+    cross_verify("phase44_async_basic.vais");
+}
+
+// === Phase 84: New cross-verification tests ===
+
+#[test]
+#[ignore]
+fn cross_verify_phase84_struct_basic() {
+    cross_verify("phase84_struct_basic.vais");
+}
+
+#[test]
+#[ignore]
+fn cross_verify_phase84_match_enum() {
+    cross_verify("phase84_match_enum.vais");
+}
+
+#[test]
+#[ignore]
+fn cross_verify_phase84_string_ops() {
+    cross_verify("phase84_string_ops.vais");
+}
+
+#[test]
+#[ignore]
+fn cross_verify_phase84_array_basic() {
+    cross_verify("phase84_array_basic.vais");
+}
+
+#[test]
+#[ignore]
+fn cross_verify_phase84_nested_calls() {
+    cross_verify("phase84_nested_calls.vais");
+}
+
+#[test]
+#[ignore]
+fn cross_verify_phase84_bitwise_ops() {
+    cross_verify("phase84_bitwise_ops.vais");
+}
+
+#[test]
+#[ignore]
+fn cross_verify_phase84_loop_break() {
+    cross_verify("phase84_loop_break.vais");
+}
+
+#[test]
+#[ignore]
+fn cross_verify_phase84_method_call() {
+    cross_verify("phase84_method_call.vais");
+}
+
 /// Run all passing cross-verification tests in one go
 #[test]
 #[ignore]
@@ -266,6 +359,19 @@ fn cross_verify_all_passing() {
         "enum_test.vais",
         "tco_tail_call.vais",
         "opt_test.vais",
+        "phase44_trait_bounds.vais",
+        "phase44_range_loop.vais",
+        "phase44_closure.vais",
+        "phase44_async_basic.vais",
+        // Phase 84 additions
+        "phase84_struct_basic.vais",
+        "phase84_match_enum.vais",
+        "phase84_string_ops.vais",
+        "phase84_array_basic.vais",
+        "phase84_nested_calls.vais",
+        "phase84_bitwise_ops.vais",
+        "phase84_loop_break.vais",
+        "phase84_method_call.vais",
     ];
 
     if !prerequisites_met() {

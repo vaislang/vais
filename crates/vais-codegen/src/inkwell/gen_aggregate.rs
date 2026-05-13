@@ -13,6 +13,95 @@ use super::generator::InkwellCodeGenerator;
 use crate::{CodegenError, CodegenResult};
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
+    /// Generate a map literal as parallel key/value arrays on the stack.
+    ///
+    /// `{k1: v1, k2: v2}` becomes:
+    /// - `keys:   [K x N]` allocated on the stack with each key stored
+    /// - `values: [V x N]` allocated on the stack with each value stored
+    /// - Returns a pointer to the keys array (consistent with Text IR backend)
+    pub(super) fn generate_map_literal(
+        &mut self,
+        pairs: &[(Spanned<Expr>, Spanned<Expr>)],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        if pairs.is_empty() {
+            // Empty map — return null pointer
+            return Ok(self
+                .context
+                .i8_type()
+                .ptr_type(AddressSpace::default())
+                .const_null()
+                .into());
+        }
+
+        let len = pairs.len() as u32;
+
+        // Generate all key-value pairs first to determine types
+        let mut key_vals: Vec<BasicValueEnum<'ctx>> = Vec::new();
+        let mut val_vals: Vec<BasicValueEnum<'ctx>> = Vec::new();
+        for (k, v) in pairs {
+            key_vals.push(self.generate_expr(&k.node)?);
+            val_vals.push(self.generate_expr(&v.node)?);
+        }
+
+        // Determine key/value types from first pair
+        let key_type = key_vals[0].get_type();
+        let val_type = val_vals[0].get_type();
+
+        let key_arr_type = key_type.array_type(len);
+        let val_arr_type = val_type.array_type(len);
+
+        // Allocate key and value arrays on stack
+        let keys_ptr = self
+            .builder
+            .build_alloca(key_arr_type, "map_keys")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let vals_ptr = self
+            .builder
+            .build_alloca(val_arr_type, "map_vals")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Store each key-value pair
+        let zero = self.context.i64_type().const_int(0, false);
+        for (i, (kv, vv)) in key_vals.iter().zip(val_vals.iter()).enumerate() {
+            let idx = self.context.i64_type().const_int(i as u64, false);
+
+            // Store key
+            // SAFETY: GEP index i is bounded by key_vals.len(), matching the alloca'd array size.
+            let k_elem_ptr = unsafe {
+                self.builder
+                    .build_gep(
+                        key_arr_type,
+                        keys_ptr,
+                        &[zero, idx],
+                        &format!("map_k_{}", i),
+                    )
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            };
+            self.builder
+                .build_store(k_elem_ptr, *kv)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+            // Store value
+            // SAFETY: GEP index i is bounded by val_vals.len(), matching the alloca'd array size.
+            let v_elem_ptr = unsafe {
+                self.builder
+                    .build_gep(
+                        val_arr_type,
+                        vals_ptr,
+                        &[zero, idx],
+                        &format!("map_v_{}", i),
+                    )
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            };
+            self.builder
+                .build_store(v_elem_ptr, *vv)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        }
+
+        // Return pointer to keys array (consistent with Text IR backend representation)
+        Ok(keys_ptr.into())
+    }
+
     pub(super) fn generate_array(
         &mut self,
         elements: &[Spanned<Expr>],
@@ -46,6 +135,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Store each element
         for (i, val) in values.iter().enumerate() {
             let idx = self.context.i64_type().const_int(i as u64, false);
+            // SAFETY: GEP index i is bounded by elements.len(), matching the alloca'd array size.
             let elem_ptr = unsafe {
                 self.builder
                     .build_gep(
@@ -69,7 +159,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         elements: &[Spanned<Expr>],
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         if elements.is_empty() {
-            return Ok(self.context.struct_type(&[], false).const_zero().into());
+            return Ok(self.unit_value());
         }
 
         // Generate all elements
@@ -95,32 +185,200 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         Ok(tuple_val.into())
     }
 
+    /// Infer the element LLVM type for a slice, array, or Vec expression.
+    /// Looks up the variable's resolved type from `var_resolved_types` and extracts
+    /// the inner element type for Slice/SliceMut/Array/Vec<T>. Falls back to i64 if unknown.
+    fn infer_element_llvm_type(&self, arr_expr: &Expr) -> inkwell::types::BasicTypeEnum<'ctx> {
+        if let Expr::Ident(name) = arr_expr {
+            match self.var_resolved_types.get(name) {
+                Some(
+                    vais_types::ResolvedType::Slice(inner)
+                    | vais_types::ResolvedType::SliceMut(inner)
+                    | vais_types::ResolvedType::Array(inner),
+                ) => {
+                    return self.type_mapper.map_type(inner);
+                }
+                // Vec<T>[idx] -> element type T
+                Some(vais_types::ResolvedType::Named {
+                    name: type_name,
+                    generics,
+                }) if type_name == "Vec" && !generics.is_empty() => {
+                    return self.type_mapper.map_type(&generics[0]);
+                }
+                _ => {}
+            }
+        }
+        // Fallback to i64 for untracked expressions
+        self.context.i64_type().into()
+    }
+
+    /// Check if an expression resolves to a Vec type (Named { name: "Vec", ... }).
+    fn is_vec_expr(&self, arr_expr: &Expr) -> bool {
+        if let Expr::Ident(name) = arr_expr {
+            if let Some(vais_types::ResolvedType::Named {
+                name: type_name, ..
+            }) = self.var_resolved_types.get(name)
+            {
+                return type_name == "Vec";
+            }
+        }
+        false
+    }
+
     pub(super) fn generate_index(
         &mut self,
         arr: &Expr,
         index: &Expr,
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // Infer element type before generating (uses AST-level info)
+        let inferred_elem_type = self.infer_element_llvm_type(arr);
+        let is_vec = self.is_vec_expr(arr);
+
         let arr_val = self.generate_expr(arr)?;
         let idx_val = self.generate_expr(index)?;
 
+        // Check if this is a struct value (slice or Vec)
+        if arr_val.is_struct_value() {
+            let struct_val = arr_val.into_struct_value();
+            let struct_type = struct_val.get_type();
+
+            // Vec<T> struct: { i64 data, i64 len, i64 cap, i64 elem_size }
+            // The data field holds a raw pointer as i64; elem_size provides stride.
+            if is_vec && struct_type.count_fields() >= 4 {
+                let idx_int = idx_val.into_int_value();
+
+                // Extract data pointer (field 0) as i64, then convert to pointer
+                let data_i64 = self
+                    .builder
+                    .build_extract_value(struct_val, 0, "vec_data")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_int_value();
+
+                let i8_ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
+                let data_ptr = self
+                    .builder
+                    .build_int_to_ptr(data_i64, i8_ptr_type, "vec_data_ptr")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                // Extract elem_size (field 3) for correct stride calculation
+                let elem_size = self
+                    .builder
+                    .build_extract_value(struct_val, 3, "vec_elem_size")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_int_value();
+
+                // Calculate byte offset: idx * elem_size
+                let byte_offset = self
+                    .builder
+                    .build_int_mul(idx_int, elem_size, "byte_offset")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                // GEP on i8* with byte offset to get element pointer
+                // SAFETY: Runtime index from user code — bounds checking is the caller's responsibility.
+                // data_ptr comes from a valid Vec data field.
+                let elem_ptr_i8 = unsafe {
+                    self.builder
+                        .build_gep(
+                            self.context.i8_type(),
+                            data_ptr,
+                            &[byte_offset],
+                            "vec_elem_ptr",
+                        )
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                };
+
+                // Load element using the inferred element type
+                return self
+                    .builder
+                    .build_load(inferred_elem_type, elem_ptr_i8, "vec_elem")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()));
+            }
+
+            // Slice is { i8*, i64 } - check if it has exactly 2 fields
+            if struct_type.count_fields() == 2 {
+                // Extract length (field 1) for bounds check
+                let len_val = self
+                    .builder
+                    .build_extract_value(struct_val, 1, "slice_len")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_int_value();
+
+                let idx_int = idx_val.into_int_value();
+
+                // Bounds check: idx < len (unsigned)
+                let in_bounds = self
+                    .builder
+                    .build_int_compare(IntPredicate::ULT, idx_int, len_val, "bounds_check")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                let current_fn = self.current_function.ok_or_else(|| {
+                    CodegenError::LlvmError("No current function for bounds check".to_string())
+                })?;
+
+                let safe_bb = self.context.append_basic_block(current_fn, "bounds_safe");
+                let oob_bb = self.context.append_basic_block(current_fn, "bounds_oob");
+
+                self.builder
+                    .build_conditional_branch(in_bounds, safe_bb, oob_bb)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                // OOB path: abort
+                self.builder.position_at_end(oob_bb);
+                let abort_fn = self.get_or_declare_abort();
+                self.builder
+                    .build_call(abort_fn, &[], "")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.builder
+                    .build_unreachable()
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                // Safe path: continue with element access
+                self.builder.position_at_end(safe_bb);
+
+                // Extract data pointer (field 0)
+                let data_ptr = self
+                    .builder
+                    .build_extract_value(struct_val, 0, "data_ptr")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                // Use the inferred element type from the variable's resolved type.
+                // The GEP instruction uses elem_type for stride calculation.
+                let elem_type = inferred_elem_type;
+                let data_ptr_val = data_ptr.into_pointer_value();
+
+                // GEP to get element pointer (stride = sizeof(elem_type))
+                // SAFETY: Runtime index from user code — bounds checking is the caller's responsibility.
+                // data_ptr comes from a valid Vec/Slice data field.
+                let elem_ptr = unsafe {
+                    self.builder
+                        .build_gep(elem_type, data_ptr_val, &[idx_int], "elem_ptr")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                };
+
+                // Load element
+                return self
+                    .builder
+                    .build_load(elem_type, elem_ptr, "elem")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()));
+            }
+        }
+
+        // Regular array/pointer indexing — use inferred element type
         let arr_ptr = arr_val.into_pointer_value();
         let idx_int = idx_val.into_int_value();
 
         // Get element pointer
+        // SAFETY: Runtime index from user code — bounds checking is the caller's responsibility.
+        // arr_ptr is a valid array/pointer from a prior allocation or parameter.
         let elem_ptr = unsafe {
             self.builder
-                .build_gep(
-                    self.context.i64_type(), // Assume i64 elements for now
-                    arr_ptr,
-                    &[idx_int],
-                    "elem_ptr",
-                )
+                .build_gep(inferred_elem_type, arr_ptr, &[idx_int], "elem_ptr")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?
         };
 
         // Load element
         self.builder
-            .build_load(self.context.i64_type(), elem_ptr, "elem")
+            .build_load(inferred_elem_type, elem_ptr, "elem")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))
     }
 
@@ -136,7 +394,33 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .ok_or_else(|| CodegenError::LlvmError("No current function for slice".to_string()))?;
 
         let arr_val = self.generate_expr(arr)?;
-        let arr_ptr = arr_val.into_pointer_value();
+
+        // Determine if the source is a Slice/SliceMut (fat pointer struct with 2 fields)
+        let is_slice_source = if let BasicValueEnum::StructValue(sv) = arr_val {
+            let struct_type = sv.get_type();
+            struct_type.count_fields() == 2
+        } else {
+            false
+        };
+
+        let arr_ptr = if is_slice_source {
+            // Extract data pointer from fat pointer (field 0)
+            let data_ptr = self
+                .builder
+                .build_extract_value(arr_val.into_struct_value(), 0, "slice_data")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                .into_pointer_value();
+            // Bitcast i8* to i64*
+            self.builder
+                .build_pointer_cast(
+                    data_ptr,
+                    self.context.i64_type().ptr_type(AddressSpace::default()),
+                    "slice_ptr_typed",
+                )
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        } else {
+            arr_val.into_pointer_value()
+        };
 
         // Get start index (default 0)
         let start_val = if let Some(start_expr) = start {
@@ -156,9 +440,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 val
             }
         } else {
-            return Err(CodegenError::Unsupported(
-                "Slice without end index requires array length".to_string(),
-            ));
+            // Open-end slice: arr[start..]
+            if is_slice_source {
+                // Extract length from fat pointer (field 1)
+                self.builder
+                    .build_extract_value(arr_val.into_struct_value(), 1, "slice_len")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_int_value()
+            } else {
+                // Array/Pointer source doesn't have length information
+                return Err(CodegenError::Unsupported(
+                    "Open-end slicing requires a slice source; array length is unknown".to_string(),
+                ));
+            }
         };
 
         // Calculate slice length: end - start
@@ -192,7 +486,41 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
             .try_as_basic_value()
             .left()
-            .unwrap();
+            .ok_or_else(|| {
+                CodegenError::LlvmError("ICE: malloc call returned void instead of pointer".into())
+            })?;
+        // Track allocation via entry-block alloca slot to avoid dominance issues in loops.
+        {
+            let current_fn = self
+                .builder
+                .get_insert_block()
+                .unwrap()
+                .get_parent()
+                .unwrap();
+            let entry_block = current_fn.get_first_basic_block().unwrap();
+            let current_block = self.builder.get_insert_block().unwrap();
+            if let Some(terminator) = entry_block.get_terminator() {
+                self.builder.position_before(&terminator);
+            } else {
+                self.builder.position_at_end(entry_block);
+            }
+            let ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
+            let alloc_slot = self
+                .builder
+                .build_alloca(
+                    ptr_type,
+                    &format!("__slice_alloc_slot_{}", self.alloc_tracker.len()),
+                )
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.builder
+                .build_store(alloc_slot, ptr_type.const_null())
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.builder.position_at_end(current_block);
+            self.builder
+                .build_store(alloc_slot, raw_ptr.into_pointer_value())
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.alloc_tracker.push(alloc_slot);
+        }
         let slice_ptr = self
             .builder
             .build_pointer_cast(
@@ -240,6 +568,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .builder
             .build_int_add(start_val, i, "src_idx")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        // SAFETY: src_idx = start + i, bounded by slice length validation in the loop condition.
+        // arr_ptr is a valid array pointer from a prior allocation.
         let src_ptr = unsafe {
             self.builder
                 .build_gep(self.context.i64_type(), arr_ptr, &[src_idx], "src_ptr")
@@ -249,6 +579,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .builder
             .build_load(self.context.i64_type(), src_ptr, "elem")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        // SAFETY: dst index i is bounded by slice_len (loop condition), matching the malloc'd buffer.
         let dst_ptr = unsafe {
             self.builder
                 .build_gep(self.context.i64_type(), slice_ptr, &[i], "dst_ptr")
@@ -285,6 +616,52 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // Transform method call to function call with receiver as first arg
         // e.g., obj.method(a, b) -> TypeName_method(obj, a, b)
+
+        // Special case: Slice.len() / SliceMut.len() — fat pointer { i8*, i64 }
+        // Field 1 is the length.  Restrict to known slice types to avoid triggering on
+        // other 2-field structs such as Result or Optional.
+        if method == "len" {
+            // Check whether the receiver's resolved type is a Slice/SliceMut before
+            // generating the expression value (avoids side-effect duplication).
+            let is_slice_receiver = match receiver {
+                Expr::Ident(name) => {
+                    // Check if the variable's type name indicates a slice
+                    let type_name = self.var_struct_types.get(name).map(|s| s.as_str());
+                    matches!(type_name, Some("Slice") | Some("SliceMut"))
+                        || self.locals.get(name).is_some_and(|(_, ty)| {
+                            // Also accept if the LLVM type is { ptr, i64 } and is NOT a
+                            // known named struct (i.e. an anonymous fat-pointer struct)
+                            if let inkwell::types::BasicTypeEnum::StructType(st) = ty {
+                                let nf = st.count_fields();
+                                if nf == 2 {
+                                    // Must not be a named struct registered in generated_structs
+                                    !self.generated_structs.values().any(|known| known == st)
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        })
+                }
+                _ => false,
+            };
+
+            if is_slice_receiver {
+                let recv_val = self.generate_expr(receiver)?;
+                if recv_val.is_struct_value() {
+                    let struct_val = recv_val.into_struct_value();
+                    if struct_val.get_type().count_fields() == 2 {
+                        // Extract field 1 (the length i64)
+                        let len_val = self
+                            .builder
+                            .build_extract_value(struct_val, 1, "slice_len")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        return Ok(len_val);
+                    }
+                }
+            }
+        }
 
         // Try to resolve the struct type name from the receiver
         let mut struct_name = self.infer_struct_name(receiver).ok();
@@ -331,13 +708,26 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .or_else(|| self.module.get_function(method))
             });
 
-        // If not found, try broader search: look for any TypeName_method pattern
+        // If not found, try broader search: look for any TypeName_method pattern.
+        // When the receiver struct name is known, use it directly (deterministic).
+        // Only fall back to iterating all structs when the name is unknown.
         let fn_value = if let Some(f) = fn_value {
             f
+        } else if let Some(ref sn) = struct_name {
+            // Struct name is known — avoid non-deterministic HashMap iteration.
+            // The qualified name was already tried above; nothing more to do.
+            let tried = format!("{}_{}", sn, method);
+            return Err(CodegenError::UndefinedFunction(format!(
+                "{} (method call on {:?})",
+                tried, receiver
+            )));
         } else {
-            // Try all known struct types with this method name
+            // Struct name unknown — scan all registered structs for a matching method.
+            // Collect into a sorted Vec first to make the search order deterministic.
+            let mut candidates: Vec<String> = self.generated_structs.keys().cloned().collect();
+            candidates.sort();
             let mut found = None;
-            for sn in self.generated_structs.keys() {
+            for sn in &candidates {
                 let candidate = format!("{}_{}", sn, method);
                 if let Some(f) = self
                     .functions
@@ -393,7 +783,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         Ok(call
             .try_as_basic_value()
             .left()
-            .unwrap_or_else(|| self.context.struct_type(&[], false).const_zero().into()))
+            .unwrap_or_else(|| self.unit_value()))
     }
 
     // ========== Lambda/Closure ==========
@@ -403,6 +793,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         params: &[ast::Param],
         body: &Expr,
         captures: &[String],
+        capture_mode: ast::CaptureMode,
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // Generate unique lambda function name
         let lambda_name = format!("__lambda_{}", self.lambda_counter);
@@ -422,16 +813,33 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             captures.to_vec()
         };
 
+        let is_ref_capture = matches!(
+            capture_mode,
+            ast::CaptureMode::ByRef | ast::CaptureMode::ByMutRef
+        );
+
         let mut captured_vars: Vec<(String, BasicValueEnum<'ctx>, BasicTypeEnum<'ctx>)> =
             Vec::new();
         for cap_name in &effective_captures {
             if let Some((ptr, var_type)) = self.locals.get(cap_name) {
-                // Load the captured value
-                let val = self
-                    .builder
-                    .build_load(*var_type, *ptr, &format!("cap_{}", cap_name))
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                captured_vars.push((cap_name.clone(), val, *var_type));
+                if is_ref_capture {
+                    // ByRef/ByMutRef: pass the alloca pointer directly
+                    // The pointer value itself is the captured value
+                    captured_vars.push((
+                        cap_name.clone(),
+                        (*ptr).into(),
+                        (*var_type)
+                            .ptr_type(inkwell::AddressSpace::default())
+                            .into(),
+                    ));
+                } else {
+                    // By-value or explicit move: load and pass the value
+                    let val = self
+                        .builder
+                        .build_load(*var_type, *ptr, &format!("cap_{}", cap_name))
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    captured_vars.push((cap_name.clone(), val, *var_type));
+                }
             }
         }
 
@@ -454,14 +862,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let lambda_fn = self.module.add_function(&lambda_name, fn_type, None);
         self.lambda_functions.push(lambda_fn);
 
-        // Save current state
+        // Save current state (move instead of clone to avoid HashMap allocation).
+        // SAFETY: if generate_expr below returns Err, the entire codegen aborts,
+        // so empty self.locals after take is acceptable (never accessed post-error).
         let saved_function = self.current_function;
-        let saved_locals = self.locals.clone();
+        let saved_locals = std::mem::take(&mut self.locals);
         let saved_insert_block = self.builder.get_insert_block();
 
         // Set up lambda context
         self.current_function = Some(lambda_fn);
-        self.locals.clear();
 
         // Create entry block for lambda
         let entry = self.context.append_basic_block(lambda_fn, "entry");
@@ -470,21 +879,43 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Register captured variables as parameters in lambda scope
         let mut param_idx = 0u32;
         for (cap_name, _, cap_type) in &captured_vars {
-            let param_val = lambda_fn.get_nth_param(param_idx).unwrap();
-            let alloca = self
-                .builder
-                .build_alloca(*cap_type, &format!("__cap_{}", cap_name))
-                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            self.builder
-                .build_store(alloca, param_val)
-                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            self.locals.insert(cap_name.clone(), (alloca, *cap_type));
+            let param_val = lambda_fn.get_nth_param(param_idx).ok_or_else(|| {
+                CodegenError::InternalError(format!(
+                    "ICE: captured variable '{}' parameter index {} out of bounds for lambda",
+                    cap_name, param_idx
+                ))
+            })?;
+            if is_ref_capture {
+                // ByRef/ByMutRef: parameter is already a pointer to the outer alloca.
+                // Use it directly — build_load will read from the outer variable.
+                let ptr_val = param_val.into_pointer_value();
+                // Get the original value type from saved locals
+                let val_type = saved_locals
+                    .get(cap_name)
+                    .map(|(_, t)| *t)
+                    .unwrap_or_else(|| self.context.i64_type().into());
+                self.locals.insert(cap_name.clone(), (ptr_val, val_type));
+            } else {
+                let alloca = self
+                    .builder
+                    .build_alloca(*cap_type, &format!("__cap_{}", cap_name))
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.builder
+                    .build_store(alloca, param_val)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.locals.insert(cap_name.clone(), (alloca, *cap_type));
+            }
             param_idx += 1;
         }
 
         // Register original parameters
         for p in params {
-            let param_val = lambda_fn.get_nth_param(param_idx).unwrap();
+            let param_val = lambda_fn.get_nth_param(param_idx).ok_or_else(|| {
+                CodegenError::InternalError(format!(
+                    "ICE: lambda parameter '{}' index {} out of bounds",
+                    p.name.node, param_idx
+                ))
+            })?;
             let ty = self.ast_type_to_resolved(&p.ty.node);
             let param_type = self.type_mapper.map_type(&ty);
             let alloca = self
@@ -502,9 +933,21 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Generate lambda body
         let body_val = self.generate_expr(body)?;
 
+        // Lambda signature is fixed to `i64` return (see fn_type above) so all
+        // callsites can use `call i64 %lambda(...)`. When the body is unit
+        // (e.g. `|| puts("...")` whose last expression is a side-effect call),
+        // body_val is a non-i64 aggregate — coerce to `i64 0` so the return
+        // instruction matches the function signature.
+        let i64_ty = self.context.i64_type();
+        let ret_val: BasicValueEnum<'ctx> = if body_val.get_type() == i64_ty.into() {
+            body_val
+        } else {
+            i64_ty.const_zero().into()
+        };
+
         // Add return
         self.builder
-            .build_return(Some(&body_val))
+            .build_return(Some(&ret_val))
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
         // Restore context
@@ -606,6 +1049,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Expr::Tuple(elems) | Expr::Array(elems) => {
                 for e in elems {
                     Self::collect_idents_inner(&e.node, idents);
+                }
+            }
+            Expr::StringInterp(parts) => {
+                // Interpolated `{name}` references must be surfaced as captures.
+                for part in parts {
+                    if let vais_ast::StringInterpPart::Expr(e) = part {
+                        Self::collect_idents_inner(&e.node, idents);
+                    }
                 }
             }
             _ => {}

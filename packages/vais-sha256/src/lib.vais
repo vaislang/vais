@@ -1,0 +1,381 @@
+# SHA-256 Implementation - FIPS 180-4 Secure Hash Standard
+# Pure Vais implementation using i64 to simulate 32-bit unsigned integers
+
+# ============================================================================
+# Extern Functions
+# ============================================================================
+
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F strlen(s: i64) -> i64
+X F str_to_ptr(s: str) -> i64
+X F load_byte(ptr: i64) -> i64
+X F store_byte(ptr: i64, val: i64) -> i64
+X F load_i64(ptr: i64) -> i64
+X F store_i64(ptr: i64, val: i64) -> i64
+X F memcpy(dest: i64, src: i64, n: i64) -> i64
+X F memset(dest: i64, val: i64, n: i64) -> i64
+X F print_i64(val: i64) -> i64
+X F print_str(s: str) -> i64
+
+# ============================================================================
+# Constants
+# ============================================================================
+
+# Initial hash values (first 32 bits of fractional parts of square roots of first 8 primes)
+F sha256_h0() -> i64 { 1779033703 }  # 0x6a09e667
+F sha256_h1() -> i64 { 3144134277 }  # 0xbb67ae85
+F sha256_h2() -> i64 { 1013904242 }  # 0x3c6ef372
+F sha256_h3() -> i64 { 2773480762 }  # 0xa54ff53a
+F sha256_h4() -> i64 { 1359893119 }  # 0x510e527f
+F sha256_h5() -> i64 { 2600822924 }  # 0x9b05688c
+F sha256_h6() -> i64 { 528734635 }   # 0x1f83d9ab
+F sha256_h7() -> i64 { 1541459225 }  # 0x5be0cd19
+
+# Round constants K[0..63] (first 32 bits of fractional parts of cube roots of first 64 primes)
+F sha256_k(i: i64) -> i64 {
+    I i == 0 { R 1116352408 }    # 0x428a2f98
+    I i == 1 { R 1899447441 }    # 0x71374491
+    I i == 2 { R 3049323471 }    # 0xb5c0fbcf
+    I i == 3 { R 3921009573 }    # 0xe9b5dba5
+    I i == 4 { R 961987163 }     # 0x3956c25b
+    I i == 5 { R 1508970993 }    # 0x59f111f1
+    I i == 6 { R 2453635748 }    # 0x923f82a4
+    I i == 7 { R 2870763221 }    # 0xab1c5ed5
+    I i == 8 { R 3624381080 }    # 0xd807aa98
+    I i == 9 { R 310598401 }     # 0x12835b01
+    I i == 10 { R 607225278 }    # 0x243185be
+    I i == 11 { R 1426881987 }   # 0x550c7dc3
+    I i == 12 { R 1925078388 }   # 0x72be5d74
+    I i == 13 { R 2162078206 }   # 0x80deb1fe
+    I i == 14 { R 2614888103 }   # 0x9bdc06a7
+    I i == 15 { R 3248222580 }   # 0xc19bf174
+    I i == 16 { R 3835390401 }   # 0xe49b69c1
+    I i == 17 { R 4022224774 }   # 0xefbe4786
+    I i == 18 { R 264347078 }    # 0x0fc19dc6
+    I i == 19 { R 604807628 }    # 0x240ca1cc
+    I i == 20 { R 770255983 }    # 0x2de92c6f
+    I i == 21 { R 1249150122 }   # 0x4a7484aa
+    I i == 22 { R 1555081692 }   # 0x5cb0a9dc
+    I i == 23 { R 1996064986 }   # 0x76f988da
+    I i == 24 { R 2554220882 }   # 0x983e5152
+    I i == 25 { R 2821834349 }   # 0xa831c66d
+    I i == 26 { R 2952996808 }   # 0xb00327c8
+    I i == 27 { R 3210313671 }   # 0xbf597fc7
+    I i == 28 { R 3336571891 }   # 0xc6e00bf3
+    I i == 29 { R 3584528711 }   # 0xd5a79147
+    I i == 30 { R 113926993 }    # 0x06ca6351
+    I i == 31 { R 338241895 }    # 0x14292967
+    I i == 32 { R 666307205 }    # 0x27b70a85
+    I i == 33 { R 773529912 }    # 0x2e1b2138
+    I i == 34 { R 1294757372 }   # 0x4d2c6dfc
+    I i == 35 { R 1396182291 }   # 0x53380d13
+    I i == 36 { R 1695183700 }   # 0x650a7354
+    I i == 37 { R 1986661051 }   # 0x766a0abb
+    I i == 38 { R 2177026350 }   # 0x81c2c92e
+    I i == 39 { R 2456956037 }   # 0x92722c85
+    I i == 40 { R 2730485921 }   # 0xa2bfe8a1
+    I i == 41 { R 2820302411 }   # 0xa81a664b
+    I i == 42 { R 3259730800 }   # 0xc24b8b70
+    I i == 43 { R 3345764771 }   # 0xc76c51a3
+    I i == 44 { R 3516065817 }   # 0xd192e819
+    I i == 45 { R 3600352804 }   # 0xd6990624
+    I i == 46 { R 4094571909 }   # 0xf40e3585
+    I i == 47 { R 275423344 }    # 0x106aa070
+    I i == 48 { R 430227734 }    # 0x19a4c116
+    I i == 49 { R 506948616 }    # 0x1e376c08
+    I i == 50 { R 659060556 }    # 0x2748774c
+    I i == 51 { R 883997877 }    # 0x34b0bcb5
+    I i == 52 { R 958139571 }    # 0x391c0cb3
+    I i == 53 { R 1322822218 }   # 0x4ed8aa4a
+    I i == 54 { R 1537002063 }   # 0x5b9cca4f
+    I i == 55 { R 1747873779 }   # 0x682e6ff3
+    I i == 56 { R 1955562222 }   # 0x748f82ee
+    I i == 57 { R 2024104815 }   # 0x78a5636f
+    I i == 58 { R 2227730452 }   # 0x84c87814
+    I i == 59 { R 2361852424 }   # 0x8cc70208
+    I i == 60 { R 2428436474 }   # 0x90befffa
+    I i == 61 { R 2756734187 }   # 0xa4506ceb
+    I i == 62 { R 3204031479 }   # 0xbef9a3f7
+    I i == 63 { R 3329325298 }   # 0xc67178f2
+    R 0
+}
+
+# ============================================================================
+# Bit Operations (32-bit simulation)
+# ============================================================================
+
+# Right rotate 32-bit value
+F rotr32(x: i64, n: i64) -> i64 {
+    (((x >> n) | (x << (32 - n))) & 4294967295)
+}
+
+# SHA-256 Sigma functions
+F sha256_sigma0(x: i64) -> i64 {
+    (rotr32(x, 7) ^ rotr32(x, 18) ^ ((x >> 3) & 4294967295)) & 4294967295
+}
+
+F sha256_sigma1(x: i64) -> i64 {
+    (rotr32(x, 17) ^ rotr32(x, 19) ^ ((x >> 10) & 4294967295)) & 4294967295
+}
+
+F sha256_sum0(x: i64) -> i64 {
+    (rotr32(x, 2) ^ rotr32(x, 13) ^ rotr32(x, 22)) & 4294967295
+}
+
+F sha256_sum1(x: i64) -> i64 {
+    (rotr32(x, 6) ^ rotr32(x, 11) ^ rotr32(x, 25)) & 4294967295
+}
+
+F sha256_ch(x: i64, y: i64, z: i64) -> i64 {
+    ((x & y) ^ ((~x) & z)) & 4294967295
+}
+
+F sha256_maj(x: i64, y: i64, z: i64) -> i64 {
+    ((x & y) ^ (x & z) ^ (y & z)) & 4294967295
+}
+
+# ============================================================================
+# State Management
+# ============================================================================
+
+# State structure (in memory):
+# Offset 0-63: 8 hash values (h0-h7), 8 bytes each = 64 bytes
+# Offset 64-127: message buffer (64 bytes)
+# Offset 128-135: buffer length (i64) = 8 bytes
+# Offset 136-143: total bit count (i64) = 8 bytes
+# Total: 144 bytes
+
+F sha256_init() -> i64 {
+    state := malloc(144)
+
+    # Initialize hash values
+    store_i64(state + 0, sha256_h0())
+    store_i64(state + 8, sha256_h1())
+    store_i64(state + 16, sha256_h2())
+    store_i64(state + 24, sha256_h3())
+    store_i64(state + 32, sha256_h4())
+    store_i64(state + 40, sha256_h5())
+    store_i64(state + 48, sha256_h6())
+    store_i64(state + 56, sha256_h7())
+
+    # Initialize buffer length and bit count
+    store_i64(state + 128, 0)
+    store_i64(state + 136, 0)
+
+    state
+}
+
+# ============================================================================
+# Transform (Process one 64-byte block)
+# ============================================================================
+
+F sha256_transform(state: i64, block: i64) -> i64 {
+    # Allocate message schedule W[0..63]
+    w := malloc(512)  # 64 * 8 bytes
+
+    # Prepare message schedule (first 16 words from block, big-endian)
+    i := mut 0
+    L i < 16 {
+        b0 := load_byte(block + (i * 4)) & 255
+        b1 := load_byte(block + (i * 4) + 1) & 255
+        b2 := load_byte(block + (i * 4) + 2) & 255
+        b3 := load_byte(block + (i * 4) + 3) & 255
+        word := ((b0 << 24) | (b1 << 16) | (b2 << 8) | b3) & 4294967295
+        store_i64(w + (i * 8), word)
+        i = i + 1
+    }
+
+    # Extend message schedule
+    L i < 64 {
+        w_15 := load_i64(w + ((i - 15) * 8))
+        w_2 := load_i64(w + ((i - 2) * 8))
+        w_16 := load_i64(w + ((i - 16) * 8))
+        w_7 := load_i64(w + ((i - 7) * 8))
+
+        s0 := sha256_sigma0(w_15)
+        s1 := sha256_sigma1(w_2)
+        word := (w_16 + s0 + w_7 + s1) & 4294967295
+        store_i64(w + (i * 8), word)
+        i = i + 1
+    }
+
+    # Initialize working variables
+    a := mut load_i64(state + 0)
+    b := mut load_i64(state + 8)
+    c := mut load_i64(state + 16)
+    d := mut load_i64(state + 24)
+    e := mut load_i64(state + 32)
+    f := mut load_i64(state + 40)
+    g := mut load_i64(state + 48)
+    h := mut load_i64(state + 56)
+
+    # Main loop (64 rounds)
+    i = 0
+    L i < 64 {
+        s1 := sha256_sum1(e)
+        ch := sha256_ch(e, f, g)
+        temp1 := (h + s1 + ch + sha256_k(i) + load_i64(w + (i * 8))) & 4294967295
+        s0 := sha256_sum0(a)
+        maj := sha256_maj(a, b, c)
+        temp2 := (s0 + maj) & 4294967295
+
+        h = g
+        g = f
+        f = e
+        e = (d + temp1) & 4294967295
+        d = c
+        c = b
+        b = a
+        a = (temp1 + temp2) & 4294967295
+
+        i = i + 1
+    }
+
+    # Update hash values
+    store_i64(state + 0, (load_i64(state + 0) + a) & 4294967295)
+    store_i64(state + 8, (load_i64(state + 8) + b) & 4294967295)
+    store_i64(state + 16, (load_i64(state + 16) + c) & 4294967295)
+    store_i64(state + 24, (load_i64(state + 24) + d) & 4294967295)
+    store_i64(state + 32, (load_i64(state + 32) + e) & 4294967295)
+    store_i64(state + 40, (load_i64(state + 40) + f) & 4294967295)
+    store_i64(state + 48, (load_i64(state + 48) + g) & 4294967295)
+    store_i64(state + 56, (load_i64(state + 56) + h) & 4294967295)
+
+    free(w)
+    0
+}
+
+# ============================================================================
+# Update
+# ============================================================================
+
+F sha256_update(state: i64, data: i64, len: i64) -> i64 {
+    buffer := state + 64
+    buflen_ptr := state + 128
+    bitcount_ptr := state + 136
+
+    buflen := mut load_i64(buflen_ptr)
+    bitcount := mut load_i64(bitcount_ptr)
+
+    idx := mut 0
+    L idx < len {
+        # Add byte to buffer
+        store_byte(buffer + buflen, load_byte(data + idx))
+        buflen = buflen + 1
+        bitcount = bitcount + 8
+
+        # Process block if buffer is full
+        I buflen == 64 {
+            sha256_transform(state, buffer)
+            buflen = 0
+        }
+
+        idx = idx + 1
+    }
+
+    store_i64(buflen_ptr, buflen)
+    store_i64(bitcount_ptr, bitcount)
+    0
+}
+
+# ============================================================================
+# Finalize
+# ============================================================================
+
+F sha256_finalize(state: i64) -> i64 {
+    buffer := state + 64
+    buflen_ptr := state + 128
+    bitcount_ptr := state + 136
+
+    buflen := mut load_i64(buflen_ptr)
+    bitcount := load_i64(bitcount_ptr)
+
+    # Append padding bit (0x80)
+    store_byte(buffer + buflen, 128)
+    buflen = buflen + 1
+
+    # Pad with zeros until 56 bytes (leaving 8 bytes for length)
+    I buflen > 56 {
+        # Fill rest of block with zeros
+        L buflen < 64 {
+            store_byte(buffer + buflen, 0)
+            buflen = buflen + 1
+        }
+        sha256_transform(state, buffer)
+        buflen = 0
+    }
+
+    # Pad to 56 bytes
+    L buflen < 56 {
+        store_byte(buffer + buflen, 0)
+        buflen = buflen + 1
+    }
+
+    # Append length in bits (big-endian 64-bit)
+    # For simplicity, we only support messages < 2^32 bits (512 MB)
+    # So high 32 bits are always 0
+    store_byte(buffer + 56, 0)
+    store_byte(buffer + 57, 0)
+    store_byte(buffer + 58, 0)
+    store_byte(buffer + 59, 0)
+    store_byte(buffer + 60, (bitcount >> 24) & 255)
+    store_byte(buffer + 61, (bitcount >> 16) & 255)
+    store_byte(buffer + 62, (bitcount >> 8) & 255)
+    store_byte(buffer + 63, bitcount & 255)
+
+    sha256_transform(state, buffer)
+
+    # Extract hash to 32-byte buffer (big-endian)
+    hash := malloc(32)
+    i := mut 0
+    L i < 8 {
+        h := load_i64(state + (i * 8))
+        store_byte(hash + (i * 4), (h >> 24) & 255)
+        store_byte(hash + (i * 4) + 1, (h >> 16) & 255)
+        store_byte(hash + (i * 4) + 2, (h >> 8) & 255)
+        store_byte(hash + (i * 4) + 3, h & 255)
+        i = i + 1
+    }
+
+    hash
+}
+
+# ============================================================================
+# Convenience Function
+# ============================================================================
+
+F sha256_hash(data: i64, len: i64) -> i64 {
+    state := sha256_init()
+    sha256_update(state, data, len)
+    hash := sha256_finalize(state)
+    free(state)
+    hash
+}
+
+# ============================================================================
+# Hex Conversion
+# ============================================================================
+
+F sha256_hex(hash: i64) -> i64 {
+    # Allocate 65 bytes (64 hex chars + null terminator)
+    hex := malloc(65)
+
+    i := mut 0
+    L i < 32 {
+        byte := load_byte(hash + i) & 255
+        hi := (byte >> 4) & 15
+        lo := byte & 15
+
+        # Convert to hex chars
+        hi_char := I hi < 10 { hi + 48 } E { hi + 87 }  # '0'-'9' or 'a'-'f'
+        lo_char := I lo < 10 { lo + 48 } E { lo + 87 }
+
+        store_byte(hex + (i * 2), hi_char)
+        store_byte(hex + (i * 2) + 1, lo_char)
+        i = i + 1
+    }
+
+    store_byte(hex + 64, 0)  # Null terminator
+    hex
+}

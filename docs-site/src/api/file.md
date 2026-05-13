@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/file
+use std/file
 ```
 
 ## Constants
@@ -23,19 +23,19 @@ U std/file
 ### File
 
 ```vais
-S File { handle: i64, mode: i64 }
+struct File { handle: i64, mode: i64 }
 ```
 
 ### MappedFile
 
 ```vais
-S MappedFile { addr: i64, len: i64 }
+struct MappedFile { addr: i64, len: i64 }
 ```
 
 ### FileLock
 
 ```vais
-S FileLock { fd: i64, locked: i64 }
+struct FileLock { fd: i64, locked: i64 }
 ```
 
 ## File Methods
@@ -110,9 +110,9 @@ S FileLock { fd: i64, locked: i64 }
 ## Usage
 
 ```vais
-U std/file
+use std/file
 
-F main() -> i64 {
+fn main() -> i64 {
     f := File.open_write("output.txt")
     f.write_str("Hello, file!")
     f.close()

@@ -276,10 +276,10 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - playground.vais.dev
+    - playground.vaislang.dev
     secretName: vais-playground-tls
   rules:
-  - host: playground.vais.dev
+  - host: playground.vaislang.dev
     http:
       paths:
       - path: /
@@ -421,8 +421,8 @@ window.addEventListener('load', () => {
 Create `.env.production`:
 
 ```env
-VITE_API_URL=https://api.vais.dev
-VITE_WASM_URL=https://cdn.vais.dev/wasm
+VITE_API_URL=https://api.vaislang.dev
+VITE_WASM_URL=https://cdn.vaislang.dev/wasm
 VITE_ANALYTICS_ID=G-XXXXXXXXXX
 ```
 
@@ -431,8 +431,8 @@ VITE_ANALYTICS_ID=G-XXXXXXXXXX
 Create `.env.staging`:
 
 ```env
-VITE_API_URL=https://staging-api.vais.dev
-VITE_WASM_URL=https://staging-cdn.vais.dev/wasm
+VITE_API_URL=https://staging-api.vaislang.dev
+VITE_WASM_URL=https://staging-cdn.vaislang.dev/wasm
 VITE_ANALYTICS_ID=G-YYYYYYYYYY
 ```
 
@@ -494,7 +494,7 @@ Add to nginx config or HTML:
   style-src 'self' 'unsafe-inline';
   img-src 'self' data: https:;
   font-src 'self' data:;
-  connect-src 'self' https://api.vais.dev;
+  connect-src 'self' https://api.vaislang.dev;
   worker-src 'self' blob:;
   child-src 'self' blob:;
 ">

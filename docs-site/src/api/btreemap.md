@@ -5,8 +5,8 @@
 ## Import
 
 ```vais
-U std/btreemap
-U std/option
+use std/btreemap
+use std/option
 ```
 
 ## Overview
@@ -146,9 +146,9 @@ Each B-tree node is 96 bytes:
 ### Basic Usage
 
 ```vais
-U std/btreemap
+use std/btreemap
 
-F main() -> i64 {
+fn main() -> i64 {
     # Create new map
     map := btreemap_new()
 
@@ -177,10 +177,10 @@ F main() -> i64 {
 ### Using Option for Error Handling
 
 ```vais
-U std/btreemap
-U std/option
+use std/btreemap
+use std/option
 
-F main() -> i64 {
+fn main() -> i64 {
     map := btreemap_new()
 
     btreemap_put(map, 42, 100)
@@ -188,7 +188,7 @@ F main() -> i64 {
     # Use Option-based get
     opt := btreemap_get_opt(map, 42)
 
-    M opt {
+    match opt {
         Some(v) => {
             # Key found, v is the value
             v  # 100
@@ -204,9 +204,9 @@ F main() -> i64 {
 ### Min/Max Keys
 
 ```vais
-U std/btreemap
+use std/btreemap
 
-F main() -> i64 {
+fn main() -> i64 {
     map := btreemap_new()
 
     btreemap_put(map, 10, 100)
@@ -226,9 +226,9 @@ F main() -> i64 {
 ### Update Existing Keys
 
 ```vais
-U std/btreemap
+use std/btreemap
 
-F main() -> i64 {
+fn main() -> i64 {
     map := btreemap_new()
 
     # Insert
@@ -250,17 +250,17 @@ F main() -> i64 {
 ### Iteration with Callback
 
 ```vais
-U std/btreemap
+use std/btreemap
 
 # Callback function receives (key, value, context)
 # Returns 0 to continue, 1 to stop
-F print_entry(key: i64, value: i64, context: i64) -> i64 {
+fn print_entry(key: i64, value: i64, context: i64) -> i64 {
     # Print or process key-value pair
     # Note: actual implementation would need function pointer support
     0  # Continue
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     map := btreemap_new()
 
     btreemap_put(map, 3, 30)
@@ -278,9 +278,9 @@ F main() -> i64 {
 ### Building a Sorted Map
 
 ```vais
-U std/btreemap
+use std/btreemap
 
-F main() -> i64 {
+fn main() -> i64 {
     map := btreemap_new()
 
     # Insert in random order
@@ -305,18 +305,18 @@ F main() -> i64 {
 ### Checking for Keys Before Access
 
 ```vais
-U std/btreemap
+use std/btreemap
 
-F safe_get(map: i64, key: i64) -> i64 {
+fn safe_get(map: i64, key: i64) -> i64 {
     I btreemap_contains(map, key) == 1 {
         btreemap_get(map, key)
-    } E {
+    } else {
         # Return default value
         -1
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     map := btreemap_new()
     btreemap_put(map, 5, 50)
 
@@ -331,9 +331,9 @@ F main() -> i64 {
 ### Memory Management
 
 ```vais
-U std/btreemap
+use std/btreemap
 
-F main() -> i64 {
+fn main() -> i64 {
     # Create map
     map := btreemap_new()
 

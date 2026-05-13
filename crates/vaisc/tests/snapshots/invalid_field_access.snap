@@ -1,1 +1,1 @@
-Type error: NoSuchField { field: "invalid_field", type_name: "User", suggestion: None, span: None }
+Type error: NoSuchField { field: "invalid_field", type_name: "User", suggestion: None, span: Some(Span { start: 99, end: 112 }) }

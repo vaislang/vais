@@ -1,20 +1,20 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-i18n-title="meta.title">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vais - AI-Optimized Systems Programming Language</title>
-  <meta name="description" content="Vais is a token-efficient systems programming language designed for AI code generation with native LLVM performance.">
+  <meta name="description" content="Vais is a systems programming language designed for AI code generation with native LLVM performance and evidence-scoped public claims.">
   <meta property="og:title" content="Vais - AI-Optimized Systems Programming Language">
-  <meta property="og:description" content="Token-efficient syntax, LLVM backend, type inference. Write less tokens, get native performance.">
+  <meta property="og:description" content="Canonical syntax, LLVM backend, type inference, and evidence-scoped public claims. Write clear Vais, get native performance.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="/logo-icon.png">
-  <meta property="og:url" content="https://vais.dev/">
+  <meta property="og:url" content="https://vaislang.dev/">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Vais - AI-Optimized Systems Programming Language">
-  <meta name="twitter:description" content="Token-efficient syntax, LLVM backend, type inference. Write less tokens, get native performance.">
+  <meta name="twitter:description" content="Canonical syntax, LLVM backend, type inference, and evidence-scoped public claims. Write clear Vais, get native performance.">
   <meta name="twitter:image" content="/logo-icon.png">
-  <link rel="canonical" href="https://vais.dev/">
+  <link rel="canonical" href="https://vaislang.dev/">
   <link rel="icon" type="image/png" href="/logo-icon.png">
   <link rel="apple-touch-icon" href="/logo-icon.png">
   <link rel="stylesheet" href="/src/styles.css">
@@ -32,15 +32,23 @@
         <span class="logo-text">Vais</span>
       </a>
       <div class="nav-links" id="nav-links">
-        <a href="#features">Features</a>
-        <a href="#compare">Compare</a>
-        <a href="#performance">Performance</a>
-        <a href="#playground">Playground</a>
-        <a href="/docs/" class="nav-link-docs">Docs</a>
-        <a href="/blog/" class="nav-link-blog">Blog</a>
+        <a href="#compare" data-i18n="nav.compare">Compare</a>
+        <a href="#performance" data-i18n="nav.performance">Performance</a>
+        <a href="#features" data-i18n="nav.features">Features</a>
+        <a href="#playground" data-i18n="nav.playground">Playground</a>
+        <a href="/vaisx/" class="nav-link-vaisx" data-i18n="nav.vaisx">VaisX</a>
+        <a href="/ecosystem/" class="nav-link-ecosystem">Ecosystem</a>
+        <a href="/docs/" class="nav-link-docs" data-i18n="nav.docs">Docs</a>
+        <a href="/blog/" class="nav-link-blog" data-i18n="nav.blog">Blog</a>
         <a href="https://github.com/vaislang/vais" class="nav-link-github" target="_blank" rel="noopener" aria-label="GitHub repository">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
         </a>
+        <select id="lang-selector" aria-label="Language" style="margin-left: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.375rem; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: var(--text); font-size: 0.9rem; cursor: pointer;">
+          <option value="en">EN</option>
+          <option value="ko">한국어</option>
+          <option value="ja">日本語</option>
+          <option value="zh">中文</option>
+        </select>
       </div>
       <button class="nav-mobile-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-links">
         <span></span><span></span><span></span>
@@ -53,19 +61,18 @@
     <div class="hero-bg"></div>
     <div class="container">
       <div class="hero-content">
-        <div class="hero-badge">v1.0.0 — Production Ready</div>
-        <h1 class="hero-title">
-          Write <span class="gradient-text">fewer tokens</span>,<br>
+        <div class="hero-badge" data-i18n="hero.badge">Certified Core + Scoped Evidence</div>
+        <h1 class="hero-title" data-i18n="hero.title" data-i18n-html>
+          Write <span class="gradient-text">clear Vais</span>,<br>
           get <span class="gradient-text">native performance</span>
         </h1>
-        <p class="hero-subtitle">
-          Vais (Vibe AI Language for Systems) is a systems programming language optimized for AI code generation.
-          Single-character keywords, expression-oriented syntax, and LLVM-powered native speed.
+        <p class="hero-subtitle" data-i18n="hero.subtitle">
+          Vais (Vibe AI Language for Systems) is a systems programming language optimized for AI code generation. The current public baseline separates main-reproducible gates, main-fixture schema gates, and integration evidence pending aggregate main port.
         </p>
         <div class="hero-actions">
-          <a href="#playground" class="btn btn-primary">Try in Browser</a>
+          <a href="#playground" class="btn btn-primary" data-i18n="hero.tryBrowser">Try in Browser</a>
           <a href="#install" class="btn btn-secondary">
-            <code>brew install vais</code>
+            <code data-i18n="hero.install">brew install vais</code>
           </a>
         </div>
       </div>
@@ -81,30 +88,30 @@
               <button class="code-tab" data-tab="2">match.vais</button>
             </div>
           </div>
-          <pre class="code-body" aria-label="Vais code example"><code class="code-panel active" data-panel="0"><span class="kw">F</span> <span class="fn">fib</span>(<span class="param">n</span>: <span class="type">i64</span>) -> <span class="type">i64</span> {
+          <pre class="code-body" aria-label="Vais code example"><code class="code-panel active" data-panel="0"><span class="kw">fn</span> <span class="fn">fib</span>(<span class="param">n</span>: <span class="type">i64</span>) -> <span class="type">i64</span> {
   <span class="kw">I</span> n &lt;= <span class="num">1</span> { n }
-  <span class="kw">E</span> { <span class="self">@</span>(n - <span class="num">1</span>) + <span class="self">@</span>(n - <span class="num">2</span>) }
+  <span class="kw">else</span> { <span class="self">@</span>(n - <span class="num">1</span>) + <span class="self">@</span>(n - <span class="num">2</span>) }
 }
 
-<span class="kw">F</span> <span class="fn">main</span>() {
+<span class="kw">fn</span> <span class="fn">main</span>() {
   result <span class="op">:=</span> <span class="fn">fib</span>(<span class="num">10</span>)
-  <span class="fn">puts</span>(<span class="str">"fib(10) = {}"</span>, result)
-}</code><code class="code-panel" data-panel="1"><span class="kw">S</span> <span class="type">Vec2</span> { x: <span class="type">f64</span>, y: <span class="type">f64</span> }
+  <span class="fn">puts</span>(<span class="str">"fib(10) = ~{result}"</span>)
+}</code><code class="code-panel" data-panel="1"><span class="kw">struct</span> <span class="type">Vec2</span> { x: <span class="type">f64</span>, y: <span class="type">f64</span> }
 
-<span class="kw">F</span> <span class="fn">len</span>(v: <span class="type">Vec2</span>) -> <span class="type">f64</span> {
+<span class="kw">fn</span> <span class="fn">len</span>(v: <span class="type">Vec2</span>) -> <span class="type">f64</span> {
   <span class="fn">sqrt</span>(v.x * v.x + v.y * v.y)
 }
 
-<span class="kw">F</span> <span class="fn">main</span>() {
+<span class="kw">fn</span> <span class="fn">main</span>() {
   p <span class="op">:=</span> <span class="type">Vec2</span> { x: <span class="num">3.0</span>, y: <span class="num">4.0</span> }
-  <span class="fn">puts</span>(<span class="str">"len = {}"</span>, <span class="fn">len</span>(p))
-}</code><code class="code-panel" data-panel="2"><span class="kw">E</span> <span class="type">Shape</span> {
+  <span class="fn">puts</span>(<span class="str">"len = ~{<span class="fn">len</span>(p)}"</span>)
+}</code><code class="code-panel" data-panel="2"><span class="kw">enum</span> <span class="type">Shape</span> {
   Circle(<span class="type">f64</span>),
   Rect(<span class="type">f64</span>, <span class="type">f64</span>),
 }
 
-<span class="kw">F</span> <span class="fn">area</span>(s: <span class="type">Shape</span>) -> <span class="type">f64</span> {
-  <span class="kw">M</span> s {
+<span class="kw">fn</span> <span class="fn">area</span>(s: <span class="type">Shape</span>) -> <span class="type">f64</span> {
+  <span class="kw">match</span> s {
     Circle(r) => <span class="num">3.14159</span> * r * r,
     Rect(w, h) => w * h,
   }
@@ -117,41 +124,46 @@
   <!-- Token Comparison Section -->
   <section class="compare" id="compare">
     <div class="container">
-      <h2 class="section-title">Token Efficiency Matters</h2>
-      <p class="section-subtitle">
-        AI models pay per token. Vais uses <strong>~10% fewer tokens</strong> than Rust
-        for equivalent programs — single-char keywords and implicit returns add up across large codebases.
+      <h2 class="section-title" data-i18n="compare.title">Canonical Syntax, Evidence-Scoped Claims</h2>
+      <p class="section-subtitle" data-i18n="compare.subtitle" data-i18n-html>
+        Step 19 retired the old single-letter keyword forms. Public claims now distinguish main-reproducible gates, schema gates ported to main fixtures, and integration evidence that is pending aggregate main port.
       </p>
       <div class="compare-grid">
-        <!-- Vais -->
+        <!-- Vais (always visible) -->
         <div class="compare-card compare-card-vais">
           <div class="compare-header">
             <span class="compare-lang">Vais</span>
-            <span class="compare-tokens">88 tokens</span>
+            <span class="compare-tokens">canonical</span>
           </div>
-          <pre class="compare-code"><code><span class="kw">E</span> <span class="type">Shape</span> { Circle(<span class="type">f64</span>), Rect(<span class="type">f64</span>, <span class="type">f64</span>) }
+          <pre class="compare-code"><code><span class="kw">enum</span> <span class="type">Shape</span> { Circle(<span class="type">f64</span>), Rect(<span class="type">f64</span>, <span class="type">f64</span>) }
 
-<span class="kw">F</span> <span class="fn">area</span>(s: <span class="type">Shape</span>) -> <span class="type">f64</span> {
-  <span class="kw">M</span> s {
+<span class="kw">fn</span> <span class="fn">area</span>(s: <span class="type">Shape</span>) -> <span class="type">f64</span> {
+  <span class="kw">match</span> s {
     Circle(r) => <span class="num">3.14</span> * r * r,
     Rect(w, h) => w * h,
   }
 }
 
-<span class="kw">F</span> <span class="fn">classify</span>(s: <span class="type">Shape</span>) -> <span class="type">str</span> {
+<span class="kw">fn</span> <span class="fn">classify</span>(s: <span class="type">Shape</span>) -> <span class="type">str</span> {
   a <span class="op">:=</span> <span class="fn">area</span>(s)
   <span class="kw">I</span> a > <span class="num">100.0</span> { <span class="str">"large"</span> }
-  <span class="kw">E</span> <span class="kw">I</span> a > <span class="num">10.0</span> { <span class="str">"medium"</span> }
-  <span class="kw">E</span> { <span class="str">"small"</span> }
+  <span class="kw">else</span> <span class="kw">I</span> a > <span class="num">10.0</span> { <span class="str">"medium"</span> }
+  <span class="kw">else</span> { <span class="str">"small"</span> }
 }</code></pre>
         </div>
-        <!-- Rust -->
-        <div class="compare-card">
+        <!-- Right side: tabbed language comparison -->
+        <div class="compare-card compare-card-tabbed">
           <div class="compare-header">
-            <span class="compare-lang">Rust</span>
-            <span class="compare-tokens">97 tokens</span>
+            <div class="compare-tabs">
+              <button class="compare-tab active" data-lang="rust">Rust</button>
+              <button class="compare-tab" data-lang="python">Python</button>
+              <button class="compare-tab" data-lang="go">Go</button>
+              <button class="compare-tab" data-lang="c">C</button>
+            </div>
+            <span class="compare-tokens" id="compare-token-count">reference</span>
           </div>
-          <pre class="compare-code"><code><span class="kw">enum</span> <span class="type">Shape</span> { Circle(<span class="type">f64</span>), Rect(<span class="type">f64</span>, <span class="type">f64</span>) }
+          <!-- Rust -->
+          <pre class="compare-code compare-lang-panel active" data-lang="rust"><code><span class="kw">enum</span> <span class="type">Shape</span> { Circle(<span class="type">f64</span>), Rect(<span class="type">f64</span>, <span class="type">f64</span>) }
 
 <span class="kw">fn</span> <span class="fn">area</span>(s: &amp;<span class="type">Shape</span>) -&gt; <span class="type">f64</span> {
     <span class="kw">match</span> s {
@@ -166,28 +178,109 @@
     <span class="kw">else</span> <span class="kw">if</span> a &gt; <span class="num">10.0</span> { <span class="str">"medium"</span> }
     <span class="kw">else</span> { <span class="str">"small"</span> }
 }</code></pre>
+          <!-- Python -->
+          <pre class="compare-code compare-lang-panel" data-lang="python"><code><span class="kw">from</span> <span class="type">enum</span> <span class="kw">import</span> Enum
+<span class="kw">from</span> <span class="type">dataclasses</span> <span class="kw">import</span> dataclass
+<span class="kw">import</span> math
+
+<span class="kw">class</span> <span class="type">Circle</span>:
+    radius: <span class="type">float</span>
+
+<span class="kw">class</span> <span class="type">Rect</span>:
+    width: <span class="type">float</span>; height: <span class="type">float</span>
+
+<span class="kw">def</span> <span class="fn">area</span>(s) -&gt; <span class="type">float</span>:
+    <span class="kw">match</span> s:
+        <span class="kw">case</span> Circle(r): <span class="kw">return</span> <span class="num">3.14</span> * r * r
+        <span class="kw">case</span> Rect(w, h): <span class="kw">return</span> w * h
+
+<span class="kw">def</span> <span class="fn">classify</span>(s) -&gt; <span class="type">str</span>:
+    a = <span class="fn">area</span>(s)
+    <span class="kw">if</span> a &gt; <span class="num">100.0</span>: <span class="kw">return</span> <span class="str">"large"</span>
+    <span class="kw">elif</span> a &gt; <span class="num">10.0</span>: <span class="kw">return</span> <span class="str">"medium"</span>
+    <span class="kw">else</span>: <span class="kw">return</span> <span class="str">"small"</span></code></pre>
+          <!-- Go -->
+          <pre class="compare-code compare-lang-panel" data-lang="go"><code><span class="kw">type</span> <span class="type">Shape</span> <span class="kw">interface</span> { <span class="fn">area</span>() <span class="type">float64</span> }
+
+<span class="kw">type</span> <span class="type">Circle</span> <span class="kw">struct</span> { R <span class="type">float64</span> }
+<span class="kw">type</span> <span class="type">Rect</span> <span class="kw">struct</span>   { W, H <span class="type">float64</span> }
+
+<span class="kw">func</span> (c <span class="type">Circle</span>) <span class="fn">area</span>() <span class="type">float64</span> {
+    <span class="kw">return</span> <span class="num">3.14</span> * c.R * c.R
+}
+<span class="kw">func</span> (r <span class="type">Rect</span>) <span class="fn">area</span>() <span class="type">float64</span> {
+    <span class="kw">return</span> r.W * r.H
+}
+
+<span class="kw">func</span> <span class="fn">classify</span>(s <span class="type">Shape</span>) <span class="type">string</span> {
+    a := s.<span class="fn">area</span>()
+    <span class="kw">if</span> a &gt; <span class="num">100.0</span> { <span class="kw">return</span> <span class="str">"large"</span> }
+    <span class="kw">if</span> a &gt; <span class="num">10.0</span> { <span class="kw">return</span> <span class="str">"medium"</span> }
+    <span class="kw">return</span> <span class="str">"small"</span>
+}</code></pre>
+          <!-- C -->
+          <pre class="compare-code compare-lang-panel" data-lang="c"><code><span class="kw">typedef enum</span> { CIRCLE, RECT } <span class="type">ShapeTag</span>;
+<span class="kw">typedef struct</span> {
+    <span class="type">ShapeTag</span> tag;
+    <span class="kw">union</span> { <span class="type">double</span> r; <span class="kw">struct</span> { <span class="type">double</span> w, h; }; };
+} <span class="type">Shape</span>;
+
+<span class="type">double</span> <span class="fn">area</span>(<span class="type">Shape</span> s) {
+    <span class="kw">switch</span> (s.tag) {
+        <span class="kw">case</span> CIRCLE: <span class="kw">return</span> <span class="num">3.14</span> * s.r * s.r;
+        <span class="kw">case</span> RECT:   <span class="kw">return</span> s.w * s.h;
+    }
+}
+
+<span class="kw">const</span> <span class="type">char</span>* <span class="fn">classify</span>(<span class="type">Shape</span> s) {
+    <span class="type">double</span> a = <span class="fn">area</span>(s);
+    <span class="kw">if</span> (a &gt; <span class="num">100.0</span>) <span class="kw">return</span> <span class="str">"large"</span>;
+    <span class="kw">if</span> (a &gt; <span class="num">10.0</span>)  <span class="kw">return</span> <span class="str">"medium"</span>;
+    <span class="kw">return</span> <span class="str">"small"</span>;
+}</code></pre>
         </div>
       </div>
       <div class="compare-bar-section">
-        <h3 class="compare-bar-title">Token Count Comparison</h3>
+        <h3 class="compare-bar-title" data-i18n="compare.barTitle">Evidence Snapshot — 2026-05-13</h3>
         <div class="compare-bars">
           <div class="bar-item">
-            <span class="bar-label">Vais</span>
+            <span class="bar-label">Integrity evidence</span>
             <div class="bar-track">
-              <div class="bar-fill bar-vais" style="width: 91%"></div>
+              <div class="bar-fill bar-vais" style="width: 100%"></div>
             </div>
-            <span class="bar-value">88</span>
+            <span class="bar-value">OK</span>
           </div>
           <div class="bar-item">
-            <span class="bar-label">Rust</span>
+            <span class="bar-label">VaisDB runtime evidence</span>
+            <div class="bar-track">
+              <div class="bar-fill bar-python" style="width: 100%"></div>
+            </div>
+            <span class="bar-value">34/34</span>
+          </div>
+          <div class="bar-item">
+            <span class="bar-label">Server runtime evidence</span>
+            <div class="bar-track">
+              <div class="bar-fill bar-go" style="width: 100%"></div>
+            </div>
+            <span class="bar-value">20/20</span>
+          </div>
+          <div class="bar-item">
+            <span class="bar-label">Web full-build evidence</span>
             <div class="bar-track">
               <div class="bar-fill bar-rust" style="width: 100%"></div>
             </div>
-            <span class="bar-value">97</span>
+            <span class="bar-value">24/24</span>
+          </div>
+          <div class="bar-item">
+            <span class="bar-label">Product schema evidence</span>
+            <div class="bar-track">
+              <div class="bar-fill bar-c" style="width: 100%"></div>
+            </div>
+            <span class="bar-value">9/9</span>
           </div>
         </div>
-        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.75rem; text-align: center;">
-          Savings grow with codebase size — <code>E</code> vs <code>enum</code>, <code>M</code> vs <code>match</code>, <code>I</code>/<code>E</code> vs <code>if</code>/<code>else</code>, no <code>let</code>/<code>;</code>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.75rem; text-align: center;" data-i18n="compare.barNote" data-i18n-html>
+          Schema gates are now main-fixture/local-workspace reproducible: cross-package schema 15/15 and shared-schema product evidence 9/9. Runtime and package counts remain integration evidence from the gate branch; the aggregate runtime gate is pending main port.
         </p>
       </div>
     </div>
@@ -196,59 +289,59 @@
   <!-- Performance Section -->
   <section class="compare" id="performance">
     <div class="container">
-      <h2 class="section-title">Native Performance</h2>
-      <p class="section-subtitle">
+      <h2 class="section-title" data-i18n="performance.title">Native Performance</h2>
+      <p class="section-subtitle" data-i18n="performance.subtitle">
         Vais compiles to optimized LLVM IR — on par with C and Rust at runtime, with fast compilation.
       </p>
       <div class="compare-bar-section">
-        <h3 class="compare-bar-title">Runtime — Fibonacci(35)</h3>
+        <h3 class="compare-bar-title" data-i18n="performance.runtimeTitle">Runtime — Fibonacci(35)</h3>
         <div class="compare-bars">
           <div class="bar-item">
             <span class="bar-label">C</span>
             <div class="bar-track">
-              <div class="bar-fill bar-rust" style="width: 92%"></div>
+              <div class="bar-fill bar-c" style="width: 94%"></div>
             </div>
-            <span class="bar-value">44ms</span>
+            <span class="bar-value">32ms</span>
           </div>
           <div class="bar-item">
             <span class="bar-label">Rust</span>
             <div class="bar-track">
-              <div class="bar-fill bar-rust" style="width: 94%"></div>
+              <div class="bar-fill bar-rust" style="width: 97%"></div>
             </div>
-            <span class="bar-value">45ms</span>
+            <span class="bar-value">33ms</span>
           </div>
           <div class="bar-item">
             <span class="bar-label">Vais</span>
             <div class="bar-track">
               <div class="bar-fill bar-vais" style="width: 100%"></div>
             </div>
-            <span class="bar-value">48ms</span>
+            <span class="bar-value">34ms</span>
           </div>
         </div>
       </div>
       <div class="compare-bar-section" style="margin-top: 2rem;">
-        <h3 class="compare-bar-title">Compile Speed — Single File</h3>
+        <h3 class="compare-bar-title" data-i18n="performance.compileTitle">Compile Speed — Single File</h3>
         <div class="compare-bars">
           <div class="bar-item">
             <span class="bar-label">Vais</span>
             <div class="bar-track">
               <div class="bar-fill bar-vais" style="width: 5%"></div>
             </div>
-            <span class="bar-value">6.5ms</span>
-          </div>
-          <div class="bar-item">
-            <span class="bar-label">C (clang)</span>
-            <div class="bar-track">
-              <div class="bar-fill bar-rust" style="width: 45%"></div>
-            </div>
-            <span class="bar-value">55ms</span>
+            <span class="bar-value">6.4ms</span>
           </div>
           <div class="bar-item">
             <span class="bar-label">Go</span>
             <div class="bar-track">
-              <div class="bar-fill bar-rust" style="width: 43%"></div>
+              <div class="bar-fill bar-go" style="width: 43%"></div>
             </div>
             <span class="bar-value">52ms</span>
+          </div>
+          <div class="bar-item">
+            <span class="bar-label">C (clang)</span>
+            <div class="bar-track">
+              <div class="bar-fill bar-c" style="width: 45%"></div>
+            </div>
+            <span class="bar-value">55ms</span>
           </div>
           <div class="bar-item">
             <span class="bar-label">Rust</span>
@@ -258,8 +351,8 @@
             <span class="bar-value">122ms</span>
           </div>
         </div>
-        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.75rem; text-align: center;">
-          Vais <code>--emit-ir</code> vs full compilation. 8.5x faster than C, 19x faster than Rust.
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.75rem; text-align: center;" data-i18n="performance.compileNote" data-i18n-html>
+          Vais <code>--emit-ir</code> vs full compilation. 8.6x faster than C, 19x faster than Rust. Updated 2026-02-11.
         </p>
       </div>
     </div>
@@ -268,56 +361,125 @@
   <!-- Features Section -->
   <section class="features" id="features">
     <div class="container">
-      <h2 class="section-title">Why Vais?</h2>
-      <p class="section-subtitle">
+      <h2 class="section-title" data-i18n="features.title">Why Vais?</h2>
+      <p class="section-subtitle" data-i18n="features.subtitle">
         Designed from the ground up for AI-assisted development without sacrificing performance.
       </p>
       <div class="features-grid">
         <div class="feature-card">
-          <div class="feature-icon">V</div>
-          <h3>Single-Char Keywords</h3>
-          <p><code>F</code> for function, <code>S</code> for struct, <code>I</code>/<code>E</code> for if/else, <code>L</code> for loop, <code>M</code> for match. Minimal tokens, maximum clarity.</p>
+          <div class="feature-icon">fn</div>
+          <h3 data-i18n="features.singleChar.title">Canonical Keywords</h3>
+          <p data-i18n="features.singleChar.description" data-i18n-html><code>fn</code>, <code>struct</code>, <code>enum</code>, <code>else</code>, <code>match</code>, <code>return</code>, <code>use</code>, and <code>pub</code> are canonical. Retired single-letter forms are no longer accepted.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">@</div>
-          <h3>Self-Recursion Operator</h3>
-          <p>The <code>@</code> operator calls the current function recursively. No need to repeat the function name — AI-friendly and concise.</p>
+          <h3 data-i18n="features.selfRecursion.title">Self-Recursion Operator</h3>
+          <p data-i18n="features.selfRecursion.description" data-i18n-html>The <code>@</code> operator calls the current function recursively. No need to repeat the function name — AI-friendly and concise.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">{}</div>
-          <h3>Everything is an Expression</h3>
-          <p>If/else, match, and blocks all return values. No <code>return</code> keyword needed for the last expression. Functional and ergonomic.</p>
+          <h3 data-i18n="features.expression.title">Everything is an Expression</h3>
+          <p data-i18n="features.expression.description" data-i18n-html>If/else, match, and blocks all return values. No <code>return</code> keyword needed for the last expression. Functional and ergonomic.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">⚡</div>
-          <h3>LLVM Native Speed</h3>
-          <p>Compiles to optimized native code via LLVM. Get C-level performance with high-level ergonomics. Supports LTO and PGO.</p>
+          <h3 data-i18n="features.llvm.title">LLVM Native Speed</h3>
+          <p data-i18n="features.llvm.description" data-i18n-html>Compiles promoted native paths through LLVM. Broader optimization and backend claims are tracked by explicit certification gates.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">T</div>
-          <h3>Type Inference</h3>
-          <p>Bidirectional type checking infers types automatically. Write <code>x := 42</code> instead of explicit type annotations everywhere.</p>
+          <h3 data-i18n="features.inference.title">Type Inference</h3>
+          <p data-i18n="features.inference.description" data-i18n-html>Bidirectional type checking infers types automatically. Write <code>x := 42</code> instead of explicit type annotations everywhere.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🔧</div>
-          <h3>Full Toolchain</h3>
-          <p>LSP server, formatter, debugger, REPL, package manager, and IDE plugins for VSCode and IntelliJ. Production-ready tooling.</p>
+          <h3 data-i18n="features.toolchain.title">Tooling Workbench</h3>
+          <p data-i18n="features.toolchain.description" data-i18n-html>LSP server, formatter, debugger, REPL, package manager, and IDE plugins exist as implementation surfaces. Support level depends on named gates.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🌐</div>
-          <h3>Multi-Target Output</h3>
-          <p>Compile to native binaries, WebAssembly, or JavaScript. Run Vais code in the browser with full WASM interop and JS codegen.</p>
+          <h3 data-i18n="features.multiTarget.title">Native First, Experimental Extra Targets</h3>
+          <p data-i18n="features.multiTarget.description" data-i18n-html>The promoted path is native codegen. JavaScript, WebAssembly, and browser execution paths remain experimental unless a page names a gate.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🔄</div>
-          <h3>Incremental Compilation</h3>
-          <p>Per-module caching with parallel codegen. Recompile only what changed — 30K-line projects rebuild in under 100ms.</p>
+          <h3 data-i18n="features.incremental.title">Parallel Compiler Pipeline</h3>
+          <p data-i18n="features.incremental.description" data-i18n-html>Per-module dependency tracking and parallel codegen are active workbench surfaces; exact performance claims require benchmark gates.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🏗️</div>
-          <h3>Self-Hosting Compiler</h3>
-          <p>Vais can compile itself. The self-hosting compiler achieves bootstrap (Stage1→Stage2→Stage3 fixed point) with 17,800+ lines of Vais.</p>
+          <h3 data-i18n="features.selfHosting.title">Self-Hosting Workbench</h3>
+          <p data-i18n="features.selfHosting.description" data-i18n-html>The repository contains 50,000+ lines of Vais compiler sources used for bootstrap and conformance work. Current guarantees are the certified Core and promoted runtime gates.</p>
         </div>
+        <div class="feature-card">
+          <div class="feature-icon">&lt;T&gt;</div>
+          <h3 data-i18n="features.generics.title">Generic Monomorphization</h3>
+          <p data-i18n="features.generics.description" data-i18n-html>Generic monomorphization is promoted only where named fixtures cover it. Generic enum layout and broader specialization semantics remain gate-bound language work.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔒</div>
+          <h3 data-i18n="features.typeCoercion.title">Rust-Style Type Safety</h3>
+          <p data-i18n="features.typeCoercion.description" data-i18n-html>Phase 158 strict type coercion: implicit widening only (<code>i32→i64</code>), no silent <code>bool↔int</code> or <code>float↔int</code> conversions. All cross-type casts are explicit with <code>as</code>, matching Rust's safety guarantees.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Ecosystem Section -->
+  <section class="vaisx-section" id="vaisx">
+    <div class="container">
+      <span class="section-badge" data-i18n="ecosystem.badge">Promoted Gates</span>
+      <h2 class="section-title" data-i18n="ecosystem.title">Full-Stack Vais Ecosystem</h2>
+      <p class="section-subtitle" data-i18n="ecosystem.subtitle" data-i18n-html>Database, server, and web packages are tracked by explicit package, runtime, unit, full-build, cross-package schema, and shared-schema product evidence. Schema fixtures are ported; main-branch aggregate runtime gate porting is still pending.</p>
+
+      <div class="vaisx-grid">
+        <div class="vaisx-card">
+          <div class="vaisx-card-icon">🗄️</div>
+          <h3 data-i18n="ecosystem.vaisdb.title">VaisDB — RAG-Native Database</h3>
+          <p data-i18n="ecosystem.vaisdb.description">Hybrid relational + vector database workbench with package codegen 261/261 and runtime smoke 34/34. Product-complete SQL/vector/FTS coverage remains outside the current claim.</p>
+        </div>
+        <div class="vaisx-card">
+          <div class="vaisx-card-icon">🚀</div>
+          <h3 data-i18n="ecosystem.server.title">vais-server — HTTP Framework</h3>
+          <p data-i18n="ecosystem.server.description">HTTP framework workbench with server runtime integration evidence 20/20. Broader REST, GraphQL, WebSocket, auth, and deployment guarantees require dedicated gates.</p>
+        </div>
+        <div class="vaisx-card">
+          <div class="vaisx-card-icon">🌐</div>
+          <h3 data-i18n="ecosystem.vaisweb.title">vais-web (VaisX) — Web Framework</h3>
+          <p data-i18n="ecosystem.vaisweb.description">Web framework workbench with runtime smoke evidence 61/77, unit 390/390, ecosystem package tests 3272/3272, full-build 24/24, and shared-schema product evidence 9/9 ported as a compiler main-fixture workspace gate. Size claims require a size gate.</p>
+        </div>
+      </div>
+
+      <div class="vaisx-preview">
+        <div class="code-window">
+          <div class="code-header">
+            <span class="code-dot red"></span>
+            <span class="code-dot yellow"></span>
+            <span class="code-dot green"></span>
+            <span class="code-filename">Counter.vaisx</span>
+          </div>
+          <div class="code-body">
+            <pre>&lt;script&gt;
+  <span class="kw">let</span> count = <span class="fn">__vx_state</span>(<span class="param">0</span>)
+  <span class="kw">let</span> doubled = <span class="fn">__vx_derived</span>(count * <span class="param">2</span>)
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;button <span class="self">@on:click</span>={count++}&gt;
+    Count: {count} (×2 = {doubled})
+  &lt;/button&gt;
+&lt;/template&gt;
+
+&lt;style&gt;
+  <span class="type">button</span> { <span class="kw">padding</span>: <span class="param">12px 24px</span>; }
+&lt;/style&gt;</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="vaisx-cta">
+        <a href="/vaisx/" class="btn btn-primary" data-i18n="ecosystem.learnMore">Learn More</a>
+        <a href="https://github.com/vaislang/vais-web" class="btn btn-secondary" target="_blank" rel="noopener" data-i18n="ecosystem.github">GitHub</a>
       </div>
     </div>
   </section>
@@ -325,17 +487,17 @@
   <!-- Playground Section -->
   <section class="playground-section" id="playground">
     <div class="container">
-      <h2 class="section-title">Try Vais Now</h2>
-      <p class="section-subtitle">
-        Write and run Vais code directly in your browser. No installation required.
+      <h2 class="section-title" data-i18n="playground.title">Try Vais Now</h2>
+      <p class="section-subtitle" data-i18n="playground.subtitle">
+        Try Vais syntax and examples in the browser. Real compilation uses the playground API; browser-only compile/execute remains experimental.
       </p>
       <div class="playground-embed" id="playground-container">
         <div class="playground-placeholder" id="playground-placeholder">
           <div class="playground-placeholder-icon">▶</div>
-          <p>Launch Interactive Playground</p>
+          <p data-i18n="playground.launch">Launch Interactive Playground</p>
           <div class="playground-actions">
-            <button class="btn btn-primary" id="playground-load-btn">Load Playground Here</button>
-            <a href="/playground/" class="btn btn-secondary" target="_blank" rel="noopener">Open in New Tab</a>
+            <button class="btn btn-primary" id="playground-load-btn" data-i18n="playground.loadHere">Load Playground Here</button>
+            <a href="/playground/" class="btn btn-secondary" target="_blank" rel="noopener" data-i18n="playground.openTab">Open in New Tab</a>
           </div>
         </div>
       </div>
@@ -345,10 +507,29 @@
   <!-- Install Section -->
   <section class="install" id="install">
     <div class="container">
-      <h2 class="section-title">Get Started in Seconds</h2>
+      <h2 class="section-title" data-i18n="install.title">Get Started in Seconds</h2>
       <div class="install-grid">
+        <div class="install-card install-card-featured">
+          <h3 data-i18n="install.oneClick">One-Click Install</h3>
+          <div class="install-cmd">
+            <code>curl -fsSL https://vaislang.dev/install.sh | sh</code>
+            <button class="copy-btn" data-copy="curl -fsSL https://vaislang.dev/install.sh | sh" aria-label="Copy">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            </button>
+          </div>
+          <p class="install-note" data-i18n="install.oneClickNote">Detects your OS & arch automatically. macOS, Linux, WSL.</p>
+        </div>
         <div class="install-card">
-          <h3>macOS / Linux</h3>
+          <h3 data-i18n="install.windows">Windows (PowerShell)</h3>
+          <div class="install-cmd">
+            <code>irm https://vaislang.dev/install.ps1 | iex</code>
+            <button class="copy-btn" data-copy="irm https://vaislang.dev/install.ps1 | iex" aria-label="Copy">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="install-card">
+          <h3 data-i18n="install.macOS">macOS / Linux (Homebrew)</h3>
           <div class="install-cmd">
             <code>brew tap vaislang/tap && brew install vais</code>
             <button class="copy-btn" data-copy="brew tap vaislang/tap && brew install vais" aria-label="Copy">
@@ -357,7 +538,7 @@
           </div>
         </div>
         <div class="install-card">
-          <h3>Cargo</h3>
+          <h3 data-i18n="install.cargo">Cargo</h3>
           <div class="install-cmd">
             <code>cargo install vaisc</code>
             <button class="copy-btn" data-copy="cargo install vaisc" aria-label="Copy">
@@ -366,7 +547,7 @@
           </div>
         </div>
         <div class="install-card">
-          <h3>Docker</h3>
+          <h3 data-i18n="install.docker">Docker</h3>
           <div class="install-cmd">
             <code>docker run -it vaislang/vais:latest</code>
             <button class="copy-btn" data-copy="docker run -it vaislang/vais:latest" aria-label="Copy">
@@ -385,29 +566,29 @@
         <div class="footer-brand">
           <img src="/logo-icon.png" alt="Vais" class="logo-img" style="width:28px;height:28px;">
           <span class="logo-text">Vais</span>
-          <p class="footer-tagline">AI-Optimized Systems Language</p>
+          <p class="footer-tagline" data-i18n="footer.tagline">AI-Optimized Systems Language</p>
         </div>
         <div class="footer-col">
-          <h4>Learn</h4>
-          <a href="/docs/">Documentation</a>
-          <a href="/playground/">Playground</a>
-          <a href="/docs/getting-started/">Quick Start</a>
+          <h4 data-i18n="footer.learn">Learn</h4>
+          <a href="/docs/" data-i18n="footer.documentation">Documentation</a>
+          <a href="/playground/" data-i18n="nav.playground">Playground</a>
+          <a href="/docs/getting-started/" data-i18n="footer.quickStart">Quick Start</a>
         </div>
         <div class="footer-col">
-          <h4>Community</h4>
-          <a href="https://github.com/vaislang/vais" target="_blank" rel="noopener">GitHub</a>
-          <a href="https://github.com/vaislang/vais/discussions" target="_blank" rel="noopener">Discussions</a>
-          <a href="https://github.com/vaislang/vais/issues" target="_blank" rel="noopener">Issues</a>
+          <h4 data-i18n="footer.community">Community</h4>
+          <a href="https://github.com/vaislang/vais" target="_blank" rel="noopener" data-i18n="footer.github">GitHub</a>
+          <a href="https://github.com/vaislang/vais/discussions" target="_blank" rel="noopener" data-i18n="footer.discussions">Discussions</a>
+          <a href="https://github.com/vaislang/vais/issues" target="_blank" rel="noopener" data-i18n="footer.issues">Issues</a>
         </div>
         <div class="footer-col">
-          <h4>More</h4>
-          <a href="/blog/">Blog</a>
-          <a href="https://github.com/vaislang/vais/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
-          <a href="https://github.com/vaislang/vais/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+          <h4 data-i18n="footer.more">More</h4>
+          <a href="/blog/" data-i18n="nav.blog">Blog</a>
+          <a href="https://github.com/vaislang/vais/blob/main/CHANGELOG.md" target="_blank" rel="noopener" data-i18n="footer.changelog">Changelog</a>
+          <a href="https://github.com/vaislang/vais/blob/main/LICENSE" target="_blank" rel="noopener" data-i18n="footer.license">MIT License</a>
         </div>
       </div>
       <div class="footer-bottom">
-        <p>&copy; 2026 Vais Contributors. Built with ❤ for AI.</p>
+        <p data-i18n="footer.copyright" data-i18n-html>&copy; 2026 Vais Contributors. Built with ❤ for AI.</p>
       </div>
     </div>
   </footer>

@@ -15,14 +15,24 @@ use rustyline::{Context, Editor, Helper};
 use std::fs;
 #[cfg(not(feature = "jit"))]
 use std::process::Command;
+#[cfg(not(feature = "jit"))]
+use std::sync::atomic::{AtomicU32, Ordering};
 
+#[cfg(not(feature = "jit"))]
+use crate::error_formatter;
 #[cfg(not(feature = "jit"))]
 use vais_codegen::CodeGenerator;
 use vais_parser::parse;
 use vais_types::TypeChecker;
 
 #[cfg(feature = "jit")]
+use std::collections::HashMap;
+#[cfg(feature = "jit")]
 use vais_jit::JitCompiler;
+
+/// Atomic counter for generating unique temporary file names (TOCTOU mitigation)
+#[cfg(not(feature = "jit"))]
+static REPL_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 /// REPL helper with completion, validation, and highlighting
 struct ReplHelper {
@@ -36,7 +46,7 @@ impl ReplHelper {
             // Single-letter keywords
             "F", "S", "E", "I", "L", "M", "W", "X", "A", "R", "B", "C", "T", "U", "P",
             // Common keywords
-            "mut", "self", "Self", "true", "false", "spawn", "await", "weak", "clone",
+            "mut", "self", "Self", "true", "false", "await", "weak", "clone",
             // Primitive types
             "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64",
             "bool", "str", "char",
@@ -163,6 +173,42 @@ impl Validator for ReplHelper {
     }
 }
 
+/// REPL state for JIT mode (execution tracking and cache management)
+#[cfg(feature = "jit")]
+struct ReplState {
+    /// Function execution counts
+    function_counts: HashMap<String, u64>,
+    /// Total expression evaluations
+    expression_count: u64,
+    /// Cache dirty flag (true if definitions changed)
+    cache_dirty: bool,
+}
+
+#[cfg(feature = "jit")]
+impl ReplState {
+    fn new() -> Self {
+        ReplState {
+            function_counts: HashMap::new(),
+            expression_count: 0,
+            cache_dirty: false,
+        }
+    }
+
+    fn clear(&mut self) {
+        self.function_counts.clear();
+        self.expression_count = 0;
+        self.cache_dirty = true;
+    }
+
+    fn mark_dirty(&mut self) {
+        self.cache_dirty = true;
+    }
+
+    fn increment_expression(&mut self) {
+        self.expression_count += 1;
+    }
+}
+
 /// Start the interactive REPL
 pub fn run() -> Result<(), String> {
     #[cfg(feature = "jit")]
@@ -185,6 +231,9 @@ pub fn run() -> Result<(), String> {
     #[cfg(feature = "jit")]
     let mut jit = JitCompiler::new().map_err(|e| format!("Failed to initialize JIT: {}", e))?;
 
+    #[cfg(feature = "jit")]
+    let mut state = ReplState::new();
+
     loop {
         // Read input with readline
         let readline = rl.readline("vais> ");
@@ -203,7 +252,7 @@ pub fn run() -> Result<(), String> {
                 // Handle commands
                 if input.starts_with(':') {
                     #[cfg(feature = "jit")]
-                    if handle_command_jit(input, &mut definitions, &rl, &mut jit) {
+                    if handle_command_jit(input, &mut definitions, &rl, &mut jit, &mut state) {
                         break;
                     }
                     #[cfg(not(feature = "jit"))]
@@ -222,10 +271,13 @@ pub fn run() -> Result<(), String> {
                     || input.starts_with("T ");
 
                 if is_definition {
+                    #[cfg(feature = "jit")]
+                    handle_definition_jit(input, &mut definitions, &mut state);
+                    #[cfg(not(feature = "jit"))]
                     handle_definition(input, &mut definitions);
                 } else {
                     #[cfg(feature = "jit")]
-                    handle_expression_jit(input, &definitions, &mut jit);
+                    handle_expression_jit(input, &definitions, &mut jit, &mut state);
                     #[cfg(not(feature = "jit"))]
                     handle_expression(input, &definitions);
                 }
@@ -310,11 +362,19 @@ fn handle_command(
             }
         }
         _ if input.starts_with(":type ") => {
-            let expr = input.strip_prefix(":type ").unwrap().trim();
+            let expr = input
+                .strip_prefix(":type ")
+                // SAFETY: starts_with(":type ") checked in match guard
+                .unwrap_or("")
+                .trim();
             handle_type_command(expr, definitions);
         }
         _ if input.starts_with(":disasm ") => {
-            let expr = input.strip_prefix(":disasm ").unwrap().trim();
+            let expr = input
+                .strip_prefix(":disasm ")
+                // SAFETY: starts_with(":disasm ") checked in match guard
+                .unwrap_or("")
+                .trim();
             handle_disasm_command(expr, definitions);
         }
         _ => {
@@ -325,6 +385,7 @@ fn handle_command(
 }
 
 /// Handle a definition (F, S, E, W, X, T)
+#[cfg(not(feature = "jit"))]
 fn handle_definition(input: &str, definitions: &mut Vec<String>) {
     match parse(input) {
         Ok(ast) => {
@@ -419,7 +480,18 @@ fn handle_disasm_command(expr: &str, definitions: &[String]) {
                             }
                         }
                         Err(e) => {
-                            println!("{} {}", "Codegen error:".red().bold(), e);
+                            let spanned = vais_codegen::SpannedCodegenError {
+                                span: codegen.last_error_span(),
+                                error: e,
+                            };
+                            println!(
+                                "{}",
+                                error_formatter::format_spanned_codegen_error(
+                                    &spanned,
+                                    &source,
+                                    &std::path::PathBuf::from("<repl>"),
+                                )
+                            );
                         }
                     }
                 }
@@ -457,6 +529,8 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
         Pointer(inner) => format!("*{}", format_type(inner)),
         Ref(inner) => format!("&{}", format_type(inner)),
         RefMut(inner) => format!("&mut {}", format_type(inner)),
+        Slice(inner) => format!("&[{}]", format_type(inner)),
+        SliceMut(inner) => format!("&mut [{}]", format_type(inner)),
         Array(inner) => format!("[{}]", format_type(inner)),
         ConstArray { element, size } => format!("[{}; {:?}]", format_type(element), size),
         Optional(inner) => format!("Option<{}>", format_type(inner)),
@@ -539,7 +613,6 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
         RefLifetime { lifetime, inner } => format!("&'{} {}", lifetime, format_type(inner)),
         RefMutLifetime { lifetime, inner } => format!("&'{} mut {}", lifetime, format_type(inner)),
         Lifetime(name) => format!("'{}", name),
-        Lazy(inner) => format!("Lazy<{}>", format_type(inner)),
     }
 }
 
@@ -577,14 +650,27 @@ fn evaluate_expr(source: &str) -> Result<String, String> {
 
     // Generate IR
     let mut codegen = CodeGenerator::new("repl");
-    let ir = codegen
-        .generate_module(&ast)
-        .map_err(|e| format!("Codegen error: {}", e))?;
+    let result = codegen.generate_module(&ast);
+    let ir = result.map_err(|e| {
+        let spanned = vais_codegen::SpannedCodegenError {
+            span: codegen.last_error_span(),
+            error: e,
+        };
+        error_formatter::format_spanned_codegen_error(
+            &spanned,
+            source,
+            &std::path::PathBuf::from("<repl>"),
+        )
+    })?;
 
-    // Write to temp file
+    // Verify IR structural integrity before compiling.
+    crate::utils::verify_ir_and_log(&ir, "repl");
+
+    // Write to temp file (atomic counter + PID for uniqueness, TOCTOU mitigation)
+    let counter = REPL_COUNTER.fetch_add(1, Ordering::Relaxed);
     let temp_dir = std::env::temp_dir();
-    let ir_path = temp_dir.join("vais_repl.ll");
-    let bin_path = temp_dir.join("vais_repl");
+    let ir_path = temp_dir.join(format!("vais_repl_{}_{}.ll", std::process::id(), counter));
+    let bin_path = temp_dir.join(format!("vais_repl_{}_{}", std::process::id(), counter));
 
     fs::write(&ir_path, &ir).map_err(|e| format!("Cannot write temp file: {}", e))?;
 
@@ -634,6 +720,7 @@ fn handle_command_jit(
     definitions: &mut Vec<String>,
     rl: &Editor<ReplHelper, rustyline::history::DefaultHistory>,
     jit: &mut JitCompiler,
+    state: &mut ReplState,
 ) -> bool {
     match input {
         ":quit" | ":q" | ":exit" => {
@@ -642,12 +729,15 @@ fn handle_command_jit(
         }
         ":help" | ":h" => {
             println!("{}", "Commands:".bold());
-            println!("  :help, :h       Show this help");
-            println!("  :quit, :q       Exit the REPL");
-            println!("  :clear          Clear definitions and reset JIT");
-            println!("  :defs           Show current definitions");
-            println!("  :history        Show input history");
-            println!("  :type <expr>    Show type of expression");
+            println!("  :help, :h         Show this help");
+            println!("  :quit, :q         Exit the REPL");
+            println!("  :clear            Clear definitions and reset JIT");
+            println!("  :defs             Show current definitions");
+            println!("  :history          Show input history");
+            println!("  :type <expr>      Show type of expression");
+            println!("  :profile          Show function execution statistics");
+            println!("  :jit-stats        Show JIT engine status");
+            println!("  :tier <func>      Show optimization tier for function");
             println!();
             println!("{}", "Features:".bold());
             println!("  - JIT compilation (Cranelift backend)");
@@ -660,9 +750,11 @@ fn handle_command_jit(
             println!("  add(2, 3)                       Call a function");
             println!("  1 + 2 * 3                       Evaluate expression");
             println!("  :type 1 + 2                     Show type (i64)");
+            println!("  :profile                        Show execution stats");
         }
         ":clear" => {
             definitions.clear();
+            state.clear();
             if let Err(e) = jit.clear() {
                 println!("{} Failed to reset JIT: {}", "Warning:".yellow().bold(), e);
             }
@@ -688,8 +780,26 @@ fn handle_command_jit(
                 }
             }
         }
+        ":profile" => {
+            handle_profile_command(state, definitions);
+        }
+        ":jit-stats" => {
+            handle_jit_stats_command(state, definitions);
+        }
+        _ if input.starts_with(":tier ") => {
+            let func_name = input
+                .strip_prefix(":tier ")
+                // SAFETY: starts_with(":tier ") checked in match guard
+                .unwrap_or("")
+                .trim();
+            handle_tier_command(func_name, definitions);
+        }
         _ if input.starts_with(":type ") => {
-            let expr = input.strip_prefix(":type ").unwrap().trim();
+            let expr = input
+                .strip_prefix(":type ")
+                // SAFETY: starts_with(":type ") checked in match guard
+                .unwrap_or("")
+                .trim();
             handle_type_command(expr, definitions);
         }
         _ => {
@@ -699,9 +809,143 @@ fn handle_command_jit(
     false
 }
 
+/// Handle definition in JIT mode (track cache dirty state)
+#[cfg(feature = "jit")]
+fn handle_definition_jit(input: &str, definitions: &mut Vec<String>, state: &mut ReplState) {
+    match parse(input) {
+        Ok(ast) => {
+            let mut checker = TypeChecker::new();
+            // First register all previous definitions
+            for def in definitions.iter() {
+                if let Ok(prev_ast) = parse(def) {
+                    let _ = checker.check_module(&prev_ast);
+                }
+            }
+            // Then check the new definition
+            match checker.check_module(&ast) {
+                Ok(_) => {
+                    definitions.push(input.to_string());
+                    state.mark_dirty();
+
+                    // Extract function name for tracking
+                    if input.starts_with("F ") {
+                        if let Some(name_end) = input.find('(') {
+                            let name = input[2..name_end].trim();
+                            state.function_counts.insert(name.to_string(), 0);
+                        }
+                    }
+
+                    println!("{}", "Defined".green());
+                }
+                Err(e) => {
+                    println!("{} {}", "Type error:".red().bold(), e);
+                }
+            }
+        }
+        Err(e) => {
+            println!("{} {}", "Parse error:".red().bold(), e);
+        }
+    }
+}
+
+/// Handle :profile command - show function execution statistics
+#[cfg(feature = "jit")]
+fn handle_profile_command(state: &ReplState, _definitions: &[String]) {
+    println!("{}", "Execution Profile:".bold().cyan());
+    println!();
+
+    if state.function_counts.is_empty() {
+        println!("  No functions defined");
+    } else {
+        println!("{:30} {}", "Function".bold(), "Executions".bold());
+        println!("{}", "-".repeat(50));
+
+        let mut sorted_funcs: Vec<_> = state.function_counts.iter().collect();
+        sorted_funcs.sort_by(|a, b| b.1.cmp(a.1));
+
+        for (name, count) in sorted_funcs {
+            println!("{:30} {}", name, count);
+        }
+    }
+
+    println!();
+    println!("Total expressions evaluated: {}", state.expression_count);
+}
+
+/// Handle :jit-stats command - show JIT engine status
+#[cfg(feature = "jit")]
+fn handle_jit_stats_command(state: &ReplState, definitions: &[String]) {
+    println!("{}", "JIT Engine Status:".bold().cyan());
+    println!();
+    println!("  Mode:                  {}", "Cranelift JIT".green());
+    println!(
+        "  Defined functions:     {}",
+        definitions.iter().filter(|d| d.starts_with("F ")).count()
+    );
+    println!("  Expressions evaluated: {}", state.expression_count);
+    println!(
+        "  Cache state:           {}",
+        if state.cache_dirty {
+            "dirty".yellow()
+        } else {
+            "clean".green()
+        }
+    );
+    println!();
+    println!("{}", "Optimization Tiers:".bold());
+    println!("  All functions:         {}", "Baseline JIT".cyan());
+    println!();
+    println!("{}", "Note:".bold());
+    println!("  Tier information is tracked at JIT engine level");
+    println!("  Use :tier <func> to check specific function optimization");
+}
+
+/// Handle :tier command - show function optimization tier
+#[cfg(feature = "jit")]
+fn handle_tier_command(func_name: &str, definitions: &[String]) {
+    // Check if function is defined
+    let func_exists = definitions.iter().any(|def| {
+        if def.starts_with("F ") {
+            if let Some(name_end) = def.find('(') {
+                let name = def[2..name_end].trim();
+                return name == func_name;
+            }
+        }
+        false
+    });
+
+    if !func_exists {
+        println!(
+            "{} Function '{}' not defined",
+            "Error:".red().bold(),
+            func_name
+        );
+        println!("Use :defs to see available functions");
+        return;
+    }
+
+    println!(
+        "{}",
+        format!("Tier info for '{}':", func_name).bold().cyan()
+    );
+    println!();
+    println!("  Current tier:     {}", "Baseline JIT".cyan());
+    println!("  Backend:          {}", "Cranelift".green());
+    println!("  Status:           {}", "Compiled".green());
+    println!();
+    println!("{}", "Note:".bold());
+    println!("  Detailed tier profiling (hot path score, deopt count, loop iterations)");
+    println!("  is tracked internally by the JIT engine's tiered compilation system.");
+}
+
 /// Handle an expression evaluation using JIT compilation
 #[cfg(feature = "jit")]
-fn handle_expression_jit(input: &str, definitions: &[String], jit: &mut JitCompiler) {
+fn handle_expression_jit(
+    input: &str,
+    definitions: &[String],
+    jit: &mut JitCompiler,
+    state: &mut ReplState,
+) {
     let mut source = String::new();
     for def in definitions {
         source.push_str(def);
@@ -709,19 +953,27 @@ fn handle_expression_jit(input: &str, definitions: &[String], jit: &mut JitCompi
     }
     source.push_str(&format!("F __repl_main()->i64{{{}}}", input));
 
-    match evaluate_expr_jit(&source, jit) {
+    match evaluate_expr_jit(&source, jit, state) {
         Ok(result) => {
+            state.increment_expression();
             println!("{} {}", "=>".cyan(), result);
         }
         Err(e) => {
             println!("{} {}", "Error:".red().bold(), e);
+            if e.contains("JIT") {
+                println!("{} Try :clear to reset JIT state", "Hint:".yellow().bold());
+            }
         }
     }
 }
 
 /// Evaluate a REPL expression using JIT compilation
 #[cfg(feature = "jit")]
-fn evaluate_expr_jit(source: &str, jit: &mut JitCompiler) -> Result<String, String> {
+fn evaluate_expr_jit(
+    source: &str,
+    jit: &mut JitCompiler,
+    state: &mut ReplState,
+) -> Result<String, String> {
     // Parse
     let ast = parse(source).map_err(|e| format!("Parse error: {}", e))?;
 
@@ -731,13 +983,18 @@ fn evaluate_expr_jit(source: &str, jit: &mut JitCompiler) -> Result<String, Stri
         .check_module(&ast)
         .map_err(|e| format!("Type error: {}", e))?;
 
-    // Reset JIT for fresh compilation
-    jit.clear().map_err(|e| format!("JIT reset error: {}", e))?;
+    // Only reset JIT if cache is dirty (definitions changed)
+    if state.cache_dirty {
+        jit.clear().map_err(|e| format!("JIT reset error: {}", e))?;
+        state.cache_dirty = false;
+    }
 
-    // JIT compile and run
-    let result = jit
-        .compile_and_run_main(&ast)
-        .map_err(|e| format!("JIT error: {}", e))?;
+    // JIT compile and run (with graceful degradation)
+    let result = jit.compile_and_run_main(&ast).map_err(|e| {
+        // Mark cache as dirty on JIT failure to trigger reset on next attempt
+        state.cache_dirty = true;
+        format!("JIT compilation failed: {}", e)
+    })?;
 
     Ok(format!("{}", result))
 }

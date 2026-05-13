@@ -5,7 +5,7 @@ Syntax highlighting and language support for the **Vais** programming language -
 ## Features
 
 - **Syntax Highlighting**: Full syntax highlighting for Vais code including:
-  - Single-character keywords (F, S, E, I, L, M, W, T, X, V, C, R, B, N, A)
+  - Single-character keywords (F, S, E, I, L, M, W, T, X, P, C, R, B, N, U, D, O, G, A, Y)
   - Type annotations (i8, i16, i32, i64, u8, u16, u32, u64, f32, f64, bool, str)
   - Self-recursion operator `@`
   - Async/await syntax
@@ -55,19 +55,24 @@ Vais is an AI-optimized programming language with Rust-like syntax but shorter k
 
 - `F` - Function definition
 - `S` - Struct definition
-- `E` - Enum definition
+- `E` - Enum / Else
 - `I` - If statement
 - `L` - Loop
 - `M` - Match expression
-- `W` - While loop / Trait (interface)
-- `T` - Trait definition
+- `W` - Trait (interface)
+- `T` - Type alias
 - `X` - Implementation block
-- `V` - Variable declaration (let)
-- `C` - Constant declaration
+- `P` - Pub (public visibility)
+- `C` - Continue
 - `R` - Return statement
 - `B` - Break statement
-- `N` - Continue statement
+- `N` - Extern (foreign function)
+- `U` - Use (import)
+- `D` - Defer
+- `O` - Union
+- `G` - Global variable
 - `A` - Async function modifier
+- `Y` - Await
 
 ### Special Operators
 
@@ -118,10 +123,10 @@ A F compute(x: i64) -> i64 {
 
 # Main function
 F main() -> i64 {
-    V result = fib(10)
+    result := fib(10)
     print_i64(result)
 
-    V value := compute(21).await
+    value := Y compute(21)
     print_i64(value)
 
     0

@@ -5,13 +5,13 @@
 ## Import
 
 ```vais
-U std/arena
+use std/arena
 ```
 
 ## Struct
 
 ```vais
-S Arena {
+struct Arena {
     chunks: i64,       # Chunk pointer list
     chunk_count: i64,
     chunk_size: i64,   # Size per chunk (default 64KB)
@@ -47,9 +47,9 @@ S Arena {
 ## Usage
 
 ```vais
-U std/arena
+use std/arena
 
-F main() -> i64 {
+fn main() -> i64 {
     a := Arena::new()
     ptr1 := a.alloc(64)   # Fast allocation
     ptr2 := a.alloc(128)

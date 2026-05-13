@@ -101,7 +101,7 @@ F do_handshake(fd: i64) -> i64 {
 
     # Read the HTTP upgrade request
     total := 0
-    L true {
+    LW true {
         n := __tcp_recv(fd, buf + total, 4096)
         I n <= 0 {
             __free(buf)
@@ -151,7 +151,7 @@ F do_handshake(fd: i64) -> i64 {
     sent := __tcp_send(fd, resp_buf, resp_len)
     __free(resp_buf)
 
-    I sent > 0 { 1 } E { 0 }
+    I sent > 0 { 1 } EL { 0 }
 }
 
 # Handle a single WebSocket client connection (echo loop)
@@ -168,10 +168,10 @@ F handle_client(fd: i64) -> i64 {
     }
 
     is_open := 1
-    L is_open == 1 {
+    LW is_open == 1 {
         # Read data from client
         total := 0
-        L total < 2 {
+        LW total < 2 {
             n := __tcp_recv(fd, recv_buf + total, 4096)
             I n <= 0 {
                 is_open = 0
@@ -186,7 +186,7 @@ F handle_client(fd: i64) -> i64 {
 
         # Try to decode, reading more if incomplete
         consumed := __ws_decode_frame(recv_buf, total, frame_out)
-        L consumed == 0 & total < 65550 {
+        LW consumed == 0 & total < 65550 {
             n := __tcp_recv(fd, recv_buf + total, 4096)
             I n <= 0 {
                 is_open = 0
@@ -213,7 +213,7 @@ F handle_client(fd: i64) -> i64 {
             # Echo text message back
             __ws_log("Echoing text frame")
             ws_send_text(fd, payload as str)
-        } E I opcode == WS_BINARY {
+        } EL I opcode == WS_BINARY {
             # Echo binary data back
             __ws_log("Echoing binary frame")
             echo_buf := __malloc(payload_len + 14)
@@ -222,11 +222,11 @@ F handle_client(fd: i64) -> i64 {
                 __tcp_send(fd, echo_buf, frame_len)
                 __free(echo_buf)
             }
-        } E I opcode == WS_PING {
+        } EL I opcode == WS_PING {
             # Respond with pong
             __ws_log("Received ping, sending pong")
             ws_send_pong(fd)
-        } E I opcode == WS_CLOSE {
+        } EL I opcode == WS_CLOSE {
             # Send close frame back and exit loop
             __ws_log("Received close frame")
             ws_send_close(fd)
@@ -261,7 +261,7 @@ F main() -> i64 {
     puts("Test with: websocat ws://127.0.0.1:9001")
 
     # Accept connections in a loop
-    L true {
+    LW true {
         client := __tcp_accept(listener)
         I client < 0 {
             C
@@ -274,7 +274,7 @@ F main() -> i64 {
         I ok == 1 {
             __ws_log("WebSocket handshake successful")
             handle_client(client)
-        } E {
+        } EL {
             __ws_log("WebSocket handshake failed")
         }
 

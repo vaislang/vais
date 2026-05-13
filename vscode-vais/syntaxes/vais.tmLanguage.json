@@ -83,7 +83,7 @@
       "patterns": [
         {
           "name": "keyword.control.vais",
-          "match": "\\b(F|S|E|I|L|M|W|T|X|V|C|R|B|N)\\b"
+          "match": "\\b(F|S|E|I|L|M|W|T|X|P|C|R|B|N|U|D|O|G|A|Y)\\b"
         },
         {
           "name": "keyword.control.flow.vais",

@@ -325,7 +325,11 @@ fn test_emit_assert_terminator() {
 #[test]
 fn test_emit_discriminant_rvalue() {
     // Discriminant rvalue: get the discriminant of an enum
-    let mut builder = MirBuilder::new("disc_test", vec![MirType::Enum("Result".into())], MirType::I64);
+    let mut builder = MirBuilder::new(
+        "disc_test",
+        vec![MirType::Enum("Result".into())],
+        MirType::I64,
+    );
 
     let disc = builder.new_local(MirType::I64, Some("disc".into()));
     builder.assign(
@@ -349,7 +353,11 @@ fn test_emit_discriminant_rvalue() {
 #[test]
 fn test_emit_len_rvalue() {
     // Len rvalue: get the length of an array/string
-    let mut builder = MirBuilder::new("len_test", vec![MirType::Array(Box::new(MirType::I64))], MirType::I64);
+    let mut builder = MirBuilder::new(
+        "len_test",
+        vec![MirType::Array(Box::new(MirType::I64))],
+        MirType::I64,
+    );
 
     let len = builder.new_local(MirType::I64, Some("len".into()));
     builder.assign(
@@ -373,7 +381,11 @@ fn test_emit_len_rvalue() {
 #[test]
 fn test_emit_aggregate_tuple() {
     // Aggregate rvalue: tuple construction
-    let mut builder = MirBuilder::new("tuple_test", vec![], MirType::Tuple(vec![MirType::I64, MirType::I64]));
+    let mut builder = MirBuilder::new(
+        "tuple_test",
+        vec![],
+        MirType::Tuple(vec![MirType::I64, MirType::I64]),
+    );
 
     let tuple_val = builder.new_local(
         MirType::Tuple(vec![MirType::I64, MirType::I64]),
@@ -699,7 +711,11 @@ fn test_borrow_check_simple_copy() {
     let mir = lower_module(&module);
 
     let errors = check_module(&mir);
-    assert_eq!(errors.len(), 0, "Copy types should not produce borrow errors");
+    assert_eq!(
+        errors.len(),
+        0,
+        "Copy types should not produce borrow errors"
+    );
 }
 
 #[test]
@@ -710,7 +726,11 @@ fn test_borrow_check_multiple_returns() {
     let mir = lower_module(&module);
 
     let errors = check_module(&mir);
-    assert_eq!(errors.len(), 0, "Multiple return paths with Copy types should be OK");
+    assert_eq!(
+        errors.len(),
+        0,
+        "Multiple return paths with Copy types should be OK"
+    );
 }
 
 #[test]
@@ -741,7 +761,11 @@ fn test_borrow_check_function_call() {
     let mir = lower_module(&module);
 
     let errors = check_module(&mir);
-    assert_eq!(errors.len(), 0, "Function calls with Copy types should be OK");
+    assert_eq!(
+        errors.len(),
+        0,
+        "Function calls with Copy types should be OK"
+    );
 }
 
 #[test]
@@ -758,7 +782,11 @@ fn test_borrow_check_match_expr() {
     let mir = lower_module(&module);
 
     let errors = check_module(&mir);
-    assert_eq!(errors.len(), 0, "Match expressions with Copy types should be OK");
+    assert_eq!(
+        errors.len(),
+        0,
+        "Match expressions with Copy types should be OK"
+    );
 }
 
 // --- Negative Tests (Errors Expected) ---
@@ -777,7 +805,10 @@ fn test_borrow_check_str_move_detection() {
     // If it tries to drop, borrow checker should catch it
     // Either way, this is a valid E2E test of the pipeline
     assert!(
-        errors.is_empty() || errors.iter().any(|e| matches!(e, BorrowError::UseAfterMove { .. })),
+        errors.is_empty()
+            || errors
+                .iter()
+                .any(|e| matches!(e, BorrowError::UseAfterMove { .. })),
         "Str move should be handled correctly (either no drop or error detected)"
     );
 }
@@ -787,23 +818,26 @@ fn test_borrow_check_double_move() {
     // Manually construct MIR body with double-move
     let body = Body {
         name: "test_double_move".to_string(),
-        params: vec![MirType::Str],
-        return_type: MirType::Str,
+        params: vec![MirType::Struct("TestNonCopy".into())],
+        return_type: MirType::Struct("TestNonCopy".into()),
         locals: vec![
             LocalDecl {
                 name: Some("_ret".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: true,
+                lifetime: None,
             },
             LocalDecl {
                 name: Some("s".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: false,
+                lifetime: None,
             },
             LocalDecl {
                 name: Some("temp".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: true,
+                lifetime: None,
             },
         ],
         basic_blocks: vec![BasicBlock {
@@ -822,6 +856,8 @@ fn test_borrow_check_double_move() {
             terminator: Some(Terminator::Return),
         }],
         block_names: std::collections::HashMap::new(),
+        lifetime_params: vec![],
+        lifetime_bounds: vec![],
     };
 
     let errors = check_body(&body);
@@ -830,7 +866,9 @@ fn test_borrow_check_double_move() {
     // and the operand within the Rvalue::Use. We just need at least 1 UseAfterMove error.
     assert!(!errors.is_empty(), "Should detect at least one error");
     assert!(
-        errors.iter().any(|e| matches!(e, BorrowError::UseAfterMove { local, .. } if *local == Local(1))),
+        errors
+            .iter()
+            .any(|e| matches!(e, BorrowError::UseAfterMove { local, .. } if *local == Local(1))),
         "Should detect use-after-move for Local(1)"
     );
 }
@@ -840,18 +878,20 @@ fn test_borrow_check_double_drop() {
     // Manually construct MIR body with double-drop
     let body = Body {
         name: "test_double_drop".to_string(),
-        params: vec![MirType::Str],
+        params: vec![MirType::Struct("TestNonCopy".into())],
         return_type: MirType::Unit,
         locals: vec![
             LocalDecl {
                 name: Some("_ret".to_string()),
                 ty: MirType::Unit,
                 is_mutable: true,
+                lifetime: None,
             },
             LocalDecl {
                 name: Some("s".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: false,
+                lifetime: None,
             },
         ],
         basic_blocks: vec![BasicBlock {
@@ -862,6 +902,8 @@ fn test_borrow_check_double_drop() {
             terminator: Some(Terminator::Return),
         }],
         block_names: std::collections::HashMap::new(),
+        lifetime_params: vec![],
+        lifetime_bounds: vec![],
     };
 
     let errors = check_body(&body);
@@ -879,18 +921,20 @@ fn test_borrow_check_use_after_drop() {
     // Manually construct MIR body with use-after-drop
     let body = Body {
         name: "test_use_after_drop".to_string(),
-        params: vec![MirType::Str],
-        return_type: MirType::Str,
+        params: vec![MirType::Struct("TestNonCopy".into())],
+        return_type: MirType::Struct("TestNonCopy".into()),
         locals: vec![
             LocalDecl {
                 name: Some("_ret".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: true,
+                lifetime: None,
             },
             LocalDecl {
                 name: Some("s".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: false,
+                lifetime: None,
             },
         ],
         basic_blocks: vec![BasicBlock {
@@ -905,6 +949,8 @@ fn test_borrow_check_use_after_drop() {
             terminator: Some(Terminator::Return),
         }],
         block_names: std::collections::HashMap::new(),
+        lifetime_params: vec![],
+        lifetime_bounds: vec![],
     };
 
     let errors = check_body(&body);
@@ -913,7 +959,9 @@ fn test_borrow_check_use_after_drop() {
     // and the operand within the Rvalue. We just need at least 1 UseAfterFree error.
     assert!(!errors.is_empty(), "Should detect at least one error");
     assert!(
-        errors.iter().any(|e| matches!(e, BorrowError::UseAfterFree { local, .. } if *local == Local(1))),
+        errors
+            .iter()
+            .any(|e| matches!(e, BorrowError::UseAfterFree { local, .. } if *local == Local(1))),
         "Should detect use-after-free for Local(1)"
     );
 }
@@ -933,11 +981,13 @@ fn test_borrow_check_mixed_valid_invalid() {
                 name: Some("_ret".to_string()),
                 ty: MirType::I64,
                 is_mutable: true,
+                lifetime: None,
             },
             LocalDecl {
                 name: Some("x".to_string()),
                 ty: MirType::I64,
                 is_mutable: false,
+                lifetime: None,
             },
         ],
         basic_blocks: vec![BasicBlock {
@@ -948,28 +998,33 @@ fn test_borrow_check_mixed_valid_invalid() {
             terminator: Some(Terminator::Return),
         }],
         block_names: std::collections::HashMap::new(),
+        lifetime_params: vec![],
+        lifetime_bounds: vec![],
     };
 
     // Body 2: Invalid - str double-move
     let invalid_body = Body {
         name: "invalid".to_string(),
-        params: vec![MirType::Str],
-        return_type: MirType::Str,
+        params: vec![MirType::Struct("TestNonCopy".into())],
+        return_type: MirType::Struct("TestNonCopy".into()),
         locals: vec![
             LocalDecl {
                 name: Some("_ret".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: true,
+                lifetime: None,
             },
             LocalDecl {
                 name: Some("s".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: false,
+                lifetime: None,
             },
             LocalDecl {
                 name: Some("temp".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: true,
+                lifetime: None,
             },
         ],
         basic_blocks: vec![BasicBlock {
@@ -986,6 +1041,8 @@ fn test_borrow_check_mixed_valid_invalid() {
             terminator: Some(Terminator::Return),
         }],
         block_names: std::collections::HashMap::new(),
+        lifetime_params: vec![],
+        lifetime_bounds: vec![],
     };
 
     module.bodies.push(valid_body);
@@ -995,9 +1052,14 @@ fn test_borrow_check_mixed_valid_invalid() {
 
     // The invalid body should produce errors (may be multiple per violation)
     // The valid body should produce 0 errors
-    assert!(!errors.is_empty(), "Should detect at least one error in invalid body");
     assert!(
-        errors.iter().any(|e| matches!(e, BorrowError::UseAfterMove { .. })),
+        !errors.is_empty(),
+        "Should detect at least one error in invalid body"
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, BorrowError::UseAfterMove { .. })),
         "Should detect use-after-move error"
     );
 }

@@ -44,6 +44,7 @@ fn test_repr_c_struct() {
         name: "Point".to_string(),
         generics: vec![],
         fields,
+        field_order: vec!["x".to_string(), "y".to_string()],
         methods: HashMap::new(),
         repr_c: true,
     };
@@ -71,6 +72,7 @@ fn test_vararg_function_signature() {
         contracts: None,
         effect_annotation: vais_types::EffectAnnotation::Infer,
         inferred_effects: None,
+        generic_callees: vec![],
     };
 
     assert!(func_sig.is_vararg);

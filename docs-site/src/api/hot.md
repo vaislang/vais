@@ -7,7 +7,7 @@
 ## Import
 
 ```vais
-U std/hot
+use std/hot
 ```
 
 ## Functions
@@ -17,7 +17,7 @@ U std/hot
 ### HotReloadContext
 
 ```vais
-S HotReloadContext { internal: i64 }
+struct HotReloadContext { internal: i64 }
 ```
 
 ## Functions
@@ -40,12 +40,12 @@ Functions marked with `#[hot]` can be reloaded at runtime without restarting the
 ## Usage
 
 ```vais
-U std/hot
+use std/hot
 
 #[hot]
-F game_update(state: i64) -> i64 { 0 }
+fn game_update(state: i64) -> i64 { 0 }
 
-F main() -> i64 {
+fn main() -> i64 {
     hot_init("./game.vais")
     L 1 {
         hot_check()

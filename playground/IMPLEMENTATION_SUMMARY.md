@@ -8,7 +8,7 @@ The Vais Playground is a web-based interactive development environment for the V
 
 - **Monaco Editor** with custom Vais syntax highlighting
 - **Real-time compilation** feedback (mock mode currently)
-- **13 example programs** demonstrating language features
+- **31 example programs** demonstrating language features
 - **Responsive UI** that works on desktop, tablet, and mobile
 - **Modern tooling** with Vite for fast development
 
@@ -114,7 +114,7 @@ Supported Tokens:
 
 **Object: `examples`**
 
-13 Example Programs:
+31 Example Programs:
 1. **Hello World** - Basic output
 2. **Fibonacci** - Recursive function
 3. **Generics** - Type parameters
@@ -272,7 +272,7 @@ dist/
 
 - [x] Monaco editor integration
 - [x] Vais syntax highlighting
-- [x] 13 example programs
+- [x] 31 example programs
 - [x] Code compilation (mock)
 - [x] Output display
 - [x] Error reporting

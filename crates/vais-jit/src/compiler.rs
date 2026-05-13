@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use cranelift::prelude::*;
 use cranelift_codegen::ir::BlockArg;
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{DataDescription, FuncId, Linkage, Module};
+use cranelift_module::{FuncId, Linkage, Module};
 
 use vais_ast::{
     BinOp, Expr, Function, FunctionBody, Item, Module as AstModule, Spanned, Stmt, Type, UnaryOp,
@@ -24,14 +24,8 @@ pub struct JitCompiler {
     builder_context: FunctionBuilderContext,
     /// Cranelift codegen context.
     ctx: codegen::Context,
-    /// Data section description.
-    #[allow(dead_code)]
-    data_description: DataDescription,
     /// Type mapper for Vais -> Cranelift type conversion.
     type_mapper: TypeMapper,
-    /// JIT runtime for external function resolution.
-    #[allow(dead_code)]
-    runtime: JitRuntime,
     /// Map of compiled function names to their IDs.
     compiled_functions: HashMap<String, FuncId>,
     /// Map of external function names to their IDs.
@@ -77,9 +71,7 @@ impl JitCompiler {
             module,
             builder_context: FunctionBuilderContext::new(),
             ctx: codegen::Context::new(),
-            data_description: DataDescription::new(),
             type_mapper: TypeMapper::new(pointer_type),
-            runtime,
             compiled_functions: HashMap::new(),
             external_functions: HashMap::new(),
         })
@@ -107,6 +99,9 @@ impl JitCompiler {
         let code_ptr = self.module.get_finalized_function(func_id);
 
         // Call the function
+        // SAFETY: code_ptr is obtained from cranelift's finalized function. The function
+        // signature is `fn() -> i64` as declared during JIT compilation. The module is
+        // kept alive (not dropped) so the code memory remains valid.
         let func: fn() -> i64 = unsafe { std::mem::transmute(code_ptr) };
         Ok(func())
     }
@@ -140,7 +135,7 @@ impl JitCompiler {
         // Add parameters
         for param in &func.params {
             let ty = self.resolve_type(&param.ty.node);
-            let cl_ty = self.type_mapper.map_type(&ty);
+            let cl_ty = self.type_mapper.map_type(&ty)?;
             sig.params.push(AbiParam::new(cl_ty));
         }
 
@@ -151,7 +146,7 @@ impl JitCompiler {
             .map(|t| self.resolve_type(&t.node))
             .unwrap_or(ResolvedType::Unit);
         if !matches!(ret_ty, ResolvedType::Unit) {
-            let cl_ret = self.type_mapper.map_type(&ret_ty);
+            let cl_ret = self.type_mapper.map_type(&ret_ty)?;
             sig.returns.push(AbiParam::new(cl_ret));
         }
 
@@ -178,7 +173,7 @@ impl JitCompiler {
                 let ty = self.resolve_type(&param.ty.node);
                 self.type_mapper.map_type(&ty)
             })
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
         let ret_ty = func
             .ret_type
@@ -193,7 +188,7 @@ impl JitCompiler {
         }
 
         if !matches!(ret_ty, ResolvedType::Unit) {
-            let cl_ret = self.type_mapper.map_type(&ret_ty);
+            let cl_ret = self.type_mapper.map_type(&ret_ty)?;
             sig.returns.push(AbiParam::new(cl_ret));
         }
 
@@ -302,6 +297,10 @@ impl JitCompiler {
             Type::Pointer(inner) => ResolvedType::Pointer(Box::new(self.resolve_type(&inner.node))),
             Type::Ref(inner) => ResolvedType::Ref(Box::new(self.resolve_type(&inner.node))),
             Type::RefMut(inner) => ResolvedType::RefMut(Box::new(self.resolve_type(&inner.node))),
+            Type::Slice(inner) => ResolvedType::Slice(Box::new(self.resolve_type(&inner.node))),
+            Type::SliceMut(inner) => {
+                ResolvedType::SliceMut(Box::new(self.resolve_type(&inner.node)))
+            }
             Type::Array(inner) => ResolvedType::Array(Box::new(self.resolve_type(&inner.node))),
             Type::Map(key, val) => ResolvedType::Map(
                 Box::new(self.resolve_type(&key.node)),
@@ -397,7 +396,6 @@ impl JitCompiler {
                 lifetime: lifetime.clone(),
                 inner: Box::new(self.resolve_type(&inner.node)),
             },
-            Type::Lazy(inner) => ResolvedType::Lazy(Box::new(self.resolve_type(&inner.node))),
         }
     }
 
@@ -406,6 +404,15 @@ impl JitCompiler {
         match expr {
             vais_ast::ConstExpr::Literal(n) => vais_types::ResolvedConst::Value(*n),
             vais_ast::ConstExpr::Param(name) => vais_types::ResolvedConst::Param(name.clone()),
+            vais_ast::ConstExpr::Negate(inner) => {
+                let resolved = self.resolve_const_expr(inner);
+                if let Some(val) = resolved.try_evaluate() {
+                    if let Some(neg_val) = val.checked_neg() {
+                        return vais_types::ResolvedConst::Value(neg_val);
+                    }
+                }
+                vais_types::ResolvedConst::Negate(Box::new(resolved))
+            }
             vais_ast::ConstExpr::BinOp { op, left, right } => {
                 let resolved_left = self.resolve_const_expr(left);
                 let resolved_right = self.resolve_const_expr(right);
@@ -414,6 +421,12 @@ impl JitCompiler {
                     vais_ast::ConstBinOp::Sub => vais_types::ConstBinOp::Sub,
                     vais_ast::ConstBinOp::Mul => vais_types::ConstBinOp::Mul,
                     vais_ast::ConstBinOp::Div => vais_types::ConstBinOp::Div,
+                    vais_ast::ConstBinOp::Mod => vais_types::ConstBinOp::Mod,
+                    vais_ast::ConstBinOp::BitAnd => vais_types::ConstBinOp::BitAnd,
+                    vais_ast::ConstBinOp::BitOr => vais_types::ConstBinOp::BitOr,
+                    vais_ast::ConstBinOp::BitXor => vais_types::ConstBinOp::BitXor,
+                    vais_ast::ConstBinOp::Shl => vais_types::ConstBinOp::Shl,
+                    vais_ast::ConstBinOp::Shr => vais_types::ConstBinOp::Shr,
                 };
                 vais_types::ResolvedConst::BinOp {
                     op: resolved_op,

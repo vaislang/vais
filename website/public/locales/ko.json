@@ -1,0 +1,132 @@
+{
+  "meta": {
+    "title": "Vais - AI 최적화 시스템 프로그래밍 언어",
+    "description": "Vais는 네이티브 LLVM 성능과 evidence-scoped 공개 claim을 갖춘 AI 코드 생성용 시스템 프로그래밍 언어입니다."
+  },
+  "nav": {
+    "compare": "게이트",
+    "performance": "성능",
+    "features": "특징",
+    "playground": "플레이그라운드",
+    "vaisx": "VaisX",
+    "docs": "문서",
+    "blog": "블로그"
+  },
+  "hero": {
+    "badge": "Certified Core + Scoped Evidence",
+    "title": "<span class=\"gradient-text\">명확한 Vais</span>를 작성하고,<br><span class=\"gradient-text\">네이티브 성능</span>을 얻으세요",
+    "subtitle": "Vais (Vibe AI Language for Systems)는 AI 코드 생성에 최적화된 시스템 프로그래밍 언어입니다. 현재 공개 기준은 main-reproducible gate, main fixture로 port된 schema gate, aggregate main port 대기 중인 integration evidence를 구분합니다.",
+    "tryBrowser": "브라우저에서 시도하기",
+    "install": "brew install vais"
+  },
+  "compare": {
+    "title": "Canonical 문법과 Evidence-scoped Claim",
+    "subtitle": "Step 19에서 기존 single-letter keyword form은 제거되었습니다. 공개 claim은 main에서 재현되는 gate, main fixture로 port된 schema gate, aggregate main port 대기 중인 integration evidence를 구분합니다.",
+    "vais": "Vais",
+    "tokens": "토큰",
+    "barTitle": "Evidence Snapshot — 2026-05-13",
+    "barNote": "schema gate는 compiler main fixture/local workspace에서 재현됩니다: cross-package schema 15/15, shared-schema product evidence 9/9. Runtime/package 수치는 gate branch integration evidence이며 aggregate runtime gate는 main port 대기 중입니다."
+  },
+  "performance": {
+    "title": "네이티브 성능",
+    "subtitle": "Vais는 최적화된 LLVM IR로 컴파일됩니다 — 런타임에서 C 및 Rust와 동등하며 빠른 컴파일 속도를 제공합니다.",
+    "runtimeTitle": "실행 시간 — Fibonacci(35)",
+    "compileTitle": "컴파일 속도 — 단일 파일",
+    "compileNote": "Vais <code>--emit-ir</code> vs 전체 컴파일. C보다 8.6배, Rust보다 19배 빠름. 2026-02-11 업데이트."
+  },
+  "features": {
+    "title": "왜 Vais인가요?",
+    "subtitle": "성능 저하 없이 AI 지원 개발을 위해 처음부터 설계되었습니다.",
+    "singleChar": {
+      "title": "Canonical 키워드",
+      "description": "<code>fn</code>, <code>struct</code>, <code>enum</code>, <code>else</code>, <code>match</code>, <code>return</code>, <code>use</code>, <code>pub</code>이 표준입니다. Retired single-letter form은 더 이상 허용되지 않습니다."
+    },
+    "selfRecursion": {
+      "title": "자기 재귀 연산자",
+      "description": "<code>@</code> 연산자는 현재 함수를 재귀적으로 호출합니다. 함수 이름을 반복할 필요가 없습니다 — AI 친화적이고 간결합니다."
+    },
+    "expression": {
+      "title": "모든 것이 표현식",
+      "description": "If/else, match, 블록이 모두 값을 반환합니다. 마지막 표현식에 <code>return</code> 키워드가 필요 없습니다. 함수형이고 인체공학적입니다."
+    },
+    "llvm": {
+      "title": "LLVM 네이티브 속도",
+      "description": "LLVM을 통한 promoted native codegen path를 제공합니다. 더 넓은 backend/optimization claim은 명시된 gate 기준으로 봅니다."
+    },
+    "inference": {
+      "title": "타입 추론",
+      "description": "양방향 타입 검사가 타입을 자동으로 추론합니다. 모든 곳에서 명시적 타입 주석 대신 <code>x := 42</code>라고 작성하세요."
+    },
+    "toolchain": {
+      "title": "Tooling Workbench",
+      "description": "LSP 서버, 포매터, 디버거, REPL, 패키지 매니저, IDE 플러그인은 구현 표면입니다. 지원 수준은 명시된 gate에 따릅니다."
+    },
+    "multiTarget": {
+      "title": "Native First, Experimental Extra Targets",
+      "description": "Promoted path는 native codegen입니다. JavaScript, WebAssembly, browser 실행 경로는 별도 gate가 없으면 experimental입니다."
+    },
+    "incremental": {
+      "title": "Parallel Compiler Pipeline",
+      "description": "모듈별 dependency tracking과 parallel codegen은 workbench 표면입니다. 정확한 성능 claim은 benchmark gate가 필요합니다."
+    },
+    "selfHosting": {
+      "title": "Self-Hosting Workbench",
+      "description": "저장소에는 bootstrap 및 conformance work에 쓰이는 50,000줄 이상의 Vais compiler source가 있습니다. 현재 보증은 certified Core와 promoted runtime gate입니다."
+    }
+  },
+  "playground": {
+    "title": "지금 Vais를 시도해보세요",
+    "subtitle": "브라우저에서 Vais syntax와 examples를 실험할 수 있습니다. 실제 compilation은 playground API를 사용하며, browser-only compile/execute는 아직 experimental입니다.",
+    "launch": "대화형 플레이그라운드 시작",
+    "loadHere": "여기에 플레이그라운드 로드",
+    "openTab": "새 탭에서 열기"
+  },
+  "install": {
+    "title": "Build From Source or Try the Playground",
+    "oneClick": "원클릭 설치",
+    "oneClickNote": "OS와 아키텍처를 자동 감지합니다. macOS, Linux, WSL 지원.",
+    "windows": "Windows (PowerShell)",
+    "macOS": "macOS / Linux (Homebrew)",
+    "cargo": "Cargo",
+    "docker": "Docker"
+  },
+  "footer": {
+    "tagline": "AI 최적화 시스템 언어",
+    "learn": "학습",
+    "documentation": "문서",
+    "quickStart": "빠른 시작",
+    "community": "커뮤니티",
+    "github": "GitHub",
+    "discussions": "토론",
+    "issues": "이슈",
+    "more": "더보기",
+    "changelog": "변경 로그",
+    "license": "MIT 라이선스",
+    "copyright": "&copy; 2026 Vais 기여자들. AI를 위해 ❤로 만들었습니다."
+  },
+  "vaisx": {
+    "badge": "신규",
+    "title": "Vais로 웹 앱 만들기",
+    "subtitle": "VaisX는 Vais web framework workbench입니다. 현재 공개 claim은 main-reproducible gate, main fixture schema gate, aggregate main port 대기 중인 integration evidence를 구분합니다.",
+    "compiler": {
+      "title": "컴파일 타임 반응성",
+      "description": "Reactive state 분석과 DOM update generation은 명시된 gate가 덮는 범위에서만 검증된 구현 표면입니다."
+    },
+    "routing": {
+      "title": "파일 기반 라우팅 & SSR",
+      "description": "File-based routing과 SSR/SSG module은 존재합니다. promoted behavior는 현재 Vais Web gate 기준입니다."
+    },
+    "runtime": {
+      "title": "Runtime Evidence",
+      "description": "현재 Vais Web integration evidence는 runtime smoke 61/77, unit 390/390, package tests 3272/3272, full-build 24/24이며 shared-schema product evidence 9/9은 compiler main-fixture workspace gate로 port되었습니다. Size claim은 size gate가 필요합니다."
+    },
+    "learnMore": "더 알아보기",
+    "github": "GitHub",
+    "quickStart": "빠른 시작",
+    "install": "npm install -g @vaisx/cli",
+    "packages": "패키지"
+  },
+  "langSelector": {
+    "label": "언어"
+  }
+}

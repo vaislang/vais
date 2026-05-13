@@ -1,0 +1,12 @@
+[package]
+name = "vais-uuid"
+version = "1.0.0"
+authors = ["Vais Team"]
+description = "UUID v4 generation and parsing"
+license = "MIT"
+
+[dependencies]
+
+[dev-dependencies]
+
+[build]

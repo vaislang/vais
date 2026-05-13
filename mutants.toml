@@ -1,0 +1,74 @@
+# cargo-mutants configuration for the Vais compiler workspace.
+# Docs: https://mutants.rs/
+#
+# Scope: core compiler crates only.
+#   - vais-ast    (AST definitions)
+#   - vais-types  (type checker & inference)
+#   - vais-codegen (LLVM IR code generator)
+#   - vaisc       (compiler CLI — source only, not tests)
+#
+# Run locally:
+#   cargo mutants --config mutants.toml --no-shuffle -j 2
+# List mutants without running:
+#   cargo mutants --config mutants.toml --list
+
+# ---------------------------------------------------------------------------
+# Scope: include only the four core crates.
+# Globs are matched against relative paths from the workspace root.
+# ---------------------------------------------------------------------------
+examine_globs = [
+    "crates/vais-ast/src/**/*.rs",
+    "crates/vais-types/src/**/*.rs",
+    "crates/vais-codegen/src/**/*.rs",
+    "crates/vaisc/src/**/*.rs",
+]
+
+# ---------------------------------------------------------------------------
+# Exclusions: test modules, fuzz targets, generated / backup files.
+# ---------------------------------------------------------------------------
+exclude_globs = [
+    # Inline test modules discovered as separate files
+    "crates/*/src/**/*_tests.rs",
+    "crates/*/src/**/tests.rs",
+    "crates/*/src/**/tests/**/*.rs",
+    # vais-codegen has named *_tests.rs files at src root level
+    "crates/vais-codegen/src/*_tests.rs",
+    # vaisc external tests directory (not src, but be explicit)
+    "crates/vaisc/tests/**/*.rs",
+    # Fuzz crate
+    "fuzz/**/*.rs",
+    # Editor backups / scratch files
+    "**/*.bak",
+    "**/*.orig",
+]
+
+# ---------------------------------------------------------------------------
+# Timeouts.
+# baseline test suite for the four crates runs in ~60-90s on a fast machine;
+# 120s minimum gives mutants 2x headroom before timing out.
+# ---------------------------------------------------------------------------
+minimum_test_timeout = 120.0
+
+# Build timeout multiplier: allow builds up to 4x the baseline build time.
+build_timeout_multiplier = 4.0
+
+# ---------------------------------------------------------------------------
+# Test execution: run tests from all workspace packages so that cross-crate
+# integration tests (vaisc e2e) also catch mutants in library crates.
+# ---------------------------------------------------------------------------
+test_workspace = true
+
+# Cap lints so that warning-as-errors in other crates do not kill mutant builds
+# prematurely (mutated code may trigger unused-variable etc.).
+cap_lints = true
+
+# Skip calls to common logging / tracing helpers — mutations here add noise
+# without testing logic.
+skip_calls = [
+    "tracing::debug",
+    "tracing::info",
+    "tracing::warn",
+    "tracing::error",
+    "eprintln",
+    "println",
+]

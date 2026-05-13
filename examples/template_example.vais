@@ -26,7 +26,7 @@ F main() -> i64 {
     ctx.set_str("name", "World")
     ctx.set_str("language", "Vais")
 
-    tmpl := template_parse("Hello, {{ name }}! Welcome to {{ language }}.")
+    tmpl := template_parse("Hello, \{\{ name \}\}! Welcome to \{\{ language \}\}.")
     result := tmpl.render(&ctx)
     print_result("   ", result)
     free(result as i64)
@@ -39,7 +39,7 @@ F main() -> i64 {
     ctx.set_int("version", 1)
     ctx.set_int("year", 2025)
 
-    tmpl2 := template_parse("{{ language }} v{{ version }} - Released {{ year }}")
+    tmpl2 := template_parse("\{\{ language \}\} v\{\{ version \}\} - Released \{\{ year \}\}")
     result2 := tmpl2.render(&ctx)
     print_result("   ", result2)
     free(result2 as i64)
@@ -52,7 +52,7 @@ F main() -> i64 {
     ctx.set_str("show_greeting", "true")
     ctx.set_str("is_admin", "0")
 
-    tmpl3 := template_parse("{% if show_greeting %}Greetings, {{ name }}!{% endif %}{% if is_admin %} [ADMIN]{% endif %}")
+    tmpl3 := template_parse("\{% if show_greeting %\}Greetings, \{\{ name \}\}!\{% endif %\}\{% if is_admin %\} [ADMIN]\{% endif %\}")
     result3 := tmpl3.render(&ctx)
     print_result("   ", result3)
     free(result3 as i64)
@@ -64,7 +64,7 @@ F main() -> i64 {
     puts("\n4. Loop blocks:")
     ctx.set_str("colors", "red,green,blue")
 
-    tmpl4 := template_parse("Colors: {% for color in colors %}[{{ color }}] {% endfor %}")
+    tmpl4 := template_parse("Colors: \{% for color in colors %\}[\{\{ color \}\}] \{% endfor %\}")
     result4 := tmpl4.render(&ctx)
     print_result("   ", result4)
     free(result4 as i64)
@@ -76,7 +76,7 @@ F main() -> i64 {
     puts("\n5. Filters:")
     ctx.set_str("title", "hello world")
 
-    tmpl5 := template_parse("Upper: {{ title | upper }}")
+    tmpl5 := template_parse("Upper: \{\{ title | upper \}\}")
     result5 := tmpl5.render(&ctx)
     print_result("   ", result5)
     free(result5 as i64)
@@ -94,7 +94,7 @@ F main() -> i64 {
     # 7. Quick render (one-shot)
     # ------------------------------------------
     puts("\n7. Quick render:")
-    result7 := template_render_var("Hi {{ user }}!", "user", "Alice")
+    result7 := template_render_var("Hi \{\{ user \}\}!", "user", "Alice")
     print_result("   ", result7)
     free(result7 as i64)
 
@@ -104,7 +104,7 @@ F main() -> i64 {
     puts("\n8. Conditional with else:")
     ctx.set_str("logged_in", "true")
 
-    tmpl8 := template_parse("{% if logged_in %}Welcome back, {{ name }}!{% else %}Please log in.{% endif %}")
+    tmpl8 := template_parse("\{% if logged_in %\}Welcome back, \{\{ name \}\}!\{% else %\}Please log in.\{% endif %\}")
     result8 := tmpl8.render(&ctx)
     print_result("   ", result8)
     free(result8 as i64)

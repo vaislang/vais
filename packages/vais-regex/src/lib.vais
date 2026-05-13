@@ -1,0 +1,917 @@
+# Regex Library - NFA-based Regular Expression Engine
+# Supports pattern matching with meta-characters and character classes
+
+# ============================================================================
+# Extern Functions
+# ============================================================================
+
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F strlen(s: i64) -> i64
+X F str_to_ptr(s: str) -> i64
+X F load_byte(ptr: i64) -> i64
+X F store_byte(ptr: i64, val: i64) -> i64
+X F load_i64(ptr: i64) -> i64
+X F store_i64(ptr: i64, val: i64) -> i64
+X F memcpy(dest: i64, src: i64, n: i64) -> i64
+X F memset(dest: i64, val: i64, n: i64) -> i64
+
+# ============================================================================
+# Constants
+# ============================================================================
+
+# NFA Node Types
+C NODE_LITERAL: i64 = 0
+C NODE_DOT: i64 = 1
+C NODE_SPLIT: i64 = 2
+C NODE_MATCH: i64 = 3
+C NODE_CHAR_CLASS: i64 = 4
+C NODE_ANCHOR_START: i64 = 5
+C NODE_ANCHOR_END: i64 = 6
+
+C MAX_NODES: i64 = 512
+C MAX_STATES: i64 = 512
+C MAX_CLASS_CHARS: i64 = 256
+
+# ============================================================================
+# Data Structures
+# ============================================================================
+
+# NFA Node: type, char_value, out1_offset, out2_offset (4 * 8 = 32 bytes)
+# Regex: nfa_nodes_ptr, node_count, start_node (3 * 8 = 24 bytes)
+# CharClass: chars_ptr, count, negated (3 * 8 = 24 bytes)
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+# Check if character is digit (0-9)
+F is_digit(c: i64) -> i64 {
+    I c >= 48 {
+        I c <= 57 {
+            R 1
+        }
+    }
+    0
+}
+
+# Check if character is word character (a-z, A-Z, 0-9, _)
+F is_word(c: i64) -> i64 {
+    I c >= 97 {
+        I c <= 122 {
+            R 1
+        }
+    }
+    I c >= 65 {
+        I c <= 90 {
+            R 1
+        }
+    }
+    I c >= 48 {
+        I c <= 57 {
+            R 1
+        }
+    }
+    I c == 95 {
+        R 1
+    }
+    0
+}
+
+# Check if character is whitespace
+F is_whitespace(c: i64) -> i64 {
+    I c == 32 {
+        R 1
+    }
+    I c == 9 {
+        R 1
+    }
+    I c == 10 {
+        R 1
+    }
+    I c == 13 {
+        R 1
+    }
+    0
+}
+
+# Create NFA node
+F create_node(node_type: i64, char_val: i64, out1: i64, out2: i64) -> i64 {
+    node := malloc(32)
+    store_i64(node, node_type)
+    store_i64(node + 8, char_val)
+    store_i64(node + 16, out1)
+    store_i64(node + 24, out2)
+    node
+}
+
+# Get node field
+F get_node_type(node: i64) -> i64 {
+    load_i64(node)
+}
+
+F get_node_char(node: i64) -> i64 {
+    load_i64(node + 8)
+}
+
+F get_node_out1(node: i64) -> i64 {
+    load_i64(node + 16)
+}
+
+F get_node_out2(node: i64) -> i64 {
+    load_i64(node + 24)
+}
+
+# Create character class
+F create_char_class(negated: i64) -> i64 {
+    class := malloc(24)
+    chars := malloc(MAX_CLASS_CHARS)
+    store_i64(class, chars)
+    store_i64(class + 8, 0)
+    store_i64(class + 16, negated)
+    class
+}
+
+# Add character to class
+F char_class_add(class: i64, c: i64) -> i64 {
+    chars := load_i64(class)
+    count := load_i64(class + 8)
+    I count >= MAX_CLASS_CHARS {
+        R 0
+    }
+    store_byte(chars + count, c)
+    store_i64(class + 8, count + 1)
+    1
+}
+
+# Check if character is in class
+F char_class_matches(class: i64, c: i64) -> i64 {
+    chars := load_i64(class)
+    count := load_i64(class + 8)
+    negated := load_i64(class + 16)
+
+    found := 0
+    i := 0
+    L {
+        I i >= count {
+            B
+        }
+        ch := load_byte(chars + i)
+        I ch == c {
+            found := 1
+            B
+        }
+        i := i + 1
+    }
+
+    I negated == 1 {
+        I found == 1 {
+            R 0
+        } E {
+            R 1
+        }
+    } E {
+        R found
+    }
+}
+
+# ============================================================================
+# Compiler - Pattern to NFA
+# ============================================================================
+
+# Compile regex pattern to NFA
+F regex_compile(pattern: i64, pattern_len: i64) -> i64 {
+    regex := malloc(24)
+    nodes := malloc(MAX_NODES * 32)
+    store_i64(regex, nodes)
+    store_i64(regex + 8, 0)
+    store_i64(regex + 16, 0)
+
+    pos := 0
+    result := compile_expr(regex, pattern, pattern_len, pos, 0)
+
+    I result < 0 {
+        free(nodes)
+        free(regex)
+        R 0
+    }
+
+    # Add final MATCH node
+    node_count := load_i64(regex + 8)
+    match_node := create_node(NODE_MATCH, 0, 0, 0)
+    store_i64(nodes + (node_count * 32), load_i64(match_node))
+    store_i64(nodes + (node_count * 32) + 8, load_i64(match_node + 8))
+    store_i64(nodes + (node_count * 32) + 16, load_i64(match_node + 16))
+    store_i64(nodes + (node_count * 32) + 24, load_i64(match_node + 24))
+    free(match_node)
+
+    # Patch last node to point to MATCH
+    I result >= 0 {
+        last_node_ptr := nodes + (result * 32)
+        store_i64(last_node_ptr + 16, node_count)
+    }
+
+    store_i64(regex + 8, node_count + 1)
+    regex
+}
+
+# Compile expression (handles alternation |)
+F compile_expr(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64) -> i64 {
+    I depth > 32 {
+        R 0 - 1
+    }
+
+    start := compile_term(regex, pattern, pattern_len, pos, depth + 1)
+    I start < 0 {
+        R start
+    }
+
+    # Check for alternation
+    current_pos := load_i64(regex + 8)
+    L {
+        I pos >= pattern_len {
+            B
+        }
+        c := load_byte(pattern + pos)
+        I c == 124 {  # '|'
+            # Create SPLIT node
+            nodes := load_i64(regex)
+            node_count := load_i64(regex + 8)
+
+            split_node := create_node(NODE_SPLIT, 0, start, 0)
+            split_idx := node_count
+            store_i64(nodes + (node_count * 32), load_i64(split_node))
+            store_i64(nodes + (node_count * 32) + 8, load_i64(split_node + 8))
+            store_i64(nodes + (node_count * 32) + 16, load_i64(split_node + 16))
+            store_i64(nodes + (node_count * 32) + 24, load_i64(split_node + 24))
+            free(split_node)
+            store_i64(regex + 8, node_count + 1)
+
+            pos := pos + 1
+            alt := compile_term(regex, pattern, pattern_len, pos, depth + 1)
+            I alt < 0 {
+                R alt
+            }
+
+            # Patch SPLIT node's out2
+            store_i64(nodes + (split_idx * 32) + 24, alt)
+            start := split_idx
+        } E {
+            B
+        }
+    }
+
+    start
+}
+
+# Compile term (sequence of factors)
+F compile_term(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64) -> i64 {
+    I depth > 32 {
+        R 0 - 1
+    }
+
+    nodes := load_i64(regex)
+    start := 0 - 1
+    last := 0 - 1
+
+    L {
+        I pos >= pattern_len {
+            B
+        }
+        c := load_byte(pattern + pos)
+        I c == 124 {  # '|'
+            B
+        }
+        I c == 41 {  # ')'
+            B
+        }
+
+        factor_result := compile_factor(regex, pattern, pattern_len, pos, depth + 1)
+        I factor_result < 0 {
+            R factor_result
+        }
+
+        factor := factor_result
+
+        I start < 0 {
+            start := factor
+        } E {
+            # Connect last node to current factor
+            I last >= 0 {
+                last_node_ptr := nodes + (last * 32)
+                store_i64(last_node_ptr + 16, factor)
+            }
+        }
+        last := factor
+    }
+
+    I start < 0 {
+        R 0
+    }
+    start
+}
+
+# Compile factor (atom + quantifier)
+F compile_factor(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64) -> i64 {
+    I depth > 32 {
+        R 0 - 1
+    }
+
+    atom := compile_atom(regex, pattern, pattern_len, pos, depth + 1)
+    I atom < 0 {
+        R atom
+    }
+
+    # Check for quantifier
+    I pos >= pattern_len {
+        R atom
+    }
+
+    c := load_byte(pattern + pos)
+    nodes := load_i64(regex)
+    node_count := load_i64(regex + 8)
+
+    # * (zero or more)
+    I c == 42 {
+        split_node := create_node(NODE_SPLIT, 0, atom, 0)
+        split_idx := node_count
+        store_i64(nodes + (node_count * 32), load_i64(split_node))
+        store_i64(nodes + (node_count * 32) + 8, load_i64(split_node + 8))
+        store_i64(nodes + (node_count * 32) + 16, load_i64(split_node + 16))
+        store_i64(nodes + (node_count * 32) + 24, load_i64(split_node + 24))
+        free(split_node)
+        store_i64(regex + 8, node_count + 1)
+
+        # Patch atom's last node to loop back
+        atom_node_ptr := nodes + (atom * 32)
+        store_i64(atom_node_ptr + 16, split_idx)
+
+        pos := pos + 1
+        R split_idx
+    }
+
+    # + (one or more)
+    I c == 43 {
+        split_node := create_node(NODE_SPLIT, 0, atom, 0)
+        split_idx := node_count
+        store_i64(nodes + (node_count * 32), load_i64(split_node))
+        store_i64(nodes + (node_count * 32) + 8, load_i64(split_node + 8))
+        store_i64(nodes + (node_count * 32) + 16, load_i64(split_node + 16))
+        store_i64(nodes + (node_count * 32) + 24, load_i64(split_node + 24))
+        free(split_node)
+        store_i64(regex + 8, node_count + 1)
+
+        # Patch atom to point to split
+        atom_node_ptr := nodes + (atom * 32)
+        store_i64(atom_node_ptr + 16, split_idx)
+
+        pos := pos + 1
+        R atom
+    }
+
+    # ? (zero or one)
+    I c == 63 {
+        split_node := create_node(NODE_SPLIT, 0, atom, 0)
+        split_idx := node_count
+        store_i64(nodes + (node_count * 32), load_i64(split_node))
+        store_i64(nodes + (node_count * 32) + 8, load_i64(split_node + 8))
+        store_i64(nodes + (node_count * 32) + 16, load_i64(split_node + 16))
+        store_i64(nodes + (node_count * 32) + 24, load_i64(split_node + 24))
+        free(split_node)
+        store_i64(regex + 8, node_count + 1)
+
+        pos := pos + 1
+        R split_idx
+    }
+
+    atom
+}
+
+# Compile atom (literal, dot, class, anchor, group)
+F compile_atom(regex: i64, pattern: i64, pattern_len: i64, pos: i64, depth: i64) -> i64 {
+    I depth > 32 {
+        R 0 - 1
+    }
+    I pos >= pattern_len {
+        R 0 - 1
+    }
+
+    c := load_byte(pattern + pos)
+    nodes := load_i64(regex)
+    node_count := load_i64(regex + 8)
+
+    # Anchor: ^
+    I c == 94 {
+        node := create_node(NODE_ANCHOR_START, 0, 0, 0)
+        store_i64(nodes + (node_count * 32), load_i64(node))
+        store_i64(nodes + (node_count * 32) + 8, load_i64(node + 8))
+        store_i64(nodes + (node_count * 32) + 16, load_i64(node + 16))
+        store_i64(nodes + (node_count * 32) + 24, load_i64(node + 24))
+        free(node)
+        store_i64(regex + 8, node_count + 1)
+        pos := pos + 1
+        R node_count
+    }
+
+    # Anchor: $
+    I c == 36 {
+        node := create_node(NODE_ANCHOR_END, 0, 0, 0)
+        store_i64(nodes + (node_count * 32), load_i64(node))
+        store_i64(nodes + (node_count * 32) + 8, load_i64(node + 8))
+        store_i64(nodes + (node_count * 32) + 16, load_i64(node + 16))
+        store_i64(nodes + (node_count * 32) + 24, load_i64(node + 24))
+        free(node)
+        store_i64(regex + 8, node_count + 1)
+        pos := pos + 1
+        R node_count
+    }
+
+    # Dot: .
+    I c == 46 {
+        node := create_node(NODE_DOT, 0, 0, 0)
+        store_i64(nodes + (node_count * 32), load_i64(node))
+        store_i64(nodes + (node_count * 32) + 8, load_i64(node + 8))
+        store_i64(nodes + (node_count * 32) + 16, load_i64(node + 16))
+        store_i64(nodes + (node_count * 32) + 24, load_i64(node + 24))
+        free(node)
+        store_i64(regex + 8, node_count + 1)
+        pos := pos + 1
+        R node_count
+    }
+
+    # Character class: [...]
+    I c == 91 {
+        pos := pos + 1
+        I pos >= pattern_len {
+            R 0 - 1
+        }
+
+        negated := 0
+        next_c := load_byte(pattern + pos)
+        I next_c == 94 {  # '^'
+            negated := 1
+            pos := pos + 1
+        }
+
+        class := create_char_class(negated)
+
+        L {
+            I pos >= pattern_len {
+                free(load_i64(class))
+                free(class)
+                R 0 - 1
+            }
+            ch := load_byte(pattern + pos)
+            I ch == 93 {  # ']'
+                B
+            }
+
+            # Check for range
+            I pos + 2 < pattern_len {
+                next := load_byte(pattern + pos + 1)
+                I next == 45 {  # '-'
+                    end_ch := load_byte(pattern + pos + 2)
+                    # Add range
+                    i := ch
+                    L {
+                        I i > end_ch {
+                            B
+                        }
+                        char_class_add(class, i)
+                        i := i + 1
+                    }
+                    pos := pos + 3
+                    C
+                }
+            }
+
+            char_class_add(class, ch)
+            pos := pos + 1
+        }
+
+        # Create node with class pointer
+        node := create_node(NODE_CHAR_CLASS, class, 0, 0)
+        store_i64(nodes + (node_count * 32), load_i64(node))
+        store_i64(nodes + (node_count * 32) + 8, load_i64(node + 8))
+        store_i64(nodes + (node_count * 32) + 16, load_i64(node + 16))
+        store_i64(nodes + (node_count * 32) + 24, load_i64(node + 24))
+        free(node)
+        store_i64(regex + 8, node_count + 1)
+
+        pos := pos + 1
+        R node_count
+    }
+
+    # Escape sequences
+    I c == 92 {  # '\'
+        pos := pos + 1
+        I pos >= pattern_len {
+            R 0 - 1
+        }
+        escape := load_byte(pattern + pos)
+
+        # \d (digit)
+        I escape == 100 {
+            class := create_char_class(0)
+            i := 48
+            L {
+                I i > 57 {
+                    B
+                }
+                char_class_add(class, i)
+                i := i + 1
+            }
+            node := create_node(NODE_CHAR_CLASS, class, 0, 0)
+            store_i64(nodes + (node_count * 32), load_i64(node))
+            store_i64(nodes + (node_count * 32) + 8, load_i64(node + 8))
+            store_i64(nodes + (node_count * 32) + 16, load_i64(node + 16))
+            store_i64(nodes + (node_count * 32) + 24, load_i64(node + 24))
+            free(node)
+            store_i64(regex + 8, node_count + 1)
+            pos := pos + 1
+            R node_count
+        }
+
+        # \w (word)
+        I escape == 119 {
+            class := create_char_class(0)
+            # a-z
+            i := 97
+            L {
+                I i > 122 {
+                    B
+                }
+                char_class_add(class, i)
+                i := i + 1
+            }
+            # A-Z
+            i := 65
+            L {
+                I i > 90 {
+                    B
+                }
+                char_class_add(class, i)
+                i := i + 1
+            }
+            # 0-9
+            i := 48
+            L {
+                I i > 57 {
+                    B
+                }
+                char_class_add(class, i)
+                i := i + 1
+            }
+            char_class_add(class, 95)  # '_'
+            node := create_node(NODE_CHAR_CLASS, class, 0, 0)
+            store_i64(nodes + (node_count * 32), load_i64(node))
+            store_i64(nodes + (node_count * 32) + 8, load_i64(node + 8))
+            store_i64(nodes + (node_count * 32) + 16, load_i64(node + 16))
+            store_i64(nodes + (node_count * 32) + 24, load_i64(node + 24))
+            free(node)
+            store_i64(regex + 8, node_count + 1)
+            pos := pos + 1
+            R node_count
+        }
+
+        # \s (whitespace)
+        I escape == 115 {
+            class := create_char_class(0)
+            char_class_add(class, 32)   # space
+            char_class_add(class, 9)    # tab
+            char_class_add(class, 10)   # newline
+            char_class_add(class, 13)   # carriage return
+            node := create_node(NODE_CHAR_CLASS, class, 0, 0)
+            store_i64(nodes + (node_count * 32), load_i64(node))
+            store_i64(nodes + (node_count * 32) + 8, load_i64(node + 8))
+            store_i64(nodes + (node_count * 32) + 16, load_i64(node + 16))
+            store_i64(nodes + (node_count * 32) + 24, load_i64(node + 24))
+            free(node)
+            store_i64(regex + 8, node_count + 1)
+            pos := pos + 1
+            R node_count
+        }
+
+        # Literal escaped character
+        c := escape
+    }
+
+    # Literal character
+    node := create_node(NODE_LITERAL, c, 0, 0)
+    store_i64(nodes + (node_count * 32), load_i64(node))
+    store_i64(nodes + (node_count * 32) + 8, load_i64(node + 8))
+    store_i64(nodes + (node_count * 32) + 16, load_i64(node + 16))
+    store_i64(nodes + (node_count * 32) + 24, load_i64(node + 24))
+    free(node)
+    store_i64(regex + 8, node_count + 1)
+
+    pos := pos + 1
+    node_count
+}
+
+# ============================================================================
+# NFA Simulation
+# ============================================================================
+
+# Add state to state set
+F add_state(states: i64, count_ptr: i64, state: i64, visited: i64) -> i64 {
+    # Check if already visited
+    I load_byte(visited + state) == 1 {
+        R 0
+    }
+    store_byte(visited + state, 1)
+
+    count := load_i64(count_ptr)
+    I count >= MAX_STATES {
+        R 0
+    }
+
+    store_i64(states + (count * 8), state)
+    store_i64(count_ptr, count + 1)
+    1
+}
+
+# Process epsilon transitions
+F add_state_eps(regex: i64, states: i64, count_ptr: i64, state: i64, visited: i64) -> i64 {
+    nodes := load_i64(regex)
+    node_ptr := nodes + (state * 32)
+    node_type := load_i64(node_ptr)
+
+    # SPLIT nodes have epsilon transitions
+    I node_type == NODE_SPLIT {
+        store_byte(visited + state, 1)
+        out1 := load_i64(node_ptr + 16)
+        out2 := load_i64(node_ptr + 24)
+        I out1 >= 0 {
+            add_state_eps(regex, states, count_ptr, out1, visited)
+        }
+        I out2 >= 0 {
+            add_state_eps(regex, states, count_ptr, out2, visited)
+        }
+        R 1
+    }
+
+    # Non-epsilon node
+    add_state(states, count_ptr, state, visited)
+}
+
+# Simulate NFA on input text
+F nfa_simulate(regex: i64, text: i64, text_len: i64, start_pos: i64) -> i64 {
+    nodes := load_i64(regex)
+    start_state := load_i64(regex + 16)
+
+    # Current and next state sets
+    current_states := malloc(MAX_STATES * 8)
+    next_states := malloc(MAX_STATES * 8)
+    current_count_ptr := malloc(8)
+    next_count_ptr := malloc(8)
+    visited := malloc(MAX_NODES)
+
+    store_i64(current_count_ptr, 0)
+
+    # Initialize with start state
+    memset(visited, 0, MAX_NODES)
+    add_state_eps(regex, current_states, current_count_ptr, start_state, visited)
+
+    # Check for start anchor
+    at_start := 1
+    I start_pos > 0 {
+        at_start := 0
+    }
+
+    # Process each character
+    pos := start_pos
+    L {
+        I pos > text_len {
+            B
+        }
+
+        # Check for match state
+        current_count := load_i64(current_count_ptr)
+        i := 0
+        matched := 0
+        L {
+            I i >= current_count {
+                B
+            }
+            state := load_i64(current_states + (i * 8))
+            node_ptr := nodes + (state * 32)
+            node_type := load_i64(node_ptr)
+
+            I node_type == NODE_MATCH {
+                matched := 1
+                B
+            }
+            i := i + 1
+        }
+
+        I matched == 1 {
+            free(current_states)
+            free(next_states)
+            free(current_count_ptr)
+            free(next_count_ptr)
+            free(visited)
+            R 1
+        }
+
+        # End of input
+        I pos >= text_len {
+            B
+        }
+
+        c := load_byte(text + pos)
+        store_i64(next_count_ptr, 0)
+
+        # Process current states
+        i := 0
+        L {
+            I i >= current_count {
+                B
+            }
+            state := load_i64(current_states + (i * 8))
+            node_ptr := nodes + (state * 32)
+            node_type := load_i64(node_ptr)
+
+            # ANCHOR_START
+            I node_type == NODE_ANCHOR_START {
+                I at_start == 1 {
+                    out1 := load_i64(node_ptr + 16)
+                    I out1 >= 0 {
+                        memset(visited, 0, MAX_NODES)
+                        add_state_eps(regex, next_states, next_count_ptr, out1, visited)
+                    }
+                }
+            }
+
+            # ANCHOR_END
+            I node_type == NODE_ANCHOR_END {
+                I pos == text_len {
+                    out1 := load_i64(node_ptr + 16)
+                    I out1 >= 0 {
+                        memset(visited, 0, MAX_NODES)
+                        add_state_eps(regex, next_states, next_count_ptr, out1, visited)
+                    }
+                }
+            }
+
+            # LITERAL
+            I node_type == NODE_LITERAL {
+                char_val := load_i64(node_ptr + 8)
+                I c == char_val {
+                    out1 := load_i64(node_ptr + 16)
+                    I out1 >= 0 {
+                        memset(visited, 0, MAX_NODES)
+                        add_state_eps(regex, next_states, next_count_ptr, out1, visited)
+                    }
+                }
+            }
+
+            # DOT
+            I node_type == NODE_DOT {
+                I c != 10 {  # Match any except newline
+                    out1 := load_i64(node_ptr + 16)
+                    I out1 >= 0 {
+                        memset(visited, 0, MAX_NODES)
+                        add_state_eps(regex, next_states, next_count_ptr, out1, visited)
+                    }
+                }
+            }
+
+            # CHAR_CLASS
+            I node_type == NODE_CHAR_CLASS {
+                class := load_i64(node_ptr + 8)
+                I char_class_matches(class, c) == 1 {
+                    out1 := load_i64(node_ptr + 16)
+                    I out1 >= 0 {
+                        memset(visited, 0, MAX_NODES)
+                        add_state_eps(regex, next_states, next_count_ptr, out1, visited)
+                    }
+                }
+            }
+
+            i := i + 1
+        }
+
+        # Swap state sets
+        tmp := current_states
+        current_states := next_states
+        next_states := tmp
+        tmp_count := current_count_ptr
+        current_count_ptr := next_count_ptr
+        next_count_ptr := tmp_count
+
+        pos := pos + 1
+        at_start := 0
+    }
+
+    # Check final states for match
+    current_count := load_i64(current_count_ptr)
+    i := 0
+    L {
+        I i >= current_count {
+            B
+        }
+        state := load_i64(current_states + (i * 8))
+        node_ptr := nodes + (state * 32)
+        node_type := load_i64(node_ptr)
+
+        I node_type == NODE_MATCH {
+            free(current_states)
+            free(next_states)
+            free(current_count_ptr)
+            free(next_count_ptr)
+            free(visited)
+            R 1
+        }
+        i := i + 1
+    }
+
+    free(current_states)
+    free(next_states)
+    free(current_count_ptr)
+    free(next_count_ptr)
+    free(visited)
+    0
+}
+
+# ============================================================================
+# Public API
+# ============================================================================
+
+# Full match
+F regex_match(regex: i64, text: i64, text_len: i64) -> i64 {
+    nfa_simulate(regex, text, text_len, 0)
+}
+
+# Find first match (search)
+F regex_search(regex: i64, text: i64, text_len: i64) -> i64 {
+    pos := 0
+    L {
+        I pos >= text_len {
+            B
+        }
+        I nfa_simulate(regex, text, text_len, pos) == 1 {
+            R pos
+        }
+        pos := pos + 1
+    }
+    0 - 1
+}
+
+# Find all matches (returns {positions_ptr, count})
+F regex_find_all(regex: i64, text: i64, text_len: i64) -> i64 {
+    result := malloc(16)
+    positions := malloc(text_len * 8)
+    count := 0
+
+    pos := 0
+    L {
+        I pos >= text_len {
+            B
+        }
+        I nfa_simulate(regex, text, text_len, pos) == 1 {
+            store_i64(positions + (count * 8), pos)
+            count := count + 1
+        }
+        pos := pos + 1
+    }
+
+    store_i64(result, positions)
+    store_i64(result + 8, count)
+    result
+}
+
+# Free compiled regex
+F regex_free(regex: i64) -> i64 {
+    I regex == 0 {
+        R 0
+    }
+
+    nodes := load_i64(regex)
+    node_count := load_i64(regex + 8)
+
+    # Free character classes
+    i := 0
+    L {
+        I i >= node_count {
+            B
+        }
+        node_ptr := nodes + (i * 32)
+        node_type := load_i64(node_ptr)
+        I node_type == NODE_CHAR_CLASS {
+            class := load_i64(node_ptr + 8)
+            I class != 0 {
+                chars := load_i64(class)
+                I chars != 0 {
+                    free(chars)
+                }
+                free(class)
+            }
+        }
+        i := i + 1
+    }
+
+    free(nodes)
+    free(regex)
+    0
+}

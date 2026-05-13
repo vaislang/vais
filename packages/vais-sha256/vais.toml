@@ -1,0 +1,12 @@
+[package]
+name = "vais-sha256"
+version = "1.0.0"
+authors = ["Vais Team"]
+description = "FIPS 180-4 SHA-256 cryptographic hash"
+license = "MIT"
+
+[dependencies]
+
+[dev-dependencies]
+
+[build]

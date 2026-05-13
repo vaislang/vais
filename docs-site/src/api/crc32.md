@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/crc32
+use std/crc32
 ```
 
 ## Functions
@@ -24,9 +24,9 @@ Uses the standard IEEE 802.3 polynomial (0xEDB88320 in reflected form). Implemen
 ## Usage
 
 ```vais
-U std/crc32
+use std/crc32
 
-F main() -> i64 {
+fn main() -> i64 {
     data := "Hello, World!"
     checksum := crc32(data, 13)
     0

@@ -4,8 +4,9 @@ use std::collections::HashMap;
 
 use super::TypeChecker;
 use crate::traits::TraitMethodSig;
+use crate::types::defs::VarInfo;
 use crate::types::{
-    self, Linearity, ResolvedType, TypeError, TypeResult, VarInfo, VariantFieldTypes,
+    find_similar_name, Linearity, ResolvedType, TypeError, TypeResult, VariantFieldTypes,
 };
 
 impl TypeChecker {
@@ -23,6 +24,7 @@ impl TypeChecker {
         })
     }
 
+    #[inline]
     pub(crate) fn lookup_var(&self, name: &str) -> Option<ResolvedType> {
         self.lookup_var_info(name).ok().map(|v| v.ty)
     }
@@ -31,6 +33,7 @@ impl TypeChecker {
         self.lookup_var_info(name).ok().map(|v| (v.ty, v.is_mut))
     }
 
+    #[inline]
     pub(crate) fn lookup_var_or_err(&self, name: &str) -> TypeResult<ResolvedType> {
         self.lookup_var_info(name).map(|v| v.ty)
     }
@@ -141,6 +144,17 @@ impl TypeChecker {
             });
         }
 
+        // Check if it's a global variable (globals are mutable by default)
+        if let Some(global_type) = self.globals.get(name) {
+            return Ok(VarInfo {
+                ty: global_type.clone(),
+                is_mut: true,
+                linearity: Linearity::Unrestricted,
+                use_count: 0,
+                defined_at: None,
+            });
+        }
+
         // Implicit self: if in a method context, check struct fields
         if let Ok(self_info) = self.lookup_self_var_info() {
             let inner_type = match &self_info.ty {
@@ -152,7 +166,7 @@ impl TypeChecker {
                 generics: _,
             }) = inner_type
             {
-                if let Some(struct_def) = self.structs.get(struct_name).cloned() {
+                if let Some(struct_def) = self.structs.get(struct_name.as_str()).cloned() {
                     for (fname, ftype) in &struct_def.fields {
                         if fname == name {
                             return Ok(VarInfo {
@@ -168,6 +182,55 @@ impl TypeChecker {
             }
         }
 
+        // Check if name is an enum TYPE name (used as namespace: DistanceMetric.L2)
+        if let Some(enum_def) = self.enums.get(name) {
+            let generics: Vec<ResolvedType> = enum_def
+                .generics
+                .iter()
+                .map(|_| self.fresh_type_var())
+                .collect();
+            return Ok(VarInfo {
+                ty: ResolvedType::Named {
+                    name: name.to_string(),
+                    generics,
+                },
+                is_mut: false,
+                linearity: Linearity::Unrestricted,
+                use_count: 0,
+                defined_at: None,
+            });
+        }
+
+        // Check if name is a struct type name (used as namespace: ByteBuffer.new())
+        if let Some(_struct_def) = self.structs.get(name) {
+            return Ok(VarInfo {
+                ty: ResolvedType::Named {
+                    name: name.to_string(),
+                    generics: vec![],
+                },
+                is_mut: false,
+                linearity: Linearity::Unrestricted,
+                use_count: 0,
+                defined_at: None,
+            });
+        }
+
+        // Fallback: if name looks like a constant (ALL_CAPS) not yet registered,
+        // return I64 to avoid cascading errors
+        if name.contains('_')
+            && name
+                .chars()
+                .all(|c| c.is_uppercase() || c == '_' || c.is_ascii_digit())
+        {
+            return Ok(VarInfo {
+                ty: ResolvedType::I64,
+                is_mut: false,
+                linearity: Linearity::Unrestricted,
+                use_count: 0,
+                defined_at: None,
+            });
+        }
+
         // Collect all available names for did-you-mean suggestion
         let mut candidates: Vec<&str> = Vec::new();
         for scope in &self.scopes {
@@ -175,17 +238,46 @@ impl TypeChecker {
         }
         candidates.extend(self.functions.keys().map(|s| s.as_str()));
         candidates.extend(self.constants.keys().map(|s| s.as_str()));
+        candidates.extend(self.globals.keys().map(|s| s.as_str()));
         for enum_def in self.enums.values() {
             candidates.extend(enum_def.variants.keys().map(|s| s.as_str()));
         }
 
-        let suggestion = types::find_similar_name(name, candidates.into_iter());
+        let suggestion = find_similar_name(name, candidates.into_iter());
 
         Err(TypeError::UndefinedVar {
             name: name.to_string(),
             span: None,
             suggestion,
         })
+    }
+
+    /// Look up a method in a trait definition, walking super traits if not found directly.
+    /// Uses a visited set to prevent infinite recursion on cyclic super-trait declarations.
+    fn find_method_in_trait_with_supers(
+        &self,
+        trait_name: &str,
+        method_name: &str,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> Option<TraitMethodSig> {
+        if !visited.insert(trait_name.to_string()) {
+            return None; // Cycle detected
+        }
+        if let Some(trait_def) = self.traits.get(trait_name) {
+            // Check direct methods first
+            if let Some(method_sig) = trait_def.methods.get(method_name) {
+                return Some(method_sig.clone());
+            }
+            // Walk super traits
+            for super_trait in &trait_def.super_traits {
+                if let Some(method_sig) =
+                    self.find_method_in_trait_with_supers(super_trait, method_name, visited)
+                {
+                    return Some(method_sig);
+                }
+            }
+        }
+        None
     }
 
     /// Find a method from trait implementations for a given type
@@ -207,10 +299,37 @@ impl TypeChecker {
             _ => None,
         };
         if let Some(trait_name) = dyn_trait {
-            if let Some(trait_def) = self.traits.get(&trait_name) {
-                return trait_def.methods.get(method_name).cloned();
+            let mut visited = std::collections::HashSet::new();
+            return self.find_method_in_trait_with_supers(&trait_name, method_name, &mut visited);
+        }
+
+        // Handle generic types with bounds from where clauses
+        if let ResolvedType::Generic(type_param) = receiver_type {
+            if let Some(bounds) = self.current_generic_bounds.get(type_param) {
+                for bound_trait in bounds {
+                    let mut visited = std::collections::HashSet::new();
+                    if let Some(method_sig) = self.find_method_in_trait_with_supers(
+                        bound_trait,
+                        method_name,
+                        &mut visited,
+                    ) {
+                        return Some(method_sig);
+                    }
+                    // Also check trait aliases
+                    if let Some(alias_bounds) = self.trait_aliases.get(bound_trait.as_str()) {
+                        for alias_trait in alias_bounds {
+                            let mut visited = std::collections::HashSet::new();
+                            if let Some(method_sig) = self.find_method_in_trait_with_supers(
+                                alias_trait,
+                                method_name,
+                                &mut visited,
+                            ) {
+                                return Some(method_sig);
+                            }
+                        }
+                    }
+                }
             }
-            return None;
         }
 
         // Get the type name from the receiver type
@@ -223,10 +342,13 @@ impl TypeChecker {
         for trait_impl in &self.trait_impls {
             if trait_impl.type_name == type_name {
                 // Found an implementation of a trait for this type
-                if let Some(trait_def) = self.traits.get(&trait_impl.trait_name) {
-                    if let Some(method_sig) = trait_def.methods.get(method_name) {
-                        return Some(method_sig.clone());
-                    }
+                let mut visited = std::collections::HashSet::new();
+                if let Some(method_sig) = self.find_method_in_trait_with_supers(
+                    &trait_impl.trait_name,
+                    method_name,
+                    &mut visited,
+                ) {
+                    return Some(method_sig);
                 }
             }
         }
@@ -237,10 +359,55 @@ impl TypeChecker {
     /// Get the Item type from an Iterator trait implementation
     /// Returns the element type that the iterator yields
     pub(crate) fn get_iterator_item_type(&self, iter_type: &ResolvedType) -> Option<ResolvedType> {
+        let mut visited = std::collections::HashSet::new();
+        self.get_iterator_item_type_inner(iter_type, &mut visited)
+    }
+
+    /// Inner implementation with visited set to prevent infinite recursion
+    /// when `into_iter()` returns the same type (or a cycle of types).
+    fn get_iterator_item_type_inner(
+        &self,
+        iter_type: &ResolvedType,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> Option<ResolvedType> {
         // Handle built-in iterable types
         match iter_type {
             ResolvedType::Array(elem_type) => return Some((**elem_type).clone()),
+            ResolvedType::ConstArray { element, .. } => return Some((**element).clone()),
             ResolvedType::Range(elem_type) => return Some((**elem_type).clone()),
+            ResolvedType::Slice(elem_type) | ResolvedType::SliceMut(elem_type) => {
+                return Some((**elem_type).clone())
+            }
+            ResolvedType::Pointer(elem_type) => return Some((**elem_type).clone()),
+            // &Vec<T>, &[T], &mut Vec<T> — iterate yields &element_type
+            ResolvedType::Ref(inner) => {
+                if let Some(elem) = self.get_iterator_item_type_inner(inner, visited) {
+                    return Some(ResolvedType::Ref(Box::new(elem)));
+                }
+                return None;
+            }
+            ResolvedType::RefMut(inner) => {
+                if let Some(elem) = self.get_iterator_item_type_inner(inner, visited) {
+                    return Some(ResolvedType::RefMut(Box::new(elem)));
+                }
+                return None;
+            }
+            // Vec<T> — element is generics[0]
+            ResolvedType::Named { name, generics } if name == "Vec" && !generics.is_empty() => {
+                return Some(generics[0].clone());
+            }
+            // Phase 24 Task 5: EnumerateIter<T> — yields (i64, T) tuples
+            // This is a virtual iterator type produced by Vec<T>.enumerate()
+            // in calls.rs. For-each loop over it binds a Pattern::Tuple([i, x])
+            // against ResolvedType::Tuple([I64, T]).
+            ResolvedType::Named { name, generics }
+                if name == "EnumerateIter" && !generics.is_empty() =>
+            {
+                return Some(ResolvedType::Tuple(vec![
+                    ResolvedType::I64,
+                    generics[0].clone(),
+                ]));
+            }
             _ => {}
         }
 
@@ -249,6 +416,11 @@ impl TypeChecker {
             ResolvedType::Named { name, .. } => name,
             _ => return None,
         };
+
+        // Prevent infinite recursion: if we've already visited this type, bail out
+        if !visited.insert(type_name.clone()) {
+            return None;
+        }
 
         // Look for Iterator trait implementation
         for trait_impl in &self.trait_impls {
@@ -280,8 +452,8 @@ impl TypeChecker {
                 if let Some(struct_def) = self.structs.get(type_name) {
                     if let Some(into_iter_method) = struct_def.methods.get("into_iter") {
                         let iterator_type = &into_iter_method.ret;
-                        // Recursively get the item type from the iterator
-                        return self.get_iterator_item_type(iterator_type);
+                        // Recursively get the item type from the iterator (with cycle detection)
+                        return self.get_iterator_item_type_inner(iterator_type, visited);
                     }
                 }
 

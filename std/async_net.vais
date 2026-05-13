@@ -92,13 +92,13 @@ F set_fd_nonblocking(fd: i64, enable: i64) -> i64 {
         R -1
     }
 
-    new_flags := I enable != 0 { flags | O_NONBLOCK } E { flags & ~O_NONBLOCK }
+    new_flags := I enable != 0 { flags | O_NONBLOCK } EL { flags & ~O_NONBLOCK }
     R fcntl(fd, F_SETFL, new_flags)
 }
 
 # Helper: Check if error is recoverable (EAGAIN/EWOULDBLOCK)
 F is_would_block(errno: i64) -> i64 {
-    R I errno == EAGAIN || errno == EWOULDBLOCK { 1 } E { 0 }
+    R I errno == EAGAIN || errno == EWOULDBLOCK { 1 } EL { 0 }
 }
 
 # ============================================================================
@@ -276,7 +276,7 @@ X AsyncTcpStream {
         # For non-blocking connect, EINPROGRESS is expected
         # In real async, we'd poll/select for writability
         # Here we simplify: if connect returns 0 or EINPROGRESS, consider it "connecting"
-        is_conn := I connect_result == 0 { 1 } E { 0 }
+        is_conn := I connect_result == 0 { 1 } EL { 0 }
 
         # Allocate read buffer
         buf := malloc(DEFAULT_READ_BUF_SIZE)
@@ -346,11 +346,11 @@ X AsyncTcpStream {
             I n > 0 {
                 read_buf_len := read_buf_len + n
                 total := total + n
-            } E I n == 0 {
+            } EL I n == 0 {
                 # Connection closed
                 is_connected := 0
                 B
-            } E {
+            } EL {
                 # Error or would block
                 B
             }
@@ -482,7 +482,7 @@ X AsyncUdpSocket {
         }
 
         optval := malloc(8)
-        store_i32(optval, I enable != 0 { 1 } E { 0 })
+        store_i32(optval, I enable != 0 { 1 } EL { 0 })
         result := setsockopt(fd, SOL_SOCKET, SO_BROADCAST, optval, 4)
         free(optval)
 

@@ -3,9 +3,12 @@
 //! Handles function code generation, TCO detection and loop-based
 //! tail recursion elimination.
 
+use std::collections::HashMap;
+
+use inkwell::values::BasicValueEnum;
 use inkwell::{AddressSpace, IntPredicate};
 
-use vais_ast::{self as ast, Expr, IfElse, Stmt};
+use vais_ast::{self as ast, Expr, GenericParamKind, IfElse, Stmt};
 use vais_types::ResolvedType;
 
 use super::generator::{InkwellCodeGenerator, TcoState};
@@ -75,6 +78,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Generate a tail-recursive function body as a loop.
     /// Instead of recursive calls, we update the parameters and branch back to the loop header.
     pub(super) fn generate_tco_function(&mut self, func: &ast::Function) -> CodegenResult<()> {
+        // Skip generic function body - they are generated via specialization
+        if !func.generics.is_empty() {
+            return Ok(());
+        }
+
         let fn_value = *self
             .functions
             .get(&func.name.node)
@@ -83,16 +91,18 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.current_function = Some(fn_value);
         self.locals.clear();
         self.var_struct_types.clear();
+        self.var_resolved_types.clear();
         self.defer_stack.clear();
+        self.alloc_tracker.clear();
+        self.string_value_slot.clear();
+        self.pending_return_skip_slot.clear();
+        self.scope_str_stack.clear();
+        self.var_string_slot.clear();
+        self.var_string_slots_multi.clear();
+        self.phi_extra_slots.clear();
 
-        let old_substitutions = self.generic_substitutions.clone();
-        if !func.generics.is_empty() {
-            for gp in &func.generics {
-                self.generic_substitutions
-                    .entry(gp.name.node.clone())
-                    .or_insert(ResolvedType::I64);
-            }
-        }
+        // Non-generic function: substitutions should be empty, take avoids clone allocation
+        let old_substitutions = std::mem::take(&mut self.generic_substitutions);
 
         // Create entry block
         let entry = self.context.append_basic_block(fn_value, "entry");
@@ -101,7 +111,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Allocate space for parameters (these will be updated on each loop iteration)
         let mut param_allocas = Vec::new();
         for (i, param) in func.params.iter().enumerate() {
-            let param_value = fn_value.get_nth_param(i as u32).unwrap();
+            let param_value = fn_value.get_nth_param(i as u32).ok_or_else(|| {
+                CodegenError::InternalError(format!(
+                    "ICE: parameter index {} out of bounds for function '{}'",
+                    i, func.name.node
+                ))
+            })?;
             let param_type = param_value.get_type();
             let alloca = self
                 .builder
@@ -118,6 +133,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 self.var_struct_types
                     .insert(param.name.node.clone(), struct_name);
             }
+
+            // Track resolved type for parameters (for element/pointee type inference)
+            let resolved = self.ast_type_to_resolved(&param.ty.node);
+            self.var_resolved_types
+                .insert(param.name.node.clone(), resolved);
         }
 
         // Create loop header block (jump target for tail calls)
@@ -150,11 +170,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if self
                     .builder
                     .get_insert_block()
-                    .unwrap()
+                    .ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "ICE: no insert block during TCO function generation".into(),
+                        )
+                    })?
                     .get_terminator()
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.mark_return_ownership_transfer_expr(&body_value, &body_expr.node);
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
@@ -192,11 +218,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if self
                     .builder
                     .get_insert_block()
-                    .unwrap()
+                    .ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "ICE: no insert block during TCO function generation".into(),
+                        )
+                    })?
                     .get_terminator()
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.mark_return_ownership_transfer_block(&body_value, stmts);
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
@@ -210,6 +242,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                 .build_return(Some(&body_value))
                                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                         } else if let Some(ert) = expected_ret_type {
+                            // Auto-return: body type doesn't match expected return type.
+                            // For main() with implicit i64 return, the body evaluates to
+                            // Unit but the function signature expects i64 — return 0.
                             let default_val = self.get_default_value(ert);
                             self.builder
                                 .build_return(Some(&default_val))
@@ -227,11 +262,18 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Clear TCO state
         self.tco_state = None;
         self.generic_substitutions = old_substitutions;
+        self.type_mapper
+            .set_generic_substitutions(&self.generic_substitutions);
         self.current_function = None;
         Ok(())
     }
 
     pub(super) fn generate_function(&mut self, func: &ast::Function) -> CodegenResult<()> {
+        // Skip generic function body - they are generated via specialization
+        if !func.generics.is_empty() {
+            return Ok(());
+        }
+
         // Check if this function has tail-recursive self-calls
         let is_tail_recursive = match &func.body {
             ast::FunctionBody::Expr(body_expr) => Self::has_tail_self_call(&body_expr.node),
@@ -256,17 +298,18 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.current_function = Some(fn_value);
         self.locals.clear();
         self.var_struct_types.clear();
+        self.var_resolved_types.clear();
         self.defer_stack.clear();
+        self.alloc_tracker.clear();
+        self.string_value_slot.clear();
+        self.pending_return_skip_slot.clear();
+        self.scope_str_stack.clear();
+        self.var_string_slot.clear();
+        self.var_string_slots_multi.clear();
+        self.phi_extra_slots.clear();
 
-        // For generic functions, set up default substitutions (T -> i64, etc.)
-        let old_substitutions = self.generic_substitutions.clone();
-        if !func.generics.is_empty() {
-            for gp in &func.generics {
-                self.generic_substitutions
-                    .entry(gp.name.node.clone())
-                    .or_insert(ResolvedType::I64);
-            }
-        }
+        // Non-generic function: substitutions should be empty, take avoids clone allocation
+        let old_substitutions = std::mem::take(&mut self.generic_substitutions);
 
         // Create entry block
         let entry = self.context.append_basic_block(fn_value, "entry");
@@ -274,7 +317,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Allocate space for parameters
         for (i, param) in func.params.iter().enumerate() {
-            let param_value = fn_value.get_nth_param(i as u32).unwrap();
+            let param_value = fn_value.get_nth_param(i as u32).ok_or_else(|| {
+                CodegenError::InternalError(format!(
+                    "ICE: parameter index {} out of bounds for function '{}'",
+                    i, func.name.node
+                ))
+            })?;
             // Use the actual LLVM parameter type from the declared function
             let param_type = param_value.get_type();
             let alloca = self
@@ -292,6 +340,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 self.var_struct_types
                     .insert(param.name.node.clone(), struct_name);
             }
+
+            // Track resolved type for parameters (for element/pointee type inference)
+            let resolved = self.ast_type_to_resolved(&param.ty.node);
+            self.var_resolved_types
+                .insert(param.name.node.clone(), resolved);
         }
 
         // Generate contract checks (#[requires] attributes)
@@ -411,36 +464,39 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         match &func.body {
             ast::FunctionBody::Expr(body_expr) => {
                 let body_value = self.generate_expr(&body_expr.node)?;
-                self.emit_defer_cleanup()?;
-                if ret_substituted == ResolvedType::Unit {
-                    self.builder
-                        .build_return(None)
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                } else {
-                    // Cast return value to match function signature if needed (e.g. i32 -> i64)
-                    let expected_ret_type = fn_value.get_type().get_return_type();
-                    let ret_val = if let Some(ert) = expected_ret_type {
-                        if ert != body_value.get_type()
-                            && body_value.is_int_value()
-                            && ert.is_int_type()
-                        {
-                            self.builder
-                                .build_int_cast(
-                                    body_value.into_int_value(),
-                                    ert.into_int_type(),
-                                    "ret_cast",
-                                )
-                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                                .into()
+                // Only build return if the current block doesn't already have a terminator
+                // (e.g. an explicit `R` / early-return inside the expr body may have emitted one)
+                if self
+                    .builder
+                    .get_insert_block()
+                    .ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "ICE: no insert block during expr-body function generation".into(),
+                        )
+                    })?
+                    .get_terminator()
+                    .is_none()
+                {
+                    self.emit_defer_cleanup()?;
+                    self.mark_return_ownership_transfer_expr(&body_value, &body_expr.node);
+                    self.emit_alloc_cleanup()?;
+                    if ret_substituted == ResolvedType::Unit {
+                        self.builder
+                            .build_return(None)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    } else {
+                        // Cast return value to match function signature if needed
+                        // (e.g. i32 -> i64, f64 -> i64 for main())
+                        let expected_ret_type = fn_value.get_type().get_return_type();
+                        let ret_val = if let Some(ert) = expected_ret_type {
+                            self.coerce_return_value(body_value, ert)?
                         } else {
                             body_value
-                        }
-                    } else {
-                        body_value
-                    };
-                    self.builder
-                        .build_return(Some(&ret_val))
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        };
+                        self.builder
+                            .build_return(Some(&ret_val))
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    }
                 }
             }
             ast::FunctionBody::Block(stmts) => {
@@ -449,17 +505,263 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if self
                     .builder
                     .get_insert_block()
-                    .unwrap()
+                    .ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "ICE: no insert block during function generation".into(),
+                        )
+                    })?
                     .get_terminator()
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.mark_return_ownership_transfer_block(&body_value, stmts);
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                     } else {
-                        // Check if body value type matches expected return type
+                        // Cast return value to match function signature if needed
+                        let expected_ret_type = fn_value.get_type().get_return_type();
+                        if let Some(ert) = expected_ret_type {
+                            let ret_val = self.coerce_return_value(body_value, ert)?;
+                            self.builder
+                                .build_return(Some(&ret_val))
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        } else {
+                            self.builder
+                                .build_return(None)
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Restore generic substitutions
+        self.generic_substitutions = old_substitutions;
+        self.type_mapper
+            .set_generic_substitutions(&self.generic_substitutions);
+        self.current_function = None;
+        Ok(())
+    }
+
+    /// Coerce a return value to match the expected LLVM return type.
+    /// Handles int-to-int (e.g. i32 -> i64), float-to-int (e.g. f64 -> i64 for main()),
+    /// and type-match passthrough.
+    fn coerce_return_value(
+        &self,
+        body_value: BasicValueEnum<'ctx>,
+        expected: inkwell::types::BasicTypeEnum<'ctx>,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        if expected == body_value.get_type() {
+            return Ok(body_value);
+        }
+        // Int to int cast (e.g. i32 -> i64)
+        if body_value.is_int_value() && expected.is_int_type() {
+            let casted = self
+                .builder
+                .build_int_cast(
+                    body_value.into_int_value(),
+                    expected.into_int_type(),
+                    "ret_cast",
+                )
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            return Ok(casted.into());
+        }
+        // Float to int cast (e.g. main() -> f64 with C ABI i64 return)
+        if body_value.is_float_value() && expected.is_int_type() {
+            let casted = self
+                .builder
+                .build_float_to_signed_int(
+                    body_value.into_float_value(),
+                    expected.into_int_type(),
+                    "fptosi_ret",
+                )
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            return Ok(casted.into());
+        }
+        // Fallback: return default value of expected type
+        Ok(self.get_default_value(expected))
+    }
+
+    /// Generate a specialized (monomorphized) function body for a generic function.
+    ///
+    /// This is called during the second pass of `generate_module_with_instantiations`
+    /// after `declare_specialized_function` has registered the LLVM function value.
+    pub(super) fn generate_specialized_function_body(
+        &mut self,
+        func: &ast::Function,
+        mangled_name: &str,
+        type_args: &[ResolvedType],
+    ) -> CodegenResult<()> {
+        // Build substitution map from actual generic param names to concrete type args
+        let type_params: Vec<_> = func
+            .generics
+            .iter()
+            .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+            .collect();
+
+        let substitutions: HashMap<String, ResolvedType> = type_params
+            .iter()
+            .zip(type_args.iter())
+            .map(|(g, t)| (g.name.node.clone(), t.clone()))
+            .collect();
+
+        // Save and replace generic substitutions (replace avoids clone allocation)
+        let old_substitutions = std::mem::replace(&mut self.generic_substitutions, substitutions);
+        self.type_mapper
+            .set_generic_substitutions(&self.generic_substitutions);
+
+        // Look up the already-declared specialized function value
+        let fn_value = *self.functions.get(mangled_name).ok_or_else(|| {
+            CodegenError::UndefinedFunction(format!(
+                "{} (specialized as {})",
+                func.name.node, mangled_name
+            ))
+        })?;
+
+        self.current_function = Some(fn_value);
+        self.locals.clear();
+        self.var_struct_types.clear();
+        self.var_resolved_types.clear();
+        self.defer_stack.clear();
+        self.alloc_tracker.clear();
+        self.string_value_slot.clear();
+        self.pending_return_skip_slot.clear();
+        self.scope_str_stack.clear();
+        self.var_string_slot.clear();
+        self.var_string_slots_multi.clear();
+        self.phi_extra_slots.clear();
+
+        // Create entry block
+        let entry = self.context.append_basic_block(fn_value, "entry");
+        self.builder.position_at_end(entry);
+
+        // Allocate space for parameters (using the declared LLVM types)
+        for (i, param) in func.params.iter().enumerate() {
+            let param_value = fn_value.get_nth_param(i as u32).ok_or_else(|| {
+                CodegenError::InternalError(format!(
+                    "ICE: parameter index {} out of bounds for specialized function '{}'",
+                    i, mangled_name
+                ))
+            })?;
+            let param_type = param_value.get_type();
+            let alloca = self
+                .builder
+                .build_alloca(param_type, &param.name.node)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.builder
+                .build_store(alloca, param_value)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.locals
+                .insert(param.name.node.clone(), (alloca, param_type));
+
+            // Track struct type for parameters using substituted types.
+            // In specialized generic functions, param.ty.node is the AST type (e.g., `T`)
+            // which resolves to the generic param name, not the concrete struct name.
+            // Use the substituted resolved type to get the actual struct name.
+            let resolved_ty = self.ast_type_to_resolved(&param.ty.node);
+            let substituted_ty = self.substitute_type(&resolved_ty);
+            if let ResolvedType::Named { name, .. } = &substituted_ty {
+                if self.generated_structs.contains_key(name.as_str()) {
+                    self.var_struct_types
+                        .insert(param.name.node.clone(), name.clone());
+                }
+            } else if let Some(struct_name) = self.extract_struct_type_name(&param.ty.node) {
+                // Fallback for non-generic params: use the AST type directly
+                self.var_struct_types
+                    .insert(param.name.node.clone(), struct_name);
+            }
+
+            // Track resolved type for parameters (for element/pointee type inference)
+            self.var_resolved_types
+                .insert(param.name.node.clone(), substituted_ty);
+        }
+
+        // Determine the return type (substituted)
+        let ret_resolved = if let Some(t) = func.ret_type.as_ref() {
+            self.ast_type_to_resolved(&t.node)
+        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&func.name.node) {
+            resolved_sig.ret.clone()
+        } else {
+            ResolvedType::Unit
+        };
+        let ret_substituted = self.substitute_type(&ret_resolved);
+
+        // Generate function body
+        match &func.body {
+            ast::FunctionBody::Expr(body_expr) => {
+                let body_value = self.generate_expr(&body_expr.node)?;
+                // Only build return if the current block doesn't already have a terminator
+                if self
+                    .builder
+                    .get_insert_block()
+                    .ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "ICE: no insert block during specialized expr-body function generation"
+                                .into(),
+                        )
+                    })?
+                    .get_terminator()
+                    .is_none()
+                {
+                    self.emit_defer_cleanup()?;
+                    self.mark_return_ownership_transfer_expr(&body_value, &body_expr.node);
+                    self.emit_alloc_cleanup()?;
+                    if ret_substituted == ResolvedType::Unit {
+                        self.builder
+                            .build_return(None)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    } else {
+                        let expected_ret_type = fn_value.get_type().get_return_type();
+                        let ret_val = if let Some(ert) = expected_ret_type {
+                            if ert != body_value.get_type()
+                                && body_value.is_int_value()
+                                && ert.is_int_type()
+                            {
+                                self.builder
+                                    .build_int_cast(
+                                        body_value.into_int_value(),
+                                        ert.into_int_type(),
+                                        "ret_cast",
+                                    )
+                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                    .into()
+                            } else {
+                                body_value
+                            }
+                        } else {
+                            body_value
+                        };
+                        self.builder
+                            .build_return(Some(&ret_val))
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    }
+                }
+            }
+            ast::FunctionBody::Block(stmts) => {
+                let body_value = self.generate_block(stmts)?;
+                // Only add return if the block doesn't already have a terminator
+                if self
+                    .builder
+                    .get_insert_block()
+                    .ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "ICE: no insert block during specialized function generation".into(),
+                        )
+                    })?
+                    .get_terminator()
+                    .is_none()
+                {
+                    self.emit_defer_cleanup()?;
+                    self.mark_return_ownership_transfer_block(&body_value, stmts);
+                    self.emit_alloc_cleanup()?;
+                    if ret_substituted == ResolvedType::Unit {
+                        self.builder
+                            .build_return(None)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    } else {
                         let expected_ret_type = fn_value.get_type().get_return_type();
                         let body_type_matches =
                             expected_ret_type.is_some_and(|ert| ert == body_value.get_type());
@@ -468,7 +770,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                 .build_return(Some(&body_value))
                                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                         } else if let Some(ert) = expected_ret_type {
-                            // Type mismatch: return a default value of the expected type
                             let default_val = self.get_default_value(ert);
                             self.builder
                                 .build_return(Some(&default_val))
@@ -485,6 +786,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Restore generic substitutions
         self.generic_substitutions = old_substitutions;
+        self.type_mapper
+            .set_generic_substitutions(&self.generic_substitutions);
         self.current_function = None;
         Ok(())
     }

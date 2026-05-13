@@ -11,8 +11,14 @@ impl TypeChecker {
     pub(crate) fn check_function(&mut self, f: &Function) -> TypeResult<()> {
         self.push_scope();
 
+        // Reset move tracking for each new function body
+        self.moved_vars.clear();
+
         // Set current generic parameters
-        let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&f.generics);
+        let saved = self.set_generics(&f.generics);
+
+        // Merge where clause bounds into current generic bounds
+        self.merge_where_clause(&f.where_clause);
 
         // Add parameters to scope and validate object safety
         // Use types from the registered FunctionSig to share type variables
@@ -23,6 +29,9 @@ impl TypeChecker {
             .map(|sig| sig.params.iter().map(|(_, ty, _)| ty.clone()).collect())
             .unwrap_or_default();
         for (i, param) in f.params.iter().enumerate() {
+            // ImplTrait parameter-position rejection removed in ROADMAP #18:
+            // Type::ImplTrait no longer exists in the AST.
+
             let ty = if i < registered_param_types.len() {
                 registered_param_types[i].clone()
             } else {
@@ -30,6 +39,17 @@ impl TypeChecker {
             };
             self.validate_dyn_trait_object_safety(&ty);
             self.define_var(&param.name.node, ty, param.is_mut);
+
+            // Validate dependent type predicates evaluate to bool
+            if let Type::Dependent {
+                var_name,
+                base,
+                predicate,
+            } = &param.ty.node
+            {
+                let resolved_base = self.resolve_type(&base.node);
+                self.validate_dependent_type(var_name, &resolved_base, predicate)?;
+            }
         }
 
         // Set current function context
@@ -52,7 +72,14 @@ impl TypeChecker {
             .ret_type
             .as_ref()
             .map(|t| self.resolve_type(&t.node))
-            .unwrap_or_else(|| self.fresh_type_var());
+            .unwrap_or_else(|| {
+                // main() without return type defaults to i64 (program exit code)
+                if f.name.node == "main" {
+                    ResolvedType::I64
+                } else {
+                    self.fresh_type_var()
+                }
+            });
         self.validate_dyn_trait_object_safety(&ret_type);
         self.current_fn_ret = Some(ret_type.clone());
         self.current_fn_name = Some(f.name.node.clone());
@@ -80,6 +107,27 @@ impl TypeChecker {
             FunctionBody::Block(stmts) => self.check_block(stmts)?,
         };
 
+        // Explicit return type with empty/void body: detect missing return value.
+        // If the function has an explicit non-Unit return type and the body is Unit
+        // (empty block or void expression), this is almost certainly a bug.
+        if !ret_type_inferred && ret_type != ResolvedType::Unit && body_type == ResolvedType::Unit {
+            // Allow special case: body that explicitly returns via R statement
+            // (check_block returns Unit for blocks ending with R, but the return was checked)
+            let has_explicit_return = match &f.body {
+                FunctionBody::Block(stmts) => {
+                    stmts.iter().any(|s| matches!(s.node, Stmt::Return(_)))
+                }
+                FunctionBody::Expr(_) => false,
+            };
+            if !has_explicit_return {
+                return Err(TypeError::Mismatch {
+                    expected: ret_type.to_string(),
+                    found: "()".to_string(),
+                    span: Some(f.name.span),
+                });
+            }
+        }
+
         // Check return type (with auto-deref: &T unifies with T)
         let expected_ret = self.current_fn_ret.clone().expect(
             "Internal compiler error: current_fn_ret should be set during function checking",
@@ -93,7 +141,49 @@ impl TypeChecker {
         } else {
             body_type.clone()
         };
-        self.unify(&expected_ret, &body_type_deref)?;
+        // main() with implicit i64 return: allow Unit body (auto-return 0)
+        if f.name.node == "main"
+            && ret_type_inferred
+            && expected_ret == ResolvedType::I64
+            && body_type_deref == ResolvedType::Unit
+        {
+            // Skip unification — codegen will insert `ret i64 0`
+        } else {
+            self.unify(&expected_ret, &body_type_deref)?;
+        }
+
+        // Phase 193 R-1b: finalize method instantiations that were deferred
+        // because their type args still contained free vars at call-site time
+        // (e.g., `Vec.with_capacity(8)` inside `fn -> Vec<i64>`). Now that the
+        // return type has been unified, apply substitutions and record any
+        // newly-concrete instantiations for monomorphization.
+        if !self.pending_method_instantiations.is_empty() {
+            let pending = std::mem::take(&mut self.pending_method_instantiations);
+            for (struct_name, method_name, type_args) in pending {
+                let resolved: Vec<ResolvedType> = type_args
+                    .iter()
+                    .map(|t| self.apply_substitutions(t))
+                    .collect();
+                let all_concrete = resolved
+                    .iter()
+                    .all(|t| !matches!(t, ResolvedType::Var(_) | ResolvedType::Generic(_)));
+                if all_concrete {
+                    self.add_instantiation(crate::types::GenericInstantiation::struct_type(
+                        &struct_name,
+                        resolved.clone(),
+                    ));
+                    self.add_instantiation(crate::types::GenericInstantiation::method(
+                        &struct_name,
+                        &method_name,
+                        resolved,
+                    ));
+                }
+            }
+        }
+
+        // Verify ImplTrait/DynTrait bounds: if return type is impl Trait or dyn Trait,
+        // check that the concrete body type implements the required trait bounds.
+        self.verify_trait_type_bounds(&expected_ret, &body_type_deref);
 
         // Resolve inferred return type: if return type was omitted, apply substitutions
         // to resolve the type variable to the concrete type from the body.
@@ -192,9 +282,60 @@ impl TypeChecker {
         let param_names: Vec<String> = f.params.iter().map(|p| p.name.node.clone()).collect();
         self.check_unused_variables(&param_names);
 
+        // Validate that no unresolved type variables survive into codegen for non-generic functions.
+        // Generic functions may legitimately contain Generic/ConstGeneric/etc. in their
+        // signatures; those are checked at instantiation time instead.
+        if f.generics.is_empty() {
+            // Check parameter types
+            if let Some(sig) = self.functions.get(&f.name.node) {
+                let params_snapshot: Vec<(String, ResolvedType)> = sig
+                    .params
+                    .iter()
+                    .map(|(name, ty, _)| (name.clone(), ty.clone()))
+                    .collect();
+                for (param_name, ty) in &params_snapshot {
+                    // Skip 'self' parameter — its type is resolved at impl block level
+                    if param_name == "self" {
+                        continue;
+                    }
+                    let resolved = self.apply_substitutions(ty);
+                    if let Some(unresolved_desc) = Self::contains_unresolved_type(&resolved) {
+                        let param_span = f
+                            .params
+                            .iter()
+                            .find(|p| p.name.node == *param_name)
+                            .map(|p| p.name.span);
+                        return Err(TypeError::InferFailed {
+                            kind: "parameter".to_string(),
+                            name: param_name.clone(),
+                            context: format!("{} (contains {})", f.name.node, unresolved_desc),
+                            span: param_span,
+                            suggestion: Some(format!(
+                                "Add explicit type annotation for parameter `{}`",
+                                param_name
+                            )),
+                        });
+                    }
+                }
+
+                // Check return type
+                let ret_snapshot = sig.ret.clone();
+                let resolved_ret = self.apply_substitutions(&ret_snapshot);
+                if let Some(unresolved_desc) = Self::contains_unresolved_type(&resolved_ret) {
+                    return Err(TypeError::InferFailed {
+                        kind: "return type".to_string(),
+                        name: f.name.node.clone(),
+                        context: format!("{} (contains {})", f.name.node, unresolved_desc),
+                        span: Some(f.name.span),
+                        suggestion: Some("Add explicit return type annotation".to_string()),
+                    });
+                }
+            }
+        }
+
         self.current_fn_ret = None;
         self.current_fn_name = None;
-        self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
+        self.restore_generics(saved);
         self.pop_scope();
 
         Ok(())
@@ -249,13 +390,90 @@ impl TypeChecker {
         let lifetime_bounds = lifetime::LifetimeInferencer::extract_lifetime_bounds(&f.generics);
 
         // Run lifetime inference
-        let _resolution = self.lifetime_inferencer.infer_function_lifetimes(
+        let resolution = self.lifetime_inferencer.infer_function_lifetimes(
             &f.name.node,
             &params,
             &ret_type,
             &lifetime_params,
             &lifetime_bounds,
         )?;
+
+        // If the function returns a reference, validate that the return lifetime
+        // is tied to a parameter lifetime (not a dangling local reference).
+        if has_ref_return {
+            let return_lt = self
+                .lifetime_inferencer
+                .extract_reference_lifetime(&ret_type)
+                .unwrap_or(lifetime::Lifetime::Static);
+
+            // Collect parameter lifetimes
+            let param_lifetimes: Vec<(String, lifetime::Lifetime)> = params
+                .iter()
+                .filter_map(|(name, ty, _)| {
+                    self.lifetime_inferencer
+                        .extract_reference_lifetime(ty)
+                        .map(|lt| (name.clone(), lt))
+                })
+                .collect();
+
+            self.lifetime_inferencer
+                .validate_return_lifetime(&return_lt, &param_lifetimes)?;
+
+            // Additionally check: if return type has a named lifetime that doesn't
+            // appear in any parameter, it could be dangling (referencing a local).
+            if let lifetime::Lifetime::Named(ref lt_name) = return_lt {
+                let param_has_lifetime = param_lifetimes
+                    .iter()
+                    .any(|(_, plt)| matches!(plt, lifetime::Lifetime::Named(n) if n == lt_name));
+                let is_explicit_param = lifetime_params.contains(lt_name);
+
+                // If the return lifetime is an explicit parameter but no input has it,
+                // the function would need to create a reference with that lifetime from
+                // nothing (dangling). However, this is currently too strict for elided
+                // lifetimes, so only flag it when there are explicit lifetime params
+                // and the return references one not present in any input.
+                if !param_has_lifetime && is_explicit_param && !param_lifetimes.is_empty() {
+                    return Err(TypeError::LifetimeTooShort {
+                        reference_lifetime: format!("'{}", lt_name),
+                        referent_lifetime: "function scope".to_string(),
+                        span: f.ret_type.as_ref().map(|t| t.span),
+                    });
+                }
+            }
+
+            // Warn about cross-function lifetime tracking limitations.
+            // If a function returns a reference and has &self parameters alongside
+            // other reference parameters, the returned reference's lifetime might be
+            // incorrectly tied to the wrong input. Current lifetime inference is
+            // intra-function only.
+            if param_lifetimes.len() > 1 {
+                let has_self_ref = params.iter().any(|(name, ty, _)| {
+                    name == "self"
+                        && matches!(
+                            ty,
+                            ResolvedType::Ref(_)
+                                | ResolvedType::RefMut(_)
+                                | ResolvedType::RefLifetime { .. }
+                                | ResolvedType::RefMutLifetime { .. }
+                        )
+                });
+                if has_self_ref {
+                    // Emit a warning: cross-function lifetime tracking for self
+                    // references is not fully verified. The returned reference may
+                    // outlive self's borrow.
+                    self.warnings.push(format!(
+                        "warning: function '{}' returns a reference and borrows \
+                         `self` alongside other reference parameters; cross-function \
+                         lifetime tracking is limited and may not catch all dangling \
+                         reference cases",
+                        f.name.node
+                    ));
+                }
+            }
+        }
+
+        // Store the resolution for potential use in later phases
+        let _ = resolution;
 
         Ok(())
     }
@@ -269,6 +487,9 @@ impl TypeChecker {
     ) -> TypeResult<()> {
         self.push_scope();
 
+        // Reset move tracking for each new method body
+        self.moved_vars.clear();
+
         // Get the type name for self
         let self_type_name = match target_type {
             Type::Named { name, .. } => name.clone(),
@@ -277,10 +498,13 @@ impl TypeChecker {
 
         // Combine struct generics with method generics
         let mut all_generics: Vec<GenericParam> = struct_generics.to_vec();
-        all_generics.extend(method.generics.iter().cloned());
+        all_generics.extend_from_slice(&method.generics);
 
         // Set current generic parameters (including struct-level generics)
-        let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&all_generics);
+        let saved = self.set_generics(&all_generics);
+
+        // Merge where clause bounds into current generic bounds
+        self.merge_where_clause(&method.where_clause);
 
         // Build the generics list for self type (struct-level generics as Generic types)
         let self_generics: Vec<ResolvedType> = struct_generics
@@ -297,6 +521,9 @@ impl TypeChecker {
             .map(|sig| sig.params.iter().map(|(_, ty, _)| ty.clone()).collect())
             .unwrap_or_default();
         for (i, param) in method.params.iter().enumerate() {
+            // ImplTrait parameter-position rejection removed in ROADMAP #18:
+            // Type::ImplTrait no longer exists in the AST.
+
             // Handle &self parameter specially
             if param.name.node == "self" {
                 // self is a reference to the target type with generics
@@ -359,8 +586,12 @@ impl TypeChecker {
                 .and_then(|s| s.methods.get(&method.name.node))
             {
                 for (name, ty, _) in &sig.params {
+                    // Skip 'self' parameter — its type is resolved at impl block level
+                    if name == "self" {
+                        continue;
+                    }
                     let resolved = self.apply_substitutions(ty);
-                    if matches!(resolved, ResolvedType::Var(_)) {
+                    if let Some(unresolved_desc) = Self::contains_unresolved_type(&resolved) {
                         let param_span = method
                             .params
                             .iter()
@@ -369,7 +600,10 @@ impl TypeChecker {
                         return Err(TypeError::InferFailed {
                             kind: "parameter".to_string(),
                             name: name.clone(),
-                            context: format!("{}::{}", self_type_name, method.name.node),
+                            context: format!(
+                                "{}::{} (contains {})",
+                                self_type_name, method.name.node, unresolved_desc
+                            ),
                             span: param_span,
                             suggestion: Some(format!("Add explicit type: `{}: <type>`", name)),
                         });
@@ -402,9 +636,68 @@ impl TypeChecker {
             }
         }
 
+        // Validate that no unresolved type variables survive into codegen for non-generic impl methods.
+        // Generic methods may legitimately contain Generic/ConstGeneric in signatures.
+        if method.generics.is_empty() && struct_generics.is_empty() {
+            if let Some(sig) = self
+                .structs
+                .get(&self_type_name)
+                .and_then(|s| s.methods.get(&method.name.node))
+            {
+                // Check parameter types
+                let params_snapshot: Vec<(String, ResolvedType)> = sig
+                    .params
+                    .iter()
+                    .map(|(name, ty, _)| (name.clone(), ty.clone()))
+                    .collect();
+                for (param_name, ty) in &params_snapshot {
+                    if param_name == "self" {
+                        continue;
+                    }
+                    let resolved = self.apply_substitutions(ty);
+                    if let Some(unresolved_desc) = Self::contains_unresolved_type(&resolved) {
+                        let param_span = method
+                            .params
+                            .iter()
+                            .find(|p| p.name.node == *param_name)
+                            .map(|p| p.name.span);
+                        return Err(TypeError::InferFailed {
+                            kind: "parameter".to_string(),
+                            name: param_name.clone(),
+                            context: format!(
+                                "{}::{} (contains {})",
+                                self_type_name, method.name.node, unresolved_desc
+                            ),
+                            span: param_span,
+                            suggestion: Some(format!(
+                                "Add explicit type annotation for parameter `{}`",
+                                param_name
+                            )),
+                        });
+                    }
+                }
+
+                // Check return type
+                let ret_snapshot = sig.ret.clone();
+                let resolved_ret = self.apply_substitutions(&ret_snapshot);
+                if let Some(unresolved_desc) = Self::contains_unresolved_type(&resolved_ret) {
+                    return Err(TypeError::InferFailed {
+                        kind: "return type".to_string(),
+                        name: format!("{}::{}", self_type_name, method.name.node),
+                        context: format!(
+                            "{}::{} (contains {})",
+                            self_type_name, method.name.node, unresolved_desc
+                        ),
+                        span: Some(method.name.span),
+                        suggestion: Some("Add explicit return type annotation".to_string()),
+                    });
+                }
+            }
+        }
+
         self.current_fn_ret = None;
         self.current_fn_name = None;
-        self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
+        self.restore_generics(saved);
         self.pop_scope();
 
         Ok(())
@@ -414,9 +707,9 @@ impl TypeChecker {
     fn body_contains_self_call(body: &FunctionBody) -> bool {
         match body {
             FunctionBody::Expr(expr) => Self::expr_contains_self_call(&expr.node),
-            FunctionBody::Block(stmts) => stmts
-                .iter()
-                .any(|s| Self::stmt_contains_self_call(&s.node)),
+            FunctionBody::Block(stmts) => {
+                stmts.iter().any(|s| Self::stmt_contains_self_call(&s.node))
+            }
         }
     }
 
@@ -436,16 +729,10 @@ impl TypeChecker {
                 cond, then, else_, ..
             } => {
                 Self::expr_contains_self_call(&cond.node)
-                    || then
-                        .iter()
-                        .any(|s| Self::stmt_contains_self_call(&s.node))
-                    || else_
-                        .as_ref()
-                        .is_some_and(Self::if_else_contains_self_call)
+                    || then.iter().any(|s| Self::stmt_contains_self_call(&s.node))
+                    || else_.as_ref().is_some_and(Self::if_else_contains_self_call)
             }
-            Expr::Block(stmts) => stmts
-                .iter()
-                .any(|s| Self::stmt_contains_self_call(&s.node)),
+            Expr::Block(stmts) => stmts.iter().any(|s| Self::stmt_contains_self_call(&s.node)),
             Expr::Assign { value, .. } => Self::expr_contains_self_call(&value.node),
             _ => false,
         }
@@ -453,14 +740,10 @@ impl TypeChecker {
 
     fn if_else_contains_self_call(else_branch: &IfElse) -> bool {
         match else_branch {
-            IfElse::Else(stmts) => stmts
-                .iter()
-                .any(|s| Self::stmt_contains_self_call(&s.node)),
+            IfElse::Else(stmts) => stmts.iter().any(|s| Self::stmt_contains_self_call(&s.node)),
             IfElse::ElseIf(cond, stmts, next) => {
                 Self::expr_contains_self_call(&cond.node)
-                    || stmts
-                        .iter()
-                        .any(|s| Self::stmt_contains_self_call(&s.node))
+                    || stmts.iter().any(|s| Self::stmt_contains_self_call(&s.node))
                     || next
                         .as_ref()
                         .is_some_and(|n| Self::if_else_contains_self_call(n))
@@ -474,6 +757,58 @@ impl TypeChecker {
             Stmt::Let { value, .. } => Self::expr_contains_self_call(&value.node),
             Stmt::Return(Some(e)) => Self::expr_contains_self_call(&e.node),
             _ => false,
+        }
+    }
+
+    /// Check if a resolved type tree contains any unresolved types
+    /// that should have been resolved before codegen.
+    /// Returns the name of the first unresolved type found, if any.
+    fn contains_unresolved_type(ty: &ResolvedType) -> Option<String> {
+        match ty {
+            ResolvedType::Var(id) => Some(format!("type variable #{}", id)),
+            ResolvedType::Unknown => Some("unknown type".to_string()),
+            // Generic/ConstGeneric/Associated are OK in generic function DEFINITIONS —
+            // they only become errors when they survive monomorphization, so we don't
+            // check them here; they're checked at instantiation time.
+
+            // Recurse into compound types
+            ResolvedType::Pointer(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Optional(inner)
+            | ResolvedType::Slice(inner)
+            | ResolvedType::SliceMut(inner)
+            | ResolvedType::Future(inner)
+            | ResolvedType::Linear(inner)
+            | ResolvedType::Affine(inner)
+            | ResolvedType::Range(inner) => Self::contains_unresolved_type(inner),
+            ResolvedType::Array(inner) => Self::contains_unresolved_type(inner),
+            ResolvedType::ConstArray { element, .. } => Self::contains_unresolved_type(element),
+            ResolvedType::Result(ok, err) | ResolvedType::Map(ok, err) => {
+                Self::contains_unresolved_type(ok).or_else(|| Self::contains_unresolved_type(err))
+            }
+            ResolvedType::Tuple(elems) => elems.iter().find_map(Self::contains_unresolved_type),
+            ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
+                params
+                    .iter()
+                    .find_map(Self::contains_unresolved_type)
+                    .or_else(|| Self::contains_unresolved_type(ret))
+            }
+            ResolvedType::RefLifetime { inner, .. }
+            | ResolvedType::RefMutLifetime { inner, .. } => Self::contains_unresolved_type(inner),
+            ResolvedType::Dependent { base, .. } => Self::contains_unresolved_type(base),
+            ResolvedType::Vector { element, .. } => Self::contains_unresolved_type(element),
+            ResolvedType::Named { generics, .. } => {
+                generics.iter().find_map(Self::contains_unresolved_type)
+            }
+            ResolvedType::DynTrait { generics, .. } => {
+                generics.iter().find_map(Self::contains_unresolved_type)
+            }
+            ResolvedType::Associated { base, generics, .. } => Self::contains_unresolved_type(base)
+                .or_else(|| generics.iter().find_map(Self::contains_unresolved_type)),
+            // All other types (primitives, Never, Generic, ConstGeneric, Lifetime)
+            // are acceptable outside of monomorphization contexts.
+            _ => None,
         }
     }
 }

@@ -1,0 +1,487 @@
+# Regex Library Tests
+
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F str_to_ptr(s: str) -> i64
+X F strlen(s: i64) -> i64
+X F load_i64(ptr: i64) -> i64
+X F print_str(s: str) -> i64
+X F print_i64(n: i64) -> i64
+
+# Import regex functions
+X F regex_compile(pattern: i64, pattern_len: i64) -> i64
+X F regex_match(regex: i64, text: i64, text_len: i64) -> i64
+X F regex_search(regex: i64, text: i64, text_len: i64) -> i64
+X F regex_find_all(regex: i64, text: i64, text_len: i64) -> i64
+X F regex_free(regex: i64) -> i64
+
+# Test 1: Literal match
+F test_literal_match() -> i64 {
+    print_str("Test 1: Literal match... ")
+
+    pattern := str_to_ptr("hello")
+    text := str_to_ptr("hello")
+
+    regex := regex_compile(pattern, strlen(pattern))
+    I regex == 0 {
+        print_str("FAILED (compile)\n")
+        R 0
+    }
+
+    result := regex_match(regex, text, strlen(text))
+    regex_free(regex)
+
+    I result == 1 {
+        print_str("PASSED\n")
+        R 1
+    } E {
+        print_str("FAILED\n")
+        R 0
+    }
+}
+
+# Test 2: Dot meta-character
+F test_dot() -> i64 {
+    print_str("Test 2: Dot meta-character... ")
+
+    pattern := str_to_ptr("h.llo")
+    text := str_to_ptr("hello")
+
+    regex := regex_compile(pattern, strlen(pattern))
+    I regex == 0 {
+        print_str("FAILED (compile)\n")
+        R 0
+    }
+
+    result := regex_match(regex, text, strlen(text))
+    regex_free(regex)
+
+    I result == 1 {
+        print_str("PASSED\n")
+        R 1
+    } E {
+        print_str("FAILED\n")
+        R 0
+    }
+}
+
+# Test 3: Star quantifier
+F test_star() -> i64 {
+    print_str("Test 3: Star quantifier... ")
+
+    pattern := str_to_ptr("ab*c")
+
+    # Test "ac"
+    text1 := str_to_ptr("ac")
+    regex := regex_compile(pattern, strlen(pattern))
+    I regex == 0 {
+        print_str("FAILED (compile)\n")
+        R 0
+    }
+    result1 := regex_match(regex, text1, strlen(text1))
+    regex_free(regex)
+
+    # Test "abc"
+    text2 := str_to_ptr("abc")
+    regex := regex_compile(pattern, strlen(pattern))
+    result2 := regex_match(regex, text2, strlen(text2))
+    regex_free(regex)
+
+    # Test "abbc"
+    text3 := str_to_ptr("abbc")
+    regex := regex_compile(pattern, strlen(pattern))
+    result3 := regex_match(regex, text3, strlen(text3))
+    regex_free(regex)
+
+    I result1 == 1 {
+        I result2 == 1 {
+            I result3 == 1 {
+                print_str("PASSED\n")
+                R 1
+            }
+        }
+    }
+
+    print_str("FAILED\n")
+    0
+}
+
+# Test 4: Plus quantifier
+F test_plus() -> i64 {
+    print_str("Test 4: Plus quantifier... ")
+
+    pattern := str_to_ptr("ab+c")
+
+    # Test "abc" (should match)
+    text1 := str_to_ptr("abc")
+    regex := regex_compile(pattern, strlen(pattern))
+    I regex == 0 {
+        print_str("FAILED (compile)\n")
+        R 0
+    }
+    result1 := regex_match(regex, text1, strlen(text1))
+    regex_free(regex)
+
+    # Test "ac" (should NOT match)
+    text2 := str_to_ptr("ac")
+    regex := regex_compile(pattern, strlen(pattern))
+    result2 := regex_match(regex, text2, strlen(text2))
+    regex_free(regex)
+
+    I result1 == 1 {
+        I result2 == 0 {
+            print_str("PASSED\n")
+            R 1
+        }
+    }
+
+    print_str("FAILED\n")
+    0
+}
+
+# Test 5: Question quantifier
+F test_question() -> i64 {
+    print_str("Test 5: Question quantifier... ")
+
+    pattern := str_to_ptr("colou?r")
+
+    # Test "color"
+    text1 := str_to_ptr("color")
+    regex := regex_compile(pattern, strlen(pattern))
+    I regex == 0 {
+        print_str("FAILED (compile)\n")
+        R 0
+    }
+    result1 := regex_match(regex, text1, strlen(text1))
+    regex_free(regex)
+
+    # Test "colour"
+    text2 := str_to_ptr("colour")
+    regex := regex_compile(pattern, strlen(pattern))
+    result2 := regex_match(regex, text2, strlen(text2))
+    regex_free(regex)
+
+    I result1 == 1 {
+        I result2 == 1 {
+            print_str("PASSED\n")
+            R 1
+        }
+    }
+
+    print_str("FAILED\n")
+    0
+}
+
+# Test 6: Alternation
+F test_alternation() -> i64 {
+    print_str("Test 6: Alternation... ")
+
+    pattern := str_to_ptr("cat|dog")
+
+    # Test "cat"
+    text1 := str_to_ptr("cat")
+    regex := regex_compile(pattern, strlen(pattern))
+    I regex == 0 {
+        print_str("FAILED (compile)\n")
+        R 0
+    }
+    result1 := regex_match(regex, text1, strlen(text1))
+    regex_free(regex)
+
+    # Test "dog"
+    text2 := str_to_ptr("dog")
+    regex := regex_compile(pattern, strlen(pattern))
+    result2 := regex_match(regex, text2, strlen(text2))
+    regex_free(regex)
+
+    I result1 == 1 {
+        I result2 == 1 {
+            print_str("PASSED\n")
+            R 1
+        }
+    }
+
+    print_str("FAILED\n")
+    0
+}
+
+# Test 7: Start anchor
+F test_anchor_start() -> i64 {
+    print_str("Test 7: Start anchor... ")
+
+    pattern := str_to_ptr("^hello")
+
+    # Test "hello" (should match)
+    text1 := str_to_ptr("hello")
+    regex := regex_compile(pattern, strlen(pattern))
+    I regex == 0 {
+        print_str("FAILED (compile)\n")
+        R 0
+    }
+    result1 := regex_match(regex, text1, strlen(text1))
+    regex_free(regex)
+
+    I result1 == 1 {
+        print_str("PASSED\n")
+        R 1
+    } E {
+        print_str("FAILED\n")
+        R 0
+    }
+}
+
+# Test 8: Character class
+F test_char_class() -> i64 {
+    print_str("Test 8: Character class... ")
+
+    pattern := str_to_ptr("[aeiou]")
+
+    # Test "a"
+    text1 := str_to_ptr("a")
+    regex := regex_compile(pattern, strlen(pattern))
+    I regex == 0 {
+        print_str("FAILED (compile)\n")
+        R 0
+    }
+    result1 := regex_match(regex, text1, strlen(text1))
+    regex_free(regex)
+
+    # Test "e"
+    text2 := str_to_ptr("e")
+    regex := regex_compile(pattern, strlen(pattern))
+    result2 := regex_match(regex, text2, strlen(text2))
+    regex_free(regex)
+
+    # Test "x" (should NOT match)
+    text3 := str_to_ptr("x")
+    regex := regex_compile(pattern, strlen(pattern))
+    result3 := regex_match(regex, text3, strlen(text3))
+    regex_free(regex)
+
+    I result1 == 1 {
+        I result2 == 1 {
+            I result3 == 0 {
+                print_str("PASSED\n")
+                R 1
+            }
+        }
+    }
+
+    print_str("FAILED\n")
+    0
+}
+
+# Test 9: Search (find position)
+F test_search() -> i64 {
+    print_str("Test 9: Search... ")
+
+    pattern := str_to_ptr("world")
+    text := str_to_ptr("hello world")
+
+    regex := regex_compile(pattern, strlen(pattern))
+    I regex == 0 {
+        print_str("FAILED (compile)\n")
+        R 0
+    }
+
+    pos := regex_search(regex, text, strlen(text))
+    regex_free(regex)
+
+    I pos == 6 {
+        print_str("PASSED\n")
+        R 1
+    } E {
+        print_str("FAILED (found at: ")
+        print_i64(pos)
+        print_str(")\n")
+        R 0
+    }
+}
+
+# Test 10: No match
+F test_no_match() -> i64 {
+    print_str("Test 10: No match... ")
+
+    pattern := str_to_ptr("xyz")
+    text := str_to_ptr("hello")
+
+    regex := regex_compile(pattern, strlen(pattern))
+    I regex == 0 {
+        print_str("FAILED (compile)\n")
+        R 0
+    }
+
+    result := regex_match(regex, text, strlen(text))
+    pos := regex_search(regex, text, strlen(text))
+    regex_free(regex)
+
+    I result == 0 {
+        I pos == 0 - 1 {
+            print_str("PASSED\n")
+            R 1
+        }
+    }
+
+    print_str("FAILED\n")
+    0
+}
+
+# Test 11: Character range
+F test_char_range() -> i64 {
+    print_str("Test 11: Character range... ")
+
+    pattern := str_to_ptr("[a-z]")
+
+    # Test "m"
+    text1 := str_to_ptr("m")
+    regex := regex_compile(pattern, strlen(pattern))
+    I regex == 0 {
+        print_str("FAILED (compile)\n")
+        R 0
+    }
+    result1 := regex_match(regex, text1, strlen(text1))
+    regex_free(regex)
+
+    # Test "5" (should NOT match)
+    text2 := str_to_ptr("5")
+    regex := regex_compile(pattern, strlen(pattern))
+    result2 := regex_match(regex, text2, strlen(text2))
+    regex_free(regex)
+
+    I result1 == 1 {
+        I result2 == 0 {
+            print_str("PASSED\n")
+            R 1
+        }
+    }
+
+    print_str("FAILED\n")
+    0
+}
+
+# Test 12: Escape sequence \d
+F test_escape_digit() -> i64 {
+    print_str("Test 12: Escape digit... ")
+
+    pattern := str_to_ptr("\\d")
+
+    # Test "5"
+    text1 := str_to_ptr("5")
+    regex := regex_compile(pattern, strlen(pattern))
+    I regex == 0 {
+        print_str("FAILED (compile)\n")
+        R 0
+    }
+    result1 := regex_match(regex, text1, strlen(text1))
+    regex_free(regex)
+
+    # Test "a" (should NOT match)
+    text2 := str_to_ptr("a")
+    regex := regex_compile(pattern, strlen(pattern))
+    result2 := regex_match(regex, text2, strlen(text2))
+    regex_free(regex)
+
+    I result1 == 1 {
+        I result2 == 0 {
+            print_str("PASSED\n")
+            R 1
+        }
+    }
+
+    print_str("FAILED\n")
+    0
+}
+
+# Test 13: Multiple matches
+F test_find_all() -> i64 {
+    print_str("Test 13: Find all... ")
+
+    pattern := str_to_ptr("a")
+    text := str_to_ptr("banana")
+
+    regex := regex_compile(pattern, strlen(pattern))
+    I regex == 0 {
+        print_str("FAILED (compile)\n")
+        R 0
+    }
+
+    result := regex_find_all(regex, text, strlen(text))
+    count := load_i64(result + 8)
+    regex_free(regex)
+
+    positions := load_i64(result)
+    free(positions)
+    free(result)
+
+    I count == 3 {
+        print_str("PASSED\n")
+        R 1
+    } E {
+        print_str("FAILED (found: ")
+        print_i64(count)
+        print_str(")\n")
+        R 0
+    }
+}
+
+F main() -> i64 {
+    print_str("=== Vais Regex Tests ===\n\n")
+
+    passed := 0
+    total := 13
+
+    I test_literal_match() == 1 {
+        passed := passed + 1
+    }
+    I test_dot() == 1 {
+        passed := passed + 1
+    }
+    I test_star() == 1 {
+        passed := passed + 1
+    }
+    I test_plus() == 1 {
+        passed := passed + 1
+    }
+    I test_question() == 1 {
+        passed := passed + 1
+    }
+    I test_alternation() == 1 {
+        passed := passed + 1
+    }
+    I test_anchor_start() == 1 {
+        passed := passed + 1
+    }
+    I test_char_class() == 1 {
+        passed := passed + 1
+    }
+    I test_search() == 1 {
+        passed := passed + 1
+    }
+    I test_no_match() == 1 {
+        passed := passed + 1
+    }
+    I test_char_range() == 1 {
+        passed := passed + 1
+    }
+    I test_escape_digit() == 1 {
+        passed := passed + 1
+    }
+    I test_find_all() == 1 {
+        passed := passed + 1
+    }
+
+    print_str("\n=== Results ===\n")
+    print_str("Passed: ")
+    print_i64(passed)
+    print_str(" / ")
+    print_i64(total)
+    print_str("\n")
+
+    I passed == total {
+        print_str("All tests PASSED!\n")
+        R 0
+    } E {
+        print_str("Some tests FAILED!\n")
+        R 1
+    }
+}

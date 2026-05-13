@@ -118,9 +118,9 @@ vaisc bindgen header.hpp \
 | C++ Type | Vais Type | Notes |
 |----------|-----------|-------|
 | std::string | String | UTF-8 string |
-| std::vector<T> | Vec<T> | Dynamic array |
-| std::optional<T> | Optional<T> | Optional value |
-| std::pair<A, B> | (A, B) | Tuple |
+| `std::vector<T>` | `Vec<T>` | Dynamic array |
+| `std::optional<T>` | `Optional<T>` | Optional value |
+| `std::pair<A, B>` | (A, B) | Tuple |
 
 ## Examples
 

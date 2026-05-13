@@ -25,10 +25,7 @@ impl JsCodeGenerator {
         // Check if there's an alias
         if let Some(alias) = &use_item.alias {
             // U module::path as alias → import * as alias from './path.js';
-            Ok(format!(
-                "import * as {} from {module_path};\n",
-                alias.node
-            ))
+            Ok(format!("import * as {} from {module_path};\n", alias.node))
         } else {
             // U module::path → import * as path from './path.js';
             Ok(format!("import * as {module_name} from {module_path};\n"))
@@ -76,10 +73,7 @@ impl JsCodeGenerator {
 
     /// Generate separate .js files for each module in modules_map
     /// Returns HashMap<filename, js_content>
-    pub fn generate_module_to_files(
-        &mut self,
-        module: &Module,
-    ) -> Result<HashMap<String, String>> {
+    pub fn generate_module_to_files(&mut self, module: &Module) -> Result<HashMap<String, String>> {
         let mut files = HashMap::new();
 
         if let Some(ref modules_map) = module.modules_map {
@@ -149,6 +143,7 @@ mod tests {
                 .map(|s| Spanned::new(s.to_string(), Span::new(0, s.len())))
                 .collect(),
             alias: alias.map(|s| Spanned::new(s.to_string(), Span::new(0, s.len()))),
+            items: None,
         }
     }
 
@@ -182,6 +177,7 @@ mod tests {
         let use_item = Use {
             path: vec![],
             alias: None,
+            items: None,
         };
         let result = gen.generate_use(&use_item).unwrap();
         assert_eq!(result, "");
@@ -208,10 +204,7 @@ mod tests {
             path_to_js_filename(Path::new("/path/to/module.vais")),
             "module.js"
         );
-        assert_eq!(
-            path_to_js_filename(Path::new("module.vais")),
-            "module.js"
-        );
+        assert_eq!(path_to_js_filename(Path::new("module.vais")), "module.js");
         assert_eq!(path_to_js_filename(Path::new("module")), "module.js");
     }
 
@@ -231,7 +224,10 @@ mod tests {
                     ))),
                     is_pub: true,
                     is_async: false,
+                    is_partial: false,
+                    declared_effect: None,
                     attributes: vec![],
+                    where_clause: vec![],
                 }),
                 Span::new(0, 10),
             )],
@@ -266,7 +262,10 @@ mod tests {
                         ))),
                         is_pub: true,
                         is_async: false,
+                        is_partial: false,
+                        declared_effect: None,
                         attributes: vec![],
+                        where_clause: vec![],
                     }),
                     Span::new(0, 10),
                 ),
@@ -282,7 +281,10 @@ mod tests {
                         ))),
                         is_pub: false,
                         is_async: false,
+                        is_partial: false,
+                        declared_effect: None,
                         attributes: vec![],
+                        where_clause: vec![],
                     }),
                     Span::new(0, 10),
                 ),
@@ -301,5 +303,62 @@ mod tests {
         let mod2 = result.get("mod2.js").unwrap();
         assert!(mod2.contains("function func2()"));
         assert!(!mod2.contains("export function func2()"));
+    }
+
+    #[test]
+    fn test_barrel_export_empty() {
+        let gen = JsCodeGenerator::new();
+        let result = gen.generate_barrel_export(&[]);
+        assert!(result.contains("Auto-generated barrel export"));
+        // No export lines for empty
+        assert!(!result.contains("export *"));
+    }
+
+    #[test]
+    fn test_barrel_export_with_js_extension() {
+        let gen = JsCodeGenerator::new();
+        let modules = vec!["already.js".to_string()];
+        let result = gen.generate_barrel_export(&modules);
+        // Should not double-add .js
+        assert!(result.contains("export * from './already.js';"));
+    }
+
+    #[test]
+    fn test_path_to_js_filename_no_extension() {
+        assert_eq!(path_to_js_filename(Path::new("simple")), "simple.js");
+    }
+
+    #[test]
+    fn test_use_path_to_module_empty() {
+        let gen = JsCodeGenerator::new();
+        let result = gen.use_path_to_module(&[]);
+        assert_eq!(result, "'./module.js'");
+    }
+
+    #[test]
+    fn test_use_path_two_segments() {
+        let gen = JsCodeGenerator::new();
+        let path = vec![
+            Spanned::new("std".to_string(), Span::new(0, 3)),
+            Spanned::new("io".to_string(), Span::new(5, 7)),
+        ];
+        let result = gen.use_path_to_module(&path);
+        assert_eq!(result, "'./io.js'");
+    }
+
+    #[test]
+    fn test_use_import_preserves_last_segment_name() {
+        let gen = JsCodeGenerator::new();
+        let use_item = make_use(&["collections"], None);
+        let result = gen.generate_use(&use_item).unwrap();
+        assert!(result.contains("as collections"));
+    }
+
+    #[test]
+    fn test_path_to_js_filename_deep_path() {
+        assert_eq!(
+            path_to_js_filename(&PathBuf::from("/a/b/c/deep.vais")),
+            "deep.js"
+        );
     }
 }

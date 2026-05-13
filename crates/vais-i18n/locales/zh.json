@@ -140,6 +140,18 @@
     "E031": {
       "title": "extern 签名不匹配",
       "message": "extern 函数 '{name}' 的返回类型不符：期望 '{expected}'，找到 '{found}'"
+    },
+    "E032": {
+      "title": "类型推断失败",
+      "message": "无法推断 '{name}' 的类型: {reason}"
+    },
+    "E033": {
+      "title": "类型检查器内部错误",
+      "message": "类型检查器内部错误: {detail}"
+    },
+    "E034": {
+      "title": "total 函数可能 panic",
+      "message": "total 函数 '{function_name}' 可能 panic ({reason}); 如果是预期的 panic，请标注 `partial`"
     }
   },
 
@@ -172,6 +184,11 @@
       "title": "递归深度超限",
       "message": "递归深度限制已超过：{detail}",
       "help": "请减少嵌套深度或重构递归类型"
+    },
+    "C007": {
+      "title": "内部编译器错误",
+      "message": "内部编译器错误：{detail}",
+      "help": "这可能是编译器的bug —— 请在 https://github.com/vaislang/vais/issues 报告"
     }
   },
 

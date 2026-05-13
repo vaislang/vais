@@ -86,7 +86,7 @@ X TemplateCtx {
         result := __template_ctx_get(self.handle, key)
         I result as i64 == 0 {
             ""
-        } E {
+        } EL {
             result
         }
     }
@@ -97,22 +97,22 @@ X TemplateCtx {
         val := __template_ctx_get(self.handle, key)
         I val as i64 == 0 {
             0
-        } E {
+        } EL {
             len := __strlen(val)
             I len == 0 {
                 0
-            } E I len == 1 {
+            } EL I len == 1 {
                 ch := __load_byte_at(val as i64, 0)
                 I ch == 48 {  # '0'
                     0
-                } E {
+                } EL {
                     1
                 }
-            } E {
+            } EL {
                 # Check for "false"
                 I __str_eq(val, "false") == 1 {
                     0
-                } E {
+                } EL {
                     1
                 }
             }
@@ -159,11 +159,11 @@ X Template {
     F render(&self, ctx: &TemplateCtx) -> str {
         I self.handle == 0 {
             ""
-        } E {
+        } EL {
             result := __template_render(self.handle, ctx.handle)
             I result as i64 == 0 {
                 ""
-            } E {
+            } EL {
                 result
             }
         }
@@ -195,7 +195,7 @@ F html_escape(input: str) -> str {
     result := __html_escape(input)
     I result as i64 == 0 {
         ""
-    } E {
+    } EL {
         result
     }
 }
@@ -248,20 +248,20 @@ F template_render_var(source: str, key: str, value: str) -> str {
 F apply_filter(value: str, filter_name: str) -> str {
     I __str_eq(filter_name, "upper") == 1 {
         __str_to_upper(value)
-    } E I __str_eq(filter_name, "lower") == 1 {
+    } EL I __str_eq(filter_name, "lower") == 1 {
         __str_to_lower(value)
-    } E I __str_eq(filter_name, "escape") == 1 {
+    } EL I __str_eq(filter_name, "escape") == 1 {
         html_escape(value)
-    } E I __str_eq(filter_name, "trim") == 1 {
+    } EL I __str_eq(filter_name, "trim") == 1 {
         __str_trim(value)
-    } E I __str_eq(filter_name, "length") == 1 {
+    } EL I __str_eq(filter_name, "length") == 1 {
         # Return the string length as a string
         len := __strlen(value)
         buf := __malloc(32)
         n := __i64_to_str(buf, len)
         __store_byte(buf + n, 0)
         buf as str
-    } E {
+    } EL {
         # Unknown filter, return value unchanged
         value
     }

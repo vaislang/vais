@@ -43,6 +43,14 @@ pub enum MirType {
     Unit,
     Pointer(Box<MirType>),
     Ref(Box<MirType>),
+    RefLifetime {
+        lifetime: String,
+        inner: Box<MirType>,
+    },
+    RefMutLifetime {
+        lifetime: String,
+        inner: Box<MirType>,
+    },
     Array(Box<MirType>),
     Tuple(Vec<MirType>),
     Struct(String),
@@ -71,12 +79,15 @@ impl MirType {
             | MirType::F32
             | MirType::F64
             | MirType::Bool
+            | MirType::Str
             | MirType::Unit
             | MirType::Pointer(_)
             | MirType::Ref(_)
+            | MirType::RefLifetime { .. }
+            | MirType::RefMutLifetime { .. }
             | MirType::Never => true,
             MirType::Tuple(elems) => elems.iter().all(|e| e.is_copy()),
-            _ => false, // Str, Array, Struct, Enum, Function
+            _ => false, // Array, Struct, Enum, Function
         }
     }
 }
@@ -405,6 +416,7 @@ pub struct LocalDecl {
     pub name: Option<String>,
     pub ty: MirType,
     pub is_mutable: bool,
+    pub lifetime: Option<String>,
 }
 
 /// A MIR function body.
@@ -419,13 +431,31 @@ pub struct Body {
     pub basic_blocks: Vec<BasicBlock>,
     /// Named block map for lookup.
     pub block_names: HashMap<String, BasicBlockId>,
+    /// Lifetime parameters (['a, 'b, ...])
+    pub lifetime_params: Vec<String>,
+    /// Lifetime bounds ([('a, ['b, 'c]), ...] = 'a: 'b + 'c)
+    pub lifetime_bounds: Vec<(String, Vec<String>)>,
 }
 
 impl Body {
     /// Pretty-print the MIR body.
     pub fn display(&self) -> String {
         let mut out = String::new();
-        out.push_str(&format!("fn {}(", self.name));
+        out.push_str(&format!("fn {}", self.name));
+
+        // Show lifetime params if present
+        if !self.lifetime_params.is_empty() {
+            out.push('<');
+            for (i, lt) in self.lifetime_params.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                out.push_str(&format!("'{}", lt));
+            }
+            out.push('>');
+        }
+
+        out.push('(');
         for (i, param) in self.params.iter().enumerate() {
             if i > 0 {
                 out.push_str(", ");

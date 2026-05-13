@@ -36,6 +36,7 @@ impl<'a> ErrorReporter<'a> {
         span: Option<Span>,
         message: &str,
         help: Option<&str>,
+        secondary_spans: &[(Span, String)],
     ) -> String {
         let mut output = String::new();
 
@@ -95,6 +96,32 @@ impl<'a> ErrorReporter<'a> {
             ));
         }
 
+        // Add secondary spans
+        for (sec_span, label) in secondary_spans {
+            if let Some(context) = self.get_source_context(*sec_span) {
+                output.push_str(&format!("   {} {}\n", "=".cyan().bold(), "note:".cyan()));
+                let location = if let Some(filename) = self.filename {
+                    format!("{}:{}:{}", filename, context.line, context.column)
+                } else {
+                    format!("line {}:{}", context.line, context.column)
+                };
+                output.push_str(&format!("  {} {}\n", "-->".cyan().bold(), location));
+                output.push_str(&format!(
+                    " {} {} {}\n",
+                    format!("{:>3}", context.line).cyan().bold(),
+                    "|".cyan().bold(),
+                    context.line_text
+                ));
+                output.push_str(&format!(
+                    "   {} {}{} {}\n",
+                    "|".cyan().bold(),
+                    " ".repeat(context.column - 1),
+                    "^".repeat(context.span_length.max(1)).blue().bold(),
+                    label.blue()
+                ));
+            }
+        }
+
         output
     }
 
@@ -119,18 +146,7 @@ impl<'a> ErrorReporter<'a> {
             }
             current_pos = idx;
         }
-
-        // Ensure we're at or past the span start
-        if current_pos < span.start && line_start < span.start {
-            // Move line_start forward if needed
-            while line_start < span.start && line_start < self.source.len() {
-                if self.source.as_bytes().get(line_start) == Some(&b'\n') {
-                    line_start += 1;
-                    break;
-                }
-                line_start += 1;
-            }
-        }
+        let _ = current_pos; // used only for iteration
 
         // Find the end of the line
         let line_end = self.source[line_start..]
@@ -218,6 +234,7 @@ pub trait DiagnosticError: fmt::Display {
             self.span(),
             &self.to_string(),
             self.help().as_deref(),
+            &[],
         )
     }
 
@@ -236,6 +253,7 @@ pub trait DiagnosticError: fmt::Display {
             self.span(),
             &self.localized_message(),
             self.localized_help().as_deref(),
+            &[],
         )
     }
 }
@@ -256,6 +274,7 @@ mod tests {
             Some(span),
             "expected i64, found Str",
             Some("consider converting the string to a number"),
+            &[],
         );
 
         println!("{}", output);
@@ -275,6 +294,7 @@ mod tests {
             None,
             "type inference failed",
             None,
+            &[],
         );
 
         println!("{}", output);

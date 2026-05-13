@@ -9,8 +9,8 @@
 //! - Error handling
 
 use vais_jit::{
-    Interpreter, JitCompiler, JitError, JitRuntime, Tier, TierThresholds,
-    TieredJit, TypeMapper, Value,
+    Interpreter, JitCompiler, JitError, JitRuntime, Tier, TierThresholds, TieredJit, TypeMapper,
+    Value,
 };
 use vais_parser;
 use vais_types::ResolvedType;
@@ -21,18 +21,16 @@ use vais_types::ResolvedType;
 
 /// Helper to compile and run Vais source with JIT compiler.
 fn compile_and_run(source: &str) -> Result<i64, JitError> {
-    let module = vais_parser::parse(source).map_err(|e| {
-        JitError::Runtime(format!("Parse failed: {}", e))
-    })?;
+    let module = vais_parser::parse(source)
+        .map_err(|e| JitError::Runtime(format!("Parse failed: {}", e)))?;
     let mut compiler = JitCompiler::new()?;
     compiler.compile_and_run_main(&module)
 }
 
 /// Helper to interpret Vais source.
 fn interpret(source: &str) -> Result<Value, JitError> {
-    let module = vais_parser::parse(source).map_err(|e| {
-        JitError::Runtime(format!("Parse failed: {}", e))
-    })?;
+    let module = vais_parser::parse(source)
+        .map_err(|e| JitError::Runtime(format!("Parse failed: {}", e)))?;
     let mut interp = Interpreter::new();
     interp.load_module(&module);
     interp.run_main()
@@ -40,9 +38,8 @@ fn interpret(source: &str) -> Result<Value, JitError> {
 
 /// Helper to run with tiered JIT.
 fn tiered_run(source: &str) -> Result<i64, JitError> {
-    let module = vais_parser::parse(source).map_err(|e| {
-        JitError::Runtime(format!("Parse failed: {}", e))
-    })?;
+    let module = vais_parser::parse(source)
+        .map_err(|e| JitError::Runtime(format!("Parse failed: {}", e)))?;
     let mut jit = TieredJit::new()?;
     jit.run_main(&module)
 }
@@ -271,7 +268,7 @@ fn test_interpreter_simple_execution() {
     let result = interpret("F main() -> i64 = 42");
     assert!(result.is_ok());
     if let Ok(val) = result {
-        assert_eq!(val.as_i64(), 42);
+        assert_eq!(val.as_i64().unwrap(), 42);
     }
 }
 
@@ -281,7 +278,7 @@ fn test_interpreter_arithmetic() {
     let result = interpret(source);
     assert!(result.is_ok());
     if let Ok(val) = result {
-        assert_eq!(val.as_i64(), 11);
+        assert_eq!(val.as_i64().unwrap(), 11);
     }
 }
 
@@ -294,7 +291,7 @@ fn test_interpreter_function_call() {
     let result = interpret(source);
     assert!(result.is_ok());
     if let Ok(val) = result {
-        assert_eq!(val.as_i64(), 49);
+        assert_eq!(val.as_i64().unwrap(), 49);
     }
 }
 
@@ -304,7 +301,7 @@ fn test_interpreter_if_else() {
     let result = interpret(source);
     assert!(result.is_ok());
     if let Ok(val) = result {
-        assert_eq!(val.as_i64(), 100);
+        assert_eq!(val.as_i64().unwrap(), 100);
     }
 }
 
@@ -334,7 +331,10 @@ fn test_tieredjit_function_stats() {
     // Check if we can get stats
     if let Some(stats) = jit.get_function_stats("helper") {
         assert_eq!(stats.execution_count, 2);
-        assert!(matches!(stats.current_tier, Tier::Interpreter | Tier::Baseline));
+        assert!(matches!(
+            stats.current_tier,
+            Tier::Interpreter | Tier::Baseline
+        ));
     }
 }
 
@@ -367,7 +367,10 @@ fn test_tieredjit_function_tier() {
     let _ = jit.run_main(&module);
 
     let tier = jit.get_function_tier("compute");
-    assert!(matches!(tier, Tier::Interpreter | Tier::Baseline | Tier::Optimizing));
+    assert!(matches!(
+        tier,
+        Tier::Interpreter | Tier::Baseline | Tier::Optimizing
+    ));
 }
 
 // ============================================================================
@@ -380,10 +383,10 @@ fn test_typemapper_basic_types() {
 
     let mapper = TypeMapper::new(types::I64);
 
-    assert_eq!(mapper.map_type(&ResolvedType::I64), types::I64);
-    assert_eq!(mapper.map_type(&ResolvedType::I32), types::I32);
-    assert_eq!(mapper.map_type(&ResolvedType::F64), types::F64);
-    assert_eq!(mapper.map_type(&ResolvedType::Bool), types::I8);
+    assert_eq!(mapper.map_type(&ResolvedType::I64).unwrap(), types::I64);
+    assert_eq!(mapper.map_type(&ResolvedType::I32).unwrap(), types::I32);
+    assert_eq!(mapper.map_type(&ResolvedType::F64).unwrap(), types::F64);
+    assert_eq!(mapper.map_type(&ResolvedType::Bool).unwrap(), types::I8);
 }
 
 #[test]
@@ -524,14 +527,14 @@ fn test_error_clear_and_recompile() {
 fn test_value_conversions() {
     // Test Value type conversions
     let i64_val = Value::I64(42);
-    assert_eq!(i64_val.as_i64(), 42);
+    assert_eq!(i64_val.as_i64().unwrap(), 42);
 
     let bool_val = Value::Bool(true);
-    assert_eq!(bool_val.as_i64(), 1);
-    assert!(bool_val.as_bool());
+    assert_eq!(bool_val.as_i64().unwrap(), 1);
+    assert!(bool_val.as_bool().unwrap());
 
     let f64_val = Value::F64(3.14);
-    assert!((f64_val.as_f64() - 3.14).abs() < 0.001);
+    assert!((f64_val.as_f64().unwrap() - 3.14).abs() < 0.001);
 }
 
 #[test]
@@ -567,7 +570,7 @@ fn test_interpreter_with_locals() {
     let result = interpret(source);
     assert!(result.is_ok());
     if let Ok(val) = result {
-        assert_eq!(val.as_i64(), 30);
+        assert_eq!(val.as_i64().unwrap(), 30);
     }
 }
 
@@ -583,5 +586,72 @@ fn test_jitcompiler_bitwise_operations() {
     let result = compile_and_run("F main() -> i64 = 4 | 8");
     if let Ok(val) = result {
         assert_eq!(val, 12);
+    }
+}
+
+// ============================================================================
+// 9. Error Handling Tests (3 tests)
+// ============================================================================
+
+#[test]
+fn test_value_conversion_errors() {
+    // Test invalid conversions return errors instead of panicking
+    let unit_val = Value::Unit;
+    assert!(unit_val.as_i64().is_err());
+    assert!(unit_val.as_f64().is_err());
+    assert!(unit_val.as_bool().is_err());
+
+    let string_val = Value::String("test".to_string());
+    assert!(string_val.as_i64().is_err());
+    assert!(string_val.as_f64().is_err());
+}
+
+#[test]
+fn test_type_mapper_error_handling() {
+    use cranelift::prelude::types;
+
+    let mapper = TypeMapper::new(types::I64);
+
+    // Test that unsubstituted generic types return errors
+    let generic = ResolvedType::Generic("T".to_string());
+    assert!(mapper.map_type(&generic).is_err());
+    if let Err(e) = mapper.map_type(&generic) {
+        assert!(matches!(e, JitError::UnsubstitutedGeneric));
+    }
+
+    // Test that unresolved type variables return errors
+    let type_var = ResolvedType::Var(0);
+    assert!(mapper.map_type(&type_var).is_err());
+    if let Err(e) = mapper.map_type(&type_var) {
+        assert!(matches!(e, JitError::UnresolvedTypeVar));
+    }
+
+    // Test that unsubstituted const generics return errors
+    let const_generic = ResolvedType::ConstGeneric("N".to_string());
+    assert!(mapper.map_type(&const_generic).is_err());
+    if let Err(e) = mapper.map_type(&const_generic) {
+        assert!(matches!(e, JitError::UnsubstitutedConstGeneric));
+    }
+}
+
+#[test]
+fn test_conversion_error_messages() {
+    // Verify error messages are descriptive
+    let unit_val = Value::Unit;
+    match unit_val.as_i64() {
+        Err(JitError::InvalidConversion { from, to }) => {
+            assert!(from.contains("Unit"));
+            assert_eq!(to, "i64");
+        }
+        _ => panic!("Expected InvalidConversion error"),
+    }
+
+    let array_val = Value::Array(vec![Value::I64(1), Value::I64(2)]);
+    match array_val.as_bool() {
+        Err(JitError::InvalidConversion { from, to }) => {
+            assert!(from.contains("Array"));
+            assert_eq!(to, "bool");
+        }
+        _ => panic!("Expected InvalidConversion error"),
     }
 }

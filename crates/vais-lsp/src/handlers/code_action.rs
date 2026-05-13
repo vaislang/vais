@@ -29,8 +29,7 @@ pub(crate) async fn handle_code_action(
         }
 
         // Refactor: Extract to function (for multi-line or complex selections)
-        if range.start.line != range.end.line
-            || (range.end.character - range.start.character) > 30
+        if range.start.line != range.end.line || (range.end.character - range.start.character) > 30
         {
             add_extract_to_function_action(backend, uri, &range, &doc, &mut actions);
         }
@@ -153,10 +152,7 @@ fn handle_diagnostic_quickfixes(
                             map.insert(
                                 uri.clone(),
                                 vec![TextEdit {
-                                    range: Range::new(
-                                        Position::new(0, 0),
-                                        Position::new(0, 0),
-                                    ),
+                                    range: Range::new(Position::new(0, 0), Position::new(0, 0)),
                                     new_text: format!("U {}\n", module),
                                 }],
                             );
@@ -275,8 +271,7 @@ fn handle_diagnostic_quickfixes(
 
             if let Some(paren_pos) = line_str.find(')') {
                 let insert_pos = paren_pos + 1;
-                let position =
-                    Position::new(diagnostic.range.start.line, insert_pos as u32);
+                let position = Position::new(diagnostic.range.start.line, insert_pos as u32);
 
                 let edit = WorkspaceEdit {
                     changes: Some({
@@ -312,8 +307,7 @@ fn handle_diagnostic_quickfixes(
             let line_str: String = line_rope.chars().collect();
             let line_end = line_str.trim_end().len();
 
-            let position =
-                Position::new(diagnostic.range.end.line, line_end as u32);
+            let position = Position::new(diagnostic.range.end.line, line_end as u32);
 
             let edit = WorkspaceEdit {
                 changes: Some({
@@ -363,9 +357,7 @@ fn add_extract_to_variable_action(
                 let selected_text = &line_str[start_char..end_char];
 
                 // Only suggest if selection is not empty and looks like an expression
-                if !selected_text.trim().is_empty()
-                    && !selected_text.trim().starts_with("L ")
-                {
+                if !selected_text.trim().is_empty() && !selected_text.trim().starts_with("L ") {
                     let var_name = "value";
                     let indent = line_str
                         .chars()
@@ -493,10 +485,7 @@ fn add_extract_to_function_action(
                         vec![
                             // Insert function at top of file
                             TextEdit {
-                                range: Range::new(
-                                    Position::new(0, 0),
-                                    Position::new(0, 0),
-                                ),
+                                range: Range::new(Position::new(0, 0), Position::new(0, 0)),
                                 new_text: function_def,
                             },
                             // Replace selection with function call
@@ -534,12 +523,11 @@ fn add_inline_variable_action(
     // Convert range.start to offset
     let cursor_line = range.start.line as usize;
     let cursor_char = range.start.character as usize;
-    let cursor_offset =
-        if let Ok(line_start_char) = doc.content.try_line_to_char(cursor_line) {
-            line_start_char + cursor_char
-        } else {
-            0
-        };
+    let cursor_offset = if let Ok(line_start_char) = doc.content.try_line_to_char(cursor_line) {
+        line_start_char + cursor_char
+    } else {
+        0
+    };
 
     // Find Let statement at cursor
     for item in &ast.items {
@@ -548,9 +536,7 @@ fn add_inline_variable_action(
                 for (stmt_idx, stmt) in stmts.iter().enumerate() {
                     if let Stmt::Let { name, value, .. } = &stmt.node {
                         // Check if cursor is on this let statement
-                        if cursor_offset >= stmt.span.start
-                            && cursor_offset <= stmt.span.end
-                        {
+                        if cursor_offset >= stmt.span.start && cursor_offset <= stmt.span.end {
                             let var_name = &name.node;
 
                             // Get the initializer expression text
@@ -578,13 +564,10 @@ fn add_inline_variable_action(
                                 let mut edits = Vec::new();
 
                                 // Remove the let statement line
-                                let let_range =
-                                    backend.span_to_range(&doc.content, &stmt.span);
+                                let let_range = backend.span_to_range(&doc.content, &stmt.span);
                                 // Extend to include the whole line
-                                let let_line_start =
-                                    Position::new(let_range.start.line, 0);
-                                let let_line_end =
-                                    Position::new(let_range.end.line + 1, 0);
+                                let let_line_start = Position::new(let_range.start.line, 0);
+                                let let_line_end = Position::new(let_range.end.line + 1, 0);
                                 edits.push(TextEdit {
                                     range: Range::new(let_line_start, let_line_end),
                                     new_text: String::new(),
@@ -608,18 +591,13 @@ fn add_inline_variable_action(
                                     change_annotations: None,
                                 };
 
-                                actions.push(CodeActionOrCommand::CodeAction(
-                                    CodeAction {
-                                        title: format!(
-                                            "Inline variable '{}'",
-                                            var_name
-                                        ),
-                                        kind: Some(CodeActionKind::REFACTOR_INLINE),
-                                        diagnostics: None,
-                                        edit: Some(edit),
-                                        ..Default::default()
-                                    },
-                                ));
+                                actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                    title: format!("Inline variable '{}'", var_name),
+                                    kind: Some(CodeActionKind::REFACTOR_INLINE),
+                                    diagnostics: None,
+                                    edit: Some(edit),
+                                    ..Default::default()
+                                }));
                             }
                         }
                     }
@@ -666,28 +644,25 @@ fn add_convert_body_actions(
                                 .collect();
 
                             // Find the opening brace of the function body
-                            let body_start =
-                                if let FunctionBody::Block(stmts) = &func.body {
-                                    if let Some(first_stmt) = stmts.first() {
-                                        // Work backwards from first statement to find '{'
-                                        let mut brace_offset = first_stmt.span.start;
-                                        while brace_offset > 0 {
-                                            brace_offset -= 1;
-                                            if let Some(ch) =
-                                                doc.content.get_char(brace_offset)
-                                            {
-                                                if ch == '{' {
-                                                    break;
-                                                }
+                            let body_start = if let FunctionBody::Block(stmts) = &func.body {
+                                if let Some(first_stmt) = stmts.first() {
+                                    // Work backwards from first statement to find '{'
+                                    let mut brace_offset = first_stmt.span.start;
+                                    while brace_offset > 0 {
+                                        brace_offset -= 1;
+                                        if let Some(ch) = doc.content.get_char(brace_offset) {
+                                            if ch == '{' {
+                                                break;
                                             }
                                         }
-                                        brace_offset
-                                    } else {
-                                        item.span.start
                                     }
+                                    brace_offset
                                 } else {
                                     item.span.start
-                                };
+                                }
+                            } else {
+                                item.span.start
+                            };
 
                             let body_end = item.span.end;
 
@@ -698,14 +673,10 @@ fn add_convert_body_actions(
                                         uri.clone(),
                                         vec![TextEdit {
                                             range: Range {
-                                                start: backend.offset_to_position(
-                                                    &doc.content,
-                                                    body_start,
-                                                ),
-                                                end: backend.offset_to_position(
-                                                    &doc.content,
-                                                    body_end,
-                                                ),
+                                                start: backend
+                                                    .offset_to_position(&doc.content, body_start),
+                                                end: backend
+                                                    .offset_to_position(&doc.content, body_end),
                                             },
                                             new_text: format!("= {}", expr_text),
                                         }],
@@ -752,14 +723,10 @@ fn add_convert_body_actions(
                                     uri.clone(),
                                     vec![TextEdit {
                                         range: Range {
-                                            start: backend.offset_to_position(
-                                                &doc.content,
-                                                eq_offset,
-                                            ),
-                                            end: backend.offset_to_position(
-                                                &doc.content,
-                                                expr.span.end,
-                                            ),
+                                            start: backend
+                                                .offset_to_position(&doc.content, eq_offset),
+                                            end: backend
+                                                .offset_to_position(&doc.content, expr.span.end),
                                         },
                                         new_text: format!("{{\n    {}\n}}", expr_text),
                                     }],
@@ -795,12 +762,11 @@ fn add_named_parameter_actions(
 ) {
     let cursor_line = range.start.line as usize;
     let cursor_char = range.start.character as usize;
-    let cursor_offset =
-        if let Ok(line_start_char) = doc.content.try_line_to_char(cursor_line) {
-            line_start_char + cursor_char
-        } else {
-            0
-        };
+    let cursor_offset = if let Ok(line_start_char) = doc.content.try_line_to_char(cursor_line) {
+        line_start_char + cursor_char
+    } else {
+        0
+    };
 
     // Find function call at cursor and offer to convert to named arguments
     for item in &ast.items {

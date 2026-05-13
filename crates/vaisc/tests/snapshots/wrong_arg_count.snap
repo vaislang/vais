@@ -1,1 +1,1 @@
-Type error: ArgCount { expected: 2, got: 1, span: None }
+Type error: ArgCount { expected: 2, got: 1, span: Some(Span { start: 54, end: 58 }) }

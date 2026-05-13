@@ -128,6 +128,11 @@ impl TreeShaker {
                 Self::collect_type_deps(&t.ty.node, &mut deps);
                 self.deps.insert(name, deps);
             }
+            Item::TraitAlias(ta) => {
+                let name = ta.name.node.clone();
+                let deps: HashSet<String> = ta.bounds.iter().map(|b| b.node.clone()).collect();
+                self.deps.insert(name, deps);
+            }
             Item::Const(c) => {
                 let name = c.name.node.clone();
                 let mut deps = HashSet::new();
@@ -204,7 +209,11 @@ impl TreeShaker {
                 }
             }
             // Other items don't produce dependencies we track
-            Item::Use(_) | Item::ExternBlock(_) | Item::Union(_) | Item::Macro(_) | Item::Error { .. } => {}
+            Item::Use(_)
+            | Item::ExternBlock(_)
+            | Item::Union(_)
+            | Item::Macro(_)
+            | Item::Error { .. } => {}
         }
     }
 
@@ -225,9 +234,14 @@ impl TreeShaker {
                     Self::collect_type_deps(&ty.node, deps);
                 }
             }
-            Type::Array(elem_type) | Type::Optional(elem_type) | Type::Result(elem_type)
-            | Type::Pointer(elem_type) | Type::Ref(elem_type) | Type::RefMut(elem_type)
-            | Type::Lazy(elem_type) => {
+            Type::Array(elem_type)
+            | Type::Optional(elem_type)
+            | Type::Result(elem_type)
+            | Type::Pointer(elem_type)
+            | Type::Ref(elem_type)
+            | Type::RefMut(elem_type)
+            | Type::Slice(elem_type)
+            | Type::SliceMut(elem_type) => {
                 Self::collect_type_deps(&elem_type.node, deps);
             }
             Type::ConstArray { element, .. } => {
@@ -246,7 +260,10 @@ impl TreeShaker {
                 }
                 Self::collect_type_deps(&ret.node, deps);
             }
-            Type::DynTrait { trait_name, generics } => {
+            Type::DynTrait {
+                trait_name,
+                generics,
+            } => {
                 // Track the trait name
                 if !Self::is_builtin_type(trait_name) {
                     deps.insert(trait_name.clone());
@@ -255,7 +272,12 @@ impl TreeShaker {
                     Self::collect_type_deps(&generic.node, deps);
                 }
             }
-            Type::Associated { base, trait_name, generics, .. } => {
+            Type::Associated {
+                base,
+                trait_name,
+                generics,
+                ..
+            } => {
                 Self::collect_type_deps(&base.node, deps);
                 if let Some(trait_n) = trait_name {
                     if !Self::is_builtin_type(trait_n) {
@@ -269,7 +291,9 @@ impl TreeShaker {
             Type::Linear(inner) | Type::Affine(inner) => {
                 Self::collect_type_deps(&inner.node, deps);
             }
-            Type::Dependent { base, predicate, .. } => {
+            Type::Dependent {
+                base, predicate, ..
+            } => {
                 Self::collect_type_deps(&base.node, deps);
                 Self::collect_expr_deps(&predicate.node, deps);
             }
@@ -299,13 +323,15 @@ impl TreeShaker {
                     Self::collect_expr_deps(&arg.node, deps);
                 }
             }
-            Expr::StaticMethodCall { type_name, args, .. } => {
+            Expr::StaticMethodCall {
+                type_name, args, ..
+            } => {
                 deps.insert(type_name.node.clone());
                 for arg in args {
                     Self::collect_expr_deps(&arg.node, deps);
                 }
             }
-            Expr::StructLit { name, fields } => {
+            Expr::StructLit { name, fields, .. } => {
                 deps.insert(name.node.clone());
                 for (_, value) in fields {
                     Self::collect_expr_deps(&value.node, deps);
@@ -395,6 +421,9 @@ impl TreeShaker {
             Expr::Field { expr, .. } => {
                 Self::collect_expr_deps(&expr.node, deps);
             }
+            Expr::TupleFieldAccess { expr, .. } => {
+                Self::collect_expr_deps(&expr.node, deps);
+            }
             Expr::Index { expr, index } => {
                 Self::collect_expr_deps(&expr.node, deps);
                 Self::collect_expr_deps(&index.node, deps);
@@ -421,9 +450,6 @@ impl TreeShaker {
                 Self::collect_expr_deps(&expr.node, deps);
             }
             Expr::Ref(expr) | Expr::Deref(expr) => {
-                Self::collect_expr_deps(&expr.node, deps);
-            }
-            Expr::Spawn(expr) => {
                 Self::collect_expr_deps(&expr.node, deps);
             }
             Expr::Lambda { params, body, .. } => {
@@ -458,7 +484,7 @@ impl TreeShaker {
             Expr::MacroInvoke(_) => {
                 // Macro invocations are expanded during parsing, tokens don't carry dep info
             }
-            Expr::Old(expr) | Expr::Assume(expr) | Expr::Lazy(expr) | Expr::Force(expr) => {
+            Expr::Old(expr) | Expr::Assume(expr) => {
                 Self::collect_expr_deps(&expr.node, deps);
             }
             Expr::Assert { condition, message } => {
@@ -468,8 +494,22 @@ impl TreeShaker {
                 }
             }
             // Literals don't reference other items
-            Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_)
-            | Expr::StringInterp(_) | Expr::Unit | Expr::SelfCall | Expr::Error { .. } => {}
+            Expr::Int(_)
+            | Expr::Float(_)
+            | Expr::Bool(_)
+            | Expr::String(_)
+            | Expr::StringInterp(_)
+            | Expr::Unit
+            | Expr::SelfCall
+            | Expr::Error { .. } => {}
+            Expr::EnumAccess {
+                enum_name, data, ..
+            } => {
+                deps.insert(enum_name.clone());
+                if let Some(d) = data {
+                    Self::collect_expr_deps(&d.node, deps);
+                }
+            }
         }
     }
 
@@ -545,6 +585,10 @@ impl TreeShaker {
                     Self::collect_pattern_deps(&pat.node, deps);
                 }
             }
+            Pattern::Alias { pattern, .. } => {
+                // For pattern alias, collect deps from inner pattern
+                Self::collect_pattern_deps(&pattern.node, deps);
+            }
         }
     }
 
@@ -557,10 +601,25 @@ impl TreeShaker {
     fn is_builtin_type(name: &str) -> bool {
         matches!(
             name,
-            "i8" | "i16" | "i32" | "i64" | "i128" | "isize" |
-            "u8" | "u16" | "u32" | "u64" | "u128" | "usize" |
-            "f32" | "f64" | "bool" | "char" | "str" | "String" |
-            "()" | "unit"
+            "i8" | "i16"
+                | "i32"
+                | "i64"
+                | "i128"
+                | "isize"
+                | "u8"
+                | "u16"
+                | "u32"
+                | "u64"
+                | "u128"
+                | "usize"
+                | "f32"
+                | "f64"
+                | "bool"
+                | "char"
+                | "str"
+                | "String"
+                | "()"
+                | "unit"
         )
     }
 
@@ -623,6 +682,7 @@ impl TreeShaker {
             Item::Struct(s) => self.is_reachable(&s.name.node),
             Item::Enum(e) => self.is_reachable(&e.name.node),
             Item::TypeAlias(t) => self.is_reachable(&t.name.node),
+            Item::TraitAlias(ta) => self.is_reachable(&ta.name.node),
             Item::Const(c) => self.is_reachable(&c.name.node),
             Item::Global(g) => self.is_reachable(&g.name.node),
             Item::Trait(t) => self.is_reachable(&t.name.node),
@@ -634,7 +694,11 @@ impl TreeShaker {
                 }
             }
             // Always keep imports, extern blocks, unions, and macros
-            Item::Use(_) | Item::ExternBlock(_) | Item::Union(_) | Item::Macro(_) | Item::Error { .. } => true,
+            Item::Use(_)
+            | Item::ExternBlock(_)
+            | Item::Union(_)
+            | Item::Macro(_)
+            | Item::Error { .. } => true,
         }
     }
 
@@ -671,185 +735,5 @@ impl TreeShaker {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn make_function(name: &str, is_pub: bool, body: Expr) -> Spanned<Item> {
-        Spanned::new(
-            Item::Function(Function {
-                name: Spanned::new(name.to_string(), Span::new(0, name.len())),
-                generics: vec![],
-                params: vec![],
-                ret_type: None,
-                body: FunctionBody::Expr(Box::new(Spanned::new(body, Span::new(0, 1)))),
-                is_pub,
-                is_async: false,
-                attributes: vec![],
-            }),
-            Span::new(0, 1),
-        )
-    }
-
-    fn make_call(func_name: &str) -> Expr {
-        Expr::Call {
-            func: Box::new(Spanned::new(
-                Expr::Ident(func_name.to_string()),
-                Span::new(0, func_name.len()),
-            )),
-            args: vec![],
-        }
-    }
-
-    #[test]
-    fn test_unreferenced_private_function_removed() {
-        let module = Module {
-            items: vec![
-                make_function("main", false, Expr::Int(42)),
-                make_function("unused", false, Expr::Int(0)),
-            ],
-            modules_map: None,
-        };
-
-        let shaken = TreeShaker::shake(&module);
-
-        assert_eq!(shaken.items.len(), 1);
-        match &shaken.items[0].node {
-            Item::Function(f) => assert_eq!(f.name.node, "main"),
-            _ => panic!("Expected function"),
-        }
-    }
-
-    #[test]
-    fn test_transitively_referenced_functions_kept() {
-        let module = Module {
-            items: vec![
-                make_function("main", false, make_call("helper1")),
-                make_function("helper1", false, make_call("helper2")),
-                make_function("helper2", false, Expr::Int(42)),
-                make_function("unused", false, Expr::Int(0)),
-            ],
-            modules_map: None,
-        };
-
-        let shaken = TreeShaker::shake(&module);
-
-        assert_eq!(shaken.items.len(), 3);
-        let names: Vec<String> = shaken
-            .items
-            .iter()
-            .filter_map(|item| match &item.node {
-                Item::Function(f) => Some(f.name.node.clone()),
-                _ => None,
-            })
-            .collect();
-
-        assert!(names.contains(&"main".to_string()));
-        assert!(names.contains(&"helper1".to_string()));
-        assert!(names.contains(&"helper2".to_string()));
-        assert!(!names.contains(&"unused".to_string()));
-    }
-
-    #[test]
-    fn test_public_functions_always_kept() {
-        let module = Module {
-            items: vec![
-                make_function("main", false, Expr::Int(42)),
-                make_function("public_api", true, Expr::Int(100)),
-                make_function("unused_private", false, Expr::Int(0)),
-            ],
-            modules_map: None,
-        };
-
-        let shaken = TreeShaker::shake(&module);
-
-        assert_eq!(shaken.items.len(), 2);
-        let names: Vec<String> = shaken
-            .items
-            .iter()
-            .filter_map(|item| match &item.node {
-                Item::Function(f) => Some(f.name.node.clone()),
-                _ => None,
-            })
-            .collect();
-
-        assert!(names.contains(&"main".to_string()));
-        assert!(names.contains(&"public_api".to_string()));
-        assert!(!names.contains(&"unused_private".to_string()));
-    }
-
-    #[test]
-    fn test_struct_lit_marks_struct_reachable() {
-        let module = Module {
-            items: vec![
-                make_function(
-                    "main",
-                    false,
-                    Expr::StructLit {
-                        name: Spanned::new("Point".to_string(), Span::new(0, 5)),
-                        fields: vec![],
-                    },
-                ),
-                Spanned::new(
-                    Item::Struct(Struct {
-                        name: Spanned::new("Point".to_string(), Span::new(0, 5)),
-                        generics: vec![],
-                        fields: vec![],
-                        methods: vec![],
-                        is_pub: false,
-                        attributes: vec![],
-                    }),
-                    Span::new(0, 1),
-                ),
-                Spanned::new(
-                    Item::Struct(Struct {
-                        name: Spanned::new("Unused".to_string(), Span::new(0, 6)),
-                        generics: vec![],
-                        fields: vec![],
-                        methods: vec![],
-                        is_pub: false,
-                        attributes: vec![],
-                    }),
-                    Span::new(0, 1),
-                ),
-            ],
-            modules_map: None,
-        };
-
-        let shaken = TreeShaker::shake(&module);
-
-        assert_eq!(shaken.items.len(), 2);
-        let has_point = shaken.items.iter().any(|item| match &item.node {
-            Item::Struct(s) => s.name.node == "Point",
-            _ => false,
-        });
-        let has_unused = shaken.items.iter().any(|item| match &item.node {
-            Item::Struct(s) => s.name.node == "Unused",
-            _ => false,
-        });
-
-        assert!(has_point);
-        assert!(!has_unused);
-    }
-
-    #[test]
-    fn test_no_main_keeps_public_only() {
-        let module = Module {
-            items: vec![
-                make_function("private1", false, Expr::Int(1)),
-                make_function("public1", true, Expr::Int(2)),
-                make_function("private2", false, Expr::Int(3)),
-            ],
-            modules_map: None,
-        };
-
-        let shaken = TreeShaker::shake(&module);
-
-        // Only main (not present) and public items are entry points
-        // So only public1 should remain
-        assert_eq!(shaken.items.len(), 1);
-        match &shaken.items[0].node {
-            Item::Function(f) => assert_eq!(f.name.node, "public1"),
-            _ => panic!("Expected function"),
-        }
-    }
-}
+#[path = "tree_shaking_tests.rs"]
+mod tree_shaking_tests;

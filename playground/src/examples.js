@@ -3,9 +3,10 @@ export const examples = {
   'hello-world': {
     name: 'Hello World',
     description: 'Simple Hello World program',
-    code: `# Hello World example using puts
-F main()->i64 {
+    code: `# Hello World example
+fn main() -> i64 {
     puts("Hello, Vais!")
+    puts("Welcome to Vais — an AI-optimized systems language")
     0
 }`
   },
@@ -14,22 +15,22 @@ F main()->i64 {
     name: 'Fibonacci',
     description: 'Recursive Fibonacci calculation',
     code: `# Fibonacci function with self-recursion
-F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
+fn fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
 
 # Simple addition
-F add(a:i64, b:i64)->i64 = a + b
+fn add(a:i64, b:i64)->i64 = a + b
 
 # Main: compute fib(10) = 55
-F main()->i64 = fib(10)`
+fn main()->i64 = fib(10)`
   },
 
   'generics': {
     name: 'Generics',
     description: 'Generic function example',
     code: `# Generic function test (simple identity)
-F identity<T>(x: T) -> T = x
+fn identity<T>(x: T) -> T = x
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Testing generics:")
 
     a := identity(42)
@@ -42,23 +43,49 @@ F main() -> i64 {
 }`
   },
 
+  'shared-schema-product': {
+    name: 'Shared Schema Product Gate',
+    description: 'One schema reused by VaisDB, vais-server, and vais-web product gates',
+    code: `# Shared schema shape used by the multi-domain product gate
+pub struct User {
+    id: i64,
+    email: str,
+    name: str
+}
+
+fn user_email(u: User) -> str {
+    u.email
+}
+
+fn main() -> i64 {
+    user := User {
+        id: 1,
+        email: "dev@vaislang.dev",
+        name: "Vais"
+    }
+
+    puts(user_email(user))
+    0
+}`
+  },
+
   'control-flow': {
     name: 'Control Flow',
     description: 'If-else and loops',
     code: `# Control flow example
-F main()->i64 {
+fn main()->i64 {
     # If-else expression
     x := 10
     result := I x > 5 {
         puts("x is greater than 5")
         1
-    } E {
+    } else {
         puts("x is less than or equal to 5")
         0
     }
 
     # Loop with range
-    L i:0..5 {
+    LF i:0..5 {
         putchar(i + 48)
         putchar(32)  # space
     }
@@ -72,19 +99,19 @@ F main()->i64 {
     name: 'Struct',
     description: 'Struct definition and usage',
     code: `# Struct definition
-S Point {
+struct Point {
     x: f64,
     y: f64
 }
 
 # Method on struct
-X Point {
-    F distance_from_origin(&self) -> f64 {
+impl Point {
+    fn distance_from_origin(&self) -> f64 {
         sqrt(self.x * self.x + self.y * self.y)
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Point { x: 3.0, y: 4.0 }
     puts("Point created")
 
@@ -99,15 +126,15 @@ F main() -> i64 {
     name: 'Enum',
     description: 'Enum types with pattern matching',
     code: `# Enum definition
-E Color {
+enum Color {
     Red,
     Green,
     Blue
 }
 
 # Match on enum variants
-F color_value(c: Color) -> i64 {
-    M c {
+fn color_value(c: Color) -> i64 {
+    match c {
         Red => 1,
         Green => 2,
         Blue => 3,
@@ -115,7 +142,7 @@ F color_value(c: Color) -> i64 {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     r := Red
     g := Green
     b := Blue
@@ -132,8 +159,8 @@ F main() -> i64 {
     name: 'Pattern Matching',
     description: 'Match expressions',
     code: `# Pattern matching example
-F classify(n: i64) -> i64 {
-    M n {
+fn classify(n: i64) -> i64 {
+    match n {
         0 => {
             puts("zero")
             0
@@ -149,7 +176,7 @@ F classify(n: i64) -> i64 {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     classify(0)
     classify(1)
     classify(42)
@@ -161,10 +188,10 @@ F main() -> i64 {
     name: 'Loops',
     description: 'Different loop types',
     code: `# Loop examples
-F main() -> i64 {
+fn main() -> i64 {
     # Range loop
     puts("Range loop:")
-    L i:0..5 {
+    LF i:0..5 {
         putchar(i + 48)
         putchar(32)
     }
@@ -201,11 +228,11 @@ F main() -> i64 {
     name: 'Self Recursion',
     description: 'Using the @ operator for recursion',
     code: `# Self-recursion operator @ example
-F factorial(n: i64) -> i64 = I n <= 1 { 1 } E { n * @(n - 1) }
+fn factorial(n: i64) -> i64 = I n <= 1 { 1 } else { n * @(n - 1) }
 
-F sum_to_n(n: i64) -> i64 = I n <= 0 { 0 } E { n + @(n - 1) }
+fn sum_to_n(n: i64) -> i64 = I n <= 0 { 0 } else { n + @(n - 1) }
 
-F main() -> i64 {
+fn main() -> i64 {
     # factorial(5) = 120
     fact := factorial(5)
 
@@ -220,7 +247,7 @@ F main() -> i64 {
     name: 'Type Inference',
     description: 'Automatic type inference',
     code: `# Type inference example
-F main() -> i64 {
+fn main() -> i64 {
     # Infer integer type
     x := 42
 
@@ -236,14 +263,14 @@ F main() -> i64 {
     0
 }
 
-F add(a: i64, b: i64) -> i64 = a + b`
+fn add(a: i64, b: i64) -> i64 = a + b`
   },
 
   'operators': {
     name: 'Operators',
     description: 'Arithmetic and comparison operators',
     code: `# Operators example
-F main() -> i64 {
+fn main() -> i64 {
     # Arithmetic
     a := 10 + 5
     b := 10 - 5
@@ -277,19 +304,19 @@ F main() -> i64 {
     code: `# Function examples
 
 # Single expression function
-F square(x: i64) -> i64 = x * x
+fn square(x: i64) -> i64 = x * x
 
 # Block function
-F print_square(x: i64) -> i64 {
+fn print_square(x: i64) -> i64 {
     result := square(x)
     puts("Square calculated")
     result
 }
 
 # Function with multiple parameters
-F add_three(a: i64, b: i64, c: i64) -> i64 = a + b + c
+fn add_three(a: i64, b: i64, c: i64) -> i64 = a + b + c
 
-F main() -> i64 {
+fn main() -> i64 {
     sq := square(5)
     ps := print_square(7)
     sum := add_three(1, 2, 3)
@@ -302,7 +329,7 @@ F main() -> i64 {
     name: 'String Interpolation',
     description: 'Embed expressions in strings with {expr}',
     code: `# String interpolation example
-F main() -> i64 {
+fn main() -> i64 {
     name := "Vais"
     version := 1
 
@@ -310,10 +337,8 @@ F main() -> i64 {
     puts("Hello, {name}!")
 
     # Expression interpolation
+    puts("Version: {version}")
     puts("1 + 2 = {1 + 2}")
-
-    # Escaped braces
-    puts("Use {{braces}} for literal braces")
 
     0
 }`
@@ -323,11 +348,11 @@ F main() -> i64 {
     name: 'Pipe Operator',
     description: 'Chain functions with |>',
     code: `# Pipe operator |> example
-F double(x: i64) -> i64 = x * 2
-F add_one(x: i64) -> i64 = x + 1
-F square(x: i64) -> i64 = x * x
+fn double(x: i64) -> i64 = x * 2
+fn add_one(x: i64) -> i64 = x + 1
+fn square(x: i64) -> i64 = x * x
 
-F main() -> i64 {
+fn main() -> i64 {
     # 5 |> double |> add_one = add_one(double(5)) = 11
     result := 5 |> double |> add_one
 
@@ -338,18 +363,16 @@ F main() -> i64 {
 }`
   },
 
-  'tilde-mut': {
-    name: 'Tilde Mut (~)',
-    description: 'Shorthand ~ for mut keyword',
-    code: `# ~ is shorthand for mut
-F main() -> i64 {
-    # Traditional mutable
+  'mutable-variables': {
+    name: 'Mutable Variables',
+    description: 'Declare mutable variables with mut',
+    code: `# Mutable variable example
+fn main() -> i64 {
+    # Mutable variable declaration
     counter := mut 0
+    total := mut 0
 
-    # ~ shorthand (equivalent)
-    ~ total := 0
-
-    L i: 0..10 {
+    LF i: 0..10 {
         counter = counter + 1
         total = total + i
     }
@@ -360,32 +383,34 @@ F main() -> i64 {
 
   'destructuring': {
     name: 'Destructuring',
-    description: 'Tuple destructuring with :=',
-    code: `# Tuple destructuring example
-F get_pair() -> (i64, i64) = (10, 20)
+    description: 'Tuple destructuring and multi-value returns',
+    code: `# Tuple destructuring
+fn get_pair() -> (i64, i64) = (10, 20)
+fn get_triple() -> (i64, i64, i64) = (1, 2, 3)
 
-F swap(a: i64, b: i64) -> (i64, i64) = (b, a)
-
-F main() -> i64 {
-    # Destructure tuple
+fn main() -> i64 {
+    # Destructure pair
     (x, y) := get_pair()
+    puts("Pair: ({x}, {y})")
 
-    # Destructure swap result
-    (a, b) := swap(1, 2)
+    # Destructure triple
+    (a, b, c) := get_triple()
+    puts("Triple: ({a}, {b}, {c})")
 
-    0
+    # x=10, y=20, a=1, b=2, c=3 -> sum=36
+    x + y + a + b + c
 }`
   },
 
   'type-infer-params': {
-    name: 'Type Inference',
+    name: 'Parameter Inference',
     description: 'Variables and return values are inferred',
     code: `# Single expression functions
-F add(a: i64, b: i64) -> i64 = a + b
-F multiply(a: i64, b: i64) -> i64 = a * b
+fn add(a: i64, b: i64) -> i64 = a + b
+fn multiply(a: i64, b: i64) -> i64 = a * b
 
 # Variable types are inferred from expressions
-F main() -> i64 {
+fn main() -> i64 {
     # Inferred as i64
     result := add(10, 20)
     product := multiply(3, 4)
@@ -400,28 +425,837 @@ F main() -> i64 {
   'minimal': {
     name: 'Minimal Program',
     description: 'Simplest valid program',
-    code: `# Minimal Vais program
-F main() -> i64 = 0`
+    code: `# Minimal Vais program — expression body
+fn main() -> i64 = 0`
+  },
+
+  'slice-types': {
+    name: 'Arrays & Pointers',
+    description: 'Array operations with pointer passing',
+    code: `# Array operations with pointer passing
+fn sum(arr: *i64, len: i64) -> i64 {
+    total := mut 0
+    i := mut 0
+    L i < len {
+        total = total + arr[i]
+        i = i + 1
+    }
+    total
+}
+
+fn find_max(arr: *i64, len: i64) -> i64 {
+    max := mut arr[0]
+    i := mut 1
+    L i < len {
+        I arr[i] > max { max = arr[i] }
+        i = i + 1
+    }
+    max
+}
+
+fn main() -> i64 {
+    arr: *i64 = [10, 20, 30, 40, 50]
+
+    total := sum(arr, 5)        # 150
+    max := find_max(arr, 5)     # 50
+
+    puts("Sum: {total}")
+    puts("Max: {max}")
+
+    total + max     # 200
+}`
+  },
+
+  'traits': {
+    name: 'Traits',
+    description: 'Define and implement traits',
+    code: `# Trait definition
+trait Shape {
+    fn area(&self) -> f64
+    fn name(&self) -> str
+}
+
+struct Circle {
+    radius: f64,
+}
+
+struct Rectangle {
+    width: f64,
+    height: f64,
+}
+
+# Trait implementation
+impl Circle: Shape {
+    fn area(&self) -> f64 {
+        3.14159 * self.radius * self.radius
+    }
+    fn name(&self) -> str { "Circle" }
+}
+
+impl Rectangle: Shape {
+    fn area(&self) -> f64 {
+        self.width * self.height
+    }
+    fn name(&self) -> str { "Rectangle" }
+}
+
+fn main() -> i64 {
+    c := Circle { radius: 5.0 }
+    r := Rectangle { width: 4.0, height: 6.0 }
+    0
+}`
+  },
+
+  'async-await': {
+    name: 'Async/Await (syntax preview)',
+    description: 'Asynchronous programming syntax — requires async runtime (compile-only)',
+    code: `# Async functions with A keyword (syntax preview)
+# Note: async codegen requires runtime support
+# This example shows the syntax for future use
+
+# A fn fetch_data(id: i64) -> i64 {
+#     id * 10
+# }
+#
+# A fn process() -> i64 {
+#     a := Y fetch_data(1)    # Y = await
+#     b := Y fetch_data(2)
+#     a + b
+# }
+
+# Synchronous equivalent:
+fn fetch_data(id: i64) -> i64 = id * 10
+
+fn process() -> i64 {
+    a := fetch_data(1)
+    b := fetch_data(2)
+    a + b
+}
+
+fn main() -> i64 {
+    result := process()
+    puts("Result: {result}")    # 30
+    result
+}`
+  },
+
+  'ownership': {
+    name: 'Ownership (syntax preview)',
+    description: 'Move semantics — Vais tracks ownership to prevent use-after-move',
+    code: `# Ownership: Vais prevents use-after-move errors
+# Move semantics are always active
+
+fn double(x: i64) -> i64 = x * 2
+
+fn main() -> i64 {
+    # Immutable binding
+    a := 42
+    result := double(a)
+    puts("Result: {result}")
+
+    # Mutable variables
+    counter := mut 0
+    L counter < 5 {
+        counter = counter + 1
+    }
+    puts("Counter: {counter}")
+
+    # Ownership ensures memory safety
+    # Variables are moved when passed by value
+    # Use mut for variables that need reassignment
+
+    result + counter    # 89
+}`
   },
 
   'wasm-interop': {
-    name: 'WASM Interop',
-    description: 'Import JS functions and export Vais functions',
-    code: `# WASM Import/Export example
-#[wasm_import("env", "console_log")]
-N F console_log(ptr: i64, len: i64) -> i64
+    name: 'WASM Interop (syntax preview)',
+    description: 'WASM import/export attributes — use --target wasm32 to compile',
+    code: `# WASM export example (syntax preview)
+# Compile with: vaisc --target wasm32-unknown-unknown file.vais
+#
+# Import syntax:
+#   #[wasm_import("env", "log")]
+#   N fn log(ptr: i64, len: i64) -> i64
+#
+# Export syntax:
+#   #[wasm_export("add")]
+#   fn add(a: i64, b: i64) -> i64 = a + b
 
-#[wasm_export("add")]
-F add(a: i64, b: i64) -> i64 = a + b
+# These functions can be exported to WASM
+fn add(a: i64, b: i64) -> i64 = a + b
 
-#[wasm_export("fibonacci")]
-F fib(n: i64) -> i64 {
-    I n <= 1 { n }
-    E { @(n - 1) + @(n - 2) }
+fn fib(n: i64) -> i64 {
+    I n <= 1 { n } else { @(n - 1) + @(n - 2) }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := add(10, 20)
+    f := fib(10)
+    puts("add(10,20) = {result}")
+    puts("fib(10) = {f}")
+    0
+}`
+  },
+
+  'lambda-capture': {
+    name: 'Lambda & Closures',
+    description: 'Lambda expressions with type-annotated parameters',
+    code: `# Lambda expressions
+fn square(x: i64) -> i64 = x * x
+
+fn main() -> i64 {
+    # Lambda with type annotation
+    double := |x: i64| x * 2
+    add_ten := |x: i64| x + 10
+
+    # Call lambdas directly
+    a := double(5)         # 10
+    b := add_ten(a)        # 20
+
+    # Combine with regular functions
+    c := square(b)         # 400
+
+    puts("double(5) = {a}")
+    puts("add_ten(10) = {b}")
+    puts("square(20) = {c}")
+
+    c    # 400
+}`
+  },
+
+  'range-loop': {
+    name: 'Range Loops',
+    description: 'Iterate with exclusive and inclusive ranges',
+    code: `# Range loop examples
+fn main() -> i64 {
+    # Exclusive range: 0, 1, 2, 3, 4
+    puts("Exclusive 0..5:")
+    LF i:0..5 {
+        putchar(i + 48)
+        putchar(32)
+    }
+    putchar(10)
+
+    # Sum with range
+    total := mut 0
+    LF i:1..11 {
+        total = total + i
+    }
+
+    # total = 55 (1+2+...+10)
+    total
+}`
+  },
+
+  'result-option': {
+    name: 'Result Type',
+    description: 'Error handling with Result type and pattern matching',
+    code: `# Result type for error handling
+enum Result { Ok(i64), Err(i64) }
+
+fn safe_divide(a: i64, b: i64) -> Result {
+    I b == 0 { return Err(-1) }
+    Ok(a / b)
+}
+
+fn main() -> i64 {
+    # Match on successful division
+    r1 := safe_divide(10, 2)
+    v1 := match r1 {
+        Ok(v) => {
+            puts("Division OK")
+            v
+        },
+        Err(e) => {
+            puts("Division failed")
+            e
+        }
+    }
+
+    # Match on division by zero
+    r2 := safe_divide(10, 0)
+    v2 := match r2 {
+        Ok(v) => v,
+        Err(e) => {
+            puts("Error: divide by zero")
+            e
+        }
+    }
+
+    puts("v1 = {v1}")     # 5
+    puts("v2 = {v2}")     # -1
+    v1 + v2               # 4
+}`
+  },
+
+  'try-operator': {
+    name: 'Try Operator (syntax preview)',
+    description: 'Propagate errors with the ? operator — syntax preview',
+    code: `# Try operator (?) for error propagation (syntax preview)
+# The ? operator unwraps Ok or returns Err early
+#
+# fn process(input: str) -> Result {
+#     n := parse_number(input)?    # early return Err
+#     result := validate(n)?       # early return Err
+#     Ok(result)
+# }
+
+# Manual error propagation (equivalent pattern):
+enum Result { Ok(i64), Err(i64) }
+
+fn validate(n: i64) -> Result {
+    I n < 0 { return Err(-1) }
+    Ok(n * 2)
+}
+
+fn process(n: i64) -> Result {
+    r := validate(n)
+    match r {
+        Ok(v) => Ok(v + 1),
+        Err(e) => Err(e)
+    }
+}
+
+fn main() -> i64 {
+    # Success path
+    r1 := process(5)
+    v1 := match r1 { Ok(v) => v, Err(e) => e }
+    puts("process(5) = {v1}")      # 11
+
+    # Error path
+    r2 := process(-3)
+    v2 := match r2 { Ok(v) => v, Err(e) => e }
+    puts("process(-3) = {v2}")     # -1
+
+    v1 + v2    # 10
+}`
+  },
+
+  'unwrap-operator': {
+    name: 'Unwrap Operator (!)',
+    description: 'Unwrap Ok values or panic with the ! operator',
+    code: `# Unwrap operator (!) for assertive access
+enum Result { Ok(i64), Err(i64) }
+
+fn get_config() -> Result {
+    Ok(42)
+}
+
+fn compute() -> Result {
+    Ok(100)
+}
+
+fn main() -> i64 {
+    # ! unwraps Ok, panics on Err
+    config := get_config()!      # 42
+    value := compute()!          # 100
+
+    puts("config = {config}")
+    puts("value = {value}")
+
+    config + value    # 142
+}`
+  },
+
+  'where-clause': {
+    name: 'Where Clause',
+    description: 'Constrain generic types with where clauses',
+    code: `# Where clause for generic constraints
+trait Printable {
+    fn to_string(&self) -> str
+}
+
+trait Comparable {
+    fn compare(&self, other: &Self) -> i64
+}
+
+# Generic function with where clause
+fn print_if_positive<T>(val: T, n: i64) -> i64
+    where type: Printable
+{
+    I n > 0 {
+        puts("Value is associated with positive number")
+        1
+    } else {
+        0
+    }
+}
+
+# Multiple constraints
+fn process<T>(item: T) -> i64
+    where type: Printable + Comparable
+{
+    0
+}
+
+fn main() -> i64 {
+    puts("Where clause example")
+    0
+}`
+  },
+
+  'defer-statement': {
+    name: 'Defer Statement',
+    description: 'Execute cleanup code when scope exits',
+    code: `# Defer statement (D keyword)
+fn main() -> i64 {
+    # Deferred actions run in LIFO order at scope exit
+    D puts("cleanup: third (runs first)")
+    D puts("cleanup: second")
+    D puts("cleanup: first (runs last)")
+
+    puts("main body executing")
+    puts("doing work...")
+
+    0
+}
+# Output order:
+# main body executing
+# doing work...
+# cleanup: first (runs last)
+# cleanup: second
+# cleanup: third (runs first)`
+  },
+
+  'fizzbuzz': {
+    name: 'FizzBuzz',
+    description: 'Classic FizzBuzz with if-else chains',
+    code: `# FizzBuzz — classic interview problem
+fn fizzbuzz(n: i64) -> i64 {
+    LF i:1..n+1 {
+        I i % 15 == 0 {
+            puts("FizzBuzz")
+        } else I i % 3 == 0 {
+            puts("Fizz")
+        } else I i % 5 == 0 {
+            puts("Buzz")
+        } else {
+            puts("{i}")
+        }
+    }
+    0
+}
+
+fn main() -> i64 {
+    fizzbuzz(20)
+}`
+  },
+
+  'binary-search': {
+    name: 'Binary Search',
+    description: 'Efficient search on sorted arrays',
+    code: `# Binary search on a sorted array
+fn binary_search(arr: *i64, len: i64, target: i64) -> i64 {
+    lo := mut 0
+    hi := mut len - 1
+
+    L lo <= hi {
+        mid := lo + (hi - lo) / 2
+        I arr[mid] == target { return mid } else I arr[mid] < target { lo = mid + 1 } else { hi = mid - 1 }
+    }
+    -1
+}
+
+fn main() -> i64 {
+    arr: *i64 = [2, 5, 8, 12, 16, 23, 38, 56, 72, 91]
+
+    idx := binary_search(arr, 10, 23)
+    puts("Search 23: index = {idx}")   # 5
+
+    idx2 := binary_search(arr, 10, 42)
+    puts("Search 42: index = {idx2}")  # -1
+
+    0
+}`
+  },
+
+  'bubble-sort': {
+    name: 'Bubble Sort',
+    description: 'Sorting algorithm with pointer arrays',
+    code: `# Bubble sort implementation
+fn bubble_sort(arr: *i64, len: i64) -> i64 {
+    i := mut 0
+    L i < len - 1 {
+        j := mut 0
+        L j < len - 1 - i {
+            I arr[j] > arr[j + 1] {
+                tmp := arr[j]
+                arr[j] = arr[j + 1]
+                arr[j + 1] = tmp
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    0
+}
+
+fn main() -> i64 {
+    arr: *i64 = [64, 25, 12, 22, 11]
+
+    puts("Before: 64 25 12 22 11")
+    bubble_sort(arr, 5)
+
+    puts("After:")
+    LF i:0..5 { puts("{arr[i]}") }
+
+    0
+}`
+  },
+
+  'gcd-lcm': {
+    name: 'GCD & LCM',
+    description: 'Euclidean algorithm with self-recursion',
+    code: `# GCD using @ (self-recursion) and ternary
+fn gcd(a: i64, b: i64) -> i64 = b == 0 ? a : @(b, a % b)
+
+fn lcm(a: i64, b: i64) -> i64 = a / gcd(a, b) * b
+
+fn coprime(a: i64, b: i64) -> i64 = gcd(a, b) == 1 ? 1 : 0
+
+fn main() -> i64 {
+    puts("gcd(48, 18) = {gcd(48, 18)}")   # 6
+    puts("lcm(12, 18) = {lcm(12, 18)}")   # 36
+    puts("coprime(15, 28) = {coprime(15, 28)}") # 1
+    0
+}`
+  },
+
+  'calculator-enum': {
+    name: 'Calculator Enum',
+    description: 'Enum variants with data and pattern matching',
+    code: `# Calculator using enum with data
+enum Op {
+    Add(i64, i64),
+    Sub(i64, i64),
+    Mul(i64, i64),
+    Div(i64, i64)
+}
+
+fn eval(op: Op) -> i64 {
+    match op {
+        Op.Add(a, b) => a + b,
+        Op.Sub(a, b) => a - b,
+        Op.Mul(a, b) => a * b,
+        Op.Div(a, b) => {
+            I b == 0 { return 0 }
+            a / b
+        }
+    }
+}
+
+fn main() -> i64 {
+    puts("10 + 5 = {eval(Add(10, 5))}")
+    puts("10 - 5 = {eval(Sub(10, 5))}")
+    puts("6 * 7 = {eval(Mul(6, 7))}")
+    puts("100 / 4 = {eval(Div(100, 4))}")
+    0
+}`
+  },
+
+  'state-machine': {
+    name: 'State Machine',
+    description: 'Traffic light simulation with enum transitions',
+    code: `# Traffic light state machine
+enum Light { Red, Yellow, Green }
+
+fn next_state(current: Light) -> Light {
+    match current {
+        Light.Red => Green,
+        Light.Green => Yellow,
+        Light.Yellow => Red
+    }
+}
+
+fn duration(state: Light) -> i64 {
+    match state {
+        Light.Red => 3,
+        Light.Green => 4,
+        Light.Yellow => 1
+    }
+}
+
+fn main() -> i64 {
+    state := mut Red
+    total := mut 0
+
+    LF i:0..6 {
+        ticks := duration(state)
+        total = total + ticks
+        state = next_state(state)
+    }
+
+    puts("6 transitions, total ticks = {total}")
+    0
+}`
+  },
+
+  'pipe-chain': {
+    name: 'Pipe Chains',
+    description: 'Functional data transformation with |>',
+    code: `# Chaining transformations with pipe operator
+fn double(x: i64) -> i64 = x * 2
+fn add_one(x: i64) -> i64 = x + 1
+fn square(x: i64) -> i64 = x * x
+fn clamp(x: i64) -> i64 = I x > 100 { 100 } else { x }
+
+fn apply_n(f: |i64| -> i64, x: i64, n: i64) -> i64 {
+    result := mut x
+    LF i:0..n { result = f(result) }
+    result
+}
+
+fn main() -> i64 {
+    r1 := 5 |> double |> add_one
+    puts("5 |> double |> add_one = {r1}")
+
+    r2 := 3 |> square |> double |> add_one
+    puts("3 |> square |> double |> add_one = {r2}")
+
+    r3 := 8 |> square |> double |> clamp
+    puts("8 |> square |> double |> clamp = {r3}")
+
+    # Apply double 4 times to 1: 1->2->4->8->16
+    r4 := apply_n(double, 1, 4)
+    puts("double applied 4x to 1 = {r4}")
+
+    0
+}`
+  },
+
+  'matrix-ops': {
+    name: 'Matrix Operations',
+    description: '2x2 matrix math with pointer arrays',
+    code: `# 2x2 matrix operations
+fn mat_mul(a: *i64, b: *i64, out: *i64) -> i64 {
+    out[0] = a[0]*b[0] + a[1]*b[2]
+    out[1] = a[0]*b[1] + a[1]*b[3]
+    out[2] = a[2]*b[0] + a[3]*b[2]
+    out[3] = a[2]*b[1] + a[3]*b[3]
+    0
+}
+
+fn mat_det(m: *i64) -> i64 = m[0]*m[3] - m[1]*m[2]
+fn mat_trace(m: *i64) -> i64 = m[0] + m[3]
+
+fn main() -> i64 {
+    a: *i64 = [1, 2, 3, 4]
+    b: *i64 = [5, 6, 7, 8]
+    result: *i64 = [0, 0, 0, 0]
+
+    mat_mul(a, b, result)
+
+    det_a := mat_det(a)
+    det_b := mat_det(b)
+    det_ab := mat_det(result)
+
+    puts("det(A) = {det_a}")
+    puts("det(B) = {det_b}")
+    puts("det(A*B) = {det_ab}")
+    puts("det(A)*det(B) = {det_a * det_b}")
+
+    0
+}`
+  },
+
+  'linked-list': {
+    name: 'Linked List',
+    description: 'Manual memory management with malloc/free',
+    code: `# Linked list with manual memory
+# Node layout: [value:i64][next:i64] = 16 bytes
+
+fn node_new(value: i64) -> i64 {
+    ptr := malloc(16)
+    store_i64(ptr, value)
+    store_i64(ptr + 8, 0)
+    ptr
+}
+
+fn node_value(n: i64) -> i64 = load_i64(n)
+fn node_next(n: i64) -> i64 = load_i64(n + 8)
+
+fn list_push(head: i64, value: i64) -> i64 {
+    new_node := node_new(value)
+    store_i64(new_node + 8, head)
+    new_node
+}
+
+fn list_sum(head: i64) -> i64 {
+    total := mut 0
+    cur := mut head
+    L cur != 0 {
+        total = total + node_value(cur)
+        cur = node_next(cur)
+    }
+    total
+}
+
+fn main() -> i64 {
+    head := mut 0
+    LF i:1..6 { head = list_push(head, i) }
+
+    total := list_sum(head)
+    puts("Sum of 1..5 = {total}")   # 15
+    0
+}`
+  },
+
+  'vec-struct-access': {
+    name: 'Vec<Struct> Direct Access',
+    description: 'Phase 182: v[i].field direct field access on Vec of structs',
+    code: `# Vec<Struct> direct field access (Phase 182)
+# v[i].field pattern — no intermediate binding needed
+
+struct Point {
+    x: i64,
+    y: i64
+}
+
+fn main() -> i64 {
+    # Array of structs
+    points: *Point = [
+        Point { x: 1, y: 2 },
+        Point { x: 3, y: 4 },
+        Point { x: 5, y: 6 }
+    ]
+
+    # Direct field access via index: v[i].field
+    puts("points[0] = ({points[0].x}, {points[0].y})")   # (1, 2)
+    puts("points[1] = ({points[1].x}, {points[1].y})")   # (3, 4)
+    puts("points[2] = ({points[2].x}, {points[2].y})")   # (5, 6)
+
+    # Use in expressions directly
+    sum_x := points[0].x + points[1].x + points[2].x
+    sum_y := points[0].y + points[1].y + points[2].y
+    puts("sum_x = {sum_x}")   # 9
+    puts("sum_y = {sum_y}")   # 12
+
+    # Access inside a loop
+    total := mut 0
+    LF i:0..3 {
+        total = total + points[i].x + points[i].y
+    }
+    puts("total = {total}")   # 21
+
+    0
+}`
+  },
+
+  'type-casting': {
+    name: 'Type Safe Casting',
+    description: 'Phase 158: explicit as keyword for all type conversions',
+    code: `# Explicit type casting with the as keyword (Phase 158)
+# Vais enforces strict type safety — no implicit coercions between
+# int/float/bool. All conversions require the as keyword.
+
+fn main() -> i64 {
+    # Integer to float conversion
+    n: i64 = 42
+    f: f64 = n as f64
+    puts("i64 42 as f64 = {f}")   # 42
+
+    # Float to integer (truncates)
+    pi: f64 = 3.14159
+    truncated: i64 = pi as i64
+    puts("3.14159 as i64 = {truncated}")   # 3
+
+    # Integer widening (also explicit for clarity)
+    small: i32 = 100
+    wide: i64 = small as i64
+    puts("i32 100 as i64 = {wide}")   # 100
+
+    # bool to integer (explicit required)
+    flag: bool = true
+    as_int: i64 = flag as i64
+    puts("true as i64 = {as_int}")   # 1
+
+    # Casting in arithmetic expressions
+    a: i64 = 7
+    b: i64 = 2
+    ratio: f64 = a as f64 / b as f64
+    puts("7.0 / 2.0 = {ratio}")   # 3.5
+
+    0
+}`
+  },
+
+  'vais-server-hello': {
+    name: 'vais-server Hello World',
+    description: 'Simple HTTP server with vais-server',
+    code: `use core/app
+use core/config
+use core/context
+
+C PORT: u16 = 8080
+
+fn handle_hello(ctx: Context) -> Response {
+    ctx.text(200, "Hello from vais-server!")
+}
+
+fn main() -> i64 {
+    config := ServerConfig.default()
+    app := mut App.new(config)
+    app.get("/", "handle_hello")
+
+    match app.listen(":{PORT}") {
+        Ok(_) => { 0 },
+        Err(e) => { println("Error: {e.message}"); 1 },
+    }
+}`
+  },
+
+  'vaisdb-query': {
+    name: 'VaisDB Basic Query',
+    description: 'SQL, vector, graph, and full-text search with VaisDB',
+    code: `use vaisdb/client
+
+fn main() -> i64 {
+    db := mut VaisDB.open("myapp.vaisdb")
+
+    # SQL: 테이블 생성
+    db.execute("CREATE TABLE users (id INT, name TEXT, bio TEXT)")
+    db.execute("INSERT INTO users VALUES (1, 'Alice', 'Engineer')")
+
+    # Vector: 시맨틱 검색
+    db.execute("VECTOR_SEARCH(users, [0.1, 0.2, 0.3], 5)")
+
+    # Graph: 관계 탐색
+    db.execute("GRAPH_TRAVERSE('user_1', 'outbound', 2)")
+
+    # Full-text: 텍스트 검색
+    db.execute("FULLTEXT_MATCH(users, 'engineer')")
+
+    0
+}`
+  },
+
+  'fullstack': {
+    name: 'Full-Stack Vais',
+    description: 'vais-web + vais-server + vaisdb end-to-end example',
+    code: `# Full-Stack Vais: vais-web + vais-server + vaisdb
+# Frontend → API Server → Database
+
+# --- Database Layer (VaisDB) ---
+struct Todo { id: i64, text: str, done: bool }
+
+# --- API Server (vais-server) ---
+use core/app
+use db/query
+
+fn handle_list_todos(ctx: Context) -> Response {
+    sql := QueryBuilder.new()
+        .select("todos")
+        .column("id").column("text").column("done")
+        .order_by("id", SortDirection.Asc)
+        .build()
+    ctx.json(200, db.execute(sql))
+}
+
+fn main() -> i64 {
+    app := mut App.new(ServerConfig.default())
+    app.get("/api/todos", "handle_list_todos")
+    app.listen(":8080")
     0
 }`
   }

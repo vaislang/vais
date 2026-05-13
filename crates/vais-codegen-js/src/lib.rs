@@ -1,3 +1,4 @@
+#![allow(dead_code)] // JS codegen metadata structs used internally
 //! Vais JavaScript Code Generator
 //!
 //! Generates JavaScript (ESM) from typed Vais AST.
@@ -9,12 +10,16 @@
 //! ```
 
 mod expr;
+mod expr_helpers;
 mod items;
 mod modules;
 mod sourcemap;
 mod stmt;
 pub mod tree_shaking;
 mod types;
+
+#[cfg(test)]
+mod expr_tests;
 
 pub use sourcemap::SourceMap;
 pub use types::JsType;
@@ -84,14 +89,12 @@ pub struct JsCodeGenerator {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct EnumVariantInfo {
     pub name: String,
     pub fields: VariantFieldsInfo,
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) enum VariantFieldsInfo {
     Unit,
     Tuple(usize),
@@ -99,7 +102,6 @@ pub(crate) enum VariantFieldsInfo {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct TraitMethodInfo {
     pub name: String,
     pub params: Vec<String>,
@@ -107,7 +109,6 @@ pub(crate) struct TraitMethodInfo {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct ImplInfo {
     pub trait_name: Option<String>,
     pub methods: Vec<(String, String)>,
@@ -181,12 +182,7 @@ impl JsCodeGenerator {
                 let fields: Vec<(String, String)> = s
                     .fields
                     .iter()
-                    .map(|f| {
-                        (
-                            f.name.node.clone(),
-                            types::type_to_js(&f.ty.node),
-                        )
-                    })
+                    .map(|f| (f.name.node.clone(), types::type_to_js(&f.ty.node)))
                     .collect();
                 self.structs.insert(s.name.node.clone(), fields);
             }
@@ -198,14 +194,10 @@ impl JsCodeGenerator {
                         name: v.name.node.clone(),
                         fields: match &v.fields {
                             VariantFields::Unit => VariantFieldsInfo::Unit,
-                            VariantFields::Tuple(types) => {
-                                VariantFieldsInfo::Tuple(types.len())
-                            }
-                            VariantFields::Struct(fields) => {
-                                VariantFieldsInfo::Struct(
-                                    fields.iter().map(|f| f.name.node.clone()).collect(),
-                                )
-                            }
+                            VariantFields::Tuple(types) => VariantFieldsInfo::Tuple(types.len()),
+                            VariantFields::Struct(fields) => VariantFieldsInfo::Struct(
+                                fields.iter().map(|f| f.name.node.clone()).collect(),
+                            ),
                         },
                     })
                     .collect();
@@ -322,7 +314,10 @@ mod tests {
                     ))),
                     is_pub: false,
                     is_async: false,
+                    is_partial: false,
+                    declared_effect: None,
                     attributes: vec![],
+                    where_clause: vec![],
                 }),
                 Span::new(0, 32),
             )],
@@ -368,6 +363,7 @@ mod tests {
                     methods: vec![],
                     is_pub: false,
                     attributes: vec![],
+                    where_clause: vec![],
                 }),
                 Span::new(0, 20),
             )],
@@ -376,5 +372,93 @@ mod tests {
         let result = gen.generate_module(&module).unwrap();
         assert!(result.contains("class Point"));
         assert!(result.contains("constructor(x, y)"));
+    }
+
+    #[test]
+    fn test_js_config_default() {
+        let config = JsConfig::default();
+        assert!(config.use_const_let);
+        assert!(!config.emit_jsdoc);
+        assert_eq!(config.indent, "  ");
+        assert_eq!(config.target, "es2020");
+    }
+
+    #[test]
+    fn test_js_codegen_with_config() {
+        let config = JsConfig {
+            use_const_let: false,
+            emit_jsdoc: true,
+            indent: "    ".to_string(),
+            target: "es2015".to_string(),
+        };
+        let gen = JsCodeGenerator::with_config(config);
+        assert!(!gen.config.use_const_let);
+        assert!(gen.config.emit_jsdoc);
+        assert_eq!(gen.config.indent, "    ");
+    }
+
+    #[test]
+    fn test_js_codegen_default() {
+        let gen = JsCodeGenerator::default();
+        assert_eq!(gen.config.indent, "  ");
+    }
+
+    #[test]
+    fn test_next_label() {
+        let mut gen = JsCodeGenerator::new();
+        assert_eq!(gen.next_label(), "_L1");
+        assert_eq!(gen.next_label(), "_L2");
+        assert_eq!(gen.next_label(), "_L3");
+    }
+
+    #[test]
+    fn test_indent() {
+        let mut gen = JsCodeGenerator::new();
+        assert_eq!(gen.indent(), "");
+        gen.indent_level = 1;
+        assert_eq!(gen.indent(), "  ");
+        gen.indent_level = 3;
+        assert_eq!(gen.indent(), "      ");
+    }
+
+    #[test]
+    fn test_js_codegen_error_display() {
+        let e1 = JsCodegenError::UnsupportedFeature("test".to_string());
+        assert!(e1.to_string().contains("Unsupported feature"));
+
+        let e2 = JsCodegenError::TypeError("type err".to_string());
+        assert!(e2.to_string().contains("Type error"));
+
+        let e3 = JsCodegenError::Internal("internal".to_string());
+        assert!(e3.to_string().contains("Internal error"));
+    }
+
+    #[test]
+    fn test_public_function() {
+        let mut gen = JsCodeGenerator::new();
+        let module = Module {
+            items: vec![Spanned::new(
+                Item::Function(Function {
+                    name: Spanned::new("greet".to_string(), Span::new(0, 5)),
+                    generics: vec![],
+                    params: vec![],
+                    ret_type: None,
+                    body: FunctionBody::Expr(Box::new(Spanned::new(
+                        Expr::String("hello".to_string()),
+                        Span::new(0, 7),
+                    ))),
+                    is_pub: true,
+                    is_async: false,
+                    is_partial: false,
+                    declared_effect: None,
+                    attributes: vec![],
+                    where_clause: vec![],
+                }),
+                Span::new(0, 10),
+            )],
+            modules_map: None,
+        };
+        let result = gen.generate_module(&module).unwrap();
+        assert!(result.contains("export function greet()"));
     }
 }
