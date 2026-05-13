@@ -103,7 +103,8 @@ Features:
 - Code snippets
 
 Supported Tokens:
-- Keywords: F, S, E, I, L, M, T, U, R, C, O, break, continue, return
+- Canonical keywords: fn, struct, enum, else, match, return, use, pub, impl, trait, type, const, where
+- Compact current syntax: I, L, LF, LW, B, C, D, N, G, O
 - Types: i8-i128, u8-u128, f32, f64, bool, char, str
 - Operators: @, :=, =>, &&, ||, ==, !=, etc.
 - Comments: # (line), /* */ (block)

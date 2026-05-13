@@ -121,6 +121,22 @@ requireText(
   'shared-schema product propagation must be named as evidence-scoped public claim',
 );
 
+const readme = 'README.md';
+requireText(readme, 'Canonical declarations', 'README must present current public syntax');
+requireText(readme, 'Current single-file compile-speed benchmark', 'README performance section must use refreshed benchmark scope');
+requireText(readme, '6.3ms', 'README compile-speed average must match the refreshed benchmark');
+requireText(readme, '9.3x faster than C/clang', 'README compile-speed ratio must match the refreshed benchmark');
+requireText(readme, 'single full ecosystem runtime aggregate main gate', 'README must preserve ecosystem runtime scope boundary');
+forbidText(readme, 'Single-letter keywords', 'README must not present legacy single-letter declarations as current syntax');
+forbidText(readme, 'F fib(n:i64)', 'README must not use legacy function syntax in examples');
+forbidText(readme, 'Fibonacci(35) benchmark (Apple M-series ARM64, 2026-02-11)', 'README runtime evidence must not present stale date as current heading');
+forbidText(readme, '833K lines/sec', 'README must not promote old large-scale throughput as current');
+requireText('examples/fib.vais', 'fn fib(n: i64)', 'README-linked fibonacci example must use current function syntax');
+requireText('examples/control_flow.vais', 'fn max(a: i64, b: i64)', 'README-linked control-flow example must use current function syntax');
+requireText('examples/enum_test.vais', 'enum Color', 'README-linked enum example must use current enum syntax');
+forbidText('examples/fib.vais', 'F fib', 'README-linked fibonacci example must not regress to legacy function syntax');
+forbidText('examples/enum_test.vais', 'EN Color', 'README-linked enum example must not regress to legacy enum syntax');
+
 const playgroundCompiler = 'playground/src/compiler.js';
 requireText(
   playgroundCompiler,
@@ -178,6 +194,16 @@ requireText(
   playgroundReadme,
   'without the playground API',
   'playground README must say Browser-JS smoke does not use the API',
+);
+requireText(
+  'playground/IMPLEMENTATION_SUMMARY.md',
+  'Canonical keywords: fn, struct, enum, else, match, return, use, pub',
+  'playground implementation summary must describe current keyword surface',
+);
+requireText(
+  'playground/PROJECT_SUMMARY.md',
+  'Canonical keywords (fn, struct, enum, else, match, return, use, pub)',
+  'playground project summary must describe current keyword surface',
 );
 
 const quickstart = 'docs/QUICKSTART.md';
