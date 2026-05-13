@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/msgpack
+use std/msgpack
 ```
 
 ## Overview
@@ -51,7 +51,7 @@ The module encodes/decodes the standard MessagePack wire format:
 ### Buffer Management
 
 ```vais
-F pb_buf_new() -> i64              # Create encoding buffer
+fn pb_buf_new() -> i64              # Create encoding buffer
 ```
 
 ### Value Constructors
@@ -59,26 +59,26 @@ F pb_buf_new() -> i64              # Create encoding buffer
 Create tagged values for encoding:
 
 ```vais
-F msgpack_nil() -> i64             # Create nil value
-F msgpack_bool(v: i64) -> i64      # Create bool value
-F msgpack_int(v: i64) -> i64       # Create integer value
-F msgpack_str(s: str) -> i64       # Create string value
-F msgpack_bin(ptr: i64, len: i64) -> i64  # Create binary value
+fn msgpack_nil() -> i64             # Create nil value
+fn msgpack_bool(v: i64) -> i64      # Create bool value
+fn msgpack_int(v: i64) -> i64       # Create integer value
+fn msgpack_str(s: str) -> i64       # Create string value
+fn msgpack_bin(ptr: i64, len: i64) -> i64  # Create binary value
 ```
 
 ### Encoding/Decoding
 
 ```vais
-F msgpack_encode(value: i64) -> i64     # Encode value to bytes
-F msgpack_decode(data: i64, len: i64) -> i64  # Decode bytes to value
+fn msgpack_encode(value: i64) -> i64     # Encode value to bytes
+fn msgpack_decode(data: i64, len: i64) -> i64  # Decode bytes to value
 ```
 
 ## Example
 
 ```vais
-U std/msgpack
+use std/msgpack
 
-F main() {
+fn main() {
     # Create and encode values
     val := msgpack_int(42)
     encoded := msgpack_encode(val)

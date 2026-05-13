@@ -173,6 +173,8 @@ fn test_module_with_items() {
         body: FunctionBody::Expr(Box::new(spanned(Expr::Unit, 5, 7))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         attributes: vec![],
         where_clause: vec![],
     };
@@ -198,6 +200,8 @@ fn test_item_function() {
         body: FunctionBody::Block(vec![]),
         is_pub: true,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         attributes: vec![],
         where_clause: vec![],
     };
@@ -519,6 +523,8 @@ fn test_function_simple() {
         body: FunctionBody::Expr(Box::new(spanned(Expr::Ident("a".to_string()), 14, 15))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         attributes: vec![],
         where_clause: vec![],
     };
@@ -540,6 +546,8 @@ fn test_function_with_generics() {
         body: FunctionBody::Block(vec![]),
         is_pub: true,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         attributes: vec![],
         where_clause: vec![],
     };
@@ -558,6 +566,8 @@ fn test_function_async() {
         body: FunctionBody::Block(vec![]),
         is_pub: true,
         is_async: true,
+        is_partial: false,
+        declared_effect: None,
         attributes: vec![],
         where_clause: vec![],
     };
@@ -1364,26 +1374,6 @@ fn test_macro_invoke_expr() {
 // ============================================================================
 
 #[test]
-fn test_expr_spawn() {
-    let expr = Expr::Spawn(Box::new(spanned(
-        Expr::Call {
-            func: Box::new(spanned(Expr::Ident("task".to_string()), 0, 4)),
-            args: vec![],
-        },
-        0,
-        6,
-    )));
-
-    match expr {
-        Expr::Spawn(inner) => match inner.node {
-            Expr::Call { .. } => {}
-            _ => panic!("Expected Call inside Spawn"),
-        },
-        _ => panic!("Expected Spawn expr"),
-    }
-}
-
-#[test]
 fn test_expr_yield_and_await() {
     let yield_expr = Expr::Yield(Box::new(spanned(Expr::Int(42), 0, 2)));
     let await_expr = Expr::Await(Box::new(spanned(
@@ -1640,6 +1630,8 @@ fn test_function_with_where_clause() {
         body: FunctionBody::Block(vec![]),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         attributes: vec![],
         where_clause: vec![
             WherePredicate {

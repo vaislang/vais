@@ -19,7 +19,7 @@ cargo install vaisc
 `hello.vais`という名前のファイルを作成:
 
 ```vais
-F main() {
+fn main() {
     puts("Hello, Vais!")
 }
 ```
@@ -45,7 +45,7 @@ Hello, Vais!
 ### 変数
 
 ```vais
-F main() {
+fn main() {
     x := 42              # i64として型推論
     y := 3.14            # f64として型推論
     name := "Alice"      # strとして型推論
@@ -58,11 +58,11 @@ F main() {
 ### 関数
 
 ```vais
-F add(a: i64, b: i64) -> i64 {
+fn add(a: i64, b: i64) -> i64 {
     a + b  # 最後の式が戻り値
 }
 
-F main() {
+fn main() {
     result := add(10, 20)
     print_i64(result)  # 出力: 30
 }
@@ -71,11 +71,11 @@ F main() {
 ### 制御フロー
 
 ```vais
-F main() {
+fn main() {
     x := 10
 
     # if式
-    msg := I x > 5 { "big" } E { "small" }
+    msg := I x > 5 { "big" } else { "small" }
     puts(msg)
 
     # ループ
@@ -90,12 +90,12 @@ F main() {
 `@`を使用して現在の関数を呼び出す:
 
 ```vais
-F factorial(n: i64) -> i64 {
-    I n <= 1 { R 1 }
+fn factorial(n: i64) -> i64 {
+    I n <= 1 { return 1 }
     n * @(n - 1)
 }
 
-F main() {
+fn main() {
     print_i64(factorial(5))  # 出力: 120
 }
 ```

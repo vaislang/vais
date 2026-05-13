@@ -15,14 +15,14 @@ F print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
         0
-    } E I val < 0 {
+    } EL I val < 0 {
         putchar(45)
         print_i64(0 - val)
-    } E {
+    } EL {
         I val >= 10 {
             print_i64(val / 10)
             0
-        } E { 0 }
+        } EL { 0 }
         putchar(48 + (val % 10))
         0
     }
@@ -39,7 +39,7 @@ F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
         puts("[PASS] ")
         puts(test_name)
         1
-    } E {
+    } EL {
         puts("[FAIL] ")
         puts(test_name)
         puts("  Expected: ")
@@ -246,7 +246,7 @@ F test_resize() -> i64 {
     # Default cap=16, threshold = 16 * 0.75 = 12
     # Insert 13 keys to trigger resize
     i := mut 0
-    L i < 13 {
+    LW i < 13 {
         map_put(m, i, i * 10)
         i = i + 1
     }
@@ -259,12 +259,12 @@ F test_resize() -> i64 {
     # Verify all keys still present
     j := mut 0
     all_found := mut 1
-    L j < 13 {
+    LW j < 13 {
         val := map_get_or(m, j, 0 - 1)
         I val != j * 10 {
             all_found = 0
             0
-        } E { 0 }
+        } EL { 0 }
         j = j + 1
     }
     passed = passed + assert_eq(all_found, 1, "all keys present after resize")
@@ -306,11 +306,11 @@ F test_keys_values() -> i64 {
             I k0 != 30 {
                 all_valid = 0
                 0
-            } E { 0 }
+            } EL { 0 }
             0
-        } E { 0 }
+        } EL { 0 }
         0
-    } E { 0 }
+    } EL { 0 }
 
     passed = passed + assert_eq(all_valid, 1, "keys are valid")
 
@@ -330,7 +330,7 @@ F test_collisions() -> i64 {
 
     # Insert many keys to ensure some collisions
     i := mut 0
-    L i < 20 {
+    LW i < 20 {
         map_put(m, i, i * 100)
         i = i + 1
     }
@@ -340,12 +340,12 @@ F test_collisions() -> i64 {
     # Verify all keys retrievable
     j := mut 0
     all_ok := mut 1
-    L j < 20 {
+    LW j < 20 {
         val := map_get_or(m, j, 0 - 1)
         I val != j * 100 {
             all_ok = 0
             0
-        } E { 0 }
+        } EL { 0 }
         j = j + 1
     }
     passed = passed + assert_eq(all_ok, 1, "all keys retrievable despite collisions")
@@ -467,5 +467,5 @@ F main() -> i64 {
     puts("========================================")
 
     # Return 0 for success, 1 for failure
-    I total >= 47 { 0 } E { 1 }
+    I total >= 47 { 0 } EL { 1 }
 }

@@ -1,6 +1,7 @@
 //! AST checking for ownership violations
 
 use super::{OwnershipChecker, OwnershipState};
+use crate::lifetime::{self, Lifetime, LifetimeInferencer};
 use crate::types::{ResolvedType, TypeError, TypeResult};
 use vais_ast::*;
 
@@ -33,10 +34,26 @@ impl OwnershipChecker {
         let prev_returns_ref = self.function_returns_ref;
         self.function_returns_ref = returns_ref;
 
+        // --- Lifetime bounds validation ---
+        // Integrate lifetime inferencer to validate function signature lifetime bounds
+        self.validate_function_lifetimes(f)?;
+
         // Register parameters (at function scope depth, treated as "parameter" scope)
         for param in &f.params {
             let ty = self.ast_type_to_resolved(&param.ty.node);
-            self.define_var(&param.name.node, ty, param.is_mut, Some(param.name.span));
+            self.define_var(
+                &param.name.node,
+                ty.clone(),
+                param.is_mut,
+                Some(param.name.span),
+            );
+
+            // Register parameter lifetime for reference types
+            if self.is_ref_ast_type(&param.ty.node) {
+                let lt = self.lifetime_for_resolved_type(&ty);
+                self.lifetime_inferencer
+                    .register_var_lifetime(&param.name.node, lt);
+            }
         }
 
         // Check body
@@ -58,6 +75,110 @@ impl OwnershipChecker {
         self.function_returns_ref = prev_returns_ref;
         self.pop_scope();
         Ok(())
+    }
+
+    /// Validate lifetime bounds in a function signature using the lifetime inferencer.
+    /// Checks that lifetime parameters and their bounds are consistent.
+    fn validate_function_lifetimes(&mut self, f: &Function) -> TypeResult<()> {
+        // Reset the inferencer for this function
+        self.lifetime_inferencer.reset();
+
+        // Build parameter list with resolved types
+        let params: Vec<(String, ResolvedType, bool)> = f
+            .params
+            .iter()
+            .map(|p| {
+                let ty = self.ast_type_to_resolved(&p.ty.node);
+                (p.name.node.clone(), ty, p.is_mut)
+            })
+            .collect();
+
+        let ret_type = f
+            .ret_type
+            .as_ref()
+            .map(|t| self.ast_type_to_resolved(&t.node))
+            .unwrap_or(ResolvedType::Unit);
+
+        // Check if the function has any reference types at all
+        let has_ref_params = params
+            .iter()
+            .any(|(_, ty, _)| self.is_resolved_ref_type(ty));
+        let has_ref_return = self.is_resolved_ref_type(&ret_type);
+
+        // Only run lifetime inference if there are references
+        if !has_ref_params && !has_ref_return {
+            return Ok(());
+        }
+
+        // Extract lifetime parameters and bounds from generics
+        let lifetime_params = LifetimeInferencer::extract_lifetime_params(&f.generics);
+        let lifetime_bounds = LifetimeInferencer::extract_lifetime_bounds(&f.generics);
+
+        // Run lifetime inference -- errors are collected, not fatal
+        match self.lifetime_inferencer.infer_function_lifetimes(
+            &f.name.node,
+            &params,
+            &ret_type,
+            &lifetime_params,
+            &lifetime_bounds,
+        ) {
+            Ok(_resolution) => {}
+            Err(err) => {
+                self.report_error(err)?;
+            }
+        }
+
+        // Validate return lifetime is tied to a parameter lifetime
+        if has_ref_return {
+            let return_lt = self
+                .lifetime_inferencer
+                .extract_reference_lifetime(&ret_type)
+                .unwrap_or(lifetime::Lifetime::Static);
+
+            let param_lifetimes: Vec<(String, Lifetime)> = params
+                .iter()
+                .filter_map(|(name, ty, _)| {
+                    self.lifetime_inferencer
+                        .extract_reference_lifetime(ty)
+                        .map(|lt| (name.clone(), lt))
+                })
+                .collect();
+
+            if let Err(err) = self
+                .lifetime_inferencer
+                .validate_return_lifetime(&return_lt, &param_lifetimes)
+            {
+                self.report_error(err)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if a resolved type is a reference type
+    fn is_resolved_ref_type(&self, ty: &ResolvedType) -> bool {
+        matches!(
+            ty,
+            ResolvedType::Ref(_)
+                | ResolvedType::RefMut(_)
+                | ResolvedType::RefLifetime { .. }
+                | ResolvedType::RefMutLifetime { .. }
+        )
+    }
+
+    /// Get a lifetime for a resolved type (for tracking purposes)
+    fn lifetime_for_resolved_type(&self, ty: &ResolvedType) -> Lifetime {
+        match ty {
+            ResolvedType::RefLifetime { lifetime, .. }
+            | ResolvedType::RefMutLifetime { lifetime, .. } => {
+                self.lifetime_inferencer.resolve_lifetime_name(lifetime)
+            }
+            _ => {
+                // For un-annotated references, use an inferred lifetime
+                // based on the current scope
+                Lifetime::Inferred(lifetime::LifetimeVar(self.scope_depth))
+            }
+        }
     }
 
     /// Check if an AST type is a reference type
@@ -100,7 +221,12 @@ impl OwnershipChecker {
                 // Track reference sources for dangling pointer detection
                 if let Expr::Ref(inner) = &value.node {
                     if let Expr::Ident(source_name) = &inner.node {
-                        self.register_reference(&name.node, source_name, false);
+                        // Determine if mutable based on the binding type
+                        let is_mut_ref = matches!(
+                            ty.as_ref().map(|t| &t.node),
+                            Some(Type::RefMut(_)) | Some(Type::RefMutLifetime { .. })
+                        );
+                        self.register_reference(&name.node, source_name, is_mut_ref);
                     }
                 }
 
@@ -151,17 +277,33 @@ impl OwnershipChecker {
                 self.check_expr_ownership(func)?;
                 for arg in args {
                     self.check_expr_ownership(arg)?;
-                    // Function arguments move non-Copy values
-                    self.check_move_from_expr(arg)?;
+                    // Don't mark args as moved — function signatures determine ownership
+                    // (args passed by &T or &mut T should not be moved)
                 }
                 Ok(())
             }
 
             Expr::MethodCall { receiver, args, .. } => {
-                self.check_expr_ownership(receiver)?;
+                // Method call receiver is borrowed, not moved.
+                // Only check it hasn't already been moved, but don't mark it as moved.
+                if let Expr::Ident(name) = &receiver.node {
+                    if let Some(info) = self.lookup_var(name) {
+                        if let OwnershipState::Moved { moved_at, .. } = &info.state {
+                            let err = TypeError::UseAfterMove {
+                                var_name: name.clone(),
+                                moved_at: *moved_at,
+                                use_at: Some(expr.span),
+                            };
+                            return self.report_error(err);
+                        }
+                    }
+                } else {
+                    self.check_expr_ownership(receiver)?;
+                }
                 for arg in args {
                     self.check_expr_ownership(arg)?;
-                    self.check_move_from_expr(arg)?;
+                    // Don't mark args as moved — method signatures determine ownership
+                    // (args passed by &T or &mut T should not be moved)
                 }
                 Ok(())
             }
@@ -183,7 +325,7 @@ impl OwnershipChecker {
 
             Expr::Assign { target, value } => {
                 self.check_expr_ownership(value)?;
-                self.check_move_from_expr(value)?;
+                // Assignment moves the value into the target — don't double-mark
 
                 if let Expr::Ident(name) = &target.node {
                     // Check for active borrows before assigning
@@ -209,14 +351,36 @@ impl OwnershipChecker {
 
             Expr::If { cond, then, else_ } => {
                 self.check_expr_ownership(cond)?;
+
+                // Save ownership state before branches for proper merge
+                let before_snapshot = self.save_ownership_snapshot();
+
+                // Check then-branch
                 self.push_scope();
                 for stmt in then {
                     self.check_stmt(stmt)?;
                 }
                 self.pop_scope();
+
+                let after_then_snapshot = self.save_ownership_snapshot();
+
                 if let Some(else_branch) = else_ {
+                    // Restore to pre-then state before checking else
+                    self.restore_ownership_snapshot(before_snapshot.clone());
                     self.check_if_else(else_branch)?;
+
+                    let after_else_snapshot = self.save_ownership_snapshot();
+
+                    // Merge: variable is moved only if BOTH branches moved it
+                    self.merge_branch_ownership(
+                        &before_snapshot,
+                        &after_then_snapshot,
+                        &after_else_snapshot,
+                    );
                 }
+                // If no else branch, keep the then-branch state as-is
+                // (conservative: if then might move, assume it could happen)
+
                 Ok(())
             }
 
@@ -304,9 +468,11 @@ impl OwnershipChecker {
             }
 
             Expr::StructLit { fields, .. } => {
+                // check_expr_ownership already handles the move via use_var,
+                // so we don't need check_move_from_expr here (which would
+                // incorrectly report E022 since the value is already marked as moved)
                 for (_, e) in fields {
                     self.check_expr_ownership(e)?;
-                    self.check_move_from_expr(e)?;
                 }
                 Ok(())
             }
@@ -351,7 +517,7 @@ impl OwnershipChecker {
                 Ok(())
             }
 
-            Expr::Spawn(inner) | Expr::Await(inner) | Expr::Try(inner) | Expr::Unwrap(inner) => {
+            Expr::Await(inner) | Expr::Try(inner) | Expr::Unwrap(inner) => {
                 self.check_expr_ownership(inner)?;
                 Ok(())
             }
@@ -379,13 +545,26 @@ impl OwnershipChecker {
         match if_else {
             IfElse::ElseIf(cond, stmts, else_branch) => {
                 self.check_expr_ownership(cond)?;
+
+                let before_snapshot = self.save_ownership_snapshot();
+
                 self.push_scope();
                 for stmt in stmts {
                     self.check_stmt(stmt)?;
                 }
                 self.pop_scope();
+
+                let after_then_snapshot = self.save_ownership_snapshot();
+
                 if let Some(else_b) = else_branch {
+                    self.restore_ownership_snapshot(before_snapshot.clone());
                     self.check_if_else(else_b)?;
+                    let after_else_snapshot = self.save_ownership_snapshot();
+                    self.merge_branch_ownership(
+                        &before_snapshot,
+                        &after_then_snapshot,
+                        &after_else_snapshot,
+                    );
                 }
                 Ok(())
             }

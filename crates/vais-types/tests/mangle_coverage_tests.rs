@@ -331,14 +331,8 @@ fn test_mangle_type_vector() {
     assert_eq!(mangle_type(&ty), "vec4_f32");
 }
 
-#[test]
-fn test_mangle_type_higher_kinded() {
-    let ty = ResolvedType::HigherKinded {
-        name: "Functor".to_string(),
-        arity: 1,
-    };
-    assert_eq!(mangle_type(&ty), "hkt1_Functor");
-}
+// test_mangle_type_higher_kinded REMOVED (ROADMAP #18):
+// ResolvedType::HigherKinded was removed.
 
 #[test]
 fn test_mangle_type_unknown_fallback() {

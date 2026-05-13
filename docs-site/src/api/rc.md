@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/rc
+use std/rc
 ```
 
 ## Structs
@@ -13,7 +13,7 @@ U std/rc
 ### Rc
 
 ```vais
-S Rc { ptr: i64 }
+struct Rc { ptr: i64 }
 ```
 
 Single-threaded reference counting. Layout: `{ref_count: i64, value: ...}`.
@@ -21,7 +21,7 @@ Single-threaded reference counting. Layout: `{ref_count: i64, value: ...}`.
 ### Weak
 
 ```vais
-S Weak { ptr: i64 }
+struct Weak { ptr: i64 }
 ```
 
 Non-owning reference that does not prevent deallocation.
@@ -60,9 +60,9 @@ Non-owning reference that does not prevent deallocation.
 ## Usage
 
 ```vais
-U std/rc
+use std/rc
 
-F main() -> i64 {
+fn main() -> i64 {
     # Create Rc
     a := Rc.from_i64(42)
     b := a.clone()       # ref_count = 2

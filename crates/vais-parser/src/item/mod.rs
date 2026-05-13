@@ -21,57 +21,100 @@ impl Parser {
 
         let is_pub = self.check(&Token::Pub);
         if is_pub {
-            self.advance();
+            self.advance_skip();
         }
+
+        // Phase 4c.2 / Task #53 — optional `partial` modifier on top-level
+        // functions. Accepted positions:
+        //   partial F foo() ...        (sync partial function)
+        //   partial A F foo() ...      (async partial function)
+        //   P partial F foo() ...      (pub sync partial)
+        //   P partial A F foo() ...    (pub async partial)
+        // Only legal immediately before `F` or `A F`; attached to anything
+        // else it falls through and produces the standard "unexpected token"
+        // error in the else-branch below.
+        let is_partial = self.check(&Token::Partial);
+        if is_partial {
+            self.advance_skip();
+        }
+
+        // Phase 4c.3 / Task #54 — optional effect prefix (`pure`, `io`,
+        // or `alloc`) on top-level functions. Canonical order:
+        //   P partial pure F foo() ...
+        //   pure F foo() ...
+        //   io A F foo() ...
+        //   P alloc F foo() ...
+        // `parse_effect_prefix` consumes at most one prefix keyword; a
+        // second one in a row falls through to the `F` / `A F` expect
+        // below and produces an "unexpected token" error.
+        let declared_effect = self.parse_effect_prefix();
 
         let start = self.current_span().start;
 
         let item = if self.check(&Token::Function) {
-            self.advance();
-            Item::Function(self.parse_function(is_pub, false, attributes)?)
+            self.advance_skip();
+            Item::Function(self.parse_function(
+                is_pub,
+                false,
+                is_partial,
+                declared_effect,
+                attributes,
+            )?)
         } else if self.check(&Token::Async) {
-            self.advance();
-            self.expect(&Token::Function)?;
-            Item::Function(self.parse_function(is_pub, true, attributes)?)
+            self.advance_skip();
+            self.expect_skip(&Token::Function)?;
+            Item::Function(self.parse_function(
+                is_pub,
+                true,
+                is_partial,
+                declared_effect,
+                attributes,
+            )?)
         } else if self.check(&Token::Struct) {
-            self.advance();
+            self.advance_skip();
             Item::Struct(self.parse_struct(is_pub, attributes)?)
-        } else if self.check(&Token::Enum) {
-            self.advance();
+        } else if self.check(&Token::Enum) || self.check(&Token::EnumKeyword) {
+            self.advance_skip();
             Item::Enum(self.parse_enum(is_pub, attributes)?)
         } else if self.check(&Token::Union) {
-            self.advance();
+            self.advance_skip();
             Item::Union(self.parse_union(is_pub)?)
         } else if self.check(&Token::TypeKeyword) {
-            self.advance();
+            self.advance_skip();
             self.parse_type_or_trait_alias(is_pub)?
         } else if self.check(&Token::Use) {
-            self.advance();
+            self.advance_skip();
             Item::Use(self.parse_use()?)
         } else if self.check(&Token::Trait) {
-            self.advance();
+            self.advance_skip();
             Item::Trait(self.parse_trait(is_pub)?)
         } else if self.check(&Token::Impl) {
-            self.advance();
+            self.advance_skip();
             // Check if this is an extern function declaration (X F name(...))
             if self.check(&Token::Function) {
-                self.advance();
+                self.advance_skip();
                 Item::ExternBlock(self.parse_single_extern_function(attributes)?)
             } else {
                 Item::Impl(self.parse_impl()?)
             }
         } else if self.check(&Token::Macro) {
-            self.advance();
+            self.advance_skip();
             Item::Macro(self.parse_macro_def(is_pub)?)
         } else if self.check(&Token::Extern) {
-            self.advance();
-            Item::ExternBlock(self.parse_extern_block()?)
+            self.advance_skip();
+            // Check if this is a single extern function: N F name(...)
+            if self.check(&Token::Function) {
+                self.advance_skip();
+                Item::ExternBlock(self.parse_single_extern_function(attributes.clone())?)
+            } else {
+                Item::ExternBlock(self.parse_extern_block()?)
+            }
         } else if self.check(&Token::Continue) {
             // C at top level is a constant definition, not continue
-            self.advance();
+            self.advance_skip();
             Item::Const(self.parse_const_def(is_pub, attributes)?)
         } else if self.check(&Token::Global) {
-            self.advance();
+            self.advance_skip();
             Item::Global(self.parse_global_def(is_pub)?)
         } else {
             return Err(ParseError::UnexpectedToken {

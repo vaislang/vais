@@ -163,20 +163,20 @@ Vais는 Criterion 기반 벤치마크를 지원합니다.
 
 ```vais
 # benches/my_bench.vais
-U std/bench
+use std/bench
 
-F fibonacci(n: i64) -> i64 {
-  I n <= 1 { R n }
-  R fibonacci(n - 1) + fibonacci(n - 2)
+fn fibonacci(n: i64) -> i64 {
+  I n <= 1 { return n }
+  return fibonacci(n - 1) + fibonacci(n - 2)
 }
 
-F bench_fib() {
+fn bench_fib() {
   benchmark("fibonacci_20", || {
     fibonacci(20)
   })
 }
 
-F main() {
+fn main() {
   bench_fib()
   bench_report()
 }
@@ -191,7 +191,7 @@ vaisc bench benches/my_bench.vais
 ### 비교 벤치마크
 
 ```vais
-F bench_sorting() {
+fn bench_sorting() {
   v1 := vec_new<i64>()
   L i := 0; i < 1000; i := i + 1 {
     vec_push(v1, 1000 - i)
@@ -223,9 +223,9 @@ F bench_sorting() {
 빈번한 할당/해제 시 성능 향상.
 
 ```vais
-U std/alloc
+use std/alloc
 
-F main() {
+fn main() {
   arena := arena_new(1024 * 1024)  # 1MB arena
 
   L i := 0; i < 10000; i := i + 1 {
@@ -244,11 +244,11 @@ F main() {
 재사용 가능한 객체 풀.
 
 ```vais
-U std/pool
+use std/pool
 
-S Connection { fd: i64 }
+struct Connection { fd: i64 }
 
-F main() {
+fn main() {
   pool := pool_new<Connection>(10)  # 10개 미리 할당
 
   L i := 0; i < 100; i := i + 1 {
@@ -264,11 +264,11 @@ F main() {
 큰 구조체는 Box로 감싸서 스택 오버플로 방지.
 
 ```vais
-S LargeData {
+struct LargeData {
   buffer: [i64; 10000]
 }
 
-F main() {
+fn main() {
   data := box(LargeData { buffer: [0; 10000] })
   # 스택 대신 힙에 할당
 }
@@ -283,9 +283,9 @@ Vais는 SIMD (Single Instruction Multiple Data)를 지원합니다.
 ### 기본 SIMD 연산
 
 ```vais
-U std/simd
+use std/simd
 
-F dot_product_simd(a: Vec<f32>, b: Vec<f32>) -> f32 {
+fn dot_product_simd(a: Vec<f32>, b: Vec<f32>) -> f32 {
   result := 0.0
   len := vec_len(a)
 
@@ -304,7 +304,7 @@ F dot_product_simd(a: Vec<f32>, b: Vec<f32>) -> f32 {
     result := result + vec_get(a, i) * vec_get(b, i)
   }
 
-  R result
+  return result
 }
 ```
 
@@ -395,15 +395,15 @@ vaisc build main.vais --emit-ir --per-module
 
 ```vais
 # 나쁨: 과도한 타입 추론
-F process(data) {
+fn process(data) {
   result := transform(data)
-  R finalize(result)
+  return finalize(result)
 }
 
 # 좋음: 명시적 타입
-F process(data: Vec<i64>) -> i64 {
+fn process(data: Vec<i64>) -> i64 {
   result: Vec<i64> = transform(data)
-  R finalize(result)
+  return finalize(result)
 }
 ```
 
@@ -411,10 +411,10 @@ F process(data: Vec<i64>) -> i64 {
 
 ```vais
 # 나쁨: 전체 라이브러리 임포트
-U std/collections
+use std/collections
 
 # 좋음: 필요한 함수만 선택적 임포트
-U std/collections { vec_new, vec_push, vec_len }
+use std/collections { vec_new, vec_push, vec_len }
 ```
 
 ---

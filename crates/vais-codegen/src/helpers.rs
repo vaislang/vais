@@ -16,6 +16,53 @@ const LLVM_INVALID_CHARS: &[char] = &[
     '+', '=', '|', '\\', '/', '?', '~', '`', '"', '\'',
 ];
 
+/// Check whether a resolved type represents void/Unit.
+///
+/// Returns `true` for `ResolvedType::Unit` and when the LLVM type string
+/// is `"void"`. Used to decide whether phi nodes should be replaced with
+/// [`void_placeholder_ir`].
+pub(crate) fn is_void_result(llvm_type: &str, resolved: &vais_types::ResolvedType) -> bool {
+    llvm_type == "void" || *resolved == vais_types::ResolvedType::Unit
+}
+
+/// Generate an LLVM IR instruction that acts as a void/Unit placeholder.
+///
+/// LLVM IR does not allow `phi void` — void is not a first-class type. When
+/// an if/else or match expression produces a Unit/void result, we still need
+/// an SSA variable to satisfy the codegen infrastructure that expects every
+/// expression to yield a result name. This helper generates a well-documented
+/// `add i64 0, 0` instruction that is dead (its result is never used).
+///
+/// The Inkwell backend uses `struct_type(&[], false).const_zero()` (a
+/// zero-sized struct) for the same purpose — both approaches are valid LLVM
+/// idioms for representing "no meaningful value."
+pub(crate) fn void_placeholder_ir(result: &str) -> String {
+    format!("  {} = add i64 0, 0  ; void/Unit placeholder\n", result)
+}
+
+/// Estimate LLVM type size in bytes from the type string.
+/// For struct types like `{ i8*, i64 }`, sums field sizes.
+#[allow(dead_code)]
+pub(crate) fn estimate_llvm_type_size(ty: &str) -> usize {
+    match ty {
+        "i1" | "i8" => 1,
+        "i16" => 2,
+        "i32" | "float" => 4,
+        "i64" | "double" | "ptr" => 8,
+        t if t.ends_with('*') => 8, // pointer
+        t if t.starts_with("{ ") && t.ends_with(" }") => {
+            // Struct type: sum of field sizes
+            let inner = &t[2..t.len() - 2];
+            inner
+                .split(',')
+                .map(|f| estimate_llvm_type_size(f.trim()))
+                .sum()
+        }
+        t if t.starts_with('%') => 8, // named type, assume pointer-sized
+        _ => 8,
+    }
+}
+
 /// Sanitize a parameter name to avoid collision with LLVM block labels.
 /// Returns `Cow::Borrowed` when no rename is needed (zero allocation).
 pub(crate) fn sanitize_param_name(name: &str) -> Cow<'_, str> {
@@ -48,18 +95,65 @@ pub(crate) fn sanitize_llvm_name(name: &str, disambiguation_suffix: Option<usize
             result.push('_');
         } else {
             // Non-ASCII or other chars: encode as _uXXXX
-            result.push_str(&format!("_u{:04X}", ch as u32));
+            write_ir_no_newline!(result, "_u{:04X}", ch as u32);
         }
     }
     if let Some(suffix) = disambiguation_suffix {
-        result.push_str(&format!("__{}", suffix));
+        write_ir_no_newline!(result, "__{}", suffix);
     }
     result
 }
 
 impl CodeGenerator {
+    /// Record a static-size alloca to be hoisted into the function entry block.
+    ///
+    /// Instead of emitting `alloca` inline (which may land inside an if/else or loop block),
+    /// this method records the instruction and returns the variable name. The collected
+    /// allocas are spliced into the entry block by [`Self::splice_entry_allocas`] after
+    /// the full function body IR has been generated.
+    ///
+    /// # Arguments
+    /// * `var_name` - The LLVM temporary name (e.g., `%tmp.5`)
+    /// * `llvm_type` - The LLVM type to allocate (e.g., `%MyStruct`, `[10 x i64]`)
+    #[inline(never)]
+    pub(crate) fn emit_entry_alloca(&mut self, var_name: &str, llvm_type: &str) {
+        self.fn_ctx
+            .entry_allocas
+            .push(format!("  {} = alloca {}", var_name, llvm_type));
+    }
+
+    /// Splice collected entry-block allocas into function IR.
+    ///
+    /// Searches for the `entry:` label in the given IR string and inserts all
+    /// collected allocas immediately after it. This ensures LLVM can optimize
+    /// all stack allocations and avoids domination errors from non-entry allocas.
+    ///
+    /// Must be called after the function body has been fully generated but before
+    /// the IR is returned.
+    #[inline(never)]
+    pub(crate) fn splice_entry_allocas(&mut self, ir: &mut String) {
+        if self.fn_ctx.entry_allocas.is_empty() {
+            return;
+        }
+
+        // Build the alloca block to insert
+        let mut alloca_block = String::new();
+        for alloca_line in &self.fn_ctx.entry_allocas {
+            alloca_block.push_str(alloca_line);
+            alloca_block.push('\n');
+        }
+
+        // Find "entry:\n" and insert allocas right after it
+        if let Some(pos) = ir.find("entry:\n") {
+            let insert_pos = pos + "entry:\n".len();
+            ir.insert_str(insert_pos, &alloca_block);
+        }
+
+        self.fn_ctx.entry_allocas.clear();
+    }
+
     /// Generate a unique string constant name, with optional module prefix
-    #[inline]
+    #[inline(never)]
     pub(crate) fn make_string_name(&self) -> String {
         use std::fmt::Write;
         let mut name = String::with_capacity(16);
@@ -77,7 +171,7 @@ impl CodeGenerator {
     /// returns the existing constant name without creating a new one.
     /// This reduces IR size and binary size when the same string literal
     /// appears multiple times in source code.
-    #[inline]
+    #[inline(never)]
     pub(crate) fn get_or_create_string_constant(&mut self, value: &str) -> String {
         // Check dedup cache first
         if let Some(existing_name) = self.strings.dedup_cache.get(value) {
@@ -97,7 +191,7 @@ impl CodeGenerator {
     }
 
     /// Generate a unique label with the given prefix
-    #[inline]
+    #[inline(never)]
     pub(crate) fn next_label(&mut self, prefix: &str) -> String {
         debug_assert!(
             !prefix.is_empty() && prefix.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'_'),
@@ -112,7 +206,7 @@ impl CodeGenerator {
     }
 
     /// Generate a unique temporary register name
-    #[inline]
+    #[inline(never)]
     pub(crate) fn next_temp(&self, counter: &mut usize) -> String {
         use std::fmt::Write;
         let mut tmp = String::with_capacity(8); // "%t" + up to 6 digits
@@ -122,6 +216,7 @@ impl CodeGenerator {
     }
 
     /// Check if a function call is recursive (calls the current function with decreases clause)
+    #[inline(never)]
     pub(crate) fn is_recursive_call(&self, fn_name: &str) -> bool {
         // Check if we have a decreases clause for this function
         if let Some(ref decreases_info) = self.contracts.current_decreases_info {
@@ -133,12 +228,14 @@ impl CodeGenerator {
     }
 
     /// Check if a function has the #[gc] attribute
+    #[inline(never)]
     pub(crate) fn _has_gc_attribute(attributes: &[Attribute]) -> bool {
         attributes.iter().any(|attr| attr.name == "gc")
     }
 
     /// Enter a type recursion level and check depth limit
     /// Returns an error if recursion limit is exceeded
+    #[inline(never)]
     pub(crate) fn enter_type_recursion(&self, context: &str) -> CodegenResult<()> {
         let depth = self.type_recursion_depth.get();
         if depth >= MAX_TYPE_RECURSION_DEPTH {
@@ -152,18 +249,19 @@ impl CodeGenerator {
     }
 
     /// Exit a type recursion level
+    #[inline(never)]
     pub(crate) fn exit_type_recursion(&self) {
         let depth = self.type_recursion_depth.get();
         self.type_recursion_depth.set(depth.saturating_sub(1));
     }
 
     /// Get the size of a type in bytes (for generic operations)
+    #[inline(never)]
     pub(crate) fn _type_size(&self, ty: &ResolvedType) -> usize {
         // Track recursion depth
         if self.enter_type_recursion("type_size").is_err() {
             // On recursion limit, return default size
-            #[cfg(debug_assertions)]
-            eprintln!("Warning: Type recursion limit exceeded in type_size");
+            debug_assert!(false, "ICE: Type recursion limit exceeded in type_size");
             return 8;
         }
 
@@ -203,6 +301,7 @@ impl CodeGenerator {
     /// Generate allocation call (malloc or gc_alloc depending on GC mode)
     ///
     /// Returns: (result_register, IR code)
+    #[inline(never)]
     pub(crate) fn _generate_alloc(
         &self,
         size_arg: &str,
@@ -214,27 +313,28 @@ impl CodeGenerator {
         if self.gc_enabled {
             // Use GC allocation
             let ptr_tmp = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = call i8* @vais_gc_alloc(i64 {}, i32 {})\n",
-                ptr_tmp, size_arg, type_id
-            ));
+            write_ir!(
+                ir,
+                "  {} = call i8* @vais_gc_alloc(i64 {}, i32 {})",
+                ptr_tmp,
+                size_arg,
+                type_id
+            );
             let result = self.next_temp(counter);
-            ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", result, ptr_tmp));
+            write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, ptr_tmp);
             (result, ir)
         } else {
             // Use manual malloc
             let ptr_tmp = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = call i8* @malloc(i64 {})\n",
-                ptr_tmp, size_arg
-            ));
+            write_ir!(ir, "  {} = call i8* @malloc(i64 {})", ptr_tmp, size_arg);
             let result = self.next_temp(counter);
-            ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", result, ptr_tmp));
+            write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, ptr_tmp);
             (result, ir)
         }
     }
 
     /// Generate code for a block expression (used in if/else branches)
+    #[inline(never)]
     pub(crate) fn _generate_block_expr(
         &mut self,
         expr: &Spanned<Expr>,
@@ -251,6 +351,7 @@ impl CodeGenerator {
 
     /// Generate code for a block of statements
     /// Returns (value, ir_code, is_terminated)
+    #[inline(never)]
     pub(crate) fn generate_block_stmts(
         &mut self,
         stmts: &[Spanned<Stmt>],
@@ -263,6 +364,7 @@ impl CodeGenerator {
 
     /// Generate code for array slicing: arr[start..end]
     /// Returns a new array (allocated on heap) containing the slice
+    #[inline(never)]
     pub(crate) fn generate_slice(
         &mut self,
         array_expr: &Spanned<Expr>,
@@ -275,9 +377,23 @@ impl CodeGenerator {
         let mut ir = arr_ir;
 
         // Determine if the source is a Slice/SliceMut (fat pointer)
+        // Also handle Ref(Slice(_)) and RefMut(SliceMut(_)) — &[T] and &mut [T]
         let arr_type = self.infer_expr_type(array_expr);
         let is_slice_source =
-            matches!(arr_type, ResolvedType::Slice(_) | ResolvedType::SliceMut(_));
+            matches!(arr_type, ResolvedType::Slice(_) | ResolvedType::SliceMut(_))
+                || matches!(
+                    &arr_type,
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                    if matches!(inner.as_ref(), ResolvedType::Slice(_) | ResolvedType::SliceMut(_))
+                );
+
+        // Detect Vec source: Vec<T>, &Vec<T>, or &mut Vec<T>
+        let is_vec_source = matches!(&arr_type, ResolvedType::Named { name, .. } if name == "Vec")
+            || matches!(
+                &arr_type,
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                if matches!(inner.as_ref(), ResolvedType::Named { name, .. } if name == "Vec")
+            );
 
         // Get start index (default 0)
         let start_val = if let Some(start_expr) = start {
@@ -296,7 +412,7 @@ impl CodeGenerator {
             // If inclusive (..=), add 1 to end
             if inclusive {
                 let adj_end = self.next_temp(counter);
-                ir.push_str(&format!("  {} = add i64 {}, 1\n", adj_end, val));
+                write_ir!(ir, "  {} = add i64 {}, 1", adj_end, val);
                 adj_end
             } else {
                 val
@@ -306,11 +422,35 @@ impl CodeGenerator {
             if is_slice_source {
                 // Extract length from fat pointer (second field)
                 let length = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = extractvalue {{ i8*, i64 }} {}, 1\n",
-                    length, arr_val
-                ));
+                write_ir!(
+                    ir,
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 1",
+                    length,
+                    arr_val
+                );
                 length
+            } else if is_vec_source {
+                // Vec<T>: extract length from Vec struct field 1 (len)
+                // arr_val is a %Vec* pointer
+                let len_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 1",
+                    len_ptr,
+                    arr_val
+                );
+                let length = self.next_temp(counter);
+                write_ir!(ir, "  {} = load i64, i64* {}", length, len_ptr);
+                length
+            } else if let ResolvedType::ConstArray { size, .. } = &arr_type {
+                // ConstArray has a known compile-time size; use it as i64 literal
+                if let Some(n) = size.try_evaluate() {
+                    n.to_string()
+                } else {
+                    return Err(CodegenError::Unsupported(
+                        "Open-end slicing on ConstArray requires a concrete size".to_string(),
+                    ));
+                }
             } else {
                 // Array/Pointer source doesn't have length information
                 return Err(CodegenError::Unsupported(
@@ -319,19 +459,32 @@ impl CodeGenerator {
             }
         };
 
-        // If source is a slice, extract the data pointer
+        // If source is a slice or Vec, extract the data pointer
         let src_arr_ptr = if is_slice_source {
             let data_ptr = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
-                data_ptr, arr_val
-            ));
+            write_ir!(
+                ir,
+                "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                data_ptr,
+                arr_val
+            );
             let typed_ptr = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = bitcast i8* {} to i64*\n",
-                typed_ptr, data_ptr
-            ));
+            write_ir!(ir, "  {} = bitcast i8* {} to i64*", typed_ptr, data_ptr);
             typed_ptr
+        } else if is_vec_source {
+            // Vec<T>: extract data pointer from Vec struct field 0 (data)
+            let data_field = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 0",
+                data_field,
+                arr_val
+            );
+            let data_i64 = self.next_temp(counter);
+            write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_field);
+            let data_ptr = self.next_temp(counter);
+            write_ir!(ir, "  {} = inttoptr i64 {} to i64*", data_ptr, data_i64);
+            data_ptr
         } else {
             // For arrays/pointers, use directly
             arr_val.clone()
@@ -339,98 +492,90 @@ impl CodeGenerator {
 
         // Calculate slice length: end - start
         let length = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = sub i64 {}, {}\n",
-            length, end_val, start_val
-        ));
+        write_ir!(ir, "  {} = sub i64 {}, {}", length, end_val, start_val);
 
         // Allocate new array for slice
         let byte_size = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = mul i64 {}, 8\n", // 8 bytes per i64 element
-            byte_size, length
-        ));
+        write_ir!(
+            ir,
+            "  {} = mul i64 {}, 8", // 8 bytes per i64 element
+            byte_size,
+            length
+        );
 
         let raw_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = call i8* @malloc(i64 {})\n",
-            raw_ptr, byte_size
-        ));
+        write_ir!(ir, "  {} = call i8* @malloc(i64 {})", raw_ptr, byte_size);
+        // Track allocation for automatic cleanup at scope exit
+        ir.push_str(&self.track_alloc(raw_ptr.clone()));
 
         let slice_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = bitcast i8* {} to i64*\n",
-            slice_ptr, raw_ptr
-        ));
+        write_ir!(ir, "  {} = bitcast i8* {} to i64*", slice_ptr, raw_ptr);
 
         // Copy elements using a loop
         let loop_idx_ptr = self.next_temp(counter);
-        ir.push_str(&format!("  {} = alloca i64\n", loop_idx_ptr));
-        ir.push_str(&format!("  store i64 0, i64* {}\n", loop_idx_ptr));
+        self.emit_entry_alloca(&loop_idx_ptr, "i64");
+        write_ir!(ir, "  store i64 0, i64* {}", loop_idx_ptr);
 
         let loop_start = self.next_label("slice_loop");
         let loop_body = self.next_label("slice_body");
         let loop_end = self.next_label("slice_end");
 
-        ir.push_str(&format!("  br label %{}\n", loop_start));
-        ir.push_str(&format!("{}:\n", loop_start));
+        write_ir!(ir, "  br label %{}", loop_start);
+        write_ir!(ir, "{}:", loop_start);
 
         let loop_idx = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = load i64, i64* {}\n",
-            loop_idx, loop_idx_ptr
-        ));
+        write_ir!(ir, "  {} = load i64, i64* {}", loop_idx, loop_idx_ptr);
 
         let cmp = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = icmp slt i64 {}, {}\n",
-            cmp, loop_idx, length
-        ));
-        ir.push_str(&format!(
-            "  br i1 {}, label %{}, label %{}\n",
-            cmp, loop_body, loop_end
-        ));
+        write_ir!(ir, "  {} = icmp slt i64 {}, {}", cmp, loop_idx, length);
+        write_ir!(
+            ir,
+            "  br i1 {}, label %{}, label %{}",
+            cmp,
+            loop_body,
+            loop_end
+        );
 
-        ir.push_str(&format!("{}:\n", loop_body));
+        write_ir!(ir, "{}:", loop_body);
 
         // Calculate source index: start + loop_idx
         let src_idx = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = add i64 {}, {}\n",
-            src_idx, start_val, loop_idx
-        ));
+        write_ir!(ir, "  {} = add i64 {}, {}", src_idx, start_val, loop_idx);
 
         // Get source element pointer
         let src_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr i64, i64* {}, i64 {}\n",
-            src_ptr, src_arr_ptr, src_idx
-        ));
+        write_ir!(
+            ir,
+            "  {} = getelementptr i64, i64* {}, i64 {}",
+            src_ptr,
+            src_arr_ptr,
+            src_idx
+        );
 
         // Load source element
         let elem = self.next_temp(counter);
-        ir.push_str(&format!("  {} = load i64, i64* {}\n", elem, src_ptr));
+        write_ir!(ir, "  {} = load i64, i64* {}", elem, src_ptr);
 
         // Get destination element pointer
         let dst_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr i64, i64* {}, i64 {}\n",
-            dst_ptr, slice_ptr, loop_idx
-        ));
+        write_ir!(
+            ir,
+            "  {} = getelementptr i64, i64* {}, i64 {}",
+            dst_ptr,
+            slice_ptr,
+            loop_idx
+        );
 
         // Store element
-        ir.push_str(&format!("  store i64 {}, i64* {}\n", elem, dst_ptr));
+        write_ir!(ir, "  store i64 {}, i64* {}", elem, dst_ptr);
 
         // Increment loop index
         let next_idx = self.next_temp(counter);
-        ir.push_str(&format!("  {} = add i64 {}, 1\n", next_idx, loop_idx));
-        ir.push_str(&format!(
-            "  store i64 {}, i64* {}\n",
-            next_idx, loop_idx_ptr
-        ));
-        ir.push_str(&format!("  br label %{}\n", loop_start));
+        write_ir!(ir, "  {} = add i64 {}, 1", next_idx, loop_idx);
+        write_ir!(ir, "  store i64 {}, i64* {}", next_idx, loop_idx_ptr);
+        write_ir!(ir, "  br label %{}", loop_start);
 
-        ir.push_str(&format!("{}:\n", loop_end));
+        write_ir!(ir, "{}:", loop_end);
 
         Ok((slice_ptr, ir))
     }

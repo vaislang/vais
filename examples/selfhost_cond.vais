@@ -3,25 +3,25 @@
 
 F classify(x: i64) -> i64 {
     I x < 0 { R 1 }
-    E I x == 0 { R 2 }
-    E I x < 10 { R 3 }
-    E I x < 100 { R 4 }
-    E { R 5 }
+    EL I x == 0 { R 2 }
+    EL I x < 10 { R 3 }
+    EL I x < 100 { R 4 }
+    EL { R 5 }
 }
 
 F fizzbuzz_sum(n: i64) -> i64 {
     I n < 1 { R 0 }
     val := I n % 15 == 0 { 15 }
-           E I n % 5 == 0 { 5 }
-           E I n % 3 == 0 { 3 }
-           E { 1 }
+           EL I n % 5 == 0 { 5 }
+           EL I n % 3 == 0 { 3 }
+           EL { 1 }
     val + @(n - 1)
 }
 
 F clamp(x: i64, lo: i64, hi: i64) -> i64 {
     I x < lo { lo }
-    E I x > hi { hi }
-    E { x }
+    EL I x > hi { hi }
+    EL { x }
 }
 
 F main() -> i64 {

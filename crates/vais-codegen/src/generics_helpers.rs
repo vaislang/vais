@@ -23,12 +23,38 @@ impl CodeGenerator {
     /// Returns the mangled name if the base name has a registered alias (e.g., "Box" -> "Box$i64").
     #[inline]
     pub(crate) fn resolve_struct_name(&self, name: &str) -> String {
+        // 1. Direct hit in the struct registry — use as-is.
         if self.types.structs.contains_key(name) {
             return name.to_string();
         }
+        // 2. Alias registered for this base name (e.g., "Box" -> "Box$i64").
         if let Some(mangled) = self.generics.struct_aliases.get(name) {
             return mangled.clone();
         }
+        // 3. Already a specialized/mangled struct name (e.g., "Point$i64") in generated_structs.
+        if self.generics.generated_structs.contains_key(name) {
+            return name.to_string();
+        }
+        // 4. If the name contains '$', it is already in mangled form — accept as-is even if
+        //    the struct hasn't been emitted yet (it will be resolved later by the LLVM emitter).
+        if name.contains('$') {
+            return name.to_string();
+        }
+        // 5. If the name is a plain base name, try to find any generated struct whose
+        //    mangled name starts with "<name>$" (picks the first/only specialization).
+        //    This handles cross-module access where only one specialization exists.
+        let prefix = format!("{name}$");
+        if let Some(mangled_key) = self
+            .generics
+            .generated_structs
+            .keys()
+            .find(|k| k.starts_with(&prefix))
+        {
+            return mangled_key.clone();
+        }
+        // Final fallback: return name unchanged.
+        // Note: this may fail later during LLVM type lookup — the caller is responsible
+        // for handling unknown struct names gracefully.
         name.to_string()
     }
 
@@ -159,14 +185,13 @@ impl CodeGenerator {
         inferred: &mut HashMap<String, ResolvedType>,
     ) {
         match param_type {
-            ResolvedType::Generic(name) => {
+            ResolvedType::Generic(name) if type_params.contains(&name) => {
                 // Direct generic type parameter (e.g., T)
-                if type_params.contains(&name) {
-                    inferred
-                        .entry(name.clone())
-                        .or_insert_with(|| arg_type.clone());
-                }
+                inferred
+                    .entry(name.clone())
+                    .or_insert_with(|| arg_type.clone());
             }
+            ResolvedType::Generic(_) => {}
             ResolvedType::Named { name, generics } => {
                 // Check if this is a type parameter name
                 if type_params.contains(&name) {
@@ -199,24 +224,7 @@ impl CodeGenerator {
                     self.infer_type_args(inner, arg_inner, type_params, inferred);
                 }
             }
-            // HKT type constructor parameter: infer F from F<A> = Vec<A> → F = Vec
-            ResolvedType::HigherKinded { name, .. } => {
-                if type_params.contains(&name) {
-                    // Extract the type constructor name from the concrete argument type
-                    if let ResolvedType::Named {
-                        name: concrete_name,
-                        ..
-                    } = arg_type
-                    {
-                        inferred
-                            .entry(name.clone())
-                            .or_insert_with(|| ResolvedType::Named {
-                                name: concrete_name.clone(),
-                                generics: vec![],
-                            });
-                    }
-                }
-            }
+            // HKT removed in ROADMAP #18.
             _ => {}
         }
     }

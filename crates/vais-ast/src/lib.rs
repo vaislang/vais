@@ -47,7 +47,7 @@ pub use expressions::{Expr, IfElse, MatchArm, StringInterpPart};
 pub use statements::Stmt;
 
 // Re-export function types
-pub use function::{CallArgs, Function, FunctionBody, NamedArg, Ownership, Param};
+pub use function::{CallArgs, EffectPrefix, Function, FunctionBody, NamedArg, Ownership, Param};
 
 // Re-export generic types
 pub use generics::{GenericParam, GenericParamKind, Variance, WherePredicate};
@@ -189,11 +189,6 @@ impl std::fmt::Display for Type {
             Type::RefLifetime { lifetime, inner } => write!(f, "&'{} {}", lifetime, inner.node),
             Type::RefMutLifetime { lifetime, inner } => {
                 write!(f, "&'{} mut {}", lifetime, inner.node)
-            }
-            Type::Lazy(inner) => write!(f, "Lazy<{}>", inner.node),
-            Type::ImplTrait { bounds } => {
-                let names: Vec<&str> = bounds.iter().map(|b| b.node.as_str()).collect();
-                write!(f, "impl {}", names.join(" + "))
             }
         }
     }

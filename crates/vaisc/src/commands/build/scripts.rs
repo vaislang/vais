@@ -1,7 +1,7 @@
 //! Build script support for vais.build files
 //!
 //! Allows packages to define pre-build, post-build, and custom build steps
-//! in their vais.toml manifest via `[build]` section:
+//! in their vais.toml manifest via `\[build\]` section:
 //!
 //!
 //! ```toml
@@ -16,7 +16,7 @@
 use std::path::Path;
 use std::process::Command;
 
-/// Build script configuration (parsed from vais.toml [build] section)
+/// Build script configuration (parsed from vais.toml `[build]` section)
 #[derive(Debug, Clone, Default)]
 pub struct BuildScriptConfig {
     /// Shell command to run before compilation
@@ -30,7 +30,7 @@ pub struct BuildScriptConfig {
 }
 
 impl BuildScriptConfig {
-    /// Parse from the [build] section of a vais.toml manifest
+    /// Parse from the `[build]` section of a vais.toml manifest
     pub fn from_toml(table: &toml::Table) -> Self {
         let mut config = Self::default();
 

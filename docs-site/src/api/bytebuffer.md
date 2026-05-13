@@ -5,13 +5,13 @@
 ## Import
 
 ```vais
-U std/bytebuffer
+use std/bytebuffer
 ```
 
 ## Struct
 
 ```vais
-S ByteBuffer { data: i64, len: i64, cap: i64, pos: i64 }
+struct ByteBuffer { data: i64, len: i64, cap: i64, pos: i64 }
 ```
 
 ## Methods
@@ -42,9 +42,9 @@ S ByteBuffer { data: i64, len: i64, cap: i64, pos: i64 }
 ## Usage
 
 ```vais
-U std/bytebuffer
+use std/bytebuffer
 
-F main() -> i64 {
+fn main() -> i64 {
     buf := ByteBuffer.with_capacity(256)
 
     # Write data

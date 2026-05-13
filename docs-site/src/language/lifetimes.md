@@ -43,7 +43,7 @@ The Vais borrow checker detects six categories of memory safety violations:
 
 ### Example: E100 UseAfterMove
 ```vais
-F take_ownership(x: Vec<i64>) {
+fn take_ownership(x: Vec<i64>) {
     # x is consumed here
 }
 
@@ -62,7 +62,7 @@ a := &mut x
 
 ### Example: E106 LifetimeViolation
 ```vais
-F dangling_ref() -> &i64 {
+fn dangling_ref() -> &i64 {
     x := 42
     &x               # ERROR E106: returns reference to local variable
 }
@@ -125,9 +125,8 @@ For complex cases where the compiler cannot infer lifetimes, use explicit lifeti
 
 ### Basic Syntax
 ```vais
-F longest<'a>(x: &'a str, y: &'a str) -> &'a str {
-    I x.len() > y.len() { x }
-    E { y }
+fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {
+    I x.len() > y.len() { x } else { y }
 }
 ```
 
@@ -137,18 +136,18 @@ The `'a` annotation declares that:
 
 ### Multiple Lifetimes
 ```vais
-F first<'a, 'b>(x: &'a i64, y: &'b i64) -> &'a i64 {
+fn first<'a, 'b>(x: &'a i64, y: &'b i64) -> &'a i64 {
     x    # Return value tied to x's lifetime
 }
 ```
 
 ### Struct Lifetimes
 ```vais
-S Ref<'a> {
+struct Ref<'a> {
     data: &'a i64
 }
 
-F create_ref<'a>(x: &'a i64) -> Ref<'a> {
+fn create_ref<'a>(x: &'a i64) -> Ref<'a> {
     Ref { data: x }
 }
 ```
@@ -160,16 +159,16 @@ Vais automatically infers lifetimes in simple cases (lifetime elision rules):
 ### Rule 1: Single input reference
 ```vais
 # Explicit:  F foo<'a>(x: &'a i64) -> &'a i64
-F foo(x: &i64) -> &i64 {    # Inferred: output lifetime = input lifetime
+fn foo(x: &i64) -> &i64 {    # Inferred: output lifetime = input lifetime
     x
 }
 ```
 
 ### Rule 2: Multiple inputs with self
 ```vais
-X MyStruct {
+impl MyStruct {
     # Explicit:  F get<'a>(&'a self) -> &'a i64
-    F get(&self) -> &i64 {    # Inferred: output lifetime = self lifetime
+    fn get(&self) -> &i64 {    # Inferred: output lifetime = self lifetime
         &self.field
     }
 }
@@ -181,7 +180,7 @@ X MyStruct {
 # F choose(x: &i64, y: &i64) -> &i64 { ... }
 
 # Must annotate explicitly:
-F choose<'a>(x: &'a i64, y: &'a i64) -> &'a i64 { ... }
+fn choose<'a>(x: &'a i64, y: &'a i64) -> &'a i64 { ... }
 ```
 
 ## Control Flow Analysis
@@ -203,7 +202,7 @@ At control flow joins (e.g., after if-else):
 x := mut [1, 2, 3]
 I condition {
     take(x)         # x moved in this branch
-} E {
+} else {
     print(x[0])     # x borrowed here
 }
 # x is considered moved here (conservative join)
@@ -236,7 +235,7 @@ struct Body {
 
 ### 1. Prefer immutable borrows
 ```vais
-F read_only(data: &[i64]) { ... }    # Good: immutable borrow
+fn read_only(data: &[i64]) { ... }    # Good: immutable borrow
 ```
 
 ### 2. Keep mutable borrows short
@@ -251,7 +250,7 @@ x.other_operation()
 ### 3. Use lifetime elision
 Let the compiler infer lifetimes when possible:
 ```vais
-F process(&self, data: &Vec<i64>) -> &i64 {
+fn process(&self, data: &Vec<i64>) -> &i64 {
     &data[0]    # Lifetime inferred
 }
 ```
@@ -259,7 +258,7 @@ F process(&self, data: &Vec<i64>) -> &i64 {
 ### 4. Split borrows
 Borrow different parts of a struct independently:
 ```vais
-S Pair { first: i64, second: i64 }
+struct Pair { first: i64, second: i64 }
 
 p := mut Pair { first: 1, second: 2 }
 a := &mut p.first

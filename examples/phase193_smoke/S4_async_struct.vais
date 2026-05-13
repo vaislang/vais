@@ -1,0 +1,34 @@
+# Phase 193 Recon-C Smoke S4
+# Goal: Async function takes Struct{str} and returns after await, field access post-await.
+# Hypothesis: commit 39922874 (async poll alloc_tracker leak + PHI predecessor mismatch)
+#             이후 async + struct + str 조합 동작 여부 미검증.
+
+S Person {
+    name: str,
+    age: i64
+}
+
+A F age_plus(p: Person, delta: i64) -> i64 {
+    # After poll resume, `p` fields must still be valid (not clobbered by state machine).
+    p.age + delta
+}
+
+A F print_name(p: Person) -> i64 {
+    # Access str field after async resume. str is pointer-heavy so poll preservation critical.
+    puts("S4 async: name = {p.name}")
+    0
+}
+
+F main() -> i64 {
+    p := Person { name: "Alice", age: 30 }
+
+    a := age_plus(p, 5).await
+    puts("S4: age_plus = {a}")
+
+    # Fresh struct to avoid move-after-use ambiguity
+    q := Person { name: "Bob", age: 25 }
+    _ := print_name(q).await
+
+    # Expected: a=35, exit 0
+    I a == 35 { 0 } EL { 1 }
+}

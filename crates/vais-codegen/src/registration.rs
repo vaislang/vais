@@ -11,6 +11,7 @@ use vais_ast::{ExternFunction, Function, Struct, VariantFields};
 use vais_types::{FunctionSig, ResolvedType};
 
 impl CodeGenerator {
+    #[inline(never)]
     pub(crate) fn register_function(&mut self, f: &Function) -> CodegenResult<()> {
         // Use resolved function signatures from type checker when available
         // (needed for functions with inferred parameter types - Type::Infer)
@@ -59,7 +60,7 @@ impl CodeGenerator {
             func_name.clone(),
             FunctionInfo {
                 signature: FunctionSig {
-                    name: f.name.node.to_string(),
+                    name: func_name.clone(),
                     generics: f.generics.iter().map(|g| g.name.node.clone()).collect(),
                     generic_bounds: f
                         .generics
@@ -106,6 +107,7 @@ impl CodeGenerator {
     }
 
     /// Register a method as a function with Type_methodName naming convention
+    #[inline(never)]
     pub(crate) fn register_method(&mut self, type_name: &str, f: &Function) -> CodegenResult<()> {
         let method_name = format!("{}_{}", type_name, f.name.node);
 
@@ -120,13 +122,17 @@ impl CodeGenerator {
         let mut params = Vec::new();
 
         if has_self {
-            // Instance method: add self parameter (pointer to struct type)
+            // Instance method: add self parameter (pointer to struct type).
+            // Use Ref(Named{...}) so type_to_llvm emits %TypeName* (a pointer),
+            // matching the actual function definition and the cross-module declare.
+            // Without this, generate_extern_decl would emit %TypeName (no pointer),
+            // causing an LLVM IR type mismatch when non-main modules declare cross-module methods.
             params.push((
                 "self".to_string(),
-                ResolvedType::Named {
+                ResolvedType::Ref(Box::new(ResolvedType::Named {
                     name: type_name.to_string(),
                     generics: vec![],
-                },
+                })),
                 false,
             ));
         }
@@ -150,10 +156,10 @@ impl CodeGenerator {
         };
 
         self.types.functions.insert(
-            method_name.to_string(),
+            method_name.clone(),
             FunctionInfo {
                 signature: FunctionSig {
-                    name: method_name.clone(),
+                    name: method_name,
                     generics: f.generics.iter().map(|g| g.name.node.clone()).collect(),
                     generic_bounds: f
                         .generics
@@ -178,6 +184,7 @@ impl CodeGenerator {
         Ok(())
     }
 
+    #[inline(never)]
     pub(crate) fn register_struct(&mut self, s: &Struct) -> CodegenResult<()> {
         let fields: Vec<_> = s
             .fields
@@ -196,25 +203,32 @@ impl CodeGenerator {
             .filter_map(|a| a.expr.as_ref().map(|e| (**e).clone()))
             .collect();
 
+        let struct_name = s.name.node.to_string();
+
         // Intern the struct name for deduplication
-        self.ident_pool.intern(&s.name.node);
+        self.ident_pool.intern(&struct_name);
+
+        let (has_owned_mask, heap_fields) = StructInfo::derive_ownership_mask(&fields);
 
         self.types.structs.insert(
-            s.name.node.to_string(),
+            struct_name.clone(),
             StructInfo {
-                _name: s.name.node.to_string(),
+                _name: struct_name,
                 fields,
                 _repr_c: s
                     .attributes
                     .iter()
                     .any(|a| a.name == "repr" && a.args.iter().any(|arg| arg == "C")),
                 _invariants: invariants,
+                has_owned_mask,
+                heap_fields,
             },
         );
 
         Ok(())
     }
 
+    #[inline(never)]
     pub(crate) fn register_enum(&mut self, e: &vais_ast::Enum) -> CodegenResult<()> {
         let mut variants = Vec::new();
 
@@ -247,16 +261,18 @@ impl CodeGenerator {
             });
         }
 
+        let enum_name = e.name.node.to_string();
+
         // Intern enum and variant names
-        self.ident_pool.intern(&e.name.node);
+        self.ident_pool.intern(&enum_name);
         for v in &variants {
             self.ident_pool.intern(&v.name);
         }
 
         self.types.enums.insert(
-            e.name.node.to_string(),
+            enum_name.clone(),
             EnumInfo {
-                name: e.name.node.to_string(),
+                name: enum_name,
                 variants,
             },
         );
@@ -264,6 +280,7 @@ impl CodeGenerator {
         Ok(())
     }
 
+    #[inline(never)]
     pub(crate) fn register_union(&mut self, u: &vais_ast::Union) -> CodegenResult<()> {
         let fields: Vec<_> = u
             .fields
@@ -274,10 +291,11 @@ impl CodeGenerator {
             })
             .collect();
 
+        let union_name = u.name.node.to_string();
         self.types.unions.insert(
-            u.name.node.to_string(),
+            union_name.clone(),
             UnionInfo {
-                _name: u.name.node.to_string(),
+                _name: union_name,
                 fields,
             },
         );
@@ -285,6 +303,7 @@ impl CodeGenerator {
         Ok(())
     }
 
+    #[inline(never)]
     pub(crate) fn register_extern_function(
         &mut self,
         func: &ExternFunction,
@@ -323,7 +342,7 @@ impl CodeGenerator {
             func_name.clone(),
             FunctionInfo {
                 signature: FunctionSig {
-                    name: func.name.node.to_string(),
+                    name: func_name.clone(),
                     params,
                     ret: ret_type,
                     is_vararg: func.is_vararg,
@@ -356,12 +375,14 @@ impl CodeGenerator {
     }
 
     /// Register a constant definition
+    #[inline(never)]
     pub(crate) fn register_const(&mut self, const_def: &vais_ast::ConstDef) -> CodegenResult<()> {
+        let const_name = const_def.name.node.clone();
         // Store constant in the constants map for later lookup
         self.types.constants.insert(
-            const_def.name.node.clone(),
+            const_name.clone(),
             crate::types::ConstInfo {
-                _name: const_def.name.node.clone(),
+                _name: const_name,
                 _ty: self.ast_type_to_resolved(&const_def.ty.node),
                 value: const_def.value.clone(),
             },
@@ -370,15 +391,22 @@ impl CodeGenerator {
     }
 
     /// Register a global variable definition
+    #[inline(never)]
     pub(crate) fn register_global(
         &mut self,
         global_def: &vais_ast::GlobalDef,
     ) -> CodegenResult<()> {
+        let global_name = global_def.name.node.clone();
+        // Pre-register string constants for str-typed globals so they are
+        // available in the string pool when emit_global_vars runs
+        if let vais_ast::Expr::String(ref s) = global_def.value.node {
+            self.get_or_create_string_constant(s);
+        }
         // Store global in the globals map for later code generation
         self.types.globals.insert(
-            global_def.name.node.clone(),
+            global_name.clone(),
             crate::types::GlobalInfo {
-                _name: global_def.name.node.clone(),
+                _name: global_name,
                 _ty: self.ast_type_to_resolved(&global_def.ty.node),
                 _value: global_def.value.clone(),
                 _is_mutable: global_def.is_mutable,

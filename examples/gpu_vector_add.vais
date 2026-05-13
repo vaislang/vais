@@ -15,7 +15,7 @@ C GPU_CAP_TENSOR: i64 = 4
 
 # Check GPU capability
 F has_gpu_cap(caps: i64, cap: i64) -> i64 {
-    I (caps & cap) != 0 { 1 } E { 0 }
+    I (caps & cap) != 0 { 1 } EL { 0 }
 }
 
 # Simulate GPU device info
@@ -44,10 +44,10 @@ F calc_blocks(n: i64, block_size: i64) -> i64 {
 F validate_launch(device: GpuDeviceInfo, threads: i64, blocks: i64) -> i64 {
     I threads > device.max_threads {
         0
-    } E {
+    } EL {
         I blocks > device.max_blocks {
             0
-        } E {
+        } EL {
             1
         }
     }

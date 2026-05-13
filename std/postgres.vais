@@ -78,7 +78,7 @@ X PgResult {
     F from_handle(h: i64) -> PgResult {
         I h == 0 {
             PgResult { handle: 0, row_count: 0, col_count: 0 }
-        } E {
+        } EL {
             PgResult {
                 handle: h,
                 row_count: __pg_ntuples(h),
@@ -89,18 +89,18 @@ X PgResult {
 
     # Check if the result is valid (not null)
     F is_valid(&self) -> i64 {
-        I self.handle != 0 { 1 } E { 0 }
+        I self.handle != 0 { 1 } EL { 0 }
     }
 
     # Check if the query was successful (COMMAND_OK or TUPLES_OK)
     F is_ok(&self) -> i64 {
         I self.handle == 0 {
             0
-        } E {
+        } EL {
             status := __pg_result_status(self.handle)
             I status == PG_RESULT_COMMAND_OK | status == PG_RESULT_TUPLES_OK {
                 1
-            } E {
+            } EL {
                 0
             }
         }
@@ -110,7 +110,7 @@ X PgResult {
     F status(&self) -> i64 {
         I self.handle == 0 {
             PG_RESULT_FATAL_ERROR
-        } E {
+        } EL {
             __pg_result_status(self.handle)
         }
     }
@@ -129,11 +129,11 @@ X PgResult {
     F get_text(&self, row: i64, col: i64) -> str {
         I self.handle == 0 {
             ""
-        } E I row < 0 | row >= self.row_count {
+        } EL I row < 0 | row >= self.row_count {
             ""
-        } E I col < 0 | col >= self.col_count {
+        } EL I col < 0 | col >= self.col_count {
             ""
-        } E {
+        } EL {
             __pg_getvalue(self.handle, row, col)
         }
     }
@@ -142,14 +142,14 @@ X PgResult {
     F get_int(&self, row: i64, col: i64) -> i64 {
         I self.handle == 0 {
             0
-        } E I row < 0 | row >= self.row_count {
+        } EL I row < 0 | row >= self.row_count {
             0
-        } E I col < 0 | col >= self.col_count {
+        } EL I col < 0 | col >= self.col_count {
             0
-        } E {
+        } EL {
             I __pg_getisnull(self.handle, row, col) == 1 {
                 0
-            } E {
+            } EL {
                 val := __pg_getvalue(self.handle, row, col)
                 val as i64
             }
@@ -160,14 +160,14 @@ X PgResult {
     F get_float(&self, row: i64, col: i64) -> f64 {
         I self.handle == 0 {
             0.0
-        } E I row < 0 | row >= self.row_count {
+        } EL I row < 0 | row >= self.row_count {
             0.0
-        } E I col < 0 | col >= self.col_count {
+        } EL I col < 0 | col >= self.col_count {
             0.0
-        } E {
+        } EL {
             I __pg_getisnull(self.handle, row, col) == 1 {
                 0.0
-            } E {
+            } EL {
                 val := __pg_getvalue(self.handle, row, col)
                 val as f64
             }
@@ -178,22 +178,22 @@ X PgResult {
     F get_bool(&self, row: i64, col: i64) -> i64 {
         I self.handle == 0 {
             0
-        } E I row < 0 | row >= self.row_count {
+        } EL I row < 0 | row >= self.row_count {
             0
-        } E I col < 0 | col >= self.col_count {
+        } EL I col < 0 | col >= self.col_count {
             0
-        } E {
+        } EL {
             I __pg_getisnull(self.handle, row, col) == 1 {
                 0
-            } E {
+            } EL {
                 val := __pg_getvalue(self.handle, row, col)
                 I __str_eq(val, "t") == 1 {
                     1
-                } E I __str_eq(val, "true") == 1 {
+                } EL I __str_eq(val, "true") == 1 {
                     1
-                } E I __str_eq(val, "1") == 1 {
+                } EL I __str_eq(val, "1") == 1 {
                     1
-                } E {
+                } EL {
                     0
                 }
             }
@@ -204,11 +204,11 @@ X PgResult {
     F is_null(&self, row: i64, col: i64) -> i64 {
         I self.handle == 0 {
             1
-        } E I row < 0 | row >= self.row_count {
+        } EL I row < 0 | row >= self.row_count {
             1
-        } E I col < 0 | col >= self.col_count {
+        } EL I col < 0 | col >= self.col_count {
             1
-        } E {
+        } EL {
             __pg_getisnull(self.handle, row, col)
         }
     }
@@ -257,7 +257,7 @@ X PgConnection {
                 user: "",
                 is_connected: 0
             }
-        } E {
+        } EL {
             status := __pg_status(h)
             I status == PG_CONNECTION_OK {
                 PgConnection {
@@ -268,7 +268,7 @@ X PgConnection {
                     user: "",
                     is_connected: 1
                 }
-            } E {
+            } EL {
                 # Connection failed, but we still have a handle for error messages
                 PgConnection {
                     handle: h,
@@ -297,11 +297,11 @@ X PgConnection {
     F is_connected(&self) -> i64 {
         I self.handle == 0 {
             0
-        } E {
+        } EL {
             status := __pg_status(self.handle)
             I status == PG_CONNECTION_OK {
                 1
-            } E {
+            } EL {
                 0
             }
         }
@@ -311,7 +311,7 @@ X PgConnection {
     F status(&self) -> i64 {
         I self.handle == 0 {
             PG_CONNECTION_BAD
-        } E {
+        } EL {
             __pg_status(self.handle)
         }
     }
@@ -320,7 +320,7 @@ X PgConnection {
     F error_message(&self) -> str {
         I self.handle == 0 {
             "No connection"
-        } E {
+        } EL {
             __pg_error_message(self.handle)
         }
     }
@@ -330,16 +330,16 @@ X PgConnection {
     F exec(&self, sql: str) -> i64 {
         I self.handle == 0 {
             0
-        } E {
+        } EL {
             res := __pg_exec(self.handle, sql)
             I res == 0 {
                 0
-            } E {
+            } EL {
                 status := __pg_result_status(res)
                 __pg_clear(res)
                 I status == PG_RESULT_COMMAND_OK {
                     1
-                } E {
+                } EL {
                     0
                 }
             }
@@ -350,7 +350,7 @@ X PgConnection {
     F query(&self, sql: str) -> PgResult {
         I self.handle == 0 {
             PgResult::from_handle(0)
-        } E {
+        } EL {
             res := __pg_exec(self.handle, sql)
             PgResult::from_handle(res)
         }
@@ -362,16 +362,16 @@ X PgConnection {
     F exec_params(&self, sql: str, nparams: i64, params: i64) -> i64 {
         I self.handle == 0 {
             0
-        } E {
+        } EL {
             res := __pg_exec_params(self.handle, sql, nparams, params)
             I res == 0 {
                 0
-            } E {
+            } EL {
                 status := __pg_result_status(res)
                 __pg_clear(res)
                 I status == PG_RESULT_COMMAND_OK {
                     1
-                } E {
+                } EL {
                     0
                 }
             }
@@ -382,7 +382,7 @@ X PgConnection {
     F query_params(&self, sql: str, nparams: i64, params: i64) -> PgResult {
         I self.handle == 0 {
             PgResult::from_handle(0)
-        } E {
+        } EL {
             res := __pg_exec_params(self.handle, sql, nparams, params)
             PgResult::from_handle(res)
         }
@@ -393,16 +393,16 @@ X PgConnection {
     F prepare(&self, name: str, sql: str, nparams: i64) -> i64 {
         I self.handle == 0 {
             0
-        } E {
+        } EL {
             res := __pg_prepare(self.handle, name, sql, nparams)
             I res == 0 {
                 0
-            } E {
+            } EL {
                 status := __pg_result_status(res)
                 __pg_clear(res)
                 I status == PG_RESULT_COMMAND_OK {
                     1
-                } E {
+                } EL {
                     0
                 }
             }
@@ -414,16 +414,16 @@ X PgConnection {
     F exec_prepared(&self, name: str, nparams: i64, params: i64) -> i64 {
         I self.handle == 0 {
             0
-        } E {
+        } EL {
             res := __pg_exec_prepared(self.handle, name, nparams, params)
             I res == 0 {
                 0
-            } E {
+            } EL {
                 status := __pg_result_status(res)
                 __pg_clear(res)
                 I status == PG_RESULT_COMMAND_OK {
                     1
-                } E {
+                } EL {
                     0
                 }
             }
@@ -434,7 +434,7 @@ X PgConnection {
     F query_prepared(&self, name: str, nparams: i64, params: i64) -> PgResult {
         I self.handle == 0 {
             PgResult::from_handle(0)
-        } E {
+        } EL {
             res := __pg_exec_prepared(self.handle, name, nparams, params)
             PgResult::from_handle(res)
         }
@@ -502,7 +502,7 @@ X PgParams {
             new_values := __malloc(new_capacity * 8)
             # Copy existing pointers
             i := 0
-            L i < self.count {
+            LW i < self.count {
                 src := self.values + i * 8
                 dst := new_values + i * 8
                 store_i64(dst, load_i64(src))

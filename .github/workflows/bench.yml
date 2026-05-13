@@ -54,6 +54,53 @@ jobs:
       - name: Run benchmarks
         run: |
           cargo bench -p vais-benches --bench compile_bench -- --output-format bencher | tee bench-output.txt
+          cargo bench -p vais-benches --bench largescale_bench -- --output-format bencher | tee -a bench-output.txt
+
+      - name: Publish criterion JSON to gh-pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          # Collect criterion JSON output files into a single benchmark-data snapshot
+          TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
+          SNAPSHOT_DIR="benchmark-data/${TIMESTAMP}"
+
+          # Configure git for the push
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Fetch or create gh-pages branch
+          git fetch origin gh-pages:gh-pages 2>/dev/null || git checkout --orphan gh-pages
+
+          # Switch to gh-pages without losing working tree criterion data
+          git stash -- target/criterion/ bench-output.txt 2>/dev/null || true
+          git checkout gh-pages
+
+          mkdir -p "${SNAPSHOT_DIR}"
+
+          # Restore stashed criterion data
+          git stash pop 2>/dev/null || true
+
+          # Copy criterion JSON estimates into the snapshot directory
+          if [ -d target/criterion ]; then
+            find target/criterion -name "estimates.json" | while read -r f; do
+              bench_name=$(echo "$f" | sed 's|target/criterion/||' | sed 's|/estimates.json||' | tr '/' '_')
+              cp "$f" "${SNAPSHOT_DIR}/${bench_name}.json"
+            done
+          fi
+
+          # Also save the bencher-format text output for quick reference
+          cp bench-output.txt "${SNAPSHOT_DIR}/bench-output.txt" 2>/dev/null || true
+
+          # Update latest symlink (as a file pointer)
+          echo "${TIMESTAMP}" > benchmark-data/latest.txt
+
+          git add benchmark-data/
+          git diff --cached --quiet || git commit -m "benchmark-data: ${TIMESTAMP} [skip ci]"
+          git push origin gh-pages
+
+          # Return to the original commit so subsequent steps work normally
+          git checkout -
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
@@ -74,20 +121,39 @@ jobs:
 
       - name: Compare benchmarks (PR only)
         if: github.event_name == 'pull_request'
+        id: compare_pr
         run: |
           # Run benchmarks and save results
           cargo bench -p vais-benches --bench compile_bench -- --save-baseline pr-baseline
+          cargo bench -p vais-benches --bench largescale_bench -- --save-baseline pr-baseline
 
           # Checkout main branch to compare
           git fetch origin main:main
           git checkout main
+
+          set +e
           cargo bench -p vais-benches --bench compile_bench -- --save-baseline main-baseline
+          main_compile_status=$?
+          cargo bench -p vais-benches --bench largescale_bench -- --save-baseline main-baseline
+          main_largescale_status=$?
+          set -e
+
+          if [ "$main_compile_status" -ne 0 ] || [ "$main_largescale_status" -ne 0 ]; then
+            {
+              echo ""
+              echo "Base main benchmark unavailable; skipping baseline comparison."
+              echo "PR benchmark execution succeeded, but main could not produce a comparison baseline."
+            } | tee -a bench-output.txt
+            echo "::warning::Base main benchmark failed; skipping PR baseline comparison."
+            exit 0
+          fi
 
           # Switch back to PR branch
           git checkout -
 
           # Compare baselines using criterion
           cargo bench -p vais-benches --bench compile_bench -- --load-baseline main-baseline --baseline pr-baseline
+          cargo bench -p vais-benches --bench largescale_bench -- --load-baseline main-baseline --baseline pr-baseline
 
       - name: Parse and check for regressions
         if: github.event_name == 'pull_request'

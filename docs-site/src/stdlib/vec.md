@@ -7,14 +7,14 @@
 ## Quick Start
 
 ```vais
-U std/vec
+use std/vec
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec::new()
     v.push(10)
     v.push(20)
     print_i64(v.get(0))  # 10
-    R 0
+    return 0
 }
 ```
 
@@ -40,9 +40,9 @@ F main() -> i64 {
 ### 예제 1: 기본 생성 및 순회
 
 ```vais
-U std/vec
+use std/vec
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec::new()
     v.push(1)
     v.push(2)
@@ -53,16 +53,16 @@ F main() -> i64 {
         print_i64(v.get(i))
         i = i + 1
     }
-    R 0
+    return 0
 }
 ```
 
 ### 예제 2: 사전 할당으로 성능 최적화
 
 ```vais
-U std/vec
+use std/vec
 
-F process_data(count: i64) -> Vec<i64> {
+fn process_data(count: i64) -> Vec<i64> {
     # 재할당 방지: 미리 용량 확보
     v := Vec::with_capacity(count)
     i := 0
@@ -70,16 +70,16 @@ F process_data(count: i64) -> Vec<i64> {
         v.push(i * 2)
         i = i + 1
     }
-    R v
+    return v
 }
 ```
 
 ### 예제 3: 중간 삽입 및 제거
 
 ```vais
-U std/vec
+use std/vec
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec::new()
     v.push(10)
     v.push(30)
@@ -91,34 +91,34 @@ F main() -> i64 {
     removed := v.remove(0)
     print_i64(removed)  # 10
 
-    R 0
+    return 0
 }
 ```
 
 ### 예제 4: 제네릭 Vec 사용
 
 ```vais
-U std/vec
+use std/vec
 
-S Point { x: i64, y: i64 }
+struct Point { x: i64, y: i64 }
 
-F main() -> i64 {
+fn main() -> i64 {
     points := Vec::new()
     points.push(Point { x: 10, y: 20 })
     points.push(Point { x: 30, y: 40 })
 
     p := points.get(0)
     print_i64(p.x)  # 10
-    R 0
+    return 0
 }
 ```
 
 ### 예제 5: 슬라이스로 변환
 
 ```vais
-U std/vec
+use std/vec
 
-F sum_vec(v: Vec<i64>) -> i64 {
+fn sum_vec(v: Vec<i64>) -> i64 {
     # Vec을 슬라이스로 변환하여 이터레이션
     slice := v.as_slice()
     total := 0
@@ -127,16 +127,16 @@ F sum_vec(v: Vec<i64>) -> i64 {
         total = total + slice[i]
         i = i + 1
     }
-    R total
+    return total
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec::new()
     v.push(1)
     v.push(2)
     v.push(3)
     print_i64(sum_vec(v))  # 6
-    R 0
+    return 0
 }
 ```
 

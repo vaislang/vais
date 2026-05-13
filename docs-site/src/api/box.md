@@ -5,13 +5,13 @@
 ## Import
 
 ```vais
-U std/box
+use std/box
 ```
 
 ## Struct
 
 ```vais
-S Box { ptr: i64 }
+struct Box { ptr: i64 }
 ```
 
 ## Methods
@@ -39,9 +39,9 @@ S Box { ptr: i64 }
 ## Usage
 
 ```vais
-U std/box
+use std/box
 
-F main() -> i64 {
+fn main() -> i64 {
     b := Box::new(42)
     val := b.get()   # 42
     b.set(100)

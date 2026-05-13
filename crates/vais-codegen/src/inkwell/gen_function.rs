@@ -93,6 +93,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.var_struct_types.clear();
         self.var_resolved_types.clear();
         self.defer_stack.clear();
+        self.alloc_tracker.clear();
+        self.string_value_slot.clear();
+        self.pending_return_skip_slot.clear();
+        self.scope_str_stack.clear();
+        self.var_string_slot.clear();
+        self.var_string_slots_multi.clear();
+        self.phi_extra_slots.clear();
 
         // Non-generic function: substitutions should be empty, take avoids clone allocation
         let old_substitutions = std::mem::take(&mut self.generic_substitutions);
@@ -172,6 +179,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.mark_return_ownership_transfer_expr(&body_value, &body_expr.node);
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
@@ -218,6 +227,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.mark_return_ownership_transfer_block(&body_value, stmts);
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
@@ -289,6 +300,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.var_struct_types.clear();
         self.var_resolved_types.clear();
         self.defer_stack.clear();
+        self.alloc_tracker.clear();
+        self.string_value_slot.clear();
+        self.pending_return_skip_slot.clear();
+        self.scope_str_stack.clear();
+        self.var_string_slot.clear();
+        self.var_string_slots_multi.clear();
+        self.phi_extra_slots.clear();
 
         // Non-generic function: substitutions should be empty, take avoids clone allocation
         let old_substitutions = std::mem::take(&mut self.generic_substitutions);
@@ -460,6 +478,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.mark_return_ownership_transfer_expr(&body_value, &body_expr.node);
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
@@ -494,6 +514,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.mark_return_ownership_transfer_block(&body_value, stmts);
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
@@ -604,6 +626,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.var_struct_types.clear();
         self.var_resolved_types.clear();
         self.defer_stack.clear();
+        self.alloc_tracker.clear();
+        self.string_value_slot.clear();
+        self.pending_return_skip_slot.clear();
+        self.scope_str_stack.clear();
+        self.var_string_slot.clear();
+        self.var_string_slots_multi.clear();
+        self.phi_extra_slots.clear();
 
         // Create entry block
         let entry = self.context.append_basic_block(fn_value, "entry");
@@ -678,6 +707,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.mark_return_ownership_transfer_expr(&body_value, &body_expr.node);
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
@@ -724,6 +755,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.mark_return_ownership_transfer_block(&body_value, stmts);
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)

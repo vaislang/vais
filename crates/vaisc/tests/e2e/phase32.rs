@@ -292,6 +292,7 @@ F main() -> i64 {
 
 // ===== Phase 34: Codegen Bug Fixes =====
 
+// REGRESSION(phase-34): enum unit variant tag mismatch — {i32} vs {i8,i64}
 #[test]
 fn e2e_enum_unit_variant_matching() {
     // Tests that enum unit variants correctly match their respective arms
@@ -332,6 +333,7 @@ F main() -> i64 {
     assert_exit_code(source, 60);
 }
 
+// REGRESSION(phase-34): struct by-value parameter field access ABI
 #[test]
 fn e2e_struct_by_value_parameter() {
     // Tests passing struct by value and accessing multiple fields
@@ -364,6 +366,7 @@ F main() -> i64 {
     assert_exit_code(source, 42);
 }
 
+// REGRESSION(phase-34): match arm phi node type mismatch for enum returns
 #[test]
 fn e2e_enum_return_from_match() {
     // Tests returning enum variants from match arms (phi node fix)

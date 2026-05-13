@@ -84,10 +84,10 @@ F default_resource_limits() -> ResourceLimit {
 F check_limits(used_memory: i64, used_time: i64, limits: ResourceLimit) -> i64 {
     I used_memory > limits.max_memory {
         0  # Exceeded
-    } E {
+    } EL {
         I used_time > limits.max_time {
             0  # Exceeded
-        } E {
+        } EL {
             1  # OK
         }
     }
@@ -109,7 +109,7 @@ C CAP_NETWORK: i64  = 32
 F has_cap(caps: i64, cap: i64) -> i64 {
     I (caps & cap) != 0 {
         1
-    } E {
+    } EL {
         0
     }
 }
@@ -158,19 +158,19 @@ F create_plugin_info(name: i64, major: i64, minor: i64, patch: i64) -> PluginInf
 F is_version_compatible(plugin: PluginInfo, req_major: i64, req_minor: i64, req_patch: i64) -> i64 {
     I plugin.version_major > req_major {
         1
-    } E {
+    } EL {
         I plugin.version_major < req_major {
             0
-        } E {
+        } EL {
             I plugin.version_minor > req_minor {
                 1
-            } E {
+            } EL {
                 I plugin.version_minor < req_minor {
                     0
-                } E {
+                } EL {
                     I plugin.version_patch >= req_patch {
                         1
-                    } E {
+                    } EL {
                         0
                     }
                 }
@@ -222,7 +222,7 @@ F hot_reload_change_detected(s: HotReloadState) -> HotReloadState {
             last_check: s.last_check,
             error_code: 0
         }
-    } E {
+    } EL {
         s
     }
 }
@@ -235,7 +235,7 @@ F hot_reload_compile_success(s: HotReloadState) -> HotReloadState {
             last_check: s.last_check,
             error_code: 0
         }
-    } E {
+    } EL {
         s
     }
 }
@@ -248,7 +248,7 @@ F hot_reload_load_success(s: HotReloadState) -> HotReloadState {
             last_check: 0,
             error_code: 0
         }
-    } E {
+    } EL {
         s
     }
 }
@@ -454,7 +454,7 @@ F main() -> i64 {
     I failed == 0 {
         puts("All 5 tests passed!")
         0
-    } E {
+    } EL {
         puts("Some tests failed.")
         1
     }

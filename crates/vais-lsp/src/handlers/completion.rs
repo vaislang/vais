@@ -182,7 +182,6 @@ fn keyword_completions() -> Vec<CompletionItem> {
             "Async function",
             "A F ${1:name}($2) -> ${3:type} {\n\t$0\n}",
         ),
-        ("spawn", "Spawn async task", "spawn ${1:expr}"),
         ("await", "Await async result", "await"),
         ("true", "Boolean true", "true"),
         ("false", "Boolean false", "false"),

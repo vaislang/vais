@@ -33,7 +33,6 @@
 - [ライフタイム & 借用チェック](../language/lifetimes.md)
 - [非同期プログラミング](../language/async-tutorial.md)
 - [クロージャ & ラムダ](../language/closures.md)
-- [遅延評価（Lazy/Force）](../language/lazy-evaluation.md)
 - [コンパイル時機能](../language/comptime-feature.md)
 
 # 標準ライブラリ
