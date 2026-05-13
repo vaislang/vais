@@ -351,7 +351,7 @@ mod tests {
 
     #[test]
     fn test_all_error_codes_unique() {
-        let errors = vec![
+        let errors = [
             CodegenError::UndefinedVar("x".into()),
             CodegenError::UndefinedFunction("f".into()),
             CodegenError::TypeError("t".into()),

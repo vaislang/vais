@@ -338,8 +338,8 @@ entry:
         let config = ParallelConfig::new(4);
         let cloned = config.clone();
         assert_eq!(cloned.num_threads, 4);
-        assert_eq!(cloned.parallel_parse, true);
-        assert_eq!(cloned.parallel_optimize, true);
+        assert!(cloned.parallel_parse);
+        assert!(cloned.parallel_optimize);
     }
 
     // ========== split_ir edge cases ==========
@@ -480,10 +480,11 @@ entry:
 
     #[test]
     fn test_parallel_stats_clone() {
-        let mut stats = ParallelStats::default();
-        stats.modules_parsed = 10;
-        stats.functions_optimized = 50;
-        stats.thread_count = 4;
+        let stats = ParallelStats {
+            modules_parsed: 10,
+            functions_optimized: 50,
+            thread_count: 4,
+        };
         let cloned = stats.clone();
         assert_eq!(cloned.modules_parsed, 10);
         assert_eq!(cloned.functions_optimized, 50);

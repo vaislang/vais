@@ -15,6 +15,11 @@
 //! - LLVM 17+ must be installed
 //! - Enable the `inkwell-codegen` feature
 
+// Inkwell 0.8 deprecates typed pointer constructors for LLVM opaque pointers.
+// This backend still uses typed pointer casts consistently; migrate the pointer
+// model in one dedicated pass instead of mixing pointer policies in this bump.
+#![allow(deprecated)]
+
 mod builtins;
 mod generator;
 mod types;

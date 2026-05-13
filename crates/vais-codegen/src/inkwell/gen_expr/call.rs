@@ -268,7 +268,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 return Ok(call
                     .try_as_basic_value()
-                    .left()
+                    .basic()
                     .unwrap_or_else(|| self.context.i64_type().const_int(0, false).into()));
             }
             "str_to_ptr" => {
@@ -322,7 +322,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 let len = len_call
                     .try_as_basic_value()
-                    .left()
+                    .basic()
                     .unwrap_or_else(|| self.context.i64_type().const_int(0, false).into())
                     .into_int_value();
                 // Build fat pointer { ptr, i64 }
@@ -374,7 +374,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 return Ok(call
                     .try_as_basic_value()
-                    .left()
+                    .basic()
                     .unwrap_or_else(|| self.context.i64_type().const_int(0, false).into()));
             }
             "__strlen" => {
@@ -393,7 +393,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 return Ok(call
                     .try_as_basic_value()
-                    .left()
+                    .basic()
                     .unwrap_or_else(|| self.context.i64_type().const_int(0, false).into()));
             }
             _ => {}
@@ -429,7 +429,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 return Ok(call
                     .try_as_basic_value()
-                    .left()
+                    .basic()
                     .unwrap_or_else(|| self.unit_value()));
             }
         }
@@ -523,12 +523,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         .build_call(malloc_fn, &[size_val.into()], "variant_multi_heap")
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                         .try_as_basic_value()
-                        .left()
+                        .basic()
                         .unwrap()
                         .into_pointer_value();
                     let typed_ptr = self
                         .builder
-                        .build_bitcast(
+                        .build_bit_cast(
                             heap_ptr,
                             payload_ty.ptr_type(AddressSpace::default()),
                             "variant_multi_typed",
@@ -597,13 +597,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                 .build_call(malloc_fn, &[size_val.into()], "variant_heap")
                                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                                 .try_as_basic_value()
-                                .left()
+                                .basic()
                                 .unwrap()
                                 .into_pointer_value();
                             // Store struct into heap memory
                             let typed_ptr = self
                                 .builder
-                                .build_bitcast(
+                                .build_bit_cast(
                                     heap_ptr,
                                     struct_ty.ptr_type(AddressSpace::default()),
                                     "variant_heap_typed",
@@ -629,7 +629,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                             let i64_ptr = self
                                 .builder
-                                .build_bitcast(
+                                .build_bit_cast(
                                     tmp_alloca,
                                     i64_ty.ptr_type(AddressSpace::default()),
                                     "variant_small_as_i64p",
@@ -743,7 +743,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Return call result or unit
         Ok(call
             .try_as_basic_value()
-            .left()
+            .basic()
             .unwrap_or_else(|| self.unit_value()))
     }
 
@@ -806,7 +806,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         Ok(call
             .try_as_basic_value()
-            .left()
+            .basic()
             .unwrap_or_else(|| i64_type.const_int(0, false).into()))
     }
 }

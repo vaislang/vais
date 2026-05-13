@@ -65,7 +65,7 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) -> 
             )
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
             .try_as_basic_value()
-            .left()
+            .basic()
             .ok_or("ICE: inkwell builtins: call returned void")?;
         builder
             .build_return(Some(&result))
@@ -150,7 +150,7 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) -> 
             )
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
             .try_as_basic_value()
-            .left()
+            .basic()
             .ok_or("ICE: inkwell builtins: call returned void")?;
         builder
             .build_return(Some(&result))

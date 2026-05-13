@@ -182,14 +182,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     /// Returns a default/zero value for a given LLVM type.
     pub(super) fn get_default_value(&self, ty: BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {
-        match ty {
-            BasicTypeEnum::IntType(it) => it.const_int(0, false).into(),
-            BasicTypeEnum::FloatType(ft) => ft.const_float(0.0).into(),
-            BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
-            BasicTypeEnum::StructType(st) => st.const_zero().into(),
-            BasicTypeEnum::ArrayType(at) => at.const_zero().into(),
-            BasicTypeEnum::VectorType(vt) => vt.const_zero().into(),
-        }
+        ty.const_zero()
     }
 
     // ========== Match Expression ==========
@@ -636,7 +629,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
                         let cmp_int = cmp_result
                             .try_as_basic_value()
-                            .left()
+                            .basic()
                             .ok_or_else(|| {
                                 CodegenError::LlvmError("strcmp returned void".to_string())
                             })?
@@ -910,7 +903,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                                     let typed_ptr = self
                                         .builder
-                                        .build_bitcast(
+                                        .build_bit_cast(
                                             tmp_alloca,
                                             struct_ty.ptr_type(AddressSpace::default()),
                                             "variant_small_typed",
@@ -946,7 +939,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             let data_i64 = data_val.into_int_value();
                             let decoded: BasicValueEnum<'ctx> = if decl_ty.is_float_type() {
                                 self.builder
-                                    .build_bitcast(
+                                    .build_bit_cast(
                                         data_i64,
                                         decl_ty.into_float_type(),
                                         "variant_i64_to_f",

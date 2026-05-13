@@ -40,7 +40,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             .build_call(malloc_fn, &[i64_type.const_int(16, false).into()], "ptr")
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
             .try_as_basic_value()
-            .left()
+            .basic()
             .ok_or("ICE: inkwell builtins: call returned void")?
             .into_pointer_value();
         let i32_ptr = builder
@@ -90,7 +90,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             .build_call(malloc_fn, &[i64_type.const_int(16, false).into()], "ptr")
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
             .try_as_basic_value()
-            .left()
+            .basic()
             .ok_or("ICE: inkwell builtins: call returned void")?
             .into_pointer_value();
         let f32_ptr = builder
@@ -135,7 +135,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             .build_call(malloc_fn, &[i64_type.const_int(16, false).into()], "ptr")
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
             .try_as_basic_value()
-            .left()
+            .basic()
             .ok_or("ICE: inkwell builtins: call returned void")?
             .into_pointer_value();
         let i64_ptr = builder
@@ -202,7 +202,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             .build_call(malloc_fn, &[i64_type.const_int(16, false).into()], "out")
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
             .try_as_basic_value()
-            .left()
+            .basic()
             .ok_or("ICE: inkwell builtins: call returned void")?
             .into_pointer_value();
         let out_i32 = builder
@@ -385,7 +385,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             .build_call(malloc_fn, &[i64_type.const_int(16, false).into()], "out")
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
             .try_as_basic_value()
-            .left()
+            .basic()
             .ok_or("ICE: inkwell builtins: call returned void")?
             .into_pointer_value();
         let out_f32 = builder
@@ -614,7 +614,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             .build_call(malloc_fn, &[i64_type.const_int(16, false).into()], "ptr")
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
             .try_as_basic_value()
-            .left()
+            .basic()
             .ok_or("ICE: inkwell builtins: call returned void")?
             .into_pointer_value();
         let f32_ptr = builder
@@ -714,7 +714,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             .build_call(malloc_fn, &[i64_type.const_int(16, false).into()], "out")
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
             .try_as_basic_value()
-            .left()
+            .basic()
             .ok_or("ICE: inkwell builtins: call returned void")?
             .into_pointer_value();
         let out_i64 = builder

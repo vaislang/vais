@@ -197,7 +197,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .build_call(strlen_fn, &[lhs_ptr.into()], "len1")
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                     .try_as_basic_value()
-                    .left()
+                    .basic()
                     .unwrap_or_else(|| i64_type.const_int(0, false).into())
                     .into_int_value();
                 let len2 = self
@@ -205,7 +205,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .build_call(strlen_fn, &[rhs_ptr.into()], "len2")
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                     .try_as_basic_value()
-                    .left()
+                    .basic()
                     .unwrap_or_else(|| i64_type.const_int(0, false).into())
                     .into_int_value();
 
@@ -225,7 +225,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .build_call(malloc_fn, &[alloc_len.into()], "str_buf")
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                     .try_as_basic_value()
-                    .left()
+                    .basic()
                     .unwrap_or_else(|| {
                         self.context
                             .i8_type()
@@ -353,7 +353,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     )
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                     .try_as_basic_value()
-                    .left()
+                    .basic()
                     .unwrap_or_else(|| self.context.i32_type().const_int(0, false).into())
                     .into_int_value();
                 let zero = cmp.get_type().const_zero();
