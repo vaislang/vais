@@ -1,0 +1,18 @@
+# Phase 84: Loop with break and accumulation
+F sum_to(n: i64) -> i64 {
+    i := mut 0
+    total := mut 0
+    L {
+        I i >= n { B }
+        i = i + 1
+        total = total + i
+    }
+    total
+}
+
+F main() -> i64 {
+    # sum_to(10) = 1+2+3+4+5+6+7+8+9+10 = 55
+    result := sum_to(10)
+    puts("loop break done")
+    result
+}

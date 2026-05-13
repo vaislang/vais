@@ -1,0 +1,23 @@
+# Phase 84: Bitwise operations
+F main() -> i64 {
+    a := 255   # 0xFF
+    b := 15    # 0x0F
+
+    # AND
+    c := a & b       # 15
+
+    # OR
+    d := 240 | 15    # 255
+
+    # XOR
+    e := 255 ^ 15    # 240
+
+    # SHL
+    f := 1 << 4       # 16
+
+    # SHR
+    g := 256 >> 4     # 16
+
+    puts("bitwise ops done")
+    c + f + g
+}

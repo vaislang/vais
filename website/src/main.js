@@ -1,3 +1,23 @@
+// Import i18n module
+import { initI18n, changeLanguage, getCurrentLanguage } from './i18n.js';
+
+// Initialize i18n on page load
+initI18n().then((lang) => {
+  console.log(`Language initialized: ${lang}`);
+});
+
+// Language selector event handler
+document.addEventListener('DOMContentLoaded', () => {
+  const langSelector = document.getElementById('lang-selector');
+  if (langSelector) {
+    langSelector.addEventListener('change', (e) => {
+      changeLanguage(e.target.value);
+    });
+    // Set initial value
+    langSelector.value = getCurrentLanguage();
+  }
+});
+
 // Copy to clipboard
 document.querySelectorAll('.copy-btn').forEach((btn) => {
   btn.addEventListener('click', async () => {
@@ -22,8 +42,9 @@ const navLinks = document.querySelector('.nav-links');
 
 if (toggle && navLinks) {
   toggle.addEventListener('click', () => {
-    navLinks.classList.toggle('open');
+    const isOpen = navLinks.classList.toggle('open');
     toggle.classList.toggle('active');
+    toggle.setAttribute('aria-expanded', isOpen);
   });
 
   // Close on link click
@@ -31,6 +52,7 @@ if (toggle && navLinks) {
     link.addEventListener('click', () => {
       navLinks.classList.remove('open');
       toggle.classList.remove('active');
+      toggle.setAttribute('aria-expanded', 'false');
     });
   });
 
@@ -39,6 +61,7 @@ if (toggle && navLinks) {
     if (!toggle.contains(e.target) && !navLinks.contains(e.target)) {
       navLinks.classList.remove('open');
       toggle.classList.remove('active');
+      toggle.setAttribute('aria-expanded', 'false');
     }
   });
 }
@@ -68,6 +91,20 @@ document.querySelectorAll('.code-tab').forEach((tab) => {
     document.querySelectorAll('.code-panel').forEach((p) => p.classList.remove('active'));
     tab.classList.add('active');
     document.querySelector(`.code-panel[data-panel="${idx}"]`)?.classList.add('active');
+  });
+});
+
+// Compare language tabs
+const tokenCounts = { rust: 'reference', python: 'reference', go: 'reference', c: 'reference' };
+document.querySelectorAll('.compare-tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    const lang = tab.dataset.lang;
+    document.querySelectorAll('.compare-tab').forEach((t) => t.classList.remove('active'));
+    document.querySelectorAll('.compare-lang-panel').forEach((p) => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelector(`.compare-lang-panel[data-lang="${lang}"]`)?.classList.add('active');
+    const counter = document.getElementById('compare-token-count');
+    if (counter && tokenCounts[lang]) counter.textContent = tokenCounts[lang];
   });
 });
 

@@ -84,7 +84,7 @@ mdBook의 내장 검색 기능이 자동으로 활성화됩니다. 추가 설정
 
 1. `main` 브랜치에 푸시하면 자동으로 빌드 및 배포
 2. GitHub Pages에 배포됨
-3. URL: `https://sswoo.github.io/vais/`
+3. URL: `https://vais.dev/docs/`
 
 수동 배포:
 

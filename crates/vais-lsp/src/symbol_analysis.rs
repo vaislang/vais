@@ -198,7 +198,7 @@ impl VaisBackend {
                     self.collect_expr_refs(elem, refs);
                 }
             }
-            Expr::StructLit { name, fields } => {
+            Expr::StructLit { name, fields, .. } => {
                 refs.push(SymbolRef {
                     name: name.node.clone(),
                     span: name.span,
@@ -211,7 +211,7 @@ impl VaisBackend {
                 self.collect_expr_refs(e, refs);
                 self.collect_expr_refs(index, refs);
             }
-            Expr::Await(inner) | Expr::Spawn(inner) => {
+            Expr::Await(inner) => {
                 self.collect_expr_refs(inner, refs);
             }
             Expr::Lambda { body, .. } => {
@@ -495,7 +495,7 @@ impl VaisBackend {
                 self.collect_calls_from_expr(caller, caller_span, e, entries);
                 self.collect_calls_from_expr(caller, caller_span, index, entries);
             }
-            Expr::Await(inner) | Expr::Spawn(inner) => {
+            Expr::Await(inner) => {
                 self.collect_calls_from_expr(caller, caller_span, inner, entries);
             }
             Expr::Lambda { body, .. } => {

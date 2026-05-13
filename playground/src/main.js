@@ -13,6 +13,10 @@ class Playground {
     this.compiler = new VaisCompiler();
     this.currentExample = null;
     this.isRunning = false;
+    this.currentTarget = 'native';
+    this._debounceTimer = null;
+    this._compilerInitialized = false;
+    this._compilerInitializing = false;
 
     this.init();
   }
@@ -28,16 +32,28 @@ class Playground {
     this.setupExamplesList();
     this.setupEventListeners();
 
-    // Load default example
-    this.loadExample('hello-world');
+    // Restore code from URL hash, or load default example
+    if (!this.restoreFromHash()) {
+      this.loadExample('hello-world');
+    }
 
-    // Initialize compiler
+    // Initialize compiler eagerly (server check is fast; WASM is lazy)
+    this._initCompiler();
+  }
+
+  async _initCompiler() {
+    if (this._compilerInitialized || this._compilerInitializing) return;
+    this._compilerInitializing = true;
     try {
       await this.compiler.initialize();
-      this.updateStatus('ready', 'Ready');
+      this._compilerInitialized = true;
+      const modeLabel = this.compiler.getModeLabel();
+      this.updateStatus('ready', `Ready (${modeLabel})`);
     } catch (error) {
       this.updateStatus('error', 'Compiler initialization failed');
       this.appendOutput(`Error: ${error.message}`, 'error');
+    } finally {
+      this._compilerInitializing = false;
     }
   }
 
@@ -78,6 +94,50 @@ class Playground {
       e?.preventDefault();
       this.formatCode();
     });
+
+    // Debounced real-time error checking on content change
+    this.editor.onDidChangeModelContent(() => {
+      clearTimeout(this._debounceTimer);
+      this._debounceTimer = setTimeout(() => {
+        this._runLiveErrorCheck();
+      }, 500);
+    });
+  }
+
+  async _runLiveErrorCheck() {
+    // Ensure compiler is initialized before checking
+    if (!this._compilerInitialized) {
+      await this._initCompiler();
+    }
+    const code = this.editor.getValue();
+    if (!code.trim()) {
+      monaco.editor.setModelMarkers(this.editor.getModel(), 'vais', []);
+      return;
+    }
+    try {
+      const result = await this.compiler.compileOnly(code);
+      const markers = (result.errors || []).map(err => ({
+        severity: monaco.MarkerSeverity.Error,
+        startLineNumber: err.line || 1,
+        startColumn: err.column || 1,
+        endLineNumber: err.line || 1,
+        endColumn: (err.column || 1) + (err.length || 1),
+        message: err.message,
+        source: 'vais',
+      }));
+      const warnMarkers = (result.warnings || []).map(w => ({
+        severity: monaco.MarkerSeverity.Warning,
+        startLineNumber: w.line || 1,
+        startColumn: w.column || 1,
+        endLineNumber: w.line || 1,
+        endColumn: (w.column || 1) + (w.length || 1),
+        message: w.message,
+        source: 'vais',
+      }));
+      monaco.editor.setModelMarkers(this.editor.getModel(), 'vais', [...markers, ...warnMarkers]);
+    } catch {
+      // Silently ignore live-check errors to not disrupt UX
+    }
   }
 
   setupExamplesList() {
@@ -130,6 +190,17 @@ class Playground {
       this.clearOutput();
     });
 
+    // Share button
+    document.getElementById('share-btn').addEventListener('click', () => {
+      this.shareCode();
+    });
+
+    // Target selector
+    document.getElementById('target-select').addEventListener('change', (e) => {
+      this.currentTarget = e.target.value;
+      this.updateRunButtonLabel();
+    });
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -137,6 +208,33 @@ class Playground {
         this.formatCode();
       }
     });
+  }
+
+  shareCode() {
+    const code = this.editor.getValue();
+    const encoded = btoa(unescape(encodeURIComponent(code)));
+    const url = `${window.location.origin}${window.location.pathname}#code=${encoded}`;
+    navigator.clipboard.writeText(url).then(() => {
+      this.appendOutput('Share URL copied to clipboard!', 'success');
+    }).catch(() => {
+      // Fallback: show the URL in output
+      this.appendOutput(`Share URL: ${url}`, 'info');
+    });
+    // Update browser URL without reloading
+    window.history.replaceState(null, '', url);
+  }
+
+  restoreFromHash() {
+    const hash = window.location.hash;
+    const match = hash.match(/^#code=(.+)$/);
+    if (!match) return false;
+    try {
+      const code = decodeURIComponent(escape(atob(match[1])));
+      this.editor.setValue(code);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   loadExample(key) {
@@ -163,20 +261,26 @@ class Playground {
     }
 
     this.isRunning = true;
-    this.updateStatus('running', 'Running...');
+    const actionLabel = this.currentTarget === 'js' ? 'Compiling...' : 'Running...';
+    this.updateStatus('running', actionLabel);
     this.setRunLoading(true);
     this.showOutputLoading();
 
     try {
       const code = this.editor.getValue();
 
-      // Compile and run
-      const result = await this.compiler.compileAndRun(code);
+      // Compile and run with selected target
+      const result = await this.compiler.compileAndRun(code, this.currentTarget);
 
       this.clearOutput();
 
       if (result.success) {
-        this.appendOutput('Compilation successful!', 'success');
+        const successMsg = this.currentTarget === 'js'
+          ? 'Compilation to JavaScript successful!'
+          : this.currentTarget === 'browser-js'
+            ? 'Browser compilation and execution successful!'
+            : 'Compilation successful!';
+        this.appendOutput(successMsg, 'success');
 
         // Show warnings if any
         if (result.warnings && result.warnings.length > 0) {
@@ -188,11 +292,18 @@ class Playground {
         // Show output
         if (result.output) {
           this.appendOutput('', 'line');
-          this.appendOutput('Output:', 'info');
+          if (this.currentTarget === 'js') {
+            this.appendOutput('Generated Code:', 'info');
+          } else {
+            this.appendOutput('Output:', 'info');
+          }
           this.appendOutput(result.output, 'line');
         }
 
-        this.updateStatus('success', 'Execution completed');
+        const statusMsg = this.currentTarget === 'js'
+          ? 'Compilation completed'
+          : 'Execution completed';
+        this.updateStatus('success', statusMsg);
       } else {
         this.appendOutput('Compilation failed!', 'error');
 
@@ -226,16 +337,28 @@ class Playground {
     const runBtn = document.getElementById('run-btn');
     if (loading) {
       runBtn.classList.add('loading');
-      runBtn.innerHTML = '<span class="btn-spinner"></span> Compiling...';
+      const label = this.currentTarget === 'js' ? 'Compiling...' : 'Compiling...';
+      runBtn.innerHTML = `<span class="btn-spinner"></span> ${label}`;
     } else {
       runBtn.classList.remove('loading');
-      runBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11.596 8.697l-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/></svg> Run';
+      this.updateRunButtonLabel();
     }
+  }
+
+  updateRunButtonLabel() {
+    const runBtn = document.getElementById('run-btn');
+    const label = this.currentTarget === 'js' ? 'Compile' : 'Run';
+    runBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11.596 8.697l-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/></svg> ${label}`;
   }
 
   showOutputLoading() {
     const output = document.getElementById('output');
-    output.innerHTML = '<div class="output-loading"><div class="output-loading-spinner"></div><span class="output-loading-text">Compiling and running...</span></div>';
+    const loadingText = this.currentTarget === 'js'
+      ? 'Compiling to JavaScript...'
+      : this.currentTarget === 'browser-js'
+        ? 'Compiling and running in browser...'
+        : 'Compiling and running...';
+    output.innerHTML = `<div class="output-loading"><div class="output-loading-spinner"></div><span class="output-loading-text">${loadingText}</span></div>`;
   }
 
   formatCode() {

@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/runtime
+use std/runtime
 ```
 
 ## Constants
@@ -233,7 +233,7 @@ Scoped task runner that guarantees cleanup on completion.
 ### Basic Async Runtime
 
 ```vais
-U std/runtime
+use std/runtime
 
 # Initialize runtime
 runtime_init()
@@ -248,7 +248,7 @@ run_all()
 ### I/O Reactor Runtime
 
 ```vais
-U std/runtime
+use std/runtime
 
 # Initialize reactor
 reactor_init()
@@ -263,9 +263,9 @@ reactor_run()
 ### Structured Concurrency
 
 ```vais
-U std/runtime
+use std/runtime
 
-F main() -> i64 {
+fn main() -> i64 {
     group := task_group()
     group.set_cancel_on_error(1)
 
@@ -287,9 +287,9 @@ F main() -> i64 {
 ### Scoped Tasks
 
 ```vais
-U std/runtime
+use std/runtime
 
-F main() -> i64 {
+fn main() -> i64 {
     scoped := scoped_task()
 
     scoped.spawn(future1, poll_fn1)

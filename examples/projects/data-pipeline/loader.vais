@@ -1,0 +1,118 @@
+# SQLite Loader Module
+# Saves transformed data to SQLite database
+
+S CsvRow {
+    name: str,
+    age: i64,
+    score: i64,
+}
+
+# Note: Actual SQLite integration would require FFI bindings
+# This is a simplified simulation writing to a text file
+
+X F fopen(path: str, mode: str) -> i64
+X F fprintf(file: i64, fmt: str, arg1: i64) -> i64
+X F fprintf_3(file: i64, fmt: str, arg1: str, arg2: i64, arg3: i64) -> i64
+X F fclose(file: i64) -> i64
+
+# Initialize database (create output file)
+F init_table(db_path: str) -> i64 {
+    puts("Initializing database table...")
+
+    f := fopen(db_path, "w")
+    I f == 0 {
+        puts("Error: Could not create database file")
+        R 0
+    }
+
+    # Write schema header
+    fprintf(f, "-- High Performers Table (score >= 85)\n", 0)
+    fprintf(f, "CREATE TABLE IF NOT EXISTS high_performers (\n", 0)
+    fprintf(f, "  name TEXT,\n", 0)
+    fprintf(f, "  age INTEGER,\n", 0)
+    fprintf(f, "  score INTEGER\n", 0)
+    fprintf(f, ");\n\n", 0)
+    fprintf(f, "BEGIN TRANSACTION;\n\n", 0)
+
+    R f
+}
+
+# Insert a single row
+F insert_row(f: i64, row: i64) {
+    name := load_i64(row)
+    age := load_i64(row + 8)
+    score := load_i64(row + 16)
+
+    # Write SQL INSERT statement
+    fprintf(f, "INSERT INTO high_performers VALUES (", 0)
+
+    # Format: ('name', age, score);
+    # Note: fprintf_3 is a custom extern for 3 args
+    fprintf_3(f, "'%s', %d, %d);\n", name, age, score)
+}
+
+# Commit and close database
+F finalize_db(f: i64) {
+    fprintf(f, "\nCOMMIT;\n", 0)
+    fprintf(f, "-- Total rows inserted above\n", 0)
+    fclose(f)
+    puts("Database transaction committed")
+}
+
+# Main loader function
+F load_to_database(rows: i64, count: i64, db_path: str) -> i64 {
+    puts("Loading data to database...")
+
+    f := init_table(db_path)
+    I f == 0 {
+        R 0
+    }
+
+    # Insert all rows
+    i := mut 0
+    L {
+        I i >= count { B }
+
+        row_ptr := rows + i * 24
+        insert_row(f, row_ptr)
+
+        i := i + 1
+    }
+
+    finalize_db(f)
+    printf("Successfully loaded %d rows\n", count)
+
+    R 1  # Success
+}
+
+# Alternative: Write to CSV instead of SQL
+F write_csv(rows: i64, count: i64, out_path: str) {
+    puts("Writing to CSV...")
+
+    f := fopen(out_path, "w")
+    I f == 0 {
+        puts("Error: Could not create output file")
+        R
+    }
+
+    # Write header
+    fprintf(f, "name,age,score\n", 0)
+
+    # Write data rows
+    i := mut 0
+    L {
+        I i >= count { B }
+
+        row_ptr := rows + i * 24
+        name := load_i64(row_ptr)
+        age := load_i64(row_ptr + 8)
+        score := load_i64(row_ptr + 16)
+
+        fprintf_3(f, "%s,%d,%d\n", name, age, score)
+
+        i := i + 1
+    }
+
+    fclose(f)
+    printf("Written %d rows to %s\n", count, out_path)
+}

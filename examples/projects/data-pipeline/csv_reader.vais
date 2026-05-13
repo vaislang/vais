@@ -1,0 +1,157 @@
+# CSV Reader Module
+# Parses CSV files and returns structured data
+
+# Row structure: stores parsed CSV row data
+S CsvRow {
+    name: str,
+    age: i64,
+    score: i64,
+}
+
+# Reads entire file into memory buffer
+F read_file(path: str) -> i64 {
+    h := fopen(path, "r")
+    I h == 0 {
+        R 0
+    }
+
+    # Allocate 64KB buffer for file contents
+    buf := malloc(65536)
+    pos := mut 0
+
+    L {
+        c := fgetc(h)
+        I c < 0 { B }
+        store_byte(buf + pos, c)
+        pos := pos + 1
+        I pos >= 65535 { B }  # Safety limit
+    }
+
+    store_byte(buf + pos, 0)  # Null terminator
+    fclose(h)
+    R buf
+}
+
+# Counts lines in buffer
+F count_lines(buf: i64) -> i64 {
+    count := mut 0
+    i := mut 0
+    L {
+        c := load_byte(buf + i)
+        I c == 0 { B }
+        I c == 10 { count := count + 1 }  # '\n' = 10
+        i := i + 1
+    }
+    R count
+}
+
+# Parses a single line into fields (name,age,score)
+F parse_line(line_start: i64, line_end: i64) -> i64 {
+    # Allocate space for 3 string pointers
+    fields := malloc(24)
+    field_idx := mut 0
+    start := mut line_start
+    i := mut line_start
+
+    L {
+        I i > line_end { B }
+        c := load_byte(i)
+
+        # Comma or end of line
+        I c == 44 | i == line_end {  # ',' = 44
+            # Copy field to heap
+            len := i - start
+            field := malloc(len + 1)
+
+            j := mut 0
+            L {
+                I j >= len { B }
+                store_byte(field + j, load_byte(start + j))
+                j := j + 1
+            }
+            store_byte(field + j, 0)
+
+            store_i64(fields + field_idx * 8, field)
+            field_idx := field_idx + 1
+            start := i + 1
+        }
+
+        i := i + 1
+    }
+
+    R fields
+}
+
+# Converts string to integer
+F str_to_int(s: i64) -> i64 {
+    result := mut 0
+    i := mut 0
+    L {
+        c := load_byte(s + i)
+        I c == 0 { B }
+        I c >= 48 & c <= 57 {  # '0'-'9'
+            result := result * 10 + (c - 48)
+        }
+        i := i + 1
+    }
+    R result
+}
+
+# Main CSV parsing function
+F read_csv(path: str) -> i64 {
+    puts("Reading CSV file...")
+
+    buf := read_file(path)
+    I buf == 0 {
+        puts("Error: Could not read file")
+        R 0
+    }
+
+    line_count := count_lines(buf)
+    I line_count < 2 {
+        puts("Error: CSV has no data rows")
+        R 0
+    }
+
+    # Allocate array for rows (skip header)
+    data_rows := line_count - 1
+    rows := malloc(data_rows * 24)  # CsvRow = 24 bytes
+
+    # Skip header line
+    i := mut 0
+    L {
+        c := load_byte(buf + i)
+        I c == 10 { i := i + 1; B }  # Found newline
+        i := i + 1
+    }
+
+    # Parse data rows
+    row_idx := mut 0
+    line_start := mut i
+
+    L {
+        c := load_byte(buf + i)
+        I c == 0 { B }
+
+        I c == 10 {  # End of line
+            fields := parse_line(line_start, i)
+
+            # Create CsvRow
+            row_ptr := rows + row_idx * 24
+            store_i64(row_ptr, load_i64(fields))      # name
+            store_i64(row_ptr + 8, str_to_int(load_i64(fields + 8)))   # age
+            store_i64(row_ptr + 16, str_to_int(load_i64(fields + 16))) # score
+
+            row_idx := row_idx + 1
+            line_start := i + 1
+        }
+
+        i := i + 1
+    }
+
+    # Return [count, rows_ptr]
+    result := malloc(16)
+    store_i64(result, data_rows)
+    store_i64(result + 8, rows)
+    R result
+}

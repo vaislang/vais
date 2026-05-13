@@ -1,4 +1,4 @@
-name: Deploy Documentation
+name: Build Documentation
 
 on:
   push:
@@ -7,16 +7,14 @@ on:
     paths:
       - 'docs-site/**'
       - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'docs-site/**'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
+# Note: GitHub Pages deployment is handled by website.yml which combines
+# the homepage, docs, and playground into a single deployment.
+# This workflow only validates that docs build correctly.
 
 jobs:
   build:
@@ -73,20 +71,3 @@ jobs:
           # Copy API docs into mdBook output
           mkdir -p docs-site/book/api
           cp -r target/doc/* docs-site/book/api/ 2>/dev/null || true
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./docs-site/book
-
-  deploy:
-    name: Deploy to GitHub Pages
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4

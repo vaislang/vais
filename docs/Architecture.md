@@ -4,6 +4,10 @@
 **Last Updated**: 2026-01-21
 **Status**: Production-Ready
 
+## Quick Start
+
+- Fast overview (with structure + runtime flow diagrams): `docs/ARCHITECTURE_AT_A_GLANCE.md`
+
 ## Table of Contents
 
 1. [Overview](#overview)
@@ -1473,7 +1477,7 @@ entry:
 }  ; %x automatically freed when function returns
 ```
 
-**Heap allocation** (Box<T>):
+**Heap allocation** (`Box<T>`):
 ```vais
 b:Box<Point> = Box.new(Point{x:1,y:2})
 ```

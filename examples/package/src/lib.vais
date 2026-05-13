@@ -13,7 +13,7 @@ S pub Person {
 }
 
 # Implementation block
-impl Person {
+X Person {
     F pub new(name: str, age: i64) -> Person {
         Person { name: name, age: age }
     }

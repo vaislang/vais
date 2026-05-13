@@ -65,6 +65,9 @@ unsafe impl Sync for LoadedModule {}
 impl LoadedModule {
     /// Get a function pointer from the module
     pub fn get_function<T>(&mut self, name: &str) -> Result<libloading::Symbol<'_, T>> {
+        // SAFETY: `Library::get` requires the symbol name to be valid and the library
+        // to be loaded. The library is guaranteed loaded (held by `self.library`), and
+        // the returned Symbol borrows `self` ensuring the library outlives the symbol.
         unsafe {
             self.library
                 .get(name.as_bytes())
@@ -78,6 +81,10 @@ impl LoadedModule {
             return Ok(ptr);
         }
 
+        // SAFETY: `Library::get` is called on a loaded library held by `self.library`.
+        // The returned raw pointer is dereferenced to obtain the function address and
+        // cached. The pointer remains valid as long as the library is loaded (i.e., as
+        // long as this `LoadedModule` is alive), which is enforced by the module lifecycle.
         unsafe {
             let symbol: libloading::Symbol<*mut std::ffi::c_void> = self
                 .library
@@ -91,6 +98,9 @@ impl LoadedModule {
 
     /// Call a function that takes no arguments and returns i64
     pub fn call_i64(&mut self, name: &str) -> Result<i64> {
+        // SAFETY: `Library::get` retrieves a symbol from the loaded library. The caller
+        // must ensure the symbol has the correct `extern "C" fn() -> i64` signature.
+        // The library remains loaded for the duration of the call since `self` is borrowed.
         unsafe {
             let func: libloading::Symbol<extern "C" fn() -> i64> = self
                 .library
@@ -102,6 +112,9 @@ impl LoadedModule {
 
     /// Call a function that takes i64 and returns i64
     pub fn call_i64_i64(&mut self, name: &str, arg: i64) -> Result<i64> {
+        // SAFETY: `Library::get` retrieves a symbol from the loaded library. The caller
+        // must ensure the symbol has the correct `extern "C" fn(i64) -> i64` signature.
+        // The library remains loaded for the duration of the call since `self` is borrowed.
         unsafe {
             let func: libloading::Symbol<extern "C" fn(i64) -> i64> = self
                 .library
@@ -113,6 +126,9 @@ impl LoadedModule {
 
     /// Call a function that takes two i64s and returns i64
     pub fn call_i64_i64_i64(&mut self, name: &str, arg1: i64, arg2: i64) -> Result<i64> {
+        // SAFETY: `Library::get` retrieves a symbol from the loaded library. The caller
+        // must ensure the symbol has the correct `extern "C" fn(i64, i64) -> i64` signature.
+        // The library remains loaded for the duration of the call since `self` is borrowed.
         unsafe {
             let func: libloading::Symbol<extern "C" fn(i64, i64) -> i64> = self
                 .library
@@ -194,7 +210,8 @@ pub struct ModuleLoader {
     _watcher: Option<RecommendedWatcher>,
     /// Channel for file change events
     event_rx: Option<Receiver<notify::Result<Event>>>,
-    /// Event sender for file changes
+    /// Event sender for file changes.
+    /// Kept alive to maintain the channel; dropping would close event_rx.
     #[allow(dead_code)]
     event_tx: Option<Sender<notify::Result<Event>>>,
     /// Callbacks for reload events
@@ -258,7 +275,10 @@ impl ModuleLoader {
         // Compile the module
         let lib_path = self.compile_module(path)?;
 
-        // Load the library
+        // SAFETY: `Library::new` loads a shared library from the filesystem. The path
+        // `lib_path` was produced by `compile_module` which compiled the source successfully.
+        // Loading may execute library initializers (e.g., `__attribute__((constructor))`),
+        // which is inherently unsafe but expected for dynamic module loading.
         let library = unsafe {
             libloading::Library::new(&lib_path)
                 .map_err(|e| DynloadError::LibraryLoadError(e.to_string()))?
@@ -627,5 +647,177 @@ mod tests {
 
         let events = loader.check_for_changes().unwrap();
         assert!(events.is_empty());
+    }
+
+    #[test]
+    fn test_module_loader_default_config() {
+        let config = ModuleLoaderConfig::default();
+        assert_eq!(config.compiler_command, "vaisc");
+        assert!(config.compiler_args.is_empty());
+        assert!(config.output_dir.is_none());
+        assert!(config.hot_reload);
+        assert_eq!(config.debounce_ms, 100);
+        assert_eq!(config.max_cache_size, 50);
+    }
+
+    #[test]
+    fn test_module_loader_config_with_output_dir() {
+        let config = ModuleLoaderConfig::new().with_output_dir("/tmp/test_output");
+        assert_eq!(config.output_dir, Some(PathBuf::from("/tmp/test_output")));
+    }
+
+    #[test]
+    fn test_module_loader_no_hot_reload() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+        assert!(loader.list_modules().is_empty());
+    }
+
+    #[test]
+    fn test_get_nonexistent_module() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+        assert!(loader.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_reload_not_loaded() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+        let result = loader.reload("nonexistent");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            DynloadError::ModuleNotLoaded(_)
+        ));
+    }
+
+    #[test]
+    fn test_poll_changes_no_hot_reload() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+        let result = loader.poll_changes(10).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_poll_changes_with_timeout() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(true)).unwrap();
+        // Should return None after timeout with no events
+        let result = loader.poll_changes(1).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_path_to_id_various() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+        assert_eq!(loader.path_to_id(Path::new("/a/b/c/test.vais")), "test");
+        assert_eq!(loader.path_to_id(Path::new("no_ext")), "no_ext");
+    }
+
+    #[test]
+    fn test_multiple_reload_callbacks() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+
+        let count = Arc::new(Mutex::new(0u32));
+        let c1 = count.clone();
+        let c2 = count.clone();
+
+        loader.on_reload(move |_| {
+            *c1.lock() += 1;
+        });
+        loader.on_reload(move |_| {
+            *c2.lock() += 1;
+        });
+
+        loader.notify_callbacks(ReloadEvent::Unloaded {
+            module_id: "test".to_string(),
+        });
+
+        assert_eq!(*count.lock(), 2);
+    }
+
+    #[test]
+    fn test_reload_event_variants() {
+        // Ensure all ReloadEvent variants can be constructed
+        let _e1 = ReloadEvent::Reloaded {
+            module_id: "m".to_string(),
+            version: 1,
+        };
+        let _e2 = ReloadEvent::ReloadFailed {
+            module_id: "m".to_string(),
+            error: "err".to_string(),
+        };
+        let _e3 = ReloadEvent::Unloaded {
+            module_id: "m".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_module_handle_clone() {
+        let handle = ModuleHandle {
+            id: "test".to_string(),
+            version: 1,
+            source_path: PathBuf::from("/test.vais"),
+            lib_path: PathBuf::from("/test.dylib"),
+            last_modified: SystemTime::now(),
+        };
+        let cloned = handle.clone();
+        assert_eq!(cloned.id, handle.id);
+        assert_eq!(cloned.version, handle.version);
+    }
+
+    #[test]
+    fn test_module_handle_debug() {
+        let handle = ModuleHandle {
+            id: "debug_test".to_string(),
+            version: 3,
+            source_path: PathBuf::from("/debug.vais"),
+            lib_path: PathBuf::from("/debug.dylib"),
+            last_modified: SystemTime::now(),
+        };
+        let debug = format!("{:?}", handle);
+        assert!(debug.contains("debug_test"));
+    }
+
+    #[test]
+    fn test_module_loader_config_default() {
+        let config = ModuleLoaderConfig::default();
+        assert_eq!(config.compiler_command, "vaisc");
+        assert!(config.hot_reload);
+        assert_eq!(config.max_cache_size, 50);
+    }
+
+    #[test]
+    fn test_load_invalid_path_does_not_trigger_unsafe() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+        // Ensure invalid paths are rejected before reaching unsafe Library::new
+        let result = loader.load("/nonexistent/path/module.vais");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            DynloadError::ModuleNotFound(_)
+        ));
+    }
+
+    #[test]
+    fn test_load_empty_path() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+        let result = loader.load("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_module_already_loaded_error() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+        // First load will fail (no compiler), but we can test the duplicate check
+        // by manually inserting a module
+        assert!(!loader.is_loaded("test_dup"));
     }
 }

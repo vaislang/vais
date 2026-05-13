@@ -197,7 +197,7 @@ X StringPool {
             self.data = new_data
             self.data_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         # Grow offsets if needed
         I self.count >= self.offset_cap {
@@ -208,7 +208,7 @@ X StringPool {
             self.offsets = new_offsets
             self.offset_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         # Copy string data
         memcpy(self.data + self.data_len, ptr, len)
@@ -1070,7 +1070,7 @@ X Module {
             self.items_ptr = new_ptr
             self.items_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         ptr := self.items_ptr + self.items_len * 32
         store_i64(ptr + 0, kind)
@@ -1103,7 +1103,7 @@ X Module {
             self.sp_data = new_data
             self.sp_data_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         # Grow offsets if needed
         I self.sp_count >= self.sp_offset_cap {
@@ -1114,7 +1114,7 @@ X Module {
             self.sp_offsets = new_offsets
             self.sp_offset_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         # Copy string data
         memcpy(self.sp_data + self.sp_data_len, ptr, len)
@@ -1198,7 +1198,7 @@ X WhereClause {
 # Print indentation
 F print_indent(depth: i64) -> i64 {
     i := 0
-    L i < depth {
+    LW i < depth {
         puts("  ")
         i = i + 1
     }
@@ -1208,87 +1208,87 @@ F print_indent(depth: i64) -> i64 {
 # Print expression kind name
 F print_expr_kind(kind: i64) -> i64 {
     I kind == EXPR_INT() { puts("INT") }
-    E I kind == EXPR_FLOAT() { puts("FLOAT") }
-    E I kind == EXPR_BOOL() { puts("BOOL") }
-    E I kind == EXPR_STRING() { puts("STRING") }
-    E I kind == EXPR_UNIT() { puts("UNIT") }
-    E I kind == EXPR_IDENT() { puts("IDENT") }
-    E I kind == EXPR_SELF_CALL() { puts("SELF_CALL") }
-    E I kind == EXPR_BINARY() { puts("BINARY") }
-    E I kind == EXPR_UNARY() { puts("UNARY") }
-    E I kind == EXPR_TERNARY() { puts("TERNARY") }
-    E I kind == EXPR_IF() { puts("IF") }
-    E I kind == EXPR_LOOP() { puts("LOOP") }
-    E I kind == EXPR_WHILE() { puts("WHILE") }
-    E I kind == EXPR_MATCH() { puts("MATCH") }
-    E I kind == EXPR_CALL() { puts("CALL") }
-    E I kind == EXPR_METHOD_CALL() { puts("METHOD_CALL") }
-    E I kind == EXPR_STATIC_CALL() { puts("STATIC_CALL") }
-    E I kind == EXPR_FIELD() { puts("FIELD") }
-    E I kind == EXPR_INDEX() { puts("INDEX") }
-    E I kind == EXPR_ARRAY() { puts("ARRAY") }
-    E I kind == EXPR_TUPLE() { puts("TUPLE") }
-    E I kind == EXPR_STRUCT_LIT() { puts("STRUCT_LIT") }
-    E I kind == EXPR_RANGE() { puts("RANGE") }
-    E I kind == EXPR_BLOCK() { puts("BLOCK") }
-    E I kind == EXPR_AWAIT() { puts("AWAIT") }
-    E I kind == EXPR_TRY() { puts("TRY") }
-    E I kind == EXPR_UNWRAP() { puts("UNWRAP") }
-    E I kind == EXPR_REF() { puts("REF") }
-    E I kind == EXPR_DEREF() { puts("DEREF") }
-    E I kind == EXPR_ASSIGN() { puts("ASSIGN") }
-    E I kind == EXPR_ASSIGN_OP() { puts("ASSIGN_OP") }
-    E I kind == EXPR_LAMBDA() { puts("LAMBDA") }
-    E I kind == EXPR_SPAWN() { puts("SPAWN") }
-    E { puts("UNKNOWN") }
+    EL I kind == EXPR_FLOAT() { puts("FLOAT") }
+    EL I kind == EXPR_BOOL() { puts("BOOL") }
+    EL I kind == EXPR_STRING() { puts("STRING") }
+    EL I kind == EXPR_UNIT() { puts("UNIT") }
+    EL I kind == EXPR_IDENT() { puts("IDENT") }
+    EL I kind == EXPR_SELF_CALL() { puts("SELF_CALL") }
+    EL I kind == EXPR_BINARY() { puts("BINARY") }
+    EL I kind == EXPR_UNARY() { puts("UNARY") }
+    EL I kind == EXPR_TERNARY() { puts("TERNARY") }
+    EL I kind == EXPR_IF() { puts("IF") }
+    EL I kind == EXPR_LOOP() { puts("LOOP") }
+    EL I kind == EXPR_WHILE() { puts("WHILE") }
+    EL I kind == EXPR_MATCH() { puts("MATCH") }
+    EL I kind == EXPR_CALL() { puts("CALL") }
+    EL I kind == EXPR_METHOD_CALL() { puts("METHOD_CALL") }
+    EL I kind == EXPR_STATIC_CALL() { puts("STATIC_CALL") }
+    EL I kind == EXPR_FIELD() { puts("FIELD") }
+    EL I kind == EXPR_INDEX() { puts("INDEX") }
+    EL I kind == EXPR_ARRAY() { puts("ARRAY") }
+    EL I kind == EXPR_TUPLE() { puts("TUPLE") }
+    EL I kind == EXPR_STRUCT_LIT() { puts("STRUCT_LIT") }
+    EL I kind == EXPR_RANGE() { puts("RANGE") }
+    EL I kind == EXPR_BLOCK() { puts("BLOCK") }
+    EL I kind == EXPR_AWAIT() { puts("AWAIT") }
+    EL I kind == EXPR_TRY() { puts("TRY") }
+    EL I kind == EXPR_UNWRAP() { puts("UNWRAP") }
+    EL I kind == EXPR_REF() { puts("REF") }
+    EL I kind == EXPR_DEREF() { puts("DEREF") }
+    EL I kind == EXPR_ASSIGN() { puts("ASSIGN") }
+    EL I kind == EXPR_ASSIGN_OP() { puts("ASSIGN_OP") }
+    EL I kind == EXPR_LAMBDA() { puts("LAMBDA") }
+    EL I kind == EXPR_SPAWN() { puts("SPAWN") }
+    EL { puts("UNKNOWN") }
     0
 }
 
 # Print statement kind name
 F print_stmt_kind(kind: i64) -> i64 {
     I kind == STMT_LET() { puts("LET") }
-    E I kind == STMT_EXPR() { puts("EXPR") }
-    E I kind == STMT_RETURN() { puts("RETURN") }
-    E I kind == STMT_BREAK() { puts("BREAK") }
-    E I kind == STMT_CONTINUE() { puts("CONTINUE") }
-    E { puts("UNKNOWN") }
+    EL I kind == STMT_EXPR() { puts("EXPR") }
+    EL I kind == STMT_RETURN() { puts("RETURN") }
+    EL I kind == STMT_BREAK() { puts("BREAK") }
+    EL I kind == STMT_CONTINUE() { puts("CONTINUE") }
+    EL { puts("UNKNOWN") }
     0
 }
 
 # Print item kind name
 F print_item_kind(kind: i64) -> i64 {
     I kind == ITEM_FUNCTION() { puts("FUNCTION") }
-    E I kind == ITEM_STRUCT() { puts("STRUCT") }
-    E I kind == ITEM_ENUM() { puts("ENUM") }
-    E I kind == ITEM_TYPE_ALIAS() { puts("TYPE_ALIAS") }
-    E I kind == ITEM_USE() { puts("USE") }
-    E I kind == ITEM_TRAIT() { puts("TRAIT") }
-    E I kind == ITEM_IMPL() { puts("IMPL") }
-    E { puts("UNKNOWN") }
+    EL I kind == ITEM_STRUCT() { puts("STRUCT") }
+    EL I kind == ITEM_ENUM() { puts("ENUM") }
+    EL I kind == ITEM_TYPE_ALIAS() { puts("TYPE_ALIAS") }
+    EL I kind == ITEM_USE() { puts("USE") }
+    EL I kind == ITEM_TRAIT() { puts("TRAIT") }
+    EL I kind == ITEM_IMPL() { puts("IMPL") }
+    EL { puts("UNKNOWN") }
     0
 }
 
 # Print binary operator name
 F print_binop(op: i64) -> i64 {
     I op == BINOP_ADD() { puts("+") }
-    E I op == BINOP_SUB() { puts("-") }
-    E I op == BINOP_MUL() { puts("*") }
-    E I op == BINOP_DIV() { puts("/") }
-    E I op == BINOP_MOD() { puts("%") }
-    E I op == BINOP_LT() { puts("<") }
-    E I op == BINOP_LTE() { puts("<=") }
-    E I op == BINOP_GT() { puts(">") }
-    E I op == BINOP_GTE() { puts(">=") }
-    E I op == BINOP_EQ() { puts("==") }
-    E I op == BINOP_NEQ() { puts("!=") }
-    E I op == BINOP_AND() { puts("&&") }
-    E I op == BINOP_OR() { puts("||") }
-    E I op == BINOP_BIT_AND() { puts("&") }
-    E I op == BINOP_BIT_OR() { puts("|") }
-    E I op == BINOP_BIT_XOR() { puts("^") }
-    E I op == BINOP_SHL() { puts("<<") }
-    E I op == BINOP_SHR() { puts(">>") }
-    E { puts("?") }
+    EL I op == BINOP_SUB() { puts("-") }
+    EL I op == BINOP_MUL() { puts("*") }
+    EL I op == BINOP_DIV() { puts("/") }
+    EL I op == BINOP_MOD() { puts("%") }
+    EL I op == BINOP_LT() { puts("<") }
+    EL I op == BINOP_LTE() { puts("<=") }
+    EL I op == BINOP_GT() { puts(">") }
+    EL I op == BINOP_GTE() { puts(">=") }
+    EL I op == BINOP_EQ() { puts("==") }
+    EL I op == BINOP_NEQ() { puts("!=") }
+    EL I op == BINOP_AND() { puts("&&") }
+    EL I op == BINOP_OR() { puts("||") }
+    EL I op == BINOP_BIT_AND() { puts("&") }
+    EL I op == BINOP_BIT_OR() { puts("|") }
+    EL I op == BINOP_BIT_XOR() { puts("^") }
+    EL I op == BINOP_SHL() { puts("<<") }
+    EL I op == BINOP_SHR() { puts(">>") }
+    EL { puts("?") }
     0
 }
 
@@ -1318,7 +1318,7 @@ F print_expr(expr_ptr: i64, pool_ptr: i64, depth: i64) -> i64 {
         puts("right:\n")
         print_expr(right_ptr, pool_ptr, depth + 2)
         0
-    } E { 0 }
+    } EL { 0 }
 
     0
 }
@@ -1336,7 +1336,7 @@ F visit_module_items(mod_ptr: i64, visitor_fn: i64, ctx: i64) -> i64 {
     items_len := load_i64(mod_ptr + 8)
 
     i := 0
-    L i < items_len {
+    LW i < items_len {
         item_ptr := items_ptr + i * 32
         # Call visitor function with (item_ptr, ctx) -> i64
         # Note: function pointers not yet fully supported, this is a placeholder
@@ -1359,14 +1359,14 @@ F visit_expr_tree(expr_ptr: i64, visitor_fn: i64, ctx: i64) -> i64 {
         visit_expr_tree(left_ptr, visitor_fn, ctx)
         visit_expr_tree(right_ptr, visitor_fn, ctx)
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Visit unary expression child
     I expr_kind == EXPR_UNARY() {
         child_ptr := load_i64(expr_ptr + 24)
         visit_expr_tree(child_ptr, visitor_fn, ctx)
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Visit call arguments
     I expr_kind == EXPR_CALL() {
@@ -1377,13 +1377,13 @@ F visit_expr_tree(expr_ptr: i64, visitor_fn: i64, ctx: i64) -> i64 {
         visit_expr_tree(func_ptr, visitor_fn, ctx)
 
         i := 0
-        L i < args_len {
+        LW i < args_len {
             arg_ptr := args_ptr + i * 72
             visit_expr_tree(arg_ptr, visitor_fn, ctx)
             i = i + 1
         }
         0
-    } E { 0 }
+    } EL { 0 }
 
     0
 }
@@ -1394,16 +1394,16 @@ F visit_expr_tree(expr_ptr: i64, visitor_fn: i64, ctx: i64) -> i64 {
 
 F binop_precedence(op: i64) -> i64 {
     I op == BINOP_OR() { 1 }
-    E I op == BINOP_AND() { 2 }
-    E I op == BINOP_BIT_OR() { 3 }
-    E I op == BINOP_BIT_XOR() { 4 }
-    E I op == BINOP_BIT_AND() { 5 }
-    E I op == BINOP_EQ() || op == BINOP_NEQ() { 6 }
-    E I op == BINOP_LT() || op == BINOP_LTE() || op == BINOP_GT() || op == BINOP_GTE() { 7 }
-    E I op == BINOP_SHL() || op == BINOP_SHR() { 8 }
-    E I op == BINOP_ADD() || op == BINOP_SUB() { 9 }
-    E I op == BINOP_MUL() || op == BINOP_DIV() || op == BINOP_MOD() { 10 }
-    E { 0 }
+    EL I op == BINOP_AND() { 2 }
+    EL I op == BINOP_BIT_OR() { 3 }
+    EL I op == BINOP_BIT_XOR() { 4 }
+    EL I op == BINOP_BIT_AND() { 5 }
+    EL I op == BINOP_EQ() || op == BINOP_NEQ() { 6 }
+    EL I op == BINOP_LT() || op == BINOP_LTE() || op == BINOP_GT() || op == BINOP_GTE() { 7 }
+    EL I op == BINOP_SHL() || op == BINOP_SHR() { 8 }
+    EL I op == BINOP_ADD() || op == BINOP_SUB() { 9 }
+    EL I op == BINOP_MUL() || op == BINOP_DIV() || op == BINOP_MOD() { 10 }
+    EL { 0 }
 }
 
 # ============================================================================
@@ -1427,7 +1427,7 @@ F test_ast_main() -> i64 {
     idx := m.intern_string(test_str, 5)
     I idx == 0 {
         puts("String interning: OK")
-    } E {
+    } EL {
         puts("String interning: FAIL")
     }
 
@@ -1436,7 +1436,7 @@ F test_ast_main() -> i64 {
     len := m.get_string_len(0)
     I len == 5 {
         puts("String retrieval: OK")
-    } E {
+    } EL {
         puts("String retrieval: FAIL")
     }
 
@@ -1444,7 +1444,7 @@ F test_ast_main() -> i64 {
     expr := ExprNode.int_lit(42, 0, 2)
     I expr.kind == EXPR_INT() && expr.field0 == 42 {
         puts("ExprNode int_lit: OK")
-    } E {
+    } EL {
         puts("ExprNode int_lit: FAIL")
     }
 
@@ -1452,7 +1452,7 @@ F test_ast_main() -> i64 {
     bin_expr := ExprNode.binary(0, 0, BINOP_ADD(), 0, 5)
     I bin_expr.kind == EXPR_BINARY() && bin_expr.field2 == BINOP_ADD() {
         puts("ExprNode binary: OK")
-    } E {
+    } EL {
         puts("ExprNode binary: FAIL")
     }
 
@@ -1460,7 +1460,7 @@ F test_ast_main() -> i64 {
     stmt := StmtNode.return_stmt(0, 0, 1)
     I stmt.kind == STMT_RETURN() {
         puts("StmtNode return: OK")
-    } E {
+    } EL {
         puts("StmtNode return: FAIL")
     }
 
@@ -1468,7 +1468,7 @@ F test_ast_main() -> i64 {
     ty := TypeNode.named(0, 0, 0, 0, 3)
     I ty.kind == TYPE_NAMED() {
         puts("TypeNode named: OK")
-    } E {
+    } EL {
         puts("TypeNode named: FAIL")
     }
 
@@ -1476,7 +1476,7 @@ F test_ast_main() -> i64 {
     func := FunctionDef.new(0, 0, 10)
     I func.name_idx == 0 && func.span_end == 10 {
         puts("FunctionDef: OK")
-    } E {
+    } EL {
         puts("FunctionDef: FAIL")
     }
 
@@ -1484,7 +1484,7 @@ F test_ast_main() -> i64 {
     m.add_item_fields(ITEM_FUNCTION(), 0, 0, 10)
     I m.items_len == 1 {
         puts("Module.add_item_fields: OK")
-    } E {
+    } EL {
         puts("Module.add_item_fields: FAIL")
     }
 
@@ -1492,14 +1492,14 @@ F test_ast_main() -> i64 {
     pat := PatternNode.wildcard(0, 1)
     I pat.kind == PAT_WILDCARD() {
         puts("PatternNode wildcard: OK")
-    } E {
+    } EL {
         puts("PatternNode wildcard: FAIL")
     }
 
     # Test binop_precedence
     I binop_precedence(BINOP_MUL()) > binop_precedence(BINOP_ADD()) {
         puts("Operator precedence: OK")
-    } E {
+    } EL {
         puts("Operator precedence: FAIL")
     }
 
@@ -1507,7 +1507,7 @@ F test_ast_main() -> i64 {
     trait_bound := TraitBound.new(0, 0, 5)
     I trait_bound.trait_name_idx == 0 && trait_bound.span_end == 5 {
         puts("TraitBound: OK")
-    } E {
+    } EL {
         puts("TraitBound: FAIL")
     }
 
@@ -1515,7 +1515,7 @@ F test_ast_main() -> i64 {
     where_clause := WhereClause.new(0, 0, 10)
     I where_clause.type_param_idx == 0 && where_clause.span_end == 10 {
         puts("WhereClause: OK")
-    } E {
+    } EL {
         puts("WhereClause: FAIL")
     }
 

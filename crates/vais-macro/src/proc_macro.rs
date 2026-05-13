@@ -552,4 +552,146 @@ mod tests {
         let result = mac.attribute(TokenStream::new(), TokenStream::new());
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_line_macro() {
+        let mac = LineMacro;
+        let output = mac.expand(TokenStream::new()).unwrap();
+        assert_eq!(output.len(), 1);
+        match &output.tokens[0] {
+            TokenTree::Literal(LiteralToken::Integer(_)) => {}
+            _ => panic!("expected integer literal"),
+        }
+    }
+
+    #[test]
+    fn test_file_macro() {
+        let mac = FileMacro;
+        let output = mac.expand(TokenStream::new()).unwrap();
+        assert_eq!(output.len(), 1);
+        match &output.tokens[0] {
+            TokenTree::Literal(LiteralToken::String(s)) => {
+                assert_eq!(s, "unknown");
+            }
+            _ => panic!("expected string literal"),
+        }
+    }
+
+    #[test]
+    fn test_column_macro() {
+        let mac = ColumnMacro;
+        let output = mac.expand(TokenStream::new()).unwrap();
+        assert_eq!(output.len(), 1);
+        match &output.tokens[0] {
+            TokenTree::Literal(LiteralToken::Integer(_)) => {}
+            _ => panic!("expected integer literal"),
+        }
+    }
+
+    #[test]
+    fn test_env_macro_with_existing_var() {
+        let mac = EnvMacro;
+        std::env::set_var("TEST_VAR_FOR_VAIS", "test_value");
+        let input = TokenStream::from_tokens(vec![TokenTree::Literal(LiteralToken::String(
+            "TEST_VAR_FOR_VAIS".to_string(),
+        ))]);
+        let output = mac.expand(input).unwrap();
+        match &output.tokens[0] {
+            TokenTree::Literal(LiteralToken::String(s)) => {
+                assert_eq!(s, "test_value");
+            }
+            _ => panic!("expected string literal"),
+        }
+        std::env::remove_var("TEST_VAR_FOR_VAIS");
+    }
+
+    #[test]
+    fn test_env_macro_with_missing_var() {
+        let mac = EnvMacro;
+        let input = TokenStream::from_tokens(vec![TokenTree::Literal(LiteralToken::String(
+            "NONEXISTENT_VAR_12345".to_string(),
+        ))]);
+        let output = mac.expand(input).unwrap();
+        match &output.tokens[0] {
+            TokenTree::Literal(LiteralToken::String(s)) => {
+                assert_eq!(s, "");
+            }
+            _ => panic!("expected string literal"),
+        }
+    }
+
+    #[test]
+    fn test_concat_with_numbers() {
+        let mac = ConcatMacro;
+        let input = TokenStream::from_tokens(vec![
+            TokenTree::Literal(LiteralToken::String("count: ".to_string())),
+            punct(','),
+            TokenTree::Literal(LiteralToken::Integer(42)),
+        ]);
+        let output = mac.expand(input).unwrap();
+        match &output.tokens[0] {
+            TokenTree::Literal(LiteralToken::String(s)) => {
+                assert_eq!(s, "count: 42");
+            }
+            _ => panic!("expected string literal"),
+        }
+    }
+
+    #[test]
+    fn test_token_stream_extend() {
+        let mut stream1 = TokenStream::from_tokens(vec![ident("a"), punct(',')]);
+        let stream2 = TokenStream::from_tokens(vec![ident("b")]);
+
+        stream1.extend(stream2);
+        assert_eq!(stream1.len(), 3);
+        assert_eq!(stream1.to_source(), "a , b");
+    }
+
+    #[test]
+    fn test_token_stream_push() {
+        let mut stream = TokenStream::new();
+        stream.push(ident("hello"));
+        stream.push(punct('!'));
+
+        assert_eq!(stream.len(), 2);
+        assert_eq!(stream.to_source(), "hello !");
+    }
+
+    #[test]
+    fn test_nested_groups() {
+        let inner = TokenStream::from_tokens(vec![ident("x")]);
+        let middle = TokenStream::from_tokens(vec![group(Delimiter::Parenthesis, inner)]);
+        let outer = group(Delimiter::Bracket, middle);
+
+        assert_eq!(outer.to_source(), "[(x)]");
+    }
+
+    #[test]
+    fn test_literal_token_bool() {
+        let lit = LiteralToken::Bool(true);
+        assert_eq!(lit.to_source(), "true");
+
+        let lit = LiteralToken::Bool(false);
+        assert_eq!(lit.to_source(), "false");
+    }
+
+    #[test]
+    fn test_literal_token_char() {
+        let lit = LiteralToken::Char('a');
+        assert_eq!(lit.to_source(), "'a'");
+    }
+
+    #[test]
+    fn test_proc_macro_error_display() {
+        let err = ProcMacroError::new("test error");
+        assert_eq!(err.to_string(), "proc macro error: test error");
+    }
+
+    #[test]
+    fn test_proc_macro_error_with_span() {
+        let span = Span::new(10, 20);
+        let err = ProcMacroError::with_span("test error", span);
+        assert!(err.span.is_some());
+        assert_eq!(err.message, "test error");
+    }
 }

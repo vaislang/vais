@@ -1,0 +1,143 @@
+# CRC32 Library - Fast lookup table implementation
+# Supports both IEEE 802.3 (0xEDB88320) and Castagnoli (0x82F63B78) polynomials
+
+# ============================================================================
+# CRC32 IEEE 802.3 (polynomial 0xEDB88320)
+# ============================================================================
+
+# Generate CRC32 lookup table (IEEE polynomial)
+F crc32_make_table() -> i64 {
+    table := malloc(2048)  # 256 entries * 8 bytes
+    idx := mut 0
+
+    L idx < 256 {
+        crc := mut idx
+        bit := mut 0
+
+        L bit < 8 {
+            I (crc & 1) == 1 {
+                crc = ((crc >> 1) & 2147483647) ^ 3988292384  # 0xEDB88320
+            } E {
+                crc = (crc >> 1) & 2147483647
+            }
+            bit = bit + 1
+        }
+
+        store_i64(table + (idx * 8), crc & 4294967295)
+        idx = idx + 1
+    }
+
+    table
+}
+
+# Update CRC32 state with data buffer (IEEE)
+# table: pointer to lookup table
+# state: current CRC state
+# data: pointer to data buffer
+# len: length of data buffer
+# Returns: updated CRC state
+F crc32_update(table: i64, state: i64, data: i64, len: i64) -> i64 {
+    crc := mut state
+    idx := mut 0
+
+    L idx < len {
+        byte_val := load_byte(data + idx)
+        table_idx := (crc ^ byte_val) & 255
+        table_offset := table + (table_idx * 8)
+        table_val := load_i64(table_offset)
+        crc = (((crc >> 8) & 16777215) ^ table_val) & 4294967295
+        idx = idx + 1
+    }
+
+    crc & 4294967295
+}
+
+# Finalize CRC32 (XOR with 0xFFFFFFFF)
+F crc32_finalize(state: i64) -> i64 {
+    (state ^ 4294967295) & 4294967295
+}
+
+# ============================================================================
+# CRC32C Castagnoli (polynomial 0x82F63B78)
+# ============================================================================
+
+# Generate CRC32C lookup table (Castagnoli polynomial)
+F crc32c_make_table() -> i64 {
+    table := malloc(2048)  # 256 entries * 8 bytes
+    idx := mut 0
+
+    L idx < 256 {
+        crc := mut idx
+        bit := mut 0
+
+        L bit < 8 {
+            I (crc & 1) == 1 {
+                crc = ((crc >> 1) & 2147483647) ^ 2197175160  # 0x82F63B78
+            } E {
+                crc = (crc >> 1) & 2147483647
+            }
+            bit = bit + 1
+        }
+
+        store_i64(table + (idx * 8), crc & 4294967295)
+        idx = idx + 1
+    }
+
+    table
+}
+
+# Update CRC32C state with data buffer (Castagnoli)
+F crc32c_update(table: i64, state: i64, data: i64, len: i64) -> i64 {
+    crc := mut state
+    idx := mut 0
+
+    L idx < len {
+        byte_val := load_byte(data + idx)
+        table_idx := (crc ^ byte_val) & 255
+        table_offset := table + (table_idx * 8)
+        table_val := load_i64(table_offset)
+        crc = (((crc >> 8) & 16777215) ^ table_val) & 4294967295
+        idx = idx + 1
+    }
+
+    crc & 4294967295
+}
+
+# Finalize CRC32C (XOR with 0xFFFFFFFF)
+F crc32c_finalize(state: i64) -> i64 {
+    (state ^ 4294967295) & 4294967295
+}
+
+# ============================================================================
+# Convenience functions
+# ============================================================================
+
+# One-shot CRC32 IEEE computation
+F crc32(data: i64, len: i64) -> i64 {
+    table := crc32_make_table()
+    state := crc32_update(table, 4294967295, data, len)
+    result := crc32_finalize(state)
+    free(table)
+    result
+}
+
+# One-shot CRC32C Castagnoli computation
+F crc32c(data: i64, len: i64) -> i64 {
+    table := crc32c_make_table()
+    state := crc32c_update(table, 4294967295, data, len)
+    result := crc32c_finalize(state)
+    free(table)
+    result
+}
+
+# ============================================================================
+# Extern declarations
+# ============================================================================
+
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F strlen(s: str) -> i64
+X F str_to_ptr(s: str) -> i64
+X F load_byte(ptr: i64) -> i64
+X F load_i64(ptr: i64) -> i64
+X F store_i64(ptr: i64, val: i64) -> i64

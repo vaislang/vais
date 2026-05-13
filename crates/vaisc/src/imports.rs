@@ -1,31 +1,57 @@
 //! Module import resolution and loading.
 
+use crate::error_formatter;
+use colored::Colorize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use colored::Colorize;
 use vais_ast::{Item, Module, Spanned};
 use vais_query::QueryDatabase;
-use crate::error_formatter;
 
-pub(crate) fn filter_imported_items(items: Vec<Spanned<Item>>) -> Vec<Spanned<Item>> {
-    items
+pub(crate) fn filter_imported_items(
+    items: Vec<Spanned<Item>>,
+    selected: Option<&[Spanned<String>]>,
+) -> Vec<Spanned<Item>> {
+    let filtered = items
         .into_iter()
-        .filter(|item| !matches!(&item.node, Item::Function(f) if f.name.node == "main"))
-        .collect()
+        .filter(|item| !matches!(&item.node, Item::Function(f) if f.name.node == "main"));
+
+    match selected {
+        None => filtered.collect(),
+        Some(names) => {
+            let _name_set: std::collections::HashSet<&str> =
+                names.iter().map(|s| s.node.as_str()).collect();
+
+            // Selective import filtering strategy:
+            // Include all items from the imported module. Impl blocks must be
+            // available for structs even when not explicitly named in the import
+            // list, because imported functions may depend on them transitively
+            // (e.g., `describe`/`it` from std/test internally use TestSuite/TestCase).
+            filtered.collect()
+        }
+    }
 }
 
-/// Load a module and recursively resolve its imports
-pub(crate) fn load_module_with_imports(
+/// Load a module with source_root for subdirectory → parent directory import resolution
+pub(crate) fn load_module_with_imports_rooted(
     path: &PathBuf,
     loaded: &mut HashSet<PathBuf>,
     loading_stack: &mut Vec<PathBuf>,
     verbose: bool,
     query_db: &QueryDatabase,
+    source_root: Option<&Path>,
 ) -> Result<Module, String> {
     let source =
         fs::read_to_string(path).map_err(|e| format!("Cannot read '{}': {}", path.display(), e))?;
-    load_module_with_imports_internal(path, loaded, loading_stack, verbose, &source, query_db)
+    load_module_with_imports_internal(
+        path,
+        loaded,
+        loading_stack,
+        verbose,
+        &source,
+        query_db,
+        source_root,
+    )
 }
 
 /// Internal function to load a module with source already read
@@ -36,6 +62,7 @@ pub(crate) fn load_module_with_imports_internal(
     verbose: bool,
     source: &str,
     query_db: &QueryDatabase,
+    source_root: Option<&Path>,
 ) -> Result<Module, String> {
     // Canonicalize path to avoid duplicate loading
     let canonical = path
@@ -114,24 +141,26 @@ pub(crate) fn load_module_with_imports_internal(
         match &item.node {
             Item::Use(use_stmt) => {
                 // Resolve import path
-                let module_path = resolve_import_path(base_dir, &use_stmt.path)?;
+                let module_path =
+                    resolve_import_path_with_root(base_dir, &use_stmt.path, source_root)?;
 
                 if verbose {
                     println!("  {} {}", "Importing".cyan(), module_path.display());
                 }
 
                 // Recursively load the imported module
-                let imported = load_module_with_imports(
+                let imported = load_module_with_imports_rooted(
                     &module_path,
                     loaded,
                     loading_stack,
                     verbose,
                     query_db,
+                    source_root,
                 )?;
 
                 // Propagate sub-module mappings with offset, or create new mapping
                 let offset = all_items.len();
-                let filtered = filter_imported_items(imported.items);
+                let filtered = filter_imported_items(imported.items, use_stmt.items.as_deref());
                 let filtered_len = filtered.len();
 
                 if let Some(sub_map) = imported.modules_map {
@@ -141,7 +170,9 @@ pub(crate) fn load_module_with_imports_internal(
 
                         // Validate remapped indices will be within bounds after extending all_items
                         let future_total_len = offset + filtered_len;
-                        for (&original_idx, &remapped_idx) in sub_indices.iter().zip(remapped.iter()) {
+                        for (&original_idx, &remapped_idx) in
+                            sub_indices.iter().zip(remapped.iter())
+                        {
                             if remapped_idx >= future_total_len && verbose {
                                 eprintln!(
                                     "{}: Remapped index {} (original {} + offset {}) >= total items {} for module '{}'",
@@ -199,6 +230,7 @@ pub(crate) fn load_module_with_imports_parallel(
     verbose: bool,
     source: &str,
     query_db: &QueryDatabase,
+    source_root: Option<&Path>,
 ) -> Result<Module, String> {
     use rayon::prelude::*;
 
@@ -245,7 +277,7 @@ pub(crate) fn load_module_with_imports_parallel(
 
     for (idx, item) in ast.items.iter().enumerate() {
         if let Item::Use(use_stmt) = &item.node {
-            let module_path = resolve_import_path(base_dir, &use_stmt.path)?;
+            let module_path = resolve_import_path_with_root(base_dir, &use_stmt.path, source_root)?;
             let module_canonical = module_path
                 .canonicalize()
                 .map_err(|e| format!("Cannot resolve path '{}': {}", module_path.display(), e))?;
@@ -327,14 +359,22 @@ pub(crate) fn load_module_with_imports_parallel(
         for item in parsed_module.items {
             match &item.node {
                 Item::Use(use_stmt) => {
-                    let sub_path = resolve_import_path(sub_base, &use_stmt.path)?;
+                    let sub_path =
+                        resolve_import_path_with_root(sub_base, &use_stmt.path, source_root)?;
                     let mut sub_loading_stack = Vec::new();
-                    let sub_imported =
-                        load_module_with_imports(&sub_path, loaded, &mut sub_loading_stack, verbose, query_db)?;
+                    let sub_imported = load_module_with_imports_rooted(
+                        &sub_path,
+                        loaded,
+                        &mut sub_loading_stack,
+                        verbose,
+                        query_db,
+                        source_root,
+                    )?;
                     let sub_canonical = sub_path.canonicalize().unwrap_or(sub_path);
 
                     let offset = sub_items.len();
-                    let filtered = filter_imported_items(sub_imported.items);
+                    let filtered =
+                        filter_imported_items(sub_imported.items, use_stmt.items.as_deref());
 
                     // Propagate sub-module mappings or create new
                     if let Some(sub_map) = sub_imported.modules_map {
@@ -376,7 +416,7 @@ pub(crate) fn load_module_with_imports_parallel(
     let mut import_idx = 0;
     for (idx, item) in ast.items.iter().enumerate() {
         match &item.node {
-            Item::Use(_) => {
+            Item::Use(use_stmt) => {
                 if import_idx < import_indices.len() && import_indices[import_idx] == idx {
                     if let Some(imported_module) = parsed_map.remove(&import_paths[import_idx]) {
                         let import_canonical = import_paths[import_idx]
@@ -384,7 +424,8 @@ pub(crate) fn load_module_with_imports_parallel(
                             .unwrap_or_else(|_| import_paths[import_idx].clone());
 
                         let offset = all_items.len();
-                        let filtered = filter_imported_items(imported_module.items);
+                        let filtered =
+                            filter_imported_items(imported_module.items, use_stmt.items.as_deref());
 
                         // Propagate sub-module mappings or create new
                         if let Some(sub_map) = imported_module.modules_map {
@@ -464,10 +505,11 @@ pub(crate) fn get_std_path() -> Option<PathBuf> {
     None
 }
 
-/// Resolve import path to file path with security validation
-pub(crate) fn resolve_import_path(
+/// Resolve import path with optional source root fallback
+pub(crate) fn resolve_import_path_with_root(
     base_dir: &Path,
     path: &[vais_ast::Spanned<String>],
+    source_root: Option<&Path>,
 ) -> Result<PathBuf, String> {
     if path.is_empty() {
         return Err("Empty import path".to_string());
@@ -558,6 +600,35 @@ pub(crate) fn resolve_import_path(
                 }
             }
 
+            // Fall back to source root (entry point's directory) if different from base_dir
+            if let Some(root) = source_root {
+                if root != base_dir {
+                    let root_canonical = root
+                        .canonicalize()
+                        .map_err(|_| format!("Cannot resolve source root: {}", root.display()))?;
+                    let mut root_file_path = root.to_path_buf();
+                    for (j, seg) in path.iter().enumerate() {
+                        if j == path.len() - 1 {
+                            let root_as_file = root_file_path.join(format!("{}.vais", seg.node));
+                            let root_as_dir = root_file_path.join(&seg.node).join("mod.vais");
+                            if root_as_file.exists() {
+                                return validate_and_canonicalize_import(
+                                    &root_as_file,
+                                    &root_canonical,
+                                );
+                            } else if root_as_dir.exists() {
+                                return validate_and_canonicalize_import(
+                                    &root_as_dir,
+                                    &root_canonical,
+                                );
+                            }
+                        } else {
+                            root_file_path = root_file_path.join(&seg.node);
+                        }
+                    }
+                }
+            }
+
             return Err(format!(
                 "Cannot find module '{}': tried '{}' and '{}'",
                 segment.node,
@@ -579,7 +650,10 @@ pub(crate) fn resolve_import_path(
 /// 2. Ensures the resolved path is within allowed directories
 /// 3. Prevents path traversal attacks (../)
 /// 4. Prevents symlink attacks
-pub(crate) fn validate_and_canonicalize_import(path: &Path, allowed_base: &Path) -> Result<PathBuf, String> {
+pub(crate) fn validate_and_canonicalize_import(
+    path: &Path,
+    allowed_base: &Path,
+) -> Result<PathBuf, String> {
     // Canonicalize the path to resolve symlinks and get absolute path
     let canonical_path = path
         .canonicalize()

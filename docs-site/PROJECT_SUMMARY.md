@@ -196,7 +196,7 @@ cd docs-site
 자동 배포:
 - `main` 브랜치에 푸시
 - GitHub Actions가 자동 처리
-- 몇 분 후 https://sswoo.github.io/vais/ 에서 확인
+- 몇 분 후 https://vais.dev/docs/ 에서 확인
 
 ## 기술 스택
 
@@ -303,4 +303,4 @@ Vais 문서 사이트는 프로젝트의 모든 문서를 통합하여 개발자
 
 생성일: 2026-01-29
 작성자: Claude Code
-버전: 1.0.0
+버전: 0.1.0

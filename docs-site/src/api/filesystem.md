@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/filesystem
+use std/filesystem
 ```
 
 ## Functions
@@ -36,9 +36,9 @@ U std/filesystem
 ## Usage
 
 ```vais
-U std/filesystem
+use std/filesystem
 
-F main() -> i64 {
+fn main() -> i64 {
     # Directory operations
     fs_mkdir("output", 755)
     cwd := fs_getcwd()

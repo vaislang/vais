@@ -1,0 +1,350 @@
+# std/web - Web API bindings for WebAssembly
+# Provides browser APIs for DOM manipulation, console, timers, fetch, and storage
+#
+# This module requires the WASM target and host-provided JavaScript imports.
+# All extern functions use #[wasm_import("env", "name")] to bind to browser APIs.
+#
+# NOTE: This file should be compiled with --no-ownership-check flag due to
+# builtin function ownership semantics with str parameters.
+#
+# Usage:
+#   U std/web
+#
+#   F main() {
+#       log_str("Hello from Vais!")
+#       elem_id := get_element_by_id("app")
+#       set_text_content(elem_id, "Welcome")
+#   }
+#
+# SAFETY: DOM handles (i64) are opaque references managed by the JavaScript host.
+# Invalid handles may cause JavaScript exceptions. Always check return values.
+
+# ==============================================================================
+# Console API
+# ==============================================================================
+
+# Console log - write to browser console
+#[wasm_import("env", "console_log")]
+X F console_log_raw(ptr: i64, len: i64) -> i64
+
+F log_str(msg: str) -> i64 {
+    ptr := str_to_ptr(msg)
+    len := strlen(msg)
+    R console_log_raw(ptr, len)
+}
+
+# ==============================================================================
+# Timer API
+# ==============================================================================
+
+# Set timeout - execute callback after delay (milliseconds)
+# Returns: timer ID
+#[wasm_import("env", "setTimeout")]
+X F set_timeout(callback_id: i64, ms: i64) -> i64
+
+# Clear timeout
+#[wasm_import("env", "clearTimeout")]
+X F clear_timeout(id: i64) -> i64
+
+# Set interval - execute callback repeatedly
+#[wasm_import("env", "setInterval")]
+X F set_interval(callback_id: i64, ms: i64) -> i64
+
+# Clear interval
+#[wasm_import("env", "clearInterval")]
+X F clear_interval(id: i64) -> i64
+
+# Get high-resolution timestamp in milliseconds
+#[wasm_import("env", "performance_now")]
+X F performance_now() -> f64
+
+# ==============================================================================
+# DOM API
+# ==============================================================================
+
+# Get element by ID
+# Returns: element handle (0 if not found)
+#[wasm_import("env", "dom_get_element_by_id")]
+X F dom_get_element_by_id_raw(id_ptr: i64, id_len: i64) -> i64
+
+F get_element_by_id(id: str) -> i64 {
+    ptr := str_to_ptr(id)
+    len := strlen(id)
+    R dom_get_element_by_id_raw(ptr, len)
+}
+
+# Set element innerHTML
+#[wasm_import("env", "dom_set_inner_html")]
+X F dom_set_inner_html_raw(elem: i64, html_ptr: i64, html_len: i64) -> i64
+
+F set_inner_html(elem: i64, html: str) -> i64 {
+    ptr := str_to_ptr(html)
+    len := strlen(html)
+    R dom_set_inner_html_raw(elem, ptr, len)
+}
+
+# Set element textContent
+#[wasm_import("env", "dom_set_text_content")]
+X F dom_set_text_content_raw(elem: i64, text_ptr: i64, text_len: i64) -> i64
+
+F set_text_content(elem: i64, text: str) -> i64 {
+    ptr := str_to_ptr(text)
+    len := strlen(text)
+    R dom_set_text_content_raw(elem, ptr, len)
+}
+
+# Add event listener to element
+#[wasm_import("env", "dom_add_event_listener")]
+X F dom_add_event_listener_raw(elem: i64, event_ptr: i64, event_len: i64, callback_id: i64) -> i64
+
+F add_event_listener(elem: i64, event: str, callback_id: i64) -> i64 {
+    ptr := str_to_ptr(event)
+    len := strlen(event)
+    R dom_add_event_listener_raw(elem, ptr, len, callback_id)
+}
+
+# Create a new element with tag name
+# Returns: element handle
+#[wasm_import("env", "dom_create_element")]
+X F dom_create_element_raw(tag_ptr: i64, tag_len: i64) -> i64
+
+F create_element(tag: str) -> i64 {
+    ptr := str_to_ptr(tag)
+    len := strlen(tag)
+    R dom_create_element_raw(ptr, len)
+}
+
+# Append child element to parent
+#[wasm_import("env", "dom_append_child")]
+X F dom_append_child(parent: i64, child: i64) -> i64
+
+# Set element attribute
+#[wasm_import("env", "dom_set_attribute")]
+X F dom_set_attribute_raw(elem: i64, name_ptr: i64, name_len: i64, val_ptr: i64, val_len: i64) -> i64
+
+F set_attribute(elem: i64, name: str, value: str) -> i64 {
+    name_ptr := str_to_ptr(name)
+    name_len := strlen(name)
+    val_ptr := str_to_ptr(value)
+    val_len := strlen(value)
+    R dom_set_attribute_raw(elem, name_ptr, name_len, val_ptr, val_len)
+}
+
+# Query selector - find first matching element
+#[wasm_import("env", "dom_query_selector")]
+X F dom_query_selector_raw(selector_ptr: i64, selector_len: i64) -> i64
+
+F query_selector(selector: str) -> i64 {
+    ptr := str_to_ptr(selector)
+    len := strlen(selector)
+    R dom_query_selector_raw(ptr, len)
+}
+
+# Set element style property
+#[wasm_import("env", "dom_set_style")]
+X F dom_set_style_raw(elem: i64, prop_ptr: i64, prop_len: i64, val_ptr: i64, val_len: i64) -> i64
+
+F set_style(elem: i64, property: str, value: str) -> i64 {
+    prop_ptr := str_to_ptr(property)
+    prop_len := strlen(property)
+    val_ptr := str_to_ptr(value)
+    val_len := strlen(value)
+    R dom_set_style_raw(elem, prop_ptr, prop_len, val_ptr, val_len)
+}
+
+# Add CSS class to element
+#[wasm_import("env", "dom_add_class")]
+X F dom_add_class_raw(elem: i64, class_ptr: i64, class_len: i64) -> i64
+
+F add_class(elem: i64, class_name: str) -> i64 {
+    ptr := str_to_ptr(class_name)
+    len := strlen(class_name)
+    R dom_add_class_raw(elem, ptr, len)
+}
+
+# Remove CSS class from element
+#[wasm_import("env", "dom_remove_class")]
+X F dom_remove_class_raw(elem: i64, class_ptr: i64, class_len: i64) -> i64
+
+F remove_class(elem: i64, class_name: str) -> i64 {
+    ptr := str_to_ptr(class_name)
+    len := strlen(class_name)
+    R dom_remove_class_raw(elem, ptr, len)
+}
+
+# ==============================================================================
+# Fetch API
+# ==============================================================================
+
+# Fetch resource as text
+#[wasm_import("env", "fetch_text")]
+X F fetch_text_raw(url_ptr: i64, url_len: i64, callback_id: i64) -> i64
+
+F fetch_text(url: str, callback_id: i64) -> i64 {
+    ptr := str_to_ptr(url)
+    len := strlen(url)
+    R fetch_text_raw(ptr, len, callback_id)
+}
+
+# HTTP GET request
+#[wasm_import("env", "fetch_get")]
+X F fetch_get_raw(url_ptr: i64, url_len: i64, callback_id: i64) -> i64
+
+F fetch_get(url: str, callback_id: i64) -> i64 {
+    ptr := str_to_ptr(url)
+    len := strlen(url)
+    R fetch_get_raw(ptr, len, callback_id)
+}
+
+# HTTP POST request
+#[wasm_import("env", "fetch_post")]
+X F fetch_post_raw(url_ptr: i64, url_len: i64, body_ptr: i64, body_len: i64, callback_id: i64) -> i64
+
+F fetch_post(url: str, body: str, callback_id: i64) -> i64 {
+    url_ptr := str_to_ptr(url)
+    url_len := strlen(url)
+    body_ptr := str_to_ptr(body)
+    body_len := strlen(body)
+    R fetch_post_raw(url_ptr, url_len, body_ptr, body_len, callback_id)
+}
+
+# ==============================================================================
+# Local Storage API
+# ==============================================================================
+
+# Set value in localStorage
+#[wasm_import("env", "storage_set")]
+X F storage_set_raw(key_ptr: i64, key_len: i64, val_ptr: i64, val_len: i64) -> i64
+
+F storage_set(key: str, value: str) -> i64 {
+    key_ptr := str_to_ptr(key)
+    key_len := strlen(key)
+    val_ptr := str_to_ptr(value)
+    val_len := strlen(value)
+    R storage_set_raw(key_ptr, key_len, val_ptr, val_len)
+}
+
+# Get value from localStorage
+# Returns: length of value written (0 if not found)
+#[wasm_import("env", "storage_get")]
+X F storage_get(key_ptr: i64, key_len: i64, out_ptr: i64, out_len: i64) -> i64
+
+# Remove key from localStorage
+#[wasm_import("env", "storage_remove")]
+X F storage_remove_raw(key_ptr: i64, key_len: i64) -> i64
+
+F storage_remove(key: str) -> i64 {
+    ptr := str_to_ptr(key)
+    len := strlen(key)
+    R storage_remove_raw(ptr, len)
+}
+
+# Clear all localStorage
+#[wasm_import("env", "storage_clear")]
+X F storage_clear() -> i64
+
+# Get number of items in localStorage
+#[wasm_import("env", "storage_length")]
+X F storage_length() -> i64
+
+# ==============================================================================
+# Window & Location API
+# ==============================================================================
+
+# Alert dialog
+#[wasm_import("env", "window_alert")]
+X F window_alert_raw(msg_ptr: i64, msg_len: i64) -> i64
+
+F alert(msg: str) -> i64 {
+    ptr := str_to_ptr(msg)
+    len := strlen(msg)
+    R window_alert_raw(ptr, len)
+}
+
+# Confirm dialog - returns 1 if OK, 0 if Cancel
+#[wasm_import("env", "window_confirm")]
+X F window_confirm_raw(msg_ptr: i64, msg_len: i64) -> i64
+
+F confirm(msg: str) -> i64 {
+    ptr := str_to_ptr(msg)
+    len := strlen(msg)
+    R window_confirm_raw(ptr, len)
+}
+
+# Navigate to URL
+#[wasm_import("env", "location_set_href")]
+X F location_set_href_raw(url_ptr: i64, url_len: i64) -> i64
+
+F navigate(url: str) -> i64 {
+    ptr := str_to_ptr(url)
+    len := strlen(url)
+    R location_set_href_raw(ptr, len)
+}
+
+# Reload current page
+#[wasm_import("env", "location_reload")]
+X F reload() -> i64
+
+# Get window innerWidth
+#[wasm_import("env", "window_inner_width")]
+X F window_inner_width() -> i64
+
+# Get window innerHeight
+#[wasm_import("env", "window_inner_height")]
+X F window_inner_height() -> i64
+
+# ==============================================================================
+# Canvas API (2D Context)
+# ==============================================================================
+
+# Get canvas 2D context
+#[wasm_import("env", "canvas_get_context_2d")]
+X F canvas_get_context_2d(canvas: i64) -> i64
+
+# Set fill style (color)
+#[wasm_import("env", "canvas_set_fill_style")]
+X F canvas_set_fill_style_raw(ctx: i64, color_ptr: i64, color_len: i64) -> i64
+
+F canvas_set_fill_style(ctx: i64, color: str) -> i64 {
+    ptr := str_to_ptr(color)
+    len := strlen(color)
+    R canvas_set_fill_style_raw(ctx, ptr, len)
+}
+
+# Fill rectangle
+#[wasm_import("env", "canvas_fill_rect")]
+X F canvas_fill_rect(ctx: i64, x: f64, y: f64, width: f64, height: f64) -> i64
+
+# Clear rectangle
+#[wasm_import("env", "canvas_clear_rect")]
+X F canvas_clear_rect(ctx: i64, x: f64, y: f64, width: f64, height: f64) -> i64
+
+# Begin path
+#[wasm_import("env", "canvas_begin_path")]
+X F canvas_begin_path(ctx: i64) -> i64
+
+# Move to point
+#[wasm_import("env", "canvas_move_to")]
+X F canvas_move_to(ctx: i64, x: f64, y: f64) -> i64
+
+# Line to point
+#[wasm_import("env", "canvas_line_to")]
+X F canvas_line_to(ctx: i64, x: f64, y: f64) -> i64
+
+# Fill current path
+#[wasm_import("env", "canvas_fill")]
+X F canvas_fill(ctx: i64) -> i64
+
+# Stroke current path
+#[wasm_import("env", "canvas_stroke")]
+X F canvas_stroke(ctx: i64) -> i64
+
+# Fill text
+#[wasm_import("env", "canvas_fill_text")]
+X F canvas_fill_text_raw(ctx: i64, text_ptr: i64, text_len: i64, x: f64, y: f64) -> i64
+
+F canvas_fill_text(ctx: i64, text: str, x: f64, y: f64) -> i64 {
+    ptr := str_to_ptr(text)
+    len := strlen(text)
+    R canvas_fill_text_raw(ctx, ptr, len, x, y)
+}

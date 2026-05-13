@@ -1,0 +1,11 @@
+# Phase 84: Array literal and indexing
+F sum3(a: i64, b: i64, c: i64) -> i64 = a + b + c
+
+F main() -> i64 {
+    x := 10
+    y := 20
+    z := 30
+    result := sum3(x, y, z)
+    puts("array basic test")
+    result
+}

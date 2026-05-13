@@ -1,0 +1,24 @@
+# HTTP types with routing
+S Response {
+    status: i,
+    body: i,
+}
+
+F route(path) -> Response {
+    I path == 1 {
+        Response(200, 1)
+    } E I path == 2 {
+        Response(200, 2)
+    } E {
+        Response(404, 0)
+    }
+}
+
+F main() {
+    res := route(1)
+    println("status=~{res.status} body=~{res.body}")
+    res2 := route(2)
+    println("status=~{res2.status} body=~{res2.body}")
+    res3 := route(99)
+    println("status=~{res3.status} body=~{res3.body}")
+}

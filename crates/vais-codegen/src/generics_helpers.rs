@@ -1,0 +1,231 @@
+//! Generic type resolution and instantiation helpers
+
+use super::*;
+
+impl CodeGenerator {
+    /// Get current generic substitution for a type parameter
+    #[inline]
+    pub(crate) fn get_generic_substitution(&self, param: &str) -> Option<ResolvedType> {
+        self.generics.substitutions.get(param).cloned()
+    }
+
+    /// Set generic substitutions for the current context
+    pub(crate) fn _set_generic_substitutions(&mut self, subst: HashMap<String, ResolvedType>) {
+        self.generics.substitutions = subst;
+    }
+
+    /// Clear generic substitutions
+    pub(crate) fn _clear_generic_substitutions(&mut self) {
+        self.generics.substitutions.clear();
+    }
+
+    /// Resolve a struct name, checking aliases for generic specializations.
+    /// Returns the mangled name if the base name has a registered alias (e.g., "Box" -> "Box$i64").
+    #[inline]
+    pub(crate) fn resolve_struct_name(&self, name: &str) -> String {
+        // 1. Direct hit in the struct registry — use as-is.
+        if self.types.structs.contains_key(name) {
+            return name.to_string();
+        }
+        // 2. Alias registered for this base name (e.g., "Box" -> "Box$i64").
+        if let Some(mangled) = self.generics.struct_aliases.get(name) {
+            return mangled.clone();
+        }
+        // 3. Already a specialized/mangled struct name (e.g., "Point$i64") in generated_structs.
+        if self.generics.generated_structs.contains_key(name) {
+            return name.to_string();
+        }
+        // 4. If the name contains '$', it is already in mangled form — accept as-is even if
+        //    the struct hasn't been emitted yet (it will be resolved later by the LLVM emitter).
+        if name.contains('$') {
+            return name.to_string();
+        }
+        // 5. If the name is a plain base name, try to find any generated struct whose
+        //    mangled name starts with "<name>$" (picks the first/only specialization).
+        //    This handles cross-module access where only one specialization exists.
+        let prefix = format!("{name}$");
+        if let Some(mangled_key) = self
+            .generics
+            .generated_structs
+            .keys()
+            .find(|k| k.starts_with(&prefix))
+        {
+            return mangled_key.clone();
+        }
+        // Final fallback: return name unchanged.
+        // Note: this may fail later during LLVM type lookup — the caller is responsible
+        // for handling unknown struct names gracefully.
+        name.to_string()
+    }
+
+    /// Generate mangled name for a generic struct
+    #[inline]
+    pub(crate) fn mangle_struct_name(&self, name: &str, generics: &[ResolvedType]) -> String {
+        vais_types::mangle_name(name, generics)
+    }
+
+    /// Generate mangled name for a generic function
+    pub(crate) fn _mangle_function_name(&self, name: &str, generics: &[ResolvedType]) -> String {
+        vais_types::mangle_name(name, generics)
+    }
+
+    /// Resolve a generic function call to the appropriate mangled specialized name.
+    /// Given a base function name and the inferred argument types, finds the
+    /// matching instantiation from the pre-computed instantiation list.
+    pub(crate) fn resolve_generic_call(
+        &self,
+        base_name: &str,
+        arg_types: &[ResolvedType],
+        instantiations_list: &[(Vec<ResolvedType>, String)],
+    ) -> String {
+        // If only one instantiation exists, check if it has generic type args.
+        // If so, apply current substitutions to derive the concrete mangled name.
+        if instantiations_list.len() == 1 {
+            let (type_args, name) = &instantiations_list[0];
+            let has_generic_args = type_args
+                .iter()
+                .any(|t| matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+            if has_generic_args && !self.generics.substitutions.is_empty() {
+                // Substitute current generics to get concrete type args
+                let concrete_args: Vec<ResolvedType> = type_args
+                    .iter()
+                    .map(|t| vais_types::substitute_type(t, &self.generics.substitutions))
+                    .collect();
+                // Only use concrete name if all args are now concrete
+                let all_concrete = concrete_args
+                    .iter()
+                    .all(|t| !matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+                if all_concrete {
+                    let mangled = vais_types::mangle_name(base_name, &concrete_args);
+                    return mangled;
+                }
+            }
+            return name.clone();
+        }
+
+        // Look up the generic function template to map argument types to type parameters
+        if let Some(template) = self.generics.function_templates.get(base_name) {
+            let type_params: Vec<&String> = template
+                .generics
+                .iter()
+                .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+                .map(|g| &g.name.node)
+                .collect();
+
+            // Infer type arguments from argument types by matching against parameter types
+            let mut inferred: HashMap<String, ResolvedType> = HashMap::new();
+            for (i, param) in template.params.iter().enumerate() {
+                if i < arg_types.len() {
+                    self.infer_type_args(
+                        &self.ast_type_to_resolved(&param.ty.node),
+                        &arg_types[i],
+                        &type_params,
+                        &mut inferred,
+                    );
+                }
+            }
+
+            // Build type_args vector in order of generic params
+            let type_args: Vec<ResolvedType> = type_params
+                .iter()
+                .map(|name| inferred.get(*name).cloned().unwrap_or(ResolvedType::I64))
+                .collect();
+
+            // Find exact match in instantiations
+            for (inst_types, mangled) in instantiations_list {
+                if inst_types == &type_args {
+                    return mangled.clone();
+                }
+            }
+        }
+
+        // Try substituting generic type args in instantiations (for transitive calls)
+        if !self.generics.substitutions.is_empty() {
+            for (inst_types, _) in instantiations_list {
+                let has_generic = inst_types
+                    .iter()
+                    .any(|t| matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+                if has_generic {
+                    let concrete_args: Vec<ResolvedType> = inst_types
+                        .iter()
+                        .map(|t| vais_types::substitute_type(t, &self.generics.substitutions))
+                        .collect();
+                    let all_concrete = concrete_args
+                        .iter()
+                        .all(|t| !matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+                    if all_concrete {
+                        let mangled = vais_types::mangle_name(base_name, &concrete_args);
+                        if self.types.functions.contains_key(&mangled) {
+                            return mangled;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: try to mangle based on argument types directly
+        let mangled = vais_types::mangle_name(base_name, arg_types);
+        if self.types.functions.contains_key(&mangled) {
+            return mangled;
+        }
+
+        // Last resort: use first instantiation
+        instantiations_list
+            .first()
+            .map(|(_, name)| name.clone())
+            .unwrap_or_else(|| base_name.to_string())
+    }
+
+    /// Infer type arguments by matching a parameter type pattern against a concrete argument type.
+    pub(crate) fn infer_type_args(
+        &self,
+        param_type: &ResolvedType,
+        arg_type: &ResolvedType,
+        type_params: &[&String],
+        inferred: &mut HashMap<String, ResolvedType>,
+    ) {
+        match param_type {
+            ResolvedType::Generic(name) if type_params.contains(&name) => {
+                // Direct generic type parameter (e.g., T)
+                inferred
+                    .entry(name.clone())
+                    .or_insert_with(|| arg_type.clone());
+            }
+            ResolvedType::Generic(_) => {}
+            ResolvedType::Named { name, generics } => {
+                // Check if this is a type parameter name
+                if type_params.contains(&name) {
+                    inferred
+                        .entry(name.clone())
+                        .or_insert_with(|| arg_type.clone());
+                } else if let ResolvedType::Named {
+                    generics: arg_generics,
+                    ..
+                } = arg_type
+                {
+                    // Recurse into generic arguments
+                    for (g, ag) in generics.iter().zip(arg_generics.iter()) {
+                        self.infer_type_args(g, ag, type_params, inferred);
+                    }
+                }
+            }
+            ResolvedType::Array(inner) => {
+                if let ResolvedType::Array(arg_inner) = arg_type {
+                    self.infer_type_args(inner, arg_inner, type_params, inferred);
+                }
+            }
+            ResolvedType::Pointer(inner) => {
+                if let ResolvedType::Pointer(arg_inner) = arg_type {
+                    self.infer_type_args(inner, arg_inner, type_params, inferred);
+                }
+            }
+            ResolvedType::Optional(inner) => {
+                if let ResolvedType::Optional(arg_inner) = arg_type {
+                    self.infer_type_args(inner, arg_inner, type_params, inferred);
+                }
+            }
+            // HKT removed in ROADMAP #18.
+            _ => {}
+        }
+    }
+}

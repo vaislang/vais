@@ -1,0 +1,14 @@
+U src/core/context
+
+# __SHARED_USER_SCHEMA__
+
+F user_json(u: User) -> str {
+    "{\"id\":7,\"email\":\"" + u.email + "\",\"name\":\"" + u.name + "\"}"
+}
+
+F main() -> i64 {
+    u: User = User { id: 7, email: "ada@vais.dev", name: "Ada" }
+    ctx := mut Context.new("GET", "/api/users/7")
+    body := user_json(u)
+    0
+}

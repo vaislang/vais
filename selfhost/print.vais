@@ -6,7 +6,7 @@ F str_len(ptr: i64) -> i64 {
     len := mut 0
     L {
         ch := load_byte(ptr + len)
-        I ch == 0 { B } E { 0 }
+        I ch == 0 { B } EL { 0 }
         len = len + 1
         0
     }
@@ -18,7 +18,7 @@ F print_i64_digits(n: i64) -> i64 {
     I n >= 10 {
         print_i64_digits(n / 10)
         0
-    } E { 0 }
+    } EL { 0 }
     putchar((n % 10) + 48)
 }
 
@@ -27,11 +27,11 @@ F print_i64(n: i64) -> i64 {
     I n == 0 {
         putchar(48)
         0
-    } E I n < 0 {
+    } EL I n < 0 {
         putchar(45)
         print_i64_digits(0 - n)
         0
-    } E {
+    } EL {
         print_i64_digits(n)
         0
     }
@@ -46,7 +46,7 @@ F print_bool(b: i64) -> i64 {
         putchar(115)  # s
         putchar(101)  # e
         0
-    } E {
+    } EL {
         putchar(116)  # t
         putchar(114)  # r
         putchar(117)  # u
@@ -60,7 +60,7 @@ F print_hex_digit(digit: i64) -> i64 {
     I digit < 10 {
         putchar(digit + 48)
         0
-    } E {
+    } EL {
         putchar(digit - 10 + 97)
         0
     }
@@ -68,7 +68,7 @@ F print_hex_digit(digit: i64) -> i64 {
 
 # Helper: print hex digits recursively
 F print_hex_digits(n: i64, pos: i64) -> i64 {
-    I pos < 0 { R 0 } E { 0 }
+    I pos < 0 { R 0 } EL { 0 }
 
     shift := pos * 4
     digit := (n >> shift) & 15
@@ -77,15 +77,15 @@ F print_hex_digits(n: i64, pos: i64) -> i64 {
     I digit == 0 {
         I pos > 0 {
             print_hex_digits(n, pos - 1)
-        } E {
+        } EL {
             putchar(48)
             0
         }
-    } E {
+    } EL {
         print_hex_digit(digit)
         I pos > 0 {
             print_hex_digits(n, pos - 1)
-        } E { 0 }
+        } EL { 0 }
         0
     }
 }
@@ -98,7 +98,7 @@ F print_hex(n: i64) -> i64 {
     I n == 0 {
         putchar(48)
         0
-    } E {
+    } EL {
         # Print up to 16 hex digits (64 bits = 16 nibbles)
         print_hex_digits(n, 15)
     }
@@ -121,7 +121,7 @@ F print_byte_hex(byte: i64) -> i64 {
 F print_bytes(data_ptr: i64, len: i64) -> i64 {
     i := mut 0
     L {
-        I i >= len { B } E { 0 }
+        I i >= len { B } EL { 0 }
 
         byte := load_byte(data_ptr + i)
         print_byte_hex(byte)
@@ -130,7 +130,7 @@ F print_bytes(data_ptr: i64, len: i64) -> i64 {
         I i < len - 1 {
             putchar(32)
             0
-        } E { 0 }
+        } EL { 0 }
 
         i = i + 1
         0
@@ -152,7 +152,7 @@ F println_str(s: str) -> i64 {
 
     i := mut 0
     L {
-        I i >= len { B } E { 0 }
+        I i >= len { B } EL { 0 }
         ch := load_byte(ptr + i)
         putchar(ch)
         i = i + 1
@@ -176,7 +176,7 @@ F eprint_str(s: str) -> i64 {
 
     i := mut 0
     L {
-        I i >= len { B } E { 0 }
+        I i >= len { B } EL { 0 }
         ch := load_byte(ptr + i)
         putchar(ch)
         i = i + 1
@@ -189,7 +189,7 @@ F eprint_str(s: str) -> i64 {
 F print_repeat(ch: i64, count: i64) -> i64 {
     i := mut 0
     L {
-        I i >= count { B } E { 0 }
+        I i >= count { B } EL { 0 }
         putchar(ch)
         i = i + 1
         0
@@ -210,7 +210,7 @@ F print_str(s: str) -> i64 {
 
     i := mut 0
     L {
-        I i >= len { B } E { 0 }
+        I i >= len { B } EL { 0 }
         ch := load_byte(ptr + i)
         putchar(ch)
         i = i + 1

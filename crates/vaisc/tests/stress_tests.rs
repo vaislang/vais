@@ -56,10 +56,6 @@ impl StressTestResult {
             println!("  Error:       {}", err);
         }
     }
-
-    fn is_success(&self) -> bool {
-        self.parse_success && self.type_check_success
-    }
 }
 
 /// Parse and type-check a stress test file

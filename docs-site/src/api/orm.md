@@ -2,6 +2,8 @@
 
 > Lightweight object-relational mapping with SQL query builder
 
+> **Implementation:** Requires C runtime (`orm_runtime.c`). Uses SQLite or PostgreSQL as backend; the corresponding database library (`-lsqlite3` or `-lpq`) must be linked.
+
 ## Overview
 
 The ORM module provides a lightweight ORM for Vais with:
@@ -16,7 +18,7 @@ The ORM module provides a lightweight ORM for Vais with:
 ## Import
 
 ```vais
-U std/orm
+use std/orm
 ```
 
 ## Constants
@@ -54,7 +56,7 @@ U std/orm
 ### Column Struct
 
 ```vais
-S Column {
+struct Column {
     name: str,
     col_type: i64,
     is_primary: i64,
@@ -68,7 +70,7 @@ S Column {
 #### new
 
 ```vais
-F new(name: str, col_type: i64) -> Column
+fn new(name: str, col_type: i64) -> Column
 ```
 
 Create a new column with specified name and type.
@@ -76,11 +78,11 @@ Create a new column with specified name and type.
 #### integer / text / real / blob / boolean
 
 ```vais
-F integer(name: str) -> Column
-F text(name: str) -> Column
-F real(name: str) -> Column
-F blob(name: str) -> Column
-F boolean(name: str) -> Column
+fn integer(name: str) -> Column
+fn text(name: str) -> Column
+fn real(name: str) -> Column
+fn blob(name: str) -> Column
+fn boolean(name: str) -> Column
 ```
 
 Create columns of specific types.
@@ -88,7 +90,7 @@ Create columns of specific types.
 #### type_str
 
 ```vais
-F type_str(&self) -> str
+fn type_str(&self) -> str
 ```
 
 Get SQL type string for this column type.
@@ -96,7 +98,7 @@ Get SQL type string for this column type.
 #### write_def
 
 ```vais
-F write_def(&self, buf: i64, pos: i64) -> i64
+fn write_def(&self, buf: i64, pos: i64) -> i64
 ```
 
 Write column definition SQL to buffer at position, returns new position.
@@ -106,7 +108,7 @@ Write column definition SQL to buffer at position, returns new position.
 ### Schema Struct
 
 ```vais
-S Schema {
+struct Schema {
     table_name: str,
     columns: i64,        # Pointer to array of Column data
     column_count: i64
@@ -118,7 +120,7 @@ S Schema {
 #### new
 
 ```vais
-F new(table_name: str) -> Schema
+fn new(table_name: str) -> Schema
 ```
 
 Create a new schema for a table.
@@ -126,7 +128,7 @@ Create a new schema for a table.
 #### add_column
 
 ```vais
-F add_column(&self, name: str, col_type: i64) -> Schema
+fn add_column(&self, name: str, col_type: i64) -> Schema
 ```
 
 Add a column to the schema. Returns self for chaining.
@@ -134,7 +136,7 @@ Add a column to the schema. Returns self for chaining.
 #### primary_key
 
 ```vais
-F primary_key(&self) -> Schema
+fn primary_key(&self) -> Schema
 ```
 
 Mark the last added column as primary key. Returns self for chaining.
@@ -142,7 +144,7 @@ Mark the last added column as primary key. Returns self for chaining.
 #### nullable
 
 ```vais
-F nullable(&self) -> Schema
+fn nullable(&self) -> Schema
 ```
 
 Mark the last added column as nullable. Returns self for chaining.
@@ -150,7 +152,7 @@ Mark the last added column as nullable. Returns self for chaining.
 #### with_default
 
 ```vais
-F with_default(&self, val: str) -> Schema
+fn with_default(&self, val: str) -> Schema
 ```
 
 Set default value on the last added column. Returns self for chaining.
@@ -158,7 +160,7 @@ Set default value on the last added column. Returns self for chaining.
 #### col_type_str
 
 ```vais
-F col_type_str(col_type: i64) -> str
+fn col_type_str(col_type: i64) -> str
 ```
 
 Get column type string from type ID (static method).
@@ -166,7 +168,7 @@ Get column type string from type ID (static method).
 #### create_table
 
 ```vais
-F create_table(&self) -> str
+fn create_table(&self) -> str
 ```
 
 Generate CREATE TABLE SQL statement.
@@ -174,7 +176,7 @@ Generate CREATE TABLE SQL statement.
 #### drop_table
 
 ```vais
-F drop_table(&self) -> str
+fn drop_table(&self) -> str
 ```
 
 Generate DROP TABLE SQL statement.
@@ -182,7 +184,7 @@ Generate DROP TABLE SQL statement.
 #### len
 
 ```vais
-F len(&self) -> i64
+fn len(&self) -> i64
 ```
 
 Get column count.
@@ -190,7 +192,7 @@ Get column count.
 #### drop
 
 ```vais
-F drop(&self) -> i64
+fn drop(&self) -> i64
 ```
 
 Free memory.
@@ -200,7 +202,7 @@ Free memory.
 ### WhereClause Struct
 
 ```vais
-S WhereClause {
+struct WhereClause {
     items: i64,        # Pointer to array: [connector, column, operator, value]
     count: i64,
     capacity: i64
@@ -212,7 +214,7 @@ S WhereClause {
 #### new
 
 ```vais
-F new() -> WhereClause
+fn new() -> WhereClause
 ```
 
 Create a new WHERE clause builder.
@@ -220,7 +222,7 @@ Create a new WHERE clause builder.
 #### add
 
 ```vais
-F add(&self, connector: str, column: str, operator: str, value: str) -> i64
+fn add(&self, connector: str, column: str, operator: str, value: str) -> i64
 ```
 
 Add a WHERE condition. `connector` is "AND", "OR", or "" (for first). Returns 0 on success, -1 on capacity exceeded.
@@ -228,7 +230,7 @@ Add a WHERE condition. `connector` is "AND", "OR", or "" (for first). Returns 0 
 #### write_to
 
 ```vais
-F write_to(&self, buf: i64, pos: i64) -> i64
+fn write_to(&self, buf: i64, pos: i64) -> i64
 ```
 
 Write WHERE clause to buffer, returns new position.
@@ -236,7 +238,7 @@ Write WHERE clause to buffer, returns new position.
 #### drop
 
 ```vais
-F drop(&self) -> i64
+fn drop(&self) -> i64
 ```
 
 Free memory.
@@ -246,7 +248,7 @@ Free memory.
 ### QueryBuilder Struct
 
 ```vais
-S QueryBuilder {
+struct QueryBuilder {
     query_type: i64,
     table: str,
     columns: i64,        # Pointer to column name array
@@ -266,7 +268,7 @@ S QueryBuilder {
 #### new
 
 ```vais
-F new() -> QueryBuilder
+fn new() -> QueryBuilder
 ```
 
 Create a new query builder.
@@ -274,7 +276,7 @@ Create a new query builder.
 #### select
 
 ```vais
-F select(cols: str) -> QueryBuilder
+fn select(cols: str) -> QueryBuilder
 ```
 
 Create a SELECT query with specified columns (e.g., "id, name, age" or "*").
@@ -282,7 +284,7 @@ Create a SELECT query with specified columns (e.g., "id, name, age" or "*").
 #### from
 
 ```vais
-F from(&self, table: str) -> QueryBuilder
+fn from(&self, table: str) -> QueryBuilder
 ```
 
 Set the FROM table. Returns self for chaining.
@@ -290,7 +292,7 @@ Set the FROM table. Returns self for chaining.
 #### where_eq
 
 ```vais
-F where_eq(&self, column: str, value: str) -> QueryBuilder
+fn where_eq(&self, column: str, value: str) -> QueryBuilder
 ```
 
 Add WHERE column = value. Returns self for chaining.
@@ -298,7 +300,7 @@ Add WHERE column = value. Returns self for chaining.
 #### where_gt
 
 ```vais
-F where_gt(&self, column: str, value: str) -> QueryBuilder
+fn where_gt(&self, column: str, value: str) -> QueryBuilder
 ```
 
 Add WHERE column > value. Returns self for chaining.
@@ -306,7 +308,7 @@ Add WHERE column > value. Returns self for chaining.
 #### where_lt
 
 ```vais
-F where_lt(&self, column: str, value: str) -> QueryBuilder
+fn where_lt(&self, column: str, value: str) -> QueryBuilder
 ```
 
 Add WHERE column < value. Returns self for chaining.
@@ -314,7 +316,7 @@ Add WHERE column < value. Returns self for chaining.
 #### and_eq
 
 ```vais
-F and_eq(&self, column: str, value: str) -> QueryBuilder
+fn and_eq(&self, column: str, value: str) -> QueryBuilder
 ```
 
 Add AND column = value. Returns self for chaining.
@@ -322,7 +324,7 @@ Add AND column = value. Returns self for chaining.
 #### or_eq
 
 ```vais
-F or_eq(&self, column: str, value: str) -> QueryBuilder
+fn or_eq(&self, column: str, value: str) -> QueryBuilder
 ```
 
 Add OR column = value. Returns self for chaining.
@@ -330,7 +332,7 @@ Add OR column = value. Returns self for chaining.
 #### order_by
 
 ```vais
-F order_by(&self, column: str, direction: str) -> QueryBuilder
+fn order_by(&self, column: str, direction: str) -> QueryBuilder
 ```
 
 Add ORDER BY clause. Direction is "ASC" or "DESC". Returns self for chaining.
@@ -338,7 +340,7 @@ Add ORDER BY clause. Direction is "ASC" or "DESC". Returns self for chaining.
 #### limit
 
 ```vais
-F limit(&self, n: i64) -> QueryBuilder
+fn limit(&self, n: i64) -> QueryBuilder
 ```
 
 Add LIMIT clause. Returns self for chaining.
@@ -346,7 +348,7 @@ Add LIMIT clause. Returns self for chaining.
 #### offset
 
 ```vais
-F offset(&self, n: i64) -> QueryBuilder
+fn offset(&self, n: i64) -> QueryBuilder
 ```
 
 Add OFFSET clause. Returns self for chaining.
@@ -354,7 +356,7 @@ Add OFFSET clause. Returns self for chaining.
 #### insert
 
 ```vais
-F insert(table: str, cols: str, vals: str) -> QueryBuilder
+fn insert(table: str, cols: str, vals: str) -> QueryBuilder
 ```
 
 Create an INSERT query. `cols` is comma-separated column names, `vals` is comma-separated values.
@@ -362,7 +364,7 @@ Create an INSERT query. `cols` is comma-separated column names, `vals` is comma-
 #### update
 
 ```vais
-F update(table: str, set_clause: str) -> QueryBuilder
+fn update(table: str, set_clause: str) -> QueryBuilder
 ```
 
 Create an UPDATE query. `set_clause` is like "name = 'Alice', age = 30".
@@ -370,7 +372,7 @@ Create an UPDATE query. `set_clause` is like "name = 'Alice', age = 30".
 #### delete
 
 ```vais
-F delete(table: str) -> QueryBuilder
+fn delete(table: str) -> QueryBuilder
 ```
 
 Create a DELETE query.
@@ -378,7 +380,7 @@ Create a DELETE query.
 #### build
 
 ```vais
-F build(&self) -> str
+fn build(&self) -> str
 ```
 
 Build the final SQL string.
@@ -386,7 +388,7 @@ Build the final SQL string.
 #### drop
 
 ```vais
-F drop(&self) -> i64
+fn drop(&self) -> i64
 ```
 
 Free memory.
@@ -396,7 +398,7 @@ Free memory.
 ### Migration Struct
 
 ```vais
-S Migration {
+struct Migration {
     version: i64,
     name: str,
     up_sql: str,
@@ -409,7 +411,7 @@ S Migration {
 #### new
 
 ```vais
-F new(version: i64, name: str, up_sql: str, down_sql: str) -> Migration
+fn new(version: i64, name: str, up_sql: str, down_sql: str) -> Migration
 ```
 
 Create a new migration.
@@ -417,7 +419,7 @@ Create a new migration.
 #### migrate_up
 
 ```vais
-F migrate_up(&self) -> str
+fn migrate_up(&self) -> str
 ```
 
 Get the up migration SQL.
@@ -425,7 +427,7 @@ Get the up migration SQL.
 #### migrate_down
 
 ```vais
-F migrate_down(&self) -> str
+fn migrate_down(&self) -> str
 ```
 
 Get the down migration SQL.
@@ -435,7 +437,7 @@ Get the down migration SQL.
 ### MigrationRunner Struct
 
 ```vais
-S MigrationRunner {
+struct MigrationRunner {
     migrations: i64,     # Pointer to array of Migration pointers
     count: i64,
     capacity: i64
@@ -447,7 +449,7 @@ S MigrationRunner {
 #### new
 
 ```vais
-F new() -> MigrationRunner
+fn new() -> MigrationRunner
 ```
 
 Create a new migration runner.
@@ -455,7 +457,7 @@ Create a new migration runner.
 #### add
 
 ```vais
-F add(&self, migration: Migration) -> MigrationRunner
+fn add(&self, migration: Migration) -> MigrationRunner
 ```
 
 Add a migration. Returns self for chaining.
@@ -463,7 +465,7 @@ Add a migration. Returns self for chaining.
 #### migrate_up_all
 
 ```vais
-F migrate_up_all(&self) -> str
+fn migrate_up_all(&self) -> str
 ```
 
 Get all up-migration SQL statements concatenated.
@@ -471,7 +473,7 @@ Get all up-migration SQL statements concatenated.
 #### migrate_down_all
 
 ```vais
-F migrate_down_all(&self) -> str
+fn migrate_down_all(&self) -> str
 ```
 
 Get all down-migration SQL statements (in reverse order).
@@ -479,7 +481,7 @@ Get all down-migration SQL statements (in reverse order).
 #### len
 
 ```vais
-F len(&self) -> i64
+fn len(&self) -> i64
 ```
 
 Get migration count.
@@ -487,7 +489,7 @@ Get migration count.
 #### drop
 
 ```vais
-F drop(&self) -> i64
+fn drop(&self) -> i64
 ```
 
 Free memory.
@@ -495,43 +497,43 @@ Free memory.
 ## Convenience Functions
 
 ```vais
-F schema(table_name: str) -> Schema
+fn schema(table_name: str) -> Schema
 ```
 
 Create a new schema for a table.
 
 ```vais
-F select_from(columns: str, table: str) -> QueryBuilder
+fn select_from(columns: str, table: str) -> QueryBuilder
 ```
 
 Create a SELECT query builder.
 
 ```vais
-F insert_into(table: str, cols: str, vals: str) -> QueryBuilder
+fn insert_into(table: str, cols: str, vals: str) -> QueryBuilder
 ```
 
 Create an INSERT query builder.
 
 ```vais
-F update_table(table: str, set_clause: str) -> QueryBuilder
+fn update_table(table: str, set_clause: str) -> QueryBuilder
 ```
 
 Create an UPDATE query builder.
 
 ```vais
-F delete_from(table: str) -> QueryBuilder
+fn delete_from(table: str) -> QueryBuilder
 ```
 
 Create a DELETE query builder.
 
 ```vais
-F migration(version: i64, name: str, up_sql: str, down_sql: str) -> Migration
+fn migration(version: i64, name: str, up_sql: str, down_sql: str) -> Migration
 ```
 
 Create a new migration.
 
 ```vais
-F migration_runner() -> MigrationRunner
+fn migration_runner() -> MigrationRunner
 ```
 
 Create a new migration runner.
@@ -541,9 +543,9 @@ Create a new migration runner.
 ### Define Schema and Create Table
 
 ```vais
-U std/orm
+use std/orm
 
-F create_users_table() -> str {
+fn create_users_table() -> str {
     s := schema("users")
         .add_column("id", COL_INTEGER)
         .primary_key()
@@ -565,9 +567,9 @@ F create_users_table() -> str {
 ### SELECT Query
 
 ```vais
-U std/orm
+use std/orm
 
-F find_active_users() -> str {
+fn find_active_users() -> str {
     q := select_from("id, name, email", "users")
         .where_eq("active", "1")
         .order_by("name", "ASC")
@@ -584,9 +586,9 @@ F find_active_users() -> str {
 ### INSERT Query
 
 ```vais
-U std/orm
+use std/orm
 
-F insert_user(name: str, email: str, age: i64) -> str {
+fn insert_user(name: str, email: str, age: i64) -> str {
     q := insert_into("users", "name, email, age", "Alice, alice@example.com, 30")
 
     sql := q.build()
@@ -600,9 +602,9 @@ F insert_user(name: str, email: str, age: i64) -> str {
 ### UPDATE Query
 
 ```vais
-U std/orm
+use std/orm
 
-F update_user_email(user_id: i64, new_email: str) -> str {
+fn update_user_email(user_id: i64, new_email: str) -> str {
     q := update_table("users", "email = 'newemail@example.com'")
         .where_eq("id", "42")
 
@@ -617,9 +619,9 @@ F update_user_email(user_id: i64, new_email: str) -> str {
 ### DELETE Query
 
 ```vais
-U std/orm
+use std/orm
 
-F delete_inactive_users() -> str {
+fn delete_inactive_users() -> str {
     q := delete_from("users")
         .where_eq("active", "0")
 
@@ -634,9 +636,9 @@ F delete_inactive_users() -> str {
 ### Complex WHERE Clauses
 
 ```vais
-U std/orm
+use std/orm
 
-F find_users_complex() -> str {
+fn find_users_complex() -> str {
     q := QueryBuilder::select("*")
         .from("users")
         .where_eq("active", "1")
@@ -658,9 +660,9 @@ F find_users_complex() -> str {
 ### Migrations
 
 ```vais
-U std/orm
+use std/orm
 
-F setup_migrations() -> MigrationRunner {
+fn setup_migrations() -> MigrationRunner {
     runner := migration_runner()
 
     # Migration 1: Create users table
@@ -693,7 +695,7 @@ F setup_migrations() -> MigrationRunner {
     runner
 }
 
-F run_migrations() -> i64 {
+fn run_migrations() -> i64 {
     runner := setup_migrations()
 
     # Get all up migrations
@@ -712,15 +714,15 @@ F run_migrations() -> i64 {
 ### Full Example with PostgreSQL
 
 ```vais
-U std/orm
-U std/postgres
+use std/orm
+use std/postgres
 
-F main() -> i64 {
+fn main() -> i64 {
     # Connect to database
     conn := pg_connect("localhost", 5432, "mydb", "user", "pass")
 
     I conn.is_connected() == 0 {
-        R -1
+        return -1
     }
 
     # Create schema
@@ -773,9 +775,9 @@ F main() -> i64 {
 ### Drop Table
 
 ```vais
-U std/orm
+use std/orm
 
-F drop_users_table() -> str {
+fn drop_users_table() -> str {
     s := schema("users")
     sql := s.drop_table()
     # sql = "DROP TABLE IF EXISTS users;"

@@ -4,11 +4,16 @@
 
 ## Overview
 
-The JSON module provides a complete JSON parsing and serialization implementation with support for:
+The JSON module provides a JSON parsing and serialization implementation surface
+with support for:
 - Primitive types: null, boolean, numbers (integers and decimals)
 - Complex types: strings, arrays, objects
 - Recursive parsing
 - JSON to string conversion
+
+The public project status does not claim complete JSON grammar validation across
+every parser path. Treat complete JSON conformance as gate-bound until a named
+JSON gate promotes it.
 
 ## JSON Value Types
 
@@ -29,7 +34,7 @@ JSON values use a discriminant-based representation:
 ### json_parse
 
 ```vais
-F json_parse(input: i64) -> i64
+fn json_parse(input: i64) -> i64
 ```
 
 Parse a JSON string into a JSON value structure.
@@ -50,7 +55,7 @@ value := json_parse(str_to_ptr(json_str))
 ### json_type
 
 ```vais
-F json_type(v: i64) -> i64
+fn json_type(v: i64) -> i64
 ```
 
 Get the type discriminant of a JSON value.
@@ -65,7 +70,7 @@ Get the type discriminant of a JSON value.
 ### json_free
 
 ```vais
-F json_free(v: i64) -> i64
+fn json_free(v: i64) -> i64
 ```
 
 Free memory allocated for a JSON value.
@@ -80,7 +85,7 @@ Free memory allocated for a JSON value.
 ### json_get_int
 
 ```vais
-F json_get_int(v: i64) -> i64
+fn json_get_int(v: i64) -> i64
 ```
 
 Extract integer value from a JSON number.
@@ -95,7 +100,7 @@ Extract integer value from a JSON number.
 ### json_get_bool
 
 ```vais
-F json_get_bool(v: i64) -> i64
+fn json_get_bool(v: i64) -> i64
 ```
 
 Extract boolean value from a JSON boolean.
@@ -110,7 +115,7 @@ Extract boolean value from a JSON boolean.
 ### json_get_string
 
 ```vais
-F json_get_string(v: i64) -> i64
+fn json_get_string(v: i64) -> i64
 ```
 
 Extract string pointer from a JSON string.
@@ -125,7 +130,7 @@ Extract string pointer from a JSON string.
 ### json_array_len
 
 ```vais
-F json_array_len(v: i64) -> i64
+fn json_array_len(v: i64) -> i64
 ```
 
 Get the length of a JSON array.
@@ -140,7 +145,7 @@ Get the length of a JSON array.
 ### json_array_get
 
 ```vais
-F json_array_get(v: i64, index: i64) -> i64
+fn json_array_get(v: i64, index: i64) -> i64
 ```
 
 Get element at index from a JSON array.
@@ -156,7 +161,7 @@ Get element at index from a JSON array.
 ### json_array_create
 
 ```vais
-F json_array_create() -> i64
+fn json_array_create() -> i64
 ```
 
 Create a new empty JSON array.
@@ -168,7 +173,7 @@ Create a new empty JSON array.
 ### json_array_add
 
 ```vais
-F json_array_add(arr_v: i64, value: i64) -> i64
+fn json_array_add(arr_v: i64, value: i64) -> i64
 ```
 
 Add an element to a JSON array.
@@ -184,7 +189,7 @@ Add an element to a JSON array.
 ### json_object_get
 
 ```vais
-F json_object_get(v: i64, key: str) -> i64
+fn json_object_get(v: i64, key: str) -> i64
 ```
 
 Get value associated with a key from a JSON object.
@@ -200,7 +205,7 @@ Get value associated with a key from a JSON object.
 ### json_object_create
 
 ```vais
-F json_object_create() -> i64
+fn json_object_create() -> i64
 ```
 
 Create a new empty JSON object.
@@ -212,7 +217,7 @@ Create a new empty JSON object.
 ### json_object_put
 
 ```vais
-F json_object_put(obj_v: i64, key: str, value: i64) -> i64
+fn json_object_put(obj_v: i64, key: str, value: i64) -> i64
 ```
 
 Set a key-value pair in a JSON object.
@@ -229,7 +234,7 @@ Set a key-value pair in a JSON object.
 ### json_to_string
 
 ```vais
-F json_to_string(v: i64) -> i64
+fn json_to_string(v: i64) -> i64
 ```
 
 Convert a JSON value to its string representation.
@@ -244,7 +249,7 @@ Convert a JSON value to its string representation.
 ### json_null
 
 ```vais
-F json_null() -> i64
+fn json_null() -> i64
 ```
 
 Create a JSON null value.
@@ -256,7 +261,7 @@ Create a JSON null value.
 ### json_bool
 
 ```vais
-F json_bool(b: i64) -> i64
+fn json_bool(b: i64) -> i64
 ```
 
 Create a JSON boolean value.
@@ -271,7 +276,7 @@ Create a JSON boolean value.
 ### json_int
 
 ```vais
-F json_int(n: i64) -> i64
+fn json_int(n: i64) -> i64
 ```
 
 Create a JSON integer value.
@@ -286,7 +291,7 @@ Create a JSON integer value.
 ### json_string_new
 
 ```vais
-F json_string_new(s: i64) -> i64
+fn json_string_new(s: i64) -> i64
 ```
 
 Create a JSON string value.
@@ -301,9 +306,9 @@ Create a JSON string value.
 ### Parsing JSON
 
 ```vais
-U std/json
+use std/json
 
-F main() -> i64 {
+fn main() -> i64 {
     # Parse a JSON object
     json_str := '{"name":"Alice","age":25,"active":true}'
     root := json_parse(str_to_ptr(json_str))
@@ -322,9 +327,9 @@ F main() -> i64 {
 ### Building JSON
 
 ```vais
-U std/json
+use std/json
 
-F main() -> i64 {
+fn main() -> i64 {
     # Create object
     obj := json_object_create()
     json_object_put(obj, "name", json_string_new(str_to_ptr("Bob")))
@@ -354,9 +359,9 @@ F main() -> i64 {
 ### Working with Arrays
 
 ```vais
-U std/json
+use std/json
 
-F main() -> i64 {
+fn main() -> i64 {
     json_str := '[10,20,30,40,50]'
     arr := json_parse(str_to_ptr(json_str))
 
@@ -377,9 +382,9 @@ F main() -> i64 {
 ### Nested Structures
 
 ```vais
-U std/json
+use std/json
 
-F main() -> i64 {
+fn main() -> i64 {
     # Parse nested JSON
     json_str := '{"user":{"id":123,"roles":["admin","user"]}}'
     root := json_parse(str_to_ptr(json_str))
@@ -399,16 +404,16 @@ F main() -> i64 {
 ### Type Checking
 
 ```vais
-U std/json
+use std/json
 
-F main() -> i64 {
+fn main() -> i64 {
     value := json_parse(str_to_ptr("42"))
     t := json_type(value)
 
     I t == 2 {
         # Integer type
         n := json_get_int(value)
-    } E I t == 4 {
+    } else I t == 4 {
         # String type
         s := json_get_string(value)
     }

@@ -196,4 +196,134 @@ mod tests {
         let local = config.get(Some("local"));
         assert!(matches!(local, RegistrySource::Local { .. }));
     }
+
+    #[test]
+    fn test_registry_source_http() {
+        let src = RegistrySource::http("https://example.com");
+        match &src {
+            RegistrySource::Http { url, token } => {
+                assert_eq!(url, "https://example.com");
+                assert!(token.is_none());
+            }
+            _ => panic!("Expected Http variant"),
+        }
+    }
+
+    #[test]
+    fn test_registry_source_http_with_token() {
+        let src = RegistrySource::http_with_token("https://example.com", "my-token");
+        match &src {
+            RegistrySource::Http { url, token } => {
+                assert_eq!(url, "https://example.com");
+                assert_eq!(token.as_deref(), Some("my-token"));
+            }
+            _ => panic!("Expected Http variant"),
+        }
+    }
+
+    #[test]
+    fn test_registry_source_local() {
+        let src = RegistrySource::local("/my/registry");
+        match &src {
+            RegistrySource::Local { path } => {
+                assert_eq!(path, &PathBuf::from("/my/registry"));
+            }
+            _ => panic!("Expected Local variant"),
+        }
+    }
+
+    #[test]
+    fn test_registry_source_git() {
+        let src = RegistrySource::git("https://github.com/org/repo.git");
+        match &src {
+            RegistrySource::Git { url, branch } => {
+                assert_eq!(url, "https://github.com/org/repo.git");
+                assert_eq!(branch, "main");
+            }
+            _ => panic!("Expected Git variant"),
+        }
+    }
+
+    #[test]
+    fn test_registry_source_name_http() {
+        let src = RegistrySource::http("https://registry.vais.dev/api/v1");
+        assert_eq!(src.name(), "registry.vais.dev");
+    }
+
+    #[test]
+    fn test_registry_source_name_http_without_scheme() {
+        let src = RegistrySource::http("http://localhost:8080/api");
+        assert_eq!(src.name(), "localhost:8080");
+    }
+
+    #[test]
+    fn test_registry_source_name_local() {
+        let src = RegistrySource::local("/home/user/my-registry");
+        assert_eq!(src.name(), "my-registry");
+    }
+
+    #[test]
+    fn test_registry_source_name_git() {
+        let src = RegistrySource::git("https://github.com/org/vais-packages.git");
+        assert_eq!(src.name(), "vais-packages");
+    }
+
+    #[test]
+    fn test_registry_source_name_git_no_extension() {
+        let src = RegistrySource::git("https://github.com/org/packages");
+        assert_eq!(src.name(), "packages");
+    }
+
+    #[test]
+    fn test_registry_source_is_default() {
+        let default = RegistrySource::default();
+        assert!(default.is_default());
+
+        let custom = RegistrySource::http("https://custom.com");
+        assert!(!custom.is_default());
+    }
+
+    #[test]
+    fn test_registry_source_default() {
+        let src = RegistrySource::default();
+        match &src {
+            RegistrySource::Http { url, token } => {
+                assert!(url.contains("vais.dev"));
+                assert!(token.is_none());
+            }
+            _ => panic!("Expected Http variant"),
+        }
+    }
+
+    #[test]
+    fn test_registry_config_with_default() {
+        let config = RegistryConfig::with_default(RegistrySource::local("/tmp"));
+        assert!(matches!(config.get(None), RegistrySource::Local { .. }));
+        assert!(config.registries.is_empty());
+    }
+
+    #[test]
+    fn test_registry_config_get_nonexistent_falls_back() {
+        let config = RegistryConfig::default();
+        let src = config.get(Some("nonexistent"));
+        // Falls back to default
+        assert!(matches!(src, RegistrySource::Http { .. }));
+    }
+
+    #[test]
+    fn test_registry_config_add_multiple() {
+        let mut config = RegistryConfig::default();
+        config.add_registry("local", RegistrySource::local("/tmp/local"));
+        config.add_registry("staging", RegistrySource::http("https://staging.vais.dev"));
+
+        assert_eq!(config.registries.len(), 2);
+        assert!(matches!(
+            config.get(Some("local")),
+            RegistrySource::Local { .. }
+        ));
+        assert!(matches!(
+            config.get(Some("staging")),
+            RegistrySource::Http { .. }
+        ));
+    }
 }

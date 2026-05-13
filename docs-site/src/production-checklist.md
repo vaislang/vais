@@ -1,6 +1,8 @@
 # Production Readiness Checklist
 
-This comprehensive checklist ensures your Vais application is production-ready. It covers all Phase 33 features and critical infrastructure components.
+This checklist is a planning aid for deployment hardening. It does not certify
+that a Vais application or every listed module is deployment-ready; use the
+current gate-backed status in `PUBLIC_STATUS.md` for public claims.
 
 ## 1. TLS/HTTPS Configuration
 
@@ -26,10 +28,10 @@ This comprehensive checklist ensures your Vais application is production-ready. 
 
 Example TLS server configuration:
 ```vais
-F create_tls_server(cert_path: Str, key_path: Str, port: i32) -> Server {
+fn create_tls_server(cert_path: Str, key_path: Str, port: i32) -> Server {
   L server := Server::with_tls(cert_path, key_path)
   L _ := server.bind("0.0.0.0", port)
-  R server
+  return server
 }
 ```
 
@@ -42,10 +44,10 @@ F create_tls_server(cert_path: Str, key_path: Str, port: i32) -> Server {
 
 Example HTTPS client configuration:
 ```vais
-F fetch_secure(url: Str, ca_bundle: Str) -> Result<Str> {
+fn fetch_secure(url: Str, ca_bundle: Str) -> Result<Str> {
   L client := Client::with_ca_bundle(ca_bundle)
   L response := client.get(url)?
-  R response.body()
+  return response.body()
 }
 ```
 
@@ -85,16 +87,16 @@ F fetch_secure(url: Str, ca_bundle: Str) -> Result<Str> {
 
 Example reactor initialization:
 ```vais
-F setup_async_runtime() -> Result<()> {
+fn setup_async_runtime() -> Result<()> {
   L platform := async_platform()
   I platform == "kqueue" {
     L _ := setup_kqueue_reactor()
-  } E I platform == "epoll" {
+  } else I platform == "epoll" {
     L _ := setup_epoll_reactor()
-  } E {
-    R Err("Unsupported platform")
+  } else {
+    return Err("Unsupported platform")
   }
-  R Ok(())
+  return Ok(())
 }
 ```
 
@@ -117,7 +119,7 @@ F setup_async_runtime() -> Result<()> {
 - [ ] Document all supported reactor names
 
 ```vais
-F main() {
+fn main() {
   L platform := async_platform()
   L _ := println("Running on: {}", platform)
 }
@@ -175,7 +177,7 @@ Example Vais.toml:
 ```toml
 [package]
 name = "my-lib"
-version = "1.0.0"
+version = "0.1.0"
 authors = ["Your Name"]
 description = "Brief description"
 repository = "https://github.com/user/my-lib"
@@ -186,7 +188,7 @@ repository = "https://github.com/user/my-lib"
 
 Publishing command:
 ```bash
-vais publish --registry https://registry.vais.dev
+vais publish --registry https://registry.vaislang.dev
 ```
 
 - [ ] Sign package with key: `vais publish --sign-key ./key.pem`
@@ -200,7 +202,7 @@ vais publish --registry https://registry.vais.dev
 
 Example installing with credentials:
 ```bash
-vais install --registry https://registry.vais.dev \
+vais install --registry https://registry.vaislang.dev \
   --username user \
   --token ${REGISTRY_TOKEN}
 ```
@@ -248,10 +250,10 @@ vais publish --signature-file package.tar.gz.sha256
 
 JWT configuration:
 ```vais
-F authenticate(username: Str, password: Str) -> Result<JwtToken> {
+fn authenticate(username: Str, password: Str) -> Result<JwtToken> {
   L validated := validate_credentials(username, password)?
   L token := JwtToken::new(username, 24h)
-  R Ok(token)
+  return Ok(token)
 }
 ```
 
@@ -369,11 +371,11 @@ Configure logging with appropriate levels:
 
 Example log level configuration:
 ```vais
-F setup_logging() -> Result<()> {
+fn setup_logging() -> Result<()> {
   L logger := Logger::new()
   L _ := logger.set_level(LogLevel::INFO)
   L _ := logger.set_format(LogFormat::Json)
-  R Ok(())
+  return Ok(())
 }
 ```
 
@@ -417,12 +419,12 @@ L _ := logger.set_format(LogFormat::Json)
 
 Example file configuration:
 ```vais
-F setup_file_logging() -> Result<()> {
+fn setup_file_logging() -> Result<()> {
   L logger := Logger::new()
   L _ := logger.set_output_file("/var/log/myapp/vais.log")
   L _ := logger.set_rotation_policy(RotationPolicy::Daily)
   L _ := logger.set_retention_days(30)
-  R Ok(())
+  return Ok(())
 }
 ```
 
@@ -434,7 +436,7 @@ F setup_file_logging() -> Result<()> {
 Use spans to track request flow across components:
 
 ```vais
-F handle_request(req_id: Str) {
+fn handle_request(req_id: Str) {
   L _ := span!("handle_request", request_id = req_id, {
     L _ := authenticate_user()
     L _ := process_data()
@@ -453,7 +455,7 @@ F handle_request(req_id: Str) {
 Include structured key=value fields in logs:
 
 ```vais
-F log_request(method: Str, path: Str, status: i32, duration_ms: i64) {
+fn log_request(method: Str, path: Str, status: i32, duration_ms: i64) {
   L _ := info!("Request completed";
     request_method = method,
     request_path = path,
@@ -487,8 +489,8 @@ Structured field examples:
 
 Example gzip configuration:
 ```vais
-F create_gzip_middleware(min_size: usize) -> Middleware {
-  R Middleware::gzip()
+fn create_gzip_middleware(min_size: usize) -> Middleware {
+  return Middleware::gzip()
     .min_compress_size(min_size)
     .quality(GzipQuality::Default)
 }
@@ -521,10 +523,10 @@ For large responses:
 
 Streaming example:
 ```vais
-F stream_large_file(path: Str) -> Stream<u8> {
+fn stream_large_file(path: Str) -> Stream<u8> {
   L file := File::open(path)?
   L compressed := GzipStream::new(file)
-  R Stream::from(compressed)
+  return Stream::from(compressed)
 }
 ```
 
@@ -589,11 +591,11 @@ The default code generator provides ~36% faster compilation:
 
 Tail call example:
 ```vais
-F factorial_tail(n: i32, acc: i32) -> i32 {
+fn factorial_tail(n: i32, acc: i32) -> i32 {
   I n <= 1 {
-    R acc
+    return acc
   }
-  R factorial_tail(n - 1, acc * n)  # Tail call - optimized
+  return factorial_tail(n - 1, acc * n)  # Tail call - optimized
 }
 ```
 
@@ -632,11 +634,11 @@ MIR optimizations include:
 
 Configuration example:
 ```vais
-F create_secure_server() -> Server {
+fn create_secure_server() -> Server {
   L server := Server::new()
   L _ := server.set_min_tls_version("1.2")
   L _ := server.set_max_tls_version("1.3")
-  R server
+  return server
 }
 ```
 
@@ -685,14 +687,14 @@ ORM Security measures:
 
 Input validation example:
 ```vais
-F validate_user_input(email: Str, age: i32) -> Result<()> {
+fn validate_user_input(email: Str, age: i32) -> Result<()> {
   I !email.contains("@") {
-    R Err("Invalid email format")
+    return Err("Invalid email format")
   }
   I age < 0 || age > 150 {
-    R Err("Invalid age")
+    return Err("Invalid age")
   }
-  R Ok(())
+  return Ok(())
 }
 ```
 
@@ -760,4 +762,3 @@ Before deploying to production:
 - [OpenSSL Documentation](https://www.openssl.org/docs/) - TLS/SSL configuration
 - [LLVM Optimization Reference](https://llvm.org/docs/Passes/) - Compiler optimizations
 - [Structured Logging Best Practices](https://www.kartar.net/2015/12/structured-logging/) - Logging patterns
-
