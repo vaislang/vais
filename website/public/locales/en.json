@@ -1,30 +1,31 @@
 {
   "meta": {
     "title": "Vais - AI-Optimized Systems Programming Language",
-    "description": "Vais is a token-efficient systems programming language designed for AI code generation with native LLVM performance."
+    "description": "Vais is a systems programming language designed for AI code generation with native LLVM performance and evidence-scoped public claims."
   },
   "nav": {
-    "compare": "Compare",
+    "compare": "Gates",
     "performance": "Performance",
     "features": "Features",
     "playground": "Playground",
+    "vaisx": "VaisX",
     "docs": "Docs",
     "blog": "Blog"
   },
   "hero": {
-    "badge": "v0.0.5 — Production Ready",
-    "title": "Write <span class=\"gradient-text\">fewer tokens</span>,<br>get <span class=\"gradient-text\">native performance</span>",
-    "subtitle": "Vais (Vibe AI Language for Systems) is a systems programming language optimized for AI code generation. Single-character keywords, expression-oriented syntax, and LLVM-powered native speed.",
+    "badge": "Certified Core + Scoped Evidence",
+    "title": "Write <span class=\"gradient-text\">clear Vais</span>,<br>get <span class=\"gradient-text\">native performance</span>",
+    "subtitle": "Vais (Vibe AI Language for Systems) is a systems programming language optimized for AI code generation. The current public baseline separates main-reproducible gates, main-fixture schema gates, and integration evidence pending aggregate main port.",
     "tryBrowser": "Try in Browser",
     "install": "brew install vais"
   },
   "compare": {
-    "title": "Token Efficiency Matters",
-    "subtitle": "AI models pay per token. Vais uses <strong>33% fewer tokens than Rust</strong> and <strong>40% fewer than C</strong> for equivalent programs — single-char keywords, expression bodies, and auto-return add up across codebases.",
+    "title": "Canonical Syntax, Evidence-Scoped Claims",
+    "subtitle": "Step 19 retired the old single-letter keyword forms. Public claims now distinguish main-reproducible gates, schema gates ported to main fixtures, and integration evidence that is pending aggregate main port.",
     "vais": "Vais",
     "tokens": "tokens",
-    "barTitle": "Token Count — 4 Benchmark Programs",
-    "barNote": "fibonacci + quicksort + http_types + linked_list (tiktoken cl100k_base). See <a href=\"https://github.com/vaislang/vais/blob/main/benches/COMPARISON.md\" style=\"color: var(--primary);\">benchmarks</a>."
+    "barTitle": "Evidence Snapshot — 2026-05-13",
+    "barNote": "Schema gates are now main-fixture/local-workspace reproducible: cross-package schema 15/15 and shared-schema product evidence 9/9. Runtime and package counts remain integration evidence from the gate branch; the aggregate runtime gate is pending main port."
   },
   "performance": {
     "title": "Native Performance",
@@ -37,8 +38,8 @@
     "title": "Why Vais?",
     "subtitle": "Designed from the ground up for AI-assisted development without sacrificing performance.",
     "singleChar": {
-      "title": "Single-Char Keywords",
-      "description": "<code>F</code> for function, <code>S</code> for struct, <code>I</code>/<code>E</code> for if/else, <code>L</code> for loop, <code>M</code> for match. Minimal tokens, maximum clarity."
+      "title": "Canonical Keywords",
+      "description": "<code>fn</code>, <code>struct</code>, <code>enum</code>, <code>else</code>, <code>match</code>, <code>return</code>, <code>use</code>, and <code>pub</code> are canonical. Retired single-letter forms are no longer accepted."
     },
     "selfRecursion": {
       "title": "Self-Recursion Operator",
@@ -50,38 +51,38 @@
     },
     "llvm": {
       "title": "LLVM Native Speed",
-      "description": "Compiles to optimized native code via LLVM. Get C-level performance with high-level ergonomics. Supports LTO and PGO."
+      "description": "Compiles promoted native paths through LLVM. Broader optimization and backend claims are tracked by explicit certification gates."
     },
     "inference": {
       "title": "Type Inference",
       "description": "Bidirectional type checking infers types automatically. Write <code>x := 42</code> instead of explicit type annotations everywhere."
     },
     "toolchain": {
-      "title": "Full Toolchain",
-      "description": "LSP server, formatter, debugger, REPL, package manager, and IDE plugins for VSCode and IntelliJ. Production-ready tooling."
+      "title": "Tooling Workbench",
+      "description": "LSP server, formatter, debugger, REPL, package manager, and IDE plugins exist as implementation surfaces. Support level depends on named gates."
     },
     "multiTarget": {
-      "title": "Multi-Target Output",
-      "description": "Compile to native binaries, WebAssembly, or JavaScript. Run Vais code in the browser with full WASM interop and JS codegen."
+      "title": "Native First, Experimental Extra Targets",
+      "description": "The promoted path is native codegen. JavaScript, WebAssembly, and browser execution paths remain experimental unless a page names a gate."
     },
     "incremental": {
-      "title": "Incremental Compilation",
-      "description": "Per-module caching with parallel codegen. Recompile only what changed — 30K-line projects rebuild in under 100ms."
+      "title": "Parallel Compiler Pipeline",
+      "description": "Per-module dependency tracking and parallel codegen are active workbench surfaces; exact performance claims require benchmark gates."
     },
     "selfHosting": {
-      "title": "Self-Hosting Compiler",
-      "description": "Vais can compile itself. The self-hosting compiler achieves bootstrap with 50,000+ lines of Vais, backed by 900 E2E tests and 5,300+ total tests."
+      "title": "Self-Hosting Workbench",
+      "description": "The repository contains 50,000+ lines of Vais compiler sources used for bootstrap and conformance work. Current guarantees are the certified Core and promoted runtime gates."
     }
   },
   "playground": {
     "title": "Try Vais Now",
-    "subtitle": "Write and run Vais code directly in your browser. No installation required.",
+    "subtitle": "Try Vais syntax and examples in the browser. Real compilation uses the playground API; browser-only compile/execute remains experimental.",
     "launch": "Launch Interactive Playground",
     "loadHere": "Load Playground Here",
     "openTab": "Open in New Tab"
   },
   "install": {
-    "title": "Get Started in Seconds",
+    "title": "Build From Source or Try the Playground",
     "oneClick": "One-Click Install",
     "oneClickNote": "Detects your OS & arch automatically. macOS, Linux, WSL.",
     "windows": "Windows (PowerShell)",
@@ -102,6 +103,28 @@
     "changelog": "Changelog",
     "license": "MIT License",
     "copyright": "&copy; 2026 Vais Contributors. Built with ❤ for AI."
+  },
+  "vaisx": {
+    "badge": "New",
+    "title": "Build Web Apps with Vais",
+    "subtitle": "VaisX is the Vais web framework workbench. Current public claims distinguish main-reproducible gates, main-fixture schema gates, and integration evidence pending aggregate main port.",
+    "compiler": {
+      "title": "Compile-Time Reactivity",
+      "description": "Reactive state analysis and DOM update generation are active implementation surfaces verified only where named gates cover them."
+    },
+    "routing": {
+      "title": "File-Based Routing & SSR",
+      "description": "File-based routing and SSR/SSG modules exist; promoted behavior is documented by the current Vais Web gates."
+    },
+    "runtime": {
+      "title": "Runtime Evidence",
+      "description": "Current Vais Web integration evidence is runtime smoke 61/77, unit 390/390, package tests 3272/3272, full-build 24/24, and shared-schema product evidence 9/9 ported as a compiler main-fixture workspace gate. Size claims require a size gate."
+    },
+    "learnMore": "Learn More",
+    "github": "GitHub",
+    "quickStart": "Quick Start",
+    "install": "npm install -g @vaisx/cli",
+    "packages": "Packages"
   },
   "langSelector": {
     "label": "Language"

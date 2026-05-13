@@ -1,0 +1,35 @@
+=== Phase 198 Bucket 4 — QUICK INDEX ===
+
+TOTAL UNDEFINED NAMES: 67
+
+BREAKDOWN:
+  - PRESENT in stdlib (need imports): 4
+  - RENAMED (stdlib uses short name): 3
+  - STILL_MISSING (60):
+    * Database/Storage: 17 items
+    * SQL Parsing: 7 items
+    * Error Types: 8 items
+    * Serialization: 8 items
+    * Utilities: 28 items
+
+KEY DECISIONS:
+  1. PRESENT (4): Add stdlib imports to vaisdb
+  2. RENAMED (3): sed refactor in vaisdb
+  3. Database/Storage: Likely self-contained module (not stdlib)
+  4. SQL Parsing: Move to vaisdb internals
+  5. Error Types: Custom enum (not function stubs)
+  6. Serialization: Audit stdlib coverage, stub ~4 endian variants if missing
+  7. Utilities: Split 3 ways—stdlib gaps, method refactor, vaisdb-specific
+
+MAPPING DOCUMENT:
+  📄 /Users/sswoo/study/projects/vais/compiler/docs/phase198/bucket4_stdlib_mapping.md
+
+SUPPORTING DATA FILES (/tmp/):
+  • b4_undefined_names.txt — all 67 names
+  • b4_mapping.tsv — PRESENT/MISSING classification
+  • b4_missing_analysis.tsv — rename/category analysis
+  • b4_present_detail.txt, b4_renamed_detail.txt — summaries
+
+NEXT OWNER: Phase 198-B6 (import/rename refactor team)
+
+====== END QUICK INDEX ======

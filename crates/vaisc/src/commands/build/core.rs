@@ -181,9 +181,21 @@ pub(crate) fn cmd_build(
 ) -> Result<(), String> {
     use incremental::{get_cache_dir, CompilationOptions, IncrementalCache};
 
-    // Initialize incremental compilation cache
+    // Initialize incremental compilation cache.
+    // The cache is always initialized (for metadata tracking) but skip-on-hit
+    // behaviour is controlled by the `--force-rebuild` flag (default: incremental enabled).
     let cache_dir = get_cache_dir(input);
     let mut cache = IncrementalCache::new(cache_dir).ok();
+
+    if verbose {
+        if let Some(ref c) = cache {
+            println!(
+                "{} incremental cache at {}",
+                "Incremental:".cyan().bold(),
+                c.cache_dir().display()
+            );
+        }
+    }
 
     // Set compilation options for cache validity checking
     if let Some(ref mut c) = cache {
@@ -251,6 +263,7 @@ pub(crate) fn cmd_build(
             verbose,
             &main_source,
             &query_db,
+            input.parent().map(|p| p as &Path),
         )?
     } else {
         load_module_with_imports_internal(
@@ -260,6 +273,7 @@ pub(crate) fn cmd_build(
             verbose,
             &main_source,
             &query_db,
+            input.parent().map(|p| p as &Path),
         )?
     };
     let parse_time = parse_start.elapsed();
@@ -311,8 +325,8 @@ pub(crate) fn cmd_build(
     // Register builtin panic! macro: panic!("msg") => __panic("msg")
     {
         use vais_ast::{
-            MacroDef, MacroPattern, MacroPatternElement, MacroRule, MacroTemplate,
-            MacroTemplateElement, MacroToken, MetaVarKind, Span, Spanned, Delimiter,
+            Delimiter, MacroDef, MacroPattern, MacroPatternElement, MacroRule, MacroTemplate,
+            MacroTemplateElement, MacroToken, MetaVarKind, Span, Spanned,
         };
         macro_registry.register(MacroDef {
             name: Spanned::new("panic".to_string(), Span::new(0, 5)),
@@ -397,9 +411,13 @@ pub(crate) fn cmd_build(
     }
 
     // Per-module codegen path
-    // VAIS_SINGLE_MODULE=1 forces single-module codegen (avoids per-module item index issues)
-    let force_single = std::env::var("VAIS_SINGLE_MODULE").map_or(false, |v| v == "1");
-    let use_per_module = !force_single && (per_module || final_ast.modules_map.as_ref().is_some_and(|m| m.len() > 1));
+    // VAIS_SINGLE_MODULE=1 forces single-module codegen (deprecated — per-module now supports generics)
+    let force_single = std::env::var("VAIS_SINGLE_MODULE").is_ok_and(|v| v == "1");
+    if force_single && verbose {
+        eprintln!("warning: VAIS_SINGLE_MODULE=1 is deprecated — per-module codegen now supports cross-module generics");
+    }
+    let use_per_module = !force_single
+        && (per_module || final_ast.modules_map.as_ref().is_some_and(|m| m.len() > 1));
     if use_per_module {
         if let Some(ref mmap) = final_ast.modules_map {
             if mmap.len() > 1 {
@@ -575,6 +593,7 @@ fn check_cache_skip(
                             incremental::CacheMissReason::OptionsChanged => "options changed",
                             incremental::CacheMissReason::FileDeleted => "deleted",
                             incremental::CacheMissReason::CacheCorrupted => "cache corrupted",
+                            incremental::CacheMissReason::StdChanged => "std changed",
                         })
                         .collect();
                     let file_name = file.file_name().and_then(|n| n.to_str()).unwrap_or("?");
@@ -659,6 +678,8 @@ fn run_type_check(
             checker = final_checker;
 
             if !all_errors.is_empty() {
+                // Phase 158/#4: VAIS_TC_NONFATAL was removed — TC errors are always
+                // fatal. Parallel TC errors are surfaced as a single InferFailed.
                 Err(vais_types::TypeError::InferFailed {
                     kind: "module".to_string(),
                     name: "parallel_tc".to_string(),
@@ -673,70 +694,41 @@ fn run_type_check(
             checker.check_module(final_ast)
         };
 
-        // Handle type checking result — non-fatal mode: convert errors to warnings
-        // and continue to codegen (partial IR generation)
-        let tc_non_fatal = std::env::var("VAIS_TC_NONFATAL").is_ok();
+        // Handle type checking result (Phase 158/#4: TC errors are always fatal).
         if let Err(e) = tc_result {
             if suggest_fixes {
                 print_suggested_fixes(&e, main_source);
             }
             let total_errors = 1 + checker.get_collected_errors().len();
-            if tc_non_fatal {
+            for collected_err in checker.get_collected_errors() {
                 eprintln!(
-                    "{}: {} type error(s) demoted to warnings (VAIS_TC_NONFATAL)",
-                    "warning".yellow().bold(),
-                    total_errors
+                    "{}",
+                    error_formatter::format_type_error(collected_err, main_source, input)
                 );
-                for collected_err in checker.get_collected_errors() {
-                    eprintln!(
-                        "{}",
-                        error_formatter::format_type_error(collected_err, main_source, input)
-                    );
-                }
-            } else {
-                for collected_err in checker.get_collected_errors() {
-                    eprintln!(
-                        "{}",
-                        error_formatter::format_type_error(collected_err, main_source, input)
-                    );
-                }
-                if let Some(ref mut c) = cache {
-                    incremental::update_tc_cache(c, final_ast, false);
-                }
-                if total_errors > 1 {
-                    eprintln!("{}: {} errors found", "error".red().bold(), total_errors);
-                }
-                return Err(error_formatter::format_type_error(&e, main_source, input));
             }
+            if let Some(ref mut c) = cache {
+                incremental::update_tc_cache(c, final_ast, false);
+            }
+            if total_errors > 1 {
+                eprintln!("{}: {} errors found", "error".red().bold(), total_errors);
+            }
+            return Err(error_formatter::format_type_error(&e, main_source, input));
         }
 
-        // Even if check_module succeeded, there may be collected errors
+        // Even if check_module succeeded, there may be collected errors.
+        // Phase 158/#4: these are fatal — no VAIS_TC_NONFATAL escape hatch.
         if !checker.get_collected_errors().is_empty() {
             let total_errors = checker.get_collected_errors().len();
-            if tc_non_fatal {
+            for collected_err in checker.get_collected_errors() {
                 eprintln!(
-                    "{}: {} type error(s) demoted to warnings (VAIS_TC_NONFATAL)",
-                    "warning".yellow().bold(),
-                    total_errors
+                    "{}",
+                    error_formatter::format_type_error(collected_err, main_source, input)
                 );
-                for collected_err in checker.get_collected_errors() {
-                    eprintln!(
-                        "{}",
-                        error_formatter::format_type_error(collected_err, main_source, input)
-                    );
-                }
-            } else {
-                for collected_err in checker.get_collected_errors() {
-                    eprintln!(
-                        "{}",
-                        error_formatter::format_type_error(collected_err, main_source, input)
-                    );
-                }
-                if let Some(ref mut c) = cache {
-                    incremental::update_tc_cache(c, final_ast, false);
-                }
-                return Err(format!("{} type error(s) found", total_errors));
             }
+            if let Some(ref mut c) = cache {
+                incremental::update_tc_cache(c, final_ast, false);
+            }
+            return Err(format!("{} type error(s) found", total_errors));
         }
 
         // Update cache: TC passed

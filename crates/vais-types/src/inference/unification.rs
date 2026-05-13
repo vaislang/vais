@@ -23,8 +23,7 @@ impl TypeChecker {
             | ResolvedType::Range(inner)
             | ResolvedType::Future(inner)
             | ResolvedType::Linear(inner)
-            | ResolvedType::Affine(inner)
-            | ResolvedType::Lazy(inner) => Self::occurs_in(id, inner),
+            | ResolvedType::Affine(inner) => Self::occurs_in(id, inner),
             ResolvedType::Result(ok, err) | ResolvedType::Map(ok, err) => {
                 Self::occurs_in(id, ok) || Self::occurs_in(id, err)
             }
@@ -191,20 +190,25 @@ impl TypeChecker {
                 }
                 Ok(())
             }
-            // Allow implicit integer type conversions (widening and narrowing)
+            // Allow implicit integer type unification (widening within same signedness family).
+            // Vais integer literals default to i64, so this enables `a:i8 = 1` patterns.
             (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => Ok(()),
-            // Allow implicit float ↔ float coercion (f32 ↔ f64)
-            (ResolvedType::F32, ResolvedType::F64)
-            | (ResolvedType::F64, ResolvedType::F32) => Ok(()),
-            // Allow implicit float ↔ integer coercion (for VaisDB codegen compatibility)
-            (a, b) if Self::is_integer_type(a) && Self::is_float_type(b) => Ok(()),
-            (a, b) if Self::is_float_type(a) && Self::is_integer_type(b) => Ok(()),
+            // Allow int ↔ float unification (Phase 160-A numeric promotion).
+            // Integer literals like `0` adapt to f32/f64 context. Enables `x: f32 = 0`.
+            (a, b)
+                if (Self::is_integer_type(a) && Self::is_float_type(b))
+                    || (Self::is_float_type(a) && Self::is_integer_type(b)) =>
+            {
+                Ok(())
+            }
+            // Allow f32 ↔ f64 unification (float literal inference).
+            (ResolvedType::F32, ResolvedType::F64) | (ResolvedType::F64, ResolvedType::F32) => {
+                Ok(())
+            }
             // Allow unit () ↔ i64 (void context: i64 return in void function)
-            (ResolvedType::Unit, ResolvedType::I64)
-            | (ResolvedType::I64, ResolvedType::Unit) => Ok(()),
-            // Allow str ↔ i64 (str is a fat pointer, i64 at IR level)
-            (ResolvedType::Str, ResolvedType::I64)
-            | (ResolvedType::I64, ResolvedType::Str) => Ok(()),
+            (ResolvedType::Unit, ResolvedType::I64) | (ResolvedType::I64, ResolvedType::Unit) => {
+                Ok(())
+            }
             // Allow Result/Optional ↔ unit (implicit Ok(()) wrapping)
             (ResolvedType::Result(_, _), ResolvedType::Unit)
             | (ResolvedType::Unit, ResolvedType::Result(_, _))
@@ -213,16 +217,41 @@ impl TypeChecker {
             // Vec<T> ↔ Slice/Ref — Vec<u8> and &[u8] are compatible
             (ResolvedType::Named { name, generics }, ResolvedType::Slice(elem))
             | (ResolvedType::Slice(elem), ResolvedType::Named { name, generics })
-                if name == "Vec" && !generics.is_empty() => {
+                if name == "Vec" && !generics.is_empty() =>
+            {
                 self.unify(&generics[0], elem)
             }
             (ResolvedType::Named { name, generics }, ResolvedType::Ref(inner))
             | (ResolvedType::Ref(inner), ResolvedType::Named { name, generics })
-                if name == "Vec" && !generics.is_empty() => {
+                if name == "Vec" && !generics.is_empty() =>
+            {
                 if let ResolvedType::Slice(elem) = inner.as_ref() {
                     self.unify(&generics[0], elem)
                 } else {
                     Ok(()) // Permissive: allow Vec ↔ &T
+                }
+            }
+            // Ref(Vec<T>) ↔ Slice(T) auto-coercion (Phase 163).
+            // &Vec<&[u8]> and &[&[u8]] are compatible — Rust-style auto-deref from &Vec<T> to &[T].
+            (ResolvedType::Ref(inner), ResolvedType::Slice(elem))
+            | (ResolvedType::Slice(elem), ResolvedType::Ref(inner))
+                if matches!(inner.as_ref(), ResolvedType::Named { name, generics, .. } if name == "Vec" && !generics.is_empty()) =>
+            {
+                if let ResolvedType::Named { generics, .. } = inner.as_ref() {
+                    self.unify(&generics[0], elem)
+                } else {
+                    Ok(())
+                }
+            }
+            // RefMut(Vec<T>) ↔ SliceMut(T) auto-coercion (Phase 163).
+            (ResolvedType::RefMut(inner), ResolvedType::SliceMut(elem))
+            | (ResolvedType::SliceMut(elem), ResolvedType::RefMut(inner))
+                if matches!(inner.as_ref(), ResolvedType::Named { name, generics, .. } if name == "Vec" && !generics.is_empty()) =>
+            {
+                if let ResolvedType::Named { generics, .. } = inner.as_ref() {
+                    self.unify(&generics[0], elem)
+                } else {
+                    Ok(())
                 }
             }
             // Pointer <-> i64 implicit unification.
@@ -232,6 +261,19 @@ impl TypeChecker {
             // Scope: unification only — does not enable arbitrary pointer arithmetic in user code.
             (ResolvedType::Pointer(_), ResolvedType::I64)
             | (ResolvedType::I64, ResolvedType::Pointer(_)) => Ok(()),
+            // Pointer<T> ↔ Slice<T> / SliceMut<T> auto-coercion (Phase 162).
+            // *u8 and &[u8] are compatible in systems code — both represent byte buffers.
+            // Unifies element types to maintain generic consistency.
+            (ResolvedType::Pointer(p), ResolvedType::Slice(s))
+            | (ResolvedType::Slice(s), ResolvedType::Pointer(p))
+            | (ResolvedType::Pointer(p), ResolvedType::SliceMut(s))
+            | (ResolvedType::SliceMut(s), ResolvedType::Pointer(p)) => self.unify(p, s),
+            // Array/ConstArray ↔ Pointer auto-coercion (Phase 162).
+            // [u64] / [u64; N] and *i64 are compatible (C-style array decay to pointer).
+            (ResolvedType::ConstArray { element, .. }, ResolvedType::Pointer(p))
+            | (ResolvedType::Pointer(p), ResolvedType::ConstArray { element, .. })
+            | (ResolvedType::Array(element), ResolvedType::Pointer(p))
+            | (ResolvedType::Pointer(p), ResolvedType::Array(element)) => self.unify(element, p),
             // Linear type: unwrap and unify with inner type
             (ResolvedType::Linear(inner), other) | (other, ResolvedType::Linear(inner)) => {
                 self.unify(inner, other)
@@ -282,6 +324,8 @@ impl TypeChecker {
                 self.unify(ea, eb)
             }
             // Vector: element type unification + lanes equality
+            // SIMD vectors require exact element type match (no implicit float coercion)
+            // because <4 x f32> (128-bit) is fundamentally different from <4 x f64> (256-bit).
             (
                 ResolvedType::Vector {
                     element: ea,
@@ -299,7 +343,23 @@ impl TypeChecker {
                         span: None,
                     });
                 }
-                self.unify(ea, eb)
+                // Strict element comparison: resolve substitutions and compare directly
+                let ea_resolved = self.apply_substitutions(ea);
+                let eb_resolved = self.apply_substitutions(eb);
+                if ea_resolved == eb_resolved {
+                    Ok(())
+                } else if let (ResolvedType::Var(_), _) | (_, ResolvedType::Var(_)) =
+                    (&ea_resolved, &eb_resolved)
+                {
+                    // Allow type variable unification (inference)
+                    self.unify(ea, eb)
+                } else {
+                    Err(TypeError::Mismatch {
+                        expected: expected.to_string(),
+                        found: found.to_string(),
+                        span: None,
+                    })
+                }
             }
             // Map: key and value recursive unification
             (ResolvedType::Map(ka, va), ResolvedType::Map(kb, vb)) => {
@@ -351,23 +411,9 @@ impl TypeChecker {
                     })
                 }
             }
-            // Lazy type unification
-            (ResolvedType::Lazy(a), ResolvedType::Lazy(b)) => self.unify(a, b),
             // DynTrait: dyn Trait accepts any concrete type that implements the trait
             (ResolvedType::DynTrait { .. }, _) | (_, ResolvedType::DynTrait { .. }) => Ok(()),
-            // ImplTrait: unification accepts any concrete type.
-            // Bound checking happens at the TypeChecker level (type_implements_trait),
-            // not in the inference engine, since TypeInference has no trait impl data.
-            // This is consistent with DynTrait handling above.
-            (ResolvedType::ImplTrait { .. }, _) | (_, ResolvedType::ImplTrait { .. }) => Ok(()),
-            // HigherKinded: type constructor parameters unify with any type.
-            // At monomorphization time, F<_> gets replaced with a concrete type constructor.
-            // SAFETY: Trait bounds on HKT params are deferred to monomorphization.
-            // The TC validates bounds when concrete types are substituted, not during unification.
-            // This matches ImplTrait/DynTrait patterns above.
-            (ResolvedType::HigherKinded { .. }, _) | (_, ResolvedType::HigherKinded { .. }) => {
-                Ok(())
-            }
+            // ImplTrait / HigherKinded were removed in ROADMAP #18.
             // Auto-deref: &T unifies with T (implicit dereference)
             (ResolvedType::Ref(inner), other) | (other, ResolvedType::Ref(inner)) => {
                 self.unify(inner, other)
@@ -383,7 +429,8 @@ impl TypeChecker {
         }
     }
 
-    /// Check if type is an integer type
+    /// Check if type is an integer type.
+    /// Bool is NOT included: bool is a distinct type in Vais's type system.
     #[inline]
     pub(crate) fn is_integer_type(ty: &ResolvedType) -> bool {
         matches!(
@@ -396,12 +443,12 @@ impl TypeChecker {
                 | ResolvedType::U16
                 | ResolvedType::U32
                 | ResolvedType::U64
-                | ResolvedType::Bool
         )
     }
 
     /// Check if type is a float type
     #[inline]
+    #[allow(dead_code)]
     pub(crate) fn is_float_type(ty: &ResolvedType) -> bool {
         matches!(ty, ResolvedType::F32 | ResolvedType::F64)
     }
@@ -431,9 +478,7 @@ impl TypeChecker {
             | ResolvedType::Never
             | ResolvedType::Unknown
             | ResolvedType::Generic(_)
-            | ResolvedType::HigherKinded { .. }
-            | ResolvedType::Lifetime(_)
-            | ResolvedType::ImplTrait { .. } => false,
+            | ResolvedType::Lifetime(_) => false,
             // Wrapper types with one inner
             ResolvedType::Array(inner)
             | ResolvedType::Optional(inner)
@@ -445,8 +490,7 @@ impl TypeChecker {
             | ResolvedType::Range(inner)
             | ResolvedType::Future(inner)
             | ResolvedType::Linear(inner)
-            | ResolvedType::Affine(inner)
-            | ResolvedType::Lazy(inner) => Self::contains_var(inner),
+            | ResolvedType::Affine(inner) => Self::contains_var(inner),
             ResolvedType::Result(ok, err) | ResolvedType::Map(ok, err) => {
                 Self::contains_var(ok) || Self::contains_var(err)
             }

@@ -232,7 +232,8 @@ fn test_unify_dyn_trait() {
 // ============================================================================
 
 #[test]
-fn test_unify_mismatch_bool_i64() {
+fn test_unify_bool_i64_rejected() {
+    // Phase 158: bool↔i64 implicit coercion is forbidden
     tc_err("F test() -> bool { R 42 }");
 }
 
@@ -242,12 +243,14 @@ fn test_unify_mismatch_str_i64() {
 }
 
 #[test]
-fn test_unify_mismatch_if_branches() {
+fn test_unify_if_branches_bool_int_rejected() {
+    // Phase 158: bool↔i64 implicit coercion is forbidden
     tc_err("F test(b: bool) -> i64 = I b { true } E { 2 }");
 }
 
 #[test]
-fn test_unify_mismatch_fn_return() {
+fn test_unify_fn_return_bool_int_rejected() {
+    // Phase 158: bool↔i64 implicit coercion is forbidden
     tc_err("F add(x: i64, y: i64) -> bool = x + y");
 }
 

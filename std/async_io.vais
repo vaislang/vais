@@ -32,9 +32,9 @@ X AsyncFile {
     F open(path: str, mode: i64) -> AsyncFile {
         flags := I mode == 0 {
             0
-        } E I mode == 1 {
+        } EL I mode == 1 {
             577
-        } E {
+        } EL {
             521
         }
 
@@ -44,7 +44,7 @@ X AsyncFile {
             fd: fd,
             path: path,
             mode: mode,
-            is_open: I fd >= 0 { 1 } E { 0 }
+            is_open: I fd >= 0 { 1 } EL { 0 }
         }
     }
 
@@ -223,7 +223,7 @@ X AsyncFileReader {
             # Seek back
             lseek(@.file.fd, -1, 1)
             1
-        } E {
+        } EL {
             0
         }
     }
@@ -286,7 +286,7 @@ X AsyncFileWriter {
 
             # Copy to buffer
             available := @.capacity - @.buf_pos
-            to_copy := I remaining < available { remaining } E { available }
+            to_copy := I remaining < available { remaining } EL { available }
 
             i := mut 0
             L {
@@ -338,7 +338,7 @@ X AsyncFileWriter {
 
         file_close := @.file.close()
 
-        I flush_result < 0 { flush_result } E { file_close }
+        I flush_result < 0 { flush_result } EL { file_close }
     }
 }
 

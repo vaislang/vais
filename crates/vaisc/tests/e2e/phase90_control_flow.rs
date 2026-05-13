@@ -292,7 +292,6 @@ F main() -> i64 {
 }
 
 #[test]
-#[ignore] // CI: clang-17 crash on X86 DAG instruction selection for nested ternary
 fn e2e_cf_ternary_in_function() {
     let source = r#"
 F sign(x: i64) -> i64 = x > 0 ? 1 : (x < 0 ? 2 : 0)

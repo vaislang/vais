@@ -11,6 +11,9 @@ impl TypeChecker {
     pub(crate) fn check_function(&mut self, f: &Function) -> TypeResult<()> {
         self.push_scope();
 
+        // Reset move tracking for each new function body
+        self.moved_vars.clear();
+
         // Set current generic parameters
         let saved = self.set_generics(&f.generics);
 
@@ -26,23 +29,8 @@ impl TypeChecker {
             .map(|sig| sig.params.iter().map(|(_, ty, _)| ty.clone()).collect())
             .unwrap_or_default();
         for (i, param) in f.params.iter().enumerate() {
-            // ImplTrait in parameter position is not supported —
-            // it would require universal quantification (generics desugaring)
-            // which is not yet implemented in Vais codegen.
-            if matches!(param.ty.node, Type::ImplTrait { .. }) {
-                return Err(TypeError::InferFailed {
-                    kind: "parameter".to_string(),
-                    name: param.name.node.clone(),
-                    context: format!(
-                        "{} — `impl Trait` is only supported in return position",
-                        f.name.node
-                    ),
-                    span: Some(param.name.span),
-                    suggestion: Some(
-                        "Use a generic type parameter instead: `F foo<T: Trait>(x: T)`".to_string(),
-                    ),
-                });
-            }
+            // ImplTrait parameter-position rejection removed in ROADMAP #18:
+            // Type::ImplTrait no longer exists in the AST.
 
             let ty = if i < registered_param_types.len() {
                 registered_param_types[i].clone()
@@ -119,6 +107,27 @@ impl TypeChecker {
             FunctionBody::Block(stmts) => self.check_block(stmts)?,
         };
 
+        // Explicit return type with empty/void body: detect missing return value.
+        // If the function has an explicit non-Unit return type and the body is Unit
+        // (empty block or void expression), this is almost certainly a bug.
+        if !ret_type_inferred && ret_type != ResolvedType::Unit && body_type == ResolvedType::Unit {
+            // Allow special case: body that explicitly returns via R statement
+            // (check_block returns Unit for blocks ending with R, but the return was checked)
+            let has_explicit_return = match &f.body {
+                FunctionBody::Block(stmts) => {
+                    stmts.iter().any(|s| matches!(s.node, Stmt::Return(_)))
+                }
+                FunctionBody::Expr(_) => false,
+            };
+            if !has_explicit_return {
+                return Err(TypeError::Mismatch {
+                    expected: ret_type.to_string(),
+                    found: "()".to_string(),
+                    span: Some(f.name.span),
+                });
+            }
+        }
+
         // Check return type (with auto-deref: &T unifies with T)
         let expected_ret = self.current_fn_ret.clone().expect(
             "Internal compiler error: current_fn_ret should be set during function checking",
@@ -141,6 +150,35 @@ impl TypeChecker {
             // Skip unification — codegen will insert `ret i64 0`
         } else {
             self.unify(&expected_ret, &body_type_deref)?;
+        }
+
+        // Phase 193 R-1b: finalize method instantiations that were deferred
+        // because their type args still contained free vars at call-site time
+        // (e.g., `Vec.with_capacity(8)` inside `fn -> Vec<i64>`). Now that the
+        // return type has been unified, apply substitutions and record any
+        // newly-concrete instantiations for monomorphization.
+        if !self.pending_method_instantiations.is_empty() {
+            let pending = std::mem::take(&mut self.pending_method_instantiations);
+            for (struct_name, method_name, type_args) in pending {
+                let resolved: Vec<ResolvedType> = type_args
+                    .iter()
+                    .map(|t| self.apply_substitutions(t))
+                    .collect();
+                let all_concrete = resolved
+                    .iter()
+                    .all(|t| !matches!(t, ResolvedType::Var(_) | ResolvedType::Generic(_)));
+                if all_concrete {
+                    self.add_instantiation(crate::types::GenericInstantiation::struct_type(
+                        &struct_name,
+                        resolved.clone(),
+                    ));
+                    self.add_instantiation(crate::types::GenericInstantiation::method(
+                        &struct_name,
+                        &method_name,
+                        resolved,
+                    ));
+                }
+            }
         }
 
         // Verify ImplTrait/DynTrait bounds: if return type is impl Trait or dyn Trait,
@@ -245,7 +283,7 @@ impl TypeChecker {
         self.check_unused_variables(&param_names);
 
         // Validate that no unresolved type variables survive into codegen for non-generic functions.
-        // Generic functions may legitimately contain Generic/ConstGeneric/ImplTrait/etc. in their
+        // Generic functions may legitimately contain Generic/ConstGeneric/etc. in their
         // signatures; those are checked at instantiation time instead.
         if f.generics.is_empty() {
             // Check parameter types
@@ -449,6 +487,9 @@ impl TypeChecker {
     ) -> TypeResult<()> {
         self.push_scope();
 
+        // Reset move tracking for each new method body
+        self.moved_vars.clear();
+
         // Get the type name for self
         let self_type_name = match target_type {
             Type::Named { name, .. } => name.clone(),
@@ -480,21 +521,8 @@ impl TypeChecker {
             .map(|sig| sig.params.iter().map(|(_, ty, _)| ty.clone()).collect())
             .unwrap_or_default();
         for (i, param) in method.params.iter().enumerate() {
-            // ImplTrait in parameter position is not supported
-            if param.name.node != "self" && matches!(param.ty.node, Type::ImplTrait { .. }) {
-                return Err(TypeError::InferFailed {
-                    kind: "parameter".to_string(),
-                    name: param.name.node.clone(),
-                    context: format!(
-                        "{}::{} — `impl Trait` is only supported in return position",
-                        self_type_name, method.name.node
-                    ),
-                    span: Some(param.name.span),
-                    suggestion: Some(
-                        "Use a generic type parameter instead: `F foo<T: Trait>(x: T)`".to_string(),
-                    ),
-                });
-            }
+            // ImplTrait parameter-position rejection removed in ROADMAP #18:
+            // Type::ImplTrait no longer exists in the AST.
 
             // Handle &self parameter specially
             if param.name.node == "self" {
@@ -739,9 +767,9 @@ impl TypeChecker {
         match ty {
             ResolvedType::Var(id) => Some(format!("type variable #{}", id)),
             ResolvedType::Unknown => Some("unknown type".to_string()),
-            // Generic/ConstGeneric/ImplTrait/Associated/HigherKinded are OK in generic function
-            // DEFINITIONS — they only become errors when they survive monomorphization,
-            // so we don't check them here; they're checked at instantiation time.
+            // Generic/ConstGeneric/Associated are OK in generic function DEFINITIONS —
+            // they only become errors when they survive monomorphization, so we don't
+            // check them here; they're checked at instantiation time.
 
             // Recurse into compound types
             ResolvedType::Pointer(inner)
@@ -753,7 +781,6 @@ impl TypeChecker {
             | ResolvedType::Future(inner)
             | ResolvedType::Linear(inner)
             | ResolvedType::Affine(inner)
-            | ResolvedType::Lazy(inner)
             | ResolvedType::Range(inner) => Self::contains_unresolved_type(inner),
             ResolvedType::Array(inner) => Self::contains_unresolved_type(inner),
             ResolvedType::ConstArray { element, .. } => Self::contains_unresolved_type(element),
@@ -779,8 +806,8 @@ impl TypeChecker {
             }
             ResolvedType::Associated { base, generics, .. } => Self::contains_unresolved_type(base)
                 .or_else(|| generics.iter().find_map(Self::contains_unresolved_type)),
-            // All other types (primitives, Never, Generic, ConstGeneric, ImplTrait,
-            // HigherKinded, Lifetime) are acceptable outside of monomorphization contexts.
+            // All other types (primitives, Never, Generic, ConstGeneric, Lifetime)
+            // are acceptable outside of monomorphization contexts.
             _ => None,
         }
     }

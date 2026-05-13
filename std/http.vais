@@ -72,7 +72,7 @@ X Headers {
 
     # Add a header
     F add(&self, name: str, value: str) -> i64 {
-        L self.count >= self.capacity {
+        LW self.count >= self.capacity {
             # Grow capacity
             new_capacity := self.capacity * 2
             new_items := __malloc(new_capacity * 16)
@@ -92,10 +92,10 @@ X Headers {
     # Get a header value by name (case-insensitive)
     F get(&self, name: str) -> str? {
         i := 0
-        L i < self.count {
+        LW i < self.count {
             offset := i * 16
             header_name := __load_ptr(self.items + offset) as str
-            L __str_eq_ignore_case(header_name, name) == 1 {
+            LW __str_eq_ignore_case(header_name, name) == 1 {
                 value := __load_ptr(self.items + offset + 8) as str
                 R Some(value)
             }
@@ -107,13 +107,13 @@ X Headers {
     # Remove a header by name
     F remove(&self, name: str) -> i64 {
         i := 0
-        L i < self.count {
+        LW i < self.count {
             offset := i * 16
             header_name := __load_ptr(self.items + offset) as str
-            L __str_eq_ignore_case(header_name, name) == 1 {
+            LW __str_eq_ignore_case(header_name, name) == 1 {
                 # Shift remaining headers down
                 j := i
-                L j < self.count - 1 {
+                LW j < self.count - 1 {
                     src_offset := (j + 1) * 16
                     dst_offset := j * 16
                     __store_ptr(self.items + dst_offset, __load_ptr(self.items + src_offset))
@@ -131,10 +131,10 @@ X Headers {
     # Check if header exists
     F contains(&self, name: str) -> i64 {
         i := 0
-        L i < self.count {
+        LW i < self.count {
             offset := i * 16
             header_name := __load_ptr(self.items + offset) as str
-            L __str_eq_ignore_case(header_name, name) == 1 {
+            LW __str_eq_ignore_case(header_name, name) == 1 {
                 R 1
             }
             i = i + 1
@@ -256,7 +256,7 @@ X Request {
 
         # Headers
         i := 0
-        L i < self.headers.count {
+        LW i < self.headers.count {
             offset := i * 16
             name := __load_ptr(self.headers.items + offset) as str
             value := __load_ptr(self.headers.items + offset + 8) as str
@@ -272,7 +272,7 @@ X Request {
         }
 
         # Content-Length if body present
-        L self.body_len > 0 {
+        LW self.body_len > 0 {
             pos = pos + __str_copy_to(buffer + pos, "Content-Length: ")
             pos = pos + __i64_to_str(buffer + pos, self.body_len)
             __store_byte(buffer + pos, 13)
@@ -286,7 +286,7 @@ X Request {
         pos = pos + 2
 
         # Body
-        L self.body_len > 0 {
+        LW self.body_len > 0 {
             __memcpy(buffer + pos, self.body, self.body_len)
             pos = pos + self.body_len
         }
@@ -395,7 +395,7 @@ X Response {
 
     # Get body as string
     F body_text(&self) -> str {
-        L self.body != 0 & self.body_len > 0 {
+        LW self.body != 0 & self.body_len > 0 {
             self.body as str
         } ! {
             ""
@@ -420,7 +420,7 @@ X Response {
 
         # Headers
         i := 0
-        L i < self.headers.count {
+        LW i < self.headers.count {
             offset := i * 16
             name := __load_ptr(self.headers.items + offset) as str
             value := __load_ptr(self.headers.items + offset + 8) as str
@@ -436,7 +436,7 @@ X Response {
         }
 
         # Content-Length
-        L self.body_len > 0 {
+        LW self.body_len > 0 {
             pos = pos + __str_copy_to(buffer + pos, "Content-Length: ")
             pos = pos + __i64_to_str(buffer + pos, self.body_len)
             __store_byte(buffer + pos, 13)
@@ -450,7 +450,7 @@ X Response {
         pos = pos + 2
 
         # Body
-        L self.body_len > 0 {
+        LW self.body_len > 0 {
             __memcpy(buffer + pos, self.body, self.body_len)
             pos = pos + self.body_len
         }
@@ -518,7 +518,7 @@ X Client {
     F execute(&self, host: str, port: i64, request: &Request) -> Response? {
         # Connect to server
         fd := __tcp_connect(host as i64, port)
-        L fd < 0 {
+        LW fd < 0 {
             R None
         }
 
@@ -529,7 +529,7 @@ X Client {
         sent := __tcp_send(fd, buffer, req_len)
         __free(buffer)
 
-        L sent < 0 {
+        LW sent < 0 {
             __tcp_close(fd)
             R None
         }
@@ -539,22 +539,22 @@ X Client {
         total_recv := 0
 
         # Read response
-        L 1 {
+        LW 1 {
             n := __tcp_recv(fd, recv_buffer + total_recv, HTTP_DEFAULT_BUFFER)
-            L n <= 0 {
+            LW n <= 0 {
                 B
             }
             total_recv = total_recv + n
 
             # Check if we have full headers
-            L __find_header_end(recv_buffer, total_recv) >= 0 {
+            LW __find_header_end(recv_buffer, total_recv) >= 0 {
                 B
             }
         }
 
         __tcp_close(fd)
 
-        L total_recv <= 0 {
+        LW total_recv <= 0 {
             __free(recv_buffer)
             R None
         }
@@ -573,7 +573,7 @@ X Client {
         port := __parse_url_port(url)
         path := __parse_url_path(url)
 
-        L port == 0 {
+        LW port == 0 {
             port = 80
         }
 
@@ -587,7 +587,7 @@ X Client {
         port := __parse_url_port(url)
         path := __parse_url_path(url)
 
-        L port == 0 {
+        LW port == 0 {
             port = 80
         }
 
@@ -631,7 +631,7 @@ X Router {
 
     # Add a route
     F route(&self, method: i64, path: str, handler: i64) -> Router {
-        L self.count >= self.capacity {
+        LW self.count >= self.capacity {
             new_capacity := self.capacity * 2
             new_routes := __malloc(new_capacity * 24)
             __memcpy(new_routes, self.routes, self.count * 24)
@@ -671,12 +671,12 @@ X Router {
     # Find handler for request
     F find_handler(&self, method: i64, path: str) -> i64 {
         i := 0
-        L i < self.count {
+        LW i < self.count {
             offset := i * 24
             route_method := __load_i64(self.routes + offset)
             route_path := __load_ptr(self.routes + offset + 8) as str
 
-            L route_method == method & __str_eq(route_path, path) == 1 {
+            LW route_method == method & __str_eq(route_path, path) == 1 {
                 R __load_ptr(self.routes + offset + 16)
             }
             i = i + 1
@@ -721,16 +721,16 @@ X Server {
     F run(&self) -> i64 {
         # Create TCP listener
         listener_fd := __tcp_listen(self.port)
-        L listener_fd < 0 {
+        LW listener_fd < 0 {
             R -1
         }
 
         self.running = 1
 
-        L self.running == 1 {
+        LW self.running == 1 {
             # Accept connection
             client_fd := __tcp_accept(listener_fd)
-            L client_fd < 0 {
+            LW client_fd < 0 {
                 C
             }
 
@@ -749,19 +749,19 @@ X Server {
         buffer := __malloc(HTTP_MAX_HEADER_SIZE)
         total := 0
 
-        L 1 {
+        LW 1 {
             n := __tcp_recv(fd, buffer + total, HTTP_DEFAULT_BUFFER)
-            L n <= 0 {
+            LW n <= 0 {
                 B
             }
             total = total + n
 
-            L __find_header_end(buffer, total) >= 0 {
+            LW __find_header_end(buffer, total) >= 0 {
                 B
             }
         }
 
-        L total <= 0 {
+        LW total <= 0 {
             __free(buffer)
             R -1
         }
@@ -773,7 +773,7 @@ X Server {
         # Find handler
         handler := self.router.find_handler(request.method, request.path)
 
-        response := L handler != 0 {
+        response := LW handler != 0 {
             # Call handler
             __call_handler(handler, &request)
         } ! {

@@ -16,6 +16,7 @@ fn check_ok(source: &str) {
         .unwrap_or_else(|e| panic!("Type check failed for: {}\nErr: {:?}", source, e));
 }
 
+#[allow(dead_code)]
 fn check_err(source: &str) {
     let module = parse(source).unwrap_or_else(|e| panic!("Parse failed: {:?}", e));
     let mut tc = TypeChecker::new();
@@ -319,6 +320,8 @@ fn test_builtin_atan2() {
 
 #[test]
 fn test_builtin_exit() {
+    // `exit(code)` is intentional termination, not a panic. Callers can
+    // stay `total`. Phase 196 P196-D removed exit from PANIC_BUILTINS.
     check_ok(
         r#"
         F test() -> i64 {
@@ -568,6 +571,101 @@ fn test_builtin_str_to_ptr() {
         r#"
         F test() -> i64 {
             R str_to_ptr("hello")
+        }
+    "#,
+    );
+}
+
+// ============================================================================
+// Phase 24 Task 5 — .iter() / .enumerate() on iterable receivers + tuple
+// destructuring in for-each loops. Verifies the type checker alone (not codegen).
+// Uses array literals instead of Vec to avoid depending on std/vec.vais, which
+// e2e/unit tests do not load. Array<T> is recognized by get_iterator_item_type.
+// ============================================================================
+
+#[test]
+fn test_phase24_array_iter_is_noop_at_type_level() {
+    // .iter() on [T] (Array<T>) returns the receiver, item type is still T.
+    check_ok(
+        r#"
+        F test() -> i64 {
+            arr := [10, 20, 30]
+            sum := mut 0
+            LF x: arr.iter() {
+                sum = sum + x
+            }
+            sum
+        }
+    "#,
+    );
+}
+
+#[test]
+fn test_phase24_array_enumerate_returns_tuple_iterator() {
+    // .enumerate() yields (i64, T) — tuple destructuring in LF must bind both.
+    check_ok(
+        r#"
+        F test() -> i64 {
+            arr := [10, 20, 30]
+            sum := mut 0
+            LF (i, x): arr.enumerate() {
+                sum = sum + i * x
+            }
+            sum
+        }
+    "#,
+    );
+}
+
+#[test]
+fn test_phase24_array_iter_enumerate_chain() {
+    // .iter().enumerate() is the canonical Rust-style form — both yield (i64, T).
+    check_ok(
+        r#"
+        F test() -> i64 {
+            arr := [100, 200]
+            sum := mut 0
+            LF (i, x): arr.iter().enumerate() {
+                sum = sum + i + x
+            }
+            sum
+        }
+    "#,
+    );
+}
+
+#[test]
+fn test_phase24_enumerate_bindings_are_usable_as_i64() {
+    // Index binding must unify with i64 in arithmetic.
+    check_ok(
+        r#"
+        F test() -> i64 {
+            arr := [5, 15, 25]
+            acc := mut 0
+            LF (idx, val): arr.enumerate() {
+                doubled := idx * 2
+                acc = acc + doubled + val
+            }
+            acc
+        }
+    "#,
+    );
+}
+
+#[test]
+fn test_phase24_tuple_pattern_in_foreach_generally() {
+    // Regression: Pattern::Tuple binding in for-each should also work for
+    // any tuple-yielding iterator, not just .enumerate(). This exercises the
+    // register_pattern_bindings path in control_flow.rs independently.
+    check_ok(
+        r#"
+        F pairs() -> i64 {
+            arr := [1, 2, 3]
+            total := mut 0
+            LF (i, x): arr.enumerate() {
+                total = total + x - i
+            }
+            total
         }
     "#,
     );

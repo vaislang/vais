@@ -1062,7 +1062,6 @@ Key rules:
 - 'A' marks a function as async
 - 'Y' awaits a Future inside an async function
 - Async functions can only be awaited inside other async functions
-  or from a spawn context
 "#
                 .to_string(),
                 code_template: r#"# Write an async function 'async_add' that takes two i64 values,
@@ -1094,86 +1093,18 @@ A F double_add(a: i64, b: i64) -> i64 {
                 ],
             },
             Lesson {
-                id: "ch7_spawn".to_string(),
-                title: "Spawn and Concurrency".to_string(),
-                description: "Run tasks concurrently with spawn".to_string(),
-                content: r#"
-The 'spawn' keyword creates a concurrent task:
-
-    A F main_task() -> i64 {
-        # Spawn two tasks that run concurrently
-        task1 := spawn compute(10)
-        task2 := spawn compute(20)
-
-        # Wait for both results
-        r1 := Y task1
-        r2 := Y task2
-
-        r1 + r2
-    }
-
-    A F compute(x: i64) -> i64 {
-        x * x
-    }
-
-Spawn returns a Future that can be awaited later.
-Tasks may run in parallel depending on the runtime.
-
-Sequential vs concurrent:
-    # Sequential: total time = time(a) + time(b)
-    result1 := Y slow_op()
-    result2 := Y slow_op()
-
-    # Concurrent: total time = max(time(a), time(b))
-    f1 := spawn slow_op()
-    f2 := spawn slow_op()
-    result1 := Y f1
-    result2 := Y f2
-"#
-                .to_string(),
-                code_template: r#"# Write an async function 'parallel_sum' that spawns two
-# computations and returns their combined result.
-# Use spawn to run them concurrently.
-# Your code here
-"#
-                .to_string(),
-                solution: r#"A F square(x: i64) -> i64 {
-    x * x
-}
-
-A F parallel_sum(a: i64, b: i64) -> i64 {
-    fa := spawn square(a)
-    fb := spawn square(b)
-    Y fa + Y fb
-}
-"#
-                .to_string(),
-                test_cases: vec![TestCase {
-                    description: "Spawn pattern should compile".to_string(),
-                    expected_output: None,
-                    should_compile: true,
-                    validation_fn: None,
-                }],
-                hints: vec![
-                    "Use 'spawn' to start a concurrent task".to_string(),
-                    "Spawn returns a Future — await it with Y".to_string(),
-                    "Spawn both tasks first, then await both results".to_string(),
-                ],
-            },
-            Lesson {
                 id: "ch7_channels".to_string(),
                 title: "Communication Patterns".to_string(),
-                description: "Coordinate concurrent tasks with shared state".to_string(),
+                description: "Coordinate async tasks and cleanup".to_string(),
                 content: r#"
-Concurrent tasks can communicate through shared mutable state
-or return values:
+Async tasks can communicate through return values and shared state:
 
 Using return values (recommended):
     A F fan_out(inputs: [i64; 3]) -> i64 {
-        t0 := spawn process(inputs[0])
-        t1 := spawn process(inputs[1])
-        t2 := spawn process(inputs[2])
-        Y t0 + Y t1 + Y t2
+        r0 := Y process(inputs[0])
+        r1 := Y process(inputs[1])
+        r2 := Y process(inputs[2])
+        r0 + r1 + r2
     }
 
 Defer for cleanup (like Go's defer):
@@ -1192,7 +1123,7 @@ Yield for cooperative multitasking:
     }
 
 Common patterns:
-- Fan-out: spawn N tasks, await all results
+- Fan-out: await N tasks in sequence, combine results
 - Pipeline: chain async operations with |>
 - Defer: ensure cleanup runs on exit
 "#
@@ -1576,7 +1507,7 @@ mod tests {
     fn test_total_lessons() {
         let chapters = create_chapters();
         let total: usize = chapters.iter().map(|c| c.lessons.len()).sum();
-        assert_eq!(total, 24);
+        assert_eq!(total, 23);
     }
 
     #[test]
@@ -1724,11 +1655,10 @@ mod tests {
     #[test]
     fn test_chapter7_lesson_count() {
         let chapter = create_chapter7_async_concurrency();
-        assert_eq!(chapter.lessons.len(), 3);
+        assert_eq!(chapter.lessons.len(), 2);
         assert_eq!(chapter.id, 6);
         assert_eq!(chapter.lessons[0].id, "ch7_async_basics");
-        assert_eq!(chapter.lessons[1].id, "ch7_spawn");
-        assert_eq!(chapter.lessons[2].id, "ch7_channels");
+        assert_eq!(chapter.lessons[1].id, "ch7_channels");
     }
 
     #[test]
@@ -1736,7 +1666,7 @@ mod tests {
         let chapter = create_chapter7_async_concurrency();
         let ids: Vec<&str> = chapter.lessons.iter().map(|l| l.id.as_str()).collect();
         assert!(ids.contains(&"ch7_async_basics"));
-        assert!(ids.contains(&"ch7_spawn"));
+        assert!(ids.contains(&"ch7_channels"));
     }
 
     #[test]

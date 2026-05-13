@@ -118,8 +118,23 @@ pub(crate) fn run_per_module_emit_ir(
     let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("main");
 
     let effective_opt_level = if debug { 0 } else { opt_level };
-    let resolved_functions = checker.get_all_functions().clone();
+    let resolved_functions = checker.get_all_functions_with_methods();
     let resolved_type_aliases = checker.get_type_aliases().clone();
+    let resolved_expr_types = checker.get_expr_types().clone();
+    let resolved_implicit_try_sites = checker.get_implicit_try_sites().clone();
+    let instantiations = checker.get_generic_instantiations();
+    // Gate instantiation tracing behind VAIS_TRACE_INST so fresh-rebuild gates
+    // and normal user builds don't see stderr noise. Set VAIS_TRACE_INST=1 to
+    // diagnose generic-instantiation issues in the build pipeline.
+    if std::env::var("VAIS_TRACE_INST").is_ok_and(|v| v == "1") {
+        for inst in &instantiations {
+            eprintln!(
+                "  [INST] base={}, mangled={}, kind={:?}, args={:?}",
+                inst.base_name, inst.mangled_name, inst.kind, inst.type_args
+            );
+        }
+    }
+    let instantiations = &instantiations;
 
     let codegen_start = std::time::Instant::now();
 
@@ -140,6 +155,8 @@ pub(crate) fn run_per_module_emit_ir(
                 vais_codegen::CodeGenerator::new_with_target(&module_stem, target.clone());
             codegen.set_resolved_functions(resolved_functions.clone());
             codegen.set_type_aliases(resolved_type_aliases.clone());
+            codegen.set_expr_types(resolved_expr_types.clone());
+            codegen.set_implicit_try_sites(resolved_implicit_try_sites.clone());
             codegen.set_string_prefix(&module_stem);
 
             if gc {
@@ -159,16 +176,28 @@ pub(crate) fn run_per_module_emit_ir(
             }
 
             // Generate IR for this module's subset
-            let result = codegen.generate_module_subset(final_ast, item_indices, is_main);
+            let result =
+                codegen.generate_module_subset(final_ast, item_indices, instantiations, is_main);
             let raw_ir = result.map_err(|e| {
                 let spanned = vais_codegen::SpannedCodegenError {
                     span: codegen.last_error_span(),
                     error: e,
                 };
+                // Error spans reference the module where the error originated,
+                // not the main entry file. Load the module's own source so the
+                // formatter renders the correct file + line + snippet.
+                let (err_source, err_path): (std::borrow::Cow<'_, str>, &Path) = if is_main {
+                    (std::borrow::Cow::Borrowed(main_source), input)
+                } else {
+                    match fs::read_to_string(module_path.as_path()) {
+                        Ok(s) => (std::borrow::Cow::Owned(s), module_path.as_path()),
+                        Err(_) => (std::borrow::Cow::Borrowed(main_source), input),
+                    }
+                };
                 format!(
                     "Codegen error for {}:\n{}",
                     module_stem,
-                    error_formatter::format_spanned_codegen_error(&spanned, main_source, input,)
+                    error_formatter::format_spanned_codegen_error(&spanned, &err_source, err_path)
                 )
             })?;
 

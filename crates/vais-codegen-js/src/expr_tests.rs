@@ -337,6 +337,7 @@ fn test_generate_struct_literal() {
                 Spanned::new(Expr::Int(2), Span::new(15, 16)),
             ),
         ],
+        enum_name: None,
     };
     let result = gen.generate_expr(&expr).unwrap();
     assert!(result.contains("new Point"));
@@ -384,19 +385,6 @@ fn test_generate_await() {
         Span::new(0, 7),
     )));
     assert_eq!(gen.generate_expr(&expr).unwrap(), "(await fetch())");
-}
-
-#[test]
-fn test_generate_spawn() {
-    let mut gen = JsCodeGenerator::new();
-    let expr = Expr::Spawn(Box::new(Spanned::new(
-        Expr::Ident("task".to_string()),
-        Span::new(0, 4),
-    )));
-    assert_eq!(
-        gen.generate_expr(&expr).unwrap(),
-        "Promise.resolve().then(() => task)"
-    );
 }
 
 #[test]
@@ -549,23 +537,6 @@ fn test_generate_yield() {
     let mut gen = JsCodeGenerator::new();
     let expr = Expr::Yield(Box::new(Spanned::new(Expr::Int(42), Span::new(6, 8))));
     assert_eq!(gen.generate_expr(&expr).unwrap(), "yield 42");
-}
-
-#[test]
-fn test_generate_lazy() {
-    let mut gen = JsCodeGenerator::new();
-    let expr = Expr::Lazy(Box::new(Spanned::new(Expr::Int(42), Span::new(0, 2))));
-    assert_eq!(gen.generate_expr(&expr).unwrap(), "(() => 42)");
-}
-
-#[test]
-fn test_generate_force() {
-    let mut gen = JsCodeGenerator::new();
-    let expr = Expr::Force(Box::new(Spanned::new(
-        Expr::Ident("lazy_val".to_string()),
-        Span::new(0, 8),
-    )));
-    assert_eq!(gen.generate_expr(&expr).unwrap(), "lazy_val()");
 }
 
 #[test]

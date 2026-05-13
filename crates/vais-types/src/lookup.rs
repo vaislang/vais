@@ -144,6 +144,17 @@ impl TypeChecker {
             });
         }
 
+        // Check if it's a global variable (globals are mutable by default)
+        if let Some(global_type) = self.globals.get(name) {
+            return Ok(VarInfo {
+                ty: global_type.clone(),
+                is_mut: true,
+                linearity: Linearity::Unrestricted,
+                use_count: 0,
+                defined_at: None,
+            });
+        }
+
         // Implicit self: if in a method context, check struct fields
         if let Ok(self_info) = self.lookup_self_var_info() {
             let inner_type = match &self_info.ty {
@@ -204,20 +215,13 @@ impl TypeChecker {
             });
         }
 
-        // Check if name is a constant
-        if let Some(const_type) = self.constants.get(name).cloned() {
-            return Ok(VarInfo {
-                ty: const_type,
-                is_mut: false,
-                linearity: Linearity::Unrestricted,
-                use_count: 0,
-                defined_at: None,
-            });
-        }
-
         // Fallback: if name looks like a constant (ALL_CAPS) not yet registered,
         // return I64 to avoid cascading errors
-        if name.contains('_') && name.chars().all(|c| c.is_uppercase() || c == '_' || c.is_ascii_digit()) {
+        if name.contains('_')
+            && name
+                .chars()
+                .all(|c| c.is_uppercase() || c == '_' || c.is_ascii_digit())
+        {
             return Ok(VarInfo {
                 ty: ResolvedType::I64,
                 is_mut: false,
@@ -234,6 +238,7 @@ impl TypeChecker {
         }
         candidates.extend(self.functions.keys().map(|s| s.as_str()));
         candidates.extend(self.constants.keys().map(|s| s.as_str()));
+        candidates.extend(self.globals.keys().map(|s| s.as_str()));
         for enum_def in self.enums.values() {
             candidates.extend(enum_def.variants.keys().map(|s| s.as_str()));
         }
@@ -368,7 +373,41 @@ impl TypeChecker {
         // Handle built-in iterable types
         match iter_type {
             ResolvedType::Array(elem_type) => return Some((**elem_type).clone()),
+            ResolvedType::ConstArray { element, .. } => return Some((**element).clone()),
             ResolvedType::Range(elem_type) => return Some((**elem_type).clone()),
+            ResolvedType::Slice(elem_type) | ResolvedType::SliceMut(elem_type) => {
+                return Some((**elem_type).clone())
+            }
+            ResolvedType::Pointer(elem_type) => return Some((**elem_type).clone()),
+            // &Vec<T>, &[T], &mut Vec<T> — iterate yields &element_type
+            ResolvedType::Ref(inner) => {
+                if let Some(elem) = self.get_iterator_item_type_inner(inner, visited) {
+                    return Some(ResolvedType::Ref(Box::new(elem)));
+                }
+                return None;
+            }
+            ResolvedType::RefMut(inner) => {
+                if let Some(elem) = self.get_iterator_item_type_inner(inner, visited) {
+                    return Some(ResolvedType::RefMut(Box::new(elem)));
+                }
+                return None;
+            }
+            // Vec<T> — element is generics[0]
+            ResolvedType::Named { name, generics } if name == "Vec" && !generics.is_empty() => {
+                return Some(generics[0].clone());
+            }
+            // Phase 24 Task 5: EnumerateIter<T> — yields (i64, T) tuples
+            // This is a virtual iterator type produced by Vec<T>.enumerate()
+            // in calls.rs. For-each loop over it binds a Pattern::Tuple([i, x])
+            // against ResolvedType::Tuple([I64, T]).
+            ResolvedType::Named { name, generics }
+                if name == "EnumerateIter" && !generics.is_empty() =>
+            {
+                return Some(ResolvedType::Tuple(vec![
+                    ResolvedType::I64,
+                    generics[0].clone(),
+                ]));
+            }
             _ => {}
         }
 

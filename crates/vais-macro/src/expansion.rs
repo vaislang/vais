@@ -180,6 +180,12 @@ impl<'a> AstExpander<'a> {
             body,
             is_pub: func.is_pub,
             is_async: func.is_async,
+            // Macro expansion preserves the original totality marker — a
+            // `partial F foo()` that the user wrote stays partial after
+            // expansion; a total function stays total.
+            is_partial: func.is_partial,
+            // Preserve the user-written effect prefix across macro expansion.
+            declared_effect: func.declared_effect,
             attributes: func.attributes,
             where_clause: func.where_clause,
         })
@@ -348,7 +354,11 @@ impl<'a> AstExpander<'a> {
                 expr: Box::new(self.expand_expr(*inner)?),
                 field,
             },
-            Expr::StructLit { name, fields } => {
+            Expr::StructLit {
+                name,
+                fields,
+                enum_name,
+            } => {
                 let expanded_fields = fields
                     .into_iter()
                     .map(|(n, e)| Ok((n, self.expand_expr(e)?)))
@@ -356,6 +366,7 @@ impl<'a> AstExpander<'a> {
                 Expr::StructLit {
                     name,
                     fields: expanded_fields,
+                    enum_name,
                 }
             }
             Expr::Array(elements) => {
@@ -417,7 +428,6 @@ impl<'a> AstExpander<'a> {
             Expr::Ref(inner) => Expr::Ref(Box::new(self.expand_expr(*inner)?)),
             Expr::Deref(inner) => Expr::Deref(Box::new(self.expand_expr(*inner)?)),
             Expr::Spread(inner) => Expr::Spread(Box::new(self.expand_expr(*inner)?)),
-            Expr::Spawn(inner) => Expr::Spawn(Box::new(self.expand_expr(*inner)?)),
             Expr::Yield(inner) => Expr::Yield(Box::new(self.expand_expr(*inner)?)),
             Expr::Comptime { body } => Expr::Comptime {
                 body: Box::new(self.expand_expr(*body)?),
@@ -445,9 +455,6 @@ impl<'a> AstExpander<'a> {
                 },
             },
             Expr::Assume(inner) => Expr::Assume(Box::new(self.expand_expr(*inner)?)),
-            // Lazy evaluation expressions
-            Expr::Lazy(inner) => Expr::Lazy(Box::new(self.expand_expr(*inner)?)),
-            Expr::Force(inner) => Expr::Force(Box::new(self.expand_expr(*inner)?)),
             Expr::StringInterp(parts) => {
                 let expanded_parts = parts
                     .into_iter()
@@ -460,6 +467,18 @@ impl<'a> AstExpander<'a> {
                     .collect::<ExpansionResult<Vec<_>>>()?;
                 Expr::StringInterp(expanded_parts)
             }
+            Expr::EnumAccess {
+                enum_name,
+                variant,
+                data,
+            } => Expr::EnumAccess {
+                enum_name,
+                variant,
+                data: match data {
+                    Some(d) => Some(Box::new(self.expand_expr(*d)?)),
+                    None => None,
+                },
+            },
             // Leaf expressions - no expansion needed
             e @ (Expr::Int(_)
             | Expr::Float(_)
@@ -469,6 +488,10 @@ impl<'a> AstExpander<'a> {
             | Expr::Unit
             | Expr::SelfCall
             | Expr::Error { .. }) => e,
+            Expr::TupleFieldAccess { expr, index } => Expr::TupleFieldAccess {
+                expr: Box::new(self.expand_expr(*expr)?),
+                index,
+            },
         };
         Ok(Spanned::new(expanded, span))
     }

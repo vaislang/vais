@@ -4,7 +4,7 @@
 //! indexing, await, try (?), unwrap (!), type casts (as), and static method calls (::).
 
 use vais_ast::*;
-use vais_lexer::Token;
+use vais_lexer::{SpannedToken, Token};
 
 use crate::{ParseError, ParseResult, Parser};
 
@@ -44,6 +44,28 @@ impl Parser {
                     self.advance_skip();
                     let end = self.prev_span().end;
                     expr = Spanned::new(Expr::Await(Box::new(expr)), Span::new(start, end));
+                } else if let Some(SpannedToken {
+                    token: Token::Int(n),
+                    ..
+                }) = self.peek().cloned()
+                {
+                    // Tuple field access: expr.0, expr.1, etc.
+                    if n < 0 {
+                        return Err(ParseError::UnexpectedToken {
+                            found: Token::Int(n),
+                            span: self.prev_span(),
+                            expected: "non-negative integer for tuple field access".into(),
+                        });
+                    }
+                    self.advance_skip();
+                    let end = self.prev_span().end;
+                    expr = Spanned::new(
+                        Expr::TupleFieldAccess {
+                            expr: Box::new(expr),
+                            index: n as usize,
+                        },
+                        Span::new(start, end),
+                    );
                 } else {
                     let field = self.parse_ident()?;
                     if self.check(&Token::LParen) {
@@ -89,12 +111,21 @@ impl Parser {
                     } else if self.check(&Token::LBrace) && self.allow_struct_literal {
                         // Check for enum variant struct construction: Type.Variant { field: value }
                         let is_type = if let Expr::Ident(name) = &expr.node {
-                            name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+                            name.chars()
+                                .next()
+                                .map(|c| c.is_uppercase())
+                                .unwrap_or(false)
                         } else {
                             false
                         };
                         if is_type {
                             // Parse as struct literal with variant name
+                            // If expr is an Ident (type name), this could be EnumType.Variant { fields }
+                            let parent_type_name = if let Expr::Ident(name) = &expr.node {
+                                Some(name.clone())
+                            } else {
+                                None
+                            };
                             self.advance_skip(); // skip '{'
                             let mut fields = Vec::new();
                             while !self.check(&Token::RBrace) && !self.is_at_end() {
@@ -118,6 +149,7 @@ impl Parser {
                                 Expr::StructLit {
                                     name: field,
                                     fields,
+                                    enum_name: parent_type_name,
                                 },
                                 Span::new(start, end),
                             );
@@ -143,25 +175,41 @@ impl Parser {
                     }
                 }
             } else if self.check(&Token::ColonColon) {
-                // Static method call: Type::method(args)
+                // `Type::name` — either static method call or enum variant access.
                 self.advance_skip();
-                let method = self.parse_ident()?;
-                self.expect_skip(&Token::LParen)?;
-                let args = self.parse_args()?;
-                self.expect_skip(&Token::RParen)?;
-                let end = self.prev_span().end;
+                let method_or_variant = self.parse_ident()?;
 
                 if let Expr::Ident(type_name) = &expr.node {
                     let tn = type_name.clone();
                     let sp = expr.span;
-                    expr = Spanned::new(
-                        Expr::StaticMethodCall {
-                            type_name: Spanned::new(tn, sp),
-                            method,
-                            args,
-                        },
-                        Span::new(start, end),
-                    );
+
+                    if !self.check(&Token::LParen) {
+                        // No argument list → enum variant access (unit variant)
+                        // e.g. Color::Red, Status::Ok
+                        let end = method_or_variant.span.end;
+                        expr = Spanned::new(
+                            Expr::EnumAccess {
+                                enum_name: tn,
+                                variant: method_or_variant.node,
+                                data: None,
+                            },
+                            Span::new(start, end),
+                        );
+                    } else {
+                        // `(` follows — static method call: Type::method(args)
+                        self.advance_skip(); // consume '('
+                        let args = self.parse_args()?;
+                        self.expect_skip(&Token::RParen)?;
+                        let end = self.prev_span().end;
+                        expr = Spanned::new(
+                            Expr::StaticMethodCall {
+                                type_name: Spanned::new(tn, sp),
+                                method: method_or_variant,
+                                args,
+                            },
+                            Span::new(start, end),
+                        );
+                    }
                 } else {
                     return Err(ParseError::UnexpectedToken {
                         found: Token::ColonColon,
@@ -201,7 +249,6 @@ impl Parser {
                             | Token::If
                             | Token::Loop
                             | Token::Match
-                            | Token::Spawn
                             | Token::Pipe      // lambda
                             | Token::Move      // move lambda
                             | Token::Minus     // unary minus

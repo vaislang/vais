@@ -7,7 +7,7 @@
 #                                       | c d |
 
 F mat_add(a: *i64, b: *i64, out: *i64) -> i64 {
-    L i:0..4 {
+    LF i:0..4 {
         out[i] = a[i] + b[i]
     }
     0
@@ -74,7 +74,7 @@ F main() -> i64 {
     I det_ab == det_a * det_b {
         puts("Verified: det(A*B) = det(A) * det(B)")
         0
-    } E {
+    } EL {
         puts("Verification failed!")
         1
     }

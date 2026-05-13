@@ -125,6 +125,10 @@ impl JsCodeGenerator {
                 let e = self.generate_expr(&expr.node)?;
                 Ok(format!("{e}.{}", sanitize_js_ident(&field.node)))
             }
+            Expr::TupleFieldAccess { expr, index } => {
+                let e = self.generate_expr(&expr.node)?;
+                Ok(format!("{e}[{index}]"))
+            }
             Expr::Index { expr, index } => {
                 let e = self.generate_expr(&expr.node)?;
                 let i = self.generate_expr(&index.node)?;
@@ -142,7 +146,7 @@ impl JsCodeGenerator {
                     items.iter().map(|e| self.generate_expr(&e.node)).collect();
                 Ok(format!("[{}]", parts?.join(", ")))
             }
-            Expr::StructLit { name, fields } => {
+            Expr::StructLit { name, fields, .. } => {
                 let field_strs: std::result::Result<Vec<String>, _> = fields
                     .iter()
                     .map(|(fname, fval)| {
@@ -205,10 +209,6 @@ impl JsCodeGenerator {
                 let e = self.generate_expr(&inner.node)?;
                 Ok(format!("(await {e})"))
             }
-            Expr::Spawn(inner) => {
-                let e = self.generate_expr(&inner.node)?;
-                Ok(format!("Promise.resolve().then(() => {e})"))
-            }
 
             // --- Error handling ---
             Expr::Try(inner) => {
@@ -265,16 +265,6 @@ impl JsCodeGenerator {
                 Ok(format!("yield {e}"))
             }
 
-            // --- Lazy / Force ---
-            Expr::Lazy(inner) => {
-                let e = self.generate_expr(&inner.node)?;
-                Ok(format!("(() => {e})"))
-            }
-            Expr::Force(inner) => {
-                let e = self.generate_expr(&inner.node)?;
-                Ok(format!("{e}()"))
-            }
-
             // --- Assert ---
             Expr::Assert { condition, message } => {
                 let c = self.generate_expr(&condition.node)?;
@@ -300,6 +290,13 @@ impl JsCodeGenerator {
                 ))
             }
             Expr::Error { message, .. } => Ok(format!("/* codegen error: {} */", message)),
+            Expr::EnumAccess {
+                enum_name, variant, ..
+            } => Ok(format!(
+                "{}.{}",
+                sanitize_js_ident(enum_name),
+                sanitize_js_ident(variant)
+            )),
         }
     }
 

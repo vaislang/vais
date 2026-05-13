@@ -26,6 +26,7 @@ impl Parser {
                     Token::Function
                     | Token::Struct
                     | Token::Enum
+                    | Token::EnumKeyword
                     | Token::Union
                     | Token::Use
                     | Token::Impl

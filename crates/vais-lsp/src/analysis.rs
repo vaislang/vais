@@ -23,28 +23,20 @@ impl VaisBackend {
 
                 for item in &ast.items {
                     match &item.node {
-                        Item::Struct(s) => {
-                            if s.name.span.start <= offset && offset <= s.name.span.end {
-                                return Some((
-                                    s.name.node.clone(),
-                                    SymbolKind::STRUCT,
-                                    s.name.span,
-                                ));
-                            }
+                        Item::Struct(s)
+                            if s.name.span.start <= offset && offset <= s.name.span.end =>
+                        {
+                            return Some((s.name.node.clone(), SymbolKind::STRUCT, s.name.span));
                         }
-                        Item::Enum(e) => {
-                            if e.name.span.start <= offset && offset <= e.name.span.end {
-                                return Some((e.name.node.clone(), SymbolKind::ENUM, e.name.span));
-                            }
+                        Item::Enum(e)
+                            if e.name.span.start <= offset && offset <= e.name.span.end =>
+                        {
+                            return Some((e.name.node.clone(), SymbolKind::ENUM, e.name.span));
                         }
-                        Item::Trait(t) => {
-                            if t.name.span.start <= offset && offset <= t.name.span.end {
-                                return Some((
-                                    t.name.node.clone(),
-                                    SymbolKind::INTERFACE,
-                                    t.name.span,
-                                ));
-                            }
+                        Item::Trait(t)
+                            if t.name.span.start <= offset && offset <= t.name.span.end =>
+                        {
+                            return Some((t.name.node.clone(), SymbolKind::INTERFACE, t.name.span));
                         }
                         _ => {}
                     }

@@ -86,14 +86,15 @@ impl CodeGenerator {
 
     /// Internal implementation of type_to_llvm without caching
     fn type_to_llvm_impl(&self, ty: &ResolvedType) -> crate::CodegenResult<String> {
-        // Track recursion depth
-        self.enter_type_recursion("type_to_llvm")?;
-
-        let result = self.type_to_llvm_impl_inner(ty);
-
-        // Always exit recursion, even on error
-        self.exit_type_recursion();
-        result
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static TTL_COUNT: AtomicUsize = AtomicUsize::new(0);
+        let _c = TTL_COUNT.fetch_add(1, Ordering::Relaxed);
+        stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
+            self.enter_type_recursion("type_to_llvm")?;
+            let result = self.type_to_llvm_impl_inner(ty);
+            self.exit_type_recursion();
+            result
+        })
     }
 
     /// Inner implementation of type_to_llvm (actual conversion logic)
@@ -130,18 +131,21 @@ impl CodeGenerator {
             ResolvedType::Ref(inner) => {
                 // &dyn Trait is a fat pointer itself (not a pointer to fat pointer)
                 // &[T] (Slice) and &mut [T] (SliceMut) are also fat pointers { i8*, i64 }
-                // — a slice reference IS a fat pointer, not a pointer to one
+                // &str is also a fat pointer — str is already { i8*, i64 }, so &str = str
+                // — a slice/str reference IS a fat pointer, not a pointer to one
                 match inner.as_ref() {
                     ResolvedType::DynTrait { .. }
                     | ResolvedType::Slice(_)
-                    | ResolvedType::SliceMut(_) => self.type_to_llvm_impl(inner)?,
+                    | ResolvedType::SliceMut(_)
+                    | ResolvedType::Str => self.type_to_llvm_impl(inner)?,
                     _ => format!("{}*", self.type_to_llvm_impl(inner)?),
                 }
             }
             ResolvedType::RefMut(inner) => match inner.as_ref() {
                 ResolvedType::DynTrait { .. }
                 | ResolvedType::Slice(_)
-                | ResolvedType::SliceMut(_) => self.type_to_llvm_impl(inner)?,
+                | ResolvedType::SliceMut(_)
+                | ResolvedType::Str => self.type_to_llvm_impl(inner)?,
                 _ => format!("{}*", self.type_to_llvm_impl(inner)?),
             },
             ResolvedType::Range(_inner) => {
@@ -151,82 +155,94 @@ impl CodeGenerator {
             ResolvedType::Named { name, generics } => {
                 // Single uppercase letter is likely a generic type parameter
                 if name.len() == 1 && name.chars().next().is_some_and(|c| c.is_uppercase()) {
-                    String::from("i64")
-                } else if !generics.is_empty() {
-                    // In Vais, all values are i64-sized, so struct/enum/union layout is the same
-                    // regardless of type arguments. Use base name for enums, structs, and unions.
-                    if self.types.enums.contains_key(name)
-                        || self.types.structs.contains_key(name)
-                        || self.types.unions.contains_key(name)
-                    {
-                        format!("%{}", name)
+                    if let Some(concrete) = self.get_generic_substitution(name) {
+                        self.type_to_llvm(&concrete)
                     } else {
-                        // Generic struct with type arguments (not in our structs map - external?)
-                        // Check if all generics are concrete (not Generic or Var types)
-                        let all_concrete = generics
-                            .iter()
-                            .all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
-
-                        if all_concrete {
-                            // Use mangled name for concrete instantiations
-                            let mangled = self.mangle_struct_name(name, generics);
-                            format!("%{}", mangled)
-                        } else {
-                            // For generic types with unresolved parameters, use base struct name
-                            // In Vais, all values are i64-sized, so struct layout is the same
-                            format!("%{}", name)
-                        }
+                        String::from("i64")
                     }
+                } else if !generics.is_empty() {
+                    // Check if all generics are concrete (not Generic or Var types)
+                    let all_concrete = generics
+                        .iter()
+                        .all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+
+                    if all_concrete {
+                        // Use mangled name for concrete instantiations.
+                        // Check if a specialized struct type was generated (e.g., Vec$MyStruct).
+                        let mangled = self.mangle_struct_name(name, generics);
+                        if self.types.structs.contains_key(&mangled)
+                            || self.generics.generated_structs.contains_key(&mangled)
+                        {
+                            format!("%{}", mangled)
+                        } else if self.types.enums.contains_key(name)
+                            || self.types.structs.contains_key(name)
+                            || self.types.unions.contains_key(name)
+                        {
+                            // Base type exists but no specialization — use base name.
+                            // This is correct for enums/unions where layout is type-independent.
+                            format!("%{}", name)
+                        } else {
+                            // External or not-yet-generated specialization
+                            format!("%{}", mangled)
+                        }
+                    } else {
+                        // For generic types with unresolved parameters, use base struct name.
+                        // Layout is i64-uniform when type args can't be resolved.
+                        format!("%{}", name)
+                    }
+                } else if let Some(subst) = self.get_generic_substitution(name) {
+                    // Named type that has a substitution (e.g., "Self" → Option)
+                    self.type_to_llvm(&subst)
                 } else {
                     // Non-generic struct/enum/union - return type without pointer
                     format!("%{}", name)
                 }
             }
             ResolvedType::Generic(param) => {
-                // Check if we have a substitution for this generic parameter
+                // Phase 191 v3: un-monomorphized generic parameters are a hard
+                // codegen error. Transitive instantiation (Phase 67) is expected
+                // to substitute every call site before codegen runs; a leak here
+                // is an ICE. `emit_warning_or_error` unconditionally promotes
+                // `GenericFallback` to `InternalError` and the `?` propagates it.
                 if let Some(concrete) = self.get_generic_substitution(param) {
                     self.type_to_llvm_impl(&concrete)?
                 } else {
-                    // Generic parameter without substitution — use i64 fallback.
-                    //
-                    // With transitive instantiation (Phase 67), this path is now mostly reached
-                    // only for un-specialized fallback versions of generic functions — i.e., when
-                    // generate_module_with_instantiations generates a backward-compatible i64 version
-                    // of a generic function that has no concrete instantiation.
-                    //
-                    // NOTE: returning Err here would break nested types like &T → i64 instead of i64*,
-                    // because the error short-circuits the wrapper type conversion.
                     let context = self
                         .fn_ctx
                         .current_function
                         .as_deref()
                         .unwrap_or("<unknown>")
                         .to_string();
-                    self.emit_warning(crate::CodegenWarning::GenericFallback {
+                    self.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
                         param: param.clone(),
                         context,
-                    });
-                    String::from("i64")
+                    })?;
+                    // Unreachable: emit_warning_or_error always returns Err for
+                    // GenericFallback after Phase 191 v3. Keep `unreachable!()`
+                    // as a type-level marker so the match arm still types-checks.
+                    unreachable!(
+                        "Phase 191 v3: emit_warning_or_error must return Err for GenericFallback"
+                    );
                 }
             }
             ResolvedType::ConstGeneric(param) => {
-                // Check if we have a substitution for this const generic parameter
+                // Phase 191 v3: same policy as `Generic` above.
                 if let Some(concrete) = self.get_generic_substitution(param) {
                     self.type_to_llvm_impl(&concrete)?
                 } else {
-                    // ConstGeneric parameter without substitution — use i64 fallback.
-                    // Same rationale as Generic above: kept for backward-compatible fallback.
                     let context = self
                         .fn_ctx
                         .current_function
                         .as_deref()
                         .unwrap_or("<unknown>")
                         .to_string();
-                    self.emit_warning(crate::CodegenWarning::GenericFallback {
+                    self.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
                         param: param.clone(),
                         context,
-                    });
-                    String::from("i64")
+                    })?;
+                    unreachable!(
+                        "Phase 191 v3: emit_warning_or_error must return Err for GenericFallback"
+                    );
                 }
             }
             ResolvedType::Vector { element, lanes } => {
@@ -239,13 +255,6 @@ impl CodeGenerator {
                 // data_ptr: i8* pointing to the actual object data
                 // vtable_ptr: i8* pointing to the vtable for this trait
                 crate::vtable::TRAIT_OBJECT_TYPE.to_string()
-            }
-            ResolvedType::ImplTrait { .. } => {
-                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
-                    type_desc: String::from("unresolved ImplTrait"),
-                    backend: String::from("text"),
-                })?;
-                String::from("i64")
             }
             ResolvedType::FnPtr {
                 params,
@@ -290,13 +299,6 @@ impl CodeGenerator {
             ResolvedType::Map(key, _val) => {
                 // Map is represented as a pointer to key array (parallel arrays)
                 format!("{}*", self.type_to_llvm_impl(key)?)
-            }
-            ResolvedType::Lazy(inner) => {
-                // Lazy<T> is represented as a struct with:
-                // - computed: i1 (has been evaluated)
-                // - value: T (cached value)
-                // - thunk: closure pointer (function to compute value)
-                format!("{{ i1, {}, i8* }}", self.type_to_llvm_impl(inner)?)
             }
             ResolvedType::Tuple(elems) => {
                 let elem_types: Vec<String> = elems
@@ -366,13 +368,6 @@ impl CodeGenerator {
                 });
                 String::from("i64")
             }
-            ResolvedType::HigherKinded { .. } => {
-                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
-                    type_desc: String::from("unresolved HKT"),
-                    backend: String::from("text"),
-                })?;
-                String::from("i64")
-            }
         })
     }
 
@@ -435,6 +430,7 @@ impl CodeGenerator {
     }
 
     /// Try to determine bit width from a value (heuristic based on SSA variable naming)
+    #[allow(dead_code)]
     pub(crate) fn get_integer_bits_from_val(&self, val: &str) -> u32 {
         // If it's a temp variable, we assume i64 (default Vais integer)
         // If it's a literal number, we assume i64
@@ -589,9 +585,6 @@ impl CodeGenerator {
                     .map(|g| self.ast_type_to_resolved_impl(&g.node))
                     .collect(),
             },
-            Type::ImplTrait { bounds } => ResolvedType::ImplTrait {
-                bounds: bounds.iter().map(|b| b.node.clone()).collect(),
-            },
             Type::Slice(inner) => {
                 ResolvedType::Slice(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
             }
@@ -619,180 +612,6 @@ impl CodeGenerator {
                 }
             }
             _ => ResolvedType::Unknown,
-        }
-    }
-
-    /// Generate LLVM struct type definition
-    pub(crate) fn generate_struct_type(&self, name: &str, info: &StructInfo) -> String {
-        let fields: Vec<_> = info
-            .fields
-            .iter()
-            .map(|(_, ty)| self.type_to_llvm(ty))
-            .collect();
-
-        format!("%{} = type {{ {} }}", name, fields.join(", "))
-    }
-
-    /// Generate LLVM enum type definition
-    pub(crate) fn generate_enum_type(&self, name: &str, info: &EnumInfo) -> String {
-        // Enum is represented as { i32 tag, union payload }
-        // For simplicity, we use the largest variant size for the payload
-        let mut max_payload_size = 0usize;
-        let mut payload_types: Vec<String> = Vec::new();
-
-        for variant in &info.variants {
-            let variant_types = match &variant.fields {
-                EnumVariantFields::Unit => vec![],
-                EnumVariantFields::Tuple(types) => {
-                    types.iter().map(|t| self.type_to_llvm(t)).collect()
-                }
-                EnumVariantFields::Struct(fields) => {
-                    fields.iter().map(|(_, t)| self.type_to_llvm(t)).collect()
-                }
-            };
-
-            // Estimate size based on actual field types
-            let size: usize = variant_types
-                .iter()
-                .map(|t| self.estimate_type_size(t))
-                .sum();
-            if size > max_payload_size {
-                max_payload_size = size;
-                payload_types = variant_types;
-            }
-        }
-
-        if payload_types.is_empty() {
-            // Simple enum with no payload - just use i32 for tag
-            format!("%{} = type {{ i32 }}", name)
-        } else {
-            // Enum with payload - tag + payload struct
-            format!(
-                "%{} = type {{ i32, {{ {} }} }}",
-                name,
-                payload_types.join(", ")
-            )
-        }
-    }
-
-    /// Generate LLVM union type definition (untagged, C-style)
-    /// All fields share the same memory location (offset 0).
-    /// The type is sized to the largest field.
-    pub(crate) fn generate_union_type(&self, name: &str, info: &UnionInfo) -> String {
-        // Find the largest field type (by estimated size)
-        let largest_type = info
-            .fields
-            .iter()
-            .map(|(_, ty)| self.type_to_llvm(ty))
-            .max_by_key(|s| self.estimate_type_size(s))
-            .unwrap_or_else(|| String::from("i64"));
-
-        format!("%{} = type {{ {} }}", name, largest_type)
-    }
-
-    /// Estimate the size of an LLVM type (for union layout)
-    pub(crate) fn estimate_type_size(&self, llvm_type: &str) -> usize {
-        match llvm_type {
-            "i1" => 1,
-            "i8" => 1,
-            "i16" => 2,
-            "i32" | "float" => 4,
-            "i64" | "double" | "i8*" => 8,
-            "i128" => 16,
-            s if s.ends_with('*') => 8, // pointers are 8 bytes on 64-bit
-            s if s.starts_with('<') => {
-                // SIMD vector type: <N x T>
-                // Parse and calculate
-                if let Some(rest) = s.strip_prefix('<') {
-                    if let Some(idx) = rest.find(" x ") {
-                        if let Ok(lanes) = rest[..idx].trim().parse::<usize>() {
-                            let elem_type = &rest[idx + 3..rest.len() - 1];
-                            return lanes * self.estimate_type_size(elem_type);
-                        }
-                    }
-                }
-                8 // fallback
-            }
-            s if s.starts_with('{') => {
-                // Struct type: { T1, T2, ... }
-                // Sum the sizes of the fields
-                let inner = s
-                    .strip_prefix("{ ")
-                    .and_then(|s| s.strip_suffix(" }"))
-                    .unwrap_or(s);
-                inner
-                    .split(", ")
-                    .map(|field| self.estimate_type_size(field.trim()))
-                    .sum()
-            }
-            s if s.starts_with('%') => 8, // Named types default to 8
-            _ => 8,                       // Default fallback
-        }
-    }
-
-    /// Compute sizeof for a ResolvedType (in bytes)
-    /// Returns the size in Vais's runtime representation
-    pub(crate) fn compute_sizeof(&self, ty: &ResolvedType) -> i64 {
-        match ty {
-            ResolvedType::I8 | ResolvedType::U8 | ResolvedType::Bool => 1,
-            ResolvedType::I16 | ResolvedType::U16 => 2,
-            ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
-            ResolvedType::I64 | ResolvedType::U64 | ResolvedType::F64 => 8,
-            ResolvedType::I128 | ResolvedType::U128 => 16,
-            ResolvedType::Str => 16, // fat pointer { i8*, i64 }
-            ResolvedType::Unit => 0,
-            ResolvedType::Pointer(_) | ResolvedType::Ref(_) | ResolvedType::RefMut(_) => 8,
-            ResolvedType::Array(_) => 8,     // pointer to heap
-            ResolvedType::Optional(_) => 8,  // tag + value in i64
-            ResolvedType::Result(_, _) => 8, // tag + value in i64
-            ResolvedType::Tuple(elems) => elems.iter().map(|e| self.compute_sizeof(e)).sum(),
-            ResolvedType::Named { name, .. } => {
-                if let Some(struct_info) = self.types.structs.get(name) {
-                    struct_info
-                        .fields
-                        .iter()
-                        .map(|(_name, ty)| self.compute_sizeof(ty))
-                        .sum()
-                } else {
-                    8 // enum (tag + payload) or unknown named type
-                }
-            }
-            _ => 8, // default for complex types
-        }
-    }
-
-    /// Compute alignof for a ResolvedType (in bytes)
-    /// Returns the alignment requirement of the type
-    pub(crate) fn compute_alignof(&self, ty: &ResolvedType) -> i64 {
-        match ty {
-            ResolvedType::I8 | ResolvedType::U8 | ResolvedType::Bool => 1,
-            ResolvedType::I16 | ResolvedType::U16 => 2,
-            ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
-            ResolvedType::I64 | ResolvedType::U64 | ResolvedType::F64 => 8,
-            ResolvedType::I128 | ResolvedType::U128 => 16,
-            ResolvedType::Str
-            | ResolvedType::Pointer(_)
-            | ResolvedType::Ref(_)
-            | ResolvedType::RefMut(_) => 8,
-            ResolvedType::Unit => 1,
-            ResolvedType::Tuple(elems) => elems
-                .iter()
-                .map(|e| self.compute_alignof(e))
-                .max()
-                .unwrap_or(8),
-            ResolvedType::Named { name, .. } => {
-                if let Some(struct_info) = self.types.structs.get(name) {
-                    struct_info
-                        .fields
-                        .iter()
-                        .map(|(_name, ty)| self.compute_alignof(ty))
-                        .max()
-                        .unwrap_or(8)
-                } else {
-                    8 // enum or unknown named type
-                }
-            }
-            _ => 8, // default for complex types
         }
     }
 }

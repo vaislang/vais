@@ -13,6 +13,7 @@ fn check_ok(source: &str) {
         .unwrap_or_else(|e| panic!("Type check failed for: {}\nErr: {:?}", source, e));
 }
 
+#[allow(dead_code)]
 fn check_err(source: &str) {
     let module = parse(source).unwrap_or_else(|e| panic!("Parse failed: {:?}", e));
     let mut tc = TypeChecker::new();

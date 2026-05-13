@@ -532,10 +532,7 @@ async fn test_package_index() {
 async fn test_web_index() {
     let (app, _db, _st) = setup_test_app().await;
 
-    let request = Request::builder()
-        .uri("/")
-        .body(Body::empty())
-        .unwrap();
+    let request = Request::builder().uri("/").body(Body::empty()).unwrap();
     let response = app.clone().oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
@@ -730,7 +727,10 @@ async fn test_search_with_pagination() {
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let packages = json["packages"].as_array().unwrap();
     assert!(packages.len() <= 2, "Limit should be respected");
-    assert!(json["total"].as_i64().unwrap() >= 5, "Total should include all matching");
+    assert!(
+        json["total"].as_i64().unwrap() >= 5,
+        "Total should include all matching"
+    );
 }
 
 // ============================================================================

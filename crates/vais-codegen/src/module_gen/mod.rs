@@ -122,6 +122,13 @@ impl CodeGenerator {
             .collect();
         sorted_fns.sort_by_key(|(key, info)| if **key == info.signature.name { 0 } else { 1 });
         for (_, info) in &sorted_fns {
+            // ROADMAP #9: skip `declare` for runtime intrinsics whose body is emitted
+            // by `generate_helper_functions()` in this same module (single-module path
+            // always acts as the main module).
+            if crate::function_gen::runtime::is_runtime_intrinsic(&info.signature.name) {
+                declared_fns.insert(info.signature.name.clone());
+                continue;
+            }
             if !declared_fns.contains(&info.signature.name) {
                 ir.push_str(&self.generate_extern_decl(info));
                 ir.push('\n');
@@ -149,6 +156,37 @@ impl CodeGenerator {
                     // Without concrete type args, we'd emit undefined symbols.
                     // Use generate_module_with_instantiations() for generic codegen.
                     if !f.generics.is_empty() {
+                        // Fallback: if the generic function IS called from within this module
+                        // but TC produced no instantiations (e.g., T cannot be inferred from
+                        // args because it only appears in a struct field that TC can't track),
+                        // emit a fallback version treating all type params as i64.
+                        if instantiations::is_function_called_in_module(&f.name.node, module) {
+                            let param_names: Vec<String> =
+                                f.generics.iter().map(|g| g.name.node.clone()).collect();
+                            self.emit_warning(CodegenWarning::UninstantiatedGeneric {
+                                function_name: f.name.node.clone(),
+                                params: param_names,
+                            });
+                            if let Ok(()) = self.register_function(f) {
+                                match self.generate_function_with_span(f, item.span) {
+                                    Ok(ir_fragment) => {
+                                        body_ir.push_str(&ir_fragment);
+                                        body_ir.push('\n');
+                                    }
+                                    Err(e)
+                                        if self.multi_error_mode
+                                            && self.collected_errors.len() < 200 =>
+                                    {
+                                        let span = self.last_error_span.unwrap_or(item.span);
+                                        self.collected_errors.push(SpannedCodegenError {
+                                            error: e,
+                                            span: Some(span),
+                                        });
+                                    }
+                                    Err(_) => {} // Ignore errors in fallback generic codegen
+                                }
+                            }
+                        }
                         continue;
                     }
                     match self.generate_function_with_span(f, item.span) {
@@ -169,6 +207,16 @@ impl CodeGenerator {
                 Item::Struct(s) => {
                     // Generate methods for this struct
                     for method in &s.methods {
+                        // Phase 191: skip base method if specialized version exists
+                        let base_method_name = format!("{}_{}", s.name.node, method.node.name.node);
+                        let has_specialization = self
+                            .generics
+                            .generated_functions
+                            .keys()
+                            .any(|k| k.starts_with(&format!("{}$", base_method_name)));
+                        if has_specialization {
+                            continue;
+                        }
                         match self.generate_method_with_span(
                             &s.name.node,
                             &method.node,
@@ -178,7 +226,9 @@ impl CodeGenerator {
                                 body_ir.push_str(&ir_fragment);
                                 body_ir.push('\n');
                             }
-                            Err(e) if self.multi_error_mode && self.collected_errors.len() < 200 => {
+                            Err(e)
+                                if self.multi_error_mode && self.collected_errors.len() < 200 =>
+                            {
                                 let span = self.last_error_span.unwrap_or(method.span);
                                 self.collected_errors.push(SpannedCodegenError {
                                     error: e,
@@ -197,13 +247,28 @@ impl CodeGenerator {
                         _ => continue,
                     };
                     for method in &impl_block.methods {
+                        // Phase 191: skip base generic method if a specialized version
+                        // was already generated. The specialized version (e.g., Vec_new$f32)
+                        // has correct typed params; the base version (Vec_new) has i64-uniform
+                        // params that produce type-mismatched IR with specialized struct layouts.
+                        let base_method_name = format!("{}_{}", type_name, method.node.name.node);
+                        let has_specialization = self
+                            .generics
+                            .generated_functions
+                            .keys()
+                            .any(|k| k.starts_with(&format!("{}$", base_method_name)));
+                        if has_specialization {
+                            continue;
+                        }
                         match self.generate_method_with_span(&type_name, &method.node, method.span)
                         {
                             Ok(ir_fragment) => {
                                 body_ir.push_str(&ir_fragment);
                                 body_ir.push('\n');
                             }
-                            Err(e) if self.multi_error_mode && self.collected_errors.len() < 200 => {
+                            Err(e)
+                                if self.multi_error_mode && self.collected_errors.len() < 200 =>
+                            {
                                 let span = self.last_error_span.unwrap_or(method.span);
                                 self.collected_errors.push(SpannedCodegenError {
                                     error: e,
@@ -234,7 +299,18 @@ impl CodeGenerator {
         }
 
         self.emit_string_constants(&mut ir, true);
+        self.emit_global_vars(&mut ir);
         self.emit_body_lambdas_vtables(&mut ir, &body_ir);
+
+        // Emit on-demand specialized functions (e.g., Vec$str_push generated during
+        // method call processing when the TC didn't provide instantiation records)
+        if !self.fn_ctx.pending_specialized_ir.is_empty() {
+            ir.push_str("\n; On-demand specialized functions\n");
+            for spec_ir in self.fn_ctx.pending_specialized_ir.drain(..) {
+                ir.push_str(&spec_ir);
+                ir.push('\n');
+            }
+        }
 
         // Add WASM runtime functions if targeting WebAssembly
         if self.target.is_wasm() {
@@ -255,6 +331,25 @@ impl CodeGenerator {
             ir.push_str(&self.generate_string_helper_functions());
             if !self.target.is_wasm() {
                 ir.push_str(&self.generate_string_extern_declarations());
+            }
+        }
+
+        // Vec<str> container-ownership helpers (RFC-002 §4.1, §4.4).
+        // Emit only when a Vec<str> specialization exists in this module.
+        if self.generics.generated_structs.contains_key("Vec$str") {
+            ir.push_str(&self.generate_vec_str_container_helpers());
+        }
+
+        // Struct shallow-free helpers (RFC-002 §4.2, Phase 191 #2b-C).
+        for struct_name in &self.needs_struct_shallow.clone() {
+            if let Some(info) = self.types.structs.get(struct_name) {
+                let field_count = info.fields.len();
+                let heap_fields = info.heap_fields.clone();
+                ir.push_str(&self.generate_struct_shallow_free_helper(
+                    struct_name,
+                    field_count,
+                    &heap_fields,
+                ));
             }
         }
 

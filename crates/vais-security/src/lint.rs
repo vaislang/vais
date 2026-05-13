@@ -414,9 +414,6 @@ impl LintAnalyzer {
             Expr::Await(inner) | Expr::Try(inner) | Expr::Unwrap(inner) => {
                 self.collect_usages_in_expr(&inner.node);
             }
-            Expr::Spawn(inner) | Expr::Lazy(inner) | Expr::Force(inner) => {
-                self.collect_usages_in_expr(&inner.node);
-            }
             Expr::Assert { condition, message } => {
                 self.collect_usages_in_expr(&condition.node);
                 if let Some(msg) = message {
@@ -442,6 +439,11 @@ impl LintAnalyzer {
                     self.collect_usages_in_expr(&v.node);
                 }
             }
+            Expr::EnumAccess { data, .. } => {
+                if let Some(d) = data {
+                    self.collect_usages_in_expr(&d.node);
+                }
+            }
             Expr::String(_)
             | Expr::Int(_)
             | Expr::Float(_)
@@ -451,6 +453,9 @@ impl LintAnalyzer {
             | Expr::MacroInvoke(_)
             | Expr::Yield(_)
             | Expr::Error { .. } => {}
+            Expr::TupleFieldAccess { expr, .. } => {
+                self.collect_usages_in_expr(&expr.node);
+            }
         }
     }
 
@@ -490,7 +495,6 @@ impl LintAnalyzer {
             | Type::Pointer(inner)
             | Type::Optional(inner)
             | Type::Result(inner)
-            | Type::Lazy(inner)
             | Type::Linear(inner)
             | Type::Affine(inner) => {
                 self.collect_usages_in_type(&inner.node);
@@ -539,11 +543,6 @@ impl LintAnalyzer {
                 self.used_idents.insert(assoc_name.clone());
                 for g in generics {
                     self.collect_usages_in_type(&g.node);
-                }
-            }
-            Type::ImplTrait { bounds } => {
-                for b in bounds {
-                    self.used_idents.insert(b.node.clone());
                 }
             }
             Type::Dependent { base, .. } => {

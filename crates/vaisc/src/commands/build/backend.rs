@@ -56,6 +56,8 @@ pub(crate) fn generate_with_text_backend(
     // (e.g., TestSuite_new, ByteBuffer_ensure_capacity) so codegen can resolve return types.
     codegen.set_resolved_functions(checker.get_all_functions_with_methods());
     codegen.set_type_aliases(checker.get_type_aliases().clone());
+    codegen.set_expr_types(checker.get_expr_types().clone());
+    codegen.set_implicit_try_sites(checker.get_implicit_try_sites().clone());
 
     // Enable multi-error mode for graceful degradation:
     // collect codegen errors instead of stopping at the first one.
@@ -66,12 +68,13 @@ pub(crate) fn generate_with_text_backend(
     }
 
     let codegen_start = std::time::Instant::now();
+    eprintln!("[build] Getting generic instantiations...");
     let instantiations = checker.get_generic_instantiations();
-    let result = if instantiations.is_empty() {
-        codegen.generate_module(final_ast)
-    } else {
-        codegen.generate_module_with_instantiations(final_ast, &instantiations)
-    };
+    eprintln!("[build] Got {} instantiations", instantiations.len());
+    // Always use generate_module_with_instantiations — even with empty instantiations,
+    // it processes generic struct definitions and method templates needed for
+    // on-demand specialization during codegen (e.g., Vec<T> methods).
+    let result = codegen.generate_module_with_instantiations(final_ast, &instantiations);
 
     // Report all collected codegen errors before returning the first fatal one
     for collected_err in codegen.get_collected_errors() {

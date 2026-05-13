@@ -597,7 +597,9 @@ impl ExhaustivenessChecker {
             PatternSpace::Any | PatternSpace::Wildcard => vec!["_".to_string()],
             PatternSpace::Int(n) => vec![format!("{}", n)],
             PatternSpace::IntRange(start, end) => {
-                if end - start <= 5 {
+                // Use saturating_sub to avoid underflow for wide ranges
+                // (e.g., i64::MIN..=i64::MAX — computing end-start would panic).
+                if end.saturating_sub(*start) <= 5 && end >= start {
                     // List individual values for small ranges
                     (*start..=*end).map(|n| format!("{}", n)).collect()
                 } else {

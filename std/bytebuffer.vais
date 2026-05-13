@@ -11,7 +11,7 @@ S ByteBuffer {
 X ByteBuffer {
     # Create with given capacity
     F with_capacity(capacity: i64) -> ByteBuffer {
-        cap := I capacity < 16 { 16 } E { capacity }
+        cap := I capacity < 16 { 16 } EL { capacity }
         data := malloc(cap)
         ByteBuffer { data: data, len: 0, cap: cap, pos: 0 }
     }
@@ -170,7 +170,7 @@ X ByteBuffer {
             v = v >> 7
             I v > 0 {
                 @.write_u8(byte | 128)  # set continuation bit
-            } E {
+            } EL {
                 @.write_u8(byte)
             }
             count = count + 1
@@ -257,16 +257,27 @@ X ByteBuffer {
         ByteBuffer.with_capacity(64)
     }
 
-    # Wrap existing mutable byte buffer (takes ownership of data pointer)
-    F wrap(data: i64, len: i64) -> ByteBuffer {
-        ByteBuffer { data: data, len: len, cap: len, pos: 0 }
+    # Wrap existing byte slice as mutable ByteBuffer (shares data pointer — caller must
+    # ensure the underlying buffer lives as long as this ByteBuffer).
+    # Accepts &[u8], &Vec<u8> (via coercion), or any slice reference.
+    F wrap(data: &[u8]) -> ByteBuffer {
+        ptr := slice_data_ptr(data)
+        length := data.len()
+        ByteBuffer { data: ptr, len: length, cap: length, pos: 0 }
     }
 
-    # Wrap existing read-only byte buffer (copies data)
-    F wrap_readonly(data: i64, len: i64) -> ByteBuffer {
-        buf := malloc(len)
-        memcpy(buf, data, len)
-        ByteBuffer { data: buf, len: len, cap: len, pos: 0 }
+    # Wrap existing byte slice as read-only ByteBuffer (copies data into new buffer)
+    F wrap_readonly(data: &[u8]) -> ByteBuffer {
+        ptr := slice_data_ptr(data)
+        length := data.len()
+        buf := malloc(length)
+        memcpy(buf, ptr, length)
+        ByteBuffer { data: buf, len: length, cap: length, pos: 0 }
+    }
+
+    # Wrap raw pointer and length directly (low-level, use wrap/wrap_readonly instead)
+    F wrap_raw(data: i64, len: i64) -> ByteBuffer {
+        ByteBuffer { data: data, len: len, cap: len, pos: 0 }
     }
 
     # Create ByteBuffer by copying from another ByteBuffer
@@ -285,7 +296,7 @@ X ByteBuffer {
     F to_vec(&self) -> Vec<u8> {
         result := mut Vec.with_capacity(self.len)
         i := mut 0
-        L i < self.len {
+        LW i < self.len {
             result.push(load_byte(self.data + i) as u8)
             i = i + 1
         }

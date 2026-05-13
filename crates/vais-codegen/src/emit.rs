@@ -57,6 +57,94 @@ impl CodeGenerator {
             // Bounds check uses abort() for OOB access
             ir.push_str("declare void @abort()\n\n");
         }
+        if self.needs_llvm_memcpy {
+            ir.push_str("declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i1)\n\n");
+        }
+    }
+
+    /// Emit global variable declarations, with optional ownership filtering.
+    ///
+    /// If `owned` is `None`, every registered global is emitted as a full
+    /// definition (legacy single-module path). If `owned` is `Some(set)`,
+    /// globals in the set are emitted as definitions and globals **not** in
+    /// the set are emitted as `external global` declarations instead. This
+    /// is the multi-module path used by `subset.rs` — see ROADMAP Phase 2
+    /// iter 15 (monitor D1 link pass) for the duplicate-symbol bug this
+    /// prevents.
+    pub(crate) fn emit_global_vars_with_ownership(
+        &self,
+        ir: &mut String,
+        owned: Option<&std::collections::HashSet<String>>,
+    ) {
+        if self.types.globals.is_empty() {
+            return;
+        }
+        for (name, info) in &self.types.globals {
+            let llvm_ty = self.type_to_llvm(&info._ty);
+            // Non-owner module in a multi-module build: emit as `external
+            // global` (declaration only). clang will resolve the symbol to
+            // the owner module's definition at link time.
+            if let Some(set) = owned {
+                if !set.contains(name) {
+                    write_ir!(ir, "@{} = external global {}", name, llvm_ty);
+                    continue;
+                }
+            }
+            // Evaluate constant initializer to a literal value
+            let init_val = match &info._value.node {
+                vais_ast::Expr::Int(n) => n.to_string(),
+                vais_ast::Expr::Bool(b) => {
+                    if *b {
+                        "1".to_string()
+                    } else {
+                        "0".to_string()
+                    }
+                }
+                vais_ast::Expr::Float(f) => format!("{}", f),
+                vais_ast::Expr::String(s) => {
+                    // Str globals: emit as a reference to the string constant.
+                    // The string constant @.strN is emitted by emit_string_constants.
+                    // Look up the string in the dedup cache to find the constant name.
+                    if let Some(const_name) = self.strings.dedup_cache.get(s.as_str()) {
+                        let len = s.len();
+                        let const_len = len + 1; // +1 for null terminator
+                        format!(
+                            "{{ i8* getelementptr inbounds ([{} x i8], [{} x i8]* @{}, i32 0, i32 0), i64 {} }}",
+                            const_len, const_len, const_name, len
+                        )
+                    } else {
+                        // String not in pool — use zeroinitializer as fallback
+                        "zeroinitializer".to_string()
+                    }
+                }
+                _ => {
+                    // For compound types (structs, arrays, etc.), use zeroinitializer
+                    // instead of 0, which is invalid for non-integer LLVM types
+                    if llvm_ty.starts_with('{')
+                        || llvm_ty.starts_with('[')
+                        || llvm_ty.starts_with('<')
+                    {
+                        "zeroinitializer".to_string()
+                    } else {
+                        "0".to_string()
+                    }
+                }
+            };
+            let linkage = if info._is_mutable {
+                "global"
+            } else {
+                "constant"
+            };
+            write_ir!(ir, "@{} = {} {} {}", name, linkage, llvm_ty, init_val);
+        }
+        ir.push('\n');
+    }
+
+    /// Thin wrapper matching the legacy signature — emits every global as a
+    /// full definition. Used by the single-module path (`mod.rs`,
+    /// `instantiations.rs`) which always owns every global in its module.
+    pub(crate) fn emit_global_vars(&self, ir: &mut String) {
+        self.emit_global_vars_with_ownership(ir, None);
     }
 
     /// Emit body IR, lambda functions, and vtable globals.

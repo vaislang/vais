@@ -11,6 +11,54 @@ use crate::{ParseError, ParseResult, Parser};
 
 use super::has_interpolation;
 
+/// Unescape `\{` → `{` and `\}` → `}` in a plain string literal (non-interpolation path).
+/// The lexer preserves these as `\{`/`\}` in the token so the parser can distinguish
+/// them from `{expr}` string interpolation. Once we know there is no interpolation,
+/// we convert the brace escapes to their literal characters.
+fn unescape_brace_escapes(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            match chars.peek() {
+                Some(&'{') => {
+                    chars.next();
+                    result.push('{');
+                }
+                Some(&'}') => {
+                    chars.next();
+                    result.push('}');
+                }
+                _ => {
+                    result.push('\\');
+                    if let Some(next) = chars.next() {
+                        result.push(next);
+                    }
+                }
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+    result
+}
+
+/// Returns true if the string contains any `\{` or `\}` brace escape sequences.
+fn has_brace_escapes(s: &str) -> bool {
+    let mut chars = s.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            if let Some(&next) = chars.peek() {
+                if next == '{' || next == '}' {
+                    return true;
+                }
+                chars.next();
+            }
+        }
+    }
+    false
+}
+
 impl Parser {
     /// Parse primary expression
     pub(crate) fn parse_primary(&mut self) -> ParseResult<Spanned<Expr>> {
@@ -23,6 +71,7 @@ impl Parser {
     /// Parse a string with interpolation into `Expr::StringInterp`.
     /// Scans the string char-by-char, splitting into literal and expression parts.
     /// `{{`/`}}` are escaped to literal `{`/`}`.
+    /// `\{`/`\}` are brace escapes (literal `{`/`}`, not interpolation).
     /// `{expr}` is sub-lexed and sub-parsed.
     fn parse_string_interpolation(&self, s: &str) -> ParseResult<Expr> {
         let mut parts: Vec<StringInterpPart> = Vec::new();
@@ -30,7 +79,26 @@ impl Parser {
         let mut chars = s.chars().peekable();
 
         while let Some(ch) = chars.next() {
-            if ch == '{' {
+            if ch == '\\' {
+                // Handle brace escapes: \{ -> literal {, \} -> literal }
+                if let Some(&next) = chars.peek() {
+                    if next == '{' {
+                        chars.next();
+                        literal.push('{');
+                        continue;
+                    } else if next == '}' {
+                        chars.next();
+                        literal.push('}');
+                        continue;
+                    }
+                }
+                // Other backslash sequences were already processed by the lexer;
+                // keep them as-is (push backslash + next char).
+                literal.push('\\');
+                if let Some(next) = chars.next() {
+                    literal.push(next);
+                }
+            } else if ch == '{' {
                 if chars.peek() == Some(&'{') {
                     // Escaped {{ -> literal {
                     chars.next();
@@ -120,7 +188,10 @@ impl Parser {
                         Expr::Cast {
                             expr: Box::new(Spanned::new(Expr::Int(n), Span::new(start, end))),
                             ty: Spanned::new(
-                                vais_ast::Type::Named { name: type_name.to_string(), generics: vec![] },
+                                vais_ast::Type::Named {
+                                    name: type_name.to_string(),
+                                    generics: vec![],
+                                },
                                 Span::new(start, end),
                             ),
                         }
@@ -137,6 +208,9 @@ impl Parser {
             Token::String(s) => {
                 if has_interpolation(&s) {
                     self.parse_string_interpolation(&s)?
+                } else if has_brace_escapes(&s) {
+                    // No interpolation, but has \{ or \} escapes — unescape them.
+                    Expr::String(unescape_brace_escapes(&s))
                 } else {
                     Expr::String(s)
                 }
@@ -215,6 +289,7 @@ impl Parser {
                         Expr::StructLit {
                             name: Spanned::new(name, Span::new(start, start + name_len)),
                             fields,
+                            enum_name: None,
                         },
                         Span::new(start, end),
                     ));
@@ -317,13 +392,13 @@ impl Parser {
                         } else {
                             // Not a map literal, restore position and parse as block
                             self.pos = saved_pos;
-                            self.pending_gt = false;
+                            self.pending_gt_count = 0;
                             self.errors.truncate(saved_errors_len);
                         }
                     } else {
                         // Not a map literal, restore position and parse as block
                         self.pos = saved_pos;
-                        self.pending_gt = false;
+                        self.pending_gt_count = 0;
                         self.errors.truncate(saved_errors_len);
                     }
                 }
@@ -338,26 +413,16 @@ impl Parser {
             Token::Loop => {
                 return self.parse_loop_expr(start);
             }
+            Token::ForEach => {
+                // LF: unambiguous for-each loop — no speculative parsing needed
+                return self.parse_foreach_expr(start);
+            }
+            Token::While => {
+                // LW: unambiguous while loop — no speculative parsing needed
+                return self.parse_while_expr(start);
+            }
             Token::Match => {
                 return self.parse_match_expr(start);
-            }
-            Token::Spawn => {
-                // Spawn can be: spawn { expr } or spawn expr
-                let body = if self.check(&Token::LBrace) {
-                    // spawn { expr }
-                    self.expect_skip(&Token::LBrace)?;
-                    let body = self.parse_expr()?;
-                    self.expect_skip(&Token::RBrace)?;
-                    body
-                } else {
-                    // spawn expr (e.g., spawn async_func(args))
-                    self.parse_unary()?
-                };
-                let end = self.prev_span().end;
-                return Ok(Spanned::new(
-                    Expr::Spawn(Box::new(body)),
-                    Span::new(start, end),
-                ));
             }
             Token::Yield => {
                 // Yield expression: yield expr
@@ -445,8 +510,8 @@ impl Parser {
         let then = self.parse_block_contents()?;
         self.expect_skip(&Token::RBrace)?;
 
-        let else_ = if self.check(&Token::Enum) {
-            // E is used for else (context-dependent)
+        let else_ = if self.check(&Token::Else) || self.check(&Token::Enum) {
+            // EL (Else) is the unambiguous else keyword; E is the old context-dependent form
             self.advance_skip();
             Some(self.parse_else_branch()?)
         } else {
@@ -480,7 +545,7 @@ impl Parser {
             let then = self.parse_block_contents()?;
             self.expect_skip(&Token::RBrace)?;
 
-            let else_ = if self.check(&Token::Enum) {
+            let else_ = if self.check(&Token::Else) || self.check(&Token::Enum) {
                 self.advance_skip();
                 Some(Box::new(self.parse_else_branch()?))
             } else {
@@ -554,10 +619,57 @@ impl Parser {
         // This is a while loop: `L condition { ... }`
         // Reset position and parse as expression
         self.pos = saved_pos;
-        self.pending_gt = false;
+        self.pending_gt_count = 0;
 
         // Disable struct literals in condition to avoid ambiguity with block start
         // e.g., `L x == CONST { ... }` should not parse CONST{ as struct literal
+        let old_allow_struct_literal = self.allow_struct_literal;
+        self.allow_struct_literal = false;
+        let condition = self.parse_expr()?;
+        self.allow_struct_literal = old_allow_struct_literal;
+
+        self.expect_skip(&Token::LBrace)?;
+        let body = self.parse_block_contents()?;
+        self.expect_skip(&Token::RBrace)?;
+
+        let end = self.prev_span().end;
+        Ok(Spanned::new(
+            Expr::While {
+                condition: Box::new(condition),
+                body,
+            },
+            Span::new(start, end),
+        ))
+    }
+
+    /// Parse for-each expression using the unambiguous `LF` keyword.
+    /// Syntax: `LF pattern:iter { body }`
+    /// No speculative parsing needed — `LF` is definitively a for-each loop.
+    pub(crate) fn parse_foreach_expr(&mut self, start: usize) -> ParseResult<Spanned<Expr>> {
+        let pattern = self.parse_pattern()?;
+        self.expect_skip(&Token::Colon)?;
+        let iter = self.parse_expr()?;
+
+        self.expect_skip(&Token::LBrace)?;
+        let body = self.parse_block_contents()?;
+        self.expect_skip(&Token::RBrace)?;
+
+        let end = self.prev_span().end;
+        Ok(Spanned::new(
+            Expr::Loop {
+                pattern: Some(pattern),
+                iter: Some(Box::new(iter)),
+                body,
+            },
+            Span::new(start, end),
+        ))
+    }
+
+    /// Parse while expression using the unambiguous `LW` keyword.
+    /// Syntax: `LW condition { body }`
+    /// No speculative parsing needed — `LW` is definitively a while loop.
+    pub(crate) fn parse_while_expr(&mut self, start: usize) -> ParseResult<Spanned<Expr>> {
+        // Disable struct literals in condition to avoid ambiguity with block start
         let old_allow_struct_literal = self.allow_struct_literal;
         self.allow_struct_literal = false;
         let condition = self.parse_expr()?;
@@ -723,7 +835,9 @@ impl Parser {
                     else if self.check(&Token::Dot) {
                         self.advance(); // skip '.'
                         let variant_span = self.current_span();
-                        let variant_tok = self.advance().ok_or(ParseError::UnexpectedEof { span: variant_span })?;
+                        let variant_tok = self
+                            .advance()
+                            .ok_or(ParseError::UnexpectedEof { span: variant_span })?;
                         let variant_name = if let Token::Ident(s) = variant_tok.token {
                             s
                         } else {
@@ -753,8 +867,13 @@ impl Parser {
                             self.advance_skip();
                             let mut fields = Vec::new();
                             while !self.check(&Token::RBrace) && !self.is_at_end() {
+                                // Support `..` rest pattern in variant struct patterns
+                                if self.check(&Token::DotDot) {
+                                    self.advance();
+                                    break;
+                                }
                                 fields.push(self.parse_pattern()?);
-                                if !self.check(&Token::RBrace) {
+                                if !self.check(&Token::RBrace) && !self.check(&Token::DotDot) {
                                     self.expect_skip(&Token::Comma)?;
                                 }
                             }
@@ -790,7 +909,8 @@ impl Parser {
                     // Check for struct destructure pattern: `Name { field, .. }`
                     else if self.check(&Token::LBrace) {
                         self.advance_skip();
-                        let mut fields: Vec<(Spanned<String>, Option<Spanned<Pattern>>)> = Vec::new();
+                        let mut fields: Vec<(Spanned<String>, Option<Spanned<Pattern>>)> =
+                            Vec::new();
                         while !self.check(&Token::RBrace) && !self.is_at_end() {
                             // Check for rest pattern `..`
                             if self.check(&Token::DotDot) {
@@ -978,13 +1098,10 @@ impl Parser {
             // Multi-character keywords that can appear in import paths or identifiers
             Token::Io => "io".to_string(),
             Token::Mut => "mut".to_string(),
-            Token::Spawn => "spawn".to_string(),
             Token::Yield => "yield".to_string(),
             Token::SelfLower => "self".to_string(),
             Token::Str => "str".to_string(),
             Token::Bool => "bool".to_string(),
-            Token::Clone => "clone".to_string(),
-            Token::Weak => "weak".to_string(),
             Token::Global => "G".to_string(),
             _ => {
                 return Err(ParseError::UnexpectedToken {

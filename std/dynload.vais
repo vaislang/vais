@@ -91,7 +91,7 @@ F load_module(path: i64) -> ModuleHandle {
     I handle == 0 {
         # Loading failed
         module_handle_new()
-    } E {
+    } EL {
         ModuleHandle {
             handle: handle,
             path: path,
@@ -108,7 +108,7 @@ F load_module_lazy(path: i64) -> ModuleHandle {
     handle := dlopen(path, RTLD_LAZY)
     I handle == 0 {
         module_handle_new()
-    } E {
+    } EL {
         ModuleHandle {
             handle: handle,
             path: path,
@@ -124,11 +124,11 @@ F load_module_lazy(path: i64) -> ModuleHandle {
 F unload_module(m: ModuleHandle) -> i64 {
     I m.loaded == 0 {
         0
-    } E {
+    } EL {
         result := dlclose(m.handle)
         I result == 0 {
             1
-        } E {
+        } EL {
             0
         }
     }
@@ -141,7 +141,7 @@ F reload_module(m: ModuleHandle) -> ModuleHandle {
     I m.loaded == 0 {
         # Not loaded, just try to load
         load_module(m.path)
-    } E {
+    } EL {
         # Unload first
         dlclose(m.handle)
 
@@ -149,7 +149,7 @@ F reload_module(m: ModuleHandle) -> ModuleHandle {
         handle := dlopen(m.path, RTLD_NOW)
         I handle == 0 {
             module_handle_new()
-        } E {
+        } EL {
             ModuleHandle {
                 handle: handle,
                 path: m.path,
@@ -167,7 +167,7 @@ F reload_module(m: ModuleHandle) -> ModuleHandle {
 F get_function(m: ModuleHandle, name: i64) -> i64 {
     I m.loaded == 0 {
         0
-    } E {
+    } EL {
         dlsym(m.handle, name)
     }
 }
@@ -244,7 +244,7 @@ C CAP_GPU: i64         = 512     # GPU/compute access
 F has_capability(caps: i64, required: i64) -> i64 {
     I (caps & required) != 0 {
         1
-    } E {
+    } EL {
         0
     }
 }
@@ -411,7 +411,7 @@ F wasm_call2(inst: WasmInstance, name: i64, arg1: i64, arg2: i64) -> i64 {
 F wasm_is_valid(inst: WasmInstance) -> i64 {
     I inst.handle != 0 {
         1
-    } E {
+    } EL {
         0
     }
 }
@@ -493,7 +493,7 @@ F hot_reloader_stop(r: HotReloader) -> HotReloader {
 F hot_reloader_check(r: HotReloader) -> i64 {
     I r.running == 0 {
         0
-    } E {
+    } EL {
         vais_hot_reload_check(r.handle)
     }
 }

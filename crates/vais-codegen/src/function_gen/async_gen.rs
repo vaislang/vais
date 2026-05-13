@@ -27,7 +27,12 @@ impl CodeGenerator {
 
         let ret_type = self.resolve_fn_return_type(f, func_name);
 
-        let ret_llvm = self.type_to_llvm(&ret_type);
+        // Use i64 placeholder for void return types since void cannot be a struct field
+        let ret_llvm = if matches!(ret_type, vais_types::ResolvedType::Unit) {
+            "i64".to_string()
+        } else {
+            self.type_to_llvm(&ret_type)
+        };
 
         // Reset async state tracking
         self.lambdas.async_state_counter = 0;
@@ -123,8 +128,13 @@ impl CodeGenerator {
         // 3. Generate poll function: implements state machine
         self.fn_ctx.current_function = Some(format!("{}__poll", func_name));
         self.fn_ctx.locals.clear();
+        self.fn_ctx.temp_var_types.clear();
         self.fn_ctx.label_counter = 0;
         self.fn_ctx.loop_stack.clear();
+        self.fn_ctx.future_poll_fns.clear();
+        self.fn_ctx.scope_stack.clear();
+        self.fn_ctx.entry_allocas.clear();
+        self.clear_alloc_tracker();
 
         write_ir!(ir, "; Poll function for async {}", func_name);
         write_ir!(
@@ -195,6 +205,15 @@ impl CodeGenerator {
             FunctionBody::Block(stmts) => self.generate_block(stmts, &mut counter)?,
         };
 
+        // Insert entry allocas (for local variables in the async body) directly
+        // into the IR. We can't use splice_entry_allocas here because the IR
+        // contains multiple "entry:" blocks (wrapper + poll).
+        for alloca_line in &self.fn_ctx.entry_allocas {
+            ir.push_str(alloca_line);
+            ir.push('\n');
+        }
+        self.fn_ctx.entry_allocas.clear();
+
         ir.push_str(&body_result.1);
 
         // Store result and return Ready
@@ -204,10 +223,13 @@ impl CodeGenerator {
             state_struct_name,
             state_struct_name
         );
-        // The codegen promotes bool comparisons to i64 (zext i1 to i64), but the
-        // result field in the state struct uses the actual return type. Truncate
-        // i64 back to i1 when the return type is bool.
-        let store_val = if ret_llvm == "i1" {
+        // Handle different result types for the async state store:
+        // - void: body returns "void" string, store i64 0 placeholder
+        // - bool (i1): truncate i64 → i1 since codegen promotes bool to i64
+        // - normal: use body result directly
+        let store_val = if body_result.0 == "void" || body_result.0.is_empty() {
+            "0".to_string()
+        } else if ret_llvm == "i1" {
             let trunc = format!("%body_trunc.{}", counter);
             write_ir!(ir, "  {} = trunc i64 {} to i1", trunc, body_result.0);
             trunc

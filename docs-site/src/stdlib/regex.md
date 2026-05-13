@@ -7,14 +7,14 @@ Regex 모듈은 정규 표현식 패턴 매칭을 제공합니다. 리터럴 문
 ## Quick Start
 
 ```vais
-U std/regex
+use std/regex
 
-F main() -> i64 {
+fn main() -> i64 {
     pattern := regex_new("hello.*world")
     I regex_match(pattern, "hello beautiful world") {
         print_str("매칭 성공!")
     }
-    R 0
+    return 0
 }
 ```
 
@@ -50,87 +50,87 @@ F main() -> i64 {
 ### 예제 1: 이메일 검증
 
 ```vais
-U std/regex
+use std/regex
 
-F is_valid_email(email: i64) -> i64 {
+fn is_valid_email(email: i64) -> i64 {
     # 단순화된 이메일 패턴: xxx@xxx.xxx
     pattern := regex_new("^[a-zA-Z0-9]+@[a-zA-Z0-9]+\\.[a-zA-Z]+$")
-    R regex_match(pattern, email)
+    return regex_match(pattern, email)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     I is_valid_email("user@example.com") {
         print_str("유효한 이메일")
-    } E {
+    } else {
         print_str("무효한 이메일")
     }
-    R 0
+    return 0
 }
 ```
 
 ### 예제 2: 텍스트 검색 및 하이라이팅
 
 ```vais
-U std/regex
+use std/regex
 
-F highlight_matches(text: i64, pattern: i64) -> i64 {
+fn highlight_matches(text: i64, pattern: i64) -> i64 {
     regex := regex_new(pattern)
     matches := regex_find_all(regex, text)
 
     I matches.len() == 0 {
         print_str("매칭 없음")
-        R 0
+        return 0
     }
 
     i := 0
     L i < matches.len() {
         pos := matches.get(i)
-        print_str("매칭 위치: ~{pos}")
+        print_str("매칭 위치: {pos}")
         i = i + 1
     }
-    R matches.len()
+    return matches.len()
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     text := "The quick brown fox jumps over the lazy dog"
     count := highlight_matches(text, "\\b[a-z]{4}\\b")  # 4글자 단어
-    print_str("총 ~{count}개 매칭")
-    R 0
+    print_str("총 {count}개 매칭")
+    return 0
 }
 ```
 
 ### 예제 3: 문자열 치환
 
 ```vais
-U std/regex
+use std/regex
 
-F sanitize_input(input: i64) -> i64 {
+fn sanitize_input(input: i64) -> i64 {
     # 숫자 아닌 문자 제거
     pattern := regex_new("[^0-9]")
-    R regex_replace(pattern, input, "")
+    return regex_replace(pattern, input, "")
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     phone := "1-800-555-1234"
     clean := sanitize_input(phone)
     print_str(clean)  # "18005551234"
-    R 0
+    return 0
 }
 ```
 
 ### 예제 4: CSV 파싱 (Split)
 
 ```vais
-U std/regex
+use std/regex
 
-F parse_csv_line(line: i64) -> Vec<i64> {
+fn parse_csv_line(line: i64) -> Vec<i64> {
     # 쉼표로 분할
     pattern := regex_new(",")
     fields := regex_split(pattern, line)
-    R fields
+    return fields
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     csv := "Alice,30,Engineer"
     fields := parse_csv_line(csv)
 
@@ -139,16 +139,16 @@ F main() -> i64 {
         print_str(fields.get(i))
         i = i + 1
     }
-    R 0
+    return 0
 }
 ```
 
 ### 예제 5: 캡처 그룹 추출
 
 ```vais
-U std/regex
+use std/regex
 
-F extract_version(text: i64) -> i64 {
+fn extract_version(text: i64) -> i64 {
     # 버전 번호 추출: v1.2.3
     pattern := regex_new("v([0-9]+)\\.([0-9]+)\\.([0-9]+)")
     captures := regex_capture(pattern, text)
@@ -158,16 +158,16 @@ F extract_version(text: i64) -> i64 {
         minor := captures.get(1)
         patch := captures.get(2)
 
-        print_str("Major: ~{major}")
-        print_str("Minor: ~{minor}")
-        print_str("Patch: ~{patch}")
+        print_str("Major: {major}")
+        print_str("Minor: {minor}")
+        print_str("Patch: {patch}")
     }
-    R 0
+    return 0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     extract_version("Version v2.5.10 released")
-    R 0
+    return 0
 }
 ```
 

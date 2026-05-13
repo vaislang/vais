@@ -5,13 +5,13 @@
 ## Import
 
 ```vais
-U std/result
+use std/result
 ```
 
 ## Enum
 
 ```vais
-E Result {
+enum Result {
     Ok(i64),
     Err(i64)
 }
@@ -48,16 +48,15 @@ E Result {
 ## Usage
 
 ```vais
-U std/result
+use std/result
 
-F divide(a: i64, b: i64) -> Result {
-    I b == 0 { Err(ERR_DIVIDE_BY_ZERO()) }
-    E { Ok(a / b) }
+fn divide(a: i64, b: i64) -> Result {
+    I b == 0 { Err(ERR_DIVIDE_BY_ZERO()) } else { Ok(a / b) }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     r := divide(10, 3)
-    M r {
+    match r {
         Ok(v) => v,
         Err(e) => 0 - 1
     }

@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/async_net
+use std/async_net
 ```
 
 ## Overview
@@ -56,7 +56,7 @@ The `async_net` module provides high-level async TCP and UDP networking APIs bui
 ### make_sockaddr_in
 
 ```vais
-F make_sockaddr_in(host: str, port: i64) -> i64
+fn make_sockaddr_in(host: str, port: i64) -> i64
 ```
 
 Create a `sockaddr_in` structure for the given host and port. Returns a pointer to the structure, or `0` on error.
@@ -68,9 +68,9 @@ The module exposes POSIX socket system calls: `socket`, `bind`, `listen`, `accep
 ## Example
 
 ```vais
-U std/async_net
+use std/async_net
 
-F main() {
+fn main() {
     # Create a TCP socket
     fd := socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
 

@@ -2,7 +2,7 @@
 //!
 //! Provides type-safe LLVM IR generation using the inkwell crate.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -23,6 +23,9 @@ pub(super) struct LoopContext<'ctx> {
     pub(super) break_block: inkwell::basic_block::BasicBlock<'ctx>,
     /// Block to jump to on continue
     pub(super) continue_block: inkwell::basic_block::BasicBlock<'ctx>,
+    /// `scope_str_stack.len()` at loop entry. Frames at indices ≥ this depth
+    /// are loop-internal and must be freed on break/continue (Phase 191 #6).
+    pub(super) scope_str_depth: usize,
 }
 
 /// LLVM code generator using inkwell.
@@ -83,6 +86,27 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Enum variant tags: maps (enum_name, variant_name) -> tag
     pub(super) enum_variants: HashMap<(String, String), i32>,
 
+    /// Enum variant payload struct names: (enum_name, variant_name) -> struct type name
+    /// Only populated for variants whose single payload field is a named struct.
+    /// Used by match pattern bindings to recover struct type for field access.
+    pub(super) enum_variant_struct_types: HashMap<(String, String), String>,
+
+    /// Enum multi-field tuple variant payload struct types:
+    /// (enum_name, variant_name) -> anonymous struct type that packs all fields.
+    /// Populated when a multi-field tuple variant (e.g., Rect(i64, i64)) is constructed;
+    /// pattern bindings use this to load the heap-allocated payload and extract each field.
+    pub(super) enum_variant_multi_payload_types:
+        HashMap<(String, String), inkwell::types::StructType<'ctx>>,
+
+    /// Enum single-primitive variant payload LLVM type:
+    /// (enum_name, variant_name) -> primitive BasicTypeEnum (f64, i32, ...) for
+    /// variants whose sole payload is a non-struct primitive. The enum data
+    /// slot always stores this as i64 (bitcast for floats, widen for smaller
+    /// ints), but pattern bindings need to recover the declared type so the
+    /// bound identifier has the right type when referenced downstream.
+    pub(super) enum_variant_primitive_payload_types:
+        HashMap<(String, String), inkwell::types::BasicTypeEnum<'ctx>>,
+
     /// Variable name -> struct type name tracking (for method call resolution)
     pub(super) var_struct_types: HashMap<String, String>,
 
@@ -98,14 +122,14 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Temporary storage for the last generated lambda (used by Stmt::Let to track bindings)
     pub(super) _last_lambda_info: Option<(String, Vec<(String, BasicValueEnum<'ctx>)>)>,
 
-    /// Temporary storage for the last generated lazy thunk
-    pub(super) _last_lazy_info: Option<(String, Vec<(String, BasicValueEnum<'ctx>)>)>,
-
-    /// Lazy binding info: variable name -> (thunk function name, captured values)
-    pub(super) lazy_bindings: HashMap<String, (String, Vec<(String, BasicValueEnum<'ctx>)>)>,
-
     /// Constants: name -> value (evaluated at compile time)
     pub(super) constants: HashMap<String, BasicValueEnum<'ctx>>,
+
+    /// User-declared globals (`G name: T = value`):
+    /// name -> (LLVM global pointer, pointee type).
+    /// Populated in generate_module's first pass from `Item::Global`.
+    /// Looked up by `generate_var` (load) and assignment paths (store).
+    pub(super) globals: HashMap<String, (GlobalValue<'ctx>, BasicTypeEnum<'ctx>)>,
 
     /// Function name -> return struct type name (for struct type inference)
     pub(super) function_return_structs: HashMap<String, String>,
@@ -117,6 +141,52 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Each entry is a PointerValue that should be freed before function return.
     pub(super) alloc_tracker: Vec<inkwell::values::PointerValue<'ctx>>,
 
+    /// Maps a string fat-pointer StructValue (keyed by raw LLVM value ref as usize)
+    /// to the `alloc_slot` PointerValue that owns its heap buffer. Used at `return`
+    /// to transfer ownership: the returned fat pointer's slot is excluded from free
+    /// so the caller receives a live buffer instead of UAF. See RFC-001 §4.6.
+    pub(super) string_value_slot: HashMap<usize, inkwell::values::PointerValue<'ctx>>,
+
+    /// Slots to skip in the next emit_alloc_cleanup call. Typically holds one
+    /// slot — the one owning the returned buffer. For PHI results (if/match as
+    /// expression producing a string), both incoming branches' slots must be
+    /// skipped because we can't know at codegen time which ran. Cleared after
+    /// cleanup emission.
+    pub(super) pending_return_skip_slot: Vec<inkwell::values::PointerValue<'ctx>>,
+
+    /// Per-scope stack of owned string slots. Each frame is a list of alloc_slot
+    /// PointerValues created during that block scope. At block exit, any slot in
+    /// the innermost frame that still appears in `string_value_slot` (i.e. was not
+    /// transferred out via return or consumed by a later concat) is freed. This
+    /// is the loop-iteration leak fix: each iteration of a loop body enters and
+    /// exits a scope, freeing the iteration's final concat result. See RFC-001
+    /// §4.2.
+    pub(super) scope_str_stack: Vec<Vec<inkwell::values::PointerValue<'ctx>>>,
+
+    /// Maps a local variable name to its owning alloc_slot — when a `let`
+    /// binding receives a tracked concat result, we record the slot under the
+    /// variable name so that `return x` (which loads `x` and produces a new SSA
+    /// register not equal to the concat's original SSA) can still find the slot
+    /// and mark it for ownership transfer. This is the fix for the UAF that
+    /// team-review caught on 2026-04-14: without variable-level tracking, a
+    /// `let msg = a+b; return msg` pattern freed `msg`'s buffer before the
+    /// caller could use it. See RFC-001 §4.5 / §4.6.
+    pub(super) var_string_slot: HashMap<String, inkwell::values::PointerValue<'ctx>>,
+
+    /// Maps a local variable name to multiple owning slots — used when the RHS
+    /// is a PHI (if/match as expression): both incoming branches' slots must
+    /// be kept live until the owner uses the value (runtime picks exactly one,
+    /// the other remains null). On `return x` we exclude ALL slots in this
+    /// list; the null one is already a no-op in emit_alloc_cleanup.
+    pub(super) var_string_slots_multi: HashMap<String, Vec<inkwell::values::PointerValue<'ctx>>>,
+
+    /// For PHI results that represent a merge of multiple tracked concat
+    /// results (if/match-as-expression producing a string), the PHI's SSA is
+    /// registered in `string_value_slot` with its first incoming slot; any
+    /// additional slots go here, keyed by the PHI's raw LLVM value ref.
+    /// Consumed by the `let` binding hook to populate `var_string_slots_multi`.
+    pub(super) phi_extra_slots: HashMap<usize, Vec<inkwell::values::PointerValue<'ctx>>>,
+
     /// TCO state: when generating a tail-recursive function as a loop,
     /// this holds the parameter allocas and the loop header block for jumping back.
     pub(super) tco_state: Option<TcoState<'ctx>>,
@@ -126,6 +196,12 @@ pub struct InkwellCodeGenerator<'ctx> {
 
     /// Type aliases from type checker (for resolving type alias names in codegen)
     pub(super) type_aliases: HashMap<String, vais_types::ResolvedType>,
+
+    /// Argument spans that were implicitly unwrapped by the type checker's
+    /// implicit error propagation pass (Phase 4b.1 / #7, `--implicit-try`).
+    /// Each call-site arg whose span is in this set is wrapped in `Expr::Try`
+    /// before codegen, reusing the existing Try handling.
+    pub(super) implicit_try_sites: HashSet<(usize, usize)>,
 }
 
 /// Tail Call Optimization state for loop-based tail recursion elimination.
@@ -176,20 +252,29 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             lambda_counter: 0,
             lambda_functions: Vec::new(),
             enum_variants: HashMap::new(),
+            enum_variant_struct_types: HashMap::new(),
+            enum_variant_primitive_payload_types: HashMap::new(),
+            enum_variant_multi_payload_types: HashMap::new(),
             var_struct_types: HashMap::new(),
             var_resolved_types: HashMap::new(),
             struct_generic_params: HashMap::new(),
             lambda_bindings: HashMap::new(),
             _last_lambda_info: None,
-            _last_lazy_info: None,
-            lazy_bindings: HashMap::new(),
             constants: HashMap::new(),
+            globals: HashMap::new(),
             function_return_structs: HashMap::new(),
             defer_stack: Vec::new(),
             alloc_tracker: Vec::new(),
+            string_value_slot: HashMap::new(),
+            pending_return_skip_slot: Vec::new(),
+            scope_str_stack: Vec::new(),
+            var_string_slot: HashMap::new(),
+            var_string_slots_multi: HashMap::new(),
+            phi_extra_slots: HashMap::new(),
             tco_state: None,
             resolved_function_sigs: HashMap::new(),
             type_aliases: HashMap::new(),
+            implicit_try_sites: HashSet::new(),
         };
 
         // Declare built-in functions
@@ -218,14 +303,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     /// Enable strict type mode.
     ///
-    /// In strict mode, ICE-level type fallbacks (`Var`, `Unknown`, `Lifetime`,
-    /// `ImplTrait`, `HigherKinded` reaching codegen) become hard errors instead
-    /// of warnings with i64 fallback in the Inkwell TypeMapper.
-    /// Generic/ConstGeneric fallbacks remain as warnings since they are
-    /// legitimate during monomorphization.
+    /// In strict mode, ICE-level type fallbacks (`Var`, `Unknown`, `Lifetime`
+    /// reaching codegen) become hard errors instead of warnings with i64
+    /// fallback in the Inkwell TypeMapper. `Generic` / `ConstGeneric`
+    /// fallbacks are **always** promoted to hard errors (Phase 191 v3 —
+    /// unconditional), so no separate opt-in exists.
     pub fn set_strict_type_mode(&mut self, strict: bool) {
         self.type_mapper.strict_type_mode = strict;
     }
+
+    // `set_strict_generic_mode` removed in Phase 191 v3 — strict generic
+    // behavior is now unconditional. See comment in `init.rs::CodeGenerator`.
 
     /// Generates code for an entire Vais module.
     ///
@@ -279,6 +367,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 }
                 ast::Item::Const(const_def) => {
                     self.define_const(const_def)?;
+                }
+                ast::Item::Global(global_def) => {
+                    self.define_global(global_def)?;
                 }
                 _ => {}
             }
@@ -526,6 +617,20 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Set type aliases from the type checker.
     pub fn set_type_aliases(&mut self, aliases: HashMap<String, vais_types::ResolvedType>) {
         self.type_aliases = aliases;
+    }
+
+    /// Set the implicit-try argument spans collected by the type checker
+    /// (Phase 4b.1 / #7). See `CodeGenerator::set_implicit_try_sites` on the
+    /// text-IR generator for the contract — this is the Inkwell mirror.
+    pub fn set_implicit_try_sites(&mut self, sites: HashSet<(usize, usize)>) {
+        self.implicit_try_sites = sites;
+    }
+
+    /// Query whether the argument at the given span was marked for implicit
+    /// error propagation by the type checker.
+    #[inline]
+    pub(super) fn is_implicit_try_site(&self, span: vais_ast::Span) -> bool {
+        self.implicit_try_sites.contains(&(span.start, span.end))
     }
 
     /// Returns the LLVM IR as a string.

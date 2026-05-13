@@ -7,7 +7,7 @@
 ## Import
 
 ```vais
-U std/wasm
+use std/wasm
 ```
 
 ## Overview
@@ -31,7 +31,7 @@ The `wasm` module provides WebAssembly-specific memory management, I/O, and WASI
 ### wasm_memory_size
 
 ```vais
-F wasm_memory_size() -> i64
+fn wasm_memory_size() -> i64
 ```
 
 Get current memory size in pages (each page = 64KB).
@@ -39,7 +39,7 @@ Get current memory size in pages (each page = 64KB).
 ### wasm_memory_grow
 
 ```vais
-F wasm_memory_grow(pages: i64) -> i64
+fn wasm_memory_grow(pages: i64) -> i64
 ```
 
 Grow memory by N pages. Returns previous size or `-1` on failure.
@@ -51,9 +51,9 @@ The module provides WASI-compatible I/O functions for writing to stdout/stderr w
 ## Example
 
 ```vais
-U std/wasm
+use std/wasm
 
-F main() {
+fn main() {
     # Check memory size
     pages := wasm_memory_size()
     total_bytes := pages * WASM_PAGE_SIZE

@@ -37,6 +37,7 @@ fn compile_file_to_ir(path: &str) -> Result<String, String> {
 }
 
 /// Assert that the given source compiles to LLVM IR successfully.
+#[allow(dead_code)]
 fn assert_compiles(source: &str) {
     match compile_to_ir(source) {
         Ok(_ir) => {}
@@ -134,19 +135,34 @@ fn assert_ir_contains(source: &str, expected: &str) {
 
 #[test]
 fn selfhost_token_module_compiles() {
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let path = format!("{}/../..", project_root);
-    let token_path = format!("{}/selfhost/token.vais", path);
-    match compile_file_to_ir(&token_path) {
-        Ok(ir) => {
-            // Verify the IR contains function definitions for token constants
-            assert!(
-                ir.contains("TOK_KW_F") || ir.contains("tok_kw_f") || ir.contains("define"),
-                "Token module IR should contain token constant function definitions"
-            );
-        }
-        Err(e) => panic!("selfhost/token.vais failed to compile: {}", e),
-    }
+    // Use the real vaisc subprocess so `U constants` import resolution runs.
+    // The in-process `compile_file_to_ir` helper parses a single source file
+    // only; selfhost/token.vais imports constants.vais and the call sites
+    // like `TOK_KW_F()` fail NotCallable without the import graph.
+    use std::path::PathBuf;
+    use std::process::Command;
+
+    let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("canonicalize project root");
+    let token_path = project_root.join("selfhost/token.vais");
+    let std_path = project_root.join("std");
+    let vaisc = env!("CARGO_BIN_EXE_vaisc");
+
+    let output = Command::new(vaisc)
+        .arg("build")
+        .arg(&token_path)
+        .arg("--emit-ir")
+        .arg("--no-cache")
+        .env("VAIS_STD_PATH", &std_path)
+        .output()
+        .expect("spawn vaisc");
+    assert!(
+        output.status.success(),
+        "selfhost/token.vais failed to compile: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]
@@ -1733,7 +1749,6 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::SelfUpper => 26, // TOK_KW_SELF_UPPER
         Token::As => 27,        // TOK_KW_AS
         Token::Const => 28,     // TOK_KW_CONST
-        Token::Spawn => 29,     // TOK_KW_SPAWN
         Token::Macro => 30,     // TOK_KW_MACRO
 
         // Additional keywords (121-128)
@@ -1742,9 +1757,6 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::Linear => 123,   // TOK_KW_LINEAR
         Token::Affine => 124,   // TOK_KW_AFFINE
         Token::Move => 125,     // TOK_KW_MOVE
-        Token::Consume => 126,  // TOK_KW_CONSUME
-        Token::Lazy => 127,     // TOK_KW_LAZY
-        Token::Force => 128,    // TOK_KW_FORCE
         Token::Where => 129,    // TOK_KW_WHERE
 
         // Type keywords (31-44)
@@ -1850,13 +1862,17 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         // Tokens not yet in selfhost lexer (return -1 for "not mapped")
         // These are rarely used features that can be added later if needed
         Token::DocComment(_) => -1, // Doc comments are stripped by the lexer anyway
-        Token::Weak => -1,          // weak references (rare)
-        Token::Clone => -1,         // clone (rare)
         Token::Pure => -1,          // pure functions (effect system)
         Token::Effect => -1,        // effect system
         Token::Io => -1,            // io effect
         Token::Unsafe => -1,        // unsafe blocks
+        Token::Partial => -1,       // totality marker (Phase 4c.2 / Task #53)
         Token::Yield => -1,         // yield keyword
+        // New unambiguous keyword variants
+        Token::EnumKeyword => 3, // same as Token::Enum (TOK_KW_E)
+        Token::Else => -1, // else is context-dependent (E token reused), not a separate selfhost token
+        Token::ForEach => 5, // same as Token::Loop (TOK_KW_L)
+        Token::While => -1, // while is context-dependent (L token reused), not a separate selfhost token
     }
 }
 

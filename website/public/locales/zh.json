@@ -1,30 +1,31 @@
 {
   "meta": {
     "title": "Vais - AI优化的系统编程语言",
-    "description": "Vais 是为 AI 代码生成设计的高效令牌系统编程语言，具有原生 LLVM 性能。"
+    "description": "Vais 是面向 AI code generation 的 systems programming language，提供 native LLVM performance 和 evidence-scoped public claims。"
   },
   "nav": {
-    "compare": "比较",
+    "compare": "Gates",
     "performance": "性能",
     "features": "特性",
     "playground": "在线试用",
+    "vaisx": "VaisX",
     "docs": "文档",
     "blog": "博客"
   },
   "hero": {
-    "badge": "v0.0.5 — 生产就绪",
-    "title": "编写<span class=\"gradient-text\">更少的令牌</span>，<br>获得<span class=\"gradient-text\">原生性能</span>",
-    "subtitle": "Vais（Vibe AI Language for Systems）是为 AI 代码生成优化的系统编程语言。单字符关键字、表达式导向语法和 LLVM 驱动的原生速度。",
+    "badge": "Certified Core + Scoped Evidence",
+    "title": "编写 <span class=\"gradient-text\">clear Vais</span>，<br>获得 <span class=\"gradient-text\">native performance</span>",
+    "subtitle": "Vais（Vibe AI Language for Systems）是为 AI 代码生成优化的系统编程语言。当前公开基线区分 main-reproducible gates、已 port 到 main fixture 的 schema gates，以及等待 aggregate main port 的 integration evidence。",
     "tryBrowser": "在浏览器中试用",
     "install": "brew install vais"
   },
   "compare": {
-    "title": "令牌效率很重要",
-    "subtitle": "AI 模型按令牌收费。对于等效程序，Vais 使用的令牌比 <strong>Rust 少 33%</strong>，比 <strong>C 少 40%</strong> — 单字符关键字、表达式体和自动返回在整个代码库中累积。",
+    "title": "Canonical Syntax, Evidence-Scoped Claims",
+    "subtitle": "Step 19 已移除旧 single-letter keyword form。公开 claim 区分 main-reproducible gates、已 port 到 main fixture 的 schema gates，以及等待 aggregate main port 的 integration evidence。",
     "vais": "Vais",
     "tokens": "令牌",
-    "barTitle": "令牌数 — 4 个基准程序",
-    "barNote": "fibonacci + quicksort + http_types + linked_list (tiktoken cl100k_base)。参见<a href=\"https://github.com/vaislang/vais/blob/main/benches/COMPARISON.md\" style=\"color: var(--primary);\">基准测试</a>。"
+    "barTitle": "Evidence Snapshot — 2026-05-13",
+    "barNote": "schema gates 现在可在 compiler main fixture/local workspace 中复现：cross-package schema 15/15，shared-schema product evidence 9/9。Runtime/package 数字仍是 gate branch 的 integration evidence；aggregate runtime gate 仍在等待 main port。"
   },
   "performance": {
     "title": "原生性能",
@@ -37,8 +38,8 @@
     "title": "为什么选择 Vais？",
     "subtitle": "从零开始为 AI 辅助开发设计，不牺牲性能。",
     "singleChar": {
-      "title": "单字符关键字",
-      "description": "函数用 <code>F</code>，结构体用 <code>S</code>，if/else 用 <code>I</code>/<code>E</code>，循环用 <code>L</code>，模式匹配用 <code>M</code>。最少的令牌，最大的清晰度。"
+      "title": "Canonical Keywords",
+      "description": "<code>fn</code>、<code>struct</code>、<code>enum</code>、<code>else</code>、<code>match</code>、<code>return</code>、<code>use</code>、<code>pub</code> 是 canonical。Retired single-letter form 不再接受。"
     },
     "selfRecursion": {
       "title": "自递归运算符",
@@ -50,38 +51,38 @@
     },
     "llvm": {
       "title": "LLVM 原生速度",
-      "description": "通过 LLVM 编译为优化的原生代码。以高级人体工程学获得 C 级性能。支持 LTO 和 PGO。"
+      "description": "通过 LLVM 提供 promoted native codegen path。更广泛的 backend/optimization claim 需要明确 gate 支撑。"
     },
     "inference": {
       "title": "类型推断",
       "description": "双向类型检查自动推断类型。在任何地方写 <code>x := 42</code> 而不是显式类型注解。"
     },
     "toolchain": {
-      "title": "完整的工具链",
-      "description": "LSP 服务器、格式化程序、调试器、REPL、包管理器以及适用于 VSCode 和 IntelliJ 的 IDE 插件。生产就绪的工具。"
+      "title": "Tooling Workbench",
+      "description": "LSP、formatter、debugger、REPL、package manager 和 IDE plugin 是 implementation surfaces。支持级别取决于 named gates。"
     },
     "multiTarget": {
-      "title": "多目标输出",
-      "description": "编译为原生二进制文件、WebAssembly 或 JavaScript。通过完整的 WASM 互操作和 JS 代码生成在浏览器中运行 Vais 代码。"
+      "title": "Native First, Experimental Extra Targets",
+      "description": "Promoted path 是 native codegen。JavaScript、WebAssembly 和 browser execution 路径在没有专门 gate 时是 experimental。"
     },
     "incremental": {
-      "title": "增量编译",
-      "description": "通过并行代码生成进行按模块缓存。仅重新编译更改的内容 — 30K 行项目在 100ms 内重建。"
+      "title": "Parallel Compiler Pipeline",
+      "description": "Module dependency tracking 和 parallel codegen 是 workbench surfaces。精确 performance claim 需要 benchmark gate。"
     },
     "selfHosting": {
-      "title": "自托管编译器",
-      "description": "Vais 可以编译自己。自托管编译器通过 50,000 多行 Vais 实现引导，由 900 个 E2E 测试和总共 5,300 多个测试支持。"
+      "title": "Self-Hosting Workbench",
+      "description": "Repository 包含 50,000+ 行 Vais compiler source，用于 bootstrap 和 conformance work。当前保证以 certified Core 和 promoted runtime gates 为准。"
     }
   },
   "playground": {
     "title": "立即试用 Vais",
-    "subtitle": "直接在浏览器中编写和运行 Vais 代码。无需安装。",
+    "subtitle": "在浏览器中试用 Vais syntax 和 examples。实际 compilation 使用 playground API；browser-only compile/execute 仍是 experimental。",
     "launch": "启动交互式在线试用",
     "loadHere": "在此处加载在线试用",
     "openTab": "在新标签页中打开"
   },
   "install": {
-    "title": "数秒内开始",
+    "title": "Build From Source or Try the Playground",
     "oneClick": "一键安装",
     "oneClickNote": "自动检测操作系统和架构。支持 macOS、Linux、WSL。",
     "windows": "Windows (PowerShell)",
@@ -102,6 +103,28 @@
     "changelog": "更新日志",
     "license": "MIT 许可证",
     "copyright": "&copy; 2026 Vais 贡献者。用 ❤ 为 AI 打造。"
+  },
+  "vaisx": {
+    "badge": "新功能",
+    "title": "用 Vais 构建 Web 应用",
+    "subtitle": "VaisX 是 Vais web framework workbench。当前公开 claim 区分 main-reproducible gates、main-fixture schema gates，以及等待 aggregate main port 的 integration evidence。",
+    "compiler": {
+      "title": "编译时响应性",
+      "description": "Reactive state analysis 和 DOM update generation 是 implementation surfaces，只在 named gates 覆盖范围内验证。"
+    },
+    "routing": {
+      "title": "基于文件的路由 & SSR",
+      "description": "File-based routing 和 SSR/SSG modules 存在；promoted behavior 以当前 Vais Web gates 为准。"
+    },
+    "runtime": {
+      "title": "Runtime Evidence",
+      "description": "当前 Vais Web integration evidence 是 runtime smoke 61/77、unit 390/390、package tests 3272/3272、full-build 24/24，shared-schema product evidence 9/9 已作为 compiler main-fixture workspace gate port。Size claim 需要 size gate。"
+    },
+    "learnMore": "了解更多",
+    "github": "GitHub",
+    "quickStart": "快速入门",
+    "install": "npm install -g @vaisx/cli",
+    "packages": "软件包"
   },
   "langSelector": {
     "label": "语言"

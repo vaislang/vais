@@ -16,7 +16,7 @@ F todo_new(id: i64, title: str, completed: bool) -> Todo {
 
 F todo_to_json(todo: Todo) -> str {
     # Format: {"id":1,"title":"Buy milk","completed":false}
-    completed_str := I todo.completed { "true" } E { "false" }
+    completed_str := I todo.completed { "true" } EL { "false" }
 
     # Build JSON string manually
     result := "{"
@@ -77,7 +77,7 @@ F i64_to_str(n: i64) -> str {
     I n == 0 { R "0" }
 
     is_neg := n < 0
-    val := I is_neg { 0 - n } E { n }
+    val := I is_neg { 0 - n } EL { n }
 
     buf := malloc(32)
     pos := 31

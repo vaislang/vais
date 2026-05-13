@@ -33,6 +33,10 @@ impl CodeGenerator {
         self.fn_ctx.loop_stack.clear();
         self.fn_ctx.future_poll_fns.clear();
         self.fn_ctx.async_poll_context = None;
+        self.fn_ctx.temp_var_types.clear();
+        self.fn_ctx.scope_stack.clear();
+        self.fn_ctx.entry_allocas.clear();
+        // Don't clear pending_specialized_ir — accumulate across functions
     }
 
     /// Map a type to LLVM for extern C ABI declarations.
@@ -40,6 +44,10 @@ impl CodeGenerator {
     pub(crate) fn type_to_llvm_extern(&self, ty: &ResolvedType) -> String {
         match ty {
             ResolvedType::Str => String::from("i8*"),
+            // &str is also passed as i8* in C ABI (not as a pointer to fat pointer)
+            ResolvedType::Ref(inner) if matches!(inner.as_ref(), ResolvedType::Str) => {
+                String::from("i8*")
+            }
             _ => self.type_to_llvm(ty),
         }
     }
@@ -53,6 +61,17 @@ impl CodeGenerator {
             .collect();
 
         let ret = self.type_to_llvm_extern(&info.signature.ret);
+
+        // Special handling for C memory functions: declare with C ABI types
+        // to match call-site IR (which uses i8* for pointers).
+        // Without this, declare uses i64 (from register_extern) causing
+        // declare/call type mismatch → LLVM undefined behavior → SIGSEGV.
+        match info.signature.name.as_str() {
+            "malloc" => return "declare i8* @malloc(i64)".to_string(),
+            "free" => return "declare void @free(i8*)".to_string(),
+            "realloc" => return "declare i8* @realloc(i8*, i64)".to_string(),
+            _ => {}
+        }
 
         // Special handling for fopen_ptr: generate wrapper that calls fopen
         if info.signature.name == "fopen_ptr" {

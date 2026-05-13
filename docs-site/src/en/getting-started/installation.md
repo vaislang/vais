@@ -378,7 +378,7 @@ After successful installation:
 ## Getting Help
 
 - **GitHub Issues**: https://github.com/vaislang/vais/issues
-- **Documentation**: https://vais.dev/docs/
+- **Documentation**: https://vaislang.dev/docs/
 - **Discussions**: https://github.com/vaislang/vais/discussions
 - **Contributing**: See [CONTRIBUTING.md](https://github.com/vaislang/vais/blob/main/CONTRIBUTING.md)
 

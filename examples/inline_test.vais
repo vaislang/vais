@@ -42,7 +42,7 @@ F print_num(n: i64) -> i64 {
     I n >= 10 {
         print_num(n / 10)
         0
-    } E { 0 }
+    } EL { 0 }
     putchar(n % 10 + 48)
     0
 }

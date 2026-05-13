@@ -9,6 +9,7 @@ impl CodeGenerator {
     ///
     /// Inserts condition checks before function return, calling __contract_fail
     /// if any postcondition fails. The return value is available as `return`.
+    #[inline(never)]
     pub(crate) fn generate_ensures_checks(
         &mut self,
         f: &Function,
@@ -34,7 +35,7 @@ impl CodeGenerator {
         let return_var_name = format!("__contract_return.{}", *counter);
         *counter += 1;
 
-        write_ir!(ir, "  %{} = alloca {}", return_var_name, return_llvm);
+        self.emit_entry_alloca(&format!("%{}", return_var_name), &return_llvm);
         write_ir!(
             ir,
             "  store {} {}, {}* %{}",

@@ -38,6 +38,7 @@ impl CodeGenerator {
                 resolved_function_sigs: HashMap::with_capacity(64),
                 type_aliases: HashMap::with_capacity(16),
                 default_params: HashMap::new(),
+                drop_registry: HashMap::new(),
             },
             generics: GenericState {
                 struct_defs: HashMap::new(),
@@ -46,6 +47,7 @@ impl CodeGenerator {
                 function_templates: HashMap::new(),
                 fn_instantiations: HashMap::new(),
                 generated_functions: HashMap::with_capacity(16),
+                generic_method_bodies: HashMap::new(),
                 substitutions: HashMap::new(),
             },
             fn_ctx: FunctionContext {
@@ -60,6 +62,18 @@ impl CodeGenerator {
                 future_poll_fns: HashMap::new(),
                 async_poll_context: None,
                 alloc_tracker: Vec::new(),
+                string_value_slot: HashMap::new(),
+                pending_return_skip_slot: Vec::new(),
+                var_string_slot: HashMap::new(),
+                var_string_slots_multi: HashMap::new(),
+                phi_extra_slots: HashMap::new(),
+                temp_var_types: HashMap::with_capacity(64),
+                scope_stack: Vec::with_capacity(8),
+                scope_str_stack: Vec::with_capacity(8),
+                scope_drop_label_counter: 0,
+                entry_allocas: Vec::new(),
+                pending_specialized_ir: Vec::new(),
+                async_poll_declares: std::collections::HashSet::new(),
             },
             strings: StringPool {
                 constants: Vec::with_capacity(16),
@@ -74,15 +88,16 @@ impl CodeGenerator {
                 async_state_counter: 0,
                 async_await_points: Vec::new(),
                 current_async_function: None,
-                last_lazy_info: None,
-                lazy_bindings: HashMap::new(),
             },
             module_name: module_name.to_string(),
             target,
             needs_unwrap_panic: false,
             needs_bounds_check: false,
             needs_sync_spawn_poll: false,
+            needs_llvm_memcpy: false,
             needs_string_helpers: false,
+            needs_vec_str_helpers: false,
+            needs_struct_shallow: std::collections::HashSet::new(),
             debug_info: DebugInfoBuilder::new(DebugConfig::default()),
             type_to_llvm_cache: std::cell::RefCell::new(HashMap::with_capacity(64)),
             gc_enabled: false,
@@ -96,16 +111,21 @@ impl CodeGenerator {
                 current_decreases_info: None,
             },
             type_recursion_depth: std::cell::Cell::new(0),
+            sizeof_visited: std::cell::RefCell::new(std::collections::HashSet::new()),
             wasm_imports: HashMap::new(),
             wasm_exports: HashMap::new(),
             last_error_span: None,
             multi_error_mode: false,
             collected_errors: Vec::new(),
             strict_type_mode: true,
+            // Phase 191 v3: `strict_generic_mode` field removed entirely.
+            // See the comment block above the field declaration in `lib.rs`.
             ident_pool: crate::string_pool::IdentPool::with_capacity(256),
             warnings: std::cell::RefCell::new(Vec::new()),
             ref_constants: Vec::new(),
             ref_constant_counter: 0,
+            expr_types: HashMap::new(),
+            implicit_try_sites: std::collections::HashSet::new(),
         };
 
         // Register built-in extern functions
@@ -168,8 +188,15 @@ impl CodeGenerator {
     pub fn set_resolved_functions(&mut self, resolved: HashMap<String, vais_types::FunctionSig>) {
         // DEBUG: print keys containing "TestSuite" or "ByteBuffer"
         for key in resolved.keys() {
-            if key.contains("TestSuite") || key.contains("ByteBuffer") || key.contains("TestCase") || key.contains("TestRunner") {
-                eprintln!("[DEBUG resolved_function_sigs] key={} ret={:?}", key, resolved[key].ret);
+            if key.contains("TestSuite")
+                || key.contains("ByteBuffer")
+                || key.contains("TestCase")
+                || key.contains("TestRunner")
+            {
+                eprintln!(
+                    "[DEBUG resolved_function_sigs] key={} ret={:?}",
+                    key, resolved[key].ret
+                );
             }
         }
         self.types.resolved_function_sigs = resolved;
@@ -178,6 +205,32 @@ impl CodeGenerator {
     /// Set type aliases from the type checker (for resolving type alias names in codegen).
     pub fn set_type_aliases(&mut self, aliases: HashMap<String, vais_types::ResolvedType>) {
         self.types.type_aliases = aliases;
+    }
+
+    /// Set expression types from the type checker.
+    /// These are used by `infer_expr_type` to look up TC-resolved types before
+    /// falling back to the legacy heuristic inference.
+    pub fn set_expr_types(&mut self, types: HashMap<(usize, usize), vais_types::ResolvedType>) {
+        self.expr_types = types;
+    }
+
+    /// Set the implicit-try argument spans collected by the type checker
+    /// (Phase 4b.1 / #7). When `--implicit-try` is on, the type checker
+    /// records each call-site argument that it auto-unwrapped; codegen
+    /// consults this set to wrap the argument in `Expr::Try` semantics on
+    /// the fly, reusing the existing Try codegen path.
+    ///
+    /// Call sites must invoke this alongside `set_expr_types` so that the
+    /// two views of the type checker's output stay in sync.
+    pub fn set_implicit_try_sites(&mut self, sites: std::collections::HashSet<(usize, usize)>) {
+        self.implicit_try_sites = sites;
+    }
+
+    /// Query whether the argument at the given span was marked for implicit
+    /// error propagation by the type checker.
+    #[inline]
+    pub(crate) fn is_implicit_try_site(&self, span: vais_ast::Span) -> bool {
+        self.implicit_try_sites.contains(&(span.start, span.end))
     }
 
     /// Set string prefix for per-module codegen (avoids .str.N collisions across modules)
@@ -221,27 +274,38 @@ impl CodeGenerator {
 
     /// Enable strict type mode.
     ///
-    /// In strict mode, ICE-level type fallbacks (`Var`, `Unknown`, `Lifetime`,
-    /// `ImplTrait`, `HigherKinded` reaching codegen) become hard errors instead
-    /// of warnings with i64 fallback. Generic/ConstGeneric fallbacks remain as
-    /// warnings since they are legitimate during monomorphization.
+    /// In strict mode, ICE-level type fallbacks (`Var`, `Unknown`, `Lifetime`
+    /// reaching codegen) become hard errors instead of warnings with i64
+    /// fallback. Generic/ConstGeneric fallbacks are also hard errors; the
+    /// historical strict-generic opt-in was removed in Phase 191.
     pub fn set_strict_type_mode(&mut self, strict: bool) {
         self.strict_type_mode = strict;
     }
+
+    // `set_strict_generic_mode` removed in Phase 191 v3 — strict behavior is
+    // now unconditional and the opt-in flag no longer exists. Call sites
+    // previously using this setter should be deleted (the default is
+    // equivalent to the old "strict on" mode).
 
     /// Record a structured codegen warning.
     ///
     /// Uses interior mutability (`RefCell`) so this can be called from `&self` methods
     /// such as `type_to_llvm` which cannot take `&mut self`.
+    #[inline(never)]
     pub(crate) fn emit_warning(&self, warning: crate::CodegenWarning) {
         self.warnings.borrow_mut().push(warning);
     }
 
-    /// Emit a warning, or return an error in strict type mode for ICE-level fallbacks.
+    /// Emit a warning, or return an error for ICE-level fallbacks.
     ///
-    /// In strict mode, [`CodegenWarning::UnresolvedTypeFallback`] is promoted to
-    /// [`CodegenError::InternalError`]. Other warning types (e.g., `GenericFallback`)
-    /// remain warnings in all modes.
+    /// - In `strict_type_mode`, [`CodegenWarning::UnresolvedTypeFallback`] is
+    ///   promoted to [`CodegenError::InternalError`].
+    /// - [`CodegenWarning::GenericFallback`] is **always** promoted to
+    ///   [`CodegenError::InternalError`] (Phase 191 v3 — unconditional). The
+    ///   historical `strict_generic_mode` opt-in was removed.
+    ///
+    /// All other warning types remain warnings.
+    #[inline(never)]
     pub(crate) fn emit_warning_or_error(
         &self,
         warning: crate::CodegenWarning,
@@ -257,6 +321,16 @@ impl CodeGenerator {
                     type_desc, backend
                 )));
             }
+        }
+        if let crate::CodegenWarning::GenericFallback {
+            ref param,
+            ref context,
+        } = warning
+        {
+            return Err(crate::CodegenError::InternalError(format!(
+                "un-monomorphized generic parameter '{}' reached codegen in '{}' — Phase 191 v3 (no fallback)",
+                param, context
+            )));
         }
         self.emit_warning(warning);
         Ok(())

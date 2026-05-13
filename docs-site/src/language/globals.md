@@ -19,7 +19,7 @@ G counter: i64 = 0
 G max_size: i64 = 1024
 G pi: f64 = 3.14159265358979
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("max_size:")
     print_i64(max_size)
     0
@@ -33,12 +33,12 @@ F main() -> i64 {
 ```vais
 G total: i64 = 0
 
-F add_to_total(n: i64) -> i64 {
+fn add_to_total(n: i64) -> i64 {
     total = total + n
     total
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     add_to_total(10)
     add_to_total(20)
     add_to_total(30)
@@ -51,8 +51,8 @@ F main() -> i64 {
 `P` 키워드와 함께 사용하면 다른 모듈에서 접근 가능합니다:
 
 ```vais
-P G VERSION: i64 = 1
-P G DEBUG_MODE: bool = false
+pub G VERSION: i64 = 1
+pub G DEBUG_MODE: bool = false
 ```
 
 ## 타입 지정

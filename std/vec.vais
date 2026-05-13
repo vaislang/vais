@@ -1,3 +1,47 @@
+# ============================================================================
+# Module: vec
+# ============================================================================
+#
+# 동적 크기 배열(growable array) 모듈입니다.
+# 타입 안전한 메모리 레이아웃으로 T 타입 원소를 저장합니다.
+# sizeof(T)를 stride로 사용하고 load_typed/store_typed로 메모리에 접근합니다.
+#
+# 주요 타입:
+#   Vec<T>   - 동적 배열 구조체 (data, len, cap, elem_size 필드)
+#
+# 주요 함수 / 메서드:
+#   Vec::new()            - 기본 용량으로 빈 배열 생성
+#   Vec::with_capacity(n) - n개 용량으로 빈 배열 생성
+#   .push(val)            - 원소 추가 (필요 시 용량 2배 확장)
+#   .pop()                - 마지막 원소 제거 및 반환 (Option<T>)
+#   .get(idx)             - 인덱스 접근 (Option<T>)
+#   .set(idx, val)        - 인덱스에 값 설정
+#   .len()                - 현재 원소 수 반환
+#   .is_empty()           - 빈 배열 여부 확인
+#   .clear()              - 모든 원소 제거 (메모리는 유지)
+#   .insert(idx, val)     - 특정 위치에 원소 삽입
+#   .remove(idx)          - 특정 위치 원소 제거 (Option<T>)
+#   .contains(val)        - 값 포함 여부 확인
+#   .free()               - 내부 메모리 해제
+#
+# 사용 예제:
+#
+#   U std/vec
+#
+#   # 정수 배열 생성 및 사용
+#   v := Vec::new()
+#   v.push(10)
+#   v.push(20)
+#   v.push(30)
+#   print("{v.len()}")        # 출력: 3
+#   val := v.get(1)
+#   M val {
+#       Some(x) => print("{x}"),   # 출력: 20
+#       None    => print("out of bounds")
+#   }
+#   v.remove(0)
+#   print("{v.len()}")        # 출력: 2
+#
 # Vec - dynamic array (growable)
 # Stores elements of type T with type-safe memory layout
 # Uses sizeof(T) for element stride and load_typed/store_typed for memory access
@@ -8,7 +52,8 @@ S Vec<T> {
     data: i64,      # Pointer to element array
     len: i64,       # Current number of elements
     cap: i64,       # Allocated capacity
-    elem_size: i64  # Size of each element in bytes (sizeof(T))
+    elem_size: i64, # Size of each element in bytes (sizeof(T))
+    owned: i64      # Vec<str> owned-bitmap pointer-int (0=unset); ignored for non-str Vecs (RFC-002 §4.1)
 }
 
 # ===== Vec helper functions (recursive, non-method) =====
@@ -17,7 +62,7 @@ S Vec<T> {
 # Shift elements right by one starting from index
 F vec_shift_right(data: i64, elem_size: i64, index: i64, len: i64) -> i64 {
     I len <= index { 0 }
-    E {
+    EL {
         # Move element at len-1 to len
         src := data + (len - 1) * elem_size
         dst := data + len * elem_size
@@ -29,7 +74,7 @@ F vec_shift_right(data: i64, elem_size: i64, index: i64, len: i64) -> i64 {
 # Shift elements left by one starting from index
 F vec_shift_left(data: i64, elem_size: i64, index: i64, len: i64) -> i64 {
     I index >= len - 1 { 0 }
-    E {
+    EL {
         src := data + (index + 1) * elem_size
         dst := data + index * elem_size
         store_i64(dst, load_i64(src))
@@ -40,7 +85,7 @@ F vec_shift_left(data: i64, elem_size: i64, index: i64, len: i64) -> i64 {
 # Reverse helper: swap elements from both ends toward center
 F vec_reverse_helper(data: i64, elem_size: i64, lo: i64, hi: i64) -> i64 {
     I lo >= hi { 0 }
-    E {
+    EL {
         a := load_i64(data + lo * elem_size)
         b := load_i64(data + hi * elem_size)
         store_i64(data + lo * elem_size, b)
@@ -56,7 +101,7 @@ F vec_insertion_sort(data: i64, elem_size: i64, len: i64) -> i64 {
 
 F vec_insertion_sort_outer(data: i64, elem_size: i64, len: i64, i: i64) -> i64 {
     I i >= len { 0 }
-    E {
+    EL {
         key := load_i64(data + i * elem_size)
         vec_insertion_sort_inner(data, elem_size, i, key)
         vec_insertion_sort_outer(data, elem_size, len, i + 1)
@@ -65,12 +110,12 @@ F vec_insertion_sort_outer(data: i64, elem_size: i64, len: i64, i: i64) -> i64 {
 
 F vec_insertion_sort_inner(data: i64, elem_size: i64, j: i64, key: i64) -> i64 {
     I j <= 0 { store_i64(data + j * elem_size, key) 0 }
-    E {
+    EL {
         prev := load_i64(data + (j - 1) * elem_size)
         I prev > key {
             store_i64(data + j * elem_size, prev)
             vec_insertion_sort_inner(data, elem_size, j - 1, key)
-        } E {
+        } EL {
             store_i64(data + j * elem_size, key)
             0
         }
@@ -82,9 +127,9 @@ X Vec<T> {
     F with_capacity(capacity: i64) -> Vec<T> {
         es := type_size()  # Returns sizeof(T) — resolved at monomorphization
         # For backward compatibility: if sizeof returns 0 (e.g., Unit), default to 8
-        elem_sz := I es <= 0 { 8 } E I es > 8 { 8 } E { es }
+        elem_sz := I es <= 0 { 8 } EL { es }
         data := malloc(capacity * elem_sz)
-        Vec { data: data, len: 0, cap: capacity, elem_size: elem_sz }
+        Vec { data: data, len: 0, cap: capacity, elem_size: elem_sz, owned: 0 }
     }
 
     # Get the number of elements
@@ -99,16 +144,16 @@ X Vec<T> {
 
     # Check if empty
     F is_empty(&self) -> i64 {
-        I self.len == 0 { 1 } E { 0 }
+        I self.len == 0 { 1 } EL { 0 }
     }
 
     # Get element at index
     F get(&self, index: i64) -> T {
         I index < 0 {
             0
-        } E I index >= self.len {
+        } EL I index >= self.len {
             0
-        } E {
+        } EL {
             ptr := self.data + index * self.elem_size
             load_typed(ptr)
         }
@@ -119,9 +164,9 @@ X Vec<T> {
     F get_opt(&self, index: i64) -> Option<T> {
         I index < 0 {
             None
-        } E I index >= self.len {
+        } EL I index >= self.len {
             None
-        } E {
+        } EL {
             ptr := self.data + index * self.elem_size
             Some(load_typed(ptr))
         }
@@ -133,7 +178,7 @@ X Vec<T> {
             ptr := self.data + index * self.elem_size
             store_typed(ptr, value)
             1
-        } E {
+        } EL {
             0
         }
     }
@@ -155,7 +200,7 @@ X Vec<T> {
             self.len = self.len - 1
             ptr := self.data + self.len * self.elem_size
             load_typed(ptr)
-        } E {
+        } EL {
             0
         }
     }
@@ -167,7 +212,7 @@ X Vec<T> {
             self.len = self.len - 1
             ptr := self.data + self.len * self.elem_size
             Some(load_typed(ptr))
-        } E {
+        } EL {
             None
         }
     }
@@ -175,7 +220,7 @@ X Vec<T> {
     # Grow capacity (double it)
     F grow(&self) -> i64 {
         doubled := self.cap * 2
-        new_cap := I doubled < 8 { 8 } E { doubled }
+        new_cap := I doubled < 8 { 8 } EL { doubled }
         new_data := malloc(new_cap * self.elem_size)
         memcpy(new_data, self.data, self.len * self.elem_size)
         free(self.data)
@@ -344,13 +389,13 @@ X Vec<T> {
     # Get first element or 0 if empty
     F first(&self) -> T {
         I self.len == 0 { 0 }
-        E { load_typed(self.data) }
+        EL { load_typed(self.data) }
     }
 
     # Get last element or 0 if empty
     F last(&self) -> T {
         I self.len == 0 { 0 }
-        E { load_typed(self.data + (self.len - 1) * self.elem_size) }
+        EL { load_typed(self.data + (self.len - 1) * self.elem_size) }
     }
 
     # Swap elements at two indices
@@ -360,6 +405,61 @@ X Vec<T> {
         b := load_typed(self.data + j * self.elem_size)
         store_typed(self.data + i * self.elem_size, b)
         store_typed(self.data + j * self.elem_size, a)
+        1
+    }
+
+    # Resize vector to new_len, filling new elements with default_val
+    F resize(&self, new_len: i64, default_val: T) -> i64 {
+        I new_len < 0 { R 0 }
+        # Grow if needed
+        LW self.cap < new_len {
+            self.grow()
+        }
+        # Fill new slots with default value
+        I new_len > self.len {
+            i := mut self.len
+            L {
+                I i >= new_len { B }
+                store_typed(self.data + i * self.elem_size, default_val)
+                i = i + 1
+            }
+        }
+        self.len = new_len
+        1
+    }
+
+    # Clone to a new Vec
+    F to_vec(&self) -> Vec<T> {
+        result := mut Vec.with_capacity(self.len)
+        i := mut 0
+        L {
+            I i >= self.len { B }
+            elem := load_typed(self.data + i * self.elem_size)
+            store_typed(result.data + i * result.elem_size, elem)
+            i = i + 1
+        }
+        result.len = self.len
+        result
+    }
+
+    # Sort by comparison function (bubble sort for simplicity)
+    F sort_by(&self, cmp: fn(T, T) -> i64) -> i64 {
+        n := self.len
+        i := mut 0
+        L {
+            I i >= n - 1 { B }
+            j := mut 0
+            L {
+                I j >= n - i - 1 { B }
+                a := load_typed(self.data + j * self.elem_size)
+                b := load_typed(self.data + (j + 1) * self.elem_size)
+                I cmp(a, b) > 0 {
+                    self.swap(j, j + 1)
+                }
+                j = j + 1
+            }
+            i = i + 1
+        }
         1
     }
 }

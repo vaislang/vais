@@ -925,6 +925,7 @@ fn test_infer_struct_lit() {
     let expr = spanned(Expr::StructLit {
         name: spanned("Point".to_string()),
         fields: vec![],
+        enum_name: None,
     });
     assert_eq!(
         ctx.infer_expr_type(&expr),
@@ -1500,6 +1501,7 @@ fn test_infer_struct_lit_with_fields() {
             (spanned("debug".to_string()), spanned(Expr::Bool(true))),
             (spanned("level".to_string()), spanned(Expr::Int(3))),
         ],
+        enum_name: None,
     });
     assert_eq!(
         ctx.infer_expr_type(&expr),

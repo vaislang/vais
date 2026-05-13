@@ -241,8 +241,7 @@ impl TreeShaker {
             | Type::Ref(elem_type)
             | Type::RefMut(elem_type)
             | Type::Slice(elem_type)
-            | Type::SliceMut(elem_type)
-            | Type::Lazy(elem_type) => {
+            | Type::SliceMut(elem_type) => {
                 Self::collect_type_deps(&elem_type.node, deps);
             }
             Type::ConstArray { element, .. } => {
@@ -298,13 +297,6 @@ impl TreeShaker {
                 Self::collect_type_deps(&base.node, deps);
                 Self::collect_expr_deps(&predicate.node, deps);
             }
-            Type::ImplTrait { bounds } => {
-                for b in bounds {
-                    if !Self::is_builtin_type(&b.node) {
-                        deps.insert(b.node.clone());
-                    }
-                }
-            }
             Type::Infer | Type::Unit => {}
         }
     }
@@ -339,7 +331,7 @@ impl TreeShaker {
                     Self::collect_expr_deps(&arg.node, deps);
                 }
             }
-            Expr::StructLit { name, fields } => {
+            Expr::StructLit { name, fields, .. } => {
                 deps.insert(name.node.clone());
                 for (_, value) in fields {
                     Self::collect_expr_deps(&value.node, deps);
@@ -429,6 +421,9 @@ impl TreeShaker {
             Expr::Field { expr, .. } => {
                 Self::collect_expr_deps(&expr.node, deps);
             }
+            Expr::TupleFieldAccess { expr, .. } => {
+                Self::collect_expr_deps(&expr.node, deps);
+            }
             Expr::Index { expr, index } => {
                 Self::collect_expr_deps(&expr.node, deps);
                 Self::collect_expr_deps(&index.node, deps);
@@ -455,9 +450,6 @@ impl TreeShaker {
                 Self::collect_expr_deps(&expr.node, deps);
             }
             Expr::Ref(expr) | Expr::Deref(expr) => {
-                Self::collect_expr_deps(&expr.node, deps);
-            }
-            Expr::Spawn(expr) => {
                 Self::collect_expr_deps(&expr.node, deps);
             }
             Expr::Lambda { params, body, .. } => {
@@ -492,7 +484,7 @@ impl TreeShaker {
             Expr::MacroInvoke(_) => {
                 // Macro invocations are expanded during parsing, tokens don't carry dep info
             }
-            Expr::Old(expr) | Expr::Assume(expr) | Expr::Lazy(expr) | Expr::Force(expr) => {
+            Expr::Old(expr) | Expr::Assume(expr) => {
                 Self::collect_expr_deps(&expr.node, deps);
             }
             Expr::Assert { condition, message } => {
@@ -510,6 +502,14 @@ impl TreeShaker {
             | Expr::Unit
             | Expr::SelfCall
             | Expr::Error { .. } => {}
+            Expr::EnumAccess {
+                enum_name, data, ..
+            } => {
+                deps.insert(enum_name.clone());
+                if let Some(d) = data {
+                    Self::collect_expr_deps(&d.node, deps);
+                }
+            }
         }
     }
 

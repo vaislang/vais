@@ -8,6 +8,7 @@ impl CodeGenerator {
     /// Converts Vais format strings like `print("x = {}", x)` to printf calls.
     /// `{}` placeholders are replaced with the appropriate C format specifier
     /// based on the inferred type of each argument.
+    #[inline(never)]
     pub(crate) fn generate_print_call(
         &mut self,
         fn_name: &str,
@@ -115,13 +116,14 @@ impl CodeGenerator {
                     chars.next();
                     if arg_idx < arg_types.len() {
                         let spec = match &arg_types[arg_idx] {
-                            ResolvedType::I32 => "%d",
-                            ResolvedType::I64 => "%ld",
+                            ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 => "%d",
+                            ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 => "%u",
+                            ResolvedType::I64 | ResolvedType::I128 => "%ld",
+                            ResolvedType::U64 | ResolvedType::U128 => "%lu",
                             ResolvedType::F32 | ResolvedType::F64 => "%f",
                             ResolvedType::Str => "%s",
-                            ResolvedType::Bool => "%ld", // bools are i64 in codegen
-                            // Char type not yet in Vais
-                            _ => "%ld", // default to i64
+                            ResolvedType::Bool => "%ld",
+                            _ => "%ld",
                         };
                         c_format.push_str(spec);
                         arg_idx += 1;
@@ -171,10 +173,29 @@ impl CodeGenerator {
             ir.push_str(&arg_ir);
 
             match &arg_types[i] {
-                ResolvedType::I32 => {
-                    let trunc_tmp = self.next_temp(counter);
-                    write_ir!(ir, "  {} = trunc i64 {} to i32", trunc_tmp, val);
-                    printf_args.push(format!("i32 {}", trunc_tmp));
+                ResolvedType::I8 | ResolvedType::I16 => {
+                    // Small signed integers: sext to i32 for vararg ABI
+                    let ir_type = self.type_to_llvm(&arg_types[i]);
+                    let ext_tmp = self.next_temp(counter);
+                    write_ir!(ir, "  {} = sext {} {} to i32", ext_tmp, ir_type, val);
+                    printf_args.push(format!("i32 {}", ext_tmp));
+                }
+                ResolvedType::U8 | ResolvedType::U16 => {
+                    // Small unsigned integers: zext to i32 for vararg ABI
+                    let ir_type = self.type_to_llvm(&arg_types[i]);
+                    let ext_tmp = self.next_temp(counter);
+                    write_ir!(ir, "  {} = zext {} {} to i32", ext_tmp, ir_type, val);
+                    printf_args.push(format!("i32 {}", ext_tmp));
+                }
+                ResolvedType::I32 | ResolvedType::U32 => {
+                    // Already i32 in LLVM IR — pass directly
+                    printf_args.push(format!("i32 {}", val));
+                }
+                ResolvedType::Bool => {
+                    // i1 → zext to i64 for vararg ABI
+                    let ext_tmp = self.next_temp(counter);
+                    write_ir!(ir, "  {} = zext i1 {} to i64", ext_tmp, val);
+                    printf_args.push(format!("i64 {}", ext_tmp));
                 }
                 ResolvedType::F32 => {
                     printf_args.push(format!("float {}", val));
@@ -238,6 +259,7 @@ impl CodeGenerator {
     ///
     /// Uses snprintf(NULL, 0, fmt, ...) to measure, malloc to allocate,
     /// then snprintf(buf, len+1, fmt, ...) to write.
+    #[inline(never)]
     pub(crate) fn generate_format_call(
         &mut self,
         args: &[Spanned<Expr>],
@@ -284,8 +306,10 @@ impl CodeGenerator {
                     chars.next();
                     if arg_idx < arg_types.len() {
                         let spec = match &arg_types[arg_idx] {
-                            ResolvedType::I32 => "%d",
-                            ResolvedType::I64 => "%ld",
+                            ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 => "%d",
+                            ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 => "%u",
+                            ResolvedType::I64 | ResolvedType::I128 => "%ld",
+                            ResolvedType::U64 | ResolvedType::U128 => "%lu",
                             ResolvedType::F32 | ResolvedType::F64 => "%f",
                             ResolvedType::Str => "%s",
                             ResolvedType::Bool => "%ld",
@@ -333,10 +357,29 @@ impl CodeGenerator {
             ir.push_str(&arg_ir);
 
             match &arg_types[i] {
-                ResolvedType::I32 => {
-                    let trunc_tmp = self.next_temp(counter);
-                    write_ir!(ir, "  {} = trunc i64 {} to i32", trunc_tmp, val);
-                    arg_vals.push(format!("i32 {}", trunc_tmp));
+                ResolvedType::I8 | ResolvedType::I16 => {
+                    // Small signed integers: sext to i32 for vararg ABI
+                    let ir_type = self.type_to_llvm(&arg_types[i]);
+                    let ext_tmp = self.next_temp(counter);
+                    write_ir!(ir, "  {} = sext {} {} to i32", ext_tmp, ir_type, val);
+                    arg_vals.push(format!("i32 {}", ext_tmp));
+                }
+                ResolvedType::U8 | ResolvedType::U16 => {
+                    // Small unsigned integers: zext to i32 for vararg ABI
+                    let ir_type = self.type_to_llvm(&arg_types[i]);
+                    let ext_tmp = self.next_temp(counter);
+                    write_ir!(ir, "  {} = zext {} {} to i32", ext_tmp, ir_type, val);
+                    arg_vals.push(format!("i32 {}", ext_tmp));
+                }
+                ResolvedType::I32 | ResolvedType::U32 => {
+                    // Already i32 in LLVM IR — pass directly
+                    arg_vals.push(format!("i32 {}", val));
+                }
+                ResolvedType::Bool => {
+                    // i1 → zext to i64 for vararg ABI
+                    let ext_tmp = self.next_temp(counter);
+                    write_ir!(ir, "  {} = zext i1 {} to i64", ext_tmp, val);
+                    arg_vals.push(format!("i64 {}", ext_tmp));
                 }
                 ResolvedType::F32 => {
                     arg_vals.push(format!("float {}", val));
@@ -394,7 +437,7 @@ impl CodeGenerator {
         let buf_ptr = self.next_temp(counter);
         write_ir!(ir, "  {} = call i8* @malloc(i64 {})", buf_ptr, buf_size);
         // Track allocation for automatic cleanup at scope exit
-        self.track_alloc(buf_ptr.clone());
+        ir.push_str(&self.track_alloc(buf_ptr.clone()));
 
         // Step 3: snprintf(buf, len+1, fmt, ...)
         let _write_result = self.next_temp(counter);
@@ -417,6 +460,7 @@ impl CodeGenerator {
     }
 
     /// Generate await expression
+    #[inline(never)]
     pub(crate) fn generate_print_i64_builtin(
         &mut self,
         args: &[Spanned<Expr>],
@@ -454,6 +498,7 @@ impl CodeGenerator {
     }
 
     /// Generate print_f64 builtin call
+    #[inline(never)]
     pub(crate) fn generate_print_f64_builtin(
         &mut self,
         args: &[Spanned<Expr>],

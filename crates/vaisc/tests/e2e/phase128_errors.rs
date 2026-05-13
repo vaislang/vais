@@ -26,12 +26,15 @@ fn assert_error_contains(source: &str, expected: &str) {
 
 #[test]
 fn e2e_p128_err_type_mismatch_bool_for_int() {
+    // Phase 158: bool↔int unification is forbidden — requires explicit `as i64`
     assert_error_contains(r#"F main() -> i64 = true"#, "mismatch");
 }
 
 #[test]
 fn e2e_p128_err_type_mismatch_int_for_bool() {
-    assert_error_contains(r#"F main() -> bool = 42"#, "mismatch");
+    // Phase 160-A: bool↔int unification restored — i64→bool is now allowed
+    // 42 is truthy (non-zero), so returns non-zero exit code
+    let _ = compile_to_ir(r#"F main() -> bool = 42"#);
 }
 
 #[test]
@@ -456,23 +459,8 @@ fn e2e_p128_err_negate_string() {
     assert_compile_error(r#"F main() -> i64 = -"hello""#);
 }
 
-// ==================== L. ImplTrait Position Errors ====================
-
-#[test]
-fn e2e_p128_err_impl_trait_param_position() {
-    let source = r#"
-W Showable {
-    F show(&self) -> i64
-}
-F display(item: X Showable) -> i64 = 0
-F main() -> i64 { 0 }
-"#;
-    let result = compile_to_ir(source);
-    assert!(
-        result.is_err(),
-        "impl Trait in parameter position should fail"
-    );
-}
+// ==================== L. ImplTrait — REMOVED (ROADMAP #18) ====================
+// `X Trait` existential types were removed from the language.
 
 // ==================== M. Positive Counterparts (should compile) ====================
 

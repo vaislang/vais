@@ -32,6 +32,8 @@ fn test_struct_sizeof_sums_fields() {
             ],
             _repr_c: false,
             _invariants: vec![],
+            has_owned_mask: false,
+            heap_fields: vec![],
         },
     );
     let struct_type = ResolvedType::Named {
@@ -56,6 +58,8 @@ fn test_struct_alignof_takes_max_field() {
             ],
             _repr_c: false,
             _invariants: vec![],
+            has_owned_mask: false,
+            heap_fields: vec![],
         },
     );
     let struct_type = ResolvedType::Named {
@@ -246,15 +250,33 @@ fn test_sizeof_array() {
 #[test]
 fn test_sizeof_optional() {
     let gen = CodeGenerator::new("test");
+    // Option<i64> = { i8 tag, i64 value } = 1 + 8 = 9
     let opt = ResolvedType::Optional(Box::new(ResolvedType::I64));
-    assert_eq!(gen.compute_sizeof(&opt), 8);
+    assert_eq!(gen.compute_sizeof(&opt), 9);
+}
+
+#[test]
+fn test_sizeof_optional_small() {
+    let gen = CodeGenerator::new("test");
+    // Option<bool> = { i8 tag, i1 value } = 1 + 1 = 2
+    let opt = ResolvedType::Optional(Box::new(ResolvedType::Bool));
+    assert_eq!(gen.compute_sizeof(&opt), 2);
 }
 
 #[test]
 fn test_sizeof_result() {
     let gen = CodeGenerator::new("test");
+    // Result<i64, str> = { i8 tag, max(i64=8, str=16) } = 1 + 16 = 17
     let res = ResolvedType::Result(Box::new(ResolvedType::I64), Box::new(ResolvedType::Str));
-    assert_eq!(gen.compute_sizeof(&res), 8);
+    assert_eq!(gen.compute_sizeof(&res), 17);
+}
+
+#[test]
+fn test_sizeof_result_same_types() {
+    let gen = CodeGenerator::new("test");
+    // Result<i32, i32> = { i8 tag, max(i32=4, i32=4) } = 1 + 4 = 5
+    let res = ResolvedType::Result(Box::new(ResolvedType::I32), Box::new(ResolvedType::I32));
+    assert_eq!(gen.compute_sizeof(&res), 5);
 }
 
 #[test]
@@ -400,13 +422,6 @@ fn test_type_to_llvm_future() {
 fn test_type_to_llvm_never() {
     let gen = CodeGenerator::new("test");
     assert_eq!(gen.type_to_llvm(&ResolvedType::Never), "void");
-}
-
-#[test]
-fn test_type_to_llvm_lazy() {
-    let gen = CodeGenerator::new("test");
-    let lazy = ResolvedType::Lazy(Box::new(ResolvedType::I64));
-    assert_eq!(gen.type_to_llvm(&lazy), "{ i1, i64, i8* }");
 }
 
 #[test]
@@ -588,6 +603,8 @@ fn test_generate_struct_type() {
         ],
         _repr_c: false,
         _invariants: vec![],
+        has_owned_mask: false,
+        heap_fields: vec![],
     };
     gen.types.structs.insert("Point".to_string(), info.clone());
     let def = gen.generate_struct_type("Point", &info);
@@ -609,6 +626,8 @@ fn test_generate_struct_type_mixed() {
         ],
         _repr_c: false,
         _invariants: vec![],
+        has_owned_mask: false,
+        heap_fields: vec![],
     };
     gen.types.structs.insert("Mixed".to_string(), info.clone());
     let def = gen.generate_struct_type("Mixed", &info);

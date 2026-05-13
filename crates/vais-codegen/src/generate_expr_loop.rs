@@ -6,6 +6,7 @@ use vais_types::ResolvedType;
 use crate::{CodeGenerator, CodegenError, CodegenResult, LocalVar, LoopLabels};
 
 impl CodeGenerator {
+    #[inline(never)]
     pub(crate) fn generate_range_for_loop(
         &mut self,
         pattern: &Spanned<Pattern>,
@@ -44,13 +45,14 @@ impl CodeGenerator {
 
         let counter_var = format!("%loop_counter.{}", self.fn_ctx.label_counter);
         self.fn_ctx.label_counter += 1;
-        write_ir!(ir, "  {} = alloca i64", counter_var);
+        self.emit_entry_alloca(&counter_var, "i64");
         write_ir!(ir, "  store i64 {}, i64* {}", start_val, counter_var);
 
         let pattern_var = if let Pattern::Ident(name) = &pattern.node {
-            let var_name = format!("{}.for", name);
+            let var_name = format!("{}.for.{}", name, self.fn_ctx.label_counter);
+            self.fn_ctx.label_counter += 1;
             let llvm_name = format!("%{}", var_name);
-            write_ir!(ir, "  {} = alloca i64", llvm_name);
+            self.emit_entry_alloca(&llvm_name, "i64");
             self.fn_ctx.locals.insert(
                 name.clone(),
                 LocalVar::alloca(ResolvedType::I64, var_name.clone()),
@@ -68,6 +70,7 @@ impl CodeGenerator {
         self.fn_ctx.loop_stack.push(LoopLabels {
             continue_label: loop_inc.clone(),
             break_label: loop_end.clone(),
+            scope_str_depth: self.fn_ctx.scope_str_stack.len(),
         });
 
         write_ir!(ir, "  br label %{}", loop_cond);

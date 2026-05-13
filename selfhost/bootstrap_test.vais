@@ -9,14 +9,14 @@ F print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
         0
-    } E I val < 0 {
+    } EL I val < 0 {
         putchar(45)
         print_i64(0 - val)
-    } E {
+    } EL {
         I val >= 10 {
             print_i64(val / 10)
             0
-        } E { 0 }
+        } EL { 0 }
         putchar(48 + (val % 10))
         0
     }
@@ -33,7 +33,7 @@ F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
         puts("[PASS]")
         puts(test_name)
         1
-    } E {
+    } EL {
         puts("[FAIL]")
         puts(test_name)
         puts("  Expected:")
@@ -49,7 +49,7 @@ F assert_neq(a: i64, b: i64, test_name: str) -> i64 {
         puts("[PASS]")
         puts(test_name)
         1
-    } E {
+    } EL {
         puts("[FAIL]")
         puts(test_name)
         0
@@ -76,7 +76,7 @@ X StringBuffer {
         I self.len >= self.cap {
             @.grow()
             0
-        } E { 0 }
+        } EL { 0 }
         store_byte(self.data + self.len, byte)
         self.len = self.len + 1
         1
@@ -87,7 +87,7 @@ X StringBuffer {
         I self.len + len > self.cap {
             @.grow_to(self.len + len + 1024)
             0
-        } E { 0 }
+        } EL { 0 }
         memcpy_str(self.data + self.len, s, len)
         self.len = self.len + len
         1
@@ -239,12 +239,12 @@ F test_binary_operators() -> i64 {
     r5 := assert_eq(17 % 5, 2, "17 % 5 = 2")
 
     # Comparison tests using conditional expressions
-    r6 := assert_eq(I 3 < 5 { 1 } E { 0 }, 1, "3 < 5")
-    r7 := assert_eq(I 5 <= 5 { 1 } E { 0 }, 1, "5 <= 5")
-    r8 := assert_eq(I 7 > 3 { 1 } E { 0 }, 1, "7 > 3")
-    r9 := assert_eq(I 5 >= 5 { 1 } E { 0 }, 1, "5 >= 5")
-    r10 := assert_eq(I 4 == 4 { 1 } E { 0 }, 1, "4 == 4")
-    r11 := assert_eq(I 4 != 5 { 1 } E { 0 }, 1, "4 != 5")
+    r6 := assert_eq(I 3 < 5 { 1 } EL { 0 }, 1, "3 < 5")
+    r7 := assert_eq(I 5 <= 5 { 1 } EL { 0 }, 1, "5 <= 5")
+    r8 := assert_eq(I 7 > 3 { 1 } EL { 0 }, 1, "7 > 3")
+    r9 := assert_eq(I 5 >= 5 { 1 } EL { 0 }, 1, "5 >= 5")
+    r10 := assert_eq(I 4 == 4 { 1 } EL { 0 }, 1, "4 == 4")
+    r11 := assert_eq(I 4 != 5 { 1 } EL { 0 }, 1, "4 != 5")
 
     r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8 + r9 + r10 + r11
 }
@@ -257,23 +257,23 @@ F test_control_flow() -> i64 {
     puts("\n=== Control Flow Tests ===")
 
     x := 10
-    result1 := I x > 5 { 1 } E { 0 }
+    result1 := I x > 5 { 1 } EL { 0 }
     r1 := assert_eq(result1, 1, "if x > 5 then 1 else 0")
 
-    result2 := I x < 5 { 1 } E { 0 }
+    result2 := I x < 5 { 1 } EL { 0 }
     r2 := assert_eq(result2, 0, "if x < 5 then 1 else 0")
 
     y := 20
     result3 := I x > 5 {
-        I y > 15 { 2 } E { 1 }
-    } E { 0 }
+        I y > 15 { 2 } EL { 1 }
+    } EL { 0 }
     r3 := assert_eq(result3, 2, "nested if: x > 5 && y > 15")
 
     # Loop test
     counter: mut i64 = 0
     sum: mut i64 = 0
     L {
-        I counter >= 5 { B } E { 0 }
+        I counter >= 5 { B } EL { 0 }
         sum = sum + counter
         counter = counter + 1
     }
@@ -326,11 +326,11 @@ F OP_MOD() -> i64 = 5
 
 F eval_simple_expr(a: i64, b: i64, op: i64) -> i64 {
     I op == OP_ADD() { a + b }
-    E I op == OP_SUB() { a - b }
-    E I op == OP_MUL() { a * b }
-    E I op == OP_DIV() { a / b }
-    E I op == OP_MOD() { a % b }
-    E { 0 }
+    EL I op == OP_SUB() { a - b }
+    EL I op == OP_MUL() { a * b }
+    EL I op == OP_DIV() { a / b }
+    EL I op == OP_MOD() { a % b }
+    EL { 0 }
 }
 
 F test_expression_evaluator() -> i64 {
@@ -394,7 +394,7 @@ F main() -> i64 {
     I passed == total {
         puts("\nAll tests PASSED!")
         0
-    } E {
+    } EL {
         puts("\nSome tests FAILED!")
         1
     }

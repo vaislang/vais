@@ -150,7 +150,7 @@ exit:
         + hints.unroll_hints.len()
         + hints.alignment_hints.len();
     // At minimum, alias analysis should produce something
-    assert!(total >= 0); // Non-negative (may or may not find hints)
+    let _ = total; // verify it was computed (always non-negative by construction)
 }
 
 #[test]

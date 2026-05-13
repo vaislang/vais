@@ -316,7 +316,10 @@ fn test_recovery_mode_with_desugar() {
         }
     "#;
     let (module, errors) = parse_with_recovery(source);
-    assert!(errors.is_empty(), "Valid desugar code should have no errors");
+    assert!(
+        errors.is_empty(),
+        "Valid desugar code should have no errors"
+    );
     assert_eq!(module.items.len(), 1);
 }
 
@@ -331,10 +334,14 @@ fn test_recovery_mode_partial_error() {
     let (module, errors) = parse_with_recovery(source);
     assert!(!errors.is_empty(), "Should have errors for broken function");
     // The struct should still be recovered
-    let has_struct = module.items.iter().any(|item| {
-        matches!(&item.node, Item::Struct(s) if s.name.node == "__VxProps__")
-    });
-    assert!(has_struct, "__VxProps__ struct should be recovered after error");
+    let has_struct = module
+        .items
+        .iter()
+        .any(|item| matches!(&item.node, Item::Struct(s) if s.name.node == "__VxProps__"));
+    assert!(
+        has_struct,
+        "__VxProps__ struct should be recovered after error"
+    );
 }
 
 // ============================================================================

@@ -7,6 +7,7 @@ use inkwell::types::{BasicMetadataTypeEnum, BasicType, StructType};
 use inkwell::values::{BasicValueEnum, FunctionValue};
 
 use vais_ast::{self as ast, Expr};
+use vais_types::ResolvedType;
 
 use super::generator::InkwellCodeGenerator;
 use crate::{CodegenError, CodegenResult};
@@ -97,12 +98,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let mut field_types = Vec::new();
         let mut field_names = Vec::new();
         let mut field_type_names = Vec::new();
+        let mut resolved_fields: Vec<(String, ResolvedType)> = Vec::new();
 
         for field in &s.fields {
             let resolved = self.ast_type_to_resolved(&field.ty.node);
             let field_type = self.type_mapper.map_type(&resolved);
             field_types.push(field_type);
             field_names.push(field.name.node.clone());
+            resolved_fields.push((field.name.node.clone(), resolved));
 
             // Extract type name for nested field access
             let type_name = match &field.ty.node {
@@ -110,6 +113,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 _ => String::from("unknown"),
             };
             field_type_names.push((field.name.node.clone(), type_name));
+        }
+
+        // Phase 191 #2b: append trailing i64 __ownership_mask when this
+        // user struct carries heap-owned string fields. Parallel to the
+        // text-IR backend (types/type_gen.rs::generate_struct_type).
+        let (has_owned_mask, _heap_fields) =
+            crate::types::StructInfo::derive_ownership_mask(&resolved_fields);
+        if has_owned_mask {
+            field_types.push(self.context.i64_type().into());
         }
 
         // Create opaque struct
@@ -125,6 +137,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.struct_field_type_names
             .insert(struct_name.clone(), field_type_names);
         self.type_mapper.register_struct(struct_name, struct_type);
+
+        // Record generic parameters for on-demand specialization
+        if !s.generics.is_empty() {
+            let param_names: Vec<String> = s.generics.iter().map(|g| g.name.node.clone()).collect();
+            self.struct_generic_params
+                .insert(struct_name.clone(), param_names);
+        }
 
         Ok(struct_type)
     }
@@ -146,10 +165,62 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             )));
         }
 
-        // Store variant tags
+        // Store variant tags, and record struct-payload variants for match binding.
         for (i, variant) in e.variants.iter().enumerate() {
             self.enum_variants
                 .insert((enum_name.clone(), variant.name.node.clone()), i as i32);
+
+            // If the variant has a single Tuple field that is a named type,
+            // record it so pattern bindings can recover the struct type.
+            // If the single field is a primitive (int/float/etc), record its
+            // LLVM type so pattern bindings can bitcast the i64 data slot back
+            // to the declared type before binding.
+            if let ast::VariantFields::Tuple(types) = &variant.fields {
+                if types.len() == 1 {
+                    if let ast::Type::Named {
+                        name: struct_name, ..
+                    } = &types[0].node
+                    {
+                        // Struct payloads: existing code path.
+                        if self.generated_structs.contains_key(struct_name) {
+                            self.enum_variant_struct_types.insert(
+                                (enum_name.clone(), variant.name.node.clone()),
+                                struct_name.clone(),
+                            );
+                        } else {
+                            // Primitive type reached here by name (e.g. "f64", "i32").
+                            let resolved = self.ast_type_to_resolved(&types[0].node);
+                            let ll_ty = self.type_mapper.map_type(&resolved);
+                            self.enum_variant_primitive_payload_types
+                                .insert((enum_name.clone(), variant.name.node.clone()), ll_ty);
+                        }
+                    } else {
+                        // Non-Named single-tuple payload (tuple of primitives, etc.).
+                        let resolved = self.ast_type_to_resolved(&types[0].node);
+                        let ll_ty = self.type_mapper.map_type(&resolved);
+                        self.enum_variant_primitive_payload_types
+                            .insert((enum_name.clone(), variant.name.node.clone()), ll_ty);
+                    }
+                } else if types.len() > 1 {
+                    // Multi-field tuple variant (e.g., Rect(f64, f64)): build an
+                    // anonymous struct type that packs all field types and record
+                    // it up-front. The constructor path (generate_call) also
+                    // registers this, but registering here too means pattern
+                    // bindings in code compiled before any construction call
+                    // (e.g., `F eval(op: Op) { M op { ... } }`) can still find
+                    // the payload layout — without this pre-registration the
+                    // match path would hit the "Payload layout unknown"
+                    // fallback and only bind the first field.
+                    let mut field_ll_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = Vec::new();
+                    for ty in types {
+                        let resolved = self.ast_type_to_resolved(&ty.node);
+                        field_ll_types.push(self.type_mapper.map_type(&resolved));
+                    }
+                    let payload_ty = self.context.struct_type(&field_ll_types, false);
+                    self.enum_variant_multi_payload_types
+                        .insert((enum_name.clone(), variant.name.node.clone()), payload_ty);
+                }
+            }
         }
 
         // Create enum as struct: { i8 tag, i64 data }
@@ -213,14 +284,38 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             return Ok(*existing);
         }
 
-        // Union is represented as a struct with a single byte array field
-        // sized to the largest variant
-        let union_type = self
-            .context
-            .struct_type(&[self.context.i64_type().into()], false);
+        // For codegen purposes a Vais union is modeled as a single-cell struct
+        // wide enough to hold the largest variant. We pick i64 — all scalar
+        // types and pointers fit, and f64 is bit-compatible at the same width.
+        // Field-name → index mapping is populated so the struct-constructor
+        // path (`UnionName { field: value }`) and field-access path can reuse
+        // the same lookup machinery as user structs. The *first* declared
+        // field dictates the wire representation; others are kept for name
+        // resolution only.
+        let union_type = self.context.opaque_struct_type(union_name);
+        union_type.set_body(&[self.context.i64_type().into()], false);
 
+        // Mirror struct registration so struct-constructor and field-access
+        // codegen can locate the union by name.
         self.generated_structs
             .insert(union_name.clone(), union_type);
+
+        let field_names: Vec<String> = u.fields.iter().map(|f| f.name.node.clone()).collect();
+        let field_type_names: Vec<(String, String)> = u
+            .fields
+            .iter()
+            .map(|f| {
+                let type_name = match &f.ty.node {
+                    ast::Type::Named { name, .. } => name.clone(),
+                    _ => String::from("unknown"),
+                };
+                (f.name.node.clone(), type_name)
+            })
+            .collect();
+        self.struct_fields.insert(union_name.clone(), field_names);
+        self.struct_field_type_names
+            .insert(union_name.clone(), field_type_names);
+        self.type_mapper.register_struct(union_name, union_type);
 
         Ok(union_type)
     }
@@ -229,6 +324,41 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let const_name = &const_def.name.node;
         let value = self.evaluate_const_expr(&const_def.value.node)?;
         self.constants.insert(const_name.clone(), value);
+        Ok(())
+    }
+
+    /// Define an LLVM global variable for a Vais `G name: T = value` declaration.
+    /// Emits `@name = global T <initializer>` and stores the pointer+type in
+    /// `self.globals` so subsequent identifier lookups and assignments can find it.
+    pub(super) fn define_global(&mut self, global_def: &ast::GlobalDef) -> CodegenResult<()> {
+        use inkwell::types::BasicTypeEnum;
+        let name = &global_def.name.node;
+        let resolved = self.ast_type_to_resolved(&global_def.ty.node);
+        let ll_type = self.type_mapper.map_type(&resolved);
+
+        let global = self.module.add_global(ll_type, None, name);
+
+        // Zero-initialize every global first; override with a constant init below when
+        // `evaluate_const_expr` succeeds and the types match. Non-constant initializers
+        // (e.g. array literals with dynamic elements) stay at zero — callers write to
+        // the global at runtime.
+        let zero: BasicValueEnum<'ctx> = match ll_type {
+            BasicTypeEnum::IntType(it) => it.const_zero().into(),
+            BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
+            BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
+            BasicTypeEnum::StructType(st) => st.const_zero().into(),
+            BasicTypeEnum::ArrayType(at) => at.const_zero().into(),
+            BasicTypeEnum::VectorType(vt) => vt.const_zero().into(),
+        };
+        global.set_initializer(&zero);
+
+        if let Ok(init_val) = self.evaluate_const_expr(&global_def.value.node) {
+            if init_val.get_type() == ll_type {
+                global.set_initializer(&init_val);
+            }
+        }
+
+        self.globals.insert(name.clone(), (global, ll_type));
         Ok(())
     }
 

@@ -19,6 +19,9 @@ pub(crate) struct TypeMapper<'ctx> {
     /// When true, ICE-level fallbacks become errors instead of warnings.
     /// Set from `InkwellCodeGenerator::set_strict_type_mode()`.
     pub(crate) strict_type_mode: bool,
+    // Phase 191 v3 (2026-04-11): `strict_generic_mode` removed. Un-monomorphized
+    // `Generic(_)` / `ConstGeneric(_)` reaching `map_type` is always promoted to
+    // a deferred `InternalError` via `pending_error`.
     /// Deferred error from `map_type` when strict mode is enabled.
     /// Since `map_type` returns `BasicTypeEnum` (not `Result`), errors from
     /// ICE-level fallbacks are stored here for the caller to check via
@@ -44,12 +47,16 @@ impl<'ctx> TypeMapper<'ctx> {
         self.warnings.borrow_mut().push(warning);
     }
 
-    /// Emit a warning, or store a deferred error in strict type mode for ICE-level fallbacks.
+    /// Emit a warning, or store a deferred error for ICE-level fallbacks.
     ///
-    /// Since `map_type` returns `BasicTypeEnum` (not `Result`), errors from strict mode
-    /// are stored in `pending_error` for the caller to check via `take_pending_error()`.
-    /// The i64 fallback value is still returned so `map_type` can complete, but the
-    /// caller should check for and propagate the error before using the result.
+    /// Since `map_type` returns `BasicTypeEnum` (not `Result`), errors are stored
+    /// in `pending_error` for the caller to check via `take_pending_error()`.
+    /// The `i64` placeholder value is still returned so `map_type` can complete,
+    /// but the caller must propagate the error before using the result.
+    ///
+    /// - `strict_type_mode` promotes `UnresolvedTypeFallback` to a deferred error.
+    /// - `GenericFallback` is **always** promoted to a deferred error
+    ///   (Phase 191 v3 — unconditional).
     fn emit_warning_or_error(&self, warning: crate::CodegenWarning) {
         if self.strict_type_mode {
             if let crate::CodegenWarning::UnresolvedTypeFallback {
@@ -57,7 +64,6 @@ impl<'ctx> TypeMapper<'ctx> {
                 ref backend,
             } = warning
             {
-                // Store the first error (don't overwrite if one is already pending)
                 let mut pending = self.pending_error.borrow_mut();
                 if pending.is_none() {
                     *pending = Some(crate::CodegenError::InternalError(format!(
@@ -67,6 +73,20 @@ impl<'ctx> TypeMapper<'ctx> {
                 }
                 return;
             }
+        }
+        if let crate::CodegenWarning::GenericFallback {
+            ref param,
+            ref context,
+        } = warning
+        {
+            let mut pending = self.pending_error.borrow_mut();
+            if pending.is_none() {
+                *pending = Some(crate::CodegenError::InternalError(format!(
+                    "un-monomorphized generic parameter '{}' reached codegen in '{}' — Phase 191 v3 (no fallback)",
+                    param, context
+                )));
+            }
+            return;
         }
         self.emit_warning(warning);
     }
@@ -183,7 +203,19 @@ impl<'ctx> TypeMapper<'ctx> {
                     .struct_type(&[ptr_type.into(), len_type.into()], false)
                     .into()
             }
-            ResolvedType::Named { name, .. } => {
+            ResolvedType::Named { name, generics } => {
+                // If generics are present and all concrete, try mangled name first (e.g., "Vec$f32")
+                if !generics.is_empty() {
+                    let all_concrete = generics
+                        .iter()
+                        .all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+                    if all_concrete {
+                        let mangled = vais_types::mangle_name(name, generics);
+                        if let Some(st) = self.struct_types.get(mangled.as_str()) {
+                            return (*st).into();
+                        }
+                    }
+                }
                 if let Some(st) = self.struct_types.get(name.as_str()) {
                     (*st).into()
                 } else {
@@ -202,14 +234,17 @@ impl<'ctx> TypeMapper<'ctx> {
                     .into()
             }
             ResolvedType::Generic(name) => {
-                // Check if we have a substitution for this generic parameter.
+                // Phase 191 v3: un-monomorphized generic parameters are a hard codegen
+                // error. With transitive instantiation (Phase 67) active, the
+                // `None` branch should only be reached on a Phase 67 bug. The
+                // deferred error is stored via `emit_warning_or_error`; the
+                // `i64_type()` return is a placeholder so `map_type` can finish
+                // its walk — the caller must check `take_pending_error()` before
+                // using the result.
                 if let Some(concrete) = self.generic_substitutions.get(name.as_str()).cloned() {
                     self.map_type(&concrete)
                 } else {
-                    // Generic parameter without substitution — use i64 fallback.
-                    // With transitive instantiation (Phase 67), this path is now mostly
-                    // reached only for un-specialized fallback versions of generic functions.
-                    self.emit_warning(crate::CodegenWarning::GenericFallback {
+                    self.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
                         param: name.clone(),
                         context: String::from("<inkwell>"),
                     });
@@ -302,31 +337,12 @@ impl<'ctx> TypeMapper<'ctx> {
                 // Transparent wrappers at runtime
                 self.map_type(inner)
             }
-            ResolvedType::Lazy(inner) => {
-                // Lazy<T> = { i1 computed, T value, ptr thunk_fn }
-                let inner_ty = self.map_type(inner);
-                self.context
-                    .struct_type(
-                        &[
-                            self.context.bool_type().into(), // computed flag
-                            inner_ty,                        // cached value
-                            self.context
-                                .i8_type()
-                                .ptr_type(inkwell::AddressSpace::default())
-                                .into(), // thunk function pointer
-                        ],
-                        false,
-                    )
-                    .into()
-            }
             ResolvedType::ConstGeneric(name) => {
-                // Check if we have a substitution for this const generic parameter.
+                // Phase 191 v3: same unconditional-error policy as `Generic` above.
                 if let Some(concrete) = self.generic_substitutions.get(name.as_str()).cloned() {
                     self.map_type(&concrete)
                 } else {
-                    // ConstGeneric parameter without substitution — use i64 fallback.
-                    // Same rationale as Generic above: kept for backward-compatible fallback.
-                    self.emit_warning(crate::CodegenWarning::GenericFallback {
+                    self.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
                         param: name.clone(),
                         context: String::from("<inkwell>"),
                     });
@@ -354,20 +370,6 @@ impl<'ctx> TypeMapper<'ctx> {
             ResolvedType::Dependent { base, .. } => {
                 // Dependent types are transparent at runtime — use base type
                 self.map_type(base)
-            }
-            ResolvedType::ImplTrait { .. } => {
-                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
-                    type_desc: String::from("unresolved ImplTrait"),
-                    backend: String::from("inkwell"),
-                });
-                self.context.i64_type().into()
-            }
-            ResolvedType::HigherKinded { .. } => {
-                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
-                    type_desc: String::from("unresolved HKT"),
-                    backend: String::from("inkwell"),
-                });
-                self.context.i64_type().into()
             }
         }
     }
