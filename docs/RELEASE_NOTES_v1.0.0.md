@@ -275,7 +275,7 @@ Vais combines the performance of compiled languages with modern type safety feat
 
 #### Other Tools
 - **Documentation generator** - Markdown-based docs from source code
-- **Playground** - Web-based code editor and executor at playground.vaislang.dev
+- **Playground** - Web-based code editor and executor at https://vaislang.dev/playground/
 - **Benchmark suite** - Performance regression testing with criterion
 - **Security analyzer** - Static analysis for security issues:
   - Buffer overflow detection
@@ -505,7 +505,7 @@ See [docs/benchmarks.md](./benchmarks.md) for comprehensive benchmark results.
 - **Architecture Guide** - [docs/Architecture.md](./Architecture.md)
 - **Security Audit** - [docs/SECURITY_AUDIT.md](./SECURITY_AUDIT.md)
 - **Memory Safety** - [docs/MEMORY_SAFETY.md](./MEMORY_SAFETY.md)
-- **Full Documentation Site** - https://docs.vaislang.dev
+- **Full Documentation Site** - https://vaislang.dev/docs/
 
 ### Tutorials
 - **Generic Programming** - [docs/generic_tutorial.md](./generic_tutorial.md)
@@ -628,7 +628,7 @@ See [ROADMAP.md](../ROADMAP.md) for detailed future plans.
 
 **Current releases:** https://github.com/vaislang/vais/releases/latest
 **Website:** https://vaislang.dev
-**Documentation:** https://docs.vaislang.dev
-**Playground:** https://playground.vaislang.dev
+**Documentation:** https://vaislang.dev/docs/
+**Playground:** https://vaislang.dev/playground/
 
 Thank you for using Vais!
