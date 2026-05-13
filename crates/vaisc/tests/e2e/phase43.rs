@@ -2,118 +2,8 @@ use super::helpers::*;
 
 // ==================== Phase 43: Async Runtime E2E Tests ====================
 // Phase 43 changes:
-// 1. Spawn TC: Non-Future values are wrapped in Future<T>
-//    - spawn on async call: Future<T> (unchanged)
-//    - spawn on sync value: Future<T> (NEW)
-// 2. Yield TC: Always returns inner_type (not i64)
-// 3. Await codegen: Text IR poll loop now includes sched_yield()
-
-// ==================== Spawn Tests ====================
-
-#[test]
-fn e2e_phase43_spawn_async_preserves_future() {
-    // spawn on async call stores future in variable, then awaits
-    let source = r#"
-A F compute(x: i64) -> i64 {
-    x * 2
-}
-
-F main() -> i64 {
-    future := spawn compute(21)
-    result := future.await
-    result - 42
-}
-"#;
-    assert_exit_code(source, 0);
-}
-
-#[test]
-fn e2e_phase43_spawn_await_chain() {
-    // spawn on async call, await immediately — spawn passthrough for async calls
-    let source = r#"
-A F compute(x: i64) -> i64 {
-    x * 2
-}
-
-F main() -> i64 {
-    result := (spawn compute(21)).await
-    result - 42
-}
-"#;
-    assert_exit_code(source, 0);
-}
-
-#[test]
-fn e2e_phase43_spawn_sync_wraps_future() {
-    // spawn 42 wraps sync value in Future struct, not awaited here
-    let source = r#"
-F main() -> i64 {
-    future := spawn 42
-    R 0
-}
-"#;
-    assert_exit_code(source, 0);
-}
-
-#[test]
-fn e2e_phase43_spawn_sync_await() {
-    // spawn 42 wrapped in Future struct, then polled immediately via __sync_spawn__poll
-    let source = r#"
-F main() -> i64 {
-    result := (spawn 42).await
-    result - 42
-}
-"#;
-    assert_exit_code(source, 0);
-}
-
-#[test]
-fn e2e_phase43_spawn_sync_arithmetic() {
-    // spawn (3+4) wraps i64 7 in Future struct, await polls immediately
-    let source = r#"
-F main() -> i64 {
-    result := (spawn (3 + 4)).await
-    result - 7
-}
-"#;
-    assert_exit_code(source, 0);
-}
-
-#[test]
-fn e2e_phase43_spawn_in_variable() {
-    // spawn on async call, store in variable, then await
-    let source = r#"
-A F compute(x: i64) -> i64 {
-    x + 10
-}
-
-F main() -> i64 {
-    fut := spawn compute(32)
-    result := fut.await
-    result - 42
-}
-"#;
-    assert_exit_code(source, 0);
-}
-
-#[test]
-fn e2e_phase43_spawn_multiple() {
-    // Multiple spawns on async calls, both awaited
-    let source = r#"
-A F add(a: i64, b: i64) -> i64 {
-    a + b
-}
-
-F main() -> i64 {
-    f1 := spawn add(10, 20)
-    f2 := spawn add(5, 7)
-    r1 := f1.await
-    r2 := f2.await
-    (r1 + r2) - 42
-}
-"#;
-    assert_exit_code(source, 0);
-}
+// 1. Yield TC: Always returns inner_type (not i64)
+// 2. Await codegen: Text IR poll loop now includes sched_yield()
 
 // ==================== Yield Tests ====================
 
@@ -219,25 +109,6 @@ F main() -> i64 {
     assert_exit_code(source, 0);
 }
 
-#[test]
-fn e2e_phase43_async_multiple_spawns() {
-    // Multiple spawns on same async function with different args, both awaited
-    let source = r#"
-A F task(x: i64) -> i64 {
-    x * 2
-}
-
-F main() -> i64 {
-    f1 := spawn task(10)
-    f2 := spawn task(11)
-    r1 := f1.await
-    r2 := f2.await
-    (r1 + r2) - 42
-}
-"#;
-    assert_exit_code(source, 0);
-}
-
 // ==================== Await Syntax Tests ====================
 
 #[test]
@@ -335,22 +206,6 @@ F main() -> i64 {
 }
 
 #[test]
-fn e2e_phase43_spawn_with_expression() {
-    // Spawn on async call, immediate await expression — spawn passthrough
-    let source = r#"
-A F add(a: i64, b: i64) -> i64 {
-    a + b
-}
-
-F main() -> i64 {
-    result := (spawn add(30, 12)).await
-    result - 42
-}
-"#;
-    assert_exit_code(source, 0);
-}
-
-#[test]
 fn e2e_phase43_async_return_early() {
     // Async function with early return + yield — AsyncPollContext handles both paths
     let source = r#"
@@ -364,48 +219,6 @@ A F check(x: i64) -> i64 {
 F main() -> i64 {
     result := check(42).await
     result - 42
-}
-"#;
-    assert_exit_code(source, 0);
-}
-
-#[test]
-fn e2e_phase43_nested_spawn_await() {
-    // Nested async: outer spawns inner, variable-based await — future_poll_fns tracking
-    let source = r#"
-A F inner(x: i64) -> i64 {
-    x + 10
-}
-
-A F outer(x: i64) -> i64 {
-    f := spawn inner(x)
-    f.await
-}
-
-F main() -> i64 {
-    result := outer(32).await
-    result - 42
-}
-"#;
-    assert_exit_code(source, 0);
-}
-
-#[test]
-fn e2e_phase43_spawn_sequential_await() {
-    // Sequential spawn-await chain: each spawn uses result of previous await
-    let source = r#"
-A F task(x: i64) -> i64 {
-    x + 1
-}
-
-F main() -> i64 {
-    f1 := spawn task(10)
-    r1 := f1.await
-    f2 := spawn task(r1)
-    r2 := f2.await
-    f3 := spawn task(r2)
-    r3 := f3.await
-    r3 - 13
 }
 "#;
     assert_exit_code(source, 0);

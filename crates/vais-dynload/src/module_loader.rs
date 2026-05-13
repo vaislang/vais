@@ -65,6 +65,9 @@ unsafe impl Sync for LoadedModule {}
 impl LoadedModule {
     /// Get a function pointer from the module
     pub fn get_function<T>(&mut self, name: &str) -> Result<libloading::Symbol<'_, T>> {
+        // SAFETY: `Library::get` requires the symbol name to be valid and the library
+        // to be loaded. The library is guaranteed loaded (held by `self.library`), and
+        // the returned Symbol borrows `self` ensuring the library outlives the symbol.
         unsafe {
             self.library
                 .get(name.as_bytes())
@@ -78,6 +81,10 @@ impl LoadedModule {
             return Ok(ptr);
         }
 
+        // SAFETY: `Library::get` is called on a loaded library held by `self.library`.
+        // The returned raw pointer is dereferenced to obtain the function address and
+        // cached. The pointer remains valid as long as the library is loaded (i.e., as
+        // long as this `LoadedModule` is alive), which is enforced by the module lifecycle.
         unsafe {
             let symbol: libloading::Symbol<*mut std::ffi::c_void> = self
                 .library
@@ -91,6 +98,9 @@ impl LoadedModule {
 
     /// Call a function that takes no arguments and returns i64
     pub fn call_i64(&mut self, name: &str) -> Result<i64> {
+        // SAFETY: `Library::get` retrieves a symbol from the loaded library. The caller
+        // must ensure the symbol has the correct `extern "C" fn() -> i64` signature.
+        // The library remains loaded for the duration of the call since `self` is borrowed.
         unsafe {
             let func: libloading::Symbol<extern "C" fn() -> i64> = self
                 .library
@@ -102,6 +112,9 @@ impl LoadedModule {
 
     /// Call a function that takes i64 and returns i64
     pub fn call_i64_i64(&mut self, name: &str, arg: i64) -> Result<i64> {
+        // SAFETY: `Library::get` retrieves a symbol from the loaded library. The caller
+        // must ensure the symbol has the correct `extern "C" fn(i64) -> i64` signature.
+        // The library remains loaded for the duration of the call since `self` is borrowed.
         unsafe {
             let func: libloading::Symbol<extern "C" fn(i64) -> i64> = self
                 .library
@@ -113,6 +126,9 @@ impl LoadedModule {
 
     /// Call a function that takes two i64s and returns i64
     pub fn call_i64_i64_i64(&mut self, name: &str, arg1: i64, arg2: i64) -> Result<i64> {
+        // SAFETY: `Library::get` retrieves a symbol from the loaded library. The caller
+        // must ensure the symbol has the correct `extern "C" fn(i64, i64) -> i64` signature.
+        // The library remains loaded for the duration of the call since `self` is borrowed.
         unsafe {
             let func: libloading::Symbol<extern "C" fn(i64, i64) -> i64> = self
                 .library
@@ -259,7 +275,10 @@ impl ModuleLoader {
         // Compile the module
         let lib_path = self.compile_module(path)?;
 
-        // Load the library
+        // SAFETY: `Library::new` loads a shared library from the filesystem. The path
+        // `lib_path` was produced by `compile_module` which compiled the source successfully.
+        // Loading may execute library initializers (e.g., `__attribute__((constructor))`),
+        // which is inherently unsafe but expected for dynamic module loading.
         let library = unsafe {
             libloading::Library::new(&lib_path)
                 .map_err(|e| DynloadError::LibraryLoadError(e.to_string()))?
@@ -770,5 +789,35 @@ mod tests {
         assert_eq!(config.compiler_command, "vaisc");
         assert!(config.hot_reload);
         assert_eq!(config.max_cache_size, 50);
+    }
+
+    #[test]
+    fn test_load_invalid_path_does_not_trigger_unsafe() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+        // Ensure invalid paths are rejected before reaching unsafe Library::new
+        let result = loader.load("/nonexistent/path/module.vais");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            DynloadError::ModuleNotFound(_)
+        ));
+    }
+
+    #[test]
+    fn test_load_empty_path() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+        let result = loader.load("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_module_already_loaded_error() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+        // First load will fail (no compiler), but we can test the duplicate check
+        // by manually inserting a module
+        assert!(!loader.is_loaded("test_dup"));
     }
 }

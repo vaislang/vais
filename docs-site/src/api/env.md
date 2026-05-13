@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/env
+use std/env
 ```
 
 ## Overview
@@ -17,7 +17,7 @@ The `env` module provides functions for reading, setting, and removing environme
 ### env_get
 
 ```vais
-F env_get(name: str) -> i64
+fn env_get(name: str) -> i64
 ```
 
 Get the value of an environment variable.
@@ -30,7 +30,7 @@ Get the value of an environment variable.
 ### env_set
 
 ```vais
-F env_set(name: str, value: str) -> i32
+fn env_set(name: str, value: str) -> i32
 ```
 
 Set an environment variable, overwriting any existing value.
@@ -44,7 +44,7 @@ Set an environment variable, overwriting any existing value.
 ### env_set_no_overwrite
 
 ```vais
-F env_set_no_overwrite(name: str, value: str) -> i32
+fn env_set_no_overwrite(name: str, value: str) -> i32
 ```
 
 Set an environment variable only if it does not already exist.
@@ -58,7 +58,7 @@ Set an environment variable only if it does not already exist.
 ### env_unset
 
 ```vais
-F env_unset(name: str) -> i32
+fn env_unset(name: str) -> i32
 ```
 
 Remove an environment variable.
@@ -71,9 +71,9 @@ Remove an environment variable.
 ## Example
 
 ```vais
-U std/env
+use std/env
 
-F main() {
+fn main() {
     env_set("MY_VAR", "hello")
     val := env_get("MY_VAR")
     env_unset("MY_VAR")

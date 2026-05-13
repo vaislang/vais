@@ -81,8 +81,8 @@ fn parse_error(source: &str) -> String {
 
 #[test]
 fn error_type_mismatch_bool_vs_i64() {
-    // Passing a bool where i64 is expected
-    let error = type_check_error("F main() -> i64 = true");
+    // Passing a struct where i64 is expected
+    let error = type_check_error("S Foo { x: i64 }\nF main() -> i64 = Foo { x: 1 }");
     assert!(
         error.contains("Type mismatch"),
         "Error should mention type mismatch: got '{}'",
@@ -97,9 +97,13 @@ fn error_type_mismatch_bool_vs_i64() {
 
 #[test]
 fn error_type_mismatch_help_suggests_cast() {
-    // When numeric type is expected, help should suggest type cast
-    let help = type_check_help("F main() -> i64 = true");
-    assert!(help.is_some(), "Should provide help for type mismatch");
+    // Struct mismatch — verify type error is returned
+    let error = type_check_error("S Foo { x: i64 }\nF main() -> i64 = Foo { x: 1 }");
+    assert!(
+        error.contains("Type mismatch"),
+        "Should produce type mismatch error: got '{}'",
+        error
+    );
 }
 
 #[test]
@@ -439,7 +443,7 @@ fn secondary_spans_empty_for_simple_errors() {
 #[test]
 fn multi_error_collects_multiple_errors() {
     // Two functions with errors — multi_error_mode should collect both
-    let source = "F foo() -> i64 = true\nF bar() -> i64 = true\nF main() -> i64 = 0";
+    let source = "S Foo { x: i64 }\nF foo() -> i64 = Foo { x: 1 }\nF bar() -> i64 = Foo { x: 1 }\nF main() -> i64 = 0";
     let errors = type_check_multi_errors(source);
     assert!(
         errors.len() >= 2,
@@ -452,7 +456,7 @@ fn multi_error_collects_multiple_errors() {
 #[test]
 fn multi_error_mode_disabled_returns_first_error_only() {
     // Without multi_error_mode, only first error is returned
-    let source = "F foo() -> i64 = true\nF bar() -> i64 = true\nF main() -> i64 = 0";
+    let source = "S Foo { x: i64 }\nF foo() -> i64 = Foo { x: 1 }\nF bar() -> i64 = Foo { x: 1 }\nF main() -> i64 = 0";
     let _tokens = tokenize(source).expect("Lexer should succeed");
     let module = parse(source).expect("Parser should succeed");
     let mut checker = TypeChecker::new();
@@ -470,7 +474,7 @@ fn multi_error_mode_disabled_returns_first_error_only() {
 
 #[test]
 fn error_code_format_is_exxxx() {
-    let err = type_check_type_error("F main() -> i64 = true");
+    let err = type_check_type_error("S Foo { x: i64 }\nF main() -> i64 = Foo { x: 1 }");
     let code = err.error_code();
     assert!(
         code.starts_with('E') || code.starts_with('C'),

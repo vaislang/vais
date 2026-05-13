@@ -2,7 +2,7 @@
 
 F sum_to_n_rec(i: i64, n: i64, acc: i64) -> i64 {
     I i >= n { acc }
-    E { sum_to_n_rec(i + 1, n, acc + i) }
+    EL { sum_to_n_rec(i + 1, n, acc + i) }
 }
 
 F sum_to_n(n: i64) -> i64 {
@@ -11,7 +11,7 @@ F sum_to_n(n: i64) -> i64 {
 
 F sum_squares_rec(i: i64, n: i64, acc: i64) -> i64 {
     I i >= n { acc }
-    E {
+    EL {
         sq := i * i
         sum_squares_rec(i + 1, n, acc + sq)
     }
@@ -42,7 +42,7 @@ F print_num(n: i64) -> i64 {
     I n >= 10 {
         print_num(n / 10)
         0
-    } E { 0 }
+    } EL { 0 }
     putchar(n % 10 + 48)
     0
 }

@@ -26,15 +26,16 @@ impl Parser {
                     Token::Function
                     | Token::Struct
                     | Token::Enum
+                    | Token::EnumKeyword
                     | Token::Union
                     | Token::Use
-                    | Token::Trait
                     | Token::Impl
                     | Token::Macro
                     | Token::Pub
                     | Token::Async
                     | Token::Extern => {
                         // We've hit a top-level item keyword - stop parsing block contents
+                        // Note: Token::Trait (W) is excluded because W is also used for while loops
                         break;
                     }
                     _ => {}
@@ -78,7 +79,7 @@ impl Parser {
         let start = self.current_span().start;
 
         let stmt = if self.check(&Token::Return) {
-            self.advance();
+            self.advance_skip();
             let expr = if !self.check(&Token::RBrace) && !self.check(&Token::Semi) {
                 Some(Box::new(self.parse_expr()?))
             } else {
@@ -86,7 +87,7 @@ impl Parser {
             };
             Stmt::Return(expr)
         } else if self.check(&Token::Break) {
-            self.advance();
+            self.advance_skip();
             let expr = if !self.check(&Token::RBrace) && !self.check(&Token::Semi) {
                 Some(Box::new(self.parse_expr()?))
             } else {
@@ -94,10 +95,10 @@ impl Parser {
             };
             Stmt::Break(expr)
         } else if self.check(&Token::Continue) {
-            self.advance();
+            self.advance_skip();
             Stmt::Continue
         } else if self.check(&Token::Defer) {
-            self.advance();
+            self.advance_skip();
             let expr = Box::new(self.parse_expr()?);
             Stmt::Defer(expr)
         } else if self.is_let_stmt() {
@@ -108,7 +109,7 @@ impl Parser {
 
         // Optional semicolon
         if self.check(&Token::Semi) {
-            self.advance();
+            self.advance_skip();
         }
 
         let end = self.prev_span().end;
@@ -182,16 +183,16 @@ impl Parser {
         // Check for ~ prefix (mutable shorthand): ~ x := expr
         let tilde_prefix = self.check(&Token::Tilde);
         if tilde_prefix {
-            self.advance();
+            self.advance_skip();
         }
 
         // Check for tuple destructuring: (a, b) := expr
         if self.check(&Token::LParen) {
             let pattern = self.parse_pattern()?;
-            self.expect(&Token::ColonEq)?;
+            self.expect_skip(&Token::ColonEq)?;
             let is_mut = self.check(&Token::Mut) || self.check(&Token::Tilde);
             if is_mut {
-                self.advance();
+                self.advance_skip();
             }
             let value = self.parse_expr()?;
             return Ok(Stmt::LetDestructure {
@@ -204,14 +205,14 @@ impl Parser {
         let name = self.parse_ident()?;
 
         let (ty, is_mut, ownership) = if self.check(&Token::ColonEq) {
-            self.advance();
+            self.advance_skip();
             // Check for ownership modifiers: `x := linear expr`, `x := affine expr`, `x := move expr`
             // BUT: if `move` is followed by `|`, it's a move lambda, not an ownership modifier
             let ownership = if self.check(&Token::Linear) {
-                self.advance();
+                self.advance_skip();
                 Ownership::Linear
             } else if self.check(&Token::Affine) {
-                self.advance();
+                self.advance_skip();
                 Ownership::Affine
             } else if self.check(&Token::Move) {
                 // Peek ahead: if next token is |, this is a move lambda, not ownership
@@ -220,11 +221,11 @@ impl Parser {
                         // Don't consume move - let the expression parser handle it
                         Ownership::Regular
                     } else {
-                        self.advance();
+                        self.advance_skip();
                         Ownership::Move
                     }
                 } else {
-                    self.advance();
+                    self.advance_skip();
                     Ownership::Move
                 }
             } else {
@@ -233,22 +234,22 @@ impl Parser {
             // Check for mut: `x := mut expr` or `x := ~ expr`
             let is_mut = tilde_prefix || self.check(&Token::Mut) || self.check(&Token::Tilde);
             if !tilde_prefix && is_mut {
-                self.advance();
+                self.advance_skip();
             }
             (None, is_mut, ownership)
         } else if tilde_prefix && self.check(&Token::Eq) {
             // ~x = expr  →  shorthand for mutable let binding (same as x := mut expr)
-            self.advance();
+            self.advance_skip();
             (None, true, Ownership::Regular)
         } else if self.check(&Token::Colon) {
-            self.advance();
+            self.advance_skip();
             // Check for ownership modifiers: `x: linear T = expr`, `x: affine T = expr`
             // BUT: if `move` is followed by `|`, it's a move lambda, not an ownership modifier
             let ownership = if self.check(&Token::Linear) {
-                self.advance();
+                self.advance_skip();
                 Ownership::Linear
             } else if self.check(&Token::Affine) {
-                self.advance();
+                self.advance_skip();
                 Ownership::Affine
             } else if self.check(&Token::Move) {
                 // Peek ahead: if next token is |, this is a move lambda, not ownership
@@ -257,11 +258,11 @@ impl Parser {
                         // Don't consume move - let the expression parser handle it
                         Ownership::Regular
                     } else {
-                        self.advance();
+                        self.advance_skip();
                         Ownership::Move
                     }
                 } else {
-                    self.advance();
+                    self.advance_skip();
                     Ownership::Move
                 }
             } else {
@@ -270,11 +271,22 @@ impl Parser {
             // Check for mut: `x: mut T = expr` or `x: ~ T = expr`
             let is_mut = tilde_prefix || self.check(&Token::Mut) || self.check(&Token::Tilde);
             if !tilde_prefix && is_mut {
-                self.advance();
+                self.advance_skip();
             }
             let ty = self.parse_type()?;
-            self.expect(&Token::Eq)?;
-            (Some(ty), is_mut, ownership)
+            // Accept both `= expr` and `:= [mut] expr` after type annotation
+            if self.check(&Token::ColonEq) {
+                self.advance_skip();
+                // Re-check for mut after :=
+                let is_mut2 = is_mut || self.check(&Token::Mut) || self.check(&Token::Tilde);
+                if !is_mut && is_mut2 {
+                    self.advance_skip();
+                }
+                (Some(ty), is_mut2, ownership)
+            } else {
+                self.expect_skip(&Token::Eq)?;
+                (Some(ty), is_mut, ownership)
+            }
         } else {
             return Err(ParseError::UnexpectedToken {
                 found: self

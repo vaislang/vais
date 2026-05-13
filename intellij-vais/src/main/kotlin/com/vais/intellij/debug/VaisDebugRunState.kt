@@ -13,6 +13,9 @@ import java.io.File
  *
  * Compiles the Vais program with debug info (-g flag equivalent),
  * then launches the vais-dap server to attach to the compiled binary.
+ *
+ * The DAP server communicates via stdin/stdout using the Debug Adapter Protocol,
+ * enabling breakpoints, stepping, variable inspection, and call stack viewing.
  */
 class VaisDebugRunState(
     environment: ExecutionEnvironment,
@@ -23,7 +26,7 @@ class VaisDebugRunState(
 
     override fun startProcess(): ProcessHandler {
         val vaisFile = File(configuration.vaisFile)
-        val parentDir = vaisFile.parent ?: "."
+        val workDir = configuration.effectiveWorkingDirectory()
         val baseName = vaisFile.nameWithoutExtension
 
         // Step 1: Compile with debug info
@@ -34,7 +37,7 @@ class VaisDebugRunState(
             .withParameters(configuration.vaisFile)
             .withParameters("-o", baseName)
             .withParameters("--opt=0") // No optimization for better debug experience
-            .withWorkDirectory(parentDir)
+            .withWorkDirectory(workDir)
 
         val compileProcess = ProcessHandlerFactory.getInstance()
             .createProcessHandler(compileCommandLine)
@@ -47,13 +50,14 @@ class VaisDebugRunState(
         }
 
         // Step 2: Launch vais-dap server with the compiled binary
-        val binaryPath = File(parentDir, baseName).absolutePath
+        val binaryPath = File(workDir, baseName).absolutePath
         logger.info("Starting vais-dap for binary: $binaryPath")
 
         val dapCommandLine = GeneralCommandLine()
             .withExePath(configuration.dapServerPath)
             .withParameters("--program", binaryPath)
-            .withWorkDirectory(parentDir)
+            .withParameters("--source", configuration.vaisFile)
+            .withWorkDirectory(workDir)
 
         // Add program arguments if specified
         if (configuration.programArguments.isNotEmpty()) {

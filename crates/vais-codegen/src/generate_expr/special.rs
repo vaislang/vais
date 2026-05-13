@@ -1,6 +1,6 @@
 //! Special expression code generation.
 //!
-//! Handles Spawn, Comptime, and Range expressions.
+//! Handles Comptime and Range expressions.
 //! Note: Try (?) and Unwrap (!) are in expr_helpers_misc.rs.
 
 use vais_ast::*;
@@ -8,67 +8,8 @@ use vais_ast::*;
 use crate::{CodeGenerator, CodegenError, CodegenResult};
 
 impl CodeGenerator {
-    /// Generate code for spawn expression: create a concurrent task.
-    /// For async function calls, the inner expression already returns a state pointer.
-    /// For sync expressions, spawn wraps the value in a Future struct:
-    ///   malloc {i64 state=-1, i64 result=value}, return pointer as i64.
-    pub(crate) fn generate_spawn_expr(
-        &mut self,
-        inner: &Spanned<Expr>,
-        counter: &mut usize,
-    ) -> CodegenResult<(String, String)> {
-        let inner_type = self.infer_expr_type(inner);
-        let (inner_val, inner_ir) = self.generate_expr(inner, counter)?;
-
-        // If inner is already a Future (async call), pass through
-        let is_async_call = if let Expr::Call { func, .. } = &inner.node {
-            if let Expr::Ident(name) = &func.node {
-                self.types
-                    .functions
-                    .get(name.as_str())
-                    .is_some_and(|info| info.signature.is_async)
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-        if matches!(inner_type, vais_types::ResolvedType::Future(_)) || is_async_call {
-            return Ok((inner_val, inner_ir));
-        }
-
-        // Sync value: wrap in an immediate Future state struct {i64 state, i64 result}
-        let mut ir = inner_ir;
-        let state_ptr = self.next_temp(counter);
-        ir.push_str(&format!("  {} = call i64 @malloc(i64 16)\n", state_ptr));
-        let typed_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = inttoptr i64 {} to {{i64, i64}}*\n",
-            typed_ptr, state_ptr
-        ));
-        // Store state = -1 (completed)
-        let state_field = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 0\n",
-            state_field, typed_ptr
-        ));
-        ir.push_str(&format!("  store i64 -1, i64* {}\n", state_field));
-        // Store result value
-        let result_field = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 1\n",
-            result_field, typed_ptr
-        ));
-        ir.push_str(&format!(
-            "  store i64 {}, i64* {}\n",
-            inner_val, result_field
-        ));
-
-        self.needs_sync_spawn_poll = true;
-        Ok((state_ptr, ir))
-    }
-
     /// Generate code for comptime expression: evaluate at compile time and emit constant.
+    #[inline(never)]
     pub(crate) fn generate_comptime_expr(
         &mut self,
         body: &Spanned<Expr>,
@@ -129,15 +70,20 @@ impl CodeGenerator {
                 *counter += 1;
                 let len = elements.len();
 
-                ir.push_str(&format!("  {} = alloca [{} x i64]\n", array_name, len));
+                self.emit_entry_alloca(&array_name, &format!("[{} x i64]", len));
 
                 for (i, elem_val) in elements.iter().enumerate() {
                     let elem_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = getelementptr [{} x i64], [{} x i64]* {}, i64 0, i64 {}\n",
-                        elem_ptr, len, len, array_name, i
-                    ));
-                    ir.push_str(&format!("  store i64 {}, i64* {}\n", elem_val, elem_ptr));
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr [{} x i64], [{} x i64]* {}, i64 0, i64 {}",
+                        elem_ptr,
+                        len,
+                        len,
+                        array_name,
+                        i
+                    );
+                    write_ir!(ir, "  store i64 {}, i64* {}", elem_val, elem_ptr);
                 }
 
                 Ok((array_name, ir))
@@ -148,6 +94,7 @@ impl CodeGenerator {
 
     /// Generate code for range expression: `start..end` or `start..=end`
     /// Produces `{ i64 start, i64 end, i1 inclusive }` struct.
+    #[inline(never)]
     pub(crate) fn generate_range_expr(
         &mut self,
         start: &Option<Box<Spanned<Expr>>>,
@@ -176,20 +123,31 @@ impl CodeGenerator {
         // Build struct via insertvalue chain
         let range_type = "{ i64, i64, i1 }";
         let t1 = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = insertvalue {} undef, i64 {}, 0\n",
-            t1, range_type, start_val
-        ));
+        write_ir!(
+            ir,
+            "  {} = insertvalue {} undef, i64 {}, 0",
+            t1,
+            range_type,
+            start_val
+        );
         let t2 = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = insertvalue {} {}, i64 {}, 1\n",
-            t2, range_type, t1, end_val
-        ));
+        write_ir!(
+            ir,
+            "  {} = insertvalue {} {}, i64 {}, 1",
+            t2,
+            range_type,
+            t1,
+            end_val
+        );
         let t3 = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = insertvalue {} {}, i1 {}, 2\n",
-            t3, range_type, t2, incl_val
-        ));
+        write_ir!(
+            ir,
+            "  {} = insertvalue {} {}, i1 {}, 2",
+            t3,
+            range_type,
+            t2,
+            incl_val
+        );
 
         Ok((t3, ir))
     }

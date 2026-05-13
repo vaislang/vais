@@ -66,7 +66,7 @@ F mir_constant_propagation(body_ptr: i64) -> i64 {
     assign_count := malloc(8 * locals_len)
     i := mut 0
     L {
-        I i >= locals_len { B } E { 0 }
+        I i >= locals_len { B } EL { 0 }
         store_i64(const_values + i * 8, 0)
         store_i64(assign_count + i * 8, 0)
         i = i + 1
@@ -75,14 +75,14 @@ F mir_constant_propagation(body_ptr: i64) -> i64 {
     # Scan all statements for assignments
     bi := mut 0
     L {
-        I bi >= blocks_len { B } E { 0 }
+        I bi >= blocks_len { B } EL { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
 
         si := mut 0
         L {
-            I si >= stmts_len { B } E { 0 }
+            I si >= stmts_len { B } EL { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
 
@@ -105,15 +105,15 @@ F mir_constant_propagation(body_ptr: i64) -> i64 {
                             I cnt == 0 {
                                 store_i64(const_values + local_idx * 8, operand)
                                 0
-                            } E {
+                            } EL {
                                 # Assigned more than once → clear
                                 store_i64(const_values + local_idx * 8, 0)
                                 0
                             }
-                        } E { 0 }
-                    } E { 0 }
-                } E { 0 }
-            } E { 0 }
+                        } EL { 0 }
+                    } EL { 0 }
+                } EL { 0 }
+            } EL { 0 }
 
             si = si + 1
         }
@@ -123,19 +123,19 @@ F mir_constant_propagation(body_ptr: i64) -> i64 {
     # Remove multi-assigned locals from const_values
     i = 0
     L {
-        I i >= locals_len { B } E { 0 }
+        I i >= locals_len { B } EL { 0 }
         cnt := load_i64(assign_count + i * 8)
         I cnt > 1 {
             store_i64(const_values + i * 8, 0)
             0
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
 
     # Phase 2: Propagate constants into operands
     bi = 0
     L {
-        I bi >= blocks_len { B } E { 0 }
+        I bi >= blocks_len { B } EL { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
@@ -143,13 +143,13 @@ F mir_constant_propagation(body_ptr: i64) -> i64 {
         # Propagate in statements
         si := mut 0
         L {
-            I si >= stmts_len { B } E { 0 }
+            I si >= stmts_len { B } EL { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
             I kind == STMT_MIR_ASSIGN() {
                 rvalue_ptr := load_i64(stmt_ptr + 16)
                 cp_propagate_rvalue(rvalue_ptr, const_values, locals_len)
-            } E { 0 }
+            } EL { 0 }
             si = si + 1
         }
 
@@ -158,7 +158,7 @@ F mir_constant_propagation(body_ptr: i64) -> i64 {
         I term_ptr != 0 {
             cp_propagate_terminator(term_ptr, const_values, locals_len)
             0
-        } E { 0 }
+        } EL { 0 }
 
         bi = bi + 1
     }
@@ -175,40 +175,40 @@ F cp_propagate_rvalue(rvalue_ptr: i64, const_values: i64, locals_len: i64) -> i6
     I kind == RVALUE_USE() {
         operand := load_i64(rvalue_ptr + 8)
         new_op := cp_try_replace(operand, const_values, locals_len)
-        I new_op != 0 { store_i64(rvalue_ptr + 8, new_op); 0 } E { 0 }
+        I new_op != 0 { store_i64(rvalue_ptr + 8, new_op); 0 } EL { 0 }
     }
-    E I kind == RVALUE_BINOP() {
+    EL I kind == RVALUE_BINOP() {
         lhs := load_i64(rvalue_ptr + 24)
         rhs := load_i64(rvalue_ptr + 32)
         new_lhs := cp_try_replace(lhs, const_values, locals_len)
         new_rhs := cp_try_replace(rhs, const_values, locals_len)
-        I new_lhs != 0 { store_i64(rvalue_ptr + 24, new_lhs); 0 } E { 0 }
-        I new_rhs != 0 { store_i64(rvalue_ptr + 32, new_rhs); 0 } E { 0 }
+        I new_lhs != 0 { store_i64(rvalue_ptr + 24, new_lhs); 0 } EL { 0 }
+        I new_rhs != 0 { store_i64(rvalue_ptr + 32, new_rhs); 0 } EL { 0 }
     }
-    E I kind == RVALUE_UNOP() {
+    EL I kind == RVALUE_UNOP() {
         operand := load_i64(rvalue_ptr + 8)
         new_op := cp_try_replace(operand, const_values, locals_len)
-        I new_op != 0 { store_i64(rvalue_ptr + 8, new_op); 0 } E { 0 }
+        I new_op != 0 { store_i64(rvalue_ptr + 8, new_op); 0 } EL { 0 }
     }
-    E I kind == RVALUE_CAST() {
+    EL I kind == RVALUE_CAST() {
         operand := load_i64(rvalue_ptr + 8)
         new_op := cp_try_replace(operand, const_values, locals_len)
-        I new_op != 0 { store_i64(rvalue_ptr + 8, new_op); 0 } E { 0 }
+        I new_op != 0 { store_i64(rvalue_ptr + 8, new_op); 0 } EL { 0 }
     }
-    E I kind == RVALUE_AGGREGATE() {
+    EL I kind == RVALUE_AGGREGATE() {
         agg_ops := load_i64(rvalue_ptr + 56)
         agg_len := load_i64(rvalue_ptr + 64)
         j := mut 0
         L {
-            I j >= agg_len { B } E { 0 }
+            I j >= agg_len { B } EL { 0 }
             op := load_i64(agg_ops + j * 8)
             new_op := cp_try_replace(op, const_values, locals_len)
-            I new_op != 0 { store_i64(agg_ops + j * 8, new_op); 0 } E { 0 }
+            I new_op != 0 { store_i64(agg_ops + j * 8, new_op); 0 } EL { 0 }
             j = j + 1
         }
         0
     }
-    E { 0 }
+    EL { 0 }
 }
 
 # Try to replace an operand with its constant value.
@@ -222,19 +222,19 @@ F cp_try_replace(op_ptr: i64, const_values: i64, locals_len: i64) -> i64 {
             I const_op != 0 {
                 # Clone the constant operand
                 cp_clone_operand(const_op)
-            } E { 0 }
-        } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
     }
-    E I op_kind == OPERAND_MOVE() {
+    EL I op_kind == OPERAND_MOVE() {
         local_idx := load_i64(op_ptr + 8)
         I local_idx < locals_len {
             const_op := load_i64(const_values + local_idx * 8)
             I const_op != 0 {
                 cp_clone_operand(const_op)
-            } E { 0 }
-        } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
     }
-    E { 0 }
+    EL { 0 }
 }
 
 # Clone an operand (allocate fresh copy)
@@ -255,35 +255,35 @@ F cp_propagate_terminator(term_ptr: i64, const_values: i64, locals_len: i64) -> 
     I kind == TERM_SWITCH_INT() {
         disc_ptr := load_i64(term_ptr + 16)
         new_disc := cp_try_replace(disc_ptr, const_values, locals_len)
-        I new_disc != 0 { store_i64(term_ptr + 16, new_disc); 0 } E { 0 }
+        I new_disc != 0 { store_i64(term_ptr + 16, new_disc); 0 } EL { 0 }
     }
-    E I kind == TERM_CALL() {
+    EL I kind == TERM_CALL() {
         args_ptr := load_i64(term_ptr + 56)
         args_len := load_i64(term_ptr + 64)
         j := mut 0
         L {
-            I j >= args_len { B } E { 0 }
+            I j >= args_len { B } EL { 0 }
             arg := load_i64(args_ptr + j * 8)
             new_arg := cp_try_replace(arg, const_values, locals_len)
-            I new_arg != 0 { store_i64(args_ptr + j * 8, new_arg); 0 } E { 0 }
+            I new_arg != 0 { store_i64(args_ptr + j * 8, new_arg); 0 } EL { 0 }
             j = j + 1
         }
         0
     }
-    E I kind == TERM_TAIL_CALL() {
+    EL I kind == TERM_TAIL_CALL() {
         args_ptr := load_i64(term_ptr + 56)
         args_len := load_i64(term_ptr + 64)
         j := mut 0
         L {
-            I j >= args_len { B } E { 0 }
+            I j >= args_len { B } EL { 0 }
             arg := load_i64(args_ptr + j * 8)
             new_arg := cp_try_replace(arg, const_values, locals_len)
-            I new_arg != 0 { store_i64(args_ptr + j * 8, new_arg); 0 } E { 0 }
+            I new_arg != 0 { store_i64(args_ptr + j * 8, new_arg); 0 } EL { 0 }
             j = j + 1
         }
         0
     }
-    E { 0 }
+    EL { 0 }
 }
 
 # ============================================================================
@@ -297,14 +297,14 @@ F mir_constant_folding(body_ptr: i64) -> i64 {
 
     bi := mut 0
     L {
-        I bi >= blocks_len { B } E { 0 }
+        I bi >= blocks_len { B } EL { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
 
         si := mut 0
         L {
-            I si >= stmts_len { B } E { 0 }
+            I si >= stmts_len { B } EL { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
 
@@ -315,11 +315,11 @@ F mir_constant_folding(body_ptr: i64) -> i64 {
                 I rv_kind == RVALUE_BINOP() {
                     cf_try_fold_binop(stmt_ptr, rvalue_ptr)
                 }
-                E I rv_kind == RVALUE_UNOP() {
+                EL I rv_kind == RVALUE_UNOP() {
                     cf_try_fold_unop(stmt_ptr, rvalue_ptr)
                 }
-                E { 0 }
-            } E { 0 }
+                EL { 0 }
+            } EL { 0 }
 
             si = si + 1
         }
@@ -346,24 +346,24 @@ F cf_try_fold_binop(stmt_ptr: i64, rvalue_ptr: i64) -> i64 {
     valid := mut 1
 
     I op == BINOP_ADD() { result = lhs_val + rhs_val }
-    E I op == BINOP_SUB() { result = lhs_val - rhs_val }
-    E I op == BINOP_MUL() { result = lhs_val * rhs_val }
-    E I op == BINOP_DIV() {
-        I rhs_val != 0 { result = lhs_val / rhs_val } E { valid = 0 }
+    EL I op == BINOP_SUB() { result = lhs_val - rhs_val }
+    EL I op == BINOP_MUL() { result = lhs_val * rhs_val }
+    EL I op == BINOP_DIV() {
+        I rhs_val != 0 { result = lhs_val / rhs_val } EL { valid = 0 }
     }
-    E I op == BINOP_REM() {
-        I rhs_val != 0 { result = lhs_val % rhs_val } E { valid = 0 }
+    EL I op == BINOP_REM() {
+        I rhs_val != 0 { result = lhs_val % rhs_val } EL { valid = 0 }
     }
-    E I op == BINOP_BIT_AND() { result = lhs_val & rhs_val }
-    E I op == BINOP_BIT_OR() { result = lhs_val | rhs_val }
-    E I op == BINOP_BIT_XOR() { result = lhs_val ^ rhs_val }
-    E I op == BINOP_EQ() { I lhs_val == rhs_val { result = 1 } E { result = 0 } }
-    E I op == BINOP_NE() { I lhs_val != rhs_val { result = 1 } E { result = 0 } }
-    E I op == BINOP_LT() { I lhs_val < rhs_val { result = 1 } E { result = 0 } }
-    E I op == BINOP_LE() { I lhs_val <= rhs_val { result = 1 } E { result = 0 } }
-    E I op == BINOP_GT() { I lhs_val > rhs_val { result = 1 } E { result = 0 } }
-    E I op == BINOP_GE() { I lhs_val >= rhs_val { result = 1 } E { result = 0 } }
-    E { valid = 0 }
+    EL I op == BINOP_BIT_AND() { result = lhs_val & rhs_val }
+    EL I op == BINOP_BIT_OR() { result = lhs_val | rhs_val }
+    EL I op == BINOP_BIT_XOR() { result = lhs_val ^ rhs_val }
+    EL I op == BINOP_EQ() { I lhs_val == rhs_val { result = 1 } EL { result = 0 } }
+    EL I op == BINOP_NE() { I lhs_val != rhs_val { result = 1 } EL { result = 0 } }
+    EL I op == BINOP_LT() { I lhs_val < rhs_val { result = 1 } EL { result = 0 } }
+    EL I op == BINOP_LE() { I lhs_val <= rhs_val { result = 1 } EL { result = 0 } }
+    EL I op == BINOP_GT() { I lhs_val > rhs_val { result = 1 } EL { result = 0 } }
+    EL I op == BINOP_GE() { I lhs_val >= rhs_val { result = 1 } EL { result = 0 } }
+    EL { valid = 0 }
 
     I valid == 0 { R 0 }
 
@@ -387,8 +387,8 @@ F cf_try_fold_unop(stmt_ptr: i64, rvalue_ptr: i64) -> i64 {
     valid := mut 1
 
     I op == UNOP_NEG() { result = 0 - val }
-    E I op == UNOP_NOT() { result = val ^ (0 - 1) }
-    E { valid = 0 }
+    EL I op == UNOP_NOT() { result = val ^ (0 - 1) }
+    EL { valid = 0 }
 
     I valid == 0 { R 0 }
 
@@ -412,7 +412,7 @@ F mir_dead_code_elimination(body_ptr: i64) -> i64 {
     used := malloc(8 * locals_len)
     i := mut 0
     L {
-        I i >= locals_len { B } E { 0 }
+        I i >= locals_len { B } EL { 0 }
         store_i64(used + i * 8, 0)
         i = i + 1
     }
@@ -423,7 +423,7 @@ F mir_dead_code_elimination(body_ptr: i64) -> i64 {
     # Scan all blocks
     bi := mut 0
     L {
-        I bi >= blocks_len { B } E { 0 }
+        I bi >= blocks_len { B } EL { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
@@ -432,7 +432,7 @@ F mir_dead_code_elimination(body_ptr: i64) -> i64 {
         # Scan statements for reads
         si := mut 0
         L {
-            I si >= stmts_len { B } E { 0 }
+            I si >= stmts_len { B } EL { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
 
@@ -440,12 +440,12 @@ F mir_dead_code_elimination(body_ptr: i64) -> i64 {
                 rvalue_ptr := load_i64(stmt_ptr + 16)
                 dce_collect_rvalue_reads(rvalue_ptr, used, locals_len)
             }
-            E I kind == STMT_MIR_DROP() {
+            EL I kind == STMT_MIR_DROP() {
                 place_ptr := load_i64(stmt_ptr + 8)
                 local_idx := load_i64(place_ptr)
-                I local_idx < locals_len { store_i64(used + local_idx * 8, 1); 0 } E { 0 }
+                I local_idx < locals_len { store_i64(used + local_idx * 8, 1); 0 } EL { 0 }
             }
-            E { 0 }
+            EL { 0 }
 
             si = si + 1
         }
@@ -454,7 +454,7 @@ F mir_dead_code_elimination(body_ptr: i64) -> i64 {
         I term_ptr != 0 {
             dce_collect_terminator_reads(term_ptr, used, locals_len)
             0
-        } E { 0 }
+        } EL { 0 }
 
         bi = bi + 1
     }
@@ -462,7 +462,7 @@ F mir_dead_code_elimination(body_ptr: i64) -> i64 {
     # Remove assignments to unused locals
     bi = 0
     L {
-        I bi >= blocks_len { B } E { 0 }
+        I bi >= blocks_len { B } EL { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
@@ -471,7 +471,7 @@ F mir_dead_code_elimination(body_ptr: i64) -> i64 {
         write_idx := mut 0
         si := mut 0
         L {
-            I si >= stmts_len { B } E { 0 }
+            I si >= stmts_len { B } EL { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
 
@@ -483,15 +483,15 @@ F mir_dead_code_elimination(body_ptr: i64) -> i64 {
                     I load_i64(used + local_idx * 8) == 0 {
                         keep = 0
                         0
-                    } E { 0 }
-                } E { 0 }
-            } E { 0 }
+                    } EL { 0 }
+                } EL { 0 }
+            } EL { 0 }
 
             I keep == 1 {
                 store_i64(stmts_ptr + write_idx * 8, stmt_ptr)
                 write_idx = write_idx + 1
                 0
-            } E { 0 }
+            } EL { 0 }
 
             si = si + 1
         }
@@ -514,48 +514,48 @@ F dce_collect_rvalue_reads(rvalue_ptr: i64, used: i64, locals_len: i64) -> i64 {
         operand := load_i64(rvalue_ptr + 8)
         dce_collect_operand_reads(operand, used, locals_len)
     }
-    E I kind == RVALUE_BINOP() {
+    EL I kind == RVALUE_BINOP() {
         lhs := load_i64(rvalue_ptr + 24)
         rhs := load_i64(rvalue_ptr + 32)
         dce_collect_operand_reads(lhs, used, locals_len)
         dce_collect_operand_reads(rhs, used, locals_len)
     }
-    E I kind == RVALUE_UNOP() {
+    EL I kind == RVALUE_UNOP() {
         operand := load_i64(rvalue_ptr + 8)
         dce_collect_operand_reads(operand, used, locals_len)
     }
-    E I kind == RVALUE_REF() {
+    EL I kind == RVALUE_REF() {
         place_ptr := load_i64(rvalue_ptr + 40)
         local_idx := load_i64(place_ptr)
-        I local_idx < locals_len { store_i64(used + local_idx * 8, 1); 0 } E { 0 }
+        I local_idx < locals_len { store_i64(used + local_idx * 8, 1); 0 } EL { 0 }
     }
-    E I kind == RVALUE_CAST() {
+    EL I kind == RVALUE_CAST() {
         operand := load_i64(rvalue_ptr + 8)
         dce_collect_operand_reads(operand, used, locals_len)
     }
-    E I kind == RVALUE_AGGREGATE() {
+    EL I kind == RVALUE_AGGREGATE() {
         agg_ops := load_i64(rvalue_ptr + 56)
         agg_len := load_i64(rvalue_ptr + 64)
         j := mut 0
         L {
-            I j >= agg_len { B } E { 0 }
+            I j >= agg_len { B } EL { 0 }
             op := load_i64(agg_ops + j * 8)
             dce_collect_operand_reads(op, used, locals_len)
             j = j + 1
         }
         0
     }
-    E I kind == RVALUE_DISCRIMINANT() {
+    EL I kind == RVALUE_DISCRIMINANT() {
         place_ptr := load_i64(rvalue_ptr + 40)
         local_idx := load_i64(place_ptr)
-        I local_idx < locals_len { store_i64(used + local_idx * 8, 1); 0 } E { 0 }
+        I local_idx < locals_len { store_i64(used + local_idx * 8, 1); 0 } EL { 0 }
     }
-    E I kind == RVALUE_LEN() {
+    EL I kind == RVALUE_LEN() {
         place_ptr := load_i64(rvalue_ptr + 40)
         local_idx := load_i64(place_ptr)
-        I local_idx < locals_len { store_i64(used + local_idx * 8, 1); 0 } E { 0 }
+        I local_idx < locals_len { store_i64(used + local_idx * 8, 1); 0 } EL { 0 }
     }
-    E { 0 }
+    EL { 0 }
 }
 
 # Collect reads from an operand
@@ -563,13 +563,13 @@ F dce_collect_operand_reads(op_ptr: i64, used: i64, locals_len: i64) -> i64 {
     op_kind := load_i64(op_ptr)
     I op_kind == OPERAND_COPY() {
         local_idx := load_i64(op_ptr + 8)
-        I local_idx < locals_len { store_i64(used + local_idx * 8, 1); 0 } E { 0 }
+        I local_idx < locals_len { store_i64(used + local_idx * 8, 1); 0 } EL { 0 }
     }
-    E I op_kind == OPERAND_MOVE() {
+    EL I op_kind == OPERAND_MOVE() {
         local_idx := load_i64(op_ptr + 8)
-        I local_idx < locals_len { store_i64(used + local_idx * 8, 1); 0 } E { 0 }
+        I local_idx < locals_len { store_i64(used + local_idx * 8, 1); 0 } EL { 0 }
     }
-    E { 0 }
+    EL { 0 }
 }
 
 # Collect reads from a terminator
@@ -580,31 +580,31 @@ F dce_collect_terminator_reads(term_ptr: i64, used: i64, locals_len: i64) -> i64
         disc_ptr := load_i64(term_ptr + 16)
         dce_collect_operand_reads(disc_ptr, used, locals_len)
     }
-    E I kind == TERM_CALL() {
+    EL I kind == TERM_CALL() {
         args_ptr := load_i64(term_ptr + 56)
         args_len := load_i64(term_ptr + 64)
         j := mut 0
         L {
-            I j >= args_len { B } E { 0 }
+            I j >= args_len { B } EL { 0 }
             arg := load_i64(args_ptr + j * 8)
             dce_collect_operand_reads(arg, used, locals_len)
             j = j + 1
         }
         0
     }
-    E I kind == TERM_TAIL_CALL() {
+    EL I kind == TERM_TAIL_CALL() {
         args_ptr := load_i64(term_ptr + 56)
         args_len := load_i64(term_ptr + 64)
         j := mut 0
         L {
-            I j >= args_len { B } E { 0 }
+            I j >= args_len { B } EL { 0 }
             arg := load_i64(args_ptr + j * 8)
             dce_collect_operand_reads(arg, used, locals_len)
             j = j + 1
         }
         0
     }
-    E { 0 }
+    EL { 0 }
 }
 
 # ============================================================================
@@ -627,7 +627,7 @@ F mir_remove_unreachable_blocks_v2(body_ptr: i64) -> i64 {
     reachable := malloc(8 * blocks_len)
     i := mut 0
     L {
-        I i >= blocks_len { B } E { 0 }
+        I i >= blocks_len { B } EL { 0 }
         store_i64(reachable + i * 8, 0)
         i = i + 1
     }
@@ -652,13 +652,13 @@ F mir_remove_unreachable_blocks_v2(body_ptr: i64) -> i64 {
         I term_ptr != 0 {
             ub_visit_successors(term_ptr, reachable, worklist, wl_len_buf, blocks_len)
             0
-        } E { 0 }
+        } EL { 0 }
     }
 
     # Replace unreachable blocks
     i = 0
     L {
-        I i >= blocks_len { B } E { 0 }
+        I i >= blocks_len { B } EL { 0 }
         I load_i64(reachable + i * 8) == 0 {
             bb_ptr := load_i64(blocks_ptr + i * 8)
             # Clear statements
@@ -666,7 +666,7 @@ F mir_remove_unreachable_blocks_v2(body_ptr: i64) -> i64 {
             # Set terminator to unreachable
             store_i64(bb_ptr + 16, term_unreachable())
             0
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
 
@@ -685,29 +685,29 @@ F ub_visit_successors(term_ptr: i64, reachable: i64, worklist: i64, wl_len_buf: 
         target := load_i64(term_ptr + 8)
         ub_try_add(target, reachable, worklist, wl_len_buf, blocks_len)
     }
-    E I kind == TERM_SWITCH_INT() {
+    EL I kind == TERM_SWITCH_INT() {
         targets_ptr := load_i64(term_ptr + 24)
         targets_len := load_i64(term_ptr + 32)
         otherwise := load_i64(term_ptr + 40)
 
         j := mut 0
         L {
-            I j >= targets_len { B } E { 0 }
+            I j >= targets_len { B } EL { 0 }
             target_bb := load_i64(targets_ptr + j * 16 + 8)
             ub_try_add(target_bb, reachable, worklist, wl_len_buf, blocks_len)
             j = j + 1
         }
         ub_try_add(otherwise, reachable, worklist, wl_len_buf, blocks_len)
     }
-    E I kind == TERM_CALL() {
+    EL I kind == TERM_CALL() {
         target := load_i64(term_ptr + 8)
         ub_try_add(target, reachable, worklist, wl_len_buf, blocks_len)
     }
-    E I kind == TERM_ASSERT() {
+    EL I kind == TERM_ASSERT() {
         target := load_i64(term_ptr + 8)
         ub_try_add(target, reachable, worklist, wl_len_buf, blocks_len)
     }
-    E { 0 }  # Return/Unreachable/TailCall have no successors
+    EL { 0 }  # Return/Unreachable/TailCall have no successors
 }
 
 # Try to add a block to the worklist if not already reachable
@@ -760,8 +760,8 @@ F mir_count_reachable_blocks(body_ptr: i64) -> i64 {
             I term_kind != TERM_UNREACHABLE() {
                 count = count + 1
                 0
-            } E { 0 }
-        } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
         bi = bi + 1
     }
     count
@@ -784,7 +784,7 @@ F mir_copy_propagation(body_ptr: i64) -> i64 {
     assign_count := malloc(8 * locals_len)
     i := mut 0
     L {
-        I i >= locals_len { B } E { 0 }
+        I i >= locals_len { B } EL { 0 }
         store_i64(copy_target + i * 8, 0 - 1)  # -1 = no copy
         store_i64(assign_count + i * 8, 0)
         i = i + 1
@@ -793,14 +793,14 @@ F mir_copy_propagation(body_ptr: i64) -> i64 {
     # Scan statements
     bi := mut 0
     L {
-        I bi >= blocks_len { B } E { 0 }
+        I bi >= blocks_len { B } EL { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
 
         si := mut 0
         L {
-            I si >= stmts_len { B } E { 0 }
+            I si >= stmts_len { B } EL { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
 
@@ -823,14 +823,14 @@ F mir_copy_propagation(body_ptr: i64) -> i64 {
                             I cnt == 0 {
                                 store_i64(copy_target + local_idx * 8, src_local)
                                 0
-                            } E {
+                            } EL {
                                 store_i64(copy_target + local_idx * 8, 0 - 1)
                                 0
                             }
-                        } E { 0 }
-                    } E { 0 }
-                } E { 0 }
-            } E { 0 }
+                        } EL { 0 }
+                    } EL { 0 }
+                } EL { 0 }
+            } EL { 0 }
 
             si = si + 1
         }
@@ -840,55 +840,55 @@ F mir_copy_propagation(body_ptr: i64) -> i64 {
     # Remove multi-assigned locals
     i = 0
     L {
-        I i >= locals_len { B } E { 0 }
+        I i >= locals_len { B } EL { 0 }
         cnt := load_i64(assign_count + i * 8)
         I cnt > 1 {
             store_i64(copy_target + i * 8, 0 - 1)
             0
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
 
     # Resolve transitive chains: x -> y -> z becomes x -> z
     i = 0
     L {
-        I i >= locals_len { B } E { 0 }
+        I i >= locals_len { B } EL { 0 }
         target := load_i64(copy_target + i * 8)
         I target != (0 - 1) {
             # Follow chain
             cur := mut target
             depth := mut 0
             L {
-                I depth >= 16 { B } E { 0 }  # cycle guard
+                I depth >= 16 { B } EL { 0 }  # cycle guard
                 next := load_i64(copy_target + cur * 8)
-                I next == (0 - 1) { B } E { 0 }
-                I next == cur { B } E { 0 }
+                I next == (0 - 1) { B } EL { 0 }
+                I next == cur { B } EL { 0 }
                 cur = next
                 depth = depth + 1
             }
             store_i64(copy_target + i * 8, cur)
             0
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
 
     # Phase 2: Replace operands
     bi = 0
     L {
-        I bi >= blocks_len { B } E { 0 }
+        I bi >= blocks_len { B } EL { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
 
         si := mut 0
         L {
-            I si >= stmts_len { B } E { 0 }
+            I si >= stmts_len { B } EL { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
             I kind == STMT_MIR_ASSIGN() {
                 rvalue_ptr := load_i64(stmt_ptr + 16)
                 cp2_replace_rvalue(rvalue_ptr, copy_target, locals_len)
-            } E { 0 }
+            } EL { 0 }
             si = si + 1
         }
 
@@ -896,7 +896,7 @@ F mir_copy_propagation(body_ptr: i64) -> i64 {
         I term_ptr != 0 {
             cp2_replace_terminator(term_ptr, copy_target, locals_len)
             0
-        } E { 0 }
+        } EL { 0 }
 
         bi = bi + 1
     }
@@ -916,9 +916,9 @@ F cp2_replace_operand(op_ptr: i64, copy_target: i64, locals_len: i64) -> i64 {
             I target != (0 - 1) {
                 store_i64(op_ptr + 8, target)
                 0
-            } E { 0 }
-        } E { 0 }
-    } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
+    } EL { 0 }
 }
 
 # Replace locals in rvalue for copy propagation
@@ -928,21 +928,21 @@ F cp2_replace_rvalue(rvalue_ptr: i64, copy_target: i64, locals_len: i64) -> i64 
         operand := load_i64(rvalue_ptr + 8)
         cp2_replace_operand(operand, copy_target, locals_len)
     }
-    E I kind == RVALUE_BINOP() {
+    EL I kind == RVALUE_BINOP() {
         lhs := load_i64(rvalue_ptr + 24)
         rhs := load_i64(rvalue_ptr + 32)
         cp2_replace_operand(lhs, copy_target, locals_len)
         cp2_replace_operand(rhs, copy_target, locals_len)
     }
-    E I kind == RVALUE_UNOP() {
+    EL I kind == RVALUE_UNOP() {
         operand := load_i64(rvalue_ptr + 8)
         cp2_replace_operand(operand, copy_target, locals_len)
     }
-    E I kind == RVALUE_CAST() {
+    EL I kind == RVALUE_CAST() {
         operand := load_i64(rvalue_ptr + 8)
         cp2_replace_operand(operand, copy_target, locals_len)
     }
-    E { 0 }
+    EL { 0 }
 }
 
 # Replace locals in terminator for copy propagation
@@ -952,19 +952,19 @@ F cp2_replace_terminator(term_ptr: i64, copy_target: i64, locals_len: i64) -> i6
         disc_ptr := load_i64(term_ptr + 16)
         cp2_replace_operand(disc_ptr, copy_target, locals_len)
     }
-    E I kind == TERM_CALL() || kind == TERM_TAIL_CALL() {
+    EL I kind == TERM_CALL() || kind == TERM_TAIL_CALL() {
         args_ptr := load_i64(term_ptr + 56)
         args_len := load_i64(term_ptr + 64)
         j := mut 0
         L {
-            I j >= args_len { B } E { 0 }
+            I j >= args_len { B } EL { 0 }
             arg := load_i64(args_ptr + j * 8)
             cp2_replace_operand(arg, copy_target, locals_len)
             j = j + 1
         }
         0
     }
-    E { 0 }
+    EL { 0 }
 }
 
 # ============================================================================
@@ -980,14 +980,14 @@ F mir_algebraic_simplification(body_ptr: i64) -> i64 {
 
     bi := mut 0
     L {
-        I bi >= blocks_len { B } E { 0 }
+        I bi >= blocks_len { B } EL { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
 
         si := mut 0
         L {
-            I si >= stmts_len { B } E { 0 }
+            I si >= stmts_len { B } EL { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
 
@@ -997,8 +997,8 @@ F mir_algebraic_simplification(body_ptr: i64) -> i64 {
 
                 I rv_kind == RVALUE_BINOP() {
                     alg_try_simplify(stmt_ptr, rvalue_ptr)
-                } E { 0 }
-            } E { 0 }
+                } EL { 0 }
+            } EL { 0 }
 
             si = si + 1
         }
@@ -1023,13 +1023,13 @@ F alg_try_simplify(stmt_ptr: i64, rvalue_ptr: i64) -> i64 {
             new_rv := rvalue_use(cp_clone_operand(lhs_ptr))
             store_i64(stmt_ptr + 16, new_rv)
             R 1
-        } E { 0 }
+        } EL { 0 }
         I lhs_is_const == 1 && load_i64(lhs_ptr + 16) == CONST_INT() && load_i64(lhs_ptr + 24) == 0 {
             new_rv := rvalue_use(cp_clone_operand(rhs_ptr))
             store_i64(stmt_ptr + 16, new_rv)
             R 1
-        } E { 0 }
-    } E { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     # Check for x - 0 -> x
     I op == BINOP_SUB() {
@@ -1037,7 +1037,7 @@ F alg_try_simplify(stmt_ptr: i64, rvalue_ptr: i64) -> i64 {
             new_rv := rvalue_use(cp_clone_operand(lhs_ptr))
             store_i64(stmt_ptr + 16, new_rv)
             R 1
-        } E { 0 }
+        } EL { 0 }
         # Check for x - x -> 0 (both are Copy/Move of same local)
         I lhs_is_const == 0 && rhs_is_const == 0 {
             lhs_kind := load_i64(lhs_ptr)
@@ -1047,10 +1047,10 @@ F alg_try_simplify(stmt_ptr: i64, rvalue_ptr: i64) -> i64 {
                     new_rv := rvalue_use(operand_const_int(0))
                     store_i64(stmt_ptr + 16, new_rv)
                     R 1
-                } E { 0 }
-            } E { 0 }
-        } E { 0 }
-    } E { 0 }
+                } EL { 0 }
+            } EL { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     # Check for x * 1 -> x
     I op == BINOP_MUL() {
@@ -1058,24 +1058,24 @@ F alg_try_simplify(stmt_ptr: i64, rvalue_ptr: i64) -> i64 {
             new_rv := rvalue_use(cp_clone_operand(lhs_ptr))
             store_i64(stmt_ptr + 16, new_rv)
             R 1
-        } E { 0 }
+        } EL { 0 }
         I lhs_is_const == 1 && load_i64(lhs_ptr + 16) == CONST_INT() && load_i64(lhs_ptr + 24) == 1 {
             new_rv := rvalue_use(cp_clone_operand(rhs_ptr))
             store_i64(stmt_ptr + 16, new_rv)
             R 1
-        } E { 0 }
+        } EL { 0 }
         # x * 0 -> 0
         I rhs_is_const == 1 && load_i64(rhs_ptr + 16) == CONST_INT() && load_i64(rhs_ptr + 24) == 0 {
             new_rv := rvalue_use(operand_const_int(0))
             store_i64(stmt_ptr + 16, new_rv)
             R 1
-        } E { 0 }
+        } EL { 0 }
         I lhs_is_const == 1 && load_i64(lhs_ptr + 16) == CONST_INT() && load_i64(lhs_ptr + 24) == 0 {
             new_rv := rvalue_use(operand_const_int(0))
             store_i64(stmt_ptr + 16, new_rv)
             R 1
-        } E { 0 }
-    } E { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     # Check for x & 0 -> 0
     I op == BINOP_BIT_AND() {
@@ -1083,13 +1083,13 @@ F alg_try_simplify(stmt_ptr: i64, rvalue_ptr: i64) -> i64 {
             new_rv := rvalue_use(operand_const_int(0))
             store_i64(stmt_ptr + 16, new_rv)
             R 1
-        } E { 0 }
+        } EL { 0 }
         I lhs_is_const == 1 && load_i64(lhs_ptr + 16) == CONST_INT() && load_i64(lhs_ptr + 24) == 0 {
             new_rv := rvalue_use(operand_const_int(0))
             store_i64(stmt_ptr + 16, new_rv)
             R 1
-        } E { 0 }
-    } E { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     # Check for x | 0 -> x, x ^ 0 -> x
     I op == BINOP_BIT_OR() || op == BINOP_BIT_XOR() {
@@ -1097,13 +1097,13 @@ F alg_try_simplify(stmt_ptr: i64, rvalue_ptr: i64) -> i64 {
             new_rv := rvalue_use(cp_clone_operand(lhs_ptr))
             store_i64(stmt_ptr + 16, new_rv)
             R 1
-        } E { 0 }
+        } EL { 0 }
         I lhs_is_const == 1 && load_i64(lhs_ptr + 16) == CONST_INT() && load_i64(lhs_ptr + 24) == 0 {
             new_rv := rvalue_use(cp_clone_operand(rhs_ptr))
             store_i64(stmt_ptr + 16, new_rv)
             R 1
-        } E { 0 }
-    } E { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     0
 }
@@ -1124,7 +1124,7 @@ F mir_loop_unrolling(body_ptr: i64) -> i64 {
 
     hi := mut 0
     L {
-        I hi >= blocks_len { B } E { 0 }
+        I hi >= blocks_len { B } EL { 0 }
         bb_ptr := load_i64(blocks_ptr + hi * 8)
         term_ptr := load_i64(bb_ptr + 16)
 
@@ -1150,9 +1150,9 @@ F mir_loop_unrolling(body_ptr: i64) -> i64 {
                                 I load_i64(body_term_ptr + 8) == hi {
                                     loops_back = 1
                                     0
-                                } E { 0 }
-                            } E { 0 }
-                        } E { 0 }
+                                } EL { 0 }
+                            } EL { 0 }
+                        } EL { 0 }
 
                         I loops_back == 1 && body_stmts_len <= max_body_stmts {
                             # Try to detect trip count from header comparison
@@ -1160,12 +1160,12 @@ F mir_loop_unrolling(body_ptr: i64) -> i64 {
                             I trip > 0 && trip <= max_trip {
                                 lu_apply_unroll(blocks_ptr, hi, body_bb, exit_bb, trip)
                                 0
-                            } E { 0 }
-                        } E { 0 }
-                    } E { 0 }
-                } E { 0 }
-            } E { 0 }
-        } E { 0 }
+                            } EL { 0 }
+                        } EL { 0 }
+                    } EL { 0 }
+                } EL { 0 }
+            } EL { 0 }
+        } EL { 0 }
 
         hi = hi + 1
     }
@@ -1196,19 +1196,19 @@ F lu_detect_trip_count(bb_ptr: i64, max_trip: i64) -> i64 {
                 I op == BINOP_LT() {
                     I load_i64(rhs_ptr) == OPERAND_CONSTANT() && load_i64(rhs_ptr + 16) == CONST_INT() {
                         bound := load_i64(rhs_ptr + 24)
-                        I bound > 0 && bound <= max_trip { R bound } E { 0 }
-                    } E { 0 }
+                        I bound > 0 && bound <= max_trip { R bound } EL { 0 }
+                    } EL { 0 }
                 }
                 # Le: trip count = bound + 1
-                E I op == BINOP_LE() {
+                EL I op == BINOP_LE() {
                     I load_i64(rhs_ptr) == OPERAND_CONSTANT() && load_i64(rhs_ptr + 16) == CONST_INT() {
                         bound := load_i64(rhs_ptr + 24) + 1
-                        I bound > 0 && bound <= max_trip { R bound } E { 0 }
-                    } E { 0 }
+                        I bound > 0 && bound <= max_trip { R bound } EL { 0 }
+                    } EL { 0 }
                 }
-                E { 0 }
-            } E { 0 }
-        } E { 0 }
+                EL { 0 }
+            } EL { 0 }
+        } EL { 0 }
 
         si = si - 1
     }
@@ -1234,7 +1234,7 @@ F lu_apply_unroll(blocks_ptr: i64, header_idx: i64, body_idx: i64, exit_bb: i64,
     # Copy header stmts
     i := mut 0
     L {
-        I i >= header_stmts_len { B } E { 0 }
+        I i >= header_stmts_len { B } EL { 0 }
         store_i64(new_stmts + i * 8, load_i64(header_stmts_ptr + i * 8))
         i = i + 1
     }
@@ -1243,10 +1243,10 @@ F lu_apply_unroll(blocks_ptr: i64, header_idx: i64, body_idx: i64, exit_bb: i64,
     t := mut 0
     write_idx := mut header_stmts_len
     L {
-        I t >= trip_count { B } E { 0 }
+        I t >= trip_count { B } EL { 0 }
         j := mut 0
         L {
-            I j >= body_stmts_len { B } E { 0 }
+            I j >= body_stmts_len { B } EL { 0 }
             store_i64(new_stmts + write_idx * 8, load_i64(body_stmts_ptr + j * 8))
             write_idx = write_idx + 1
             j = j + 1

@@ -104,7 +104,7 @@ X Database {
                 path: path,
                 is_open: 1
             }
-        } E {
+        } EL {
             Database {
                 handle: 0,
                 path: path,
@@ -120,7 +120,7 @@ X Database {
 
     # Check if the database is open
     F is_valid(&self) -> i64 {
-        I self.is_open == 1 & self.handle != 0 { 1 } E { 0 }
+        I self.is_open == 1 & self.handle != 0 { 1 } EL { 0 }
     }
 
     # Close the database connection
@@ -130,7 +130,7 @@ X Database {
             self.handle = 0
             self.is_open = 0
             rc
-        } E {
+        } EL {
             SQLITE_OK
         }
     }
@@ -162,7 +162,7 @@ X Database {
                 db_handle: self.handle,
                 column_count: col_count
             }
-        } E {
+        } EL {
             Statement {
                 handle: 0,
                 db_handle: self.handle,
@@ -175,7 +175,7 @@ X Database {
     F error_message(&self) -> str {
         I self.handle != 0 {
             __sqlite_errmsg(self.handle)
-        } E {
+        } EL {
             "Database not open"
         }
     }
@@ -264,7 +264,7 @@ S Statement {
 X Statement {
     # Check if statement is valid
     F is_valid(&self) -> i64 {
-        I self.handle != 0 { 1 } E { 0 }
+        I self.handle != 0 { 1 } EL { 0 }
     }
 
     # Bind an integer value to a parameter (1-indexed)
@@ -380,7 +380,7 @@ X Statement {
             rc := __sqlite_finalize(self.handle)
             self.handle = 0
             rc
-        } E {
+        } EL {
             SQLITE_OK
         }
     }
@@ -391,13 +391,13 @@ X Statement {
         rc := self.step()
         I rc == SQLITE_DONE {
             SQLITE_OK
-        } E I rc == SQLITE_ROW {
+        } EL I rc == SQLITE_ROW {
             # Consume remaining rows
-            L rc == SQLITE_ROW {
+            LW rc == SQLITE_ROW {
                 rc = self.step()
             }
-            I rc == SQLITE_DONE { SQLITE_OK } E { rc }
-        } E {
+            I rc == SQLITE_DONE { SQLITE_OK } EL { rc }
+        } EL {
             rc
         }
     }
@@ -468,7 +468,7 @@ X Row {
 
     # Check if a column is NULL (0-indexed)
     F is_null(&self, index: i64) -> i64 {
-        I self.get_type(index) == SQLITE_NULL { 1 } E { 0 }
+        I self.get_type(index) == SQLITE_NULL { 1 } EL { 0 }
     }
 
     # Get column count
@@ -511,7 +511,7 @@ F table_exists(db: &Database, name: str) -> i64 {
         result = stmt.column_int(0)
     }
     stmt.finalize()
-    I result > 0 { 1 } E { 0 }
+    I result > 0 { 1 } EL { 0 }
 }
 
 # Count the number of rows in a table.
@@ -594,15 +594,15 @@ F result_code_str(code: i64) -> str {
 
 # Check if a result code indicates success
 F is_ok(code: i64) -> i64 {
-    I code == SQLITE_OK { 1 } E { 0 }
+    I code == SQLITE_OK { 1 } EL { 0 }
 }
 
 # Check if a step result indicates a row is available
 F has_row(code: i64) -> i64 {
-    I code == SQLITE_ROW { 1 } E { 0 }
+    I code == SQLITE_ROW { 1 } EL { 0 }
 }
 
 # Check if a step result indicates completion
 F is_done(code: i64) -> i64 {
-    I code == SQLITE_DONE { 1 } E { 0 }
+    I code == SQLITE_DONE { 1 } EL { 0 }
 }

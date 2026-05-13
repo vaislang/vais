@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/math
+use std/math
 ```
 
 ## Constants
@@ -80,9 +80,9 @@ U std/math
 ### Basic Calculations
 
 ```vais
-U std/math
+use std/math
 
-F main() -> i64 {
+fn main() -> i64 {
     # Absolute value
     x := abs(-42.5)  # 42.5
     y := abs_i64(-10)  # 10
@@ -101,9 +101,9 @@ F main() -> i64 {
 ### Trigonometry
 
 ```vais
-U std/math
+use std/math
 
-F main() -> i64 {
+fn main() -> i64 {
     # Convert degrees to radians
     angle := deg_to_rad(45.0)
 
@@ -125,9 +125,9 @@ F main() -> i64 {
 ### Power and Logarithms
 
 ```vais
-U std/math
+use std/math
 
-F main() -> i64 {
+fn main() -> i64 {
     # Exponentiation
     squared := pow(5.0, 2.0)  # 25.0
     cubed := pow(2.0, 3.0)    # 8.0
@@ -152,9 +152,9 @@ F main() -> i64 {
 ### Rounding Operations
 
 ```vais
-U std/math
+use std/math
 
-F main() -> i64 {
+fn main() -> i64 {
     x := 3.7
     y := 3.2
 
@@ -173,9 +173,9 @@ F main() -> i64 {
 ### Floating-Point Comparison
 
 ```vais
-U std/math
+use std/math
 
-F main() -> i64 {
+fn main() -> i64 {
     a := 0.1 + 0.2
     b := 0.3
 
@@ -195,16 +195,16 @@ F main() -> i64 {
 ### Practical Example: Distance Calculation
 
 ```vais
-U std/math
+use std/math
 
 # Calculate Euclidean distance between two points
-F distance(x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
+fn distance(x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
     dx := x2 - x1
     dy := y2 - y1
     sqrt(dx * dx + dy * dy)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     dist := distance(0.0, 0.0, 3.0, 4.0)  # 5.0
     0
 }
@@ -213,17 +213,17 @@ F main() -> i64 {
 ### Practical Example: Circle Calculations
 
 ```vais
-U std/math
+use std/math
 
-F circle_area(radius: f64) -> f64 {
+fn circle_area(radius: f64) -> f64 {
     PI * radius * radius
 }
 
-F circle_circumference(radius: f64) -> f64 {
+fn circle_circumference(radius: f64) -> f64 {
     TAU * radius  # or 2.0 * PI * radius
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     r := 5.0
     area := circle_area(r)
     circ := circle_circumference(r)

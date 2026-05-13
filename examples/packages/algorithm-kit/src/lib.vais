@@ -60,7 +60,7 @@ F collatz_steps(n: i64) -> i64 {
         I val <= 1 { B 0 }
         I val % 2 == 0 {
             val = val / 2
-        } E {
+        } EL {
             val = val * 3 + 1
         }
         steps = steps + 1

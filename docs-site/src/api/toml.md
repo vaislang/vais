@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/toml
+use std/toml
 ```
 
 ## Overview
@@ -28,7 +28,7 @@ The `toml` module provides a recursive-descent TOML parser and generator. It sup
 ### Parsing
 
 ```vais
-F toml_parse(input: str) -> i64
+fn toml_parse(input: str) -> i64
 ```
 
 Parse a TOML string into a tagged value tree. Returns a pointer to the root value.
@@ -36,38 +36,38 @@ Parse a TOML string into a tagged value tree. Returns a pointer to the root valu
 ### Value Access
 
 ```vais
-F toml_get_type(value: i64) -> i64     # Get value tag/type
-F toml_get_int(value: i64) -> i64      # Get integer value
-F toml_get_bool(value: i64) -> i64     # Get boolean value
-F toml_get_str(value: i64) -> str      # Get string value
+fn toml_get_type(value: i64) -> i64     # Get value tag/type
+fn toml_get_int(value: i64) -> i64      # Get integer value
+fn toml_get_bool(value: i64) -> i64     # Get boolean value
+fn toml_get_str(value: i64) -> str      # Get string value
 ```
 
 ### Table Operations
 
 ```vais
-F toml_table_get(table: i64, key: str) -> i64   # Lookup key in table
-F toml_table_len(table: i64) -> i64              # Number of keys
+fn toml_table_get(table: i64, key: str) -> i64   # Lookup key in table
+fn toml_table_len(table: i64) -> i64              # Number of keys
 ```
 
 ### Array Operations
 
 ```vais
-F toml_array_get(array: i64, index: i64) -> i64  # Get element at index
-F toml_array_len(array: i64) -> i64               # Number of elements
+fn toml_array_get(array: i64, index: i64) -> i64  # Get element at index
+fn toml_array_len(array: i64) -> i64               # Number of elements
 ```
 
 ### Generation
 
 ```vais
-F toml_to_string(value: i64) -> str    # Serialize value to TOML string
+fn toml_to_string(value: i64) -> str    # Serialize value to TOML string
 ```
 
 ## Example
 
 ```vais
-U std/toml
+use std/toml
 
-F main() {
+fn main() {
     input := "[server]\nhost = \"localhost\"\nport = 8080"
     doc := toml_parse(input)
     server := toml_table_get(doc, "server")

@@ -115,7 +115,7 @@ F test_alternating(iterations: i64) -> i64 {
         # Alternate between small (2KB) and large (16KB) buffers
         size := I i % 2 == 0 {
             R 2048
-        } E {
+        } EL {
             R 16384
         }
 
@@ -152,9 +152,9 @@ F test_stress(iterations: i64) -> i64 {
         # Vary sizes: small (1KB), medium (16KB), large (64KB)
         size := I i % 3 == 0 {
             R 1024
-        } E I i % 3 == 1 {
+        } EL I i % 3 == 1 {
             R 16384
-        } E {
+        } EL {
             R 65536
         }
 

@@ -602,7 +602,9 @@ F main() -> i64 {
 
 #[test]
 fn test_result_generic_unwrap_operator() {
-    // ! operator with Result
+    // ! operator with Result.
+    // Phase 4c.2: `!` unwrap is a panic source (panics on `Err`), so the
+    // caller must be marked `partial` to opt out of the totality gate.
     assert_exit_code(
         r#"
 E Result { Ok(i64), Err(i64) }
@@ -611,7 +613,7 @@ F get_value() -> Result {
     Ok(55)
 }
 
-F main() -> i64 {
+partial F main() -> i64 {
     get_value()!
 }
 "#,

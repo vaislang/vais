@@ -28,7 +28,7 @@ X SimpleCounter: Iterator {
     }
 
     F has_next(&self) -> i64 {
-        I self.value < 10 { 1 } E { 0 }
+        I self.value < 10 { 1 } EL { 0 }
     }
 }
 

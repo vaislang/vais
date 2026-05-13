@@ -5,10 +5,20 @@ use crate::{ParseError, ParseResult, Parser};
 
 impl Parser {
     /// Parse function: `name(params)->ret=expr` or `name(params)->ret{...}`
+    ///
+    /// `is_partial` marks the function as exempt from the Phase 4c.2 totality
+    /// gate — see `vais_ast::Function::is_partial` for the full semantics.
+    ///
+    /// `declared_effect` carries the Phase 4c.3 prefix keyword (`pure`, `io`,
+    /// or `alloc`) that the caller already consumed. See
+    /// `vais_ast::Function::declared_effect` for the subtype rules enforced
+    /// by the type checker.
     pub(crate) fn parse_function(
         &mut self,
         is_pub: bool,
         is_async: bool,
+        is_partial: bool,
+        declared_effect: Option<EffectPrefix>,
         attributes: Vec<Attribute>,
     ) -> ParseResult<Function> {
         let name = self.parse_ident()?;
@@ -57,9 +67,82 @@ impl Parser {
             body,
             is_pub,
             is_async,
+            is_partial,
+            declared_effect,
             attributes,
             where_clause,
         })
+    }
+
+    /// Parse an optional Phase 4c.3 effect prefix keyword and consume it.
+    ///
+    /// Recognises `pure` and `io` (full reserved keywords) and
+    /// `alloc` (a **contextual** keyword — see the note on
+    /// `Token::Pure` in the lexer for why `alloc` stays a regular
+    /// identifier everywhere else). Returns `None` if the current
+    /// token is not an effect prefix — callers decide whether a
+    /// missing prefix is legal at their grammar position.
+    ///
+    /// ## `alloc` disambiguation (contextual keyword)
+    ///
+    /// The lexer emits `alloc` as `Token::Ident("alloc")` because
+    /// `std/allocator.vais` and `std/arena.vais` already use it as a
+    /// method / variable name in ~40 places. We accept it as an effect
+    /// prefix iff **the very next token** (peek-ahead +1) is either
+    /// `F`, `A`, `P`, `partial`, `pure`, or `io` — i.e. only in a
+    /// position where a function modifier could legally start. If the
+    /// next token is anything else (a method call, a binding, ...)
+    /// we leave `alloc` in the token stream untouched for the caller.
+    ///
+    /// The three prefixes are mutually exclusive: a function may carry
+    /// at most one effect prefix. We enforce this by only consuming a
+    /// single token and returning — any additional effect prefix that
+    /// follows will be seen by `expect(Token::Function)` downstream and
+    /// reported as an unexpected-token error.
+    pub(crate) fn parse_effect_prefix(&mut self) -> Option<EffectPrefix> {
+        if self.check(&Token::Pure) {
+            self.advance();
+            return Some(EffectPrefix::Pure);
+        }
+        if self.check(&Token::Io) {
+            self.advance();
+            return Some(EffectPrefix::Io);
+        }
+        // Contextual: `alloc` is a regular identifier at the lexer
+        // level. Promote it to an effect prefix only when the token
+        // immediately following it is something that can legally start
+        // a function item. We intentionally do NOT mix `pure` / `io`
+        // here: those are lexer keywords and can't appear as a normal
+        // identifier anyway.
+        if self.is_contextual_alloc_prefix() {
+            self.advance();
+            return Some(EffectPrefix::Alloc);
+        }
+        None
+    }
+
+    /// Read-only predicate: is the current token `alloc` acting as a
+    /// Phase 4c.3 effect prefix? Used by the struct/impl method-loop
+    /// lookahead that has to decide "is this an effect-prefixed
+    /// method or a field declaration called `alloc`?" without
+    /// committing to the consumption `parse_effect_prefix` performs.
+    pub(crate) fn is_contextual_alloc_prefix(&self) -> bool {
+        let Some(tok) = self.tokens.get(self.pos) else {
+            return false;
+        };
+        let Token::Ident(name) = &tok.token else {
+            return false;
+        };
+        if name != "alloc" {
+            return false;
+        }
+        let Some(next) = self.tokens.get(self.pos + 1) else {
+            return false;
+        };
+        matches!(
+            next.token,
+            Token::Function | Token::Async | Token::Partial | Token::Pure | Token::Io
+        )
     }
 
     /// Parse struct: `Name{fields}` with optional methods
@@ -68,7 +151,7 @@ impl Parser {
         is_pub: bool,
         attributes: Vec<Attribute>,
     ) -> ParseResult<Struct> {
-        let name = self.parse_ident()?;
+        let name = self.parse_ident_or_keyword()?;
         let generics = self.parse_generics()?;
 
         // Parse where clause
@@ -86,12 +169,32 @@ impl Parser {
             if self.check(&Token::Function)
                 || self.check(&Token::Pub)
                 || self.check(&Token::Async)
+                || self.check(&Token::Partial)
+                || self.check(&Token::Pure)
+                || self.check(&Token::Io)
+                || self.is_contextual_alloc_prefix()
                 || !method_attrs.is_empty()
             {
                 let is_method_pub = self.check(&Token::Pub);
                 if is_method_pub {
                     self.advance();
                 }
+                // Phase 4c.2 — optional `partial` on struct methods.
+                // Accept before or after `P`: both `P partial F` and
+                // `partial P F` feel natural to users. We only accept
+                // the canonical `P partial F` here; the other order can
+                // be added later if users ask.
+                let is_method_partial = if self.check(&Token::Partial) {
+                    self.advance();
+                    true
+                } else {
+                    false
+                };
+                // Phase 4c.3 (Task #54) — optional effect prefix
+                // (`pure` / `io` / `alloc`) on struct methods. Canonical
+                // order: `P partial pure F method()`. Mutually exclusive:
+                // a method may declare at most one effect prefix.
+                let method_declared_effect = self.parse_effect_prefix();
                 // Check for async method: `A F method_name(...)`
                 let is_method_async = if self.check(&Token::Async) {
                     self.advance();
@@ -100,7 +203,13 @@ impl Parser {
                     false
                 };
                 self.expect(&Token::Function)?;
-                let method = self.parse_function(is_method_pub, is_method_async, method_attrs)?;
+                let method = self.parse_function(
+                    is_method_pub,
+                    is_method_async,
+                    is_method_partial,
+                    method_declared_effect,
+                    method_attrs,
+                )?;
                 let end = self.prev_span().end;
                 methods.push(Spanned::new(method, Span::new(start, end)));
             } else {
@@ -130,21 +239,43 @@ impl Parser {
         is_pub: bool,
         attributes: Vec<Attribute>,
     ) -> ParseResult<Enum> {
-        let name = self.parse_ident()?;
+        let name = self.parse_ident_or_keyword()?;
         let generics = self.parse_generics()?;
 
-        let lbrace_span = self.current_span();
-        self.expect(&Token::LBrace)?;
         let mut variants = Vec::new();
 
-        while !self.check(&Token::RBrace) && !self.is_at_end() {
-            variants.push(self.parse_variant()?);
-            if !self.check(&Token::RBrace) {
-                self.expect(&Token::Comma)?;
+        // Support both syntaxes:
+        // E Name { V1, V2 { field: T }, V3 }     (brace syntax)
+        // E Name = V1 | V2 { field: T } | V3;    (pipe syntax)
+        if self.check(&Token::Eq) {
+            // Pipe syntax: E Name = V1 | V2 | V3;
+            self.advance(); // consume '='
+            loop {
+                variants.push(self.parse_variant()?);
+                if self.check(&Token::Pipe) {
+                    self.advance(); // consume '|'
+                } else {
+                    break;
+                }
             }
-        }
+            // Optional trailing semicolon
+            if self.check(&Token::Semi) {
+                self.advance();
+            }
+        } else {
+            // Brace syntax: E Name { V1, V2, V3 }
+            let lbrace_span = self.current_span();
+            self.expect(&Token::LBrace)?;
 
-        self.expect_closing(&Token::RBrace, lbrace_span)?;
+            while !self.check(&Token::RBrace) && !self.is_at_end() {
+                variants.push(self.parse_variant()?);
+                if !self.check(&Token::RBrace) {
+                    self.expect(&Token::Comma)?;
+                }
+            }
+
+            self.expect_closing(&Token::RBrace, lbrace_span)?;
+        }
 
         Ok(Enum {
             name,
@@ -192,7 +323,7 @@ impl Parser {
 
     /// Parse union: `Name{fields}` (untagged union, C-style)
     pub(super) fn parse_union(&mut self, is_pub: bool) -> ParseResult<Union> {
-        let name = self.parse_ident()?;
+        let name = self.parse_ident_or_keyword()?;
         let generics = self.parse_generics()?;
 
         let lbrace_span = self.current_span();
@@ -231,7 +362,7 @@ impl Parser {
                 self.advance(); // consume ident
                 let has_plus = self.check(&Token::Plus);
                 self.pos = saved_pos; // restore
-                self.pending_gt = false;
+                self.pending_gt_count = 0;
                 has_plus
             } else {
                 false

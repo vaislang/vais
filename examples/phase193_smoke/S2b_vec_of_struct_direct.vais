@@ -1,0 +1,22 @@
+# S2b: Avoid Option<T> pattern match; use Vec.get with explicit return type.
+# Isolates whether match arm type inference or Vec<Struct{str}> method is the issue.
+
+U std/vec
+
+S Person {
+    name: str,
+    age: i64
+}
+
+F main() -> i64 {
+    v := Vec.with_capacity(4)
+    v.push(Person { name: "Alice", age: 30 })
+    v.push(Person { name: "Bob",   age: 25 })
+    v.push(Person { name: "Carol", age: 40 })
+
+    n := v.len()
+    puts("S2b: len = {n}")
+
+    # Expected: len=3, exit 0 (no get/iteration)
+    I n == 3 { 0 } EL { 1 }
+}

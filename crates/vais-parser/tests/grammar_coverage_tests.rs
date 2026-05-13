@@ -42,6 +42,7 @@ fn assert_parses_expr(source: &str) {
     assert_parses(&wrapped);
 }
 
+#[allow(dead_code)]
 fn assert_expr_fails(source: &str) {
     let wrapped = format!("F __test__() -> i64 {{ {} }}", source);
     assert_parse_fails(&wrapped);
@@ -421,7 +422,7 @@ mod items {
 
     #[test]
     fn grammar_item_const_public() {
-        let m = parse_ok("P C PI: f64 = 3.14");
+        let m = parse_ok("P C pi: f64 = 3.14");
         match &m.items[0].node {
             Item::Const(c) => assert!(c.is_pub),
             other => panic!("Expected Const, got {:?}", other),
@@ -566,11 +567,6 @@ mod types {
     }
 
     #[test]
-    fn grammar_type_lazy() {
-        assert_parses("F f(x: Lazy<i64>) -> i64 = 0");
-    }
-
-    #[test]
     fn grammar_type_fn_type() {
         assert_parses("F f(cb: (i64, i64) -> i64) -> i64 = 0");
     }
@@ -600,16 +596,8 @@ mod types {
         assert_parses("F f(x: affine i64) -> i64 = 0");
     }
 
-    #[test]
-    fn grammar_type_impl_trait() {
-        // Vais uses `X Trait` for existential/impl trait (not `impl`)
-        assert_parses("F f(x: i64) -> X Display = 0");
-    }
-
-    #[test]
-    fn grammar_type_impl_trait_multi_bound() {
-        assert_parses("F f(x: i64) -> X Display + Debug = 0");
-    }
+    // grammar_type_impl_trait{,_multi_bound} REMOVED (ROADMAP #18):
+    // `X Trait` return-position existential types were removed.
 }
 
 // =============================================================================
@@ -967,13 +955,6 @@ mod expressions {
         assert_parses_expr("move |x| x + 1");
     }
 
-    // --- Spawn ---
-
-    #[test]
-    fn grammar_expr_spawn() {
-        assert_parses_expr("spawn foo()");
-    }
-
     // --- Yield ---
 
     #[test]
@@ -1020,20 +1001,6 @@ mod expressions {
     #[test]
     fn grammar_expr_assume() {
         assert_parses_expr("assume(x > 0)");
-    }
-
-    // --- Lazy ---
-
-    #[test]
-    fn grammar_expr_lazy() {
-        assert_parses_expr("lazy 42");
-    }
-
-    // --- Force ---
-
-    #[test]
-    fn grammar_expr_force() {
-        assert_parses_expr("force x");
     }
 
     // --- Pipe operator ---
@@ -1331,8 +1298,8 @@ mod negative {
 
     #[test]
     fn grammar_neg_extern_without_brace() {
-        // N without braces should fail
-        assert_parse_fails("N F foo() -> i64");
+        // N without F or { should fail — N F foo() is valid (single extern function)
+        assert_parse_fails("N foo()");
     }
 
     #[test]
@@ -1412,7 +1379,6 @@ fn grammar_sync_expr_variants() {
             | Expr::Assign { .. }
             | Expr::AssignOp { .. }
             | Expr::Lambda { .. }
-            | Expr::Spawn(_)
             | Expr::Yield(_)
             | Expr::Comptime { .. }
             | Expr::MacroInvoke(_)
@@ -1420,11 +1386,11 @@ fn grammar_sync_expr_variants() {
             | Expr::Assert { .. }
             | Expr::Assume(_)
             | Expr::Error { .. }
-            | Expr::Lazy(_)
-            | Expr::Force(_) => {}
+            | Expr::EnumAccess { .. }
+            | Expr::TupleFieldAccess { .. } => {}
         }
     }
-    // Count: 46 variants as of Phase 64
+    // Count: 48 variants as of Phase 182
 }
 
 /// Compile-time guard: if Item variants change, this match will fail to compile.
@@ -1489,7 +1455,6 @@ fn grammar_sync_type_variants() {
             | Type::SliceMut(_)
             | Type::RefLifetime { .. }
             | Type::RefMutLifetime { .. }
-            | Type::Lazy(_)
             | Type::Fn { .. }
             | Type::Unit
             | Type::Infer
@@ -1497,11 +1462,10 @@ fn grammar_sync_type_variants() {
             | Type::Associated { .. }
             | Type::Linear(_)
             | Type::Affine(_)
-            | Type::ImplTrait { .. }
             | Type::Dependent { .. } => {}
         }
     }
-    // Count: 25 variants as of Phase 64
+    // Count: 24 variants after ImplTrait removal (ROADMAP #18)
 }
 
 /// Compile-time guard: if Pattern variants change, this match will fail to compile.
@@ -2044,47 +2008,9 @@ mod const_params_and_variance {
         assert_parses("F f<-T: Clone>(x: T) -> i64 = 0");
     }
 
-    // --- Higher-kinded type parameters (HKT) ---
-
-    #[test]
-    fn grammar_hkt_basic() {
-        // Note: use 'Ctr' not 'F' because F is a keyword in Vais
-        // Use space between > > to avoid >> being tokenized as Shr
-        let m = parse_ok("F f<Ctr<_> >(x: i64) -> i64 = 0");
-        match &m.items[0].node {
-            Item::Function(f) => {
-                assert!(f.generics[0].is_higher_kinded());
-                match &f.generics[0].kind {
-                    GenericParamKind::HigherKinded { arity, .. } => {
-                        assert_eq!(arity, &1);
-                    }
-                    other => panic!("Expected HigherKinded, got {:?}", other),
-                }
-            }
-            other => panic!("Expected Function, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn grammar_hkt_multi_arity() {
-        // Use space between > > to avoid >> tokenized as Shr
-        let m = parse_ok("F f<Ctr<_, _> >(x: i64) -> i64 = 0");
-        match &m.items[0].node {
-            Item::Function(f) => match &f.generics[0].kind {
-                GenericParamKind::HigherKinded { arity, .. } => {
-                    assert_eq!(arity, &2);
-                }
-                other => panic!("Expected HigherKinded, got {:?}", other),
-            },
-            other => panic!("Expected Function, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn grammar_hkt_with_bound() {
-        // Use space between > > to avoid >> tokenized as Shr
-        assert_parses("F f<Ctr<_>: Functor>(x: i64) -> i64 = 0");
-    }
+    // --- Higher-kinded type parameters (HKT) — REMOVED (ROADMAP #18) ---
+    // HKT parameter syntax `F<_>` was removed from the language.
+    // Tests grammar_hkt_basic / grammar_hkt_multi_arity / grammar_hkt_with_bound deleted.
 }
 
 // =============================================================================

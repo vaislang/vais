@@ -198,7 +198,8 @@ fn base64_digit(value: u8) -> char {
         52..=61 => (b'0' + (value - 52)) as char,
         62 => '+',
         63 => '/',
-        _ => panic!("Invalid base64 digit: {}", value),
+        // SAFETY: VLQ encoding only produces 6-bit values (0-63)
+        _ => unreachable!("Invalid base64 digit: {}", value),
     }
 }
 

@@ -9,10 +9,14 @@ use super::resolved::{ConstBinOp, ResolvedConst, ResolvedType};
 const MAX_SUBSTITUTE_DEPTH: usize = 64;
 
 /// Substitute generic type parameters with concrete types
+#[inline]
 pub fn substitute_type(
     ty: &ResolvedType,
     substitutions: &HashMap<String, ResolvedType>,
 ) -> ResolvedType {
+    if substitutions.is_empty() {
+        return ty.clone();
+    }
     substitute_type_impl(ty, substitutions, 0)
 }
 
@@ -30,30 +34,15 @@ fn substitute_type_impl(
             .cloned()
             .unwrap_or_else(|| ty.clone()),
         ResolvedType::Named { name, generics } => {
-            // HKT application: if name itself is a substitution target (e.g., F<A> where F=Vec),
-            // replace the constructor name and recurse into generic args.
-            // NOTE: This HKT application logic is mirrored in inference.rs::substitute_generics().
-            // Any changes here must be synchronized with that function.
+            // Direct substitution: if name itself is a substitution target (e.g., bare T → I64),
+            // return the substituted type.
             if let Some(subst) = substitutions.get(name) {
-                if !generics.is_empty() {
-                    // F<A> where F→Vec, A→i64 becomes Vec<i64>
-                    let concrete_name = match subst {
-                        ResolvedType::Named { name: concrete, .. }
-                        | ResolvedType::HigherKinded { name: concrete, .. } => concrete.clone(),
-                        _ => name.clone(),
-                    };
-                    let new_generics: Vec<ResolvedType> = generics
-                        .iter()
-                        .map(|g| substitute_type_impl(g, substitutions, depth + 1))
-                        .collect();
-                    return ResolvedType::Named {
-                        name: concrete_name,
-                        generics: new_generics,
-                    };
-                } else {
-                    // No generics applied — direct substitution (e.g., bare F)
+                if generics.is_empty() {
                     return subst.clone();
                 }
+                // Named<T> where the type constructor itself is substituted: fall through to
+                // recurse into generics, since higher-kinded substitutions were removed
+                // in ROADMAP #18 along with ResolvedType::HigherKinded.
             }
 
             // Early return if no generics to recurse into
@@ -229,11 +218,6 @@ fn substitute_type_impl(
                 size: new_size,
             }
         }
-        // HigherKinded: substitute if a mapping exists
-        ResolvedType::HigherKinded { name, .. } => substitutions
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| ty.clone()),
         ResolvedType::Map(k, v) => {
             let new_k = substitute_type_impl(k, substitutions, depth + 1);
             let new_v = substitute_type_impl(v, substitutions, depth + 1);
@@ -307,10 +291,6 @@ fn substitute_type_impl(
                 generics: new_generics,
             }
         }
-        ResolvedType::ImplTrait { bounds: _ } => {
-            // Bounds are String trait names, no type substitution needed
-            ty.clone()
-        }
         ResolvedType::Associated {
             base,
             trait_name,
@@ -341,13 +321,6 @@ fn substitute_type_impl(
                 assoc_name: assoc_name.clone(),
                 generics: new_generics,
             }
-        }
-        ResolvedType::Lazy(inner) => {
-            let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
-            if inner.as_ref() == &new_inner {
-                return ty.clone();
-            }
-            ResolvedType::Lazy(Box::new(new_inner))
         }
         ResolvedType::Linear(inner) => {
             let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
@@ -398,33 +371,36 @@ fn substitute_type_impl(
                 inner: Box::new(new_inner),
             }
         }
-        ResolvedType::Lifetime(_) => {
+        ResolvedType::Lifetime(name) => {
             // Lifetime parameters are not substituted
-            ty.clone()
+            ResolvedType::Lifetime(name.clone())
         }
-        // Primitives pass through unchanged
-        ResolvedType::I8
-        | ResolvedType::I16
-        | ResolvedType::I32
-        | ResolvedType::I64
-        | ResolvedType::I128
-        | ResolvedType::U8
-        | ResolvedType::U16
-        | ResolvedType::U32
-        | ResolvedType::U64
-        | ResolvedType::U128
-        | ResolvedType::F32
-        | ResolvedType::F64
-        | ResolvedType::Bool
-        | ResolvedType::Str
-        | ResolvedType::Unit
-        | ResolvedType::Unknown
-        | ResolvedType::Never
-        | ResolvedType::Var(_) => ty.clone(),
+        // Primitives and simple variants pass through unchanged.
+        // Use explicit construction instead of clone() to avoid vtable dispatch
+        // and potential heap allocation overhead on non-Copy enum variants.
+        ResolvedType::I8 => ResolvedType::I8,
+        ResolvedType::I16 => ResolvedType::I16,
+        ResolvedType::I32 => ResolvedType::I32,
+        ResolvedType::I64 => ResolvedType::I64,
+        ResolvedType::I128 => ResolvedType::I128,
+        ResolvedType::U8 => ResolvedType::U8,
+        ResolvedType::U16 => ResolvedType::U16,
+        ResolvedType::U32 => ResolvedType::U32,
+        ResolvedType::U64 => ResolvedType::U64,
+        ResolvedType::U128 => ResolvedType::U128,
+        ResolvedType::F32 => ResolvedType::F32,
+        ResolvedType::F64 => ResolvedType::F64,
+        ResolvedType::Bool => ResolvedType::Bool,
+        ResolvedType::Str => ResolvedType::Str,
+        ResolvedType::Unit => ResolvedType::Unit,
+        ResolvedType::Unknown => ResolvedType::Unknown,
+        ResolvedType::Never => ResolvedType::Never,
+        ResolvedType::Var(id) => ResolvedType::Var(*id),
     }
 }
 
 /// Substitute const parameter names in a ResolvedConst expression
+#[inline]
 pub fn substitute_const(
     c: &ResolvedConst,
     _substitutions: &HashMap<String, ResolvedType>,
@@ -434,6 +410,7 @@ pub fn substitute_const(
 }
 
 /// Substitute const parameters with concrete values in a ResolvedConst expression
+#[inline]
 pub fn substitute_const_values(
     c: &ResolvedConst,
     const_subs: &HashMap<String, i64>,

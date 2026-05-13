@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/protobuf
+use std/protobuf
 ```
 
 ## Overview
@@ -37,32 +37,32 @@ The `protobuf` module implements the [Protocol Buffers](https://protobuf.dev/pro
 ### Buffer Management
 
 ```vais
-F pb_buf_new() -> i64    # Create a new encoding buffer (256 bytes initial)
+fn pb_buf_new() -> i64    # Create a new encoding buffer (256 bytes initial)
 ```
 
 ### Encoding Functions
 
 ```vais
-F pb_encode_varint(buf: i64, field: i64, value: i64) -> i64
-F pb_encode_fixed64(buf: i64, field: i64, value: i64) -> i64
-F pb_encode_fixed32(buf: i64, field: i64, value: i64) -> i64
-F pb_encode_bytes(buf: i64, field: i64, data: i64, len: i64) -> i64
-F pb_encode_string(buf: i64, field: i64, s: str) -> i64
+fn pb_encode_varint(buf: i64, field: i64, value: i64) -> i64
+fn pb_encode_fixed64(buf: i64, field: i64, value: i64) -> i64
+fn pb_encode_fixed32(buf: i64, field: i64, value: i64) -> i64
+fn pb_encode_bytes(buf: i64, field: i64, data: i64, len: i64) -> i64
+fn pb_encode_string(buf: i64, field: i64, s: str) -> i64
 ```
 
 ### Decoding Functions
 
 ```vais
-F pb_decode_field(data: i64, pos: i64, len: i64) -> i64
-F pb_decode_varint(data: i64, pos: i64) -> i64
+fn pb_decode_field(data: i64, pos: i64, len: i64) -> i64
+fn pb_decode_varint(data: i64, pos: i64) -> i64
 ```
 
 ## Example
 
 ```vais
-U std/protobuf
+use std/protobuf
 
-F main() {
+fn main() {
     buf := pb_buf_new()
     pb_encode_varint(buf, 1, 42)       # field 1 = 42
     pb_encode_string(buf, 2, "hello")  # field 2 = "hello"

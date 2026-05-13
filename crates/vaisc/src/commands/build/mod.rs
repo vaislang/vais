@@ -5,7 +5,9 @@ mod backend;
 pub(crate) mod cache;
 mod core;
 mod gpu;
+mod parallel;
 pub(crate) mod scripts;
+mod serial;
 mod utils;
 
 // Re-export public functions

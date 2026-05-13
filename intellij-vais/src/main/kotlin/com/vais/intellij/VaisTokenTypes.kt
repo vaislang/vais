@@ -35,6 +35,10 @@ object VaisTokenTypes {
     val KW_M = VaisElementType("KW_M")       // Match
     val KW_U = VaisElementType("KW_U")       // Use
     val KW_A = VaisElementType("KW_A")       // Async
+    val KW_D = VaisElementType("KW_D")       // Defer
+    val KW_N = VaisElementType("KW_N")       // Extern
+    val KW_G = VaisElementType("KW_G")       // Global
+    val KW_O = VaisElementType("KW_O")       // Union
 
     // Full keywords
     val KW_LET = VaisElementType("KW_LET")
@@ -61,6 +65,10 @@ object VaisTokenTypes {
     val KW_WHERE = VaisElementType("KW_WHERE")
     val KW_SELF = VaisElementType("KW_SELF")
     val KW_SELF_TYPE = VaisElementType("KW_SELF_TYPE")
+    val KW_SPAWN = VaisElementType("KW_SPAWN")
+    val KW_YIELD = VaisElementType("KW_YIELD")
+    val KW_MOVE = VaisElementType("KW_MOVE")
+    val KW_TYPE = VaisElementType("KW_TYPE")
 
     // Operators
     val PLUS = VaisElementType("PLUS")
@@ -110,10 +118,12 @@ object VaisTokenTypes {
     val STRINGS = TokenSet.create(STRING, CHAR)
     val KEYWORDS = TokenSet.create(
         KW_F, KW_S, KW_E, KW_T, KW_I, KW_L, KW_M, KW_U, KW_A,
+        KW_D, KW_N, KW_G, KW_O,
         KW_LET, KW_MUT, KW_IF, KW_ELSE, KW_LOOP, KW_WHILE, KW_FOR, KW_IN,
         KW_MATCH, KW_RETURN, KW_BREAK, KW_CONTINUE, KW_FN, KW_STRUCT,
         KW_ENUM, KW_TRAIT, KW_IMPL, KW_PUB, KW_USE, KW_ASYNC, KW_AWAIT,
-        KW_WHERE, KW_SELF, KW_SELF_TYPE
+        KW_WHERE, KW_SELF, KW_SELF_TYPE,
+        KW_SPAWN, KW_YIELD, KW_MOVE, KW_TYPE
     )
     val OPERATORS = TokenSet.create(
         PLUS, MINUS, STAR, SLASH, PERCENT, EQ, EQ_EQ, NOT_EQ,

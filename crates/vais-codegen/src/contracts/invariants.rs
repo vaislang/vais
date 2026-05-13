@@ -7,6 +7,7 @@ impl CodeGenerator {
     /// Generate invariant checks for a struct type
     ///
     /// Called after struct construction/modification to verify invariants.
+    #[inline(never)]
     pub(crate) fn _generate_invariant_checks(
         &mut self,
         struct_name: &str,
