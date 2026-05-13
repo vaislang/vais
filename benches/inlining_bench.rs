@@ -4,7 +4,8 @@
 //! including the expanded threshold (50 instructions) and call-frequency
 //! based prioritization.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
+use std::hint::black_box;
 use vais_codegen::optimize::{optimize_ir_with_pgo, OptLevel, PgoMode};
 
 /// Generate synthetic LLVM IR with small helper functions to test inlining

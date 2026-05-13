@@ -33,7 +33,7 @@ fn test_generate_large_project_10k() {
 
     // Should be roughly 10K lines (within 20% tolerance)
     assert!(
-        line_count >= 8_000 && line_count <= 12_000,
+        (8_000..=12_000).contains(&line_count),
         "Expected ~10K lines, got {}",
         line_count
     );
@@ -61,7 +61,7 @@ fn test_generate_large_project_50k() {
 
     // Should be roughly 50K lines (within 20% tolerance)
     assert!(
-        line_count >= 40_000 && line_count <= 60_000,
+        (40_000..=60_000).contains(&line_count),
         "Expected ~50K lines, got {}",
         line_count
     );
@@ -83,7 +83,7 @@ fn test_generate_large_project_100k() {
 
     // Should be roughly 100K lines (within 20% tolerance)
     assert!(
-        line_count >= 80_000 && line_count <= 120_000,
+        (80_000..=120_000).contains(&line_count),
         "Expected ~100K lines, got {}",
         line_count
     );
@@ -186,7 +186,7 @@ fn test_generate_distributed_project() {
     // Total line count should be roughly 20K (note: actual may be lower due to line limiting logic)
     let total_lines: usize = modules.iter().map(|(_, code)| code.lines().count()).sum();
     assert!(
-        total_lines >= 10_000 && total_lines <= 25_000,
+        (10_000..=25_000).contains(&total_lines),
         "Expected ~10-25K total lines (target 20K), got {}",
         total_lines
     );

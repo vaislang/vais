@@ -571,7 +571,7 @@ F cascade() -> i64 {
 
     // Should have multiple errors
     assert!(
-        errors.len() >= 1,
+        !errors.is_empty(),
         "Expected at least one error for incomplete expressions"
     );
 

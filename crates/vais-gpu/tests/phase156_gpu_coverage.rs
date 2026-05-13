@@ -1112,7 +1112,7 @@ fn test_generate_simd_code_empty_module() {
     assert!(result.is_ok());
     let code = result.unwrap();
     // Should at least contain header info
-    assert!(code.contains("Vais") || code.contains("AVX2") || code.len() > 0);
+    assert!(code.contains("Vais") || code.contains("AVX2") || !code.is_empty());
 }
 
 #[test]
@@ -1122,7 +1122,7 @@ fn test_generate_simd_code_avx512_header() {
     let source = "F noop() = 0";
     let module = parse(source).unwrap();
     let code = generate_simd_code(&module, SimdTarget::Avx512).unwrap();
-    assert!(code.contains("immintrin.h") || code.contains("AVX-512") || code.len() > 0);
+    assert!(code.contains("immintrin.h") || code.contains("AVX-512") || !code.is_empty());
 }
 
 #[test]
@@ -1132,7 +1132,7 @@ fn test_generate_simd_code_neon_header() {
     let source = "F noop() = 0";
     let module = parse(source).unwrap();
     let code = generate_simd_code(&module, SimdTarget::Neon).unwrap();
-    assert!(code.contains("arm_neon.h") || code.contains("NEON") || code.len() > 0);
+    assert!(code.contains("arm_neon.h") || code.contains("NEON") || !code.is_empty());
 }
 
 #[test]
@@ -1142,7 +1142,7 @@ fn test_generate_simd_code_sve_header() {
     let source = "F noop() = 0";
     let module = parse(source).unwrap();
     let code = generate_simd_code(&module, SimdTarget::Sve).unwrap();
-    assert!(code.contains("arm_sve.h") || code.contains("SVE") || code.len() > 0);
+    assert!(code.contains("arm_sve.h") || code.contains("SVE") || !code.is_empty());
 }
 
 #[test]

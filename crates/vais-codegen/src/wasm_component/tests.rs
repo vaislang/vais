@@ -1,6 +1,5 @@
 #[cfg(test)]
-#[allow(clippy::module_inception)]
-mod tests {
+mod wasm_component_tests {
     use crate::wasm_component::*;
     use vais_types::ResolvedType;
 

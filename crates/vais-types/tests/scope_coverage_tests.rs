@@ -620,9 +620,9 @@ fn test_collected_errors() {
     let mut tc = TypeChecker::new();
     let result = tc.check_module(&module);
     // Either error is returned or collected
-    if result.is_err() {
+    if let Err(err) = result {
         // Error was returned directly
-        assert!(format!("{:?}", result.unwrap_err()).contains("undefined_var") || true);
+        assert!(!format!("{:?}", err).is_empty());
     }
     // get_collected_errors also works
     let _ = tc.get_collected_errors();

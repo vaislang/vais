@@ -5,7 +5,8 @@
 //!
 //! Run with: cargo bench --bench endurance_bench
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use std::hint::black_box;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -13,9 +14,7 @@ use vais_lexer::tokenize;
 use vais_parser::parse;
 use vais_types::TypeChecker;
 
-// Re-use the lib.rs utilities
-mod lib;
-use lib::*;
+use vais_benches::utils;
 
 /// Simple source for repeated benchmarking
 fn generate_simple_source() -> String {
@@ -101,7 +100,7 @@ fn bench_memory_stability(c: &mut Criterion) {
                 // Track allocations across iterations
                 let mut alloc_history = Vec::with_capacity(iterations);
 
-                for i in 0..iterations {
+                for _i in 0..iterations {
                     let before = allocation_tracker.load(Ordering::Relaxed);
                     let start = std::time::Instant::now();
 

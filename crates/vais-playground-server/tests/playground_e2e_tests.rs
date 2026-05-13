@@ -211,8 +211,7 @@ fn test_source_size_validation_logic() {
     let over_limit = "# padding\n".repeat(10000); // ~100KB
 
     assert!(under_limit.len() < max_size);
-    let would_reject = over_limit.len() > max_size;
-    assert!(would_reject, "Size limit validation works correctly");
+    assert!(over_limit.len() > max_size);
 }
 
 // Task 3: Compiler Integration Tests (4 tests, with graceful skip)
@@ -558,7 +557,7 @@ fn test_default_config_values() {
     let default_max_output = 1024 * 1024usize; // 1MB
 
     assert!(default_port > 1024); // Not privileged port
-    assert!(default_max_concurrent > 0 && default_max_concurrent < 100);
+    assert!((1..100).contains(&default_max_concurrent));
     assert!((1..=60).contains(&default_timeout));
     assert!(default_max_source >= 1024); // At least 1KB
     assert!(default_max_output >= default_max_source); // Output >= source

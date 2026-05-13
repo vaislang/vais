@@ -2334,10 +2334,13 @@ fn selfhost_examples_individual_file_verification() {
             continue; // Skip if file doesn't exist
         }
 
-        let source = std::fs::read_to_string(&full_path)
-            .unwrap_or_else(|_| panic!("Failed to read {}", full_path));
+        let source =
+            std::fs::read_to_string(&full_path).unwrap_or_else(|e| {
+                panic!("Failed to read {}: {}", full_path, e)
+            });
 
-        let tokens = tokenize(&source).unwrap_or_else(|_| panic!("Failed to lex {}", full_path));
+        let tokens =
+            tokenize(&source).unwrap_or_else(|e| panic!("Failed to lex {}: {}", full_path, e));
 
         for expected in expected_tokens {
             let found = tokens

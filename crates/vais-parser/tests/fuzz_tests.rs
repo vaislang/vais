@@ -144,7 +144,7 @@ fn fuzz_random_ascii_strings() {
 
 #[test]
 fn fuzz_mutated_valid_code() {
-    let valid_programs = vec![
+    let valid_programs = [
         "F add(x:i64,y:i64)->i64=x+y",
         "S Point{x:i64,y:i64}",
         "E Option<T>{Some(T),None}",
@@ -400,7 +400,7 @@ fn fuzz_unicode_and_special_chars() {
     }
 
     // Test null bytes
-    let null_inputs = vec![
+    let null_inputs = [
         "\0",
         "F test\0()->i64=42",
         "\0\0\0\0",

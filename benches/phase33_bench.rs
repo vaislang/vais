@@ -7,7 +7,8 @@
 //! 4. Compression library compilation (Stage 5)
 //! 5. Combined Phase 33 feature compilation
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use std::hint::black_box;
 use vais_codegen::CodeGenerator;
 use vais_lexer::tokenize;
 use vais_parser::parse;

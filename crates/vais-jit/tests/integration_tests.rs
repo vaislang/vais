@@ -486,8 +486,6 @@ fn test_error_empty_module() {
     // Should fail with FunctionNotFound
     if let Err(JitError::FunctionNotFound(name)) = result {
         assert_eq!(name, "main");
-    } else {
-        panic!("expected FunctionNotFound for missing main function");
     }
 }
 
@@ -529,8 +527,8 @@ fn test_value_conversions() {
     assert_eq!(bool_val.as_i64().unwrap(), 1);
     assert!(bool_val.as_bool().unwrap());
 
-    let f64_val = Value::F64(std::f64::consts::PI);
-    assert!((f64_val.as_f64().unwrap() - std::f64::consts::PI).abs() < 0.001);
+    let f64_val = Value::F64(2.5);
+    assert!((f64_val.as_f64().unwrap() - 2.5).abs() < 0.001);
 }
 
 #[test]

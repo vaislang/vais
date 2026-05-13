@@ -319,8 +319,8 @@ fn test_constant_display() {
 
 #[test]
 fn test_constant_float_display() {
-    let s = format!("{}", Constant::Float(3.14));
-    assert!(s.contains("3.14"));
+    let s = format!("{}", Constant::Float(2.5));
+    assert!(s.contains("2.5"));
 }
 
 #[test]

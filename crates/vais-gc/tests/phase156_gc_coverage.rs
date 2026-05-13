@@ -4,8 +4,7 @@
 //! mark/sweep correctness, cycle-related patterns, and GC statistics/metrics.
 
 use vais_gc::{
-    CardTable, CollectionType, GcHeap, GcObject, GcRoot, GcStats, GenGcConfig, GenGcStats,
-    Generation, GenerationalGc, RememberedSet,
+    CardTable, GcHeap, GenGcConfig, GenGcStats, Generation, GenerationalGc, RememberedSet,
 };
 
 // ─── GcHeap: allocation statistics ──────────────────────────────────────────

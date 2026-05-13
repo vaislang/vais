@@ -286,6 +286,7 @@ impl CodeGenerator {
     /// Generate string operations for either `str` fat pointers or std `String`
     /// builder values. `String + str` returns a `%String` value so assignment
     /// back into a `String` local has a single, explicit layout.
+    #[allow(clippy::too_many_arguments)]
     #[inline(never)]
     pub(crate) fn generate_string_like_binary_op(
         &mut self,

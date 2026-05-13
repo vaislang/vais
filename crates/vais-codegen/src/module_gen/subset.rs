@@ -582,14 +582,14 @@ impl CodeGenerator {
         // Skip builtins — they are handled by generate_helper_functions() or the non-main extern block.
         // Skip specialized functions that will be defined in this module (type signature mismatch).
         for (name, info) in &self.types.functions {
-            if !info.is_extern
-                && !module_functions.contains(name)
-                && !declared_fns.contains(name)
-                && !builtin_fn_keys.contains(name)
-                && !specialized_defines.contains(name)
-                && !(is_main_module
-                    && crate::function_gen::runtime::is_runtime_intrinsic(&info.signature.name))
-            {
+            let skip_decl = info.is_extern
+                || module_functions.contains(name)
+                || declared_fns.contains(name)
+                || builtin_fn_keys.contains(name)
+                || specialized_defines.contains(name)
+                || (is_main_module
+                    && crate::function_gen::runtime::is_runtime_intrinsic(&info.signature.name));
+            if !skip_decl {
                 ir.push_str(&self.generate_extern_decl(info));
                 ir.push('\n');
                 declared_fns.insert(name.clone());

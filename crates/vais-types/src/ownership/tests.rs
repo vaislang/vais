@@ -1,7 +1,7 @@
 //! Ownership checker tests
 
 #[cfg(test)]
-mod tests {
+mod ownership_tests {
     use crate::ownership::*;
     use crate::types::{ResolvedType, TypeError};
     use vais_ast::Span;

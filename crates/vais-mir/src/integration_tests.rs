@@ -698,9 +698,9 @@ fn test_terminator_display_all_variants() {
 
 #[test]
 fn test_constant_float_display() {
-    let c = Constant::Float(3.14);
+    let c = Constant::Float(2.5);
     let s = format!("{}", c);
-    assert!(s.contains("3.14"));
+    assert!(s.contains("2.5"));
 }
 
 #[test]
