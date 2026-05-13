@@ -28,10 +28,10 @@ mod message;
 pub use locale::Locale;
 pub use message::I18n;
 
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 use std::sync::RwLock;
 
-static I18N: OnceCell<RwLock<I18n>> = OnceCell::new();
+static I18N: OnceLock<RwLock<I18n>> = OnceLock::new();
 
 /// Initialize the global i18n instance
 ///
@@ -132,25 +132,23 @@ mod tests {
 
     #[test]
     fn test_korean_locale() {
-        init(Some(Locale::Ko));
-        set_locale(Locale::Ko);
-
-        let title = get_simple("type.E001.title");
+        // Use I18n directly to avoid OnceLock race conditions
+        let i18n = I18n::with_locale(Locale::Ko);
+        let title = i18n.get_simple("type.E001.title");
         assert_eq!(title, "타입 불일치");
     }
 
     #[test]
     fn test_japanese_locale() {
-        init(Some(Locale::Ja));
-        set_locale(Locale::Ja);
-
-        let title = get_simple("type.E001.title");
+        // Use I18n directly to avoid OnceLock race conditions
+        let i18n = I18n::with_locale(Locale::Ja);
+        let title = i18n.get_simple("type.E001.title");
         assert_eq!(title, "型の不一致");
     }
 
     #[test]
     fn test_chinese_locale() {
-        // Use I18n directly to avoid OnceCell race conditions
+        // Use I18n directly to avoid OnceLock race conditions
         let i18n = I18n::with_locale(Locale::Zh);
         let title = i18n.get_simple("type.E001.title");
         assert_eq!(title, "类型不匹配");

@@ -64,7 +64,7 @@ X StringBuffer {
         I self.len >= self.cap {
             @.grow()
             0
-        } E { 0 }
+        } EL { 0 }
         store_byte(self.data + self.len, byte)
         self.len = self.len + 1
         1
@@ -74,7 +74,7 @@ X StringBuffer {
         I self.len + len > self.cap {
             @.grow_to(self.len + len + 1024)
             0
-        } E { 0 }
+        } EL { 0 }
         memcpy(self.data + self.len, ptr, len)
         self.len = self.len + len
         1
@@ -85,7 +85,7 @@ X StringBuffer {
         I self.len + len > self.cap {
             @.grow_to(self.len + len + 1024)
             0
-        } E { 0 }
+        } EL { 0 }
         memcpy_str(self.data + self.len, s, len)
         self.len = self.len + len
         1
@@ -96,15 +96,15 @@ X StringBuffer {
         I value == 0 {
             @.append_byte(48)  # '0'
             1
-        } E I value < 0 {
+        } EL I value < 0 {
             @.append_byte(45)  # '-'
             @.append_i64(0 - value)
-        } E {
+        } EL {
             # Recursively build digits
             I value >= 10 {
                 @.append_i64(value / 10)
                 0
-            } E { 0 }
+            } EL { 0 }
             digit := (value % 10) + 48
             @.append_byte(digit)
             1
@@ -454,7 +454,7 @@ X CodeGenerator {
             store_i64(self.output + 16, new_cap)
             buf_data = new_data
             0
-        } E { 0 }
+        } EL { 0 }
 
         memcpy(buf_data + buf_len, ptr, len)
         store_i64(self.output + 8, buf_len + len)
@@ -478,7 +478,7 @@ X CodeGenerator {
             store_i64(self.output + 16, new_cap)
             buf_data = new_data
             0
-        } E { 0 }
+        } EL { 0 }
 
         memcpy_str(buf_data + buf_len, s, len)
         store_i64(self.output + 8, buf_len + len)
@@ -493,11 +493,11 @@ X CodeGenerator {
         I value == 0 {
             store_byte(tb_data, 48)
             @.emit_ptr(tb_data, 1)
-        } E I value < 0 {
+        } EL I value < 0 {
             store_byte(tb_data, 45)
             @.emit_ptr(tb_data, 1)
             @.emit_i64(0 - value)
-        } E {
+        } EL {
             @.emit_positive_i64(value)
         }
     }
@@ -551,40 +551,40 @@ X CodeGenerator {
 
     F type_to_llvm_str(&self, type_kind: i64) -> i64 {
         I type_kind == LLVM_VOID() { @.emit_cstr("void") }
-        E I type_kind == LLVM_I1() { @.emit_cstr("i1") }
-        E I type_kind == LLVM_I8() { @.emit_cstr("i8") }
-        E I type_kind == LLVM_I16() { @.emit_cstr("i16") }
-        E I type_kind == LLVM_I32() { @.emit_cstr("i32") }
-        E I type_kind == LLVM_I64() { @.emit_cstr("i64") }
-        E I type_kind == LLVM_I128() { @.emit_cstr("i128") }
-        E I type_kind == LLVM_FLOAT() { @.emit_cstr("float") }
-        E I type_kind == LLVM_DOUBLE() { @.emit_cstr("double") }
-        E I type_kind == LLVM_PTR() { @.emit_cstr("i8*") }
-        E { @.emit_cstr("i64") }  # Default
+        EL I type_kind == LLVM_I1() { @.emit_cstr("i1") }
+        EL I type_kind == LLVM_I8() { @.emit_cstr("i8") }
+        EL I type_kind == LLVM_I16() { @.emit_cstr("i16") }
+        EL I type_kind == LLVM_I32() { @.emit_cstr("i32") }
+        EL I type_kind == LLVM_I64() { @.emit_cstr("i64") }
+        EL I type_kind == LLVM_I128() { @.emit_cstr("i128") }
+        EL I type_kind == LLVM_FLOAT() { @.emit_cstr("float") }
+        EL I type_kind == LLVM_DOUBLE() { @.emit_cstr("double") }
+        EL I type_kind == LLVM_PTR() { @.emit_cstr("i8*") }
+        EL { @.emit_cstr("i64") }  # Default
     }
 
     F resolved_type_to_llvm(&self, resolved_kind: i64) -> i64 {
         # Map ResolvedType kind to LLVM type kind
         # TY_I8 = 1, TY_I16 = 2, TY_I32 = 3, TY_I64 = 4, etc.
         I resolved_kind == 1 { LLVM_I8() }
-        E I resolved_kind == 2 { LLVM_I16() }
-        E I resolved_kind == 3 { LLVM_I32() }
-        E I resolved_kind == 4 { LLVM_I64() }
-        E I resolved_kind == 5 { LLVM_I128() }
-        E I resolved_kind == 6 { LLVM_I8() }   # u8
-        E I resolved_kind == 7 { LLVM_I16() }  # u16
-        E I resolved_kind == 8 { LLVM_I32() }  # u32
-        E I resolved_kind == 9 { LLVM_I64() }  # u64
-        E I resolved_kind == 10 { LLVM_I128() } # u128
-        E I resolved_kind == 11 { LLVM_FLOAT() }
-        E I resolved_kind == 12 { LLVM_DOUBLE() }
-        E I resolved_kind == 13 { LLVM_I1() }  # bool
-        E I resolved_kind == 14 { LLVM_PTR() } # str
-        E I resolved_kind == 15 { LLVM_VOID() } # unit
-        E I resolved_kind == 21 { LLVM_PTR() } # pointer
-        E I resolved_kind == 22 { LLVM_PTR() } # ref
-        E I resolved_kind == 23 { LLVM_PTR() } # ref_mut
-        E { LLVM_I64() }
+        EL I resolved_kind == 2 { LLVM_I16() }
+        EL I resolved_kind == 3 { LLVM_I32() }
+        EL I resolved_kind == 4 { LLVM_I64() }
+        EL I resolved_kind == 5 { LLVM_I128() }
+        EL I resolved_kind == 6 { LLVM_I8() }   # u8
+        EL I resolved_kind == 7 { LLVM_I16() }  # u16
+        EL I resolved_kind == 8 { LLVM_I32() }  # u32
+        EL I resolved_kind == 9 { LLVM_I64() }  # u64
+        EL I resolved_kind == 10 { LLVM_I128() } # u128
+        EL I resolved_kind == 11 { LLVM_FLOAT() }
+        EL I resolved_kind == 12 { LLVM_DOUBLE() }
+        EL I resolved_kind == 13 { LLVM_I1() }  # bool
+        EL I resolved_kind == 14 { LLVM_PTR() } # str
+        EL I resolved_kind == 15 { LLVM_VOID() } # unit
+        EL I resolved_kind == 21 { LLVM_PTR() } # pointer
+        EL I resolved_kind == 22 { LLVM_PTR() } # ref
+        EL I resolved_kind == 23 { LLVM_PTR() } # ref_mut
+        EL { LLVM_I64() }
     }
 
     # ========== Local Variables ==========
@@ -598,7 +598,7 @@ X CodeGenerator {
             self.locals_ptr = new_ptr
             self.locals_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         ptr := self.locals_ptr + self.locals_len * LocalVar.size()
         store_i64(ptr, name_idx)
@@ -620,7 +620,7 @@ X CodeGenerator {
             local_name := load_i64(ptr)
             I local_name == name_idx {
                 R ptr
-            } E { 0 }
+            } EL { 0 }
         }
         0  # Not found
     }
@@ -641,7 +641,7 @@ X CodeGenerator {
             self.functions_ptr = new_ptr
             self.functions_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         ptr := self.functions_ptr + self.functions_len * FunctionInfo.size()
         store_i64(ptr, name_idx)
@@ -661,7 +661,7 @@ X CodeGenerator {
             fn_name := load_i64(ptr)
             I fn_name == name_idx {
                 R ptr
-            } E {
+            } EL {
                 i = i + 1
             }
         }
@@ -679,7 +679,7 @@ X CodeGenerator {
             self.structs_ptr = new_ptr
             self.structs_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         ptr := self.structs_ptr + self.structs_len * StructTypeInfo.size()
         store_i64(ptr, name_idx)
@@ -698,7 +698,7 @@ X CodeGenerator {
             struct_name := load_i64(ptr)
             I struct_name == name_idx {
                 R ptr
-            } E {
+            } EL {
                 i = i + 1
             }
         }
@@ -716,7 +716,7 @@ X CodeGenerator {
             self.loop_stack_ptr = new_ptr
             self.loop_stack_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         ptr := self.loop_stack_ptr + self.loop_stack_len * LoopContext.size()
         store_i64(ptr, break_ptr)
@@ -732,12 +732,12 @@ X CodeGenerator {
         I self.loop_stack_len > 0 {
             self.loop_stack_len = self.loop_stack_len - 1
             1
-        } E { 0 }
+        } EL { 0 }
     }
 
     F current_loop(&self) -> i64 {
         I self.loop_stack_len == 0 { 0 }
-        E { self.loop_stack_ptr + (self.loop_stack_len - 1) * LoopContext.size() }
+        EL { self.loop_stack_ptr + (self.loop_stack_len - 1) * LoopContext.size() }
     }
 
     # ========== Monomorphization Support ==========
@@ -752,7 +752,7 @@ X CodeGenerator {
             self.generic_fns_ptr = new_ptr
             self.generic_fns_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         store_i64(self.generic_fns_ptr + self.generic_fns_len * 8, fn_ptr)
         self.generic_fns_len = self.generic_fns_len + 1
@@ -767,7 +767,7 @@ X CodeGenerator {
             fn_name := load_i64(fn_ptr)
             I fn_name == name_idx {
                 R fn_ptr
-            } E { 0 }
+            } EL { 0 }
             i = i + 1
         }
         0
@@ -791,12 +791,12 @@ X CodeGenerator {
                     I load_i64(entry_args + j * 8) != load_i64(type_args_ptr + j * 8) {
                         same = 0
                         B
-                    } E { 0 }
+                    } EL { 0 }
                     j = j + 1
                 }
                 I same == 1 { R 1 }  # Already exists
-                E { 0 }
-            } E { 0 }
+                EL { 0 }
+            } EL { 0 }
             i = i + 1
         }
 
@@ -809,7 +809,7 @@ X CodeGenerator {
             self.mono_entries_ptr = new_ptr
             self.mono_entries_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         entry_ptr := self.mono_entries_ptr + self.mono_entries_len * 24
         store_i64(entry_ptr, fn_name_idx)
@@ -887,7 +887,7 @@ X CodeGenerator {
             self.mono_bind_values_ptr = new_vals
             self.mono_bind_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         store_i64(self.mono_bind_keys_ptr + self.mono_bind_len * 8, name_idx)
         store_i64(self.mono_bind_values_ptr + self.mono_bind_len * 8, llvm_type_kind)
@@ -903,7 +903,7 @@ X CodeGenerator {
             key := load_i64(self.mono_bind_keys_ptr + i * 8)
             I key == name_idx {
                 R load_i64(self.mono_bind_values_ptr + i * 8)
-            } E { 0 }
+            } EL { 0 }
         }
         0 - 1  # Not found
     }
@@ -926,7 +926,7 @@ X CodeGenerator {
             self.generic_structs_ptr = new_ptr
             self.generic_structs_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         store_i64(self.generic_structs_ptr + self.generic_structs_len * 8, struct_ptr)
         self.generic_structs_len = self.generic_structs_len + 1
@@ -941,7 +941,7 @@ X CodeGenerator {
             struct_name := load_i64(struct_ptr)  # StructDef.name_idx at offset 0
             I struct_name == name_idx {
                 R struct_ptr
-            } E { 0 }
+            } EL { 0 }
             i = i + 1
         }
         0
@@ -964,12 +964,12 @@ X CodeGenerator {
                     I load_i64(entry_args + j * 8) != load_i64(type_kinds_ptr + j * 8) {
                         same = 0
                         B
-                    } E { 0 }
+                    } EL { 0 }
                     j = j + 1
                 }
                 I same == 1 { R 1 }  # Already exists
-                E { 0 }
-            } E { 0 }
+                EL { 0 }
+            } EL { 0 }
             i = i + 1
         }
 
@@ -982,7 +982,7 @@ X CodeGenerator {
             self.struct_mono_ptr = new_ptr
             self.struct_mono_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         # Copy type args
         args_copy := malloc(type_kinds_len * 8)
@@ -1014,7 +1014,7 @@ X CodeGenerator {
             I struct_ptr != 0 {
                 @.generate_mono_struct_type(struct_ptr, type_kinds_ptr, type_kinds_len)
                 0
-            } E { 0 }
+            } EL { 0 }
 
             i = i + 1
         }
@@ -1032,7 +1032,7 @@ X CodeGenerator {
 
         # Set up generic bindings
         @.clear_mono_bindings()
-        bind_count := I generics_len < type_kinds_len { generics_len } E { type_kinds_len }
+        bind_count := I generics_len < type_kinds_len { generics_len } EL { type_kinds_len }
         j: mut i64 = 0
         L { I j >= bind_count { B }
             # GenericParam.name_idx is at offset 0, GenericParam.size() = 40
@@ -1054,7 +1054,7 @@ X CodeGenerator {
         # Emit field types (all fields are i64 in our simplified model, but resolve generics)
         i: mut i64 = 0
         L { I i >= fields_len { B }
-            I i > 0 { @.emit_cstr(", ") } E { 0 }
+            I i > 0 { @.emit_cstr(", ") } EL { 0 }
 
             # FieldDef: name_idx(0), type_ptr(8), ... - FieldDef.size() = 40
             field_ptr := fields_ptr + i * 40
@@ -1062,7 +1062,7 @@ X CodeGenerator {
 
             field_llvm := I field_type_ptr == 0 {
                 LLVM_I64()
-            } E {
+            } EL {
                 @.resolve_mono_type(field_type_ptr)
             }
             @.type_to_llvm_str(field_llvm)
@@ -1092,7 +1092,7 @@ X CodeGenerator {
             self.trait_defs_ptr = new_ptr
             self.trait_defs_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         ptr := self.trait_defs_ptr + self.trait_defs_len * 24
         store_i64(ptr, trait_name_idx)
@@ -1108,7 +1108,7 @@ X CodeGenerator {
         L { I i >= self.trait_defs_len { B }
             ptr := self.trait_defs_ptr + i * 24
             name := load_i64(ptr)
-            I name == trait_name_idx { R ptr } E { 0 }
+            I name == trait_name_idx { R ptr } EL { 0 }
             i = i + 1
         }
         0
@@ -1126,7 +1126,7 @@ X CodeGenerator {
             self.vtables_ptr = new_ptr
             self.vtables_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         # Build vtable name: __vtable_TypeName_TraitName
         store_i64(self.temp_buf + 8, 0)  # Clear temp buffer
@@ -1145,7 +1145,7 @@ X CodeGenerator {
             store_i64(self.temp_buf + 16, needed * 2)
             tb_data = new_data
             0
-        } E { 0 }
+        } EL { 0 }
 
         # "__vtable_"
         memcpy_str(tb_data, "__vtable_", 9)
@@ -1182,7 +1182,7 @@ X CodeGenerator {
             vt_trait := load_i64(ptr + 8)
             I vt_type == impl_type_idx && vt_trait == trait_name_idx {
                 R ptr
-            } E { 0 }
+            } EL { 0 }
             i = i + 1
         }
         0
@@ -1215,7 +1215,7 @@ X CodeGenerator {
 
             j: mut i64 = 0
             L { I j >= methods_len { B }
-                I j > 0 { @.emit_cstr(",\n") } E { 0 }
+                I j > 0 { @.emit_cstr(",\n") } EL { 0 }
 
                 method_name_idx := load_i64(methods_ptr + j * 8)
                 @.emit_cstr("  i64 ptrtoint (i64 (i64)* @")
@@ -1317,7 +1317,7 @@ X CodeGenerator {
             store_i64(self.temp_buf + 16, new_cap)
             tb_data = new_data
             0
-        } E { 0 }
+        } EL { 0 }
 
         # Copy base name
         memcpy(tb_data, base_ptr, base_len)
@@ -1344,7 +1344,7 @@ X CodeGenerator {
                 store_byte(tb_data + pos, 95)  # _
                 pos = pos + 1
                 0
-            } E { 0 }
+            } EL { 0 }
 
             kind := load_i64(type_kinds_ptr + i * 8)
             # Write kind as digits
@@ -1354,7 +1354,7 @@ X CodeGenerator {
                 store_byte(tb_data + pos, 48 + kind % 10)
                 pos = pos + 1
                 0
-            } E {
+            } EL {
                 store_byte(tb_data + pos, 48 + kind)
                 pos = pos + 1
                 0
@@ -1385,7 +1385,7 @@ X CodeGenerator {
             I fn_ptr != 0 {
                 @.generate_mono_function(fn_ptr, type_kinds_ptr, type_kinds_len)
                 0
-            } E { 0 }
+            } EL { 0 }
 
             i = i + 1
         }
@@ -1407,7 +1407,7 @@ X CodeGenerator {
 
         # Set up generic bindings
         @.clear_mono_bindings()
-        bind_count := I generics_len < type_kinds_len { generics_len } E { type_kinds_len }
+        bind_count := I generics_len < type_kinds_len { generics_len } EL { type_kinds_len }
         j: mut i64 = 0
         L { I j >= bind_count { B }
             # GenericParam.name_idx is at offset 0, GenericParam.size() = 40
@@ -1427,7 +1427,7 @@ X CodeGenerator {
         ret_llvm := I ret_type_ptr == 0 {
             self.current_fn_ret_type = LLVM_VOID()
             LLVM_VOID()
-        } E {
+        } EL {
             ret_kind := load_i64(ret_type_ptr)
             llvm_kind := @.resolve_mono_type(ret_type_ptr)
             self.current_fn_ret_type = llvm_kind
@@ -1451,7 +1451,7 @@ X CodeGenerator {
         # Emit parameters (resolve generic types)
         k: mut i64 = 0
         L { I k >= params_len { B }
-            I k > 0 { @.emit_cstr(", ") } E { 0 }
+            I k > 0 { @.emit_cstr(", ") } EL { 0 }
 
             param_ptr := params_ptr + k * 40  # Param.size() = 40
             param_name_idx := load_i64(param_ptr)
@@ -1459,7 +1459,7 @@ X CodeGenerator {
 
             param_llvm := I param_type_ptr == 0 {
                 LLVM_I64()
-            } E {
+            } EL {
                 @.resolve_mono_type(param_type_ptr)
             }
 
@@ -1483,20 +1483,20 @@ X CodeGenerator {
             result_reg := @.generate_expr(body_expr_ptr)
             I ret_llvm == LLVM_VOID() {
                 @.emit_cstr("  ret void\n")
-            } E {
+            } EL {
                 @.emit_cstr("  ret ")
                 @.type_to_llvm_str(ret_llvm)
                 @.emit_cstr(" ")
                 @.emit_reg(result_reg)
                 @.emit_cstr("\n")
             }
-        } E {
+        } EL {
             @.generate_stmts(body_stmts_ptr, body_stmts_len)
             # Execute deferred expressions at function end
             @.emit_defer_cleanup()
             I ret_llvm == LLVM_VOID() {
                 @.emit_cstr("  ret void\n")
-            } E {
+            } EL {
                 @.emit_cstr("  ret ")
                 @.type_to_llvm_str(ret_llvm)
                 @.emit_cstr(" 0 ; implicit return\n")
@@ -1526,15 +1526,15 @@ X CodeGenerator {
             bound := @.get_mono_binding(gen_name)
             I bound != 0 - 1 {
                 bound  # Return the concrete LLVM type kind
-            } E {
+            } EL {
                 LLVM_I64()  # Fallback
             }
         }
         # TY_NAMED = 25 - check if it has generic args
-        E I type_kind == 25 {
+        EL I type_kind == 25 {
             LLVM_I64()  # Named types default to pointer-sized
         }
-        E {
+        EL {
             @.resolved_type_to_llvm(type_kind)
         }
     }
@@ -1553,7 +1553,7 @@ X CodeGenerator {
             self.strings_ptr = new_ptr
             self.strings_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         # Store: name will be ".str.N", value is the string content
         ptr := self.strings_ptr + self.strings_len * 32
@@ -1594,14 +1594,14 @@ X CodeGenerator {
                 @.register_function_decl(data_ptr)
             }
             # ITEM_STRUCT = 2
-            E I kind == 2 {
+            EL I kind == 2 {
                 @.register_struct_decl(data_ptr)
             }
             # ITEM_TRAIT = 6
-            E I kind == 6 {
+            EL I kind == 6 {
                 @.register_trait_decl(data_ptr)
             }
-            E { 0 }
+            EL { 0 }
 
             i = i + 1
         }
@@ -1632,10 +1632,10 @@ X CodeGenerator {
                 @.generate_function(data_ptr)
             }
             # ITEM_IMPL = 7
-            E I kind == 7 {
+            EL I kind == 7 {
                 @.generate_impl(data_ptr)
             }
-            E { 0 }
+            EL { 0 }
 
             i = i + 1
         }
@@ -1670,7 +1670,7 @@ X CodeGenerator {
 
         ret_llvm := I ret_type_ptr == 0 {
             LLVM_VOID()
-        } E {
+        } EL {
             ret_kind := load_i64(ret_type_ptr)
             @.resolved_type_to_llvm(ret_kind)
         }
@@ -1686,7 +1686,7 @@ X CodeGenerator {
         # Save generic structs for monomorphization, register non-generic normally
         I generics_len > 0 {
             @.save_generic_struct(struct_ptr)
-        } E {
+        } EL {
             @.add_struct(name_idx)
         }
     }
@@ -1710,7 +1710,7 @@ X CodeGenerator {
                 mi = mi + 1
             }
             @.register_trait_def(name_idx, method_names, methods_len)
-        } E {
+        } EL {
             @.register_trait_def(name_idx, 0, 0)
         }
     }
@@ -1726,7 +1726,7 @@ X CodeGenerator {
 
         i: mut i64 = 0
         L { I i >= fields_len { B }
-            I i > 0 { @.emit_cstr(", ") } E { 0 }
+            I i > 0 { @.emit_cstr(", ") } EL { 0 }
 
             field_ptr := fields_ptr + i * StructFieldInfo.size()
             field_type := load_i64(field_ptr + 8)
@@ -1776,15 +1776,15 @@ X CodeGenerator {
                 c := load_byte(value_ptr + j)
                 I c == 10 {
                     @.emit_cstr("\\0A")
-                } E I c == 13 {
+                } EL I c == 13 {
                     @.emit_cstr("\\0D")
-                } E I c == 34 {
+                } EL I c == 34 {
                     @.emit_cstr("\\22")
-                } E I c == 92 {
+                } EL I c == 92 {
                     @.emit_cstr("\\5C")
-                } E I c == 0 {
+                } EL I c == 0 {
                     @.emit_cstr("\\00")
-                } E {
+                } EL {
                     tb_data := load_i64(self.temp_buf)
                     store_byte(tb_data, c)
                     @.emit(tb_data, 1)
@@ -1871,7 +1871,7 @@ X CodeGenerator {
         ret_llvm := I ret_type_ptr == 0 {
             self.current_fn_ret_type = LLVM_VOID()
             LLVM_VOID()
-        } E {
+        } EL {
             ret_kind := load_i64(ret_type_ptr)
             llvm_kind := @.resolved_type_to_llvm(ret_kind)
             self.current_fn_ret_type = llvm_kind
@@ -1887,14 +1887,14 @@ X CodeGenerator {
             @.emit_string_idx(self.current_impl_type_idx)
             @.emit_cstr("_")
             0
-        } E { 0 }
+        } EL { 0 }
         @.emit_string_idx(name_idx)
         @.emit_cstr("(")
 
         # Emit parameters
         i: mut i64 = 0
         L { I i >= params_len { B }
-            I i > 0 { @.emit_cstr(", ") } E { 0 }
+            I i > 0 { @.emit_cstr(", ") } EL { 0 }
 
             param_ptr := params_ptr + i * 40  # Param.size() = 40
             param_name_idx := load_i64(param_ptr)
@@ -1902,7 +1902,7 @@ X CodeGenerator {
 
             param_llvm := I param_type_ptr == 0 {
                 LLVM_I64()
-            } E {
+            } EL {
                 type_kind := load_i64(param_type_ptr)
                 @.resolved_type_to_llvm(type_kind)
             }
@@ -1929,21 +1929,21 @@ X CodeGenerator {
 
             I ret_llvm == LLVM_VOID() {
                 @.emit_cstr("  ret void\n")
-            } E {
+            } EL {
                 @.emit_cstr("  ret ")
                 @.type_to_llvm_str(ret_llvm)
                 @.emit_cstr(" ")
                 @.emit_reg(result_reg)
                 @.emit_cstr("\n")
             }
-        } E {
+        } EL {
             # Block body
             @.generate_stmts(body_stmts_ptr, body_stmts_len)
 
             # Add implicit return if needed
             I ret_llvm == LLVM_VOID() {
                 @.emit_cstr("  ret void\n")
-            } E { 0 }
+            } EL { 0 }
         }
 
         @.emit_cstr("}\n\n")
@@ -1963,7 +1963,7 @@ X CodeGenerator {
         I target_type_ptr != 0 {
             self.current_impl_type_idx = load_i64(target_type_ptr + 24)  # TypeNode.field0 = name_idx
             0
-        } E {
+        } EL {
             self.current_impl_type_idx = 0 - 1
             0
         }
@@ -1984,7 +1984,7 @@ X CodeGenerator {
             # Get target type name_idx from TypeNode (kind at 0, name_idx at field0 = 24)
             impl_type_idx := I target_type_ptr != 0 {
                 load_i64(target_type_ptr + 24)  # TypeNode.field0 = name_idx for NAMED type
-            } E { 0 }
+            } EL { 0 }
 
             I impl_type_idx != 0 {
                 # Build method name_idx array for vtable (in declaration order)
@@ -1998,8 +1998,8 @@ X CodeGenerator {
                 }
                 @.add_vtable(impl_type_idx, trait_name_idx, method_names, methods_len)
                 0
-            } E { 0 }
-        } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
 
         1
     }
@@ -2024,28 +2024,28 @@ X CodeGenerator {
             @.generate_let_stmt(stmt_ptr)
         }
         # STMT_EXPR = 11
-        E I kind == 11 {
+        EL I kind == 11 {
             expr_ptr := load_i64(stmt_ptr + 24)
             @.generate_expr(expr_ptr)
             1
         }
         # STMT_RETURN = 12
-        E I kind == 12 {
+        EL I kind == 12 {
             @.generate_return_stmt(stmt_ptr)
         }
         # STMT_BREAK = 13
-        E I kind == 13 {
+        EL I kind == 13 {
             @.generate_break_stmt()
         }
         # STMT_CONTINUE = 14
-        E I kind == 14 {
+        EL I kind == 14 {
             @.generate_continue_stmt()
         }
         # STMT_DEFER = 15
-        E I kind == 15 {
+        EL I kind == 15 {
             @.push_defer(stmt_ptr)
         }
-        E { 1 }
+        EL { 1 }
     }
 
     # Push a defer statement's expression pointer onto the defer stack
@@ -2059,7 +2059,7 @@ X CodeGenerator {
             self.defer_stack_ptr = new_ptr
             self.defer_stack_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
         store_i64(self.defer_stack_ptr + self.defer_stack_len * 8, expr_ptr)
         self.defer_stack_len = self.defer_stack_len + 1
         1
@@ -2070,17 +2070,17 @@ X CodeGenerator {
         I self.defer_stack_len > 0 {
             i := mut self.defer_stack_len - 1
             done := mut 0
-            L done == 0 {
+            LW done == 0 {
                 expr_ptr := load_i64(self.defer_stack_ptr + i * 8)
                 @.generate_expr(expr_ptr)
                 I i == 0 {
                     done = 1
-                } E {
+                } EL {
                     i = i - 1
                 }
             }
             0
-        } E { 0 }
+        } EL { 0 }
     }
 
     F generate_let_stmt(&self, stmt_ptr: i64) -> i64 {
@@ -2093,7 +2093,7 @@ X CodeGenerator {
         var_type := I type_ptr != 0 {
             type_kind := load_i64(type_ptr)
             @.resolved_type_to_llvm(type_kind)
-        } E {
+        } EL {
             LLVM_I64()  # Default
         }
 
@@ -2118,7 +2118,7 @@ X CodeGenerator {
             @.emit_reg(alloca_reg)
             @.emit_cstr("\n")
             0
-        } E { 0 }
+        } EL { 0 }
 
         # Register local variable (store alloca register as name)
         name_ptr := @.get_string_ptr(name_idx)
@@ -2141,7 +2141,7 @@ X CodeGenerator {
 
         I expr_ptr == 0 || self.current_fn_ret_type == LLVM_VOID() {
             @.emit_cstr("  ret void\n")
-        } E {
+        } EL {
             value_reg := @.generate_expr(expr_ptr)
             @.emit_cstr("  ret ")
             @.type_to_llvm_str(self.current_fn_ret_type)
@@ -2160,7 +2160,7 @@ X CodeGenerator {
             @.emit_i64(break_label)
             @.emit_cstr("\n")
             1
-        } E { 0 }
+        } EL { 0 }
     }
 
     F generate_continue_stmt(&self) -> i64 {
@@ -2171,7 +2171,7 @@ X CodeGenerator {
             @.emit_i64(continue_label)
             @.emit_cstr("\n")
             1
-        } E { 0 }
+        } EL { 0 }
     }
 
     # ========== Expression Generation ==========
@@ -2193,7 +2193,7 @@ X CodeGenerator {
             result
         }
         # EXPR_FLOAT = 21
-        E I kind == 21 {
+        EL I kind == 21 {
             # For now, emit as i64 (float bits)
             value := load_i64(expr_ptr + 24)
             result := @.fresh_reg()
@@ -2205,18 +2205,18 @@ X CodeGenerator {
             result
         }
         # EXPR_BOOL = 22
-        E I kind == 22 {
+        EL I kind == 22 {
             value := load_i64(expr_ptr + 24)
             result := @.fresh_reg()
             @.emit_cstr("  ")
             @.emit_reg(result)
             @.emit_cstr(" = add i64 0, ")
-            I value != 0 { @.emit_cstr("1") } E { @.emit_cstr("0") }
+            I value != 0 { @.emit_cstr("1") } EL { @.emit_cstr("0") }
             @.emit_cstr("\n")
             result
         }
         # EXPR_STRING = 23
-        E I kind == 23 {
+        EL I kind == 23 {
             str_idx := load_i64(expr_ptr + 24)
             str_ptr := @.get_string_ptr(str_idx)
             str_len := @.get_string_len(str_idx)
@@ -2247,7 +2247,7 @@ X CodeGenerator {
             result2
         }
         # EXPR_UNIT = 24
-        E I kind == 24 {
+        EL I kind == 24 {
             result := @.fresh_reg()
             @.emit_cstr("  ")
             @.emit_reg(result)
@@ -2255,16 +2255,16 @@ X CodeGenerator {
             result
         }
         # EXPR_IDENT = 25
-        E I kind == 25 {
+        EL I kind == 25 {
             name_idx := load_i64(expr_ptr + 24)
             @.generate_ident(name_idx)
         }
         # EXPR_SELF_CALL = 26
-        E I kind == 26 {
+        EL I kind == 26 {
             @.generate_self_call(expr_ptr)
         }
         # EXPR_BINARY = 27
-        E I kind == 27 {
+        EL I kind == 27 {
             # Try constant folding first
             left_ptr := load_i64(expr_ptr + 24)
             right_ptr := load_i64(expr_ptr + 32)
@@ -2278,11 +2278,11 @@ X CodeGenerator {
                 op := load_i64(expr_ptr + 40)
 
                 folded := I op == OP_ADD() { left_val + right_val }
-                          E I op == OP_SUB() { left_val - right_val }
-                          E I op == OP_MUL() { left_val * right_val }
-                          E I op == OP_DIV() && right_val != 0 { left_val / right_val }
-                          E I op == OP_MOD() && right_val != 0 { left_val % right_val }
-                          E { 0 - 1 }  # sentinel: can't fold
+                          EL I op == OP_SUB() { left_val - right_val }
+                          EL I op == OP_MUL() { left_val * right_val }
+                          EL I op == OP_DIV() && right_val != 0 { left_val / right_val }
+                          EL I op == OP_MOD() && right_val != 0 { left_val % right_val }
+                          EL { 0 - 1 }  # sentinel: can't fold
 
                 I folded != 0 - 1 {
                     result := @.fresh_reg()
@@ -2292,15 +2292,15 @@ X CodeGenerator {
                     @.emit_i64(folded)
                     @.emit_cstr(" ; constant fold\n")
                     result
-                } E {
+                } EL {
                     @.generate_binary(expr_ptr)
                 }
-            } E {
+            } EL {
                 @.generate_binary(expr_ptr)
             }
         }
         # EXPR_UNARY = 28
-        E I kind == 28 {
+        EL I kind == 28 {
             # Try constant folding first
             inner_ptr := load_i64(expr_ptr + 24)
             inner_kind := load_i64(inner_ptr)
@@ -2311,8 +2311,8 @@ X CodeGenerator {
                 op := load_i64(expr_ptr + 32)
 
                 folded := I op == UOP_NEG() { 0 - inner_val }
-                          E I op == UOP_BITNOT() { 0 - 1 - inner_val }  # ~x = -1 - x
-                          E { 0 - 1 }  # sentinel: can't fold
+                          EL I op == UOP_BITNOT() { 0 - 1 - inner_val }  # ~x = -1 - x
+                          EL { 0 - 1 }  # sentinel: can't fold
 
                 I folded != 0 - 1 {
                     result := @.fresh_reg()
@@ -2322,103 +2322,103 @@ X CodeGenerator {
                     @.emit_i64(folded)
                     @.emit_cstr(" ; constant fold\n")
                     result
-                } E {
+                } EL {
                     @.generate_unary(expr_ptr)
                 }
-            } E {
+            } EL {
                 @.generate_unary(expr_ptr)
             }
         }
         # EXPR_IF = 30
-        E I kind == 30 {
+        EL I kind == 30 {
             @.generate_if(expr_ptr)
         }
         # EXPR_LOOP = 31
-        E I kind == 31 {
+        EL I kind == 31 {
             @.generate_loop(expr_ptr)
         }
         # EXPR_WHILE = 52
-        E I kind == 52 {
+        EL I kind == 52 {
             @.generate_while(expr_ptr)
         }
         # EXPR_CALL = 33
-        E I kind == 33 {
+        EL I kind == 33 {
             @.generate_call(expr_ptr)
         }
         # EXPR_INDEX = 37
-        E I kind == 37 {
+        EL I kind == 37 {
             @.generate_index(expr_ptr)
         }
         # EXPR_ARRAY = 38
-        E I kind == 38 {
+        EL I kind == 38 {
             @.generate_array(expr_ptr)
         }
         # EXPR_BLOCK = 42
-        E I kind == 42 {
+        EL I kind == 42 {
             @.generate_block_expr(expr_ptr)
         }
         # EXPR_TERNARY = 29
-        E I kind == 29 {
+        EL I kind == 29 {
             @.generate_ternary(expr_ptr)
         }
         # EXPR_MATCH = 32
-        E I kind == 32 {
+        EL I kind == 32 {
             @.generate_match(expr_ptr)
         }
         # EXPR_METHOD_CALL = 34
-        E I kind == 34 {
+        EL I kind == 34 {
             @.generate_method_call(expr_ptr)
         }
         # EXPR_STATIC_CALL = 35
-        E I kind == 35 {
+        EL I kind == 35 {
             @.generate_static_call(expr_ptr)
         }
         # EXPR_FIELD = 36
-        E I kind == 36 {
+        EL I kind == 36 {
             @.generate_field_access(expr_ptr)
         }
         # EXPR_TUPLE = 39
-        E I kind == 39 {
+        EL I kind == 39 {
             @.generate_tuple(expr_ptr)
         }
         # EXPR_STRUCT_LIT = 40
-        E I kind == 40 {
+        EL I kind == 40 {
             @.generate_struct_lit(expr_ptr)
         }
         # EXPR_RANGE = 41
-        E I kind == 41 {
+        EL I kind == 41 {
             @.generate_range(expr_ptr)
         }
         # EXPR_TRY = 44
-        E I kind == 44 {
+        EL I kind == 44 {
             @.generate_try(expr_ptr)
         }
         # EXPR_UNWRAP = 45
-        E I kind == 45 {
+        EL I kind == 45 {
             @.generate_unwrap(expr_ptr)
         }
         # EXPR_REF = 46
-        E I kind == 46 {
+        EL I kind == 46 {
             @.generate_ref(expr_ptr)
         }
         # EXPR_DEREF = 47
-        E I kind == 47 {
+        EL I kind == 47 {
             @.generate_deref(expr_ptr)
         }
         # EXPR_ASSIGN = 48
-        E I kind == 48 {
+        EL I kind == 48 {
             @.generate_assign(expr_ptr)
         }
         # EXPR_ASSIGN_OP = 49
-        E I kind == 49 {
+        EL I kind == 49 {
             @.generate_assign_op(expr_ptr)
         }
         # EXPR_LAMBDA = 50
-        E I kind == 50 {
+        EL I kind == 50 {
             @.generate_lambda(expr_ptr)
         }
         # EXPR_AWAIT = 43
-        E I kind == 43 {
+        EL I kind == 43 {
             inner_ptr := load_i64(expr_ptr + 24)  # field0: Future expression
             inner_reg := @.generate_expr(inner_ptr)
 
@@ -2435,7 +2435,7 @@ X CodeGenerator {
             result
         }
         # EXPR_SPAWN = 51
-        E I kind == 51 {
+        EL I kind == 51 {
             inner_ptr := load_i64(expr_ptr + 24)  # field0: expression to spawn
             inner_reg := @.generate_expr(inner_ptr)
 
@@ -2449,7 +2449,7 @@ X CodeGenerator {
             @.emit_cstr(" ; spawn\n")
             result
         }
-        E {
+        EL {
             # Unknown expression, return 0
             result := @.fresh_reg()
             @.emit_cstr("  ")
@@ -2481,7 +2481,7 @@ X CodeGenerator {
                 @.emit_reg(alloca_reg)
                 @.emit_cstr("\n")
                 result
-            } E {
+            } EL {
                 # Direct use of parameter
                 result := @.fresh_reg()
                 @.emit_cstr("  ")
@@ -2493,7 +2493,7 @@ X CodeGenerator {
                 @.emit_cstr("\n")
                 result
             }
-        } E {
+        } EL {
             # Unknown variable
             result := @.fresh_reg()
             @.emit_cstr("  ; unknown var: ")
@@ -2520,24 +2520,24 @@ X CodeGenerator {
         @.emit_cstr(" = ")
 
         I op == OP_ADD() { @.emit_cstr("add i64 ") }
-        E I op == OP_SUB() { @.emit_cstr("sub i64 ") }
-        E I op == OP_MUL() { @.emit_cstr("mul i64 ") }
-        E I op == OP_DIV() { @.emit_cstr("sdiv i64 ") }
-        E I op == OP_MOD() { @.emit_cstr("srem i64 ") }
-        E I op == OP_LT() { @.emit_cstr("icmp slt i64 ") }
-        E I op == OP_LTE() { @.emit_cstr("icmp sle i64 ") }
-        E I op == OP_GT() { @.emit_cstr("icmp sgt i64 ") }
-        E I op == OP_GTE() { @.emit_cstr("icmp sge i64 ") }
-        E I op == OP_EQ() { @.emit_cstr("icmp eq i64 ") }
-        E I op == OP_NEQ() { @.emit_cstr("icmp ne i64 ") }
-        E I op == OP_AND() { @.emit_cstr("and i64 ") }
-        E I op == OP_OR() { @.emit_cstr("or i64 ") }
-        E I op == OP_BIT_AND() { @.emit_cstr("and i64 ") }
-        E I op == OP_BIT_OR() { @.emit_cstr("or i64 ") }
-        E I op == OP_BIT_XOR() { @.emit_cstr("xor i64 ") }
-        E I op == OP_SHL() { @.emit_cstr("shl i64 ") }
-        E I op == OP_SHR() { @.emit_cstr("ashr i64 ") }
-        E { @.emit_cstr("add i64 ") }
+        EL I op == OP_SUB() { @.emit_cstr("sub i64 ") }
+        EL I op == OP_MUL() { @.emit_cstr("mul i64 ") }
+        EL I op == OP_DIV() { @.emit_cstr("sdiv i64 ") }
+        EL I op == OP_MOD() { @.emit_cstr("srem i64 ") }
+        EL I op == OP_LT() { @.emit_cstr("icmp slt i64 ") }
+        EL I op == OP_LTE() { @.emit_cstr("icmp sle i64 ") }
+        EL I op == OP_GT() { @.emit_cstr("icmp sgt i64 ") }
+        EL I op == OP_GTE() { @.emit_cstr("icmp sge i64 ") }
+        EL I op == OP_EQ() { @.emit_cstr("icmp eq i64 ") }
+        EL I op == OP_NEQ() { @.emit_cstr("icmp ne i64 ") }
+        EL I op == OP_AND() { @.emit_cstr("and i64 ") }
+        EL I op == OP_OR() { @.emit_cstr("or i64 ") }
+        EL I op == OP_BIT_AND() { @.emit_cstr("and i64 ") }
+        EL I op == OP_BIT_OR() { @.emit_cstr("or i64 ") }
+        EL I op == OP_BIT_XOR() { @.emit_cstr("xor i64 ") }
+        EL I op == OP_SHL() { @.emit_cstr("shl i64 ") }
+        EL I op == OP_SHR() { @.emit_cstr("ashr i64 ") }
+        EL { @.emit_cstr("add i64 ") }
 
         @.emit_reg(left_reg)
         @.emit_cstr(", ")
@@ -2553,7 +2553,7 @@ X CodeGenerator {
             @.emit_reg(result)
             @.emit_cstr(" to i64\n")
             ext_result
-        } E {
+        } EL {
             result
         }
     }
@@ -2573,17 +2573,17 @@ X CodeGenerator {
             @.emit_cstr("sub i64 0, ")
             @.emit_reg(inner_reg)
         }
-        E I op == UOP_NOT() {
+        EL I op == UOP_NOT() {
             @.emit_cstr("xor i64 ")
             @.emit_reg(inner_reg)
             @.emit_cstr(", 1")
         }
-        E I op == UOP_BITNOT() {
+        EL I op == UOP_BITNOT() {
             @.emit_cstr("xor i64 ")
             @.emit_reg(inner_reg)
             @.emit_cstr(", -1")
         }
-        E {
+        EL {
             @.emit_cstr("add i64 0, ")
             @.emit_reg(inner_reg)
         }
@@ -2636,7 +2636,7 @@ X CodeGenerator {
         I else_ptr != 0 {
             @.generate_else(else_ptr)
             0
-        } E { 0 }
+        } EL { 0 }
         @.emit_cstr("  br label %end")
         @.emit_i64(label_id)
         @.emit_cstr("\n")
@@ -2661,7 +2661,7 @@ X CodeGenerator {
             stmts_ptr := load_i64(else_ptr + 16)
             stmts_len := load_i64(else_ptr + 24)
             @.generate_stmts(stmts_ptr, stmts_len)
-        } E {
+        } EL {
             # else-if
             cond_ptr := load_i64(else_ptr + 8)
             stmts_ptr := load_i64(else_ptr + 16)
@@ -2700,7 +2700,7 @@ X CodeGenerator {
             I next_ptr != 0 {
                 @.generate_else(next_ptr)
                 0
-            } E { 0 }
+            } EL { 0 }
             @.emit_cstr("  br label %elseif_end")
             @.emit_i64(label_id)
             @.emit_cstr("\n")
@@ -2840,7 +2840,7 @@ X CodeGenerator {
         fn_info := @.find_function(func_name_idx)
         ret_type := I fn_info != 0 {
             load_i64(fn_info + 24)
-        } E {
+        } EL {
             LLVM_I64()  # Default
         }
 
@@ -2859,7 +2859,7 @@ X CodeGenerator {
 
         I ret_type == LLVM_VOID() {
             @.emit_cstr("  call void @")
-        } E {
+        } EL {
             @.emit_cstr("  ")
             @.emit_reg(result)
             @.emit_cstr(" = call ")
@@ -2872,7 +2872,7 @@ X CodeGenerator {
 
         i = 0
         L { I i >= args_len { B }
-            I i > 0 { @.emit_cstr(", ") } E { 0 }
+            I i > 0 { @.emit_cstr(", ") } EL { 0 }
             @.emit_cstr("i64 ")
             arg_reg := load_i64(arg_regs_ptr + i * 8)
             @.emit_reg(arg_reg)
@@ -2889,7 +2889,7 @@ X CodeGenerator {
             @.emit_reg(zero)
             @.emit_cstr(" = add i64 0, 0\n")
             zero
-        } E {
+        } EL {
             result
         }
     }
@@ -3075,7 +3075,7 @@ X CodeGenerator {
 
         # Allocate memory for tuple (elements_len * 8 bytes)
         size := elements_len * 8
-        I size == 0 { size = 8 } E { 0 }
+        I size == 0 { size = 8 } EL { 0 }
 
         size_reg := @.fresh_reg()
         @.emit_cstr("  ")
@@ -3147,7 +3147,7 @@ X CodeGenerator {
         @.emit_cstr(" to i64\n")
 
         # Store start
-        start_reg := I start_ptr != 0 { @.generate_expr(start_ptr) } E {
+        start_reg := I start_ptr != 0 { @.generate_expr(start_ptr) } EL {
             zero := @.fresh_reg()
             @.emit_cstr("  ")
             @.emit_reg(zero)
@@ -3168,7 +3168,7 @@ X CodeGenerator {
         @.emit_reg(range_ptr)
         @.emit_cstr(", 8\n")
 
-        end_reg := I end_ptr != 0 { @.generate_expr(end_ptr) } E {
+        end_reg := I end_ptr != 0 { @.generate_expr(end_ptr) } EL {
             max := @.fresh_reg()
             @.emit_cstr("  ")
             @.emit_reg(max)
@@ -3214,7 +3214,7 @@ X CodeGenerator {
             store_i64(self.lambda_buf + 16, new_cap)
             lb_data = new_data
             0
-        } E { 0 }
+        } EL { 0 }
 
         memcpy_str(lb_data + lb_len, s, len)
         store_i64(self.lambda_buf + 8, lb_len + len)
@@ -3229,11 +3229,11 @@ X CodeGenerator {
         I value == 0 {
             store_byte(tb_data, 48)
             @.lambda_emit_ptr(tb_data, 1)
-        } E I value < 0 {
+        } EL I value < 0 {
             store_byte(tb_data, 45)
             @.lambda_emit_ptr(tb_data, 1)
             @.lambda_emit_i64(0 - value)
-        } E {
+        } EL {
             @.lambda_emit_positive_i64(value)
         }
     }
@@ -3261,7 +3261,7 @@ X CodeGenerator {
             store_i64(self.lambda_buf + 16, new_cap)
             lb_data = new_data
             0
-        } E { 0 }
+        } EL { 0 }
 
         memcpy(lb_data + lb_len, ptr, len)
         store_i64(self.lambda_buf + 8, lb_len + len)
@@ -3308,7 +3308,7 @@ X CodeGenerator {
                 I param_name == name_idx {
                     is_lambda_param = 1
                     B
-                } E { 0 }
+                } EL { 0 }
                 pi = pi + 1
             }
             I is_lambda_param == 1 { R captures_len }
@@ -3322,36 +3322,36 @@ X CodeGenerator {
             L { I ci >= captures_len { B }
                 I load_i64(captures_ptr + ci * 16) == name_idx {
                     R captures_len  # Already captured
-                } E { 0 }
+                } EL { 0 }
                 ci = ci + 1
             }
 
             # Determine capture mode: Ref for mutable locals (alloca), Move for params
             is_alloca := load_i64(local_ptr + 40)
-            cap_mode := I is_alloca == 1 { 1 } E { 0 }  # 1=Ref, 0=Move
+            cap_mode := I is_alloca == 1 { 1 } EL { 0 }  # 1=Ref, 0=Move
 
             # Add capture with mode
             I captures_len < captures_cap {
                 store_i64(captures_ptr + captures_len * 16, name_idx)
                 store_i64(captures_ptr + captures_len * 16 + 8, cap_mode)
                 R captures_len + 1
-            } E { R captures_len }
+            } EL { R captures_len }
         }
 
         # EXPR_BINARY = 27: recurse into left and right
-        E I body_kind == 27 {
+        EL I body_kind == 27 {
             left_ptr := load_i64(body_ptr + 24)
             right_ptr := load_i64(body_ptr + 32)
             len1 := @.collect_captures(left_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
             @.collect_captures(right_ptr, params_ptr, params_len, captures_ptr, len1, captures_cap)
         }
         # EXPR_UNARY = 28: recurse into operand
-        E I body_kind == 28 {
+        EL I body_kind == 28 {
             inner_ptr := load_i64(body_ptr + 24)
             @.collect_captures(inner_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
         }
         # EXPR_CALL = 33: recurse into func and args
-        E I body_kind == 33 {
+        EL I body_kind == 33 {
             func_ptr := load_i64(body_ptr + 24)
             args_ptr := load_i64(body_ptr + 32)
             args_len := load_i64(body_ptr + 40)
@@ -3365,7 +3365,7 @@ X CodeGenerator {
             cur_len
         }
         # EXPR_IF = 30: cond, then stmts, else ptr
-        E I body_kind == 30 {
+        EL I body_kind == 30 {
             cond_ptr := load_i64(body_ptr + 24)
             cur_len: mut i64 = @.collect_captures(cond_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
             # then block stmts
@@ -3380,7 +3380,7 @@ X CodeGenerator {
                 I stmt_expr != 0 {
                     cur_len = @.collect_captures(stmt_expr, params_ptr, params_len, captures_ptr, cur_len, captures_cap)
                     0
-                } E { 0 }
+                } EL { 0 }
                 si = si + 1
             }
             # else branch
@@ -3388,11 +3388,11 @@ X CodeGenerator {
             I else_ptr != 0 {
                 cur_len = @.collect_captures(else_ptr, params_ptr, params_len, captures_ptr, cur_len, captures_cap)
                 0
-            } E { 0 }
+            } EL { 0 }
             cur_len
         }
         # EXPR_BLOCK = 42: stmts
-        E I body_kind == 42 {
+        EL I body_kind == 42 {
             stmts_ptr := load_i64(body_ptr + 24)
             stmts_len := load_i64(body_ptr + 32)
             cur_len: mut i64 = captures_len
@@ -3403,13 +3403,13 @@ X CodeGenerator {
                 I stmt_expr != 0 {
                     cur_len = @.collect_captures(stmt_expr, params_ptr, params_len, captures_ptr, cur_len, captures_cap)
                     0
-                } E { 0 }
+                } EL { 0 }
                 si = si + 1
             }
             cur_len
         }
         # EXPR_METHOD_CALL = 34: receiver + args
-        E I body_kind == 34 {
+        EL I body_kind == 34 {
             recv_ptr := load_i64(body_ptr + 24)
             args_ptr := load_i64(body_ptr + 40)
             args_len := load_i64(body_ptr + 48)
@@ -3423,19 +3423,19 @@ X CodeGenerator {
             cur_len
         }
         # EXPR_FIELD = 36: inner expr
-        E I body_kind == 36 {
+        EL I body_kind == 36 {
             inner_ptr := load_i64(body_ptr + 24)
             @.collect_captures(inner_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
         }
         # EXPR_INDEX = 37: expr + index
-        E I body_kind == 37 {
+        EL I body_kind == 37 {
             base_ptr := load_i64(body_ptr + 24)
             idx_ptr := load_i64(body_ptr + 32)
             len1 := @.collect_captures(base_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
             @.collect_captures(idx_ptr, params_ptr, params_len, captures_ptr, len1, captures_cap)
         }
         # EXPR_TERNARY = 29: cond, then, else
-        E I body_kind == 29 {
+        EL I body_kind == 29 {
             cond_ptr := load_i64(body_ptr + 24)
             then_ptr := load_i64(body_ptr + 32)
             else_ptr := load_i64(body_ptr + 40)
@@ -3443,7 +3443,7 @@ X CodeGenerator {
             len2 := @.collect_captures(then_ptr, params_ptr, params_len, captures_ptr, len1, captures_cap)
             @.collect_captures(else_ptr, params_ptr, params_len, captures_ptr, len2, captures_cap)
         }
-        E {
+        EL {
             # For literal types (INT, FLOAT, BOOL, STRING, UNIT) - no captures
             captures_len
         }
@@ -3481,7 +3481,7 @@ X CodeGenerator {
                     @.emit_reg(alloca_reg)
                     @.emit_cstr(" to i64 ; ref capture\n")
                     store_i64(capture_regs + ci * 8, cap_reg)
-                } E I is_param == 1 {
+                } EL I is_param == 1 {
                     # Move capture of parameter: copy value
                     cap_reg := @.fresh_reg()
                     @.emit_cstr("  ")
@@ -3492,7 +3492,7 @@ X CodeGenerator {
                     @.emit_ptr(cap_name_ptr, cap_name_len)
                     @.emit_cstr(", 0 ; move capture\n")
                     store_i64(capture_regs + ci * 8, cap_reg)
-                } E {
+                } EL {
                     # Move capture of local: load value from alloca
                     alloca_reg := load_i64(local_ptr + 8)
                     cap_reg := @.fresh_reg()
@@ -3503,7 +3503,7 @@ X CodeGenerator {
                     @.emit_cstr(" ; move capture\n")
                     store_i64(capture_regs + ci * 8, cap_reg)
                 }
-            } E {
+            } EL {
                 store_i64(capture_regs + ci * 8, 0)
             }
             ci = ci + 1
@@ -3533,7 +3533,7 @@ X CodeGenerator {
         total_params: mut i64 = 0
         ci = 0
         L { I ci >= num_captures { B }
-            I total_params > 0 { @.lambda_emit_cstr(", ") } E { 0 }
+            I total_params > 0 { @.lambda_emit_cstr(", ") } EL { 0 }
 
             cap_name_idx := load_i64(capture_buf + ci * 16)
             cap_mode := load_i64(capture_buf + ci * 16 + 8)
@@ -3549,12 +3549,12 @@ X CodeGenerator {
                 # directly register with alloca flag so reads/writes go through it
                 @.lambda_emit_cstr("_ptr")
                 # We'll create an alloca in the lambda body for ref captures
-            } E { 0 }
+            } EL { 0 }
 
             # Register capture as local parameter (Move captures are direct params)
             I cap_mode == 0 {
                 @.add_local(cap_name_idx, pname_ptr, pname_len, LLVM_I64(), 1)
-            } E { 0 }
+            } EL { 0 }
 
             total_params = total_params + 1
             ci = ci + 1
@@ -3563,7 +3563,7 @@ X CodeGenerator {
         # Emit regular parameters
         i: mut i64 = 0
         L { I i >= params_len { B }
-            I total_params > 0 { @.lambda_emit_cstr(", ") } E { 0 }
+            I total_params > 0 { @.lambda_emit_cstr(", ") } EL { 0 }
 
             param_ptr := params_ptr + i * 40  # Param.size() = 40
             param_name_idx := load_i64(param_ptr)
@@ -3615,7 +3615,7 @@ X CodeGenerator {
                 local_ptr := self.locals_ptr + local_idx * LocalVar.size()
                 store_i64(local_ptr + 8, ptr_reg)  # llvm_name_ptr = reg number
                 store_i64(local_ptr + 40, 1)  # is_alloca = 1 (pointer semantics)
-            } E { 0 }
+            } EL { 0 }
             ci = ci + 1
         }
 
@@ -3647,7 +3647,7 @@ X CodeGenerator {
         # Emit parameter types for function pointer type (captures + params)
         j: mut i64 = 0
         L { I j >= num_captures + params_len { B }
-            I j > 0 { @.emit_cstr(", ") } E { 0 }
+            I j > 0 { @.emit_cstr(", ") } EL { 0 }
             @.emit_cstr("i64")
             j = j + 1
         }
@@ -3686,10 +3686,10 @@ X CodeGenerator {
                     @.emit_reg(alloca_reg)
                     @.emit_cstr(" to i64\n")
                     R result
-                } E { 0 }
-            } E { 0 }
+                } EL { 0 }
+            } EL { 0 }
             0
-        } E { 0 }
+        } EL { 0 }
 
         # Fallback: generate expr and store it on stack, return pointer
         inner_reg := @.generate_expr(inner_ptr)
@@ -3870,11 +3870,11 @@ X CodeGenerator {
         @.emit_cstr(" = ")
 
         I op == OP_ADD() { @.emit_cstr("add i64 ") }
-        E I op == OP_SUB() { @.emit_cstr("sub i64 ") }
-        E I op == OP_MUL() { @.emit_cstr("mul i64 ") }
-        E I op == OP_DIV() { @.emit_cstr("sdiv i64 ") }
-        E I op == OP_MOD() { @.emit_cstr("srem i64 ") }
-        E { @.emit_cstr("add i64 ") }
+        EL I op == OP_SUB() { @.emit_cstr("sub i64 ") }
+        EL I op == OP_MUL() { @.emit_cstr("mul i64 ") }
+        EL I op == OP_DIV() { @.emit_cstr("sdiv i64 ") }
+        EL I op == OP_MOD() { @.emit_cstr("srem i64 ") }
+        EL { @.emit_cstr("add i64 ") }
 
         @.emit_reg(current_reg)
         @.emit_cstr(", ")
@@ -3919,7 +3919,7 @@ X CodeGenerator {
             body_ptr := load_i64(arm_ptr + 16)
 
             arm_label := @.fresh_label()
-            next_label := I i + 1 < arms_len { @.fresh_label() } E { merge_label }
+            next_label := I i + 1 < arms_len { @.fresh_label() } EL { merge_label }
 
             # Pattern matching: compare scrutinee against pattern
             pat_kind := load_i64(pattern_ptr)
@@ -3945,13 +3945,13 @@ X CodeGenerator {
                     local_ptr := self.locals_ptr + local_idx * 48  # LocalVar.size()
                     store_i64(local_ptr + 40, 1)  # is_alloca = 1
                     0
-                } E { 0 }
+                } EL { 0 }
                 @.emit_cstr("  br label %arm")
                 @.emit_i64(arm_label)
                 @.emit_cstr("\n")
             }
             # PAT_LITERAL = 82
-            E I pat_kind == 82 {
+            EL I pat_kind == 82 {
                 lit_value := load_i64(pattern_ptr + 24)
                 cmp_reg := @.fresh_reg()
                 @.emit_cstr("  ")
@@ -3970,7 +3970,7 @@ X CodeGenerator {
                 @.emit_cstr("\n")
             }
             # PAT_VARIANT = 85 (enum variant: compare tag)
-            E I pat_kind == 85 {
+            EL I pat_kind == 85 {
                 variant_name_idx := load_i64(pattern_ptr + 24)
                 # Compare tag (treat variant name as tag index for now)
                 cmp_reg := @.fresh_reg()
@@ -3990,7 +3990,7 @@ X CodeGenerator {
                 @.emit_cstr("\n")
             }
             # PAT_RANGE = 86
-            E I pat_kind == 86 {
+            EL I pat_kind == 86 {
                 range_start_pat := load_i64(pattern_ptr + 24)
                 range_end_pat := load_i64(pattern_ptr + 32)
                 range_inclusive := load_i64(pattern_ptr + 40)
@@ -4013,7 +4013,7 @@ X CodeGenerator {
                 @.emit_reg(le_reg)
                 I range_inclusive == 1 {
                     @.emit_cstr(" = icmp sle i64 ")
-                } E {
+                } EL {
                     @.emit_cstr(" = icmp slt i64 ")
                 }
                 @.emit_reg(scrutinee_reg)
@@ -4040,7 +4040,7 @@ X CodeGenerator {
                 @.emit_cstr("\n")
             }
             # PAT_OR = 87
-            E I pat_kind == 87 {
+            EL I pat_kind == 87 {
                 or_pats_ptr := load_i64(pattern_ptr + 24)
                 or_pats_len := load_i64(pattern_ptr + 32)
 
@@ -4049,7 +4049,7 @@ X CodeGenerator {
                 L { I k >= or_pats_len { B }
                     sub_pat := load_i64(or_pats_ptr + k * 8)
                     sub_kind := load_i64(sub_pat)
-                    or_next := I k + 1 < or_pats_len { @.fresh_label() } E { next_label }
+                    or_next := I k + 1 < or_pats_len { @.fresh_label() } EL { next_label }
 
                     I sub_kind == 82 {
                         # Literal sub-pattern
@@ -4073,8 +4073,8 @@ X CodeGenerator {
                             @.emit_cstr("or_next")
                             @.emit_i64(or_next)
                             @.emit_cstr(":\n")
-                        } E { 0 }
-                    } E {
+                        } EL { 0 }
+                    } EL {
                         # Wildcard/ident in or-pattern: always matches
                         @.emit_cstr("  br label %arm")
                         @.emit_i64(arm_label)
@@ -4085,7 +4085,7 @@ X CodeGenerator {
                 }
                 0
             }
-            E {
+            EL {
                 # Other patterns: default to always-match
                 @.emit_cstr("  br label %arm")
                 @.emit_i64(arm_label)
@@ -4118,7 +4118,7 @@ X CodeGenerator {
                 @.emit_i64(guard_pass_label)
                 @.emit_cstr(":\n")
                 0
-            } E { 0 }
+            } EL { 0 }
 
             arm_result := @.generate_expr(body_ptr)
 
@@ -4135,7 +4135,7 @@ X CodeGenerator {
                 @.emit_cstr("next")
                 @.emit_i64(next_label)
                 @.emit_cstr(":\n")
-            } E { 0 }
+            } EL { 0 }
 
             i = i + 1
         }
@@ -4152,7 +4152,7 @@ X CodeGenerator {
             @.emit_cstr(" = phi i64 ")
             j: mut i64 = 0
             L { I j >= arms_len { B }
-                I j > 0 { @.emit_cstr(", ") } E { 0 }
+                I j > 0 { @.emit_cstr(", ") } EL { 0 }
                 arm_label := load_i64(arm_results_ptr + j * 16)
                 arm_result := load_i64(arm_results_ptr + j * 16 + 8)
                 @.emit_cstr("[ ")
@@ -4163,7 +4163,7 @@ X CodeGenerator {
                 j = j + 1
             }
             @.emit_cstr("\n")
-        } E {
+        } EL {
             @.emit_cstr("  ")
             @.emit_reg(result)
             @.emit_cstr(" = add i64 0, 0\n")
@@ -4259,21 +4259,21 @@ X CodeGenerator {
                 # If the variable was initialized from a struct literal or static call,
                 # we can't easily determine the struct name from LLVM type alone
                 0 - 1
-            } E { 0 - 1 }
+            } EL { 0 - 1 }
         }
         # EXPR_STRUCT_LIT = 40: struct name is directly available
-        E I kind == 40 {
+        EL I kind == 40 {
             load_i64(expr_ptr + 24)  # field0 = name_idx
         }
         # EXPR_STATIC_CALL = 35: type_idx is the struct name
-        E I kind == 35 {
+        EL I kind == 35 {
             load_i64(expr_ptr + 24)  # field0 = type_idx
         }
         # EXPR_SELF_CALL = 26: use current impl type
-        E I kind == 26 {
+        EL I kind == 26 {
             self.current_impl_type_idx
         }
-        E {
+        EL {
             0 - 1
         }
     }
@@ -4311,13 +4311,13 @@ X CodeGenerator {
             @.emit_string_idx(recv_type_idx)
             @.emit_cstr("_")
             0
-        } E { 0 }
+        } EL { 0 }
         @.emit_string_idx(method_idx)
         @.emit_cstr("(")
 
         j: mut i64 = 0
         L { I j >= total_args { B }
-            I j > 0 { @.emit_cstr(", ") } E { 0 }
+            I j > 0 { @.emit_cstr(", ") } EL { 0 }
             @.emit_cstr("i64 ")
             arg_reg := load_i64(arg_regs_ptr + j * 8)
             @.emit_reg(arg_reg)
@@ -4360,7 +4360,7 @@ X CodeGenerator {
 
         j: mut i64 = 0
         L { I j >= args_len { B }
-            I j > 0 { @.emit_cstr(", ") } E { 0 }
+            I j > 0 { @.emit_cstr(", ") } EL { 0 }
             @.emit_cstr("i64 ")
             arg_reg := load_i64(arg_regs_ptr + j * 8)
             @.emit_reg(arg_reg)
@@ -4414,7 +4414,7 @@ X CodeGenerator {
 
         # Allocate memory for the struct (fields_len * 8 bytes)
         size := fields_len * 8
-        I size == 0 { size = 8 } E { 0 }  # Minimum 8 bytes
+        I size == 0 { size = 8 } EL { 0 }  # Minimum 8 bytes
 
         # Call malloc
         size_reg := @.fresh_reg()
@@ -4511,16 +4511,16 @@ X CodeGenerator {
             L { I pos >= ir_len { B }
                 ch := load_byte(ir_data + pos)
                 I ch == 10 { B }  # newline
-                E { pos = pos + 1 }
+                EL { pos = pos + 1 }
             }
             line_len := pos - line_start
 
             # Skip newline
-            I pos < ir_len { pos = pos + 1 } E { 0 }
+            I pos < ir_len { pos = pos + 1 } EL { 0 }
 
             # Skip empty lines, comments, labels
             I line_len == 0 { 0 }
-            E {
+            EL {
                 @.dce_scan_line(ir_data + line_start, line_len, defined, used, side_effect, max_regs)
             }
         }
@@ -4536,12 +4536,12 @@ X CodeGenerator {
             L { I pos >= ir_len { B }
                 ch := load_byte(ir_data + pos)
                 I ch == 10 { B }
-                E { pos = pos + 1 }
+                EL { pos = pos + 1 }
             }
             line_len := pos - line_start
 
             # Skip newline
-            I pos < ir_len { pos = pos + 1 } E { 0 }
+            I pos < ir_len { pos = pos + 1 } EL { 0 }
 
             # Check if this line defines an unused register
             should_remove := @.dce_should_remove(ir_data + line_start, line_len, defined, used, side_effect, max_regs)
@@ -4554,12 +4554,12 @@ X CodeGenerator {
                 new_len = new_len + dce_len
                 store_byte(new_buf + new_len, 10)
                 new_len = new_len + 1
-            } E {
+            } EL {
                 # Copy line as-is
                 I line_len > 0 {
                     memcpy(new_buf + new_len, ir_data + line_start, line_len)
                     new_len = new_len + line_len
-                } E { 0 }
+                } EL { 0 }
                 store_byte(new_buf + new_len, 10)
                 new_len = new_len + 1
             }
@@ -4585,7 +4585,7 @@ X CodeGenerator {
         start: mut i64 = 0
         L { I start >= line_len { B }
             ch := load_byte(line_ptr + start)
-            I ch == 32 || ch == 9 { start = start + 1 } E { B }
+            I ch == 32 || ch == 9 { start = start + 1 } EL { B }
         }
         I start >= line_len { R 0 }
 
@@ -4607,14 +4607,14 @@ X CodeGenerator {
             has_side := @.dce_has_side_effect(line_ptr, line_len)
             I has_side == 1 {
                 store_byte(side_effect + def_reg, 1)
-            } E { 0 }
+            } EL { 0 }
 
             # Scan for used registers in the RHS (after " = ")
             eq_pos := @.dce_find_equals(line_ptr, line_len)
             I eq_pos > 0 {
                 @.dce_scan_uses(line_ptr + eq_pos, line_len - eq_pos, used, max_regs)
-            } E { 0 }
-        } E {
+            } EL { 0 }
+        } EL {
             # Not a definition line - all %N references are uses
             # This covers: ret, br, store, call without result, etc.
             @.dce_scan_uses(line_ptr, line_len, used, max_regs)
@@ -4642,7 +4642,7 @@ X CodeGenerator {
                 num = num * 10 + (d - 48)
                 has_digit = 1
                 pos = pos + 1
-            } E { B }
+            } EL { B }
         }
 
         I has_digit == 0 { R 0 - 1 }
@@ -4654,8 +4654,8 @@ X CodeGenerator {
             c3 := load_byte(line_ptr + pos + 2)
             I c1 == 32 && c2 == 61 && c3 == 32 {
                 num
-            } E { 0 - 1 }
-        } E { 0 - 1 }
+            } EL { 0 - 1 }
+        } EL { 0 - 1 }
     }
 
     # Find the position of " = " in a line, returns position after " = " or -1
@@ -4678,7 +4678,7 @@ X CodeGenerator {
     F dce_has_side_effect(&self, line_ptr: i64, line_len: i64) -> i64 {
         # Find the RHS after " = "
         eq_pos := @.dce_find_equals(line_ptr, line_len)
-        rhs_start := I eq_pos > 0 { eq_pos } E { 0 }
+        rhs_start := I eq_pos > 0 { eq_pos } EL { 0 }
         rhs_ptr := line_ptr + rhs_start
         rhs_len := line_len - rhs_start
 
@@ -4723,13 +4723,13 @@ X CodeGenerator {
                         num = num * 10 + (d - 48)
                         has_digit = 1
                         j = j + 1
-                    } E { B }
+                    } EL { B }
                 }
                 I has_digit == 1 && num < max_regs {
                     store_byte(used + num, 1)
-                } E { 0 }
+                } EL { 0 }
                 i = j
-            } E {
+            } EL {
                 i = i + 1
             }
         }
@@ -4742,7 +4742,7 @@ X CodeGenerator {
         start: mut i64 = 0
         L { I start >= line_len { B }
             ch := load_byte(line_ptr + start)
-            I ch == 32 || ch == 9 { start = start + 1 } E { B }
+            I ch == 32 || ch == 9 { start = start + 1 } EL { B }
         }
         I start >= line_len { R 0 }
 
@@ -4756,7 +4756,7 @@ X CodeGenerator {
         has_side := load_byte(side_effect + def_reg)
 
         I is_defined == 1 && is_used == 0 && has_side == 0 { 1 }
-        E { 0 }
+        EL { 0 }
     }
 
     # ========== Basic Inlining ==========
@@ -4814,11 +4814,11 @@ X CodeGenerator {
                 new_buf := load_i64(new_data)       # stored at offset 0
                 I cur_data != ir_data {
                     free(cur_data)
-                } E { 0 }
+                } EL { 0 }
                 cur_data = new_buf
                 cur_len = new_len
                 free(new_data)
-            } E { 0 }
+            } EL { 0 }
 
             ci = ci + 1
         }
@@ -4828,16 +4828,16 @@ X CodeGenerator {
             free(ir_data)
             store_i64(self.output, cur_data)
             store_i64(self.output + 8, cur_len)
-        } E { 0 }
+        } EL { 0 }
 
         # Free candidate body buffers
         ci = 0
         L { I ci >= num_candidates { B }
             cand_ptr := candidates + ci * 56
             body_ptr := load_i64(cand_ptr + 24)
-            I body_ptr != 0 { free(body_ptr) } E { 0 }
+            I body_ptr != 0 { free(body_ptr) } EL { 0 }
             name_ptr := load_i64(cand_ptr)
-            I name_ptr != 0 { free(name_ptr) } E { 0 }
+            I name_ptr != 0 { free(name_ptr) } EL { 0 }
             ci = ci + 1
         }
         free(candidates)
@@ -4854,10 +4854,10 @@ X CodeGenerator {
             line_start := pos
             L { I pos >= ir_len { B }
                 ch := load_byte(ir_data + pos)
-                I ch == 10 { B } E { pos = pos + 1 }
+                I ch == 10 { B } EL { pos = pos + 1 }
             }
             line_len := pos - line_start
-            I pos < ir_len { pos = pos + 1 } E { 0 }
+            I pos < ir_len { pos = pos + 1 } EL { 0 }
 
             # Check if line starts with "define " (100 101 102 105 110 101 32)
             I line_len > 8 {
@@ -4873,11 +4873,11 @@ X CodeGenerator {
                             result := @.inline_parse_function(ir_data, ir_len, line_start, cand_ptr)
                             I result == 1 {
                                 store_i64(num_ptr, num + 1)
-                            } E { 0 }
-                        } E { 0 }
-                    } E { 0 }
-                } E { 0 }
-            } E { 0 }
+                            } EL { 0 }
+                        } EL { 0 }
+                    } EL { 0 }
+                } EL { 0 }
+            } EL { 0 }
         }
         1
     }
@@ -4890,7 +4890,7 @@ X CodeGenerator {
         L { I pos >= ir_len { B }
             ch := load_byte(ir_data + pos)
             I ch == 64 { B }  # '@'
-            E { pos = pos + 1 }
+            EL { pos = pos + 1 }
         }
         I pos >= ir_len { R 0 }
 
@@ -4898,7 +4898,7 @@ X CodeGenerator {
         L { I pos >= ir_len { B }
             ch := load_byte(ir_data + pos)
             I ch == 40 { B }  # '('
-            E { pos = pos + 1 }
+            EL { pos = pos + 1 }
         }
         I pos >= ir_len { R 0 }
         name_end := pos
@@ -4912,7 +4912,7 @@ X CodeGenerator {
             I c0 == 109 && c1 == 97 && name_len == 4 { R 0 }
             # Skip "__" prefix (internal/lambda)
             I c0 == 95 && c1 == 95 { R 0 }
-        } E { 0 }
+        } EL { 0 }
 
         # Count parameters (count commas + 1 if non-empty, 0 if empty)
         paren_start := pos  # position of '('
@@ -4924,18 +4924,18 @@ X CodeGenerator {
         L { I pos >= ir_len || paren_depth == 0 { B }
             ch := load_byte(ir_data + pos)
             I ch == 40 { paren_depth = paren_depth + 1 }
-            E I ch == 41 { paren_depth = paren_depth - 1 }
-            E I ch == 44 && paren_depth == 1 { param_count = param_count + 1 }
-            E I ch != 32 && ch != 41 && paren_depth == 1 { has_params = 1 }
+            EL I ch == 41 { paren_depth = paren_depth - 1 }
+            EL I ch == 44 && paren_depth == 1 { param_count = param_count + 1 }
+            EL I ch != 32 && ch != 41 && paren_depth == 1 { has_params = 1 }
             pos = pos + 1
         }
-        I has_params == 1 { param_count = param_count + 1 } E { 0 }
+        I has_params == 1 { param_count = param_count + 1 } EL { 0 }
 
         # Find opening '{' and then scan body lines until '}'
         L { I pos >= ir_len { B }
             ch := load_byte(ir_data + pos)
             I ch == 123 { B }  # '{'
-            E { pos = pos + 1 }
+            EL { pos = pos + 1 }
         }
         I pos >= ir_len { R 0 }
         pos = pos + 1  # skip '{'
@@ -4943,7 +4943,7 @@ X CodeGenerator {
         # Skip to next line
         L { I pos >= ir_len { B }
             ch := load_byte(ir_data + pos)
-            I ch == 10 { pos = pos + 1; B } E { pos = pos + 1 }
+            I ch == 10 { pos = pos + 1; B } EL { pos = pos + 1 }
         }
 
         # Collect body lines and count instructions
@@ -4958,25 +4958,25 @@ X CodeGenerator {
             ls := pos
             L { I pos >= ir_len { B }
                 ch := load_byte(ir_data + pos)
-                I ch == 10 { B } E { pos = pos + 1 }
+                I ch == 10 { B } EL { pos = pos + 1 }
             }
             ll := pos - ls
-            I pos < ir_len { pos = pos + 1 } E { 0 }
+            I pos < ir_len { pos = pos + 1 } EL { 0 }
 
             # Check for closing '}'
             I ll >= 1 {
                 fc := load_byte(ir_data + ls)
                 I fc == 125 { B }  # '}'
-            } E { 0 }
+            } EL { 0 }
 
             # Skip labels and empty lines
             I ll == 0 { 0 }
-            E {
+            EL {
                 # Skip leading whitespace
                 ws: mut i64 = 0
                 L { I ws >= ll { B }
                     wc := load_byte(ir_data + ls + ws)
-                    I wc == 32 || wc == 9 { ws = ws + 1 } E { B }
+                    I wc == 32 || wc == 9 { ws = ws + 1 } EL { B }
                 }
 
                 I ws < ll {
@@ -4985,7 +4985,7 @@ X CodeGenerator {
 
                     # Skip comments and labels
                     I tc == 59 || lc == 58 { 0 }
-                    E {
+                    EL {
                         instruction_count = instruction_count + 1
 
                         # Check for call instructions
@@ -4994,8 +4994,8 @@ X CodeGenerator {
                             # Check if recursive (calls own function name)
                             I @.inline_contains_name(ir_data + ls, ll, ir_data + name_start, name_len) == 1 {
                                 is_recursive = 1
-                            } E { 0 }
-                        } E { 0 }
+                            } EL { 0 }
+                        } EL { 0 }
 
                         # Track max register number
                         @.inline_scan_max_reg(ir_data + ls, ll, &max_reg)
@@ -5004,9 +5004,9 @@ X CodeGenerator {
                         # "ret i64" → bytes 114 101 116 32 105 54 52
                         I @.dce_contains_5bytes(ir_data + ls + ws, ll - ws, 114, 101, 116, 32, 105) == 1 {
                             ret_type = 1
-                        } E { 0 }
+                        } EL { 0 }
                     }
-                } E { 0 }
+                } EL { 0 }
             }
         }
 
@@ -5057,9 +5057,9 @@ X CodeGenerator {
                     I i + 1 + name_len < data_len {
                         nc := load_byte(data + i + 1 + name_len)
                         I nc == 40 { R 1 }  # '('
-                    } E { R 1 }
-                } E { 0 }
-            } E { 0 }
+                    } EL { R 1 }
+                } EL { 0 }
+            } EL { 0 }
             i = i + 1
         }
         0
@@ -5080,14 +5080,14 @@ X CodeGenerator {
                         num = num * 10 + (d - 48)
                         has_digit = 1
                         j = j + 1
-                    } E { B }
+                    } EL { B }
                 }
                 I has_digit == 1 {
                     cur_max := load_i64(max_ptr)
-                    I num > cur_max { store_i64(max_ptr, num) } E { 0 }
-                } E { 0 }
+                    I num > cur_max { store_i64(max_ptr, num) } EL { 0 }
+                } EL { 0 }
                 i = j
-            } E {
+            } EL {
                 i = i + 1
             }
         }
@@ -5119,10 +5119,10 @@ X CodeGenerator {
             line_start := pos
             L { I pos >= ir_len { B }
                 ch := load_byte(ir_data + pos)
-                I ch == 10 { B } E { pos = pos + 1 }
+                I ch == 10 { B } EL { pos = pos + 1 }
             }
             line_len := pos - line_start
-            I pos < ir_len { pos = pos + 1 } E { 0 }
+            I pos < ir_len { pos = pos + 1 } EL { 0 }
 
             # Check if this line calls our candidate
             # Pattern: "call i64 @name("
@@ -5140,7 +5140,7 @@ X CodeGenerator {
                 ws: mut i64 = 0
                 L { I ws >= line_len { B }
                     wc := load_byte(ir_data + line_start + ws)
-                    I wc == 32 || wc == 9 { ws = ws + 1 } E { B }
+                    I wc == 32 || wc == 9 { ws = ws + 1 } EL { B }
                 }
 
                 # Extract call arguments
@@ -5149,7 +5149,7 @@ X CodeGenerator {
                 L { I arg_start >= line_len { B }
                     ac := load_byte(ir_data + line_start + arg_start)
                     I ac == 40 { arg_start = arg_start + 1; B }  # '('
-                    E { arg_start = arg_start + 1 }
+                    EL { arg_start = arg_start + 1 }
                 }
 
                 # Parse argument values (comma-separated, each has "i64 %N" or "i64 N")
@@ -5171,12 +5171,12 @@ X CodeGenerator {
 
                 free(arg_values)
                 did_inline = 1
-            } E {
+            } EL {
                 # Copy line as-is
                 I line_len > 0 {
                     memcpy(new_buf + new_len, ir_data + line_start, line_len)
                     new_len = new_len + line_len
-                } E { 0 }
+                } EL { 0 }
                 store_byte(new_buf + new_len, 10)
                 new_len = new_len + 1
             }
@@ -5187,7 +5187,7 @@ X CodeGenerator {
             store_i64(result, new_buf)
             store_i64(result + 8, new_len)
             result
-        } E {
+        } EL {
             free(new_buf)
             0
         }
@@ -5222,10 +5222,10 @@ X CodeGenerator {
                         I i + 10 + name_len < line_len {
                             pc := load_byte(line + i + 10 + name_len)
                             I pc == 40 { R i }
-                        } E { 0 }
-                    } E { 0 }
-                } E { 0 }
-            } E { 0 }
+                        } EL { 0 }
+                    } EL { 0 }
+                } EL { 0 }
+            } EL { 0 }
             i = i + 1
         }
         0 - 1
@@ -5251,17 +5251,17 @@ X CodeGenerator {
                         num = num * 10 + (d - 48)
                         has_digit = 1
                         j = j + 1
-                    } E { B }
+                    } EL { B }
                 }
                 I has_digit == 1 {
                     store_i64(arg_values + arg_idx * 8, num)
                     arg_idx = arg_idx + 1
-                } E { 0 }
+                } EL { 0 }
                 i = j
             }
             # Handle named parameters (%name) - skip for now, only numeric
-            E I ch == 41 { B }  # ')' end of args
-            E { i = i + 1 }
+            EL I ch == 41 { B }  # ')' end of args
+            EL { i = i + 1 }
         }
         arg_idx
     }
@@ -5275,39 +5275,39 @@ X CodeGenerator {
             line_start := pos
             L { I pos >= body_len { B }
                 ch := load_byte(body + pos)
-                I ch == 10 { B } E { pos = pos + 1 }
+                I ch == 10 { B } EL { pos = pos + 1 }
             }
             line_len := pos - line_start
-            I pos < body_len { pos = pos + 1 } E { 0 }
+            I pos < body_len { pos = pos + 1 } EL { 0 }
 
             # Skip empty lines and labels
             I line_len == 0 { 0 }
-            E {
+            EL {
                 # Skip whitespace
                 ws: mut i64 = 0
                 L { I ws >= line_len { B }
                     wc := load_byte(body + line_start + ws)
-                    I wc == 32 || wc == 9 { ws = ws + 1 } E { B }
+                    I wc == 32 || wc == 9 { ws = ws + 1 } EL { B }
                 }
 
                 I ws >= line_len { 0 }
-                E {
+                EL {
                     fc := load_byte(body + line_start + ws)
                     lc := load_byte(body + line_start + line_len - 1)
 
                     # Skip comments and labels
                     I fc == 59 || lc == 58 { 0 }
                     # Handle return: "ret i64 %N" → "%dest = add i64 0, %N_renamed"
-                    E I @.dce_contains_5bytes(body + line_start + ws, line_len - ws, 114, 101, 116, 32, 105) == 1 {
+                    EL I @.dce_contains_5bytes(body + line_start + ws, line_len - ws, 114, 101, 116, 32, 105) == 1 {
                         # Extract return value register
                         ret_val := @.inline_extract_ret_value(body + line_start + ws, line_len - ws)
                         I dest_reg >= 0 && ret_type == 1 {
                             # Map the return value (apply register offset)
                             mapped_val := I ret_val >= 0 && ret_val < param_count {
                                 load_i64(arg_values + ret_val * 8)
-                            } E I ret_val >= 0 {
+                            } EL I ret_val >= 0 {
                                 ret_val + reg_offset
-                            } E { ret_val }
+                            } EL { ret_val }
 
                             memcpy_str(out + out_len, "  %", 3)
                             out_len = out_len + 3
@@ -5317,10 +5317,10 @@ X CodeGenerator {
                             out_len = out_len + @.inline_write_i64(out + out_len, mapped_val)
                             memcpy_str(out + out_len, " ; inlined ret\n", 15)
                             out_len = out_len + 15
-                        } E { 0 }
+                        } EL { 0 }
                     }
                     # Regular instruction: copy with register renaming
-                    E {
+                    EL {
                         memcpy_str(out + out_len, "  ", 2)
                         out_len = out_len + 2
                         # Copy line byte by byte, renaming %N to %(N+offset) or to arg value
@@ -5338,25 +5338,25 @@ X CodeGenerator {
                                         rnum = rnum * 10 + (rd - 48)
                                         rdig = 1
                                         bj = bj + 1
-                                    } E { B }
+                                    } EL { B }
                                 }
                                 I rdig == 1 {
                                     # Map register: param regs → arg values, others → offset
                                     mapped := I rnum < param_count {
                                         load_i64(arg_values + rnum * 8)
-                                    } E {
+                                    } EL {
                                         rnum + reg_offset
                                     }
                                     store_byte(out + out_len, 37)  # '%'
                                     out_len = out_len + 1
                                     out_len = out_len + @.inline_write_i64(out + out_len, mapped)
-                                } E {
+                                } EL {
                                     # Not a numeric reg, copy '%' and continue
                                     store_byte(out + out_len, 37)
                                     out_len = out_len + 1
                                 }
                                 bi = bj
-                            } E {
+                            } EL {
                                 store_byte(out + out_len, bc)
                                 out_len = out_len + 1
                                 bi = bi + 1
@@ -5389,7 +5389,7 @@ X CodeGenerator {
                         num = num * 10 + (d - 48)
                         has_digit = 1
                         j = j + 1
-                    } E { B }
+                    } EL { B }
                 }
                 I has_digit == 1 { R num }
             }
@@ -5403,10 +5403,10 @@ X CodeGenerator {
         I value < 0 {
             store_byte(out, 45)  # '-'
             1 + @.inline_write_i64(out + 1, 0 - value)
-        } E I value == 0 {
+        } EL I value == 0 {
             store_byte(out, 48)  # '0'
             1
-        } E {
+        } EL {
             # Count digits
             len := @.inline_write_positive(out, value, 0)
             len
@@ -5473,14 +5473,14 @@ F test_codegen_main() -> i64 {
     buf.append_cstr("World!")
     I buf.len == 13 {
         puts("StringBuffer append: OK")
-    } E {
+    } EL {
         puts("StringBuffer append: FAIL")
     }
 
     buf.append_i64(42)
     I buf.len == 15 {
         puts("StringBuffer append_i64: OK")
-    } E {
+    } EL {
         puts("StringBuffer append_i64: FAIL")
     }
 
@@ -5490,7 +5490,7 @@ F test_codegen_main() -> i64 {
     gen := CodeGenerator.new()
     I gen.functions_cap == 128 {
         puts("CodeGenerator creation: OK")
-    } E {
+    } EL {
         puts("CodeGenerator creation: FAIL")
     }
 
@@ -5499,7 +5499,7 @@ F test_codegen_main() -> i64 {
     reg2 := gen.fresh_reg()
     I reg1 == 0 && reg2 == 1 {
         puts("Register generation: OK")
-    } E {
+    } EL {
         puts("Register generation: FAIL")
     }
 
@@ -5508,7 +5508,7 @@ F test_codegen_main() -> i64 {
     label2 := gen.fresh_label()
     I label1 == 0 && label2 == 1 {
         puts("Label generation: OK")
-    } E {
+    } EL {
         puts("Label generation: FAIL")
     }
 
@@ -5517,20 +5517,20 @@ F test_codegen_main() -> i64 {
     found := gen.find_local(0)
     I found != 0 {
         puts("Local variable: OK")
-    } E {
+    } EL {
         puts("Local variable: FAIL")
     }
 
     # Test type conversion
     I gen.resolved_type_to_llvm(4) == LLVM_I64() {
         puts("Type conversion i64: OK")
-    } E {
+    } EL {
         puts("Type conversion i64: FAIL")
     }
 
     I gen.resolved_type_to_llvm(13) == LLVM_I1() {
         puts("Type conversion bool: OK")
-    } E {
+    } EL {
         puts("Type conversion bool: FAIL")
     }
 

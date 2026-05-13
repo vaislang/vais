@@ -98,7 +98,9 @@ async fn main() -> io::Result<()> {
         .with_max_level(args.log_level)
         .with_writer(io::stderr)
         .finish();
-    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+    if let Err(e) = tracing::subscriber::set_global_default(subscriber) {
+        eprintln!("Warning: failed to set tracing subscriber: {e}");
+    }
 
     info!("Starting vais-dap server v{}", env!("CARGO_PKG_VERSION"));
 

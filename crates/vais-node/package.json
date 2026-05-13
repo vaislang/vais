@@ -1,0 +1,15 @@
+{
+  "name": "vais-node",
+  "version": "0.1.0",
+  "description": "Node.js bindings for the Vais compiler",
+  "main": "index.js",
+  "scripts": {
+    "build": "cargo build --release -p vais-node",
+    "test": "node --test test/test.mjs"
+  },
+  "keywords": ["vais", "compiler", "napi"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

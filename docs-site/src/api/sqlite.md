@@ -7,7 +7,7 @@
 ## Import
 
 ```vais
-U std/sqlite
+use std/sqlite
 ```
 
 ## Constants
@@ -153,12 +153,12 @@ Convenience wrapper for result rows during iteration.
 ### Basic Usage
 
 ```vais
-U std/sqlite
+use std/sqlite
 
-F main() -> i64 {
+fn main() -> i64 {
     db := Database::open("test.db")
     I db.is_valid() == 0 {
-        R 1
+        return 1
     }
 
     db.exec("CREATE TABLE users (id INTEGER, name TEXT)")
@@ -181,9 +181,9 @@ F main() -> i64 {
 ### Query Iteration with Row
 
 ```vais
-U std/sqlite
+use std/sqlite
 
-F main() -> i64 {
+fn main() -> i64 {
     db := Database::open("users.db")
     stmt := db.prepare("SELECT id, name FROM users")
 
@@ -203,22 +203,22 @@ F main() -> i64 {
 ### Transaction Management
 
 ```vais
-U std/sqlite
+use std/sqlite
 
-F main() -> i64 {
+fn main() -> i64 {
     db := Database::open("data.db")
 
     db.begin()
     rc := db.exec("INSERT INTO accounts VALUES (1, 100)")
     I rc != SQLITE_OK {
         db.rollback()
-        R 1
+        return 1
     }
 
     rc = db.exec("UPDATE accounts SET balance = balance - 100 WHERE id = 2")
     I rc != SQLITE_OK {
         db.rollback()
-        R 1
+        return 1
     }
 
     db.commit()
@@ -230,9 +230,9 @@ F main() -> i64 {
 ### In-Memory Database
 
 ```vais
-U std/sqlite
+use std/sqlite
 
-F main() -> i64 {
+fn main() -> i64 {
     db := Database::memory()
     db.exec("CREATE TABLE temp (id INTEGER)")
     db.exec("INSERT INTO temp VALUES (42)")
@@ -252,9 +252,9 @@ F main() -> i64 {
 ### Error Handling
 
 ```vais
-U std/sqlite
+use std/sqlite
 
-F main() -> i64 {
+fn main() -> i64 {
     db := Database::open("test.db")
     rc := db.exec("INVALID SQL")
 
@@ -262,7 +262,7 @@ F main() -> i64 {
         error_msg := db.error_message()
         code_name := result_code_str(rc)
         # Handle error...
-        R 1
+        return 1
     }
 
     db.close()
@@ -273,9 +273,9 @@ F main() -> i64 {
 ### Convenience Functions
 
 ```vais
-U std/sqlite
+use std/sqlite
 
-F main() -> i64 {
+fn main() -> i64 {
     # Using convenience functions
     db := open("data.db")
     rc := exec(&db, "CREATE TABLE test (id INTEGER)")

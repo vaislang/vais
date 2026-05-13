@@ -3,8 +3,9 @@
 use std::collections::HashMap;
 
 use cranelift::prelude::*;
+use cranelift_codegen::ir::BlockArg;
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{DataDescription, FuncId, Linkage, Module};
+use cranelift_module::{FuncId, Linkage, Module};
 
 use vais_ast::{
     BinOp, Expr, Function, FunctionBody, Item, Module as AstModule, Spanned, Stmt, Type, UnaryOp,
@@ -23,14 +24,8 @@ pub struct JitCompiler {
     builder_context: FunctionBuilderContext,
     /// Cranelift codegen context.
     ctx: codegen::Context,
-    /// Data section description.
-    #[allow(dead_code)]
-    data_description: DataDescription,
     /// Type mapper for Vais -> Cranelift type conversion.
     type_mapper: TypeMapper,
-    /// JIT runtime for external function resolution.
-    #[allow(dead_code)]
-    runtime: JitRuntime,
     /// Map of compiled function names to their IDs.
     compiled_functions: HashMap<String, FuncId>,
     /// Map of external function names to their IDs.
@@ -76,9 +71,7 @@ impl JitCompiler {
             module,
             builder_context: FunctionBuilderContext::new(),
             ctx: codegen::Context::new(),
-            data_description: DataDescription::new(),
             type_mapper: TypeMapper::new(pointer_type),
-            runtime,
             compiled_functions: HashMap::new(),
             external_functions: HashMap::new(),
         })
@@ -106,6 +99,9 @@ impl JitCompiler {
         let code_ptr = self.module.get_finalized_function(func_id);
 
         // Call the function
+        // SAFETY: code_ptr is obtained from cranelift's finalized function. The function
+        // signature is `fn() -> i64` as declared during JIT compilation. The module is
+        // kept alive (not dropped) so the code memory remains valid.
         let func: fn() -> i64 = unsafe { std::mem::transmute(code_ptr) };
         Ok(func())
     }
@@ -139,7 +135,7 @@ impl JitCompiler {
         // Add parameters
         for param in &func.params {
             let ty = self.resolve_type(&param.ty.node);
-            let cl_ty = self.type_mapper.map_type(&ty);
+            let cl_ty = self.type_mapper.map_type(&ty)?;
             sig.params.push(AbiParam::new(cl_ty));
         }
 
@@ -150,7 +146,7 @@ impl JitCompiler {
             .map(|t| self.resolve_type(&t.node))
             .unwrap_or(ResolvedType::Unit);
         if !matches!(ret_ty, ResolvedType::Unit) {
-            let cl_ret = self.type_mapper.map_type(&ret_ty);
+            let cl_ret = self.type_mapper.map_type(&ret_ty)?;
             sig.returns.push(AbiParam::new(cl_ret));
         }
 
@@ -177,7 +173,7 @@ impl JitCompiler {
                 let ty = self.resolve_type(&param.ty.node);
                 self.type_mapper.map_type(&ty)
             })
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
         let ret_ty = func
             .ret_type
@@ -192,7 +188,7 @@ impl JitCompiler {
         }
 
         if !matches!(ret_ty, ResolvedType::Unit) {
-            let cl_ret = self.type_mapper.map_type(&ret_ty);
+            let cl_ret = self.type_mapper.map_type(&ret_ty)?;
             sig.returns.push(AbiParam::new(cl_ret));
         }
 
@@ -212,15 +208,13 @@ impl JitCompiler {
         let mut var_index = 0;
 
         for (i, (param, cl_ty)) in func.params.iter().zip(param_types.iter()).enumerate() {
-            let var = Variable::new(var_index);
-            var_index += 1;
-
-            builder.declare_var(var, *cl_ty);
+            let var = builder.declare_var(*cl_ty);
 
             let val = builder.block_params(entry_block)[i];
             builder.def_var(var, val);
 
             variables.insert(param.name.node.clone(), var);
+            var_index += 1;
         }
 
         // Compile the function body
@@ -303,6 +297,10 @@ impl JitCompiler {
             Type::Pointer(inner) => ResolvedType::Pointer(Box::new(self.resolve_type(&inner.node))),
             Type::Ref(inner) => ResolvedType::Ref(Box::new(self.resolve_type(&inner.node))),
             Type::RefMut(inner) => ResolvedType::RefMut(Box::new(self.resolve_type(&inner.node))),
+            Type::Slice(inner) => ResolvedType::Slice(Box::new(self.resolve_type(&inner.node))),
+            Type::SliceMut(inner) => {
+                ResolvedType::SliceMut(Box::new(self.resolve_type(&inner.node)))
+            }
             Type::Array(inner) => ResolvedType::Array(Box::new(self.resolve_type(&inner.node))),
             Type::Map(key, val) => ResolvedType::Map(
                 Box::new(self.resolve_type(&key.node)),
@@ -398,7 +396,6 @@ impl JitCompiler {
                 lifetime: lifetime.clone(),
                 inner: Box::new(self.resolve_type(&inner.node)),
             },
-            Type::Lazy(inner) => ResolvedType::Lazy(Box::new(self.resolve_type(&inner.node))),
         }
     }
 
@@ -407,6 +404,15 @@ impl JitCompiler {
         match expr {
             vais_ast::ConstExpr::Literal(n) => vais_types::ResolvedConst::Value(*n),
             vais_ast::ConstExpr::Param(name) => vais_types::ResolvedConst::Param(name.clone()),
+            vais_ast::ConstExpr::Negate(inner) => {
+                let resolved = self.resolve_const_expr(inner);
+                if let Some(val) = resolved.try_evaluate() {
+                    if let Some(neg_val) = val.checked_neg() {
+                        return vais_types::ResolvedConst::Value(neg_val);
+                    }
+                }
+                vais_types::ResolvedConst::Negate(Box::new(resolved))
+            }
             vais_ast::ConstExpr::BinOp { op, left, right } => {
                 let resolved_left = self.resolve_const_expr(left);
                 let resolved_right = self.resolve_const_expr(right);
@@ -415,6 +421,12 @@ impl JitCompiler {
                     vais_ast::ConstBinOp::Sub => vais_types::ConstBinOp::Sub,
                     vais_ast::ConstBinOp::Mul => vais_types::ConstBinOp::Mul,
                     vais_ast::ConstBinOp::Div => vais_types::ConstBinOp::Div,
+                    vais_ast::ConstBinOp::Mod => vais_types::ConstBinOp::Mod,
+                    vais_ast::ConstBinOp::BitAnd => vais_types::ConstBinOp::BitAnd,
+                    vais_ast::ConstBinOp::BitOr => vais_types::ConstBinOp::BitOr,
+                    vais_ast::ConstBinOp::BitXor => vais_types::ConstBinOp::BitXor,
+                    vais_ast::ConstBinOp::Shl => vais_types::ConstBinOp::Shl,
+                    vais_ast::ConstBinOp::Shr => vais_types::ConstBinOp::Shr,
                 };
                 vais_types::ResolvedConst::BinOp {
                     op: resolved_op,
@@ -531,11 +543,9 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
     fn compile_stmt(&mut self, stmt: &Stmt) -> Result<(), JitError> {
         match stmt {
             Stmt::Let { name, value, .. } => {
-                let var = Variable::new(self.var_index);
-                self.var_index += 1;
-
                 // Declare variable with i64 type (default)
-                self.builder.declare_var(var, types::I64);
+                let var = self.builder.declare_var(types::I64);
+                self.var_index += 1;
 
                 let val = self.compile_expr(&value.node)?;
                 self.builder.def_var(var, val);
@@ -741,7 +751,9 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
         self.builder.switch_to_block(then_block);
         self.builder.seal_block(then_block);
         let then_val = self.compile_stmts_as_expr(then_stmts)?;
-        self.builder.ins().jump(merge_block, &[then_val]);
+        self.builder
+            .ins()
+            .jump(merge_block, &[BlockArg::Value(then_val)]);
 
         // Else block
         self.builder.switch_to_block(else_block);
@@ -751,7 +763,9 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
         } else {
             self.builder.ins().iconst(types::I64, 0)
         };
-        self.builder.ins().jump(merge_block, &[else_val]);
+        self.builder
+            .ins()
+            .jump(merge_block, &[BlockArg::Value(else_val)]);
 
         // Merge block
         self.builder.switch_to_block(merge_block);
@@ -810,12 +824,16 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
         self.builder.switch_to_block(then_block);
         self.builder.seal_block(then_block);
         let then_val = self.compile_expr(then_expr)?;
-        self.builder.ins().jump(merge_block, &[then_val]);
+        self.builder
+            .ins()
+            .jump(merge_block, &[BlockArg::Value(then_val)]);
 
         self.builder.switch_to_block(else_block);
         self.builder.seal_block(else_block);
         let else_val = self.compile_expr(else_expr)?;
-        self.builder.ins().jump(merge_block, &[else_val]);
+        self.builder
+            .ins()
+            .jump(merge_block, &[BlockArg::Value(else_val)]);
 
         self.builder.switch_to_block(merge_block);
         self.builder.seal_block(merge_block);
@@ -1024,5 +1042,55 @@ mod tests {
     fn test_bitwise_or() {
         let result = compile_and_run("F main()->i64{12|3}").unwrap();
         assert_eq!(result, 15);
+    }
+
+    #[test]
+    fn test_complex_expression() {
+        let result = compile_and_run("F main()->i64{(2+3)*(4-1)}").unwrap();
+        assert_eq!(result, 15);
+    }
+
+    #[test]
+    fn test_nested_if_expressions() {
+        let source = "F main()->i64{x:=10;I x>5{I x>8{1}E{2}}E{3}}";
+        let result = compile_and_run(source).unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_multiple_function_calls_same_function() {
+        let source = "F sq(x:i64)->i64{x*x} F main()->i64{sq(3)+sq(4)}";
+        let result = compile_and_run(source).unwrap();
+        assert_eq!(result, 25);
+    }
+
+    #[test]
+    fn test_ternary_expression() {
+        let source = "F main()->i64{x:=5;x>3?10:20}";
+        let result = compile_and_run(source).unwrap();
+        assert_eq!(result, 10);
+    }
+
+    #[test]
+    fn test_chained_comparisons() {
+        let source = "F main()->i64{a:=5;b:=10;I a<b&&b<20{1}E{0}}";
+        let result = compile_and_run(source).unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_compiler_clear() {
+        let mut jit = JitCompiler::new().unwrap();
+
+        let ast1 = parse("F main()->i64{42}").unwrap();
+        let result1 = jit.compile_and_run_main(&ast1).unwrap();
+        assert_eq!(result1, 42);
+
+        // Clear and compile new code
+        jit.clear().unwrap();
+
+        let ast2 = parse("F main()->i64{99}").unwrap();
+        let result2 = jit.compile_and_run_main(&ast2).unwrap();
+        assert_eq!(result2, 99);
     }
 }

@@ -25,11 +25,13 @@ vais-parser = { path = "../vais-parser" }
 vais-ast = { path = "../vais-ast" }
 vais-types = { path = "../vais-types" }
 vais-codegen = { path = "../vais-codegen" }
+vais-codegen-js = { path = "../vais-codegen-js" }
 vais-i18n = { path = "../vais-i18n" }
 vais-plugin = { path = "../vais-plugin" }
 vais-jit = { path = "../vais-jit", optional = true }
 vais-gpu = { path = "../vais-gpu" }
 vais-macro = { path = "../vais-macro" }
+vais-mir = { path = "../vais-mir" }
 vais-query = { path = "../vais-query" }
 
 inkwell = { workspace = true, optional = true }
@@ -42,8 +44,12 @@ sha2 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 rayon = { workspace = true }
-toml = "0.9"
+toml = "1.0"
 notify = "8"
+
+# Static analysis
+vais-security = { path = "../vais-security" }
+hex = "0.4"
 
 # Registry support
 ureq = { version = "2.12", features = ["gzip", "json"] }
@@ -51,6 +57,9 @@ flate2 = { workspace = true }
 tar = { workspace = true }
 dirs = "6"
 glob = "0.3"
+semver = "1.0"
 
 [dev-dependencies]
 tempfile = "3.10"
+vais-bindgen = { path = "../vais-bindgen" }
+libc = "0.2"

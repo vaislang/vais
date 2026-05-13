@@ -411,7 +411,7 @@ fn test_object_safe_async_method() {
         F main() -> i64 = 0
     "#;
 
-    let warnings = get_warnings(source);
+    let _warnings = get_warnings(source);
     // Async methods should be object-safe as long as they have a receiver
     // Note: This may depend on implementation details
 }
@@ -445,7 +445,7 @@ fn test_multiple_violations() {
         F main() -> i64 = 0
     "#;
 
-    let warnings = get_warnings(source);
+    let _warnings = get_warnings(source);
     // Should have warnings about multiple violations when used as dyn Trait
     // (Though this code doesn't use it as dyn, so might not trigger)
 }
@@ -466,6 +466,6 @@ fn test_super_trait_doesnt_affect_object_safety() {
         F main() -> i64 = 0
     "#;
 
-    let warnings = get_warnings(source);
+    let _warnings = get_warnings(source);
     // Should be object-safe as long as all methods are safe
 }

@@ -231,7 +231,8 @@ kbd {
   align-items: center;
 }
 
-.example-select {
+.example-select,
+.target-select {
   padding: 0.5rem 1rem;
   background: var(--background);
   color: var(--text-primary);
@@ -239,15 +240,24 @@ kbd {
   border-radius: 6px;
   font-size: 0.9rem;
   cursor: pointer;
-  min-width: 200px;
   transition: all 0.2s;
 }
 
-.example-select:hover {
+.example-select {
+  min-width: 200px;
+}
+
+.target-select {
+  min-width: 150px;
+}
+
+.example-select:hover,
+.target-select:hover {
   border-color: var(--primary-color);
 }
 
-.example-select:focus {
+.example-select:focus,
+.target-select:focus {
   outline: none;
   border-color: var(--primary-color);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
@@ -551,8 +561,9 @@ kbd {
     flex: 1;
   }
 
-  .example-select {
-    min-width: 150px;
+  .example-select,
+  .target-select {
+    min-width: 120px;
     font-size: 0.85rem;
   }
 

@@ -2,6 +2,7 @@
 //!
 //! Recursive descent parser for AI-optimized syntax.
 
+mod error_display;
 mod expr;
 mod ffi;
 mod item;
@@ -37,6 +38,14 @@ pub enum ParseError {
     /// Invalid or malformed expression
     #[error("Invalid expression")]
     InvalidExpression,
+    /// Maximum recursion depth exceeded during parsing
+    #[error("Maximum parse depth exceeded ({max}) - expression too deeply nested")]
+    DepthExceeded {
+        /// The maximum depth that was exceeded
+        max: usize,
+        /// Source location where the depth was exceeded
+        span: std::ops::Range<usize>,
+    },
 }
 
 impl ParseError {
@@ -46,6 +55,7 @@ impl ParseError {
             ParseError::UnexpectedToken { span, .. } => Some(span.clone()),
             ParseError::UnexpectedEof { span } => Some(span.clone()),
             ParseError::InvalidExpression => None,
+            ParseError::DepthExceeded { span, .. } => Some(span.clone()),
         }
     }
 
@@ -55,6 +65,7 @@ impl ParseError {
             ParseError::UnexpectedToken { .. } => "P001",
             ParseError::UnexpectedEof { .. } => "P002",
             ParseError::InvalidExpression => "P003",
+            ParseError::DepthExceeded { .. } => "P004",
         }
     }
 
@@ -76,6 +87,9 @@ impl ParseError {
             ),
             ParseError::UnexpectedEof { .. } => vais_i18n::get_simple(&key),
             ParseError::InvalidExpression => vais_i18n::get_simple(&key),
+            ParseError::DepthExceeded { max, .. } => {
+                vais_i18n::get(&key, &[("max", &max.to_string())])
+            }
         }
     }
 }
@@ -117,11 +131,31 @@ pub struct Parser {
     allow_struct_literal: bool,
     /// Current recursion depth for nested expression parsing
     depth: usize,
-    /// Source code for newline detection (used to prevent cross-line postfix parsing)
+    /// Source code for newline detection (used to prevent cross-line postfix parsing).
+    /// Stored as String instead of &str to avoid lifetime parameters on Parser struct.
+    /// The one-time allocation is acceptable as parsing happens once per file.
     source: String,
+    /// Pre-computed newline byte positions for O(log n) newline detection.
+    /// Built once from source; used by has_newline_between() to avoid repeated scanning.
+    newline_positions: Vec<usize>,
     /// Compile-time cfg key-value pairs for conditional compilation.
     /// When set, items with `#[cfg(key = "value")]` are filtered out if they don't match.
     cfg_values: std::collections::HashMap<String, String>,
+    /// Pending `>` count from splitting `>>` (Token::Shr) or `>>>` (Token::Shr + Token::Gt) in nested generics.
+    /// When `Vec<Vec<Vec<i64>>>` is tokenized, multiple `>>` tokens appear.
+    /// We split each into two `>` tokens: the first closes the inner generic,
+    /// and this counter records how many additional `>` tokens are still pending.
+    pending_gt_count: usize,
+}
+
+/// Build a sorted vec of byte positions where '\n' occurs in source.
+/// Used for O(log n) newline-between queries via binary search.
+fn build_newline_positions(source: &str) -> Vec<usize> {
+    source
+        .bytes()
+        .enumerate()
+        .filter_map(|(i, b)| if b == b'\n' { Some(i) } else { None })
+        .collect()
 }
 
 impl Parser {
@@ -135,12 +169,20 @@ impl Parser {
             allow_struct_literal: true,
             depth: 0,
             source: String::new(),
+            newline_positions: Vec::new(),
             cfg_values: std::collections::HashMap::new(),
+            pending_gt_count: 0,
         }
     }
 
     /// Creates a new parser with source code for newline detection.
+    ///
+    /// Note: This clones the source string to avoid adding a lifetime parameter to Parser,
+    /// which would require changes across ~94 usage sites. The allocation is acceptable
+    /// since it happens once per file parse (not in a hot loop), and the source is only
+    /// used for newline detection in postfix operator parsing.
     pub fn new_with_source(tokens: Vec<SpannedToken>, source: &str) -> Self {
+        let newline_positions = build_newline_positions(source);
         Self {
             tokens,
             pos: 0,
@@ -149,7 +191,9 @@ impl Parser {
             allow_struct_literal: true,
             depth: 0,
             source: source.to_string(),
+            newline_positions,
             cfg_values: std::collections::HashMap::new(),
+            pending_gt_count: 0,
         }
     }
 
@@ -166,7 +210,9 @@ impl Parser {
             allow_struct_literal: true,
             depth: 0,
             source: String::new(),
+            newline_positions: Vec::new(),
             cfg_values: std::collections::HashMap::new(),
+            pending_gt_count: 0,
         }
     }
 
@@ -178,13 +224,16 @@ impl Parser {
     }
 
     /// Check if there is a newline between two byte positions in the source.
+    /// Uses pre-computed newline positions with binary search for O(log n) lookup.
+    #[inline]
     fn has_newline_between(&self, start: usize, end: usize) -> bool {
-        if self.source.is_empty() {
+        if self.newline_positions.is_empty() {
             return false;
         }
-        let s = start.min(self.source.len());
-        let e = end.min(self.source.len());
-        self.source[s..e].contains('\n')
+        // Binary search for the first newline position >= start
+        let idx = self.newline_positions.partition_point(|&pos| pos < start);
+        // Check if that newline is within [start, end)
+        idx < self.newline_positions.len() && self.newline_positions[idx] < end
     }
 
     /// Increment the recursion depth, returning an error if MAX_PARSE_DEPTH is exceeded.
@@ -192,16 +241,9 @@ impl Parser {
         self.depth += 1;
         if self.depth > MAX_PARSE_DEPTH {
             let span = self.current_span();
-            Err(ParseError::UnexpectedToken {
-                found: self
-                    .peek()
-                    .map(|t| t.token.clone())
-                    .unwrap_or(Token::Ident("EOF".to_string())),
+            Err(ParseError::DepthExceeded {
+                max: MAX_PARSE_DEPTH,
                 span,
-                expected: format!(
-                    "expression (maximum nesting depth of {} exceeded)",
-                    MAX_PARSE_DEPTH
-                ),
             })
         } else {
             Ok(())
@@ -259,17 +301,20 @@ impl Parser {
                     | Token::Defer
                     | Token::If
                     | Token::Loop
+                    | Token::ForEach
+                    | Token::While
                     | Token::Match => {
                         break;
                     }
                     // Item-level keywords - if we hit these, we've gone too far
                     // (likely missing a closing brace in the function body)
+                    // Note: Token::Trait (W) excluded — also used as while loop keyword
                     Token::Function
                     | Token::Struct
                     | Token::Enum
+                    | Token::EnumKeyword
                     | Token::Union
                     | Token::Use
-                    | Token::Trait
                     | Token::Impl
                     | Token::Macro
                     | Token::Pub
@@ -309,13 +354,14 @@ impl Parser {
             if let Some(tok) = self.peek() {
                 match &tok.token {
                     // Top-level item keywords
+                    // Note: Token::Trait (W) excluded — also used as while loop keyword
                     Token::Function
                     | Token::Struct
                     | Token::Enum
+                    | Token::EnumKeyword
                     | Token::Union
                     | Token::TypeKeyword
                     | Token::Use
-                    | Token::Trait
                     | Token::Impl
                     | Token::Macro
                     | Token::Pub
@@ -324,63 +370,6 @@ impl Parser {
                     }
                     // Attributes can also start items
                     Token::HashBracket => {
-                        break;
-                    }
-                    _ => {}
-                }
-            }
-
-            // Skip this token
-            if let Some(tok) = self.advance() {
-                skipped.push(format!("{:?}", tok.token));
-            }
-        }
-
-        skipped
-    }
-
-    /// Synchronize to the next expression boundary for error recovery.
-    /// Skips tokens until an expression delimiter is found.
-    /// Returns the list of skipped tokens (as strings for debugging).
-    #[allow(dead_code)]
-    fn synchronize_expression(&mut self) -> Vec<String> {
-        let mut skipped = Vec::new();
-        let mut brace_depth = 0;
-        let mut paren_depth = 0;
-        let mut bracket_depth = 0;
-
-        while !self.is_at_end() {
-            if let Some(tok) = self.peek() {
-                match &tok.token {
-                    // Track nesting
-                    Token::LBrace => brace_depth += 1,
-                    Token::RBrace => {
-                        if brace_depth > 0 {
-                            brace_depth -= 1;
-                        } else {
-                            break;
-                        }
-                    }
-                    Token::LParen => paren_depth += 1,
-                    Token::RParen => {
-                        if paren_depth > 0 {
-                            paren_depth -= 1;
-                        } else {
-                            break;
-                        }
-                    }
-                    Token::LBracket => bracket_depth += 1,
-                    Token::RBracket => {
-                        if bracket_depth > 0 {
-                            bracket_depth -= 1;
-                        } else {
-                            break;
-                        }
-                    }
-                    // At top level (not nested), these are boundaries
-                    Token::Comma | Token::Semi
-                        if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 =>
-                    {
                         break;
                     }
                     _ => {}
@@ -405,8 +394,41 @@ impl Parser {
     /// inserted into the AST. Use `errors()` to retrieve all collected errors.
     pub fn parse_module(&mut self) -> ParseResult<Module> {
         let mut items = Vec::new();
+        let mut describe_test_names: Vec<String> = Vec::new();
 
         while !self.is_at_end() {
+            // Check for describe("...", |t| { ... }) test blocks
+            if self.check_ident("describe") {
+                match self.parse_describe_block() {
+                    Ok(test_fns) => {
+                        for (name, func) in test_fns {
+                            describe_test_names.push(name);
+                            items.push(func);
+                        }
+                        continue;
+                    }
+                    Err(e) => {
+                        if self.recovery_mode {
+                            let start = self.current_span().start;
+                            let message = e.to_string();
+                            self.record_error(e);
+                            let skipped_tokens = self.synchronize_item();
+                            let end = self.prev_span().end;
+                            items.push(Spanned::new(
+                                Item::Error {
+                                    message,
+                                    skipped_tokens,
+                                },
+                                Span::new(start, end),
+                            ));
+                            continue;
+                        } else {
+                            return Err(e);
+                        }
+                    }
+                }
+            }
+
             match self.parse_item() {
                 Ok(item) => {
                     // Apply cfg filtering: skip items whose #[cfg(...)] doesn't match
@@ -440,6 +462,62 @@ impl Parser {
             }
         }
 
+        // If we found describe blocks, generate a main() function that calls all test functions
+        if !describe_test_names.is_empty() {
+            // Check if a main already exists
+            let has_main = items
+                .iter()
+                .any(|item| matches!(&item.node, Item::Function(f) if f.name.node == "main"));
+            if !has_main {
+                let span = Span::new(0, 0);
+                let mut stmts = Vec::new();
+                for name in &describe_test_names {
+                    // Generate: test_name();
+                    stmts.push(Spanned::new(
+                        Stmt::Expr(Box::new(Spanned::new(
+                            Expr::Call {
+                                func: Box::new(Spanned::new(Expr::Ident(name.clone()), span)),
+                                args: vec![],
+                            },
+                            span,
+                        ))),
+                        span,
+                    ));
+                }
+                // return 0
+                stmts.push(Spanned::new(
+                    Stmt::Return(Some(Box::new(Spanned::new(Expr::Int(0), span)))),
+                    span,
+                ));
+                let main_fn = Function {
+                    name: Spanned::new("main".to_string(), span),
+                    generics: vec![],
+                    params: vec![],
+                    ret_type: Some(Spanned::new(
+                        Type::Named {
+                            name: "i64".to_string(),
+                            generics: vec![],
+                        },
+                        span,
+                    )),
+                    body: FunctionBody::Block(stmts),
+                    is_pub: false,
+                    is_async: false,
+                    // Synthetic main wrapper — exempt from Phase 4c.2
+                    // totality gate (it hoists top-level user statements
+                    // whose panic-freedom was never declared).
+                    is_partial: true,
+                    // Synthetic main wrapper carries no declared effect —
+                    // user code is inferred; the Phase 4c.3 subtype rule
+                    // only fires on explicit `pure/io/alloc` prefixes.
+                    declared_effect: None,
+                    attributes: vec![],
+                    where_clause: vec![],
+                };
+                items.push(Spanned::new(Item::Function(main_fn), span));
+            }
+        }
+
         Ok(Module {
             items,
             modules_map: None,
@@ -455,7 +533,7 @@ impl Parser {
     ///
     /// # Returns
     ///
-    /// A tuple of (Module, Vec<ParseError>) containing the parsed module
+    /// A tuple of `(Module, Vec<ParseError>)` containing the parsed module
     /// and all errors encountered during parsing.
     pub fn parse_module_with_recovery(&mut self) -> (Module, Vec<ParseError>) {
         self.recovery_mode = true;
@@ -538,12 +616,115 @@ impl Parser {
 
     // === Helper methods ===
 
+    /// Parse an identifier, also accepting single-character keyword tokens
+    /// in positions where an identifier is expected (e.g., type names, struct names).
+    /// This allows `S C { }` where C is a struct name, not Continue.
+    pub(crate) fn parse_ident_or_keyword(&mut self) -> ParseResult<Spanned<String>> {
+        // parse_ident() already accepts all single-char keyword tokens as identifiers,
+        // so this is a thin wrapper that makes the intent explicit at call sites.
+        self.parse_ident()
+    }
+
+    /// Convert a single-character keyword token to its string representation
+    /// for use as an identifier. Returns None for non-keyword tokens.
+    #[allow(dead_code)]
+    pub(crate) fn keyword_to_ident(token: &Token) -> Option<&'static str> {
+        match token {
+            Token::Break => Some("B"),
+            Token::Continue => Some("C"),
+            Token::Enum => Some("E"),
+            Token::Function => Some("F"),
+            Token::Global => Some("G"),
+            Token::If => Some("I"),
+            Token::Loop => Some("L"),
+            Token::Match => Some("M"),
+            Token::Extern => Some("N"),
+            Token::Union => Some("O"),
+            Token::Pub => Some("P"),
+            Token::Return => Some("R"),
+            Token::Struct => Some("S"),
+            Token::TypeKeyword => Some("T"),
+            Token::Use => Some("U"),
+            Token::Trait => Some("W"),
+            Token::Impl => Some("X"),
+            Token::Await => Some("Y"),
+            Token::Async => Some("A"),
+            Token::Defer => Some("D"),
+            _ => None,
+        }
+    }
+
     pub(crate) fn peek(&self) -> Option<&SpannedToken> {
         self.tokens.get(self.pos)
     }
 
     pub(crate) fn peek_next(&self) -> Option<&SpannedToken> {
         self.tokens.get(self.pos + 1)
+    }
+
+    /// Check if the current "token" is `>`, accounting for a pending `>`
+    /// left over from splitting a `>>` (Token::Shr) in nested generic contexts.
+    /// Also returns true for `>>` (Token::Shr) because `>>` will be split into
+    /// two `>` tokens when consumed via `consume_gt()`.
+    pub(crate) fn check_gt(&self) -> bool {
+        if self.pending_gt_count > 0 {
+            return true;
+        }
+        matches!(
+            self.peek().map(|t| &t.token),
+            Some(Token::Gt) | Some(Token::Shr)
+        )
+    }
+
+    /// Consume a single `>`, which may either be:
+    /// 1. A pending second `>` from a previously split `>>`, or
+    /// 2. A real `Token::Gt` in the stream, or
+    /// 3. A `Token::Shr` (`>>`) which we split: consume it and increment `pending_gt_count`
+    ///    so the next `consume_gt()` call returns the second `>`.
+    ///
+    /// Returns a synthetic `>` SpannedToken in the pending-gt and Shr cases.
+    pub(crate) fn consume_gt(&mut self) -> ParseResult<SpannedToken> {
+        if self.pending_gt_count > 0 {
+            self.pending_gt_count -= 1;
+            // Return a synthetic Gt token at the current span
+            let span = self.current_span();
+            return Ok(SpannedToken {
+                token: Token::Gt,
+                span,
+            });
+        }
+        if self.check(&Token::Gt) {
+            return self.advance().ok_or_else(|| ParseError::UnexpectedEof {
+                span: self.current_span(),
+            });
+        }
+        if self.check(&Token::Shr) {
+            // Split `>>` into two `>` tokens: consume it and remember one pending `>`
+            let tok = self.advance().ok_or_else(|| ParseError::UnexpectedEof {
+                span: self.current_span(),
+            })?;
+            self.pending_gt_count += 1;
+            // Return a synthetic Gt with the span of the Shr token
+            return Ok(SpannedToken {
+                token: Token::Gt,
+                span: tok.span,
+            });
+        }
+        Err(ParseError::UnexpectedToken {
+            found: self
+                .peek()
+                .map(|t| t.token.clone())
+                .unwrap_or(Token::Ident("EOF".into())),
+            span: self.current_span(),
+            expected: "'>'".to_string(),
+        })
+    }
+
+    /// Check if the current token is an identifier with the given name
+    pub(crate) fn check_ident(&self, name: &str) -> bool {
+        self.peek()
+            .map(|t| matches!(&t.token, Token::Ident(s) if s == name))
+            .unwrap_or(false)
     }
 
     pub(crate) fn advance(&mut self) -> Option<SpannedToken> {
@@ -553,6 +734,15 @@ impl Parser {
             let tok = self.tokens[self.pos].clone();
             self.pos += 1;
             Some(tok)
+        }
+    }
+
+    /// Advance the parser position without cloning the token.
+    /// Use this when the token's content is not needed (just consuming it).
+    #[inline]
+    pub(crate) fn advance_skip(&mut self) {
+        if !self.is_at_end() {
+            self.pos += 1;
         }
     }
 
@@ -567,6 +757,25 @@ impl Parser {
                 span: self.current_span(),
                 expected: Self::token_to_friendly_name(expected),
             })
+        } else {
+            Err(ParseError::UnexpectedToken {
+                found: self
+                    .peek()
+                    .map(|t| t.token.clone())
+                    .unwrap_or(Token::Ident("EOF".into())),
+                span: self.current_span(),
+                expected: Self::token_to_friendly_name(expected),
+            })
+        }
+    }
+
+    /// Expect a token and advance without cloning it.
+    /// Use this when the token value is not needed (just ensuring syntax correctness).
+    #[inline]
+    pub(crate) fn expect_skip(&mut self, expected: &Token) -> ParseResult<()> {
+        if self.check(expected) {
+            self.advance_skip();
+            Ok(())
         } else {
             Err(ParseError::UnexpectedToken {
                 found: self
@@ -669,7 +878,12 @@ impl Parser {
                     Token::Semi => {
                         return; // Don't consume - let the caller handle it
                     }
-                    Token::Function | Token::Struct | Token::Enum | Token::Trait | Token::Impl
+                    Token::Function
+                    | Token::Struct
+                    | Token::Enum
+                    | Token::EnumKeyword
+                    | Token::Trait
+                    | Token::Impl
                         if depth == 0 =>
                     {
                         return; // At a top-level item - stop
@@ -683,88 +897,226 @@ impl Parser {
 
     /// Convert a token to a user-friendly name for error messages
     fn token_to_friendly_name(token: &Token) -> String {
-        match token {
-            // Delimiters
-            Token::LParen => "'('".to_string(),
-            Token::RParen => "')'".to_string(),
-            Token::LBrace => "'{'".to_string(),
-            Token::RBrace => "'}'".to_string(),
-            Token::LBracket => "'['".to_string(),
-            Token::RBracket => "']'".to_string(),
-            Token::Comma => "','".to_string(),
-            Token::Colon => "':'".to_string(),
-            Token::ColonColon => "'::'".to_string(),
-            Token::Semi => "';'".to_string(),
-            Token::Dot => "'.'".to_string(),
-            Token::DotDot => "'..'".to_string(),
-            Token::DotDotEq => "'..='".to_string(),
-            Token::Arrow => "'->'".to_string(),
-            Token::FatArrow => "'=>'".to_string(),
-            // Operators
-            Token::Eq => "'='".to_string(),
-            Token::ColonEq => "':=' (let binding)".to_string(),
-            Token::EqEq => "'=='".to_string(),
-            Token::Neq => "'!='".to_string(),
-            Token::Lt => "'<'".to_string(),
-            Token::Lte => "'<='".to_string(),
-            Token::Gt => "'>'".to_string(),
-            Token::Gte => "'>='".to_string(),
-            Token::Plus => "'+'".to_string(),
-            Token::PlusEq => "'+='".to_string(),
-            Token::Minus => "'-'".to_string(),
-            Token::MinusEq => "'-='".to_string(),
-            Token::Star => "'*'".to_string(),
-            Token::StarEq => "'*='".to_string(),
-            Token::Slash => "'/'".to_string(),
-            Token::SlashEq => "'/='".to_string(),
-            Token::Percent => "'%'".to_string(),
-            Token::Amp => "'&'".to_string(),
-            Token::PipeArrow => "'|>'".to_string(),
-            Token::Pipe => "'|'".to_string(),
-            Token::Bang => "'!'".to_string(),
-            Token::Tilde => "'~'".to_string(),
-            Token::Caret => "'^'".to_string(),
-            Token::Shl => "'<<'".to_string(),
-            Token::Shr => "'>>'".to_string(),
-            Token::Question => "'?'".to_string(),
-            Token::At => "'@' (self-recursion)".to_string(),
-            Token::HashBracket => "'#[' (attribute)".to_string(),
-            // Keywords
-            Token::Function => "function keyword 'F'".to_string(),
-            Token::Struct => "struct keyword 'S'".to_string(),
-            Token::Enum => "enum keyword 'E'".to_string(),
-            Token::Trait => "trait keyword 'W'".to_string(),
-            Token::Impl => "impl keyword 'X'".to_string(),
-            Token::If => "if keyword 'I'".to_string(),
-            Token::Loop => "loop keyword 'L'".to_string(),
-            Token::Match => "match keyword 'M'".to_string(),
-            Token::Return => "return keyword 'R'".to_string(),
-            Token::Break => "break keyword 'B'".to_string(),
-            Token::Continue => "continue keyword 'C'".to_string(),
-            Token::Use => "use keyword 'U'".to_string(),
-            Token::Pub => "pub keyword 'P'".to_string(),
-            Token::Async => "async keyword 'A'".to_string(),
-            Token::Await => "await keyword 'Y'".to_string(),
-            Token::Spawn => "'spawn' keyword".to_string(),
-            Token::Yield => "'yield' keyword".to_string(),
-            Token::True => "'true'".to_string(),
-            Token::False => "'false'".to_string(),
-            Token::Defer => "defer keyword 'D'".to_string(),
-            Token::Union => "union keyword 'O'".to_string(),
-            Token::Comptime => "'comptime' keyword".to_string(),
-            Token::Const => "'const' keyword".to_string(),
-            Token::Mut => "'mut' keyword".to_string(),
-            Token::SelfLower => "'self'".to_string(),
-            Token::SelfUpper => "'Self'".to_string(),
-            Token::TypeKeyword => "type keyword 'T'".to_string(),
-            // Literals
-            Token::Ident(name) => format!("identifier '{}'", name),
-            Token::Int(_) => "integer literal".to_string(),
-            Token::Float(_) => "float literal".to_string(),
-            Token::String(_) => "string literal".to_string(),
-            // Default for any other token
-            _ => format!("{:?}", token),
+        error_display::token_to_friendly_name(token)
+    }
+
+    /// Parse a describe("name", |t| { it("test", || { body }); ... }); block
+    /// and desugar it into individual test functions.
+    ///
+    /// Returns a list of (function_name, Item::Function) pairs.
+    fn parse_describe_block(&mut self) -> ParseResult<Vec<(String, Spanned<Item>)>> {
+        let start = self.current_span().start;
+
+        // consume "describe"
+        self.advance_skip();
+
+        // expect "("
+        self.expect_skip(&Token::LParen)?;
+
+        // expect string literal for describe name
+        let describe_name = if let Some(tok) = self.peek() {
+            if let Token::String(s) = &tok.token {
+                let name = s.clone();
+                self.advance_skip();
+                name
+            } else {
+                return Err(ParseError::UnexpectedToken {
+                    found: tok.token.clone(),
+                    span: tok.span.clone(),
+                    expected: "string literal for describe name".into(),
+                });
+            }
+        } else {
+            return Err(ParseError::UnexpectedEof {
+                span: self.current_span(),
+            });
+        };
+
+        // Handle two syntax forms:
+        // Form 1 (VaisDB): describe("name") { ... }
+        // Form 2 (closure): describe("name", |t| { ... })
+        if self.check(&Token::RParen) {
+            // Form 1: consume ")" then expect "{"
+            self.advance_skip();
+            self.expect_skip(&Token::LBrace)?;
+        } else if self.check(&Token::Comma) {
+            // Form 2: consume "," then skip closure params until "{"
+            self.advance_skip();
+            let mut brace_depth = 0;
+            while !self.is_at_end() {
+                if self.check(&Token::LBrace) && brace_depth == 0 {
+                    break;
+                }
+                if let Some(tok) = self.peek() {
+                    if tok.token == Token::LBrace {
+                        brace_depth += 1;
+                    } else if tok.token == Token::RBrace {
+                        brace_depth -= 1;
+                    }
+                }
+                self.advance();
+            }
+            self.expect_skip(&Token::LBrace)?;
+        } else {
+            return Err(ParseError::UnexpectedToken {
+                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Semi),
+                span: self.current_span(),
+                expected: "')' or ',' after describe name".into(),
+            });
         }
+
+        let mut test_fns = Vec::new();
+
+        // Parse it() blocks inside describe
+        while !self.is_at_end() && !self.check(&Token::RBrace) {
+            if self.check_ident("it") {
+                match self.parse_it_block(&describe_name, start) {
+                    Ok((name, func)) => {
+                        test_fns.push((name, func));
+                    }
+                    Err(e) => {
+                        if self.recovery_mode {
+                            self.record_error(e);
+                            self.synchronize_item();
+                        } else {
+                            return Err(e);
+                        }
+                    }
+                }
+            } else {
+                // Skip non-it content (comments, etc.)
+                self.advance();
+            }
+        }
+
+        // consume "}" of describe block
+        if self.check(&Token::RBrace) {
+            self.advance_skip();
+        }
+
+        // consume ");" at the end of describe(...)
+        if self.check(&Token::RParen) {
+            self.advance_skip();
+        }
+        if self.check(&Token::Semi) {
+            self.advance_skip();
+        }
+
+        Ok(test_fns)
+    }
+
+    /// Parse an it("test name", || { body }); block inside a describe block.
+    /// Returns (function_name, Item::Function).
+    fn parse_it_block(
+        &mut self,
+        describe_name: &str,
+        _outer_start: usize,
+    ) -> ParseResult<(String, Spanned<Item>)> {
+        let start = self.current_span().start;
+
+        // consume "it"
+        self.advance_skip();
+
+        // expect "("
+        self.expect_skip(&Token::LParen)?;
+
+        // expect string literal for test name
+        let test_name = if let Some(tok) = self.peek() {
+            if let Token::String(s) = &tok.token {
+                let name = s.clone();
+                self.advance_skip();
+                name
+            } else {
+                return Err(ParseError::UnexpectedToken {
+                    found: tok.token.clone(),
+                    span: tok.span.clone(),
+                    expected: "string literal for it test name".into(),
+                });
+            }
+        } else {
+            return Err(ParseError::UnexpectedEof {
+                span: self.current_span(),
+            });
+        };
+
+        // Handle two syntax forms:
+        // Form 1 (VaisDB): it("name") { ... }
+        // Form 2 (closure): it("name", || { ... })
+        let stmts = if self.check(&Token::RParen) {
+            // Form 1: consume ")" then expect "{"
+            self.advance_skip();
+            self.expect_skip(&Token::LBrace)?;
+            let stmts = self.parse_block_contents()?;
+            self.expect_skip(&Token::RBrace)?;
+            stmts
+        } else if self.check(&Token::Comma) {
+            // Form 2: consume "," then "||" then "{"
+            self.advance_skip();
+            if self.check(&Token::Pipe) {
+                self.advance_skip();
+                if self.check(&Token::Pipe) {
+                    self.advance_skip();
+                }
+            }
+            self.expect_skip(&Token::LBrace)?;
+            let stmts = self.parse_block_contents()?;
+            self.expect_skip(&Token::RBrace)?;
+            self.expect_skip(&Token::RParen)?;
+            stmts
+        } else {
+            return Err(ParseError::UnexpectedToken {
+                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Semi),
+                span: self.current_span(),
+                expected: "')' or ',' after it test name".into(),
+            });
+        };
+
+        // optional ";"
+        if self.check(&Token::Semi) {
+            self.advance_skip();
+        }
+
+        // Build function name: test_{describe_snake}_{it_snake}
+        let fn_name = format!(
+            "test_{}_{}",
+            to_snake_case(describe_name),
+            to_snake_case(&test_name)
+        );
+
+        let span = Span::new(start, self.prev_span().end);
+
+        // Add "return 0" at the end
+        let mut body_stmts = stmts;
+        body_stmts.push(Spanned::new(
+            Stmt::Return(Some(Box::new(Spanned::new(Expr::Int(0), span)))),
+            span,
+        ));
+
+        let func = Function {
+            name: Spanned::new(fn_name.clone(), span),
+            generics: vec![],
+            params: vec![],
+            ret_type: Some(Spanned::new(
+                Type::Named {
+                    name: "i64".to_string(),
+                    generics: vec![],
+                },
+                span,
+            )),
+            body: FunctionBody::Block(body_stmts),
+            is_pub: false,
+            is_async: false,
+            // Synthetic test wrapper — exempt from totality gate, same as
+            // the synthetic main hoist above.
+            is_partial: true,
+            // Synthetic test wrapper — no declared effect, same rationale
+            // as the synthetic main hoist.
+            declared_effect: None,
+            attributes: vec![],
+            where_clause: vec![],
+        };
+
+        Ok((fn_name, Spanned::new(Item::Function(func), span)))
     }
 
     pub(crate) fn is_at_end(&self) -> bool {
@@ -784,6 +1136,27 @@ impl Parser {
             0..0
         }
     }
+}
+
+/// Convert a string to snake_case for test function naming.
+/// "name returns correct string" → "name_returns_correct_string"
+/// "HybridCost" → "hybridcost"
+fn to_snake_case(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    for c in s.chars() {
+        if c.is_alphanumeric() {
+            result.push(c.to_ascii_lowercase());
+        } else if (c == ' ' || c == '-' || c == '_') && !result.is_empty() && !result.ends_with('_')
+        {
+            result.push('_');
+        }
+        // Skip other chars (punctuation, etc.)
+    }
+    // Remove trailing underscore
+    while result.ends_with('_') {
+        result.pop();
+    }
+    result
 }
 
 /// Parses Vais source code into an Abstract Syntax Tree.
@@ -850,7 +1223,7 @@ pub fn parse_with_cfg(
 ///
 /// # Returns
 ///
-/// A tuple of (Module, Vec<ParseError>) containing the parsed AST
+/// A tuple of `(Module, Vec<ParseError>)` containing the parsed AST
 /// (with Error nodes for problematic sections) and all collected errors.
 ///
 /// # Examples
@@ -887,1511 +1260,10 @@ pub fn parse_with_recovery(source: &str) -> (Module, Vec<ParseError>) {
     };
 
     let mut parser = Parser::new_with_recovery(tokens);
+    parser.newline_positions = build_newline_positions(source);
     parser.source = source.to_string();
     parser.parse_module_with_recovery()
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_simple_function() {
-        let source = "F add(a:i64,b:i64)->i64=a+b";
-        let module = parse(source).unwrap();
-
-        assert_eq!(module.items.len(), 1);
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function, got {:?}", module.items[0].node);
-        };
-        assert_eq!(f.name.node, "add");
-        assert_eq!(f.params.len(), 2);
-    }
-
-    #[test]
-    fn test_parse_fibonacci() {
-        let source = "F fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)";
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "fib");
-        let FunctionBody::Expr(expr) = &f.body else {
-            unreachable!("Expected expression body");
-        };
-        assert!(
-            matches!(expr.node, Expr::Ternary { .. }),
-            "Expected ternary expression"
-        );
-    }
-
-    #[test]
-    fn test_parse_struct() {
-        let source = "S Point{x:f64,y:f64}";
-        let module = parse(source).unwrap();
-
-        let Item::Struct(s) = &module.items[0].node else {
-            unreachable!("Expected struct, got {:?}", module.items[0].node);
-        };
-        assert_eq!(s.name.node, "Point");
-        assert_eq!(s.fields.len(), 2);
-    }
-
-    #[test]
-    fn test_parse_enum() {
-        let source = "E Option<T>{Some(T),None}";
-        let module = parse(source).unwrap();
-
-        let Item::Enum(e) = &module.items[0].node else {
-            unreachable!("Expected enum, got {:?}", module.items[0].node);
-        };
-        assert_eq!(e.name.node, "Option");
-        assert_eq!(e.generics.len(), 1);
-        assert_eq!(e.variants.len(), 2);
-    }
-
-    #[test]
-    fn test_parse_block_function() {
-        let source = "F sum(arr:[i64])->i64{s:=0;L x:arr{s+=x};s}";
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        let FunctionBody::Block(stmts) = &f.body else {
-            unreachable!("Expected block body, got {:?}", f.body);
-        };
-        assert_eq!(stmts.len(), 3);
-    }
-
-    #[test]
-    fn test_parse_generic_constraints() {
-        // Test single trait bound
-        let source = "F print_value<T: Display>(x: T) -> () = println(x)";
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "print_value");
-        assert_eq!(f.generics.len(), 1);
-        assert_eq!(f.generics[0].name.node, "T");
-        assert_eq!(f.generics[0].bounds.len(), 1);
-        assert_eq!(f.generics[0].bounds[0].node, "Display");
-
-        // Test multiple trait bounds
-        let source2 = "F compare<T: Ord + Clone>(a: T, b: T) -> bool = a < b";
-        let module2 = parse(source2).unwrap();
-
-        let Item::Function(f2) = &module2.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f2.generics.len(), 1);
-        assert_eq!(f2.generics[0].name.node, "T");
-        assert_eq!(f2.generics[0].bounds.len(), 2);
-        assert_eq!(f2.generics[0].bounds[0].node, "Ord");
-        assert_eq!(f2.generics[0].bounds[1].node, "Clone");
-
-        // Test multiple generic params with bounds
-        let source3 = "F transform<A: Clone, B: Default>(x: A) -> B = x";
-        let module3 = parse(source3).unwrap();
-
-        let Item::Function(f3) = &module3.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f3.generics.len(), 2);
-        assert_eq!(f3.generics[0].name.node, "A");
-        assert_eq!(f3.generics[0].bounds.len(), 1);
-        assert_eq!(f3.generics[0].bounds[0].node, "Clone");
-        assert_eq!(f3.generics[1].name.node, "B");
-        assert_eq!(f3.generics[1].bounds.len(), 1);
-        assert_eq!(f3.generics[1].bounds[0].node, "Default");
-
-        // Test generic without bounds (should still work)
-        let source4 = "F identity<T>(x: T) -> T = x";
-        let module4 = parse(source4).unwrap();
-
-        let Item::Function(f4) = &module4.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f4.generics.len(), 1);
-        assert_eq!(f4.generics[0].name.node, "T");
-        assert_eq!(f4.generics[0].bounds.len(), 0);
-    }
-
-    // ==================== Edge Case Tests ====================
-
-    #[test]
-    fn test_empty_input() {
-        let source = "";
-        let module = parse(source).unwrap();
-        assert!(module.items.is_empty());
-    }
-
-    #[test]
-    fn test_whitespace_only() {
-        let source = "   \n\t\r\n   ";
-        let module = parse(source).unwrap();
-        assert!(module.items.is_empty());
-    }
-
-    #[test]
-    fn test_comment_only() {
-        let source = "# this is just a comment\n# another comment";
-        let module = parse(source).unwrap();
-        assert!(module.items.is_empty());
-    }
-
-    #[test]
-    fn test_minimal_function() {
-        let source = "F f()->()=()";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-        assert!(f.params.is_empty());
-    }
-
-    #[test]
-    fn test_empty_struct() {
-        let source = "S Empty{}";
-        let module = parse(source).unwrap();
-        let Item::Struct(s) = &module.items[0].node else {
-            unreachable!("Expected struct");
-        };
-        assert_eq!(s.name.node, "Empty");
-        assert!(s.fields.is_empty());
-    }
-
-    #[test]
-    fn test_single_field_struct() {
-        let source = "S Single{x:i64}";
-        let module = parse(source).unwrap();
-        let Item::Struct(s) = &module.items[0].node else {
-            unreachable!("Expected struct");
-        };
-        assert_eq!(s.fields.len(), 1);
-    }
-
-    #[test]
-    fn test_minimal_enum() {
-        let source = "E Unit{A}";
-        let module = parse(source).unwrap();
-        let Item::Enum(e) = &module.items[0].node else {
-            unreachable!("Expected enum");
-        };
-        assert_eq!(e.name.node, "Unit");
-        assert_eq!(e.variants.len(), 1);
-    }
-
-    #[test]
-    fn test_enum_with_tuple_variants() {
-        let source = "E Shape{Circle(f64),Rectangle(f64,f64),Point}";
-        let module = parse(source).unwrap();
-        let Item::Enum(e) = &module.items[0].node else {
-            unreachable!("Expected enum");
-        };
-        assert_eq!(e.variants.len(), 3);
-    }
-
-    #[test]
-    fn test_enum_with_struct_variants() {
-        let source = "E Message{Quit,Move{x:i64,y:i64},Write(str)}";
-        let module = parse(source).unwrap();
-        let Item::Enum(e) = &module.items[0].node else {
-            unreachable!("Expected enum");
-        };
-        assert_eq!(e.variants.len(), 3);
-    }
-
-    #[test]
-    fn test_empty_block_function() {
-        let source = "F f()->(){}";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        let FunctionBody::Block(stmts) = &f.body else {
-            unreachable!("Expected block body");
-        };
-        assert!(stmts.is_empty());
-    }
-
-    #[test]
-    fn test_nested_generic_types() {
-        // Use simple generic syntax that the parser supports
-        let source = "F f<T>(x:T)->T=x";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.params.len(), 1);
-        assert_eq!(f.generics.len(), 1);
-    }
-
-    #[test]
-    fn test_deeply_nested_arrays() {
-        let source = "F f(x:[[[i64]]])->[[[i64]]]=x";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.params.len(), 1);
-    }
-
-    #[test]
-    fn test_multiple_items() {
-        let source = r#"
-S Point{x:f64,y:f64}
-F new_point(x:f64,y:f64)->Point=Point{x:x,y:y}
-F origin()->Point=new_point(0.0,0.0)
-"#;
-        let module = parse(source).unwrap();
-        assert_eq!(module.items.len(), 3);
-    }
-
-    #[test]
-    fn test_trait_definition() {
-        // Trait uses W keyword with methods using regular identifiers
-        let source = "W Display{F display(s:&Self)->str=\"\"}";
-        let module = parse(source).unwrap();
-        let Item::Trait(t) = &module.items[0].node else {
-            unreachable!("Expected trait");
-        };
-        assert_eq!(t.name.node, "Display");
-        assert_eq!(t.methods.len(), 1);
-    }
-
-    #[test]
-    fn test_impl_block() {
-        let source = r#"
-S Point{x:f64,y:f64}
-X Point{F new(x:f64,y:f64)->Point=Point{x:x,y:y}}
-"#;
-        let module = parse(source).unwrap();
-        assert_eq!(module.items.len(), 2);
-        let Item::Impl(imp) = &module.items[1].node else {
-            unreachable!("Expected impl");
-        };
-        // target_type is a Spanned<Type>, check the type name
-        assert!(matches!(&imp.target_type.node, Type::Named { name, .. } if name == "Point"));
-    }
-
-    #[test]
-    fn test_if_without_else() {
-        let source = "F f(x:bool)->(){I x{print(1)}}";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        // Function should parse successfully
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_nested_if_else() {
-        let source = "F f(x:i64)->i64=I x>0{I x>10{100}E{10}}E{0}";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_match_with_wildcard() {
-        let source = "F f(x:i64)->i64=M x{0=>0,1=>1,_=>-1}";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        let FunctionBody::Expr(expr) = &f.body else {
-            unreachable!("Expected expression body");
-        };
-        assert!(matches!(expr.node, Expr::Match { .. }));
-    }
-
-    #[test]
-    fn test_match_with_guard() {
-        let source = "F f(x:i64)->i64=M x{n I n>0=>n,_=>0}";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_lambda_expression() {
-        let source = "F f()->i64{g:=|x:i64|x*2;g(21)}";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_nested_lambda() {
-        let source = "F f()->i64{g:=|x:i64|(|y:i64|x+y);g(10)(32)}";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_method_chaining() {
-        let source = "F f(x:str)->i64=x.len().to_string().len()";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_array_indexing_chain() {
-        let source = "F f(arr:[[i64]])->i64=arr[0][1]";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_self_recursion_operator() {
-        let source = "F factorial(n:i64)->i64=n<2?1:n*@(n-1)";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "factorial");
-    }
-
-    #[test]
-    fn test_range_expression() {
-        let source = "F f()->(){L i:0..10{print(i)}}";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_ternary_operator() {
-        // Test the ternary operator (cond ? then : else)
-        let source = "F f(x:i64)->i64=x>0?x:0";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_ternary_with_unary_minus() {
-        // Test ternary with unary minus in then branch: x<0 ? -x : x
-        let source = "F abs(x:i64)->i64=x<0?-x:x";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "abs");
-        // Body should be a Ternary
-        let FunctionBody::Expr(body) = &f.body else {
-            panic!("Expected expression body");
-        };
-        assert!(matches!(body.node, Expr::Ternary { .. }));
-    }
-
-    #[test]
-    fn test_try_operator() {
-        // Test postfix try operator (?)
-        let source = "F f(x:i64?)->i64=x?";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-        // Verify the body is a Try expression
-        let FunctionBody::Expr(body) = &f.body else {
-            panic!("Expected expression body");
-        };
-        if let Expr::Try(inner) = &body.node {
-            assert!(matches!(inner.node, Expr::Ident(_)));
-        } else {
-            panic!("Expected Try expression");
-        }
-    }
-
-    #[test]
-    fn test_try_operator_in_expression() {
-        // Test try operator followed by binary operator
-        let source = "F f(x:i64?)->i64=x?+1";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        // Verify the body is a Binary expression with Try on left
-        let FunctionBody::Expr(body) = &f.body else {
-            panic!("Expected expression body");
-        };
-        if let Expr::Binary { left, .. } = &body.node {
-            assert!(matches!(left.node, Expr::Try(_)));
-        } else {
-            panic!("Expected Binary expression with Try on left");
-        }
-    }
-
-    #[test]
-    fn test_try_and_ternary_coexist() {
-        // Test that try and ternary can coexist: (x?) ? 1 : 0
-        let source = "F f(x:i64?)->i64=(x?)?1:0";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        // Body should be a Ternary with condition being Try
-        let FunctionBody::Expr(body) = &f.body else {
-            panic!("Expected expression body");
-        };
-        if let Expr::Ternary { cond, .. } = &body.node {
-            assert!(matches!(cond.node, Expr::Try(_)));
-        } else {
-            panic!("Expected Ternary expression");
-        }
-    }
-
-    #[test]
-    fn test_simple_return_type() {
-        // Test simple return type parsing
-        let source = "F f()->i64=42";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert!(f.ret_type.is_some());
-    }
-
-    #[test]
-    fn test_reference_types() {
-        let source = "F f(x:&i64,y:&mut i64)->()=()";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.params.len(), 2);
-    }
-
-    #[test]
-    fn test_pointer_type() {
-        let source = "F f(x:*i64)->*i64=x";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert!(matches!(&f.params[0].ty.node, Type::Pointer(_)));
-    }
-
-    #[test]
-    fn test_tuple_type() {
-        let source = "F f(x:(i64,str))->(i64,str)=x";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert!(matches!(&f.params[0].ty.node, Type::Tuple(_)));
-    }
-
-    #[test]
-    fn test_function_type() {
-        let source = "F apply(f:(i64)->i64,x:i64)->i64=f(x)";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert!(matches!(&f.params[0].ty.node, Type::Fn { .. }));
-    }
-
-    #[test]
-    fn test_async_function() {
-        // Async function with A prefix
-        let source = "A F fetch(url:str)->str=url";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert!(f.is_async);
-    }
-
-    #[test]
-    fn test_pub_function() {
-        let source = "P F public_fn()->()=()";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert!(f.is_pub);
-    }
-
-    #[test]
-    fn test_import_statement() {
-        // Use statement with U keyword
-        let source = "U std::fs";
-        let module = parse(source).unwrap();
-        let Item::Use(u) = &module.items[0].node else {
-            unreachable!("Expected use statement");
-        };
-        assert!(!u.path.is_empty());
-    }
-
-    #[test]
-    fn test_complex_expression() {
-        let source = "F f(a:i64,b:i64,c:i64)->i64=a+b*c-a/b%c";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_bitwise_operations() {
-        let source = "F f(a:i64,b:i64)->i64=a&b|c^d<<2>>1";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_comparison_chain() {
-        let source = "F f(a:i64,b:i64,c:i64)->bool=a<b&&b<c||a==c";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_unary_operators() {
-        let source = "F f(x:i64,b:bool)->i64=-x+~x*(!b?1:0)";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_compound_assignment() {
-        // In Vais, use := for mutable variable declaration
-        let source = "F f(x:i64)->i64{y:=x;y+=1;y-=2;y*=3;y}";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        let FunctionBody::Block(stmts) = &f.body else {
-            unreachable!("Expected block body");
-        };
-        assert_eq!(stmts.len(), 5);
-    }
-
-    #[test]
-    fn test_break_with_value() {
-        let source = "F f()->i64{L{B 42}}";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_continue_in_loop() {
-        let source = "F f()->(){L i:0..10{I i%2==0{C};print(i)}}";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_defer_statement() {
-        // Test basic defer statement
-        let source = "F f() -> () { h := open(); D close(h); () }";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-        // Check that body contains defer
-        let FunctionBody::Block(stmts) = &f.body else {
-            panic!("Expected block body");
-        };
-        // Should have 3 statements: let, defer, expr
-        assert_eq!(stmts.len(), 3);
-        assert!(matches!(stmts[1].node, Stmt::Defer(_)));
-    }
-
-    #[test]
-    fn test_multiple_defer_statements() {
-        // Test multiple defer statements (LIFO order)
-        let source = "F f() -> () { D cleanup1(); D cleanup2(); D cleanup3(); () }";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        let FunctionBody::Block(stmts) = &f.body else {
-            panic!("Expected block body");
-        };
-        // Should have 4 statements: 3 defers + 1 expr
-        assert_eq!(stmts.len(), 4);
-        assert!(matches!(stmts[0].node, Stmt::Defer(_)));
-        assert!(matches!(stmts[1].node, Stmt::Defer(_)));
-        assert!(matches!(stmts[2].node, Stmt::Defer(_)));
-    }
-
-    #[test]
-    fn test_struct_literal() {
-        let source = "F f()->Point{Point{x:1.0,y:2.0}}";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_array_literal() {
-        let source = "F f()->[i64]=[1,2,3,4,5]";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_empty_array_literal() {
-        let source = "F f()->[i64]=[]";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_array_with_values() {
-        // Test array literal syntax [value, value, ...]
-        let source = "F f()->[i64]=[1,2,3]";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_multiline_function() {
-        let source = r#"
-F calculate(a: i64,
-            b: i64,
-            c: i64) -> i64 {
-    x := a + b;
-    y := x * c;
-    R y
-}
-"#;
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.params.len(), 3);
-    }
-
-    #[test]
-    fn test_all_primitive_types() {
-        let source = r#"
-F test(
-    a:i8,b:i16,c:i32,d:i64,e:i128,
-    f:u8,g:u16,h:u32,i:u64,j:u128,
-    k:f32,l:f64,m:bool,n:str
-)->()=()
-"#;
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.params.len(), 14);
-    }
-
-    #[test]
-    fn test_pattern_in_match() {
-        let source = r#"
-F f(opt:Option<i64>)->i64=M opt{
-    Some(x)=>x,
-    None=>0
-}
-"#;
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-    }
-
-    #[test]
-    fn test_tuple_parameter() {
-        // Test tuple type as parameter
-        let source = "F f(t:(i64,i64))->i64=42";
-        let module = parse(source).unwrap();
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "f");
-        assert!(matches!(&f.params[0].ty.node, Type::Tuple(_)));
-    }
-
-    #[test]
-    fn test_basic_struct_with_methods() {
-        // Test struct with impl block using regular param names
-        let source = r#"
-S Counter{value:i64}
-X Counter{F inc(c:&Counter)->i64=c.value+1}
-"#;
-        let module = parse(source).unwrap();
-        assert_eq!(module.items.len(), 2);
-    }
-
-    #[test]
-    fn test_enum_pattern_match() {
-        // Test enum variant matching
-        let source = r#"
-E Result{Ok(i64),Err(str)}
-F handle(r:Result)->i64=M r{Ok(v)=>v,Err(_)=>0}
-"#;
-        let module = parse(source).unwrap();
-        assert_eq!(module.items.len(), 2);
-    }
-
-    // ==================== Advanced Edge Case Tests ====================
-
-    #[test]
-    fn test_nested_generic_vec_hashmap() {
-        // Test nested generic: Vec<HashMap<K, V> > with spaces
-        let source = "S Container{data:Vec<HashMap<str,i64> >}";
-        let module = parse(source).unwrap();
-
-        let Item::Struct(s) = &module.items[0].node else {
-            unreachable!("Expected struct");
-        };
-        assert_eq!(s.name.node, "Container");
-        assert_eq!(s.fields.len(), 1);
-    }
-
-    #[test]
-    fn test_option_of_vec_generic() {
-        // Test Option<Vec<T> > combination with spaces (need space before =)
-        let source = r#"F get_items<T>()->Option<Vec<T> > ="""#;
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "get_items");
-        assert_eq!(f.generics.len(), 1);
-    }
-
-    #[test]
-    fn test_hashmap_option_value() {
-        // Test HashMap<K, Option<V> > with spaces
-        let source = "S Cache{entries:HashMap<str,Option<i64> >}";
-        let module = parse(source).unwrap();
-
-        let Item::Struct(s) = &module.items[0].node else {
-            unreachable!("Expected struct");
-        };
-        assert_eq!(s.name.node, "Cache");
-    }
-
-    #[test]
-    fn test_deeply_nested_generics() {
-        // Test Vec<HashMap<K, Option<Vec<T> > > > with spaces (need space before =)
-        let source = "F complex<T>()->Vec<HashMap<str,Option<Vec<T> > > > =[]";
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "complex");
-    }
-
-    #[test]
-    fn test_pattern_match_with_guard() {
-        // Test pattern matching with guard condition
-        let source = "F classify(x:i64)->str=M x{n I n>0=>\"pos\",n I n<0=>\"neg\",_=>\"zero\"}";
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "classify");
-    }
-
-    #[test]
-    fn test_pattern_match_guard_complex() {
-        // Test pattern match with complex guard
-        let source = r#"
-F filter(opt:Option<i64>)->i64=M opt{
-    Some(x) I x>0&&x<100=>x,
-    Some(x) I x>=100=>100,
-    Some(_)=>0,
-    None=>-1
-}
-"#;
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "filter");
-    }
-
-    #[test]
-    fn test_nested_pattern_destructuring() {
-        // Test nested destructuring in pattern match
-        let source = r#"
-E Nested{Pair((i64,i64)),Single(i64),None}
-F sum(n:Nested)->i64=M n{
-    Pair((a,b))=>a+b,
-    Single(x)=>x,
-    None=>0
-}
-"#;
-        let module = parse(source).unwrap();
-
-        assert_eq!(module.items.len(), 2);
-        let Item::Function(f) = &module.items[1].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "sum");
-    }
-
-    #[test]
-    fn test_pattern_guard_with_multiple_conditions() {
-        // Test guard with multiple && || conditions
-        let source =
-            "F check(x:i64,y:i64)->bool=M (x,y){(a,b) I a>0&&b>0||a<0&&b<0=>true,_=>false}";
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "check");
-    }
-
-    #[test]
-    fn test_nested_option_pattern() {
-        // Test nested Option patterns: Option<Option<T> > with spaces
-        let source = r#"
-F unwrap_twice(opt:Option<Option<i64> >)->i64=M opt{
-    Some(Some(x))=>x,
-    Some(None)=>-1,
-    None=>-2
-}
-"#;
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "unwrap_twice");
-    }
-
-    #[test]
-    fn test_mutual_recursion_type_inference() {
-        // Test mutual recursion: two functions calling each other
-        let source = r#"
-F is_even(n:i64)->bool=n==0?true:is_odd(n-1)
-F is_odd(n:i64)->bool=n==0?false:is_even(n-1)
-"#;
-        let module = parse(source).unwrap();
-
-        assert_eq!(module.items.len(), 2);
-        let Item::Function(f1) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        let Item::Function(f2) = &module.items[1].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f1.name.node, "is_even");
-        assert_eq!(f2.name.node, "is_odd");
-    }
-
-    #[test]
-    fn test_three_way_mutual_recursion() {
-        // Test three functions in mutual recursion
-        let source = r#"
-F a(n:i64)->i64=n<1?0:b(n-1)+1
-F b(n:i64)->i64=n<1?0:c(n-1)+1
-F c(n:i64)->i64=n<1?0:a(n-1)+1
-"#;
-        let module = parse(source).unwrap();
-
-        assert_eq!(module.items.len(), 3);
-    }
-
-    #[test]
-    fn test_indirect_recursion_through_lambda() {
-        // Test recursion through lambda (advanced case)
-        let source = r#"
-F outer(n:i64)->i64{
-    helper:=|x:i64|x<1?0:outer(x-1)+1;
-    helper(n)
-}
-"#;
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "outer");
-    }
-
-    #[test]
-    fn test_generic_mutual_recursion() {
-        // Test mutual recursion with generics
-        let source = r#"
-F transform_a<T>(x:T)->T=transform_b(x)
-F transform_b<T>(x:T)->T=x
-"#;
-        let module = parse(source).unwrap();
-
-        assert_eq!(module.items.len(), 2);
-    }
-
-    #[test]
-    fn test_i8_boundary_parsing() {
-        // Test i8 min/max: -128, 127
-        let source = "F i8_test()->(){min:i8=-128;max:i8=127}";
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "i8_test");
-    }
-
-    #[test]
-    fn test_i16_boundaries() {
-        // Test i16 boundaries: -32768, 32767
-        let source = "F i16_test()->(){min:i16=-32768;max:i16=32767}";
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "i16_test");
-    }
-
-    #[test]
-    fn test_i64_max_parsing() {
-        // Test i64 max: 9223372036854775807
-        let source = "F i64_max()->i64=9223372036854775807";
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "i64_max");
-    }
-
-    #[test]
-    fn test_pattern_with_range() {
-        // Test pattern matching with ranges
-        let source = r#"
-F grade(score:i64)->str=M score{
-    x I x>=90=>"A",
-    x I x>=80=>"B",
-    x I x>=70=>"C",
-    x I x>=60=>"D",
-    _=>"F"
-}
-"#;
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "grade");
-    }
-
-    #[test]
-    fn test_destructure_nested_struct() {
-        // Test destructuring nested structs in pattern match
-        let source = r#"
-S Point{x:i64,y:i64}
-S Line{start:Point,end:Point}
-F length(line:Line)->i64=line.end.x-line.start.x
-"#;
-        let module = parse(source).unwrap();
-
-        assert_eq!(module.items.len(), 3);
-    }
-
-    #[test]
-    fn test_guard_with_method_call() {
-        // Test guard condition with method calls
-        let source = "F check_len(s:str)->bool=M s{x I x.len()>0=>true,_=>false}";
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "check_len");
-    }
-
-    #[test]
-    fn test_multiple_generic_constraints() {
-        // Test function with multiple generic parameters with bounds
-        let source = "F combine<A:Clone,B:Default,C:Ord>(a:A,b:B,c:C)->C=c";
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.generics.len(), 3);
-        assert_eq!(f.generics[0].bounds.len(), 1);
-        assert_eq!(f.generics[1].bounds.len(), 1);
-        assert_eq!(f.generics[2].bounds.len(), 1);
-    }
-
-    #[test]
-    fn test_enum_with_generic_variants() {
-        // Test enum with generic variants
-        let source = "E Result<T,E>{Ok(T),Err(E)}";
-        let module = parse(source).unwrap();
-
-        let Item::Enum(e) = &module.items[0].node else {
-            unreachable!("Expected enum");
-        };
-        assert_eq!(e.name.node, "Result");
-        assert_eq!(e.generics.len(), 2);
-        assert_eq!(e.variants.len(), 2);
-    }
-
-    #[test]
-    fn test_deeply_nested_if_else() {
-        // Test deeply nested if-else chains
-        let source = r#"
-F classify(n:i64)->str{
-    I n>1000{
-        I n>10000{"huge"}E{"large"}
-    }E{
-        I n>100{
-            I n>500{"medium-large"}E{"medium"}
-        }E{
-            I n>10{"small"}E{"tiny"}
-        }
-    }
-}
-"#;
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "classify");
-    }
-
-    #[test]
-    fn test_pattern_with_multiple_bindings() {
-        // Test pattern with multiple variable bindings and guards
-        let source = r#"
-F process(a:i64,b:i64)->i64=M (a,b){
-    (x,y) I x>0&&y>0=>x+y,
-    (x,y) I x<0&&y<0=>x-y,
-    (x,y) I x==0||y==0=>0,
-    (x,y)=>x*y
-}
-"#;
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "process");
-    }
-
-    #[test]
-    fn test_self_recursion_with_multiple_params() {
-        // Test self-recursion with multiple parameters
-        let source = "F gcd(a:i64,b:i64)->i64=b==0?a:@(b,a%b)";
-        let module = parse(source).unwrap();
-
-        let Item::Function(f) = &module.items[0].node else {
-            unreachable!("Expected function");
-        };
-        assert_eq!(f.name.node, "gcd");
-        assert_eq!(f.params.len(), 2);
-    }
-
-    // ==================== Error Recovery Tests ====================
-
-    #[test]
-    fn test_error_recovery_multiple_items() {
-        // Test that parser recovers and continues parsing after an error
-        // The broken function has an incomplete parameter list followed by a semicolon,
-        // which allows the parser to recover and continue.
-        let source = r#"
-F good1()->i64=1
-F broken(;
-F good2()->i64=2
-S ValidStruct{x:i64}
-"#;
-        let (module, errors) = parse_with_recovery(source);
-
-        // Should have collected at least one error
-        assert!(!errors.is_empty(), "Expected at least one error");
-
-        // Count valid items (good1, good2, ValidStruct) and errors
-        let mut valid_function_count = 0;
-        let mut valid_struct_count = 0;
-        let mut error_count = 0;
-
-        for item in &module.items {
-            match &item.node {
-                Item::Function(f) if f.name.node == "good1" || f.name.node == "good2" => {
-                    valid_function_count += 1;
-                }
-                Item::Struct(s) if s.name.node == "ValidStruct" => {
-                    valid_struct_count += 1;
-                }
-                Item::Error { .. } => {
-                    error_count += 1;
-                }
-                _ => {}
-            }
-        }
-
-        // The parser should recover after the error and parse remaining valid items
-        assert!(
-            valid_function_count >= 1,
-            "Should have parsed at least 1 valid function"
-        );
-        assert_eq!(valid_struct_count, 1, "Should have parsed 1 valid struct");
-        assert!(error_count >= 1, "Should have at least 1 error node");
-    }
-
-    #[test]
-    fn test_error_recovery_block_statements() {
-        // Test error recovery within block statements
-        let source = r#"
-F test_block()->i64{
-    x := 1
-    y :=
-    z := 3
-    z
-}
-"#;
-        let (module, errors) = parse_with_recovery(source);
-
-        // Should have errors for the incomplete let statement
-        assert!(!errors.is_empty(), "Expected errors");
-
-        // Should still have parsed the function
-        assert_eq!(module.items.len(), 1);
-        let Item::Function(f) = &module.items[0].node else {
-            panic!("Expected function");
-        };
-        assert_eq!(f.name.node, "test_block");
-
-        // The function body should have statements (some may be error nodes)
-        let FunctionBody::Block(stmts) = &f.body else {
-            panic!("Expected block body");
-        };
-        assert!(!stmts.is_empty());
-
-        // Check that we have both valid statements and error statements
-        let mut has_error_stmt = false;
-        let mut has_valid_let = false;
-        for stmt in stmts {
-            match &stmt.node {
-                Stmt::Error { .. } => has_error_stmt = true,
-                Stmt::Let { name, .. } if name.node == "x" || name.node == "z" => {
-                    has_valid_let = true
-                }
-                _ => {}
-            }
-        }
-        assert!(has_valid_let, "Should have valid let statements");
-        assert!(has_error_stmt, "Should have error statements");
-    }
-
-    #[test]
-    fn test_error_recovery_preserves_span() {
-        // Test that error recovery preserves span information
-        let source = "F broken( F good()->i64=42";
-        let (module, errors) = parse_with_recovery(source);
-
-        // Check that errors have span information
-        for error in &errors {
-            let span = error.span();
-            assert!(span.is_some(), "Error should have span information");
-        }
-
-        // Check that error nodes in AST have valid spans
-        for item in &module.items {
-            assert!(item.span.start <= item.span.end, "Span should be valid");
-        }
-    }
-
-    #[test]
-    fn test_error_recovery_synchronize_to_next_function() {
-        // Test that parser synchronizes correctly to next function keyword
-        let source = r#"
-F broken(x:i64 y:i64)->i64
-F good(a:i64,b:i64)->i64=a+b
-"#;
-        let (module, errors) = parse_with_recovery(source);
-
-        // Should have errors
-        assert!(!errors.is_empty(), "Expected errors for broken function");
-
-        // Should have recovered and parsed the good function
-        let has_good_function = module
-            .items
-            .iter()
-            .any(|item| matches!(&item.node, Item::Function(f) if f.name.node == "good"));
-        assert!(
-            has_good_function,
-            "Should have parsed 'good' function after recovery"
-        );
-    }
-
-    #[test]
-    fn test_error_recovery_synchronize_to_struct() {
-        // Test synchronization to struct keyword
-        // Use semicolon to help parser recognize the error boundary
-        let source = r#"
-F broken(;
-S Point{x:f64,y:f64}
-"#;
-        let (module, errors) = parse_with_recovery(source);
-
-        assert!(!errors.is_empty());
-
-        let has_struct = module
-            .items
-            .iter()
-            .any(|item| matches!(&item.node, Item::Struct(s) if s.name.node == "Point"));
-        assert!(has_struct, "Should have parsed Point struct after recovery");
-    }
-
-    #[test]
-    fn test_error_recovery_empty_after_errors() {
-        // Test that errors() returns collected errors
-        let tokens = vais_lexer::tokenize("F broken(").unwrap();
-        let mut parser = Parser::new_with_recovery(tokens);
-        let _ = parser.parse_module();
-
-        let errors = parser.errors();
-        assert!(!errors.is_empty(), "Should have collected errors");
-    }
-
-    #[test]
-    fn test_error_recovery_take_errors() {
-        // Test that take_errors() returns and clears errors
-        let tokens = vais_lexer::tokenize("F broken(").unwrap();
-        let mut parser = Parser::new_with_recovery(tokens);
-        let _ = parser.parse_module();
-
-        let errors = parser.take_errors();
-        assert!(!errors.is_empty(), "take_errors should return errors");
-        assert!(
-            parser.errors().is_empty(),
-            "errors should be empty after take"
-        );
-    }
-
-    #[test]
-    fn test_no_recovery_mode_fails_fast() {
-        // Test that without recovery mode, parsing fails on first error
-        let source = "F broken( F good()->i64=42";
-        let result = parse(source);
-        assert!(result.is_err(), "Without recovery, should fail immediately");
-    }
-
-    #[test]
-    fn test_error_recovery_enum_with_error() {
-        // Test error recovery when enum has errors
-        let source = r#"
-E Broken{A(i64,B}
-E Good{X,Y}
-"#;
-        let (module, errors) = parse_with_recovery(source);
-
-        assert!(!errors.is_empty());
-
-        let has_good_enum = module
-            .items
-            .iter()
-            .any(|item| matches!(&item.node, Item::Enum(e) if e.name.node == "Good"));
-        assert!(has_good_enum, "Should have parsed Good enum after recovery");
-    }
-
-    #[test]
-    fn test_error_recovery_mixed_items() {
-        // Test recovery with various item types
-        let source = r#"
-F func1()->i64=1
-S Broken{x
-E MyEnum{A,B}
-F func2()->i64=2
-W MyTrait{F method()->i64}
-"#;
-        let (module, errors) = parse_with_recovery(source);
-
-        assert!(!errors.is_empty(), "Should have errors for broken struct");
-
-        // Count valid items
-        let valid_functions = module
-            .items
-            .iter()
-            .filter(|item| matches!(&item.node, Item::Function(_)))
-            .count();
-        let valid_enums = module
-            .items
-            .iter()
-            .filter(|item| matches!(&item.node, Item::Enum(_)))
-            .count();
-        let valid_traits = module
-            .items
-            .iter()
-            .filter(|item| matches!(&item.node, Item::Trait(_)))
-            .count();
-
-        assert!(
-            valid_functions >= 2,
-            "Should have at least 2 valid functions"
-        );
-        assert!(valid_enums >= 1, "Should have at least 1 valid enum");
-        assert!(valid_traits >= 1, "Should have at least 1 valid trait");
-    }
-
-    #[test]
-    fn test_error_recovery_missing_closing_paren() {
-        let source = r#"
-F broken(x: i64, y: i64 -> i64 = x + y
-F good() -> i64 = 42
-"#;
-        let (module, errors) = parse_with_recovery(source);
-        assert!(!errors.is_empty(), "Expected error for missing ')'");
-
-        // Should still parse the good function
-        let has_good = module
-            .items
-            .iter()
-            .any(|item| matches!(&item.node, Item::Function(f) if f.name.node == "good"));
-        assert!(
-            has_good,
-            "Should have parsed 'good' function after recovery"
-        );
-    }
-
-    #[test]
-    fn test_error_recovery_missing_closing_brace() {
-        let source = r#"
-F broken() -> i64 {
-    x := 1
-    y := 2
-
-F good() -> i64 = 42
-"#;
-        let (module, errors) = parse_with_recovery(source);
-        assert!(!errors.is_empty(), "Expected error for missing '}}'");
-
-        let has_good = module
-            .items
-            .iter()
-            .any(|item| matches!(&item.node, Item::Function(f) if f.name.node == "good"));
-        assert!(
-            has_good,
-            "Should have parsed 'good' function after recovery"
-        );
-    }
-
-    #[test]
-    fn test_error_recovery_generic_missing_closing_angle() {
-        let source = r#"
-F broken<T(x: T) -> T = x
-F good() -> i64 = 42
-"#;
-        let (module, errors) = parse_with_recovery(source);
-        assert!(!errors.is_empty(), "Expected error for missing '>'");
-
-        let has_good = module
-            .items
-            .iter()
-            .any(|item| matches!(&item.node, Item::Function(f) if f.name.node == "good"));
-        assert!(
-            has_good,
-            "Should have parsed 'good' function after recovery"
-        );
-    }
-
-    #[test]
-    fn test_error_recovery_generic_invalid_param() {
-        let source = r#"
-F broken<T, 123, U>(x: T) -> T = x
-F good() -> i64 = 42
-"#;
-        let (module, errors) = parse_with_recovery(source);
-        assert!(
-            !errors.is_empty(),
-            "Expected error for invalid generic param"
-        );
-
-        let has_good = module
-            .items
-            .iter()
-            .any(|item| matches!(&item.node, Item::Function(f) if f.name.node == "good"));
-        assert!(
-            has_good,
-            "Should have parsed 'good' function after recovery"
-        );
-    }
-
-    #[test]
-    fn test_error_recovery_mismatched_brackets() {
-        let source = r#"
-F broken() -> i64 {
-    x := [1, 2, 3}
-    x
-}
-F good() -> i64 = 42
-"#;
-        let (module, errors) = parse_with_recovery(source);
-        assert!(!errors.is_empty(), "Expected error for mismatched brackets");
-
-        let has_good = module
-            .items
-            .iter()
-            .any(|item| matches!(&item.node, Item::Function(f) if f.name.node == "good"));
-        assert!(
-            has_good,
-            "Should have parsed 'good' function after recovery"
-        );
-    }
-}
+mod parser_tests;

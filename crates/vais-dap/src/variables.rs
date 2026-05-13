@@ -7,6 +7,15 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 use crate::protocol::types::{Scope, ScopePresentationHint, Variable, VariablePresentationHint};
 
+/// Evaluation context for expression evaluation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EvaluateContext {
+    Watch,
+    Hover,
+    Repl,
+    Clipboard,
+}
+
 /// Manages variable references for scopes and expandable variables
 #[derive(Debug, Default)]
 pub struct VariableManager {
@@ -134,6 +143,39 @@ impl VariableManager {
         scopes
     }
 
+    /// Create scopes for a frame with Globals instead of Registers
+    pub fn create_scopes_with_globals(&mut self, frame_id: i64) -> Vec<Scope> {
+        let mut scopes = Vec::new();
+
+        for scope_kind in [ScopeKind::Locals, ScopeKind::Arguments, ScopeKind::Globals] {
+            let ref_id = self.next_ref();
+
+            self.ref_map.insert(
+                ref_id,
+                VariableRefInfo::Scope {
+                    frame_id,
+                    scope_type: scope_kind,
+                },
+            );
+
+            scopes.push(Scope {
+                name: scope_kind.name().to_string(),
+                presentation_hint: Some(scope_kind.presentation_hint()),
+                variables_reference: ref_id,
+                named_variables: None,
+                indexed_variables: None,
+                expensive: Some(scope_kind.is_expensive()),
+                source: None,
+                line: None,
+                column: None,
+                end_line: None,
+                end_column: None,
+            });
+        }
+
+        scopes
+    }
+
     /// Get info about a variable reference
     pub fn get_ref_info(&self, ref_id: i64) -> Option<&VariableRefInfo> {
         self.ref_map.get(&ref_id)
@@ -232,6 +274,121 @@ impl VariableManager {
             VariableRefInfo::Scope { .. } => None,
         }
     }
+
+    /// Evaluate an expression in the given context
+    /// Returns a Variable representation of the result
+    pub fn evaluate_expression(
+        &mut self,
+        expression: &str,
+        frame_id: i64,
+        context: EvaluateContext,
+    ) -> Variable {
+        // Try to resolve the expression from cached variables
+        if let Some(cached_var) = self.resolve_path(expression, frame_id) {
+            let formatted_value = self.format_for_context(cached_var, context);
+
+            Variable {
+                name: expression.to_string(),
+                value: formatted_value,
+                var_type: cached_var.type_name.clone(),
+                presentation_hint: cached_var.type_name.as_ref().map(|t| {
+                    VariablePresentationHint {
+                        kind: Some(type_to_kind(t)),
+                        attributes: None,
+                        visibility: None,
+                        lazy: None,
+                    }
+                }),
+                evaluate_name: Some(expression.to_string()),
+                variables_reference: cached_var.variables_reference,
+                named_variables: None,
+                indexed_variables: None,
+                memory_reference: cached_var.memory_reference.clone(),
+            }
+        } else {
+            // Expression not found in cache, return unevaluated
+            Variable {
+                name: expression.to_string(),
+                value: format!("<not available: {}>", expression),
+                var_type: None,
+                presentation_hint: None,
+                evaluate_name: Some(expression.to_string()),
+                variables_reference: 0,
+                named_variables: None,
+                indexed_variables: None,
+                memory_reference: None,
+            }
+        }
+    }
+
+    /// Find a variable by name in all cached scopes for a frame
+    fn find_variable_by_name(&self, name: &str, frame_id: i64) -> Option<&CachedVariable> {
+        // Iterate through all scope references for this frame
+        for (ref_id, ref_info) in &self.ref_map {
+            if let VariableRefInfo::Scope {
+                frame_id: fid,
+                scope_type: _,
+            } = ref_info
+            {
+                if *fid == frame_id {
+                    // Check cached variables for this scope
+                    if let Some(cached_vars) = self.cached_variables.get(ref_id) {
+                        if let Some(var) = cached_vars.iter().find(|v| v.name == name) {
+                            return Some(var);
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Resolve a dotted path expression (e.g., "obj.field.sub")
+    fn resolve_path(&self, path: &str, frame_id: i64) -> Option<&CachedVariable> {
+        let parts: Vec<&str> = path.split('.').collect();
+
+        if parts.is_empty() {
+            return None;
+        }
+
+        // Find the base variable
+        let mut current_var = self.find_variable_by_name(parts[0], frame_id)?;
+
+        // Navigate through the path
+        for part in &parts[1..] {
+            // Need to find child variables
+            if current_var.variables_reference == 0 {
+                return None; // No children
+            }
+
+            // Look for the child in cached variables
+            let cached_children = self
+                .cached_variables
+                .get(&current_var.variables_reference)?;
+            current_var = cached_children.iter().find(|v| v.name == *part)?;
+        }
+
+        Some(current_var)
+    }
+
+    /// Format a variable for the given context
+    fn format_for_context(&self, var: &CachedVariable, context: EvaluateContext) -> String {
+        match context {
+            EvaluateContext::Hover => {
+                // Include type information
+                if let Some(type_name) = &var.type_name {
+                    format!("{} ({})", var.value, type_name)
+                } else {
+                    var.value.clone()
+                }
+            }
+            EvaluateContext::Clipboard => {
+                // Value only, no type
+                var.value.clone()
+            }
+            _ => var.value.clone(),
+        }
+    }
 }
 
 /// Raw variable from debugger
@@ -276,6 +433,186 @@ fn type_to_kind(type_name: &str) -> String {
         "class".to_string()
     } else {
         "property".to_string()
+    }
+}
+
+/// Vais-specific pretty printer for displaying runtime values
+/// Translates raw LLDB output into Vais-friendly representations
+pub struct VaisPrettyPrinter;
+
+impl VaisPrettyPrinter {
+    /// Format a variable value based on its Vais type
+    pub fn format_value(type_name: Option<&str>, raw_value: &str) -> String {
+        let Some(ty) = type_name else {
+            return raw_value.to_string();
+        };
+
+        // Vec<T> display: show as [elem1, elem2, ...]
+        if ty.starts_with("Vec<") || ty.contains("Vec") {
+            return Self::format_vec(raw_value);
+        }
+
+        // Option<T> display: show as Some(value) or None
+        if ty.starts_with("Option<") || ty.contains("Option") {
+            return Self::format_option(raw_value);
+        }
+
+        // Result<T, E> display: show as Ok(value) or Err(error)
+        if ty.starts_with("Result<") || ty.contains("Result") {
+            return Self::format_result(raw_value);
+        }
+
+        // HashMap<K, V> display
+        if ty.starts_with("HashMap<") || ty.contains("HashMap") {
+            return Self::format_hashmap(raw_value);
+        }
+
+        // Enum variant display: translate i8 tag to variant name
+        // Vais enums are represented as {i8 tag, i64 data}
+        if Self::looks_like_enum_struct(raw_value) {
+            return Self::format_enum_variant(raw_value);
+        }
+
+        // Bool display: translate 0/1 to false/true for bool types
+        if ty == "bool" || ty == "i1" {
+            return match raw_value.trim() {
+                "0" | "false" => "false".to_string(),
+                "1" | "true" => "true".to_string(),
+                _ => raw_value.to_string(),
+            };
+        }
+
+        // Char display: show character representation
+        if ty == "char" || ty == "u8" {
+            if let Ok(code) = raw_value.trim().parse::<u32>() {
+                if let Some(c) = char::from_u32(code) {
+                    if c.is_ascii_graphic() || c == ' ' {
+                        return format!("'{}' ({})", c, code);
+                    }
+                }
+            }
+        }
+
+        // String/str display: ensure quoted
+        if ty == "str" || ty == "&str" || ty == "String" {
+            let trimmed = raw_value.trim();
+            if !trimmed.starts_with('"') {
+                return format!("\"{}\"", trimmed);
+            }
+        }
+
+        raw_value.to_string()
+    }
+
+    /// Format Vec display value
+    fn format_vec(raw: &str) -> String {
+        let trimmed = raw.trim();
+        // If already formatted as array-like, return as-is
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            return trimmed.to_string();
+        }
+        // Try to parse LLDB struct output for Vec
+        // Vec is typically {ptr, len, capacity}
+        if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            // Extract the length if visible
+            let inner = &trimmed[1..trimmed.len() - 1];
+            let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+            if parts.len() >= 2 {
+                // Try to extract length
+                if let Some(len_str) = parts.get(1) {
+                    let len_str = len_str.trim();
+                    if let Ok(len) = len_str.parse::<usize>() {
+                        return format!("Vec (len: {})", len);
+                    }
+                }
+            }
+        }
+        raw.to_string()
+    }
+
+    /// Format Option display value
+    fn format_option(raw: &str) -> String {
+        let trimmed = raw.trim();
+        // Option is typically {i8 tag, i64 data} where tag 0=None, 1=Some
+        if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            let inner = &trimmed[1..trimmed.len() - 1];
+            let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+            if parts.len() >= 2 {
+                let tag = parts[0].trim();
+                let value = parts[1].trim();
+                return match tag {
+                    "0" => "None".to_string(),
+                    "1" => format!("Some({})", value),
+                    _ => raw.to_string(),
+                };
+            }
+        }
+        raw.to_string()
+    }
+
+    /// Format Result display value
+    fn format_result(raw: &str) -> String {
+        let trimmed = raw.trim();
+        // Result is typically {i8 tag, i64 data} where tag 0=Ok, 1=Err
+        if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            let inner = &trimmed[1..trimmed.len() - 1];
+            let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+            if parts.len() >= 2 {
+                let tag = parts[0].trim();
+                let value = parts[1].trim();
+                return match tag {
+                    "0" => format!("Ok({})", value),
+                    "1" => format!("Err({})", value),
+                    _ => raw.to_string(),
+                };
+            }
+        }
+        raw.to_string()
+    }
+
+    /// Format HashMap display value
+    fn format_hashmap(raw: &str) -> String {
+        let trimmed = raw.trim();
+        if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            // Try to show entry count
+            let inner = &trimmed[1..trimmed.len() - 1];
+            let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+            if parts.len() >= 2 {
+                return format!("HashMap (entries: ~{})", parts.len() / 2);
+            }
+        }
+        raw.to_string()
+    }
+
+    /// Check if value looks like an enum struct {tag, data}
+    fn looks_like_enum_struct(raw: &str) -> bool {
+        let trimmed = raw.trim();
+        if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            let inner = &trimmed[1..trimmed.len() - 1];
+            let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+            // Enum is exactly {i8 tag, i64 data}
+            if parts.len() == 2 {
+                if let Ok(tag) = parts[0].trim().parse::<i64>() {
+                    return (0..256).contains(&tag);
+                }
+            }
+        }
+        false
+    }
+
+    /// Format enum variant from {tag, data} representation
+    fn format_enum_variant(raw: &str) -> String {
+        let trimmed = raw.trim();
+        if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            let inner = &trimmed[1..trimmed.len() - 1];
+            let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+            if parts.len() == 2 {
+                let tag = parts[0].trim();
+                let data = parts[1].trim();
+                return format!("variant#{} (data: {})", tag, data);
+            }
+        }
+        raw.to_string()
     }
 }
 
@@ -342,6 +679,235 @@ mod tests {
             assert_eq!(name, "arr");
         } else {
             panic!("Expected Variable ref info");
+        }
+    }
+
+    #[test]
+    fn test_evaluate_existing_variable() {
+        let mut manager = VariableManager::new();
+
+        let scopes = manager.create_scopes(1);
+        let locals_ref = scopes[0].variables_reference;
+
+        let raw_vars = vec![RawVariable {
+            name: "x".to_string(),
+            value: "42".to_string(),
+            type_name: Some("i64".to_string()),
+            has_children: false,
+            named_children: None,
+            indexed_children: None,
+            memory_reference: None,
+        }];
+
+        manager.cache_variables(locals_ref, 1, raw_vars);
+
+        let result = manager.evaluate_expression("x", 1, EvaluateContext::Repl);
+
+        assert_eq!(result.name, "x");
+        assert_eq!(result.value, "42");
+        assert_eq!(result.var_type, Some("i64".to_string()));
+        assert_eq!(result.variables_reference, 0);
+    }
+
+    #[test]
+    fn test_evaluate_missing_variable() {
+        let mut manager = VariableManager::new();
+
+        let scopes = manager.create_scopes(1);
+        let locals_ref = scopes[0].variables_reference;
+
+        manager.cache_variables(locals_ref, 1, vec![]);
+
+        let result = manager.evaluate_expression("missing", 1, EvaluateContext::Repl);
+
+        assert_eq!(result.name, "missing");
+        assert!(result.value.contains("not available"));
+        assert_eq!(result.var_type, None);
+        assert_eq!(result.variables_reference, 0);
+    }
+
+    #[test]
+    fn test_evaluate_dotted_path() {
+        let mut manager = VariableManager::new();
+
+        let scopes = manager.create_scopes(1);
+        let locals_ref = scopes[0].variables_reference;
+
+        // Create parent variable
+        let raw_vars = vec![RawVariable {
+            name: "obj".to_string(),
+            value: "MyStruct".to_string(),
+            type_name: Some("MyStruct".to_string()),
+            has_children: true,
+            named_children: Some(1),
+            indexed_children: None,
+            memory_reference: None,
+        }];
+
+        let dap_vars = manager.cache_variables(locals_ref, 1, raw_vars);
+        let obj_ref = dap_vars[0].variables_reference;
+
+        // Cache child variable
+        let child_vars = vec![RawVariable {
+            name: "field".to_string(),
+            value: "99".to_string(),
+            type_name: Some("i32".to_string()),
+            has_children: false,
+            named_children: None,
+            indexed_children: None,
+            memory_reference: None,
+        }];
+
+        manager.cache_variables(obj_ref, 1, child_vars);
+
+        let result = manager.evaluate_expression("obj.field", 1, EvaluateContext::Repl);
+
+        assert_eq!(result.name, "obj.field");
+        assert_eq!(result.value, "99");
+        assert_eq!(result.var_type, Some("i32".to_string()));
+    }
+
+    #[test]
+    fn test_evaluate_context_formatting() {
+        let mut manager = VariableManager::new();
+
+        let scopes = manager.create_scopes(1);
+        let locals_ref = scopes[0].variables_reference;
+
+        let raw_vars = vec![RawVariable {
+            name: "x".to_string(),
+            value: "42".to_string(),
+            type_name: Some("i64".to_string()),
+            has_children: false,
+            named_children: None,
+            indexed_children: None,
+            memory_reference: None,
+        }];
+
+        manager.cache_variables(locals_ref, 1, raw_vars);
+
+        // Test Hover context (includes type)
+        let hover_result = manager.evaluate_expression("x", 1, EvaluateContext::Hover);
+        assert_eq!(hover_result.value, "42 (i64)");
+
+        // Test Clipboard context (value only)
+        let clipboard_result = manager.evaluate_expression("x", 1, EvaluateContext::Clipboard);
+        assert_eq!(clipboard_result.value, "42");
+
+        // Test Repl context (default)
+        let repl_result = manager.evaluate_expression("x", 1, EvaluateContext::Repl);
+        assert_eq!(repl_result.value, "42");
+    }
+
+    #[test]
+    fn test_pretty_printer_bool() {
+        assert_eq!(VaisPrettyPrinter::format_value(Some("bool"), "0"), "false");
+        assert_eq!(VaisPrettyPrinter::format_value(Some("bool"), "1"), "true");
+        assert_eq!(VaisPrettyPrinter::format_value(Some("i1"), "0"), "false");
+    }
+
+    #[test]
+    fn test_pretty_printer_option() {
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("Option<i64>"), "{0, 42}"),
+            "None"
+        );
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("Option<i64>"), "{1, 42}"),
+            "Some(42)"
+        );
+    }
+
+    #[test]
+    fn test_pretty_printer_result() {
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("Result<i64, str>"), "{0, 99}"),
+            "Ok(99)"
+        );
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("Result<i64, str>"), "{1, 99}"),
+            "Err(99)"
+        );
+    }
+
+    #[test]
+    fn test_pretty_printer_vec() {
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("Vec<i64>"), "[1, 2, 3]"),
+            "[1, 2, 3]"
+        );
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("Vec<i64>"), "{0x1234, 5, 10}"),
+            "Vec (len: 5)"
+        );
+    }
+
+    #[test]
+    fn test_pretty_printer_string() {
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("str"), "hello"),
+            "\"hello\""
+        );
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("str"), "\"hello\""),
+            "\"hello\""
+        );
+    }
+
+    #[test]
+    fn test_pretty_printer_char() {
+        assert_eq!(
+            VaisPrettyPrinter::format_value(Some("char"), "65"),
+            "'A' (65)"
+        );
+    }
+
+    #[test]
+    fn test_pretty_printer_enum() {
+        // Enum-like struct {tag, data} without a known type name
+        assert_eq!(
+            VaisPrettyPrinter::format_value(None, "{2, 100}"),
+            "{2, 100}" // No type info, no enum formatting
+        );
+    }
+
+    #[test]
+    fn test_pretty_printer_passthrough() {
+        // Regular i64 should pass through unchanged
+        assert_eq!(VaisPrettyPrinter::format_value(Some("i64"), "42"), "42");
+        assert_eq!(VaisPrettyPrinter::format_value(None, "42"), "42");
+    }
+
+    #[test]
+    fn test_create_scopes_with_globals() {
+        let mut manager = VariableManager::new();
+
+        let scopes = manager.create_scopes_with_globals(1);
+
+        assert_eq!(scopes.len(), 3);
+        assert_eq!(scopes[0].name, "Locals");
+        assert_eq!(scopes[1].name, "Arguments");
+        assert_eq!(scopes[2].name, "Globals");
+
+        // Verify that Globals scope is marked as expensive
+        assert_eq!(scopes[2].expensive, Some(true));
+
+        // Check that references are tracked
+        for scope in &scopes {
+            assert!(manager.get_ref_info(scope.variables_reference).is_some());
+        }
+
+        // Verify the scope type is correct
+        let globals_info = manager.get_ref_info(scopes[2].variables_reference).unwrap();
+        if let VariableRefInfo::Scope {
+            scope_type,
+            frame_id,
+        } = globals_info
+        {
+            assert_eq!(*scope_type, ScopeKind::Globals);
+            assert_eq!(*frame_id, 1);
+        } else {
+            panic!("Expected Scope ref info for Globals");
         }
     }
 }

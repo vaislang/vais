@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/io
+use std/io
 ```
 
 ## Overview
@@ -23,7 +23,7 @@ The IO module provides safe input operations with built-in buffer overflow prote
 ### read_line
 
 ```vais
-F read_line(buffer: i64, max_len: i64) -> i64
+fn read_line(buffer: i64, max_len: i64) -> i64
 ```
 
 Read a line from stdin into a buffer, removing trailing newline.
@@ -41,7 +41,7 @@ Read a line from stdin into a buffer, removing trailing newline.
 ### read_i64
 
 ```vais
-F read_i64() -> i64
+fn read_i64() -> i64
 ```
 
 Read an integer from stdin.
@@ -58,7 +58,7 @@ num := read_i64()
 ### read_f64
 
 ```vais
-F read_f64() -> f64
+fn read_f64() -> f64
 ```
 
 Read a floating-point number from stdin.
@@ -75,7 +75,7 @@ price := read_f64()
 ### read_char
 
 ```vais
-F read_char() -> i64
+fn read_char() -> i64
 ```
 
 Read a single character from stdin.
@@ -87,7 +87,7 @@ Read a single character from stdin.
 ### prompt_line
 
 ```vais
-F prompt_line(prompt: i64, buffer: i64, max_len: i64) -> i64
+fn prompt_line(prompt: i64, buffer: i64, max_len: i64) -> i64
 ```
 
 Print a prompt and read a line from stdin.
@@ -111,7 +111,7 @@ free(buf)
 ### prompt_i64
 
 ```vais
-F prompt_i64(prompt: i64) -> i64
+fn prompt_i64(prompt: i64) -> i64
 ```
 
 Print a prompt and read an integer.
@@ -131,7 +131,7 @@ age := prompt_i64("Enter age: ")
 ### prompt_f64
 
 ```vais
-F prompt_f64(prompt: i64) -> f64
+fn prompt_f64(prompt: i64) -> f64
 ```
 
 Print a prompt and read a float.
@@ -163,9 +163,9 @@ The following C library functions are available for advanced use:
 ### Basic Input
 
 ```vais
-U std/io
+use std/io
 
-F main() -> i64 {
+fn main() -> i64 {
     # Read a number
     age := prompt_i64("Enter your age: ")
 
@@ -182,9 +182,9 @@ F main() -> i64 {
 ### Reading Lines
 
 ```vais
-U std/io
+use std/io
 
-F main() -> i64 {
+fn main() -> i64 {
     buffer := malloc(256)
 
     # Read a line with prompt
@@ -203,9 +203,9 @@ F main() -> i64 {
 ### Input Validation Loop
 
 ```vais
-U std/io
+use std/io
 
-F main() -> i64 {
+fn main() -> i64 {
     buf := malloc(100)
     valid := 0
 

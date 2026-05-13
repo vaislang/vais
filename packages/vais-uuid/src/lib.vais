@@ -1,0 +1,146 @@
+# vais-uuid: UUID v4 generation library
+# Simple implementation using LCG for randomness
+
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F load_byte(ptr: i64) -> i64
+X F store_byte(ptr: i64, val: i64) -> i64
+X F memset(dest: i64, val: i64, n: i64) -> i64
+
+# LCG state (caller must manage seed)
+F next_random(seed: i64) -> i64 {
+    # LCG parameters
+    a := 1664525
+    c := 1013904223
+    m := 2147483647  # 2^31 - 1
+
+    result := (seed * a + c) % m
+    R result
+}
+
+# Generate UUID v4 with given seed
+F uuid_v4_with_seed(seed: i64) -> i64 {
+    uuid := malloc(16)
+    current := seed
+
+    # Generate 16 random bytes
+    i := 0
+    L {
+        I i >= 16 {
+            B
+        }
+        current = next_random(current)
+        byte := (current >> 8) & 255
+        store_byte(uuid + i, byte)
+        i = i + 1
+    }
+
+    # Set version (byte 6, bits 4-7 = 0100 for v4)
+    b6 := load_byte(uuid + 6)
+    b6 = (b6 & 15) | 64
+    store_byte(uuid + 6, b6)
+
+    # Set variant (byte 8, bits 6-7 = 10 for RFC 4122)
+    b8 := load_byte(uuid + 8)
+    b8 = (b8 & 63) | 128
+    store_byte(uuid + 8, b8)
+
+    R uuid
+}
+
+# Generate UUID v4 with default seed
+F uuid_v4() -> i64 {
+    R uuid_v4_with_seed(12345)
+}
+
+# Convert byte value to hex digit
+F to_hex(val: i64) -> i64 {
+    I val < 10 {
+        R 48 + val
+    }
+    R 97 + (val - 10)
+}
+
+# Format UUID as string (36 chars + null)
+F uuid_to_string(uuid: i64) -> i64 {
+    s := malloc(37)
+    pos := 0
+
+    i := 0
+    L {
+        I i >= 16 {
+            B
+        }
+
+        # Add dashes
+        I i == 4 {
+            store_byte(s + pos, 45)
+            pos = pos + 1
+        }
+        I i == 6 {
+            store_byte(s + pos, 45)
+            pos = pos + 1
+        }
+        I i == 8 {
+            store_byte(s + pos, 45)
+            pos = pos + 1
+        }
+        I i == 10 {
+            store_byte(s + pos, 45)
+            pos = pos + 1
+        }
+
+        byte := load_byte(uuid + i)
+        hi := (byte >> 4) & 15
+        lo := byte & 15
+
+        store_byte(s + pos, to_hex(hi))
+        pos = pos + 1
+        store_byte(s + pos, to_hex(lo))
+        pos = pos + 1
+
+        i = i + 1
+    }
+
+    store_byte(s + pos, 0)
+    R s
+}
+
+# Generate nil UUID
+F uuid_nil() -> i64 {
+    uuid := malloc(16)
+    memset(uuid, 0, 16)
+    R uuid
+}
+
+# Compare two UUIDs (returns 0 if equal)
+F uuid_compare(a: i64, b: i64) -> i64 {
+    i := 0
+    L {
+        I i >= 16 {
+            B
+        }
+
+        ba := load_byte(a + i)
+        bb := load_byte(b + i)
+
+        I ba != bb {
+            R ba - bb
+        }
+
+        i = i + 1
+    }
+    R 0
+}
+
+# Get UUID version (4 for v4 UUIDs)
+F uuid_version(uuid: i64) -> i64 {
+    b6 := load_byte(uuid + 6)
+    R (b6 >> 4) & 15
+}
+
+# Free UUID
+F uuid_free(uuid: i64) -> i64 {
+    free(uuid)
+    R 0
+}

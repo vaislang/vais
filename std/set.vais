@@ -4,7 +4,7 @@
 
 # Helper function to initialize buckets recursively
 F set_init_buckets(buckets: i64, cap: i64, i: i64) -> i64 {
-    I i >= cap { 0 } E {
+    I i >= cap { 0 } EL {
         store_i64(buckets + i * 8, 0)
         set_init_buckets(buckets, cap, i + 1)
     }
@@ -26,7 +26,7 @@ S SetEntry {
 X Set {
     # Create a new Set with given capacity
     F with_capacity(capacity: i64) -> Set {
-        cap := I capacity < 8 { 8 } E { capacity }
+        cap := I capacity < 8 { 8 } EL { capacity }
         # Allocate bucket array (array of pointers, each 8 bytes)
         buckets := malloc(cap * 8)
         # Initialize all buckets to null (0)
@@ -46,14 +46,14 @@ X Set {
 
     # Check if empty
     F is_empty(&self) -> i64 {
-        I self.size == 0 { 1 } E { 0 }
+        I self.size == 0 { 1 } EL { 0 }
     }
 
     # Hash function for i64 value
     F hash(&self, value: i64) -> i64 {
         # Simple hash: multiply by golden ratio prime and take modulo
         h := value * 2654435769
-        abs_h := I h < 0 { 0 - h } E { h }
+        abs_h := I h < 0 { 0 - h } EL { h }
         abs_h % self.cap
     }
 
@@ -110,7 +110,7 @@ X Set {
                 I prev_ptr == 0 {
                     # Removing head of list
                     store_i64(self.buckets + idx * 8, next)
-                } E {
+                } EL {
                     # Removing from middle/end
                     store_i64(prev_ptr + 8, next)
                 }

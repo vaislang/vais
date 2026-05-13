@@ -50,7 +50,7 @@ F pq_capacity(pq: i64) -> i64 {
 
 # Check if PQ is empty
 F pq_is_empty(pq: i64) -> i64 {
-    I pq_size(pq) == 0 { 1 } E { 0 }
+    I pq_size(pq) == 0 { 1 } EL { 0 }
 }
 
 # Peek at minimum element (returns 0 if empty)
@@ -58,7 +58,7 @@ F pq_peek(pq: i64) -> i64 {
     size := pq_size(pq)
     I size == 0 {
         0
-    } E {
+    } EL {
         data := load_i64(pq)
         load_i64(data)  # Root element at index 0
     }
@@ -68,7 +68,7 @@ F pq_peek(pq: i64) -> i64 {
 F pq_sift_up(pq: i64, idx: i64) -> i64 {
     I idx == 0 {
         0  # At root, done
-    } E {
+    } EL {
         data := load_i64(pq)
         parent_idx := (idx - 1) / 2
 
@@ -83,7 +83,7 @@ F pq_sift_up(pq: i64, idx: i64) -> i64 {
 
             # Continue sifting up
             pq_sift_up(pq, parent_idx)
-        } E {
+        } EL {
             0  # Heap property satisfied
         }
     }
@@ -98,7 +98,7 @@ F pq_sift_down(pq: i64, idx: i64) -> i64 {
     # Check if leaf node
     I left_idx >= size {
         0  # No children, done
-    } E {
+    } EL {
         data := load_i64(pq)
         current_val := load_i64(data + idx * 8)
 
@@ -113,10 +113,10 @@ F pq_sift_down(pq: i64, idx: i64) -> i64 {
                 store_i64(data + idx * 8, left_val)
                 store_i64(data + left_idx * 8, current_val)
                 pq_sift_down(pq, left_idx)
-            } E {
+            } EL {
                 0
             }
-        } E {
+        } EL {
             # Both children exist
             right_val := load_i64(data + right_idx * 8)
 
@@ -128,17 +128,17 @@ F pq_sift_down(pq: i64, idx: i64) -> i64 {
                     store_i64(data + idx * 8, left_val)
                     store_i64(data + left_idx * 8, current_val)
                     pq_sift_down(pq, left_idx)
-                } E {
+                } EL {
                     0
                 }
-            } E {
+            } EL {
                 # Right child is smaller
                 I right_val < current_val {
                     # Swap with right child
                     store_i64(data + idx * 8, right_val)
                     store_i64(data + right_idx * 8, current_val)
                     pq_sift_down(pq, right_idx)
-                } E {
+                } EL {
                     0
                 }
             }
@@ -169,13 +169,13 @@ F pq_pop(pq: i64) -> i64 {
 
     I size == 0 {
         0
-    } E I size == 1 {
+    } EL I size == 1 {
         # Special case: last element
         data := load_i64(pq)
         min_val := load_i64(data)
         store_i64(pq + 8, 0)
         min_val
-    } E {
+    } EL {
         data := load_i64(pq)
 
         # Get minimum element (root)
@@ -237,7 +237,7 @@ F test_basic_operations() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } E { 0 } } E { 0 } } E { 0 } } E { 0 } } E { 0 }
+    } EL { 0 } } EL { 0 } } EL { 0 } } EL { 0 } } EL { 0 }
 }
 
 F test_peek() -> i64 {
@@ -273,7 +273,7 @@ F test_peek() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } E { 0 } } E { 0 } } E { 0 }
+    } EL { 0 } } EL { 0 } } EL { 0 }
 }
 
 F test_empty() -> i64 {
@@ -304,7 +304,7 @@ F test_empty() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } E { 0 } } E { 0 } } E { 0 }
+    } EL { 0 } } EL { 0 } } EL { 0 }
 }
 
 F test_duplicates() -> i64 {
@@ -344,7 +344,7 @@ F test_duplicates() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } E { 0 } } E { 0 } } E { 0 } } E { 0 } } E { 0 }
+    } EL { 0 } } EL { 0 } } EL { 0 } } EL { 0 } } EL { 0 }
 }
 
 F test_single_element() -> i64 {
@@ -375,7 +375,7 @@ F test_single_element() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } E { 0 } } E { 0 } } E { 0 }
+    } EL { 0 } } EL { 0 } } EL { 0 }
 }
 
 F test_descending_order() -> i64 {
@@ -406,7 +406,7 @@ F test_descending_order() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } E { 0 } } E { 0 }
+    } EL { 0 } } EL { 0 }
 }
 
 F test_ascending_order() -> i64 {
@@ -440,7 +440,7 @@ F test_ascending_order() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } E { 0 } } E { 0 } } E { 0 }
+    } EL { 0 } } EL { 0 } } EL { 0 }
 }
 
 F test_interleaved() -> i64 {
@@ -472,7 +472,7 @@ F test_interleaved() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } E { 0 } } E { 0 } } E { 0 }
+    } EL { 0 } } EL { 0 } } EL { 0 }
 }
 
 F main() -> i64 {
@@ -492,28 +492,28 @@ F main() -> i64 {
     I r1 == 1 { I r2 == 1 { I r3 == 1 { I r4 == 1 { I r5 == 1 { I r6 == 1 { I r7 == 1 { I r8 == 1 {
         puts("=== All PriorityQueue Tests PASSED ===")
         0
-    } E {
+    } EL {
         puts("=== Some Tests FAILED ===")
         1
-    } } E {
+    } } EL {
         puts("=== Some Tests FAILED ===")
         1
-    } } E {
+    } } EL {
         puts("=== Some Tests FAILED ===")
         1
-    } } E {
+    } } EL {
         puts("=== Some Tests FAILED ===")
         1
-    } } E {
+    } } EL {
         puts("=== Some Tests FAILED ===")
         1
-    } } E {
+    } } EL {
         puts("=== Some Tests FAILED ===")
         1
-    } } E {
+    } } EL {
         puts("=== Some Tests FAILED ===")
         1
-    } } E {
+    } } EL {
         puts("=== Some Tests FAILED ===")
         1
     }

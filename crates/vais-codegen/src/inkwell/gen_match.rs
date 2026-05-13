@@ -3,7 +3,6 @@
 //! Handles match expressions, pattern checking, pattern bindings,
 //! and assertions.
 
-
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::{BasicValueEnum, IntValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
@@ -17,12 +16,24 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     pub(super) fn infer_struct_name(&self, expr: &Expr) -> CodegenResult<String> {
         match expr {
             Expr::Ident(name) => {
-                // Look up in var_struct_types
+                // Primary: look up in var_struct_types (populated from annotations and StructLit assignments)
                 if let Some(struct_name) = self.var_struct_types.get(name) {
                     return Ok(struct_name.clone());
                 }
-                Err(CodegenError::Unsupported(format!(
-                    "Cannot infer struct type for variable: {}. Consider adding type annotations.",
+                // Fallback: check locals — if the variable's LLVM struct type matches a known
+                // generated struct, return that struct's name.
+                if let Some((_ptr, inkwell::types::BasicTypeEnum::StructType(st))) =
+                    self.locals.get(name)
+                {
+                    for (sname, known_st) in &self.generated_structs {
+                        if known_st == st {
+                            return Ok(sname.clone());
+                        }
+                    }
+                }
+                Err(CodegenError::InternalError(format!(
+                    "Type inference failed: cannot determine struct type for variable `{}`. \
+                     Hint: add an explicit type annotation (e.g., `x: MyStruct := ...`).",
                     name
                 )))
             }
@@ -31,7 +42,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // Recursively infer the inner expression's struct type,
                 // then look up the field's type (if it's also a struct)
                 let parent_struct = self.infer_struct_name(&inner.node)?;
-                // Look up the field's type name from struct_field_type_names
+                // Primary: look up the field's type name from struct_field_type_names
                 if let Some(field_types) = self.struct_field_type_names.get(&parent_struct) {
                     for (fname, ftype) in field_types {
                         if fname == &field.node && !ftype.is_empty() {
@@ -42,21 +53,40 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         }
                     }
                 }
-                Err(CodegenError::Unsupported(format!(
-                    "Cannot infer struct type for nested field access: {}.{}",
+                // Fallback: scan all known structs' field lists to find the field's type
+                // (covers cases where struct_field_type_names was not populated for this struct)
+                for (sname, field_names) in &self.struct_fields {
+                    if sname == &parent_struct {
+                        for fname in field_names {
+                            if fname == &field.node {
+                                // Field exists but has a non-struct type; cannot infer struct name
+                                break;
+                            }
+                        }
+                    }
+                }
+                Err(CodegenError::InternalError(format!(
+                    "Type inference failed: cannot determine struct type for field access `{}.{}`. \
+                     Hint: ensure the field is declared with a struct type annotation.",
                     parent_struct, field.node
                 )))
             }
             Expr::Call { func, .. } => {
                 // Try to infer return type as struct from function name
                 if let Expr::Ident(fn_name) = &func.node {
-                    // Check if the function name matches a struct constructor pattern
+                    // Primary: check if the function name matches a struct constructor pattern
                     if self.generated_structs.contains_key(fn_name.as_str()) {
                         return Ok(fn_name.clone());
                     }
+                    // Fallback: check function_return_structs for an explicit return-type mapping
+                    if let Some(ret_struct) = self.function_return_structs.get(fn_name.as_str()) {
+                        return Ok(ret_struct.clone());
+                    }
                 }
-                Err(CodegenError::Unsupported(
-                    "Cannot infer struct type for call expression".to_string(),
+                Err(CodegenError::InternalError(
+                    "Type inference failed: cannot determine struct type for call expression. \
+                     Hint: ensure the called function has an explicit struct return type annotation."
+                        .to_string(),
                 ))
             }
             Expr::SelfCall => {
@@ -65,19 +95,66 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if let Some(struct_name) = self.var_struct_types.get("self") {
                     return Ok(struct_name.clone());
                 }
-                Err(CodegenError::Unsupported(
-                    "SelfCall (@) used outside of method context".to_string(),
+                Err(CodegenError::InternalError(
+                    "Type inference failed: cannot determine struct type for `@` (self-recursion). \
+                     Hint: `@` can only be used inside a method with a known `self` type."
+                        .to_string(),
                 ))
             }
-            _ => Err(CodegenError::Unsupported(format!(
-                "Cannot infer struct type for expression: {:?}",
+            Expr::Index { expr: inner, .. } => {
+                // v[i].field: infer the element struct type from the container's resolved type.
+                // Supports `Vec<S>`, `[S]`, `[S; N]` — any indexable whose element is a named struct.
+                if let Expr::Ident(var_name) = &inner.node {
+                    use vais_types::ResolvedType;
+                    let elem_ty = match self.var_resolved_types.get(var_name) {
+                        Some(ResolvedType::Named { name, generics })
+                            if name == "Vec" && !generics.is_empty() =>
+                        {
+                            Some(&generics[0])
+                        }
+                        Some(
+                            ResolvedType::Slice(inner)
+                            | ResolvedType::SliceMut(inner)
+                            | ResolvedType::Array(inner),
+                        ) => Some(inner.as_ref()),
+                        _ => None,
+                    };
+                    if let Some(ResolvedType::Named { name: sname, .. }) = elem_ty {
+                        if self.generated_structs.contains_key(sname) {
+                            return Ok(sname.clone());
+                        }
+                    }
+                }
+                Err(CodegenError::InternalError(
+                    "Type inference failed: cannot determine struct type for indexed expression. \
+                     Hint: ensure the container has an explicit element type (e.g., `Vec<MyStruct>`)."
+                        .to_string(),
+                ))
+            }
+            Expr::If { .. } => Err(CodegenError::InternalError(
+                "Type inference failed: cannot determine struct type for an `if` expression. \
+                 Hint: assign the result to a variable with an explicit struct type annotation."
+                    .to_string(),
+            )),
+            Expr::Block(_) => Err(CodegenError::InternalError(
+                "Type inference failed: cannot determine struct type for a block expression. \
+                 Hint: assign the result to a variable with an explicit struct type annotation."
+                    .to_string(),
+            )),
+            _ => Err(CodegenError::InternalError(format!(
+                "Type inference failed: cannot determine struct type for expression `{:?}`. \
+                 Hint: use a named variable with an explicit struct type annotation.",
                 expr
             ))),
         }
     }
 
     /// Gets the field index by name for a struct.
-    pub(super) fn get_field_index(&self, struct_name: &str, field_name: &str) -> CodegenResult<u32> {
+    pub(super) fn get_field_index(
+        &self,
+        struct_name: &str,
+        field_name: &str,
+    ) -> CodegenResult<u32> {
         if let Some(fields) = self.struct_fields.get(struct_name) {
             for (idx, name) in fields.iter().enumerate() {
                 if name == field_name {
@@ -159,13 +236,16 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             let mut case_arms: Vec<(&MatchArm, inkwell::basic_block::BasicBlock<'ctx>)> =
                 Vec::new();
 
+            // Use the match value's actual int type for case constants
+            let switch_int_type = match_val.into_int_value().get_type();
+
             for arm in arms {
                 match &arm.pattern.node {
                     Pattern::Literal(Literal::Int(n)) => {
                         let arm_block = self
                             .context
                             .append_basic_block(fn_value, &self.fresh_label("match.arm"));
-                        let case_val = self.context.i64_type().const_int(*n as u64, true);
+                        let case_val = switch_int_type.const_int(*n as u64, true);
                         cases.push((case_val, arm_block));
                         case_arms.push((arm, arm_block));
                     }
@@ -211,7 +291,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     // Guard passed - execute body
                     self.builder.position_at_end(guard_pass);
                     let body_val = self.generate_expr(&arm.body.node)?;
-                    let body_end = self.builder.get_insert_block().unwrap();
+                    let body_end = self.builder.get_insert_block().ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "ICE: no insert block after match arm body (guarded)".into(),
+                        )
+                    })?;
                     if body_end.get_terminator().is_none() {
                         self.builder
                             .build_unconditional_branch(merge_block)
@@ -226,7 +310,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 } else {
                     let body_val = self.generate_expr(&arm.body.node)?;
-                    let body_end = self.builder.get_insert_block().unwrap();
+                    let body_end = self.builder.get_insert_block().ok_or_else(|| {
+                        CodegenError::LlvmError("ICE: no insert block after match arm body".into())
+                    })?;
                     if body_end.get_terminator().is_none() {
                         self.builder
                             .build_unconditional_branch(merge_block)
@@ -240,7 +326,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.builder.position_at_end(default_block);
             if let Some(arm) = default_arm {
                 let body_val = self.generate_expr(&arm.body.node)?;
-                let default_end = self.builder.get_insert_block().unwrap();
+                let default_end = self.builder.get_insert_block().ok_or_else(|| {
+                    CodegenError::LlvmError("ICE: no insert block after match default arm".into())
+                })?;
                 if default_end.get_terminator().is_none() {
                     self.builder
                         .build_unconditional_branch(merge_block)
@@ -257,7 +345,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         } else {
             // Fall back to chained conditional branches for complex patterns
-            let mut current_block = self.builder.get_insert_block().unwrap();
+            let mut current_block = self.builder.get_insert_block().ok_or_else(|| {
+                CodegenError::LlvmError("ICE: no insert block at start of match chain".into())
+            })?;
 
             for (i, arm) in arms.iter().enumerate() {
                 let is_last = i == arms.len() - 1;
@@ -344,7 +434,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 }
 
                 let body_val = self.generate_expr(&arm.body.node)?;
-                let body_end_block = self.builder.get_insert_block().unwrap();
+                let body_end_block = self.builder.get_insert_block().ok_or_else(|| {
+                    CodegenError::LlvmError(
+                        "ICE: no insert block after match arm body (chained)".into(),
+                    )
+                })?;
                 if body_end_block.get_terminator().is_none() {
                     self.builder
                         .build_unconditional_branch(merge_block)
@@ -355,11 +449,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // For the last arm's fallthrough block, add a default value and jump to merge
                 if is_last {
                     self.builder.position_at_end(next_block);
-                    let default_val = self.context.i64_type().const_int(0, false);
+                    // Use the type from previously collected arm results if available,
+                    // otherwise fall back to the current arm's body type.
+                    // This is safer than using body_val directly when the last arm terminates.
+                    let ref_type = if let Some((first_val, _)) = arm_results.first() {
+                        first_val.get_type()
+                    } else {
+                        body_val.get_type()
+                    };
+                    let default_val = ref_type.const_zero();
                     self.builder
                         .build_unconditional_branch(merge_block)
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                    arm_results.push((default_val.into(), next_block));
+                    arm_results.push((default_val, next_block));
                 }
 
                 current_block = next_block;
@@ -374,7 +476,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.builder
                 .build_unreachable()
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            Ok(self.context.struct_type(&[], false).const_zero().into())
+            Ok(self.unit_value())
         } else if arm_results.len() == 1 {
             // Only one arm reaches merge - no phi needed
             Ok(arm_results[0].0)
@@ -407,8 +509,39 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 Ok(self.context.bool_type().const_int(1, false))
             }
             Pattern::Ident(name) => {
-                // Check if this identifier is a known enum variant (simple variant without data)
-                let is_enum_variant = self.enum_variants.iter().any(|((_, v), _)| v == name);
+                // Check if this identifier is a known enum variant (simple variant without data).
+                // Narrow the search: if the match value is a struct, try to find the enum type
+                // it belongs to from the match scrutinee's LLVM struct type, and only match
+                // variants from that specific enum.  Fall back to any-enum search when the
+                // struct type cannot be identified (keeps backward compatibility).
+                let matched_enum_name: Option<String> = if match_val.is_struct_value() {
+                    let sv = match_val.into_struct_value();
+                    let st = sv.get_type();
+                    // Look up which generated struct (enum backing type) this is
+                    self.generated_structs
+                        .iter()
+                        .find(|(_, known_st)| **known_st == st)
+                        .map(|(sname, _)| sname.clone())
+                } else {
+                    None
+                };
+
+                let is_enum_variant = if let Some(ref enum_name) = matched_enum_name {
+                    // Prefer variants belonging to the identified enum
+                    let narrowed = self
+                        .enum_variants
+                        .iter()
+                        .any(|((e, v), _)| e == enum_name && v == name);
+                    if narrowed {
+                        narrowed
+                    } else {
+                        // Fallback: any enum has this variant name
+                        self.enum_variants.iter().any(|((_, v), _)| v == name)
+                    }
+                } else {
+                    self.enum_variants.iter().any(|((_, v), _)| v == name)
+                };
+
                 if is_enum_variant && match_val.is_struct_value() {
                     // Compare the tag value
                     let struct_val = match_val.into_struct_value();
@@ -436,22 +569,25 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Pattern::Literal(lit) => {
                 match lit {
                     Literal::Int(n) => {
-                        let lit_val = self.context.i64_type().const_int(*n as u64, true);
+                        let match_int = match_val.into_int_value();
+                        // Use the match value's actual int type for the literal
+                        let lit_val = match_int.get_type().const_int(*n as u64, true);
                         let cmp = self
                             .builder
-                            .build_int_compare(
-                                IntPredicate::EQ,
-                                match_val.into_int_value(),
-                                lit_val,
-                                "pat_eq",
-                            )
+                            .build_int_compare(IntPredicate::EQ, match_int, lit_val, "pat_eq")
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                         Ok(cmp)
                     }
                     Literal::Bool(b) => {
-                        let lit_val = self.context.bool_type().const_int(*b as u64, false);
                         let match_int = match_val.into_int_value();
-                        // Convert to same bit width if needed
+                        let match_width = match_int.get_type().get_bit_width();
+                        // Create literal in the same bit width as the match value
+                        let lit_val = if match_width == 1 {
+                            self.context.bool_type().const_int(*b as u64, false)
+                        } else {
+                            // Match value is wider (e.g. i64) — compare against 0/1
+                            match_int.get_type().const_int(*b as u64, false)
+                        };
                         let cmp = self
                             .builder
                             .build_int_compare(IntPredicate::EQ, match_int, lit_val, "pat_eq")
@@ -485,12 +621,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             self.module.add_function("strcmp", fn_type, None)
                         });
 
+                        // Extract raw ptr from str fat pointer if needed
+                        let match_raw_ptr = self.extract_str_raw_ptr(*match_val)?;
+
                         // Call strcmp
                         let cmp_result = self
                             .builder
                             .build_call(
                                 strcmp_fn,
-                                &[(*match_val).into(), pattern_str.into()],
+                                &[match_raw_ptr.into(), pattern_str.into()],
                                 "strcmp_result",
                             )
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
@@ -658,6 +797,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
                 Ok(result)
             }
+            Pattern::Alias { pattern, .. } => {
+                // For pattern alias, check the inner pattern
+                self.generate_pattern_check(pattern, match_val)
+            }
         }
     }
 
@@ -711,18 +854,193 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 }
                 Ok(())
             }
-            Pattern::Variant { name: _, fields } => {
-                // Bind variant fields
-                // Enum is { i8 tag, i64 data } - extract data and bind
+            Pattern::Variant { name, fields } => {
+                // Bind variant fields.
+                // Enum is { i8 tag, i64 data } — the data field (index 1) holds the payload.
+                // For single-field variants the payload IS the value (or a pointer if the
+                // payload is a struct >8B that was heap-allocated by the constructor).
+                // For multi-field variants the payload is an anonymous struct; extract each
+                // sub-field with sequential build_extract_value calls.
                 let struct_val = match_val.into_struct_value();
                 let data_val = self
                     .builder
                     .build_extract_value(struct_val, 1, "variant_data")
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
-                // For now, assume single field variant
-                if let Some(first_field) = fields.first() {
-                    self.generate_pattern_bindings(first_field, &data_val)?;
+                // Look up whether this variant carries a struct payload.
+                // (enum_name unknown here — scan enum_variant_struct_types by variant name.)
+                let variant_struct_name: Option<String> = self
+                    .enum_variant_struct_types
+                    .iter()
+                    .find(|((_, v_name), _)| v_name == &name.node)
+                    .map(|(_, s)| s.clone());
+
+                if fields.len() <= 1 {
+                    // Single-field (or no-field) variant: bind directly.
+                    if let Some(first_field) = fields.first() {
+                        if let Some(ref struct_name) = variant_struct_name {
+                            if let Some(&struct_ty) = self.generated_structs.get(struct_name) {
+                                // data_val is an i64 holding either the bitcast struct
+                                // (if ≤8B) or a heap pointer (if >8B). Determine which
+                                // based on the struct's store size.
+                                let target_data = inkwell::targets::TargetData::create(
+                                    &self.module.get_triple().as_str().to_string_lossy(),
+                                );
+                                let size_bytes = target_data.get_store_size(&struct_ty);
+                                let i64_ty = self.context.i64_type();
+                                let data_i64 = data_val.into_int_value();
+                                let loaded_struct: BasicValueEnum<'ctx> = if size_bytes > 8 {
+                                    // Heap-allocated: i64 → ptr → load struct
+                                    let ptr_ty = struct_ty.ptr_type(AddressSpace::default());
+                                    let heap_ptr = self
+                                        .builder
+                                        .build_int_to_ptr(data_i64, ptr_ty, "variant_heap_ptr")
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                                    self.builder
+                                        .build_load(struct_ty, heap_ptr, "variant_heap_load")
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                } else {
+                                    // Small (≤8B): i64 → stack alloca → load as struct
+                                    let tmp_alloca = self
+                                        .builder
+                                        .build_alloca(i64_ty, "variant_small_from_i64")
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                                    self.builder
+                                        .build_store(tmp_alloca, data_i64)
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                                    let typed_ptr = self
+                                        .builder
+                                        .build_bitcast(
+                                            tmp_alloca,
+                                            struct_ty.ptr_type(AddressSpace::default()),
+                                            "variant_small_typed",
+                                        )
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                        .into_pointer_value();
+                                    self.builder
+                                        .build_load(struct_ty, typed_ptr, "variant_small_load")
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                };
+                                // Bind the loaded struct value, then record its type name
+                                // so downstream field access can resolve the struct.
+                                self.generate_pattern_bindings(first_field, &loaded_struct)?;
+                                if let Pattern::Ident(ident_name) = &first_field.node {
+                                    self.var_struct_types
+                                        .insert(ident_name.clone(), struct_name.clone());
+                                }
+                                return Ok(());
+                            }
+                        }
+
+                        // Non-struct payload (e.g. Circle(f64)): the enum data
+                        // slot stored the payload as i64 (floats bitcast, ints
+                        // widened). Recover the declared primitive type if we
+                        // have it recorded so the bound identifier has the
+                        // right LLVM type downstream.
+                        let primitive_ty: Option<inkwell::types::BasicTypeEnum<'ctx>> = self
+                            .enum_variant_primitive_payload_types
+                            .iter()
+                            .find(|((_, v_name), _)| v_name == &name.node)
+                            .map(|(_, ty)| *ty);
+                        if let Some(decl_ty) = primitive_ty {
+                            let data_i64 = data_val.into_int_value();
+                            let decoded: BasicValueEnum<'ctx> = if decl_ty.is_float_type() {
+                                self.builder
+                                    .build_bitcast(
+                                        data_i64,
+                                        decl_ty.into_float_type(),
+                                        "variant_i64_to_f",
+                                    )
+                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            } else if decl_ty.is_int_type() {
+                                let target = decl_ty.into_int_type();
+                                if target.get_bit_width() == 64 {
+                                    data_i64.into()
+                                } else if target.get_bit_width() < 64 {
+                                    self.builder
+                                        .build_int_truncate(data_i64, target, "variant_i64_trunc")
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                        .into()
+                                } else {
+                                    self.builder
+                                        .build_int_s_extend(data_i64, target, "variant_i64_sext")
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                        .into()
+                                }
+                            } else if decl_ty.is_pointer_type() {
+                                self.builder
+                                    .build_int_to_ptr(
+                                        data_i64,
+                                        decl_ty.into_pointer_type(),
+                                        "variant_i64_to_ptr",
+                                    )
+                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                    .into()
+                            } else {
+                                data_val
+                            };
+                            self.generate_pattern_bindings(first_field, &decoded)?;
+                            return Ok(());
+                        }
+
+                        self.generate_pattern_bindings(first_field, &data_val)?;
+                    }
+                } else {
+                    // Multi-field variant: the payload is packed into an anonymous struct
+                    // and stored on the heap. The enum's i64 data slot holds the heap ptr.
+                    // Look up the payload struct type recorded at construction time.
+                    let multi_payload_ty: Option<inkwell::types::StructType<'ctx>> = self
+                        .enum_variant_multi_payload_types
+                        .iter()
+                        .find(|((_, v_name), _)| v_name == &name.node)
+                        .map(|(_, ty)| *ty);
+
+                    if let Some(payload_ty) = multi_payload_ty {
+                        // data_val is the i64 holding the heap pointer. inttoptr to struct*,
+                        // load the struct, then extract each field.
+                        let data_i64 = data_val.into_int_value();
+                        let ptr_ty = payload_ty.ptr_type(AddressSpace::default());
+                        let heap_ptr = self
+                            .builder
+                            .build_int_to_ptr(data_i64, ptr_ty, "variant_multi_ptr")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        let loaded_struct = self
+                            .builder
+                            .build_load(payload_ty, heap_ptr, "variant_multi_load")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            .into_struct_value();
+                        for (idx, field_pat) in fields.iter().enumerate() {
+                            let sub_val = self
+                                .builder
+                                .build_extract_value(
+                                    loaded_struct,
+                                    idx as u32,
+                                    &format!("variant_field_{}", idx),
+                                )
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            self.generate_pattern_bindings(field_pat, &sub_val)?;
+                        }
+                    } else if data_val.is_struct_value() {
+                        // Legacy path: payload was packed directly into the i64 slot as a struct
+                        // (should not happen with current constructor, kept for safety).
+                        let payload_struct = data_val.into_struct_value();
+                        for (idx, field_pat) in fields.iter().enumerate() {
+                            let sub_val = self
+                                .builder
+                                .build_extract_value(
+                                    payload_struct,
+                                    idx as u32,
+                                    &format!("variant_field_{}", idx),
+                                )
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            self.generate_pattern_bindings(field_pat, &sub_val)?;
+                        }
+                    } else {
+                        // Payload layout unknown — bind first field as fallback
+                        if let Some(first_field) = fields.first() {
+                            self.generate_pattern_bindings(first_field, &data_val)?;
+                        }
+                    }
                 }
                 Ok(())
             }
@@ -756,6 +1074,23 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 }
                 Ok(())
             }
+            Pattern::Alias { name, pattern } => {
+                // Bind the whole value to the alias name
+                let var_type = match_val.get_type();
+                let alloca = self
+                    .builder
+                    .build_alloca(var_type, name)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.builder
+                    .build_store(alloca, *match_val)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.locals.insert(name.clone(), (alloca, var_type));
+
+                // Then bind variables from the inner pattern
+                self.generate_pattern_bindings(pattern, match_val)?;
+
+                Ok(())
+            }
         }
     }
 
@@ -780,17 +1115,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             "Err" => 1,
             _ => 0, // Default to 0 for unknown variants
         }
-    }
-
-    /// Gets the tag value for an enum variant with explicit enum name.
-    ///
-    /// This method provides more precise lookup when the enum name is known.
-    #[allow(dead_code)]
-    pub(super) fn get_enum_variant_tag_with_enum(&self, enum_name: &str, variant_name: &str) -> i32 {
-        self.enum_variants
-            .get(&(enum_name.to_string(), variant_name.to_string()))
-            .copied()
-            .unwrap_or_else(|| self.get_enum_variant_tag(variant_name))
     }
 
     // ========== Assert ==========
@@ -843,9 +1167,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Pass: continue
         self.builder.position_at_end(pass_block);
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     // ========== String Interpolation ==========
-
 }

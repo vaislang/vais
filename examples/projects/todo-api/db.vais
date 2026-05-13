@@ -1,0 +1,187 @@
+# db.vais - SQLite database operations for Todo API
+
+U models
+
+# Extern SQLite3 functions
+X F sqlite3_open(filename: str, db: i64) -> i64
+X F sqlite3_close(db: i64) -> i64
+X F sqlite3_exec(db: i64, sql: str, callback: i64, arg: i64, errmsg: i64) -> i64
+X F sqlite3_prepare_v2(db: i64, sql: str, len: i64, stmt: i64, tail: i64) -> i64
+X F sqlite3_step(stmt: i64) -> i64
+X F sqlite3_finalize(stmt: i64) -> i64
+X F sqlite3_column_int64(stmt: i64, col: i64) -> i64
+X F sqlite3_column_text(stmt: i64, col: i64) -> i64
+X F sqlite3_bind_text(stmt: i64, idx: i64, text: str, len: i64, destructor: i64) -> i64
+X F sqlite3_bind_int64(stmt: i64, idx: i64, val: i64) -> i64
+X F sqlite3_last_insert_rowid(db: i64) -> i64
+
+# Database handle (global)
+db_ptr := malloc(8)
+
+F init_db() -> i64 {
+    # Open database
+    rc := sqlite3_open("todos.db", db_ptr)
+    I rc != 0 {
+        println("Failed to open database")
+        R 1
+    }
+
+    db := load_i64(db_ptr)
+
+    # Create table
+    create_sql := "CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, completed INTEGER DEFAULT 0)"
+
+    rc = sqlite3_exec(db, create_sql, 0, 0, 0)
+    I rc != 0 {
+        println("Failed to create table")
+        R 1
+    }
+
+    println("Database initialized")
+    0
+}
+
+F create_todo(title: str) -> i64 {
+    db := load_i64(db_ptr)
+
+    sql := "INSERT INTO todos (title, completed) VALUES (?, 0)"
+    stmt_ptr := malloc(8)
+
+    rc := sqlite3_prepare_v2(db, sql, strlen(sql), stmt_ptr, 0)
+    I rc != 0 {
+        println("Failed to prepare insert statement")
+        R -1
+    }
+
+    stmt := load_i64(stmt_ptr)
+
+    # Bind title parameter
+    sqlite3_bind_text(stmt, 1, title, strlen(title), 0)
+
+    # Execute
+    rc = sqlite3_step(stmt)
+    sqlite3_finalize(stmt)
+
+    I rc != 101 {  # SQLITE_DONE = 101
+        println("Failed to insert todo")
+        R -1
+    }
+
+    # Get last inserted ID
+    todo_id := sqlite3_last_insert_rowid(db)
+    todo_id
+}
+
+F get_all_todos(out_todos: i64, out_count: i64) -> i64 {
+    db := load_i64(db_ptr)
+
+    sql := "SELECT id, title, completed FROM todos ORDER BY id"
+    stmt_ptr := malloc(8)
+
+    rc := sqlite3_prepare_v2(db, sql, strlen(sql), stmt_ptr, 0)
+    I rc != 0 {
+        println("Failed to prepare select statement")
+        store_i64(out_count, 0)
+        R 1
+    }
+
+    stmt := load_i64(stmt_ptr)
+
+    # Allocate array for todos (max 100)
+    max_todos := 100
+    todos := malloc(max_todos * 24)  # sizeof(Todo) = 24
+    count := 0
+
+    L {
+        rc = sqlite3_step(stmt)
+        I rc == 101 { B }  # SQLITE_DONE = 101
+        I rc != 100 { B }  # SQLITE_ROW = 100
+
+        I count >= max_todos { B }
+
+        # Read row
+        todo_id := sqlite3_column_int64(stmt, 0)
+        title_ptr := sqlite3_column_text(stmt, 1)
+        completed := sqlite3_column_int64(stmt, 2)
+
+        # Store in array
+        offset := count * 24
+        store_i64(todos + offset, todo_id)
+        store_str(todos + offset + 8, ptr_to_str(title_ptr))
+        store_bool(todos + offset + 16, completed != 0)
+
+        count = count + 1
+    }
+
+    sqlite3_finalize(stmt)
+
+    store_i64(out_todos, todos)
+    store_i64(out_count, count)
+    0
+}
+
+F get_todo(id: i64, out_todo: i64) -> i64 {
+    db := load_i64(db_ptr)
+
+    sql := "SELECT id, title, completed FROM todos WHERE id = ?"
+    stmt_ptr := malloc(8)
+
+    rc := sqlite3_prepare_v2(db, sql, strlen(sql), stmt_ptr, 0)
+    I rc != 0 {
+        println("Failed to prepare select statement")
+        R 1
+    }
+
+    stmt := load_i64(stmt_ptr)
+    sqlite3_bind_int64(stmt, 1, id)
+
+    rc = sqlite3_step(stmt)
+    I rc != 100 {  # SQLITE_ROW = 100
+        sqlite3_finalize(stmt)
+        R 1  # Not found
+    }
+
+    # Read row
+    todo_id := sqlite3_column_int64(stmt, 0)
+    title_ptr := sqlite3_column_text(stmt, 1)
+    completed := sqlite3_column_int64(stmt, 2)
+
+    # Store Todo
+    store_i64(out_todo, todo_id)
+    store_str(out_todo + 8, ptr_to_str(title_ptr))
+    store_bool(out_todo + 16, completed != 0)
+
+    sqlite3_finalize(stmt)
+    0
+}
+
+F delete_todo(id: i64) -> i64 {
+    db := load_i64(db_ptr)
+
+    sql := "DELETE FROM todos WHERE id = ?"
+    stmt_ptr := malloc(8)
+
+    rc := sqlite3_prepare_v2(db, sql, strlen(sql), stmt_ptr, 0)
+    I rc != 0 {
+        println("Failed to prepare delete statement")
+        R 1
+    }
+
+    stmt := load_i64(stmt_ptr)
+    sqlite3_bind_int64(stmt, 1, id)
+
+    rc = sqlite3_step(stmt)
+    sqlite3_finalize(stmt)
+
+    I rc != 101 {  # SQLITE_DONE = 101
+        R 1
+    }
+
+    0
+}
+
+F close_db() -> i64 {
+    db := load_i64(db_ptr)
+    sqlite3_close(db)
+    0
+}

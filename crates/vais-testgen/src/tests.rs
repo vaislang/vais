@@ -154,10 +154,10 @@ fn test_shrink_array() {
 
 #[test]
 fn test_type_hint_from_str() {
-    assert_eq!(TypeHint::from_str("i64"), TypeHint::I64);
-    assert_eq!(TypeHint::from_str("bool"), TypeHint::Bool);
-    assert_eq!(TypeHint::from_str("str"), TypeHint::Str);
-    assert_eq!(TypeHint::from_str("unknown"), TypeHint::Unknown);
+    assert_eq!(TypeHint::parse_type("i64"), TypeHint::I64);
+    assert_eq!(TypeHint::parse_type("bool"), TypeHint::Bool);
+    assert_eq!(TypeHint::parse_type("str"), TypeHint::Str);
+    assert_eq!(TypeHint::parse_type("unknown"), TypeHint::Unknown);
 }
 
 #[test]

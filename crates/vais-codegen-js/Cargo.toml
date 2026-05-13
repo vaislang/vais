@@ -1,0 +1,17 @@
+[package]
+name = "vais-codegen-js"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "JavaScript (ESM) code generator for the Vais programming language"
+
+[dependencies]
+vais-ast = { path = "../vais-ast" }
+vais-types = { path = "../vais-types" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+vais-parser = { path = "../vais-parser" }
+vais-lexer = { path = "../vais-lexer" }
+pretty_assertions = { workspace = true }

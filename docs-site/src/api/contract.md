@@ -19,7 +19,7 @@ This module is used internally by the compiler. It should not be imported direct
 ### `__contract_fail`
 
 ```vais
-F __contract_fail(kind: i64, condition: str, file: str, line: i64, func: str) -> i64
+fn __contract_fail(kind: i64, condition: str, file: str, line: i64, func: str) -> i64
 ```
 
 Called by the compiler when a contract is violated. Prints diagnostic information and exits the program.
@@ -36,7 +36,7 @@ Called by the compiler when a contract is violated. Prints diagnostic informatio
 ### `__panic`
 
 ```vais
-F __panic(msg: str) -> i64
+fn __panic(msg: str) -> i64
 ```
 
 Simpler panic function for contract failures. Prints error message and exits.
