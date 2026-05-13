@@ -29,9 +29,9 @@ Vais 编程语言完整参考。
 
 ## 概述
 
-Vais 是一种令牌高效、AI 优化的系统编程语言，旨在最小化 AI 代码生成中的令牌使用，同时保持完整的系统编程能力。其特点:
+Vais 是一种面向 AI 代码生成的系统编程语言，目标是输出清晰代码、保持原生执行，并以 gate-backed public claims 说明公开能力边界。其特点:
 
-- **单字符关键字** 以实现最大令牌效率
+- **Canonical keywords**: `fn`, `struct`, `enum`, `else`, `match`, `return`, `use`, `pub` 是当前标准
 - **表达式导向语法**，一切都返回值
 - **自递归运算符 `@`** 用于简洁的递归函数
 - **基于 LLVM 的编译** 以实现原生性能
@@ -48,7 +48,7 @@ Vais 是一种令牌高效、AI 优化的系统编程语言，旨在最小化 AI
 
 ```vais
 # 这是一个注释
-F add(a:i64, b:i64)->i64 = a + b  # 行内注释
+fn add(a:i64, b:i64)->i64 = a + b  # 行内注释
 ```
 
 ### 空白字符
@@ -104,23 +104,24 @@ false
 
 ## 关键字
 
-Vais 使用单字符关键字以实现最大令牌效率:
+Vais 在 Step 19 中 retired 了早期 single-character form。新代码使用 canonical keyword:
 
 | 关键字 | 含义 | 用法 |
 |---------|---------|-------|
-| `F` | 函数 | 定义函数 |
-| `S` | 结构体 | 定义结构体类型 |
-| `E` | 枚举 (或 Else) | 定义枚举类型，或 if 中的 else 分支 |
+| `fn` | 函数 | 定义函数 |
+| `struct` | 结构体 | 定义结构体类型 |
+| `enum` / `else` | 枚举 / Else | 定义枚举类型，或 if 中的 else 分支 |
 | `I` | If | 条件表达式 |
 | `L` | 循环 | 循环构造 |
-| `M` | 匹配 | 模式匹配 |
-| `W` | Trait (Where) | 定义 trait (接口) |
-| `X` | 实现 (eXtend) | 实现方法或 trait |
-| `T` | 类型 | 类型别名定义 |
-| `U` | Use | 导入/使用模块 |
-| `P` | Public | 公共可见性 |
+| `LF` | Range loop | range / foreach loop |
+| `match` | 匹配 | 模式匹配 |
+| `trait` | Trait | 定义 trait (接口) |
+| `impl` | 实现 | 实现方法或 trait |
+| `type` | 类型 | 类型别名定义 |
+| `use` | Use | 导入/使用模块 |
+| `pub` | Public | 公共可见性 |
 | `A` | Async | 异步函数标记 |
-| `R` | 返回 | 从函数提前返回 |
+| `return` | 返回 | 从函数提前返回 |
 | `B` | Break | 跳出循环 |
 | `C` | Continue/Const | 继续下一次循环迭代，或常量 |
 | `D` | Defer | 延迟执行 |
@@ -201,14 +202,14 @@ Vais 使用单字符关键字以实现最大令牌效率:
 
 ```vais
 *i64        # 指向 i64 的指针
-*T          # 指向类型 T 的指针
+*type          # 指向类型 T 的指针
 ```
 
 ### 数组类型
 
 ```vais
 [i64]       # i64 数组
-[T]         # 类型 T 的数组
+[type]         # 类型 T 的数组
 ```
 
 ### 切片类型
@@ -216,8 +217,8 @@ Vais 使用单字符关键字以实现最大令牌效率:
 切片是对数组子序列的引用:
 
 ```vais
-&[T]        # 不可变切片
-&mut [T]    # 可变切片
+&[type]        # 不可变切片
+&mut [type]    # 可变切片
 
 # 示例
 arr := [1, 2, 3, 4, 5]
@@ -344,22 +345,22 @@ condition ? value_if_true : value_if_false
 Vais 中的函数自动返回其最后一个表达式的值。除非需要提前返回，否则不需要显式的 `R` (return):
 
 ```vais
-F add(a: i64, b: i64) -> i64 {
+fn add(a: i64, b: i64) -> i64 {
     a + b    # 自动返回
 }
 
-F max(a: i64, b: i64) -> i64 {
+fn max(a: i64, b: i64) -> i64 {
     I a > b {
         a    # 每个分支返回其最后一个表达式
-    } E {
+    } else {
         b
     }
 }
 
 # 只有在需要提前返回时才需要显式 R
-F safe_divide(a: i64, b: i64) -> i64 {
+fn safe_divide(a: i64, b: i64) -> i64 {
     I b == 0 {
-        R 0    # 提前返回
+        return 0    # 提前返回
     }
     a / b      # 自动返回
 }
@@ -393,16 +394,16 @@ result := x > 0 ? 1 : -1
 # 块形式
 I x < 0 {
     -1
-} E {
+} else {
     0
 }
 
 # Else-if 链
 I x < 0 {
     -1
-} E I x == 0 {
+} else I x == 0 {
     0
-} E {
+} else {
     1
 }
 ```
@@ -432,7 +433,7 @@ L item: array {
 ### Match 表达式
 
 ```vais
-M value {
+match value {
     0 => "zero",
     1 => "one",
     2 => "two",
@@ -440,7 +441,7 @@ M value {
 }
 
 # 带变量绑定
-M option {
+match option {
     Some(x) => x,
     None => 0
 }
@@ -459,9 +460,9 @@ L i: 0..100 {
 ### Return 语句
 
 ```vais
-F compute(x: i64) -> i64 {
+fn compute(x: i64) -> i64 {
     I x < 0 {
-        R 0    # 提前返回
+        return 0    # 提前返回
     }
     x * 2
 }
@@ -475,15 +476,15 @@ F compute(x: i64) -> i64 {
 
 **表达式形式 (单表达式):**
 ```vais
-F add(a:i64, b:i64)->i64 = a + b
+fn add(a:i64, b:i64)->i64 = a + b
 ```
 
 **块形式:**
 ```vais
-F factorial(n:i64)->i64 {
+fn factorial(n:i64)->i64 {
     I n < 2 {
         1
-    } E {
+    } else {
         n * @(n-1)
     }
 }
@@ -492,7 +493,7 @@ F factorial(n:i64)->i64 {
 ### 参数
 
 ```vais
-F example(x: i64, y: f64, name: str) -> i64 { ... }
+fn example(x: i64, y: f64, name: str) -> i64 { ... }
 ```
 
 ### 参数类型推导
@@ -501,13 +502,13 @@ F example(x: i64, y: f64, name: str) -> i64 { ... }
 
 ```vais
 # 从使用中推导类型
-F add(a, b) = a + b
+fn add(a, b) = a + b
 
 # 混合: 一些显式，一些推导
-F scale(x, factor: f64) -> f64 = x * factor
+fn scale(x, factor: f64) -> f64 = x * factor
 
 # 编译器从函数调用方式推导类型
-F main() -> i64 {
+fn main() -> i64 {
     add(1, 2)       # 推导为 a: i64, b: i64
     scale(3.0, 2.0)  # 推导为 x: f64
     0
@@ -517,16 +518,16 @@ F main() -> i64 {
 ### 返回类型
 
 ```vais
-F returns_int() -> i64 { 42 }
-F returns_nothing() -> i64 { 0 }  # 约定: 0 表示 void
+fn returns_int() -> i64 { 42 }
+fn returns_nothing() -> i64 { 0 }  # 约定: 0 表示 void
 ```
 
 ### 泛型函数
 
 ```vais
-F identity<T>(x: T) -> T = x
+fn identity<T>(x: T) -> T = x
 
-F swap<A, B>(a: A, b: B) -> (B, A) {
+fn swap<A, B>(a: A, b: B) -> (B, A) {
     (b, a)
 }
 ```
@@ -534,8 +535,8 @@ F swap<A, B>(a: A, b: B) -> (B, A) {
 ### 自递归
 
 ```vais
-F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
-F countdown(n:i64)->i64 = n<1 ? 0 : @(n-1)
+fn fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
+fn countdown(n:i64)->i64 = n<1 ? 0 : @(n-1)
 ```
 
 ### 外部函数
@@ -543,9 +544,9 @@ F countdown(n:i64)->i64 = n<1 ? 0 : @(n-1)
 使用 `N F` 声明 C 函数:
 
 ```vais
-N F puts(s: i64) -> i64
-N F malloc(size: i64) -> i64
-N F sqrt(x: f64) -> f64
+N fn puts(s: i64) -> i64
+N fn malloc(size: i64) -> i64
+N fn sqrt(x: f64) -> f64
 ```
 
 ## 控制流
@@ -561,18 +562,18 @@ I x > 0 {
 # if-else
 I x > 0 {
     puts("positive")
-} E {
+} else {
     puts("negative or zero")
 }
 
 # if 作为表达式
-sign := I x > 0 { 1 } E I x < 0 { -1 } E { 0 }
+sign := I x > 0 { 1 } else I x < 0 { -1 } else { 0 }
 ```
 
 ### match 表达式
 
 ```vais
-M x {
+match x {
     0 => "zero",
     1 => "one",
     2 => "two",
@@ -605,7 +606,7 @@ L i := 0; i < 20; i += 1 {
 
 ```vais
 # 定义结构体
-S Point {
+struct Point {
     x: f64,
     y: f64
 }
@@ -620,12 +621,12 @@ x_coord := p.x
 ### 方法
 
 ```vais
-X Point {
-    F distance(self) -> f64 {
+impl Point {
+    fn distance(self) -> f64 {
         sqrt(self.x * self.x + self.y * self.y)
     }
 
-    F translate(self, dx: f64, dy: f64) -> Point {
+    fn translate(self, dx: f64, dy: f64) -> Point {
         Point { x: self.x + dx, y: self.y + dy }
     }
 }
@@ -635,19 +636,19 @@ X Point {
 
 ```vais
 # 简单枚举
-E Color {
+enum Color {
     Red,
     Green,
     Blue
 }
 
 # 带数据的枚举
-E Option<T> {
+enum Option<T> {
     Some(T),
     None
 }
 
-E Result<T, E> {
+enum Result<T, E> {
     Ok(T),
     Err(E)
 }
@@ -656,10 +657,10 @@ E Result<T, E> {
 ## 模式匹配
 
 ```vais
-E Option<T> { Some(T), None }
+enum Option<T> { Some(T), None }
 
-F unwrap_or<T>(opt: Option<T>, default: T) -> T {
-    M opt {
+fn unwrap_or<T>(opt: Option<T>, default: T) -> T {
+    match opt {
         Some(v) => v,
         None => default
     }
@@ -673,40 +674,40 @@ F unwrap_or<T>(opt: Option<T>, default: T) -> T {
 Trait 定义类型必须实现的方法集合:
 
 ```vais
-W Printable {
-    F print(&self) -> i64
+trait Printable {
+    fn print(&self) -> i64
 }
 
-W Comparable {
-    F compare(&self, other: &Self) -> i64
+trait Comparable {
+    fn compare(&self, other: &Self) -> i64
 }
 
-W Shape {
-    F area(&self) -> f64
-    F perimeter(&self) -> f64
+trait Shape {
+    fn area(&self) -> f64
+    fn perimeter(&self) -> f64
 }
 ```
 
 ### 实现 Trait
 
 ```vais
-S Circle {
+struct Circle {
     radius: f64
 }
 
-X Circle: Shape {
-    F area(&self) -> f64 {
+impl Circle: Shape {
+    fn area(&self) -> f64 {
         pi := 3.14159
         pi * self.radius * self.radius
     }
 
-    F perimeter(&self) -> f64 {
+    fn perimeter(&self) -> f64 {
         pi := 3.14159
         2.0 * pi * self.radius
     }
 }
 
-F main()->i64 {
+fn main()->i64 {
     c := Circle { radius: 5.0 }
     a := c.area()
     p := c.perimeter()
@@ -723,21 +724,21 @@ F main()->i64 {
 ### 泛型 Trait
 
 ```vais
-W Container<T> {
-    F get(&self) -> T
-    F set(&self, value: T) -> i64
+trait Container<T> {
+    fn get(&self) -> T
+    fn set(&self, value: T) -> i64
 }
 
-S Box<T> {
+struct Box<T> {
     value: T
 }
 
-X Box<T>: Container<T> {
-    F get(&self) -> T {
+impl Box<T>: Container<T> {
+    fn get(&self) -> T {
         self.value
     }
 
-    F set(&self, value: T) -> i64 {
+    fn set(&self, value: T) -> i64 {
         self.value = value
         0
     }
@@ -749,26 +750,26 @@ X Box<T>: Container<T> {
 也可以在不实现 trait 的情况下向类型添加方法:
 
 ```vais
-S Point {
+struct Point {
     x: f64,
     y: f64
 }
 
-X Point {
-    F distance(&self) -> f64 {
+impl Point {
+    fn distance(&self) -> f64 {
         sqrt(self.x * self.x + self.y * self.y)
     }
 
-    F translate(&self, dx: f64, dy: f64) -> Point {
+    fn translate(&self, dx: f64, dy: f64) -> Point {
         Point { x: self.x + dx, y: self.y + dy }
     }
 
-    F origin() -> Point {
+    fn origin() -> Point {
         Point { x: 0.0, y: 0.0 }
     }
 }
 
-F main()->i64 {
+fn main()->i64 {
     p := Point { x: 3.0, y: 4.0 }
     d := p.distance()
     p2 := p.translate(1.0, 1.0)
@@ -784,18 +785,18 @@ F main()->i64 {
 
 ```vais
 # 泛型结构体
-S Box<T> {
+struct Box<T> {
     value: T
 }
 
 # 泛型函数
-F swap<T>(a: T, b: T) -> (T, T) {
+fn swap<T>(a: T, b: T) -> (T, T) {
     (b, a)
 }
 
 # 泛型 trait
-W Container<T> {
-    F get(self) -> T
+trait Container<T> {
+    fn get(self) -> T
 }
 ```
 
@@ -808,25 +809,25 @@ Vais 使用 `Result` 和 `Option` 类型进行显式错误处理。
 表示可能不存在的值:
 
 ```vais
-E Option<T> {
+enum Option<T> {
     None,
     Some(T)
 }
 
-F find(arr: [i64], target: i64) -> Option<i64> {
+fn find(arr: [i64], target: i64) -> Option<i64> {
     L i: 0..arr.len() {
         I arr[i] == target {
-            R Some(i)
+            return Some(i)
         }
     }
     None
 }
 
-F main()->i64 {
+fn main()->i64 {
     arr := [1, 2, 3, 4, 5]
     result := find(arr, 3)
 
-    M result {
+    match result {
         Some(index) => {
             puts("Found at index: ")
             print_i64(index)
@@ -842,22 +843,22 @@ F main()->i64 {
 表示可能失败的操作:
 
 ```vais
-E Result<T, E> {
+enum Result<T, E> {
     Ok(T),
     Err(E)
 }
 
-F divide(a: i64, b: i64) -> Result<i64, str> {
+fn divide(a: i64, b: i64) -> Result<i64, str> {
     I b == 0 {
-        R Err("division by zero")
+        return Err("division by zero")
     }
     Ok(a / b)
 }
 
-F main()->i64 {
+fn main()->i64 {
     result := divide(10, 2)
 
-    M result {
+    match result {
         Ok(value) => {
             puts("Result: ")
             print_i64(value)
@@ -876,24 +877,24 @@ F main()->i64 {
 `?` 运算符传播错误:
 
 ```vais
-F compute() -> Result<i64, str> {
+fn compute() -> Result<i64, str> {
     a := divide(10, 2)?   # 如果是 Err 则提前返回
     b := divide(a, 3)?    # 继续链式调用
     Ok(b)
 }
 
 # 等价于:
-F compute_verbose() -> Result<i64, str> {
+fn compute_verbose() -> Result<i64, str> {
     a_result := divide(10, 2)
-    a := M a_result {
+    a := match a_result {
         Ok(val) => val,
-        Err(e) => { R Err(e) }
+        Err(e) => { return Err(e) }
     }
 
     b_result := divide(a, 3)
-    b := M b_result {
+    b := match b_result {
         Ok(val) => val,
-        Err(e) => { R Err(e) }
+        Err(e) => { return Err(e) }
     }
 
     Ok(b)
@@ -905,7 +906,7 @@ F compute_verbose() -> Result<i64, str> {
 `!` 运算符在 Err/None 时 panic:
 
 ```vais
-F main()->i64 {
+fn main()->i64 {
     result := divide(10, 2)
     value := result!  # 如果是 Err 则 panic
 
@@ -926,17 +927,17 @@ F main()->i64 {
 使用 `U` (Use) 关键字导入模块:
 
 ```vais
-U std/io        # 导入 I/O 模块
-U std/vec       # 导入 Vec 模块
-U std/hashmap   # 导入 HashMap 模块
+use std/io        # 导入 I/O 模块
+use std/vec       # 导入 Vec 模块
+use std/hashmap   # 导入 HashMap 模块
 ```
 
 ### 使用导入的项
 
 ```vais
-U std/vec
+use std/vec
 
-F main()->i64 {
+fn main()->i64 {
     v := Vec::new()
     v.push(1)
     v.push(2)
@@ -954,9 +955,9 @@ F main()->i64 {
 模块使用 `/` 分隔的路径:
 
 ```vais
-U std/collections/vec
-U std/io/file
-U std/net/tcp
+use std/collections/vec
+use std/io/file
+use std/net/tcp
 ```
 
 ### 项目结构
@@ -973,10 +974,10 @@ project/
 在 `main.vais` 中:
 
 ```vais
-U utils
-U math/vector
+use utils
+use math/vector
 
-F main()->i64 {
+fn main()->i64 {
     # 使用导入的模块
     0
 }
@@ -988,11 +989,11 @@ F main()->i64 {
 
 ```vais
 # 在 utils.vais 中
-P F public_function()->i64 {
+pub fn public_function()->i64 {
     42
 }
 
-F private_function()->i64 {
+fn private_function()->i64 {
     0
 }
 ```
@@ -1006,12 +1007,12 @@ Vais 支持使用 `A` (Async) 和 `Y` (Await/Yield) 关键字的异步编程。
 ### 异步函数
 
 ```vais
-A F fetch_data() -> str {
+A fn fetch_data() -> str {
     # 异步操作
     "data"
 }
 
-A F process() -> i64 {
+A fn process() -> i64 {
     data := Y fetch_data()  # 等待结果
     puts(data)
     0
@@ -1021,12 +1022,12 @@ A F process() -> i64 {
 ### Spawn 任务
 
 ```vais
-A F background_task() -> i64 {
+A fn background_task() -> i64 {
     puts("Running in background")
     0
 }
 
-F main()->i64 {
+fn main()->i64 {
     # 生成异步任务
     task := spawn background_task()
 
@@ -1040,17 +1041,17 @@ F main()->i64 {
 ### Future 组合器
 
 ```vais
-U std/async
+use std/async
 
-A F fetch_user(id: i64) -> User {
+A fn fetch_user(id: i64) -> User {
     # 获取用户数据
 }
 
-A F fetch_posts(user_id: i64) -> [Post] {
+A fn fetch_posts(user_id: i64) -> [Post] {
     # 获取帖子
 }
 
-A F get_user_with_posts(id: i64) -> (User, [Post]) {
+A fn get_user_with_posts(id: i64) -> (User, [Post]) {
     user := Y fetch_user(id)
     posts := Y fetch_posts(user.id)
     (user, posts)
@@ -1079,11 +1080,11 @@ value := compute(5)
 ### 捕获变量
 
 ```vais
-F make_adder(n: i64) -> |i64| -> i64 {
+fn make_adder(n: i64) -> |i64| -> i64 {
     |x| x + n  # 捕获 n
 }
 
-F main()->i64 {
+fn main()->i64 {
     add_5 := make_adder(5)
     result := add_5(10)  # 返回 15
 
@@ -1137,8 +1138,8 @@ sizeof(T) -> i64          # 类型大小
 ### 斐波那契
 
 ```vais
-F fib(n: i64) -> i64 {
-    I n <= 1 { R n }
+fn fib(n: i64) -> i64 {
+    I n <= 1 { return n }
     @(n-1) + @(n-2)
 }
 ```
@@ -1146,13 +1147,13 @@ F fib(n: i64) -> i64 {
 ### 链表
 
 ```vais
-S Node<T> {
+struct Node<T> {
     value: T,
     next: Option<Box<Node<T>>>
 }
 
-X Node<T> {
-    F new(value: T) -> Node<T> {
+impl Node<T> {
+    fn new(value: T) -> Node<T> {
         Node { value: value, next: None }
     }
 }
@@ -1161,11 +1162,11 @@ X Node<T> {
 ### 错误处理
 
 ```vais
-F parse_number(s: str) -> Result<i64, str> {
+fn parse_number(s: str) -> Result<i64, str> {
     # 解析逻辑
     I is_valid {
         Ok(number)
-    } E {
+    } else {
         Err("Invalid number")
     }
 }

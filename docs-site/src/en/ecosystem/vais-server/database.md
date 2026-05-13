@@ -16,16 +16,16 @@ vaisdb (Vector + Graph + SQL + Full-text)
 ### Embedded Mode (File-based)
 
 ```vais
-U db/connection
+use db/connection
 
 config := DbConfig.embedded("./data/myapp.vaisdb")
-M DbConnection.connect(config) {
+match DbConnection.connect(config) {
     Ok(conn) => {
         println("Connected: {conn.to_string()}")
     },
     Err(e) => {
         println("Connection failed: {e.message}")
-        R 1
+        return 1
     },
 }
 ```
@@ -34,7 +34,7 @@ M DbConnection.connect(config) {
 
 ```vais
 config := DbConfig.tcp("127.0.0.1", 7300)
-M DbConnection.connect(config) {
+match DbConnection.connect(config) {
     Ok(conn) => { /* ... */ },
     Err(e)   => { /* ... */ },
 }
@@ -53,7 +53,7 @@ The default timeout is 5000ms.
 
 ```vais
 sql := "SELECT id, name FROM users WHERE id = 1"
-M conn.execute(sql) {
+match conn.execute(sql) {
     Ok(result) => {
         println("Row count: {result.row_count()}")
         I i = 0; i < result.row_count(); i = i + 1 {
@@ -84,13 +84,13 @@ In production, use `ConnectionPool` instead of opening a new connection for ever
 ### Creating a Pool
 
 ```vais
-U db/connection
-U db/pool
+use db/connection
+use db/pool
 
 db_config   := DbConfig.embedded("./data/myapp.vaisdb")
 pool_config := PoolConfig.default()   # min=2, max=10, idle_timeout=30s
 
-M ConnectionPool.new(db_config, pool_config) {
+match ConnectionPool.new(db_config, pool_config) {
     Ok(mut pool) => {
         # Use the pool
         stats := pool.stats()
@@ -98,7 +98,7 @@ M ConnectionPool.new(db_config, pool_config) {
     },
     Err(e) => {
         println("Pool creation failed: {e.message}")
-        R 1
+        return 1
     },
 }
 ```
@@ -106,10 +106,10 @@ M ConnectionPool.new(db_config, pool_config) {
 ### Acquiring and Releasing Connections
 
 ```vais
-M pool.acquire() {
+match pool.acquire() {
     Ok(conn) => {
         # Execute query
-        M conn.execute("SELECT 1") {
+        match conn.execute("SELECT 1") {
             Ok(_)  => { println("Health check passed") },
             Err(e) => { println("Error: {e.message}") },
         }
@@ -161,7 +161,7 @@ pool.health_check()   # sends SELECT 1 ping to idle connections and replaces dea
 ### SELECT
 
 ```vais
-U db/query
+use db/query
 
 sql := QueryBuilder.new()
     .select("users")
@@ -260,12 +260,12 @@ begin_sql  := QueryBuilder.new().begin_transaction().build()  # "BEGIN"
 commit_sql := QueryBuilder.new().commit().build()             # "COMMIT"
 rb_sql     := QueryBuilder.new().rollback().build()           # "ROLLBACK"
 
-M conn.execute(begin_sql) {
+match conn.execute(begin_sql) {
     Ok(_)  => {},
-    Err(e) => { R Err(e) },
+    Err(e) => { return Err(e) },
 }
 # ... execute DML queries ...
-M conn.execute(commit_sql) {
+match conn.execute(commit_sql) {
     Ok(_)  => { println("Transaction committed") },
     Err(e) => {
         conn.execute(rb_sql)
@@ -333,13 +333,13 @@ sql := QueryBuilder.new()
 ### Defining and Running Migrations
 
 ```vais
-U db/connection
-U db/migrate
+use db/connection
+use db/migrate
 
-F run_migrations(conn: DbConnection) -> Result<i64, VaisDbError> {
+fn run_migrations(conn: DbConnection) -> Result<i64, VaisDbError> {
     migrator_result := Migrator.new(conn)
-    M migrator_result {
-        Err(e) => { R Err(e) },
+    match migrator_result {
+        Err(e) => { return Err(e) },
         Ok(mut migrator) => {
             # Version 1 — create users table
             m1 := Migration.new(
@@ -379,7 +379,7 @@ F run_migrations(conn: DbConnection) -> Result<i64, VaisDbError> {
 
 ```vais
 # Roll back to version 1 (versions 2 and 3 are run in reverse order)
-M migrator.run_down(1) {
+match migrator.run_down(1) {
     Ok(count) => { println("{count} migration(s) rolled back") },
     Err(e)    => { println("Rollback failed: {e.message}") },
 }
@@ -403,18 +403,18 @@ m := Migration.new(
 The following shows the complete flow: connecting to the database and running migrations at server startup, then querying data with QueryBuilder inside a handler.
 
 ```vais
-U core/app
-U core/config
-U core/context
-U db/connection
-U db/migrate
-U db/query
-U src/util/json
+use core/app
+use core/config
+use core/context
+use db/connection
+use db/migrate
+use db/query
+use src/util/json
 
 C PORT:    u16 = 8080
 C DB_PATH: str = "./data/app.vaisdb"
 
-F handle_get_user(ctx: Context) -> Response {
+fn handle_get_user(ctx: Context) -> Response {
     id := ctx.path_params
 
     sql := QueryBuilder.new()
@@ -436,22 +436,22 @@ F handle_get_user(ctx: Context) -> Response {
     ctx.json(200, json_encode(pairs))
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # 1. Connect to DB
     db_config := DbConfig.embedded(DB_PATH)
-    db := M DbConnection.connect(db_config) {
+    db := match DbConnection.connect(db_config) {
         Err(e) => {
             println("DB connection failed: {e.message}")
-            R 1
+            return 1
         },
         Ok(conn) => { conn },
     }
 
     # 2. Run migrations
-    M Migrator.new(db) {
+    match Migrator.new(db) {
         Err(e) => {
             println("Migrator init failed: {e.message}")
-            R 1
+            return 1
         },
         Ok(mut migrator) => {
             m1 := Migration.new(
@@ -460,9 +460,9 @@ F main() -> i64 {
                 "DROP TABLE IF EXISTS users"
             )
             migrator.add_migration(m1)
-            M migrator.run_up() {
+            match migrator.run_up() {
                 Ok(count) => { println("{count} migration(s) applied") },
-                Err(e)    => { println("Migration failed: {e.message}") R 1 },
+                Err(e)    => { println("Migration failed: {e.message}") return 1 },
             }
         },
     }
@@ -476,9 +476,9 @@ F main() -> i64 {
     app.get("/users/:id", "handle_get_user")
 
     println("Server starting: :{PORT}")
-    M app.listen(":{PORT}") {
+    match app.listen(":{PORT}") {
         Ok(_) => {},
-        Err(e) => { println("Server error: {e.message}") R 1 },
+        Err(e) => { println("Server error: {e.message}") return 1 },
     }
     0
 }

@@ -156,10 +156,10 @@ impl CodeGenerator {
         loop {
             match &current.node {
                 Expr::MethodCall {
-                    receiver, method, args,
-                } if args.is_empty()
-                    && (method.node == "iter" || method.node == "enumerate") =>
-                {
+                    receiver,
+                    method,
+                    args,
+                } if args.is_empty() && (method.node == "iter" || method.node == "enumerate") => {
                     if method.node == "enumerate" {
                         enumerate_seen = true;
                     }
@@ -319,24 +319,24 @@ impl CodeGenerator {
         // elem_name is the second's. Other tuple shapes are ignored (the
         // outer guard in generate_loop_with_pattern only routes valid shapes
         // to this function).
-        let (idx_user_name, elem_user_name): (Option<String>, Option<String>) =
-            match &pattern.node {
-                Pattern::Ident(name) => (None, Some(name.clone())),
-                Pattern::Tuple(inner) if is_enumerate && inner.len() == 2 => {
-                    let idx_n = match &inner[0].node {
-                        Pattern::Ident(n) => Some(n.clone()),
-                        Pattern::Wildcard => None,
-                        _ => None,
-                    };
-                    let elem_n = match &inner[1].node {
-                        Pattern::Ident(n) => Some(n.clone()),
-                        Pattern::Wildcard => None,
-                        _ => None,
-                    };
-                    (idx_n, elem_n)
-                }
-                _ => (None, None),
-            };
+        let (idx_user_name, elem_user_name): (Option<String>, Option<String>) = match &pattern.node
+        {
+            Pattern::Ident(name) => (None, Some(name.clone())),
+            Pattern::Tuple(inner) if is_enumerate && inner.len() == 2 => {
+                let idx_n = match &inner[0].node {
+                    Pattern::Ident(n) => Some(n.clone()),
+                    Pattern::Wildcard => None,
+                    _ => None,
+                };
+                let elem_n = match &inner[1].node {
+                    Pattern::Ident(n) => Some(n.clone()),
+                    Pattern::Wildcard => None,
+                    _ => None,
+                };
+                (idx_n, elem_n)
+            }
+            _ => (None, None),
+        };
 
         // 4a. If enumerate-bound, register an i64 alloca for the index variable.
         if let Some(idx_name) = &idx_user_name {
@@ -344,9 +344,10 @@ impl CodeGenerator {
             self.fn_ctx.label_counter += 1;
             let idx_llvm_var = format!("%{}", idx_llvm);
             self.emit_entry_alloca(&idx_llvm_var, "i64");
-            self.fn_ctx
-                .locals
-                .insert(idx_name.clone(), LocalVar::alloca(ResolvedType::I64, idx_llvm));
+            self.fn_ctx.locals.insert(
+                idx_name.clone(),
+                LocalVar::alloca(ResolvedType::I64, idx_llvm),
+            );
         }
 
         // 4b. Create the element variable alloca and register in locals.

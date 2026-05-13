@@ -65,9 +65,9 @@ FROM SEMANTIC_CHUNK(
 Vais에서 사용:
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F ingest_document(db: &Database, doc_id: i64, title: str, content: str) {
+fn ingest_document(db: &Database, doc_id: i64, title: str, content: str) {
     tx := db.begin()?;
 
     # 원본 문서 저장
@@ -123,9 +123,9 @@ CREATE TABLE chunk_edges (
 청크 관계 자동 구성:
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F build_chunk_graph(db: &Database, document_id: i64) {
+fn build_chunk_graph(db: &Database, document_id: i64) {
     # 1. 순서 관계 (next/prev) 생성
     db.execute("
         INSERT INTO chunk_edges (src_chunk_id, dst_chunk_id, edge_type, weight)
@@ -193,9 +193,9 @@ SET embedding.local_path = '/models/nomic-embed-text-v1.5.gguf';
 Vais 설정:
 
 ```vais
-U vaisdb::{Database, EmbeddingConfig};
+use vaisdb::{Database, EmbeddingConfig};
 
-F main() {
+fn main() {
     config := EmbeddingConfig {
         model: "text-embedding-3-small",
         dimensions: 1536,
@@ -265,15 +265,15 @@ FROM RAG_SEARCH(
 Vais에서 RAG 파이프라인 구성:
 
 ```vais
-U vaisdb::{Database, RagResult};
+use vaisdb::{Database, RagResult};
 
-S RagContext {
+struct RagContext {
     chunks:  Vec<str>,
     sources: Vec<str>,
     scores:  Vec<f32>,
 }
 
-F build_rag_context(db: &Database, question: str) -> Result<RagContext, str> {
+fn build_rag_context(db: &Database, question: str) -> Result<RagContext, str> {
     results := db.query("
         SELECT
             dc.content,
@@ -296,10 +296,10 @@ F build_rag_context(db: &Database, question: str) -> Result<RagContext, str> {
         scores:  results.map(|r| r.relevance_score),
     };
 
-    R Ok(ctx);
+    return Ok(ctx);
 }
 
-F answer_question(db: &Database, llm: &LlmClient, question: str) -> str {
+fn answer_question(db: &Database, llm: &LlmClient, question: str) -> str {
     ctx := build_rag_context(db, question)?;
 
     # LLM에 컨텍스트와 함께 질문 전달
@@ -400,9 +400,9 @@ CREATE VECTOR INDEX idx_memory_embedding ON agent_memory(embedding)
 ### 메모리 저장 및 검색
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-S AgentMemory {
+struct AgentMemory {
     agent_id:    str,
     session_id:  str,
     memory_type: str,
@@ -410,7 +410,7 @@ S AgentMemory {
     importance:  f32,
 }
 
-F store_memory(db: &Database, memory: &AgentMemory) {
+fn store_memory(db: &Database, memory: &AgentMemory) {
     db.execute("
         INSERT INTO agent_memory
             (agent_id, session_id, memory_type, content, embedding, importance)
@@ -424,7 +424,7 @@ F store_memory(db: &Database, memory: &AgentMemory) {
     ])?;
 }
 
-F recall_memories(
+fn recall_memories(
     db:       &Database,
     agent_id: str,
     context:  str,
@@ -456,7 +456,7 @@ F recall_memories(
           )
     ", [agent_id, context, limit])?;
 
-    R Ok(results.map(|r| r.content));
+    return Ok(results.map(|r| r.content));
 }
 ```
 
@@ -465,9 +465,9 @@ F recall_memories(
 오래된 에피소드 메모리를 시맨틱 메모리로 요약합니다.
 
 ```vais
-U vaisdb::{Database};
+use vaisdb::{Database};
 
-F consolidate_episodic_memories(
+fn consolidate_episodic_memories(
     db:       &Database,
     agent_id: str,
     llm:      &LlmClient
@@ -483,7 +483,7 @@ F consolidate_episodic_memories(
         ORDER BY created_at
     ", [agent_id])?;
 
-    I episodes.len() == 0 { R; }
+    I episodes.len() == 0 { return; }
 
     # LLM으로 요약 생성
     episode_texts := episodes.map(|e| e.content).join("\n");
@@ -519,12 +519,12 @@ F consolidate_episodic_memories(
 아래는 문서 수집부터 질의응답까지의 전체 RAG 파이프라인입니다.
 
 ```vais
-U vaisdb::{Database};
-U std::env;
+use vaisdb::{Database};
+use std::env;
 
 # --- 1단계: 문서 수집 및 인덱싱 ---
 
-F index_document(db: &Database, title: str, content: str) {
+fn index_document(db: &Database, title: str, content: str) {
     tx := db.begin()?;
 
     # 원본 문서 저장
@@ -559,13 +559,13 @@ F index_document(db: &Database, title: str, content: str) {
 
 # --- 2단계: RAG 검색 ---
 
-S RagResult {
+struct RagResult {
     content: str,
     source:  str,
     score:   f32,
 }
 
-F rag_retrieve(db: &Database, question: str) -> Vec<RagResult> {
+fn rag_retrieve(db: &Database, question: str) -> Vec<RagResult> {
     db.query("
         SELECT
             dc.content,
@@ -589,7 +589,7 @@ F rag_retrieve(db: &Database, question: str) -> Vec<RagResult> {
 
 # --- 3단계: 프롬프트 구성 + LLM 호출 ---
 
-F answer(db: &Database, question: str) -> str {
+fn answer(db: &Database, question: str) -> str {
     chunks := rag_retrieve(db, question);
 
     context := chunks.map(|c| "출처: {c.source}\n{c.content}").join("\n\n---\n\n");
@@ -600,7 +600,7 @@ F answer(db: &Database, question: str) -> str {
     llm_call(prompt)
 }
 
-F main() {
+fn main() {
     db := Database::open("knowledge.vaisdb")?;
 
     # 문서 인덱싱

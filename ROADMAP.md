@@ -1,18 +1,81 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
+> **현재 버전**: 0.1.0 (certified Core compiler + promoted runtime baseline; product-complete v1.0 아님)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 199 plan: vaisdb Full migration 전략 A 확정, Tier 1 mechanical patterns 먼저. Phase 199~203 연속 로드맵)
+> **최종 업데이트**: 2026-05-10 (`PUBLIC_STATUS.md` 기준으로 현재 claim/gate 정렬. Phase 199 이전 backlog는 보존 기록으로 격하)
 
 ---
 
-## ⏳ 대기 — Phase 199: vaisdb 기반 이주 (Tier 1 — Mechanical patterns)
+## ✅ 현재 조정 상태 — 2026-05-10
 
-mode: pending
+mode: active-coordination
+source_of_truth: `PUBLIC_STATUS.md`
+
+현재 공개 baseline은 **Core compiler + promoted runtime gate** 입니다. 이 문서는 제품 완성도 선언이 아니라, 어떤 claim이 실제 gate로 뒷받침되는지 추적하는 조정 문서입니다.
+
+이 문서에서 현재 active section은 이 `현재 조정 상태` 블록입니다. 아래 Phase 199 이하 section은 완료/보존 이력이며, 각 section 안의 `pending`, `auto`, `RED` 같은 과거 상태 단어는 상단 gate를 대체하지 않습니다.
+
+### 인증된 gate
+
+- Core compiler freeze bundle: passed
+- Downstream re-entry criteria: passed
+- Final integrity gate: `scripts/check-integrity.sh` passed
+- Standard library package tests: `82/82`
+- VaisDB package tests: `261/261`
+- Backend package tests: `18/18`
+- `std/http_client` runtime smoke: `15/15`
+- TLS runtime smoke: `2/2`
+- VaisDB runtime smoke: `34/34`
+- Vais Server runtime smoke: `15/15`
+- Vais Web runtime smoke: `61/77` with credential/network-gated cases skipped
+- Vais Web unit tests: `390/390`
+- Ecosystem package tests: `3272/3272`
+- Vais Web full-build gate: `24/24`
+- Package full-build gate: `2/2`
+- Playground web mode/build gate: passed; Server-WASM remains API-compiled,
+  and Preview remains a syntax/demo fallback only
+- Browser-JS playground smoke gate: passed for parser + JavaScript codegen
+  compile/execute in the browser; this is not a complete browser-only language
+  implementation claim
+
+### 공개 non-claim
+
+아래 항목은 아직 product-complete 또는 v1.0 claim으로 말하지 않습니다.
+
+- 모든 언어 feature complete
+- 현재 tested surface 밖의 enum/generic/lifetime semantics complete
+- JavaScript/WASM target execution complete
+- browser-only playground compile/execute complete
+- 모든 parser path의 JSON grammar validation complete
+- 임의 server middleware dispatch/response transform complete
+- promoted local smoke gate 밖의 broad external network reliability
+- product-complete VaisDB, Vais Server, Vais Web behavior
+- 모든 stdlib module의 complete API documentation
+
+### 다음 순차 작업 후보
+
+1. **문서/claim hygiene gate**: `PUBLIC_STATUS.md`, website, docs, playground, README/ROADMAP류가 동일한 claim boundary를 유지하는지 계속 정리.
+2. **Browser-only playground gate**: 현재 playground는 `certified-core preview`로 정렬됨. 브라우저 단독 compile/execute complete claim은 별도 gate가 필요.
+3. **언어 semantics gate**: generic enum/lifetime 등 tested surface 밖의 의미론은 이름 붙인 최소 재현 + spec + compiler/codegen gate로 분리.
+4. **Server/Web live gate**: Vais Web runtime `77/77`은 credential/network-gated case를 포함하므로 secret/live-deploy 환경 정의가 먼저 필요.
+
+### 최근 동기화
+
+- `vais` CI baseline 복구: GitHub PR #47
+- public docs/site/playground claim sync: GitHub PR #46
+- `vais-lang` package roadmap gate count sync: GitHub PR #2
+
+---
+
+## 🗄 보존 — Phase 199: vaisdb 기반 이주 (Tier 1 — Mechanical patterns)
+
+mode: archived-superseded
 max_iterations: 20
 iteration: 0
 strategy: Phase 198 Bucket 3/4 deferred 작업을 sub-pattern 단위로 잘게 쪼개서 재도전. Phase 198 교훈: sub-agent는 recon만 reliable, "analyze+fix 동시"는 cutoff. 그래서 Phase 199는 **(1) recon-haiku로 분류 → (2) Opus direct로 sub-pattern별 per-file fix** 구조. vaisdb는 /Users/sswoo/study/projects/vais/lang/packages/vaisdb (외부 git repo) — commit은 그쪽에 수행.
+
+**상태 메모 (2026-05-10)**: 이 section은 현재 active plan이 아니라 과거 backlog 기록입니다. 현재 public baseline은 `PUBLIC_STATUS.md`의 promoted gate 기준이며, VaisDB는 package tests `261/261` 및 runtime smoke `34/34`로 별도 인증되었습니다. 이 section의 `RED`, `pending`, Phase 199~203 계획은 현재 claim source로 사용하지 않습니다.
 
 **사용자 결정 (2026-04-18)**: 전략 A (Full migration). vaisdb를 현재 compiler로 빌드 가능하게 복구. Phase 199~203 연속 로드맵 예상.
 
@@ -106,15 +169,17 @@ progress: 0/8 (0%)
 
 ---
 
-## ⏸ 부분완료 — Phase 198: 하위 패키지 regression 해소
+## 🗄 보존 — Phase 198: 하위 패키지 regression 해소
 
-mode: auto
+mode: archived-historical
 max_iterations: 20
 iteration: 4
 completed_at: 2026-04-18 (부분)
   iter1 strategy: Task #30 (Bucket 1 spot-check, haiku read-only) + Task #31 (federation fix, sonnet, vais-web 독립). 둘은 완전 다른 디렉토리 (compiler vs vais-web/packages/federation). 병렬 background 안전. Worktree 안 씀 (Phase 195/196/197 교훈). Spot-check 결과로 Bucket 6 (compiler fix) 필요 여부 결정. ✅ 결과: Bucket 6 = noop (all source migration). commits 97c84987 + vais-web 외부 repo.
   iter2 strategy: Tasks #32/33/34 unblocked. 모두 vaisdb 또는 vais-server 소스 수정 (compiler 안 건드림). 파일 영역: #32 = VaisError struct (stdlib 또는 callers), #33 = parser-syntax 이주 (vaisdb src + vais-server tests), #34 = stdlib function rename 매핑 + 적용 (vaisdb src + std/ 일부). 파일 overlap 약간 (vaisdb src/**)이지만 각 task가 다른 에러 코드에 집중 → 동일 파일 내 다른 라인 수정 가능성. sequential이 더 안전. #32 먼저 (영향 작고 명확) → #33 → #34 순서. 각 background.
 strategy: Phase 197 consolidated.md 기반으로 6 bucket. Bucket 1 (spot-check) 먼저 돌려서 compiler vs source 판정, 그 결과로 Bucket 2~6 파일 영향 범위 확정. 병렬 가능성 높음 (parser 수정과 stdlib audit는 다른 파일). **vaisdb 86% 실패**는 multi-phase 가능성 — Phase 198에서 가능한 만큼 해소 후 Phase 199 고려.
+
+**상태 메모 (2026-05-10)**: 이 section은 historical report입니다. 현재 상태는 상단의 `PUBLIC_STATUS.md` 기반 gate를 따르며, 여기의 vaisdb/server/web 수치는 현재 공개 claim으로 사용하지 않습니다.
 
 ### 목표 (Exit Criteria)
 
@@ -191,15 +256,17 @@ progress: 8/8 (100%) ✅ — 3 package 감사 완료. vaisdb RED (86% fail), vai
 
 ---
 
-## ⏸ 완료 — Phase 197: 하위 패키지 3종 회귀 감사
+## 🗄 보존 — Phase 197: 하위 패키지 3종 회귀 감사
 
-mode: auto
+mode: archived-historical
 max_iterations: 10
 iteration: 2
 completed_at: 2026-04-18
 strategy: audit-only. Phase 195/196에서 compiler 자체는 green (179/179, clippy 0/0, E2E 2596/0/0) 이지만 하위 패키지 `vais/lang/packages/{vaisdb,vais-server,vais-web}/` 는 실측 없음. 이번 phase는 **감사만** — 3 패키지 각각 fresh-build + test 돌려서 regression 실측. 어떤 수정도 금지. 발견된 문제는 Phase 198 task로 분류.
   iter1 strategy: Task #22 Recon-G 단일 unblocked. research-haiku foreground (lean scope: 3 package layout 파악만, tool budget ~15회). Phase 196 Recon-F 교훈 반영 — 명확한 출력 포맷 + early Write. 산출물 docs/phase197/package_layouts.md. ✅ commit 784d66e3.
   iter2 strategy: Recon-G 결과 기반 3 감사 task 병렬. 각 패키지 완전 독립 디렉토리 (vaisdb / vais-server / vais-web), 공통 compiler는 read-only. **Worktree 사용 금지** (Phase 195/196 교훈). impl-sonnet 3 병렬 background. 빌드 오래 걸림 예상 (vais-server = vaisc+clang, vais-web = pnpm install 가능) — 완료 통지 대기. 각 agent는 수정 없이 측정만, PROMISE 신호 필수.
+
+**상태 메모 (2026-05-10)**: 이 section은 2026-04-18 감사 이력입니다. 현재 package/runtime gate는 상단의 promoted baseline 및 `PUBLIC_STATUS.md`가 기준입니다.
 
 ### 목표 (Exit Criteria)
 

@@ -7,7 +7,7 @@
 ## Import
 
 ```vais
-U std/web
+use std/web
 ```
 
 ## Overview
@@ -21,53 +21,53 @@ The `web` module provides browser API bindings for Vais programs compiled to Web
 ## Console API
 
 ```vais
-F log_str(msg: str) -> i64          # Write to browser console
-F console_warn(msg: str) -> i64     # Console warning
-F console_error(msg: str) -> i64    # Console error
+fn log_str(msg: str) -> i64          # Write to browser console
+fn console_warn(msg: str) -> i64     # Console warning
+fn console_error(msg: str) -> i64    # Console error
 ```
 
 ## DOM API
 
 ```vais
-F get_element_by_id(id: str) -> i64         # Get element by ID
-F set_text_content(elem: i64, text: str)    # Set element text
-F set_inner_html(elem: i64, html: str)      # Set element innerHTML
-F create_element(tag: str) -> i64           # Create new element
-F append_child(parent: i64, child: i64)     # Append child element
-F set_attribute(elem: i64, name: str, value: str)  # Set attribute
-F get_attribute(elem: i64, name: str) -> str        # Get attribute
-F add_event_listener(elem: i64, event: str, handler: i64)  # Add event listener
+fn get_element_by_id(id: str) -> i64         # Get element by ID
+fn set_text_content(elem: i64, text: str)    # Set element text
+fn set_inner_html(elem: i64, html: str)      # Set element innerHTML
+fn create_element(tag: str) -> i64           # Create new element
+fn append_child(parent: i64, child: i64)     # Append child element
+fn set_attribute(elem: i64, name: str, value: str)  # Set attribute
+fn get_attribute(elem: i64, name: str) -> str        # Get attribute
+fn add_event_listener(elem: i64, event: str, handler: i64)  # Add event listener
 ```
 
 ## Timer API
 
 ```vais
-F set_timeout(handler: i64, ms: i64) -> i64     # Schedule callback
-F set_interval(handler: i64, ms: i64) -> i64    # Schedule repeating callback
-F clear_timeout(id: i64)                          # Cancel timeout
-F clear_interval(id: i64)                         # Cancel interval
+fn set_timeout(handler: i64, ms: i64) -> i64     # Schedule callback
+fn set_interval(handler: i64, ms: i64) -> i64    # Schedule repeating callback
+fn clear_timeout(id: i64)                          # Cancel timeout
+fn clear_interval(id: i64)                         # Cancel interval
 ```
 
 ## Fetch API
 
 ```vais
-F fetch(url: str, callback: i64) -> i64    # HTTP fetch with callback
+fn fetch(url: str, callback: i64) -> i64    # HTTP fetch with callback
 ```
 
 ## Storage API
 
 ```vais
-F local_storage_get(key: str) -> str       # Get from localStorage
-F local_storage_set(key: str, value: str)  # Set in localStorage
-F local_storage_remove(key: str)           # Remove from localStorage
+fn local_storage_get(key: str) -> str       # Get from localStorage
+fn local_storage_set(key: str, value: str)  # Set in localStorage
+fn local_storage_remove(key: str)           # Remove from localStorage
 ```
 
 ## Example
 
 ```vais
-U std/web
+use std/web
 
-F main() {
+fn main() {
     log_str("Hello from Vais!")
     elem := get_element_by_id("app")
     set_text_content(elem, "Welcome to Vais WASM")

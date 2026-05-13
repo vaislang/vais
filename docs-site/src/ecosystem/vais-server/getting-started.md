@@ -18,18 +18,18 @@
 `src/main.vais` 파일을 만들고 아래 내용을 입력합니다.
 
 ```vais
-U core/app
-U core/config
-U core/context
+use core/app
+use core/config
+use core/context
 
 C PORT: u16 = 8080
 
 # GET / 핸들러 — plain text 응답
-F handle_hello(ctx: Context) -> Response {
+fn handle_hello(ctx: Context) -> Response {
     ctx.text(200, "Hello, World!")
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     config := ServerConfig.default()
     app    := mut App.new(config)
 
@@ -38,13 +38,13 @@ F main() -> i64 {
     addr := ":{PORT}"
     println("서버 시작: {addr}")
 
-    M app.listen(addr) {
+    match app.listen(addr) {
         Ok(_) => {
             println("서버가 정상 종료되었습니다.")
         },
         Err(e) => {
             println("서버 시작 실패: {e.message}")
-            R 1
+            return 1
         },
     }
     0
@@ -76,9 +76,9 @@ curl http://localhost:8080/
 ### 임포트
 
 ```vais
-U core/app      # App 구조체 — 라우트/미들웨어 등록, listen()
-U core/config   # ServerConfig — 서버 설정
-U core/context  # Context — 요청 컨텍스트, Response 빌더
+use core/app      # App 구조체 — 라우트/미들웨어 등록, listen()
+use core/config   # ServerConfig — 서버 설정
+use core/context  # Context — 요청 컨텍스트, Response 빌더
 ```
 
 `U` 키워드는 모듈 임포트입니다. 경로는 `src/` 기준 상대 경로입니다.
@@ -86,7 +86,7 @@ U core/context  # Context — 요청 컨텍스트, Response 빌더
 ### 핸들러 시그니처
 
 ```vais
-F handle_hello(ctx: Context) -> Response {
+fn handle_hello(ctx: Context) -> Response {
     ctx.text(200, "Hello, World!")
 }
 ```
@@ -104,9 +104,9 @@ app.get("/", "handle_hello")
 ### Result 처리
 
 ```vais
-M app.listen(addr) {
+match app.listen(addr) {
     Ok(_)  => { println("정상 종료") },
-    Err(e) => { println("오류: {e.message}") R 1 },
+    Err(e) => { println("오류: {e.message}") return 1 },
 }
 ```
 
@@ -119,15 +119,15 @@ M app.listen(addr) {
 plain text 응답 외에 JSON 응답을 반환하는 예제입니다.
 
 ```vais
-U core/app
-U core/config
-U core/context
-U src/util/json
+use core/app
+use core/config
+use core/context
+use src/util/json
 
 C PORT: u16 = 8080
 
 # GET /ping — JSON 헬스 체크
-F handle_ping(ctx: Context) -> Response {
+fn handle_ping(ctx: Context) -> Response {
     pairs := Vec.new()
     pairs.push("status")
     pairs.push("ok")
@@ -137,7 +137,7 @@ F handle_ping(ctx: Context) -> Response {
 }
 
 # GET /hello/:name — 경로 파라미터 사용
-F handle_greet(ctx: Context) -> Response {
+fn handle_greet(ctx: Context) -> Response {
     name := ctx.path_params   # "name=<value>" 형식
     pairs := Vec.new()
     pairs.push("message")
@@ -145,7 +145,7 @@ F handle_greet(ctx: Context) -> Response {
     ctx.json(200, json_encode(pairs))
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     config := ServerConfig.default()
     app    := mut App.new(config)
 
@@ -153,11 +153,11 @@ F main() -> i64 {
     app.get("/hello/:name",  "handle_greet")
 
     println("JSON API 서버 시작: :{PORT}")
-    M app.listen(":{PORT}") {
+    match app.listen(":{PORT}") {
         Ok(_) => {},
         Err(e) => {
             println("오류: {e.message}")
-            R 1
+            return 1
         },
     }
     0
@@ -196,7 +196,7 @@ app.use("cors")     # CORS 헤더 자동 추가
 미들웨어는 등록 순서대로 before 훅이 실행되고, 역순으로 after 훅이 실행됩니다.
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     config := ServerConfig.default()
     app    := mut App.new(config)
 
@@ -206,9 +206,9 @@ F main() -> i64 {
 
     app.get("/", "handle_hello")
 
-    M app.listen(":{PORT}") {
+    match app.listen(":{PORT}") {
         Ok(_) => {},
-        Err(e) => { println("오류: {e.message}") R 1 },
+        Err(e) => { println("오류: {e.message}") return 1 },
     }
     0
 }

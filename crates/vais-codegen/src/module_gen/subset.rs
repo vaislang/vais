@@ -713,24 +713,24 @@ impl CodeGenerator {
         for &idx in &valid_indices {
             let item = &full_module.items[idx];
             match &item.node {
-                Item::Function(f) => {
-                    if f.generics.is_empty() {
-                        body_ir.push_str(&self.generate_function_with_span(f, item.span)?);
-                        body_ir.push('\n');
-                    }
+                Item::Function(f) if f.generics.is_empty() => {
+                    body_ir.push_str(&self.generate_function_with_span(f, item.span)?);
+                    body_ir.push('\n');
+                }
+                Item::Function(_) => {
                     // generic functions are handled by the instantiation loop above
                 }
-                Item::Struct(s) => {
-                    if s.generics.is_empty() {
-                        for method in &s.methods {
-                            body_ir.push_str(&self.generate_method_with_span(
-                                &s.name.node,
-                                &method.node,
-                                method.span,
-                            )?);
-                            body_ir.push('\n');
-                        }
+                Item::Struct(s) if s.generics.is_empty() => {
+                    for method in &s.methods {
+                        body_ir.push_str(&self.generate_method_with_span(
+                            &s.name.node,
+                            &method.node,
+                            method.span,
+                        )?);
+                        body_ir.push('\n');
                     }
+                }
+                Item::Struct(_) => {
                     // generic struct methods handled by instantiation loop above
                 }
                 Item::Impl(impl_block) => {

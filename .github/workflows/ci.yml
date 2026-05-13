@@ -32,6 +32,60 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+  # ---------- Public claim guard ----------
+  public-claims:
+    name: Public Claim Guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check public claims
+        run: node scripts/check-public-claims.mjs
+
+  # ---------- Playground web gate ----------
+  playground-web:
+    name: Playground Web Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: playground/package-lock.json
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
+      - name: Install playground dependencies
+        working-directory: playground
+        run: npm ci
+
+      - name: Build browser compiler
+        working-directory: playground
+        run: npm run browser-compiler:build
+
+      - name: Check browser compiler gate
+        working-directory: playground
+        run: npm run browser-compiler:check
+
+      - name: Check playground mode contract
+        working-directory: playground
+        run: npm run test:contract
+
+      - name: Build playground
+        working-directory: playground
+        run: npm run build
+
   # ---------- Documentation check ----------
   docs:
     name: Documentation
@@ -134,6 +188,7 @@ jobs:
           cargo clippy
           -p vais-ast -p vais-lexer -p vais-parser -p vais-types
           -p vais-mir -p vais-codegen-js -p vais-i18n -p vais-macro
+          -p vais-browser-compiler
           -p vais-gc -p vais-gpu -p vais-plugin -p vais-bindgen
           -p vais-profiler -p vais-security -p vais-supply-chain
           -p vais-testgen -p vais-hotreload -p vais-dynload
@@ -202,6 +257,7 @@ jobs:
           cargo check
           -p vais-ast -p vais-lexer -p vais-parser -p vais-types
           -p vais-mir -p vais-codegen-js -p vais-i18n -p vais-macro
+          -p vais-browser-compiler
           -p vais-gc -p vais-gpu -p vais-plugin -p vais-bindgen
           -p vais-profiler -p vais-security -p vais-supply-chain
           -p vais-testgen -p vais-hotreload -p vais-dynload
@@ -270,6 +326,7 @@ jobs:
           cargo test
           -p vais-ast -p vais-lexer -p vais-parser -p vais-types
           -p vais-mir -p vais-codegen-js -p vais-i18n -p vais-macro
+          -p vais-browser-compiler
           -p vais-gc -p vais-gpu -p vais-plugin -p vais-bindgen
           -p vais-profiler -p vais-security -p vais-supply-chain
           -p vais-testgen -p vais-hotreload -p vais-dynload

@@ -1,12 +1,16 @@
 # VaisX (vais-web)
 
-VaisX는 Vais 언어 위에서 동작하는 컴파일 타임 반응성 프론트엔드 프레임워크입니다. 빌드 시점에 반응성 그래프를 완전히 해석하여 런타임 오버헤드를 최소화합니다.
+VaisX는 Vais 언어 위에서 동작하는 컴파일 타임 반응성 frontend framework
+workbench입니다. 현재 공개 claim은 runtime `61/77`, unit `390/390`, package
+`3272/3272`, full-build `24/24`, shared-schema product `9/9` gate에 묶입니다.
 
 ## 특징
 
-### 초경량 런타임 (< 3KB)
+### Runtime Gates
 
-반응성 로직 전체가 컴파일 타임에 처리됩니다. `$state`, `$derived`, `$effect`는 빌드 시 최적화된 DOM 업데이트 코드로 변환되며, 런타임에 남는 코어는 3KB 미만입니다. React(~45KB), Vue(~34KB), Svelte 런타임과 비교해 현저히 작습니다.
+반응성 분석과 DOM 업데이트 생성은 구현 표면입니다. 3KB 미만 runtime 같은
+size claim은 dedicated size gate가 생기기 전까지 공개 보증으로 쓰지
+않습니다.
 
 ### 단일 파일 컴포넌트 (.vaisx)
 
@@ -69,7 +73,7 @@ VaisX는 Vais 언어의 타입 시스템과 문법을 그대로 사용합니다.
 | `mut name := value` | 가변 변수 |
 | `I cond { }` | if 조건문 |
 | `E I cond { }` | else if |
-| `E { }` | else |
+| `else { }` | else |
 | `R value` | 반환 |
 
 ---
@@ -88,13 +92,13 @@ VaisX는 Vais 언어의 타입 시스템과 문법을 그대로 사용합니다.
         │
         ▼
 ┌─────────────────────┐
-│  최적화된 JS/WASM    │  ← Vite 플러그인이 번들링
+│  JS/WASM outputs    │  ← experimental unless gated
 │  (반응성 코드 내장)  │
 └─────────────────────┘
         │
         ▼
 ┌─────────────────────┐
-│  VaisX 런타임       │  ← < 3KB
+│  VaisX 런타임       │  ← runtime 61/77 gate
 │  (DOM 패치, 이벤트) │
 └─────────────────────┘
 ```
@@ -111,7 +115,7 @@ VaisX는 Vais 언어의 타입 시스템과 문법을 그대로 사용합니다.
 
 ```
 packages/
-├── runtime/         # 코어 런타임 (< 3KB)
+├── runtime/         # 코어 runtime, size gate pending
 ├── cli/             # 프로젝트 스캐폴딩 CLI
 ├── kit/             # 공유 타입 및 인터페이스
 ├── plugin/          # Vite 호환 플러그인
@@ -135,14 +139,15 @@ vaislang/vais (컴파일러)
 ├── vais-codegen-js  → JS ESM 코드 생성
 ├── vais-parser      → Vais 소스 파싱
 ├── vais-ast         → AST 타입 정의
-└── WASM codegen     → wasm32 컴파일 타겟
+└── WASM codegen     → experimental wasm32 target unless gated
         ↓
 vaislang/vais-lang/packages/vais-web  (이 패키지)
         ↓
 vaislang/vais-lang/packages/vais-server  (SSR 연동)
 ```
 
-코어 컴파일러와의 호환성은 220개의 계약 테스트로 보장됩니다 (Phase 139+ 대상).
+코어 컴파일러 호환성은 historical phase number가 아니라 현재 full-build 및
+package gate로 판단합니다.
 
 ---
 
@@ -150,7 +155,7 @@ vaislang/vais-lang/packages/vais-server  (SSR 연동)
 
 | 항목 | VaisX | React | Vue 3 | Svelte |
 |---|---|---|---|---|
-| 런타임 크기 | < 3KB | ~45KB | ~34KB | ~2KB |
+| Runtime gate | 61/77 smoke + shared schema 9/9 | n/a | n/a | n/a |
 | 반응성 방식 | 컴파일 타임 | 가상 DOM | 프록시 | 컴파일 타임 |
 | 언어 | Vais | JSX/TSX | SFC + TSX | Svelte |
 | SSR/SSG | 내장 | Next.js 필요 | Nuxt 필요 | SvelteKit 필요 |

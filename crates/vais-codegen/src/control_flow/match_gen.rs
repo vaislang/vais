@@ -344,9 +344,9 @@ impl CodeGenerator {
                         );
                         zinit
                     }
-                    ResolvedType::Named { .. }
-                    | ResolvedType::Ref(_)
-                    | ResolvedType::RefMut(_) => "null".to_string(),
+                    ResolvedType::Named { .. } | ResolvedType::Ref(_) | ResolvedType::RefMut(_) => {
+                        "null".to_string()
+                    }
                     ResolvedType::F64 => "0.0".to_string(),
                     ResolvedType::Bool => "0".to_string(), // Bool → i64 in phi
                     _ => "0".to_string(),

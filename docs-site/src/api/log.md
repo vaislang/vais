@@ -60,7 +60,7 @@ The Log module provides production-grade logging with:
 ### log_init
 
 ```vais
-F log_init(level: i64) -> i64
+fn log_init(level: i64) -> i64
 ```
 
 Initialize the global logger with a specified level.
@@ -75,7 +75,7 @@ Initialize the global logger with a specified level.
 ### log_set_level
 
 ```vais
-F log_set_level(level: i64) -> i64
+fn log_set_level(level: i64) -> i64
 ```
 
 Set the global log level.
@@ -85,7 +85,7 @@ Set the global log level.
 ### log_set_output
 
 ```vais
-F log_set_output(target: i64) -> i64
+fn log_set_output(target: i64) -> i64
 ```
 
 Set the output target (stdout/stderr/file).
@@ -95,7 +95,7 @@ Set the output target (stdout/stderr/file).
 ### log_set_file
 
 ```vais
-F log_set_file(path: str) -> i64
+fn log_set_file(path: str) -> i64
 ```
 
 Set the log file path (use before setting output to `LOG_OUTPUT_FILE`).
@@ -105,7 +105,7 @@ Set the log file path (use before setting output to `LOG_OUTPUT_FILE`).
 ### log_set_format
 
 ```vais
-F log_set_format(format: i64) -> i64
+fn log_set_format(format: i64) -> i64
 ```
 
 Set the output format (text or JSON).
@@ -115,11 +115,11 @@ Set the output format (text or JSON).
 ### log_trace / log_debug / log_info / log_warn / log_error
 
 ```vais
-F log_trace(msg: str) -> i64
-F log_debug(msg: str) -> i64
-F log_info(msg: str) -> i64
-F log_warn(msg: str) -> i64
-F log_error(msg: str) -> i64
+fn log_trace(msg: str) -> i64
+fn log_debug(msg: str) -> i64
+fn log_info(msg: str) -> i64
+fn log_warn(msg: str) -> i64
+fn log_error(msg: str) -> i64
 ```
 
 Log a message at the specified level.
@@ -134,7 +134,7 @@ Log a message at the specified level.
 ### log_with_field
 
 ```vais
-F log_with_field(level: i64, msg: str, key: str, value: str) -> i64
+fn log_with_field(level: i64, msg: str, key: str, value: str) -> i64
 ```
 
 Log a message with a single structured field.
@@ -155,7 +155,7 @@ log_with_field(LOG_LEVEL_INFO, "User login", "user_id", "12345")
 ### log_with_fields
 
 ```vais
-F log_with_fields(level: i64, msg: str, fields: str) -> i64
+fn log_with_fields(level: i64, msg: str, fields: str) -> i64
 ```
 
 Log a message with multiple structured fields (comma-separated key=value pairs).
@@ -175,7 +175,7 @@ log_with_fields(LOG_LEVEL_ERROR, "Request failed", "status=500,method=GET,path=/
 ### span_start
 
 ```vais
-F span_start(name: str) -> i64
+fn span_start(name: str) -> i64
 ```
 
 Start a new span for request tracing.
@@ -190,7 +190,7 @@ Start a new span for request tracing.
 ### span_end
 
 ```vais
-F span_end(span_id: i64) -> i64
+fn span_end(span_id: i64) -> i64
 ```
 
 End a span and clean up its state.
@@ -205,7 +205,7 @@ End a span and clean up its state.
 ### span_log
 
 ```vais
-F span_log(span_id: i64, level: i64, msg: str) -> i64
+fn span_log(span_id: i64, level: i64, msg: str) -> i64
 ```
 
 Log a message within a span (automatically includes span's trace_id).
@@ -220,7 +220,7 @@ Log a message within a span (automatically includes span's trace_id).
 ### span_log_field
 
 ```vais
-F span_log_field(span_id: i64, level: i64, msg: str, key: str, value: str) -> i64
+fn span_log_field(span_id: i64, level: i64, msg: str, key: str, value: str) -> i64
 ```
 
 Log a message with a field within a span.
@@ -230,7 +230,7 @@ Log a message with a field within a span.
 ### span_trace_id
 
 ```vais
-F span_trace_id(span_id: i64) -> str
+fn span_trace_id(span_id: i64) -> str
 ```
 
 Get the trace ID for a span.
@@ -245,11 +245,11 @@ Get the trace ID for a span.
 ### trace_field / debug_field / info_field / warn_field / error_field
 
 ```vais
-F trace_field(msg: str, key: str, value: str) -> i64
-F debug_field(msg: str, key: str, value: str) -> i64
-F info_field(msg: str, key: str, value: str) -> i64
-F warn_field(msg: str, key: str, value: str) -> i64
-F error_field(msg: str, key: str, value: str) -> i64
+fn trace_field(msg: str, key: str, value: str) -> i64
+fn debug_field(msg: str, key: str, value: str) -> i64
+fn info_field(msg: str, key: str, value: str) -> i64
+fn warn_field(msg: str, key: str, value: str) -> i64
+fn error_field(msg: str, key: str, value: str) -> i64
 ```
 
 Log a message with a single field at the respective level.
@@ -264,7 +264,7 @@ Log a message with a single field at the respective level.
 ### log_error_text
 
 ```vais
-F log_error_text(code: i64) -> str
+fn log_error_text(code: i64) -> str
 ```
 
 Get human-readable error description for an error code.

@@ -41,13 +41,13 @@ Functions are defined with the `F` keyword. Async functions use `A F`.
 
 ```vais
 <script>
-  F greet(name: String) -> String {
-    R "Hello, " + name + "!"
+  fn greet(name: String) -> String {
+    return "Hello, " + name + "!"
   }
 
-  A F fetchData(url: String) -> Data {
+  A fn fetchData(url: String) -> Data {
     res := await fetch(url)
-    R await res.json()
+    return await res.json()
   }
 </script>
 ```
@@ -58,13 +58,13 @@ Structs (data types) are defined with the `S` keyword.
 
 ```vais
 <script>
-  S User {
+  struct User {
     id: Int,
     name: String,
     email: String
   }
 
-  S Post {
+  struct Post {
     id: Int,
     title: String,
     author: User
@@ -98,11 +98,11 @@ Declare reactive state with `$state(initialValue)`. When the value changes, the 
   items := $state([])
   isOpen := $state(false)
 
-  F increment() {
+  fn increment() {
     count += 1        # count changes → template updates automatically
   }
 
-  F setName(newName: String) {
+  fn setName(newName: String) {
     name = newName
   }
 </script>
@@ -122,7 +122,7 @@ Declare reactive state with `$state(initialValue)`. When the value changes, the 
     { id: 2, text: "Build an app", done: false }
   ])
 
-  F addTodo(text: String) {
+  fn addTodo(text: String) {
     todos = [...todos, { id: todos.length + 1, text, done: false }]
   }
 </script>
@@ -192,7 +192,7 @@ A cleanup function can be returned.
     }, 300)
 
     # Called before the next run or when the component is destroyed
-    R () => clearTimeout(timer)
+    return () => clearTimeout(timer)
   }
 </script>
 ```
@@ -402,16 +402,16 @@ Functions annotated with `#[server]` run only on the server. They are connected 
 ```vais
 <script>
   #[server]
-  A F createPost(formData: FormData) -> ActionResult {
+  A fn createPost(formData: FormData) -> ActionResult {
     title := formData.get("title")
     content := formData.get("content")
 
     I title == "" {
-      R ActionResult { status: "error", errors: { title: "Title is required" } }
+      return ActionResult { status: "error", errors: { title: "Title is required" } }
     }
 
     savePost({ title, content })
-    R ActionResult { status: "success" }
+    return ActionResult { status: "success" }
   }
 </script>
 
@@ -437,14 +437,14 @@ Server actions support progressive enhancement — forms work correctly even whe
 | `name := $state(v)` | Reactive state | `count := $state(0)` |
 | `name := $derived(e)` | Derived value | `double := $derived(n * 2)` |
 | `$effect { }` | Side effect block | `$effect { log(x) }` |
-| `F name() { }` | Function definition | `F add(a, b) { R a + b }` |
-| `A F name() { }` | Async function | `A F load() { }` |
-| `S Name { }` | Struct definition | `S User { name: String }` |
-| `I cond { }` | if conditional | `I x > 0 { R true }` |
-| `E I cond { }` | else if | `E I x == 0 { }` |
-| `E { }` | else | `E { R false }` |
-| `R value` | Return | `R result` |
-| `#[server]` | Server-only attribute | `#[server] A F load()` |
+| `fn name() { }` | Function definition | `fn add(a, b) { return a + b }` |
+| `A fn name() { }` | Async function | `A fn load() { }` |
+| `struct Name { }` | Struct definition | `struct User { name: String }` |
+| `I cond { }` | if conditional | `I x > 0 { return true }` |
+| `else I cond { }` | else if | `else I x == 0 { }` |
+| `else { }` | else | `else { return false }` |
+| `return value` | Return | `return result` |
+| `#[server]` | Server-only attribute | `#[server] A fn load()` |
 | `P { name: Type }` | Props declaration | `P { title: String }` |
 | `emit name(args)` | Emit event | `emit change(value)` |
 

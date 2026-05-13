@@ -1,0 +1,22 @@
+# Consumer: vaisdb-style table builder.
+# Compiled by gate.sh as `cat ../schema/user.vais this-file > combined.vais`
+# (module imports across separate files do not currently resolve in
+# user-space outside std/, so the gate works around it by concatenating
+# schema + consumer at gate time. The semantic intent is identical: a
+# consumer references the schema's User type and its `email` field.)
+
+F build_user(id: i64, email: str, name: str) -> User {
+    R User { id: id, email: email, name: name }
+}
+
+F lookup_email(u: User) -> str {
+    R u.email
+}
+
+F main() -> i64 {
+    u: User = build_user(1, "a@b.c", "alice")
+    I lookup_email(u) != "a@b.c" {
+        R 1
+    }
+    R 0
+}

@@ -47,9 +47,7 @@ pub use expressions::{Expr, IfElse, MatchArm, StringInterpPart};
 pub use statements::Stmt;
 
 // Re-export function types
-pub use function::{
-    CallArgs, EffectPrefix, Function, FunctionBody, NamedArg, Ownership, Param,
-};
+pub use function::{CallArgs, EffectPrefix, Function, FunctionBody, NamedArg, Ownership, Param};
 
 // Re-export generic types
 pub use generics::{GenericParam, GenericParamKind, Variance, WherePredicate};

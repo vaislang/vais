@@ -182,17 +182,18 @@ impl TypeChecker {
         // called from a total local function — such a call will be
         // rejected by the totality walk because the imported partial
         // function's name lands in `partial_fns`.
-        let local_module_for_totality = if self.imported_item_count > 0
-            && self.imported_item_count < module.items.len()
-        {
-            Module {
-                items: module.items[self.imported_item_count..].to_vec(),
-                modules_map: None,
-            }
-        } else {
-            module.clone()
-        };
-        self.try_or_collect(crate::totality::enforce_totality(&local_module_for_totality))?;
+        let local_module_for_totality =
+            if self.imported_item_count > 0 && self.imported_item_count < module.items.len() {
+                Module {
+                    items: module.items[self.imported_item_count..].to_vec(),
+                    modules_map: None,
+                }
+            } else {
+                module.clone()
+            };
+        self.try_or_collect(crate::totality::enforce_totality(
+            &local_module_for_totality,
+        ))?;
 
         // Phase 4c.3 / Task #54 — effect purity gate.
         //

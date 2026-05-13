@@ -1,12 +1,17 @@
 # VaisX (vais-web)
 
-VaisX is a compile-time reactivity frontend framework built on top of the Vais language. It fully resolves the reactivity graph at build time, minimizing runtime overhead.
+VaisX is a compile-time reactivity frontend framework workbench built on top of
+the Vais language. Current public claims are tied to the promoted Vais Web
+gates: runtime `61/77`, unit `390/390`, package `3272/3272`, full-build
+`24/24`, shared-schema product `9/9`.
 
 ## Features
 
-### Ultralight Runtime (< 3KB)
+### Runtime Gates
 
-All reactivity logic is processed at compile time. `$state`, `$derived`, and `$effect` are transformed into optimized DOM update code at build time, leaving a core runtime of less than 3KB. This is significantly smaller than React (~45KB), Vue (~34KB), and the Svelte runtime.
+Reactivity analysis and DOM update generation are implementation surfaces. Size
+claims such as a sub-3KB runtime require a dedicated size gate before they are
+public guarantees.
 
 ### Single-File Component (.vaisx)
 
@@ -17,7 +22,7 @@ Each component is written as a single file with the `.vaisx` extension. One file
   name := "VaisX"
   count := $state(0)
 
-  F increment() {
+  fn increment() {
     count += 1
   }
 </script>
@@ -69,7 +74,7 @@ VaisX uses the Vais language's type system and syntax directly. Component logic 
 | `mut name := value` | Mutable variable |
 | `I cond { }` | if conditional |
 | `E I cond { }` | else if |
-| `E { }` | else |
+| `else { }` | else |
 | `R value` | Return |
 
 ---
@@ -88,13 +93,13 @@ Source file (.vaisx)
         │
         ▼
 ┌─────────────────────┐
-│  Optimized JS/WASM  │  ← Bundled by Vite plugin
+│  JS/WASM outputs    │  ← experimental unless gated
 │  (reactivity built-in) │
 └─────────────────────┘
         │
         ▼
 ┌─────────────────────┐
-│  VaisX Runtime      │  ← < 3KB
+│  VaisX Runtime      │  ← runtime 61/77 gate
 │  (DOM patching, events) │
 └─────────────────────┘
 ```
@@ -111,7 +116,7 @@ Source file (.vaisx)
 
 ```
 packages/
-├── runtime/         # Core runtime (< 3KB)
+├── runtime/         # Core runtime, size gate pending
 ├── cli/             # Project scaffolding CLI
 ├── kit/             # Shared types and interfaces
 ├── plugin/          # Vite-compatible plugin
@@ -135,14 +140,15 @@ vaislang/vais (compiler)
 ├── vais-codegen-js  → JS ESM code generation
 ├── vais-parser      → Vais source parsing
 ├── vais-ast         → AST type definitions
-└── WASM codegen     → wasm32 compile target
+└── WASM codegen     → experimental wasm32 target unless gated
         ↓
 vaislang/vais-lang/packages/vais-web  (this package)
         ↓
 vaislang/vais-lang/packages/vais-server  (SSR integration)
 ```
 
-Compatibility with the core compiler is guaranteed by 220 contract tests (targeting Phase 139+).
+Compatibility with the core compiler should be judged by the current full-build
+and package gates, not by historical phase numbers.
 
 ---
 
@@ -150,7 +156,7 @@ Compatibility with the core compiler is guaranteed by 220 contract tests (target
 
 | Item | VaisX | React | Vue 3 | Svelte |
 |---|---|---|---|---|
-| Runtime size | < 3KB | ~45KB | ~34KB | ~2KB |
+| Runtime gate | 61/77 smoke + shared schema 9/9 | n/a | n/a | n/a |
 | Reactivity model | Compile-time | Virtual DOM | Proxy | Compile-time |
 | Language | Vais | JSX/TSX | SFC + TSX | Svelte |
 | SSR/SSG | Built-in | Requires Next.js | Requires Nuxt | Requires SvelteKit |
