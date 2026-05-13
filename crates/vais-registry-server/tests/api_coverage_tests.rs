@@ -76,7 +76,7 @@ license = "MIT"
         hdr.set_cksum();
         archive.append(&hdr, manifest_bytes).unwrap();
 
-        let source = format!("F main() -> i64 {{ R 0 }}\n");
+        let source = "F main() -> i64 { R 0 }\n".to_string();
         let source_bytes = source.as_bytes();
         let mut hdr = tar::Header::new_gnu();
         hdr.set_path("src/main.vais").unwrap();
