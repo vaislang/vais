@@ -371,7 +371,7 @@ impl DataLayoutOptimizer {
         let mut optimized = layout.clone();
         optimized
             .fields
-            .sort_by(|a, b| b.alignment.cmp(&a.alignment));
+            .sort_by_key(|field| std::cmp::Reverse(field.alignment));
         optimized.calculate_layout();
 
         if optimized.padding < layout.padding {
@@ -480,7 +480,7 @@ pub fn suggest_field_reorder(fields: &[(String, String)]) -> Vec<(String, String
         .collect();
 
     // Sort by alignment descending (stable sort to preserve order among same-alignment fields)
-    fields_with_align.sort_by(|a, b| b.2.cmp(&a.2));
+    fields_with_align.sort_by_key(|field| std::cmp::Reverse(field.2));
 
     fields_with_align
         .into_iter()

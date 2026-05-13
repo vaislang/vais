@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/option
+use std/option
 ```
 
 ## Overview
@@ -19,7 +19,7 @@ This is useful for functions that may fail to produce a value, or for representi
 ## Enum Definition
 
 ```vais
-E Option<T> {
+enum Option<T> {
     None,
     Some(T)
 }
@@ -30,7 +30,7 @@ E Option<T> {
 ### is_some
 
 ```vais
-F is_some(&self) -> i64
+fn is_some(&self) -> i64
 ```
 
 Check if the option contains a value.
@@ -50,7 +50,7 @@ I x.is_some() == 1 {
 ### is_none
 
 ```vais
-F is_none(&self) -> i64
+fn is_none(&self) -> i64
 ```
 
 Check if the option is empty.
@@ -70,7 +70,7 @@ I y.is_none() == 1 {
 ### unwrap_or
 
 ```vais
-F unwrap_or(&self, default: T) -> T
+fn unwrap_or(&self, default: T) -> T
 ```
 
 Extract the value from the option, or return a default value if `None`.
@@ -94,20 +94,20 @@ val2 := y.unwrap_or(0)  # val2 = 0
 ### Basic Pattern Matching
 
 ```vais
-U std/option
+use std/option
 
-F divide(a: i64, b: i64) -> Option<i64> {
+fn divide(a: i64, b: i64) -> Option<i64> {
     I b == 0 {
         None
-    } E {
+    } else {
         Some(a / b)
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := divide(10, 2)
 
-    M result {
+    match result {
         Some(v) => v,      # Returns 5
         None => 0          # Returns 0 on division by zero
     }
@@ -117,9 +117,9 @@ F main() -> i64 {
 ### Using Methods
 
 ```vais
-U std/option
+use std/option
 
-F main() -> i64 {
+fn main() -> i64 {
     x := Some(42)
     y := None
 
@@ -142,21 +142,21 @@ F main() -> i64 {
 ### Optional Function Return Values
 
 ```vais
-U std/option
+use std/option
 
-F find_first_positive(arr: i64, len: i64) -> Option<i64> {
+fn find_first_positive(arr: i64, len: i64) -> Option<i64> {
     i := 0
     L i < len {
         val := load_i64(arr + i * 8)
         I val > 0 {
-            R Some(val)
+            return Some(val)
         }
         i = i + 1
     }
     None
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     arr := malloc(5 * 8)
     store_i64(arr, -1)
     store_i64(arr + 8, 0)
@@ -166,7 +166,7 @@ F main() -> i64 {
 
     result := find_first_positive(arr, 5)
 
-    M result {
+    match result {
         Some(v) => v,   # Returns 5
         None => -1      # Returns -1 if no positive found
     }
@@ -179,24 +179,24 @@ F main() -> i64 {
 ### Chaining Optional Operations
 
 ```vais
-U std/option
+use std/option
 
-F safe_divide(a: i64, b: i64) -> Option<i64> {
-    I b == 0 { None } E { Some(a / b) }
+fn safe_divide(a: i64, b: i64) -> Option<i64> {
+    I b == 0 { None } else { Some(a / b) }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # First division
     step1 := safe_divide(100, 5)  # Some(20)
 
     # Process result
-    final := M step1 {
+    final := match step1 {
         Some(v) => safe_divide(v, 4),  # Some(5)
         None => None
     }
 
     # Extract with default
-    answer := M final {
+    answer := match final {
         Some(v) => v,
         None => 0
     }
@@ -209,25 +209,25 @@ F main() -> i64 {
 ### Using Options with User Input
 
 ```vais
-U std/option
-U std/io
+use std/option
+use std/io
 
-F parse_positive_int() -> Option<i64> {
+fn parse_positive_int() -> Option<i64> {
     num := read_i64()
     I num > 0 {
         Some(num)
-    } E {
+    } else {
         None
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := parse_positive_int()
 
     I result.is_some() == 1 {
         val := result.unwrap_or(0)
         # Process valid input
-    } E {
+    } else {
         # Handle invalid input
     }
 
@@ -238,9 +238,9 @@ F main() -> i64 {
 ### Generic Option with Different Types
 
 ```vais
-U std/option
+use std/option
 
-F main() -> i64 {
+fn main() -> i64 {
     # Option<i64>
     int_opt := Some(42)
     int_val := int_opt.unwrap_or(0)

@@ -113,7 +113,8 @@ F main() -> i64 = gret(1)
 
 #[test]
 fn snapshot_type_mismatch() {
-    let source = "F main() -> bool = 42";
+    // Phase 160-A: bool↔i64 coercion is now allowed, so use str↔i64 mismatch instead
+    let source = r#"F main() -> str = 42"#;
     assert_error_snapshot("type_mismatch", source);
 }
 
@@ -161,8 +162,8 @@ F main() -> i64 {
 
 #[test]
 fn snapshot_binary_op_type_error() {
-    // Binary operation with incompatible types
-    let source = r#"F main() -> i64 = 5 + true"#;
+    // Phase 160-A: bool↔i64 is allowed, so use str + i64 mismatch instead
+    let source = r#"F main() -> str = "hello" + 5"#;
     assert_error_snapshot("binary_op_type_error", source);
 }
 

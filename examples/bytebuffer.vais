@@ -10,7 +10,7 @@ S ByteBuffer {
 
 X ByteBuffer {
     F with_capacity(capacity: i64) -> ByteBuffer {
-        cap := I capacity < 16 { 16 } E { capacity }
+        cap := I capacity < 16 { 16 } EL { capacity }
         data := malloc(cap)
         ByteBuffer { data: data, len: 0, cap: cap, pos: 0 }
     }

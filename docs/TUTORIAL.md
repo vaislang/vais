@@ -45,7 +45,7 @@ cargo build --release
 
 ```bash
 ./target/release/vaisc --version
-# Should output: Vais 0.0.1
+# Should output: Vais 0.1.0
 ```
 
 ---

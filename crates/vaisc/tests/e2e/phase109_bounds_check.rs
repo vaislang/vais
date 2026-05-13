@@ -50,7 +50,11 @@ F main() -> i64 {
 }
 "#,
     );
-    assert!(ir.is_ok(), "Slice OOB program should compile: {:?}", ir.err());
+    assert!(
+        ir.is_ok(),
+        "Slice OOB program should compile: {:?}",
+        ir.err()
+    );
 }
 
 /// Boundary index — accessing exactly at length should be OOB

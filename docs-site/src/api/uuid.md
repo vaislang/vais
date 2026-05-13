@@ -5,13 +5,13 @@
 ## Import
 
 ```vais
-U std/uuid
+use std/uuid
 ```
 
 ## Struct
 
 ```vais
-S Uuid { high: i64, low: i64 }
+struct Uuid { high: i64, low: i64 }
 ```
 
 | Method | Signature | Description |
@@ -36,9 +36,9 @@ S Uuid { high: i64, low: i64 }
 ## Usage
 
 ```vais
-U std/uuid
+use std/uuid
 
-F main() -> i64 {
+fn main() -> i64 {
     id := uuid_v4()
     id.print()  # e.g. "550e8400-e29b-41d4-a716-446655440000"
     0

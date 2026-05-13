@@ -38,7 +38,7 @@ F layout_extend(base: Layout, ext: Layout) -> Layout {
     offset := ptr_align_up(base.size, ext.align)
     Layout {
         size: offset + ext.size,
-        align: I base.align > ext.align { base.align } E { ext.align }
+        align: I base.align > ext.align { base.align } EL { ext.align }
     }
 }
 
@@ -50,7 +50,7 @@ F layout_extend(base: Layout, ext: Layout) -> Layout {
 F global_alloc(layout: Layout) -> Allocation {
     aligned_size := ptr_align_up(layout.size, layout.align)
     ptr := malloc(aligned_size)
-    Allocation { ptr: ptr, size: I ptr != 0 { aligned_size } E { 0 } }
+    Allocation { ptr: ptr, size: I ptr != 0 { aligned_size } EL { 0 } }
 }
 
 # Allocate zeroed memory using global allocator
@@ -73,7 +73,7 @@ F global_realloc(ptr: i64, old_layout: Layout, new_layout: Layout) -> Allocation
     new_ptr := mem_realloc(ptr, old_layout.size, new_layout.size)
     Allocation {
         ptr: new_ptr,
-        size: I new_ptr != 0 { new_layout.size } E { 0 }
+        size: I new_ptr != 0 { new_layout.size } EL { 0 }
     }
 }
 
@@ -96,7 +96,7 @@ X BumpAllocator {
         buffer := malloc(capacity)
         BumpAllocator {
             buffer: buffer,
-            capacity: I buffer != 0 { capacity } E { 0 },
+            capacity: I buffer != 0 { capacity } EL { 0 },
             offset: 0,
             allocated: 0
         }
@@ -180,7 +180,7 @@ X PoolAllocator {
     # Create a new pool allocator
     F new(block_size: i64, num_blocks: i64) -> PoolAllocator {
         # Ensure block size is at least pointer-sized for free list
-        actual_block_size := I block_size < 8 { 8 } E { block_size }
+        actual_block_size := I block_size < 8 { 8 } EL { block_size }
         capacity := actual_block_size * num_blocks
         buffer := malloc(capacity)
 
@@ -193,7 +193,7 @@ X PoolAllocator {
 
         # Initialize free list - each block points to next
         i := 0
-        L i < num_blocks - 1 {
+        LW i < num_blocks - 1 {
             block := buffer + i * actual_block_size
             next_block := buffer + (i + 1) * actual_block_size
             store_i64(block, next_block)
@@ -302,7 +302,7 @@ X FreeListAllocator {
     F alloc(&self, layout: Layout) -> Allocation {
         # Minimum block size is header size
         min_size := layout.size + HEADER_SIZE
-        min_size := I min_size < 32 { 32 } E { min_size }
+        min_size := I min_size < 32 { 32 } EL { min_size }
 
         # Align size
         aligned_size := ptr_align_up(min_size, 8)
@@ -311,7 +311,7 @@ X FreeListAllocator {
         prev := 0
         curr := self.free_list
 
-        L curr != 0 {
+        LW curr != 0 {
             block_size := load_i64(curr)
             next := load_i64(curr + 8)
 
@@ -330,7 +330,7 @@ X FreeListAllocator {
                 # Remove from free list
                 I prev == 0 {
                     self.free_list = next
-                } E {
+                } EL {
                     store_i64(prev + 8, next)
                 }
 
@@ -399,7 +399,7 @@ X StackAllocator {
         buffer := malloc(capacity)
         StackAllocator {
             buffer: buffer,
-            capacity: I buffer != 0 { capacity } E { 0 },
+            capacity: I buffer != 0 { capacity } EL { 0 },
             offset: 0,
             prev_offset: 0
         }

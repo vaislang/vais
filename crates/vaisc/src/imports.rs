@@ -19,47 +19,39 @@ pub(crate) fn filter_imported_items(
     match selected {
         None => filtered.collect(),
         Some(names) => {
-            let name_set: std::collections::HashSet<&str> =
+            let _name_set: std::collections::HashSet<&str> =
                 names.iter().map(|s| s.node.as_str()).collect();
-            filtered
-                .filter(|item| {
-                    let item_name = match &item.node {
-                        Item::Function(f) => Some(f.name.node.as_str()),
-                        Item::Struct(s) => Some(s.name.node.as_str()),
-                        Item::Enum(e) => Some(e.name.node.as_str()),
-                        Item::Union(u) => Some(u.name.node.as_str()),
-                        Item::TypeAlias(t) => Some(t.name.node.as_str()),
-                        Item::TraitAlias(ta) => Some(ta.name.node.as_str()),
-                        Item::Trait(t) => Some(t.name.node.as_str()),
-                        Item::Impl(_) => None, // Always include impls
-                        Item::Const(c) => Some(c.name.node.as_str()),
-                        Item::Global(g) => Some(g.name.node.as_str()),
-                        Item::Macro(m) => Some(m.name.node.as_str()),
-                        Item::ExternBlock(_) => None, // Always include extern blocks
-                        Item::Use(_) => None,         // Always include nested imports
-                        Item::Error { .. } => None,
-                    };
-                    match item_name {
-                        Some(name) => name_set.contains(name),
-                        None => true, // Include unnamed items (impls, extern blocks, etc.)
-                    }
-                })
-                .collect()
+
+            // Selective import filtering strategy:
+            // Include all items from the imported module. Impl blocks must be
+            // available for structs even when not explicitly named in the import
+            // list, because imported functions may depend on them transitively
+            // (e.g., `describe`/`it` from std/test internally use TestSuite/TestCase).
+            filtered.collect()
         }
     }
 }
 
-/// Load a module and recursively resolve its imports
-pub(crate) fn load_module_with_imports(
+/// Load a module with source_root for subdirectory → parent directory import resolution
+pub(crate) fn load_module_with_imports_rooted(
     path: &PathBuf,
     loaded: &mut HashSet<PathBuf>,
     loading_stack: &mut Vec<PathBuf>,
     verbose: bool,
     query_db: &QueryDatabase,
+    source_root: Option<&Path>,
 ) -> Result<Module, String> {
     let source =
         fs::read_to_string(path).map_err(|e| format!("Cannot read '{}': {}", path.display(), e))?;
-    load_module_with_imports_internal(path, loaded, loading_stack, verbose, &source, query_db)
+    load_module_with_imports_internal(
+        path,
+        loaded,
+        loading_stack,
+        verbose,
+        &source,
+        query_db,
+        source_root,
+    )
 }
 
 /// Internal function to load a module with source already read
@@ -70,6 +62,7 @@ pub(crate) fn load_module_with_imports_internal(
     verbose: bool,
     source: &str,
     query_db: &QueryDatabase,
+    source_root: Option<&Path>,
 ) -> Result<Module, String> {
     // Canonicalize path to avoid duplicate loading
     let canonical = path
@@ -148,19 +141,21 @@ pub(crate) fn load_module_with_imports_internal(
         match &item.node {
             Item::Use(use_stmt) => {
                 // Resolve import path
-                let module_path = resolve_import_path(base_dir, &use_stmt.path)?;
+                let module_path =
+                    resolve_import_path_with_root(base_dir, &use_stmt.path, source_root)?;
 
                 if verbose {
                     println!("  {} {}", "Importing".cyan(), module_path.display());
                 }
 
                 // Recursively load the imported module
-                let imported = load_module_with_imports(
+                let imported = load_module_with_imports_rooted(
                     &module_path,
                     loaded,
                     loading_stack,
                     verbose,
                     query_db,
+                    source_root,
                 )?;
 
                 // Propagate sub-module mappings with offset, or create new mapping
@@ -235,6 +230,7 @@ pub(crate) fn load_module_with_imports_parallel(
     verbose: bool,
     source: &str,
     query_db: &QueryDatabase,
+    source_root: Option<&Path>,
 ) -> Result<Module, String> {
     use rayon::prelude::*;
 
@@ -281,7 +277,7 @@ pub(crate) fn load_module_with_imports_parallel(
 
     for (idx, item) in ast.items.iter().enumerate() {
         if let Item::Use(use_stmt) = &item.node {
-            let module_path = resolve_import_path(base_dir, &use_stmt.path)?;
+            let module_path = resolve_import_path_with_root(base_dir, &use_stmt.path, source_root)?;
             let module_canonical = module_path
                 .canonicalize()
                 .map_err(|e| format!("Cannot resolve path '{}': {}", module_path.display(), e))?;
@@ -363,14 +359,16 @@ pub(crate) fn load_module_with_imports_parallel(
         for item in parsed_module.items {
             match &item.node {
                 Item::Use(use_stmt) => {
-                    let sub_path = resolve_import_path(sub_base, &use_stmt.path)?;
+                    let sub_path =
+                        resolve_import_path_with_root(sub_base, &use_stmt.path, source_root)?;
                     let mut sub_loading_stack = Vec::new();
-                    let sub_imported = load_module_with_imports(
+                    let sub_imported = load_module_with_imports_rooted(
                         &sub_path,
                         loaded,
                         &mut sub_loading_stack,
                         verbose,
                         query_db,
+                        source_root,
                     )?;
                     let sub_canonical = sub_path.canonicalize().unwrap_or(sub_path);
 
@@ -507,10 +505,11 @@ pub(crate) fn get_std_path() -> Option<PathBuf> {
     None
 }
 
-/// Resolve import path to file path with security validation
-pub(crate) fn resolve_import_path(
+/// Resolve import path with optional source root fallback
+pub(crate) fn resolve_import_path_with_root(
     base_dir: &Path,
     path: &[vais_ast::Spanned<String>],
+    source_root: Option<&Path>,
 ) -> Result<PathBuf, String> {
     if path.is_empty() {
         return Err("Empty import path".to_string());
@@ -596,6 +595,35 @@ pub(crate) fn resolve_import_path(
                             }
                         } else {
                             dep_file_path = dep_file_path.join(&seg.node);
+                        }
+                    }
+                }
+            }
+
+            // Fall back to source root (entry point's directory) if different from base_dir
+            if let Some(root) = source_root {
+                if root != base_dir {
+                    let root_canonical = root
+                        .canonicalize()
+                        .map_err(|_| format!("Cannot resolve source root: {}", root.display()))?;
+                    let mut root_file_path = root.to_path_buf();
+                    for (j, seg) in path.iter().enumerate() {
+                        if j == path.len() - 1 {
+                            let root_as_file = root_file_path.join(format!("{}.vais", seg.node));
+                            let root_as_dir = root_file_path.join(&seg.node).join("mod.vais");
+                            if root_as_file.exists() {
+                                return validate_and_canonicalize_import(
+                                    &root_as_file,
+                                    &root_canonical,
+                                );
+                            } else if root_as_dir.exists() {
+                                return validate_and_canonicalize_import(
+                                    &root_as_dir,
+                                    &root_canonical,
+                                );
+                            }
+                        } else {
+                            root_file_path = root_file_path.join(&seg.node);
                         }
                     }
                 }

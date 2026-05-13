@@ -1,30 +1,31 @@
 {
   "meta": {
     "title": "Vais - AI最適化システムプログラミング言語",
-    "description": "VaisはネイティブLLVMパフォーマンスを備えた、AI コード生成のために設計されたトークン効率的なシステムプログラミング言語です。"
+    "description": "Vais は native LLVM performance と evidence-scoped public claims を持つ、AI code generation 向け systems programming language です。"
   },
   "nav": {
-    "compare": "比較",
+    "compare": "Gates",
     "performance": "パフォーマンス",
     "features": "特徴",
     "playground": "プレイグラウンド",
+    "vaisx": "VaisX",
     "docs": "ドキュメント",
     "blog": "ブログ"
   },
   "hero": {
-    "badge": "v1.0.0 — プロダクション対応",
-    "title": "<span class=\"gradient-text\">少ないトークン</span>で書き、<br><span class=\"gradient-text\">ネイティブパフォーマンス</span>を得る",
-    "subtitle": "Vais（Vibe AI Language for Systems）は、AIコード生成に最適化されたシステムプログラミング言語です。単一文字キーワード、式指向構文、LLVMベースのネイティブ速度を提供します。",
+    "badge": "Certified Core + Scoped Evidence",
+    "title": "<span class=\"gradient-text\">clear Vais</span> を書き、<br><span class=\"gradient-text\">native performance</span> を得る",
+    "subtitle": "Vais（Vibe AI Language for Systems）は、AIコード生成に最適化されたシステムプログラミング言語です。現在の公開基準は main-reproducible gates、main fixture に port 済みの schema gates、aggregate main port 待ちの integration evidence を区別します。",
     "tryBrowser": "ブラウザで試す",
     "install": "brew install vais"
   },
   "compare": {
-    "title": "トークン効率が重要",
-    "subtitle": "AIモデルはトークンごとに課金されます。Vaisは同等のプログラムで<strong>Rustより33%少ないトークン</strong>、<strong>Cより40%少ないトークン</strong>を使用します — 単一文字キーワード、式本体、自動returnがコードベース全体で積み重なります。",
+    "title": "Canonical Syntax, Evidence-Scoped Claims",
+    "subtitle": "Step 19 で旧 single-letter keyword form は削除されました。公開 claim は main-reproducible gates、main fixture に port 済みの schema gates、aggregate main port 待ちの integration evidence を区別します。",
     "vais": "Vais",
     "tokens": "トークン",
-    "barTitle": "トークン数 — 4つのベンチマークプログラム",
-    "barNote": "fibonacci + quicksort + http_types + linked_list (tiktoken cl100k_base)。<a href=\"https://github.com/vaislang/vais/blob/main/benches/COMPARISON.md\" style=\"color: var(--primary);\">ベンチマーク</a>を参照。"
+    "barTitle": "Evidence Snapshot — 2026-05-13",
+    "barNote": "schema gates は compiler main fixture/local workspace で再現できます: cross-package schema 15/15、shared-schema product evidence 9/9。Runtime/package の数値は gate branch の integration evidence で、aggregate runtime gate は main port 待ちです。"
   },
   "performance": {
     "title": "ネイティブパフォーマンス",
@@ -37,8 +38,8 @@
     "title": "なぜVaisなのか？",
     "subtitle": "パフォーマンスを犠牲にすることなく、AI支援開発のためにゼロから設計されました。",
     "singleChar": {
-      "title": "単一文字キーワード",
-      "description": "関数は<code>F</code>、構造体は<code>S</code>、if/elseは<code>I</code>/<code>E</code>、ループは<code>L</code>、パターンマッチは<code>M</code>。最小限のトークン、最大限の明確性。"
+      "title": "Canonical Keywords",
+      "description": "<code>fn</code>、<code>struct</code>、<code>enum</code>、<code>else</code>、<code>match</code>、<code>return</code>、<code>use</code>、<code>pub</code> が canonical です。Retired single-letter form はもう受け付けません。"
     },
     "selfRecursion": {
       "title": "自己再帰演算子",
@@ -50,38 +51,38 @@
     },
     "llvm": {
       "title": "LLVMネイティブ速度",
-      "description": "LLVMを介して最適化されたネイティブコードにコンパイルされます。高レベルのエルゴノミクスでCレベルのパフォーマンスを実現。LTOとPGOをサポート。"
+      "description": "LLVMによる promoted native codegen path を提供します。より広い backend/optimization claim は明示された gate で判断します。"
     },
     "inference": {
       "title": "型推論",
       "description": "双方向型チェックが型を自動的に推論します。すべての場所で明示的な型注釈の代わりに<code>x := 42</code>と書きます。"
     },
     "toolchain": {
-      "title": "完全なツールチェーン",
-      "description": "LSPサーバー、フォーマッター、デバッガー、REPL、パッケージマネージャー、VSCodeおよびIntelliJ用IDEプラグイン。プロダクション対応ツール。"
+      "title": "Tooling Workbench",
+      "description": "LSP、formatter、debugger、REPL、package manager、IDE plugin は implementation surface です。support level は named gates に依存します。"
     },
     "multiTarget": {
-      "title": "マルチターゲット出力",
-      "description": "ネイティブバイナリ、WebAssembly、またはJavaScriptにコンパイルします。完全なWASM interopとJSコード生成でブラウザでVaisコードを実行。"
+      "title": "Native First, Experimental Extra Targets",
+      "description": "Promoted path は native codegen です。JavaScript、WebAssembly、browser execution は dedicated gate がない限り experimental です。"
     },
     "incremental": {
-      "title": "インクリメンタルコンパイル",
-      "description": "並列コード生成によるモジュールごとのキャッシング。変更された部分のみを再コンパイル — 30K行のプロジェクトが100ms以内に再ビルドされます。"
+      "title": "Parallel Compiler Pipeline",
+      "description": "Module dependency tracking と parallel codegen は workbench surface です。正確な performance claim には benchmark gate が必要です。"
     },
     "selfHosting": {
-      "title": "セルフホスティングコンパイラ",
-      "description": "Vaisは自分自身をコンパイルできます。セルフホスティングコンパイラは50,000行以上のVaisでブートストラップを達成し、900のE2Eテストと合計5,300以上のテストでサポートされています。"
+      "title": "Self-Hosting Workbench",
+      "description": "repository には bootstrap と conformance work に使う 50,000+ LOC の Vais compiler source があります。現在の保証は certified Core と promoted runtime gates です。"
     }
   },
   "playground": {
     "title": "今すぐVaisを試す",
-    "subtitle": "ブラウザで直接Vaisコードを書いて実行します。インストール不要。",
+    "subtitle": "ブラウザで Vais syntax と examples を試せます。実際の compilation は playground API を使い、browser-only compile/execute はまだ experimental です。",
     "launch": "インタラクティブプレイグラウンドを起動",
     "loadHere": "ここにプレイグラウンドを読み込む",
     "openTab": "新しいタブで開く"
   },
   "install": {
-    "title": "数秒で始める",
+    "title": "Build From Source or Try the Playground",
     "oneClick": "ワンクリックインストール",
     "oneClickNote": "OSとアーキテクチャを自動検出します。macOS、Linux、WSL対応。",
     "windows": "Windows (PowerShell)",
@@ -102,6 +103,28 @@
     "changelog": "変更履歴",
     "license": "MITライセンス",
     "copyright": "&copy; 2026 Vais 貢献者。AIのために❤で作られました。"
+  },
+  "vaisx": {
+    "badge": "新機能",
+    "title": "VaisでWebアプリを構築",
+    "subtitle": "VaisX は Vais web framework workbench です。現在の公開 claim は main-reproducible gates、main-fixture schema gates、aggregate main port 待ちの integration evidence を区別します。",
+    "compiler": {
+      "title": "コンパイル時リアクティビティ",
+      "description": "Reactive state analysis と DOM update generation は named gates が覆盖する範囲でのみ検証された implementation surface です。"
+    },
+    "routing": {
+      "title": "ファイルベースルーティング & SSR",
+      "description": "File-based routing と SSR/SSG module は存在します。promoted behavior は現在の Vais Web gate で判断します。"
+    },
+    "runtime": {
+      "title": "Runtime Evidence",
+      "description": "現在の Vais Web integration evidence は runtime smoke 61/77、unit 390/390、package tests 3272/3272、full-build 24/24 で、shared-schema product evidence 9/9 は compiler main-fixture workspace gate として port 済みです。Size claim には size gate が必要です。"
+    },
+    "learnMore": "詳しく見る",
+    "github": "GitHub",
+    "quickStart": "クイックスタート",
+    "install": "npm install -g @vaisx/cli",
+    "packages": "パッケージ"
   },
   "langSelector": {
     "label": "言語"

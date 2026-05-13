@@ -511,7 +511,6 @@ impl JsCodeGenerator {
     }
 }
 
-
 #[cfg(test)]
 #[path = "items_tests.rs"]
 mod items_tests;

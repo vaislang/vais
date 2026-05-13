@@ -80,7 +80,7 @@ X Url {
         I port == 0 {
             I __str_eq(scheme, "https") == 1 {
                 port = CLIENT_DEFAULT_PORT_HTTPS
-            } E {
+            } EL {
                 port = CLIENT_DEFAULT_PORT_HTTP
             }
         }
@@ -99,7 +99,7 @@ X Url {
     F is_https(&self) -> i64 {
         I __str_eq(self.scheme, "https") == 1 {
             1
-        } E {
+        } EL {
             0
         }
     }
@@ -109,7 +109,7 @@ X Url {
         query_len := __strlen(self.query)
         I query_len > 0 {
             __str_concat3(self.path, "?", self.query)
-        } E {
+        } EL {
             self.path
         }
     }
@@ -119,7 +119,7 @@ X Url {
         # Only include port if non-default
         I self.port == CLIENT_DEFAULT_PORT_HTTP | self.port == CLIENT_DEFAULT_PORT_HTTPS {
             self.host
-        } E {
+        } EL {
             buf := __malloc(256)
             pos := __str_copy_to(buf, self.host)
             __store_byte(buf + pos, 58)  # ':'
@@ -218,7 +218,7 @@ X HttpRequest {
     F set_header(&self, name: str, value: str) -> HttpRequest {
         # Search for existing header
         i := 0
-        L i < self.header_count {
+        LW i < self.header_count {
             offset := i * 16
             header_name := __load_ptr(self.headers + offset) as str
             I __str_eq_ignore_case(header_name, name) == 1 {
@@ -235,13 +235,13 @@ X HttpRequest {
     # Remove a header by name
     F remove_header(&self, name: str) -> HttpRequest {
         i := 0
-        L i < self.header_count {
+        LW i < self.header_count {
             offset := i * 16
             header_name := __load_ptr(self.headers + offset) as str
             I __str_eq_ignore_case(header_name, name) == 1 {
                 # Shift remaining headers down
                 j := i
-                L j < self.header_count - 1 {
+                LW j < self.header_count - 1 {
                     src_offset := (j + 1) * 16
                     dst_offset := j * 16
                     __store_ptr(self.headers + dst_offset, __load_ptr(self.headers + src_offset))
@@ -259,7 +259,7 @@ X HttpRequest {
     # Get a header value by name
     F get_header(&self, name: str) -> str? {
         i := 0
-        L i < self.header_count {
+        LW i < self.header_count {
             offset := i * 16
             header_name := __load_ptr(self.headers + offset) as str
             I __str_eq_ignore_case(header_name, name) == 1 {
@@ -367,7 +367,7 @@ X HttpRequest {
 
         # User headers
         i := 0
-        L i < self.header_count {
+        LW i < self.header_count {
             offset := i * 16
             name := __load_ptr(self.headers + offset) as str
             value := __load_ptr(self.headers + offset + 8) as str
@@ -455,7 +455,7 @@ X HttpResponse {
     F is_ok(&self) -> i64 {
         I self.error_code == 0 {
             1
-        } E {
+        } EL {
             0
         }
     }
@@ -464,7 +464,7 @@ X HttpResponse {
     F is_success(&self) -> i64 {
         I self.error_code == 0 & self.status >= 200 & self.status < 300 {
             1
-        } E {
+        } EL {
             0
         }
     }
@@ -473,7 +473,7 @@ X HttpResponse {
     F is_redirect(&self) -> i64 {
         I self.error_code == 0 & self.status >= 300 & self.status < 400 {
             1
-        } E {
+        } EL {
             0
         }
     }
@@ -482,7 +482,7 @@ X HttpResponse {
     F is_client_error(&self) -> i64 {
         I self.error_code == 0 & self.status >= 400 & self.status < 500 {
             1
-        } E {
+        } EL {
             0
         }
     }
@@ -491,7 +491,7 @@ X HttpResponse {
     F is_server_error(&self) -> i64 {
         I self.error_code == 0 & self.status >= 500 & self.status < 600 {
             1
-        } E {
+        } EL {
             0
         }
     }
@@ -500,7 +500,7 @@ X HttpResponse {
     F body_text(&self) -> str {
         I self.body != 0 & self.body_len > 0 {
             self.body as str
-        } E {
+        } EL {
             ""
         }
     }
@@ -508,7 +508,7 @@ X HttpResponse {
     # Get a response header value by name (case-insensitive)
     F get_header(&self, name: str) -> str? {
         i := 0
-        L i < self.header_count {
+        LW i < self.header_count {
             offset := i * 16
             header_name := __load_ptr(self.headers + offset) as str
             I __str_eq_ignore_case(header_name, name) == 1 {
@@ -523,7 +523,7 @@ X HttpResponse {
     # Check if a response header exists
     F has_header(&self, name: str) -> i64 {
         i := 0
-        L i < self.header_count {
+        LW i < self.header_count {
             offset := i * 16
             header_name := __load_ptr(self.headers + offset) as str
             I __str_eq_ignore_case(header_name, name) == 1 {
@@ -610,7 +610,7 @@ X ConnectionPool {
     # Get a cached connection fd for host:port, or -1 if none
     F get(&self, host: str, port: i64) -> i64 {
         i := 0
-        L i < self.count {
+        LW i < self.count {
             offset := i * POOL_ENTRY_SIZE
             entry_host := __load_ptr(self.entries + offset) as str
             entry_port := __load_i64(self.entries + offset + 8)
@@ -631,7 +631,7 @@ X ConnectionPool {
     F put(&self, host: str, port: i64, fd: i64) -> i64 {
         # Try to find an empty slot
         i := 0
-        L i < self.count {
+        LW i < self.count {
             offset := i * POOL_ENTRY_SIZE
             entry_alive := __load_i64(self.entries + offset + 24)
             I entry_alive == 0 {
@@ -663,7 +663,7 @@ X ConnectionPool {
     # Close all pooled connections
     F close_all(&self) -> i64 {
         i := 0
-        L i < self.count {
+        LW i < self.count {
             offset := i * POOL_ENTRY_SIZE
             entry_alive := __load_i64(self.entries + offset + 24)
             I entry_alive == 1 {
@@ -764,7 +764,7 @@ X HttpClient {
     F send(&self, request: &HttpRequest) -> HttpResponse {
         # Apply default headers (if not already set)
         i := 0
-        L i < self.default_header_count {
+        LW i < self.default_header_count {
             offset := i * 16
             name := __load_ptr(self.default_headers + offset) as str
             value := __load_ptr(self.default_headers + offset + 8) as str
@@ -867,7 +867,7 @@ X HttpClient {
             recv_buf := __malloc(CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
             total_recv := 0
 
-            L true {
+            LW true {
                 n := __tls_read(tls, recv_buf + total_recv, CLIENT_RECV_CHUNK)
                 I n <= 0 {
                     B
@@ -882,7 +882,7 @@ X HttpClient {
                         I body_received >= content_len {
                             B
                         }
-                    } E {
+                    } EL {
                         B
                     }
                 }
@@ -916,10 +916,10 @@ X HttpClient {
                     },
                     None => response
                 }
-            } E {
+            } EL {
                 response
             }
-        } E {
+        } EL {
             # Plain HTTP path (unchanged)
             sent := __tcp_send(fd, send_buf, req_len)
             __free(send_buf)
@@ -933,7 +933,7 @@ X HttpClient {
             recv_buf := __malloc(CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
             total_recv := 0
 
-            L true {
+            LW true {
                 n := __tcp_recv(fd, recv_buf + total_recv, CLIENT_RECV_CHUNK)
                 I n <= 0 {
                     B
@@ -950,7 +950,7 @@ X HttpClient {
                         I body_received >= content_len {
                             B
                         }
-                    } E {
+                    } EL {
                         B
                     }
                 }
@@ -981,10 +981,10 @@ X HttpClient {
                 }
                 I should_close == 1 {
                     __tcp_close(fd)
-                } E {
+                } EL {
                     self.pool.put(host, port, fd)
                 }
-            } E {
+            } EL {
                 __tcp_close(fd)
             }
 
@@ -1003,7 +1003,7 @@ X HttpClient {
                     },
                     None => response
                 }
-            } E {
+            } EL {
                 response
             }
         }
@@ -1245,7 +1245,7 @@ F hex_digit_value(c: i64) -> i64 {
 F parse_chunk_size(buffer: i64, pos: i64) -> i64 {
     size := 0
     i := pos
-    L true {
+    LW true {
         c := load_byte(buffer + i)
         # Check for \r (end of hex digits line)
         I c == 13 {
@@ -1274,7 +1274,7 @@ F parse_chunked_body(buffer: i64, start: i64, total_len: i64) -> i64 {
     out_pos := 0
     pos := start
 
-    L true {
+    LW true {
         # Guard: ensure we haven't overrun the buffer
         I pos >= start + total_len {
             B
@@ -1284,7 +1284,7 @@ F parse_chunked_body(buffer: i64, start: i64, total_len: i64) -> i64 {
         chunk_size := parse_chunk_size(buffer, pos)
 
         # Advance past the hex size digits to the \r\n
-        L pos < start + total_len {
+        LW pos < start + total_len {
             c := load_byte(buffer + pos)
             # Stop at \r
             I c == 13 {
@@ -1296,7 +1296,7 @@ F parse_chunked_body(buffer: i64, start: i64, total_len: i64) -> i64 {
         # Skip \r\n after chunk size
         I pos + 1 < start + total_len {
             pos = pos + 2
-        } E {
+        } EL {
             B
         }
 
@@ -1317,7 +1317,7 @@ F parse_chunked_body(buffer: i64, start: i64, total_len: i64) -> i64 {
         # Skip the trailing \r\n after chunk data
         I pos + 1 < start + total_len {
             pos = pos + 2
-        } E {
+        } EL {
             B
         }
     }
@@ -1383,7 +1383,7 @@ F url_encode_char(c: i64, buf: i64, pos: i64) -> i64 {
 # Convert a 0-15 value to its ASCII hex digit (0-9 -> 48-57, A-F -> 65-70)
 F hex_nibble(n: i64) -> i64 {
     I n < 10 { n + 48 }
-    E { n - 10 + 65 }
+    EL { n - 10 + 65 }
 }
 
 # URL-encode a string (percent-encoding).
@@ -1395,7 +1395,7 @@ F url_encode(input: i64, input_len: i64) -> i64 {
     out_buf := __malloc(input_len * 3 + 1)
     out_pos := 0
     i := 0
-    L i < input_len {
+    LW i < input_len {
         c := load_byte(input + i)
         I c == 0 {
             B
@@ -1440,11 +1440,11 @@ F query_builder_new() -> i64 {
 # Returns the query builder pointer (for chaining).
 F query_builder_add(qb: i64, key: i64, value: i64) -> i64 {
     key_len := 0
-    L load_byte(key + key_len) != 0 {
+    LW load_byte(key + key_len) != 0 {
         key_len = key_len + 1
     }
     val_len := 0
-    L load_byte(value + val_len) != 0 {
+    LW load_byte(value + val_len) != 0 {
         val_len = val_len + 1
     }
 
@@ -1452,11 +1452,11 @@ F query_builder_add(qb: i64, key: i64, value: i64) -> i64 {
     enc_key := url_encode(key, key_len)
     enc_val := url_encode(value, val_len)
     enc_key_len := 0
-    L load_byte(enc_key + enc_key_len) != 0 {
+    LW load_byte(enc_key + enc_key_len) != 0 {
         enc_key_len = enc_key_len + 1
     }
     enc_val_len := 0
-    L load_byte(enc_val + enc_val_len) != 0 {
+    LW load_byte(enc_val + enc_val_len) != 0 {
         enc_val_len = enc_val_len + 1
     }
 
@@ -1574,7 +1574,7 @@ F response_header_at(resp: &HttpResponse, index: i64) -> str {
 F response_is_success(status: i64) -> i64 {
     I status >= 200 & status < 300 {
         1
-    } E {
+    } EL {
         0
     }
 }
@@ -1583,7 +1583,7 @@ F response_is_success(status: i64) -> i64 {
 F response_is_redirect(status: i64) -> i64 {
     I status >= 300 & status < 400 {
         1
-    } E {
+    } EL {
         0
     }
 }
@@ -1592,7 +1592,7 @@ F response_is_redirect(status: i64) -> i64 {
 F response_is_client_error(status: i64) -> i64 {
     I status >= 400 & status < 500 {
         1
-    } E {
+    } EL {
         0
     }
 }
@@ -1601,7 +1601,7 @@ F response_is_client_error(status: i64) -> i64 {
 F response_is_server_error(status: i64) -> i64 {
     I status >= 500 & status < 600 {
         1
-    } E {
+    } EL {
         0
     }
 }

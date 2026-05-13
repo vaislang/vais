@@ -55,6 +55,7 @@ mod emit;
 mod error;
 mod expr;
 mod expr_helpers;
+mod expr_helpers_assign;
 mod expr_helpers_call;
 mod expr_helpers_control;
 mod expr_helpers_data;
@@ -122,7 +123,7 @@ use vais_types::ResolvedType;
 
 /// Maximum recursion depth for type resolution to prevent stack overflow
 /// This limit protects against infinite recursive types like: type A = B; type B = A;
-const MAX_TYPE_RECURSION_DEPTH: usize = 128;
+const MAX_TYPE_RECURSION_DEPTH: usize = 64;
 
 /// Escape a string for use in LLVM IR string constants.
 ///
@@ -150,10 +151,6 @@ pub(crate) fn escape_llvm_string(s: &str) -> String {
     result
 }
 
-#[cfg(test)]
-use diagnostics::edit_distance;
-#[cfg(test)]
-pub(crate) use diagnostics::suggest_type_conversion;
 pub(crate) use diagnostics::{format_did_you_mean, suggest_similar};
 pub use target::TargetTriple;
 // Re-export type structs from types module
@@ -198,8 +195,19 @@ pub struct CodeGenerator {
     // Flag to emit __sync_spawn__poll function for sync spawn→Future wrapping
     needs_sync_spawn_poll: bool,
 
+    // Flag to emit llvm.memcpy intrinsic declaration (used by typed memory ops on large structs)
+    needs_llvm_memcpy: bool,
+
     // Flag to emit string helper functions
     needs_string_helpers: bool,
+
+    // Flag to emit Vec<str> container ownership helpers (RFC-002 §4.1/§4.4).
+    // Set by Vec_push$str call-site wrapping (Phase 191 #2a').
+    needs_vec_str_helpers: bool,
+
+    // Struct types that need __vais_struct_shallow_free_{Name} emission (RFC-002 §4.2).
+    // Populated by scope/function-exit drop cleanup when a struct with has_owned_mask is dropped.
+    needs_struct_shallow: std::collections::HashSet<String>,
 
     // Debug info builder for DWARF metadata generation
     debug_info: DebugInfoBuilder,
@@ -225,6 +233,9 @@ pub struct CodeGenerator {
     // Type recursion depth tracking (prevents infinite recursion)
     type_recursion_depth: std::cell::Cell<usize>,
 
+    // Sizeof visited set (prevents infinite recursion for circular struct references)
+    sizeof_visited: std::cell::RefCell<std::collections::HashSet<String>>,
+
     // WASM import metadata: function_name -> (module_name, import_name)
     pub(crate) wasm_imports: HashMap<String, (String, String)>,
 
@@ -243,11 +254,19 @@ pub struct CodeGenerator {
     pub multi_error_mode: bool,
     pub(crate) collected_errors: Vec<SpannedCodegenError>,
 
-    // When true, ICE-level type fallbacks (Var, Unknown, Lifetime, HKT,
-    // ImplTrait reaching codegen) are promoted from warnings to hard errors.
-    // Default: false (backward compatible — i64 fallback with warning).
-    // Set to true via `set_strict_type_mode(true)` for stricter validation.
+    // When true, ICE-level type fallbacks (Var, Unknown, Lifetime reaching
+    // codegen) are promoted from warnings to hard errors.
+    // Default: true. Can be disabled via `set_strict_type_mode(false)` or
+    // `VAIS_STRICT_TYPE_MODE=0` env var.
     pub strict_type_mode: bool,
+
+    // Phase 191 v3 (2026-04-11, iter 15): the historical `i64` fallback for
+    // un-monomorphized `Generic(_)` / `ConstGeneric(_)` was removed entirely.
+    // Any such type reaching `type_to_llvm` now aborts codegen with an
+    // ICE-level `InternalError`. The previous `strict_generic_mode` opt-in
+    // flag, its setter, and the `VAIS_STRICT_GENERIC` env var are all gone —
+    // the only remaining behavior is "strict." Keep this comment anchor so
+    // future PRs can grep `Phase 191` and find the full history.
 
     // String interning pool for identifier deduplication.
     // Reduces memory usage by storing each unique function/struct/variable name once.
@@ -268,6 +287,17 @@ pub struct CodeGenerator {
 
     // Counter for unique global constant names
     pub(crate) ref_constant_counter: usize,
+
+    // Expression types from type checker, keyed by (span.start, span.end).
+    // Used by infer_expr_type to look up TC-resolved types before falling back
+    // to the legacy inference heuristics.
+    pub(crate) expr_types: HashMap<(usize, usize), ResolvedType>,
+
+    // Argument spans that were implicitly unwrapped by the implicit error
+    // propagation pass (Phase 4b.1 / #7, `--implicit-try`). For each span
+    // present, the call-site arg is wrapped as if the user had written `?`
+    // on it, reusing the existing `Expr::Try` codegen path.
+    pub(crate) implicit_try_sites: std::collections::HashSet<(usize, usize)>,
 }
 
 #[cfg(test)]

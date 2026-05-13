@@ -25,13 +25,13 @@ X RangeIter: Iterator {
             val := self.current
             self.current = self.current + 1
             val
-        } E {
+        } EL {
             0 - 1
         }
     }
 
     F has_more(&self) -> i64 {
-        I self.current < self.end { 1 } E { 0 }
+        I self.current < self.end { 1 } EL { 0 }
     }
 }
 
@@ -65,7 +65,7 @@ X FibIter: Iterator {
     F next(&self) -> i64 {
         I self.count >= self.max_count {
             0 - 1
-        } E {
+        } EL {
             current := self.a
             self.a = self.b
             self.b = current + self.b
@@ -75,7 +75,7 @@ X FibIter: Iterator {
     }
 
     F has_more(&self) -> i64 {
-        I self.count < self.max_count { 1 } E { 0 }
+        I self.count < self.max_count { 1 } EL { 0 }
     }
 }
 

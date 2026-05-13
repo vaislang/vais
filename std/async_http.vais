@@ -125,15 +125,15 @@ X AsyncHttpRequest {
     }
 
     F is_get(&self) -> i64 {
-        I self.method == ASYNC_HTTP_GET { 1 } E { 0 }
+        I self.method == ASYNC_HTTP_GET { 1 } EL { 0 }
     }
 
     F is_post(&self) -> i64 {
-        I self.method == ASYNC_HTTP_POST { 1 } E { 0 }
+        I self.method == ASYNC_HTTP_POST { 1 } EL { 0 }
     }
 
     F has_body(&self) -> i64 {
-        I self.body_len > 0 { 1 } E { 0 }
+        I self.body_len > 0 { 1 } EL { 0 }
     }
 }
 
@@ -255,7 +255,7 @@ X Route {
     F matches(&self, method: i64, path: str) -> i64 {
         I self.method != method { R 0 }
         # Simple exact match (no path params in async version)
-        I self.path == path { 1 } E { 0 }
+        I self.path == path { 1 } EL { 0 }
     }
 }
 
@@ -614,30 +614,30 @@ X HttpParser {
         I first == 71 {
             self.method = ASYNC_HTTP_GET
             self.pos = 4    # "GET "
-        } E I first == 80 {
+        } EL I first == 80 {
             second := load_byte(self.buf + 1)
             I second == 79 {
                 self.method = ASYNC_HTTP_POST
                 self.pos = 5    # "POST "
-            } E I second == 85 {
+            } EL I second == 85 {
                 self.method = ASYNC_HTTP_PUT
                 self.pos = 4    # "PUT "
-            } E I second == 65 {
+            } EL I second == 65 {
                 self.method = ASYNC_HTTP_PATCH
                 self.pos = 6    # "PATCH "
-            } E {
+            } EL {
                 R -1
             }
-        } E I first == 68 {
+        } EL I first == 68 {
             self.method = ASYNC_HTTP_DELETE
             self.pos = 7    # "DELETE "
-        } E I first == 72 {
+        } EL I first == 72 {
             self.method = ASYNC_HTTP_HEAD
             self.pos = 5    # "HEAD "
-        } E I first == 79 {
+        } EL I first == 79 {
             self.method = ASYNC_HTTP_OPTIONS
             self.pos = 8    # "OPTIONS "
-        } E {
+        } EL {
             R -1
         }
 
@@ -795,7 +795,7 @@ X ConnectionPool {
     }
 
     F is_empty(&self) -> i64 {
-        I self.count == 0 { 1 } E { 0 }
+        I self.count == 0 { 1 } EL { 0 }
     }
 }
 
@@ -857,7 +857,7 @@ F cors_middleware() -> Middleware {
 # Simple route matcher utility
 # Returns 1 if path matches pattern, 0 otherwise
 F path_matches(path: str, pattern: str) -> i64 {
-    I path == pattern { 1 } E { 0 }
+    I path == pattern { 1 } EL { 0 }
 }
 
 # Parse query string parameter (simple key=value extraction)

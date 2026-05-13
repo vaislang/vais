@@ -1,6 +1,9 @@
 # Ecosystem Packages
 
-Vais provides a growing ecosystem of pure-Vais packages for common tasks. These packages are implemented entirely in Vais, demonstrating the language's capabilities while providing production-ready functionality.
+Vais provides a growing ecosystem of pure-Vais packages for common tasks. These
+packages are implemented in Vais and tracked by explicit package/runtime gates;
+do not treat them as broadly deployment-ready unless the page names the gate that
+certifies the claim.
 
 ## Available Packages
 
@@ -16,7 +19,7 @@ Vais provides a growing ecosystem of pure-Vais packages for common tasks. These 
 
 **Usage:**
 ```vais
-U vais_crc32.{crc32_ieee, crc32_castagnoli}
+use vais_crc32.{crc32_ieee, crc32_castagnoli}
 
 data := "Hello, Vais!".as_bytes()
 checksum := crc32_ieee(data[..])
@@ -39,7 +42,7 @@ print_u32(checksum)
 
 **Usage:**
 ```vais
-U vais_lz4.{compress, decompress}
+use vais_lz4.{compress, decompress}
 
 original := "The quick brown fox jumps over the lazy dog"
 compressed := compress(original.as_bytes())
@@ -69,7 +72,7 @@ print(String::from_bytes(decompressed))
 
 **Usage:**
 ```vais
-U vais_aes.{Aes256, BlockMode}
+use vais_aes.{Aes256, BlockMode}
 
 key := [0u8; 32]    # 256-bit key
 iv := [0u8; 16]     # Initialization vector (for CBC/CTR)
@@ -105,13 +108,13 @@ print(String::from_bytes(decrypted))    # "Secret message"
 
 **Usage:**
 ```vais
-U vais_json.{parse, stringify, JsonValue}
+use vais_json.{parse, stringify, JsonValue}
 
 # Parsing
 json_str := '{"name": "Vais", "version": 1.0, "features": ["fast", "safe"]}'
 value := parse(json_str)
 
-M value {
+match value {
     JsonValue::Object(obj) => {
         name := obj.get("name")
         print(name)    # "Vais"
@@ -149,7 +152,7 @@ print(output)
 
 **Usage:**
 ```vais
-U vais_csv.{CsvReader, CsvWriter}
+use vais_csv.{CsvReader, CsvWriter}
 
 # Reading
 csv := "name,age,city\nAlice,30,NYC\nBob,25,LA"
@@ -202,9 +205,9 @@ vais pkg add vais-json@1.0.0
 Use the `U` (use) keyword to import package modules:
 
 ```vais
-U vais_json.{parse, stringify}
-U vais_crc32.crc32_ieee
-U vais_aes.Aes256
+use vais_json.{parse, stringify}
+use vais_crc32.crc32_ieee
+use vais_aes.Aes256
 ```
 
 ### Building
@@ -296,7 +299,7 @@ See [CONTRIBUTING.md](../contributing/contributing.md) for details.
 
 **Usage:**
 ```vais
-U vais_base64.{encode, decode}
+use vais_base64.{encode, decode}
 
 data := "Hello, Vais!".as_bytes()
 encoded := encode(data[..])
@@ -323,7 +326,7 @@ print(String::from_bytes(decoded))    # "Hello, Vais!"
 
 **Usage:**
 ```vais
-U vais_sha256.{sha256, hash_to_hex}
+use vais_sha256.{sha256, hash_to_hex}
 
 data := "Hello, Vais!".as_bytes()
 hash := sha256(data[..])
@@ -351,7 +354,7 @@ print(hex_str)    # "a591a6d4..."
 
 **Usage:**
 ```vais
-U vais_uuid.{generate_v4, uuid_to_string}
+use vais_uuid.{generate_v4, uuid_to_string}
 
 uuid := generate_v4()
 uuid_str := uuid_to_string(uuid)
@@ -376,12 +379,12 @@ print(uuid_str)    # "550e8400-e29b-41d4-a716-446655440000"
 
 **Usage:**
 ```vais
-U vais_regex.{compile, match}
+use vais_regex.{compile, match}
 
 pattern := compile("^[a-z]+@[a-z]+\\.[a-z]+$")
 I match(pattern, "user@example.com") {
     print("Valid email")
-} E {
+} else {
     print("Invalid email")
 }
 ```

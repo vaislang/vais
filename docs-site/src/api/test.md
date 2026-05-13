@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/test
+use std/test
 ```
 
 ## Constants
@@ -24,7 +24,7 @@ U std/test
 ### TestResult
 
 ```vais
-S TestResult { name: str, status: i64, message: str, duration_ns: i64, file: str, line: i64 }
+struct TestResult { name: str, status: i64, message: str, duration_ns: i64, file: str, line: i64 }
 ```
 
 | Method | Description |
@@ -41,7 +41,7 @@ S TestResult { name: str, status: i64, message: str, duration_ns: i64, file: str
 ### TestCase
 
 ```vais
-S TestCase { name: str, fn_ptr: i64, ... }
+struct TestCase { name: str, fn_ptr: i64, ... }
 ```
 
 | Method | Description |
@@ -59,7 +59,7 @@ S TestCase { name: str, fn_ptr: i64, ... }
 ### TestSuite
 
 ```vais
-S TestSuite { name: str, tests: i64, ... }
+struct TestSuite { name: str, tests: i64, ... }
 ```
 
 | Method | Description |
@@ -88,7 +88,7 @@ S TestSuite { name: str, tests: i64, ... }
 ### TestRunner
 
 ```vais
-S TestRunner { suites: i64, ... }
+struct TestRunner { suites: i64, ... }
 ```
 
 | Method | Description |
@@ -130,9 +130,9 @@ S TestRunner { suites: i64, ... }
 ## Usage
 
 ```vais
-U std/test
+use std/test
 
-F test_addition() -> TestResult {
+fn test_addition() -> TestResult {
     result := 2 + 2
     assert_eq(result, 4)
     TestResult::passed("test_addition", 0)

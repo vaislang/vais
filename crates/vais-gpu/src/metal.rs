@@ -760,7 +760,6 @@ pub fn generate_host_code(kernels: &[GpuKernel], library_name: &str) -> String {
     code
 }
 
-
 #[cfg(test)]
 #[path = "metal_tests.rs"]
 mod metal_tests;

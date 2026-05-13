@@ -1,6 +1,6 @@
 # Result and error handling test - minimal
 
-E MyResult {
+EN MyResult {
     MyOk(i64),
     MyErr(i64)
 }

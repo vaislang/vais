@@ -47,6 +47,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             .build_pointer_cast(ptr, i32_type.ptr_type(AddressSpace::default()), "i32ptr")
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?;
         for i in 0..4u32 {
+            // SAFETY: GEP index i is in 0..4, within the malloc'd 16-byte (4 x i32) buffer.
             let gep = unsafe {
                 builder
                     .build_gep(
@@ -96,6 +97,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             .build_pointer_cast(ptr, f32_type.ptr_type(AddressSpace::default()), "f32ptr")
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?;
         for i in 0..4u32 {
+            // SAFETY: GEP index i is in 0..4, within the malloc'd 16-byte (4 x f32) buffer.
             let gep = unsafe {
                 builder
                     .build_gep(
@@ -140,6 +142,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             .build_pointer_cast(ptr, i64_type.ptr_type(AddressSpace::default()), "i64ptr")
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?;
         for i in 0..2u32 {
+            // SAFETY: GEP index i is in 0..2, within the malloc'd 16-byte (2 x i64) buffer.
             let gep = unsafe {
                 builder
                     .build_gep(
@@ -170,6 +173,7 @@ pub(super) fn define_simd_builtins<'ctx>(
         ("simd_add_vec4i32", "add"),
         ("simd_sub_vec4i32", "sub"),
         ("simd_mul_vec4i32", "mul"),
+        ("simd_div_vec4i32", "sdiv"),
     ] {
         let fn_type = i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into()], false);
         let func = module.add_function(name, fn_type, None);
@@ -207,11 +211,13 @@ pub(super) fn define_simd_builtins<'ctx>(
 
         for i in 0..4u32 {
             let idx = i32_type.const_int(i as u64, false);
+            // SAFETY: GEP indices are in 0..4, within the caller-provided 4 x i32 vectors.
             let a_gep = unsafe {
                 builder
                     .build_gep(i32_type, a_ptr, &[idx], "a_gep")
                     .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
             };
+            // SAFETY: Same as a_gep — index in 0..4, within 4 x i32 vector b.
             let b_gep = unsafe {
                 builder
                     .build_gep(i32_type, b_ptr, &[idx], "b_gep")
@@ -235,16 +241,14 @@ pub(super) fn define_simd_builtins<'ctx>(
                 "mul" => builder
                     .build_int_mul(a_val, b_val, "r")
                     .map_err(|e| format!("ICE: inkwell builtins: {e}"))?,
+                "sdiv" => builder
+                    .build_int_signed_div(a_val, b_val, "r")
+                    .map_err(|e| format!("ICE: inkwell builtins: {e}"))?,
                 _ => {
-                    eprintln!(
-                        "[ICE] unexpected SIMD operation in vec4i32: {} — using add as fallback",
-                        op
-                    );
-                    builder
-                        .build_int_add(a_val, b_val, "r")
-                        .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
+                    return Err(format!("ICE: unexpected SIMD operation in vec4i32: {op}"));
                 }
             };
+            // SAFETY: GEP index in 0..4, within the freshly malloc'd 16-byte (4 x i32) output buffer.
             let o_gep = unsafe {
                 builder
                     .build_gep(i32_type, out_i32, &[idx], "o_gep")
@@ -276,6 +280,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?;
         let mut sum = i64_type.const_int(0, false);
         for i in 0..4u32 {
+            // SAFETY: GEP index i is in 0..4, within the caller-provided 4 x i32 vector.
             let gep = unsafe {
                 builder
                     .build_gep(
@@ -319,6 +324,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?;
         let mut prod = i64_type.const_int(1, false);
         for i in 0..4u32 {
+            // SAFETY: GEP index i is in 0..4, within the caller-provided 4 x i32 vector.
             let gep = unsafe {
                 builder
                     .build_gep(
@@ -388,11 +394,13 @@ pub(super) fn define_simd_builtins<'ctx>(
 
         for i in 0..4u32 {
             let idx = i32_type.const_int(i as u64, false);
+            // SAFETY: GEP indices are in 0..4, within the caller-provided 4 x f32 vectors.
             let a_gep = unsafe {
                 builder
                     .build_gep(f32_type, a_ptr, &[idx], "a_gep")
                     .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
             };
+            // SAFETY: Same as a_gep — index in 0..4, within 4 x f32 vector b.
             let b_gep = unsafe {
                 builder
                     .build_gep(f32_type, b_ptr, &[idx], "b_gep")
@@ -420,15 +428,10 @@ pub(super) fn define_simd_builtins<'ctx>(
                     .build_float_div(a_val, b_val, "r")
                     .map_err(|e| format!("ICE: inkwell builtins: {e}"))?,
                 _ => {
-                    eprintln!(
-                        "[ICE] unexpected SIMD operation in vec4f32: {} — using fadd as fallback",
-                        op
-                    );
-                    builder
-                        .build_float_add(a_val, b_val, "r")
-                        .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
+                    return Err(format!("ICE: unexpected SIMD operation in vec4f32: {op}"));
                 }
             };
+            // SAFETY: GEP index in 0..4, within the freshly malloc'd 16-byte (4 x f32) output buffer.
             let o_gep = unsafe {
                 builder
                     .build_gep(f32_type, out_f32, &[idx], "o_gep")
@@ -460,6 +463,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?;
         let mut sum = f64_type.const_float(0.0);
         for i in 0..4u32 {
+            // SAFETY: GEP index i is in 0..4, within the caller-provided 4 x f32 vector.
             let gep = unsafe {
                 builder
                     .build_gep(
@@ -503,6 +507,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?;
         let mut prod = f64_type.const_float(1.0);
         for i in 0..4u32 {
+            // SAFETY: GEP index i is in 0..4, within the caller-provided 4 x f32 vector.
             let gep = unsafe {
                 builder
                     .build_gep(
@@ -556,11 +561,13 @@ pub(super) fn define_simd_builtins<'ctx>(
         let mut sum = f64_type.const_float(0.0);
         for i in 0..4u32 {
             let idx = i32_type.const_int(i as u64, false);
+            // SAFETY: GEP index i is in 0..4, within the caller-provided 4 x f32 vector a.
             let a_gep = unsafe {
                 builder
                     .build_gep(f32_type, a_ptr, &[idx], "a_gep")
                     .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
             };
+            // SAFETY: GEP index i is in 0..4, within the caller-provided 4 x f32 vector b.
             let b_gep = unsafe {
                 builder
                     .build_gep(f32_type, b_ptr, &[idx], "b_gep")
@@ -614,6 +621,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             .build_pointer_cast(ptr, f32_type.ptr_type(AddressSpace::default()), "f32ptr")
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?;
         for i in 0..4u32 {
+            // SAFETY: GEP index i is in 0..4, within the malloc'd 16-byte (4 x f32) buffer.
             let gep = unsafe {
                 builder
                     .build_gep(
@@ -659,6 +667,8 @@ pub(super) fn define_simd_builtins<'ctx>(
             .get_nth_param(1)
             .ok_or("ICE: builtin function missing parameter")?
             .into_int_value();
+        // SAFETY: GEP uses runtime index from caller — bounds checking is the caller's
+        // responsibility. The pointer is cast from a valid i8* SIMD vector allocation.
         let gep = unsafe {
             builder
                 .build_gep(f32_type, a_ptr, &[idx], "gep")
@@ -712,11 +722,13 @@ pub(super) fn define_simd_builtins<'ctx>(
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?;
         for i in 0..2u32 {
             let idx = i32_type.const_int(i as u64, false);
+            // SAFETY: GEP indices are in 0..2, within the caller-provided 2 x i64 vectors.
             let a_gep = unsafe {
                 builder
                     .build_gep(i64_type, a_ptr, &[idx], "a_gep")
                     .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
             };
+            // SAFETY: Same as a_gep — index in 0..2, within 2 x i64 vector b.
             let b_gep = unsafe {
                 builder
                     .build_gep(i64_type, b_ptr, &[idx], "b_gep")
@@ -733,6 +745,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             let result = builder
                 .build_int_add(a_val, b_val, "r")
                 .map_err(|e| format!("ICE: inkwell builtins: {e}"))?;
+            // SAFETY: GEP index in 0..2, within the freshly malloc'd 16-byte (2 x i64) output buffer.
             let o_gep = unsafe {
                 builder
                     .build_gep(i64_type, out_i64, &[idx], "o_gep")
@@ -764,6 +777,7 @@ pub(super) fn define_simd_builtins<'ctx>(
             .map_err(|e| format!("ICE: inkwell builtins: {e}"))?;
         let mut sum = i64_type.const_int(0, false);
         for i in 0..2u32 {
+            // SAFETY: GEP index i is in 0..2, within the caller-provided 2 x i64 vector.
             let gep = unsafe {
                 builder
                     .build_gep(

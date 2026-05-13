@@ -11,7 +11,7 @@ F fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
 # === Algorithm 2: Sum 1 to N (Iterative with Loop) ===
 # Uses tail recursion to simulate iteration
 F sum_to_n_helper(n: i64, acc: i64) -> i64 =
-    I n == 0 { acc } E { @(n - 1, acc + n) }
+    I n == 0 { acc } EL { @(n - 1, acc + n) }
 
 F sum_to_n(n: i64) -> i64 = sum_to_n_helper(n, 0)
 
@@ -19,20 +19,20 @@ F sum_to_n(n: i64) -> i64 = sum_to_n_helper(n, 0)
 # Trial division primality test helper
 F is_prime_helper(n: i64, d: i64) -> i64 =
     I d * d > n { 1 }
-    E I n % d == 0 { 0 }
-    E { @(n, d + 2) }
+    EL I n % d == 0 { 0 }
+    EL { @(n, d + 2) }
 
 # Check if n is prime (returns 1 for prime, 0 for not)
 F is_prime(n: i64) -> i64 =
     I n < 2 { 0 }
-    E I n < 4 { 1 }
-    E I n % 2 == 0 { 0 }
-    E { is_prime_helper(n, 3) }
+    EL I n < 4 { 1 }
+    EL I n % 2 == 0 { 0 }
+    EL { is_prime_helper(n, 3) }
 
 # Count primes up to n using tail recursion
 F count_primes_helper(n: i64, current: i64, count: i64) -> i64 =
     I current > n { count }
-    E { @(n, current + 1, count + is_prime(current)) }
+    EL { @(n, current + 1, count + is_prime(current)) }
 
 F count_primes(n: i64) -> i64 = count_primes_helper(n, 2, 0)
 

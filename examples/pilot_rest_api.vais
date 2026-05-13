@@ -27,18 +27,18 @@ F strlen_ptr(s: i64) -> i64 {
 
 F strlen_rec(s: i64, idx: i64) -> i64 {
     I load_byte(s + idx) == 0 { idx }
-    E { strlen_rec(s, idx + 1) }
+    EL { strlen_rec(s, idx + 1) }
 }
 
 F copy_bytes(dst: i64, src: i64, len: i64, idx: i64) -> i64 {
-    I idx >= len { 0 } E {
+    I idx >= len { 0 } EL {
         store_byte(dst + idx, load_byte(src + idx))
         copy_bytes(dst, src, len, idx + 1)
     }
 }
 
 F mem_zero(ptr: i64, count: i64, idx: i64) -> i64 {
-    I idx >= count { 0 } E {
+    I idx >= count { 0 } EL {
         store_i64(ptr + idx * 8, 0)
         mem_zero(ptr, count, idx + 1)
     }
@@ -50,8 +50,8 @@ F str_eq_ptr(a: i64, b: i64, len: i64) -> i64 {
 
 F str_eq_rec(a: i64, b: i64, len: i64, idx: i64) -> i64 {
     I idx >= len { 1 }
-    E I load_byte(a + idx) != load_byte(b + idx) { 0 }
-    E { str_eq_rec(a, b, len, idx + 1) }
+    EL I load_byte(a + idx) != load_byte(b + idx) { 0 }
+    EL { str_eq_rec(a, b, len, idx + 1) }
 }
 
 # =====================================================
@@ -85,7 +85,7 @@ F buf_ensure(b: i64, needed: i64) -> i64 {
     I load_i64(b + 8) + needed >= load_i64(b + 16) {
         buf_grow(b)
         buf_ensure(b, needed)
-    } E { 0 }
+    } EL { 0 }
 }
 
 F buf_push_byte(b: i64, c: i64) -> i64 {
@@ -102,7 +102,7 @@ F buf_push_str(b: i64, s: i64, slen: i64) -> i64 {
 }
 
 F buf_push_str_rec(b: i64, s: i64, slen: i64, idx: i64) -> i64 {
-    I idx >= slen { 0 } E {
+    I idx >= slen { 0 } EL {
         buf_push_byte(b, load_byte(s + idx))
         buf_push_str_rec(b, s, slen, idx + 1)
     }
@@ -137,8 +137,8 @@ F i64_to_str(n: i64) -> i64 {
         store_byte(buf + 1, 0)
         R buf
     }
-    is_neg := I n < 0 { 1 } E { 0 }
-    abs_n := I is_neg == 1 { 0 - n } E { n }
+    is_neg := I n < 0 { 1 } EL { 0 }
+    abs_n := I is_neg == 1 { 0 - n } EL { n }
     digits := count_digits(abs_n, 0)
     total := digits + is_neg
     buf := malloc(total + 1)
@@ -150,12 +150,12 @@ F i64_to_str(n: i64) -> i64 {
 
 F count_digits(n: i64, acc: i64) -> i64 {
     I n == 0 { acc }
-    E { count_digits(n / 10, acc + 1) }
+    EL { count_digits(n / 10, acc + 1) }
 }
 
 F fill_digits(buf: i64, n: i64, pos: i64) -> i64 {
     I n == 0 { 0 }
-    E {
+    EL {
         store_byte(buf + pos, n % 10 + 48)
         fill_digits(buf, n / 10, pos - 1)
     }
@@ -164,21 +164,21 @@ F fill_digits(buf: i64, n: i64, pos: i64) -> i64 {
 # String to integer
 F str_to_i64(s: i64, len: i64) -> i64 {
     I len == 0 { 0 }
-    E {
-        is_neg := I load_byte(s) == 45 { 1 } E { 0 }
+    EL {
+        is_neg := I load_byte(s) == 45 { 1 } EL { 0 }
         start := is_neg
         val := parse_int_rec(s, len, start, 0)
-        I is_neg == 1 { 0 - val } E { val }
+        I is_neg == 1 { 0 - val } EL { val }
     }
 }
 
 F parse_int_rec(s: i64, len: i64, idx: i64, acc: i64) -> i64 {
     I idx >= len { acc }
-    E {
+    EL {
         c := load_byte(s + idx)
         I c >= 48 && c <= 57 {
             parse_int_rec(s, len, idx + 1, acc * 10 + (c - 48))
-        } E { acc }
+        } EL { acc }
     }
 }
 
@@ -191,10 +191,10 @@ F hash_str(s: i64, len: i64) -> i64 {
 }
 
 F hash_str_rec(s: i64, len: i64, idx: i64, h: i64) -> i64 {
-    I idx >= len { h } E {
+    I idx >= len { h } EL {
         c := load_byte(s + idx)
         new_h := h * 33 + c
-        abs_h := I new_h < 0 { 0 - new_h } E { new_h }
+        abs_h := I new_h < 0 { 0 - new_h } EL { new_h }
         hash_str_rec(s, len, idx + 1, abs_h)
     }
 }
@@ -240,11 +240,11 @@ F tbl_set(tbl: i64, key: i64, key_len: i64, value: i64) -> i64 {
 
 F tbl_find_node(nd: i64, key: i64, key_len: i64) -> i64 {
     I nd == 0 { 0 }
-    E {
+    EL {
         nk := load_i64(nd)
         nk_len := load_i64(nd + 8)
         I nk_len == key_len && str_eq_ptr(nk, key, key_len) == 1 { nd }
-        E { tbl_find_node(load_i64(nd + 24), key, key_len) }
+        EL { tbl_find_node(load_i64(nd + 24), key, key_len) }
     }
 }
 
@@ -254,7 +254,7 @@ F tbl_get(tbl: i64, key: i64, key_len: i64) -> i64 {
     h := hash_str(key, key_len) % cap
     nd := tbl_find_node(load_i64(buckets + h * 8), key, key_len)
     I nd == 0 { 0 }
-    E { load_i64(nd + 16) }
+    EL { load_i64(nd + 16) }
 }
 
 F tbl_delete(tbl: i64, key: i64, key_len: i64) -> i64 {
@@ -269,7 +269,7 @@ F tbl_delete(tbl: i64, key: i64, key_len: i64) -> i64 {
 F tbl_delete_chain(prev_ptr: i64, key: i64, key_len: i64) -> i64 {
     nd := load_i64(prev_ptr)
     I nd == 0 { 0 }
-    E {
+    EL {
         nk := load_i64(nd)
         nk_len := load_i64(nd + 8)
         I nk_len == key_len && str_eq_ptr(nk, key, key_len) == 1 {
@@ -279,7 +279,7 @@ F tbl_delete_chain(prev_ptr: i64, key: i64, key_len: i64) -> i64 {
             free(nk)
             free(nd)
             1
-        } E {
+        } EL {
             tbl_delete_chain(nd + 24, key, key_len)
         }
     }
@@ -298,7 +298,7 @@ F tbl_entries(tbl: i64) -> i64 {
 }
 
 F tbl_collect_buckets(buckets: i64, cap: i64, idx: i64, result: i64) -> i64 {
-    I idx >= cap { 0 } E {
+    I idx >= cap { 0 } EL {
         nd := load_i64(buckets + idx * 8)
         tbl_collect_chain(nd, result)
         tbl_collect_buckets(buckets, cap, idx + 1, result)
@@ -306,7 +306,7 @@ F tbl_collect_buckets(buckets: i64, cap: i64, idx: i64, result: i64) -> i64 {
 }
 
 F tbl_collect_chain(nd: i64, result: i64) -> i64 {
-    I nd == 0 { 0 } E {
+    I nd == 0 { 0 } EL {
         arr := load_i64(result)
         count := load_i64(result + 8)
         store_i64(arr + count * 8, nd)
@@ -378,21 +378,21 @@ F parse_request(raw: i64, raw_len: i64) -> i64 {
 
 F find_byte(data: i64, len: i64, target: i64, start: i64) -> i64 {
     I start >= len { 0 - 1 }
-    E I load_byte(data + start) == target { start }
-    E { find_byte(data, len, target, start + 1) }
+    EL I load_byte(data + start) == target { start }
+    EL { find_byte(data, len, target, start + 1) }
 }
 
 F find_double_crlf(data: i64, len: i64, idx: i64) -> i64 {
     I idx + 3 >= len { 0 - 1 }
-    E I load_byte(data + idx) == 13 && load_byte(data + idx + 1) == 10 && load_byte(data + idx + 2) == 13 && load_byte(data + idx + 3) == 10 {
+    EL I load_byte(data + idx) == 13 && load_byte(data + idx + 1) == 10 && load_byte(data + idx + 2) == 13 && load_byte(data + idx + 3) == 10 {
         idx + 4
     }
-    E { find_double_crlf(data, len, idx + 1) }
+    EL { find_double_crlf(data, len, idx + 1) }
 }
 
 F parse_headers_rec(raw: i64, start: i64, end_pos: i64, headers: i64) -> i64 {
     I start >= end_pos { 0 }
-    E {
+    EL {
         # Find colon
         colon := find_byte(raw, end_pos, 58, start)  # ':'
         I colon < 0 { R 0 }
@@ -418,7 +418,7 @@ F req_is_method(r: i64, method: i64) -> i64 {
     m_len := req_method_len(r)
     expected_len := strlen_ptr(method)
     I m_len != expected_len { 0 }
-    E { str_eq_ptr(m, method, m_len) }
+    EL { str_eq_ptr(m, method, m_len) }
 }
 
 # =====================================================
@@ -610,7 +610,7 @@ F router_match(router: i64, req: i64) -> i64 {
 
 F router_match_rec(routes: i64, count: i64, idx: i64, req: i64) -> i64 {
     I idx >= count { 0 - 1 }
-    E {
+    EL {
         offset := idx * 40
         r_method := load_i64(routes + offset)
         r_method_len := load_i64(routes + offset + 8)
@@ -640,7 +640,7 @@ F path_match_rec(path: i64, path_len: i64, pi: i64, pat: i64, pat_len: i64, qi: 
     # Both exhausted: match
     I pi >= path_len && qi >= pat_len { 1 }
     # Pattern has :param segment
-    E I qi < pat_len && load_byte(pat + qi) == 58 {
+    EL I qi < pat_len && load_byte(pat + qi) == 58 {
         # Skip param name in pattern until '/' or end
         next_slash_q := find_byte(pat, pat_len, 47, qi)
         # Skip actual value in path until '/' or end
@@ -649,21 +649,21 @@ F path_match_rec(path: i64, path_len: i64, pi: i64, pat: i64, pat_len: i64, qi: 
             # Both end without more slashes
             1
         }
-        E I next_slash_q < 0 && next_slash_p >= 0 { 0 }
-        E I next_slash_q >= 0 && next_slash_p < 0 { 0 }
-        E {
+        EL I next_slash_q < 0 && next_slash_p >= 0 { 0 }
+        EL I next_slash_q >= 0 && next_slash_p < 0 { 0 }
+        EL {
             # Continue matching after the slash
             path_match_rec(path, path_len, next_slash_p, pat, pat_len, next_slash_q)
         }
     }
     # Both have chars: compare
-    E I pi < path_len && qi < pat_len {
+    EL I pi < path_len && qi < pat_len {
         I load_byte(path + pi) == load_byte(pat + qi) {
             path_match_rec(path, path_len, pi + 1, pat, pat_len, qi + 1)
-        } E { 0 }
+        } EL { 0 }
     }
     # Length mismatch
-    E { 0 }
+    EL { 0 }
 }
 
 # Extract path parameter value
@@ -790,7 +790,7 @@ F store_to_json_array(s: i64) -> i64 {
 }
 
 F store_items_json_rec(b: i64, arr: i64, count: i64, idx: i64) -> i64 {
-    I idx >= count { 0 } E {
+    I idx >= count { 0 } EL {
         I idx > 0 { json_comma(b) }
         nd := load_i64(arr + idx * 8)
         item := load_i64(nd + 16)  # value from table node
@@ -815,12 +815,12 @@ C H_HEALTH: i64 = 6
 
 F handle_request(handler_id: i64, req: i64, store: i64) -> i64 {
     I handler_id == 1 { handle_list_items(store) }
-    E I handler_id == 2 { handle_create_item(req, store) }
-    E I handler_id == 3 { handle_get_item(req, store) }
-    E I handler_id == 4 { handle_update_item(req, store) }
-    E I handler_id == 5 { handle_delete_item(req, store) }
-    E I handler_id == 6 { handle_health() }
-    E { resp_server_error(str_to_ptr("Unknown handler")) }
+    EL I handler_id == 2 { handle_create_item(req, store) }
+    EL I handler_id == 3 { handle_get_item(req, store) }
+    EL I handler_id == 4 { handle_update_item(req, store) }
+    EL I handler_id == 5 { handle_delete_item(req, store) }
+    EL I handler_id == 6 { handle_health() }
+    EL { resp_server_error(str_to_ptr("Unknown handler")) }
 }
 
 F handle_health() -> i64 {
@@ -868,7 +868,7 @@ F handle_get_item(req: i64, store: i64) -> i64 {
     free(id_str)
     item := store_get(store, id)
     I item == 0 { resp_not_found() }
-    E {
+    EL {
         json := item_to_json(item)
         resp_ok(json)
     }
@@ -893,7 +893,7 @@ F handle_update_item(req: i64, store: i64) -> i64 {
     result := store_update(store, id, name, name_len, value)
     free(name)
     I result == 0 { resp_not_found() }
-    E {
+    EL {
         item := store_get(store, id)
         json := item_to_json(item)
         resp_ok(json)
@@ -909,7 +909,7 @@ F handle_delete_item(req: i64, store: i64) -> i64 {
     free(id_str)
     result := store_delete(store, id)
     I result == 0 { resp_not_found() }
-    E { resp_no_content() }
+    EL { resp_no_content() }
 }
 
 # =====================================================
@@ -950,24 +950,24 @@ F extract_json_int(body: i64, body_len: i64, key: i64, key_len: i64) -> i64 {
 F find_json_key(body: i64, body_len: i64, key: i64, key_len: i64, start: i64) -> i64 {
     # Find "key": pattern
     I start + key_len + 3 > body_len { 0 - 1 }
-    E I load_byte(body + start) == 34 && str_eq_ptr(body + start + 1, key, key_len) == 1 && load_byte(body + start + 1 + key_len) == 34 {
+    EL I load_byte(body + start) == 34 && str_eq_ptr(body + start + 1, key, key_len) == 1 && load_byte(body + start + 1 + key_len) == 34 {
         # Found key, skip past ":"
         after_key := start + 1 + key_len + 1  # past closing "
         colon := skip_json_ws(body, body_len, after_key)
         I colon < body_len && load_byte(body + colon) == 58 {
             colon + 1
-        } E { 0 - 1 }
+        } EL { 0 - 1 }
     }
-    E { find_json_key(body, body_len, key, key_len, start + 1) }
+    EL { find_json_key(body, body_len, key, key_len, start + 1) }
 }
 
 F skip_json_ws(body: i64, body_len: i64, pos: i64) -> i64 {
     I pos >= body_len { pos }
-    E {
+    EL {
         c := load_byte(body + pos)
         I c == 32 || c == 9 || c == 10 || c == 13 {
             skip_json_ws(body, body_len, pos + 1)
-        } E { pos }
+        } EL { pos }
     }
 }
 

@@ -485,11 +485,9 @@ impl VaisBackend {
                         }
                     }
                 }
-                Item::Struct(s) => {
-                    if s.name.node != name {
-                        for field in &s.fields {
-                            count += self.count_name_in_type(&field.ty.node, name);
-                        }
+                Item::Struct(s) if s.name.node != name => {
+                    for field in &s.fields {
+                        count += self.count_name_in_type(&field.ty.node, name);
                     }
                 }
                 _ => {}

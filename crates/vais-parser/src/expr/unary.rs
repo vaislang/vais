@@ -1,7 +1,8 @@
 //! Unary operator parsing.
 //!
 //! Handles prefix unary operators: negation (-), logical not (!), bitwise not (~),
-//! reference (&), dereference (*), lazy evaluation (lazy), and force evaluation (force).
+//! reference (&), dereference (*),
+//! and prefix await (Y).
 
 use vais_ast::*;
 use vais_lexer::Token;
@@ -21,7 +22,7 @@ impl Parser {
         let start = self.current_span().start;
 
         if self.check(&Token::Minus) {
-            self.advance();
+            self.advance_skip();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
             return Ok(Spanned::new(
@@ -34,7 +35,7 @@ impl Parser {
         }
 
         if self.check(&Token::Bang) {
-            self.advance();
+            self.advance_skip();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
             return Ok(Spanned::new(
@@ -47,7 +48,7 @@ impl Parser {
         }
 
         if self.check(&Token::Tilde) {
-            self.advance();
+            self.advance_skip();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
             return Ok(Spanned::new(
@@ -60,7 +61,11 @@ impl Parser {
         }
 
         if self.check(&Token::Amp) {
-            self.advance();
+            self.advance_skip();
+            // Skip optional 'mut' keyword: &mut expr → Ref(expr)
+            if self.check(&Token::Mut) {
+                self.advance_skip();
+            }
             let expr = self.parse_unary()?;
             let end = expr.span.end;
             return Ok(Spanned::new(
@@ -70,7 +75,7 @@ impl Parser {
         }
 
         if self.check(&Token::Star) {
-            self.advance();
+            self.advance_skip();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
             return Ok(Spanned::new(
@@ -79,24 +84,13 @@ impl Parser {
             ));
         }
 
-        // lazy expr - deferred evaluation
-        if self.check(&Token::Lazy) {
-            self.advance();
+        // Y expr - prefix await (equivalent to expr.await postfix form)
+        if self.check(&Token::Await) {
+            self.advance_skip();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
             return Ok(Spanned::new(
-                Expr::Lazy(Box::new(expr)),
-                Span::new(start, end),
-            ));
-        }
-
-        // force expr - force evaluation of lazy value
-        if self.check(&Token::Force) {
-            self.advance();
-            let expr = self.parse_unary()?;
-            let end = expr.span.end;
-            return Ok(Spanned::new(
-                Expr::Force(Box::new(expr)),
+                Expr::Await(Box::new(expr)),
                 Span::new(start, end),
             ));
         }

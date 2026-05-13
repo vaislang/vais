@@ -5,13 +5,13 @@
 ## Import
 
 ```vais
-U std/time
+use std/time
 ```
 
 ## Duration Struct
 
 ```vais
-S Duration { secs: i64, nanos: i64 }
+struct Duration { secs: i64, nanos: i64 }
 ```
 
 | Method | Signature | Description |
@@ -50,9 +50,9 @@ S Duration { secs: i64, nanos: i64 }
 ## Usage
 
 ```vais
-U std/time
+use std/time
 
-F main() -> i64 {
+fn main() -> i64 {
     start := time_millis()
     sleep_millis(100)
     elapsed := elapsed_millis(start)  # ~100

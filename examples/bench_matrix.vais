@@ -25,12 +25,12 @@ N F load_i64(addr: i64) -> i64
 
 F mat_mul(a: i64, b: i64, c: i64, n: i64) -> i64 {
     i := mut 0
-    L i < n {
+    LW i < n {
         j := mut 0
-        L j < n {
+        LW j < n {
             sum := mut 0
             k := mut 0
-            L k < n {
+            LW k < n {
                 av := mat_get(a, n, i, k)
                 bv := mat_get(b, n, k, j)
                 sum = sum + av * bv
@@ -52,9 +52,9 @@ F main() -> i64 {
 
     # Initialize matrices
     i := mut 0
-    L i < n {
+    LW i < n {
         j := mut 0
-        L j < n {
+        LW j < n {
             mat_set(a, n, i, j, i + j)
             mat_set(b, n, i, j, i * j + 1)
             j = j + 1
@@ -67,7 +67,7 @@ F main() -> i64 {
     # Return checksum: sum of diagonal
     checksum := mut 0
     i = 0
-    L i < n {
+    LW i < n {
         checksum = checksum + mat_get(c, n, i, i)
         i = i + 1
     }

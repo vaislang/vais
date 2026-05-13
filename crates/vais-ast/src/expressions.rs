@@ -97,6 +97,11 @@ pub enum Expr {
         expr: Box<Spanned<Expr>>,
         field: Spanned<String>,
     },
+    /// Tuple field access: `obj.0`, `obj.1`, etc.
+    TupleFieldAccess {
+        expr: Box<Spanned<Expr>>,
+        index: usize,
+    },
     /// Index: `arr[idx]`
     Index {
         expr: Box<Spanned<Expr>>,
@@ -106,10 +111,12 @@ pub enum Expr {
     Array(Vec<Spanned<Expr>>),
     /// Tuple literal: `(a, b, c)`
     Tuple(Vec<Spanned<Expr>>),
-    /// Struct literal: `Point{x:1,y:2}`
+    /// Struct literal: `Point{x:1,y:2}` or enum struct variant: `Shape.Circle{radius:5.0}`
     StructLit {
         name: Spanned<String>,
         fields: Vec<(Spanned<String>, Spanned<Expr>)>,
+        /// If this is an enum struct variant, the enum type name (e.g., "Shape" for Shape.Circle{...})
+        enum_name: Option<String>,
     },
     /// Range: `start..end`
     Range {
@@ -158,8 +165,6 @@ pub enum Expr {
         /// Capture mode for closure (by-value, move, by-ref, by-mut-ref)
         capture_mode: CaptureMode,
     },
-    /// Spawn: `spawn{expr}`
-    Spawn(Box<Spanned<Expr>>),
     /// Yield: `Y expr` - Yield a value from a generator function
     Yield(Box<Spanned<Expr>>),
     /// Comptime: `comptime { expr }` - Evaluated at compile time
@@ -186,13 +191,13 @@ pub enum Expr {
         /// Tokens that were skipped during recovery
         skipped_tokens: Vec<String>,
     },
-    /// Lazy expression: `lazy expr` - Deferred evaluation
-    /// The expression is not evaluated until explicitly forced.
-    /// Creates a `Lazy<T>` thunk that memoizes the result.
-    Lazy(Box<Spanned<Expr>>),
-    /// Force expression: `force expr` - Force evaluation of lazy value
-    /// Evaluates a lazy thunk and returns the cached result.
-    Force(Box<Spanned<Expr>>),
+    /// Enum variant access via namespace: `EnumName::VariantName`
+    /// Optionally carries tuple-variant data: `EnumName::VariantName(data)`
+    EnumAccess {
+        enum_name: String,
+        variant: String,
+        data: Option<Box<Spanned<Expr>>>,
+    },
 }
 
 /// If-else branch

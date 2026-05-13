@@ -9,7 +9,7 @@ S Range {
 
 X Range {
     F has_next(&self) -> i64 {
-        I self.current < self.end { 1 } E { 0 }
+        I self.current < self.end { 1 } EL { 0 }
     }
 
     F next(&self) -> i64 {
@@ -17,7 +17,7 @@ X Range {
             value := self.current
             self.current = self.current + self.step
             value
-        } E {
+        } EL {
             0 - 1
         }
     }
@@ -28,7 +28,7 @@ F print_num(n: i64) -> i64 {
     I n >= 10 {
         putchar(n / 10 + 48)
         0
-    } E {
+    } EL {
         0
     }
     putchar(n % 10 + 48)

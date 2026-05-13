@@ -25,11 +25,11 @@ F toml_strlen_ptr(s: i64) -> i64 {
 
 F toml_strlen_rec(s: i64, len: i64) -> i64 {
     I load_byte(s + len) == 0 { len }
-    E { toml_strlen_rec(s, len + 1) }
+    EL { toml_strlen_rec(s, len + 1) }
 }
 
 F toml_init_mem(ptr: i64, count: i64, idx: i64) -> i64 {
-    I idx >= count { 0 } E {
+    I idx >= count { 0 } EL {
         store_i64(ptr + idx * 8, 0)
         toml_init_mem(ptr, count, idx + 1)
     }
@@ -40,10 +40,10 @@ F toml_hash_str(s: i64, len: i64) -> i64 {
 }
 
 F toml_hash_rec(s: i64, len: i64, idx: i64, h: i64) -> i64 {
-    I idx >= len { h } E {
+    I idx >= len { h } EL {
         c := load_byte(s + idx)
         new_h := h * 33 + c
-        abs_h := I new_h < 0 { 0 - new_h } E { new_h }
+        abs_h := I new_h < 0 { 0 - new_h } EL { new_h }
         toml_hash_rec(s, len, idx + 1, abs_h)
     }
 }
@@ -54,8 +54,8 @@ F toml_str_eq(a: i64, b: i64, len: i64) -> i64 {
 
 F toml_str_eq_rec(a: i64, b: i64, len: i64, idx: i64) -> i64 {
     I idx >= len { 1 }
-    E I load_byte(a + idx) != load_byte(b + idx) { 0 }
-    E { toml_str_eq_rec(a, b, len, idx + 1) }
+    EL I load_byte(a + idx) != load_byte(b + idx) { 0 }
+    EL { toml_str_eq_rec(a, b, len, idx + 1) }
 }
 
 # =====================================================
@@ -97,12 +97,12 @@ F toml_table_set(tbl: i64, key: i64, key_len: i64, value_ptr: i64) -> i64 {
 }
 
 F toml_table_get_rec(node: i64, key: i64, key_len: i64) -> i64 {
-    I node == 0 { 0 } E {
+    I node == 0 { 0 } EL {
         nk := load_i64(node)
         nkl := load_i64(node + 8)
         I nkl == key_len && toml_str_eq(nk, key, key_len) == 1 {
             load_i64(node + 16)
-        } E {
+        } EL {
             toml_table_get_rec(load_i64(node + 24), key, key_len)
         }
     }
@@ -218,7 +218,7 @@ F toml_parser_new(input: i64, len: i64) -> i64 {
 F toml_peek(p: i64) -> i64 {
     pos := load_i64(p + 8)
     len := load_i64(p + 16)
-    I pos >= len { 0 } E {
+    I pos >= len { 0 } EL {
         input := load_i64(p)
         load_byte(input + pos)
     }
@@ -232,7 +232,7 @@ F toml_advance(p: i64) -> i64 {
         c := load_byte(input + pos)
         store_i64(p + 8, pos + 1)
         c
-    } E { 0 }
+    } EL { 0 }
 }
 
 F toml_pos(p: i64) -> i64 {
@@ -261,7 +261,7 @@ F toml_skip_comment(p: i64) -> i64 {
 F toml_skip_to_eol(p: i64) -> i64 {
     c := toml_peek(p)
     I c == 0 || c == 10 { 0 }
-    E {
+    EL {
         toml_advance(p)
         toml_skip_to_eol(p)
     }
@@ -273,7 +273,7 @@ F toml_skip_all_ws(p: i64) -> i64 {
     I c == 32 || c == 9 || c == 10 || c == 13 {
         toml_advance(p)
         toml_skip_all_ws(p)
-    } E I c == 35 {
+    } EL I c == 35 {
         toml_skip_to_eol(p)
         toml_skip_all_ws(p)
     }
@@ -287,10 +287,10 @@ F toml_skip_all_ws(p: i64) -> i64 {
 # Check if character is valid for bare key
 F toml_is_bare_key_char(c: i64) -> i64 {
     I c >= 65 && c <= 90 { 1 }         # A-Z
-    E I c >= 97 && c <= 122 { 1 }      # a-z
-    E I c >= 48 && c <= 57 { 1 }       # 0-9
-    E I c == 45 || c == 95 { 1 }       # - _
-    E { 0 }
+    EL I c >= 97 && c <= 122 { 1 }      # a-z
+    EL I c >= 48 && c <= 57 { 1 }       # 0-9
+    EL I c == 45 || c == 95 { 1 }       # - _
+    EL { 0 }
 }
 
 # Parse a bare key, returns pointer to {data, len} on heap
@@ -310,7 +310,7 @@ F toml_parse_bare_key_rec(p: i64, buf: i64, len: i64) -> i64 {
         toml_advance(p)
         store_byte(buf + len, c)
         toml_parse_bare_key_rec(p, buf, len + 1)
-    } E { len }
+    } EL { len }
 }
 
 # Parse quoted key
@@ -329,7 +329,7 @@ F toml_parse_quoted_key(p: i64) -> i64 {
 F toml_parse_key(p: i64) -> i64 {
     c := toml_peek(p)
     I c == 34 { toml_parse_quoted_key(p) }   # '"'
-    E { toml_parse_bare_key(p) }
+    EL { toml_parse_bare_key(p) }
 }
 
 # =====================================================
@@ -342,18 +342,18 @@ F toml_parse_str_chars(p: i64, buf: i64, len: i64) -> i64 {
     I c == 0 || c == 34 {    # end of input or closing '"'
         toml_advance(p)
         len
-    } E I c == 92 {          # backslash escape
+    } EL I c == 92 {          # backslash escape
         toml_advance(p)
         esc := toml_advance(p)
         ch := I esc == 110 { 10 }       # \n
-            E I esc == 116 { 9 }         # \t
-            E I esc == 114 { 13 }        # \r
-            E I esc == 92 { 92 }         # \\
-            E I esc == 34 { 34 }         # \"
-            E { esc }
+            EL I esc == 116 { 9 }         # \t
+            EL I esc == 114 { 13 }        # \r
+            EL I esc == 92 { 92 }         # \\
+            EL I esc == 34 { 34 }         # \"
+            EL { esc }
         store_byte(buf + len, ch)
         toml_parse_str_chars(p, buf, len + 1)
-    } E {
+    } EL {
         toml_advance(p)
         store_byte(buf + len, c)
         toml_parse_str_chars(p, buf, len + 1)
@@ -371,10 +371,10 @@ F toml_parse_string_value(p: i64) -> i64 {
 # Parse integer
 F toml_parse_integer(p: i64) -> i64 {
     is_neg := I toml_peek(p) == 45 { toml_advance(p); 1 }
-        E I toml_peek(p) == 43 { toml_advance(p); 0 }
-        E { 0 }
+        EL I toml_peek(p) == 43 { toml_advance(p); 0 }
+        EL { 0 }
     val := toml_parse_digits(p, 0)
-    final_val := I is_neg == 1 { 0 - val } E { val }
+    final_val := I is_neg == 1 { 0 - val } EL { val }
     toml_int(final_val)
 }
 
@@ -384,10 +384,10 @@ F toml_parse_digits(p: i64, acc: i64) -> i64 {
     I c == 95 {
         toml_advance(p)
         toml_parse_digits(p, acc)
-    } E I c >= 48 && c <= 57 {
+    } EL I c >= 48 && c <= 57 {
         toml_advance(p)
         toml_parse_digits(p, acc * 10 + (c - 48))
-    } E { acc }
+    } EL { acc }
 }
 
 # Parse boolean
@@ -415,7 +415,7 @@ F toml_parse_inline_array(p: i64) -> i64 {
     arr := toml_array_new()
     I toml_peek(p) == 93 {    # ']'
         toml_advance(p)
-    } E {
+    } EL {
         toml_parse_array_items(p, arr)
     }
     toml_array_value(arr)
@@ -433,10 +433,10 @@ F toml_parse_array_items(p: i64, arr: i64) -> i64 {
         # Allow trailing comma
         I toml_peek(p) == 93 {
             toml_advance(p)
-        } E {
+        } EL {
             toml_parse_array_items(p, arr)
         }
-    } E I c == 93 {
+    } EL I c == 93 {
         toml_advance(p)
     }
     0
@@ -449,7 +449,7 @@ F toml_parse_inline_table(p: i64) -> i64 {
     tbl := toml_table_new()
     I toml_peek(p) == 125 {   # '}'
         toml_advance(p)
-    } E {
+    } EL {
         toml_parse_inline_table_items(p, tbl)
     }
     toml_table_value(tbl)
@@ -474,7 +474,7 @@ F toml_parse_inline_table_items(p: i64, tbl: i64) -> i64 {
     I c == 44 {    # ','
         toml_advance(p)
         toml_parse_inline_table_items(p, tbl)
-    } E I c == 125 {
+    } EL I c == 125 {
         toml_advance(p)
     }
     0
@@ -485,14 +485,14 @@ F toml_parse_value(p: i64) -> i64 {
     toml_skip_ws(p)
     c := toml_peek(p)
     I c == 34 { toml_parse_string_value(p) }              # '"'
-    E I c == 116 { toml_parse_bool_true(p) }              # 't'rue
-    E I c == 102 { toml_parse_bool_false(p) }             # 'f'alse
-    E I c == 91 { toml_parse_inline_array(p) }            # '['
-    E I c == 123 { toml_parse_inline_table(p) }           # '{'
-    E I c == 45 || c == 43 || (c >= 48 && c <= 57) {
+    EL I c == 116 { toml_parse_bool_true(p) }              # 't'rue
+    EL I c == 102 { toml_parse_bool_false(p) }             # 'f'alse
+    EL I c == 91 { toml_parse_inline_array(p) }            # '['
+    EL I c == 123 { toml_parse_inline_table(p) }           # '{'
+    EL I c == 45 || c == 43 || (c >= 48 && c <= 57) {
         toml_parse_integer(p)
     }
-    E { toml_null() }
+    EL { toml_null() }
 }
 
 # =====================================================
@@ -523,7 +523,7 @@ F toml_parse_lines(p: i64, root: i64, current: i64) -> i64 {
         existing := toml_table_get(root, key_data, key_len)
         new_table := I existing != 0 && load_i64(existing) == 5 {
             load_i64(existing + 8)
-        } E {
+        } EL {
             sub := toml_table_new()
             toml_table_set(root, key_data, key_len, toml_table_value(sub))
             sub
@@ -532,11 +532,11 @@ F toml_parse_lines(p: i64, root: i64, current: i64) -> i64 {
         toml_skip_ws(p)
         toml_skip_comment(p)
         toml_parse_lines(p, root, new_table)
-    } E I c == 35 {
+    } EL I c == 35 {
         # Comment line
         toml_skip_to_eol(p)
         toml_parse_lines(p, root, current)
-    } E I toml_is_bare_key_char(c) == 1 || c == 34 {
+    } EL I toml_is_bare_key_char(c) == 1 || c == 34 {
         # Key = value pair
         key := toml_parse_key(p)
         key_data := load_i64(key)
@@ -553,7 +553,7 @@ F toml_parse_lines(p: i64, root: i64, current: i64) -> i64 {
         toml_skip_ws(p)
         toml_skip_comment(p)
         toml_parse_lines(p, root, current)
-    } E {
+    } EL {
         # Skip unexpected character
         toml_advance(p)
         toml_parse_lines(p, root, current)
@@ -571,7 +571,7 @@ F toml_stringify(v: i64) -> i64 {
         # Top-level table
         tbl := load_i64(v + 8)
         toml_stringify_table_entries(tbl)
-    } E {
+    } EL {
         toml_stringify_value(v)
     }
 }
@@ -584,13 +584,13 @@ F toml_stringify_value(v: i64) -> i64 {
 
     I tag == 1 {
         I data == 0 { toml_make_str_false() }
-        E { toml_make_str_true() }
+        EL { toml_make_str_true() }
     }
-    E I tag == 2 { toml_stringify_int(data) }
-    E I tag == 3 { toml_stringify_str(data, extra) }
-    E I tag == 4 { toml_stringify_array(data) }
-    E I tag == 5 { toml_stringify_inline_table(data) }
-    E { toml_make_empty_str() }
+    EL I tag == 2 { toml_stringify_int(data) }
+    EL I tag == 3 { toml_stringify_str(data, extra) }
+    EL I tag == 4 { toml_stringify_array(data) }
+    EL I tag == 5 { toml_stringify_inline_table(data) }
+    EL { toml_make_empty_str() }
 }
 
 F toml_make_empty_str() -> i64 {
@@ -628,19 +628,19 @@ F toml_stringify_int(n: i64) -> i64 {
         R buf
     }
     buf := malloc(32)
-    val := I n < 0 { 0 - n } E { n }
+    val := I n < 0 { 0 - n } EL { n }
     pos := toml_write_digits(buf, val, 0)
     final_pos := I n < 0 {
         toml_shift_right(buf, pos)
         store_byte(buf, 45)
         pos + 1
-    } E { pos }
+    } EL { pos }
     store_byte(buf + final_pos, 0)
     buf
 }
 
 F toml_write_digits(buf: i64, n: i64, pos: i64) -> i64 {
-    I n == 0 { pos } E {
+    I n == 0 { pos } EL {
         new_pos := toml_write_digits(buf, n / 10, pos)
         store_byte(buf + new_pos, 48 + (n % 10))
         new_pos + 1
@@ -648,7 +648,7 @@ F toml_write_digits(buf: i64, n: i64, pos: i64) -> i64 {
 }
 
 F toml_shift_right(buf: i64, len: i64) -> i64 {
-    I len <= 0 { 0 } E {
+    I len <= 0 { 0 } EL {
         store_byte(buf + len, load_byte(buf + len - 1))
         toml_shift_right(buf, len - 1)
     }
@@ -664,21 +664,21 @@ F toml_stringify_str(s: i64, len: i64) -> i64 {
 }
 
 F toml_write_str_chars(buf: i64, s: i64, len: i64, idx: i64, pos: i64) -> i64 {
-    I idx >= len { pos } E {
+    I idx >= len { pos } EL {
         c := load_byte(s + idx)
         I c == 34 || c == 92 {
             store_byte(buf + pos, 92)
             store_byte(buf + pos + 1, c)
             toml_write_str_chars(buf, s, len, idx + 1, pos + 2)
-        } E I c == 10 {
+        } EL I c == 10 {
             store_byte(buf + pos, 92)
             store_byte(buf + pos + 1, 110)
             toml_write_str_chars(buf, s, len, idx + 1, pos + 2)
-        } E I c == 9 {
+        } EL I c == 9 {
             store_byte(buf + pos, 92)
             store_byte(buf + pos + 1, 116)
             toml_write_str_chars(buf, s, len, idx + 1, pos + 2)
-        } E {
+        } EL {
             store_byte(buf + pos, c)
             toml_write_str_chars(buf, s, len, idx + 1, pos + 1)
         }
@@ -697,12 +697,12 @@ F toml_stringify_array(arr: i64) -> i64 {
 }
 
 F toml_write_arr_items(buf: i64, data: i64, len: i64, idx: i64, pos: i64) -> i64 {
-    I idx >= len { pos } E {
+    I idx >= len { pos } EL {
         new_pos := I idx > 0 {
             store_byte(buf + pos, 44)      # ','
             store_byte(buf + pos + 1, 32)  # ' '
             pos + 2
-        } E { pos }
+        } EL { pos }
         elem := load_i64(data + idx * 8)
         elem_str := toml_stringify_value(elem)
         elem_len := toml_strlen_ptr(elem_str)
@@ -724,7 +724,7 @@ F toml_stringify_inline_table(tbl: i64) -> i64 {
 }
 
 F toml_write_tbl_buckets(buf: i64, buckets: i64, cap: i64, idx: i64, pos: i64, first: i64) -> i64 {
-    I idx >= cap { pos } E {
+    I idx >= cap { pos } EL {
         node := load_i64(buckets + idx * 8)
         result := toml_write_tbl_entries(buf, node, pos, first)
         new_pos := load_i64(result)
@@ -740,12 +740,12 @@ F toml_write_tbl_entries(buf: i64, node: i64, pos: i64, first: i64) -> i64 {
         store_i64(result, pos)
         store_i64(result + 8, first)
         result
-    } E {
+    } EL {
         sep_pos := I first == 0 {
             store_byte(buf + pos, 44)      # ','
             store_byte(buf + pos + 1, 32)  # ' '
             pos + 2
-        } E { pos }
+        } EL { pos }
 
         key := load_i64(node)
         key_len := load_i64(node + 8)
@@ -779,7 +779,7 @@ F toml_stringify_table_entries(tbl: i64) -> i64 {
 }
 
 F toml_write_top_buckets(buf: i64, buckets: i64, cap: i64, idx: i64, pos: i64) -> i64 {
-    I idx >= cap { pos } E {
+    I idx >= cap { pos } EL {
         node := load_i64(buckets + idx * 8)
         new_pos := toml_write_top_entries(buf, node, pos)
         toml_write_top_buckets(buf, buckets, cap, idx + 1, new_pos)
@@ -787,12 +787,12 @@ F toml_write_top_buckets(buf: i64, buckets: i64, cap: i64, idx: i64, pos: i64) -
 }
 
 F toml_write_top_entries(buf: i64, node: i64, pos: i64) -> i64 {
-    I node == 0 { pos } E {
+    I node == 0 { pos } EL {
         key := load_i64(node)
         key_len := load_i64(node + 8)
         val := load_i64(node + 16)
 
-        val_tag := I val != 0 { load_i64(val) } E { 0 }
+        val_tag := I val != 0 { load_i64(val) } EL { 0 }
         I val_tag == 5 {
             # Sub-table: write as [table_name] section
             store_byte(buf + pos, 91)   # '['
@@ -804,7 +804,7 @@ F toml_write_top_entries(buf: i64, node: i64, pos: i64) -> i64 {
             sub_pos = toml_write_top_buckets(buf, load_i64(sub_tbl), load_i64(sub_tbl + 16), 0, sub_pos)
             next := load_i64(node + 24)
             toml_write_top_entries(buf, next, sub_pos)
-        } E {
+        } EL {
             # Regular key = value
             memcpy(buf + pos, key, key_len)
             after_key := pos + key_len
@@ -846,41 +846,41 @@ F toml_to_string(v: i64) -> i64 {
 
 # Get type tag of value (0=null, 1=bool, 2=int, 3=string, 4=array, 5=table)
 F toml_type(v: i64) -> i64 {
-    I v == 0 { 0 } E { load_i64(v) }
+    I v == 0 { 0 } EL { load_i64(v) }
 }
 
 # Get integer value
 F toml_get_int(v: i64) -> i64 {
     I v == 0 { 0 }
-    E I load_i64(v) == 2 { load_i64(v + 8) }
-    E { 0 }
+    EL I load_i64(v) == 2 { load_i64(v + 8) }
+    EL { 0 }
 }
 
 # Get boolean value
 F toml_get_bool(v: i64) -> i64 {
     I v == 0 { 0 }
-    E I load_i64(v) == 1 { load_i64(v + 8) }
-    E { 0 }
+    EL I load_i64(v) == 1 { load_i64(v + 8) }
+    EL { 0 }
 }
 
 # Get string data pointer
 F toml_get_string(v: i64) -> i64 {
     I v == 0 { 0 }
-    E I load_i64(v) == 3 { load_i64(v + 8) }
-    E { 0 }
+    EL I load_i64(v) == 3 { load_i64(v + 8) }
+    EL { 0 }
 }
 
 # Get string length
 F toml_get_string_len(v: i64) -> i64 {
     I v == 0 { 0 }
-    E I load_i64(v) == 3 { load_i64(v + 16) }
-    E { 0 }
+    EL I load_i64(v) == 3 { load_i64(v + 16) }
+    EL { 0 }
 }
 
 # Get array length
 F toml_array_len(v: i64) -> i64 {
     I v == 0 || load_i64(v) != 4 { 0 }
-    E { load_i64(load_i64(v + 8) + 8) }
+    EL { load_i64(load_i64(v + 8) + 8) }
 }
 
 # Get array element at index
@@ -890,7 +890,7 @@ F toml_array_get(v: i64, index: i64) -> i64 {
     arr_data := load_i64(arr)
     arr_len := load_i64(arr + 8)
     I index < 0 || index >= arr_len { 0 }
-    E { load_i64(arr_data + index * 8) }
+    EL { load_i64(arr_data + index * 8) }
 }
 
 # Get table value by key
@@ -903,7 +903,7 @@ F toml_table_get_by_key(v: i64, key: i64, key_len: i64) -> i64 {
 # Get table size
 F toml_table_size(v: i64) -> i64 {
     I v == 0 || load_i64(v) != 5 { 0 }
-    E { load_i64(load_i64(v + 8) + 8) }
+    EL { load_i64(load_i64(v + 8) + 8) }
 }
 
 # Free a TOML value (shallow)

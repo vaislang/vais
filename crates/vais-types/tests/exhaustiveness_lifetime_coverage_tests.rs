@@ -25,8 +25,7 @@ fn check_err(source: &str) -> String {
 fn check_result(source: &str) -> Result<(), String> {
     let module = parse(source).map_err(|e| format!("Parse: {:?}", e))?;
     let mut tc = TypeChecker::new();
-    tc.check_module(&module)
-        .map_err(|e| format!("TC: {:?}", e))
+    tc.check_module(&module).map_err(|e| format!("TC: {:?}", e))
 }
 
 // ============================================================================

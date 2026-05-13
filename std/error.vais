@@ -1,3 +1,51 @@
+# ============================================================================
+# Module: error
+# ============================================================================
+#
+# thiserror/anyhow 스타일의 에러 유틸리티 모듈입니다.
+# 에러 타입 정의, 체이닝, 카테고리 분류, 컨텍스트 추가 기능을 제공합니다.
+#
+# 주요 타입:
+#   ErrorChain          - 에러 인과관계 체인 (연결 리스트 방식)
+#   VaisError           - 단일 에러 값 (code, message 포인터)
+#   ErrorContext        - 에러에 컨텍스트를 추가하는 래퍼
+#
+# 에러 카테고리 상수:
+#   ERROR_CATEGORY_IO         = 1   # 파일/소켓 I/O 관련
+#   ERROR_CATEGORY_PARSE      = 2   # 파싱 오류
+#   ERROR_CATEGORY_VALIDATION = 3   # 검증 오류
+#   ERROR_CATEGORY_AUTH       = 4   # 인증/권한 오류
+#   ERROR_CATEGORY_NETWORK    = 5   # 네트워크 오류
+#   ERROR_CATEGORY_INTERNAL   = 6   # 내부 로직 오류
+#
+# 주요 함수:
+#   error_new(code, ctx)         - 새 에러 생성
+#   error_chain_push(chain, code, ctx) - 체인에 에러 추가
+#   error_chain_root(chain)      - 체인의 최초 원인 반환
+#   error_category(code)         - 에러 코드에서 카테고리 추출
+#   error_format(err)            - 에러를 사람이 읽기 좋은 문자열로 변환
+#   error_is_io(code)            - IO 에러 여부 확인
+#   error_is_auth(code)          - AUTH 에러 여부 확인
+#
+# 사용 예제:
+#
+#   U std/error
+#   U std/result
+#
+#   # 에러 생성
+#   err := error_new(ERROR_CATEGORY_IO(), 0)
+#
+#   # 체인으로 원인 추적
+#   chain := error_chain_push(0, ERROR_CATEGORY_IO(), 0)
+#   chain = error_chain_push(chain, ERROR_CATEGORY_INTERNAL(), 0)
+#   root := error_chain_root(chain)
+#
+#   # Result에 에러 담기
+#   F read_config(path: str) -> Result<i64, i64> {
+#       handle := file_open(path)?
+#       Ok(handle)
+#   }
+#
 # error.vais — thiserror/anyhow style error utilities
 # Provides ergonomic error type definitions, chaining, and downcasting.
 
@@ -36,7 +84,7 @@ X ErrorChain {
     F root_cause(&self) -> i64 {
         I self.next == 0 {
             self.code
-        } E {
+        } EL {
             # Follow the chain to the root
             self.code
         }
@@ -44,19 +92,44 @@ X ErrorChain {
 
     # Get chain depth (1 = no wrapping)
     F depth(&self) -> i64 {
-        I self.next == 0 { 1 } E { 2 }
+        I self.next == 0 { 1 } EL { 2 }
     }
 
     # Check if this error has a source/cause
     F has_source(&self) -> i64 {
-        I self.next != 0 { 1 } E { 0 }
+        I self.next != 0 { 1 } EL { 0 }
+    }
+}
+
+# ===== VaisError =====
+# Single error value carrying a numeric code and a human-readable message.
+# Intended for consumers that want a simple code/message pair without having
+# to invent their own struct. Added 2026-04-18 (Phase 198 Bucket 2) after
+# `vais-server` and several downstream projects had diverged definitions.
+#
+# - `code`  : i64 error code (typically HTTP status or VAIS-* category)
+# - `message`: human-readable message string
+#
+# Projects that want richer error context (severity, detail, hint) can still
+# define their own types; VaisError is the shared baseline that stdlib-based
+# code can rely on.
+
+S VaisError {
+    code: i64,
+    message: str
+}
+
+X VaisError {
+    # Build a new error with the given code and message.
+    F new(code: i64, message: str) -> VaisError {
+        VaisError { code: code, message: message }
     }
 }
 
 # ===== Typed Error Enum =====
 # Common application errors with specific variants (thiserror-style)
 
-E AppError {
+EN AppError {
     NotFound(i64),
     InvalidInput(i64),
     IoError(i64),
@@ -143,13 +216,13 @@ F internal_error(detail: i64) -> AppError {
 # Convert an errno-style code to an AppError
 F from_errno(errno: i64) -> AppError {
     I errno == 2 { NotFound(errno) }
-    E { I errno == 13 { AuthError(errno) }
-    E { I errno == 22 { InvalidInput(errno) }
-    E { IoError(errno) } } }
+    EL { I errno == 13 { AuthError(errno) }
+    EL { I errno == 22 { InvalidInput(errno) }
+    EL { IoError(errno) } } }
 }
 
 # Ensure a condition holds, or return an error
 # Returns 0 (ok) or error code
 F ensure(condition: i64, error_code: i64) -> i64 {
-    I condition != 0 { 0 } E { error_code }
+    I condition != 0 { 0 } EL { error_code }
 }

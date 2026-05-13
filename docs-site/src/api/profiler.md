@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/profiler
+use std/profiler
 ```
 
 ## Constants
@@ -174,9 +174,9 @@ Generate flame graph data from stack samples.
 ### Basic Timing
 
 ```vais
-U std/profiler
+use std/profiler
 
-F main() -> i64 {
+fn main() -> i64 {
     t := timer()
     t.start()
 
@@ -194,9 +194,9 @@ F main() -> i64 {
 ### Instrumentation Profiling
 
 ```vais
-U std/profiler
+use std/profiler
 
-F main() -> i64 {
+fn main() -> i64 {
     p := get_profiler()
     p.enable()
 
@@ -219,9 +219,9 @@ F main() -> i64 {
 ### Convenience Functions
 
 ```vais
-U std/profiler
+use std/profiler
 
-F expensive_computation(n: i64) -> i64 {
+fn expensive_computation(n: i64) -> i64 {
     sum := 0
     i := 0
     L i < n {
@@ -231,7 +231,7 @@ F expensive_computation(n: i64) -> i64 {
     sum
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # Profile with begin/end
     profile_begin("compute")
     result := expensive_computation(1000000)
@@ -249,9 +249,9 @@ F main() -> i64 {
 ### Memory Profiling
 
 ```vais
-U std/profiler
+use std/profiler
 
-F main() -> i64 {
+fn main() -> i64 {
     mem := get_mem_profiler()
     mem.enable()
 
@@ -274,9 +274,9 @@ F main() -> i64 {
 ### Sampling Profiler
 
 ```vais
-U std/profiler
+use std/profiler
 
-F main() -> i64 {
+fn main() -> i64 {
     # Sample every 10ms
     sampler := SampleProfiler::new(10)
     sampler.start()
@@ -295,9 +295,9 @@ F main() -> i64 {
 ### Nested Profiling
 
 ```vais
-U std/profiler
+use std/profiler
 
-F outer() -> i64 {
+fn outer() -> i64 {
     profile_begin("outer")
 
     inner()
@@ -307,7 +307,7 @@ F outer() -> i64 {
     0
 }
 
-F inner() -> i64 {
+fn inner() -> i64 {
     profile_begin("inner")
 
     # Do work...
@@ -317,7 +317,7 @@ F inner() -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     get_profiler().enable()
 
     outer()

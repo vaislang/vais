@@ -5,9 +5,9 @@
 ## Import
 
 ```vais
-U std/proptest
-U std/random
-U std/test
+use std/proptest
+use std/random
+use std/test
 ```
 
 ## Overview
@@ -55,7 +55,7 @@ The `proptest` module provides QuickCheck-style property-based testing for Vais,
 Produces random test values with shrinking support.
 
 ```vais
-S Generator {
+struct Generator {
     gen_type: i64,
     min: i64,
     max: i64,
@@ -87,7 +87,7 @@ S Generator {
 Result of running a property test.
 
 ```vais
-S PropertyResult {
+struct PropertyResult {
     status: i64,
     message: str,
     counterexample: i64,    # The failing input value
@@ -111,7 +111,7 @@ S PropertyResult {
 A testable property with generator and test function.
 
 ```vais
-S Property {
+struct Property {
     name: str,
     test_fn: i64,          # Function pointer: (i64) -> i64 (0=pass, non-0=fail)
     generator: Generator,
@@ -134,7 +134,7 @@ S Property {
 Result of shrinking a counterexample.
 
 ```vais
-S ShrinkResult {
+struct ShrinkResult {
     value: i64,
     steps: i64
 }
@@ -185,22 +185,22 @@ S ShrinkResult {
 ### Basic Property Test
 
 ```vais
-U std/proptest
+use std/proptest
 
 # Test function: returns 0 if property holds, non-zero if violated
-F test_abs_positive(x: i64) -> i64 {
-    abs_x := I x < 0 { -x } E { x }
-    I abs_x >= 0 { 0 } E { 1 }  # 0 = pass
+fn test_abs_positive(x: i64) -> i64 {
+    abs_x := I x < 0 { -x } else { x }
+    I abs_x >= 0 { 0 } else { 1 }  # 0 = pass
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     gen := Generator.i64_any()
     result := prop_check("abs is always positive", test_abs_positive, gen)
 
     I result.is_passed() == 1 {
         # Test passed
         0
-    } E {
+    } else {
         # Test failed
         1
     }
@@ -210,17 +210,17 @@ F main() -> i64 {
 ### Using Property Struct
 
 ```vais
-U std/proptest
+use std/proptest
 
-F test_addition_commutative(x: i64) -> i64 {
+fn test_addition_commutative(x: i64) -> i64 {
     # In real code, would need to pass two args
     # For now, test with x and x+1
     a := x
     b := x + 1
-    I a + b == b + a { 0 } E { 1 }
+    I a + b == b + a { 0 } else { 1 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     gen := Generator.i64_range(0, 1000)
 
     prop := Property.new("addition is commutative", test_addition_commutative, gen)
@@ -242,19 +242,19 @@ F main() -> i64 {
 ### Assert Property
 
 ```vais
-U std/proptest
+use std/proptest
 
-F test_double_half(x: i64) -> i64 {
+fn test_double_half(x: i64) -> i64 {
     # For non-zero x, (x * 2) / 2 should equal x
     I x == 0 {
         0  # Skip zero (precondition)
-    } E {
+    } else {
         result := (x * 2) / 2
-        I result == x { 0 } E { 1 }
+        I result == x { 0 } else { 1 }
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     gen := Generator.i64_nonzero()
 
     # This will panic with details if the property fails
@@ -267,14 +267,14 @@ F main() -> i64 {
 ### Range Generators
 
 ```vais
-U std/proptest
+use std/proptest
 
-F test_in_range(x: i64) -> i64 {
+fn test_in_range(x: i64) -> i64 {
     # Verify generated value is in expected range
-    I x >= 10 && x <= 100 { 0 } E { 1 }
+    I x >= 10 && x <= 100 { 0 } else { 1 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # Small positive values
     small_gen := Generator.i64_small()  # 0-100
 
@@ -292,9 +292,9 @@ F main() -> i64 {
 ### Float Property Testing
 
 ```vais
-U std/proptest
+use std/proptest
 
-F test_float_sum(bits: i64) -> i64 {
+fn test_float_sum(bits: i64) -> i64 {
     # Convert i64 bits to f64
     x := i64_bits_to_f64(bits)
 
@@ -303,10 +303,10 @@ F test_float_sum(bits: i64) -> i64 {
 
     # Convert back for comparison
     sum_bits := f64_to_i64_bits(sum)
-    I sum_bits == bits { 0 } E { 1 }
+    I sum_bits == bits { 0 } else { 1 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     gen := Generator.f64_unit()  # [0, 1)
     result := prop_check("adding zero preserves value", test_float_sum, gen)
     0
@@ -316,14 +316,14 @@ F main() -> i64 {
 ### With Shrinking
 
 ```vais
-U std/proptest
+use std/proptest
 
-F test_always_fails(x: i64) -> i64 {
+fn test_always_fails(x: i64) -> i64 {
     # This will fail for any x > 10
-    I x > 10 { 1 } E { 0 }
+    I x > 10 { 1 } else { 0 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     gen := Generator.i64_range(0, 1000)
     result := prop_check("always passes", test_always_fails, gen)
 
@@ -341,14 +341,14 @@ F main() -> i64 {
 ### Idempotence Testing
 
 ```vais
-U std/proptest
+use std/proptest
 
 # Define a function to test
-F abs_value(x: i64) -> i64 {
-    I x < 0 { -x } E { x }
+fn abs_value(x: i64) -> i64 {
+    I x < 0 { -x } else { x }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     gen := Generator.i64_any()
 
     # Create property that tests idempotence
