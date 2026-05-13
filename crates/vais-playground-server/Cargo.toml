@@ -14,7 +14,7 @@ path = "src/main.rs"
 # Web framework
 axum = { version = "0.7", features = ["macros"] }
 tokio = { workspace = true }
-tower-http = { version = "0.5", features = ["cors", "trace", "compression-gzip"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
 
 # Serialization
 serde = { workspace = true }
