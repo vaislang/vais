@@ -1,0 +1,20 @@
+# Phase 44 Cross-verify: Async/Await basics (Phase 43)
+# Tests async function declaration, await, and yield
+
+A F compute(x: i64) -> i64 {
+    x * 2
+}
+
+A F step1(x: i64) -> i64 {
+    x + 5
+}
+
+A F chained(x: i64) -> i64 {
+    step1(x).await
+}
+
+F main() -> i64 {
+    result := compute(21).await
+    r2 := chained(37).await
+    (result + r2) - 84
+}

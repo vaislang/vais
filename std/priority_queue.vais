@@ -27,7 +27,7 @@ X PriorityQueue {
 
     # Check if empty
     F is_empty(&self) -> i64 {
-        I self.size == 0 { 1 } E { 0 }
+        I self.size == 0 { 1 } EL { 0 }
     }
 
     # Peek at the minimum element (highest priority)
@@ -35,7 +35,7 @@ X PriorityQueue {
     F peek(&self) -> i64 {
         I self.size == 0 {
             0
-        } E {
+        } EL {
             load_i64(self.data)  # Root element at index 0
         }
     }
@@ -45,7 +45,7 @@ X PriorityQueue {
     F peek_opt(&self) -> Option {
         I self.size == 0 {
             None
-        } E {
+        } EL {
             Some(load_i64(self.data))  # Root element at index 0
         }
     }
@@ -73,11 +73,11 @@ X PriorityQueue {
     F pop(&self) -> i64 {
         I self.size == 0 {
             0
-        } E I self.size == 1 {
+        } EL I self.size == 1 {
             # Special case: last element
             self.size = 0
             load_i64(self.data)
-        } E {
+        } EL {
             # Get minimum element (root)
             min_val := load_i64(self.data)
 
@@ -101,11 +101,11 @@ X PriorityQueue {
     F pop_opt(&self) -> Option {
         I self.size == 0 {
             None
-        } E I self.size == 1 {
+        } EL I self.size == 1 {
             # Special case: last element
             self.size = 0
             Some(load_i64(self.data))
-        } E {
+        } EL {
             # Get minimum element (root)
             min_val := load_i64(self.data)
 
@@ -143,7 +143,7 @@ X PriorityQueue {
     F sift_up(&self, idx: i64) -> i64 {
         I idx == 0 {
             0  # At root, done
-        } E {
+        } EL {
             parent_idx := (idx - 1) / 2
 
             child_val := load_i64(self.data + idx * 8)
@@ -157,7 +157,7 @@ X PriorityQueue {
 
                 # Continue sifting up
                 @.sift_up(parent_idx)
-            } E {
+            } EL {
                 0  # Heap property satisfied
             }
         }
@@ -171,7 +171,7 @@ X PriorityQueue {
         # Check if leaf node
         I left_idx >= self.size {
             0  # No children, done
-        } E {
+        } EL {
             current_val := load_i64(self.data + idx * 8)
 
             # Get left child value
@@ -185,10 +185,10 @@ X PriorityQueue {
                     store_i64(self.data + idx * 8, left_val)
                     store_i64(self.data + left_idx * 8, current_val)
                     @.sift_down(left_idx)
-                } E {
+                } EL {
                     0
                 }
-            } E {
+            } EL {
                 # Both children exist
                 right_val := load_i64(self.data + right_idx * 8)
 
@@ -200,17 +200,17 @@ X PriorityQueue {
                         store_i64(self.data + idx * 8, left_val)
                         store_i64(self.data + left_idx * 8, current_val)
                         @.sift_down(left_idx)
-                    } E {
+                    } EL {
                         0
                     }
-                } E {
+                } EL {
                     # Right child is smaller
                     I right_val < current_val {
                         # Swap with right child
                         store_i64(self.data + idx * 8, right_val)
                         store_i64(self.data + right_idx * 8, current_val)
                         @.sift_down(right_idx)
-                    } E {
+                    } EL {
                         0
                     }
                 }

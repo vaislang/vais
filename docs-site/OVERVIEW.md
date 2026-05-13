@@ -255,7 +255,7 @@ cd docs-site
 5. 문서 빌드
 6. GitHub Pages에 배포
 
-**배포 URL:** https://sswoo.github.io/vais/
+**배포 URL:** https://vais.dev/docs/
 
 ## 문서 통합 전략
 
@@ -290,7 +290,7 @@ cd docs-site
 ### 일반 사용자 (문서 읽기)
 
 1. **온라인 문서 방문**
-   - URL: https://sswoo.github.io/vais/
+   - URL: https://vais.dev/docs/
    - 검색 기능 사용
    - 모바일 친화적
 
@@ -528,5 +528,5 @@ MIT License - Vais 프로젝트와 동일
 ---
 
 **생성일**: 2026-01-29
-**버전**: 1.0.0
+**버전**: 0.1.0
 **관리자**: Vais Contributors

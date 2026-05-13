@@ -11,8 +11,8 @@ F get(arr: *i64, i: i64) -> i64 = arr[i]
 # Bubble sort: find minimum in arr[start..len] and return its index
 F find_min_idx(arr: *i64, start: i64, len: i64, current: i64, min_idx: i64) -> i64 =
     I current == len { min_idx }
-    E I arr[current] < arr[min_idx] { @(arr, start, len, current + 1, current) }
-    E { @(arr, start, len, current + 1, min_idx) }
+    EL I arr[current] < arr[min_idx] { @(arr, start, len, current + 1, current) }
+    EL { @(arr, start, len, current + 1, min_idx) }
 
 # Selection sort step: sort arr[pos..len]
 # Note: We can't mutate array elements directly, so we compute sorted results
@@ -22,31 +22,31 @@ F find_min_idx(arr: *i64, start: i64, len: i64, current: i64, min_idx: i64) -> i
 # Sum array elements using recursion
 F array_sum(arr: *i64, len: i64, idx: i64) -> i64 =
     I idx == len { 0 }
-    E { arr[idx] + @(arr, len, idx + 1) }
+    EL { arr[idx] + @(arr, len, idx + 1) }
 
 # Find minimum value
 F array_min(arr: *i64, len: i64, idx: i64, current_min: i64) -> i64 =
     I idx == len { current_min }
-    E I arr[idx] < current_min { @(arr, len, idx + 1, arr[idx]) }
-    E { @(arr, len, idx + 1, current_min) }
+    EL I arr[idx] < current_min { @(arr, len, idx + 1, arr[idx]) }
+    EL { @(arr, len, idx + 1, current_min) }
 
 # Find maximum value
 F array_max(arr: *i64, len: i64, idx: i64, current_max: i64) -> i64 =
     I idx == len { current_max }
-    E I arr[idx] > current_max { @(arr, len, idx + 1, arr[idx]) }
-    E { @(arr, len, idx + 1, current_max) }
+    EL I arr[idx] > current_max { @(arr, len, idx + 1, arr[idx]) }
+    EL { @(arr, len, idx + 1, current_max) }
 
 # Count elements matching a predicate value
 F count_equal(arr: *i64, len: i64, idx: i64, target: i64) -> i64 =
     I idx == len { 0 }
-    E I arr[idx] == target { 1 + @(arr, len, idx + 1, target) }
-    E { @(arr, len, idx + 1, target) }
+    EL I arr[idx] == target { 1 + @(arr, len, idx + 1, target) }
+    EL { @(arr, len, idx + 1, target) }
 
 # Count elements greater than threshold
 F count_greater(arr: *i64, len: i64, idx: i64, threshold: i64) -> i64 =
     I idx == len { 0 }
-    E I arr[idx] > threshold { 1 + @(arr, len, idx + 1, threshold) }
-    E { @(arr, len, idx + 1, threshold) }
+    EL I arr[idx] > threshold { 1 + @(arr, len, idx + 1, threshold) }
+    EL { @(arr, len, idx + 1, threshold) }
 
 # === Output Helpers ===
 
@@ -54,20 +54,20 @@ F print_digit(d: i64) -> i64 { putchar(d + 48); 0 }
 
 F print_num_helper(n: i64) -> i64 =
     I n < 10 { print_digit(n) }
-    E { print_num_helper(n / 10); print_digit(n % 10) }
+    EL { print_num_helper(n / 10); print_digit(n % 10) }
 
 F print_num(n: i64) -> i64 =
     I n < 0 { putchar(45); print_num_helper(0 - n) }
-    E I n == 0 { print_digit(0) }
-    E { print_num_helper(n) }
+    EL I n == 0 { print_digit(0) }
+    EL { print_num_helper(n) }
 
 F newline() -> i64 { putchar(10); 0 }
 
 # Print array elements separated by spaces
 F print_array(arr: *i64, len: i64, idx: i64) -> i64 =
     I idx == len { 0 }
-    E {
-        I idx > 0 { putchar(44); putchar(32) } E { 0 };
+    EL {
+        I idx > 0 { putchar(44); putchar(32) } EL { 0 };
         print_num(arr[idx]);
         @(arr, len, idx + 1)
     }
@@ -104,14 +104,14 @@ F main() -> i64 {
     max := array_max(data, 10, 1, data[0])
 
     # Expected: sum=483, min=5, max=93
-    result := I sum == 483 { 1 } E { 0 }
-    result2 := I min == 5 { 1 } E { 0 }
-    result3 := I max == 93 { 1 } E { 0 }
+    result := I sum == 483 { 1 } EL { 0 }
+    result2 := I min == 5 { 1 } EL { 0 }
+    result3 := I max == 93 { 1 } EL { 0 }
 
     I result + result2 + result3 == 3 {
         puts("All assertions passed!")
         0
-    } E {
+    } EL {
         puts("ASSERTION FAILED!")
         1
     }

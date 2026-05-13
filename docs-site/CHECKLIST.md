@@ -188,7 +188,7 @@ git push origin main
 - [ ] GitHub에 푸시
 - [ ] GitHub Actions 워크플로우 실행 확인
 - [ ] GitHub Pages 설정 확인
-- [ ] 배포된 사이트 확인 (https://sswoo.github.io/vais/)
+- [ ] 배포된 사이트 확인 (https://vais.dev/docs/)
 
 ## 유지보수 체크리스트 □
 
@@ -265,7 +265,7 @@ git push origin main
 
 **상태**: ✓ 완료
 **생성일**: 2026-01-29
-**버전**: 1.0.0
+**버전**: 0.1.0
 
 ## 다음 단계
 
@@ -288,7 +288,7 @@ git push origin main
    - Source: GitHub Actions 선택
 
 4. **문서 확인**
-   - https://sswoo.github.io/vais/ 방문
+   - https://vais.dev/docs/ 방문
    - 검색 기능 테스트
    - 모든 링크 확인
 

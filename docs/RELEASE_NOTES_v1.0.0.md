@@ -1,14 +1,22 @@
-# Vais v1.0.0 Release Notes
+# Vais v1.0.0 Release Notes (Historical Draft)
 
-**Release Date:** February 2026
+**Status:** Historical draft, not the current public release claim.
+**Draft Date:** February 2026
 **License:** MIT
 **Official Website:** https://vaislang.dev
+
+This document is retained as planning/history context. The current public
+baseline is the certified Core compiler plus named promoted runtime gates in
+[`../PUBLIC_STATUS.md`](../PUBLIC_STATUS.md), not a product-complete v1.0
+release.
 
 ---
 
 ## Overview
 
-We are proud to announce the v1.0.0 release of Vais, an AI-optimized systems programming language designed for token efficiency, native performance, and Rust-level memory safety. This release marks the language as production-ready with a stable API, comprehensive toolchain, and robust type system.
+This historical draft described a planned v1.0.0 release of Vais, an AI-optimized
+systems programming language designed for token efficiency and native codegen.
+Do not use this draft as the current production-readiness or stable-API claim.
 
 Vais combines the performance of compiled languages with modern type safety features, making it ideal for systems programming, AI code generation, and performance-critical applications.
 
@@ -18,9 +26,9 @@ Vais combines the performance of compiled languages with modern type safety feat
 
 - **AI-Optimized Syntax** - Single-character keywords (`F`, `S`, `E`, `I`, `L`, `M`) reduce token count by 40-60% compared to traditional languages
 - **LLVM Backend** - Native code generation with performance comparable to C/C++
-- **Rust-Level Safety** - Complete ownership system with lifetimes, borrow checking, and move semantics
-- **Full Toolchain** - Batteries-included developer experience with LSP, REPL, debugger, formatter, and package manager
-- **Production Ready** - 402+ passing tests, self-hosted compiler, comprehensive documentation
+- **Rust-Level Safety Goal** - Ownership, borrow checking, and move-semantics workbench
+- **Toolchain Workbench** - LSP, REPL, debugger, formatter, and package manager surfaces
+- **Gate-Backed Status Required** - Use `PUBLIC_STATUS.md` for current certified claims
 - **Multi-Platform** - Cross-compilation support for 16 target platforms
 
 ---
@@ -70,7 +78,7 @@ Vais combines the performance of compiled languages with modern type safety feat
 - **Lifetime inference** - Rust-style 3-rule elision for automatic lifetime deduction
 - **Lifetime annotations** - Explicit lifetime parameters when needed
 - **Dangling pointer prevention** - Scope-based reference validity checking
-- **ABI stability** - Versioned ABI with compatibility guarantees (v1.0.0)
+- **ABI stability goal** - Versioned ABI planning context
 
 #### Advanced Types
 - **Sum types (Enums)** - Algebraic data types with payload variants
@@ -300,7 +308,7 @@ Vais combines the performance of compiled languages with modern type safety feat
 
 ## Installation
 
-Vais v1.0.0 can be installed through multiple package managers:
+The draft assumed installation through multiple package managers:
 
 ### macOS (Homebrew)
 ```bash
@@ -363,7 +371,7 @@ See [INSTALLATION.md](./INSTALLATION.md) for detailed instructions.
 
 ## Known Limitations
 
-While Vais v1.0.0 is production-ready, the following limitations are known and documented:
+The draft listed the following limitations:
 
 ### Parser
 - **Stack overflow on deeply nested expressions** - Expressions nested more than ~30 levels may cause stack overflow. A recursion depth limit is planned for v1.1.0. (See Security Audit H-1)
@@ -396,9 +404,10 @@ See [SECURITY_AUDIT.md](./SECURITY_AUDIT.md) for complete security analysis and 
 
 ## Migration from v0.2.0
 
-Vais v1.0.0 is **fully backward compatible** with v0.2.0. No code changes are required.
+This draft assumed backward compatibility with v0.2.0. Treat that as historical
+planning context, not a current release guarantee.
 
-### New Features Available in v1.0.0
+### New Features Planned in the Draft
 
 1. **Lifetime System** - Annotate lifetimes for complex borrowing scenarios
    ```vais
@@ -465,7 +474,7 @@ See [MIGRATION.md](../MIGRATION.md) for detailed migration guide.
 
 ## Performance
 
-Vais v1.0.0 demonstrates competitive performance with established systems languages:
+The draft recorded competitive-performance targets against established systems languages:
 
 | Benchmark | Vais 1.0 | C (gcc -O3) | Rust 1.75 | Go 1.21 | Python 3.12 |
 |-----------|----------|-------------|-----------|---------|-------------|
@@ -534,7 +543,7 @@ We welcome contributions! See:
 
 ## Acknowledgments
 
-Vais v1.0.0 is the result of contributions from:
+This draft reflected contributions from:
 
 ### Core Team
 - **Steve (sswoo)** - Project creator and lead maintainer
@@ -592,7 +601,7 @@ SOFTWARE.
 
 ## What's Next
 
-Vais v1.0.0 establishes the foundation. Future releases will focus on:
+The draft roadmap assumed future releases would focus on:
 
 ### v1.1.0 (Q2 2026)
 - Parser recursion depth limits
@@ -617,7 +626,7 @@ See [ROADMAP.md](../ROADMAP.md) for detailed future plans.
 
 ---
 
-**Download:** https://github.com/vaislang/vais/releases/tag/v1.0.0
+**Current releases:** https://github.com/vaislang/vais/releases/latest
 **Website:** https://vaislang.dev
 **Documentation:** https://docs.vaislang.dev
 **Playground:** https://playground.vaislang.dev

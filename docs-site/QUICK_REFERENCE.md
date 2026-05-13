@@ -116,7 +116,7 @@ git push origin main
 
 1. GitHub Actions 탭 방문
 2. 최신 "Deploy Documentation" 워크플로우 확인
-3. https://sswoo.github.io/vais/ 에서 결과 확인
+3. https://vais.dev/docs/ 에서 결과 확인
 
 ## 문제 해결
 

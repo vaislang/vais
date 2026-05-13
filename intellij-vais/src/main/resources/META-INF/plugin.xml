@@ -9,22 +9,51 @@
 
     <h2>Features</h2>
     <ul>
-        <li>Syntax highlighting</li>
-        <li>Code completion</li>
-        <li>Go to definition</li>
+        <li>Syntax highlighting with Vais single-character keywords</li>
+        <li>LSP-powered code completion (struct fields, methods, trait methods)</li>
+        <li>Go to definition (cross-module, import resolution)</li>
         <li>Find references</li>
-        <li>Hover information</li>
-        <li>Error diagnostics</li>
-        <li>Code formatting</li>
+        <li>Hover information with inferred types</li>
+        <li>Error diagnostics via LSP</li>
+        <li>Inlay hints for variable types</li>
+        <li>Signature help</li>
+        <li>Document symbols</li>
+        <li>Code actions</li>
+        <li>Code formatting (LSP-backed + fallback formatter)</li>
+        <li>Brace matching and auto-closing</li>
+        <li>Line/block comment toggle (Ctrl+/ and Ctrl+Shift+/)</li>
+        <li>Run configuration with target selection (native/JS/WASM)</li>
+        <li>Working directory and environment variable support</li>
+        <li>Debug configuration via vais-dap (DAP server)</li>
     </ul>
 
     <h2>Requirements</h2>
     <ul>
-        <li>vais-lsp binary in PATH or configured location</li>
+        <li>vais-lsp binary in PATH or configured location (for LSP features)</li>
+        <li>vais-dap binary in PATH or configured location (for debugging)</li>
+        <li>vaisc compiler in PATH or configured location (for run/debug)</li>
     </ul>
     ]]></description>
 
     <change-notes><![CDATA[
+    <h3>0.1.0</h3>
+    <ul>
+        <li>Code formatting support (LSP-backed with fallback formatter)</li>
+        <li>Brace matching and auto-closing for (), {}, [], &lt;&gt;</li>
+        <li>Line and block comment toggling</li>
+        <li>Run configuration: target selection (native/JS/WASM)</li>
+        <li>Run configuration: working directory and environment variables</li>
+        <li>Debug configuration: working directory support, source file mapping</li>
+        <li>Improved file chooser dialogs with project context</li>
+    </ul>
+    <h3>0.0.2</h3>
+    <ul>
+        <li>Enhanced LSP integration with document synchronization</li>
+        <li>Auto-start LSP server on .vais file open</li>
+        <li>DAP debug configuration support</li>
+        <li>Fixed createElement crash in parser definition</li>
+        <li>Expanded client capabilities (inlay hints, signature help, code actions)</li>
+    </ul>
     <h3>0.0.1</h3>
     <ul>
         <li>Initial release</li>
@@ -35,6 +64,7 @@
 
     <!-- Product and plugin compatibility requirements -->
     <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.lang</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- File Type -->
@@ -59,10 +89,37 @@
         <colorSettingsPage
             implementation="com.vais.intellij.VaisColorSettingsPage"/>
 
+        <!-- Code Formatting -->
+        <lang.formatter
+            language="Vais"
+            implementationClass="com.vais.intellij.format.VaisFormattingModelBuilder"/>
+
+        <!-- Brace Matching -->
+        <lang.braceMatcher
+            language="Vais"
+            implementationClass="com.vais.intellij.format.VaisBraceMatcher"/>
+
+        <!-- Comment Toggle (Ctrl+/ and Ctrl+Shift+/) -->
+        <lang.commenter
+            language="Vais"
+            implementationClass="com.vais.intellij.format.VaisCommenter"/>
+
         <!-- LSP Server Support (via lsp4j) -->
         <notificationGroup
             id="Vais LSP"
             displayType="BALLOON"/>
+
+        <!-- Run Configuration -->
+        <configurationType implementation="com.vais.intellij.run.VaisRunConfigurationType"/>
+
+        <!-- Debug Configuration -->
+        <configurationType implementation="com.vais.intellij.debug.VaisDebugConfigurationType"/>
+
+        <!-- Debug Runner: drives the XDebug session via vais-dap -->
+        <programRunner implementation="com.vais.intellij.debug.VaisDebugRunner"/>
+
+        <!-- Breakpoint type for .vais source files -->
+        <xdebugger.breakpointType implementation="com.vais.intellij.debug.VaisLineBreakpointType"/>
     </extensions>
 
     <applicationListeners>

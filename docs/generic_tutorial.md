@@ -554,7 +554,7 @@ F print_twice<T: Printable>(value: &T) -> i64 {
 }
 ```
 
-### Where 절 (개념적)
+### Where 절
 
 복잡한 바운드 표현:
 
@@ -568,7 +568,32 @@ where
     value.print()
     0
 }
+
+# Where clause with struct methods
+S Container<T> where T: Clone {
+    value: T
+}
+
+X Container<T> where T: Clone {
+    F get_copy(&self) -> T {
+        self.value.clone()
+    }
+}
+
+# Where clause separating bounds from type parameters
+F complex_transform<T, U>(input: T) -> U
+where
+    T: Display,
+    U: Default
+{
+    # Transform logic
+    0
+}
 ```
+
+**Where 절 vs 인라인 바운드:**
+- 인라인: `F func<T: Trait>(x: T)` — 간단한 단일 바운드에 적합
+- Where 절: `F func<T>(x: T) where T: TraitA, T: TraitB` — 복잡한 다중 바운드에 적합
 
 ### 다중 바운드 예제
 
@@ -625,7 +650,7 @@ F main() -> i64 {
 
 ## 표준 라이브러리 제네릭
 
-### Vec<T> - 동적 배열
+### `Vec<T>` - 동적 배열
 
 ```vais
 U std/vec
@@ -658,7 +683,7 @@ F main() -> i64 {
 }
 ```
 
-### Option<T> - 선택적 값
+### `Option<T>` - 선택적 값
 
 ```vais
 U std/option
@@ -696,7 +721,7 @@ F main() -> i64 {
 }
 ```
 
-### Result<T, E> - 에러 처리
+### `Result<T, E>` - 에러 처리
 
 ```vais
 E Result<T, E> {
@@ -744,7 +769,7 @@ F main() -> i64 {
 }
 ```
 
-### HashMap<K, V> - 해시맵
+### `HashMap<K, V>` - 해시맵
 
 ```vais
 U std/hashmap

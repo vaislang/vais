@@ -47,7 +47,7 @@ F main() -> i64 {
         free(rc)
         puts("  Release 2: Freed (last ref)")
         0
-    } E {
+    } EL {
         store_i64(rc, count5 - 1)
         0
     }

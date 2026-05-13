@@ -1,0 +1,12 @@
+[package]
+name = "vais-csv"
+version = "1.0.0"
+authors = ["Vais Team"]
+description = "CSV parser and generator for Vais - parse and write CSV files with proper escaping"
+license = "MIT"
+
+[dependencies]
+
+[dev-dependencies]
+
+[build]

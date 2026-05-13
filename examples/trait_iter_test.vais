@@ -13,7 +13,7 @@ S Range {
 # Simple impl block (no trait)
 X Range {
     F has_next(&self) -> i64 {
-        I self.current < self.end { 1 } E { 0 }
+        I self.current < self.end { 1 } EL { 0 }
     }
 }
 
@@ -24,7 +24,7 @@ X Range: Iterator {
             value := self.current
             self.current = self.current + self.step
             value
-        } E {
+        } EL {
             0 - 1
         }
     }

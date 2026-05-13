@@ -46,7 +46,7 @@ impl ExprVisitor for CodeGenerator {
                 self.generate_expr(expr, counter)
             }
             Expr::Tuple(elements) => self.visit_tuple(elements, counter),
-            Expr::StructLit { name, fields } => self.visit_struct_lit(name, fields, counter),
+            Expr::StructLit { name, fields, .. } => self.visit_struct_lit(name, fields, counter),
             Expr::Index { expr: array, index } => {
                 // Check if this is a slice operation (index is a Range expression)
                 if let Expr::Range {
@@ -66,6 +66,11 @@ impl ExprVisitor for CodeGenerator {
                 self.visit_index(array, index, counter)
             }
             Expr::Field { expr: obj, field } => self.visit_field(obj, field, counter),
+            Expr::TupleFieldAccess { expr: obj, index } => {
+                // Treat tuple field access as regular field access with index as field name
+                let field_name = Spanned::new(index.to_string(), obj.span);
+                self.visit_field(obj, &field_name, counter)
+            }
             Expr::MethodCall {
                 receiver,
                 method,
@@ -93,13 +98,8 @@ impl ExprVisitor for CodeGenerator {
                 inclusive,
             } => self.visit_range(start.as_deref(), end.as_deref(), *inclusive, counter),
             Expr::Await(inner) => self.visit_await(inner, counter),
-            Expr::Spawn(inner) => self.visit_spawn(inner, counter),
             Expr::Yield(inner) => self.visit_expr(inner, counter),
-            Expr::Lambda {
-                params,
-                body,
-                captures: _,
-            } => self.visit_lambda(params, body, counter),
+            Expr::Lambda { params, body, .. } => self.visit_lambda(params, body, counter),
             Expr::Try(inner) => self.visit_try(inner, counter),
             Expr::Unwrap(inner) => self.visit_unwrap(inner, counter),
             Expr::Comptime { body } => self.visit_comptime(body, counter),
@@ -109,8 +109,39 @@ impl ExprVisitor for CodeGenerator {
                 self.visit_assert(condition, message.as_deref(), counter)
             }
             Expr::Assume(inner) => self.visit_assume(inner, counter),
-            Expr::Lazy(inner) => self.visit_lazy(inner, counter),
-            Expr::Force(inner) => self.visit_force(inner, counter),
+            // Enum namespace access: EnumName::VariantName
+            // Delegate to the same unit-enum-variant path used for bare variant names.
+            Expr::EnumAccess {
+                enum_name: _,
+                variant,
+                data: None,
+            } => {
+                // Unit variant: look up by variant name (same as bare Ident path)
+                if self.is_unit_enum_variant(variant) {
+                    self.generate_unit_enum_variant(variant, counter)
+                } else {
+                    self.visit_ident(variant, counter)
+                }
+            }
+            Expr::EnumAccess {
+                enum_name: _,
+                variant,
+                data: Some(data_expr),
+            } => {
+                // Tuple variant with data: treat as a call `VariantName(data)`
+                let span = expr.span;
+                let call_expr = vais_ast::Spanned::new(
+                    vais_ast::Expr::Call {
+                        func: Box::new(vais_ast::Spanned::new(
+                            vais_ast::Expr::Ident(variant.clone()),
+                            span,
+                        )),
+                        args: vec![*data_expr.clone()],
+                    },
+                    span,
+                );
+                self.generate_expr(&call_expr, counter)
+            }
             Expr::Error { message, .. } => {
                 // Error nodes should not reach codegen - they indicate parsing failures
                 Err(CodegenError::Unsupported(format!(
@@ -134,9 +165,7 @@ impl ExprVisitor for CodeGenerator {
     }
 
     fn visit_string(&mut self, s: &str, _counter: &mut usize) -> GenResult {
-        let name = format!(".str.{}", self.string_counter);
-        self.string_counter += 1;
-        self.string_constants.push((name.clone(), s.to_string()));
+        let name = self.get_or_create_string_constant(s);
 
         let len = s.len() + 1;
         Ok((
@@ -153,7 +182,7 @@ impl ExprVisitor for CodeGenerator {
     }
 
     fn visit_ident(&mut self, name: &str, counter: &mut usize) -> GenResult {
-        if let Some(local) = self.locals.get(name).cloned() {
+        if let Some(local) = self.fn_ctx.locals.get(name).cloned() {
             if local.is_param() {
                 Ok((format!("%{}", local.llvm_name), String::new()))
             } else if matches!(local.ty, ResolvedType::Named { .. }) {
@@ -183,8 +212,11 @@ impl ExprVisitor for CodeGenerator {
     }
 
     fn visit_self_call(&mut self) -> GenResult {
-        if let Some(fn_name) = &self.current_function {
-            Ok((format!("@{}", fn_name), String::new()))
+        if let Some(fn_name) = &self.fn_ctx.current_function {
+            // In async poll functions, current_function is "name__poll"
+            // but @ should refer to the original create function.
+            let call_name = fn_name.strip_suffix("__poll").unwrap_or(fn_name);
+            Ok((format!("@{}", call_name), String::new()))
         } else {
             Err(CodegenError::UndefinedFunction("@".to_string()))
         }
@@ -341,9 +373,18 @@ impl ExprVisitor for CodeGenerator {
 
     fn visit_ref(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
         if let Expr::Ident(name) = &inner.node {
-            if let Some(local) = self.locals.get(name.as_str()).cloned() {
+            if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
                 if local.is_alloca() {
                     // Alloca variables already have an address
+                    return Ok((format!("%{}", local.llvm_name), String::new()));
+                } else if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_ssa() {
+                    // Named SSA locals (self, struct params) are already pointers
+                    // from alloca pattern at function entry — return directly
+                    let (val, val_ir) = self.visit_expr(inner, counter)?;
+                    return Ok((val, val_ir));
+                } else if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_param() {
+                    // Named param (e.g., `self` in methods) is passed as %Struct* —
+                    // already a pointer, return directly for &self
                     return Ok((format!("%{}", local.llvm_name), String::new()));
                 } else {
                     // SSA/Param values need to be spilled to stack to take their address
@@ -352,11 +393,15 @@ impl ExprVisitor for CodeGenerator {
                     let (val, val_ir) = self.visit_expr(inner, counter)?;
                     ir.push_str(&val_ir);
                     let tmp_alloca = self.next_temp(counter);
-                    ir.push_str(&format!("  {} = alloca {}\n", tmp_alloca, llvm_ty));
-                    ir.push_str(&format!(
-                        "  store {} {}, {}* {}\n",
-                        llvm_ty, val, llvm_ty, tmp_alloca
-                    ));
+                    write_ir!(ir, "  {} = alloca {}", tmp_alloca, llvm_ty);
+                    write_ir!(
+                        ir,
+                        "  store {} {}, {}* {}",
+                        llvm_ty,
+                        val,
+                        llvm_ty,
+                        tmp_alloca
+                    );
                     return Ok((tmp_alloca, ir));
                 }
             }
@@ -379,10 +424,14 @@ impl ExprVisitor for CodeGenerator {
         };
 
         let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = load {}, {}* {}\n",
-            result, llvm_ty, llvm_ty, ptr_val
-        ));
+        write_ir!(
+            ir,
+            "  {} = load {}, {}* {}",
+            result,
+            llvm_ty,
+            llvm_ty,
+            ptr_val
+        );
 
         Ok((result, ir))
     }
@@ -423,20 +472,13 @@ impl ExprVisitor for CodeGenerator {
         self.generate_await_expr(inner, counter)
     }
 
-    fn visit_spawn(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
-        let (future_ptr, future_ir) = self.visit_expr(inner, counter)?;
-        let mut ir = future_ir;
-        ir.push_str(&format!("; Spawned task at {}\n", future_ptr));
-        Ok((future_ptr, ir))
-    }
-
     fn visit_lambda(
         &mut self,
         params: &[Param],
         body: &Spanned<Expr>,
         counter: &mut usize,
     ) -> GenResult {
-        self.generate_lambda_expr(params, body, counter)
+        self.generate_lambda_expr(params, body, &vais_ast::CaptureMode::ByValue, counter)
     }
 
     fn visit_try(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
@@ -464,10 +506,8 @@ impl ExprVisitor for CodeGenerator {
                 Ok((if b { "1" } else { "0" }.to_string(), String::new()))
             }
             vais_types::ComptimeValue::String(s) => {
-                // Create a global string constant
-                let name = format!(".str.{}", self.string_counter);
-                self.string_counter += 1;
-                self.string_constants.push((name.clone(), s.clone()));
+                // Create a global string constant (deduplicated)
+                let name = self.get_or_create_string_constant(&s);
                 let len = s.len() + 1;
                 Ok((
                     format!(
@@ -506,15 +546,20 @@ impl ExprVisitor for CodeGenerator {
                 let len = elements.len();
 
                 // For now, assume i64 elements (we'd need better type inference for mixed types)
-                ir.push_str(&format!("  {} = alloca [{} x i64]\n", array_name, len));
+                write_ir!(ir, "  {} = alloca [{} x i64]", array_name, len);
 
                 for (i, elem_val) in elements.iter().enumerate() {
                     let elem_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = getelementptr [{} x i64], [{} x i64]* {}, i64 0, i64 {}\n",
-                        elem_ptr, len, len, array_name, i
-                    ));
-                    ir.push_str(&format!("  store i64 {}, i64* {}\n", elem_val, elem_ptr));
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr [{} x i64], [{} x i64]* {}, i64 0, i64 {}",
+                        elem_ptr,
+                        len,
+                        len,
+                        array_name,
+                        i
+                    );
+                    write_ir!(ir, "  store i64 {}, i64* {}", elem_val, elem_ptr);
                 }
 
                 Ok((array_name, ir))
@@ -538,7 +583,7 @@ impl ExprVisitor for CodeGenerator {
         let old_var_name = format!("__old_{}", *counter);
         *counter += 1;
 
-        if let Some(snapshot_var) = self.old_snapshots.get(&old_var_name) {
+        if let Some(snapshot_var) = self.contracts.old_snapshots.get(&old_var_name) {
             let ty = self.infer_expr_type(inner);
             let llvm_ty = self.type_to_llvm(&ty);
             let result = self.next_temp(counter);
@@ -569,129 +614,5 @@ impl ExprVisitor for CodeGenerator {
         } else {
             self.generate_assume(inner, counter)
         }
-    }
-
-    fn visit_lazy(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
-        // Lazy evaluation: Create a thunk struct { i1 computed, T value, i8* thunk_fn }
-        // For simplicity, we evaluate the expression immediately but wrap it in a Lazy struct.
-        // A full implementation would create a closure and defer evaluation.
-
-        let (inner_val, inner_ir) = self.visit_expr(inner, counter)?;
-        let mut ir = inner_ir;
-
-        // Infer the inner type to get the correct LLVM type
-        let inner_type = self.infer_expr_type(inner);
-        let inner_llvm_ty = self.type_to_llvm(&inner_type);
-        let lazy_ty = format!("{{ i1, {}, i8* }}", inner_llvm_ty);
-
-        // Allocate the lazy struct
-        let lazy_ptr = self.next_temp(counter);
-        ir.push_str(&format!("  {} = alloca {}\n", lazy_ptr, lazy_ty));
-
-        // Store computed = true (eager evaluation for now)
-        let computed_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr {}, {}* {}, i32 0, i32 0\n",
-            computed_ptr, lazy_ty, lazy_ty, lazy_ptr
-        ));
-        ir.push_str(&format!("  store i1 1, i1* {}\n", computed_ptr));
-
-        // Store the computed value
-        let value_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr {}, {}* {}, i32 0, i32 1\n",
-            value_ptr, lazy_ty, lazy_ty, lazy_ptr
-        ));
-        ir.push_str(&format!(
-            "  store {} {}, {}* {}\n",
-            inner_llvm_ty, inner_val, inner_llvm_ty, value_ptr
-        ));
-
-        // Store thunk pointer as null (not needed for eager evaluation)
-        let thunk_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr {}, {}* {}, i32 0, i32 2\n",
-            thunk_ptr, lazy_ty, lazy_ty, lazy_ptr
-        ));
-        ir.push_str(&format!("  store i8* null, i8** {}\n", thunk_ptr));
-
-        // Load and return the lazy struct
-        let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = load {}, {}* {}\n",
-            result, lazy_ty, lazy_ty, lazy_ptr
-        ));
-
-        Ok((result, ir))
-    }
-
-    fn visit_force(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
-        // Force evaluation: Extract value from Lazy struct
-        // If computed flag is true, return cached value
-        // Otherwise, call thunk and cache result (not implemented for eager mode)
-
-        // Infer the lazy type to extract the inner type
-        let lazy_type = self.infer_expr_type(inner);
-        let inner_type = match &lazy_type {
-            ResolvedType::Lazy(inner) => inner.as_ref().clone(),
-            other => other.clone(), // If not lazy, just return the value
-        };
-
-        // If the inner expression is not a Lazy type, just return the value directly
-        if !matches!(lazy_type, ResolvedType::Lazy(_)) {
-            return self.visit_expr(inner, counter);
-        }
-
-        let inner_llvm_ty = self.type_to_llvm(&inner_type);
-
-        // For lazy values, we need to handle the case where the expression is a variable
-        // The variable holds a Lazy struct, and we need to extract the value field
-
-        // Check if the inner expression is an identifier (variable reference)
-        if let Expr::Ident(name) = &inner.node {
-            if let Some(local) = self.locals.get(name.as_str()).cloned() {
-                let lazy_ty = format!("{{ i1, {}, i8* }}", inner_llvm_ty);
-                let mut ir = String::new();
-
-                if local.is_ssa() {
-                    // For SSA variables, the value is already the struct itself
-                    // Use extractvalue to get the value field (index 1)
-                    let result = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = extractvalue {} {}, 1\n",
-                        result, lazy_ty, local.llvm_name
-                    ));
-                    return Ok((result, ir));
-                } else {
-                    // For alloca variables, get pointer to value field (index 1)
-                    let value_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = getelementptr {}, {}* %{}, i32 0, i32 1\n",
-                        value_ptr, lazy_ty, lazy_ty, local.llvm_name
-                    ));
-
-                    let result = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = load {}, {}* {}\n",
-                        result, inner_llvm_ty, inner_llvm_ty, value_ptr
-                    ));
-
-                    return Ok((result, ir));
-                }
-            }
-        }
-
-        // For other expressions that produce lazy values, use extractvalue
-        let (lazy_val, lazy_ir) = self.visit_expr(inner, counter)?;
-        let mut ir = lazy_ir;
-
-        // Use extractvalue to get the value field (index 1) from the struct
-        let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = extractvalue {{ i1, {}, i8* }} {}, 1\n",
-            result, inner_llvm_ty, lazy_val
-        ));
-
-        Ok((result, ir))
     }
 }

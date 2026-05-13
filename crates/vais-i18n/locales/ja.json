@@ -140,6 +140,18 @@
     "E031": {
       "title": "extern署名不一致",
       "message": "extern関数'{name}'の戻り値型が予期と異なります: '{expected}'を期待しましたが'{found}'が見つかりました"
+    },
+    "E032": {
+      "title": "型推論失敗",
+      "message": "'{name}'の型を推論できませんでした: {reason}"
+    },
+    "E033": {
+      "title": "型チェッカー内部エラー",
+      "message": "型チェッカー内部エラー: {detail}"
+    },
+    "E034": {
+      "title": "total関数がpanicする可能性",
+      "message": "total関数'{function_name}'がpanicする可能性があります ({reason}); 意図的なpanicなら`partial`と記してください"
     }
   },
 
@@ -172,6 +184,11 @@
       "title": "再帰深度制限超過",
       "message": "再帰深度の制限を超えました: {detail}",
       "help": "ネストの深さを減らすか、再帰型をリファクタリングしてください"
+    },
+    "C007": {
+      "title": "内部コンパイラエラー",
+      "message": "内部コンパイラエラー: {detail}",
+      "help": "コンパイラのバグの可能性があります — https://github.com/vaislang/vais/issues で報告してください"
     }
   },
 

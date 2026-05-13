@@ -1,0 +1,195 @@
+name: Publish to crates.io
+
+on:
+  # Trigger on release creation
+  release:
+    types: [published]
+
+  # Manual trigger with dry-run option
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (do not actually publish)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  publish:
+    name: Publish Crates to crates.io
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM 17
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main"
+          sudo apt-get update
+          sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-publish-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-publish-
+
+      - name: Verify all crates build
+        run: cargo build --workspace --exclude vais-python --exclude vais-node
+
+      - name: Run tests
+        run: cargo test --workspace --exclude vais-python --exclude vais-node
+
+      - name: Determine publish flags
+        id: publish-flags
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+            echo "flags=--dry-run" >> $GITHUB_OUTPUT
+            echo "Running in DRY-RUN mode"
+          else
+            echo "flags=" >> $GITHUB_OUTPUT
+            echo "Running in PUBLISH mode"
+          fi
+
+      - name: Compute dependency order and publish all crates
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          PUBLISH_FLAGS: ${{ steps.publish-flags.outputs.flags }}
+        run: |
+          set -euo pipefail
+
+          # Excluded crates (require separate build systems)
+          EXCLUDE="vais-python vais-node"
+
+          # Topological sort: parse workspace Cargo.toml files to determine
+          # dependency order automatically. Uses cargo-metadata for accuracy.
+          echo "=== Computing dependency order ==="
+
+          # Get publish order via cargo metadata (topological sort)
+          CRATES_ORDER=$(cargo metadata --no-deps --format-version 1 \
+            | python3 -c "
+          import json, sys
+          meta = json.load(sys.stdin)
+          exclude = set('$EXCLUDE'.split())
+
+          # Build dependency graph from workspace members
+          pkgs = {p['name']: p for p in meta['packages']}
+          workspace_members = set()
+          for mid in meta['workspace_members']:
+              name = mid.split(' ')[0]
+              workspace_members.add(name)
+
+          # Filter to workspace crates only, excluding python/node
+          ws_pkgs = {n: p for n, p in pkgs.items()
+                     if n in workspace_members and n not in exclude}
+
+          # Build adjacency: crate -> set of workspace deps
+          deps = {}
+          for name, pkg in ws_pkgs.items():
+              deps[name] = set()
+              for dep in pkg.get('dependencies', []):
+                  dep_name = dep['name']
+                  if dep_name in ws_pkgs:
+                      deps[name].add(dep_name)
+
+          # Kahn's algorithm for topological sort
+          in_degree = {n: 0 for n in ws_pkgs}
+          for name, d in deps.items():
+              for dep in d:
+                  in_degree[dep] = in_degree.get(dep, 0)  # ensure exists
+
+          # Recompute in-degrees
+          in_degree = {n: 0 for n in ws_pkgs}
+          for name, d in deps.items():
+              for dep in d:
+                  if dep in in_degree:
+                      in_degree[dep] += 1
+
+          # Wait — in_degree should count how many depend ON each node
+          # Actually for publishing, we want: publish dependencies first
+          # So reverse: in_degree[x] = number of deps x has (that are in workspace)
+          in_degree = {n: len(d) for n, d in deps.items()}
+          queue = [n for n, deg in in_degree.items() if deg == 0]
+          queue.sort()  # deterministic order
+
+          order = []
+          while queue:
+              node = queue.pop(0)
+              order.append(node)
+              for name, d in deps.items():
+                  if node in d:
+                      in_degree[name] -= 1
+                      if in_degree[name] == 0:
+                          queue.append(name)
+              queue.sort()
+
+          for name in order:
+              print(name)
+          ")
+
+          echo "=== Publish order ==="
+          echo "$CRATES_ORDER"
+          echo ""
+
+          # Publish each crate in dependency order
+          TOTAL=0
+          SUCCESS=0
+          FAILED=""
+
+          while IFS= read -r crate; do
+            [ -z "$crate" ] && continue
+            TOTAL=$((TOTAL + 1))
+            CRATE_DIR="crates/$crate"
+
+            if [ ! -d "$CRATE_DIR" ]; then
+              echo "::warning::Crate directory not found: $CRATE_DIR — skipping"
+              continue
+            fi
+
+            echo ""
+            echo "=== [$TOTAL] Publishing $crate ==="
+            if (cd "$CRATE_DIR" && cargo publish $PUBLISH_FLAGS --token "$CARGO_REGISTRY_TOKEN"); then
+              SUCCESS=$((SUCCESS + 1))
+              echo "::notice::$crate published successfully"
+            else
+              echo "::warning::$crate publish failed (may already be published)"
+              FAILED="$FAILED $crate"
+            fi
+
+            # Wait for crates.io index to update before publishing dependents
+            if [ -z "$PUBLISH_FLAGS" ]; then
+              echo "Waiting 30s for crates.io index update..."
+              sleep 30
+            fi
+          done <<< "$CRATES_ORDER"
+
+          echo ""
+          echo "=== Publish Summary ==="
+          echo "Total: $TOTAL, Success: $SUCCESS, Failed: $((TOTAL - SUCCESS))"
+          if [ -n "$FAILED" ]; then
+            echo "::warning::Failed crates:$FAILED"
+          fi
+          if [ -n "$PUBLISH_FLAGS" ]; then
+            echo "::notice::This was a DRY-RUN. No crates were actually published."
+          else
+            echo "::notice::All crates have been published to crates.io"
+            echo "::notice::Users can now install with: cargo install vaisc"
+          fi

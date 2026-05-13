@@ -138,7 +138,11 @@ impl VaisBackend {
         }
     }
 
-    pub(crate) fn collect_folding_ranges(&self, ast: &Module, rope: &Rope) -> Vec<FoldingRangeInfo> {
+    pub(crate) fn collect_folding_ranges(
+        &self,
+        ast: &Module,
+        rope: &Rope,
+    ) -> Vec<FoldingRangeInfo> {
         let mut ranges = Vec::new();
 
         for item in &ast.items {
@@ -296,7 +300,11 @@ impl VaisBackend {
     }
 
     /// Find incoming calls to a function
-    pub(crate) fn find_incoming_calls(&self, uri: &Url, func_name: &str) -> Vec<(String, Span, Span)> {
+    pub(crate) fn find_incoming_calls(
+        &self,
+        uri: &Url,
+        func_name: &str,
+    ) -> Vec<(String, Span, Span)> {
         let mut calls = Vec::new();
 
         if let Some(cache) = self.get_symbol_cache(uri) {
@@ -324,5 +332,4 @@ impl VaisBackend {
 
         calls
     }
-
 }

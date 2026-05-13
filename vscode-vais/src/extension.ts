@@ -14,6 +14,56 @@ let client: LanguageClient | undefined;
 export function activate(context: vscode.ExtensionContext) {
     // Activate debugger support
     activateDebugger(context);
+
+    // Register Code Lens commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand('vais.runTest', async (testName: string, uri: string) => {
+            const terminal = vscode.window.createTerminal('Vais Test');
+            terminal.show();
+            terminal.sendText(`cargo run --bin vaisc -- test ${testName} ${vscode.Uri.parse(uri).fsPath}`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('vais.debugTest', async (testName: string, uri: string) => {
+            // Start debug session for the test
+            await vscode.debug.startDebugging(
+                vscode.workspace.workspaceFolders?.[0],
+                {
+                    type: 'vais',
+                    name: `Debug ${testName}`,
+                    request: 'launch',
+                    program: vscode.Uri.parse(uri).fsPath,
+                    args: ['--test', testName],
+                }
+            );
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('vais.showReferences', async (uri: string, position: { line: number, character: number }) => {
+            const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(uri));
+            const pos = new vscode.Position(position.line, position.character);
+            await vscode.commands.executeCommand('editor.action.findReferences', doc.uri, pos);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('vais.showImplementations', async (uri: string, position: { line: number, character: number }) => {
+            const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(uri));
+            const pos = new vscode.Position(position.line, position.character);
+            await vscode.commands.executeCommand('editor.action.goToImplementation', doc.uri, pos);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('vais.runBenchmark', async (benchName: string, uri: string) => {
+            const terminal = vscode.window.createTerminal('Vais Benchmark');
+            terminal.show();
+            terminal.sendText(`cargo run --bin vaisc -- bench ${benchName} ${vscode.Uri.parse(uri).fsPath}`);
+        })
+    );
+
     // Get configuration
     const config = vscode.workspace.getConfiguration('vais');
     const serverPath = config.get<string>('languageServer.path', 'vais-lsp');

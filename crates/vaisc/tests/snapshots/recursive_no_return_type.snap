@@ -1,0 +1,1 @@
+Type error: InferFailed { kind: "return type", name: "fib", context: "fib", span: Some(Span { start: 2, end: 5 }), suggestion: Some("Recursive functions require explicit return type annotation") }

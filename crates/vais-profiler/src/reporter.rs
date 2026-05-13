@@ -85,8 +85,10 @@ impl TextReport {
             stats.peak_allocated_bytes as f64 / 1_048_576.0
         ));
 
-        if stats.total_allocations > 0 {
-            let avg_size = stats.total_allocated_bytes / stats.total_allocations;
+        if let Some(avg_size) = stats
+            .total_allocated_bytes
+            .checked_div(stats.total_allocations)
+        {
             output.push_str(&format!("Average allocation:    {} bytes\n", avg_size));
         }
 
@@ -109,7 +111,7 @@ impl TextReport {
         output.push('\n');
 
         let mut edges = self.snapshot.call_graph.clone();
-        edges.sort_by(|a, b| b.2.cmp(&a.2));
+        edges.sort_by_key(|entry| std::cmp::Reverse(entry.2));
 
         for (caller, callee, count) in edges.iter().take(20) {
             output.push_str(&format!("{:<30} -> {:<30} {:>10}\n", caller, callee, count));
@@ -174,11 +176,11 @@ impl ProfileStats {
             })
             .collect();
 
-        let average_allocation_size = if snapshot.memory_stats.total_allocations > 0 {
-            snapshot.memory_stats.total_allocated_bytes / snapshot.memory_stats.total_allocations
-        } else {
-            0
-        };
+        let average_allocation_size = snapshot
+            .memory_stats
+            .total_allocated_bytes
+            .checked_div(snapshot.memory_stats.total_allocations)
+            .unwrap_or(0);
 
         Self {
             duration_secs,

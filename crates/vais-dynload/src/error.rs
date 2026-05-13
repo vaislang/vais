@@ -168,4 +168,224 @@ mod tests {
         let err: DynloadError = io_err.into();
         assert!(matches!(err, DynloadError::IoError(_)));
     }
+
+    #[test]
+    fn test_error_display_all_variants() {
+        let errors: Vec<DynloadError> = vec![
+            DynloadError::ModuleNotFound(PathBuf::from("/test")),
+            DynloadError::CompilationError("error".into()),
+            DynloadError::LibraryLoadError("error".into()),
+            DynloadError::SymbolNotFound("sym".into()),
+            DynloadError::ModuleAlreadyLoaded("mod".into()),
+            DynloadError::ModuleNotLoaded("mod".into()),
+            DynloadError::WasmValidationError("error".into()),
+            DynloadError::WasmInstantiationError("error".into()),
+            DynloadError::WasmExecutionError("error".into()),
+            DynloadError::WasmFunctionNotFound("fn".into()),
+            DynloadError::WasmTypeMismatch {
+                expected: "i32".into(),
+                actual: "i64".into(),
+            },
+            DynloadError::ResourceLimitExceeded {
+                resource: "memory".into(),
+                limit: "1MB".into(),
+                used: "2MB".into(),
+            },
+            DynloadError::MemoryLimitExceeded(1024),
+            DynloadError::ExecutionTimeout(5000),
+            DynloadError::ManifestError("error".into()),
+            DynloadError::VersionIncompatible {
+                plugin: "test".into(),
+                required: ">=1.0".into(),
+                actual: "0.5".into(),
+            },
+            DynloadError::DependencyNotFound("dep".into()),
+            DynloadError::HostFunctionError("error".into()),
+            DynloadError::HostFunctionNotRegistered("fn".into()),
+            DynloadError::SecurityViolation("violation".into()),
+            DynloadError::HotReloadError("error".into()),
+            DynloadError::ConfigError("error".into()),
+            DynloadError::DiscoveryError("error".into()),
+            DynloadError::InternalError("error".into()),
+        ];
+
+        for err in errors {
+            let display = err.to_string();
+            assert!(!display.is_empty(), "Error display should not be empty");
+        }
+    }
+
+    #[test]
+    fn test_error_wasm_type_mismatch_display() {
+        let err = DynloadError::WasmTypeMismatch {
+            expected: "i32".to_string(),
+            actual: "f64".to_string(),
+        };
+        let display = err.to_string();
+        assert!(display.contains("i32"));
+        assert!(display.contains("f64"));
+    }
+
+    #[test]
+    fn test_error_resource_limit_display() {
+        let err = DynloadError::ResourceLimitExceeded {
+            resource: "memory".to_string(),
+            limit: "64MB".to_string(),
+            used: "128MB".to_string(),
+        };
+        let display = err.to_string();
+        assert!(display.contains("memory"));
+        assert!(display.contains("64MB"));
+        assert!(display.contains("128MB"));
+    }
+
+    #[test]
+    fn test_error_version_incompatible_display() {
+        let err = DynloadError::VersionIncompatible {
+            plugin: "my-plugin".to_string(),
+            required: ">=1.0.0".to_string(),
+            actual: "0.5.0".to_string(),
+        };
+        let display = err.to_string();
+        assert!(display.contains("my-plugin"));
+    }
+
+    #[test]
+    fn test_error_from_toml() {
+        let result: std::result::Result<toml::Value, toml::de::Error> =
+            toml::from_str("not valid toml {{{");
+        if let Err(toml_err) = result {
+            let err: DynloadError = toml_err.into();
+            assert!(matches!(err, DynloadError::ManifestError(_)));
+        }
+    }
+
+    #[test]
+    fn test_error_manifest_error() {
+        let err = DynloadError::ManifestError("bad manifest".to_string());
+        assert!(err.to_string().contains("bad manifest"));
+    }
+
+    #[test]
+    fn test_error_wasm_validation() {
+        let err = DynloadError::WasmValidationError("validation fail".to_string());
+        assert!(err.to_string().contains("validation fail"));
+    }
+
+    #[test]
+    fn test_error_wasm_instantiation() {
+        let err = DynloadError::WasmInstantiationError("instantiation fail".to_string());
+        assert!(err.to_string().contains("instantiation fail"));
+    }
+
+    #[test]
+    fn test_error_wasm_execution() {
+        let err = DynloadError::WasmExecutionError("execution fail".to_string());
+        assert!(err.to_string().contains("execution fail"));
+    }
+
+    #[test]
+    fn test_error_wasm_function_not_found() {
+        let err = DynloadError::WasmFunctionNotFound("missing_fn".to_string());
+        assert!(err.to_string().contains("missing_fn"));
+    }
+
+    #[test]
+    fn test_error_library_load() {
+        let err = DynloadError::LibraryLoadError("load fail".to_string());
+        assert!(err.to_string().contains("load fail"));
+    }
+
+    #[test]
+    fn test_error_symbol_not_found() {
+        let err = DynloadError::SymbolNotFound("my_symbol".to_string());
+        assert!(err.to_string().contains("my_symbol"));
+    }
+
+    #[test]
+    fn test_error_module_already_loaded() {
+        let err = DynloadError::ModuleAlreadyLoaded("mod1".to_string());
+        assert!(err.to_string().contains("mod1"));
+    }
+
+    #[test]
+    fn test_error_module_not_loaded() {
+        let err = DynloadError::ModuleNotLoaded("mod2".to_string());
+        assert!(err.to_string().contains("mod2"));
+    }
+
+    #[test]
+    fn test_error_dependency_not_found() {
+        let err = DynloadError::DependencyNotFound("missing-dep".to_string());
+        assert!(err.to_string().contains("missing-dep"));
+    }
+
+    #[test]
+    fn test_error_host_function_error() {
+        let err = DynloadError::HostFunctionError("host fn crashed".to_string());
+        assert!(err.to_string().contains("host fn crashed"));
+    }
+
+    #[test]
+    fn test_error_host_function_not_registered() {
+        let err = DynloadError::HostFunctionNotRegistered("unknown_fn".to_string());
+        assert!(err.to_string().contains("unknown_fn"));
+    }
+
+    #[test]
+    fn test_error_security_violation() {
+        let err = DynloadError::SecurityViolation("unauthorized access".to_string());
+        assert!(err.to_string().contains("unauthorized access"));
+    }
+
+    #[test]
+    fn test_error_hot_reload() {
+        let err = DynloadError::HotReloadError("reload fail".to_string());
+        assert!(err.to_string().contains("reload fail"));
+    }
+
+    #[test]
+    fn test_error_config() {
+        let err = DynloadError::ConfigError("bad config".to_string());
+        assert!(err.to_string().contains("bad config"));
+    }
+
+    #[test]
+    fn test_error_discovery() {
+        let err = DynloadError::DiscoveryError("scan fail".to_string());
+        assert!(err.to_string().contains("scan fail"));
+    }
+
+    #[test]
+    fn test_error_internal() {
+        let err = DynloadError::InternalError("internal panic".to_string());
+        assert!(err.to_string().contains("internal panic"));
+    }
+
+    #[test]
+    fn test_error_execution_timeout() {
+        let err = DynloadError::ExecutionTimeout(5000);
+        assert!(err.to_string().contains("5000"));
+    }
+
+    #[test]
+    fn test_error_memory_limit() {
+        let err = DynloadError::MemoryLimitExceeded(65536);
+        assert!(err.to_string().contains("65536"));
+    }
+
+    #[test]
+    fn test_error_compilation() {
+        let err = DynloadError::CompilationError("failed to compile".to_string());
+        assert!(err.to_string().contains("failed to compile"));
+    }
+
+    #[test]
+    fn test_result_type_alias() {
+        let ok: Result<i32> = Ok(42);
+        assert_eq!(ok.unwrap(), 42);
+
+        let err: Result<i32> = Err(DynloadError::InternalError("test".to_string()));
+        assert!(err.is_err());
+    }
 }

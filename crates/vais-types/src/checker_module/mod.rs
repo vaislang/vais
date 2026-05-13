@@ -1,0 +1,376 @@
+//! Module-level type checking: check_module, registration, and generics.
+
+use std::collections::{HashMap, HashSet};
+
+use vais_ast::*;
+
+use super::TypeChecker;
+use crate::object_safety;
+use crate::ownership;
+use crate::traits::TraitImpl;
+use crate::traits::{AssociatedTypeDef, TraitDef, TraitMethodSig};
+use crate::types::{
+    self, EffectAnnotation, EnumDef, FunctionSig, ResolvedType, StructDef, TypeError, TypeResult,
+    UnionDef, VariantFieldTypes,
+};
+
+mod registration;
+mod traits;
+mod validation;
+
+/// Saved state of generic type parameters, for restoring after processing.
+pub(crate) struct SavedGenericState {
+    /// Generic type parameter names (e.g., ["T", "U"])
+    pub generics: Vec<String>,
+    /// Trait bounds per generic (e.g., {"T": ["Clone", "Debug"]})
+    pub bounds: HashMap<String, Vec<String>>,
+    /// Const generic values (e.g., {"N": ResolvedType::I64})
+    pub const_generics: HashMap<String, ResolvedType>,
+}
+
+impl TypeChecker {
+    /// Type checks a complete module.
+    ///
+    /// Performs two-pass type checking:
+    /// 1. First pass: Collect all type definitions (functions, structs, enums, traits)
+    /// 2. Second pass: Type check all function bodies and implementations
+    ///
+    /// # Arguments
+    ///
+    /// * `module` - The parsed AST module to type check
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) if type checking succeeds, or a TypeError on failure.
+    pub fn check_module(&mut self, module: &Module) -> TypeResult<()> {
+        // First pass (1a): Register type definitions (structs, enums, traits)
+        // These must be registered BEFORE impl blocks, because impl blocks
+        // look up the target struct/enum by name.
+        for item in &module.items {
+            match &item.node {
+                Item::Struct(s) => self.register_struct(s)?,
+                Item::Enum(e) => self.register_enum(e)?,
+                Item::Union(u) => self.register_union(u)?,
+                Item::TypeAlias(t) => self.register_type_alias(t)?,
+                Item::TraitAlias(ta) => self.register_trait_alias(ta)?,
+                Item::Trait(t) => self.register_trait(t)?,
+                _ => {} // Handled in pass 1b
+            }
+        }
+
+        // First pass (1b): Register functions, impl blocks, constants, externs
+        // Now that all structs/enums/traits are registered, impl blocks can find their targets.
+        for item in &module.items {
+            match &item.node {
+                Item::Function(f) => self.register_function(f)?,
+                Item::Impl(impl_block) => {
+                    // Register impl methods to the target type
+                    self.register_impl(impl_block)?;
+                }
+                Item::ExternBlock(ext) => {
+                    // Register extern functions
+                    for func in &ext.functions {
+                        self.register_extern_function(func)?;
+                    }
+                }
+                Item::Const(const_def) => {
+                    // Register constant with its type
+                    let const_type = self.resolve_type(&const_def.ty.node);
+                    self.constants
+                        .insert(const_def.name.node.clone(), const_type);
+                }
+                Item::Global(global_def) => {
+                    // Register global variable with its type
+                    let global_type = self.resolve_type(&global_def.ty.node);
+                    self.globals
+                        .insert(global_def.name.node.clone(), global_type);
+                }
+                Item::Use(_)
+                | Item::Macro(_)
+                | Item::Error { .. }
+                | Item::Struct(_)
+                | Item::Enum(_)
+                | Item::Union(_)
+                | Item::TypeAlias(_)
+                | Item::TraitAlias(_)
+                | Item::Trait(_) => {
+                    // Already handled in pass 1a, or not needed here
+                }
+            }
+        }
+
+        // Second pass: check function bodies
+        // For imported items, suppress type errors from body checking.
+        // Imported function bodies may reference symbols not available in the
+        // current compilation unit (transitive dependencies). Errors from imported
+        // code should not be reported to the user — only local code errors matter.
+        let body_check_imported_end =
+            if self.imported_item_count > 0 && self.imported_item_count < module.items.len() {
+                self.imported_item_count
+            } else {
+                0
+            };
+        for (idx, item) in module.items.iter().enumerate() {
+            let is_imported = idx < body_check_imported_end;
+            match &item.node {
+                Item::Function(f) => {
+                    let result = self.check_function(f);
+                    if is_imported {
+                        // Silently ignore errors from imported function bodies.
+                        // They may reference symbols not in this compilation unit.
+                        let _ = result;
+                    } else {
+                        self.try_or_collect(result)?;
+                    }
+                }
+                Item::Impl(impl_block) => {
+                    // Check impl method bodies
+                    // Get struct generics if the target is a struct
+                    let struct_generics = match &impl_block.target_type.node {
+                        Type::Named { name, .. } => {
+                            // Look up the struct definition to get its generics
+                            self.structs
+                                .get(name)
+                                .map(|s| {
+                                    s.generics
+                                        .iter()
+                                        .map(|g| {
+                                            GenericParam::new_type(
+                                                Spanned::new(g.clone(), Span::default()),
+                                                vec![],
+                                            )
+                                        })
+                                        .collect::<Vec<_>>()
+                                })
+                                .unwrap_or_default()
+                        }
+                        _ => vec![],
+                    };
+                    // Also include impl-level generics
+                    let mut all_generics = struct_generics;
+                    all_generics.extend_from_slice(&impl_block.generics);
+
+                    for method in &impl_block.methods {
+                        let result = self.check_impl_method(
+                            &impl_block.target_type.node,
+                            &method.node,
+                            &all_generics,
+                        );
+                        if is_imported {
+                            // Silently ignore errors from imported impl method bodies.
+                            let _ = result;
+                        } else {
+                            self.try_or_collect(result)?;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Phase 4c.2 / Task #53 — totality gate.
+        //
+        // After body type checking, before ownership, walk the module
+        // call graph and reject any non-`partial` function that can
+        // transitively reach a runtime panic. This is a pure syntactic
+        // + call-graph analysis implemented in `crate::totality`;
+        // see that module for the exact set of panic sources.
+        //
+        // Imported modules are skipped: we only enforce totality on
+        // code authored in this compilation unit, not on symbols pulled
+        // in via `use`. An imported partial function can still be
+        // called from a total local function — such a call will be
+        // rejected by the totality walk because the imported partial
+        // function's name lands in `partial_fns`.
+        let local_module_for_totality =
+            if self.imported_item_count > 0 && self.imported_item_count < module.items.len() {
+                Module {
+                    items: module.items[self.imported_item_count..].to_vec(),
+                    modules_map: None,
+                }
+            } else {
+                module.clone()
+            };
+        self.try_or_collect(crate::totality::enforce_totality(
+            &local_module_for_totality,
+        ))?;
+
+        // Phase 4c.3 / Task #54 — effect purity gate.
+        //
+        // Walks the same local-only module slice that the totality gate
+        // uses and verifies that every `pure F` / `io F` / `alloc F`
+        // prefixed function stays within its declared effect ceiling.
+        // Functions without an effect prefix are inferred and do not
+        // participate directly — see `crate::effect_purity` for the
+        // subtype rules and the exact builtin classification.
+        self.try_or_collect(crate::effect_purity::enforce_effect_purity(
+            &local_module_for_totality,
+        ))?;
+
+        // Third pass: ownership and borrow checking (skip imported items)
+        if let Some(strict) = self.ownership_check_mode {
+            let mut ownership_checker = ownership::OwnershipChecker::new_collecting();
+            // Only check ownership for items from the current file, not imported modules
+            let local_module =
+                if self.imported_item_count > 0 && self.imported_item_count < module.items.len() {
+                    Module {
+                        items: module.items[self.imported_item_count..].to_vec(),
+                        modules_map: None,
+                    }
+                } else {
+                    module.clone()
+                };
+            // Run ownership check in collecting mode (never fails, collects all errors)
+            let _ = ownership_checker.check_module(&local_module);
+            let ownership_errors = ownership_checker.take_errors();
+
+            if !ownership_errors.is_empty() {
+                if strict {
+                    // Strict mode: return first error
+                    // SAFETY: non-empty check is on the line above
+                    let first_err = ownership_errors
+                        .into_iter()
+                        .next()
+                        .unwrap_or_else(|| unreachable!("ownership_errors was verified non-empty"));
+                    return Err(first_err);
+                } else {
+                    // Warn mode: add to warnings
+                    for err in &ownership_errors {
+                        self.warnings.push(format!("[ownership] {}", err));
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Set current generics with their bounds for type resolution
+    pub(crate) fn set_generics(&mut self, generics: &[GenericParam]) -> SavedGenericState {
+        let prev_generics = std::mem::replace(
+            &mut self.current_generics,
+            generics.iter().map(|g| &g.name.node).cloned().collect(),
+        );
+        let prev_bounds = std::mem::replace(
+            &mut self.current_generic_bounds,
+            generics
+                .iter()
+                .map(|g| {
+                    let mut expanded_bounds = Vec::new();
+                    for b in &g.bounds {
+                        if let Some(alias_bounds) = self.trait_aliases.get(&b.node) {
+                            expanded_bounds.extend(alias_bounds.iter().cloned());
+                        } else {
+                            expanded_bounds.push(b.node.clone());
+                        }
+                    }
+                    (g.name.node.clone(), expanded_bounds)
+                })
+                .collect(),
+        );
+        // Track const generic parameters with their types
+        // Collect first to avoid borrow conflict with self.resolve_type
+        let new_const_generics: HashMap<String, ResolvedType> = generics
+            .iter()
+            .filter_map(|g| {
+                if let GenericParamKind::Const { ty } = &g.kind {
+                    Some((g.name.node.clone(), self.resolve_type(&ty.node)))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let prev_const_generics =
+            std::mem::replace(&mut self.current_const_generics, new_const_generics);
+
+        SavedGenericState {
+            generics: prev_generics,
+            bounds: prev_bounds,
+            const_generics: prev_const_generics,
+        }
+    }
+
+    /// Restore previous generics
+    pub(crate) fn restore_generics(&mut self, saved: SavedGenericState) {
+        self.current_generics = saved.generics;
+        self.current_generic_bounds = saved.bounds;
+        self.current_const_generics = saved.const_generics;
+    }
+
+    /// Merge where clause bounds into current generic bounds.
+    ///
+    /// Where clause predicates provide additional trait bounds on generic parameters
+    /// that supplement the inline bounds in the generic parameter list.
+    ///
+    /// # Arguments
+    ///
+    /// * `where_clause` - The where clause predicates to merge
+    ///
+    /// # Example
+    ///
+    /// ```vais
+    /// F foo<T>(x: T) where T: Display + Clone { ... }
+    /// ```
+    ///
+    /// The where clause bounds (Display, Clone) are merged into the generic bounds for T.
+    pub(crate) fn merge_where_clause(&mut self, where_clause: &[WherePredicate]) {
+        for predicate in where_clause {
+            let bounds = self
+                .current_generic_bounds
+                .entry(predicate.ty.node.clone())
+                .or_default();
+            for b in &predicate.bounds {
+                // Expand trait aliases in where clause bounds
+                if let Some(alias_bounds) = self.trait_aliases.get(&b.node) {
+                    for ab in alias_bounds {
+                        if !bounds.contains(ab) {
+                            bounds.push(ab.clone());
+                        }
+                    }
+                } else if !bounds.contains(&b.node) {
+                    bounds.push(b.node.clone());
+                }
+            }
+        }
+    }
+
+    /// Extract contract specification from function attributes.
+    ///
+    /// Parses requires/ensures/invariant attributes and builds a ContractSpec.
+    /// NOTE: Contract expression type-checking is done in check_function() (checker_fn.rs)
+    /// for requires (before body) and ensures (after body with 'return' in scope).
+    /// This method only extracts the contract clauses without re-checking types.
+    pub(crate) fn extract_contracts(
+        &mut self,
+        f: &Function,
+    ) -> TypeResult<Option<types::ContractSpec>> {
+        use types::{ContractClause, ContractSpec};
+
+        let mut spec = ContractSpec::default();
+
+        for attr in &f.attributes {
+            match attr.name.as_str() {
+                "requires" | "ensures" => {
+                    if let Some(expr) = &attr.expr {
+                        // Contract expressions are already type-checked in check_function()
+                        // (requires before body, ensures after body with 'return' in scope).
+                        // Here we only extract the clause for storage in FunctionSig.
+                        let clause = ContractClause {
+                            expr_str: attr.args.first().cloned().unwrap_or_default(),
+                            span: expr.span,
+                        };
+
+                        if attr.name == "requires" {
+                            spec.requires.push(clause);
+                        } else {
+                            spec.ensures.push(clause);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(if spec.is_empty() { None } else { Some(spec) })
+    }
+}

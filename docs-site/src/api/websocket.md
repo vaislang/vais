@@ -2,9 +2,11 @@
 
 > WebSocket protocol implementation (RFC 6455)
 
+> **Implementation:** Requires C runtime (`websocket_runtime.c`). Built on top of TCP networking; for secure WebSocket (`wss://`), link OpenSSL.
+
 ## Overview
 
-The WebSocket module provides a full-featured WebSocket implementation with:
+The WebSocket module provides a WebSocket implementation surface with:
 - Server-side WebSocket upgrade handshake from HTTP
 - Client and server connection management
 - Frame encoding/decoding (text, binary, ping, pong, close)
@@ -12,10 +14,14 @@ The WebSocket module provides a full-featured WebSocket implementation with:
 - Close handshake and connection state management
 - Echo server pattern for simple WebSocket servers
 
+This page documents the API surface. Product-complete WebSocket behavior is not
+part of the current certified public baseline unless a later runtime gate names
+it explicitly.
+
 ## Import
 
 ```vais
-U std/websocket
+use std/websocket
 ```
 
 ## Constants
@@ -70,7 +76,7 @@ U std/websocket
 ### WsFrame Struct
 
 ```vais
-S WsFrame {
+struct WsFrame {
     opcode: i64,
     payload: i64,        # Pointer to payload data
     payload_len: i64,
@@ -84,7 +90,7 @@ S WsFrame {
 #### new
 
 ```vais
-F new(opcode: i64, payload: i64, payload_len: i64) -> WsFrame
+fn new(opcode: i64, payload: i64, payload_len: i64) -> WsFrame
 ```
 
 Create a new WebSocket frame with custom opcode and payload.
@@ -92,7 +98,7 @@ Create a new WebSocket frame with custom opcode and payload.
 #### text
 
 ```vais
-F text(msg: str) -> WsFrame
+fn text(msg: str) -> WsFrame
 ```
 
 Create a text frame from a string message.
@@ -100,7 +106,7 @@ Create a text frame from a string message.
 #### binary
 
 ```vais
-F binary(data: i64, len: i64) -> WsFrame
+fn binary(data: i64, len: i64) -> WsFrame
 ```
 
 Create a binary frame from raw data.
@@ -108,7 +114,7 @@ Create a binary frame from raw data.
 #### ping
 
 ```vais
-F ping() -> WsFrame
+fn ping() -> WsFrame
 ```
 
 Create a ping frame with no payload.
@@ -116,7 +122,7 @@ Create a ping frame with no payload.
 #### pong
 
 ```vais
-F pong() -> WsFrame
+fn pong() -> WsFrame
 ```
 
 Create a pong frame (response to ping).
@@ -124,7 +130,7 @@ Create a pong frame (response to ping).
 #### close
 
 ```vais
-F close(status_code: i64) -> WsFrame
+fn close(status_code: i64) -> WsFrame
 ```
 
 Create a close frame with a status code.
@@ -132,7 +138,7 @@ Create a close frame with a status code.
 #### is_control
 
 ```vais
-F is_control(&self) -> i64
+fn is_control(&self) -> i64
 ```
 
 Check if this is a control frame (opcode >= 8). Returns 1 if true, 0 otherwise.
@@ -140,7 +146,7 @@ Check if this is a control frame (opcode >= 8). Returns 1 if true, 0 otherwise.
 #### is_text
 
 ```vais
-F is_text(&self) -> i64
+fn is_text(&self) -> i64
 ```
 
 Check if this is a text frame. Returns 1 if true, 0 otherwise.
@@ -148,7 +154,7 @@ Check if this is a text frame. Returns 1 if true, 0 otherwise.
 #### is_binary
 
 ```vais
-F is_binary(&self) -> i64
+fn is_binary(&self) -> i64
 ```
 
 Check if this is a binary frame. Returns 1 if true, 0 otherwise.
@@ -156,7 +162,7 @@ Check if this is a binary frame. Returns 1 if true, 0 otherwise.
 #### is_close
 
 ```vais
-F is_close(&self) -> i64
+fn is_close(&self) -> i64
 ```
 
 Check if this is a close frame. Returns 1 if true, 0 otherwise.
@@ -164,7 +170,7 @@ Check if this is a close frame. Returns 1 if true, 0 otherwise.
 #### is_ping
 
 ```vais
-F is_ping(&self) -> i64
+fn is_ping(&self) -> i64
 ```
 
 Check if this is a ping frame. Returns 1 if true, 0 otherwise.
@@ -172,7 +178,7 @@ Check if this is a ping frame. Returns 1 if true, 0 otherwise.
 #### is_pong
 
 ```vais
-F is_pong(&self) -> i64
+fn is_pong(&self) -> i64
 ```
 
 Check if this is a pong frame. Returns 1 if true, 0 otherwise.
@@ -180,7 +186,7 @@ Check if this is a pong frame. Returns 1 if true, 0 otherwise.
 #### payload_text
 
 ```vais
-F payload_text(&self) -> str
+fn payload_text(&self) -> str
 ```
 
 Get payload as string (for text frames). Returns empty string if no payload.
@@ -188,7 +194,7 @@ Get payload as string (for text frames). Returns empty string if no payload.
 #### close_code
 
 ```vais
-F close_code(&self) -> i64
+fn close_code(&self) -> i64
 ```
 
 Get close status code from close frame. Returns `WS_CLOSE_NO_STATUS` if not a close frame.
@@ -196,7 +202,7 @@ Get close status code from close frame. Returns `WS_CLOSE_NO_STATUS` if not a cl
 #### drop
 
 ```vais
-F drop(&self) -> i64
+fn drop(&self) -> i64
 ```
 
 Free payload memory.
@@ -206,7 +212,7 @@ Free payload memory.
 ### WsConnection Struct
 
 ```vais
-S WsConnection {
+struct WsConnection {
     fd: i64,             # TCP socket file descriptor
     is_server: i64,      # 1 if server-side, 0 if client-side
     state: i64,          # Connection state (WS_STATE_*)
@@ -219,7 +225,7 @@ S WsConnection {
 #### from_server
 
 ```vais
-F from_server(fd: i64) -> WsConnection
+fn from_server(fd: i64) -> WsConnection
 ```
 
 Create a server-side WebSocket connection from an already-accepted TCP socket.
@@ -227,7 +233,7 @@ Create a server-side WebSocket connection from an already-accepted TCP socket.
 #### from_client
 
 ```vais
-F from_client(fd: i64) -> WsConnection
+fn from_client(fd: i64) -> WsConnection
 ```
 
 Create a client-side WebSocket connection.
@@ -235,7 +241,7 @@ Create a client-side WebSocket connection.
 #### is_open
 
 ```vais
-F is_open(&self) -> i64
+fn is_open(&self) -> i64
 ```
 
 Check if connection is open. Returns 1 if open, 0 otherwise.
@@ -243,7 +249,7 @@ Check if connection is open. Returns 1 if open, 0 otherwise.
 #### send_frame
 
 ```vais
-F send_frame(&self, frame: &WsFrame) -> i64
+fn send_frame(&self, frame: &WsFrame) -> i64
 ```
 
 Send a WebSocket frame. Returns bytes sent on success, -1 on error.
@@ -251,7 +257,7 @@ Send a WebSocket frame. Returns bytes sent on success, -1 on error.
 #### send_text
 
 ```vais
-F send_text(&self, msg: str) -> i64
+fn send_text(&self, msg: str) -> i64
 ```
 
 Send a text message. Returns bytes sent on success, -1 on error.
@@ -259,7 +265,7 @@ Send a text message. Returns bytes sent on success, -1 on error.
 #### send_binary
 
 ```vais
-F send_binary(&self, data: i64, len: i64) -> i64
+fn send_binary(&self, data: i64, len: i64) -> i64
 ```
 
 Send binary data. Returns bytes sent on success, -1 on error.
@@ -267,7 +273,7 @@ Send binary data. Returns bytes sent on success, -1 on error.
 #### send_ping
 
 ```vais
-F send_ping(&self) -> i64
+fn send_ping(&self) -> i64
 ```
 
 Send a ping frame. Returns bytes sent on success, -1 on error.
@@ -275,7 +281,7 @@ Send a ping frame. Returns bytes sent on success, -1 on error.
 #### send_pong
 
 ```vais
-F send_pong(&self) -> i64
+fn send_pong(&self) -> i64
 ```
 
 Send a pong frame (response to ping). Returns bytes sent on success, -1 on error.
@@ -283,7 +289,7 @@ Send a pong frame (response to ping). Returns bytes sent on success, -1 on error
 #### send_close
 
 ```vais
-F send_close(&self, status_code: i64) -> i64
+fn send_close(&self, status_code: i64) -> i64
 ```
 
 Send a close frame with status code. Returns bytes sent on success, -1 on error.
@@ -291,7 +297,7 @@ Send a close frame with status code. Returns bytes sent on success, -1 on error.
 #### recv_frame
 
 ```vais
-F recv_frame(&self) -> WsFrame
+fn recv_frame(&self) -> WsFrame
 ```
 
 Receive a WebSocket frame. Returns frame with opcode=-1 on error or connection closed. Automatically handles close handshake and responds to close frames.
@@ -299,7 +305,7 @@ Receive a WebSocket frame. Returns frame with opcode=-1 on error or connection c
 #### close
 
 ```vais
-F close(&self) -> i64
+fn close(&self) -> i64
 ```
 
 Close the WebSocket connection gracefully (sends close frame if open).
@@ -307,7 +313,7 @@ Close the WebSocket connection gracefully (sends close frame if open).
 #### force_close
 
 ```vais
-F force_close(&self) -> i64
+fn force_close(&self) -> i64
 ```
 
 Force close without handshake (immediately closes TCP socket).
@@ -315,7 +321,7 @@ Force close without handshake (immediately closes TCP socket).
 #### drop
 
 ```vais
-F drop(&self) -> i64
+fn drop(&self) -> i64
 ```
 
 Cleanup / destructor (calls force_close).
@@ -325,7 +331,7 @@ Cleanup / destructor (calls force_close).
 ### WsServer Struct
 
 ```vais
-S WsServer {
+struct WsServer {
     listener_fd: i64,
     port: i64,
     running: i64
@@ -337,7 +343,7 @@ S WsServer {
 #### bind
 
 ```vais
-F bind(port: i64) -> WsServer
+fn bind(port: i64) -> WsServer
 ```
 
 Create and bind a WebSocket server on the given port.
@@ -345,7 +351,7 @@ Create and bind a WebSocket server on the given port.
 #### is_valid
 
 ```vais
-F is_valid(&self) -> i64
+fn is_valid(&self) -> i64
 ```
 
 Check if server is valid (listener bound successfully). Returns 1 if valid, 0 otherwise.
@@ -353,7 +359,7 @@ Check if server is valid (listener bound successfully). Returns 1 if valid, 0 ot
 #### accept
 
 ```vais
-F accept(&self) -> WsConnection
+fn accept(&self) -> WsConnection
 ```
 
 Accept a WebSocket connection (performs HTTP upgrade handshake). Returns WsConnection with fd=-1 on error.
@@ -361,7 +367,7 @@ Accept a WebSocket connection (performs HTTP upgrade handshake). Returns WsConne
 #### run_echo
 
 ```vais
-F run_echo(&self) -> i64
+fn run_echo(&self) -> i64
 ```
 
 Run an echo server loop (convenience for simple servers). Accepts one connection at a time and echoes text and binary frames back.
@@ -369,7 +375,7 @@ Run an echo server loop (convenience for simple servers). Accepts one connection
 #### stop
 
 ```vais
-F stop(&self) -> i64
+fn stop(&self) -> i64
 ```
 
 Stop the server.
@@ -377,7 +383,7 @@ Stop the server.
 #### close
 
 ```vais
-F close(&self) -> i64
+fn close(&self) -> i64
 ```
 
 Close the server listener.
@@ -385,7 +391,7 @@ Close the server listener.
 #### drop
 
 ```vais
-F drop(&self) -> i64
+fn drop(&self) -> i64
 ```
 
 Cleanup / destructor (calls close).
@@ -393,13 +399,13 @@ Cleanup / destructor (calls close).
 ## Convenience Functions
 
 ```vais
-F ws_server(port: i64) -> WsServer
+fn ws_server(port: i64) -> WsServer
 ```
 
 Create a WebSocket server bound to a port.
 
 ```vais
-F ws_upgrade(fd: i64, buffer: i64, buffer_len: i64) -> WsConnection
+fn ws_upgrade(fd: i64, buffer: i64, buffer_len: i64) -> WsConnection
 ```
 
 Perform server-side handshake on an existing TCP connection (for integrating with existing HTTP servers). Returns WsConnection with fd=-1 on failure.
@@ -409,12 +415,12 @@ Perform server-side handshake on an existing TCP connection (for integrating wit
 ### WebSocket Echo Server
 
 ```vais
-U std/websocket
+use std/websocket
 
-F main() -> i64 {
+fn main() -> i64 {
     server := ws_server(8080)
     I server.is_valid() == 0 {
-        R -1
+        return -1
     }
 
     # Run echo server (blocks)
@@ -428,12 +434,12 @@ F main() -> i64 {
 ### Custom WebSocket Server
 
 ```vais
-U std/websocket
+use std/websocket
 
-F main() -> i64 {
+fn main() -> i64 {
     server := WsServer::bind(8080)
     I server.is_valid() == 0 {
-        R -1
+        return -1
     }
 
     L true {
@@ -454,9 +460,9 @@ F main() -> i64 {
                 msg := frame.payload_text()
                 # Process text message
                 conn.send_text(msg)
-            } E I frame.is_ping() == 1 {
+            } else I frame.is_ping() == 1 {
                 conn.send_pong()
-            } E I frame.is_close() == 1 {
+            } else I frame.is_close() == 1 {
                 B  # Close handled in recv_frame
             }
 
@@ -473,9 +479,9 @@ F main() -> i64 {
 ### WebSocket Client (Sending Messages)
 
 ```vais
-U std/websocket
+use std/websocket
 
-F send_message(tcp_fd: i64, msg: str) -> i64 {
+fn send_message(tcp_fd: i64, msg: str) -> i64 {
     conn := WsConnection::from_client(tcp_fd)
 
     # Send text message
@@ -497,15 +503,15 @@ F send_message(tcp_fd: i64, msg: str) -> i64 {
 ### Integration with HTTP Server
 
 ```vais
-U std/websocket
-U std/http
+use std/websocket
+use std/http
 
 # Upgrade HTTP connection to WebSocket
-F handle_ws_upgrade(tcp_fd: i64, http_buffer: i64, buffer_len: i64) -> i64 {
+fn handle_ws_upgrade(tcp_fd: i64, http_buffer: i64, buffer_len: i64) -> i64 {
     conn := ws_upgrade(tcp_fd, http_buffer, buffer_len)
 
     I conn.fd < 0 {
-        R -1  # Upgrade failed
+        return -1  # Upgrade failed
     }
 
     # Handle WebSocket connection

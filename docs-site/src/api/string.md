@@ -5,7 +5,7 @@
 ## Import
 
 ```vais
-U std/string
+use std/string
 ```
 
 ## Overview
@@ -15,13 +15,13 @@ The `String` type provides a dynamically-sized, heap-allocated string that autom
 ## Dependencies
 
 ```vais
-U std/option
+use std/option
 ```
 
 ## Struct
 
 ```vais
-S String {
+struct String {
     data: i64,   # Pointer to char array (i8*)
     len: i64,    # Current length (excluding null terminator)
     cap: i64     # Allocated capacity
@@ -33,7 +33,7 @@ S String {
 ### with_capacity
 
 ```vais
-F with_capacity(capacity: i64) -> String
+fn with_capacity(capacity: i64) -> String
 ```
 
 Create an empty string with the specified initial capacity.
@@ -53,7 +53,7 @@ s := String.with_capacity(100)
 ### len
 
 ```vais
-F len(&self) -> i64
+fn len(&self) -> i64
 ```
 
 Get the current length of the string (excluding null terminator).
@@ -65,7 +65,7 @@ Get the current length of the string (excluding null terminator).
 ### capacity
 
 ```vais
-F capacity(&self) -> i64
+fn capacity(&self) -> i64
 ```
 
 Get the allocated capacity.
@@ -77,7 +77,7 @@ Get the allocated capacity.
 ### is_empty
 
 ```vais
-F is_empty(&self) -> i64
+fn is_empty(&self) -> i64
 ```
 
 Check if the string is empty.
@@ -89,7 +89,7 @@ Check if the string is empty.
 ### char_at
 
 ```vais
-F char_at(&self, index: i64) -> i64
+fn char_at(&self, index: i64) -> i64
 ```
 
 Get the ASCII character at the specified index. Returns 0 for out-of-bounds access.
@@ -110,7 +110,7 @@ c := s.char_at(0)  # 104 ('h')
 ### char_at_opt
 
 ```vais
-F char_at_opt(&self, index: i64) -> Option<i64>
+fn char_at_opt(&self, index: i64) -> Option<i64>
 ```
 
 Safe character access using Option type.
@@ -123,7 +123,7 @@ Safe character access using Option type.
 **Example:**
 ```vais
 s := str_from("test")
-M s.char_at_opt(0) {
+match s.char_at_opt(0) {
     Some(c) => { puts_char(c) }
     None => { puts("Out of bounds") }
 }
@@ -134,7 +134,7 @@ M s.char_at_opt(0) {
 ### push_char
 
 ```vais
-F push_char(&self, c: i64) -> i64
+fn push_char(&self, c: i64) -> i64
 ```
 
 Append a character to the end of the string. Automatically grows capacity if needed.
@@ -155,7 +155,7 @@ s.push_char(33)  # Append '!'
 ### grow
 
 ```vais
-F grow(&self) -> i64
+fn grow(&self) -> i64
 ```
 
 Grow the string's capacity (doubles it, or sets to 16 if smaller).
@@ -167,7 +167,7 @@ Grow the string's capacity (doubles it, or sets to 16 if smaller).
 ### clear
 
 ```vais
-F clear(&self) -> i64
+fn clear(&self) -> i64
 ```
 
 Clear the string contents (sets length to 0).
@@ -179,7 +179,7 @@ Clear the string contents (sets length to 0).
 ### print
 
 ```vais
-F print(&self) -> i64
+fn print(&self) -> i64
 ```
 
 Print the string to stdout.
@@ -191,7 +191,7 @@ Print the string to stdout.
 ### drop
 
 ```vais
-F drop(&self) -> i64
+fn drop(&self) -> i64
 ```
 
 Free the string's memory.
@@ -203,7 +203,7 @@ Free the string's memory.
 ### str_from
 
 ```vais
-F str_from(s: i64) -> String
+fn str_from(s: i64) -> String
 ```
 
 Create a `String` from a C string literal (null-terminated).
@@ -223,7 +223,7 @@ s := str_from("Hello, world!")
 ### str_concat
 
 ```vais
-F str_concat(a: String, b: String) -> String
+fn str_concat(a: String, b: String) -> String
 ```
 
 Concatenate two strings into a new string.
@@ -246,7 +246,7 @@ c := str_concat(a, b)  # "Hello world"
 ### str_substring
 
 ```vais
-F str_substring(s: String, start: i64, end: i64) -> String
+fn str_substring(s: String, start: i64, end: i64) -> String
 ```
 
 Extract a substring from start index (inclusive) to end index (exclusive).
@@ -269,7 +269,7 @@ sub := str_substring(s, 0, 5)  # "hello"
 ### str_contains_char
 
 ```vais
-F str_contains_char(s: String, c: i64) -> i64
+fn str_contains_char(s: String, c: i64) -> i64
 ```
 
 Check if the string contains the specified character.
@@ -293,7 +293,7 @@ I str_contains_char(s, 101) {  # 'e'
 ### str_eq
 
 ```vais
-F str_eq(a: String, b: String) -> i64
+fn str_eq(a: String, b: String) -> i64
 ```
 
 Compare two strings for equality.
@@ -318,9 +318,9 @@ I str_eq(a, b) {
 ### Basic String Operations
 
 ```vais
-U std/string
+use std/string
 
-F main() -> i64 {
+fn main() -> i64 {
     # Create from literal
     s := str_from("Hello")
 
@@ -345,9 +345,9 @@ F main() -> i64 {
 ### String Concatenation
 
 ```vais
-U std/string
+use std/string
 
-F main() -> i64 {
+fn main() -> i64 {
     first := str_from("Hello")
     second := str_from(" ")
     third := str_from("world!")
@@ -370,9 +370,9 @@ F main() -> i64 {
 ### Substring Extraction
 
 ```vais
-U std/string
+use std/string
 
-F main() -> i64 {
+fn main() -> i64 {
     text := str_from("The quick brown fox")
 
     # Extract "quick"
@@ -388,9 +388,9 @@ F main() -> i64 {
 ### Character Access
 
 ```vais
-U std/string
+use std/string
 
-F main() -> i64 {
+fn main() -> i64 {
     s := str_from("hello")
 
     # Iterate through characters
@@ -412,9 +412,9 @@ F main() -> i64 {
 ### String Comparison
 
 ```vais
-U std/string
+use std/string
 
-F main() -> i64 {
+fn main() -> i64 {
     a := str_from("test")
     b := str_from("test")
     c := str_from("different")

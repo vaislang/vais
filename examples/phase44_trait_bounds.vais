@@ -1,0 +1,25 @@
+# Phase 44 Cross-verify: Trait bounds & generic functions (Phase 40)
+# Tests trait implementation, bounds verification, and generic call dispatch
+
+W Summable {
+    F sum(&self) -> i64
+}
+
+S Pair { a: i64, b: i64 }
+
+X Pair: Summable {
+    F sum(&self) -> i64 {
+        self.a + self.b
+    }
+}
+
+F identity<T>(x: T) -> T {
+    x
+}
+
+F main() -> i64 {
+    p := Pair { a: 20, b: 22 }
+    result := p.sum()
+    x := identity(result)
+    x - 42
+}

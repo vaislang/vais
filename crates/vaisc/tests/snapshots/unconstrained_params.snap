@@ -1,0 +1,1 @@
+Type error: InferFailed { kind: "return type", name: "add", context: "add", span: Some(Span { start: 2, end: 5 }), suggestion: Some("Add explicit return type annotation") }

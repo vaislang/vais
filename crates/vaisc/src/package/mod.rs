@@ -1,0 +1,36 @@
+//! Package manager for Vais
+//!
+//! Handles vais.toml parsing, dependency resolution, and package builds.
+
+// Submodules
+mod features;
+mod manifest;
+mod resolution;
+pub mod semver;
+mod types;
+mod workspace;
+
+#[cfg(test)]
+mod tests;
+
+// Re-export public types and functions
+pub use types::{
+    BuildConfig, Dependency, DetailedDependency, NativeDependency, PackageError, PackageInfo,
+    PackageManifest, PackageResult, ResolvedDependency,
+};
+
+pub use features::FeatureConfig;
+
+pub use workspace::{
+    find_workspace_root, resolve_inter_workspace_deps, resolve_workspace_members, WorkspaceConfig,
+};
+
+pub use manifest::{add_dependency, find_manifest, init_package, load_manifest, remove_dependency};
+
+pub use resolution::{
+    default_registry_cache_root, find_cached_registry_dep, resolve_all_dependencies,
+};
+
+// Cycle detection utilities — re-exported for package tooling & lint integration
+#[allow(unused_imports)]
+pub use resolution::{detect_all_cycles, format_cycles};
