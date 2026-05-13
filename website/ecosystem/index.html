@@ -520,7 +520,7 @@
       </h1>
       <p class="eco-hero-subtitle">
         하나의 언어로 프론트엔드, 백엔드, 데이터베이스를 모두.
-        현재 공개 기준은 제품 완성이 아니라 main 재현 gate, main fixture schema gate, aggregate main port 대기 중인 integration evidence를 구분한 범위입니다.
+        현재 공개 기준은 제품 완성이 아니라 compiler main gate, main fixture schema gate, VaisDB aggregate main full-build smoke, scoped integration evidence를 구분한 범위입니다.
       </p>
       <div class="eco-hero-actions">
         <a href="https://docs.vaislang.dev/ecosystem/" class="btn btn-primary">Get Started</a>
@@ -533,7 +533,7 @@
 
         <div class="arch-layer arch-layer-browser">
           <span class="arch-label">[ Browser ]</span>
-          <span class="arch-desc">VaisX (vais-web) — integration evidence: runtime 61/77, unit 390/390, full-build 24/24; schema gate 9/9 ported as main fixture</span>
+          <span class="arch-desc">VaisX (vais-web) — scoped evidence: runtime 61/77, unit 390/390, full-build 24/24; schema gate 9/9 ported as main fixture</span>
         </div>
 
         <div class="arch-arrow">↕  HTTP / WebSocket  ↕</div>
@@ -577,7 +577,7 @@
           <div class="product-tagline">vais-web · 웹 프레임워크 workbench</div>
           <p class="product-desc">
             컴파일 타임 반응성과 DOM 업데이트 생성을 목표로 하는 웹 프레임워크.
-            현재 공개 claim은 integration evidence runtime 61/77, unit 390/390, full-build 24/24와 main fixture로 port된 shared-schema product 9/9에 묶입니다.
+            현재 공개 claim은 scoped runtime 61/77, unit 390/390, full-build 24/24와 main fixture로 port된 shared-schema product 9/9에 묶입니다.
           </p>
           <ul class="product-features">
             <li>컴파일 타임 반응성 구현 표면</li>
@@ -598,7 +598,7 @@
           <div class="product-tagline">RAG-native 하이브리드 데이터베이스</div>
           <p class="product-desc">
             벡터 검색, 그래프 쿼리, SQL, 전문 검색(FTS)을 단일 엔진으로 묶는
-            데이터베이스 workbench. 현재 integration evidence는 package 261/261, runtime 34/34입니다.
+            데이터베이스 workbench. 현재 main full-build smoke는 36/36 modules clean이며, scoped evidence는 package 261/261, runtime 34/34입니다.
           </p>
           <ul class="product-features">
             <li>Vector + Graph + SQL + FTS 구현 표면</li>
@@ -687,7 +687,7 @@
     )
     <span class="fn">ul</span>(|| {
       <span class="kw">fn</span> <span class="fn">render_item</span>(r: <span class="type">SearchResult</span>) {
-        <span class="fn">li</span>(<span class="str">"~{r.title}  (score: ~{r.score:.2})"</span>)
+        <span class="fn">li</span>(<span class="str">"{r.title}  (score: {r.score:.2})"</span>)
       }
       results.<span class="fn">get</span>().<span class="fn">iter</span>() |> <span class="fn">map</span>(<span class="fn">render_item</span>)
     })
@@ -760,7 +760,7 @@
 <span class="cm"># RAG 파이프라인 — 한 줄로 완성</span>
 <span class="kw">A</span> <span class="kw">fn</span> <span class="fn">rag_query</span>(db: <span class="type">Db</span>, question: <span class="type">str</span>) -> <span class="type">str</span> {
   context <span class="op">:=</span> <span class="kw">Y</span> db.<span class="fn">rag</span>(question, top_k: <span class="num">5</span>)<span class="op">?</span>
-  <span class="fn">llm_complete</span>(<span class="str">"~{context}\n\nQ: ~{question}"</span>)<span class="op">!</span>
+  <span class="fn">llm_complete</span>(<span class="str">"{context}\n\nQ: {question}"</span>)<span class="op">!</span>
 }</code></pre>
           </div>
         </div>

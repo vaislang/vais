@@ -82,8 +82,18 @@ requireText(
 );
 requireText(
   publicStatus,
-  'not yet reproducible from `origin/main`',
-  'integration evidence must not be presented as main-reproducible yet',
+  'VaisDB aggregate main full-build smoke',
+  'VaisDB aggregate main full-build smoke must be named as main-reproducible evidence',
+);
+requireText(
+  publicStatus,
+  '`36/36` LLVM/object cache artifacts',
+  'VaisDB aggregate main full-build smoke must disclose the measured module/cache scope',
+);
+requirePattern(
+  publicStatus,
+  /not yet\s+reproducible as a single `origin\/main` gate/,
+  'remaining integration evidence must not be presented as one full ecosystem main gate',
 );
 requireText(
   publicStatus,
@@ -92,8 +102,8 @@ requireText(
 );
 requireText(
   publicStatus,
-  'Full ecosystem runtime aggregate runner: pending DB/server/web runtime main',
-  'full ecosystem runtime aggregate must remain explicitly pending',
+  'Full ecosystem runtime aggregate runner: still pending a single',
+  'full ecosystem runtime aggregate must remain explicitly pending as one main gate',
 );
 requireText(
   publicStatus,
@@ -175,12 +185,13 @@ const websiteSubtitle =
 requireText('website/index.html', websiteSubtitle, 'homepage playground copy must match public claim boundary');
 requireText('website/public/locales/en.json', websiteSubtitle, 'English locale must match public claim boundary');
 requireText('website/index.html', 'Evidence Snapshot', 'homepage must scope gate counts as evidence');
-requireText('website/index.html', 'pending main port', 'homepage must disclose aggregate runtime gate main-port status');
+requireText('website/index.html', 'VaisDB aggregate main full-build smoke', 'homepage must disclose the promoted aggregate main gate');
+requireText('website/index.html', 'other runtime/package counts remain scoped evidence', 'homepage must preserve the DB/server/web scope boundary');
 requireText('website/index.html', 'main-fixture/local-workspace reproducible', 'homepage must disclose schema gate main-fixture status');
 requireText('website/index.html', 'server runtime integration evidence 20/20', 'homepage server claim must be evidence-scoped');
 requireText('website/index.html', 'shared-schema product evidence 9/9', 'homepage web claim must be evidence-scoped');
 requireText('website/ecosystem/index.html', 'server runtime 20/20', 'ecosystem server evidence count must remain explicit');
-requireText('website/ecosystem/index.html', 'integration evidence', 'ecosystem page must disclose evidence scope');
+requireText('website/ecosystem/index.html', 'scoped evidence', 'ecosystem page must disclose evidence scope');
 requireText('website/vaisx/index.html', 'shared-schema product evidence 9/9', 'VaisX page must be evidence-scoped');
 requireText('playground/src/examples.js', "'shared-schema-product'", 'playground must expose the shared-schema product example');
 

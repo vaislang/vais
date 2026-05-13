@@ -12,10 +12,11 @@ unverified.
 The current certified baseline is a core compiler and promoted-runtime evidence
 baseline, with reproducibility scope split as follows.
 
-The current public baseline has two evidence tiers:
+The current public baseline has three evidence tiers:
 
 1. Main-reproducible gates that run from the current `origin/main` tree.
-2. Integration evidence gathered on the long-running
+2. Main-tree fixtures that require a sibling local workspace.
+3. Scoped integration evidence gathered on the long-running
    `codex/ssr-json-grammar-gate` branch and the local multi-repository
    workspace.
 
@@ -34,6 +35,10 @@ The current `origin/main` tree directly enforces:
   `bash scripts/check-integrity.sh`
 - `vaisc emit-ts` schema declaration tests:
   `cargo test --locked -p vaisc --test emit_ts_skeleton --test emit_ts_exhaustiveness`
+- VaisDB aggregate main full-build smoke:
+  clean-cache `vaisc build ../lang/packages/vaisdb/src/main.vais`, producing
+  `36/36` LLVM/object cache artifacts with no IR verifier, warning, undefined
+  symbol, or duplicate symbol lines
 - Cross-package schema gate: `15/15` via
   `tests/empirical/cross_package_schema/tests/gate.sh positive|negative`
 - Multi-domain product schema gate: `9/9` via
@@ -45,17 +50,19 @@ TypeScript toolchain. The multi-domain product gate currently certifies
 type-check propagation across the DB/server/web consumers; DB/server native
 runtime coverage remains integration evidence below.
 
-The following counts are integration evidence from
-`codex/ssr-json-grammar-gate` and the local workspace as of 2026-05-12. They
-are public evidence, but the full ecosystem runtime aggregate is not yet reproducible from `origin/main`
-until the DB/server/web runtime gates are ported to main:
+The following counts are scoped integration evidence from
+`codex/ssr-json-grammar-gate` and the local workspace as of 2026-05-13. They
+are public evidence, but the full ecosystem runtime aggregate runner is not yet
+reproducible as a single `origin/main` gate until the DB/server/web runtime
+gates are ported to main:
 
 - Core compiler freeze bundle: passed
 - Downstream re-entry criteria: passed
-- Full ecosystem runtime aggregate runner: pending DB/server/web runtime main
-  port
+- Full ecosystem runtime aggregate runner: still pending a single
+  DB/server/web runtime main gate
 - Standard library package tests: `82/82`
-- VaisDB package tests: `261/261`
+- VaisDB package tests: `261/261` scoped package evidence; aggregate main
+  full-build smoke now separately passes
 - Backend package tests: `18/18`
 - `std/http_client` runtime smoke: `15/15`
 - TLS runtime smoke: `2/2`
@@ -83,8 +90,8 @@ The current baseline does not certify:
 - Broad external network reliability outside the promoted local smoke gates
 - Product-complete VaisDB, Vais Server, or Vais Web behavior
 - Complete API documentation for every standard-library module
-- Main-branch reproducibility for the full ecosystem runtime aggregate until
-  the pending DB/server/web runtime main-port work lands
+- Main-branch reproducibility for a single full ecosystem runtime aggregate
+  until the DB/server/web runtime main-gate work lands
 
 ## Public Wording Policy
 
@@ -93,7 +100,8 @@ Use evidence-scoped wording:
 - "certified core compiler"
 - "promoted runtime smoke gate"
 - "integration evidence"
-- "pending main port"
+- "scoped evidence"
+- "single full ecosystem runtime gate pending"
 - "source-build baseline"
 - "experimental target"
 - "design target"

@@ -15,17 +15,17 @@
   "hero": {
     "badge": "Certified Core + Scoped Evidence",
     "title": "Write <span class=\"gradient-text\">clear Vais</span>,<br>get <span class=\"gradient-text\">native performance</span>",
-    "subtitle": "Vais (Vibe AI Language for Systems) is a systems programming language optimized for AI code generation. The current public baseline separates main-reproducible gates, main-fixture schema gates, and integration evidence pending aggregate main port.",
+    "subtitle": "Vais (Vibe AI Language for Systems) is a systems programming language optimized for AI code generation. The current public baseline includes a clean compiler main gate and a VaisDB aggregate main full-build smoke, while DB/server/web product claims stay tied to named gates.",
     "tryBrowser": "Try in Browser",
     "install": "brew install vais"
   },
   "compare": {
     "title": "Canonical Syntax, Evidence-Scoped Claims",
-    "subtitle": "Step 19 retired the old single-letter keyword forms. Public claims now distinguish main-reproducible gates, schema gates ported to main fixtures, and integration evidence that is pending aggregate main port.",
+    "subtitle": "Full-word declaration and import spellings are canonical where available; compact control forms such as <code>I</code>, <code>LF</code>, <code>LW</code>, <code>D</code>, <code>B</code>, and <code>C</code> remain current syntax. Public claims distinguish the compiler main gate, the VaisDB aggregate main full-build smoke, schema fixtures, and scoped integration evidence.",
     "vais": "Vais",
     "tokens": "tokens",
     "barTitle": "Evidence Snapshot — 2026-05-13",
-    "barNote": "Schema gates are now main-fixture/local-workspace reproducible: cross-package schema 15/15 and shared-schema product evidence 9/9. Runtime and package counts remain integration evidence from the gate branch; the aggregate runtime gate is pending main port."
+    "barNote": "Compiler baseline: fmt/build, IR verifier tests, and a clean-cache VaisDB aggregate main full-build smoke pass without IR or link warnings. Cross-package schema 15/15 and shared-schema product evidence 9/9 remain main-fixture/local-workspace reproducible; server/web counts are scoped gate evidence."
   },
   "performance": {
     "title": "Native Performance",
@@ -39,7 +39,7 @@
     "subtitle": "Designed from the ground up for AI-assisted development without sacrificing performance.",
     "singleChar": {
       "title": "Canonical Keywords",
-      "description": "<code>fn</code>, <code>struct</code>, <code>enum</code>, <code>else</code>, <code>match</code>, <code>return</code>, <code>use</code>, and <code>pub</code> are canonical. Retired single-letter forms are no longer accepted."
+      "description": "<code>fn</code>, <code>struct</code>, <code>enum</code>, <code>else</code>, <code>match</code>, <code>return</code>, <code>use</code>, and <code>pub</code> are canonical where the compiler exposes full-word spellings. Compact control tokens remain explicit syntax where no full-word spelling is promoted."
     },
     "selfRecursion": {
       "title": "Self-Recursion Operator",
@@ -107,7 +107,7 @@
   "vaisx": {
     "badge": "New",
     "title": "Build Web Apps with Vais",
-    "subtitle": "VaisX is the Vais web framework workbench. Current public claims distinguish main-reproducible gates, main-fixture schema gates, and integration evidence pending aggregate main port.",
+    "subtitle": "VaisX is the Vais web framework workbench. Current public claims distinguish main-reproducible compiler/schema gates, the VaisDB aggregate main full-build smoke, and scoped Vais Web integration evidence.",
     "compiler": {
       "title": "Compile-Time Reactivity",
       "description": "Reactive state analysis and DOM update generation are active implementation surfaces verified only where named gates cover them."
@@ -118,7 +118,7 @@
     },
     "runtime": {
       "title": "Runtime Evidence",
-      "description": "Current Vais Web integration evidence is runtime smoke 61/77, unit 390/390, package tests 3272/3272, full-build 24/24, and shared-schema product evidence 9/9 ported as a compiler main-fixture workspace gate. Size claims require a size gate."
+      "description": "Current scoped Vais Web evidence is runtime smoke 61/77, unit 390/390, package tests 3272/3272, full-build 24/24, and shared-schema product evidence 9/9 ported as a compiler main-fixture workspace gate. Size claims require a size gate."
     },
     "learnMore": "Learn More",
     "github": "GitHub",

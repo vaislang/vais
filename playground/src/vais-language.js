@@ -13,11 +13,10 @@ export function registerVaisLanguage(monaco) {
       'B', 'C', 'T', 'U', 'W', 'X', 'P',
       'D', 'A', 'Y', 'N', 'G', 'O',
       'true', 'false', 'null', 'mut', 'self',
-      'async', 'await', 'spawn', 'yield',
+      'await', 'yield',
       'pub', 'impl', 'trait', 'struct', 'enum',
       'fn', 'let', 'const', 'type', 'use',
-      'if', 'else', 'match', 'for', 'while', 'loop',
-      'break', 'continue', 'return', 'defer',
+      'else', 'match', 'return',
       'where', 'as', 'in'
     ],
 
@@ -178,24 +177,24 @@ export function registerVaisLanguage(monaco) {
     provideCompletionItems: (model, position) => {
       const suggestions = [
         // Keywords
-        { label: 'F', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'F ${1:name}(${2:params}) -> ${3:type} {\n    ${4}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
-        { label: 'S', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'S ${1:Name} {\n    ${2:field}: ${3:type}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
-        { label: 'E', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'E ${1:Name} {\n    ${2:Variant}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+        { label: 'fn', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'fn ${1:name}(${2:params}) -> ${3:type} {\n    ${4}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+        { label: 'struct', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'struct ${1:Name} {\n    ${2:field}: ${3:type}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+        { label: 'enum', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'enum ${1:Name} {\n    ${2:Variant}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
         { label: 'I', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'I ${1:condition} {\n    ${2}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
-        { label: 'L', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'L ${1:i}:${2:0..10} {\n    ${3}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
-        { label: 'M', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'M ${1:expr} {\n    ${2:pattern} => ${3:result}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+        { label: 'LF', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'LF ${1:i}:${2:0..10} {\n    ${3}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'range/foreach loop' },
+        { label: 'LW', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'LW ${1:condition} {\n    ${2}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'while-style loop' },
+        { label: 'L', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'L {\n    ${1}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'loop block' },
+        { label: 'match', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'match ${1:expr} {\n    ${2:pattern} => ${3:result}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
         { label: 'B', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'B', documentation: 'break' },
-        { label: 'W', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'W ${1:TraitName} {\n    ${2}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'trait definition' },
-        { label: 'X', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'X ${1:StructName}: ${2:TraitName} {\n    ${3}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'impl block' },
+        { label: 'C', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'C', documentation: 'continue' },
+        { label: 'trait', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'trait ${1:TraitName} {\n    ${2}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'trait definition' },
+        { label: 'impl', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'impl ${1:StructName}: ${2:TraitName} {\n    ${3}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'impl block' },
         { label: 'D', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'D ${1:expression}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'defer statement' },
-        { label: 'U', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'U ${1:module}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'import module' },
-        { label: 'P', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'P ${1}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'pub (public visibility)' },
-        { label: 'R', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'R ${1:value}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'return value' },
-        { label: 'N', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'N F ${1:name}(${2:params}) -> ${3:type}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'extern function' },
+        { label: 'use', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'use ${1:module}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'import module' },
+        { label: 'pub', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'pub ${1}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'public visibility' },
+        { label: 'return', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'return ${1:value}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'return value' },
+        { label: 'N', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'N fn ${1:name}(${2:params}) -> ${3:type}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'extern function' },
         { label: 'G', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'G ${1:name}: ${2:type} = ${3:value}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'global variable' },
-        { label: 'break', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'break' },
-        { label: 'continue', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'continue' },
-        { label: 'return', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'return ${1:value}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
 
         // Types
         { label: 'i64', kind: monaco.languages.CompletionItemKind.TypeParameter, insertText: 'i64' },
@@ -211,8 +210,8 @@ export function registerVaisLanguage(monaco) {
         { label: 'printf', kind: monaco.languages.CompletionItemKind.Function, insertText: 'printf("${1:format}", ${2:args})', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
 
         // Snippets
-        { label: 'main', kind: monaco.languages.CompletionItemKind.Snippet, insertText: 'F main() {\n    ${1}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'Main function template' },
-        { label: 'fn', kind: monaco.languages.CompletionItemKind.Snippet, insertText: 'F ${1:name}(${2:params}) -> ${3:i64} {\n    ${4}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'Function template' }
+        { label: 'main', kind: monaco.languages.CompletionItemKind.Snippet, insertText: 'fn main() -> i64 {\n    ${1:0}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'Main function template' },
+        { label: 'function', kind: monaco.languages.CompletionItemKind.Snippet, insertText: 'fn ${1:name}(${2:params}) -> ${3:i64} {\n    ${4}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'Function template' }
       ];
 
       return { suggestions };

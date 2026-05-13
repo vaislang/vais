@@ -15,17 +15,17 @@
   "hero": {
     "badge": "Certified Core + Scoped Evidence",
     "title": "编写 <span class=\"gradient-text\">clear Vais</span>，<br>获得 <span class=\"gradient-text\">native performance</span>",
-    "subtitle": "Vais（Vibe AI Language for Systems）是为 AI 代码生成优化的系统编程语言。当前公开基线区分 main-reproducible gates、已 port 到 main fixture 的 schema gates，以及等待 aggregate main port 的 integration evidence。",
+    "subtitle": "Vais（Vibe AI Language for Systems）是为 AI 代码生成优化的系统编程语言。当前公开基线包含 clean compiler main gate 和 VaisDB aggregate main full-build smoke；DB/server/web product claims 仍限定在 named gates 范围内。",
     "tryBrowser": "在浏览器中试用",
     "install": "brew install vais"
   },
   "compare": {
     "title": "Canonical Syntax, Evidence-Scoped Claims",
-    "subtitle": "Step 19 已移除旧 single-letter keyword form。公开 claim 区分 main-reproducible gates、已 port 到 main fixture 的 schema gates，以及等待 aggregate main port 的 integration evidence。",
+    "subtitle": "Full-word declaration/import spellings 在可用处是 canonical。<code>I</code>、<code>LF</code>、<code>LW</code>、<code>D</code>、<code>B</code>、<code>C</code> 等 compact control forms 仍是当前语法。公开 claim 区分 compiler main gate、VaisDB aggregate main full-build smoke、schema fixtures 和 scoped integration evidence。",
     "vais": "Vais",
     "tokens": "令牌",
     "barTitle": "Evidence Snapshot — 2026-05-13",
-    "barNote": "schema gates 现在可在 compiler main fixture/local workspace 中复现：cross-package schema 15/15，shared-schema product evidence 9/9。Runtime/package 数字仍是 gate branch 的 integration evidence；aggregate runtime gate 仍在等待 main port。"
+    "barNote": "Compiler baseline 已通过 fmt/build、IR verifier tests 和 clean-cache VaisDB aggregate main full-build smoke，且无 IR/link warnings。Cross-package schema 15/15 和 shared-schema product evidence 9/9 可在 main-fixture/local-workspace 中复现；server/web counts 是 scoped gate evidence。"
   },
   "performance": {
     "title": "原生性能",
@@ -39,7 +39,7 @@
     "subtitle": "从零开始为 AI 辅助开发设计，不牺牲性能。",
     "singleChar": {
       "title": "Canonical Keywords",
-      "description": "<code>fn</code>、<code>struct</code>、<code>enum</code>、<code>else</code>、<code>match</code>、<code>return</code>、<code>use</code>、<code>pub</code> 是 canonical。Retired single-letter form 不再接受。"
+      "description": "<code>fn</code>、<code>struct</code>、<code>enum</code>、<code>else</code>、<code>match</code>、<code>return</code>、<code>use</code>、<code>pub</code> 在 compiler 提供 full-word spellings 的地方是 canonical。尚未 promoted full-word spelling 的 compact control tokens 仍是显式当前语法。"
     },
     "selfRecursion": {
       "title": "自递归运算符",
@@ -107,7 +107,7 @@
   "vaisx": {
     "badge": "新功能",
     "title": "用 Vais 构建 Web 应用",
-    "subtitle": "VaisX 是 Vais web framework workbench。当前公开 claim 区分 main-reproducible gates、main-fixture schema gates，以及等待 aggregate main port 的 integration evidence。",
+    "subtitle": "VaisX 是 Vais web framework workbench。当前公开 claim 区分 main-reproducible compiler/schema gates、VaisDB aggregate main full-build smoke 和 scoped Vais Web integration evidence。",
     "compiler": {
       "title": "编译时响应性",
       "description": "Reactive state analysis 和 DOM update generation 是 implementation surfaces，只在 named gates 覆盖范围内验证。"
@@ -118,7 +118,7 @@
     },
     "runtime": {
       "title": "Runtime Evidence",
-      "description": "当前 Vais Web integration evidence 是 runtime smoke 61/77、unit 390/390、package tests 3272/3272、full-build 24/24，shared-schema product evidence 9/9 已作为 compiler main-fixture workspace gate port。Size claim 需要 size gate。"
+      "description": "当前 scoped Vais Web evidence 是 runtime smoke 61/77、unit 390/390、package tests 3272/3272、full-build 24/24，shared-schema product evidence 9/9 已作为 compiler main-fixture workspace gate port。Size claim 需要 size gate。"
     },
     "learnMore": "了解更多",
     "github": "GitHub",
