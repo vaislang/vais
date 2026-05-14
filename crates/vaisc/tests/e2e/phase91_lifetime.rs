@@ -133,6 +133,61 @@ F main() -> i64 = 42
     assert_exit_code(source, 42);
 }
 
+#[test]
+fn e2e_lifetime_explicit_deref_field_access() {
+    let source = r#"
+S Connection {
+    id: i64
+}
+
+F get_id(c: &Connection) -> i64 {
+    (*c).id
+}
+
+F main() -> i64 {
+    c := Connection { id: 42 }
+    get_id(&c)
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_lifetime_generic_option_ref_payload_explicit_deref_field() {
+    let source = r#"
+S Connection {
+    id: i64
+}
+
+E Option<T> {
+    Some(T),
+    None
+}
+
+F maybe(c: &Connection, flag: bool) -> Option<&Connection> {
+    I flag {
+        Some(c)
+    } E {
+        None
+    }
+}
+
+F get_id(c: &Connection) -> i64 {
+    (*c).id
+}
+
+F main() -> i64 {
+    c := Connection { id: 42 }
+    opt := maybe(&c, true)
+    M opt {
+        Some(conn) => get_id(conn),
+        None => 0
+    }
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
 // ==================== Method Self Lifetime (Rule 3) ====================
 
 #[test]

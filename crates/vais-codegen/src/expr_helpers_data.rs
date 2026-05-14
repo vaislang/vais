@@ -10,6 +10,33 @@ use vais_ast::{Expr, Spanned};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
+    pub(crate) fn generate_field_base_expr(
+        &mut self,
+        obj: &Spanned<Expr>,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        // Field GEP needs the struct address. For `(*ref).field`, the deref's
+        // inner expression already is that address; emitting the deref load first
+        // would turn the base into a struct value.
+        if let Expr::Deref(inner) = &obj.node {
+            let inner_type = self.infer_expr_type(inner);
+            let derefs_to_named_struct = match &inner_type {
+                ResolvedType::Ref(target)
+                | ResolvedType::RefMut(target)
+                | ResolvedType::Pointer(target) => {
+                    matches!(target.as_ref(), ResolvedType::Named { .. })
+                }
+                _ => false,
+            };
+
+            if derefs_to_named_struct {
+                return self.generate_expr(inner, counter);
+            }
+        }
+
+        self.generate_expr(obj, counter)
+    }
+
     /// Register a ResolvedType for an index-load result based on its LLVM type string.
     ///
     /// This ensures downstream call-arg coercion (in generate_expr_call.rs) can detect
@@ -726,7 +753,7 @@ impl CodeGenerator {
             }
         }
 
-        let (obj_val, obj_ir) = self.generate_expr(obj, counter)?;
+        let (obj_val, obj_ir) = self.generate_field_base_expr(obj, counter)?;
         let mut ir = obj_ir;
 
         // Infer the type of the object expression (works for both Ident and nested Field)
