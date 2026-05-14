@@ -128,28 +128,20 @@ impl TypeChecker {
             }
         }
 
-        // Check return type (with auto-deref: &T unifies with T)
+        // Check return type. References must match references; returning a
+        // referenced value as T requires an explicit dereference expression.
         let expected_ret = self.current_fn_ret.clone().expect(
             "Internal compiler error: current_fn_ret should be set during function checking",
         );
-        let body_type_deref = if let ResolvedType::Ref(inner) = &body_type {
-            if self.unify(&expected_ret, inner).is_ok() {
-                *inner.clone()
-            } else {
-                body_type.clone()
-            }
-        } else {
-            body_type.clone()
-        };
         // main() with implicit i64 return: allow Unit body (auto-return 0)
         if f.name.node == "main"
             && ret_type_inferred
             && expected_ret == ResolvedType::I64
-            && body_type_deref == ResolvedType::Unit
+            && body_type == ResolvedType::Unit
         {
             // Skip unification — codegen will insert `ret i64 0`
         } else {
-            self.unify(&expected_ret, &body_type_deref)?;
+            self.unify(&expected_ret, &body_type)?;
         }
 
         // Phase 193 R-1b: finalize method instantiations that were deferred
@@ -183,7 +175,7 @@ impl TypeChecker {
 
         // Verify ImplTrait/DynTrait bounds: if return type is impl Trait or dyn Trait,
         // check that the concrete body type implements the required trait bounds.
-        self.verify_trait_type_bounds(&expected_ret, &body_type_deref);
+        self.verify_trait_type_bounds(&expected_ret, &body_type);
 
         // Resolve inferred return type: if return type was omitted, apply substitutions
         // to resolve the type variable to the concrete type from the body.
@@ -558,20 +550,12 @@ impl TypeChecker {
             FunctionBody::Block(stmts) => self.check_block(stmts)?,
         };
 
-        // Check return type (with auto-deref: &T unifies with T)
+        // Check return type. References must match references; returning a
+        // referenced value as T requires an explicit dereference expression.
         let expected_ret = self.current_fn_ret.clone().expect(
             "Internal compiler error: current_fn_ret should be set during function checking",
         );
-        let body_type_deref = if let ResolvedType::Ref(inner) = &body_type {
-            if self.unify(&expected_ret, inner).is_ok() {
-                *inner.clone()
-            } else {
-                body_type.clone()
-            }
-        } else {
-            body_type.clone()
-        };
-        self.unify(&expected_ret, &body_type_deref)?;
+        self.unify(&expected_ret, &body_type)?;
 
         // Resolve inferred parameter types for impl methods (same as check_function)
         if method

@@ -68,7 +68,7 @@ impl CodeGenerator {
         field: &Spanned<String>,
         counter: &mut usize,
     ) -> CodegenResult<Option<(String, String)>> {
-        let (obj_val, obj_ir) = self.generate_expr(obj, counter)?;
+        let (obj_val, obj_ir) = self.generate_field_base_expr(obj, counter)?;
         let mut ir = obj_ir;
         let obj_type = self.infer_expr_type(obj);
         let resolved_type = match &obj_type {

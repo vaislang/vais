@@ -116,17 +116,7 @@ impl TypeChecker {
                     ResolvedType::Unit
                 };
                 if let Some(expected) = self.current_fn_ret.clone() {
-                    // Auto-deref: if returning &T but expected is T, allow implicit deref
-                    let ret_type_deref = if let ResolvedType::Ref(inner) = &ret_type {
-                        if self.unify(&expected, inner).is_ok() {
-                            *inner.clone()
-                        } else {
-                            ret_type.clone()
-                        }
-                    } else {
-                        ret_type.clone()
-                    };
-                    self.unify(&expected, &ret_type_deref)?;
+                    self.unify(&expected, &ret_type)?;
                 }
                 // Return has "Never" type because execution doesn't continue past it
                 Ok(ResolvedType::Never)
