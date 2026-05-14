@@ -303,6 +303,17 @@ fn test_closure_as_arg() {
     assert!(ir.contains("call"));
 }
 
+#[test]
+fn test_indirect_fn_param_uses_typed_function_pointer() {
+    let ir = gen_ok(
+        r#"
+        F apply_pair(f: fn(i64, i64) -> i64, a: i64, b: i64) -> i64 = f(a, b)
+    "#,
+    );
+    assert!(ir.contains("call i64 %f("), "IR was:\n{}", ir);
+    assert!(!ir.contains("inttoptr i64 %f"), "IR was:\n{}", ir);
+}
+
 // ============================================================================
 // Multiple return path calls
 // ============================================================================

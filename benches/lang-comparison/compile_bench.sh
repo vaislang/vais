@@ -4,6 +4,7 @@
 
 set -e
 BENCH_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$BENCH_DIR/../.." && pwd)"
 cd "$BENCH_DIR"
 
 echo "================================================================"
@@ -16,10 +17,11 @@ echo ""
 
 # Build vaisc first
 echo "Building vaisc..."
-cargo build --release --bin vaisc -q 2>/dev/null
-VAISC="$(cd ../.. && pwd)/target/release/vaisc"
+cargo build --release --bin vaisc --manifest-path "$PROJECT_ROOT/Cargo.toml" -q
+VAISC="$PROJECT_ROOT/target/release/vaisc"
 
 PROGRAMS="fibonacci quicksort http_types linked_list"
+rm -f /tmp/bench_*_*.json
 
 for prog in $PROGRAMS; do
     echo ""
@@ -29,7 +31,7 @@ for prog in $PROGRAMS; do
     echo ""
 
     # Clean previous outputs
-    rm -f /tmp/bench_*
+    rm -f /tmp/bench_vais.ll /tmp/bench_rust /tmp/bench_go /tmp/bench_c
 
     echo "--- Compilation Speed (cold, single file) ---"
     echo ""

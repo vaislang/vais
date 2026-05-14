@@ -266,6 +266,12 @@ X ByteBuffer {
         ByteBuffer { data: ptr, len: length, cap: length, pos: 0 }
     }
 
+    # Alias used by higher-level protocol/storage code. This is a borrowed view,
+    # not an owning copy; use wrap_readonly when the buffer must own the bytes.
+    F from_slice(data: &[u8]) -> ByteBuffer {
+        ByteBuffer.wrap(data)
+    }
+
     # Wrap existing byte slice as read-only ByteBuffer (copies data into new buffer)
     F wrap_readonly(data: &[u8]) -> ByteBuffer {
         ptr := slice_data_ptr(data)

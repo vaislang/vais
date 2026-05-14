@@ -153,7 +153,7 @@ mod tests {
     #[test]
     fn test_error_ids_unique() {
         let errors: Vec<DapError> = vec![
-            DapError::Io(std::io::Error::new(std::io::ErrorKind::Other, "test")),
+            DapError::Io(std::io::Error::other("test")),
             DapError::Json(serde_json::from_str::<i32>("bad").unwrap_err()),
             DapError::Protocol("".to_string()),
             DapError::InvalidRequest("".to_string()),

@@ -673,8 +673,8 @@ fn test_literal_equality() {
 
 #[test]
 fn test_literal_float() {
-    let lit = Literal::Float(3.14);
-    assert_eq!(lit, Literal::Float(3.14));
+    let lit = Literal::Float(2.5);
+    assert_eq!(lit, Literal::Float(2.5));
 }
 
 // ============================================================================

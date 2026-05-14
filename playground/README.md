@@ -98,7 +98,7 @@ playground/
 ### Syntax Highlighting
 
 The playground includes full syntax highlighting for Vais:
-- Keywords: `F`, `S`, `E`, `I`, `L`, `M`, etc.
+- Keywords: `fn`, `struct`, `enum`, `match`, `I`, `LF`, `LW`, `B`, `C`, `D`, etc.
 - Types: `i64`, `f64`, `bool`, etc.
 - Operators: `@`, `:=`, `=>`, etc.
 - Comments, strings, and numbers
@@ -148,7 +148,7 @@ export const examples = {
     name: 'My Example',
     description: 'Example description',
     code: `# Your Vais code here
-F main() -> i64 = 0`
+fn main() -> i64 = 0`
   }
 };
 ```

@@ -79,8 +79,8 @@ fn test_comptime_value_as_i64_err() {
 
 #[test]
 fn test_comptime_value_as_f64_from_float() {
-    let val = ComptimeValue::Float(3.14);
-    assert!((val.as_f64().unwrap() - 3.14).abs() < f64::EPSILON);
+    let val = ComptimeValue::Float(2.5);
+    assert!((val.as_f64().unwrap() - 2.5).abs() < f64::EPSILON);
 }
 
 #[test]
@@ -143,7 +143,7 @@ fn test_display_int() {
 
 #[test]
 fn test_display_float() {
-    assert_eq!(format!("{}", ComptimeValue::Float(3.14)), "3.14");
+    assert_eq!(format!("{}", ComptimeValue::Float(2.5)), "2.5");
 }
 
 #[test]
@@ -551,8 +551,8 @@ fn test_eval_neg_int() {
 #[test]
 fn test_eval_neg_float() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&unary(UnaryOp::Neg, float_expr(3.14))).unwrap();
-    assert_eq!(result, ComptimeValue::Float(-3.14));
+    let result = eval.eval(&unary(UnaryOp::Neg, float_expr(2.5))).unwrap();
+    assert_eq!(result, ComptimeValue::Float(-2.5));
 }
 
 #[test]
@@ -610,9 +610,9 @@ fn test_eval_abs_int_negative() {
 fn test_eval_abs_float() {
     let mut eval = ComptimeEvaluator::new();
     let result = eval
-        .eval(&call_expr("abs", vec![float_expr(-3.14)]))
+        .eval(&call_expr("abs", vec![float_expr(-2.5)]))
         .unwrap();
-    assert_eq!(result, ComptimeValue::Float(3.14));
+    assert_eq!(result, ComptimeValue::Float(2.5));
 }
 
 #[test]

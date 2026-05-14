@@ -7,9 +7,9 @@
 //!   - `define void @__store_byte(i64 %ptr, i64 %val) { … }` — from
 //!     `generate_helper_functions`
 //!
-//! In the **same** main module. LLVM rejects that as a symbol redefinition,
-//! which is why `vais-apps/signature/build.sh` had a python3 post-processing
-//! step to strip the redundant declares.
+//! This happened in the **same** main module. LLVM rejects that as a symbol
+//! redefinition, which is why `vais-apps/signature/build.sh` had a python3
+//! post-processing step to strip the redundant declares.
 //!
 //! This test pins the fix: when the main module emits the helper function
 //! body, the corresponding `declare` must be suppressed so the IR contains
@@ -22,6 +22,7 @@ use crate::helpers::compile_to_ir;
 
 /// Count how many lines in `ir` look like `{prefix} ... @{name}(...)`.
 /// Matches the shape of LLVM IR function declarations/definitions:
+///
 ///   - `declare i64 @strlen(i64)` — prefix "declare", name "strlen"
 ///   - `define void @__store_byte(i64 %ptr, i64 %val) {` — prefix "define",
 ///     name "__store_byte"

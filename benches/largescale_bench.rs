@@ -39,9 +39,9 @@ fn generate_large_project(target_lines: usize) -> String {
         // Structs
         for s in 0..structs_per_module {
             code.push_str(&format!("S Mod{}Struct{} {{\n", m, s));
-            code.push_str(&format!("    field_a: i64,\n"));
-            code.push_str(&format!("    field_b: i64,\n"));
-            code.push_str(&format!("    field_c: bool\n"));
+            code.push_str("    field_a: i64,\n");
+            code.push_str("    field_b: i64,\n");
+            code.push_str("    field_c: bool\n");
             code.push_str("}\n\n");
             lines += 6;
 
@@ -53,9 +53,9 @@ fn generate_large_project(target_lines: usize) -> String {
         // Enums
         for e in 0..enums_per_module {
             code.push_str(&format!("E Mod{}Result{} {{\n", m, e));
-            code.push_str(&format!("    Ok(i64),\n"));
-            code.push_str(&format!("    Err(i64),\n"));
-            code.push_str(&format!("    None\n"));
+            code.push_str("    Ok(i64),\n");
+            code.push_str("    Err(i64),\n");
+            code.push_str("    None\n");
             code.push_str("}\n\n");
             lines += 6;
 
@@ -84,7 +84,7 @@ fn generate_large_project(target_lines: usize) -> String {
                     // Recursive
                     code.push_str(&format!("F mod{}_rec{}(n: i64) -> i64 {{\n", m, f));
                     code.push_str(&format!("    I n <= 1 {{ R {} }}\n", f % 3 + 1));
-                    code.push_str(&format!("    R n * @(n - 1)\n"));
+                    code.push_str("    R n * @(n - 1)\n");
                     code.push_str("}\n\n");
                     lines += 5;
                 }

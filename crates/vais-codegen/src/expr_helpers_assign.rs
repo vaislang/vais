@@ -57,10 +57,26 @@ impl CodeGenerator {
                             // definitions may not dominate it.
                             self.emit_entry_alloca(&format!("%{}", alloca_name), &llvm_ty);
                         }
-                        // Now store the new (reassignment) value
-                        let actual_val_ty = self.llvm_type_of(&val);
-                        let coerced_val =
-                            self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir);
+                        // Now store the new (reassignment) value. Named RHS
+                        // expressions such as unit enum variants produce an
+                        // alloca pointer; assignment stores the value.
+                        let store_val = if matches!(local_ty, ResolvedType::Named { .. })
+                            && !self.is_expr_value(value)
+                        {
+                            let loaded = self.next_temp(counter);
+                            write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
+                            loaded
+                        } else {
+                            val.clone()
+                        };
+                        let actual_val_ty = self.llvm_type_of(&store_val);
+                        let coerced_val = self.coerce_int_width(
+                            &store_val,
+                            &actual_val_ty,
+                            &llvm_ty,
+                            counter,
+                            &mut ir,
+                        );
                         write_ir!(
                             ir,
                             "  store {} {}, {}* %{}",
@@ -76,9 +92,23 @@ impl CodeGenerator {
                     } else {
                         let llvm_ty = self.type_to_llvm(&local.ty);
                         // Coerce value width to match local variable type
-                        let actual_val_ty = self.llvm_type_of(&val);
-                        let coerced_val =
-                            self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir);
+                        let store_val = if matches!(local.ty, ResolvedType::Named { .. })
+                            && !self.is_expr_value(value)
+                        {
+                            let loaded = self.next_temp(counter);
+                            write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
+                            loaded
+                        } else {
+                            val.clone()
+                        };
+                        let actual_val_ty = self.llvm_type_of(&store_val);
+                        let coerced_val = self.coerce_int_width(
+                            &store_val,
+                            &actual_val_ty,
+                            &llvm_ty,
+                            counter,
+                            &mut ir,
+                        );
                         // Store the value into the alloca.
                         write_ir!(
                             ir,
@@ -137,6 +167,12 @@ impl CodeGenerator {
                         // Coerce value to match field type
                         let actual_val_ty = self.llvm_type_of(&val);
                         let coerced_val = if matches!(field_ty, ResolvedType::Named { .. })
+                            && !self.is_expr_value(value)
+                        {
+                            let loaded = self.next_temp(counter);
+                            write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
+                            loaded
+                        } else if matches!(field_ty, ResolvedType::Named { .. })
                             && val.starts_with('%')
                         {
                             // Named field type: the value may be a pointer to the struct

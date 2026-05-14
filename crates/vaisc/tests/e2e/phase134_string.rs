@@ -578,16 +578,15 @@ F main() -> i64 {
 
 #[test]
 fn e2e_str_as_bytes() {
-    // as_bytes returns raw byte pointer; verify it's non-zero for non-empty string
+    // as_bytes returns a borrowed byte-slice view over the string data.
     assert_exit_code(
         r#"
 F main() -> i64 {
     s := "hello"
-    ptr := s.as_bytes()
-    I ptr > 0 { R 1 }
-    R 0
+    bytes := s.as_bytes()
+    bytes.len()
 }
 "#,
-        1,
+        5,
     );
 }

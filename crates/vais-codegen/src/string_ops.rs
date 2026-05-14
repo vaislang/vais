@@ -6,6 +6,7 @@
 
 use crate::{CodeGenerator, CodegenError, CodegenResult};
 use vais_ast::{BinOp, Expr, Spanned};
+use vais_types::ResolvedType;
 
 impl CodeGenerator {
     /// Resolve an argument value to an i8* pointer for builtins (free, memcpy, strlen, puts_ptr).
@@ -52,6 +53,26 @@ impl CodeGenerator {
         ptr
     }
 
+    /// Convert either a Vais str fat pointer or an erased i64 C-string pointer to i8*.
+    #[inline(never)]
+    pub(crate) fn string_like_to_i8_ptr(
+        &self,
+        value: &str,
+        counter: &mut usize,
+        ir: &mut String,
+    ) -> String {
+        let llvm_ty = self.llvm_type_of(value);
+        if llvm_ty == "i8*" || llvm_ty == "ptr" {
+            value.to_string()
+        } else if llvm_ty == "i64" || llvm_ty.starts_with('i') {
+            let ptr = self.next_temp(counter);
+            write_ir!(ir, "  {} = inttoptr {} {} to i8*", ptr, llvm_ty, value);
+            ptr
+        } else {
+            self.extract_str_ptr(value, counter, ir)
+        }
+    }
+
     /// Extract the i64 length from a string fat pointer { i8*, i64 }
     #[inline(never)]
     pub(crate) fn extract_str_len(
@@ -92,6 +113,286 @@ impl CodeGenerator {
         t1
     }
 
+    pub(crate) fn is_string_builder_type(&self, ty: &ResolvedType) -> bool {
+        match ty {
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                self.is_string_builder_type(inner)
+            }
+            ResolvedType::Named { name, generics } => {
+                if self.resolve_struct_name(name) == "String" {
+                    return true;
+                }
+                if generics.is_empty() {
+                    if let Some(alias) = self.types.type_aliases.get(name).cloned() {
+                        return self.is_string_builder_type(&alias);
+                    }
+                }
+                false
+            }
+            ResolvedType::Generic(param) => self
+                .generics
+                .substitutions
+                .get(param)
+                .cloned()
+                .is_some_and(|concrete| self.is_string_builder_type(&concrete)),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn is_str_type(&self, ty: &ResolvedType) -> bool {
+        match ty {
+            ResolvedType::Str => true,
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => self.is_str_type(inner),
+            ResolvedType::Named { name, generics } if generics.is_empty() => self
+                .types
+                .type_aliases
+                .get(name)
+                .cloned()
+                .is_some_and(|alias| self.is_str_type(&alias)),
+            ResolvedType::Generic(param) => self
+                .generics
+                .substitutions
+                .get(param)
+                .cloned()
+                .is_some_and(|concrete| self.is_str_type(&concrete)),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn is_string_like_type(&self, ty: &ResolvedType) -> bool {
+        self.is_str_type(ty) || self.is_string_builder_type(ty)
+    }
+
+    /// Coerce the std `String` builder layout `{ data: i64, len: i64, cap: i64 }`
+    /// into the language `str` ABI `{ i8*, i64 }`.
+    pub(crate) fn coerce_string_builder_to_str(
+        &mut self,
+        value: &str,
+        source_is_value: bool,
+        counter: &mut usize,
+        ir: &mut String,
+    ) -> String {
+        let (data_i64, len) = if source_is_value {
+            let data = self.next_temp(counter);
+            write_ir!(ir, "  {} = extractvalue %String {}, 0", data, value);
+            let len = self.next_temp(counter);
+            write_ir!(ir, "  {} = extractvalue %String {}, 1", len, value);
+            (data, len)
+        } else {
+            let data_ptr = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = getelementptr %String, %String* {}, i32 0, i32 0",
+                data_ptr,
+                value
+            );
+            let data = self.next_temp(counter);
+            write_ir!(ir, "  {} = load i64, i64* {}", data, data_ptr);
+            let len_ptr = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = getelementptr %String, %String* {}, i32 0, i32 1",
+                len_ptr,
+                value
+            );
+            let len = self.next_temp(counter);
+            write_ir!(ir, "  {} = load i64, i64* {}", len, len_ptr);
+            (data, len)
+        };
+
+        let ptr = self.next_temp(counter);
+        write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr, data_i64);
+        self.build_str_fat_ptr(&ptr, &len, counter, ir)
+    }
+
+    fn coerce_string_like_to_str_fat_ptr(
+        &mut self,
+        value: &str,
+        ty: &ResolvedType,
+        source_is_value: bool,
+        counter: &mut usize,
+        ir: &mut String,
+    ) -> CodegenResult<String> {
+        if self.is_str_type(ty) {
+            return Ok(value.to_string());
+        }
+
+        if self.is_string_builder_type(ty) {
+            let builder_is_value =
+                !matches!(ty, ResolvedType::Ref(_) | ResolvedType::RefMut(_)) && source_is_value;
+            let fat = self.coerce_string_builder_to_str(value, builder_is_value, counter, ir);
+            self.fn_ctx.register_temp_type(&fat, ResolvedType::Str);
+            return Ok(fat);
+        }
+
+        let llvm_ty = self.llvm_type_of(value);
+        if llvm_ty == "{ i8*, i64 }" {
+            return Ok(value.to_string());
+        }
+
+        Err(CodegenError::Unsupported(format!(
+            "string operation operand is not string-like: {:?}",
+            ty
+        )))
+    }
+
+    fn build_string_builder_from_str_fat_ptr(
+        &mut self,
+        fat_ptr: &str,
+        counter: &mut usize,
+        ir: &mut String,
+    ) -> String {
+        let raw_ptr = self.next_temp(counter);
+        write_ir!(
+            ir,
+            "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+            raw_ptr,
+            fat_ptr
+        );
+        let len = self.next_temp(counter);
+        write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 1", len, fat_ptr);
+        let data_i64 = self.next_temp(counter);
+        write_ir!(ir, "  {} = ptrtoint i8* {} to i64", data_i64, raw_ptr);
+        let cap = self.next_temp(counter);
+        write_ir!(ir, "  {} = add i64 {}, 1", cap, len);
+
+        let s0 = self.next_temp(counter);
+        write_ir!(
+            ir,
+            "  {} = insertvalue %String undef, i64 {}, 0",
+            s0,
+            data_i64
+        );
+        let s1 = self.next_temp(counter);
+        write_ir!(ir, "  {} = insertvalue %String {}, i64 {}, 1", s1, s0, len);
+        let result = self.next_temp(counter);
+        write_ir!(
+            ir,
+            "  {} = insertvalue %String {}, i64 {}, 2",
+            result,
+            s1,
+            cap
+        );
+        self.fn_ctx.register_temp_type(
+            &result,
+            ResolvedType::Named {
+                name: "String".to_string(),
+                generics: vec![],
+            },
+        );
+        result
+    }
+
+    /// Generate string operations for either `str` fat pointers or std `String`
+    /// builder values. `String + str` returns a `%String` value so assignment
+    /// back into a `String` local has a single, explicit layout.
+    #[allow(clippy::too_many_arguments)]
+    #[inline(never)]
+    pub(crate) fn generate_string_like_binary_op(
+        &mut self,
+        op: &BinOp,
+        left_val: &str,
+        left_ty: &ResolvedType,
+        left_is_value: bool,
+        right_val: &str,
+        right_ty: &ResolvedType,
+        right_is_value: bool,
+        mut ir: String,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        self.needs_string_helpers = true;
+
+        let left_fat = self.coerce_string_like_to_str_fat_ptr(
+            left_val,
+            left_ty,
+            left_is_value,
+            counter,
+            &mut ir,
+        )?;
+        let right_fat = self.coerce_string_like_to_str_fat_ptr(
+            right_val,
+            right_ty,
+            right_is_value,
+            counter,
+            &mut ir,
+        )?;
+        let left_ptr = self.extract_str_ptr(&left_fat, counter, &mut ir);
+        let right_ptr = self.extract_str_ptr(&right_fat, counter, &mut ir);
+
+        match op {
+            BinOp::Add => {
+                let fat_result = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = call {{ i8*, i64 }} @__vais_str_concat(i8* {}, i8* {})",
+                    fat_result,
+                    left_ptr,
+                    right_ptr
+                );
+                self.fn_ctx
+                    .register_temp_type(&fat_result, ResolvedType::Str);
+
+                if self.is_string_builder_type(left_ty) && !self.is_str_type(left_ty) {
+                    let builder_result =
+                        self.build_string_builder_from_str_fat_ptr(&fat_result, counter, &mut ir);
+                    return Ok((builder_result, ir));
+                }
+
+                let raw_ptr_for_free = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                    raw_ptr_for_free,
+                    fat_result
+                );
+                let (store_ir, slot) = self.track_alloc_with_slot(raw_ptr_for_free);
+                ir.push_str(&store_ir);
+                if let Some(frame) = self.fn_ctx.scope_str_stack.last_mut() {
+                    frame.push(slot.clone());
+                }
+                self.fn_ctx
+                    .string_value_slot
+                    .insert(fat_result.clone(), slot);
+                self.emit_intermediate_free(left_val, &mut ir);
+                Ok((fat_result, ir))
+            }
+            BinOp::Eq | BinOp::Neq | BinOp::Lt | BinOp::Lte | BinOp::Gt | BinOp::Gte => {
+                let cmp_result = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = call i32 @strcmp(i8* {}, i8* {})",
+                    cmp_result,
+                    left_ptr,
+                    right_ptr
+                );
+                let pred = match op {
+                    BinOp::Eq => "eq",
+                    BinOp::Neq => "ne",
+                    BinOp::Lt => "slt",
+                    BinOp::Lte => "sle",
+                    BinOp::Gt => "sgt",
+                    BinOp::Gte => "sge",
+                    _ => unreachable!(),
+                };
+                let bool_result = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = icmp {} i32 {}, 0",
+                    bool_result,
+                    pred,
+                    cmp_result
+                );
+                let result = self.next_temp(counter);
+                write_ir!(ir, "  {} = zext i1 {} to i64", result, bool_result);
+                Ok((result, ir))
+            }
+            _ => Err(CodegenError::Unsupported(format!(
+                "string operation {:?} not supported",
+                op
+            ))),
+        }
+    }
+
     /// Emit `free(slot); store null, slot` if `value` is a tracked concat
     /// intermediate (its fat pointer owns a slot in `string_value_slot`).
     /// Safe because the caller has guaranteed that `value` has been consumed
@@ -129,125 +430,6 @@ impl CodeGenerator {
         write_ir!(ir, "  br label %{}", after);
         write_ir!(ir, "{}:", after);
         self.fn_ctx.current_block = after;
-    }
-
-    /// Generate LLVM IR for string binary operations (+, ==, !=, <, >)
-    #[inline(never)]
-    pub(crate) fn generate_string_binary_op(
-        &mut self,
-        op: &BinOp,
-        left_val: &str,
-        right_val: &str,
-        mut ir: String,
-        counter: &mut usize,
-    ) -> CodegenResult<(String, String)> {
-        self.needs_string_helpers = true;
-
-        // Extract raw i8* pointers from fat pointers for C interop
-        let left_ptr = self.extract_str_ptr(left_val, counter, &mut ir);
-        let right_ptr = self.extract_str_ptr(right_val, counter, &mut ir);
-
-        match op {
-            BinOp::Add => {
-                // String concatenation: call __vais_str_concat(left, right) -> { i8*, i64 }
-                let result = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = call {{ i8*, i64 }} @__vais_str_concat(i8* {}, i8* {})",
-                    result,
-                    left_ptr,
-                    right_ptr
-                );
-                // Extract the raw pointer from the fat pointer for auto-free tracking
-                let raw_ptr_for_free = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
-                    raw_ptr_for_free,
-                    result
-                );
-                let (store_ir, slot) = self.track_alloc_with_slot(raw_ptr_for_free);
-                ir.push_str(&store_ir);
-                // Record ownership: the fat-pointer SSA register owns this slot.
-                // Also register in the topmost string-scope frame for block-exit cleanup.
-                if let Some(frame) = self.fn_ctx.scope_str_stack.last_mut() {
-                    frame.push(slot.clone());
-                }
-                self.fn_ctx.string_value_slot.insert(result.clone(), slot);
-                // Intermediate free: in `a + b + c`, the LHS `a+b` is a tracked
-                // concat result whose fat-pointer SSA value is `left_val`. It has
-                // been consumed by this concat (memcpy'd), so the intermediate
-                // buffer is safe to free now. See RFC-001 §4.3. We free and null
-                // the slot; cleanup later skips null slots.
-                self.emit_intermediate_free(left_val, &mut ir);
-                Ok((result, ir))
-            }
-            BinOp::Eq => {
-                // String equality: strcmp(left, right) == 0
-                let cmp_result = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = call i32 @strcmp(i8* {}, i8* {})",
-                    cmp_result,
-                    left_ptr,
-                    right_ptr
-                );
-                let eq_result = self.next_temp(counter);
-                write_ir!(ir, "  {} = icmp eq i32 {}, 0", eq_result, cmp_result);
-                let result = self.next_temp(counter);
-                write_ir!(ir, "  {} = zext i1 {} to i64", result, eq_result);
-                Ok((result, ir))
-            }
-            BinOp::Neq => {
-                let cmp_result = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = call i32 @strcmp(i8* {}, i8* {})",
-                    cmp_result,
-                    left_ptr,
-                    right_ptr
-                );
-                let neq_result = self.next_temp(counter);
-                write_ir!(ir, "  {} = icmp ne i32 {}, 0", neq_result, cmp_result);
-                let result = self.next_temp(counter);
-                write_ir!(ir, "  {} = zext i1 {} to i64", result, neq_result);
-                Ok((result, ir))
-            }
-            BinOp::Lt => {
-                let cmp_result = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = call i32 @strcmp(i8* {}, i8* {})",
-                    cmp_result,
-                    left_ptr,
-                    right_ptr
-                );
-                let lt_result = self.next_temp(counter);
-                write_ir!(ir, "  {} = icmp slt i32 {}, 0", lt_result, cmp_result);
-                let result = self.next_temp(counter);
-                write_ir!(ir, "  {} = zext i1 {} to i64", result, lt_result);
-                Ok((result, ir))
-            }
-            BinOp::Gt => {
-                let cmp_result = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = call i32 @strcmp(i8* {}, i8* {})",
-                    cmp_result,
-                    left_ptr,
-                    right_ptr
-                );
-                let gt_result = self.next_temp(counter);
-                write_ir!(ir, "  {} = icmp sgt i32 {}, 0", gt_result, cmp_result);
-                let result = self.next_temp(counter);
-                write_ir!(ir, "  {} = zext i1 {} to i64", result, gt_result);
-                Ok((result, ir))
-            }
-            _ => Err(CodegenError::Unsupported(format!(
-                "string operation {:?} not supported",
-                op
-            ))),
-        }
     }
 
     /// Generate LLVM IR for string method calls.
@@ -481,10 +663,10 @@ impl CodeGenerator {
                 Ok((recv_val.to_string(), ir))
             }
             "as_bytes" => {
-                // as_bytes returns the raw pointer as i64 (ptrtoint for C interop)
-                let result = self.next_temp(counter);
-                write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, recv_ptr);
-                Ok((result, ir))
+                // str.as_bytes() is a borrowed byte slice. The runtime
+                // representation of str and &[u8] is the same fat pointer
+                // shape: { i8* data, i64 len }.
+                Ok((recv_val.to_string(), ir))
             }
             _ => Err(CodegenError::Unsupported(format!(
                 "string method '{}' not supported",
@@ -505,7 +687,7 @@ impl CodeGenerator {
 
         // __vais_str_concat: concatenate two strings -> { i8*, i64 }
         ir.push_str("\n; String helper: concatenate two strings\n");
-        ir.push_str("define { i8*, i64 } @__vais_str_concat(i8* %a, i8* %b) {\n");
+        ir.push_str("define weak_odr { i8*, i64 } @__vais_str_concat(i8* %a, i8* %b) {\n");
         ir.push_str("entry:\n");
         ir.push_str("  %alen = call i64 @strlen(i8* %a)\n");
         ir.push_str("  %blen = call i64 @strlen(i8* %b)\n");
@@ -528,7 +710,7 @@ impl CodeGenerator {
 
         // __vais_str_indexOf: find substring position
         ir.push_str("\n; String helper: indexOf\n");
-        ir.push_str("define i64 @__vais_str_indexOf(i8* %haystack, i8* %needle) {\n");
+        ir.push_str("define weak_odr i64 @__vais_str_indexOf(i8* %haystack, i8* %needle) {\n");
         ir.push_str("entry:\n");
         ir.push_str("  %found = call i8* @strstr(i8* %haystack, i8* %needle)\n");
         ir.push_str("  %is_null = icmp eq i8* %found, null\n");
@@ -544,7 +726,9 @@ impl CodeGenerator {
 
         // __vais_str_substring: extract substring [start, end) -> { i8*, i64 }
         ir.push_str("\n; String helper: substring\n");
-        ir.push_str("define { i8*, i64 } @__vais_str_substring(i8* %s, i64 %start, i64 %end) {\n");
+        ir.push_str(
+            "define weak_odr { i8*, i64 } @__vais_str_substring(i8* %s, i64 %start, i64 %end) {\n",
+        );
         ir.push_str("entry:\n");
         ir.push_str("  %len = sub i64 %end, %start\n");
         ir.push_str("  %size = add i64 %len, 1\n");
@@ -563,7 +747,7 @@ impl CodeGenerator {
 
         // __vais_str_startsWith: check if string starts with prefix
         ir.push_str("\n; String helper: startsWith\n");
-        ir.push_str("define i64 @__vais_str_startsWith(i8* %s, i8* %prefix) {\n");
+        ir.push_str("define weak_odr i64 @__vais_str_startsWith(i8* %s, i8* %prefix) {\n");
         ir.push_str("entry:\n");
         ir.push_str("  %plen = call i64 @strlen(i8* %prefix)\n");
         ir.push_str("  %cmp = call i32 @strncmp(i8* %s, i8* %prefix, i64 %plen)\n");
@@ -574,7 +758,7 @@ impl CodeGenerator {
 
         // __vais_str_endsWith: check if string ends with suffix
         ir.push_str("\n; String helper: endsWith\n");
-        ir.push_str("define i64 @__vais_str_endsWith(i8* %s, i8* %suffix) {\n");
+        ir.push_str("define weak_odr i64 @__vais_str_endsWith(i8* %s, i8* %suffix) {\n");
         ir.push_str("entry:\n");
         ir.push_str("  %slen = call i64 @strlen(i8* %s)\n");
         ir.push_str("  %suflen = call i64 @strlen(i8* %suffix)\n");
@@ -596,6 +780,7 @@ impl CodeGenerator {
 
     /// Generate `declare` statements for string helper functions defined in the main module.
     /// Used by non-main modules in per-module compilation so the linker can resolve them.
+    #[allow(dead_code)]
     #[inline(never)]
     pub(crate) fn generate_string_helper_declarations(&self) -> String {
         let mut ir = String::with_capacity(512);
@@ -846,7 +1031,7 @@ impl CodeGenerator {
         );
         write_ir!(
             ir,
-            "define void @__vais_struct_shallow_free_{}({}* %s) {{",
+            "define weak_odr void @__vais_struct_shallow_free_{}({}* %s) {{",
             struct_name,
             ty
         );
@@ -930,6 +1115,7 @@ impl CodeGenerator {
     }
 
     /// `declare` statement for a struct shallow-free helper (per-module compilation).
+    #[allow(dead_code)]
     pub(crate) fn generate_struct_shallow_free_declaration(struct_name: &str) -> String {
         format!(
             "declare void @__vais_struct_shallow_free_{}(%{}*)\n",

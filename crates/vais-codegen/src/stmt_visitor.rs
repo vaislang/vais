@@ -49,6 +49,26 @@ impl StmtVisitor for CodeGenerator {
     }
 
     fn visit_block_stmts(&mut self, stmts: &[Spanned<Stmt>], counter: &mut usize) -> BlockResult {
+        self.visit_block_stmts_expected(stmts, counter, None)
+    }
+}
+
+impl CodeGenerator {
+    pub(crate) fn generate_block_stmts_with_expected_result_type(
+        &mut self,
+        stmts: &[Spanned<Stmt>],
+        counter: &mut usize,
+        expected_result_type: &ResolvedType,
+    ) -> BlockResult {
+        self.visit_block_stmts_expected(stmts, counter, Some(expected_result_type))
+    }
+
+    fn visit_block_stmts_expected(
+        &mut self,
+        stmts: &[Spanned<Stmt>],
+        counter: &mut usize,
+        expected_result_type: Option<&ResolvedType>,
+    ) -> BlockResult {
         // Push a new scope frame so Named-type locals declared in this block
         // are tracked for Drop cleanup when the block exits.
         self.enter_scope();
@@ -57,12 +77,24 @@ impl StmtVisitor for CodeGenerator {
         let mut last_value = "0".to_string();
         let mut terminated = false;
 
-        for stmt in stmts {
+        for (idx, stmt) in stmts.iter().enumerate() {
             if terminated {
                 break;
             }
 
-            let (value, stmt_ir) = self.visit_stmt(stmt, counter)?;
+            let (value, stmt_ir) = if let (Some(expected), true, Stmt::Expr(expr)) =
+                (expected_result_type, idx + 1 == stmts.len(), &stmt.node)
+            {
+                let saved_generic_substitutions =
+                    self.push_expected_static_ctor_substitutions(expected, &expr.node);
+                let generated_expr = self.generate_expr(expr, counter);
+                if let Some(saved) = saved_generic_substitutions {
+                    self.generics.substitutions = saved;
+                }
+                generated_expr?
+            } else {
+                self.visit_stmt(stmt, counter)?
+            };
             ir.push_str(&stmt_ir);
             last_value = value;
 
@@ -144,9 +176,7 @@ impl StmtVisitor for CodeGenerator {
 
         Ok((last_value, ir, terminated))
     }
-}
 
-impl CodeGenerator {
     /// Generate let statement with SSA optimization for immutable simple types
     /// (visitor variant: uses single-pointer pattern and entry-block allocas)
     fn generate_let_stmt_visitor(
@@ -193,7 +223,33 @@ impl CodeGenerator {
             false
         };
 
-        let (val, val_ir) = self.generate_expr(value, counter)?;
+        let resolved_ty = ty
+            .map(|t| self.ast_type_to_resolved(&t.node))
+            .unwrap_or(inferred_ty);
+        let resolved_ty = vais_types::substitute_type(&resolved_ty, &self.generics.substitutions);
+
+        let saved_generic_substitutions =
+            self.push_expected_static_ctor_substitutions(&resolved_ty, &value.node);
+        let saved_load_typed_substitutions = if matches!(
+            &value.node,
+            Expr::Call { func, .. } if matches!(&func.node, Expr::Ident(name) if name == "load_typed")
+        ) {
+            let saved = self.generics.substitutions.clone();
+            self.generics
+                .substitutions
+                .insert("T".to_string(), resolved_ty.clone());
+            Some(saved)
+        } else {
+            None
+        };
+        let generated_value = self.generate_expr(value, counter);
+        if let Some(saved) = saved_generic_substitutions {
+            self.generics.substitutions = saved;
+        }
+        if let Some(saved) = saved_load_typed_substitutions {
+            self.generics.substitutions = saved;
+        }
+        let (val, val_ir) = generated_value?;
 
         // Owning-string binding: if the RHS is a tracked concat result, record
         // the slot under this variable's name. A later `return x` reaches
@@ -219,10 +275,6 @@ impl CodeGenerator {
                     .insert(name.node.clone(), all);
             }
         }
-
-        let resolved_ty = ty
-            .map(|t| self.ast_type_to_resolved(&t.node))
-            .unwrap_or(inferred_ty);
 
         // Determine if we can use SSA style (no alloca) to reduce stack usage
         // Conditions for SSA:
@@ -310,11 +362,17 @@ impl CodeGenerator {
                 // Single-pointer: alloca %T, store value directly
                 self.emit_entry_alloca(&format!("%{}", llvm_name), &llvm_ty);
                 let is_value_expr = self.is_expr_value(value);
+                let is_load_typed_call = matches!(
+                    &value.node,
+                    Expr::Call { func, .. }
+                        if matches!(&func.node, Expr::Ident(name) if name == "load_typed")
+                );
                 // If the value expression is not a value (e.g., block returning
                 // a struct-typed local, or load_typed returning alloca ptr), load struct first
-                let actual_val = if !is_value_expr {
+                let actual_val = if !is_value_expr || is_load_typed_call {
                     let loaded = self.next_temp(counter);
                     write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
+                    self.fn_ctx.register_temp_type(&loaded, resolved_ty.clone());
                     loaded
                 } else {
                     val.clone()
@@ -552,22 +610,25 @@ impl CodeGenerator {
                 .cloned()
                 .unwrap_or(ResolvedType::I64);
             let llvm_ty = self.type_to_llvm(&ret_type);
+            let expr_type = self.infer_expr_type(expr);
 
             // For struct types, may need to load from pointer
-            let ret_val =
-                if matches!(ret_type, ResolvedType::Named { .. }) && !self.is_expr_value(expr) {
-                    let loaded = format!("%ret.{}", counter);
-                    *counter += 1;
-                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
-                    loaded
-                } else {
-                    val
-                };
+            let ret_val = if matches!(ret_type, ResolvedType::Str)
+                && self.is_string_builder_type(&expr_type)
+            {
+                self.coerce_string_builder_to_str(&val, self.is_expr_value(expr), counter, &mut ir)
+            } else if matches!(ret_type, ResolvedType::Named { .. }) && !self.is_expr_value(expr) {
+                let loaded = format!("%ret.{}", counter);
+                *counter += 1;
+                write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
+                loaded
+            } else {
+                val
+            };
 
             // Coerce return value to match declared function return type
             let mut coerced = false;
             let ret_val = if llvm_ty != "void" {
-                let expr_type = self.infer_expr_type(expr);
                 let val_llvm_ty = self.type_to_llvm(&expr_type);
                 if val_llvm_ty != llvm_ty {
                     coerced = true;

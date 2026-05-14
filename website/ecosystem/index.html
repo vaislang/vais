@@ -498,7 +498,7 @@
       <div class="nav-links" id="nav-links">
         <a href="/ecosystem/" style="color: var(--text);">Ecosystem</a>
         <a href="/vaisx/">VaisX</a>
-        <a href="https://docs.vaislang.dev/" class="nav-link-docs">Docs</a>
+        <a href="/docs/" class="nav-link-docs">Docs</a>
         <a href="/blog/" class="nav-link-blog">Blog</a>
         <a href="https://github.com/vaislang/vais" class="nav-link-github" target="_blank" rel="noopener" aria-label="GitHub repository">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
@@ -520,10 +520,10 @@
       </h1>
       <p class="eco-hero-subtitle">
         하나의 언어로 프론트엔드, 백엔드, 데이터베이스를 모두.
-        현재 공개 기준은 제품 완성이 아니라 main 재현 gate, main fixture schema gate, aggregate main port 대기 중인 integration evidence를 구분한 범위입니다.
+        현재 공개 기준은 제품 완성이 아니라 compiler main gate, main fixture schema gate, VaisDB aggregate main full-build smoke, scoped integration evidence를 구분한 범위입니다.
       </p>
       <div class="eco-hero-actions">
-        <a href="https://docs.vaislang.dev/ecosystem/" class="btn btn-primary">Get Started</a>
+        <a href="/docs/ecosystem/" class="btn btn-primary">Get Started</a>
         <a href="https://github.com/vaislang/vais" class="btn btn-secondary" target="_blank" rel="noopener">View on GitHub</a>
       </div>
 
@@ -533,7 +533,7 @@
 
         <div class="arch-layer arch-layer-browser">
           <span class="arch-label">[ Browser ]</span>
-          <span class="arch-desc">VaisX (vais-web) — integration evidence: runtime 61/77, unit 390/390, full-build 24/24; schema gate 9/9 ported as main fixture</span>
+          <span class="arch-desc">VaisX (vais-web) — scoped evidence: runtime 61/77, unit 390/390, full-build 24/24; schema gate 9/9 ported as main fixture</span>
         </div>
 
         <div class="arch-arrow">↕  HTTP / WebSocket  ↕</div>
@@ -577,7 +577,7 @@
           <div class="product-tagline">vais-web · 웹 프레임워크 workbench</div>
           <p class="product-desc">
             컴파일 타임 반응성과 DOM 업데이트 생성을 목표로 하는 웹 프레임워크.
-            현재 공개 claim은 integration evidence runtime 61/77, unit 390/390, full-build 24/24와 main fixture로 port된 shared-schema product 9/9에 묶입니다.
+            현재 공개 claim은 scoped runtime 61/77, unit 390/390, full-build 24/24와 main fixture로 port된 shared-schema product 9/9에 묶입니다.
           </p>
           <ul class="product-features">
             <li>컴파일 타임 반응성 구현 표면</li>
@@ -586,7 +586,7 @@
             <li>Vais 타입 시스템 연동 workbench</li>
             <li>WASM 빌드는 experimental target</li>
           </ul>
-          <a href="https://docs.vaislang.dev/ecosystem/vaisx/" class="product-link">
+          <a href="/docs/ecosystem/vais-web/" class="product-link">
             문서 보기 →
           </a>
         </div>
@@ -598,7 +598,7 @@
           <div class="product-tagline">RAG-native 하이브리드 데이터베이스</div>
           <p class="product-desc">
             벡터 검색, 그래프 쿼리, SQL, 전문 검색(FTS)을 단일 엔진으로 묶는
-            데이터베이스 workbench. 현재 integration evidence는 package 261/261, runtime 34/34입니다.
+            데이터베이스 workbench. 현재 main full-build smoke는 36/36 modules clean이며, scoped evidence는 package 261/261, runtime 34/34입니다.
           </p>
           <ul class="product-features">
             <li>Vector + Graph + SQL + FTS 구현 표면</li>
@@ -607,7 +607,7 @@
             <li>vais-server 네이티브 통합</li>
             <li>WebAssembly 빌드는 experimental target</li>
           </ul>
-          <a href="https://docs.vaislang.dev/ecosystem/vaisdb/" class="product-link">
+          <a href="/docs/ecosystem/vaisdb/" class="product-link">
             문서 보기 →
           </a>
         </div>
@@ -628,7 +628,7 @@
             <li>타입 안전 요청/응답 직렬화</li>
             <li>WebSocket 표면은 dedicated gate 필요</li>
           </ul>
-          <a href="https://docs.vaislang.dev/ecosystem/vais-server/" class="product-link">
+          <a href="/docs/ecosystem/vais-server/" class="product-link">
             문서 보기 →
           </a>
         </div>
@@ -687,7 +687,7 @@
     )
     <span class="fn">ul</span>(|| {
       <span class="kw">fn</span> <span class="fn">render_item</span>(r: <span class="type">SearchResult</span>) {
-        <span class="fn">li</span>(<span class="str">"~{r.title}  (score: ~{r.score:.2})"</span>)
+        <span class="fn">li</span>(<span class="str">"{r.title}  (score: {r.score:.2})"</span>)
       }
       results.<span class="fn">get</span>().<span class="fn">iter</span>() |> <span class="fn">map</span>(<span class="fn">render_item</span>)
     })
@@ -760,7 +760,7 @@
 <span class="cm"># RAG 파이프라인 — 한 줄로 완성</span>
 <span class="kw">A</span> <span class="kw">fn</span> <span class="fn">rag_query</span>(db: <span class="type">Db</span>, question: <span class="type">str</span>) -> <span class="type">str</span> {
   context <span class="op">:=</span> <span class="kw">Y</span> db.<span class="fn">rag</span>(question, top_k: <span class="num">5</span>)<span class="op">?</span>
-  <span class="fn">llm_complete</span>(<span class="str">"~{context}\n\nQ: ~{question}"</span>)<span class="op">!</span>
+  <span class="fn">llm_complete</span>(<span class="str">"{context}\n\nQ: {question}"</span>)<span class="op">!</span>
 }</code></pre>
           </div>
         </div>
@@ -779,7 +779,7 @@
         문서에서 각 제품의 퀵스타트 가이드와 풀스택 튜토리얼을 확인하세요.
       </p>
       <div class="eco-cta-actions">
-        <a href="https://docs.vaislang.dev/ecosystem/" class="btn btn-primary">Get Started</a>
+        <a href="/docs/ecosystem/" class="btn btn-primary">Get Started</a>
         <a href="/" class="btn btn-secondary">← Vais 홈으로</a>
       </div>
     </div>
@@ -794,9 +794,9 @@
           <span class="logo-text" style="font-size: 1rem;">Vais</span>
         </a>
         <div class="eco-footer-links">
-          <a href="https://docs.vaislang.dev/ecosystem/vaisx/">VaisX Docs</a>
-          <a href="https://docs.vaislang.dev/ecosystem/vaisdb/">VaisDB Docs</a>
-          <a href="https://docs.vaislang.dev/ecosystem/vais-server/">vais-server Docs</a>
+          <a href="/docs/ecosystem/vais-web/">VaisX Docs</a>
+          <a href="/docs/ecosystem/vaisdb/">VaisDB Docs</a>
+          <a href="/docs/ecosystem/vais-server/">vais-server Docs</a>
           <a href="https://github.com/vaislang/vais" target="_blank" rel="noopener">GitHub</a>
         </div>
         <span class="eco-footer-copy">&copy; 2026 Vais Contributors</span>

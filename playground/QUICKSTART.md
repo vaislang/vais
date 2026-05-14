@@ -65,7 +65,7 @@ Results appear in the right panel with:
 
 ```vais
 # Hello World
-F main()->i64 {
+fn main() -> i64 {
     puts("Hello, Vais!")
     0
 }
@@ -73,8 +73,8 @@ F main()->i64 {
 
 ```vais
 # Fibonacci with self-recursion
-F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
-F main()->i64 = fib(10)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
+fn main() -> i64 = fib(10)
 ```
 
 ## Next Steps

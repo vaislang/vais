@@ -68,6 +68,12 @@ impl CodeGenerator {
             } => {
                 // Infer type BEFORE generating code, so we can use function return types
                 let inferred_ty = self.infer_expr_type(value);
+                let resolved_ty = ty
+                    .as_ref()
+                    .map(|t| self.ast_type_to_resolved(&t.node))
+                    .unwrap_or(inferred_ty.clone());
+                let resolved_ty =
+                    vais_types::substitute_type(&resolved_ty, &self.generics.substitutions);
 
                 // Check if this is a struct literal - handle specially
                 // Also detect struct tuple literal: Point(40, 2) where "Point" is a known struct
@@ -102,12 +108,28 @@ impl CodeGenerator {
                     false
                 };
 
-                let (val, val_ir) = self.generate_expr(value, counter)?;
-
-                let resolved_ty = ty
-                    .as_ref()
-                    .map(|t| self.ast_type_to_resolved(&t.node))
-                    .unwrap_or(inferred_ty.clone()); // Use inferred type if not specified
+                let saved_generic_substitutions =
+                    self.push_expected_static_ctor_substitutions(&resolved_ty, &value.node);
+                let saved_load_typed_substitutions = if matches!(
+                    &value.node,
+                    Expr::Call { func, .. } if matches!(&func.node, Expr::Ident(name) if name == "load_typed")
+                ) {
+                    let saved = self.generics.substitutions.clone();
+                    self.generics
+                        .substitutions
+                        .insert("T".to_string(), resolved_ty.clone());
+                    Some(saved)
+                } else {
+                    None
+                };
+                let generated_value = self.generate_expr(value, counter);
+                if let Some(saved) = saved_generic_substitutions {
+                    self.generics.substitutions = saved;
+                }
+                if let Some(saved) = saved_load_typed_substitutions {
+                    self.generics.substitutions = saved;
+                }
+                let (val, val_ir) = generated_value?;
 
                 // Generate unique LLVM name for this variable (to handle loops)
                 let llvm_name = format!("{}.{}", name.node, counter);
@@ -197,14 +219,62 @@ impl CodeGenerator {
                         // This keeps all struct variables as pointers for consistency
                         let tmp_ptr = format!("%{}.struct", llvm_name);
                         write_ir!(ir, "  {} = alloca {}", tmp_ptr, llvm_ty);
+                        let is_load_typed_call = matches!(
+                            &value.node,
+                            Expr::Call { func, .. }
+                                if matches!(&func.node, Expr::Ident(name) if name == "load_typed")
+                        );
                         // If the value expression is not a value (e.g., block returning
-                        // a struct-typed local), we need to load the struct first
-                        let actual_val = if !self.is_expr_value(value) {
+                        // a struct-typed local, or load_typed returning alloca ptr),
+                        // we need to load the struct first.
+                        let actual_val = if !self.is_expr_value(value) || is_load_typed_call {
                             let loaded = self.next_temp(counter);
                             write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
+                            self.fn_ctx.register_temp_type(&loaded, resolved_ty.clone());
                             loaded
                         } else {
                             val.clone()
+                        };
+                        let actual_val = if actual_val.starts_with('%') {
+                            let actual_llvm_ty = self.llvm_type_of(&actual_val);
+                            if actual_llvm_ty != llvm_ty
+                                && actual_llvm_ty.starts_with('%')
+                                && llvm_ty.starts_with('%')
+                            {
+                                let actual_slot = self.next_temp(counter);
+                                self.emit_entry_alloca(&actual_slot, &actual_llvm_ty);
+                                write_ir!(
+                                    ir,
+                                    "  store {} {}, {}* {}",
+                                    actual_llvm_ty,
+                                    actual_val,
+                                    actual_llvm_ty,
+                                    actual_slot
+                                );
+                                let cast_ptr = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = bitcast {}* {} to {}*",
+                                    cast_ptr,
+                                    actual_llvm_ty,
+                                    actual_slot,
+                                    llvm_ty
+                                );
+                                let loaded = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load {}, {}* {}",
+                                    loaded,
+                                    llvm_ty,
+                                    llvm_ty,
+                                    cast_ptr
+                                );
+                                loaded
+                            } else {
+                                actual_val
+                            }
+                        } else {
+                            actual_val
                         };
                         write_ir!(
                             ir,

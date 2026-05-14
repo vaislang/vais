@@ -569,9 +569,10 @@ fn test_generate_specialized_function() {
         .generate_module_with_instantiations(&module, &instantiations)
         .unwrap();
 
-    // Should contain specialized function identity$i64
+    // Specialized functions use weak_odr linkage so repeated module-level
+    // instantiations remain link-safe across aggregate builds.
     assert!(
-        ir.contains("define i64 @identity$i64"),
+        ir.contains("define weak_odr i64 @identity$i64"),
         "Expected identity$i64 in IR: {}",
         ir
     );

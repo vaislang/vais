@@ -49,7 +49,7 @@ Step-by-step guide to using the Vais Playground.
 2. **Review the Code**
    ```vais
    # Hello World example using puts
-   F main()->i64 {
+   fn main() -> i64 {
        puts("Hello, Vais!")
        0
    }
@@ -68,21 +68,21 @@ Step-by-step guide to using the Vais Playground.
 
 ### Lesson 1: Functions
 
-Functions in Vais start with `F`:
+Functions in Vais use `fn` as the canonical declaration keyword:
 
 ```vais
 # Single-expression function
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 
 # Block function
-F greet(name: str) -> i64 {
+fn greet(name: str) -> i64 {
     puts("Hello, ")
     puts(name)
     0
 }
 
 # Main function (entry point)
-F main() -> i64 {
+fn main() -> i64 {
     result := add(5, 3)
     greet("World")
     0
@@ -99,7 +99,7 @@ F main() -> i64 {
 Vais uses `:=` for type-inferred declarations:
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     # Type inference
     x := 42          # i64
     y := 3.14        # f64
@@ -115,7 +115,7 @@ F main() -> i64 {
     0
 }
 
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 ```
 
 **Supported Types:**
@@ -128,17 +128,17 @@ F add(a: i64, b: i64) -> i64 = a + b
 
 ### Lesson 3: Control Flow
 
-#### If-Else (I/E keywords)
+#### If-Else (`I` / `else`)
 
 ```vais
-F check_number(n: i64) -> i64 {
+fn check_number(n: i64) -> i64 {
     result := I n > 0 {
         puts("Positive")
         1
-    } E I n < 0 {
+    } else I n < 0 {
         puts("Negative")
         -1
-    } E {
+    } else {
         puts("Zero")
         0
     }
@@ -150,7 +150,7 @@ F check_number(n: i64) -> i64 {
 #### Ternary Operator
 
 ```vais
-F max(a: i64, b: i64) -> i64 = a > b ? a : b
+fn max(a: i64, b: i64) -> i64 = a > b ? a : b
 ```
 
 **Try it:**
@@ -160,12 +160,12 @@ F max(a: i64, b: i64) -> i64 = a > b ? a : b
 
 ### Lesson 4: Loops
 
-#### Range Loop (L keyword)
+#### Range Loop (`LF`)
 
 ```vais
-F print_numbers() -> i64 {
+fn print_numbers() -> i64 {
     # Loop from 0 to 9
-    L i:0..10 {
+    LF i:0..10 {
         putchar(i + 48)  # Convert to ASCII
         putchar(32)      # Space
     }
@@ -177,10 +177,10 @@ F print_numbers() -> i64 {
 #### While-Style Loop
 
 ```vais
-F countdown() -> i64 {
+fn countdown() -> i64 {
     counter := 10
     L {
-        I counter <= 0 { break }
+        I counter <= 0 { B }
 
         putchar(counter + 48)
         putchar(32)
@@ -194,9 +194,9 @@ F countdown() -> i64 {
 #### Loop with Continue
 
 ```vais
-F skip_evens() -> i64 {
-    L i:0..10 {
-        I i % 2 == 0 { continue }
+fn skip_evens() -> i64 {
+    LF i:0..10 {
+        I i % 2 == 0 { C }
         putchar(i + 48)
     }
     0
@@ -206,19 +206,19 @@ F skip_evens() -> i64 {
 **Try it:**
 1. Load "Loops" example
 2. Modify the range
-3. Add break/continue conditions
+3. Add `B`/`C` break and continue conditions
 
-### Lesson 5: Structs (S keyword)
+### Lesson 5: Structs (`struct`)
 
 ```vais
 # Define a struct
-S Point {
+struct Point {
     x: f64,
     y: f64
 }
 
 # Create and use struct
-F main() -> i64 {
+fn main() -> i64 {
     # Create instance
     p := Point { x: 3.0, y: 4.0 }
 
@@ -233,23 +233,23 @@ F main() -> i64 {
 #### Methods on Structs
 
 ```vais
-S Rectangle {
+struct Rectangle {
     width: f64,
     height: f64
 }
 
 # Implement methods
-I Rectangle {
-    F area() -> f64 {
-        @.width * @.height
+impl Rectangle {
+    fn area(&self) -> f64 {
+        self.width * self.height
     }
 
-    F perimeter() -> f64 {
-        2.0 * (@.width + @.height)
+    fn perimeter(&self) -> f64 {
+        2.0 * (self.width + self.height)
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     rect := Rectangle { width: 5.0, height: 3.0 }
     a := rect.area()
     p := rect.perimeter()
@@ -262,11 +262,11 @@ F main() -> i64 {
 2. Add more fields
 3. Implement additional methods
 
-### Lesson 6: Enums (E keyword)
+### Lesson 6: Enums (`enum`)
 
 ```vais
 # Define enum
-E Color {
+enum Color {
     Red,
     Green,
     Blue,
@@ -274,29 +274,29 @@ E Color {
 }
 
 # Use enum
-F main() -> i64 {
+fn main() -> i64 {
     c1 := Red
     c2 := RGB(255, 128, 0)
     0
 }
 ```
 
-#### Pattern Matching (M keyword)
+#### Pattern Matching (match keyword)
 
 ```vais
-E Option<T> {
+enum Option<T> {
     Some(T),
     None
 }
 
-F get_or_default(opt: Option<i64>, default: i64) -> i64 {
-    M opt {
+fn get_or_default(opt: Option<i64>, default: i64) -> i64 {
+    match opt {
         Some(v) => v,
         None => default
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     x := Some(42)
     y := None
 
@@ -318,28 +318,28 @@ The `@` operator calls the current function recursively:
 
 ```vais
 # Traditional recursion (doesn't work in Vais)
-F factorial(n: i64) -> i64 {
+fn factorial(n: i64) -> i64 {
     I n <= 1 {
         1
-    } E {
+    } else {
         n * factorial(n - 1)  # ❌ Can't call by name
     }
 }
 
 # Vais self-recursion (correct)
-F factorial(n: i64) -> i64 {
+fn factorial(n: i64) -> i64 {
     I n <= 1 {
         1
-    } E {
+    } else {
         n * @(n - 1)  # ✅ Use @ operator
     }
 }
 
 # Fibonacci with self-recursion
-F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
 
 # Sum from 1 to n
-F sum_to_n(n: i64) -> i64 = I n <= 0 { 0 } E { n + @(n-1) }
+fn sum_to_n(n: i64) -> i64 = I n <= 0 { 0 } else { n + @(n-1) }
 ```
 
 **Try it:**
@@ -351,13 +351,13 @@ F sum_to_n(n: i64) -> i64 = I n <= 0 { 0 } E { n + @(n-1) }
 
 ```vais
 # Generic function
-F identity<T>(x: T) -> T = x
+fn identity<T>(x: T) -> T = x
 
 # Generic with constraints (future)
-F max<T: Ord>(a: T, b: T) -> T = a > b ? a : b
+fn max<T: Ord>(a: T, b: T) -> T = a > b ? a : b
 
 # Use generics
-F main() -> i64 {
+fn main() -> i64 {
     x := identity(42)       # T = i64
     y := identity(3.14)     # T = f64
     z := identity(true)     # T = bool
@@ -369,11 +369,11 @@ F main() -> i64 {
 #### Generic Structs
 
 ```vais
-S Box<T> {
+struct Box<T> {
     value: T
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     int_box := Box { value: 42 }
     float_box := Box { value: 3.14 }
     0
@@ -390,7 +390,7 @@ F main() -> i64 {
 Vais can infer types in many contexts:
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     # Infer from literal
     x := 42              # i64
     y := 3.14           # f64
@@ -407,8 +407,8 @@ F main() -> i64 {
     0
 }
 
-F add(a: i64, b: i64) -> i64 = a + b
-F identity<T>(x: T) -> T = x
+fn add(a: i64, b: i64) -> i64 = a + b
+fn identity<T>(x: T) -> T = x
 ```
 
 **Try it:**
@@ -419,7 +419,7 @@ F identity<T>(x: T) -> T = x
 ### Lesson 10: Operators
 
 ```vais
-F test_operators() -> i64 {
+fn test_operators() -> i64 {
     # Arithmetic
     a := 10 + 5   # Addition
     b := 10 - 5   # Subtraction
@@ -468,7 +468,7 @@ F test_operators() -> i64 {
    comment
 */
 
-F main() -> i64 {
+fn main() -> i64 {
     # TODO: implement this
     0
 }
@@ -477,7 +477,7 @@ F main() -> i64 {
 ### Arrays
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     # Array literal
     arr := [1, 2, 3, 4, 5]
 
@@ -495,7 +495,7 @@ F main() -> i64 {
 ### Strings
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     # String literals
     greeting := "Hello, World!"
 
@@ -542,8 +542,8 @@ Document your code with comments, especially for complex logic:
 #   n: The number to calculate factorial for
 # Returns:
 #   The factorial of n
-F factorial(n: i64) -> i64 =
-    I n <= 1 { 1 } E { n * @(n-1) }
+fn factorial(n: i64) -> i64 =
+    I n <= 1 { 1 } else { n * @(n-1) }
 ```
 
 ### 6. Keyboard Shortcuts
@@ -568,12 +568,12 @@ Begin with simple programs and gradually add complexity.
 
 ```vais
 # ❌ Wrong
-F main() {
+fn main() {
     puts("Hello")
 }
 
 # ✅ Correct
-F main() -> i64 {
+fn main() -> i64 {
     puts("Hello")
     0
 }
@@ -583,27 +583,27 @@ F main() -> i64 {
 
 ```vais
 # ❌ May not work
-F add(a, b) = a + b
+fn add(a, b) = a + b
 
 # ✅ Better
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 ```
 
 ### 3. Incorrect Recursion
 
 ```vais
 # ❌ Wrong
-F fib(n: i64) -> i64 = n < 2 ? n : fib(n-1) + fib(n-2)
+fn fib(n: i64) -> i64 = n < 2 ? n : fib(n-1) + fib(n-2)
 
 # ✅ Correct
-F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
 ```
 
 ### 4. Mismatched Braces
 
 ```vais
 # ❌ Wrong
-F main() -> i64 {
+fn main() -> i64 {
     I true {
         puts("Test")
     # Missing closing brace!
@@ -611,7 +611,7 @@ F main() -> i64 {
 }
 
 # ✅ Correct
-F main() -> i64 {
+fn main() -> i64 {
     I true {
         puts("Test")
     }
@@ -657,7 +657,7 @@ Check out the [Language Specification](../docs/LANGUAGE_SPEC.md) for complete de
 1. Check for syntax errors (red squiggles in editor)
 2. Ensure main function exists and returns i64
 3. Check that all braces are matched
-4. Look for typos in keywords (F, S, E, I, L, M)
+4. Look for typos in keywords (`fn`, `struct`, `enum`, `match`, `I`, `LF`, `LW`, `B`, `C`)
 
 ### Unexpected Output
 

@@ -38,6 +38,10 @@ pub(crate) const RUNTIME_INTRINSIC_NAMES: &[&str] = &[
     "__store_f32",
     "__load_f32",
     "__load_f64",
+    "__strlen",
+    "Option_is_some",
+    "Option_is_none",
+    "Option_unwrap_or",
     "__call_poll",
     "__extract_poll_status",
     "__extract_poll_value",
@@ -145,6 +149,54 @@ impl CodeGenerator {
         ir.push_str("  store i64 %val, i64* %0\n");
         ir.push_str("  ret void\n");
         ir.push_str("}\n");
+
+        // __strlen: std-facing alias for libc strlen
+        ir.push_str("\n; Helper function: strlen alias\n");
+        ir.push_str("define weak_odr i64 @__strlen(i8* %str) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %len = call i64 @strlen(i8* %str)\n");
+        ir.push_str("  ret i64 %len\n");
+        ir.push_str("}\n");
+
+        if self.types.enums.contains_key("Option") {
+            // Base Option helpers for erased `%Option = { i32, { i64 } }`.
+            ir.push_str("\n; Base Option helper: is_some\n");
+            ir.push_str("define weak_odr i64 @Option_is_some(%Option* %self) {\n");
+            ir.push_str("entry:\n");
+            ir.push_str("  %tag_ptr = getelementptr %Option, %Option* %self, i32 0, i32 0\n");
+            ir.push_str("  %tag = load i32, i32* %tag_ptr\n");
+            ir.push_str("  %is_some = icmp ne i32 %tag, 0\n");
+            ir.push_str("  %result = zext i1 %is_some to i64\n");
+            ir.push_str("  ret i64 %result\n");
+            ir.push_str("}\n");
+
+            ir.push_str("\n; Base Option helper: is_none\n");
+            ir.push_str("define weak_odr i64 @Option_is_none(%Option* %self) {\n");
+            ir.push_str("entry:\n");
+            ir.push_str("  %tag_ptr = getelementptr %Option, %Option* %self, i32 0, i32 0\n");
+            ir.push_str("  %tag = load i32, i32* %tag_ptr\n");
+            ir.push_str("  %is_none = icmp eq i32 %tag, 0\n");
+            ir.push_str("  %result = zext i1 %is_none to i64\n");
+            ir.push_str("  ret i64 %result\n");
+            ir.push_str("}\n");
+
+            ir.push_str("\n; Base Option helper: unwrap_or\n");
+            ir.push_str("define weak_odr i64 @Option_unwrap_or(%Option* %self, i64 %default) {\n");
+            ir.push_str("entry:\n");
+            ir.push_str("  %tag_ptr = getelementptr %Option, %Option* %self, i32 0, i32 0\n");
+            ir.push_str("  %tag = load i32, i32* %tag_ptr\n");
+            ir.push_str("  %is_some = icmp ne i32 %tag, 0\n");
+            ir.push_str("  br i1 %is_some, label %some, label %none\n");
+            ir.push_str("some:\n");
+            ir.push_str(
+                "  %payload_ptr = getelementptr %Option, %Option* %self, i32 0, i32 1, i32 0\n",
+            );
+            ir.push_str("  %payload = load i64, i64* %payload_ptr\n");
+            ir.push_str("  ret i64 %payload\n");
+            ir.push_str("none:\n");
+            ir.push_str("  ret i64 %default\n");
+            ir.push_str("}\n");
+        }
 
         // __swap: swap two i64 elements in array by index
         ir.push_str("\n; Helper function: swap two i64 elements in array\n");
@@ -295,7 +347,9 @@ impl CodeGenerator {
 
         // __time_now_ms: get current time in milliseconds using gettimeofday
         ir.push_str("\n; Async helper: current time in milliseconds\n");
-        ir.push_str("declare i32 @gettimeofday(i8*, i8*)\n");
+        if !self.types.functions.contains_key("gettimeofday") {
+            ir.push_str("declare i32 @gettimeofday(i8*, i8*)\n");
+        }
         ir.push_str("define i64 @__time_now_ms() {\n");
         ir.push_str("entry:\n");
         ir.push_str("  %tv = alloca [16 x i8], align 8\n");

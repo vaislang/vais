@@ -582,12 +582,14 @@ impl CodeGenerator {
         // Skip builtins — they are handled by generate_helper_functions() or the non-main extern block.
         // Skip specialized functions that will be defined in this module (type signature mismatch).
         for (name, info) in &self.types.functions {
-            if !info.is_extern
-                && !module_functions.contains(name)
-                && !declared_fns.contains(name)
-                && !builtin_fn_keys.contains(name)
-                && !specialized_defines.contains(name)
-            {
+            let skip_decl = info.is_extern
+                || module_functions.contains(name)
+                || declared_fns.contains(name)
+                || builtin_fn_keys.contains(name)
+                || specialized_defines.contains(name)
+                || (is_main_module
+                    && crate::function_gen::runtime::is_runtime_intrinsic(&info.signature.name));
+            if !skip_decl {
                 ir.push_str(&self.generate_extern_decl(info));
                 ir.push('\n');
                 declared_fns.insert(name.clone());
@@ -812,12 +814,10 @@ impl CodeGenerator {
         }
 
         if self.needs_string_helpers {
-            if is_main_module {
-                ir.push_str(&self.generate_string_helper_functions());
-            } else {
-                // Non-main modules: declare string helpers as external (defined in main module)
-                ir.push_str(&self.generate_string_helper_declarations());
-            }
+            // Emit weak definitions in every module that needs them. A non-main
+            // module can require string helpers even when the main module does
+            // not, and `weak_odr` keeps duplicate definitions link-safe.
+            ir.push_str(&self.generate_string_helper_functions());
             if !self.target.is_wasm() {
                 ir.push_str(&self.generate_string_extern_declarations());
             }
@@ -835,17 +835,16 @@ impl CodeGenerator {
         // Struct shallow-free helpers (RFC-002 §4.2, Phase 191 #2b-C).
         for struct_name in &self.needs_struct_shallow.clone() {
             if let Some(info) = self.types.structs.get(struct_name) {
-                if is_main_module {
-                    let field_count = info.fields.len();
-                    let heap_fields = info.heap_fields.clone();
-                    ir.push_str(&self.generate_struct_shallow_free_helper(
-                        struct_name,
-                        field_count,
-                        &heap_fields,
-                    ));
-                } else {
-                    ir.push_str(&Self::generate_struct_shallow_free_declaration(struct_name));
-                }
+                // Emit weak definitions in every module that needs them. The
+                // main module may not use the same structs as a transitive
+                // module, so declarations alone can leave link-time gaps.
+                let field_count = info.fields.len();
+                let heap_fields = info.heap_fields.clone();
+                ir.push_str(&self.generate_struct_shallow_free_helper(
+                    struct_name,
+                    field_count,
+                    &heap_fields,
+                ));
             }
         }
 

@@ -42,24 +42,30 @@ fn test_js_config_default() {
 
 #[test]
 fn test_js_config_var_mode() {
-    let mut config = JsConfig::default();
-    config.use_const_let = false;
+    let config = JsConfig {
+        use_const_let: false,
+        ..Default::default()
+    };
     let js = gen_js_with_config("F f() -> i64 = 42", config);
     assert!(!js.is_empty());
 }
 
 #[test]
 fn test_js_config_jsdoc() {
-    let mut config = JsConfig::default();
-    config.emit_jsdoc = true;
+    let config = JsConfig {
+        emit_jsdoc: true,
+        ..Default::default()
+    };
     let js = gen_js_with_config("F add(x: i64, y: i64) -> i64 = x + y", config);
     assert!(!js.is_empty());
 }
 
 #[test]
 fn test_js_config_custom_indent() {
-    let mut config = JsConfig::default();
-    config.indent = "    ".to_string(); // 4 spaces
+    let config = JsConfig {
+        indent: "    ".to_string(), // 4 spaces
+        ..Default::default()
+    };
     let js = gen_js_with_config(
         r#"
         F f() -> i64 {

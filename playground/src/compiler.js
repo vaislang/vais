@@ -67,7 +67,7 @@ export class VaisCompiler {
       const response = await fetch(`${this.apiUrl}/api/compile-wasm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source: 'F main()->i64{0}', target: 'wasm32' }),
+        body: JSON.stringify({ source: 'fn main() -> i64 { 0 }', target: 'wasm32' }),
         signal: AbortSignal.timeout(5000),
       });
       if (response.ok) {
@@ -331,9 +331,10 @@ export class VaisCompiler {
       return { success: false, errors, warnings, output: null };
     }
 
-    // Check for main function
-    if (!sourceCode.includes('F main')) {
-      errors.push({ line: 1, column: 1, message: 'No main function found (expected `F main()`)' });
+    // Check for main function. `fn` is canonical; `F` remains accepted by the
+    // compiler for compatibility.
+    if (!/\b(fn|F)\s+main\b/.test(sourceCode)) {
+      errors.push({ line: 1, column: 1, message: 'No main function found (expected `fn main()`)' });
     }
 
     // Brace matching
@@ -394,16 +395,16 @@ export class VaisCompiler {
       // Match puts("...") calls
       const putsMatch = trimmed.match(/puts\("([^"]*)"\)/);
       if (putsMatch) {
-        output.push(putsMatch[1]);
+        output.push(putsMatch[1].replace(/~?\{([^}]+)\}/g, '<$1>'));
         continue;
       }
 
       // Match println("...") calls (with simple interpolation)
       const printlnMatch = trimmed.match(/println\("([^"]*)"\)/);
       if (printlnMatch) {
-        // Replace ~{expr} with <expr> for display
+        // Replace interpolation placeholders with <expr> for display.
         const text = printlnMatch[1]
-          .replace(/~\{([^}]+)\}/g, '<$1>');
+          .replace(/~?\{([^}]+)\}/g, '<$1>');
         output.push(text);
         continue;
       }
@@ -427,9 +428,9 @@ export class VaisCompiler {
     const simulatedOutput = this.mockSimulateOutput(sourceCode);
 
     // Count language constructs for summary
-    const funcCount = (sourceCode.match(/\bF\s+\w+/g) || []).length;
-    const structCount = (sourceCode.match(/\bS\s+\w+/g) || []).length;
-    const enumCount = (sourceCode.match(/\bE\s+\w+/g) || []).length;
+    const funcCount = (sourceCode.match(/\b(fn|F)\s+\w+/g) || []).length;
+    const structCount = (sourceCode.match(/\b(struct|S)\s+\w+/g) || []).length;
+    const enumCount = (sourceCode.match(/\b(enum|E)\s+\w+/g) || []).length;
 
     const summary = [];
     if (funcCount > 0) summary.push(`${funcCount} function(s)`);

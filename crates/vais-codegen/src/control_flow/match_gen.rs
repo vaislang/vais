@@ -54,7 +54,9 @@ impl CodeGenerator {
 
         let merge_label = self.next_label("match.merge");
         let mut arm_labels: Vec<String> = Vec::with_capacity(arms.len());
-        let mut arm_values: Vec<(String, String)> = Vec::with_capacity(arms.len()); // (value, label)
+        let mut arm_values: Vec<(String, String, ResolvedType)> = Vec::with_capacity(arms.len()); // (value, label, type)
+        let expected_arm_body_type = self.resolve_match_arm_body_type(arms, &match_type);
+        let expected_phi_type = self.match_phi_type_for(&expected_arm_body_type);
 
         // Check if all arms are simple integer literals (can use switch)
         let all_int_literals = arms.iter().all(|arm| {
@@ -126,20 +128,42 @@ impl CodeGenerator {
                         // Guard passed - execute body
                         write_ir!(ir, "{}:", guard_pass);
                         self.fn_ctx.current_block = guard_pass.clone();
-                        let (body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
+                        let (mut body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
+                        let arm_terminated = ir_ends_with_terminator(&body_ir);
                         ir.push_str(&body_ir);
-                        arm_values.push((body_val, self.fn_ctx.current_block.clone()));
-                        write_ir!(ir, "  br label %{}", merge_label);
+                        if !arm_terminated {
+                            let body_ty = self.infer_expr_type(&arm.body);
+                            body_val = self.coerce_match_arm_value_to_phi(
+                                body_val,
+                                &body_ty,
+                                &expected_phi_type,
+                                counter,
+                                &mut ir,
+                            );
+                            arm_values.push((body_val, self.fn_ctx.current_block.clone(), body_ty));
+                            write_ir!(ir, "  br label %{}", merge_label);
+                        }
 
                         // Guard failed - go to default
                         write_ir!(ir, "{}:", guard_fail);
                         write_ir!(ir, "  br label %{}", default_label);
                     } else {
                         self.fn_ctx.current_block.clone_from(label);
-                        let (body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
+                        let (mut body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
+                        let arm_terminated = ir_ends_with_terminator(&body_ir);
                         ir.push_str(&body_ir);
-                        arm_values.push((body_val, self.fn_ctx.current_block.clone()));
-                        write_ir!(ir, "  br label %{}", merge_label);
+                        if !arm_terminated {
+                            let body_ty = self.infer_expr_type(&arm.body);
+                            body_val = self.coerce_match_arm_value_to_phi(
+                                body_val,
+                                &body_ty,
+                                &expected_phi_type,
+                                counter,
+                                &mut ir,
+                            );
+                            arm_values.push((body_val, self.fn_ctx.current_block.clone(), body_ty));
+                            write_ir!(ir, "  br label %{}", merge_label);
+                        }
                     }
 
                     case_idx += 1;
@@ -149,14 +173,26 @@ impl CodeGenerator {
             // Generate default arm
             write_ir!(ir, "{}:", default_label);
             if let Some(arm) = default_arm {
-                let (body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
+                let (mut body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
+                let arm_terminated = ir_ends_with_terminator(&body_ir);
                 ir.push_str(&body_ir);
-                arm_values.push((body_val, default_label.clone()));
+                if !arm_terminated {
+                    let body_ty = self.infer_expr_type(&arm.body);
+                    body_val = self.coerce_match_arm_value_to_phi(
+                        body_val,
+                        &body_ty,
+                        &expected_phi_type,
+                        counter,
+                        &mut ir,
+                    );
+                    arm_values.push((body_val, default_label.clone(), body_ty));
+                    write_ir!(ir, "  br label %{}", merge_label);
+                }
             } else {
                 // No default arm - unreachable or return 0
-                arm_values.push(("0".to_string(), default_label.clone()));
+                arm_values.push(("0".to_string(), default_label.clone(), ResolvedType::I64));
+                write_ir!(ir, "  br label %{}", merge_label);
             }
-            write_ir!(ir, "  br label %{}", merge_label);
         } else {
             // Fall back to chained conditional branches for complex patterns
             let mut current_label = self.next_label("match.check");
@@ -251,19 +287,25 @@ impl CodeGenerator {
                 }
 
                 let (mut body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
+                let arm_terminated = ir_ends_with_terminator(&body_ir);
                 ir.push_str(&body_ir);
 
                 // Coerce arm values to match the phi type.
                 // Skip if the body_val is a placeholder (void/ret arms).
-                if !body_val.is_empty()
+                if !arm_terminated
+                    && !body_val.is_empty()
                     && body_val != "void"
                     && !body_ir.trim_end().ends_with("unreachable")
                 {
-                    let arm_inferred = self.infer_expr_type(&arm.body);
+                    let mut arm_inferred = self.infer_expr_type(&arm.body);
                     if matches!(arm_inferred, ResolvedType::Bool) {
-                        let coerced = self.next_temp(counter);
-                        write_ir!(ir, "  {} = zext i1 {} to i64", coerced, body_val);
-                        body_val = coerced;
+                        if self.llvm_type_of(&body_val) == "i1" {
+                            let coerced = self.next_temp(counter);
+                            write_ir!(ir, "  {} = zext i1 {} to i64", coerced, body_val);
+                            self.fn_ctx.register_temp_type(&coerced, ResolvedType::I64);
+                            body_val = coerced;
+                        }
+                        arm_inferred = ResolvedType::I64;
                     } else if matches!(arm_inferred, ResolvedType::Named { .. }) {
                         // Named type (struct/enum): phi uses pointer type (%T*).
                         // If this arm body produced a value (e.g., function return),
@@ -287,29 +329,44 @@ impl CodeGenerator {
                         // else: already a pointer, use as-is
                     } else if !matches!(arm_inferred, ResolvedType::Named { .. }) {
                         // Arm produces i64 (e.g., closure call) but function returns
-                        // Named type (struct/enum) — inttoptr to match phi pointer type
+                        // Named type (struct/enum) — inttoptr only when this match
+                        // expression itself is also producing that pointer-shaped phi.
+                        // Statement-position matches inside Result-returning functions
+                        // must stay typed from their own arms, not the function return.
                         if let Some(ret_ty) = &self.fn_ctx.current_return_type {
                             if matches!(ret_ty, ResolvedType::Named { .. }) {
                                 let llvm_ty = self.type_to_llvm(ret_ty);
-                                let coerced = self.next_temp(counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = inttoptr i64 {} to {}*",
-                                    coerced,
-                                    body_val,
-                                    llvm_ty
-                                );
-                                body_val = coerced;
+                                if expected_phi_type == format!("{}*", llvm_ty) {
+                                    let coerced = self.next_temp(counter);
+                                    write_ir!(
+                                        ir,
+                                        "  {} = inttoptr i64 {} to {}*",
+                                        coerced,
+                                        body_val,
+                                        llvm_ty
+                                    );
+                                    body_val = coerced;
+                                }
                             }
                         }
                     }
+                    body_val = self.coerce_match_arm_value_to_phi(
+                        body_val,
+                        &arm_inferred,
+                        &expected_phi_type,
+                        counter,
+                        &mut ir,
+                    );
                 }
 
                 // Use actual current block (may differ from arm_body_label if body
                 // inserted intermediate labels, e.g., division-by-zero guard)
-                let actual_block = self.fn_ctx.current_block.clone();
-                arm_values.push((body_val, actual_block));
-                write_ir!(ir, "  br label %{}", merge_label);
+                if !arm_terminated {
+                    let actual_block = self.fn_ctx.current_block.clone();
+                    let body_ty = self.infer_expr_type(&arm.body);
+                    arm_values.push((body_val, actual_block, body_ty));
+                    write_ir!(ir, "  br label %{}", merge_label);
+                }
 
                 current_label = next_label;
             }
@@ -317,22 +374,11 @@ impl CodeGenerator {
             // Default fallthrough block (no arm matched)
             write_ir!(ir, "{}:", default_label);
             self.fn_ctx.current_block.clone_from(&default_label);
-            // Use appropriate default value based on arm types or function return type
+            // Use the already-resolved match arm type for synthetic default values.
+            // Looking at the enclosing function return here makes statement-position
+            // matches in `Result`-returning functions emit pointer defaults into i64 PHIs.
             let default_val = {
-                let mut resolved = if !arms.is_empty() {
-                    self.infer_expr_type(&arms[0].body)
-                } else {
-                    ResolvedType::I64
-                };
-                // If first arm type is i64 but function returns Named, use Named
-                if !matches!(resolved, ResolvedType::Named { .. }) {
-                    if let Some(ret_ty) = &self.fn_ctx.current_return_type {
-                        if matches!(ret_ty, ResolvedType::Named { .. }) {
-                            resolved = ret_ty.clone();
-                        }
-                    }
-                }
-                match &resolved {
+                match &expected_arm_body_type {
                     ResolvedType::Str => {
                         // Str PHI uses fat-pointer { i8*, i64 } — emit a zero
                         // constant for the unreachable default fallthrough.
@@ -352,12 +398,14 @@ impl CodeGenerator {
                     _ => "0".to_string(),
                 }
             };
-            arm_values.push((default_val, default_label.clone()));
+            let default_ty = expected_arm_body_type.clone();
+            arm_values.push((default_val, default_label.clone(), default_ty));
             write_ir!(ir, "  br label %{}", merge_label);
         }
 
         // Merge block with phi node
         write_ir!(ir, "{}:", merge_label);
+        self.fn_ctx.current_block.clone_from(&merge_label);
 
         if arm_values.is_empty() {
             Ok(("0".to_string(), ir))
@@ -365,33 +413,7 @@ impl CodeGenerator {
             // Determine phi node type from arm body expressions.
             // Try the first arm, but if it's a generic i64 and another arm or the
             // function return type is a Named type (struct/enum), prefer that.
-            let arm_body_type = if !arms.is_empty() {
-                let first_arm_ty = self.infer_expr_type(&arms[0].body);
-                if matches!(first_arm_ty, ResolvedType::Named { .. }) {
-                    first_arm_ty
-                } else {
-                    // Check other arms for Named types (e.g., enum construction)
-                    let named_from_arms = arms.iter().skip(1).find_map(|arm| {
-                        let ty = self.infer_expr_type(&arm.body);
-                        if matches!(ty, ResolvedType::Named { .. }) {
-                            Some(ty)
-                        } else {
-                            None
-                        }
-                    });
-                    // Also check function return type as fallback
-                    named_from_arms.unwrap_or_else(|| {
-                        if let Some(ret_ty) = &self.fn_ctx.current_return_type {
-                            if matches!(ret_ty, ResolvedType::Named { .. }) {
-                                return ret_ty.clone();
-                            }
-                        }
-                        first_arm_ty
-                    })
-                }
-            } else {
-                ResolvedType::I64
-            };
+            let arm_body_type = expected_arm_body_type.clone();
 
             // Check if all arms produce void/Unit — phi void is invalid in LLVM IR.
             // Use a placeholder add instruction instead, same pattern as if_else.rs.
@@ -406,25 +428,11 @@ impl CodeGenerator {
             }
 
             let is_named_type = matches!(&arm_body_type, ResolvedType::Named { .. });
-            let phi_type = match &arm_body_type {
-                ResolvedType::Named { .. } => {
-                    // Enum/struct types are returned as pointers in text codegen
-                    let llvm_ty = self.type_to_llvm(&arm_body_type);
-                    format!("{}*", llvm_ty)
-                }
-                ResolvedType::Str => "{ i8*, i64 }".to_string(),
-                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
-                    let inner_ty = self.type_to_llvm(inner);
-                    format!("{}*", inner_ty)
-                }
-                ResolvedType::F64 => "double".to_string(),
-                ResolvedType::Bool => "i64".to_string(), // Bool is zext'd to i64 in codegen
-                _ => "i64".to_string(),
-            };
+            let phi_type = expected_phi_type.clone();
 
             let phi_args: Vec<String> = arm_values
                 .iter()
-                .map(|(val, label)| format!("[ {}, %{} ]", val, label))
+                .map(|(val, label, _ty)| format!("[ {}, %{} ]", val, label))
                 .collect();
             write_ir!(
                 ir,
@@ -450,9 +458,11 @@ impl CodeGenerator {
 
                 Ok((loaded, ir))
             } else {
-                // Register the actual phi IR type (i64 for Bool/small ints) so
-                // downstream coercion uses the correct source type.
-                if matches!(arm_body_type, ResolvedType::Bool) {
+                // Register the actual phi IR type so downstream coercion uses the
+                // correct source type instead of the AST-level inferred type. This
+                // matters for small-int return types: match arms use i64 literals
+                // unless the phi itself was narrowed.
+                if phi_type == "i64" {
                     self.fn_ctx
                         .register_temp_type(&phi_result, ResolvedType::I64);
                 }
@@ -463,7 +473,7 @@ impl CodeGenerator {
                 // ownership and skip the would-be cleanup.
                 if matches!(arm_body_type, ResolvedType::Str) {
                     let mut slots: Vec<String> = Vec::new();
-                    for (val, _label) in &arm_values {
+                    for (val, _label, _ty) in &arm_values {
                         let key = val.trim().to_string();
                         if let Some(slot) = self.fn_ctx.string_value_slot.get(&key).cloned() {
                             if !slots.contains(&slot) {
@@ -486,4 +496,119 @@ impl CodeGenerator {
             }
         }
     }
+
+    fn resolve_match_arm_body_type(
+        &self,
+        arms: &[MatchArm],
+        match_type: &ResolvedType,
+    ) -> ResolvedType {
+        if arms.is_empty() {
+            return ResolvedType::I64;
+        }
+
+        let first_arm_ty = self.infer_match_arm_body_type_with_pattern(&arms[0], match_type);
+        if Self::is_preferred_match_body_type(&first_arm_ty) {
+            return first_arm_ty;
+        }
+
+        let concrete_from_arms = arms.iter().skip(1).find_map(|arm| {
+            let ty = self.infer_match_arm_body_type_with_pattern(arm, match_type);
+            if Self::is_preferred_match_body_type(&ty) {
+                Some(ty)
+            } else {
+                None
+            }
+        });
+
+        concrete_from_arms.unwrap_or(first_arm_ty)
+    }
+
+    fn is_preferred_match_body_type(ty: &ResolvedType) -> bool {
+        matches!(
+            ty,
+            ResolvedType::Named { .. } | ResolvedType::Str | ResolvedType::F32 | ResolvedType::F64
+        )
+    }
+
+    fn match_phi_type_for(&self, ty: &ResolvedType) -> String {
+        match ty {
+            ResolvedType::Named { .. } => {
+                let llvm_ty = self.type_to_llvm(ty);
+                format!("{}*", llvm_ty)
+            }
+            ResolvedType::Str => "{ i8*, i64 }".to_string(),
+            ResolvedType::Ref(_) | ResolvedType::RefMut(_) => self.type_to_llvm(ty),
+            ResolvedType::F32 | ResolvedType::F64 => self.type_to_llvm(ty),
+            ResolvedType::Bool => "i64".to_string(),
+            _ => "i64".to_string(),
+        }
+    }
+
+    fn match_arm_value_ir_type_for(&self, ty: &ResolvedType) -> String {
+        match ty {
+            ResolvedType::Named { .. } => {
+                let llvm_ty = self.type_to_llvm(ty);
+                format!("{}*", llvm_ty)
+            }
+            ResolvedType::Bool => "i1".to_string(),
+            ResolvedType::Ref(_) | ResolvedType::RefMut(_) => self.type_to_llvm(ty),
+            _ => self.type_to_llvm(ty),
+        }
+    }
+
+    fn coerce_match_arm_value_to_phi(
+        &mut self,
+        val: String,
+        val_ty: &ResolvedType,
+        phi_type: &str,
+        counter: &mut usize,
+        ir: &mut String,
+    ) -> String {
+        let val_ir_ty = self.match_arm_value_ir_type_for(val_ty);
+        if val.starts_with('%')
+            && val_ir_ty != phi_type
+            && Self::int_type_width(&val_ir_ty) > 0
+            && Self::int_type_width(phi_type) > 0
+        {
+            let val_width = Self::int_type_width(&val_ir_ty);
+            let phi_width = Self::int_type_width(phi_type);
+            if val_width < phi_width
+                && matches!(
+                    val_ty,
+                    ResolvedType::Bool
+                        | ResolvedType::U8
+                        | ResolvedType::U16
+                        | ResolvedType::U32
+                        | ResolvedType::U64
+                        | ResolvedType::U128
+                )
+            {
+                let tmp = self.next_temp(counter);
+                write_ir!(ir, "  {} = zext {} {} to {}", tmp, val_ir_ty, val, phi_type);
+                tmp
+            } else {
+                self.coerce_int_width(&val, &val_ir_ty, phi_type, counter, ir)
+            }
+        } else {
+            val
+        }
+    }
+}
+
+fn ir_ends_with_terminator(ir: &str) -> bool {
+    ir.lines()
+        .rev()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.starts_with(';'))
+        .is_some_and(|line| {
+            line.starts_with("ret ")
+                || line == "ret void"
+                || line.starts_with("br ")
+                || line.starts_with("switch ")
+                || line == "unreachable"
+                || line.starts_with("resume ")
+                || line.starts_with("invoke ")
+                || line.starts_with("indirectbr ")
+                || line.starts_with("callbr ")
+        })
 }

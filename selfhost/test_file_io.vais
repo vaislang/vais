@@ -127,10 +127,10 @@ F test_write_read_roundtrip() -> i64 {
     read_data := load_i64(result)
     read_len := load_i64(result + 8)
 
-    match := compare_data(read_data, read_len, content)
+    matched := compare_data(read_data, read_len, content)
     file_result_free(result)
 
-    assert_true(match, "write_read_roundtrip")
+    assert_true(matched, "write_read_roundtrip")
 }
 
 # Test 2: File exists - existing file
@@ -197,10 +197,10 @@ F test_file_append() -> i64 {
     read_len := load_i64(result + 8)
 
     expected := "Hello World"
-    match := compare_data(read_data, read_len, expected)
+    matched := compare_data(read_data, read_len, expected)
     file_result_free(result)
 
-    assert_true(match, "file_append")
+    assert_true(matched, "file_append")
 }
 
 # Test 6: Open/write/close with file_write_bytes
@@ -236,10 +236,10 @@ F test_manual_write() -> i64 {
     read_data := load_i64(result)
     read_len := load_i64(result + 8)
 
-    match := compare_data(read_data, read_len, content)
+    matched := compare_data(read_data, read_len, content)
     file_result_free(result)
 
-    assert_true(match, "manual_write")
+    assert_true(matched, "manual_write")
 }
 
 # Test 7: Read line by line
@@ -411,11 +411,11 @@ F test_read_bytes() -> i64 {
     read_data := load_i64(result)
     read_len := load_i64(result + 8)
 
-    match := compare_data(read_data, read_len, "ABC")
+    matched := compare_data(read_data, read_len, "ABC")
     file_result_free(result)
     file_close(fp)
 
-    assert_true(match, "read_bytes")
+    assert_true(matched, "read_bytes")
 }
 
 # Test 10: Empty file
@@ -521,12 +521,12 @@ F test_binary_data() -> i64 {
     } EL { 0 }
 
     i = 0
-    match := mut 1
+    matched := mut 1
     LW i < size {
         original := load_byte(data + i)
         read_byte := load_byte(read_data + i)
         I original != read_byte {
-            match = 0
+            matched = 0
         } EL { 0 }
         i = i + 1
     }
@@ -534,7 +534,7 @@ F test_binary_data() -> i64 {
     free(data)
     file_result_free(result)
 
-    assert_true(match, "binary_data")
+    assert_true(matched, "binary_data")
 }
 
 # ============================================================================

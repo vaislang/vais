@@ -37,7 +37,7 @@ impl CodeGenerator {
                     if self.type_to_llvm(&then_type) != self.type_to_llvm(&else_type_resolved) {
                         vais_types::ResolvedType::I64
                     } else {
-                        then_type
+                        then_type.clone()
                     };
                 let llvm_type = self.type_to_llvm(&block_type);
 
@@ -86,24 +86,21 @@ impl CodeGenerator {
                     loaded
                 } else if !then_terminated {
                     // Coerce integer width if the value type differs from the phi type
-                    let actual_ty = self.llvm_type_of(&then_val);
-                    let coerced =
-                        self.coerce_int_width(&then_val, &actual_ty, &llvm_type, counter, &mut ir);
-                    // Also coerce float width (e.g., float→double or double→float for phi)
-                    let actual_after = self.llvm_type_of(&coerced);
-                    if actual_after != llvm_type
-                        && (actual_after == "float" || actual_after == "double")
+                    let actual_ty = if matches!(
+                        then_type,
+                        vais_types::ResolvedType::F32 | vais_types::ResolvedType::F64
+                    ) {
+                        self.type_to_llvm(&then_type)
+                    } else {
+                        self.llvm_type_of(&then_val)
+                    };
+                    if actual_ty != llvm_type
+                        && (actual_ty == "float" || actual_ty == "double")
                         && (llvm_type == "float" || llvm_type == "double")
                     {
-                        let tmp = self.next_temp(counter);
-                        if actual_after == "float" {
-                            write_ir!(ir, "  {} = fpext float {} to double", tmp, coerced);
-                        } else {
-                            write_ir!(ir, "  {} = fptrunc double {} to float", tmp, coerced);
-                        }
-                        tmp
+                        self.coerce_float_width(&then_val, &actual_ty, &llvm_type, counter, &mut ir)
                     } else {
-                        coerced
+                        self.coerce_int_width(&then_val, &actual_ty, &llvm_type, counter, &mut ir)
                     }
                 } else {
                     then_val // move: not used after
@@ -163,24 +160,21 @@ impl CodeGenerator {
                     loaded
                 } else if !else_terminated && has_else {
                     // Coerce integer width if the value type differs from the phi type
-                    let actual_ty = self.llvm_type_of(&else_val);
-                    let coerced =
-                        self.coerce_int_width(&else_val, &actual_ty, &llvm_type, counter, &mut ir);
-                    // Also coerce float width (e.g., float→double or double→float for phi)
-                    let actual_after = self.llvm_type_of(&coerced);
-                    if actual_after != llvm_type
-                        && (actual_after == "float" || actual_after == "double")
+                    let actual_ty = if matches!(
+                        else_type_resolved,
+                        vais_types::ResolvedType::F32 | vais_types::ResolvedType::F64
+                    ) {
+                        self.type_to_llvm(&else_type_resolved)
+                    } else {
+                        self.llvm_type_of(&else_val)
+                    };
+                    if actual_ty != llvm_type
+                        && (actual_ty == "float" || actual_ty == "double")
                         && (llvm_type == "float" || llvm_type == "double")
                     {
-                        let tmp = self.next_temp(counter);
-                        if actual_after == "float" {
-                            write_ir!(ir, "  {} = fpext float {} to double", tmp, coerced);
-                        } else {
-                            write_ir!(ir, "  {} = fptrunc double {} to float", tmp, coerced);
-                        }
-                        tmp
+                        self.coerce_float_width(&else_val, &actual_ty, &llvm_type, counter, &mut ir)
                     } else {
-                        coerced
+                        self.coerce_int_width(&else_val, &actual_ty, &llvm_type, counter, &mut ir)
                     }
                 } else {
                     else_val // move: not used after

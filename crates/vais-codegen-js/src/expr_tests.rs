@@ -117,7 +117,7 @@ fn test_generate_int_literal() {
 #[test]
 fn test_generate_float_literal() {
     let mut gen = JsCodeGenerator::new();
-    assert_eq!(gen.generate_expr(&Expr::Float(3.14)).unwrap(), "3.14");
+    assert_eq!(gen.generate_expr(&Expr::Float(2.5)).unwrap(), "2.5");
     // Integer-valued float should get .0 appended
     let result = gen.generate_expr(&Expr::Float(1.0)).unwrap();
     assert!(result.contains('.') || result.contains('e'));

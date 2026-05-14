@@ -298,7 +298,7 @@ fn test_package_signature_verification_success() {
     // Verify the signature
     let verify_result = signer.verify_signature(&test_file, &signature);
     assert!(verify_result.is_ok());
-    assert_eq!(verify_result.unwrap(), true);
+    assert!(verify_result.unwrap());
 
     // Verify strict
     let verify_strict_result = signer.verify_signature_strict(&test_file, &signature);
@@ -322,7 +322,7 @@ fn test_package_signature_verification_failure() {
     // Verification should fail
     let verify_result = signer.verify_signature(&test_file, &signature);
     assert!(verify_result.is_ok());
-    assert_eq!(verify_result.unwrap(), false);
+    assert!(!verify_result.unwrap());
 
     // Strict verification should return error
     let verify_strict_result = signer.verify_signature_strict(&test_file, &signature);
@@ -647,7 +647,7 @@ fn test_audit_severity_scores() {
     assert_eq!(VulnerabilitySeverity::Critical.score(), 10);
 
     // Verify ordering
-    let mut severities = vec![
+    let mut severities = [
         VulnerabilitySeverity::Critical,
         VulnerabilitySeverity::Low,
         VulnerabilitySeverity::High,
@@ -822,7 +822,7 @@ fn test_sbom_empty_manifest_parsing() {
 #[test]
 fn test_component_type_all_variants() {
     // Test all ComponentType variants
-    let types = vec![
+    let types = [
         ComponentType::Library,
         ComponentType::Application,
         ComponentType::Framework,

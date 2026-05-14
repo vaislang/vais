@@ -250,33 +250,33 @@ fn test_sizeof_array() {
 #[test]
 fn test_sizeof_optional() {
     let gen = CodeGenerator::new("test");
-    // Option<i64> = { i8 tag, i64 value } = 1 + 8 = 9
+    // Option<T> uses the canonical erased ABI: %Option = { i32, { i64 } }
     let opt = ResolvedType::Optional(Box::new(ResolvedType::I64));
-    assert_eq!(gen.compute_sizeof(&opt), 9);
+    assert_eq!(gen.compute_sizeof(&opt), 16);
 }
 
 #[test]
 fn test_sizeof_optional_small() {
     let gen = CodeGenerator::new("test");
-    // Option<bool> = { i8 tag, i1 value } = 1 + 1 = 2
+    // Payload width does not change the canonical Option ABI.
     let opt = ResolvedType::Optional(Box::new(ResolvedType::Bool));
-    assert_eq!(gen.compute_sizeof(&opt), 2);
+    assert_eq!(gen.compute_sizeof(&opt), 16);
 }
 
 #[test]
 fn test_sizeof_result() {
     let gen = CodeGenerator::new("test");
-    // Result<i64, str> = { i8 tag, max(i64=8, str=16) } = 1 + 16 = 17
+    // Result<T, E> uses the canonical erased ABI: %Result = { i32, { i64 } }
     let res = ResolvedType::Result(Box::new(ResolvedType::I64), Box::new(ResolvedType::Str));
-    assert_eq!(gen.compute_sizeof(&res), 17);
+    assert_eq!(gen.compute_sizeof(&res), 16);
 }
 
 #[test]
 fn test_sizeof_result_same_types() {
     let gen = CodeGenerator::new("test");
-    // Result<i32, i32> = { i8 tag, max(i32=4, i32=4) } = 1 + 4 = 5
+    // Payload width does not change the canonical Result ABI.
     let res = ResolvedType::Result(Box::new(ResolvedType::I32), Box::new(ResolvedType::I32));
-    assert_eq!(gen.compute_sizeof(&res), 5);
+    assert_eq!(gen.compute_sizeof(&res), 16);
 }
 
 #[test]
@@ -401,14 +401,14 @@ fn test_type_to_llvm_slice_mut() {
 fn test_type_to_llvm_optional() {
     let gen = CodeGenerator::new("test");
     let opt = ResolvedType::Optional(Box::new(ResolvedType::I64));
-    assert_eq!(gen.type_to_llvm(&opt), "{ i8, i64 }");
+    assert_eq!(gen.type_to_llvm(&opt), "%Option");
 }
 
 #[test]
 fn test_type_to_llvm_result() {
     let gen = CodeGenerator::new("test");
     let res = ResolvedType::Result(Box::new(ResolvedType::I32), Box::new(ResolvedType::Str));
-    assert_eq!(gen.type_to_llvm(&res), "{ i8, i32 }");
+    assert_eq!(gen.type_to_llvm(&res), "%Result");
 }
 
 #[test]

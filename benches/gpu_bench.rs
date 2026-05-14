@@ -146,6 +146,8 @@ fn create_vais_gpu_module(kernel_name: &str) -> Module {
         )]),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         attributes: vec![Attribute {
             name: "gpu".to_string(),
             args: vec![],
@@ -466,6 +468,8 @@ fn bench_full_gpu_pipeline(c: &mut Criterion) {
                 )]),
                 is_pub: false,
                 is_async: false,
+                is_partial: false,
+                declared_effect: None,
                 attributes: vec![Attribute {
                     name: "gpu".to_string(),
                     args: vec![],

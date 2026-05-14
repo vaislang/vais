@@ -137,7 +137,7 @@ fn test_builder_assign_const_bool() {
 #[test]
 fn test_builder_assign_const_float() {
     let mut builder = MirBuilder::new("test", vec![], MirType::F64);
-    builder.assign_const(Local(0), Constant::Float(3.14));
+    builder.assign_const(Local(0), Constant::Float(2.5));
     let body = builder.build();
     assert!(!body.basic_blocks[0].statements.is_empty());
 }

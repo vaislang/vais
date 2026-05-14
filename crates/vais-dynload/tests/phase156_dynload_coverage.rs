@@ -44,7 +44,7 @@ fn test_sandbox_config_duplicate_capability_not_added() {
     let count = config
         .capabilities
         .iter()
-        .filter(|&&ref c| *c == PluginCapability::Console)
+        .filter(|&c| *c == PluginCapability::Console)
         .count();
     // Console was already in default config; adding again should not duplicate
     assert_eq!(count, 1);
@@ -57,7 +57,7 @@ fn test_sandbox_config_with_capabilities_dedup() {
     let time_count = config
         .capabilities
         .iter()
-        .filter(|&&ref c| *c == PluginCapability::Time)
+        .filter(|&c| *c == PluginCapability::Time)
         .count();
     assert_eq!(time_count, 1);
 }

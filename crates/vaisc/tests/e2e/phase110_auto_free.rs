@@ -66,7 +66,8 @@ F main() -> i64 {
 
 #[test]
 fn test_auto_free_ir_for_slice() {
-    // Auto-free is disabled; verify slice allocation compiles and tracks alloc slot.
+    // Slices are borrowed fat-pointer views over existing storage, so creating
+    // a slice must not allocate a new heap buffer.
     let ir = compile_to_ir(
         r#"
 F main() -> i64 {
@@ -83,8 +84,13 @@ F main() -> i64 {
     let main_end = ir[main_start..].find("\n}\n").unwrap() + main_start;
     let main_ir = &ir[main_start..main_end];
     assert!(
-        main_ir.contains("@malloc"),
-        "Expected malloc call for slice allocation:\n{}",
+        !main_ir.contains("@malloc"),
+        "Slice view creation should not allocate:\n{}",
+        main_ir
+    );
+    assert!(
+        main_ir.contains("insertvalue { i8*, i64 }"),
+        "Expected slice fat-pointer construction:\n{}",
         main_ir
     );
 }

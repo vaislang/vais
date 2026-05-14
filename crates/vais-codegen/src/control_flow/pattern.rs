@@ -60,14 +60,17 @@ impl CodeGenerator {
                 } else if let Some(const_val) = self.resolve_const_int_value(name) {
                     // Named constant pattern — compare match value against constant
                     let mut ir = String::new();
+                    let cmp_llvm = self.pattern_cmp_llvm_for_type(match_type);
+                    let actual_ty = self.llvm_type_of(match_val);
+                    let cmp_val =
+                        self.coerce_int_width(match_val, &actual_ty, cmp_llvm, counter, &mut ir);
                     let result = self.next_temp(counter);
-                    // Codegen widens all narrow integers (u8, i8, u16, etc.) to i64,
-                    // so always use i64 for the comparison — matches Pattern::Literal(Int) behavior.
                     write_ir!(
                         ir,
-                        "  {} = icmp eq i64 {}, {}",
+                        "  {} = icmp eq {} {}, {}",
                         result,
-                        match_val,
+                        cmp_llvm,
+                        cmp_val,
                         const_val
                     );
                     Ok((result, ir))
@@ -78,14 +81,31 @@ impl CodeGenerator {
             }
             Pattern::Literal(lit) => match lit {
                 Literal::Int(n) => {
+                    let mut ir = String::new();
+                    let cmp_llvm = self.pattern_cmp_llvm_for_type(match_type);
+                    let actual_ty = self.llvm_type_of(match_val);
+                    let cmp_val =
+                        self.coerce_int_width(match_val, &actual_ty, cmp_llvm, counter, &mut ir);
                     let result = self.next_temp(counter);
-                    let ir = format!("  {} = icmp eq i64 {}, {}\n", result, match_val, n);
+                    write_ir!(ir, "  {} = icmp eq {} {}, {}", result, cmp_llvm, cmp_val, n);
                     Ok((result, ir))
                 }
                 Literal::Bool(b) => {
                     let lit_val = if *b { "1" } else { "0" };
+                    let mut ir = String::new();
+                    let cmp_llvm = self.pattern_cmp_llvm_for_type(match_type);
+                    let actual_ty = self.llvm_type_of(match_val);
+                    let cmp_val =
+                        self.coerce_int_width(match_val, &actual_ty, cmp_llvm, counter, &mut ir);
                     let result = self.next_temp(counter);
-                    let ir = format!("  {} = icmp eq i64 {}, {}\n", result, match_val, lit_val);
+                    write_ir!(
+                        ir,
+                        "  {} = icmp eq {} {}, {}",
+                        result,
+                        cmp_llvm,
+                        cmp_val,
+                        lit_val
+                    );
                     Ok((result, ir))
                 }
                 Literal::Float(f) => {
@@ -136,12 +156,18 @@ impl CodeGenerator {
                 inclusive,
             } => {
                 let mut ir = String::new();
+                let cmp_llvm = self.pattern_cmp_llvm_for_type(match_type);
+                let actual_ty = self.llvm_type_of(match_val);
+                let cmp_val =
+                    self.coerce_int_width(match_val, &actual_ty, cmp_llvm, counter, &mut ir);
+                let unsigned = self.pattern_cmp_is_unsigned(match_type);
 
                 // Check lower bound
                 let lower_check = if let Some(start_pat) = start {
                     if let Pattern::Literal(Literal::Int(n)) = &start_pat.node {
                         let tmp = self.next_temp(counter);
-                        write_ir!(ir, "  {} = icmp sge i64 {}, {}", tmp, match_val, n);
+                        let cmp = if unsigned { "icmp uge" } else { "icmp sge" };
+                        write_ir!(ir, "  {} = {} {} {}, {}", tmp, cmp, cmp_llvm, cmp_val, n);
                         tmp
                     } else {
                         "1".to_string()
@@ -154,8 +180,13 @@ impl CodeGenerator {
                 let upper_check = if let Some(end_pat) = end {
                     if let Pattern::Literal(Literal::Int(n)) = &end_pat.node {
                         let tmp = self.next_temp(counter);
-                        let cmp = if *inclusive { "icmp sle" } else { "icmp slt" };
-                        write_ir!(ir, "  {} = {} i64 {}, {}", tmp, cmp, match_val, n);
+                        let cmp = match (*inclusive, unsigned) {
+                            (true, true) => "icmp ule",
+                            (false, true) => "icmp ult",
+                            (true, false) => "icmp sle",
+                            (false, false) => "icmp slt",
+                        };
+                        write_ir!(ir, "  {} = {} {} {}, {}", tmp, cmp, cmp_llvm, cmp_val, n);
                         tmp
                     } else {
                         "1".to_string()
@@ -461,6 +492,24 @@ impl CodeGenerator {
         None
     }
 
+    fn pattern_cmp_llvm_for_type(&self, ty: &ResolvedType) -> &'static str {
+        match ty {
+            ResolvedType::I8 | ResolvedType::U8 => "i8",
+            ResolvedType::I16 | ResolvedType::U16 => "i16",
+            ResolvedType::I32 | ResolvedType::U32 => "i32",
+            ResolvedType::I128 | ResolvedType::U128 => "i128",
+            ResolvedType::Bool => "i1",
+            _ => "i64",
+        }
+    }
+
+    fn pattern_cmp_is_unsigned(&self, ty: &ResolvedType) -> bool {
+        matches!(
+            ty,
+            ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 | ResolvedType::U64
+        )
+    }
+
     /// Resolve a short-form struct-variant name (e.g. `Varchar`) to its parent
     /// enum + tag + named-field layout. Returns `None` if `variant_name` is not
     /// the name of an enum struct-variant (`EnumVariantFields::Struct`).
@@ -546,7 +595,7 @@ impl CodeGenerator {
     ///
     /// For example, given `Option<Vec<u64>>::Some(T)`, this returns `[Vec<u64>]`
     /// by substituting `T` → `Vec<u64>` from the match_type generics.
-    fn resolve_variant_field_types(
+    pub(crate) fn resolve_variant_field_types(
         &self,
         enum_name: &str,
         variant_name: &str,
@@ -573,8 +622,15 @@ impl CodeGenerator {
             EnumVariantFields::Struct(fields) => fields.iter().map(|(_, ty)| ty).collect(),
         };
 
+        let match_inner_type = match match_type {
+            ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Pointer(inner) => inner.as_ref(),
+            other => other,
+        };
+
         // Extract the concrete generic args from match_type (e.g., [Vec<u64>] from Option<Vec<u64>>)
-        let concrete_generics = match match_type {
+        let concrete_generics = match match_inner_type {
             ResolvedType::Named { generics, .. } if !generics.is_empty() => generics,
             _ => {
                 // Non-generic enum: field types are already concrete, return them directly.
@@ -843,6 +899,12 @@ impl CodeGenerator {
                         .cloned()
                         .unwrap_or(ResolvedType::I64);
 
+                    if matches!(&field_pat.node, Pattern::Wildcard)
+                        || matches!(field_type, ResolvedType::Unit)
+                    {
+                        continue;
+                    }
+
                     let llvm_field_ty = self.type_to_llvm(&field_type);
                     // Check if the field type is compound (not a simple integer/bool/pointer).
                     // Compound types were stored via bitcast/heap-alloc into the i64 payload slot.
@@ -966,7 +1028,7 @@ impl CodeGenerator {
                             )?;
                             ir.push_str(&bind_ir);
                         } else {
-                            // Simple type (i64, i32, pointer, etc.): load directly
+                            // Simple type (i64, i32, pointer, etc.): payload slots are i64.
                             let raw_val = self.next_temp(counter);
                             write_ir!(ir, "  {} = load i64, i64* {}", raw_val, payload_ptr);
                             let field_val = if llvm_field_ty == "i1" {
@@ -974,6 +1036,28 @@ impl CodeGenerator {
                                 let bool_val = self.next_temp(counter);
                                 write_ir!(ir, "  {} = trunc i64 {} to i1", bool_val, raw_val);
                                 bool_val
+                            } else if llvm_field_ty.ends_with('*') {
+                                let ptr_val = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = inttoptr i64 {} to {}",
+                                    ptr_val,
+                                    raw_val,
+                                    llvm_field_ty
+                                );
+                                ptr_val
+                            } else if Self::int_type_width(&llvm_field_ty) > 0
+                                && llvm_field_ty != "i64"
+                            {
+                                let narrowed = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = trunc i64 {} to {}",
+                                    narrowed,
+                                    raw_val,
+                                    llvm_field_ty
+                                );
+                                narrowed
                             } else {
                                 raw_val
                             };
@@ -1085,6 +1169,28 @@ impl CodeGenerator {
                                 let bool_val = self.next_temp(counter);
                                 write_ir!(ir, "  {} = trunc i64 {} to i1", bool_val, payload_val);
                                 bool_val
+                            } else if llvm_field_ty.ends_with('*') {
+                                let ptr_val = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = inttoptr i64 {} to {}",
+                                    ptr_val,
+                                    payload_val,
+                                    llvm_field_ty
+                                );
+                                ptr_val
+                            } else if Self::int_type_width(&llvm_field_ty) > 0
+                                && llvm_field_ty != "i64"
+                            {
+                                let narrowed = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = trunc i64 {} to {}",
+                                    narrowed,
+                                    payload_val,
+                                    llvm_field_ty
+                                );
+                                narrowed
                             } else {
                                 payload_val.clone()
                             };

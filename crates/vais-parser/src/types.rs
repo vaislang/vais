@@ -608,6 +608,19 @@ impl Parser {
                     ));
                 }
             }
+            if matches!(tok.token, Token::Function) {
+                let next_is_lparen = self
+                    .peek_next()
+                    .map(|next| matches!(next.token, Token::LParen))
+                    .unwrap_or(false);
+                if next_is_lparen {
+                    self.advance(); // consume `fn` / `F`
+                    return Ok(Spanned::new(
+                        self.parse_fn_ptr_type()?,
+                        Span::new(start, self.prev_span().end),
+                    ));
+                }
+            }
             let name = self.parse_type_name()?;
             let generics = if self.check(&Token::Lt) {
                 self.advance();

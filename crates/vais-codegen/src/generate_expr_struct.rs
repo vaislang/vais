@@ -152,7 +152,14 @@ impl CodeGenerator {
                         ))
                     })?;
 
-                let (val, field_ir) = self.generate_expr(field_expr, counter)?;
+                let field_ty = effective_fields[field_idx].1.clone();
+                let saved_generic_substitutions =
+                    self.push_expected_static_ctor_substitutions(&field_ty, &field_expr.node);
+                let generated_field = self.generate_expr(field_expr, counter);
+                if let Some(saved) = saved_generic_substitutions {
+                    self.generics.substitutions = saved;
+                }
+                let (val, field_ir) = generated_field?;
                 ir.push_str(&field_ir);
 
                 let rvalue_key = val.clone();
@@ -168,8 +175,7 @@ impl CodeGenerator {
                     field_idx
                 );
 
-                let field_ty = &effective_fields[field_idx].1;
-                let llvm_ty = self.type_to_llvm(field_ty);
+                let llvm_ty = self.type_to_llvm(&field_ty);
 
                 // For struct-typed fields, val might be a pointer that needs to be loaded
                 let val_to_store = if matches!(field_ty, ResolvedType::Named { .. })

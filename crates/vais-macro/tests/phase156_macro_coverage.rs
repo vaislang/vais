@@ -14,8 +14,7 @@
 
 use vais_ast::{
     Delimiter, MacroDef, MacroInvoke, MacroLiteral, MacroPattern, MacroPatternElement, MacroRule,
-    MacroTemplate, MacroTemplateElement, MacroToken, MetaVarKind, Module, RepetitionKind, Span,
-    Spanned,
+    MacroTemplate, MacroTemplateElement, MacroToken, MetaVarKind, RepetitionKind, Span, Spanned,
 };
 use vais_macro::{
     collect_macros, expand_macros, process_derives, register_async_macros,
@@ -142,10 +141,10 @@ fn test_expander_metavar_lit_kind() {
     let invoke = MacroInvoke {
         name: Spanned::new("wrap_lit".to_string(), Span::new(0, 8)),
         delimiter: Delimiter::Paren,
-        tokens: vec![MacroToken::Literal(MacroLiteral::Float(3.14))],
+        tokens: vec![MacroToken::Literal(MacroLiteral::Float(2.5))],
     };
     let result = expander.expand(&invoke).unwrap();
-    assert_eq!(tokens_to_string(&result), "3.14");
+    assert_eq!(tokens_to_string(&result), "2.5");
 }
 
 #[test]
@@ -511,9 +510,9 @@ fn test_tokens_to_string_nested_group() {
 
 #[test]
 fn test_tokens_to_string_float_literal() {
-    let tokens = vec![MacroToken::Literal(MacroLiteral::Float(2.718))];
+    let tokens = vec![MacroToken::Literal(MacroLiteral::Float(2.75))];
     let output = tokens_to_string(&tokens);
-    assert!(output.starts_with("2.718"));
+    assert!(output.starts_with("2.75"));
 }
 
 // ==================== HygienicContext deeper coverage ====================
@@ -734,7 +733,7 @@ fn test_token_tree_group() {
 #[test]
 fn test_literal_token_variants() {
     let int_lit = LiteralToken::Integer(42);
-    let float_lit = LiteralToken::Float(3.14);
+    let float_lit = LiteralToken::Float(2.5);
     let str_lit = LiteralToken::String("hello".to_string());
     let char_lit = LiteralToken::Char('x');
     let bool_lit = LiteralToken::Bool(false);

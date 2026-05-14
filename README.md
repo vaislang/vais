@@ -8,7 +8,7 @@
 [![Docs](https://img.shields.io/badge/docs-vaislang.dev-purple)](https://vaislang.dev/docs/)
 [![GitHub Discussions](https://img.shields.io/github/discussions/vaislang/vais)](https://github.com/vaislang/vais/discussions)
 
-Vais is designed to minimize token usage while maximizing code expressiveness, making it ideal for AI-assisted development and LLM code generation.
+Vais is designed to minimize token usage while keeping systems code explicit enough for compiler diagnostics, review, and AI-assisted development.
 
 ## Current Status
 
@@ -19,7 +19,10 @@ claim boundary.
 
 ## Key Features
 
-- **Single-letter keywords** - `F` (function), `S` (struct), `E` (enum/else), `I` (if), `L` (loop), `M` (match)
+- **Canonical declarations** - `fn`, `struct`, `enum`, `else`, `match`, `return`,
+  `use`, and `pub` are the public spellings where available
+- **Compact control forms** - `I`, `L`, `LF`, `LW`, `B`, and `C` remain current
+  syntax for repeated control-flow positions
 - **Self-recursion operator** `@` - Call the current function recursively
 - **Expression-oriented** - Everything is an expression
 - **LLVM backend** - Promoted native codegen path with LLVM 17
@@ -39,30 +42,30 @@ claim boundary.
 
 ```vais
 # Fibonacci with self-recursion
-F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
 
 # Struct definition
-S Point { x:f64, y:f64 }
+struct Point { x: f64, y: f64 }
 
 # Sum with loop
-F sum(arr:[i64])->i64 {
-    s := 0
-    L x:arr { s += x }
+fn sum(arr: *i64, len: i64) -> i64 {
+    s := mut 0
+    LF i:0..len { s += arr[i] }
     s
 }
 ```
 
 ## Syntax Overview
 
-| Keyword | Meaning | Example |
-|---------|---------|---------|
-| `F` | Function | `F add(a:i64,b:i64)->i64=a+b` |
-| `S` | Struct | `S Point{x:f64,y:f64}` |
-| `E` | Enum/Else | `E Option<T>{Some(T),None}` |
-| `I` | If | `I x>0{1}E{-1}` |
-| `L` | Loop | `L i:0..10{print(i)}` |
-| `M` | Match | `M opt{Some(v)=>v,None=>0}` |
-| `@` | Self-call | `@(n-1)` (recursive call) |
+| Syntax | Meaning | Example |
+|--------|---------|---------|
+| `fn` | Function | `fn add(a: i64, b: i64) -> i64 = a + b` |
+| `struct` | Struct | `struct Point { x: f64, y: f64 }` |
+| `enum` | Enum | `enum Option<T> { Some(T), None }` |
+| `I` / `else` | If/else | `I x > 0 { 1 } else { -1 }` |
+| `LF` | Range loop | `LF i:0..10 { print(i) }` |
+| `match` | Match | `match opt { Some(v) => v, None => 0 }` |
+| `@` | Self-call | `@(n - 1)` |
 | `:=` | Infer & assign | `x := 42` |
 
 ## Project Structure
@@ -175,22 +178,24 @@ Coverage is measured automatically on every push and pull request to `main` and 
 
 ## Status
 
-- [x] Lexer (logos-based tokenizer)
-- [x] Parser (recursive descent)
-- [x] Type checker (generics, traits, type inference, GATs, object safety)
-- [x] Code generator (LLVM IR via inkwell, JavaScript ESM, WASM)
-- [x] Standard library (80 modules: Vec, HashMap, String, File, Net, Async, GPU, etc.)
-- [x] Borrow checker (Non-Lexical Lifetimes, CFG-based dataflow, `--strict-borrow`)
-- [x] Slice types (`&[T]` / `&mut [T]` with fat pointers)
-- [x] Parallel compilation (DAG-based dependency resolution, 2-4x speedup)
-- [x] Self-hosting compiler (50,000+ LOC, 21/21 clang success, Bootstrap Phase 56)
-- [x] LSP support (diagnostics, completion, hover, go-to-definition, references, rename)
-- [x] REPL (interactive environment)
-- [x] VSCode extension + IntelliJ plugin (syntax highlighting, LSP integration)
-- [x] Optimizer (constant folding, DCE, CSE, loop unrolling, LICM, alias analysis, vectorization)
-- [x] Formatter (`vaisc fmt`)
-- [x] Debugger (DWARF metadata, lldb/gdb support)
-- [x] Ecosystem packages (vais-aes, vais-base64, vais-crc32, vais-csv, vais-json, vais-lz4, vais-regex, vais-sha256, vais-uuid)
+The current source baseline is evidence-scoped. See
+[`PUBLIC_STATUS.md`](PUBLIC_STATUS.md) for the public claim boundary.
+
+Certified or main-reproducible gates currently include:
+
+- Core compiler and promoted-runtime evidence baseline
+- Public claim guard: `node scripts/check-public-claims.mjs`
+- Main-scoped integrity runner: `bash scripts/check-integrity.sh`
+- Playground web mode/build contract, with Server-WASM explicitly API-compiled
+- Browser-JS playground smoke for parser + JavaScript codegen compile/execute
+- `vaisc emit-ts` schema declaration tests
+- VaisDB aggregate main full-build smoke: `36/36` LLVM/object cache artifacts
+- Cross-package schema gate: `15/15`
+- Multi-domain product schema gate: `9/9`
+
+Scoped integration evidence currently includes std/package/server/database/web
+runtime and package counts. A single full ecosystem runtime aggregate main gate
+is still pending.
 
 ## Performance
 
@@ -198,19 +203,28 @@ Vais is designed for both compilation speed and runtime performance.
 
 ### Compilation Speed
 
-| Phase | Time (avg) | Throughput | Notes |
-|-------|------------|------------|-------|
-| Lexer | ~0.07ms/1K LOC | ~166 MiB/s | logos-based |
-| Parser | ~0.44ms/1K LOC | ~32 MiB/s | 2.18x speedup with parallel |
-| Type Checker | ~0.13ms/1K LOC | ~8K lines/ms | DAG-based parallel |
-| Code Generator | ~0.54ms/1K LOC | ~1.8K lines/ms | 4.14x speedup with parallel |
-| **Full Pipeline** | **~1.2ms/1K LOC** | **~833K lines/sec** | **50K lines → 60ms** |
+Current single-file compile-speed benchmark
+(`benches/lang-comparison/compile_bench.sh`, Hyperfine, 2026-05-13,
+Apple ARM64/macOS):
 
-**Self-Hosting Bootstrap:** 50,000+ LOC, 21/21 clang compilation success (100%)
+| Program | Vais `--emit-ir` | Rust `rustc` | Go `go build` | C `clang` |
+|---------|------------------|--------------|---------------|-----------|
+| fibonacci | 6.0ms | 93.7ms | 48.0ms | 55.8ms |
+| quicksort | 6.4ms | 95.6ms | 47.8ms | 56.8ms |
+| http_types | 6.6ms | 103.2ms | 47.1ms | 60.7ms |
+| linked_list | 6.0ms | 98.3ms | 47.3ms | 59.5ms |
+| **Average** | **6.3ms** | **97.7ms** | **47.5ms** | **58.2ms** |
+
+Vais `--emit-ir` is 9.3x faster than C/clang, 7.6x faster than Go, and
+15.6x faster than Rust on this benchmark. This compares Vais LLVM IR emission
+against full binary compilation for the other toolchains.
 
 ### Runtime Performance
 
-Fibonacci(35) benchmark (Apple M-series ARM64, 2026-02-11):
+Runtime performance numbers are retained as scoped historical evidence until
+the runtime benchmark suite is refreshed on the current compiler. The older
+Fibonacci(35) snapshot measured Apple M-series ARM64 with Vais IR linked by
+clang:
 
 | Language | Time | Relative |
 |----------|------|----------|
@@ -326,7 +340,7 @@ After installing Vais and running your first program, here's how to continue:
 brew tap vaislang/tap && brew install vais
 
 # 2. Write your first program
-echo 'F main() { println("Hello, Vais!") }' > hello.vais
+printf 'fn main() -> i64 {\n    puts("Hello, Vais!")\n    0\n}\n' > hello.vais
 
 # 3. Run it
 vaisc run hello.vais
@@ -340,8 +354,8 @@ vaisc repl
 | Example | Description | Concepts |
 |---------|-------------|----------|
 | [fib.vais](examples/fib.vais) | Fibonacci with `@` self-recursion | Functions, `@` operator |
-| [control_flow.vais](examples/control_flow.vais) | If/else, loops, match | `I`/`E`/`L`/`M` keywords |
-| [enum_test.vais](examples/enum_test.vais) | Enum variants + pattern matching | `E`, `M`, `S` |
+| [control_flow.vais](examples/control_flow.vais) | If/else, loops, match | `I`, `else`, `L`/`LF`, `match` |
+| [enum_test.vais](examples/enum_test.vais) | Enum variants + pattern matching | `enum`, `match`, `struct` |
 | [pipe_operator.vais](examples/pipe_operator.vais) | Pipe `\|>` and closures | Functional patterns |
 | [json_test.vais](examples/json_test.vais) | JSON builder API | Standard library usage |
 
@@ -380,8 +394,8 @@ Step-by-step project tutorials:
 ### Recent Blog Posts
 
 - [The Self-Hosting Journey: 50,000 Lines of Vais Compiling Itself](https://vaislang.dev/blog/self-hosting-journey.html)
-- [Vais Performance: Compilation Speed and Runtime Benchmarks](https://vaislang.dev/blog/performance-comparison.html)
-- [The Design Philosophy Behind Single-Character Keywords](https://vaislang.dev/blog/why-single-char-keywords.html)
+- [Historical Vais Performance Snapshot](https://vaislang.dev/blog/performance-comparison.html)
+- [Archived: Single-Character Keyword Rationale](https://vaislang.dev/blog/why-single-char-keywords.html)
 
 ## Legacy
 

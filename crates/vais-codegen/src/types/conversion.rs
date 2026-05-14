@@ -3,6 +3,74 @@
 use super::*;
 use crate::CodeGenerator;
 
+fn convert_const_binop(op: &vais_ast::ConstBinOp) -> vais_types::ConstBinOp {
+    use vais_ast::ConstBinOp as A;
+    use vais_types::ConstBinOp as R;
+    match op {
+        A::Add => R::Add,
+        A::Sub => R::Sub,
+        A::Mul => R::Mul,
+        A::Div => R::Div,
+        A::Mod => R::Mod,
+        A::BitAnd => R::BitAnd,
+        A::BitOr => R::BitOr,
+        A::BitXor => R::BitXor,
+        A::Shl => R::Shl,
+        A::Shr => R::Shr,
+    }
+}
+
+fn convert_const_expr(expr: &vais_ast::ConstExpr) -> vais_types::ResolvedConst {
+    match expr {
+        vais_ast::ConstExpr::Literal(n) => vais_types::ResolvedConst::Value(*n),
+        vais_ast::ConstExpr::Param(name) => vais_types::ResolvedConst::Param(name.clone()),
+        vais_ast::ConstExpr::Negate(inner) => {
+            let inner = convert_const_expr(inner);
+            if let vais_types::ResolvedConst::Value(n) = inner {
+                vais_types::ResolvedConst::Value(-n)
+            } else {
+                vais_types::ResolvedConst::Negate(Box::new(inner))
+            }
+        }
+        vais_ast::ConstExpr::BinOp { op, left, right } => {
+            let left = convert_const_expr(left);
+            let right = convert_const_expr(right);
+            if let (
+                vais_types::ResolvedConst::Value(left_value),
+                vais_types::ResolvedConst::Value(right_value),
+            ) = (&left, &right)
+            {
+                let folded = match op {
+                    vais_ast::ConstBinOp::Add => Some(left_value + right_value),
+                    vais_ast::ConstBinOp::Sub => Some(left_value - right_value),
+                    vais_ast::ConstBinOp::Mul => Some(left_value * right_value),
+                    vais_ast::ConstBinOp::Div if *right_value != 0 => {
+                        Some(left_value / right_value)
+                    }
+                    vais_ast::ConstBinOp::Mod if *right_value != 0 => {
+                        Some(left_value % right_value)
+                    }
+                    vais_ast::ConstBinOp::BitAnd => Some(left_value & right_value),
+                    vais_ast::ConstBinOp::BitOr => Some(left_value | right_value),
+                    vais_ast::ConstBinOp::BitXor => Some(left_value ^ right_value),
+                    vais_ast::ConstBinOp::Shl => Some(left_value << right_value),
+                    vais_ast::ConstBinOp::Shr => Some(left_value >> right_value),
+                    _ => None,
+                };
+                if let Some(value) = folded {
+                    return vais_types::ResolvedConst::Value(value);
+                }
+            }
+
+            vais_types::ResolvedConst::BinOp {
+                op: convert_const_binop(op),
+                left: Box::new(left),
+                right: Box::new(right),
+            }
+        }
+    }
+}
+
 impl CodeGenerator {
     /// Convert a ResolvedType to LLVM IR type string with caching.
     ///
@@ -319,16 +387,8 @@ impl CodeGenerator {
                 let ret_type = self.type_to_llvm_impl(ret)?;
                 format!("{}({})*", ret_type, param_types.join(", "))
             }
-            ResolvedType::Optional(inner) => {
-                // Option<T> is { i8 tag, T value }
-                let inner_ty = self.type_to_llvm_impl(inner)?;
-                format!("{{ i8, {} }}", inner_ty)
-            }
-            ResolvedType::Result(ok, _err) => {
-                // Result<T, E> is { i8 tag, T value } (use ok type for payload)
-                let ok_ty = self.type_to_llvm_impl(ok)?;
-                format!("{{ i8, {} }}", ok_ty)
-            }
+            ResolvedType::Optional(_) => String::from("%Option"),
+            ResolvedType::Result(_, _) => String::from("%Result"),
             ResolvedType::Future(_) => {
                 // Future is an opaque pointer to async state machine.
                 // Represented as i64 in Text IR (pointer-as-integer convention).
@@ -548,6 +608,21 @@ impl CodeGenerator {
             Type::Array(inner) => {
                 ResolvedType::Array(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
             }
+            Type::ConstArray { element, size } => ResolvedType::ConstArray {
+                element: Box::new(self.ast_type_to_resolved_impl(&element.node)),
+                size: convert_const_expr(size),
+            },
+            Type::Map(key, value) => ResolvedType::Map(
+                Box::new(self.ast_type_to_resolved_impl(&key.node)),
+                Box::new(self.ast_type_to_resolved_impl(&value.node)),
+            ),
+            Type::Optional(inner) => {
+                ResolvedType::Optional(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
+            }
+            Type::Result(inner) => ResolvedType::Result(
+                Box::new(self.ast_type_to_resolved_impl(&inner.node)),
+                Box::new(ResolvedType::I64),
+            ),
             Type::Pointer(inner) => {
                 ResolvedType::Pointer(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
             }
@@ -574,7 +649,29 @@ impl CodeGenerator {
                     .map(|e| self.ast_type_to_resolved_impl(&e.node))
                     .collect(),
             ),
+            Type::Fn { params, ret } => ResolvedType::Fn {
+                params: params
+                    .iter()
+                    .map(|p| self.ast_type_to_resolved_impl(&p.node))
+                    .collect(),
+                ret: Box::new(self.ast_type_to_resolved_impl(&ret.node)),
+                effects: None,
+            },
+            Type::FnPtr {
+                params,
+                ret,
+                is_vararg,
+            } => ResolvedType::FnPtr {
+                params: params
+                    .iter()
+                    .map(|p| self.ast_type_to_resolved_impl(&p.node))
+                    .collect(),
+                ret: Box::new(self.ast_type_to_resolved_impl(&ret.node)),
+                is_vararg: *is_vararg,
+                effects: None,
+            },
             Type::Unit => ResolvedType::Unit,
+            Type::Infer => ResolvedType::Unknown,
             Type::DynTrait {
                 trait_name,
                 generics,
@@ -611,7 +708,20 @@ impl CodeGenerator {
                     predicate: predicate_str,
                 }
             }
-            _ => ResolvedType::Unknown,
+            Type::Associated {
+                base,
+                trait_name,
+                assoc_name,
+                generics,
+            } => ResolvedType::Associated {
+                base: Box::new(self.ast_type_to_resolved_impl(&base.node)),
+                trait_name: trait_name.clone(),
+                assoc_name: assoc_name.clone(),
+                generics: generics
+                    .iter()
+                    .map(|g| self.ast_type_to_resolved_impl(&g.node))
+                    .collect(),
+            },
         }
     }
 }

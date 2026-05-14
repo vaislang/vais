@@ -88,17 +88,12 @@ async fn start_test_server() -> (u16, tokio::task::JoinHandle<()>) {
     let port = listener.local_addr().unwrap().port();
 
     let handle = tokio::spawn(async move {
-        loop {
-            match listener.accept().await {
-                Ok((stream, _)) => {
-                    tokio::spawn(async move {
-                        let (reader, writer) = stream.into_split();
-                        let mut server = DapServer::new();
-                        let _ = server.run(reader, writer).await;
-                    });
-                }
-                Err(_) => break,
-            }
+        while let Ok((stream, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let (reader, writer) = stream.into_split();
+                let mut server = DapServer::new();
+                let _ = server.run(reader, writer).await;
+            });
         }
     });
 
@@ -480,7 +475,7 @@ async fn test_scopes_request() {
 
     if response["success"] == true {
         let scopes = response["body"]["scopes"].as_array().unwrap();
-        assert!(scopes.len() > 0);
+        assert!(!scopes.is_empty());
 
         // Check scope structure
         for scope in scopes {

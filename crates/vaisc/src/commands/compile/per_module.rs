@@ -180,8 +180,12 @@ pub(crate) fn compile_per_module(
             return Ok((cached_obj_path, true)); // true = cache hit
         }
 
-        // Cache miss: write .ll, compile to .o
-        let ll_path = cache_dir.join(format!("{}.ll", module_stem));
+        // Cache miss: write .ll, compile to .o. Use the IR hash in the
+        // temporary .ll path as well as the cached .o path. Many real projects
+        // contain same-stem modules in different directories (for example
+        // std/file.vais and storage/file.vais); a stem-only path lets parallel
+        // workers overwrite each other's clang input.
+        let ll_path = cache_dir.join(format!("{}_{}.ll", module_stem, &ir_hash[..16]));
         fs::write(&ll_path, ir)
             .map_err(|e| format!("Cannot write '{}': {}", ll_path.display(), e))?;
 
@@ -263,15 +267,16 @@ pub(crate) fn compile_per_module(
     link_args.push("-o".to_string());
     link_args.push(bin_path.display().to_string());
 
-    // Add system libraries
-    #[cfg(target_os = "macos")]
-    {
-        link_args.push("-lSystem".to_string());
-    }
+    // Add system libraries. On macOS clang links libSystem implicitly; passing
+    // `-lSystem` manually produces duplicate-library warnings.
     #[cfg(target_os = "linux")]
     {
         link_args.push("-lm".to_string());
     }
+
+    let used_modules = crate::runtime::extract_used_modules(final_ast);
+    let native_deps = HashMap::new();
+    super::native::add_runtime_libs(&mut link_args, verbose, &used_modules, &native_deps, false)?;
 
     // Phase 4c.4 / Task #55 — reproducible linker metadata.
     // Shared with `compile_to_native` so both the per-module and

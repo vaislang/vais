@@ -122,7 +122,7 @@ mod tests {
 
     #[test]
     fn test_find_similar_exact_match() {
-        let candidates = vec!["i64", "f64", "bool", "str"];
+        let candidates = ["i64", "f64", "bool", "str"];
         assert_eq!(
             find_similar_name("i64", candidates.iter().copied()),
             Some("i64".to_string())
@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn test_find_similar_typo() {
-        let candidates = vec!["i64", "f64", "bool", "str"];
+        let candidates = ["i64", "f64", "bool", "str"];
         assert_eq!(
             find_similar_name("i6", candidates.iter().copied()),
             Some("i64".to_string())
@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     fn test_find_similar_no_match() {
-        let candidates = vec!["i64", "f64", "bool"];
+        let candidates = ["i64", "f64", "bool"];
         assert_eq!(
             find_similar_name("zzzzzzzzz", candidates.iter().copied()),
             None
@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn test_find_similar_case_insensitive() {
-        let candidates = vec!["Bool", "String"];
+        let candidates = ["Bool", "String"];
         assert_eq!(
             find_similar_name("bool", candidates.iter().copied()),
             Some("Bool".to_string())

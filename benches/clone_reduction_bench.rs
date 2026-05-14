@@ -10,7 +10,8 @@
 //! 3. Generic instantiation performance (Rc optimization impact)
 //! 4. Full compilation pipeline (lex→parse→typecheck→codegen)
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::hint::black_box;
 use vais_codegen::CodeGenerator;
 use vais_parser::parse;
 use vais_types::TypeChecker;

@@ -3,7 +3,8 @@
 //! Measures the impact of caching and memoization on type checking,
 //! symbol resolution, and pattern matching.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use std::hint::black_box;
 use std::fs;
 
 use vais_parser::parse;

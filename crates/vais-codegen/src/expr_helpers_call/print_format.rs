@@ -2,6 +2,15 @@ use super::*;
 use vais_ast::{Expr, Span, Spanned};
 use vais_types::ResolvedType;
 
+fn is_string_vararg_type(ty: &ResolvedType) -> bool {
+    matches!(ty, ResolvedType::Str)
+        || matches!(
+            ty,
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                if matches!(inner.as_ref(), ResolvedType::Str)
+        )
+}
+
 impl CodeGenerator {
     /// Generate print/println call with format string support
     ///
@@ -115,15 +124,18 @@ impl CodeGenerator {
                     // {} -> format specifier based on type
                     chars.next();
                     if arg_idx < arg_types.len() {
-                        let spec = match &arg_types[arg_idx] {
-                            ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 => "%d",
-                            ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 => "%u",
-                            ResolvedType::I64 | ResolvedType::I128 => "%ld",
-                            ResolvedType::U64 | ResolvedType::U128 => "%lu",
-                            ResolvedType::F32 | ResolvedType::F64 => "%f",
-                            ResolvedType::Str => "%s",
-                            ResolvedType::Bool => "%ld",
-                            _ => "%ld",
+                        let spec = if is_string_vararg_type(&arg_types[arg_idx]) {
+                            "%s"
+                        } else {
+                            match &arg_types[arg_idx] {
+                                ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 => "%d",
+                                ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 => "%u",
+                                ResolvedType::I64 | ResolvedType::I128 => "%ld",
+                                ResolvedType::U64 | ResolvedType::U128 => "%lu",
+                                ResolvedType::F32 | ResolvedType::F64 => "%f",
+                                ResolvedType::Bool => "%ld",
+                                _ => "%ld",
+                            }
                         };
                         c_format.push_str(spec);
                         arg_idx += 1;
@@ -203,7 +215,7 @@ impl CodeGenerator {
                 ResolvedType::F64 => {
                     printf_args.push(format!("double {}", val));
                 }
-                ResolvedType::Str => {
+                ty if is_string_vararg_type(ty) => {
                     // Extract raw i8* pointer from string fat pointer for printf
                     let raw_ptr = self.extract_str_ptr(&val, counter, &mut ir);
                     printf_args.push(format!("i8* {}", raw_ptr));
@@ -305,15 +317,18 @@ impl CodeGenerator {
                 } else if chars.peek() == Some(&'}') {
                     chars.next();
                     if arg_idx < arg_types.len() {
-                        let spec = match &arg_types[arg_idx] {
-                            ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 => "%d",
-                            ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 => "%u",
-                            ResolvedType::I64 | ResolvedType::I128 => "%ld",
-                            ResolvedType::U64 | ResolvedType::U128 => "%lu",
-                            ResolvedType::F32 | ResolvedType::F64 => "%f",
-                            ResolvedType::Str => "%s",
-                            ResolvedType::Bool => "%ld",
-                            _ => "%ld",
+                        let spec = if is_string_vararg_type(&arg_types[arg_idx]) {
+                            "%s"
+                        } else {
+                            match &arg_types[arg_idx] {
+                                ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 => "%d",
+                                ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 => "%u",
+                                ResolvedType::I64 | ResolvedType::I128 => "%ld",
+                                ResolvedType::U64 | ResolvedType::U128 => "%lu",
+                                ResolvedType::F32 | ResolvedType::F64 => "%f",
+                                ResolvedType::Bool => "%ld",
+                                _ => "%ld",
+                            }
                         };
                         c_format.push_str(spec);
                         arg_idx += 1;
@@ -387,7 +402,7 @@ impl CodeGenerator {
                 ResolvedType::F64 => {
                     arg_vals.push(format!("double {}", val));
                 }
-                ResolvedType::Str => {
+                ty if is_string_vararg_type(ty) => {
                     // Extract raw i8* pointer from string fat pointer for snprintf
                     let raw_ptr = self.extract_str_ptr(&val, counter, &mut ir);
                     arg_vals.push(format!("i8* {}", raw_ptr));

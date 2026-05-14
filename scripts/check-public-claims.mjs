@@ -82,8 +82,18 @@ requireText(
 );
 requireText(
   publicStatus,
-  'not yet reproducible from `origin/main`',
-  'integration evidence must not be presented as main-reproducible yet',
+  'VaisDB aggregate main full-build smoke',
+  'VaisDB aggregate main full-build smoke must be named as main-reproducible evidence',
+);
+requireText(
+  publicStatus,
+  '`36/36` LLVM/object cache artifacts',
+  'VaisDB aggregate main full-build smoke must disclose the measured module/cache scope',
+);
+requirePattern(
+  publicStatus,
+  /not yet\s+reproducible as a single `origin\/main` gate/,
+  'remaining integration evidence must not be presented as one full ecosystem main gate',
 );
 requireText(
   publicStatus,
@@ -92,8 +102,8 @@ requireText(
 );
 requireText(
   publicStatus,
-  'Full ecosystem runtime aggregate runner: pending DB/server/web runtime main',
-  'full ecosystem runtime aggregate must remain explicitly pending',
+  'Full ecosystem runtime aggregate runner: still pending a single',
+  'full ecosystem runtime aggregate must remain explicitly pending as one main gate',
 );
 requireText(
   publicStatus,
@@ -110,6 +120,22 @@ requireText(
   'Multi-domain product schema gate: `9/9`',
   'shared-schema product propagation must be named as evidence-scoped public claim',
 );
+
+const readme = 'README.md';
+requireText(readme, 'Canonical declarations', 'README must present current public syntax');
+requireText(readme, 'Current single-file compile-speed benchmark', 'README performance section must use refreshed benchmark scope');
+requireText(readme, '6.3ms', 'README compile-speed average must match the refreshed benchmark');
+requireText(readme, '9.3x faster than C/clang', 'README compile-speed ratio must match the refreshed benchmark');
+requireText(readme, 'single full ecosystem runtime aggregate main gate', 'README must preserve ecosystem runtime scope boundary');
+forbidText(readme, 'Single-letter keywords', 'README must not present legacy single-letter declarations as current syntax');
+forbidText(readme, 'F fib(n:i64)', 'README must not use legacy function syntax in examples');
+forbidText(readme, 'Fibonacci(35) benchmark (Apple M-series ARM64, 2026-02-11)', 'README runtime evidence must not present stale date as current heading');
+forbidText(readme, '833K lines/sec', 'README must not promote old large-scale throughput as current');
+requireText('examples/fib.vais', 'fn fib(n: i64)', 'README-linked fibonacci example must use current function syntax');
+requireText('examples/control_flow.vais', 'fn max(a: i64, b: i64)', 'README-linked control-flow example must use current function syntax');
+requireText('examples/enum_test.vais', 'enum Color', 'README-linked enum example must use current enum syntax');
+forbidText('examples/fib.vais', 'F fib', 'README-linked fibonacci example must not regress to legacy function syntax');
+forbidText('examples/enum_test.vais', 'EN Color', 'README-linked enum example must not regress to legacy enum syntax');
 
 const playgroundCompiler = 'playground/src/compiler.js';
 requireText(
@@ -169,25 +195,93 @@ requireText(
   'without the playground API',
   'playground README must say Browser-JS smoke does not use the API',
 );
+requireText(
+  'playground/IMPLEMENTATION_SUMMARY.md',
+  'Canonical keywords: fn, struct, enum, else, match, return, use, pub',
+  'playground implementation summary must describe current keyword surface',
+);
+requireText(
+  'playground/PROJECT_SUMMARY.md',
+  'Canonical keywords (fn, struct, enum, else, match, return, use, pub)',
+  'playground project summary must describe current keyword surface',
+);
+
+const quickstart = 'docs/QUICKSTART.md';
+requireText(quickstart, 'Functions use the canonical `fn` keyword', 'quickstart must present current function syntax');
+requireText(quickstart, 'struct Point', 'quickstart must present current struct syntax');
+forbidText(quickstart, 'F fib(n: i64)', 'quickstart must not use legacy single-letter function examples');
+forbidText(quickstart, 'S Point', 'quickstart must not use legacy single-letter struct examples');
+
+const fibonacciEpisode = 'docs/youtube-tutorials/episode-02-fibonacci.md';
+requireText(fibonacciEpisode, 'fn fib(n: i64)', 'fibonacci tutorial must use current function syntax');
+forbidText(fibonacciEpisode, 'F fib(n: i64)', 'fibonacci tutorial must not use legacy function syntax');
 
 const websiteSubtitle =
   'Try Vais syntax and examples in the browser. Real compilation uses the playground API; browser-only compile/execute remains experimental.';
 requireText('website/index.html', websiteSubtitle, 'homepage playground copy must match public claim boundary');
 requireText('website/public/locales/en.json', websiteSubtitle, 'English locale must match public claim boundary');
 requireText('website/index.html', 'Evidence Snapshot', 'homepage must scope gate counts as evidence');
-requireText('website/index.html', 'pending main port', 'homepage must disclose aggregate runtime gate main-port status');
+requireText('website/index.html', 'VaisDB aggregate main full-build smoke', 'homepage must disclose the promoted aggregate main gate');
+requireText('website/index.html', 'other runtime/package counts remain scoped evidence', 'homepage must preserve the DB/server/web scope boundary');
 requireText('website/index.html', 'main-fixture/local-workspace reproducible', 'homepage must disclose schema gate main-fixture status');
 requireText('website/index.html', 'server runtime integration evidence 20/20', 'homepage server claim must be evidence-scoped');
 requireText('website/index.html', 'shared-schema product evidence 9/9', 'homepage web claim must be evidence-scoped');
+requireText(
+  'website/index.html',
+  'Updated 2026-05-13',
+  'homepage compile-speed benchmark date must reflect the current refresh',
+);
+requireText(
+  'website/public/locales/en.json',
+  'Updated 2026-05-13',
+  'English locale compile-speed benchmark date must reflect the current refresh',
+);
+requireText(
+  'website/index.html',
+  '9.3x faster than C/clang and 15.6x faster than Rust',
+  'homepage compile-speed ratios must match the refreshed benchmark',
+);
 requireText('website/ecosystem/index.html', 'server runtime 20/20', 'ecosystem server evidence count must remain explicit');
-requireText('website/ecosystem/index.html', 'integration evidence', 'ecosystem page must disclose evidence scope');
+requireText('website/ecosystem/index.html', 'scoped evidence', 'ecosystem page must disclose evidence scope');
 requireText('website/vaisx/index.html', 'shared-schema product evidence 9/9', 'VaisX page must be evidence-scoped');
 requireText('playground/src/examples.js', "'shared-schema-product'", 'playground must expose the shared-schema product example');
+
+requireText(
+  'website/blog/performance-comparison.html',
+  'Archive note (2026-05-13)',
+  'historical performance article must not read as a current benchmark claim',
+);
+requireText(
+  'website/blog/performance-comparison.html',
+  'large-scale throughput numbers below should be rerun before citing them as current',
+  'historical throughput data must be scoped as stale until rerun',
+);
+requireText(
+  'website/blog/why-single-char-keywords.html',
+  'Archive note, 2026-05-13',
+  'single-character keyword rationale must remain explicitly archived',
+);
+requireText(
+  'website/blog/why-vais.html',
+  'The refreshed 2026-05-13 token benchmark reports',
+  'why-vais token section must use the current scoped benchmark claim',
+);
+forbidText(
+  'website/blog/why-vais.html',
+  'Vais uses single-character keywords throughout',
+  'why-vais page must not present historical single-character declarations as current syntax',
+);
+forbidText(
+  'website/blog/index.html',
+  'How Vais achieves 800K lines/sec',
+  'blog index must not promote archived throughput as a current claim',
+);
 
 for (const locale of ['ko', 'ja', 'zh']) {
   const path = `website/public/locales/${locale}.json`;
   requireText(path, 'playground API', `${locale} locale must name the API dependency`);
   requireText(path, 'browser-only compile/execute', `${locale} locale must keep browser-only status experimental`);
+  requireText(path, '2026-05-13', `${locale} locale compile-speed note must carry the current benchmark date`);
 }
 
 for (const path of [
@@ -206,6 +300,11 @@ for (const path of [
     path,
     'browser-only JS/WASM paths are experimental',
     'use the clearer compile/execute wording introduced by the claim boundary',
+  );
+  forbidText(
+    path,
+    '2026-02-11',
+    'homepage compile-speed note must not use the stale February benchmark date',
   );
 }
 

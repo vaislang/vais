@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This page presents **actual measured** performance benchmarks comparing Vais against C, Rust, and Python. All numbers are from real runs on local hardware — no projected or estimated values.
+This page presents **actual measured** performance benchmarks comparing Vais against C, Rust, Go, and Python. Each section states its measurement date and scope. Current compile-speed and token-efficiency data was refreshed on 2026-05-13; older runtime snapshots remain labeled as historical evidence, not current throughput claims.
 
 ### Test Environment
 
@@ -10,22 +10,21 @@ This page presents **actual measured** performance benchmarks comparing Vais aga
 - CPU: Apple Silicon (ARM64)
 - OS: macOS Darwin 25.2.0
 
-**Compiler Versions:**
-- Vais: vaisc 1.0.0 (LLVM 17 backend, text codegen + clang)
-- C: Apple clang 17.0.0
-- Rust: rustc 1.92.0
-- Python: CPython 3.14.2
+**Current compile/token refresh (2026-05-13):**
+- Vais: vaisc 0.1.0
+- C: Apple clang 21.0.0
+- Go: go1.25.7 darwin/arm64
+- Rust: rustc 1.95.0
+- Hyperfine: 1.20.0
+- Tokenizer: tiktoken cl100k_base
 
 **Compilation Flags:**
-- Vais: `vaisc build -O2` (LLVM backend, clang -O2)
-- C: `clang -O2`
-- Rust: `rustc -C opt-level=3`
-- Python: interpreted (no JIT)
+- Compile-speed benchmark: Vais `vaisc build --emit-ir`; C `clang`; Go `go build`; Rust `rustc`
+- Runtime snapshot: Vais LLVM IR linked with clang `-O2`; C `clang -O2`; Rust release
 
 **Measurement:**
-- Each benchmark run 5 times, median `user` time reported
-- Measured using `/usr/bin/time -p`
-- All programs single-threaded
+- Compile speed: `hyperfine --warmup 3 --min-runs 15`
+- Runtime snapshot: `/usr/bin/time -p`, single-threaded
 
 ## Runtime Performance
 
@@ -68,9 +67,24 @@ Vais produces compact binaries — 7.5x smaller than Rust.
 
 ## Compilation Speed
 
-Vais compiler throughput (internal benchmark):
-- **50K lines in 63ms** (~800K lines/sec)
-- Frontend (lexer+parser+type checker) dominates; LLVM codegen is fast
+Current single-file compile-speed benchmark (`benches/lang-comparison/compile_bench.sh`,
+Hyperfine, 2026-05-13, Apple ARM64/macOS):
+
+| Program | Vais `--emit-ir` | Rust `rustc` | Go `go build` | C `clang` |
+|---------|------------------|--------------|---------------|-----------|
+| fibonacci | 6.0ms | 93.7ms | 48.0ms | 55.8ms |
+| quicksort | 6.4ms | 95.6ms | 47.8ms | 56.8ms |
+| http_types | 6.6ms | 103.2ms | 47.1ms | 60.7ms |
+| linked_list | 6.0ms | 98.3ms | 47.3ms | 59.5ms |
+| **Average** | **6.3ms** | **97.7ms** | **47.5ms** | **58.2ms** |
+
+Vais `--emit-ir` is 9.3x faster than C/clang, 7.6x faster than Go, and
+15.6x faster than Rust on this benchmark. This compares Vais LLVM IR emission
+against full binary compilation for the other toolchains.
+
+The older large-scale throughput snapshot (50K lines in 63ms, ~800K lines/sec)
+is tracked by a separate benchmark and should be rerun before citing as a
+current claim.
 
 ## Token Efficiency (GPT-4 Tokenizer)
 
@@ -80,92 +94,90 @@ Token counts measured with `tiktoken` (cl100k_base, GPT-4 tokenizer) on four ben
 
 | Language | Tokens | Lines | Tok/Line | vs Vais |
 |----------|--------|-------|----------|---------|
-| **Vais** | **721** | **114** | **6.3** | **1.00x** |
-| Python | 889 | 137 | 6.5 | 1.23x |
-| Go | 893 | 174 | 5.1 | 1.24x |
-| Rust | 1,080 | 163 | 6.6 | 1.50x |
-| C | 1,211 | 191 | 6.3 | 1.68x |
+| **Vais** | **829** | **120** | **6.9** | **1.00x** |
+| Python | 889 | 137 | 6.5 | 1.07x |
+| Go | 893 | 174 | 5.1 | 1.08x |
+| Rust | 1,080 | 163 | 6.6 | 1.30x |
+| C | 1,211 | 191 | 6.3 | 1.46x |
 
 ### Per-Program Breakdown
 
 | Program | Vais | Rust | Go | C | Python |
 |---------|------|------|----|----|--------|
-| fibonacci | 115 | 135 | 126 | 159 | 118 |
-| quicksort | 199 | 242 | 228 | 291 | 227 |
-| http_types | 151 | 431 | 318 | 454 | 326 |
-| linked_list | 256 | 272 | 221 | 307 | 218 |
+| fibonacci | 130 | 135 | 126 | 159 | 118 |
+| quicksort | 235 | 242 | 228 | 291 | 227 |
+| http_types | 172 | 431 | 318 | 454 | 326 |
+| linked_list | 292 | 272 | 221 | 307 | 218 |
 
 ### Token Savings
 
-- Vais saves **33.2%** vs Rust (1,080 → 721 tokens)
-- Vais saves **40.5%** vs C (1,211 → 721 tokens)
-- Vais saves **19.3%** vs Go (893 → 721 tokens)
-- Vais saves **18.9%** vs Python (889 → 721 tokens)
+- Vais saves **23.2%** vs Rust (1,080 → 829 tokens)
+- Vais saves **31.5%** vs C (1,211 → 829 tokens)
+- Vais saves **7.2%** vs Go (893 → 829 tokens)
+- Vais saves **6.7%** vs Python (889 → 829 tokens)
 
-### Why Vais Uses Fewer Tokens
+### Why Vais Uses Fewer Tokens Than Rust/C
 
-Vais achieves the lowest total token count across all four benchmarks due to several syntax optimizations:
-
-**Type inference:**
-- Parameter type inference: `F fib(n)` instead of `F fib(n: i64)` — saves 2 tokens per parameter
-- Return type inference for simple functions
-- `i` type alias for `i64` in type annotations
+Vais is no longer documented as a single-letter-keyword language. The current
+benchmark fixtures use canonical public declarations such as `fn` and `struct`.
+The token advantage now comes from a smaller set of explicit, current syntax
+choices:
 
 **Control flow density:**
-- Single-character keywords (`F`, `I`, `E`, `L`, `R`, `M`) reduce keyword overhead
-- No semicolons required (1 token saved per statement)
-- Expression-body syntax (`= expr`) eliminates braces for simple functions
+- Compact control forms (`I`, `LF`, `L`) reduce repeated boilerplate in loops and branches
+- No semicolons are required
+- Expression-body syntax (`= expr`) keeps simple functions short
 
 **Recursion & operators:**
-- `@` self-recursion operator replaces function name repetition
-- `+=` compound assignment (same as other languages)
-- Range loops `L i:0..n` eliminate manual counter variables
+- `@` self-recursion replaces repeating the current function name
+- `+=` compound assignment avoids repeated left-hand sides
+- Range loops such as `LF i:0..n` avoid manual counter setup
 
-**Auto-return & builtins:**
-- `main()` auto-return: omit `-> i64` and trailing `0` — saves 3 tokens per program
-- `swap(arr, i, j)` builtin replaces 3-line temp-load-store pattern — saves ~6 tokens per swap
-
-**Data structures:**
-- Struct tuple literals: `Response(200, 1)` instead of `Response { status: 200, body: 1 }` — saves ~5 tokens per construction
-- `*i64` arrays with direct indexing `arr[i]` are as concise as Python/Rust
-- No `let`/`var`/`def` required (`:=` binding is universal)
+**Bindings and data access:**
+- `:=` works as the normal local binding form, without `let`/`var`/`def`
+- Direct pointer/array indexing (`arr[i]`) stays concise for systems code
+- Named struct literals remain explicit while still avoiding constructor boilerplate
 
 **Struct-heavy code advantage:**
-- In `http_types`, Vais uses **166 tokens** vs Rust's **431 tokens** (61% smaller)
-- Struct tuple literals and parameter inference compound in struct-heavy code
+- In `http_types`, Vais uses **172 tokens** vs Rust's **431 tokens** and C's **454 tokens**
+- The advantage is strongest where other systems languages repeat type names, ownership wrappers, or C-style struct setup
 
 ### Honest Assessment
 
-**Aggregate results:** Vais uses **fewer tokens than all other languages** (721 total, 33.2% smaller than Rust, 40.5% smaller than C, 18.9% smaller than Python).
+**Aggregate results:** With current canonical public syntax, Vais uses **829 tokens total**, 23.2% fewer than Rust and 31.5% fewer than C. Python and Go are close in aggregate because their linked-list fixtures use GC/reference patterns while the Vais fixture uses explicit pointer operations.
 
 **Per-benchmark variability:**
-- **Struct-heavy code** (`http_types`): Vais has a **massive advantage** (54-67% smaller than Rust/C/Python/Go)
-- **Algorithm code** (`fibonacci`, `quicksort`): Vais is **the most compact** — fibonacci 115 tokens (smallest), quicksort 199 tokens (smallest)
-- **Pointer arithmetic code** (`linked_list`): Vais at 256 tokens; slightly larger than Python/Go due to manual `malloc`/`store`/`load` (no GC)
+- **Struct-heavy code** (`http_types`): Vais has a large advantage (46-62% smaller than Rust/C/Python/Go)
+- **Algorithm code** (`fibonacci`, `quicksort`): Vais is close to Python/Go and smaller than Rust/C in aggregate
+- **Pointer arithmetic code** (`linked_list`): Vais at 292 tokens; larger than Python/Go/Rust because the fixture uses explicit `malloc`/`store`/`load` instead of GC or ownership-library helpers
 
 Vais's token advantage comes from:
-- Struct tuple literals (`Response(200, 1)` instead of `Response { status: 200, body: 1 }`)
-- Parameter type inference (omit `: i64` annotations)
-- Single-character keywords and compact control flow
+- Compact loops and branches (`I`, `L`, `LF`)
+- Universal local binding with `:=`
+- Canonical declarations, compact control flow, and expression bodies
 - Expression-body syntax and `@` self-recursion operator
 
 ## Source Code
 
-All benchmark source files are in `examples/projects/benchmark/`:
-- `benchmark.vais` — Vais implementation
-- `benchmark.c` — C implementation
-- `benchmark.rs` — Rust implementation
-- `benchmark.py` — Python implementation
+Single-file language-comparison benchmarks are in `benches/lang-comparison/`:
+- `benches/lang-comparison/vais/*.vais`
+- `benches/lang-comparison/rust/*.rs`
+- `benches/lang-comparison/go/*.go`
+- `benches/lang-comparison/c/*.c`
+- `benches/lang-comparison/python/*.py`
+
+The older runtime benchmark sources live under `examples/projects/benchmark/`
+and the Rust Criterion benches.
 
 ### Vais
 ```vais
-F fib_rec(n) -> i64 =
-    I n <= 1 { n } E { @(n - 1) + @(n - 2) }
+fn fib_rec(n: i64) -> i64 =
+    I n <= 1 { n } else { @(n - 1) + @(n - 2) }
 
-F fib_iter(n) -> i64 {
+fn fib_iter(n: i64) -> i64 {
     a := mut 0
     b := mut 1
-    L _:0..n {
+    LF _:0..n {
         t := a + b
         a = b
         b = t
@@ -180,17 +192,17 @@ Based on **actual measurements**:
 
 - **Runtime:** Vais with `-O2` matches C and Rust exactly (1.00x). Both LLVM-backed languages produce identical machine code quality. Python is 40-60x slower.
 - **Binary size:** Vais (58 KB) is compact — 1.7x of C, 7.5x smaller than Rust.
-- **Token efficiency:** Vais uses **fewer tokens than all other languages** (801 total). Vais saves 25.8% vs Rust, 33.9% vs C, 10.3% vs Go, and 9.9% vs Python. The advantage is most pronounced in struct-heavy code (61% smaller than Rust in `http_types`).
-- **Compilation speed:** ~800K lines/sec throughput.
+- **Token efficiency:** Vais uses 829 tokens across the current fixtures, saving 23.2% vs Rust and 31.5% vs C. Python and Go are close in aggregate; Vais's advantage is strongest in struct-heavy code.
+- **Compilation speed:** current single-file `--emit-ir` average is 6.3ms, 9.3x faster than C/clang and 15.6x faster than Rust full binary compilation.
 
 Vais's key advantages are:
 1. **C-equivalent performance** with higher-level syntax
 2. **Compact binaries** (much smaller than Rust)
-3. **Lowest token count** across all benchmarks (801 tokens, 25.8% smaller than Rust, 9.9% smaller than Python)
-4. **Fast compilation** (~800K lines/sec)
+3. **Lower token count than Rust and C** on the current canonical syntax fixtures
+4. **Fast single-file compilation** (6.3ms `--emit-ir` average on the current benchmark)
 
 ---
 
-*Last updated: February 2026*
-*Vais version: 1.0.0*
+*Last updated: 2026-05-13*
+*Current compile/token refresh: vaisc 0.1.0*
 *All measurements are actual runs, not projections.*

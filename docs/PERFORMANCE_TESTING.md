@@ -141,7 +141,9 @@ Located in `benches/fixtures/`:
 4. Alert on significant changes
 
 **Output:**
-- Benchmark dashboard at `https://vais.dev/docs/dev/bench/`
+- Benchmark results in the GitHub Actions run summary and artifacts
+- Optional historical dashboard data under `dev/bench` when gh-pages benchmark
+  publishing is enabled
 - Performance trends over time
 - Downloadable results artifacts
 

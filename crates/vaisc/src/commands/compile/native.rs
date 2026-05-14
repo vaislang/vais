@@ -399,6 +399,30 @@ pub(super) fn add_runtime_and_native_libs(
         }
     }
 
+    // Transitive std modules are compiled per-module and may reference sync
+    // helpers even when the root AST did not import `std/sync` directly.
+    if !linked_runtimes
+        .iter()
+        .any(|rt| rt.ends_with("sync_runtime.c"))
+    {
+        if let Some(sync_rt_path) = find_sync_runtime() {
+            let rt_str = sync_rt_path
+                .to_str()
+                .unwrap_or("sync_runtime.c")
+                .to_string();
+            linked_runtimes.push(rt_str.clone());
+            args.push(rt_str);
+            needs_pthread = true;
+            if verbose {
+                println!(
+                    "{} Linking sync runtime from: {} (transitive fallback)",
+                    "info:".blue().bold(),
+                    sync_rt_path.display()
+                );
+            }
+        }
+    }
+
     // Legacy fallbacks
     if linked_runtimes.is_empty() {
         if let Some(http_rt_path) = find_http_runtime() {
@@ -615,6 +639,23 @@ pub(crate) fn add_runtime_libs(
                     args.push(lib.to_string());
                 }
             }
+        }
+    }
+
+    // Transitive std modules can require sync helpers even when the root module
+    // did not import std::sync directly.
+    if !linked_runtimes
+        .iter()
+        .any(|rt| rt.ends_with("sync_runtime.c"))
+    {
+        if let Some(sync_rt_path) = find_sync_runtime() {
+            let rt_str = sync_rt_path
+                .to_str()
+                .unwrap_or("sync_runtime.c")
+                .to_string();
+            linked_runtimes.push(rt_str.clone());
+            args.push(rt_str);
+            needs_pthread = true;
         }
     }
 

@@ -38,13 +38,10 @@ impl CodeGenerator {
         }));
         match result {
             Ok(r) => r,
-            Err(_) => {
-                eprintln!(
-                    "[WARN] Stack overflow during codegen of '{}' — skipping",
-                    f.name.node
-                );
-                Ok(String::new())
-            }
+            Err(_) => Err(CodegenError::InternalError(format!(
+                "stack overflow during codegen of '{}'",
+                f.name.node
+            ))),
         }
     }
 
@@ -229,8 +226,26 @@ impl CodeGenerator {
 
         match &f.body {
             FunctionBody::Expr(expr) => {
-                let (value, expr_ir) = self.generate_expr(expr, &mut counter)?;
+                let saved_generic_substitutions =
+                    self.push_expected_static_ctor_substitutions(&ret_type, &expr.node);
+                let generated_expr = self.generate_expr(expr, &mut counter);
+                if let Some(saved) = saved_generic_substitutions {
+                    self.generics.substitutions = saved;
+                }
+                let (mut value, expr_ir) = generated_expr?;
                 ir.push_str(&expr_ir);
+
+                if matches!(ret_type, ResolvedType::Str) {
+                    let expr_type = self.infer_expr_type(expr);
+                    if self.is_string_builder_type(&expr_type) {
+                        value = self.coerce_string_builder_to_str(
+                            &value,
+                            self.is_expr_value(expr),
+                            &mut counter,
+                            &mut ir,
+                        );
+                    }
+                }
 
                 // Execute deferred expressions before return (LIFO order)
                 let defer_ir = self.generate_defer_cleanup(&mut counter)?;
@@ -302,18 +317,22 @@ impl CodeGenerator {
                 if ret_type == ResolvedType::Unit {
                     write_ir!(ir, "  ret void{}", ret_dbg);
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
-                    // For struct returns, load the value from pointer
-                    let loaded = format!("%ret.{}", counter);
-                    write_ir!(
-                        ir,
-                        "  {} = load {}, {}* {}{}",
-                        loaded,
-                        ret_llvm,
-                        ret_llvm,
-                        value,
-                        ret_dbg
-                    );
-                    write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
+                    if value == "0" {
+                        write_ir!(ir, "  ret {} zeroinitializer{}", ret_llvm, ret_dbg);
+                    } else {
+                        // For struct returns, load the value from pointer
+                        let loaded = format!("%ret.{}", counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}{}",
+                            loaded,
+                            ret_llvm,
+                            ret_llvm,
+                            value,
+                            ret_dbg
+                        );
+                        write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
+                    }
                 } else {
                     // Phase 191: float literal returned as integer — needs fptosi.
                     // E.g., `F main() -> i64 = 3.14` generates `ret i64 3.140000e+00`
@@ -338,7 +357,18 @@ impl CodeGenerator {
                         trunc_tmp
                     } else if value.starts_with('%') {
                         let val_llvm = self.llvm_type_of(&value);
-                        if (val_llvm == "float" || val_llvm == "double")
+                        if ret_llvm.starts_with('{') && val_llvm == format!("{}*", ret_llvm) {
+                            let loaded = self.next_temp(&mut counter);
+                            write_ir!(
+                                ir,
+                                "  {} = load {}, {}* {}",
+                                loaded,
+                                ret_llvm,
+                                ret_llvm,
+                                value
+                            );
+                            loaded
+                        } else if (val_llvm == "float" || val_llvm == "double")
                             && (ret_llvm == "float" || ret_llvm == "double")
                             && val_llvm != ret_llvm
                         {
@@ -366,8 +396,12 @@ impl CodeGenerator {
                 }
             }
             FunctionBody::Block(stmts) => {
-                let (value, block_ir, terminated) =
-                    self.generate_block_stmts(stmts, &mut counter)?;
+                let (mut value, block_ir, terminated) = self
+                    .generate_block_stmts_with_expected_result_type(
+                        stmts,
+                        &mut counter,
+                        &ret_type,
+                    )?;
                 ir.push_str(&block_ir);
 
                 // If block is already terminated (has return/break), don't emit ret
@@ -376,6 +410,18 @@ impl CodeGenerator {
                     // Note: defer cleanup for early returns is handled in Return statement
                     // Note: alloc cleanup for early returns is handled in Return statement
                 } else {
+                    if matches!(ret_type, ResolvedType::Str) {
+                        let block_type = self.infer_block_type(stmts);
+                        if self.is_string_builder_type(&block_type) {
+                            value = self.coerce_string_builder_to_str(
+                                &value,
+                                self.is_block_result_value(stmts),
+                                &mut counter,
+                                &mut ir,
+                            );
+                        }
+                    }
+
                     // Execute deferred expressions before return (LIFO order)
                     let defer_ir = self.generate_defer_cleanup(&mut counter)?;
                     ir.push_str(&defer_ir);
@@ -421,8 +467,10 @@ impl CodeGenerator {
                         // main() with implicit i64 return and Unit body: auto-return 0
                         write_ir!(ir, "  ret i64 0{}", ret_dbg);
                     } else if matches!(ret_type, ResolvedType::Named { .. }) {
-                        // Check if the result is already a value (from phi node) or a pointer (from struct lit)
-                        if self.is_block_result_value(stmts) {
+                        if value == "0" {
+                            write_ir!(ir, "  ret {} zeroinitializer{}", ret_llvm, ret_dbg);
+                        } else if self.is_block_result_value(stmts) {
+                            // Check if the result is already a value (from phi node) or a pointer (from struct lit)
                             // Value — check if type name matches return type.
                             // Generic calls may return %Vec while function declares %Vec$i64.
                             let val_llvm = self.llvm_type_of(&value);
@@ -497,8 +545,25 @@ impl CodeGenerator {
                         write_ir!(ir, "  ret {} @{}{}", ret_llvm, const_name, ret_dbg);
                     } else if ret_llvm.starts_with('{') {
                         // Inline struct return: if value is scalar, use zeroinitializer.
-                        if value.starts_with('%') && self.llvm_type_of(&value).starts_with('{') {
+                        let val_llvm = if value.starts_with('%') {
+                            self.llvm_type_of(&value)
+                        } else {
+                            String::new()
+                        };
+                        if value.starts_with('%') && val_llvm == ret_llvm {
                             write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
+                        } else if value.starts_with('%') && val_llvm == format!("{}*", ret_llvm) {
+                            let loaded = self.next_temp(&mut counter);
+                            write_ir!(
+                                ir,
+                                "  {} = load {}, {}* {}{}",
+                                loaded,
+                                ret_llvm,
+                                ret_llvm,
+                                value,
+                                ret_dbg
+                            );
+                            write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
                         } else {
                             write_ir!(ir, "  ret {} zeroinitializer{}", ret_llvm, ret_dbg);
                         }
@@ -506,7 +571,18 @@ impl CodeGenerator {
                         // Coerce return value width if needed (int, float, struct).
                         let value = if value.starts_with('%') {
                             let val_llvm = self.llvm_type_of(&value);
-                            if (val_llvm == "float" || val_llvm == "double")
+                            if ret_llvm.starts_with('{') && val_llvm == format!("{}*", ret_llvm) {
+                                let loaded = self.next_temp(&mut counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load {}, {}* {}",
+                                    loaded,
+                                    ret_llvm,
+                                    ret_llvm,
+                                    value
+                                );
+                                loaded
+                            } else if (val_llvm == "float" || val_llvm == "double")
                                 && (ret_llvm == "float" || ret_llvm == "double")
                                 && val_llvm != ret_llvm
                             {
@@ -734,8 +810,26 @@ impl CodeGenerator {
         let mut counter = 0;
         match &f.body {
             FunctionBody::Expr(expr) => {
-                let (value, expr_ir) = self.generate_expr(expr, &mut counter)?;
+                let saved_generic_substitutions =
+                    self.push_expected_static_ctor_substitutions(&ret_type, &expr.node);
+                let generated_expr = self.generate_expr(expr, &mut counter);
+                if let Some(saved) = saved_generic_substitutions {
+                    self.generics.substitutions = saved;
+                }
+                let (mut value, expr_ir) = generated_expr?;
                 ir.push_str(&expr_ir);
+
+                if matches!(ret_type, ResolvedType::Str) {
+                    let expr_type = self.infer_expr_type(expr);
+                    if self.is_string_builder_type(&expr_type) {
+                        value = self.coerce_string_builder_to_str(
+                            &value,
+                            self.is_expr_value(expr),
+                            &mut counter,
+                            &mut ir,
+                        );
+                    }
+                }
 
                 // Call Drop::drop() for droppable locals (reverse order)
                 let drop_ir = self.generate_drop_cleanup();
@@ -765,18 +859,22 @@ impl CodeGenerator {
                 if ret_type == ResolvedType::Unit {
                     write_ir!(ir, "  ret void{}", ret_dbg);
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
-                    // For struct returns, load the value from pointer
-                    let loaded = format!("%ret.{}", counter);
-                    write_ir!(
-                        ir,
-                        "  {} = load {}, {}* {}{}",
-                        loaded,
-                        ret_llvm,
-                        ret_llvm,
-                        value,
-                        ret_dbg
-                    );
-                    write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
+                    if value == "0" {
+                        write_ir!(ir, "  ret {} zeroinitializer{}", ret_llvm, ret_dbg);
+                    } else {
+                        // For struct returns, load the value from pointer
+                        let loaded = format!("%ret.{}", counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}{}",
+                            loaded,
+                            ret_llvm,
+                            ret_llvm,
+                            value,
+                            ret_dbg
+                        );
+                        write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
+                    }
                 } else if matches!(ret_type, ResolvedType::Ref(_) | ResolvedType::RefMut(_))
                     && !value.starts_with('%')
                     && !value.starts_with('@')
@@ -795,7 +893,26 @@ impl CodeGenerator {
                 } else {
                     let value = if value.starts_with('%') {
                         let val_llvm = self.llvm_type_of(&value);
-                        self.coerce_int_width(&value, &val_llvm, &ret_llvm, &mut counter, &mut ir)
+                        if ret_llvm.starts_with('{') && val_llvm == format!("{}*", ret_llvm) {
+                            let loaded = self.next_temp(&mut counter);
+                            write_ir!(
+                                ir,
+                                "  {} = load {}, {}* {}",
+                                loaded,
+                                ret_llvm,
+                                ret_llvm,
+                                value
+                            );
+                            loaded
+                        } else {
+                            self.coerce_int_width(
+                                &value,
+                                &val_llvm,
+                                &ret_llvm,
+                                &mut counter,
+                                &mut ir,
+                            )
+                        }
                     } else {
                         value
                     };
@@ -803,8 +920,12 @@ impl CodeGenerator {
                 }
             }
             FunctionBody::Block(stmts) => {
-                let (value, block_ir, terminated) =
-                    self.generate_block_stmts(stmts, &mut counter)?;
+                let (mut value, block_ir, terminated) = self
+                    .generate_block_stmts_with_expected_result_type(
+                        stmts,
+                        &mut counter,
+                        &ret_type,
+                    )?;
                 ir.push_str(&block_ir);
 
                 // If block is already terminated (has return/break), don't emit ret
@@ -812,6 +933,18 @@ impl CodeGenerator {
                     // Block already has a terminator, no need for ret
                     // Note: alloc cleanup for early returns is handled in Return statement
                 } else {
+                    if matches!(ret_type, ResolvedType::Str) {
+                        let block_type = self.infer_block_type(stmts);
+                        if self.is_string_builder_type(&block_type) {
+                            value = self.coerce_string_builder_to_str(
+                                &value,
+                                self.is_block_result_value(stmts),
+                                &mut counter,
+                                &mut ir,
+                            );
+                        }
+                    }
+
                     // Call Drop::drop() for droppable locals (reverse order)
                     let drop_ir = self.generate_drop_cleanup();
                     ir.push_str(&drop_ir);
@@ -840,8 +973,10 @@ impl CodeGenerator {
                     if ret_type == ResolvedType::Unit {
                         write_ir!(ir, "  ret void{}", ret_dbg);
                     } else if matches!(ret_type, ResolvedType::Named { .. }) {
-                        // Check if the result is already a value (from phi node) or a pointer (from struct lit)
-                        if self.is_block_result_value(stmts) {
+                        if value == "0" {
+                            write_ir!(ir, "  ret {} zeroinitializer{}", ret_llvm, ret_dbg);
+                        } else if self.is_block_result_value(stmts) {
+                            // Check if the result is already a value (from phi node) or a pointer (from struct lit)
                             // Value (e.g., from if-else phi node) - return directly
                             write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                         } else {
@@ -877,7 +1012,18 @@ impl CodeGenerator {
                         // Coerce return value width if needed (int, float, struct).
                         let value = if value.starts_with('%') {
                             let val_llvm = self.llvm_type_of(&value);
-                            if (val_llvm == "float" || val_llvm == "double")
+                            if ret_llvm.starts_with('{') && val_llvm == format!("{}*", ret_llvm) {
+                                let loaded = self.next_temp(&mut counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load {}, {}* {}",
+                                    loaded,
+                                    ret_llvm,
+                                    ret_llvm,
+                                    value
+                                );
+                                loaded
+                            } else if (val_llvm == "float" || val_llvm == "double")
                                 && (ret_llvm == "float" || ret_llvm == "double")
                                 && val_llvm != ret_llvm
                             {

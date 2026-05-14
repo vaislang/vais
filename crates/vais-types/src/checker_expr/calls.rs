@@ -522,8 +522,7 @@ impl TypeChecker {
                             span: Some(expr_span),
                         });
                     }
-                    // Returns raw byte pointer (i8* as i64)
-                    return Ok(ResolvedType::I64);
+                    return Ok(ResolvedType::Slice(Box::new(ResolvedType::U8)));
                 }
                 "clone" | "to_string" | "as_str" => {
                     if !args.is_empty() {

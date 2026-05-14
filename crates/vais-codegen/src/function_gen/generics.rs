@@ -143,11 +143,11 @@ impl CodeGenerator {
         match result {
             Ok(r) => r,
             Err(_) => {
-                eprintln!(
-                    "[WARN] Stack overflow during specialization of '{}' — skipping",
+                self.generics.generated_functions.remove(&inst.mangled_name);
+                Err(crate::CodegenError::InternalError(format!(
+                    "stack overflow during specialization of '{}'",
                     inst.mangled_name
-                );
-                Ok(String::new()) // Return empty IR, function will be undefined
+                )))
             }
         }
     }
@@ -165,57 +165,6 @@ impl CodeGenerator {
             .iter()
             .any(|t| matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)))
         {
-            return Ok(String::new());
-        }
-
-        // Skip specialization for deeply nested struct types to prevent stack overflow.
-        // store_typed/load_typed have been extracted to #[inline(never)] methods, so the
-        // threshold is relaxed from >2 fields to >6 fields. Only skip if the struct has
-        // deeply nested Named fields (depth >= 2), as single-level Named fields are fine.
-        let has_complex_type = inst.type_args.iter().any(|t| {
-            if let ResolvedType::Named { name, .. } = t {
-                let fields = self
-                    .types
-                    .structs
-                    .get(name)
-                    .map(|s| &s.fields[..])
-                    .unwrap_or(&[]);
-                let generic_fields = self
-                    .generics
-                    .struct_defs
-                    .get(name)
-                    .map(|s| s.fields.len())
-                    .unwrap_or(0);
-                // Check for deeply nested Named types (depth 2: Named field whose own fields
-                // are also Named). Single-level Named fields (e.g., Vec<Point>) are allowed.
-                let has_deeply_nested = fields.iter().any(|(_, ty)| {
-                    if let ResolvedType::Named {
-                        name: inner_name, ..
-                    } = ty
-                    {
-                        self.types
-                            .structs
-                            .get(inner_name)
-                            .map(|s| {
-                                s.fields
-                                    .iter()
-                                    .any(|(_, ft)| matches!(ft, ResolvedType::Named { .. }))
-                            })
-                            .unwrap_or(false)
-                    } else {
-                        false
-                    }
-                });
-                // Complex if: >6 fields, OR deeply nested Named fields (depth >= 2)
-                fields.len() > 6 || generic_fields > 6 || has_deeply_nested
-            } else {
-                false
-            }
-        });
-        if has_complex_type {
-            self.generics
-                .generated_functions
-                .insert(inst.mangled_name.clone(), true);
             return Ok(String::new());
         }
 
@@ -433,7 +382,7 @@ impl CodeGenerator {
         );
         write_ir!(
             ir,
-            "define {} @{}({}) {{",
+            "define weak_odr {} @{}({}) {{",
             ret_llvm,
             inst.mangled_name,
             params.join(", ")
@@ -498,16 +447,20 @@ impl CodeGenerator {
                 } else if ret_type == ResolvedType::Unit {
                     ir.push_str("  ret void\n");
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
-                    let loaded = format!("%ret.{}", counter);
-                    write_ir!(
-                        ir,
-                        "  {} = load {}, {}* {}",
-                        loaded,
-                        ret_llvm,
-                        ret_llvm,
-                        value
-                    );
-                    write_ir!(ir, "  ret {} {}", ret_llvm, loaded);
+                    if value == "0" {
+                        write_ir!(ir, "  ret {} zeroinitializer", ret_llvm);
+                    } else {
+                        let loaded = format!("%ret.{}", counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
+                            loaded,
+                            ret_llvm,
+                            ret_llvm,
+                            value
+                        );
+                        write_ir!(ir, "  ret {} {}", ret_llvm, loaded);
+                    }
                 } else {
                     // Coerce body value to return type if needed (e.g., i64 → double)
                     let coerced = self.coerce_specialized_return(
@@ -525,8 +478,12 @@ impl CodeGenerator {
                 // single-pointer alloca pattern consistent with generate_ident_expr.
                 // The old generate_block path creates double-pointer allocas for
                 // struct locals which causes type mismatches on return.
-                let (value, block_ir, terminated) =
-                    self.generate_block_stmts(stmts, &mut counter)?;
+                let (value, block_ir, terminated) = self
+                    .generate_block_stmts_with_expected_result_type(
+                        stmts,
+                        &mut counter,
+                        &ret_type,
+                    )?;
                 ir.push_str(&block_ir);
                 // If the block already contains a terminator (e.g., explicit `R 42`),
                 // do not emit a duplicate ret instruction.
@@ -538,7 +495,9 @@ impl CodeGenerator {
                     } else if ret_type == ResolvedType::Unit {
                         ir.push_str("  ret void\n");
                     } else if matches!(ret_type, ResolvedType::Named { .. }) {
-                        if self.is_block_result_value(stmts) {
+                        if value == "0" {
+                            write_ir!(ir, "  ret {} zeroinitializer", ret_llvm);
+                        } else if self.is_block_result_value(stmts) {
                             // Check if value needs coercion (e.g., i64 from generic call
                             // but ret_llvm is a struct type like %Vec$u64)
                             let val_ty = self.llvm_type_of(&value);
@@ -653,6 +612,9 @@ impl CodeGenerator {
         // For struct return types where body returns i64 (generic erasure)
         // Use inttoptr+load to reinterpret the i64 as a struct pointer
         let val_llvm = self.llvm_type_of(value);
+        if value == "0" && ret_llvm.starts_with('%') && !ret_llvm.ends_with('*') {
+            return "zeroinitializer".to_string();
+        }
         if val_llvm == "i64"
             && ret_llvm.starts_with('%')
             && !ret_llvm.ends_with('*')

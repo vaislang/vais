@@ -15,31 +15,31 @@
   "hero": {
     "badge": "Certified Core + Scoped Evidence",
     "title": "<span class=\"gradient-text\">clear Vais</span> を書き、<br><span class=\"gradient-text\">native performance</span> を得る",
-    "subtitle": "Vais（Vibe AI Language for Systems）は、AIコード生成に最適化されたシステムプログラミング言語です。現在の公開基準は main-reproducible gates、main fixture に port 済みの schema gates、aggregate main port 待ちの integration evidence を区別します。",
+    "subtitle": "Vais（Vibe AI Language for Systems）は、AIコード生成に最適化されたシステムプログラミング言語です。現在の公開基準には clean compiler main gate と VaisDB aggregate main full-build smoke が含まれ、DB/server/web product claims は named gates の範囲に限定されます。",
     "tryBrowser": "ブラウザで試す",
     "install": "brew install vais"
   },
   "compare": {
     "title": "Canonical Syntax, Evidence-Scoped Claims",
-    "subtitle": "Step 19 で旧 single-letter keyword form は削除されました。公開 claim は main-reproducible gates、main fixture に port 済みの schema gates、aggregate main port 待ちの integration evidence を区別します。",
+    "subtitle": "Full-word declaration/import spellings は利用できる場所で canonical です。<code>I</code>、<code>LF</code>、<code>LW</code>、<code>D</code>、<code>B</code>、<code>C</code> などの compact control forms は現在の構文として残っています。公開 claim は compiler main gate、VaisDB aggregate main full-build smoke、schema fixtures、scoped integration evidence を区別します。",
     "vais": "Vais",
     "tokens": "トークン",
     "barTitle": "Evidence Snapshot — 2026-05-13",
-    "barNote": "schema gates は compiler main fixture/local workspace で再現できます: cross-package schema 15/15、shared-schema product evidence 9/9。Runtime/package の数値は gate branch の integration evidence で、aggregate runtime gate は main port 待ちです。"
+    "barNote": "Compiler baseline は fmt/build、IR verifier tests、clean-cache VaisDB aggregate main full-build smoke を IR/link warning なしで通過します。Cross-package schema 15/15 と shared-schema product evidence 9/9 は main-fixture/local-workspace で再現でき、server/web counts は scoped gate evidence です。"
   },
   "performance": {
     "title": "ネイティブパフォーマンス",
     "subtitle": "Vaisは最適化されたLLVM IRにコンパイルされます — 実行時にCおよびRustと同等で、高速なコンパイルを実現します。",
     "runtimeTitle": "実行時間 — Fibonacci(35)",
     "compileTitle": "コンパイル速度 — 単一ファイル",
-    "compileNote": "Vais <code>--emit-ir</code> vs 完全コンパイル。Cより8.6倍、Rustより19倍高速。2026-02-11更新。"
+    "compileNote": "Vais <code>--emit-ir</code> vs full binary compilation。Hyperfine、4 benchmark programs、Apple ARM64/macOS 基準: C/clang より9.3倍、Rustより15.6倍高速。2026-05-13更新。"
   },
   "features": {
     "title": "なぜVaisなのか？",
     "subtitle": "パフォーマンスを犠牲にすることなく、AI支援開発のためにゼロから設計されました。",
     "singleChar": {
       "title": "Canonical Keywords",
-      "description": "<code>fn</code>、<code>struct</code>、<code>enum</code>、<code>else</code>、<code>match</code>、<code>return</code>、<code>use</code>、<code>pub</code> が canonical です。Retired single-letter form はもう受け付けません。"
+      "description": "<code>fn</code>、<code>struct</code>、<code>enum</code>、<code>else</code>、<code>match</code>、<code>return</code>、<code>use</code>、<code>pub</code> は compiler が full-word spellings を提供する場所で canonical です。Full-word spelling が promoted されていない compact control tokens は明示的な現行構文です。"
     },
     "selfRecursion": {
       "title": "自己再帰演算子",
@@ -107,7 +107,7 @@
   "vaisx": {
     "badge": "新機能",
     "title": "VaisでWebアプリを構築",
-    "subtitle": "VaisX は Vais web framework workbench です。現在の公開 claim は main-reproducible gates、main-fixture schema gates、aggregate main port 待ちの integration evidence を区別します。",
+    "subtitle": "VaisX は Vais web framework workbench です。現在の公開 claim は main-reproducible compiler/schema gates、VaisDB aggregate main full-build smoke、scoped Vais Web integration evidence を区別します。",
     "compiler": {
       "title": "コンパイル時リアクティビティ",
       "description": "Reactive state analysis と DOM update generation は named gates が覆盖する範囲でのみ検証された implementation surface です。"
@@ -118,7 +118,7 @@
     },
     "runtime": {
       "title": "Runtime Evidence",
-      "description": "現在の Vais Web integration evidence は runtime smoke 61/77、unit 390/390、package tests 3272/3272、full-build 24/24 で、shared-schema product evidence 9/9 は compiler main-fixture workspace gate として port 済みです。Size claim には size gate が必要です。"
+      "description": "現在の scoped Vais Web evidence は runtime smoke 61/77、unit 390/390、package tests 3272/3272、full-build 24/24 で、shared-schema product evidence 9/9 は compiler main-fixture workspace gate として port 済みです。Size claim には size gate が必要です。"
     },
     "learnMore": "詳しく見る",
     "github": "GitHub",

@@ -257,7 +257,8 @@ http://localhost:3000
 
 ### 1. Syntax Highlighting
 Complete tokenization for:
-- Keywords (F, S, E, I, L, M, etc.)
+- Canonical keywords (fn, struct, enum, else, match, return, use, pub)
+- Compact current syntax (I, L, LF, LW, B, C, etc.)
 - Types (i64, f64, bool, etc.)
 - Operators (@, :=, =>, etc.)
 - Comments, strings, numbers

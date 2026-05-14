@@ -25,7 +25,7 @@
 //! reducing redundant AST traversal in codegen.
 
 use crate::CodeGenerator;
-use vais_ast::{BinOp, Expr, Spanned, Stmt};
+use vais_ast::{BinOp, Expr, MatchArm, Pattern, Spanned, Stmt};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
@@ -81,10 +81,24 @@ impl CodeGenerator {
                         if !self.fn_ctx.locals.contains_key(var_name.as_str()) {
                             // Search block for a Let defining this variable
                             for stmt in stmts.iter().rev().skip(1) {
-                                if let Stmt::Let { name, value, .. } = &stmt.node {
+                                if let Stmt::Let {
+                                    name, ty, value, ..
+                                } = &stmt.node
+                                {
                                     if name.node == *var_name {
-                                        let ty = self.infer_expr_type(value);
-                                        if matches!(ty, ResolvedType::Named { .. }) {
+                                        let resolved_ty = ty
+                                            .as_ref()
+                                            .map(|t| self.ast_type_to_resolved(&t.node))
+                                            .unwrap_or_else(|| self.infer_expr_type(value));
+                                        if matches!(resolved_ty, ResolvedType::Named { .. })
+                                            || (matches!(
+                                                &self.fn_ctx.current_return_type,
+                                                Some(ResolvedType::Named { .. })
+                                            ) && matches!(
+                                                resolved_ty,
+                                                ResolvedType::I64 | ResolvedType::Unknown
+                                            ))
+                                        {
                                             return false; // struct-typed local → pointer
                                         }
                                         break;
@@ -179,6 +193,7 @@ impl CodeGenerator {
                 let obj_type = self.infer_expr_type(obj);
                 let resolved = match &obj_type {
                     ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
+                    ResolvedType::Pointer(inner) => inner.as_ref(),
                     other => other,
                 };
                 if let ResolvedType::Named { name, .. } = resolved {
@@ -192,6 +207,30 @@ impl CodeGenerator {
                     }
                 }
                 true
+            }
+            Expr::Index { expr: array, .. } => {
+                let array_ty = self.infer_expr_type(array);
+                let vec_elem_ty = match &array_ty {
+                    ResolvedType::Named { name, generics }
+                        if name == "Vec" && !generics.is_empty() =>
+                    {
+                        Some(&generics[0])
+                    }
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                        if let ResolvedType::Named { name, generics } = inner.as_ref() {
+                            if name == "Vec" && !generics.is_empty() {
+                                Some(&generics[0])
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                };
+
+                !matches!(vec_elem_ty, Some(ResolvedType::Named { .. }))
             }
             _ => true,
         }
@@ -491,6 +530,10 @@ impl CodeGenerator {
             }
             Expr::Ref(inner) => ResolvedType::Ref(Box::new(self.infer_expr_type(inner))),
             Expr::Deref(inner) => match self.infer_expr_type(inner) {
+                ResolvedType::Str
+                | ResolvedType::Slice(_)
+                | ResolvedType::SliceMut(_)
+                | ResolvedType::DynTrait { .. } => self.infer_expr_type(inner),
                 ResolvedType::Pointer(inner) => *inner,
                 ResolvedType::Ref(inner) => *inner,
                 ResolvedType::RefMut(inner) => *inner,
@@ -598,12 +641,37 @@ impl CodeGenerator {
             Expr::Index { expr: inner, index } => {
                 // Check if this is a slice operation
                 if matches!(index.node, Expr::Range { .. }) {
-                    // Slice returns a pointer
+                    // Range indexing returns the slice fat-pointer type.
                     let inner_ty = self.infer_expr_type(inner);
                     match inner_ty {
-                        ResolvedType::Pointer(elem) => ResolvedType::Pointer(elem),
-                        ResolvedType::Array(elem) => ResolvedType::Pointer(elem),
-                        _ => ResolvedType::Pointer(Box::new(ResolvedType::I64)),
+                        ResolvedType::Pointer(elem)
+                        | ResolvedType::Array(elem)
+                        | ResolvedType::Slice(elem)
+                        | ResolvedType::SliceMut(elem) => ResolvedType::Slice(elem),
+                        ResolvedType::Named {
+                            ref name,
+                            ref generics,
+                        } if name == "Vec" && !generics.is_empty() => {
+                            ResolvedType::Slice(Box::new(generics[0].clone()))
+                        }
+                        ResolvedType::Ref(ref inner) | ResolvedType::RefMut(ref inner) => {
+                            match inner.as_ref() {
+                                ResolvedType::Pointer(elem)
+                                | ResolvedType::Array(elem)
+                                | ResolvedType::Slice(elem)
+                                | ResolvedType::SliceMut(elem) => {
+                                    ResolvedType::Slice(Box::new(*elem.clone()))
+                                }
+                                ResolvedType::Named {
+                                    ref name,
+                                    ref generics,
+                                } if name == "Vec" && !generics.is_empty() => {
+                                    ResolvedType::Slice(Box::new(generics[0].clone()))
+                                }
+                                _ => ResolvedType::Slice(Box::new(ResolvedType::I64)),
+                            }
+                        }
+                        _ => ResolvedType::Slice(Box::new(ResolvedType::I64)),
                     }
                 } else {
                     // Regular indexing returns element type
@@ -646,20 +714,77 @@ impl CodeGenerator {
             } => {
                 // Get method return type from struct definition
                 let recv_type = self.infer_expr_type(receiver);
+                let inner_recv_owned = match &recv_type {
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                        inner.as_ref().clone()
+                    }
+                    other => other.clone(),
+                };
+                let effective_recv_owned = match &inner_recv_owned {
+                    ResolvedType::Named { name, generics }
+                        if matches!(
+                            name.as_str(),
+                            "MutexGuard" | "RwLockReadGuard" | "RwLockWriteGuard"
+                        ) && !generics.is_empty() =>
+                    {
+                        let guard_method_arity = match method.node.as_str() {
+                            "new" => Some(1),
+                            "get" | "unlock" => Some(0),
+                            "set" => Some(1),
+                            _ => None,
+                        };
+                        if guard_method_arity == Some(args.len()) {
+                            inner_recv_owned.clone()
+                        } else {
+                            generics[0].clone()
+                        }
+                    }
+                    _ => inner_recv_owned.clone(),
+                };
 
-                // String method return types
+                // String method return types for both str and &str.
                 // Note: bool methods return i64 (0/1) at runtime, matching comparison ops
-                if matches!(recv_type, ResolvedType::Str) {
+                let recv_is_str = matches!(recv_type, ResolvedType::Str)
+                    || matches!(&recv_type, ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                        if matches!(inner.as_ref(), ResolvedType::Str));
+                if recv_is_str {
                     return match method.node.as_str() {
                         "len" | "charAt" | "indexOf" | "contains" | "startsWith" | "endsWith"
                         | "isEmpty" => ResolvedType::I64,
-                        "substring" | "push_str" => ResolvedType::Str,
+                        "substring" | "push_str" | "clone" | "to_string" => ResolvedType::Str,
+                        "as_bytes" => ResolvedType::Slice(Box::new(ResolvedType::U8)),
                         _ => ResolvedType::I64,
                     };
                 }
 
+                let slice_elem = match &effective_recv_owned {
+                    ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => {
+                        Some(elem.as_ref().clone())
+                    }
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                        match inner.as_ref() {
+                            ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => {
+                                Some(elem.as_ref().clone())
+                            }
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                };
+                if let Some(elem_ty) = slice_elem {
+                    return match method.node.as_str() {
+                        "len" => ResolvedType::U64,
+                        "get" | "first" | "last" => elem_ty,
+                        _ => ResolvedType::I64,
+                    };
+                }
+
+                if self.is_string_builder_type(&effective_recv_owned) && method.node == "as_str" {
+                    return ResolvedType::Str;
+                }
+
                 // Vec<T> method return types
-                let vec_elem = match &recv_type {
+                let vec_elem = match &effective_recv_owned {
                     ResolvedType::Named { name, generics }
                         if name == "Vec" && !generics.is_empty() =>
                     {
@@ -700,7 +825,7 @@ impl CodeGenerator {
                 // Look up registered function signature first — this is the ground truth
                 // from the type checker and always takes priority over hardcoded heuristics.
                 // Unwrap Ref/RefMut to get the inner Named type
-                let inner_recv = match &recv_type {
+                let inner_recv = match &effective_recv_owned {
                     ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
                     other => other,
                 };
@@ -739,7 +864,7 @@ impl CodeGenerator {
 
                 // Hardcoded heuristics for types without registered signatures
                 // (e.g., std library types used without explicit impl blocks in scope)
-                if let ResolvedType::Named { name, .. } = inner_recv {
+                if let ResolvedType::Named { name, generics } = inner_recv {
                     if name == "ByteBuffer" {
                         return match method.node.as_str() {
                             "read_u8" | "read_i8" | "read_u16" | "read_i16" | "read_u32"
@@ -762,7 +887,7 @@ impl CodeGenerator {
                     if name == "Mutex" && method.node == "lock" {
                         return ResolvedType::Named {
                             name: "MutexGuard".to_string(),
-                            generics: vec![],
+                            generics: generics.first().cloned().into_iter().collect(),
                         };
                     }
                 }
@@ -934,14 +1059,10 @@ impl CodeGenerator {
                 // If-else returns the type of its then block
                 self.infer_block_type(then)
             }
-            Expr::Match { arms, .. } => {
-                // Match returns the type of its first arm body
-                if let Some(arm) = arms.first() {
-                    self.infer_expr_type(&arm.body)
-                } else {
-                    ResolvedType::I64
-                }
-            }
+            Expr::Match {
+                expr: match_expr,
+                arms,
+            } => self.infer_match_expr_type(match_expr, arms),
             Expr::Cast { ty, .. } => {
                 // Cast returns the target type
                 self.ast_type_to_resolved(&ty.node)
@@ -1052,6 +1173,121 @@ impl CodeGenerator {
                 self.infer_expr_type(value)
             }
             _ => ResolvedType::I64, // Default fallback for remaining expressions
+        }
+    }
+
+    pub(crate) fn infer_match_expr_type(
+        &self,
+        match_expr: &Spanned<Expr>,
+        arms: &[MatchArm],
+    ) -> ResolvedType {
+        let match_type = self.infer_expr_type(match_expr);
+        let Some(first_arm) = arms.first() else {
+            return ResolvedType::I64;
+        };
+
+        let first_ty = self.infer_match_arm_body_type_with_pattern(first_arm, &match_type);
+        if !matches!(first_ty, ResolvedType::I64 | ResolvedType::Unknown) {
+            return first_ty;
+        }
+
+        arms.iter()
+            .skip(1)
+            .map(|arm| self.infer_match_arm_body_type_with_pattern(arm, &match_type))
+            .find(|ty| !matches!(ty, ResolvedType::I64 | ResolvedType::Unknown))
+            .unwrap_or(first_ty)
+    }
+
+    pub(crate) fn infer_match_arm_body_type_with_pattern(
+        &self,
+        arm: &MatchArm,
+        match_type: &ResolvedType,
+    ) -> ResolvedType {
+        if let Some(binding) = Self::body_terminal_ident(&arm.body) {
+            if let Some(ty) = self.pattern_binding_type(&arm.pattern, binding, match_type) {
+                return ty;
+            }
+        }
+
+        self.infer_expr_type(&arm.body)
+    }
+
+    fn body_terminal_ident(body: &Spanned<Expr>) -> Option<&str> {
+        match &body.node {
+            Expr::Ident(name) => Some(name.as_str()),
+            Expr::Block(stmts) => stmts.last().and_then(|stmt| {
+                if let Stmt::Expr(expr) = &stmt.node {
+                    Self::body_terminal_ident(expr)
+                } else {
+                    None
+                }
+            }),
+            _ => None,
+        }
+    }
+
+    fn pattern_binding_type(
+        &self,
+        pattern: &Spanned<Pattern>,
+        binding: &str,
+        match_type: &ResolvedType,
+    ) -> Option<ResolvedType> {
+        match &pattern.node {
+            Pattern::Ident(name) => {
+                if name == binding
+                    && !self.is_unit_enum_variant(name)
+                    && !self.is_known_constant(name)
+                {
+                    Some(match_type.clone())
+                } else {
+                    None
+                }
+            }
+            Pattern::Variant { name, fields } => {
+                let enum_name = self.get_enum_name_for_variant(&name.node)?;
+                let field_types =
+                    self.resolve_variant_field_types(&enum_name, &name.node, match_type);
+                fields.iter().enumerate().find_map(|(idx, field_pat)| {
+                    let field_ty = field_types.get(idx).cloned().unwrap_or(ResolvedType::I64);
+                    self.pattern_binding_type(field_pat, binding, &field_ty)
+                })
+            }
+            Pattern::Tuple(patterns) => {
+                let elem_types = if let ResolvedType::Tuple(elems) = match_type {
+                    elems.clone()
+                } else {
+                    vec![ResolvedType::I64; patterns.len()]
+                };
+                patterns.iter().enumerate().find_map(|(idx, pat)| {
+                    let elem_ty = elem_types.get(idx).cloned().unwrap_or(ResolvedType::I64);
+                    self.pattern_binding_type(pat, binding, &elem_ty)
+                })
+            }
+            Pattern::Struct { name, fields } => {
+                if let Some(struct_info) = self.types.structs.get(&name.node) {
+                    fields.iter().find_map(|(field_name, field_pat)| {
+                        let pat = field_pat.as_ref()?;
+                        let (_, field_ty) = struct_info
+                            .fields
+                            .iter()
+                            .find(|(candidate, _)| candidate == &field_name.node)?;
+                        self.pattern_binding_type(pat, binding, field_ty)
+                    })
+                } else {
+                    None
+                }
+            }
+            Pattern::Alias { name, pattern } => {
+                if name == binding {
+                    Some(match_type.clone())
+                } else {
+                    self.pattern_binding_type(pattern, binding, match_type)
+                }
+            }
+            Pattern::Or(patterns) => patterns
+                .iter()
+                .find_map(|pat| self.pattern_binding_type(pat, binding, match_type)),
+            _ => None,
         }
     }
 

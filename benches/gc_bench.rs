@@ -3,7 +3,8 @@
 //! Measures allocation throughput, minor/major GC latency, and promotion behavior
 //! under various workloads and tuning configurations.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use std::hint::black_box;
 use vais_gc::{GenGcConfig, GenerationalGc};
 
 /// Benchmark: allocation-intensive workload (many short-lived objects)

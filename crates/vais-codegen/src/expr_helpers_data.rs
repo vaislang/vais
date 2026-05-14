@@ -699,6 +699,15 @@ impl CodeGenerator {
                         let mut ir = String::new();
                         let enum_ptr = self.next_temp(counter);
                         self.emit_entry_alloca(&enum_ptr, &format!("%{}", name));
+                        self.fn_ctx.register_temp_type(
+                            &enum_ptr,
+                            vais_types::ResolvedType::Pointer(Box::new(
+                                vais_types::ResolvedType::Named {
+                                    name: name.clone(),
+                                    generics: vec![],
+                                },
+                            )),
+                        );
                         let tag_ptr = self.next_temp(counter);
                         write_ir!(
                             ir,
