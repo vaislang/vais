@@ -1,0 +1,63 @@
+test lexer/tokenize/fibonacci ... bench:       4,858 ns/iter (+/- 16)
+test lexer/tokenize/sort ... bench:       9,014 ns/iter (+/- 30)
+test lexer/tokenize/struct_heavy ... bench:      10,238 ns/iter (+/- 618)
+test lexer/tokenize/complex ... bench:      19,104 ns/iter (+/- 92)
+
+test parser/parse/fibonacci ... bench:      19,660 ns/iter (+/- 74)
+test parser/parse/sort ... bench:      37,470 ns/iter (+/- 203)
+test parser/parse/struct_heavy ... bench:      35,718 ns/iter (+/- 298)
+test parser/parse/complex ... bench:      75,970 ns/iter (+/- 763)
+
+test type_checker/check/fibonacci ... bench:     313,181 ns/iter (+/- 3,126)
+test type_checker/check/sort ... bench:     482,104 ns/iter (+/- 2,915)
+test type_checker/check/struct_heavy ... bench:     128,255 ns/iter (+/- 491)
+test type_checker/check/complex ... bench:     833,498 ns/iter (+/- 3,254)
+
+test codegen/generate/fibonacci ... bench:     293,498 ns/iter (+/- 3,450)
+test codegen/generate/sort ... bench:     411,210 ns/iter (+/- 5,076)
+test codegen/generate/struct_heavy ... bench:     394,419 ns/iter (+/- 3,816)
+test codegen/generate/complex ... bench:     600,556 ns/iter (+/- 5,559)
+
+test full_compile/compile/fibonacci ... bench:     697,834 ns/iter (+/- 7,221)
+test full_compile/compile/sort ... bench:   1,022,158 ns/iter (+/- 10,497)
+test full_compile/compile/struct_heavy ... bench:     648,517 ns/iter (+/- 5,887)
+test full_compile/compile/complex ... bench:   1,621,858 ns/iter (+/- 20,217)
+
+test lexer_scaling/tokenize/100_funcs ... bench:      66,469 ns/iter (+/- 239)
+test lexer_scaling/tokenize/500_funcs ... bench:     332,313 ns/iter (+/- 3,431)
+test lexer_scaling/tokenize/1000_funcs ... bench:     674,808 ns/iter (+/- 1,702)
+test lexer_scaling/tokenize/5000_funcs ... bench:   3,254,813 ns/iter (+/- 10,995)
+
+test largescale_full_pipeline/compile/1011lines ... bench:   5,079,995 ns/iter (+/- 81,079)
+test largescale_full_pipeline/compile/5009lines ... bench:  26,590,929 ns/iter (+/- 416,188)
+test largescale_full_pipeline/compile/10007lines ... bench:  53,703,026 ns/iter (+/- 716,872)
+test largescale_full_pipeline/compile/25005lines ... bench: 140,800,350 ns/iter (+/- 529,048)
+test largescale_full_pipeline/compile/50004lines ... bench: 284,037,337 ns/iter (+/- 2,850,388)
+
+test largescale_lexer/tokenize/1011lines ... bench:     221,741 ns/iter (+/- 3,700)
+test largescale_lexer/tokenize/5009lines ... bench:   1,115,263 ns/iter (+/- 2,732)
+test largescale_lexer/tokenize/10007lines ... bench:   2,214,545 ns/iter (+/- 7,716)
+test largescale_lexer/tokenize/25005lines ... bench:   5,462,518 ns/iter (+/- 13,773)
+test largescale_lexer/tokenize/50004lines ... bench:  10,929,120 ns/iter (+/- 32,000)
+
+test largescale_parser/parse/1011lines ... bench:     822,997 ns/iter (+/- 3,128)
+test largescale_parser/parse/5009lines ... bench:   4,034,090 ns/iter (+/- 22,013)
+test largescale_parser/parse/10007lines ... bench:   8,057,298 ns/iter (+/- 8,701)
+test largescale_parser/parse/25005lines ... bench:  21,339,435 ns/iter (+/- 298,437)
+test largescale_parser/parse/50004lines ... bench:  46,065,782 ns/iter (+/- 490,490)
+
+test largescale_typechecker/check/1011lines ... bench:     320,016 ns/iter (+/- 931)
+test largescale_typechecker/check/5009lines ... bench:     944,677 ns/iter (+/- 3,820)
+test largescale_typechecker/check/10007lines ... bench:   1,747,349 ns/iter (+/- 15,775)
+test largescale_typechecker/check/25005lines ... bench:   4,060,390 ns/iter (+/- 39,965)
+test largescale_typechecker/check/50004lines ... bench:   8,721,027 ns/iter (+/- 616,153)
+
+test largescale_codegen/generate/1011lines ... bench:   4,317,587 ns/iter (+/- 62,452)
+test largescale_codegen/generate/5009lines ... bench:  21,060,210 ns/iter (+/- 786,379)
+test largescale_codegen/generate/10007lines ... bench:  42,617,956 ns/iter (+/- 1,522,613)
+test largescale_codegen/generate/25005lines ... bench: 111,637,990 ns/iter (+/- 2,245,473)
+test largescale_codegen/generate/50004lines ... bench: 218,148,903 ns/iter (+/- 1,981,185)
+
+test largescale_incremental/full_10k ... bench:  54,754,991 ns/iter (+/- 1,346,297)
+test largescale_incremental/second_compile_10k ... bench:  55,906,263 ns/iter (+/- 684,147)
+
