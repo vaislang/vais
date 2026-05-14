@@ -7,6 +7,7 @@ on:
     paths:
       - 'website/**'
       - 'docs-site/**'
+      - 'docs/ai/**'
       - 'playground/**'
       - 'crates/vais-ast/**'
       - 'crates/vais-browser-compiler/**'
@@ -19,6 +20,8 @@ on:
       - 'Cargo.lock'
       - 'scripts/check-browser-compiler-gate.mjs'
       - 'scripts/check-public-claims.mjs'
+      - 'scripts/check-ai-docs-sync.mjs'
+      - 'scripts/generate-ai-docs.mjs'
       - 'install.sh'
       - 'install.ps1'
       - '.github/workflows/website.yml'
@@ -50,6 +53,9 @@ jobs:
 
       - name: Check public claims
         run: node scripts/check-public-claims.mjs
+
+      - name: Check AI docs sync
+        run: node scripts/check-ai-docs-sync.mjs
 
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack

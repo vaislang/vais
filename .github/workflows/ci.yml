@@ -48,6 +48,13 @@ jobs:
       - name: Check public claims
         run: node scripts/check-public-claims.mjs
 
+      - name: Fetch base for AI docs changed-check
+        if: github.event_name == 'pull_request'
+        run: git fetch --no-tags --depth=1 origin ${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+
+      - name: Check AI docs sync
+        run: node scripts/check-ai-docs-sync.mjs --changed-check
+
   # ---------- Playground web gate ----------
   playground-web:
     name: Playground Web Gate

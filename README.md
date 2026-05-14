@@ -17,6 +17,12 @@ runtime gates. It is not a product-complete v1.0 release. Use
 [`PUBLIC_STATUS.md`](PUBLIC_STATUS.md) for public wording and the gate-backed
 claim boundary.
 
+AI agents should start with the generated onboarding docs:
+
+- [`docs/ai/LLM_LANGUAGE_CARD.md`](docs/ai/LLM_LANGUAGE_CARD.md)
+- [`docs/ai/AI_DEVELOPER_GUIDE.md`](docs/ai/AI_DEVELOPER_GUIDE.md)
+- [`docs/ai/REFERENCE_APP_CONTRACT.md`](docs/ai/REFERENCE_APP_CONTRACT.md)
+
 ## Key Features
 
 - **Canonical declarations** - `fn`, `struct`, `enum`, `else`, `match`, `return`,

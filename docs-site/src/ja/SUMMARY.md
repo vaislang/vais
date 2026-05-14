@@ -4,6 +4,10 @@
 
 # スタートガイド
 
+- [AI Developer Onboarding]()
+  - [LLM Language Card](./ai/llm-language-card.md)
+  - [AI Developer Guide](./ai/ai-developer-guide.md)
+  - [Reference App Contract](./ai/reference-app-contract.md)
 - [インストール](./getting-started/installation.md)
 - [クイックスタート](./getting-started/quick-start.md)
 - [チュートリアル](./getting-started/tutorial.md)
