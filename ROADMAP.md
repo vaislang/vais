@@ -3,14 +3,14 @@
 
 > **현재 버전**: 0.1.0 (certified Core compiler + promoted runtime baseline; product-complete v1.0 아님)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-05-10 (`PUBLIC_STATUS.md` 기준으로 현재 claim/gate 정렬. Phase 199 이전 backlog는 보존 기록으로 격하)
+> **최종 업데이트**: 2026-05-15 (`PUBLIC_STATUS.md` Last verified 2026-05-13 기준으로 현재 claim/gate 재정렬. Phase 199 이전 backlog는 보존 기록으로 격하)
 
 ---
 
-## ✅ 현재 조정 상태 — 2026-05-10
+## ✅ 현재 조정 상태 — 2026-05-15
 
 mode: active-coordination
-source_of_truth: `PUBLIC_STATUS.md`
+source_of_truth: `PUBLIC_STATUS.md` (Last verified: 2026-05-13)
 
 현재 공개 baseline은 **Core compiler + promoted runtime gate** 입니다. 이 문서는 제품 완성도 선언이 아니라, 어떤 claim이 실제 gate로 뒷받침되는지 추적하는 조정 문서입니다.
 
@@ -27,7 +27,7 @@ source_of_truth: `PUBLIC_STATUS.md`
 - `std/http_client` runtime smoke: `15/15`
 - TLS runtime smoke: `2/2`
 - VaisDB runtime smoke: `34/34`
-- Vais Server runtime smoke: `15/15`
+- Vais Server runtime smoke: `20/20`
 - Vais Web runtime smoke: `61/77` with credential/network-gated cases skipped
 - Vais Web unit tests: `390/390`
 - Ecosystem package tests: `3272/3272`
@@ -62,6 +62,7 @@ source_of_truth: `PUBLIC_STATUS.md`
 
 ### 최근 동기화
 
+- runtime aggregate/public claim stabilization: GitHub PR #58
 - `vais` CI baseline 복구: GitHub PR #47
 - public docs/site/playground claim sync: GitHub PR #46
 - `vais-lang` package roadmap gate count sync: GitHub PR #2
