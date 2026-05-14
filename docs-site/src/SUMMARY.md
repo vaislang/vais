@@ -4,6 +4,10 @@
 
 # 시작하기
 
+- [AI 개발자 온보딩]()
+  - [LLM 언어 카드](./ai/llm-language-card.md)
+  - [AI 개발자 가이드](./ai/ai-developer-guide.md)
+  - [Reference App 계약](./ai/reference-app-contract.md)
 - [AI 바이브코딩 5분 가이드](./getting-started/vibe-coding.md)
 - [설치](./getting-started/installation.md)
 - [빠른 시작](./getting-started/quick-start.md)

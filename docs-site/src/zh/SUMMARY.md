@@ -4,6 +4,10 @@
 
 # 入门指南
 
+- [AI Developer Onboarding]()
+  - [LLM Language Card](./ai/llm-language-card.md)
+  - [AI Developer Guide](./ai/ai-developer-guide.md)
+  - [Reference App Contract](./ai/reference-app-contract.md)
 - [安装](./getting-started/installation.md)
 - [快速开始](./getting-started/quick-start.md)
 - [教程](./getting-started/tutorial.md)
