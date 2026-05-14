@@ -28,9 +28,9 @@
     "barNote": "Compiler baseline は fmt/build、IR verifier tests、clean-cache VaisDB aggregate main full-build smoke を IR/link warning なしで通過します。Cross-package schema 15/15 と shared-schema product evidence 9/9 は main-fixture/local-workspace で再現でき、server/web counts は scoped gate evidence です。"
   },
   "performance": {
-    "title": "ネイティブパフォーマンス",
-    "subtitle": "Vaisは最適化されたLLVM IRにコンパイルされます — 実行時にCおよびRustと同等で、高速なコンパイルを実現します。",
-    "runtimeTitle": "実行時間 — Fibonacci(35)",
+    "title": "ネイティブ性能エビデンス",
+    "subtitle": "Vais は native build で LLVM IR を生成します。compile-speed chart は current data で、runtime chart は runtime suite が更新されるまで scoped historical snapshot です。",
+    "runtimeTitle": "Historical Runtime Snapshot — Fibonacci(35)",
     "compileTitle": "コンパイル速度 — 単一ファイル",
     "compileNote": "Vais <code>--emit-ir</code> vs full binary compilation。Hyperfine、4 benchmark programs、Apple ARM64/macOS 基準: C/clang より9.3倍、Rustより15.6倍高速。2026-05-13更新。"
   },

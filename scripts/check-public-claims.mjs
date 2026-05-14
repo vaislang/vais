@@ -229,6 +229,16 @@ requireText(quickstart, 'struct Point', 'quickstart must present current struct 
 forbidText(quickstart, 'F fib(n: i64)', 'quickstart must not use legacy single-letter function examples');
 forbidText(quickstart, 'S Point', 'quickstart must not use legacy single-letter struct examples');
 
+const languageSpec = 'docs/LANGUAGE_SPEC.md';
+requireText(languageSpec, 'not a product-complete v1.0 declaration', 'language spec must keep the public release boundary explicit');
+requireText(languageSpec, 'Canonical declaration and module keywords', 'language spec must present canonical declaration syntax');
+requireText(languageSpec, 'Current compact control and system forms', 'language spec must distinguish compact control syntax from declaration syntax');
+requireText(languageSpec, '*T <-> i64', 'language spec must document the strict pointer/integer boundary');
+requireText(languageSpec, 'Enum Runtime Layout', 'language spec must document enum runtime layout');
+requireText(languageSpec, '%Option = type { i32, { i64 } }', 'language spec must document canonical Option layout');
+forbidText(languageSpec, 'Vais uses single-letter keywords for maximum token efficiency', 'language spec must not promote legacy declaration aliases as canonical');
+forbidText(languageSpec, 'F add(a:i64', 'language spec examples must not use legacy F declaration syntax');
+
 const fibonacciEpisode = 'docs/youtube-tutorials/episode-02-fibonacci.md';
 requireText(fibonacciEpisode, 'fn fib(n: i64)', 'fibonacci tutorial must use current function syntax');
 forbidText(fibonacciEpisode, 'F fib(n: i64)', 'fibonacci tutorial must not use legacy function syntax');
@@ -249,9 +259,19 @@ requireText(
   'homepage compile-speed benchmark date must reflect the current refresh',
 );
 requireText(
+  'website/index.html',
+  'runtime chart is a scoped historical snapshot',
+  'homepage runtime performance numbers must not read as current benchmark data',
+);
+requireText(
   'website/public/locales/en.json',
   'Updated 2026-05-13',
   'English locale compile-speed benchmark date must reflect the current refresh',
+);
+requireText(
+  'website/public/locales/en.json',
+  'runtime chart is a scoped historical snapshot',
+  'English locale runtime performance copy must scope the historical chart',
 );
 requireText(
   'website/index.html',
@@ -272,6 +292,41 @@ requireText(
   'website/blog/performance-comparison.html',
   'large-scale throughput numbers below should be rerun before citing them as current',
   'historical throughput data must be scoped as stale until rerun',
+);
+for (const path of [
+  'docs-site/src/en/introduction.md',
+  'docs-site/src/ja/introduction.md',
+  'docs-site/src/zh/introduction.md',
+]) {
+  requireText(path, '2026-05-13', `${path} must carry the refreshed compile-speed benchmark date`);
+  requireText(path, '6.3ms', `${path} must carry the refreshed single-file compile-speed average`);
+  forbidText(path, '800K lines/sec', `${path} must not present the old throughput snapshot as current`);
+  forbidText(path, '800K 行/秒', `${path} must not present the old throughput snapshot as current`);
+}
+requireText(
+  'playground/TUTORIAL.md',
+  'not a product-complete v1.0 release',
+  'playground tutorial must not present Vais as v1.0',
+);
+forbidText(
+  'playground/TUTORIAL.md',
+  'Current Vais version (v1.0.0)',
+  'playground tutorial must not claim a v1.0 current version',
+);
+requireText(
+  'playground/FEATURES.md',
+  'does not claim complete browser-only compilation or execution',
+  'playground features must keep browser-only status scoped',
+);
+requireText(
+  'playground/FEATURES.md',
+  'This is not browser-only WASM compilation',
+  'playground features must keep Server-WASM compile boundary explicit',
+);
+forbidText(
+  'playground/FEATURES.md',
+  'Mock Compiler (Current)',
+  'playground features must not describe the current surface as only a mock compiler',
 );
 requireText(
   'website/blog/why-single-char-keywords.html',
