@@ -98,9 +98,9 @@ Outputs:
 ```
 
 **Key Stages:**
-- **Lexer**: Tokenizes source code using logos library (~2M tokens/sec)
-- **Parser**: Builds AST with recursive descent parser (~800K nodes/sec)
-- **Type Checker**: Performs type inference and constraint solving (~400K types/sec)
+- **Lexer**: Tokenizes source code using the logos library
+- **Parser**: Builds AST with a recursive descent parser
+- **Type Checker**: Performs type inference and constraint solving
 - **Codegen**: Generates LLVM IR on the promoted native path; JavaScript and
   WASM paths are experimental unless a page names a gate
 
@@ -177,18 +177,21 @@ fn compute() -> Result<i64, str> {
 
 ### Compilation Speed
 
-Current single-file compile-speed benchmark (`benches/lang-comparison/compile_bench.sh`,
-Hyperfine, 2026-05-13, Apple ARM64/macOS) averages 6.3ms for Vais
-`--emit-ir` across four benchmark programs. This compares Vais LLVM IR emission
-against full binary compilation for the other toolchains.
+Current single-file compile-speed benchmark
+(`benches/lang-comparison/compile_bench.sh`, Hyperfine, 2026-05-13,
+Apple ARM64/macOS):
 
-| Phase | Time (avg) | Throughput |
-|-------|------------|------------|
-| Lexer | ~0.5ms/1K LOC | ~2M tokens/sec |
-| Parser | ~1.2ms/1K LOC | ~800K AST nodes/sec |
-| Type Checker | ~2.5ms/1K LOC | ~400K types/sec |
-| Code Generator | ~3.0ms/1K LOC | ~300K IR lines/sec |
-| **Full Pipeline** | **~1.25ms/1K LOC** | **~800K lines/sec** |
+| Program | Vais `--emit-ir` | Rust `rustc` | Go `go build` | C `clang` |
+| --- | ---: | ---: | ---: | ---: |
+| fibonacci | 6.0ms | 93.7ms | 48.0ms | 55.8ms |
+| quicksort | 6.4ms | 95.6ms | 47.8ms | 56.8ms |
+| http_types | 6.6ms | 103.2ms | 47.1ms | 60.7ms |
+| linked_list | 6.0ms | 98.3ms | 47.3ms | 59.5ms |
+| **Average** | **6.3ms** | **97.7ms** | **47.5ms** | **58.2ms** |
+
+This compares Vais LLVM IR emission against full binary compilation for the
+other toolchains. Older large-scale throughput snapshots are historical and
+should be rerun before being cited as current.
 
 **Self-Hosting:** The repository contains 50,000+ lines of Vais compiler
 sources used for bootstrap and conformance work. Current correctness is judged

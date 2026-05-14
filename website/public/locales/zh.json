@@ -28,9 +28,9 @@
     "barNote": "Compiler baseline 已通过 fmt/build、IR verifier tests 和 clean-cache VaisDB aggregate main full-build smoke，且无 IR/link warnings。Cross-package schema 15/15 和 shared-schema product evidence 9/9 可在 main-fixture/local-workspace 中复现；server/web counts 是 scoped gate evidence。"
   },
   "performance": {
-    "title": "原生性能",
-    "subtitle": "Vais 编译为优化的 LLVM IR — 运行时与 C 和 Rust 相当，并具有快速的编译速度。",
-    "runtimeTitle": "运行时间 — Fibonacci(35)",
+    "title": "原生性能证据",
+    "subtitle": "Vais 在 native build 中生成 LLVM IR。compile-speed chart 是当前数据；runtime chart 在 runtime suite 刷新前是 scoped historical snapshot。",
+    "runtimeTitle": "Historical Runtime Snapshot — Fibonacci(35)",
     "compileTitle": "编译速度 — 单个文件",
     "compileNote": "Vais <code>--emit-ir</code> vs full binary compilation。Hyperfine、4 个 benchmark programs、Apple ARM64/macOS 基准：比 C/clang 快 9.3 倍，比 Rust 快 15.6 倍。更新于 2026-05-13。"
   },

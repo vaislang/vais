@@ -18,7 +18,7 @@ Step-by-step guide to using the Vais Playground.
 #### Header Bar
 
 - **Logo**: Shows you're in Vais Playground
-- **Version**: Current Vais version (v1.0.0)
+- **Version**: Current source baseline (0.1.0); not a product-complete v1.0 release
 - **GitHub Link**: Opens Vais repository
 - **Docs Link**: Opens language documentation
 
@@ -33,7 +33,7 @@ Step-by-step guide to using the Vais Playground.
 - **Example Dropdown**: Another way to select examples
 - **Format Button**: Auto-formats your code
 - **Clear Button**: Clears the output panel
-- **Run Button**: Compiles and executes code
+- **Run Button**: Runs code through the best available mode
 
 #### Output Panel
 
@@ -636,7 +636,7 @@ Try implementing:
 
 ### 3. Read the Documentation
 
-Check out the [Language Specification](../docs/LANGUAGE_SPEC.md) for complete details.
+Check out the [Language Specification](../docs/LANGUAGE_SPEC.md) for the current authoritative language contract.
 
 ### 4. Join the Community
 
@@ -676,7 +676,7 @@ Check out the [Language Specification](../docs/LANGUAGE_SPEC.md) for complete de
 ## Resources
 
 - **Language Spec**: Complete language reference
-- **Examples**: 31 working examples in the playground
+- **Examples**: 31 playground examples; execution coverage depends on the selected mode
 - **GitHub**: Source code and issues
 - **Docs**: Comprehensive documentation
 

@@ -249,54 +249,29 @@ Real-time status updates:
 - "Execution completed" - Finished running
 - "Compilation failed" - Errors found
 
-## Compilation Features
+## Compilation Modes
 
-### Mock Compiler (Current)
+The playground uses automatic fallback. The current certified public baseline
+does not claim complete browser-only compilation or execution.
 
-The playground includes a demonstration compiler:
+1. **Server mode**
+   - Sends code to the playground API
+   - Uses `vaisc` for real compilation
+   - Can execute native examples when the API is available
 
-1. **Syntax Validation**
-   - Checks for empty files
-   - Validates brace matching
-   - Detects missing main function
+2. **Browser-JS mode**
+   - Runs without the playground API
+   - Uses the browser compiler smoke path: parser + JavaScript codegen
+   - Executes generated JavaScript for the supported smoke surface
 
-2. **Error Reporting**
-   - Line and column numbers
-   - Descriptive error messages
-   - Multiple error display
+3. **Server-WASM mode**
+   - The playground API compiles the WASM binary
+   - The browser executes the returned binary
+   - This is not browser-only WASM compilation
 
-3. **Warning System**
-   - Non-fatal issues
-   - Best practice suggestions
-
-4. **IR Generation**
-   - Mock LLVM IR output
-   - Shows compilation structure
-
-### Real Compiler (Future)
-
-When integrated with WASM:
-
-1. **Full Compilation Pipeline**
-   - Lexical analysis
-   - Parsing
-   - Type checking
-   - Code generation
-
-2. **Advanced Diagnostics**
-   - Precise error locations
-   - Suggested fixes
-   - Type mismatch details
-
-3. **Optimization**
-   - Constant folding
-   - Dead code elimination
-   - Inline expansion
-
-4. **Execution**
-   - Direct WASM execution
-   - Real stdout/stderr capture
-   - Exit code reporting
+4. **Preview mode**
+   - Syntax/demo fallback when compiler services are unavailable
+   - Not a certified compile/execute path
 
 ## Theme
 
@@ -378,7 +353,7 @@ Optimized for reduced eye strain:
 ### Minimum Requirements
 
 - ES6+ support
-- WebAssembly support (for real compiler)
+- WebAssembly support (for Server-WASM execution)
 - Local Storage API
 - Web Workers (for background compilation)
 
@@ -395,7 +370,7 @@ The playground checks for:
 
 1. **Lazy Loading**
    - Monaco editor loaded on demand
-   - WASM module loaded when needed
+- Browser compiler and WASM runner loaded only when needed
    - Examples loaded incrementally
 
 2. **Code Splitting**
@@ -405,12 +380,12 @@ The playground checks for:
 3. **Caching**
    - Service Worker for offline access
    - Browser cache headers
-   - WASM module caching
+- Browser compiler and WASM asset caching
 
 4. **Minification**
    - JavaScript minification
    - CSS minification
-   - WASM optimization
+- Production bundle optimization
 
 ### Benchmarks
 
@@ -418,9 +393,9 @@ Typical load times on fast connection:
 
 - Initial page load: ~500ms
 - Editor initialization: ~300ms
-- WASM module load: ~200ms
+- Browser compiler asset load: environment-dependent
 - Example switch: <50ms
-- Compilation: ~100ms (mock) / ~500ms (real)
+- Compilation: mode-dependent; use benchmark gates for publishable numbers
 
 ## Accessibility
 

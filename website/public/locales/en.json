@@ -28,9 +28,9 @@
     "barNote": "Compiler baseline: fmt/build, IR verifier tests, and a clean-cache VaisDB aggregate main full-build smoke pass without IR or link warnings. Cross-package schema 15/15 and shared-schema product evidence 9/9 remain main-fixture/local-workspace reproducible; server/web counts are scoped gate evidence."
   },
   "performance": {
-    "title": "Native Performance",
-    "subtitle": "Vais compiles to optimized LLVM IR — on par with C and Rust at runtime, with fast compilation.",
-    "runtimeTitle": "Runtime — Fibonacci(35)",
+    "title": "Native Performance Evidence",
+    "subtitle": "Vais emits LLVM IR for native builds. The compile-speed chart is current; the runtime chart is a scoped historical snapshot until the runtime suite is refreshed.",
+    "runtimeTitle": "Historical Runtime Snapshot — Fibonacci(35)",
     "compileTitle": "Compile Speed — Single File",
     "compileNote": "Vais <code>--emit-ir</code> vs full binary compilation. Hyperfine, 4 benchmark programs, Apple ARM64/macOS: 9.3x faster than C/clang and 15.6x faster than Rust. Updated 2026-05-13."
   },
