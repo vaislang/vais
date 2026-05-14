@@ -121,6 +121,23 @@ requireText(
   'shared-schema product propagation must be named as evidence-scoped public claim',
 );
 
+const roadmap = 'ROADMAP.md';
+requireText(
+  roadmap,
+  'source_of_truth: `PUBLIC_STATUS.md`',
+  'ROADMAP must defer public claim wording to PUBLIC_STATUS.md',
+);
+requireText(
+  roadmap,
+  'Vais Server runtime smoke: `20/20`',
+  'ROADMAP server runtime evidence count must match PUBLIC_STATUS.md',
+);
+forbidText(
+  roadmap,
+  'Vais Server runtime smoke: `15/15`',
+  'ROADMAP must not retain the older pre-aggregate server runtime count',
+);
+
 const readme = 'README.md';
 requireText(readme, 'Canonical declarations', 'README must present current public syntax');
 requireText(readme, 'Current single-file compile-speed benchmark', 'README performance section must use refreshed benchmark scope');
