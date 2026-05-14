@@ -202,36 +202,43 @@ Vec<T>      # Generic vector type
 Pair<A, B>  # Multiple type parameters
 ```
 
-### Type Conversion Rules (Phase 158)
+### Type Conversion Rules
 
-Vais uses strict Rust-style type coercion. Implicit widening is allowed only in a narrow set of cases; all other conversions require an explicit `as` cast. These rules were finalized in **Phase 158** to eliminate the yo-yo pattern where `unification.rs` coercion was toggled repeatedly.
+Vais keeps structural types strict, while numeric primitives may adapt to the
+expected numeric context. These rules are part of the language type contract, not
+a backend fallback.
 
 **Implicit (automatic) conversions:**
-- Integer widening: `i8 → i16 → i32 → i64`, `u8 → u16 → u32 → u64`
-- Float literal inference: `f32 ↔ f64` (the literal is inferred from context, identical to Rust behavior)
+- Integer numeric unification across integer widths and signedness.
+- Integer/float numeric promotion when the expected type is numeric.
+- Float literal inference between `f32` and `f64`.
 
-**Prohibited implicit conversions — explicit `as` required:**
-- `bool ↔ i64`: use `flag as i64` or `n != 0`
-- `int ↔ float`: use `x as f64` or `y as i64`
-- `str ↔ i64`: use parsing functions or `n as str`
-- Integer narrowing (`i64 → i32`): use `x as i32`
+**Prohibited implicit conversions — explicit conversion required:**
+- `bool ↔ i64`: use `flag as i64` or `n != 0`.
+- `str ↔ i64`: use string parsing/formatting helpers or `str_to_ptr`/`ptr_to_str`
+  for raw pointer interop.
+- `*T ↔ i64`: typed pointer values do not implicitly unify with raw integer
+  addresses. Low-level memory APIs such as `malloc`, `free`, `load_i64`, and
+  `store_i64` expose raw addresses as `i64`; code using typed `*T` must not rely
+  on implicit pointer/integer conversion.
 
 ```vais
-# Allowed implicit widening
+# Allowed numeric adaptation
 x: i8 = 10
-y: i64 = x          # OK: i8 → i64
+y: i64 = x          # OK: integer numeric context
+z: f64 = 3          # OK: numeric promotion
 
 # Explicit cast required
 flag: bool = true
 n: i64 = flag as i64        # OK: explicit as
-val: f64 = 3 as f64         # OK: explicit as
 
 # Prohibited — compile error
 bad: i64 = true             # ERROR: bool → i64 implicit
-bad2: i64 = 3.14            # ERROR: float → int implicit
+bad2: i64 = "hello"         # ERROR: str → i64 implicit
 ```
 
-**E2E protection test:** `vais-types/tests/phase158_type_strict.rs` enforces these rules.
+**E2E protection test:** `vaisc/tests/e2e/phase158_type_strict.rs` and
+`vais-types/tests/inference_unification_tests.rs` enforce these rules.
 
 ### Linear and Affine Types (Experimental)
 
