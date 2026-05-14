@@ -202,6 +202,16 @@ fn test_unify_ref_pointer_array_to_slice_allowed() {
     );
 }
 
+#[test]
+fn test_unify_pointer_to_i64_rejected_without_explicit_cast() {
+    tc_err("F test(p: *i64) -> i64 { x: i64 = p; R 0 }");
+}
+
+#[test]
+fn test_unify_i64_to_pointer_rejected_without_explicit_cast() {
+    tc_err("F test(x: i64) -> *i64 = x");
+}
+
 // ============================================================================
 // Unification — Never type
 // ============================================================================

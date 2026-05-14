@@ -277,13 +277,6 @@ impl TypeChecker {
                     Ok(())
                 }
             }
-            // Pointer <-> i64 implicit unification.
-            // Vais represents all pointers as i64 at the IR level (no opaque pointer distinction).
-            // This allows builtins like vec_new() -> i64 and malloc() -> i64 to unify with *T
-            // parameters, and swap(ptr, i, j) to accept either pointer or i64 arguments.
-            // Scope: unification only — does not enable arbitrary pointer arithmetic in user code.
-            (ResolvedType::Pointer(_), ResolvedType::I64)
-            | (ResolvedType::I64, ResolvedType::Pointer(_)) => Ok(()),
             // Pointer<T> ↔ Slice<T> / SliceMut<T> auto-coercion (Phase 162).
             // *u8 and &[u8] are compatible in systems code — both represent byte buffers.
             // Unifies element types to maintain generic consistency.

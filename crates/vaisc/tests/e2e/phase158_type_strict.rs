@@ -1,13 +1,14 @@
-//! Phase 158: Type Coercion Prohibition E2E Tests
+//! Type conversion E2E tests.
 //!
-//! Verifies that implicit type coercions forbidden by Phase 158's Rust-style
-//! strict type rules are rejected at compile time, and that explicitly permitted
-//! conversions (integer widening, explicit `as` casts) continue to work.
+//! Verifies that forbidden structural conversions are rejected at compile time,
+//! and that explicitly permitted numeric adaptation and explicit `as` casts
+//! continue to work.
 //!
-//! Phase 158 rules (see CLAUDE.md "Type Conversion Rules"):
-//!   Allowed (implicit):  integer widening only — i8→i16→i32→i64, u8→u16→u32→u64
-//!   Forbidden:           bool↔i64, int↔float, f32↔f64, str↔i64, integer narrowing
-//!   All other conversions require an explicit `as` keyword.
+//! Current rules (see LANGUAGE_SPEC.md "Type Conversion Rules"):
+//!   Allowed (implicit):  numeric adaptation across integer widths/signs,
+//!                        int↔float numeric promotion, f32↔f64 literal inference
+//!   Forbidden:           bool↔i64, str↔i64, typed pointer↔i64
+//!   All other structural conversions require an explicit conversion boundary.
 
 use crate::helpers::{assert_compiles, assert_exit_code};
 
@@ -89,6 +90,18 @@ fn e2e_phase158_strict_str_to_i64_return() {
     assert_error_contains(r#"F main() -> i64 = "hello""#, "mismatch");
 }
 
+/// Typed pointer values do not implicitly unify with raw i64 addresses.
+#[test]
+fn e2e_phase158_strict_pointer_to_i64_return() {
+    assert_error_contains(
+        r#"
+F addr(p: *i64) -> i64 = p
+F main() -> i64 = 0
+"#,
+        "mismatch",
+    );
+}
+
 /// Bool arithmetic still requires numeric type — `+` operator requires numeric, not bool.
 #[test]
 fn e2e_phase158_strict_bool_in_arithmetic() {
@@ -100,7 +113,7 @@ F main() -> i64 { x := true; x + 1 }
 
 // ==================== B. Permitted Conversions (must succeed) ====================
 
-/// Phase 158 rule: integer widening i32→i64 is permitted (integer unification).
+/// Integer numeric unification permits i32→i64 in this return context.
 #[test]
 fn e2e_phase158_strict_i32_to_i64_widening() {
     // A variable declared as i32 can be returned as i64 via widening
@@ -112,7 +125,7 @@ F main() -> i64 { x:i32 = 1; x }
     );
 }
 
-/// Phase 158 rule: integer widening i8→i64 is permitted.
+/// Integer numeric unification permits i8→i64 in this return context.
 #[test]
 fn e2e_phase158_strict_i8_to_i64_widening() {
     assert_exit_code(
@@ -123,7 +136,7 @@ F main() -> i64 { x:i8 = 5; x }
     );
 }
 
-/// Phase 158 rule: integer widening u8→i64 is permitted.
+/// Integer numeric unification permits u8→i64 in this return context.
 #[test]
 fn e2e_phase158_strict_u8_to_i64_widening() {
     assert_exit_code(
@@ -140,10 +153,10 @@ fn e2e_phase158_strict_i64_literal_return() {
     assert_exit_code(r#"F main() -> i64 = 42"#, 42);
 }
 
-/// Phase 158 rule: typed integer literal (i32 suffix) is valid — inferred as i32, widened to i64.
+/// Typed integer literal (i32 suffix) is valid and adapts to i64 context.
 #[test]
 fn e2e_phase158_strict_typed_int_literal_i32() {
-    // `1i32` is a typed integer literal; widening to i64 return is permitted
+    // `1i32` is a typed integer literal; adaptation to i64 return is permitted.
     assert_exit_code(
         r#"
 F main() -> i64 { x := 1i32; x }
@@ -187,10 +200,9 @@ fn e2e_phase158_strict_trivial_compile() {
 // ==================== E. Phase 158 CI Gate (source-level) ====================
 //
 // ROADMAP #4: guard against regression by scanning `vais-types/src/inference/unification.rs`
-// for forbidden coercion patterns. If any of these names appear in the source the gate
-// fails, forcing the author to either rename the function or acknowledge a Phase 158 RFC.
-//
-// The list mirrors CLAUDE.md "Type Conversion Rules" and BASELINE_2026-04-11.md section 6.
+// for forbidden structural coercion patterns. If any of these names appear in
+// the source the gate fails, forcing the author to either rename the function or
+// update the language conversion rules in the same change.
 
 /// Locate the unification source file regardless of where `cargo test` is run from.
 fn find_unification_rs() -> Option<std::path::PathBuf> {
@@ -226,20 +238,18 @@ fn e2e_phase158_ci_gate_no_forbidden_coercions() {
     let src = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("failed to read {}: {}", path.display(), e));
 
-    // Forbidden function-name fragments. These are the coercion shapes that
-    // Phase 158 explicitly prohibits — adding any of them reintroduces the
-    // yo-yo pattern that the rule exists to prevent.
+    // Forbidden function-name fragments. These are structural coercion shapes
+    // that the language explicitly prohibits as implicit unification.
     const FORBIDDEN: &[&str] = &[
         "coerce_bool",
         "bool_to_i64",
         "i64_to_bool",
-        "int_to_float",
-        "float_to_int",
         "str_to_i64",
         "i64_to_str",
-        "narrow_int",
         "coerce_to_i64",
         "as_i64_implicit",
+        "pointer_to_i64",
+        "i64_to_pointer",
     ];
 
     let mut hits: Vec<&str> = Vec::new();
@@ -252,10 +262,8 @@ fn e2e_phase158_ci_gate_no_forbidden_coercions() {
         hits.is_empty(),
         "Phase 158 CI gate: forbidden coercion identifier(s) found in \
          vais-types/src/inference/unification.rs: {:?}. \
-         Type coercion rules were tightened in Phase 158 (see CLAUDE.md \
-         'Type Conversion Rules'). If you genuinely need to reintroduce one \
-         of these conversions, update this gate list and the CLAUDE.md rules \
-         in the same commit.",
+         If you genuinely need to reintroduce one of these conversions, update \
+         this gate list and LANGUAGE_SPEC.md in the same commit.",
         hits
     );
 }
