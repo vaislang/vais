@@ -8,6 +8,17 @@ use vais_ast::{Expr, Param, Spanned};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
+    fn enum_error_tag_for_type(&self, ty: &ResolvedType) -> i32 {
+        let variant = match ty {
+            ResolvedType::Optional(_) => "None",
+            ResolvedType::Result(_, _) => "Err",
+            ResolvedType::Named { name, .. } if name == "Option" => "None",
+            ResolvedType::Named { name, .. } if name == "Result" => "Err",
+            _ => "Err",
+        };
+        self.get_enum_variant_tag(variant)
+    }
+
     /// Resolve the poll function name for an await expression. Matches `Call`
     /// and `MethodCall` expressions whose callee names an async function; other
     /// expressions return `None` and the caller falls back to the generic path.
@@ -459,13 +470,21 @@ impl CodeGenerator {
             inner_val
         );
 
-        // Check if Err (tag != 0)
+        // Result propagates Err; Option propagates None. Tags are declaration-order.
+        let error_tag = self.enum_error_tag_for_type(&inner_type);
         let is_err = self.next_temp(counter);
         let err_label = self.next_label("try_err");
         let ok_label = self.next_label("try_ok");
         let merge_label = self.next_label("try_merge");
 
-        write_ir!(ir, "  {} = icmp ne {} {}, 0", is_err, tag_type, tag);
+        write_ir!(
+            ir,
+            "  {} = icmp eq {} {}, {}",
+            is_err,
+            tag_type,
+            tag,
+            error_tag
+        );
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}\n",
@@ -655,12 +674,20 @@ impl CodeGenerator {
             inner_val
         );
 
-        // Check if Err/None (tag != 0)
+        // Panic on Err/None. Tags are declaration-order.
+        let error_tag = self.enum_error_tag_for_type(&inner_type);
         let is_err = self.next_temp(counter);
         let err_label = self.next_label("unwrap_err");
         let ok_label = self.next_label("unwrap_ok");
 
-        write_ir!(ir, "  {} = icmp ne {} {}, 0", is_err, tag_type, tag);
+        write_ir!(
+            ir,
+            "  {} = icmp eq {} {}, {}",
+            is_err,
+            tag_type,
+            tag,
+            error_tag
+        );
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}\n",

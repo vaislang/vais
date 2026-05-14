@@ -77,6 +77,36 @@ fn convert_const_binop(op: &vais_ast::ConstBinOp) -> vais_types::ConstBinOp {
 }
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
+    fn enum_error_tag_for_expr(&self, expr: &Expr) -> i32 {
+        fn classify(ty: &ResolvedType) -> Option<&'static str> {
+            match ty {
+                ResolvedType::Optional(_) => Some("None"),
+                ResolvedType::Result(_, _) => Some("Err"),
+                ResolvedType::Named { name, .. } if name == "Option" => Some("None"),
+                ResolvedType::Named { name, .. } if name == "Result" => Some("Err"),
+                _ => None,
+            }
+        }
+
+        let variant = match expr {
+            Expr::Ident(name) => self.var_resolved_types.get(name).and_then(classify),
+            Expr::Call { func, .. } => {
+                if let Expr::Ident(fn_name) = &func.node {
+                    self.resolved_function_sigs
+                        .get(fn_name)
+                        .and_then(|sig| classify(&sig.ret))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+
+        variant
+            .map(|name| self.get_enum_variant_tag(name))
+            .unwrap_or_else(|| self.get_enum_variant_tag("Err"))
+    }
+
     pub(super) fn ast_type_to_resolved(&self, ty: &Type) -> ResolvedType {
         match ty {
             Type::Named { name, generics } => match name.as_str() {
@@ -339,8 +369,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     pub(super) fn generate_try(&mut self, inner: &Expr) -> CodegenResult<BasicValueEnum<'ctx>> {
         // Try (?) operator - propagate error if Result/Option is error/None
-        // Result/Optional layout: { i8 tag, i64 payload } where tag 0=Ok/Some, 1=Err/None (for Result)
-        // and tag 0=None, 1=Some (for Option)
+        // Result/Optional layout: `{ i32 tag, { i64... } payload }`.
         let val = self.generate_expr(inner)?;
 
         // If the value is not a struct (e.g. primitive), just return it as-is (no unwrapping needed)
@@ -351,8 +380,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let struct_val = val.into_struct_value();
         let struct_type = struct_val.get_type();
 
-        // Only handle { i8, i64 } shaped structs (Result/Optional)
-        if struct_type.count_fields() != 2 {
+        // Only handle enum-shaped structs.
+        if struct_type.count_fields() < 2 {
             return Ok(struct_val.into());
         }
 
@@ -367,20 +396,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
             .into_int_value();
 
-        // Check if error: for Result, tag != 0 means Err; for Option, tag == 0 means None
-        // We use the Result convention (tag 0 = Ok/Some success path)
-        // Actually in this codebase: Ok tag=0, Some tag=1, None tag=0, Err tag=1
-        // So for both Result and Option, tag != 0 means error/None needs propagation
-        // Wait - Some is tag=1 and None is tag=0 for Option. That means for Option,
-        // tag==0 is the error case (None). For Result, tag!=0 (Err=1) is error.
-        // Since we can't easily distinguish at codegen level, we use Result convention:
-        // tag != 0 means error -> propagate. This is consistent with Ok=0, Err=1.
+        // Result propagates Err; Option propagates None. Use resolved local/call
+        // type when available so declaration-order tags stay authoritative.
+        let error_tag = self.enum_error_tag_for_expr(inner);
         let is_error = self
             .builder
             .build_int_compare(
-                inkwell::IntPredicate::NE,
+                inkwell::IntPredicate::EQ,
                 tag,
-                tag.get_type().const_int(0, false),
+                tag.get_type().const_int(error_tag as u64, false),
                 "try_is_err",
             )
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
@@ -398,19 +422,26 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .build_return(Some(&struct_val))
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
 
-        // Ok path: extract payload (field 1)
+        // Ok path: extract payload slot 0 (field 1 is the payload struct)
         self.builder.position_at_end(ok_block);
-        let payload = self
+        let payload_struct = self
             .builder
             .build_extract_value(struct_val, 1, "try_payload")
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+        let payload = if payload_struct.is_struct_value() {
+            self.builder
+                .build_extract_value(payload_struct.into_struct_value(), 0, "try_payload_slot")
+                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
+        } else {
+            payload_struct
+        };
 
         Ok(payload)
     }
 
     pub(super) fn generate_unwrap(&mut self, inner: &Expr) -> CodegenResult<BasicValueEnum<'ctx>> {
         // Unwrap (!) operator - panic if Result/Option is error/None
-        // Result/Optional layout: { i8 tag, i64 payload } where tag 0=Ok, 1=Err
+        // Result/Optional layout: `{ i32 tag, { i64... } payload }`.
         let val = self.generate_expr(inner)?;
 
         // If the value is not a struct, just return it as-is
@@ -421,8 +452,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let struct_val = val.into_struct_value();
         let struct_type = struct_val.get_type();
 
-        // Only handle { i8, i64 } shaped structs (Result/Optional)
-        if struct_type.count_fields() != 2 {
+        // Only handle enum-shaped structs.
+        if struct_type.count_fields() < 2 {
             return Ok(struct_val.into());
         }
 
@@ -437,13 +468,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
             .into_int_value();
 
-        // Check if error (tag != 0)
+        // Panic on Err/None, using declaration-order tags.
+        let error_tag = self.enum_error_tag_for_expr(inner);
         let is_error = self
             .builder
             .build_int_compare(
-                inkwell::IntPredicate::NE,
+                inkwell::IntPredicate::EQ,
                 tag,
-                tag.get_type().const_int(0, false),
+                tag.get_type().const_int(error_tag as u64, false),
                 "unwrap_is_err",
             )
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
@@ -466,12 +498,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .build_unreachable()
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
 
-        // Ok path: extract payload (field 1)
+        // Ok path: extract payload slot 0 (field 1 is the payload struct)
         self.builder.position_at_end(ok_block);
-        let payload = self
+        let payload_struct = self
             .builder
             .build_extract_value(struct_val, 1, "unwrap_payload")
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+        let payload = if payload_struct.is_struct_value() {
+            self.builder
+                .build_extract_value(payload_struct.into_struct_value(), 0, "unwrap_payload_slot")
+                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
+        } else {
+            payload_struct
+        };
 
         Ok(payload)
     }

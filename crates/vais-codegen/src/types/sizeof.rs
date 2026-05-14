@@ -146,9 +146,10 @@ impl CodeGenerator {
                         }
                     }
                 }
-                // Try enums: { i8 tag, i64 payload } = 9 but typically padded to 16
+                // Native enums use `{ i32 tag, { i64... } payload }`; single-slot
+                // Option/Result values are 16 bytes after alignment.
                 if self.types.enums.contains_key(name) {
-                    return 16; // { i8, i64 } with alignment padding
+                    return 16;
                 }
                 // Try with generic-mangled names in generated_structs
                 if !generics.is_empty() {

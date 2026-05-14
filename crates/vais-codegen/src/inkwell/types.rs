@@ -3,13 +3,14 @@
 use inkwell::context::Context;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType};
 use inkwell::AddressSpace;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use vais_types::ResolvedType;
 
 /// Maps Vais types to LLVM types using inkwell.
 pub(crate) struct TypeMapper<'ctx> {
     context: &'ctx Context,
-    struct_types: HashMap<String, StructType<'ctx>>,
+    struct_types: RefCell<HashMap<String, StructType<'ctx>>>,
     /// Generic substitutions mirrored from InkwellCodeGenerator.
     /// Updated via `set_generic_substitutions` / `clear_generic_substitutions`.
     pub(crate) generic_substitutions: HashMap<String, ResolvedType>,
@@ -34,7 +35,7 @@ impl<'ctx> TypeMapper<'ctx> {
     pub(crate) fn new(context: &'ctx Context) -> Self {
         Self {
             context,
-            struct_types: HashMap::new(),
+            struct_types: RefCell::new(HashMap::new()),
             generic_substitutions: HashMap::new(),
             warnings: std::cell::RefCell::new(Vec::new()),
             strict_type_mode: true,
@@ -119,7 +120,38 @@ impl<'ctx> TypeMapper<'ctx> {
 
     /// Registers a named struct type.
     pub(crate) fn register_struct(&mut self, name: &str, struct_type: StructType<'ctx>) {
-        self.struct_types.insert(name.to_string(), struct_type);
+        self.struct_types
+            .borrow_mut()
+            .insert(name.to_string(), struct_type);
+    }
+
+    /// Look up a named struct type that was already registered.
+    pub(crate) fn get_registered_struct(&self, name: &str) -> Option<StructType<'ctx>> {
+        self.struct_types.borrow().get(name).copied()
+    }
+
+    /// Return the canonical erased enum ABI used for builtin generic enums.
+    ///
+    /// This mirrors the text backend layout: `%Option/%Result = { i32, { i64 } }`.
+    /// Generic parameters do not specialize the ABI; payload values are erased into
+    /// i64 slots, with larger aggregates stored indirectly.
+    pub(crate) fn erased_enum_struct_type(&self, name: &str) -> StructType<'ctx> {
+        if let Some(st) = self.get_registered_struct(name) {
+            return st;
+        }
+
+        let enum_type = self.context.opaque_struct_type(name);
+        let payload_type = self
+            .context
+            .struct_type(&[self.context.i64_type().into()], false);
+        enum_type.set_body(
+            &[self.context.i32_type().into(), payload_type.into()],
+            false,
+        );
+        self.struct_types
+            .borrow_mut()
+            .insert(name.to_string(), enum_type);
+        enum_type
     }
 
     /// Maps a Vais resolved type to an LLVM basic type.
@@ -211,13 +243,14 @@ impl<'ctx> TypeMapper<'ctx> {
                         .all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
                     if all_concrete {
                         let mangled = vais_types::mangle_name(name, generics);
-                        if let Some(st) = self.struct_types.get(mangled.as_str()) {
-                            return (*st).into();
+                        if let Some(st) = self.struct_types.borrow().get(mangled.as_str()).copied()
+                        {
+                            return st.into();
                         }
                     }
                 }
-                if let Some(st) = self.struct_types.get(name.as_str()) {
-                    (*st).into()
+                if let Some(st) = self.struct_types.borrow().get(name.as_str()).copied() {
+                    st.into()
                 } else {
                     // Return opaque struct placeholder
                     self.context.opaque_struct_type(name).into()
@@ -269,22 +302,17 @@ impl<'ctx> TypeMapper<'ctx> {
                 self.context.struct_type(&elem_types, false).into()
             }
             ResolvedType::Optional(inner) => {
-                // Option<T> is { tag: i8, value: T }
-                let inner_llvm = self.map_type(inner);
-                let tag_type = self.context.i8_type();
-                self.context
-                    .struct_type(&[tag_type.into(), inner_llvm], false)
-                    .into()
+                // Walk the payload type to preserve strict generic/unresolved checks,
+                // but the ABI itself is erased and type-independent.
+                let _ = self.map_type(inner);
+                self.erased_enum_struct_type("Option").into()
             }
             ResolvedType::Result(ok, err) => {
-                // Result<T, E> is { tag: i8, value: max(T, E) }
-                let ok_llvm = self.map_type(ok);
-                let _err_llvm = self.map_type(err);
-                let tag_type = self.context.i8_type();
-                // Use ok type as payload (largest variant strategy handled by enum layout)
-                self.context
-                    .struct_type(&[tag_type.into(), ok_llvm], false)
-                    .into()
+                // Walk both payload types to preserve strict generic/unresolved checks,
+                // but the ABI itself is erased and type-independent.
+                let _ = self.map_type(ok);
+                let _ = self.map_type(err);
+                self.erased_enum_struct_type("Result").into()
             }
             ResolvedType::Map(key, value) => {
                 // Map is a pointer to runtime structure
