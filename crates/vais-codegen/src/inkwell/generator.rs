@@ -8,7 +8,8 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::{BasicTypeEnum, StructType};
-use inkwell::values::{BasicValueEnum, FunctionValue, GlobalValue, PointerValue};
+use inkwell::values::{BasicValueEnum, FunctionValue, GlobalValue, IntValue, PointerValue};
+use inkwell::AddressSpace;
 
 use vais_ast::{self as ast, Expr, Module as VaisModule};
 use vais_types::ResolvedType;
@@ -93,16 +94,17 @@ pub struct InkwellCodeGenerator<'ctx> {
 
     /// Enum multi-field tuple variant payload struct types:
     /// (enum_name, variant_name) -> anonymous struct type that packs all fields.
-    /// Populated when a multi-field tuple variant (e.g., Rect(i64, i64)) is constructed;
-    /// pattern bindings use this to load the heap-allocated payload and extract each field.
+    /// Populated when a multi-field tuple variant (e.g., Rect(i64, i64)) is declared;
+    /// pattern bindings use this to decode each erased i64 payload slot back to its
+    /// declared field type.
     pub(super) enum_variant_multi_payload_types:
         HashMap<(String, String), inkwell::types::StructType<'ctx>>,
 
     /// Enum single-primitive variant payload LLVM type:
     /// (enum_name, variant_name) -> primitive BasicTypeEnum (f64, i32, ...) for
-    /// variants whose sole payload is a non-struct primitive. The enum data
-    /// slot always stores this as i64 (bitcast for floats, widen for smaller
-    /// ints), but pattern bindings need to recover the declared type so the
+    /// variants whose sole payload is a non-struct primitive. The enum payload
+    /// slot stores this as i64 (bitcast for floats, widen for smaller ints),
+    /// but pattern bindings need to recover the declared type so the
     /// bound identifier has the right type when referenced downstream.
     pub(super) enum_variant_primitive_payload_types:
         HashMap<(String, String), inkwell::types::BasicTypeEnum<'ctx>>,
@@ -299,6 +301,245 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     #[inline]
     pub(super) fn unit_value(&self) -> BasicValueEnum<'ctx> {
         self.context.struct_type(&[], false).const_zero().into()
+    }
+
+    /// Return the canonical erased enum type used by Option/Result in the
+    /// inkwell backend, and mirror it in the generator's named-struct table.
+    pub(super) fn erased_enum_type(&mut self, enum_name: &str) -> StructType<'ctx> {
+        if let Some(ty) = self.generated_structs.get(enum_name).copied() {
+            return ty;
+        }
+        let ty = self.type_mapper.erased_enum_struct_type(enum_name);
+        self.generated_structs.insert(enum_name.to_string(), ty);
+        ty
+    }
+
+    /// Build a value for the canonical enum ABI `{ i32 tag, { i64... } payload }`.
+    /// Unit-only enums have no payload field; missing payload slots are zero-filled.
+    pub(super) fn build_erased_enum_value(
+        &self,
+        enum_type: StructType<'ctx>,
+        tag: i32,
+        payload_slots: &[IntValue<'ctx>],
+        name: &str,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        let mut value = enum_type.get_undef();
+        let tag_type = match enum_type.get_field_type_at_index(0) {
+            Some(BasicTypeEnum::IntType(int_ty)) => int_ty,
+            _ => self.context.i32_type(),
+        };
+        value = self
+            .builder
+            .build_insert_value(
+                value,
+                tag_type.const_int(tag as u64, false),
+                0,
+                &format!("{}_tag", name),
+            )
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+
+        if enum_type.count_fields() > 1 {
+            let payload_type = match enum_type.get_field_type_at_index(1) {
+                Some(BasicTypeEnum::StructType(payload_type)) => payload_type,
+                _ => self
+                    .context
+                    .struct_type(&[self.context.i64_type().into()], false),
+            };
+            let mut payload = payload_type.get_undef();
+            for idx in 0..payload_type.count_fields() {
+                let slot = payload_slots
+                    .get(idx as usize)
+                    .copied()
+                    .unwrap_or_else(|| self.context.i64_type().const_int(0, false));
+                payload = self
+                    .builder
+                    .build_insert_value(payload, slot, idx, &format!("{}_data_{}", name, idx))
+                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value();
+            }
+            value = self
+                .builder
+                .build_insert_value(value, payload, 1, &format!("{}_payload", name))
+                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
+                .into_struct_value();
+        }
+
+        Ok(value.into())
+    }
+
+    /// Erase an arbitrary payload value into one canonical i64 enum payload slot.
+    pub(super) fn erase_enum_payload_to_i64(
+        &self,
+        value: BasicValueEnum<'ctx>,
+        name: &str,
+    ) -> CodegenResult<IntValue<'ctx>> {
+        if value.is_struct_value() {
+            let struct_val = value.into_struct_value();
+            let struct_ty = struct_val.get_type();
+            let target_data = inkwell::targets::TargetData::create(
+                &self.module.get_triple().as_str().to_string_lossy(),
+            );
+            let size_bytes = target_data.get_store_size(&struct_ty);
+            let i64_ty = self.context.i64_type();
+            if size_bytes > 8 {
+                let i8_ptr_ty = self.context.i8_type().ptr_type(AddressSpace::default());
+                let malloc_fn = self
+                    .module
+                    .get_function("malloc")
+                    .or_else(|| {
+                        let malloc_ty = i8_ptr_ty.fn_type(&[i64_ty.into()], false);
+                        Some(self.module.add_function("malloc", malloc_ty, None))
+                    })
+                    .unwrap();
+                let heap_ptr = self
+                    .builder
+                    .build_call(
+                        malloc_fn,
+                        &[i64_ty.const_int(size_bytes, false).into()],
+                        &format!("{}_heap", name),
+                    )
+                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
+                    .try_as_basic_value()
+                    .basic()
+                    .ok_or_else(|| {
+                        crate::CodegenError::LlvmError(
+                            "ICE: malloc call returned void for enum payload".into(),
+                        )
+                    })?
+                    .into_pointer_value();
+                let typed_ptr = self
+                    .builder
+                    .build_bit_cast(
+                        heap_ptr,
+                        struct_ty.ptr_type(AddressSpace::default()),
+                        &format!("{}_heap_typed", name),
+                    )
+                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
+                    .into_pointer_value();
+                self.builder
+                    .build_store(typed_ptr, struct_val)
+                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+                self.builder
+                    .build_ptr_to_int(heap_ptr, i64_ty, &format!("{}_ptr_i64", name))
+                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))
+            } else {
+                let tmp_alloca = self
+                    .builder
+                    .build_alloca(struct_ty, &format!("{}_small_tmp", name))
+                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+                self.builder
+                    .build_store(tmp_alloca, struct_val)
+                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+                let i64_ptr = self
+                    .builder
+                    .build_bit_cast(
+                        tmp_alloca,
+                        i64_ty.ptr_type(AddressSpace::default()),
+                        &format!("{}_small_i64p", name),
+                    )
+                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
+                    .into_pointer_value();
+                self.builder
+                    .build_load(i64_ty, i64_ptr, &format!("{}_small_i64", name))
+                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))
+                    .map(|v| v.into_int_value())
+            }
+        } else {
+            self.coerce_to_i64(value)
+        }
+    }
+
+    /// Decode one canonical i64 enum payload slot back into the declared LLVM type.
+    pub(super) fn decode_enum_payload_slot(
+        &self,
+        slot: IntValue<'ctx>,
+        declared_type: BasicTypeEnum<'ctx>,
+        name: &str,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        if let BasicTypeEnum::StructType(struct_ty) = declared_type {
+            let target_data = inkwell::targets::TargetData::create(
+                &self.module.get_triple().as_str().to_string_lossy(),
+            );
+            let size_bytes = target_data.get_store_size(&struct_ty);
+            if size_bytes > 8 {
+                let ptr_ty = struct_ty.ptr_type(AddressSpace::default());
+                let heap_ptr = self
+                    .builder
+                    .build_int_to_ptr(slot, ptr_ty, &format!("{}_heap_ptr", name))
+                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+                return self
+                    .builder
+                    .build_load(struct_ty, heap_ptr, &format!("{}_heap_load", name))
+                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()));
+            }
+
+            let i64_ty = self.context.i64_type();
+            let tmp_alloca = self
+                .builder
+                .build_alloca(i64_ty, &format!("{}_small_slot", name))
+                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+            self.builder
+                .build_store(tmp_alloca, slot)
+                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+            let typed_ptr = self
+                .builder
+                .build_bit_cast(
+                    tmp_alloca,
+                    struct_ty.ptr_type(AddressSpace::default()),
+                    &format!("{}_small_typed", name),
+                )
+                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
+                .into_pointer_value();
+            return self
+                .builder
+                .build_load(struct_ty, typed_ptr, &format!("{}_small_load", name))
+                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()));
+        }
+
+        if let BasicTypeEnum::FloatType(float_ty) = declared_type {
+            let bit_width = float_ty.get_bit_width();
+            let source = if bit_width < 64 {
+                self.builder
+                    .build_int_truncate(
+                        slot,
+                        self.context.custom_width_int_type(bit_width),
+                        &format!("{}_f_trunc", name),
+                    )
+                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
+            } else {
+                slot
+            };
+            return self
+                .builder
+                .build_bit_cast(source, float_ty, &format!("{}_to_float", name))
+                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()));
+        }
+
+        if let BasicTypeEnum::IntType(int_ty) = declared_type {
+            let decoded = match int_ty.get_bit_width().cmp(&64) {
+                std::cmp::Ordering::Equal => slot,
+                std::cmp::Ordering::Less => self
+                    .builder
+                    .build_int_truncate(slot, int_ty, &format!("{}_trunc", name))
+                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?,
+                std::cmp::Ordering::Greater => self
+                    .builder
+                    .build_int_s_extend(slot, int_ty, &format!("{}_sext", name))
+                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?,
+            };
+            return Ok(decoded.into());
+        }
+
+        if let BasicTypeEnum::PointerType(ptr_ty) = declared_type {
+            return self
+                .builder
+                .build_int_to_ptr(slot, ptr_ty, &format!("{}_to_ptr", name))
+                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))
+                .map(Into::into);
+        }
+
+        Ok(slot.into())
     }
 
     /// Enable strict type mode.

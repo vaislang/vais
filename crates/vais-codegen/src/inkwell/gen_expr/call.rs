@@ -142,104 +142,41 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             "load_byte" => return self.generate_load_byte(args),
             "store_f64" => return self.generate_store_f64(args),
             "load_f64" => return self.generate_load_f64(args),
-            // Option constructors: Some(val) -> { i8 tag=1, i64 data=val }
+            // Option constructors: Some(val) -> canonical `%Option`.
             "Some" => {
-                let enum_type = self.context.struct_type(
-                    &[
-                        self.context.i8_type().into(),
-                        self.context.i64_type().into(),
-                    ],
-                    false,
-                );
-                let data_val = if args.is_empty() {
-                    self.context.i64_type().const_int(0, false)
+                let enum_type = self.erased_enum_type("Option");
+                let tag = self.get_enum_variant_tag("Some");
+                let payload_slots = if args.is_empty() {
+                    Vec::new()
                 } else {
                     let v = self.generate_expr(&args[0].node)?;
-                    self.coerce_to_i64(v)?
+                    vec![self.erase_enum_payload_to_i64(v, "some_data")?]
                 };
-                let mut val = enum_type.get_undef();
-                val = self
-                    .builder
-                    .build_insert_value(
-                        val,
-                        self.context.i8_type().const_int(1, false),
-                        0,
-                        "some_tag",
-                    )
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                    .into_struct_value();
-                val = self
-                    .builder
-                    .build_insert_value(val, data_val, 1, "some_data")
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                    .into_struct_value();
-                return Ok(val.into());
+                return self.build_erased_enum_value(enum_type, tag, &payload_slots, "some");
             }
-            // Result constructors: Ok(val) -> { i8 tag=0, i64 data=val }
+            // Result constructors: Ok(val) -> canonical `%Result`.
             "Ok" => {
-                let enum_type = self.context.struct_type(
-                    &[
-                        self.context.i8_type().into(),
-                        self.context.i64_type().into(),
-                    ],
-                    false,
-                );
-                let data_val = if args.is_empty() {
-                    self.context.i64_type().const_int(0, false)
+                let enum_type = self.erased_enum_type("Result");
+                let tag = self.get_enum_variant_tag("Ok");
+                let payload_slots = if args.is_empty() {
+                    Vec::new()
                 } else {
                     let v = self.generate_expr(&args[0].node)?;
-                    self.coerce_to_i64(v)?
+                    vec![self.erase_enum_payload_to_i64(v, "ok_data")?]
                 };
-                let mut val = enum_type.get_undef();
-                val = self
-                    .builder
-                    .build_insert_value(
-                        val,
-                        self.context.i8_type().const_int(0, false),
-                        0,
-                        "ok_tag",
-                    )
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                    .into_struct_value();
-                val = self
-                    .builder
-                    .build_insert_value(val, data_val, 1, "ok_data")
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                    .into_struct_value();
-                return Ok(val.into());
+                return self.build_erased_enum_value(enum_type, tag, &payload_slots, "ok");
             }
-            // Err(val) -> { i8 tag=1, i64 data=val }
+            // Err(val) -> canonical `%Result`.
             "Err" => {
-                let enum_type = self.context.struct_type(
-                    &[
-                        self.context.i8_type().into(),
-                        self.context.i64_type().into(),
-                    ],
-                    false,
-                );
-                let data_val = if args.is_empty() {
-                    self.context.i64_type().const_int(0, false)
+                let enum_type = self.erased_enum_type("Result");
+                let tag = self.get_enum_variant_tag("Err");
+                let payload_slots = if args.is_empty() {
+                    Vec::new()
                 } else {
                     let v = self.generate_expr(&args[0].node)?;
-                    self.coerce_to_i64(v)?
+                    vec![self.erase_enum_payload_to_i64(v, "err_data")?]
                 };
-                let mut val = enum_type.get_undef();
-                val = self
-                    .builder
-                    .build_insert_value(
-                        val,
-                        self.context.i8_type().const_int(1, false),
-                        0,
-                        "err_tag",
-                    )
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                    .into_struct_value();
-                val = self
-                    .builder
-                    .build_insert_value(val, data_val, 1, "err_data")
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                    .into_struct_value();
-                return Ok(val.into());
+                return self.build_erased_enum_value(enum_type, tag, &payload_slots, "err");
             }
             "puts_ptr" => {
                 // puts_ptr(i64) -> i32: convert i64 to ptr then call puts
@@ -479,189 +416,22 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 .enum_variants
                 .iter()
                 .find(|((_, v_name), _)| v_name == &fn_name)
-                .map(|((_, _), tag)| *tag);
+                .map(|((enum_name, _), tag)| (enum_name.clone(), *tag));
 
-            if let Some(tag) = is_enum_variant {
-                // Build enum value: { i8 tag, i64 data }
-                let enum_type = self.context.struct_type(
-                    &[
-                        self.context.i8_type().into(),
-                        self.context.i64_type().into(),
-                    ],
-                    false,
-                );
-                let data_val = if args.is_empty() {
-                    self.context.i64_type().const_int(0, false)
-                } else if args.len() > 1 {
-                    // Multi-field tuple variant: pack all fields into an anonymous struct,
-                    // heap-allocate, and store pointer in i64 data slot.
-                    let field_vals: Vec<BasicValueEnum<'ctx>> = args
-                        .iter()
-                        .map(|a| self.generate_expr(&a.node))
-                        .collect::<CodegenResult<Vec<_>>>()?;
-                    let field_tys: Vec<inkwell::types::BasicTypeEnum<'ctx>> =
-                        field_vals.iter().map(|v| v.get_type()).collect();
-                    let payload_ty = self.context.struct_type(&field_tys, false);
-                    let target_data = inkwell::targets::TargetData::create(
-                        &self.module.get_triple().as_str().to_string_lossy(),
+            if let Some((enum_name, tag)) = is_enum_variant {
+                let enum_type = self
+                    .generated_structs
+                    .get(&enum_name)
+                    .copied()
+                    .unwrap_or_else(|| self.erased_enum_type(&enum_name));
+                let mut payload_slots = Vec::with_capacity(args.len());
+                for (idx, arg) in args.iter().enumerate() {
+                    let payload = self.generate_expr(&arg.node)?;
+                    payload_slots.push(
+                        self.erase_enum_payload_to_i64(payload, &format!("variant_data_{}", idx))?,
                     );
-                    let size_bytes = target_data.get_store_size(&payload_ty);
-                    let i64_ty = self.context.i64_type();
-                    let i8_ptr_ty = self.context.i8_type().ptr_type(AddressSpace::default());
-                    // Always heap-alloc for multi-field (simpler than deciding per-size).
-                    let malloc_fn = self
-                        .module
-                        .get_function("malloc")
-                        .or_else(|| {
-                            let malloc_ty = i8_ptr_ty.fn_type(&[i64_ty.into()], false);
-                            Some(self.module.add_function("malloc", malloc_ty, None))
-                        })
-                        .unwrap();
-                    let size_val = i64_ty.const_int(size_bytes, false);
-                    let heap_ptr = self
-                        .builder
-                        .build_call(malloc_fn, &[size_val.into()], "variant_multi_heap")
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                        .try_as_basic_value()
-                        .basic()
-                        .unwrap()
-                        .into_pointer_value();
-                    let typed_ptr = self
-                        .builder
-                        .build_bit_cast(
-                            heap_ptr,
-                            payload_ty.ptr_type(AddressSpace::default()),
-                            "variant_multi_typed",
-                        )
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                        .into_pointer_value();
-                    // Build the payload struct and store it.
-                    let mut payload_val = payload_ty.get_undef();
-                    for (i, fv) in field_vals.iter().enumerate() {
-                        payload_val = self
-                            .builder
-                            .build_insert_value(
-                                payload_val,
-                                *fv,
-                                i as u32,
-                                &format!("variant_multi_field_{}", i),
-                            )
-                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                            .into_struct_value();
-                    }
-                    self.builder
-                        .build_store(typed_ptr, payload_val)
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                    // Record the payload struct type so pattern binding can recover field types.
-                    // Look up the enum name that owns this tag value.
-                    let owning_enum_name = self
-                        .enum_variants
-                        .iter()
-                        .find(|((_, v_name), t)| v_name == &fn_name && **t == tag)
-                        .map(|((e_name, _), _)| e_name.clone());
-                    if let Some(enum_name) = owning_enum_name {
-                        self.enum_variant_multi_payload_types
-                            .insert((enum_name, fn_name.clone()), payload_ty);
-                    }
-                    self.builder
-                        .build_ptr_to_int(heap_ptr, i64_ty, "variant_multi_data_as_i64")
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                } else {
-                    let v = self.generate_expr(&args[0].node)?;
-                    // Large struct (>8B) cannot fit in i64: heap-allocate and store pointer.
-                    // Small types (i64, f64, ptr, ≤8B struct) use bitcast/coerce_to_i64.
-                    if v.is_struct_value() {
-                        let struct_val = v.into_struct_value();
-                        let struct_ty = struct_val.get_type();
-                        let target_data = inkwell::targets::TargetData::create(
-                            &self.module.get_triple().as_str().to_string_lossy(),
-                        );
-                        let size_bytes = target_data.get_store_size(&struct_ty);
-                        if size_bytes > 8 {
-                            // Heap-allocate: malloc(size) → memcpy struct → ptrtoint to i64
-                            let i64_ty = self.context.i64_type();
-                            let i8_ptr_ty =
-                                self.context.i8_type().ptr_type(AddressSpace::default());
-                            // Call malloc(size)
-                            let malloc_fn = self
-                                .module
-                                .get_function("malloc")
-                                .or_else(|| {
-                                    let malloc_ty = i8_ptr_ty.fn_type(&[i64_ty.into()], false);
-                                    Some(self.module.add_function("malloc", malloc_ty, None))
-                                })
-                                .unwrap();
-                            let size_val = i64_ty.const_int(size_bytes, false);
-                            let heap_ptr = self
-                                .builder
-                                .build_call(malloc_fn, &[size_val.into()], "variant_heap")
-                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                                .try_as_basic_value()
-                                .basic()
-                                .unwrap()
-                                .into_pointer_value();
-                            // Store struct into heap memory
-                            let typed_ptr = self
-                                .builder
-                                .build_bit_cast(
-                                    heap_ptr,
-                                    struct_ty.ptr_type(AddressSpace::default()),
-                                    "variant_heap_typed",
-                                )
-                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                                .into_pointer_value();
-                            self.builder
-                                .build_store(typed_ptr, struct_val)
-                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                            // ptrtoint to i64 for enum data slot
-                            self.builder
-                                .build_ptr_to_int(heap_ptr, i64_ty, "variant_data_as_i64")
-                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                        } else {
-                            // Small struct (≤8B): bitcast via stack alloca to i64
-                            let i64_ty = self.context.i64_type();
-                            let tmp_alloca = self
-                                .builder
-                                .build_alloca(struct_ty, "variant_small_tmp")
-                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                            self.builder
-                                .build_store(tmp_alloca, struct_val)
-                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                            let i64_ptr = self
-                                .builder
-                                .build_bit_cast(
-                                    tmp_alloca,
-                                    i64_ty.ptr_type(AddressSpace::default()),
-                                    "variant_small_as_i64p",
-                                )
-                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                                .into_pointer_value();
-                            self.builder
-                                .build_load(i64_ty, i64_ptr, "variant_small_as_i64")
-                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                                .into_int_value()
-                        }
-                    } else {
-                        self.coerce_to_i64(v)?
-                    }
-                };
-                let mut val = enum_type.get_undef();
-                val = self
-                    .builder
-                    .build_insert_value(
-                        val,
-                        self.context.i8_type().const_int(tag as u64, false),
-                        0,
-                        "variant_tag",
-                    )
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                    .into_struct_value();
-                val = self
-                    .builder
-                    .build_insert_value(val, data_val, 1, "variant_data")
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                    .into_struct_value();
-                return Ok(val.into());
+                }
+                return self.build_erased_enum_value(enum_type, tag, &payload_slots, "variant");
             }
 
             // Collect all available function names for suggestions

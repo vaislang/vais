@@ -151,15 +151,18 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     pub(super) fn define_enum(&mut self, e: &ast::Enum) -> CodegenResult<StructType<'ctx>> {
         let enum_name = &e.name.node;
 
-        // If already defined, return existing
+        // If already defined and its variants were registered, return existing.
+        // Builtin erased Option/Result may be created first by type mapping; in
+        // that case we still need to register source-declared variant tags below.
         if let Some(existing) = self.generated_structs.get(enum_name) {
-            return Ok(*existing);
+            if self.enum_variants.keys().any(|(e, _)| e == enum_name) {
+                return Ok(*existing);
+            }
         }
 
-        // Validate variant count fits in i8 tag
-        if e.variants.len() > 255 {
+        if e.variants.len() > i32::MAX as usize {
             return Err(CodegenError::Unsupported(format!(
-                "Enum '{}' has {} variants (max 255 due to i8 tag)",
+                "Enum '{}' has {} variants (max i32::MAX due to i32 tag)",
                 enum_name,
                 e.variants.len()
             )));
@@ -223,15 +226,42 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
-        // Create enum as struct: { i8 tag, i64 data }
-        // Must match the layout used in gen_expr.rs for variant construction
-        let enum_type = self.context.struct_type(
-            &[
-                self.context.i8_type().into(),
-                self.context.i64_type().into(),
-            ],
-            false,
-        );
+        let max_field_count = e
+            .variants
+            .iter()
+            .map(|variant| match &variant.fields {
+                ast::VariantFields::Unit => 0usize,
+                ast::VariantFields::Tuple(types) => types.len(),
+                ast::VariantFields::Struct(fields) => fields.len(),
+            })
+            .max()
+            .unwrap_or(0);
+
+        // Create enum as a named struct matching the text backend:
+        // unit-only: `%E = type { i32 }`
+        // payload:   `%E = type { i32, { i64, ... } }`
+        let enum_type = if let Some(existing) = self.generated_structs.get(enum_name).copied() {
+            existing
+        } else if let Some(existing) = self.type_mapper.get_registered_struct(enum_name) {
+            existing
+        } else {
+            self.context.opaque_struct_type(enum_name)
+        };
+
+        if enum_type.count_fields() == 0 {
+            if max_field_count == 0 {
+                enum_type.set_body(&[self.context.i32_type().into()], false);
+            } else {
+                let payload_fields: Vec<_> = (0..max_field_count)
+                    .map(|_| self.context.i64_type().into())
+                    .collect();
+                let payload_type = self.context.struct_type(&payload_fields, false);
+                enum_type.set_body(
+                    &[self.context.i32_type().into(), payload_type.into()],
+                    false,
+                );
+            }
+        }
 
         self.generated_structs.insert(enum_name.clone(), enum_type);
         self.type_mapper.register_struct(enum_name, enum_type);

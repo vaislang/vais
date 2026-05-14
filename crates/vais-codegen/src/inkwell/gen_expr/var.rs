@@ -7,37 +7,11 @@ use crate::{CodegenError, CodegenResult};
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
     pub(super) fn generate_var(&mut self, name: &str) -> CodegenResult<BasicValueEnum<'ctx>> {
-        // Handle None as a built-in value: { i8 tag=0, i64 data=0 }
+        // Handle None as a built-in value using the canonical erased Option ABI.
         if name == "None" {
-            let enum_type = self.context.struct_type(
-                &[
-                    self.context.i8_type().into(),
-                    self.context.i64_type().into(),
-                ],
-                false,
-            );
-            let mut val = enum_type.get_undef();
-            val = self
-                .builder
-                .build_insert_value(
-                    val,
-                    self.context.i8_type().const_int(0, false),
-                    0,
-                    "none_tag",
-                )
-                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                .into_struct_value();
-            val = self
-                .builder
-                .build_insert_value(
-                    val,
-                    self.context.i64_type().const_int(0, false),
-                    1,
-                    "none_data",
-                )
-                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                .into_struct_value();
-            return Ok(val.into());
+            let enum_type = self.erased_enum_type("Option");
+            let tag = self.get_enum_variant_tag("None");
+            return self.build_erased_enum_value(enum_type, tag, &[], "none");
         }
 
         let result = self.locals.get(name);
@@ -60,38 +34,18 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Ok(value)
         } else {
             // Check if this is an enum variant name (e.g., Red, Green, Blue)
-            for ((_, v_name), tag) in &self.enum_variants {
-                if v_name == name {
-                    let enum_type = self.context.struct_type(
-                        &[
-                            self.context.i8_type().into(),
-                            self.context.i64_type().into(),
-                        ],
-                        false,
-                    );
-                    let mut val = enum_type.get_undef();
-                    val = self
-                        .builder
-                        .build_insert_value(
-                            val,
-                            self.context.i8_type().const_int(*tag as u64, false),
-                            0,
-                            "variant_tag",
-                        )
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                        .into_struct_value();
-                    val = self
-                        .builder
-                        .build_insert_value(
-                            val,
-                            self.context.i64_type().const_int(0, false),
-                            1,
-                            "variant_data",
-                        )
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                        .into_struct_value();
-                    return Ok(val.into());
-                }
+            let variant = self
+                .enum_variants
+                .iter()
+                .find(|((_, v_name), _)| v_name == name)
+                .map(|((enum_name, _), tag)| (enum_name.clone(), *tag));
+            if let Some((enum_name, tag)) = variant {
+                let enum_type = self
+                    .generated_structs
+                    .get(&enum_name)
+                    .copied()
+                    .unwrap_or_else(|| self.erased_enum_type(&enum_name));
+                return self.build_erased_enum_value(enum_type, tag, &[], "variant");
             }
 
             // Check if this is a function name (function reference as variable)

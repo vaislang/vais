@@ -549,7 +549,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         .build_int_compare(
                             IntPredicate::EQ,
                             tag_val,
-                            self.context.i8_type().const_int(expected_tag as u64, false),
+                            tag_val.get_type().const_int(expected_tag as u64, false),
                             "variant_check",
                         )
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
@@ -743,7 +743,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
             Pattern::Variant { name, fields: _ } => {
                 // Enum variant pattern: check the tag matches
-                // Enum is represented as { i8 tag, i64 data }
+                // Enum is represented as `{ i32 tag, { i64... } payload }`.
                 let struct_val = match_val.into_struct_value();
                 let tag_val = self
                     .builder
@@ -759,7 +759,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .build_int_compare(
                         IntPredicate::EQ,
                         tag_val,
-                        self.context.i8_type().const_int(expected_tag as u64, false),
+                        tag_val.get_type().const_int(expected_tag as u64, false),
                         "variant_check",
                     )
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
@@ -849,16 +849,23 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
             Pattern::Variant { name, fields } => {
                 // Bind variant fields.
-                // Enum is { i8 tag, i64 data } — the data field (index 1) holds the payload.
-                // For single-field variants the payload IS the value (or a pointer if the
-                // payload is a struct >8B that was heap-allocated by the constructor).
-                // For multi-field variants the payload is an anonymous struct; extract each
-                // sub-field with sequential build_extract_value calls.
+                // Enum is `{ i32 tag, { i64... } payload }`. Each variant field is
+                // erased into one i64 payload slot.
                 let struct_val = match_val.into_struct_value();
-                let data_val = self
-                    .builder
-                    .build_extract_value(struct_val, 1, "variant_data")
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                let payload_val = if struct_val.get_type().count_fields() > 1 {
+                    self.builder
+                        .build_extract_value(struct_val, 1, "variant_payload")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                } else {
+                    self.context.i64_type().const_int(0, false).into()
+                };
+                let data_val = if payload_val.is_struct_value() {
+                    self.builder
+                        .build_extract_value(payload_val.into_struct_value(), 0, "variant_data")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                } else {
+                    payload_val
+                };
 
                 // Look up whether this variant carries a struct payload.
                 // (enum_name unknown here — scan enum_variant_struct_types by variant name.)
@@ -925,11 +932,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             }
                         }
 
-                        // Non-struct payload (e.g. Circle(f64)): the enum data
-                        // slot stored the payload as i64 (floats bitcast, ints
-                        // widened). Recover the declared primitive type if we
-                        // have it recorded so the bound identifier has the
-                        // right LLVM type downstream.
+                        // Non-struct payload (e.g. Circle(f64)): recover the
+                        // declared type from the erased i64 payload slot.
                         let primitive_ty: Option<inkwell::types::BasicTypeEnum<'ctx>> = self
                             .enum_variant_primitive_payload_types
                             .iter()
@@ -937,41 +941,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             .map(|(_, ty)| *ty);
                         if let Some(decl_ty) = primitive_ty {
                             let data_i64 = data_val.into_int_value();
-                            let decoded: BasicValueEnum<'ctx> = if decl_ty.is_float_type() {
-                                self.builder
-                                    .build_bit_cast(
-                                        data_i64,
-                                        decl_ty.into_float_type(),
-                                        "variant_i64_to_f",
-                                    )
-                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                            } else if decl_ty.is_int_type() {
-                                let target = decl_ty.into_int_type();
-                                if target.get_bit_width() == 64 {
-                                    data_i64.into()
-                                } else if target.get_bit_width() < 64 {
-                                    self.builder
-                                        .build_int_truncate(data_i64, target, "variant_i64_trunc")
-                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                                        .into()
-                                } else {
-                                    self.builder
-                                        .build_int_s_extend(data_i64, target, "variant_i64_sext")
-                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                                        .into()
-                                }
-                            } else if decl_ty.is_pointer_type() {
-                                self.builder
-                                    .build_int_to_ptr(
-                                        data_i64,
-                                        decl_ty.into_pointer_type(),
-                                        "variant_i64_to_ptr",
-                                    )
-                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                                    .into()
-                            } else {
-                                data_val
-                            };
+                            let decoded =
+                                self.decode_enum_payload_slot(data_i64, decl_ty, "variant_slot")?;
                             self.generate_pattern_bindings(first_field, &decoded)?;
                             return Ok(());
                         }
@@ -979,9 +950,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         self.generate_pattern_bindings(first_field, &data_val)?;
                     }
                 } else {
-                    // Multi-field variant: the payload is packed into an anonymous struct
-                    // and stored on the heap. The enum's i64 data slot holds the heap ptr.
-                    // Look up the payload struct type recorded at construction time.
+                    // Multi-field variant: each erased payload slot corresponds to
+                    // the same-index declared field type recorded at enum declaration.
                     let multi_payload_ty: Option<inkwell::types::StructType<'ctx>> = self
                         .enum_variant_multi_payload_types
                         .iter()
@@ -989,28 +959,32 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         .map(|(_, ty)| *ty);
 
                     if let Some(payload_ty) = multi_payload_ty {
-                        // data_val is the i64 holding the heap pointer. inttoptr to struct*,
-                        // load the struct, then extract each field.
-                        let data_i64 = data_val.into_int_value();
-                        let ptr_ty = payload_ty.ptr_type(AddressSpace::default());
-                        let heap_ptr = self
-                            .builder
-                            .build_int_to_ptr(data_i64, ptr_ty, "variant_multi_ptr")
-                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                        let loaded_struct = self
-                            .builder
-                            .build_load(payload_ty, heap_ptr, "variant_multi_load")
-                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                            .into_struct_value();
+                        if !payload_val.is_struct_value() {
+                            if let Some(first_field) = fields.first() {
+                                self.generate_pattern_bindings(first_field, &data_val)?;
+                            }
+                            return Ok(());
+                        }
+
+                        let payload_struct = payload_val.into_struct_value();
                         for (idx, field_pat) in fields.iter().enumerate() {
-                            let sub_val = self
+                            let slot = self
                                 .builder
                                 .build_extract_value(
-                                    loaded_struct,
+                                    payload_struct,
                                     idx as u32,
-                                    &format!("variant_field_{}", idx),
+                                    &format!("variant_slot_{}", idx),
                                 )
-                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_int_value();
+                            let declared_ty = payload_ty
+                                .get_field_type_at_index(idx as u32)
+                                .unwrap_or_else(|| self.context.i64_type().into());
+                            let sub_val = self.decode_enum_payload_slot(
+                                slot,
+                                declared_ty,
+                                &format!("variant_field_{}", idx),
+                            )?;
                             self.generate_pattern_bindings(field_pat, &sub_val)?;
                         }
                     } else if data_val.is_struct_value() {

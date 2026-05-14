@@ -765,6 +765,32 @@ opt := Some(42)
 err := Err("file not found")
 ```
 
+### Enum Runtime Layout
+
+Enum discriminants are assigned by declaration order, starting at `0`. The tag is
+part of the language ABI, not a backend detail: every backend uses an `i32` tag.
+
+The canonical native LLVM layout is:
+
+```llvm
+%Enum = type { i32 }                  ; unit-only enum
+%Enum = type { i32, { i64, ... } }    ; enum with payload fields
+```
+
+Payload fields are erased into fixed `i64` slots. Values that do not fit in one
+slot are stored indirectly and the pointer is placed in the slot. Generic enums
+such as `Option<T>` and `Result<T, E>` use the same named base layout for every
+instantiation, for example:
+
+```llvm
+%Option = type { i32, { i64 } }
+%Result = type { i32, { i64 } }
+```
+
+Backends must not emit an anonymous alternate layout for the same source enum
+instantiation. In particular, `{ i8, i64 }` is not a valid native layout for
+`Option<T>` or `Result<T, E>`.
+
 ### Enum Implementation Blocks
 
 Enums can have methods just like structs:

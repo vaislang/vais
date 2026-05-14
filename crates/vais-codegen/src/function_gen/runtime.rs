@@ -160,12 +160,15 @@ impl CodeGenerator {
 
         if self.types.enums.contains_key("Option") {
             // Base Option helpers for erased `%Option = { i32, { i64 } }`.
+            let some_tag = self.get_enum_variant_tag("Some");
+            let none_tag = self.get_enum_variant_tag("None");
+
             ir.push_str("\n; Base Option helper: is_some\n");
             ir.push_str("define weak_odr i64 @Option_is_some(%Option* %self) {\n");
             ir.push_str("entry:\n");
             ir.push_str("  %tag_ptr = getelementptr %Option, %Option* %self, i32 0, i32 0\n");
             ir.push_str("  %tag = load i32, i32* %tag_ptr\n");
-            ir.push_str("  %is_some = icmp ne i32 %tag, 0\n");
+            ir.push_str(&format!("  %is_some = icmp eq i32 %tag, {}\n", some_tag));
             ir.push_str("  %result = zext i1 %is_some to i64\n");
             ir.push_str("  ret i64 %result\n");
             ir.push_str("}\n");
@@ -175,7 +178,7 @@ impl CodeGenerator {
             ir.push_str("entry:\n");
             ir.push_str("  %tag_ptr = getelementptr %Option, %Option* %self, i32 0, i32 0\n");
             ir.push_str("  %tag = load i32, i32* %tag_ptr\n");
-            ir.push_str("  %is_none = icmp eq i32 %tag, 0\n");
+            ir.push_str(&format!("  %is_none = icmp eq i32 %tag, {}\n", none_tag));
             ir.push_str("  %result = zext i1 %is_none to i64\n");
             ir.push_str("  ret i64 %result\n");
             ir.push_str("}\n");
@@ -185,7 +188,7 @@ impl CodeGenerator {
             ir.push_str("entry:\n");
             ir.push_str("  %tag_ptr = getelementptr %Option, %Option* %self, i32 0, i32 0\n");
             ir.push_str("  %tag = load i32, i32* %tag_ptr\n");
-            ir.push_str("  %is_some = icmp ne i32 %tag, 0\n");
+            ir.push_str(&format!("  %is_some = icmp eq i32 %tag, {}\n", some_tag));
             ir.push_str("  br i1 %is_some, label %some, label %none\n");
             ir.push_str("some:\n");
             ir.push_str(
