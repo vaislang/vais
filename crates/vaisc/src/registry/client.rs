@@ -70,11 +70,11 @@ impl RegistryClient {
 
         let mut request = ureq::get(&index_url);
         if let Some(t) = token {
-            request = request.set("Authorization", &format!("Bearer {}", t));
+            request = request.header("Authorization", &format!("Bearer {}", t));
         }
 
-        let response = request.call().map_err(|e| match e {
-            ureq::Error::Status(code, _) => RegistryError::HttpError {
+        let mut response = request.call().map_err(|e| match e {
+            ureq::Error::StatusCode(code) => RegistryError::HttpError {
                 status: code,
                 message: format!("failed to fetch index from {}", index_url),
             },
@@ -84,7 +84,8 @@ impl RegistryClient {
         })?;
 
         let body = response
-            .into_string()
+            .body_mut()
+            .read_to_string()
             .map_err(|_| RegistryError::RegistryUnreachable { url: index_url })?;
 
         // Parse and cache index
@@ -225,11 +226,11 @@ impl RegistryClient {
 
                 let mut request = ureq::get(&archive_url);
                 if let Some(t) = token {
-                    request = request.set("Authorization", &format!("Bearer {}", t));
+                    request = request.header("Authorization", &format!("Bearer {}", t));
                 }
 
-                let response = request.call().map_err(|e| match e {
-                    ureq::Error::Status(code, _) => RegistryError::HttpError {
+                let mut response = request.call().map_err(|e| match e {
+                    ureq::Error::StatusCode(code) => RegistryError::HttpError {
                         status: code,
                         message: format!("failed to download {}", archive_url),
                     },
@@ -238,12 +239,13 @@ impl RegistryClient {
                     },
                 })?;
 
-                let mut data = Vec::new();
-                response.into_reader().read_to_end(&mut data).map_err(|_| {
-                    RegistryError::ArchiveError {
-                        message: "failed to read response body".to_string(),
-                    }
-                })?;
+                let data =
+                    response
+                        .body_mut()
+                        .read_to_vec()
+                        .map_err(|_| RegistryError::ArchiveError {
+                            message: "failed to read response body".to_string(),
+                        })?;
 
                 Ok(data)
             }
@@ -267,8 +269,8 @@ impl RegistryClient {
                     version
                 );
 
-                let response = ureq::get(&archive_url).call().map_err(|e| match e {
-                    ureq::Error::Status(code, _) => RegistryError::HttpError {
+                let mut response = ureq::get(&archive_url).call().map_err(|e| match e {
+                    ureq::Error::StatusCode(code) => RegistryError::HttpError {
                         status: code,
                         message: format!("failed to download {}", archive_url),
                     },
@@ -277,12 +279,13 @@ impl RegistryClient {
                     },
                 })?;
 
-                let mut data = Vec::new();
-                response.into_reader().read_to_end(&mut data).map_err(|_| {
-                    RegistryError::ArchiveError {
-                        message: "failed to read response body".to_string(),
-                    }
-                })?;
+                let data =
+                    response
+                        .body_mut()
+                        .read_to_vec()
+                        .map_err(|_| RegistryError::ArchiveError {
+                            message: "failed to read response body".to_string(),
+                        })?;
 
                 Ok(data)
             }
@@ -324,8 +327,6 @@ pub struct InstalledPackage {
     pub version: Version,
     pub path: PathBuf,
 }
-
-use std::io::Read;
 
 #[cfg(test)]
 mod tests {

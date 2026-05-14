@@ -79,17 +79,18 @@ fn check_for_update() {
     }
 
     // Fetch from GitHub API with 2s timeout
-    let agent = ureq::AgentBuilder::new()
-        .timeout(Duration::from_secs(2))
-        .build();
+    let agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(2)))
+        .build()
+        .new_agent();
     let result = agent
         .get("https://api.github.com/repos/vaislang/vais/releases/latest")
-        .set("User-Agent", &format!("vaisc/{}", current))
+        .header("User-Agent", &format!("vaisc/{}", current))
         .call();
 
     let latest_tag = match result {
-        Ok(resp) => {
-            if let Ok(json) = resp.into_json::<serde_json::Value>() {
+        Ok(mut resp) => {
+            if let Ok(json) = resp.body_mut().read_json::<serde_json::Value>() {
                 json["tag_name"].as_str().unwrap_or("").to_string()
             } else {
                 return;

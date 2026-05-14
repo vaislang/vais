@@ -136,22 +136,24 @@ pub(super) fn cmd_pkg_publish(
     );
 
     let publish_url = format!("{}/packages/publish", registry_url.trim_end_matches('/'));
-    let response = ureq::post(&publish_url)
-        .set("Authorization", &format!("Bearer {}", auth_token))
-        .set(
+    let mut response = ureq::post(&publish_url)
+        .header("Authorization", &format!("Bearer {}", auth_token))
+        .header(
             "Content-Type",
             &format!("multipart/form-data; boundary={}", boundary),
         )
-        .send_bytes(&body)
-        .map_err(|e| match e {
-            ureq::Error::Status(code, resp) => {
-                let msg = resp.into_string().unwrap_or_default();
-                format!("publish failed (HTTP {}): {}", code, msg)
-            }
-            _ => format!("publish failed: {}", e),
-        })?;
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .send(&body)
+        .map_err(|e| format!("publish failed: {}", e))?;
 
     let status = response.status();
+    if !status.is_success() {
+        let msg = response.body_mut().read_to_string().unwrap_or_default();
+        return Err(format!("publish failed (HTTP {}): {}", status, msg));
+    }
+
     if verbose {
         println!("  Server responded with status {}", status);
     }
@@ -169,12 +171,12 @@ pub(super) fn cmd_pkg_publish(
     );
 
     let verify_response = ureq::get(&verify_url)
-        .set("Authorization", &format!("Bearer {}", auth_token))
+        .header("Authorization", &format!("Bearer {}", auth_token))
         .call();
 
     match verify_response {
-        Ok(resp) => {
-            if let Ok(body) = resp.into_string() {
+        Ok(mut resp) => {
+            if let Ok(body) = resp.body_mut().read_to_string() {
                 if let Ok(pkg_info) = serde_json::from_str::<serde_json::Value>(&body) {
                     if let Some(server_checksum) = pkg_info.get("checksum").and_then(|c| c.as_str())
                     {
@@ -248,14 +250,20 @@ pub(super) fn cmd_pkg_yank(
     }
 
     ureq::post(&yank_url)
-        .set("Authorization", &format!("Bearer {}", auth_token))
-        .call()
-        .map_err(|e| match e {
-            ureq::Error::Status(code, resp) => {
-                let msg = resp.into_string().unwrap_or_default();
-                format!("yank failed (HTTP {}): {}", code, msg)
+        .header("Authorization", &format!("Bearer {}", auth_token))
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .send_empty()
+        .map_err(|e| format!("yank failed: {}", e))
+        .and_then(|mut response| {
+            let status = response.status();
+            if status.is_success() {
+                Ok(())
+            } else {
+                let msg = response.body_mut().read_to_string().unwrap_or_default();
+                Err(format!("yank failed (HTTP {}): {}", status, msg))
             }
-            _ => format!("yank failed: {}", e),
         })?;
 
     println!(
@@ -304,21 +312,25 @@ pub(super) fn cmd_pkg_login(registry: Option<String>, verbose: bool) -> Result<(
         println!("  Authenticating as {}...", username);
     }
 
-    let response = ureq::post(&login_url)
+    let mut response = ureq::post(&login_url)
+        .config()
+        .http_status_as_error(false)
+        .build()
         .send_json(serde_json::json!({
             "username": username,
             "password": password,
         }))
-        .map_err(|e| match e {
-            ureq::Error::Status(code, resp) => {
-                let msg = resp.into_string().unwrap_or_default();
-                format!("login failed (HTTP {}): {}", code, msg)
-            }
-            _ => format!("login failed: {}", e),
-        })?;
+        .map_err(|e| format!("login failed: {}", e))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let msg = response.body_mut().read_to_string().unwrap_or_default();
+        return Err(format!("login failed (HTTP {}): {}", status, msg));
+    }
 
     let body: serde_json::Value = response
-        .into_json()
+        .body_mut()
+        .read_json()
         .map_err(|e| format!("failed to parse login response: {}", e))?;
 
     let token = body
