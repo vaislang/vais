@@ -210,16 +210,16 @@ F main() -> i64 = 42
     assert_exit_code(source, 42);
 }
 
-// REGRESSION(phase-124): literal returned from &i64 function promoted to global constant
 #[test]
-fn e2e_lifetime_no_ref_params_returns_ref() {
-    // No ref params, returns a ref → gets 'static from elision (valid for now)
-    // Literal 42 is promoted to a global constant so the returned i64* pointer is valid.
+fn e2e_lifetime_no_ref_params_returns_ref_rejected() {
+    // Strict reference semantics: returning a value from a reference-returning
+    // function is not an implicit literal promotion. The program must return
+    // an explicit reference with a valid lifetime.
     let source = r#"
 F get_ref() -> &i64 {
     42
 }
 F main() -> i64 = 42
 "#;
-    assert_exit_code(source, 42);
+    assert_compile_error(source);
 }

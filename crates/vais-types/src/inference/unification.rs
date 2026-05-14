@@ -243,6 +243,18 @@ impl TypeChecker {
                     Ok(())
                 }
             }
+            // Ref(Pointer<T>) ↔ Slice(T) auto-coercion for pointer-backed array literals.
+            // This is a narrow slice coercion, not a general &T ↔ T conversion.
+            (ResolvedType::Ref(inner), ResolvedType::Slice(elem))
+            | (ResolvedType::Slice(elem), ResolvedType::Ref(inner))
+                if matches!(inner.as_ref(), ResolvedType::Pointer(_)) =>
+            {
+                if let ResolvedType::Pointer(pointer_elem) = inner.as_ref() {
+                    self.unify(pointer_elem, elem)
+                } else {
+                    Ok(())
+                }
+            }
             // RefMut(Vec<T>) ↔ SliceMut(T) auto-coercion (Phase 163).
             (ResolvedType::RefMut(inner), ResolvedType::SliceMut(elem))
             | (ResolvedType::SliceMut(elem), ResolvedType::RefMut(inner))
@@ -250,6 +262,17 @@ impl TypeChecker {
             {
                 if let ResolvedType::Named { generics, .. } = inner.as_ref() {
                     self.unify(&generics[0], elem)
+                } else {
+                    Ok(())
+                }
+            }
+            // RefMut(Pointer<T>) ↔ SliceMut(T), same narrow pointer-backed slice coercion.
+            (ResolvedType::RefMut(inner), ResolvedType::SliceMut(elem))
+            | (ResolvedType::SliceMut(elem), ResolvedType::RefMut(inner))
+                if matches!(inner.as_ref(), ResolvedType::Pointer(_)) =>
+            {
+                if let ResolvedType::Pointer(pointer_elem) = inner.as_ref() {
+                    self.unify(pointer_elem, elem)
                 } else {
                     Ok(())
                 }
@@ -414,13 +437,8 @@ impl TypeChecker {
             // DynTrait: dyn Trait accepts any concrete type that implements the trait
             (ResolvedType::DynTrait { .. }, _) | (_, ResolvedType::DynTrait { .. }) => Ok(()),
             // ImplTrait / HigherKinded were removed in ROADMAP #18.
-            // Auto-deref: &T unifies with T (implicit dereference)
-            (ResolvedType::Ref(inner), other) | (other, ResolvedType::Ref(inner)) => {
-                self.unify(inner, other)
-            }
-            (ResolvedType::RefMut(inner), other) | (other, ResolvedType::RefMut(inner)) => {
-                self.unify(inner, other)
-            }
+            // Do not implicitly unify &T or &mut T with T. Value/reference
+            // conversion must be explicit at the expression boundary (`*ref`).
             _ => Err(TypeError::Mismatch {
                 expected: expected.to_string(),
                 found: found.to_string(),

@@ -171,12 +171,35 @@ fn test_unify_result_generic() {
 }
 
 // ============================================================================
-// Unification — Ref / auto-deref
+// Unification — Ref
 // ============================================================================
 
 #[test]
-fn test_unify_ref_to_value() {
-    tc_ok("F test() -> i64 { x := 42; R x }");
+fn test_unify_ref_explicit_deref_to_value() {
+    tc_ok("F test() -> i64 { x := 42; r := &x; R *r }");
+}
+
+#[test]
+fn test_unify_ref_to_value_rejected_without_explicit_deref() {
+    tc_err("F test() -> i64 { x := 42; r := &x; R r }");
+}
+
+#[test]
+fn test_unify_ref_tail_expr_to_value_rejected_without_explicit_deref() {
+    tc_err("F test(x: i64) -> i64 = &x");
+}
+
+#[test]
+fn test_unify_ref_pointer_array_to_slice_allowed() {
+    tc_ok(
+        r#"
+        F first(xs: &[i64]) -> i64 = xs[0]
+        F test() -> i64 {
+            data := [1, 2, 3]
+            first(&data)
+        }
+    "#,
+    );
 }
 
 // ============================================================================
