@@ -296,10 +296,10 @@ jobs:
           echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
           echo "CC=clang-17" >> $GITHUB_ENV
 
-      - name: Install LLVM 17 (macOS)
+      - name: Install LLVM 17 and OpenSSL (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install llvm@17
+          brew install llvm@17 openssl@3
           echo "LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)" >> $GITHUB_ENV
 
       - name: Install LLVM 17 (Windows)

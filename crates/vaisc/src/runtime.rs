@@ -9,9 +9,25 @@ pub(crate) struct RuntimeInfo {
     pub(crate) file: &'static str,
     /// Whether this runtime requires pthread linking
     pub(crate) needs_pthread: bool,
-    /// Additional system libraries required (e.g., "-lssl", "-lcrypto")
+    /// Additional clang flags required by this runtime.
+    ///
+    /// Runtime C sources are compiled by the final clang invocation, so
+    /// native dependency include hints must travel with linker flags.
     pub(crate) libs: &'static [&'static str],
 }
+
+const OPENSSL_NATIVE_FLAGS: &[&str] = &[
+    "-I/opt/homebrew/opt/openssl@3/include",
+    "-I/usr/local/opt/openssl@3/include",
+    "-I/opt/homebrew/opt/openssl/include",
+    "-I/usr/local/opt/openssl/include",
+    "-L/opt/homebrew/opt/openssl@3/lib",
+    "-L/usr/local/opt/openssl@3/lib",
+    "-L/opt/homebrew/opt/openssl/lib",
+    "-L/usr/local/opt/openssl/lib",
+    "-lssl",
+    "-lcrypto",
+];
 
 /// Get the C runtime file info for a given module path.
 /// Returns None if the module doesn't have a C runtime dependency.
@@ -32,14 +48,10 @@ pub(crate) fn get_runtime_for_module(module_path: &str) -> Option<RuntimeInfo> {
             file: "http_client_runtime.c",
             needs_pthread: false,
             // HTTPS path now uses TLS via tls_runtime.c; mirror the OpenSSL
-            // library search hints from the std::tls entry so programs using
-            // http_client with HTTPS resolve -lssl / -lcrypto on macOS Homebrew.
-            libs: &[
-                "-L/opt/homebrew/opt/openssl/lib",
-                "-L/usr/local/opt/openssl/lib",
-                "-lssl",
-                "-lcrypto",
-            ],
+            // native hints from the std::tls entry so programs using
+            // http_client with HTTPS can compile tls_runtime.c and resolve
+            // -lssl / -lcrypto on macOS Homebrew.
+            libs: OPENSSL_NATIVE_FLAGS,
         }),
         "std::websocket" => Some(RuntimeInfo {
             file: "websocket_runtime.c",
@@ -49,20 +61,13 @@ pub(crate) fn get_runtime_for_module(module_path: &str) -> Option<RuntimeInfo> {
         "std::tls" => Some(RuntimeInfo {
             file: "tls_runtime.c",
             needs_pthread: false,
-            // macOS: system OpenSSL is unshipped; clang -lssl/-lcrypto fails
-            // unless Homebrew openssl is on the search path. The library
-            // search hint comes through `-L`-prefixed entries in `libs`,
-            // which native.rs forwards verbatim to clang. The presence of
-            // -L paths for both Homebrew arm64 and Intel locations covers
-            // both Apple-silicon and older x86_64 macOS layouts; on Linux
-            // these paths simply don't exist, so clang silently ignores
-            // them and resolves -lssl from the standard system path.
-            libs: &[
-                "-L/opt/homebrew/opt/openssl/lib",
-                "-L/usr/local/opt/openssl/lib",
-                "-lssl",
-                "-lcrypto",
-            ],
+            // macOS: system OpenSSL is unshipped; tls_runtime.c needs both
+            // include and library search hints for Homebrew OpenSSL. The
+            // flags cover Apple-silicon and Intel Homebrew layouts, including
+            // the current openssl@3 opt path and the legacy openssl alias.
+            // On Linux these paths do not exist, so clang ignores them and
+            // resolves OpenSSL from the system paths.
+            libs: OPENSSL_NATIVE_FLAGS,
         }),
         "src::auth" | "src::auth::runtime" => Some(RuntimeInfo {
             file: "auth_runtime.c",
@@ -400,4 +405,38 @@ pub(crate) fn find_gc_library() -> Option<PathBuf> {
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tls_runtime_carries_openssl_compile_and_link_hints() {
+        let info = get_runtime_for_module("std::tls").expect("std::tls runtime info");
+
+        assert!(
+            info.libs
+                .iter()
+                .any(|flag| flag.ends_with("/openssl@3/include")),
+            "std::tls must pass an OpenSSL include path for tls_runtime.c"
+        );
+        assert!(
+            info.libs
+                .iter()
+                .any(|flag| flag.ends_with("/openssl@3/lib")),
+            "std::tls must pass an OpenSSL library path"
+        );
+        assert!(info.libs.contains(&"-lssl"));
+        assert!(info.libs.contains(&"-lcrypto"));
+    }
+
+    #[test]
+    fn http_client_reuses_tls_openssl_hints() {
+        let tls = get_runtime_for_module("std::tls").expect("std::tls runtime info");
+        let http_client =
+            get_runtime_for_module("std::http_client").expect("std::http_client runtime info");
+
+        assert_eq!(http_client.libs, tls.libs);
+    }
 }
