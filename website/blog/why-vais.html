@@ -470,17 +470,10 @@
         <h2>The Token Efficiency Problem</h2>
 
         <p>
-          <strong>Archive note, 2026-05-12:</strong> the sections below preserve historical design context.
-          Step 19 retired <code>F/S/E/EN/EL/M/R/T/U/P/W/X</code>; current Vais code uses canonical keywords
-          such as <code>fn</code>, <code>struct</code>, <code>enum</code>, <code>else</code>, <code>match</code>,
-          <code>return</code>, <code>use</code>, and <code>pub</code>.
-        </p>
-
-        <p>
-          Let's talk numbers. A typical struct definition in Rust requires keywords like <code>struct</code>,
-          <code>fn</code>, and <code>impl</code>. These are tokenized inefficiently—<code>struct</code> alone
-          is often 2-3 tokens depending on the tokenizer. In Vais, the equivalent keyword is <code>S</code>:
-          a single character, always one token.
+          <strong>Archive note, 2026-05-13:</strong> the sections below preserve historical design context.
+          Current Vais code prefers canonical keywords such as <code>fn</code>, <code>struct</code>,
+          <code>enum</code>, <code>else</code>, <code>match</code>, <code>return</code>, <code>use</code>,
+          and <code>pub</code>; compact spellings remain compatibility syntax where the compiler still accepts them.
         </p>
 
         <p>

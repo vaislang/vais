@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Vais - AI 최적화 시스템 프로그래밍 언어",
-    "description": "Vais는 네이티브 LLVM 성능과 gate-backed 공개 claim을 갖춘 AI 코드 생성용 시스템 프로그래밍 언어입니다."
+    "description": "Vais는 네이티브 LLVM 성능과 evidence-scoped 공개 claim을 갖춘 AI 코드 생성용 시스템 프로그래밍 언어입니다."
   },
   "nav": {
     "compare": "게이트",
@@ -13,19 +13,19 @@
     "blog": "블로그"
   },
   "hero": {
-    "badge": "Certified Core + Promoted Runtime Gates",
+    "badge": "Certified Core + Scoped Evidence",
     "title": "<span class=\"gradient-text\">명확한 Vais</span>를 작성하고,<br><span class=\"gradient-text\">네이티브 성능</span>을 얻으세요",
-    "subtitle": "Vais (Vibe AI Language for Systems)는 AI 코드 생성에 최적화된 시스템 프로그래밍 언어입니다. 현재 공개 기준은 certified Core compiler와 명시된 promoted runtime gate입니다.",
+    "subtitle": "Vais (Vibe AI Language for Systems)는 AI 코드 생성에 최적화된 시스템 프로그래밍 언어입니다. 현재 공개 기준에는 clean compiler main gate와 VaisDB aggregate main full-build smoke가 포함되며, DB/server/web 제품 claim은 명시된 gate 범위에 묶입니다.",
     "tryBrowser": "브라우저에서 시도하기",
     "install": "brew install vais"
   },
   "compare": {
-    "title": "Canonical 문법과 Gate-backed Claim",
-    "subtitle": "Step 19에서 기존 single-letter keyword form은 제거되었습니다. 현재 공개 claim은 canonical 문법과 integrity, package, runtime, full-build, product schema 같은 명시 gate에 묶입니다.",
+    "title": "Canonical 문법과 Evidence-scoped Claim",
+    "subtitle": "Full-word declaration/import spelling은 가능한 곳에서 canonical입니다. <code>I</code>, <code>LF</code>, <code>LW</code>, <code>D</code>, <code>B</code>, <code>C</code> 같은 compact control form은 현재 문법으로 남아 있습니다. 공개 claim은 compiler main gate, VaisDB aggregate main full-build smoke, schema fixture, scoped integration evidence를 구분합니다.",
     "vais": "Vais",
     "tokens": "토큰",
-    "barTitle": "Gate Snapshot — 2026-05-12",
-    "barNote": "Baseline은 현재 integrity manifest 기준입니다. cross-package schema 15/15와 multi-domain product schema 9/9가 locked gate입니다."
+    "barTitle": "Evidence Snapshot — 2026-05-13",
+    "barNote": "Compiler baseline은 fmt/build, IR verifier test, clean-cache VaisDB aggregate main full-build smoke를 IR/link warning 없이 통과합니다. Cross-package schema 15/15와 shared-schema product evidence 9/9는 main-fixture/local-workspace에서 재현되며 server/web 수치는 scoped gate evidence입니다."
   },
   "performance": {
     "title": "네이티브 성능 증거",
@@ -39,7 +39,7 @@
     "subtitle": "성능 저하 없이 AI 지원 개발을 위해 처음부터 설계되었습니다.",
     "singleChar": {
       "title": "Canonical 키워드",
-      "description": "<code>fn</code>, <code>struct</code>, <code>enum</code>, <code>else</code>, <code>match</code>, <code>return</code>, <code>use</code>, <code>pub</code>이 표준입니다. Retired single-letter form은 더 이상 허용되지 않습니다."
+      "description": "<code>fn</code>, <code>struct</code>, <code>enum</code>, <code>else</code>, <code>match</code>, <code>return</code>, <code>use</code>, <code>pub</code>은 compiler가 full-word spelling을 제공하는 곳에서 canonical입니다. Full-word가 promoted되지 않은 compact control token은 명시적 현재 문법으로 남아 있습니다."
     },
     "selfRecursion": {
       "title": "자기 재귀 연산자",
@@ -76,7 +76,7 @@
   },
   "playground": {
     "title": "지금 Vais를 시도해보세요",
-    "subtitle": "브라우저에서 Vais syntax와 examples를 실험할 수 있습니다. Server-backed compilation은 API가 있을 때 사용되며 JS/WASM browser path는 experimental입니다.",
+    "subtitle": "브라우저에서 Vais syntax와 examples를 실험할 수 있습니다. 실제 compilation은 playground API를 사용하며, browser-only compile/execute는 아직 experimental입니다.",
     "launch": "대화형 플레이그라운드 시작",
     "loadHere": "여기에 플레이그라운드 로드",
     "openTab": "새 탭에서 열기"
@@ -107,7 +107,7 @@
   "vaisx": {
     "badge": "신규",
     "title": "Vais로 웹 앱 만들기",
-    "subtitle": "VaisX는 Vais web framework workbench입니다. 현재 공개 claim은 runtime, unit, package, full-build, shared-schema product gate에 묶입니다.",
+    "subtitle": "VaisX는 Vais web framework workbench입니다. 현재 공개 claim은 main-reproducible compiler/schema gate, VaisDB aggregate main full-build smoke, scoped Vais Web integration evidence를 구분합니다.",
     "compiler": {
       "title": "컴파일 타임 반응성",
       "description": "Reactive state 분석과 DOM update generation은 명시된 gate가 덮는 범위에서만 검증된 구현 표면입니다."
@@ -117,8 +117,8 @@
       "description": "File-based routing과 SSR/SSG module은 존재합니다. promoted behavior는 현재 Vais Web gate 기준입니다."
     },
     "runtime": {
-      "title": "Promoted Runtime Gates",
-      "description": "현재 Vais Web baseline은 runtime smoke 61/77, unit 390/390, package tests 3272/3272, full-build 24/24, shared-schema product gate 9/9입니다. Size claim은 size gate가 필요합니다."
+      "title": "Runtime Evidence",
+      "description": "현재 scoped Vais Web evidence는 runtime smoke 61/77, unit 390/390, package tests 3272/3272, full-build 24/24이며 shared-schema product evidence 9/9은 compiler main-fixture workspace gate로 port되었습니다. Size claim은 size gate가 필요합니다."
     },
     "learnMore": "더 알아보기",
     "github": "GitHub",

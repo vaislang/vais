@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vais - AI-Optimized Systems Programming Language</title>
-  <meta name="description" content="Vais is a systems programming language designed for AI code generation with native LLVM performance and gate-backed public claims.">
+  <meta name="description" content="Vais is a systems programming language designed for AI code generation with native LLVM performance and evidence-scoped public claims.">
   <meta property="og:title" content="Vais - AI-Optimized Systems Programming Language">
-  <meta property="og:description" content="Canonical syntax, LLVM backend, type inference, and gate-backed public claims. Write clear Vais, get native performance.">
+  <meta property="og:description" content="Canonical syntax, LLVM backend, type inference, and evidence-scoped public claims. Write clear Vais, get native performance.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="/logo-icon.png">
   <meta property="og:url" content="https://vaislang.dev/">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Vais - AI-Optimized Systems Programming Language">
-  <meta name="twitter:description" content="Canonical syntax, LLVM backend, type inference, and gate-backed public claims. Write clear Vais, get native performance.">
+  <meta name="twitter:description" content="Canonical syntax, LLVM backend, type inference, and evidence-scoped public claims. Write clear Vais, get native performance.">
   <meta name="twitter:image" content="/logo-icon.png">
   <link rel="canonical" href="https://vaislang.dev/">
   <link rel="icon" type="image/png" href="/logo-icon.png">
@@ -61,14 +61,13 @@
     <div class="hero-bg"></div>
     <div class="container">
       <div class="hero-content">
-        <div class="hero-badge" data-i18n="hero.badge">Certified Core + Promoted Runtime Gates</div>
+        <div class="hero-badge" data-i18n="hero.badge">Certified Core + Scoped Evidence</div>
         <h1 class="hero-title" data-i18n="hero.title" data-i18n-html>
           Write <span class="gradient-text">clear Vais</span>,<br>
           get <span class="gradient-text">native performance</span>
         </h1>
         <p class="hero-subtitle" data-i18n="hero.subtitle">
-          Vais (Vibe AI Language for Systems) is a systems programming language optimized for AI code generation.
-          The current public baseline is a certified Core compiler plus named promoted runtime gates.
+          Vais (Vibe AI Language for Systems) is a systems programming language optimized for AI code generation. The current public baseline includes a clean compiler main gate and a VaisDB aggregate main full-build smoke, while DB/server/web product claims stay tied to named gates.
         </p>
         <div class="hero-actions">
           <a href="#playground" class="btn btn-primary" data-i18n="hero.tryBrowser">Try in Browser</a>
@@ -94,18 +93,20 @@
   <span class="kw">else</span> { <span class="self">@</span>(n - <span class="num">1</span>) + <span class="self">@</span>(n - <span class="num">2</span>) }
 }
 
-<span class="kw">fn</span> <span class="fn">main</span>() {
+<span class="kw">fn</span> <span class="fn">main</span>() -> <span class="type">i64</span> {
   result <span class="op">:=</span> <span class="fn">fib</span>(<span class="num">10</span>)
-  <span class="fn">puts</span>(<span class="str">"fib(10) = ~{result}"</span>)
+  <span class="fn">puts</span>(<span class="str">"fib(10) = {result}"</span>)
+  <span class="num">0</span>
 }</code><code class="code-panel" data-panel="1"><span class="kw">struct</span> <span class="type">Vec2</span> { x: <span class="type">f64</span>, y: <span class="type">f64</span> }
 
 <span class="kw">fn</span> <span class="fn">len</span>(v: <span class="type">Vec2</span>) -> <span class="type">f64</span> {
   <span class="fn">sqrt</span>(v.x * v.x + v.y * v.y)
 }
 
-<span class="kw">fn</span> <span class="fn">main</span>() {
+<span class="kw">fn</span> <span class="fn">main</span>() -> <span class="type">i64</span> {
   p <span class="op">:=</span> <span class="type">Vec2</span> { x: <span class="num">3.0</span>, y: <span class="num">4.0</span> }
-  <span class="fn">puts</span>(<span class="str">"len = ~{<span class="fn">len</span>(p)}"</span>)
+  <span class="fn">puts</span>(<span class="str">"len = {<span class="fn">len</span>(p)}"</span>)
+  <span class="num">0</span>
 }</code><code class="code-panel" data-panel="2"><span class="kw">enum</span> <span class="type">Shape</span> {
   Circle(<span class="type">f64</span>),
   Rect(<span class="type">f64</span>, <span class="type">f64</span>),
@@ -125,9 +126,9 @@
   <!-- Token Comparison Section -->
   <section class="compare" id="compare">
     <div class="container">
-      <h2 class="section-title" data-i18n="compare.title">Canonical Syntax, Gate-Backed Claims</h2>
+      <h2 class="section-title" data-i18n="compare.title">Canonical Syntax, Evidence-Scoped Claims</h2>
       <p class="section-subtitle" data-i18n="compare.subtitle" data-i18n-html>
-        Step 19 retired the old single-letter keyword forms. Current public claims are tied to canonical syntax and named gates, including integrity, package, runtime, full-build, and product schema checks.
+        Full-word declaration and import spellings are canonical where available; compact control forms such as <code>I</code>, <code>LF</code>, <code>LW</code>, <code>D</code>, <code>B</code>, and <code>C</code> remain current syntax. Public claims distinguish the compiler main gate, the VaisDB aggregate main full-build smoke, schema fixtures, and scoped integration evidence.
       </p>
       <div class="compare-grid">
         <!-- Vais (always visible) -->
@@ -242,38 +243,38 @@
         </div>
       </div>
       <div class="compare-bar-section">
-        <h3 class="compare-bar-title" data-i18n="compare.barTitle">Gate Snapshot — 2026-05-12</h3>
+        <h3 class="compare-bar-title" data-i18n="compare.barTitle">Evidence Snapshot — 2026-05-13</h3>
         <div class="compare-bars">
           <div class="bar-item">
-            <span class="bar-label">Integrity</span>
+            <span class="bar-label">Compiler main gate</span>
             <div class="bar-track">
               <div class="bar-fill bar-vais" style="width: 100%"></div>
             </div>
             <span class="bar-value">OK</span>
           </div>
           <div class="bar-item">
-            <span class="bar-label">VaisDB runtime</span>
+            <span class="bar-label">VaisDB main full build</span>
             <div class="bar-track">
               <div class="bar-fill bar-python" style="width: 100%"></div>
             </div>
-            <span class="bar-value">34/34</span>
+            <span class="bar-value">36/36</span>
           </div>
           <div class="bar-item">
-            <span class="bar-label">Server runtime</span>
+            <span class="bar-label">Server runtime evidence</span>
             <div class="bar-track">
               <div class="bar-fill bar-go" style="width: 100%"></div>
             </div>
             <span class="bar-value">20/20</span>
           </div>
           <div class="bar-item">
-            <span class="bar-label">Web full build</span>
+            <span class="bar-label">Web full-build evidence</span>
             <div class="bar-track">
               <div class="bar-fill bar-rust" style="width: 100%"></div>
             </div>
             <span class="bar-value">24/24</span>
           </div>
           <div class="bar-item">
-            <span class="bar-label">Product schema</span>
+            <span class="bar-label">Product schema evidence</span>
             <div class="bar-track">
               <div class="bar-fill bar-c" style="width: 100%"></div>
             </div>
@@ -281,7 +282,7 @@
           </div>
         </div>
         <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.75rem; text-align: center;" data-i18n="compare.barNote" data-i18n-html>
-          Baseline is generated from the current integrity manifest: cross-package schema 15/15 and multi-domain product schema 9/9 are locked gates.
+          Compiler baseline: fmt/build, IR verifier tests, and a clean-cache VaisDB aggregate main full-build smoke pass without IR or link warnings. Cross-package schema 15/15 and shared-schema product evidence 9/9 remain main-fixture/local-workspace reproducible; server/web counts are scoped gate evidence.
         </p>
       </div>
     </div>
@@ -370,7 +371,7 @@
         <div class="feature-card">
           <div class="feature-icon">fn</div>
           <h3 data-i18n="features.singleChar.title">Canonical Keywords</h3>
-          <p data-i18n="features.singleChar.description" data-i18n-html><code>fn</code>, <code>struct</code>, <code>enum</code>, <code>else</code>, <code>match</code>, <code>return</code>, <code>use</code>, and <code>pub</code> are canonical. Retired single-letter forms are no longer accepted.</p>
+          <p data-i18n="features.singleChar.description" data-i18n-html><code>fn</code>, <code>struct</code>, <code>enum</code>, <code>else</code>, <code>match</code>, <code>return</code>, <code>use</code>, and <code>pub</code> are canonical where the compiler exposes full-word spellings. Compact control tokens remain explicit syntax where no full-word spelling is promoted.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">@</div>
@@ -431,23 +432,23 @@
     <div class="container">
       <span class="section-badge" data-i18n="ecosystem.badge">Promoted Gates</span>
       <h2 class="section-title" data-i18n="ecosystem.title">Full-Stack Vais Ecosystem</h2>
-      <p class="section-subtitle" data-i18n="ecosystem.subtitle" data-i18n-html>Database, server, and web packages are tracked by explicit package, runtime, unit, full-build, cross-package schema, and shared-schema product gates. They are not presented as product-complete v1 releases.</p>
+      <p class="section-subtitle" data-i18n="ecosystem.subtitle" data-i18n-html>Database, server, and web packages are tracked by explicit package, runtime, unit, full-build, cross-package schema, and shared-schema product evidence. The compiler main baseline now includes the clean-cache VaisDB aggregate full-build smoke; other runtime/package counts remain scoped evidence.</p>
 
       <div class="vaisx-grid">
         <div class="vaisx-card">
           <div class="vaisx-card-icon">🗄️</div>
           <h3 data-i18n="ecosystem.vaisdb.title">VaisDB — RAG-Native Database</h3>
-          <p data-i18n="ecosystem.vaisdb.description">Hybrid relational + vector database workbench with package codegen 261/261 and runtime smoke 34/34. Product-complete SQL/vector/FTS coverage remains outside the current claim.</p>
+          <p data-i18n="ecosystem.vaisdb.description">Hybrid relational + vector database workbench with main full-build smoke 36/36 modules clean, plus scoped package codegen 261/261 and runtime smoke 34/34 evidence. Product-complete SQL/vector/FTS coverage remains outside the current claim.</p>
         </div>
         <div class="vaisx-card">
           <div class="vaisx-card-icon">🚀</div>
           <h3 data-i18n="ecosystem.server.title">vais-server — HTTP Framework</h3>
-          <p data-i18n="ecosystem.server.description">HTTP framework workbench with server runtime smoke 20/20. Broader REST, GraphQL, WebSocket, auth, and deployment guarantees require dedicated gates.</p>
+          <p data-i18n="ecosystem.server.description">HTTP framework workbench with server runtime integration evidence 20/20. Broader REST, GraphQL, WebSocket, auth, and deployment guarantees require dedicated gates.</p>
         </div>
         <div class="vaisx-card">
           <div class="vaisx-card-icon">🌐</div>
           <h3 data-i18n="ecosystem.vaisweb.title">vais-web (VaisX) — Web Framework</h3>
-          <p data-i18n="ecosystem.vaisweb.description">Web framework workbench with runtime smoke 61/77, unit 390/390, ecosystem package tests 3272/3272, full-build 24/24, and shared-schema product gate 9/9. Size claims require a size gate.</p>
+          <p data-i18n="ecosystem.vaisweb.description">Web framework workbench with scoped runtime smoke evidence 61/77, unit 390/390, ecosystem package tests 3272/3272, full-build 24/24, and shared-schema product evidence 9/9 ported as a compiler main-fixture workspace gate. Size claims require a size gate.</p>
         </div>
       </div>
 

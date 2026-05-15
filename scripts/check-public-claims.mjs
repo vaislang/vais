@@ -90,11 +90,6 @@ requireText(
   '`36/36` LLVM/object cache artifacts',
   'VaisDB aggregate main full-build smoke must disclose the measured module/cache scope',
 );
-requirePattern(
-  publicStatus,
-  /not yet\s+reproducible as a single `origin\/main` gate/,
-  'remaining integration evidence must not be presented as one full ecosystem main gate',
-);
 requireText(
   publicStatus,
   'Main-scoped integrity runner:',
@@ -102,8 +97,8 @@ requireText(
 );
 requireText(
   publicStatus,
-  'Full ecosystem runtime aggregate runner: still pending a single',
-  'full ecosystem runtime aggregate must remain explicitly pending as one main gate',
+  'Full ecosystem runtime aggregate runner: promoted via',
+  'full ecosystem runtime aggregate must be named as a promoted gate',
 );
 requireText(
   publicStatus,
@@ -144,6 +139,7 @@ requireText(readme, 'Current single-file compile-speed benchmark', 'README perfo
 requireText(readme, '6.3ms', 'README compile-speed average must match the refreshed benchmark');
 requireText(readme, '9.3x faster than C/clang', 'README compile-speed ratio must match the refreshed benchmark');
 requireText(readme, 'single full ecosystem runtime aggregate main gate', 'README must preserve ecosystem runtime scope boundary');
+requireText(readme, 'promoted via `bash scripts/check-integrity.sh`', 'README must name the promoted aggregate runner');
 forbidText(readme, 'Single-letter keywords', 'README must not present legacy single-letter declarations as current syntax');
 forbidText(readme, 'F fib(n:i64)', 'README must not use legacy function syntax in examples');
 forbidText(readme, 'Fibonacci(35) benchmark (Apple M-series ARM64, 2026-02-11)', 'README runtime evidence must not present stale date as current heading');

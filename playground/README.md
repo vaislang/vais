@@ -5,8 +5,10 @@ Web-based interactive playground for the Vais programming language.
 ## Features
 
 - **Monaco Editor** with Vais syntax highlighting
-- **Server-backed compilation** when the playground API is available, with
-  preview fallback
+- **Server-backed compilation** when the playground API is available
+- **Server-WASM execution** where the API compiles a WASM binary and the browser
+  executes it
+- **Preview fallback** for syntax/demo exploration when the API is unavailable
 - **31 example programs** demonstrating language features
 - **Auto-completion** for Vais keywords and functions
 - **Keyboard shortcuts** for quick actions
@@ -111,11 +113,14 @@ Press `Ctrl+Space` to see suggestions for:
 
 ### Execution Modes
 
-The playground uses automatic fallback:
+The playground uses automatic fallback. The current certified public baseline
+does not include browser-only compilation or execution.
 
-1. **Server mode** — Sends code to the playground server for real compilation via `vaisc`
-2. **Preview mode** — Client-side syntax/demo fallback when the server is unavailable
-3. **WASM mode** — Experimental browser path; not part of the certified Core baseline
+1. **Server mode** — Sends code to the playground API for real compilation via `vaisc`
+2. **Browser-JS mode** — Loads `vais-browser-compiler` in the browser, compiles
+   through parser + JavaScript codegen, then executes the generated JavaScript
+3. **Server-WASM mode** — The API compiles a WASM binary, then the browser executes that binary
+4. **Preview mode** — Client-side syntax/demo fallback when the API is unavailable; this is not a certified compile/execute path
 
 ## Development
 
@@ -181,7 +186,7 @@ Edit `src/styles.css` to customize the appearance.
 
 ## Future Enhancements
 
-- [ ] Certified browser WASM compilation gate
+- [ ] Certified browser-only WASM compilation gate
 - [ ] Code sharing via URL
 - [ ] Multi-file projects
 - [ ] Standard library documentation integration

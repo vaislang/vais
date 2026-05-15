@@ -23,14 +23,6 @@ AI agents should start with the generated onboarding docs:
 - [`docs/ai/AI_DEVELOPER_GUIDE.md`](docs/ai/AI_DEVELOPER_GUIDE.md)
 - [`docs/ai/REFERENCE_APP_CONTRACT.md`](docs/ai/REFERENCE_APP_CONTRACT.md)
 
-## Current Status
-
-The current public baseline is a certified Core compiler plus named promoted
-runtime gates. It is not a product-complete v1.0 release. Use
-[`PUBLIC_STATUS.md`](PUBLIC_STATUS.md) for public wording and
-[`docs/certification/CURRENT_STATUS.md`](docs/certification/CURRENT_STATUS.md)
-for compiler certification detail.
-
 ## Key Features
 
 - **Canonical declarations** - `fn`, `struct`, `enum`, `else`, `match`, `return`,
@@ -126,26 +118,7 @@ benches/           # Benchmark suite (criterion + language comparison)
 playground/        # Web playground frontend
 ```
 
-The v1.0 trust path is the Cargo `default-members` set: core compiler crates plus
-small auxiliary crates. Experimental crates remain in the workspace for opt-in
-builds, but they are not part of the default Core gate; see
-[`docs/CRATE_AUDIT.md`](docs/CRATE_AUDIT.md). Completed phase notes and old
-ROADMAP variants live in [`docs/history/`](docs/history/).
-
-Current Core certification status is tracked in
-[`docs/certification/CURRENT_STATUS.md`](docs/certification/CURRENT_STATUS.md).
-Use that file and [`ROADMAP.md`](ROADMAP.md) instead of archived phase counts
-when deciding the next compiler task.
-
-The project-level AI-native language principles are recorded in
-[`../docs/design/ai-native-language-principles.md`](../docs/design/ai-native-language-principles.md).
-Those principles are enforced through the Core certification and promotion
-gates, not by broad feature claims.
-
 ## Building
-
-Rust is pinned by [`rust-toolchain.toml`](rust-toolchain.toml). LLVM 17 is
-required for crates that use the LLVM/Inkwell backend.
 
 ```bash
 cargo build --release
@@ -209,23 +182,28 @@ Coverage is measured automatically on every push and pull request to `main` and 
 ./target/release/vaisc check hello.vais
 ```
 
-## Implementation Inventory
+## Status
 
-This is an inventory of implemented or experimental surfaces, not a Core
-certification checklist. The current proof boundary is
-`docs/certification/CURRENT_STATUS.md`.
+The current source baseline is evidence-scoped. See
+[`PUBLIC_STATUS.md`](PUBLIC_STATUS.md) for the public claim boundary.
 
-- Lexer and parser for the current grammar
-- Type checker with Core-certified fixtures plus broader generics/traits work
-- LLVM IR code generator, with JS/WASM and other backends outside the Core gate
-- Standard library modules used by Core, std, and downstream package gates
-- Borrow-checking and `--strict-borrow` work, with advanced destructor/FFI safety
-  outside Core
-- Slice types (`&[T]` / `&mut [T]`) with fat pointers
-- Parallel compilation via DAG-based dependency resolution
-- Self-hosting workbench with 50,000+ LOC of Vais compiler sources
-- LSP, REPL, editor integration, optimizer, formatter, debugger, and ecosystem
-  package work outside the Core proof boundary unless specifically promoted
+Certified or main-reproducible gates currently include:
+
+- Core compiler and promoted-runtime evidence baseline
+- Public claim guard: `node scripts/check-public-claims.mjs`
+- Main-scoped integrity runner: `bash scripts/check-integrity.sh`
+- Playground web mode/build contract, with Server-WASM explicitly API-compiled
+- Browser-JS playground smoke for parser + JavaScript codegen compile/execute
+- `vaisc emit-ts` schema declaration tests
+- VaisDB aggregate main full-build smoke: `36/36` LLVM/object cache artifacts
+- Cross-package schema gate: `15/15`
+- Multi-domain product schema gate: `9/9`
+
+Scoped integration evidence currently includes std/package/server/database/web
+runtime and package counts. The single full ecosystem runtime aggregate main gate
+is promoted via `bash scripts/check-integrity.sh` with the sibling `lang`
+workspace; broader product-complete DB/server/web behavior remains outside the
+public claim boundary.
 
 ## Performance
 
@@ -237,10 +215,17 @@ Current single-file compile-speed benchmark
 (`benches/lang-comparison/compile_bench.sh`, Hyperfine, 2026-05-13,
 Apple ARM64/macOS):
 
-**Self-hosting bootstrap workbench:** 50,000+ LOC of Vais compiler sources.
-Historical clang compilation counts are useful regression context, but current
-compiler correctness is judged by the Core certification gate and promoted
-runtime fixtures.
+| Program | Vais `--emit-ir` | Rust `rustc` | Go `go build` | C `clang` |
+|---------|------------------|--------------|---------------|-----------|
+| fibonacci | 6.0ms | 93.7ms | 48.0ms | 55.8ms |
+| quicksort | 6.4ms | 95.6ms | 47.8ms | 56.8ms |
+| http_types | 6.6ms | 103.2ms | 47.1ms | 60.7ms |
+| linked_list | 6.0ms | 98.3ms | 47.3ms | 59.5ms |
+| **Average** | **6.3ms** | **97.7ms** | **47.5ms** | **58.2ms** |
+
+Vais `--emit-ir` is 9.3x faster than C/clang, 7.6x faster than Go, and
+15.6x faster than Rust on this benchmark. This compares Vais LLVM IR emission
+against full binary compilation for the other toolchains.
 
 ### Runtime Performance
 
@@ -280,8 +265,7 @@ cd docs-site
 
 Visit the [online documentation](https://vaislang.dev/docs/) or browse the individual files:
 
-- [LANGUAGE_SPEC.md](docs/LANGUAGE_SPEC.md) - Full language surface and current
-  non-Core status notes
+- [LANGUAGE_SPEC.md](docs/LANGUAGE_SPEC.md) - Complete language specification
 - [STDLIB.md](docs/STDLIB.md) - Standard library reference
 - [TUTORIAL.md](docs/TUTORIAL.md) - Getting started tutorial
 - [Architecture.md](docs/Architecture.md) - Compiler architecture and design
@@ -418,8 +402,8 @@ Step-by-step project tutorials:
 ### Recent Blog Posts
 
 - [The Self-Hosting Journey: 50,000 Lines of Vais Compiling Itself](https://vaislang.dev/blog/self-hosting-journey.html)
-- [Vais Performance: Compilation Speed and Runtime Benchmarks](https://vaislang.dev/blog/performance-comparison.html)
-- [The Design Philosophy Behind Single-Character Keywords](https://vaislang.dev/blog/why-single-char-keywords.html)
+- [Historical Vais Performance Snapshot](https://vaislang.dev/blog/performance-comparison.html)
+- [Archived: Single-Character Keyword Rationale](https://vaislang.dev/blog/why-single-char-keywords.html)
 
 ## Legacy
 
