@@ -10,6 +10,18 @@ use std::time::{Duration, Instant};
 static VAIS_SERVER_SMOKE_LOCK: Mutex<()> = Mutex::new(());
 static VAIS_SERVER_SMOKE_ID: AtomicUsize = AtomicUsize::new(0);
 
+macro_rules! skip_if_no_vais_server_package {
+    () => {{
+        let compiler_root = compiler_root();
+        if vais_server_package_roots(&compiler_root).is_none() {
+            eprintln!(
+                "SKIP: vais-server source root not found; set VAIS_LANG_ROOT to run this smoke"
+            );
+            return;
+        }
+    }};
+}
+
 #[test]
 fn e2e_vais_server_00_minimal_runtime_smoke() {
     assert_vais_server_smoke_runs("minimal_runtime_smoke.vais", 0);
@@ -72,6 +84,7 @@ fn e2e_vais_server_11_auth_jwt_runtime_smoke() {
 
 #[test]
 fn e2e_vais_server_12_ssr_forwarding_runtime_smoke() {
+    skip_if_no_vais_server_package!();
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR upstream listener");
     listener
         .set_nonblocking(true)
@@ -171,6 +184,7 @@ fn main() -> i64 {
 
 #[test]
 fn e2e_vais_server_13_ssr_forwarding_error_mapping_runtime_smoke() {
+    skip_if_no_vais_server_package!();
     let status_listener =
         TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR status upstream listener");
     status_listener
@@ -289,6 +303,7 @@ fn main() -> i64 {
 
 #[test]
 fn e2e_vais_server_14_ssr_forwarding_timeout_runtime_smoke() {
+    skip_if_no_vais_server_package!();
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR timeout listener");
     listener
         .set_nonblocking(true)
@@ -369,6 +384,7 @@ fn main() -> i64 {
 
 #[test]
 fn e2e_vais_server_15_ssr_forwarding_retry_runtime_smoke() {
+    skip_if_no_vais_server_package!();
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR retry listener");
     listener
         .set_nonblocking(true)
@@ -455,6 +471,7 @@ fn main() -> i64 {
 
 #[test]
 fn e2e_vais_server_16_ssr_forwarding_retry_budget_observability_runtime_smoke() {
+    skip_if_no_vais_server_package!();
     let listener =
         TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR retry budget observability listener");
     listener
@@ -567,6 +584,7 @@ fn main() -> i64 {
 
 #[test]
 fn e2e_vais_server_17_ssr_nested_json_props_runtime_smoke() {
+    skip_if_no_vais_server_package!();
     let listener =
         TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR nested JSON upstream listener");
     listener
@@ -697,6 +715,7 @@ fn main() -> i64 {
 
 #[test]
 fn e2e_vais_server_18_ssr_json_escape_runtime_smoke() {
+    skip_if_no_vais_server_package!();
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR escape upstream listener");
     listener
         .set_nonblocking(true)
@@ -799,6 +818,7 @@ fn main() -> i64 {
 
 #[test]
 fn e2e_vais_server_19_ssr_json_grammar_runtime_smoke() {
+    skip_if_no_vais_server_package!();
     let listener =
         TcpListener::bind(("127.0.0.1", 0)).expect("bind SSR JSON grammar upstream listener");
     listener
@@ -990,7 +1010,9 @@ fn assert_vais_server_smoke_runs(fixture: &str, expected_exit: i32) {
     let _guard = VAIS_SERVER_SMOKE_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let output = run_vais_server_smoke_fixture(fixture);
+    let Some(output) = run_vais_server_smoke_fixture(fixture) else {
+        return;
+    };
     let actual_exit = output.status.code().unwrap_or(-1);
     assert!(
         output.status.success() || actual_exit == expected_exit,
@@ -1009,8 +1031,12 @@ fn assert_vais_server_smoke_runs(fixture: &str, expected_exit: i32) {
     );
 }
 
-fn run_vais_server_smoke_fixture(fixture: &str) -> std::process::Output {
+fn run_vais_server_smoke_fixture(fixture: &str) -> Option<std::process::Output> {
     let compiler_root = compiler_root();
+    let Some((server_root, vaisdb_src)) = vais_server_package_roots(&compiler_root) else {
+        eprintln!("SKIP: vais-server source root not found; set VAIS_LANG_ROOT to run {fixture}");
+        return None;
+    };
     let fixture_path = compiler_root.join("tests/vais-server/smoke").join(fixture);
     assert!(
         fixture_path.is_file(),
@@ -1024,8 +1050,8 @@ fn run_vais_server_smoke_fixture(fixture: &str) -> std::process::Output {
     let _ = std::fs::remove_dir_all(smoke_root.join(".vais-cache"));
     let _ = std::fs::remove_dir_all(std::env::temp_dir().join(".vais-cache"));
     remove_vais_cache_dirs(&compiler_root.join("std"));
-    remove_vais_cache_dirs(&workspace_root(&compiler_root).join("lang/packages/vais-server"));
-    remove_vais_cache_dirs(&workspace_root(&compiler_root).join("lang/packages/vaisdb/src"));
+    remove_vais_cache_dirs(&server_root);
+    remove_vais_cache_dirs(&vaisdb_src);
 
     let isolated_dir = isolated_smoke_dir(fixture);
     let isolated_tmp_dir = isolated_dir.join("tmp");
@@ -1077,7 +1103,7 @@ fn run_vais_server_smoke_fixture(fixture: &str) -> std::process::Output {
         .expect("failed to run vais-server runtime smoke executable");
     let _ = std::fs::remove_file(&exe_path);
     let _ = std::fs::remove_dir_all(&isolated_dir);
-    run
+    Some(run)
 }
 
 fn run_vais_server_generated_loopback_smoke(
@@ -1484,6 +1510,34 @@ fn workspace_root(compiler_root: &Path) -> &Path {
         .expect("compiler root should have workspace parent")
 }
 
+fn lang_root(compiler_root: &Path) -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("VAIS_LANG_ROOT") {
+        let path = PathBuf::from(path);
+        if path.is_dir() {
+            return Some(path);
+        }
+    }
+
+    for candidate in [
+        workspace_root(compiler_root).join("lang"),
+        compiler_root.join("vais-lang"),
+        compiler_root.join("lang"),
+    ] {
+        if candidate.is_dir() {
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
+fn vais_server_package_roots(compiler_root: &Path) -> Option<(PathBuf, PathBuf)> {
+    let lang_root = lang_root(compiler_root)?;
+    let server_root = lang_root.join("packages/vais-server");
+    let vaisdb_src = lang_root.join("packages/vaisdb/src");
+    (server_root.is_dir() && vaisdb_src.is_dir()).then_some((server_root, vaisdb_src))
+}
+
 fn std_link(compiler_root: &Path) -> PathBuf {
     let tmp_std_root = PathBuf::from("/tmp/vais-lib");
     std::fs::create_dir_all(&tmp_std_root).expect("failed to create /tmp/vais-lib");
@@ -1509,8 +1563,8 @@ fn std_link(compiler_root: &Path) -> PathBuf {
 
 fn vais_server_dep_paths(compiler_root: &Path) -> String {
     let std_link = std_link(compiler_root);
-    let server_root = workspace_root(compiler_root).join("lang/packages/vais-server");
-    let vaisdb_src = workspace_root(compiler_root).join("lang/packages/vaisdb/src");
+    let (server_root, vaisdb_src) = vais_server_package_roots(compiler_root)
+        .expect("vais-server source root should be available before building smoke fixtures");
     format!(
         "{}:{}:{}",
         server_root.display(),

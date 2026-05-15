@@ -14,14 +14,8 @@ use std::process::Command;
 
 /// Build `<repo_root>/lang/packages/<pkg>/src/main.vais` with `vaisc build`.
 /// Returns Ok(()) on success, Err(stderr) on failure.
-fn try_build_pkg_entry(pkg: &str) -> Result<(), String> {
-    let workspace_root = workspace_root();
-    let entry = workspace_root
-        .join("lang")
-        .join("packages")
-        .join(pkg)
-        .join("src")
-        .join("main.vais");
+fn try_build_pkg_entry(pkg: &str, entry: &Path) -> Result<(), String> {
+    let compiler_root = compiler_root();
     if !entry.exists() {
         return Err(format!(
             "package entry not found: {} (pkg={})",
@@ -30,19 +24,11 @@ fn try_build_pkg_entry(pkg: &str) -> Result<(), String> {
         ));
     }
 
-    let std_path = workspace_root.join("compiler").join("std");
-    let vaisc = workspace_root
-        .join("compiler")
-        .join("target")
-        .join("release")
-        .join("vaisc");
+    let std_path = compiler_root.join("std");
+    let vaisc = compiler_root.join("target").join("release").join("vaisc");
     if !vaisc.exists() {
         // Fall back to debug build if release isn't there (shouldn't happen in CI).
-        let debug_vaisc = workspace_root
-            .join("compiler")
-            .join("target")
-            .join("debug")
-            .join("vaisc");
+        let debug_vaisc = compiler_root.join("target").join("debug").join("vaisc");
         if !debug_vaisc.exists() {
             return Err(format!(
                 "vaisc binary not found at {} or {}",
@@ -54,11 +40,7 @@ fn try_build_pkg_entry(pkg: &str) -> Result<(), String> {
     let vaisc_path = if vaisc.exists() {
         vaisc
     } else {
-        workspace_root
-            .join("compiler")
-            .join("target")
-            .join("debug")
-            .join("vaisc")
+        compiler_root.join("target").join("debug").join("vaisc")
     };
 
     let tmp_out = std::env::temp_dir().join(format!("vais_pkg_full_build_{}", pkg));
@@ -67,7 +49,7 @@ fn try_build_pkg_entry(pkg: &str) -> Result<(), String> {
     let output = Command::new(&vaisc_path)
         .env("VAIS_STD_PATH", &std_path)
         .arg("build")
-        .arg(&entry)
+        .arg(entry)
         .arg("-o")
         .arg(&tmp_out)
         .output()
@@ -83,6 +65,55 @@ fn try_build_pkg_entry(pkg: &str) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+fn package_entry(pkg: &str) -> Option<PathBuf> {
+    let entry = lang_root()?
+        .join("packages")
+        .join(pkg)
+        .join("src")
+        .join("main.vais");
+    if !entry.exists() {
+        eprintln!(
+            "SKIP: package entry not found: {} (pkg={})",
+            entry.display(),
+            pkg
+        );
+        return None;
+    }
+    Some(entry)
+}
+
+fn lang_root() -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("VAIS_LANG_ROOT") {
+        let path = PathBuf::from(path);
+        if path.is_dir() {
+            return Some(path);
+        }
+    }
+
+    for candidate in [
+        workspace_root().join("lang"),
+        compiler_root().join("vais-lang"),
+        compiler_root().join("lang"),
+    ] {
+        if candidate.is_dir() {
+            return Some(candidate);
+        }
+    }
+
+    eprintln!("SKIP: vais-lang root not found; set VAIS_LANG_ROOT to run package full-build smoke");
+    None
+}
+
+fn compiler_root() -> PathBuf {
+    let manifest_dir =
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set in tests");
+    let path = Path::new(&manifest_dir);
+    path.parent()
+        .and_then(|p| p.parent())
+        .map(PathBuf::from)
+        .expect("could not derive compiler root from CARGO_MANIFEST_DIR")
 }
 
 fn workspace_root() -> PathBuf {
@@ -101,7 +132,10 @@ fn workspace_root() -> PathBuf {
 
 #[test]
 fn e2e_pkg_full_build_vais_server_main() {
-    match try_build_pkg_entry("vais-server") {
+    let Some(entry) = package_entry("vais-server") else {
+        return;
+    };
+    match try_build_pkg_entry("vais-server", &entry) {
         Ok(()) => {}
         Err(e) => panic!("vais-server full build failed:\n{}", e),
     }
@@ -109,7 +143,10 @@ fn e2e_pkg_full_build_vais_server_main() {
 
 #[test]
 fn e2e_pkg_full_build_vaisdb_main() {
-    match try_build_pkg_entry("vaisdb") {
+    let Some(entry) = package_entry("vaisdb") else {
+        return;
+    };
+    match try_build_pkg_entry("vaisdb", &entry) {
         Ok(()) => {}
         Err(e) => panic!("vaisdb full build failed:\n{}", e),
     }

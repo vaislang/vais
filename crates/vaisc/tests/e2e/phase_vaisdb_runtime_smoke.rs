@@ -180,7 +180,9 @@ fn assert_vaisdb_smoke_runs(fixture: &str, expected_exit: i32) {
     let _guard = VAISDB_SMOKE_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let output = run_vaisdb_smoke_fixture(fixture);
+    let Some(output) = run_vaisdb_smoke_fixture(fixture) else {
+        return;
+    };
     let actual_exit = output.status.code().unwrap_or(-1);
     assert!(
         output.status.success() || actual_exit == expected_exit,
@@ -199,8 +201,12 @@ fn assert_vaisdb_smoke_runs(fixture: &str, expected_exit: i32) {
     );
 }
 
-fn run_vaisdb_smoke_fixture(fixture: &str) -> std::process::Output {
+fn run_vaisdb_smoke_fixture(fixture: &str) -> Option<std::process::Output> {
     let compiler_root = compiler_root();
+    let Some(vaisdb_src) = vaisdb_src(&compiler_root) else {
+        eprintln!("SKIP: vaisdb source root not found; set VAIS_LANG_ROOT to run {fixture}");
+        return None;
+    };
     let fixture_path = compiler_root.join("tests/vaisdb/smoke").join(fixture);
     assert!(
         fixture_path.is_file(),
@@ -214,7 +220,7 @@ fn run_vaisdb_smoke_fixture(fixture: &str) -> std::process::Output {
     let _ = std::fs::remove_dir_all(smoke_root.join(".vais-cache"));
     let _ = std::fs::remove_dir_all(std::env::temp_dir().join(".vais-cache"));
     remove_vais_cache_dirs(&compiler_root.join("std"));
-    remove_vais_cache_dirs(&workspace_root(&compiler_root).join("lang/packages/vaisdb/src"));
+    remove_vais_cache_dirs(&vaisdb_src);
 
     let isolated_dir = isolated_smoke_dir(fixture);
     let isolated_tmp_dir = isolated_dir.join("tmp");
@@ -243,7 +249,10 @@ fn run_vaisdb_smoke_fixture(fixture: &str) -> std::process::Output {
         .arg("--force-rebuild")
         .current_dir(&isolated_dir)
         .env("VAIS_STD_PATH", std_link(&compiler_root))
-        .env("VAIS_DEP_PATHS", vaisdb_dep_paths(&compiler_root))
+        .env(
+            "VAIS_DEP_PATHS",
+            vaisdb_dep_paths(&compiler_root, &vaisdb_src),
+        )
         .env("TMPDIR", &isolated_tmp_dir)
         .env("TMP", &isolated_tmp_dir)
         .env("TEMP", &isolated_tmp_dir)
@@ -266,7 +275,7 @@ fn run_vaisdb_smoke_fixture(fixture: &str) -> std::process::Output {
         .expect("failed to run VaisDB runtime smoke executable");
     let _ = std::fs::remove_file(&exe_path);
     let _ = std::fs::remove_dir_all(&isolated_dir);
-    run
+    Some(run)
 }
 
 fn isolated_smoke_dir(fixture: &str) -> PathBuf {
@@ -292,6 +301,32 @@ fn workspace_root(compiler_root: &Path) -> &Path {
         .expect("compiler root should have workspace parent")
 }
 
+fn lang_root(compiler_root: &Path) -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("VAIS_LANG_ROOT") {
+        let path = PathBuf::from(path);
+        if path.is_dir() {
+            return Some(path);
+        }
+    }
+
+    for candidate in [
+        workspace_root(compiler_root).join("lang"),
+        compiler_root.join("vais-lang"),
+        compiler_root.join("lang"),
+    ] {
+        if candidate.is_dir() {
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
+fn vaisdb_src(compiler_root: &Path) -> Option<PathBuf> {
+    let src = lang_root(compiler_root)?.join("packages/vaisdb/src");
+    src.is_dir().then_some(src)
+}
+
 fn std_link(compiler_root: &Path) -> PathBuf {
     let tmp_std_root = PathBuf::from("/tmp/vais-lib");
     std::fs::create_dir_all(&tmp_std_root).expect("failed to create /tmp/vais-lib");
@@ -315,9 +350,8 @@ fn std_link(compiler_root: &Path) -> PathBuf {
     std_link
 }
 
-fn vaisdb_dep_paths(compiler_root: &Path) -> String {
+fn vaisdb_dep_paths(compiler_root: &Path, vaisdb_src: &Path) -> String {
     let std_link = std_link(compiler_root);
-    let vaisdb_src = workspace_root(compiler_root).join("lang/packages/vaisdb/src");
     format!("{}:{}", vaisdb_src.display(), std_link.display())
 }
 
