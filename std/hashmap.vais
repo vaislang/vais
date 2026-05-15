@@ -874,6 +874,13 @@ impl StrHashMap<V> {
         @.get_str_inline(entry_ptr, kp)
     }
 
+    fn get_str(&self, key: str) -> V {
+        idx := @.hash(key)
+        entry_ptr := load_i64(self.buckets + idx * 8)
+        kp := str_to_ptr(key)
+        @.get_str_inline(entry_ptr, kp)
+    }
+
     # Helper method for getting value from chain (generic V)
     fn get_str_inline(&self, entry_ptr: i64, key: i64) -> V {
         I entry_ptr == 0 { 0 }

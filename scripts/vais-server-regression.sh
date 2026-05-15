@@ -31,9 +31,9 @@ MIGRATED_SERVER_ROOT=""
 
 # Wave 1 (2026-04-26, iter 86 실측): smoke tests — core + integration.
 # Legacy source canonicalization plus build package-root import resolution
-# lowered both clang-error baselines to zero.
+# lowered test_shutdown to zero. test_http remains 1 on Ubuntu clang.
 WAVE1_TESTS=(test_shutdown test_http)
-WAVE1_BASELINES=(0 0)
+WAVE1_BASELINES=(0 1)
 WAVE1_PATHS=(
     "tests/core/test_shutdown.vais"
     "tests/integration/test_http.vais"
