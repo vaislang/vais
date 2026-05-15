@@ -1,6 +1,6 @@
 //! Test case and test suite generation from function signatures.
 
-use rand::Rng;
+use rand::{Rng, RngExt};
 use std::fmt;
 
 use crate::properties::Property;
@@ -238,7 +238,7 @@ impl TestGenerator {
         return_type: &TypeHint,
     ) -> TestSuite {
         let mut cases = vec![];
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Boundary value tests
         cases.extend(self.generate_boundary_tests(function_name, param_types));
@@ -353,7 +353,7 @@ impl TestGenerator {
         {
             let inputs: Vec<TestValue> = param_types
                 .iter()
-                .map(|t| self.random_value(t, &mut rand::thread_rng()))
+                .map(|t| self.random_value(t, &mut rand::rng()))
                 .collect();
             cases.push(TestCase {
                 name: format!("{}_property_commutative", function_name),
@@ -373,7 +373,7 @@ impl TestGenerator {
         {
             let inputs: Vec<TestValue> = param_types
                 .iter()
-                .map(|t| self.random_value(t, &mut rand::thread_rng()))
+                .map(|t| self.random_value(t, &mut rand::rng()))
                 .collect();
             cases.push(TestCase {
                 name: format!("{}_property_idempotent", function_name),
@@ -396,7 +396,7 @@ impl TestGenerator {
         {
             let inputs: Vec<TestValue> = param_types
                 .iter()
-                .map(|t| self.random_value(t, &mut rand::thread_rng()))
+                .map(|t| self.random_value(t, &mut rand::rng()))
                 .collect();
             cases.push(TestCase {
                 name: format!("{}_property_non_negative", function_name),
@@ -412,24 +412,24 @@ impl TestGenerator {
 
     fn random_value(&self, ty: &TypeHint, rng: &mut impl Rng) -> TestValue {
         match ty {
-            TypeHint::I64 => TestValue::Int(rng.gen_range(-1000..=1000)),
-            TypeHint::I32 => TestValue::Int(rng.gen_range(-1000..=1000)),
-            TypeHint::I16 => TestValue::Int(rng.gen_range(-100..=100)),
-            TypeHint::I8 => TestValue::Int(rng.gen_range(-128..=127)),
-            TypeHint::U64 | TypeHint::U32 => TestValue::Int(rng.gen_range(0..=1000)),
-            TypeHint::U16 => TestValue::Int(rng.gen_range(0..=100)),
-            TypeHint::U8 => TestValue::Int(rng.gen_range(0..=255)),
-            TypeHint::F64 | TypeHint::F32 => TestValue::Float(rng.gen_range(-100.0..=100.0)),
-            TypeHint::Bool => TestValue::Bool(rng.gen_bool(0.5)),
+            TypeHint::I64 => TestValue::Int(rng.random_range(-1000..=1000)),
+            TypeHint::I32 => TestValue::Int(rng.random_range(-1000..=1000)),
+            TypeHint::I16 => TestValue::Int(rng.random_range(-100..=100)),
+            TypeHint::I8 => TestValue::Int(rng.random_range(-128..=127)),
+            TypeHint::U64 | TypeHint::U32 => TestValue::Int(rng.random_range(0..=1000)),
+            TypeHint::U16 => TestValue::Int(rng.random_range(0..=100)),
+            TypeHint::U8 => TestValue::Int(rng.random_range(0..=255)),
+            TypeHint::F64 | TypeHint::F32 => TestValue::Float(rng.random_range(-100.0..=100.0)),
+            TypeHint::Bool => TestValue::Bool(rng.random_bool(0.5)),
             TypeHint::Str => {
-                let len = rng.gen_range(0..=10);
+                let len = rng.random_range(0..=10);
                 let s: String = (0..len)
-                    .map(|_| rng.gen_range(b'a'..=b'z') as char)
+                    .map(|_| rng.random_range(b'a'..=b'z') as char)
                     .collect();
                 TestValue::Str(s)
             }
             TypeHint::Array(inner) => {
-                let len = rng.gen_range(0..=5);
+                let len = rng.random_range(0..=5);
                 TestValue::Array((0..len).map(|_| self.random_value(inner, rng)).collect())
             }
             TypeHint::Tuple(types) => {

@@ -484,38 +484,44 @@
         </p>
 
         <p>
-          Across a realistic codebase, this adds up fast. Our benchmarks show Vais programs use <strong>30-40%
-          fewer tokens</strong> than equivalent Rust code. For AI models working under tight context limits,
-          that's the difference between fitting your entire module in context or having to truncate critical parts.
+          Current Vais no longer relies on single-character declarations as the public default. The
+          language-comparison fixtures now use canonical forms such as <code>fn</code> and
+          <code>struct</code>, while retaining compact control forms where they remain part of the
+          compiler surface.
         </p>
 
-        <h2>Single-Character Keywords: Not Just Shorter, Smarter</h2>
+        <p>
+          The refreshed 2026-05-13 token benchmark reports <strong>829 tokens</strong> across four
+          Vais fixtures, versus <strong>1,080</strong> for Rust and <strong>1,211</strong> for C.
+          Python and Go are close in aggregate on these small programs, so the claim is scoped:
+          Vais is currently strongest against Rust/C and in struct-heavy code.
+        </p>
+
+        <h2>Compact Syntax Without Hiding Canonical Keywords</h2>
 
         <p>
-          Vais uses single-character keywords throughout:
+          Current public examples prefer:
         </p>
 
         <ul>
-          <li><code>F</code> for function definitions</li>
-          <li><code>S</code> for struct declarations</li>
-          <li><code>I</code> and <code>E</code> for if/else branches</li>
-          <li><code>L</code> for loops</li>
-          <li><code>M</code> for match expressions</li>
-          <li><code>:=</code> for variable bindings (e.g., <code>x := 42</code>)</li>
-          <li><code>W</code> for trait definitions</li>
+          <li><code>fn</code> for function definitions</li>
+          <li><code>struct</code> and <code>enum</code> for type declarations</li>
+          <li><code>I</code> and <code>else</code> for if/else branches</li>
+          <li><code>L</code> and <code>LF</code> for loop forms</li>
+          <li><code>match</code> for match expressions</li>
+          <li><code>:=</code> for local bindings (for example, <code>x := 42</code>)</li>
+          <li><code>@</code> for self-recursion</li>
         </ul>
 
         <p>
-          This isn't code golf. It's a deliberate design choice optimized for both AI generation and human
-          readability in the context window. When an AI model sees <code>F fib(n: i64) -> i64</code>,
-          it immediately knows this is a function. The cognitive load for humans is minimal—you adapt in
-          minutes—but the token savings compound over thousands of lines.
+          The design is not code golf. The current direction keeps declarations explicit while preserving
+          terse syntax in repeated control-flow and binding positions.
         </p>
 
         <pre><code><span class="comment">// Vais: ~18 tokens</span>
-<span class="kw">F</span> <span class="fn">factorial</span>(n: <span class="type">i64</span>) -> <span class="type">i64</span> {
+<span class="kw">fn</span> <span class="fn">factorial</span>(n: <span class="type">i64</span>) -> <span class="type">i64</span> {
   <span class="kw">I</span> n == <span class="num">0</span> { <span class="num">1</span> }
-  <span class="kw">E</span> { n * <span class="self">@</span>(n - <span class="num">1</span>) }
+  <span class="kw">else</span> { n * <span class="self">@</span>(n - <span class="num">1</span>) }
 }</code></pre>
 
         <pre><code><span class="comment">// Rust: ~32 tokens</span>
@@ -531,9 +537,9 @@
           repeating the function name in recursive calls, you use <code>@</code>:
         </p>
 
-        <pre><code><span class="kw">F</span> <span class="fn">fib</span>(n: <span class="type">i64</span>) -> <span class="type">i64</span> {
+        <pre><code><span class="kw">fn</span> <span class="fn">fib</span>(n: <span class="type">i64</span>) -> <span class="type">i64</span> {
   <span class="kw">I</span> n &lt;= <span class="num">1</span> { n }
-  <span class="kw">E</span> { <span class="self">@</span>(n - <span class="num">1</span>) + <span class="self">@</span>(n - <span class="num">2</span>) }
+  <span class="kw">else</span> { <span class="self">@</span>(n - <span class="num">1</span>) + <span class="self">@</span>(n - <span class="num">2</span>) }
 }</code></pre>
 
         <p>
@@ -549,8 +555,8 @@
           in a block is implicitly returned—no <code>return</code> keyword needed:
         </p>
 
-        <pre><code><span class="kw">F</span> <span class="fn">abs</span>(x: <span class="type">i64</span>) -> <span class="type">i64</span> {
-  <span class="kw">I</span> x &lt; <span class="num">0</span> { -x } <span class="kw">E</span> { x }
+        <pre><code><span class="kw">fn</span> <span class="fn">abs</span>(x: <span class="type">i64</span>) -> <span class="type">i64</span> {
+  <span class="kw">I</span> x &lt; <span class="num">0</span> { -x } <span class="kw">else</span> { x }
 }</code></pre>
 
         <p>

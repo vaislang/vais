@@ -6,7 +6,8 @@
 //! 3. Compile speed scaling (100/1K/10K LOC)
 //! 4. Memory usage estimation
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::hint::black_box;
 use vais_codegen::CodeGenerator;
 use vais_lexer::tokenize;
 use vais_parser::parse;
@@ -327,7 +328,7 @@ fn bench_runtime_algorithms(c: &mut Criterion) {
 
     // Quicksort
     for size in [100, 1000, 10000] {
-        let mut data: Vec<i64> = (0..size).rev().collect();
+        let data: Vec<i64> = (0..size).rev().collect();
         group.bench_with_input(BenchmarkId::new("quicksort", size), &data, |b, d| {
             let mut arr = d.clone();
             b.iter(|| {

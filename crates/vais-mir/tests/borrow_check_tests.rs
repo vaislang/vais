@@ -691,7 +691,7 @@ fn test_cfg_predecessors() {
     let predecessors = cfg_predecessors(&body);
 
     // bb0 should have no predecessors (entry block)
-    assert!(predecessors.get(&BasicBlockId(0)).is_none());
+    assert!(!predecessors.contains_key(&BasicBlockId(0)));
 
     // bb1 should have predecessor bb0
     assert_eq!(

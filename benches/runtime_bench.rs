@@ -337,32 +337,6 @@ fn rust_matrix_multiply(n: usize) -> i64 {
     checksum % 256
 }
 
-fn rust_build_tree(
-    depth: u32,
-    val: i64,
-) -> Option<
-    Box<(
-        i64,
-        Option<
-            Box<(
-                i64,
-                Option<
-                    Box<(
-                        i64,
-                        Option<Box<dyn std::any::Any>>,
-                        Option<Box<dyn std::any::Any>>,
-                    )>,
-                >,
-                Option<Box<dyn std::any::Any>>,
-            )>,
-        >,
-        Option<Box<dyn std::any::Any>>,
-    )>,
-> {
-    // Simplified: just count nodes via recursion
-    None // placeholder
-}
-
 fn rust_tree_sum(depth: u32, val: i64) -> i64 {
     if depth == 0 {
         return 0;

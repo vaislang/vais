@@ -1,6 +1,7 @@
 # Language Specification
 
-Complete reference for the Vais programming language.
+This page includes the repository's authoritative language specification so the
+docs site does not drift from the compiler-facing contract.
 
 ## Overview
 

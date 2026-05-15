@@ -147,7 +147,7 @@ fn test_constant_int_display() {
 
 #[test]
 fn test_constant_float_display() {
-    assert_eq!(format!("{}", Constant::Float(3.14)), "3.14");
+    assert_eq!(format!("{}", Constant::Float(2.5)), "2.5");
     assert_eq!(format!("{}", Constant::Float(0.0)), "0");
 }
 

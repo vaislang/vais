@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Vais Performance: Compilation Speed and Runtime Benchmarks - Vais Blog</title>
-  <meta name="description" content="How Vais achieves 800K lines/sec compilation throughput, near-C runtime performance, and what the numbers mean compared to Rust, Go, and C.">
+  <title>Historical Vais Performance Snapshot - Vais Blog</title>
+  <meta name="description" content="Historical Vais performance snapshot. Current single-file compile-speed data was refreshed on 2026-05-13; large-scale throughput numbers should be rerun before citing as current.">
   <link rel="icon" type="image/png" href="/logo-icon.png">
   <link rel="apple-touch-icon" href="/logo-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -93,17 +93,21 @@
         <span class="article-date">2026-03-02</span>
         <span class="article-tag">Performance</span>
       </div>
-      <h1 class="article-title">Vais Performance: Compilation Speed and Runtime Benchmarks</h1>
+      <h1 class="article-title">Historical Vais Performance Snapshot</h1>
 
       <div class="article-content">
         <p>
           Performance is not just a feature of Vais -- it is a design constraint woven into every architectural decision. From the lexer to the LLVM backend, every stage of the compilation pipeline is optimized for throughput. This post presents our benchmark results and explains what they mean.
         </p>
 
+        <blockquote>
+          <strong>Archive note (2026-05-13):</strong> This article preserves an older Phase 182 throughput snapshot. Current single-file compile-speed data is published on the homepage and in <code>benches/COMPARISON.md</code>. The large-scale throughput numbers below should be rerun before citing them as current.
+        </blockquote>
+
         <h2>Compilation Pipeline Performance</h2>
 
         <p>
-          The Vais compiler processes code through five stages: Lexer, Parser, Type Checker, Code Generator, and LLVM Backend. Each stage is benchmarked independently using Criterion.
+          The historical benchmark below measured five stages independently using Criterion: Lexer, Parser, Type Checker, Code Generator, and LLVM Backend.
         </p>
 
         <table>
@@ -119,10 +123,10 @@
           </tbody>
         </table>
 
-        <h3>What 800K Lines/Second Means</h3>
+        <h3>What The Historical 800K Lines/Second Snapshot Meant</h3>
 
         <p>
-          To put this in perspective: a typical large Rust project compiles at roughly 5K-20K lines/second (including type checking and borrow checking). Vais achieves 800K lines/second for the full pipeline, which means a 50,000-line codebase compiles end-to-end in <strong>63 milliseconds</strong>.
+          In that snapshot, the full pipeline processed roughly 800K lines/second, which meant a 50,000-line generated codebase completed in <strong>63 milliseconds</strong>. Treat this as archived evidence until the large-scale benchmark is rerun on the current compiler.
         </p>
 
         <p>
@@ -179,7 +183,7 @@
         <h2>Compilation Speed Comparison</h2>
 
         <p>
-          How does Vais compare to other compilers for compile-time speed?
+          The table below belongs to the same historical throughput snapshot. Current single-file compiler comparisons use <code>hyperfine</code> and are tracked in <code>benches/COMPARISON.md</code>.
         </p>
 
         <table>
@@ -196,13 +200,13 @@
         </table>
 
         <p>
-          Vais is significantly faster than Rust and Go for compilation, while producing comparable runtime performance. The trade-off is that Vais's borrow checker is simpler than Rust's, and the optimizer relies more heavily on LLVM passes than on compiler-level analysis.
+          Current public performance claims should prefer the refreshed single-file compile-speed benchmark unless the large-scale pipeline benchmark has been rerun.
         </p>
 
         <h2>Self-Hosting Benchmark</h2>
 
         <p>
-          The ultimate compilation benchmark: the Vais compiler compiling itself. The self-hosting compiler is 50,000+ lines of Vais code, and it compiles to valid LLVM IR with 21/21 clang compilation success (100%).
+          The historical self-hosting snapshot measured a generated 50,000+ line Vais compiler fixture and reported valid LLVM IR with 21/21 clang compilation success.
         </p>
 
 <pre><code>$ time vaisc build selfhost/main.vais

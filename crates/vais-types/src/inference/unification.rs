@@ -517,6 +517,18 @@ impl TypeChecker {
                     Ok(())
                 }
             }
+            // Ref(Pointer<T>) ↔ Slice(T) auto-coercion for pointer-backed array literals.
+            // This is a narrow slice coercion, not a general &T ↔ T conversion.
+            (ResolvedType::Ref(inner), ResolvedType::Slice(elem))
+            | (ResolvedType::Slice(elem), ResolvedType::Ref(inner))
+                if matches!(inner.as_ref(), ResolvedType::Pointer(_)) =>
+            {
+                if let ResolvedType::Pointer(pointer_elem) = inner.as_ref() {
+                    self.unify(pointer_elem, elem)
+                } else {
+                    Ok(())
+                }
+            }
             // RefMut(Vec<T>) ↔ SliceMut(T) auto-coercion (Phase 163).
             (ResolvedType::RefMut(inner), ResolvedType::SliceMut(elem))
             | (ResolvedType::SliceMut(elem), ResolvedType::RefMut(inner))

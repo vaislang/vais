@@ -8,7 +8,20 @@
 [![Docs](https://img.shields.io/badge/docs-vaislang.dev-purple)](https://vaislang.dev/docs/)
 [![GitHub Discussions](https://img.shields.io/github/discussions/vaislang/vais)](https://github.com/vaislang/vais/discussions)
 
-Vais is designed to minimize token usage while maximizing code expressiveness, making it ideal for AI-assisted development and LLM code generation.
+Vais is designed to minimize token usage while keeping systems code explicit enough for compiler diagnostics, review, and AI-assisted development.
+
+## Current Status
+
+The current public baseline is a certified Core compiler plus named promoted
+runtime gates. It is not a product-complete v1.0 release. Use
+[`PUBLIC_STATUS.md`](PUBLIC_STATUS.md) for public wording and the gate-backed
+claim boundary.
+
+AI agents should start with the generated onboarding docs:
+
+- [`docs/ai/LLM_LANGUAGE_CARD.md`](docs/ai/LLM_LANGUAGE_CARD.md)
+- [`docs/ai/AI_DEVELOPER_GUIDE.md`](docs/ai/AI_DEVELOPER_GUIDE.md)
+- [`docs/ai/REFERENCE_APP_CONTRACT.md`](docs/ai/REFERENCE_APP_CONTRACT.md)
 
 ## Current Status
 
@@ -20,7 +33,10 @@ for compiler certification detail.
 
 ## Key Features
 
-- **Single-letter keywords** - `F` (function), `S` (struct), `E` (enum/else), `I` (if), `L` (loop), `M` (match)
+- **Canonical declarations** - `fn`, `struct`, `enum`, `else`, `match`, `return`,
+  `use`, and `pub` are the public spellings where available
+- **Compact control forms** - `I`, `L`, `LF`, `LW`, `B`, and `C` remain current
+  syntax for repeated control-flow positions
 - **Self-recursion operator** `@` - Call the current function recursively
 - **Expression-oriented** - Everything is an expression
 - **LLVM backend** - Promoted native codegen path with LLVM 17
@@ -40,30 +56,30 @@ for compiler certification detail.
 
 ```vais
 # Fibonacci with self-recursion
-F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
 
 # Struct definition
-S Point { x:f64, y:f64 }
+struct Point { x: f64, y: f64 }
 
 # Sum with loop
-F sum(arr:[i64])->i64 {
-    s := 0
-    L x:arr { s += x }
+fn sum(arr: *i64, len: i64) -> i64 {
+    s := mut 0
+    LF i:0..len { s += arr[i] }
     s
 }
 ```
 
 ## Syntax Overview
 
-| Keyword | Meaning | Example |
-|---------|---------|---------|
-| `F` | Function | `F add(a:i64,b:i64)->i64=a+b` |
-| `S` | Struct | `S Point{x:f64,y:f64}` |
-| `E` | Enum/Else | `E Option<T>{Some(T),None}` |
-| `I` | If | `I x>0{1}E{-1}` |
-| `L` | Loop | `L i:0..10{print(i)}` |
-| `M` | Match | `M opt{Some(v)=>v,None=>0}` |
-| `@` | Self-call | `@(n-1)` (recursive call) |
+| Syntax | Meaning | Example |
+|--------|---------|---------|
+| `fn` | Function | `fn add(a: i64, b: i64) -> i64 = a + b` |
+| `struct` | Struct | `struct Point { x: f64, y: f64 }` |
+| `enum` | Enum | `enum Option<T> { Some(T), None }` |
+| `I` / `else` | If/else | `I x > 0 { 1 } else { -1 }` |
+| `LF` | Range loop | `LF i:0..10 { print(i) }` |
+| `match` | Match | `match opt { Some(v) => v, None => 0 }` |
+| `@` | Self-call | `@(n - 1)` |
 | `:=` | Infer & assign | `x := 42` |
 
 ## Project Structure
@@ -217,13 +233,9 @@ Vais is designed for both compilation speed and runtime performance.
 
 ### Compilation Speed
 
-| Phase | Time (avg) | Throughput | Notes |
-|-------|------------|------------|-------|
-| Lexer | ~0.07ms/1K LOC | ~166 MiB/s | logos-based |
-| Parser | ~0.44ms/1K LOC | ~32 MiB/s | 2.18x speedup with parallel |
-| Type Checker | ~0.13ms/1K LOC | ~8K lines/ms | DAG-based parallel |
-| Code Generator | ~0.54ms/1K LOC | ~1.8K lines/ms | 4.14x speedup with parallel |
-| **Full Pipeline** | **~1.2ms/1K LOC** | **~833K lines/sec** | **50K lines → 60ms** |
+Current single-file compile-speed benchmark
+(`benches/lang-comparison/compile_bench.sh`, Hyperfine, 2026-05-13,
+Apple ARM64/macOS):
 
 **Self-hosting bootstrap workbench:** 50,000+ LOC of Vais compiler sources.
 Historical clang compilation counts are useful regression context, but current
@@ -232,7 +244,10 @@ runtime fixtures.
 
 ### Runtime Performance
 
-Fibonacci(35) benchmark (Apple M-series ARM64, 2026-02-11):
+Runtime performance numbers are retained as scoped historical evidence until
+the runtime benchmark suite is refreshed on the current compiler. The older
+Fibonacci(35) snapshot measured Apple M-series ARM64 with Vais IR linked by
+clang:
 
 | Language | Time | Relative |
 |----------|------|----------|
@@ -349,7 +364,7 @@ After installing Vais and running your first program, here's how to continue:
 brew tap vaislang/tap && brew install vais
 
 # 2. Write your first program
-echo 'F main() { println("Hello, Vais!") }' > hello.vais
+printf 'fn main() -> i64 {\n    puts("Hello, Vais!")\n    0\n}\n' > hello.vais
 
 # 3. Run it
 vaisc run hello.vais
@@ -363,8 +378,8 @@ vaisc repl
 | Example | Description | Concepts |
 |---------|-------------|----------|
 | [fib.vais](examples/fib.vais) | Fibonacci with `@` self-recursion | Functions, `@` operator |
-| [control_flow.vais](examples/control_flow.vais) | If/else, loops, match | `I`/`E`/`L`/`M` keywords |
-| [enum_test.vais](examples/enum_test.vais) | Enum variants + pattern matching | `E`, `M`, `S` |
+| [control_flow.vais](examples/control_flow.vais) | If/else, loops, match | `I`, `else`, `L`/`LF`, `match` |
+| [enum_test.vais](examples/enum_test.vais) | Enum variants + pattern matching | `enum`, `match`, `struct` |
 | [pipe_operator.vais](examples/pipe_operator.vais) | Pipe `\|>` and closures | Functional patterns |
 | [json_test.vais](examples/json_test.vais) | JSON builder API | Standard library usage |
 

@@ -4792,7 +4792,7 @@ impl CodeGenerator {
         candidates := malloc(max_candidates * 56)
         num_candidates: mut i64 = 0
 
-        @.inline_find_candidates(ir_data, ir_len, candidates, &num_candidates, max_candidates)
+        @.inline_find_candidates(ir_data, ir_len, candidates, (&num_candidates) as i64, max_candidates)
 
         I num_candidates == 0 {
             free(candidates)
@@ -4807,7 +4807,7 @@ impl CodeGenerator {
         ci: mut i64 = 0
         L { I ci >= num_candidates { B }
             cand_ptr := candidates + ci * 56
-            new_data := @.inline_apply_candidate(cur_data, cur_len, cand_ptr, &inline_counter)
+            new_data := @.inline_apply_candidate(cur_data, cur_len, cand_ptr, (&inline_counter) as i64)
 
             I new_data != 0 {
                 new_len := load_i64(new_data + 8)  # stored at offset 8 by inline_apply
@@ -4998,7 +4998,7 @@ impl CodeGenerator {
                         } else { 0 }
 
                         # Track max register number
-                        @.inline_scan_max_reg(ir_data + ls, ll, &max_reg)
+                        @.inline_scan_max_reg(ir_data + ls, ll, (&max_reg) as i64)
 
                         # Check for non-void return
                         # "ret i64" → bytes 114 101 116 32 105 54 52
@@ -5163,7 +5163,7 @@ impl CodeGenerator {
 
                 # Inline body with register offset
                 reg_offset := counter * (cand_max_reg + 1) + 100000
-                @.inline_emit_body(new_buf, &new_len, cand_body, cand_body_len, arg_values, cand_params, reg_offset, dest_reg, cand_ret)
+                @.inline_emit_body(new_buf, (&new_len) as i64, cand_body, cand_body_len, arg_values, cand_params, reg_offset, dest_reg, cand_ret)
 
                 # End comment
                 memcpy_str(new_buf + new_len, "  ; END INLINE\n", 15)

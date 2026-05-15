@@ -16,9 +16,10 @@ fn route(path) -> Response {
 
 fn main() {
     res := route(1)
-    println("status=~{res.status} body=~{res.body}")
+    println("status={res.status} body={res.body}")
     res2 := route(2)
-    println("status=~{res2.status} body=~{res2.body}")
+    println("status={res2.status} body={res2.body}")
     res3 := route(99)
-    println("status=~{res3.status} body=~{res3.body}")
+    println("status={res3.status} body={res3.body}")
+    0
 }

@@ -389,7 +389,11 @@ fn test_generate_with_array_type_hint() {
     let generator = TestGenerator::new().with_num_cases(3);
 
     let array_hint = TypeHint::Array(Box::new(TypeHint::I64));
-    let test_suite = generator.generate("process_array", &[array_hint.clone()], &TypeHint::I64);
+    let test_suite = generator.generate(
+        "process_array",
+        std::slice::from_ref(&array_hint),
+        &TypeHint::I64,
+    );
 
     assert_eq!(test_suite.function_name, "process_array");
     assert_eq!(test_suite.param_types.len(), 1);
@@ -416,7 +420,11 @@ fn test_generate_with_tuple_type_hint() {
     let generator = TestGenerator::new().with_num_cases(2);
 
     let tuple_hint = TypeHint::Tuple(vec![TypeHint::I64, TypeHint::Bool, TypeHint::Str]);
-    let test_suite = generator.generate("process_tuple", &[tuple_hint.clone()], &TypeHint::I64);
+    let test_suite = generator.generate(
+        "process_tuple",
+        std::slice::from_ref(&tuple_hint),
+        &TypeHint::I64,
+    );
 
     assert_eq!(test_suite.function_name, "process_tuple");
     assert_eq!(test_suite.param_types.len(), 1);

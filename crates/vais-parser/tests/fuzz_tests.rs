@@ -400,7 +400,7 @@ fn fuzz_unicode_and_special_chars() {
     }
 
     // Test null bytes
-    let null_inputs = vec![
+    let null_inputs = [
         "\0",
         "F test\0()->i64=42",
         "\0\0\0\0",

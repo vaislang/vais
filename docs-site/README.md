@@ -82,9 +82,10 @@ mdBook의 내장 검색 기능이 자동으로 활성화됩니다. 추가 설정
 
 문서는 GitHub Actions를 통해 자동으로 배포됩니다:
 
-1. `main` 브랜치에 푸시하면 자동으로 빌드 및 배포
-2. GitHub Pages에 배포됨
-3. URL: `https://vais.dev/docs/`
+1. `main` 브랜치에 푸시하면 `.github/workflows/website.yml`이 website, docs, playground를 함께 빌드
+2. `docs-site/book`이 `website/dist/docs`로 복사됨
+3. GitHub Pages에 배포됨
+4. URL: `https://vaislang.dev/docs/`
 
 수동 배포:
 

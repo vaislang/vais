@@ -1,6 +1,6 @@
 # Vais Language Specification
 
-Version: v0.1.0
+Version: 0.1.0 source baseline
 
 ## Certification Status
 
@@ -16,33 +16,9 @@ correctness guarantee. A construct is Core-certified only when it is listed in
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Lexical Structure](#lexical-structure)
-3. [Keywords](#keywords)
-4. [Types](#types)
-5. [Operators](#operators)
-6. [Expressions](#expressions)
-7. [Statements](#statements)
-8. [Functions](#functions)
-9. [Structs](#structs)
-10. [Enums](#enums)
-11. [Error Handling](#error-handling)
-12. [Traits and Implementations](#traits-and-implementations)
-13. [Pattern Matching](#pattern-matching)
-14. [Generics](#generics)
-15. [Module System](#module-system)
-16. [Async/Await](#asyncawait)
-17. [Iterators and Generators](#iterators-and-generators)
-18. [Closures and Lambdas](#closures-and-lambdas)
-19. [Memory Management](#memory-management)
-20. [Built-in Functions](#built-in-functions)
-21. [Constants](#constants)
-22. [Package Ecosystem](#package-ecosystem)
-23. [Best Practices](#best-practices)
-24. [Examples](#examples)
-25. [Grammar Summary](#grammar-summary)
+## Public Baseline
 
----
+The current public baseline is evidence-scoped:
 
 ## Overview
 
@@ -75,67 +51,19 @@ certification claims:
 
 ## Lexical Structure
 
-### Comments
-
-Comments start with `#` and continue to the end of the line:
+Comments start with `#` and continue to the end of the line.
 
 ```vais
-# This is a comment
-F add(a:i64, b:i64)->i64 = a + b  # Inline comment
+# A comment
+fn add(a: i64, b: i64) -> i64 = a + b
 ```
 
-### Whitespace
+Identifiers start with a letter or underscore, followed by letters, digits, or
+underscores.
 
-Whitespace (spaces, tabs, newlines) is ignored except when separating tokens.
-
-### Identifiers
-
-Identifiers start with a letter or underscore, followed by letters, digits, or underscores:
-
-```
+```text
 [a-zA-Z_][a-zA-Z0-9_]*
 ```
-
-Examples: `x`, `my_var`, `Counter`, `_private`
-
-### Literals
-
-**Integer Literals:**
-```vais
-42
-1_000_000    # Underscores for readability
--42          # Negative (using unary minus operator)
-```
-
-**Float Literals:**
-```vais
-3.14
-1.0e10
-2.5e-3
-1_000.5_00
-```
-
-**String Literals:**
-```vais
-"Hello, World!"
-"Line with \"quotes\""
-```
-
-**String Interpolation:**
-```vais
-name := "Vais"
-println("Hello, {name}!")           # Variable interpolation
-println("Result: {2 + 3}")         # Expression interpolation
-println("Escaped: {{not interp}}") # Escaped braces
-```
-
-**Boolean Literals:**
-```vais
-true
-false
-```
-
----
 
 ## Keywords
 
@@ -338,631 +266,233 @@ current certification floor.
 ### Pointer Types
 
 ```vais
-*i64        # Pointer to i64
-*T          # Pointer to type T
+i8 i16 i32 i64 i128
+u8 u16 u32 u64 u128
+f32 f64
+bool
+str
+()
 ```
 
-### Array Types
+## Compound Types
 
 ```vais
-[i64]       # Array of i64
-[T]         # Array of type T
+*T              # Typed raw pointer
+&T              # Shared reference
+&mut T          # Mutable reference
+&[T]            # Shared slice
+&mut [T]        # Mutable slice
+[T]             # Array-like value surface
+(A, B, C)       # Tuple
+Option<T>
+Result<T, E>
+Vec<T>
 ```
 
-### Generic Types
+Low-level memory APIs such as `malloc`, `free`, `load_i64`, and `store_i64`
+expose raw addresses as `i64`. Typed pointers (`*T`) are a separate type
+surface and do not implicitly unify with raw integer addresses.
+
+## Type Conversion Rules
+
+Vais keeps structural types strict, while numeric primitives may adapt to the
+expected numeric context. These rules are part of the language type contract,
+not a backend fallback.
+
+Implicit conversions:
+
+- Integer numeric unification across integer widths and signedness.
+- Integer/float numeric promotion when the expected type is numeric.
+- Float literal inference between `f32` and `f64`.
+
+Prohibited implicit conversions:
+
+- `bool <-> i64`: use `flag as i64` or `n != 0`.
+- `str <-> i64`: use string parsing/formatting helpers or explicit raw pointer
+  interop helpers.
+- `*T <-> i64`: typed pointer values do not implicitly unify with raw integer
+  addresses.
+- Structural type changes between unrelated structs, enums, tuples, references,
+  slices, and pointers.
 
 ```vais
-Option<T>   # Generic Option type
-Vec<T>      # Generic vector type
-Pair<A, B>  # Multiple type parameters
-```
-
-### Type Conversion Rules (Phase 158)
-
-Vais uses strict Rust-style type coercion. Implicit widening is allowed only in a narrow set of cases; all other conversions require an explicit `as` cast. These rules were finalized in **Phase 158** to eliminate the yo-yo pattern where `unification.rs` coercion was toggled repeatedly.
-
-**Implicit (automatic) conversions:**
-- Integer widening: `i8 → i16 → i32 → i64`, `u8 → u16 → u32 → u64`
-- Float literal inference: `f32 ↔ f64` (the literal is inferred from context, identical to Rust behavior)
-
-**Prohibited implicit conversions — explicit `as` required:**
-- `bool ↔ i64`: use `flag as i64` or `n != 0`
-- `int ↔ float`: use `x as f64` or `y as i64`
-- `str ↔ i64`: use parsing functions or `n as str`
-- Integer narrowing (`i64 → i32`): use `x as i32`
-
-```vais
-# Allowed implicit widening
+# Allowed numeric adaptation
 x: i8 = 10
-y: i64 = x          # OK: i8 → i64
+y: i64 = x
+z: f64 = 3
 
-# Explicit cast required
+# Explicit conversion boundary
 flag: bool = true
-n: i64 = flag as i64        # OK: explicit as
-val: f64 = 3 as f64         # OK: explicit as
+n: i64 = flag as i64
 
-# Prohibited — compile error
-bad: i64 = true             # ERROR: bool → i64 implicit
-bad2: i64 = 3.14            # ERROR: float → int implicit
+# Compile errors
+bad_bool: i64 = true
+bad_str: i64 = "hello"
 ```
 
-**E2E protection test:** `vais-types/tests/phase158_type_strict.rs` enforces these rules.
+Protection tests:
 
-### Linear and Affine Types (Experimental)
-
-> **[Experimental]** Linear and affine type annotations are partially implemented. The borrow checker integration is incomplete. These features may change in future releases.
-
-**Linear types** (`linear T`) enforce that a value must be used exactly once:
-
-```vais
-# [Experimental] — borrow checker integration incomplete
-x: linear i64 = acquire_resource()
-use_resource(x)   # x is consumed here; using x again is a compile error
-```
-
-**Affine types** (`affine T`) enforce that a value is used at most once (may be dropped unused):
-
-```vais
-# [Experimental] — borrow checker integration incomplete
-x: affine i64 = acquire_resource()
-# x may be dropped without use, but cannot be used twice
-use_resource(x)
-```
-
-These types appear in the grammar as `LinearType` and `AffineType` but full enforcement via the borrow checker is a work-in-progress.
-
----
-
-## Operators
-
-### Arithmetic Operators
-
-| Operator | Description | Example |
-|----------|-------------|---------|
-| `+` | Addition | `a + b` |
-| `-` | Subtraction or unary negation | `a - b`, `-x` |
-| `*` | Multiplication | `a * b` |
-| `/` | Division | `a / b` |
-| `%` | Modulo | `a % b` |
-
-### Comparison Operators
-
-| Operator | Description | Example |
-|----------|-------------|---------|
-| `==` | Equal | `a == b` |
-| `!=` | Not equal | `a != b` |
-| `<` | Less than | `a < b` |
-| `>` | Greater than | `a > b` |
-| `<=` | Less or equal | `a <= b` |
-| `>=` | Greater or equal | `a >= b` |
-
-### Logical Operators
-
-| Operator | Description | Example |
-|----------|-------------|---------|
-| `&` | Bitwise AND | `a & b` |
-| `\|` | Bitwise OR | `a \| b` |
-| `^` | Bitwise XOR | `a ^ b` |
-| `!` | Logical NOT | `!x` |
-| `~` | Bitwise NOT | `~x` |
-| `<<` | Left shift | `a << 2` |
-| `>>` | Right shift | `a >> 2` |
-
-### Assignment Operators
-
-| Operator | Description | Example |
-|----------|-------------|---------|
-| `=` | Assignment | `x = 10` |
-| `:=` | Type-inferred assignment | `x := 10` |
-| `+=` | Add and assign | `x += 5` |
-| `-=` | Subtract and assign | `x -= 5` |
-| `*=` | Multiply and assign | `x *= 2` |
-| `/=` | Divide and assign | `x /= 2` |
-
-### Special Operators
-
-| Operator | Description | Example |
-|----------|-------------|---------|
-| `@` | Self-recursion | `@(n-1)` |
-| `?` | Ternary conditional or Try operator | `x > 0 ? 1 : -1` or `file.read()?` |
-| `!` | Logical NOT or Unwrap operator | `!x` or `option!` |
-| `.` | Member access | `point.x` |
-| `::` | Path separator | `std::math::PI` |
-| `->` | Function return type | `F add()->i64` |
-| `=>` | Match arm separator | `0 => "zero"` |
-| `..` | Range (exclusive) / Spread | `0..10`, `[..arr]` |
-| `..=` | Range (inclusive) | `0..=10` |
-| `\|>` | Pipe operator | `x \|> f \|> g` (equivalent to `g(f(x))`) |
-
-**Note on `?` operator:** The `?` operator has two uses:
-- **Ternary conditional**: `condition ? true_val : false_val`
-- **Try operator**: `result?` - propagates errors to caller (see [Error Handling](#error-handling))
-
-### Operator Precedence
-
-Operators are listed from highest to lowest precedence:
-
-| Precedence | Operators | Description |
-|------------|-----------|-------------|
-| 1 (highest) | `.`, `[]`, `()` | Member access, Index, Call |
-| 2 | `-`, `!`, `~`, `@` | Unary operators |
-| 3 | `*`, `/`, `%` | Multiplication, Division, Modulo |
-| 4 | `+`, `-` | Addition, Subtraction |
-| 5 | `<<`, `>>` | Bit shifts |
-| 6 | `&` | Bitwise AND |
-| 7 | `^` | Bitwise XOR |
-| 8 | `\|` | Bitwise OR |
-| 9 | `==`, `!=`, `<`, `>`, `<=`, `>=` | Comparison |
-| 10 | `&&` | Logical AND |
-| 11 | `\|\|` | Logical OR |
-| 12 | `?:`, `\|>` | Ternary conditional, Pipe |
-| 13 (lowest) | `=`, `:=`, `+=`, `-=`, `*=`, `/=` | Assignment |
-
-**Note:** Bitwise `&` has higher precedence than comparison operators like `==`. Use parentheses to clarify: `(a == b) & (c == d)`.
-
----
-
-## Expressions
-
-Everything in Vais is an expression that returns a value.
-
-### Literals
-
-```vais
-42          # Integer
-3.14        # Float
-"hello"     # String
-true        # Boolean
-```
-
-### Variable References
-
-```vais
-x
-my_variable
-```
-
-### Binary Expressions
-
-```vais
-a + b
-x * y - z
-a == b
-```
-
-### Unary Expressions
-
-```vais
--x
-!flag
-~bits
-```
-
-### Function Calls
-
-```vais
-add(1, 2)
-compute(x, y, z)
-obj.method()
-```
-
-### Ternary Conditional
-
-```vais
-condition ? true_value : false_value
-x > 0 ? x : -x    # Absolute value
-```
-
-### Array/Index Access
-
-```vais
-arr[0]
-data[i * 2 + 1]
-```
-
-### Member Access
-
-```vais
-point.x
-counter.value
-obj.method()
-```
-
-### Self-Recursion
-
-The `@` operator calls the current function recursively:
-
-```vais
-F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
-```
-
-Equivalent to:
-```vais
-F fib(n:i64)->i64 = n<2 ? n : fib(n-1) + fib(n-2)
-```
-
-### Pipe Operator
-
-The `|>` operator passes the left-hand value as the first argument to the right-hand function:
-
-```vais
-# x |> f is equivalent to f(x)
-result := 5 |> double |> add_one
-
-# Chaining multiple transformations
-F double(x: i64) -> i64 = x * 2
-F add_one(x: i64) -> i64 = x + 1
-
-F main() -> i64 = 5 |> double |> add_one  # 11
-```
-
-### String Interpolation
-
-Embed expressions inside string literals with `{expr}`:
-
-```vais
-name := "World"
-println("Hello, {name}!")          # Variable
-println("Sum: {2 + 3}")           # Expression
-println("Escaped: {{braces}}")    # Literal braces with {{ }}
-```
-
-### Tuple Destructuring
-
-Unpack tuple values into multiple variables:
-
-```vais
-(a, b) := get_pair()
-(x, y, z) := (1, 2, 3)
-```
-
-### Block Expressions
-
-Blocks are expressions that return the value of their last expression:
-
-```vais
-{
-    x := 10
-    y := 20
-    x + y    # Returns 30
-}
-```
-
-### Auto-Return
-
-Functions in Vais automatically return the value of their last expression. No explicit `R` (return) is needed unless early return is required:
-
-```vais
-F add(a: i64, b: i64) -> i64 {
-    a + b    # Automatically returned
-}
-
-F max(a: i64, b: i64) -> i64 {
-    I a > b {
-        a    # Each branch returns its last expression
-    } E {
-        b
-    }
-}
-
-# Explicit R is only needed for early return
-F safe_divide(a: i64, b: i64) -> i64 {
-    I b == 0 {
-        R 0    # Early return
-    }
-    a / b      # Auto-returned
-}
-```
-
-This applies to all block expressions including `I`/`E`, `M`, and `L`.
-
----
-
-## Statements
-
-### Variable Declaration
-
-```vais
-# Type-inferred (immutable)
-x := 10
-
-# Explicit type
-y: i64 = 20
-
-# Mutable
-z := mut 30
-```
-
-### If-Else Expression
-
-```vais
-# Single-line ternary
-result := x > 0 ? 1 : -1
-
-# Block form
-I x < 0 {
-    -1
-} E {
-    0
-}
-
-# Else-if chain
-I x < 0 {
-    -1
-} E I x == 0 {
-    0
-} E {
-    1
-}
-```
-
-Note: `E` is used for "else" in if expressions.
-
-### Loop Expression
-
-```vais
-# Infinite loop
-L {
-    # ... body
-    B  # Break
-}
-
-# Range loop
-L i: 0..10 {
-    puts("Iteration")
-}
-
-# Array iteration (conceptual)
-L item: array {
-    # ... process item
-}
-```
-
-### Match Expression
-
-```vais
-M value {
-    0 => "zero",
-    1 => "one",
-    2 => "two",
-    _ => "other"    # Wildcard/default
-}
-
-# With variable binding
-M option {
-    Some(x) => x,
-    None => 0
-}
-```
-
-### Break and Continue
-
-```vais
-L i: 0..100 {
-    I i == 50 { B }      # Break
-    I i % 2 == 0 { C }   # Continue
-    process(i)
-}
-```
-
-### Return Statement
-
-```vais
-F compute(x: i64) -> i64 {
-    I x < 0 {
-        R 0    # Early return
-    }
-    x * 2
-}
-```
-
----
+- `crates/vaisc/tests/e2e/phase158_type_strict.rs`
+- `crates/vais-types/tests/inference_unification_tests.rs`
 
 ## Functions
 
-### Function Definition
+Functions may use expression bodies or block bodies. The last block expression
+is the return value unless an explicit `return` exits early.
 
-**Expression form (single expression):**
 ```vais
-F add(a:i64, b:i64)->i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
+
+fn abs(x: i64) -> i64 {
+    I x < 0 { 0 - x } else { x }
+}
+
+fn checked_div(a: i64, b: i64) -> Result<i64, str> {
+    I b == 0 {
+        return Err("division by zero")
+    }
+    Ok(a / b)
+}
 ```
 
-**Block form:**
+The self-recursion operator `@` calls the current function.
+
 ```vais
-F factorial(n:i64)->i64 {
-    I n < 2 {
-        1
-    } E {
-        n * @(n-1)
+fn fib(n: i64) -> i64 = I n < 2 { n } else { @(n - 1) + @(n - 2) }
+```
+
+## Variables
+
+```vais
+x := 42
+y: i32 = 7
+counter := mut 0
+counter = counter + 1
+```
+
+## Control Flow
+
+`I`, `match`, and block forms are expressions when all arms produce compatible
+types.
+
+```vais
+fn classify(n: i64) -> str {
+    I n < 0 { "negative" }
+    else I n == 0 { "zero" }
+    else { "positive" }
+}
+
+fn color_code(c: Color) -> i64 {
+    match c {
+        Red => 1,
+        Green => 2,
+        Blue => 3,
     }
 }
 ```
 
-### Parameters
+Loops use compact control forms.
 
 ```vais
-F example(x: i64, y: f64, name: str) -> i64 { ... }
-```
+fn sum_to(n: i64) -> i64 {
+    total := mut 0
+    LF i: 0..n {
+        total = total + i
+    }
+    total
+}
 
-### Parameter Type Inference
-
-Parameter types can be omitted when they can be inferred from call sites:
-
-```vais
-# Types inferred from usage
-F add(a, b) = a + b
-
-# Mixed: some explicit, some inferred
-F scale(x, factor: f64) -> f64 = x * factor
-
-# The compiler infers types from how the function is called
-F main() -> i64 {
-    add(1, 2)       # a: i64, b: i64 inferred
-    scale(3.0, 2.0)  # x: f64 inferred
-    0
+fn first_even(limit: i64) -> i64 {
+    i := mut 0
+    LW i < limit {
+        I i % 2 == 0 { return i }
+        i = i + 1
+    }
+    -1
 }
 ```
-
-### Return Types
-
-```vais
-F returns_int() -> i64 { 42 }
-F returns_nothing() -> i64 { 0 }  # Convention: 0 for void
-```
-
-### Generic Functions
-
-```vais
-F identity<T>(x: T) -> T = x
-
-F swap<A, B>(a: A, b: B) -> (B, A) {
-    (b, a)
-}
-```
-
-### Self-Recursion
-
-```vais
-F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
-F countdown(n:i64)->i64 = n<1 ? 0 : @(n-1)
-```
-
-### External Functions
-
-Declare C functions with `X F`:
-
-```vais
-X F puts(s: i64) -> i64
-X F malloc(size: i64) -> i64
-X F sqrt(x: f64) -> f64
-```
-
----
 
 ## Structs
 
-### Struct Definition
-
 ```vais
-S Point {
+struct Point {
     x: f64,
-    y: f64
+    y: f64,
 }
 
-S Person {
-    name: str,
-    age: i64
-}
-```
-
-### Generic Structs
-
-```vais
-S Pair<T> {
-    first: T,
-    second: T
-}
-
-S Container<K, V> {
-    key: K,
-    value: V
+impl Point {
+    fn manhattan(&self) -> f64 {
+        self.x + self.y
+    }
 }
 ```
 
-### Struct Instantiation
-
-```vais
-p := Point { x: 10.0, y: 20.0 }
-person := Person { name: "Alice", age: 30 }
-pair := Pair { first: 1, second: 2 }
-```
-
-### Field Access
-
-```vais
-x_coord := p.x
-person_age := person.age
-```
-
----
+Struct values have named fields. Generic structs are specialized where the
+compiler has concrete type arguments.
 
 ## Enums
 
-### Enum Definition
-
-**Simple enum:**
 ```vais
-E Color {
-    Red,
-    Green,
-    Blue
-}
-```
-
-**Enum with data:**
-```vais
-E Option {
+enum Option<T> {
+    Some(T),
     None,
-    Some(i64)
 }
 
-E Result {
-    Ok(i64),
-    Err(str)
+enum Result<T, E> {
+    Ok(T),
+    Err(E),
 }
 ```
 
-### Enum Usage
+Enum tags are declaration-order indexes starting at `0`. Pattern matching uses
+the same declaration-order tags; it must not hardcode variant meaning from a
+variant name except through the registered enum definition.
+
+## Enum Runtime Layout
+
+The LLVM backend uses one canonical runtime layout for each enum declaration:
+
+- Unit-only enum: `%Enum = type { i32 }`
+- Payload enum: `%Enum = type { i32, { i64, ... } }`
+
+The first field is always an `i32` tag. Payload fields are stored in a nested
+payload struct. `Option<T>` and `Result<T, E>` use the same canonical erased
+layout for the current runtime surface:
+
+```llvm
+%Option = type { i32, { i64 } }
+%Result = type { i32, { i64 } }
+```
+
+The compiler must not mix this layout with anonymous enum literals such as
+`{ i8, i64 }`. Constructor, call, match, `?`, and `!` lowering all use the same
+registered layout.
+
+Protection tests:
+
+- `crates/vais-codegen/tests/inkwell_enum_layout_tests.rs`
+- `crates/vais-codegen/tests/text_enum_layout_tests.rs`
+- `crates/vaisc/tests/e2e/phase90_enums.rs`
+- `crates/vaisc/tests/e2e/phase41_error_handling.rs`
+
+## Pattern Matching
 
 ```vais
-color := Red
-opt := Some(42)
-err := Err("file not found")
-```
-
-### Enum Implementation Blocks
-
-Enums can have methods just like structs:
-
-```vais
-E Color {
-    Red,
-    Green,
-    Blue
-}
-
-X Color {
-    F is_warm(&self) -> bool {
-        M self {
-            Red => true,
-            Green => false,
-            Blue => false,
-            _ => false
-        }
-    }
-
-    F to_hex(&self) -> str {
-        M self {
-            Red => "#FF0000",
-            Green => "#00FF00",
-            Blue => "#0000FF",
-            _ => "#000000"
-        }
+fn unwrap_or<T>(opt: Option<T>, default: T) -> T {
+    match opt {
+        Some(v) => v,
+        None => default,
     }
 }
 
-# Usage
-F main() -> i64 {
-    c := Red
-    I c.is_warm() {
-        puts("This is a warm color")
+fn describe(n: i64) -> str {
+    match n {
+        0 => "zero",
+        1 => "one",
+        _ => "many",
     }
-    puts(c.to_hex())
-    0
 }
 ```
-
----
 
 ## Error Handling
 
@@ -979,173 +509,93 @@ a `Result<T, E>` or `Option<T>`, it:
 - Early-returns the error/None to the calling function if `Err(e)` or `None`
 
 ```vais
-E Result<T, E> {
-    Ok(T),
-    Err(E)
+fn parse_and_double(s: str) -> Result<i64, str> {
+    n := parse_i64(s)?
+    Ok(n * 2)
 }
 
-F read_file(path: str) -> Result<str, str> {
-    # If open fails, propagate the error immediately
-    file := open(path)?
+fn get_or_zero(opt: Option<i64>) -> i64 = opt!
+```
 
-    # If read fails, propagate the error
-    data := file.read()?
+## Generics
 
-    # Success case
-    Ok(data)
-}
+```vais
+fn identity<T>(x: T) -> T = x
 
-F process() -> Result<i64, str> {
-    # The ? operator automatically propagates errors
-    content := read_file("config.txt")?
-
-    # Continue processing if no error
-    Ok(parse(content))
+struct Pair<A, B> {
+    first: A,
+    second: B,
 }
 ```
 
-### The `!` Operator (Unwrap)
+Generic functions and structs are specialized on concrete type arguments where
+the compiler can prove the instantiation. Runtime-erased surfaces must be
+specified explicitly, not inferred from backend convenience.
 
-The `!` operator forcefully extracts the value from a `Result` or `Option`. If the value is `Err` or `None`, the program will panic:
-
-```vais
-# Unwrap an Option - panics if None
-value := some_option!
-
-# Unwrap a Result - panics if Err
-data := some_result!
-
-# Example usage
-F get_config() -> Option<str> {
-    # ... returns Some(config) or None
-}
-
-F main() -> i64 {
-    # This panics if get_config returns None
-    config := get_config()!
-
-    puts(config)
-    0
-}
-```
-
-### Error Type Derivation
-
-Use `#[derive(Error)]` to automatically implement error traits:
+## Traits And Impl
 
 ```vais
-#[derive(Error)]
-E AppError {
-    NotFound(str),
-    Permission(str),
-    Network(str)
+trait Printable {
+    fn print(&self) -> i64
 }
 
-F find_user(id: i64) -> Result<str, AppError> {
-    I id < 0 {
-        Err(NotFound("User ID cannot be negative"))
-    } E {
-        Ok("User data")
-    }
-}
-```
+struct Counter { value: i64 }
 
-### Standard Library Error Module
-
-Vais provides `std/error.vais` with common error handling utilities (similar to Rust's `anyhow` and `thiserror`):
-
-```vais
-U std/error
-
-# Error trait implementation
-F handle_errors() -> Result<i64, str> {
-    data := read_file("data.txt")?
-    result := process(data)?
-    Ok(result)
-}
-```
-
----
-
-## Traits and Implementations
-
-### Trait Definition
-
-```vais
-W Printable {
-    F print(&self) -> i64
-}
-
-W Comparable {
-    F compare(&self, other: &Self) -> i64
-}
-```
-
-### Trait Implementation
-
-```vais
-S Counter {
-    value: i64
-}
-
-X Counter: Printable {
-    F print(&self) -> i64 {
-        puts("Counter value:")
+impl Counter: Printable {
+    fn print(&self) -> i64 {
         print_i64(self.value)
         0
     }
 }
 ```
 
-### Method Implementation (without trait)
+## References And Lifetimes
+
+Reference-to-value conversion is explicit. A `&T` does not silently become `T`;
+use dereference at the boundary.
 
 ```vais
-X Counter {
-    F increment(&self) -> i64 {
-        self.value + 1
-    }
+fn read(x: &i64) -> i64 = *x
+```
 
-    F double(&self) -> i64 {
-        self.value * 2
-    }
+Lifetime elision is permitted only on the tested surface. Ambiguous reference
+returns require explicit lifetime information and must fail at type-check time
+rather than falling through to backend errors.
+
+## Async, Extern, And Globals
+
+```vais
+A fn fetch(id: i64) -> Result<str, str> {
+    Ok("data")
 }
+
+N fn malloc(size: i64) -> i64
+N fn free(ptr: i64) -> i64
+
+G counter: i64 = 0
 ```
 
-### Calling Methods
+Async and non-native targets are implementation surfaces unless a named gate
+certifies a narrower claim.
+
+## Built-Ins
+
+Common built-ins include:
 
 ```vais
-c := Counter { value: 42 }
-c.print()
-inc := c.increment()
-dbl := c.double()
+puts(s: str) -> i64
+print_i64(x: i64) -> i64
+malloc(size: i64) -> i64
+free(ptr: i64) -> i64
+load_i64(ptr: i64) -> i64
+store_i64(ptr: i64, value: i64) -> i64
+sizeof(T) -> i64
 ```
 
----
+Raw memory built-ins operate on `i64` addresses. Code using typed pointers must
+cross that boundary explicitly.
 
-## Pattern Matching
-
-### Basic Match
-
-```vais
-F classify(n: i64) -> str {
-    M n {
-        0 => "zero",
-        1 => "one",
-        _ => "other"
-    }
-}
-```
-
-### Match with Binding
-
-```vais
-F describe(opt: Option) -> i64 {
-    M opt {
-        Some(x) => x,
-        None => 0
-    }
-}
-```
+## Compatibility Rule
 
 ### Match with Guards
 

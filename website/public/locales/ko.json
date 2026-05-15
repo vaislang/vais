@@ -28,11 +28,11 @@
     "barNote": "Baseline은 현재 integrity manifest 기준입니다. cross-package schema 15/15와 multi-domain product schema 9/9가 locked gate입니다."
   },
   "performance": {
-    "title": "네이티브 성능",
-    "subtitle": "Vais는 최적화된 LLVM IR로 컴파일됩니다 — 런타임에서 C 및 Rust와 동등하며 빠른 컴파일 속도를 제공합니다.",
-    "runtimeTitle": "실행 시간 — Fibonacci(35)",
+    "title": "네이티브 성능 증거",
+    "subtitle": "Vais는 native build에서 LLVM IR을 생성합니다. 컴파일 속도 chart는 현행 수치이고, runtime chart는 runtime suite가 갱신될 때까지 scoped historical snapshot입니다.",
+    "runtimeTitle": "Historical Runtime Snapshot — Fibonacci(35)",
     "compileTitle": "컴파일 속도 — 단일 파일",
-    "compileNote": "Vais <code>--emit-ir</code> vs 전체 컴파일. C보다 8.6배, Rust보다 19배 빠름. 2026-02-11 업데이트."
+    "compileNote": "Vais <code>--emit-ir</code> vs 전체 binary compilation. Hyperfine, benchmark 4개, Apple ARM64/macOS 기준: C/clang보다 9.3배, Rust보다 15.6배 빠름. 2026-05-13 업데이트."
   },
   "features": {
     "title": "왜 Vais인가요?",

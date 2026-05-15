@@ -59,20 +59,13 @@ Configuration (`netlify.toml`):
 ```bash
 # Build
 npm run build
-
-# Deploy to gh-pages branch
-npm i -g gh-pages
-gh-pages -d dist
 ```
 
-Update `vite.config.js`:
-
-```javascript
-export default defineConfig({
-  base: '/vais/',  // Replace with your repo name
-  // ... rest of config
-});
-```
+For the Vais production site, do not publish the playground with a standalone
+`gh-pages` branch. The canonical deployment is the repository-level
+`.github/workflows/website.yml` workflow, which builds `playground/dist` and
+copies it to `https://vaislang.dev/playground/` as part of the combined Pages
+artifact.
 
 ### 4. Cloudflare Pages
 

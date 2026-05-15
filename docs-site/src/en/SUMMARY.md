@@ -4,6 +4,10 @@
 
 # Getting Started
 
+- [AI Developer Onboarding]()
+  - [LLM Language Card](./ai/llm-language-card.md)
+  - [AI Developer Guide](./ai/ai-developer-guide.md)
+  - [Reference App Contract](./ai/reference-app-contract.md)
 - [5-Minute Vibe Coding Guide](./getting-started/vibe-coding.md)
 - [Installation](./getting-started/installation.md)
 - [Quick Start](./getting-started/quick-start.md)

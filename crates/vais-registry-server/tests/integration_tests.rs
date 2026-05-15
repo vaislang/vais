@@ -1028,7 +1028,7 @@ async fn test_full_publish_install_roundtrip() {
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
-    assert!(json["packages"].as_array().unwrap().len() > 0);
+    assert!(!json["packages"].as_array().unwrap().is_empty());
     assert_eq!(json["packages"][0]["name"], "roundtrip-pkg");
 
     // 5. Get package info

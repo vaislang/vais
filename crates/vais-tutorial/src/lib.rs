@@ -1062,7 +1062,7 @@ mod tests {
     #[test]
     fn test_result_type_alias() {
         let ok: crate::Result<i32> = Ok(42);
-        assert_eq!(ok.unwrap(), 42);
+        assert!(matches!(ok, Ok(42)));
         let err: crate::Result<i32> = Err(TutorialError::ParseError("x".into()));
         assert!(err.is_err());
     }

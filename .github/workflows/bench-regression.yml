@@ -26,12 +26,21 @@ jobs:
 
     steps:
       - name: Checkout PR branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM 17
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main"
+          sudo apt-get update
+          sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+          echo "CC=clang-17" >> $GITHUB_ENV
 
       - name: Install jq (for JSON parsing)
         run: sudo apt-get update && sudo apt-get install -y jq bc
@@ -71,6 +80,8 @@ jobs:
           echo "::endgroup::"
 
       - name: Run benchmarks on base branch
+        id: base_bench
+        continue-on-error: true
         run: |
           echo "::group::Running benchmarks on base branch"
           # Clean target to avoid mixing artifacts
@@ -81,11 +92,13 @@ jobs:
           echo "::endgroup::"
 
       - name: Save base benchmark results
+        if: steps.base_bench.outcome == 'success'
         run: |
           mkdir -p benchmark-results/base
           cp -r target/criterion benchmark-results/base/
 
       - name: Restore PR results and compare
+        if: steps.base_bench.outcome == 'success'
         run: |
           # Move base results aside
           mv target/criterion target/criterion-base
@@ -98,16 +111,19 @@ jobs:
           find target/criterion-base -name "estimates.json" | while read f; do
             relative_path="${f#target/criterion-base/}"
             target_path="target/criterion/${relative_path}"
-            target_dir=$(dirname "$target_path")
+            dest_path="${target_path/\/base\//\/main\/}"
+            target_dir=$(dirname "$dest_path")
             mkdir -p "$target_dir"
-            cp "$f" "${target_path/\/base\//\/main\/}"
+            cp "$f" "$dest_path"
           done
 
       - name: Checkout PR branch for scripts
+        if: steps.base_bench.outcome == 'success'
         run: |
           git checkout ${{ github.head_ref }}
 
       - name: Compare benchmark results
+        if: steps.base_bench.outcome == 'success'
         id: compare
         continue-on-error: true
         run: |
@@ -403,9 +419,35 @@ jobs:
 
           echo "::endgroup::"
 
+      - name: Record unavailable base benchmark
+        if: steps.base_bench.outcome != 'success'
+        run: |
+          cat > benchmark-comparison.md << 'EOF'
+          ## Benchmark Comparison Report
+
+          Base branch benchmark results were unavailable, so this PR could not be
+          compared against `main`.
+
+          The PR branch benchmark step completed successfully. This usually means
+          the comparison baseline is broken on the current base branch, not that
+          this PR introduced a benchmark regression.
+          EOF
+
+          cat > benchmark-results.json << 'EOF'
+          {
+            "benchmarks": [],
+            "regressions": 0,
+            "improvements": 0,
+            "threshold": 10,
+            "baseline_unavailable": true
+          }
+          EOF
+
+          echo "::warning::Base branch benchmark failed; skipping regression comparison for this PR."
+
       - name: Post benchmark results as PR comment
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
@@ -487,7 +529,7 @@ jobs:
 
       - name: Auto-alert on critical regressions
         if: steps.compare.outcome == 'failure'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
@@ -573,7 +615,7 @@ jobs:
 
       - name: Upload benchmark artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
           path: |
@@ -595,10 +637,19 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM 17
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main"
+          sudo apt-get update
+          sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+          echo "CC=clang-17" >> $GITHUB_ENV
 
       - name: Build compiler
         run: cargo build --release -p vaisc

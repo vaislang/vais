@@ -217,6 +217,7 @@ impl Parser {
             }
             Token::At => Expr::SelfCall,
             Token::SelfLower => Expr::Ident("self".to_string()),
+            Token::Return if self.allow_contract_return_ident => Expr::Ident("return".to_string()),
             Token::Ident(name) => {
                 // Handle contract verification builtins: old(), assert(), assume()
                 if name == "old" && self.check(&Token::LParen) {

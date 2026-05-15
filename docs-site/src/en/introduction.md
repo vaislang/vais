@@ -177,13 +177,9 @@ fn compute() -> Result<i64, str> {
 
 ### Compilation Speed
 
-| Phase | Time (avg) | Throughput |
-|-------|------------|------------|
-| Lexer | ~0.5ms/1K LOC | ~2M tokens/sec |
-| Parser | ~1.2ms/1K LOC | ~800K AST nodes/sec |
-| Type Checker | ~2.5ms/1K LOC | ~400K types/sec |
-| Code Generator | ~3.0ms/1K LOC | ~300K IR lines/sec |
-| **Full Pipeline** | **~1.25ms/1K LOC** | **~800K lines/sec** |
+Current single-file compile-speed benchmark
+(`benches/lang-comparison/compile_bench.sh`, Hyperfine, 2026-05-13,
+Apple ARM64/macOS):
 
 **Self-Hosting:** The repository contains 50,000+ lines of Vais compiler
 sources used for bootstrap and conformance work. Current correctness is judged
@@ -191,7 +187,9 @@ by the certified Core gate and promoted runtime fixtures.
 
 ### Runtime Performance
 
-Fibonacci(35) benchmark (Apple M-series ARM64):
+Historical Fibonacci(35) runtime snapshot (Apple M-series ARM64). These
+numbers are retained as scoped evidence until the runtime benchmark suite is
+refreshed on the current compiler:
 
 | Language | Time | Relative |
 |----------|------|----------|

@@ -129,24 +129,23 @@ impl TypeContext {
     pub(crate) fn collect_variable_bindings(&mut self, ast: &Module, cursor_offset: usize) {
         for item in &ast.items {
             match &item.node {
-                Item::Function(f) => {
-                    // Check if cursor is inside this function
-                    if item.span.start <= cursor_offset && cursor_offset <= item.span.end {
-                        // Add function parameters
-                        for param in &f.params {
-                            if param.name.node != "self" {
-                                let ty = ast_type_to_lsp(&param.ty.node);
-                                self.variable_types.insert(param.name.node.clone(), ty);
-                            }
+                Item::Function(f)
+                    if item.span.start <= cursor_offset && cursor_offset <= item.span.end =>
+                {
+                    // Add function parameters
+                    for param in &f.params {
+                        if param.name.node != "self" {
+                            let ty = ast_type_to_lsp(&param.ty.node);
+                            self.variable_types.insert(param.name.node.clone(), ty);
                         }
-                        // Collect from body
-                        match &f.body {
-                            FunctionBody::Block(stmts) => {
-                                self.collect_bindings_from_stmts(stmts, cursor_offset);
-                            }
-                            FunctionBody::Expr(expr) => {
-                                self.collect_bindings_from_expr(expr, cursor_offset);
-                            }
+                    }
+                    // Collect from body
+                    match &f.body {
+                        FunctionBody::Block(stmts) => {
+                            self.collect_bindings_from_stmts(stmts, cursor_offset);
+                        }
+                        FunctionBody::Expr(expr) => {
+                            self.collect_bindings_from_expr(expr, cursor_offset);
                         }
                     }
                 }

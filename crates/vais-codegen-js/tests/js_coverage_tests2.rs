@@ -58,8 +58,10 @@ fn test_js_config_jsdoc() {
 
 #[test]
 fn test_js_config_custom_indent() {
-    let mut config = JsConfig::default();
-    config.indent = "    ".to_string(); // 4 spaces
+    let config = JsConfig {
+        indent: "    ".to_string(), // 4 spaces
+        ..Default::default()
+    };
     let js = gen_js_with_config(
         r#"
         fn f() -> i64 {

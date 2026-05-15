@@ -43,9 +43,9 @@
 //! - **50 modules**: 4-6x speedup (good parallelism)
 //! - **100 modules**: 6-8x speedup (near-optimal parallelism)
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use rayon::prelude::*;
-use std::hint::black_box as std_black_box;
+use std::hint::black_box;
 use vais_ast::Module;
 use vais_codegen::CodeGenerator;
 use vais_lexer::tokenize;
@@ -149,7 +149,7 @@ fn bench_sequential_parse_typecheck(c: &mut Criterion) {
                     // Type check each module sequentially
                     for (_name, ast) in &asts {
                         let mut checker = TypeChecker::new();
-                        let _ = checker.check_module(std_black_box(ast));
+                        let _ = checker.check_module(black_box(ast));
                     }
                 })
             },
@@ -187,7 +187,7 @@ fn bench_parallel_parse_typecheck(c: &mut Criterion) {
                         .par_iter()
                         .map(|(_name, ast)| {
                             let mut checker = TypeChecker::new();
-                            checker.check_module(std_black_box(ast))
+                            checker.check_module(black_box(ast))
                         })
                         .collect();
                 })
@@ -227,7 +227,7 @@ fn bench_sequential_full_pipeline(c: &mut Criterion) {
                         .iter()
                         .map(|(name, ast)| {
                             let mut checker = TypeChecker::new();
-                            let _ = checker.check_module(std_black_box(ast));
+                            let _ = checker.check_module(black_box(ast));
                             (name.clone(), ast)
                         })
                         .collect();
@@ -235,7 +235,7 @@ fn bench_sequential_full_pipeline(c: &mut Criterion) {
                     // Sequential codegen
                     for (name, ast) in &checked_asts {
                         let mut codegen = CodeGenerator::new(name);
-                        let _ = codegen.generate_module(std_black_box(ast));
+                        let _ = codegen.generate_module(black_box(ast));
                     }
                 })
             },
@@ -274,7 +274,7 @@ fn bench_parallel_full_pipeline(c: &mut Criterion) {
                         .par_iter()
                         .map(|(name, ast)| {
                             let mut checker = TypeChecker::new();
-                            let _ = checker.check_module(std_black_box(ast));
+                            let _ = checker.check_module(black_box(ast));
                             (name.clone(), ast)
                         })
                         .collect();
@@ -284,7 +284,7 @@ fn bench_parallel_full_pipeline(c: &mut Criterion) {
                         .par_iter()
                         .map(|(name, ast)| {
                             let mut codegen = CodeGenerator::new(name);
-                            codegen.generate_module(std_black_box(ast))
+                            codegen.generate_module(black_box(ast))
                         })
                         .collect();
                 })
@@ -445,7 +445,7 @@ fn bench_typecheck_speedup_10modules(c: &mut Criterion) {
             b.iter(|| {
                 for (_name, ast) in asts {
                     let mut checker = TypeChecker::new();
-                    let _ = checker.check_module(std_black_box(ast));
+                    let _ = checker.check_module(black_box(ast));
                 }
             })
         },
@@ -460,7 +460,7 @@ fn bench_typecheck_speedup_10modules(c: &mut Criterion) {
                     .par_iter()
                     .map(|(_name, ast)| {
                         let mut checker = TypeChecker::new();
-                        checker.check_module(std_black_box(ast))
+                        checker.check_module(black_box(ast))
                     })
                     .collect();
             })
@@ -491,7 +491,7 @@ fn bench_typecheck_speedup_50modules(c: &mut Criterion) {
             b.iter(|| {
                 for (_name, ast) in asts {
                     let mut checker = TypeChecker::new();
-                    let _ = checker.check_module(std_black_box(ast));
+                    let _ = checker.check_module(black_box(ast));
                 }
             })
         },
@@ -506,7 +506,7 @@ fn bench_typecheck_speedup_50modules(c: &mut Criterion) {
                     .par_iter()
                     .map(|(_name, ast)| {
                         let mut checker = TypeChecker::new();
-                        checker.check_module(std_black_box(ast))
+                        checker.check_module(black_box(ast))
                     })
                     .collect();
             })
@@ -537,7 +537,7 @@ fn bench_typecheck_speedup_100modules(c: &mut Criterion) {
             b.iter(|| {
                 for (_name, ast) in asts {
                     let mut checker = TypeChecker::new();
-                    let _ = checker.check_module(std_black_box(ast));
+                    let _ = checker.check_module(black_box(ast));
                 }
             })
         },
@@ -552,7 +552,7 @@ fn bench_typecheck_speedup_100modules(c: &mut Criterion) {
                     .par_iter()
                     .map(|(_name, ast)| {
                         let mut checker = TypeChecker::new();
-                        checker.check_module(std_black_box(ast))
+                        checker.check_module(black_box(ast))
                     })
                     .collect();
             })
@@ -587,7 +587,7 @@ fn bench_codegen_speedup_10modules(c: &mut Criterion) {
             b.iter(|| {
                 for (name, ast) in asts {
                     let mut codegen = CodeGenerator::new(name);
-                    let _ = codegen.generate_module(std_black_box(ast));
+                    let _ = codegen.generate_module(black_box(ast));
                 }
             })
         },
@@ -602,7 +602,7 @@ fn bench_codegen_speedup_10modules(c: &mut Criterion) {
                     .par_iter()
                     .map(|(name, ast)| {
                         let mut codegen = CodeGenerator::new(name);
-                        codegen.generate_module(std_black_box(ast))
+                        codegen.generate_module(black_box(ast))
                     })
                     .collect();
             })
@@ -637,7 +637,7 @@ fn bench_codegen_speedup_50modules(c: &mut Criterion) {
             b.iter(|| {
                 for (name, ast) in asts {
                     let mut codegen = CodeGenerator::new(name);
-                    let _ = codegen.generate_module(std_black_box(ast));
+                    let _ = codegen.generate_module(black_box(ast));
                 }
             })
         },
@@ -652,7 +652,7 @@ fn bench_codegen_speedup_50modules(c: &mut Criterion) {
                     .par_iter()
                     .map(|(name, ast)| {
                         let mut codegen = CodeGenerator::new(name);
-                        codegen.generate_module(std_black_box(ast))
+                        codegen.generate_module(black_box(ast))
                     })
                     .collect();
             })
@@ -687,7 +687,7 @@ fn bench_codegen_speedup_100modules(c: &mut Criterion) {
             b.iter(|| {
                 for (name, ast) in asts {
                     let mut codegen = CodeGenerator::new(name);
-                    let _ = codegen.generate_module(std_black_box(ast));
+                    let _ = codegen.generate_module(black_box(ast));
                 }
             })
         },
@@ -702,7 +702,7 @@ fn bench_codegen_speedup_100modules(c: &mut Criterion) {
                     .par_iter()
                     .map(|(name, ast)| {
                         let mut codegen = CodeGenerator::new(name);
-                        codegen.generate_module(std_black_box(ast))
+                        codegen.generate_module(black_box(ast))
                     })
                     .collect();
             })

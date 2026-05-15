@@ -3,8 +3,9 @@
 //! This benchmark suite focuses on measuring the performance of individual
 //! compiler phases and the full compilation pipeline with realistic code.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::fs;
+use std::hint::black_box;
 
 use vais_codegen::CodeGenerator;
 use vais_lexer::tokenize;

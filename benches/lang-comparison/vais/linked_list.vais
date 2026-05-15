@@ -10,6 +10,7 @@ fn list_push(head, val) {
     nd := node_new(val)
     store_i64(nd + 8, load_i64(head + 8))
     store_i64(head + 8, nd)
+    0
 }
 
 fn list_len(head) {
@@ -34,9 +35,10 @@ fn list_sum(head) {
 
 fn main() {
     head := node_new(0)
-    L i:1..11 {
+    LF i:1..11 {
         list_push(head, i)
     }
-    println("~{list_len(head)}")
-    println("~{list_sum(head)}")
+    println("{list_len(head)}")
+    println("{list_sum(head)}")
+    0
 }

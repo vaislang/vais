@@ -1,6 +1,7 @@
-# Vais 语言规范
+# 语言规范
 
-版本: 0.1.0
+此页面引用仓库中的权威语言规范，避免 docs site 与 compiler-facing contract
+发生漂移。
 
 Vais 编程语言完整参考。
 

@@ -2,9 +2,9 @@
 //!
 //! Adds 100–150 new unit tests covering:
 //!   1. checker_expr/ — binary, unary, field access, index, closures, try/unwrap,
-//!                       ternary, pipe, references, deref, string interp, casts
+//!      ternary, pipe, references, deref, string interp, casts
 //!   2. checker_fn.rs — return-type mismatch, recursive fn detection, impl methods,
-//!                       generic fns, where-clause, requires/ensures attributes
+//!      generic fns, where-clause, requires/ensures attributes
 //!   3. inference/    — unification edge cases, occurs-check, substitution
 //!   4. ownership/    — OwnershipChecker API (new, new_collecting, errors, take_errors)
 //!   5. checker_module/ — struct/enum/trait registration, type-alias, constant, impl

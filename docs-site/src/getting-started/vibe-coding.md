@@ -208,5 +208,5 @@ fn main() -> i64 {
 - **언어 깊게**: [언어 명세](../language/language-spec.md)
 - **실전 튜토리얼**: [CLI 도구](../tutorials/cli-tool.md), [HTTP 서버](../tutorials/http-server.md), [WebSocket 채팅](../tutorials/websocket-chat.md)
 - **생태계 상세**: [생태계 개요](../ecosystem/README.md)
-- **플레이그라운드**: [play.vaislang.dev](https://play.vaislang.dev) (40+ 예제)
+- **플레이그라운드**: [vaislang.dev/playground](https://vaislang.dev/playground/) (40+ 예제)
 - **GitHub**: [vaislang/vais](https://github.com/vaislang/vais)

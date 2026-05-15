@@ -4,7 +4,7 @@
 //! and error handling (file not found, invalid path, etc.)
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use vais_hotreload::{
     DylibLoader, FileWatcher, HotReloadConfig, HotReloadError, HotReloader, WatchEvent,
@@ -106,14 +106,14 @@ fn test_watch_event_removed_path_accessible() {
 fn test_watch_event_clone_created() {
     let original = WatchEvent::Created(PathBuf::from("x.vais"));
     let cloned = original.clone();
-    assert!(matches!(cloned, WatchEvent::Created(p) if p == PathBuf::from("x.vais")));
+    assert!(matches!(cloned, WatchEvent::Created(p) if p.as_path() == Path::new("x.vais")));
 }
 
 #[test]
 fn test_watch_event_clone_removed() {
     let original = WatchEvent::Removed(PathBuf::from("y.vais"));
     let cloned = original.clone();
-    assert!(matches!(cloned, WatchEvent::Removed(p) if p == PathBuf::from("y.vais")));
+    assert!(matches!(cloned, WatchEvent::Removed(p) if p.as_path() == Path::new("y.vais")));
 }
 
 // ─── HotReloadConfig: builder pattern edge cases ─────────────────────────────
@@ -189,9 +189,7 @@ fn test_dylib_loader_rejects_empty_path_string() {
 
 #[test]
 fn test_dylib_loader_rejects_directory_path() {
-    let tmp = TempDir::new().unwrap();
-    // tmp.path() is a directory, not a file — DylibLoader::new checks existence;
-    // on some systems a directory "exists" so we test a non-existent path instead
+    // DylibLoader::new checks existence; use a definitely missing file path.
     let result = DylibLoader::new("/nonexistent/definitely/not/here.dylib");
     assert!(result.is_err());
 }

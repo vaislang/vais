@@ -94,7 +94,7 @@
         <span class="article-date">2026-03-02</span>
         <span class="article-tag">Language Design</span>
       </div>
-      <h1 class="article-title">The Design Philosophy Behind Single-Character Keywords</h1>
+      <h1 class="article-title">Archived Single-Character Keyword Rationale</h1>
 
       <div class="article-content">
         <p>
@@ -111,7 +111,7 @@
         <h2>The Token Economy</h2>
 
         <p>
-          Large Language Models process text in tokens. Every token costs compute, latency, and money. When an LLM generates code, the keyword <code>function</code> consumes one token (sometimes two, depending on the tokenizer). In Vais, <code>F</code> is a single character that consistently maps to one token.
+          Large Language Models process text in tokens. Every token costs compute, latency, and money. In the historical design, <code>F</code> was used as a compact function marker.
         </p>
 
         <p>
@@ -136,7 +136,7 @@
         <h2>The Keyword Map</h2>
 
         <p>
-          Every single-character keyword in Vais was chosen based on mnemonic strength and visual distinctiveness:
+          The historical keyword map chose single-character forms based on mnemonic strength and visual distinctiveness:
         </p>
 
         <table>
@@ -183,7 +183,7 @@
 }</code></pre>
 
         <p>
-          The Vais version is 33% fewer tokens while maintaining identical readability for developers who know the keyword map. The learning curve is approximately 15 minutes -- memorizing 13 single-letter mnemonics.
+          The historical Vais version was designed to reduce token count while remaining readable for developers who knew the keyword map.
         </p>
 
         <h2>The <code>@</code> Self-Recursion Operator</h2>
@@ -237,12 +237,12 @@
         </ol>
 
         <p>
-          Vais is designed for the era where an AI writes the code and a human reviews it. The single-character keywords make generation efficient, while the LSP tooling makes review ergonomic.
+          The historical design targeted an era where an AI writes the code and a human reviews it. Current public syntax keeps canonical declaration keywords while retaining compact forms where they are still part of the compiler surface.
         </p>
 
         <div class="article-cta">
-          <h3>Try Vais Yourself</h3>
-          <p>Install Vais and see how single-character keywords feel in practice.</p>
+          <h3>Use Current Vais Syntax</h3>
+          <p>For current examples, prefer canonical keywords such as fn, struct, enum, else, match, return, use, and pub.</p>
           <a href="https://github.com/vaislang/vais" class="btn" target="_blank" rel="noopener">Get Started on GitHub</a>
         </div>
       </div>

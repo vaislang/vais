@@ -212,7 +212,7 @@ fn fuzz_deeply_nested_types() {
 
 #[test]
 fn fuzz_circular_type_references() {
-    let test_cases = vec![
+    let test_cases = [
         // Type alias referring to itself
         "Y A = A",
         // Mutual type alias references
@@ -255,7 +255,7 @@ fn fuzz_circular_type_references() {
 
 #[test]
 fn fuzz_empty_trait_implementations() {
-    let test_cases = vec![
+    let test_cases = [
         // Empty trait
         "T Empty {}",
         // Empty trait impl
@@ -298,7 +298,7 @@ fn fuzz_empty_trait_implementations() {
 
 #[test]
 fn fuzz_functions_with_no_body() {
-    let test_cases = vec![
+    let test_cases = [
         // These should parse but might have issues in type checking
         "fn test()->i64",
         "fn test(x:i64)->i64",
@@ -423,7 +423,7 @@ fn fuzz_type_mismatches() {
 
 #[test]
 fn fuzz_undefined_references() {
-    let test_cases = vec![
+    let test_cases = [
         // Undefined variable
         "fn test()->i64=undefined_var",
         // Undefined function
@@ -466,7 +466,7 @@ fn fuzz_undefined_references() {
 
 #[test]
 fn fuzz_malformed_generics() {
-    let test_cases = vec![
+    let test_cases = [
         // Too many type arguments
         "enum Option<T>{Some(T),None} F test()->Option<i64,bool>=None",
         // Too few type arguments
@@ -572,7 +572,7 @@ fn fuzz_generated_valid_programs() {
 
                             source.push_str(&format!("S {}", name));
                             if field_count == 0 {
-                                source.push_str(" ");
+                                source.push(' ');
                             } else {
                                 source.push('{');
                                 for j in 0..field_count {

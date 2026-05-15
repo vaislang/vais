@@ -267,7 +267,7 @@ fn test_const_private() {
             },
             Span::new(4, 7),
         ),
-        value: Spanned::new(Expr::Float(3.14), Span::new(10, 14)),
+        value: Spanned::new(Expr::Float(2.5), Span::new(10, 14)),
         is_pub: false,
         attributes: vec![],
     };

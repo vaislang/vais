@@ -7,7 +7,8 @@
 //! 4. Combined Application - 300+ line full application
 //! 5. Scaling Test - Measures how compilation scales with source size
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::hint::black_box;
 use vais_codegen::CodeGenerator;
 use vais_lexer::tokenize;
 use vais_parser::parse;

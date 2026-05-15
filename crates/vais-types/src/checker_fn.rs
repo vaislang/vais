@@ -206,7 +206,7 @@ impl TypeChecker {
         if f.name.node == "main"
             && ret_type_inferred
             && expected_ret == ResolvedType::I64
-            && body_type_deref == ResolvedType::Unit
+            && body_type == ResolvedType::Unit
         {
             // Skip unification — codegen will insert `ret i64 0`
         } else {
@@ -276,7 +276,7 @@ impl TypeChecker {
 
         // Verify ImplTrait/DynTrait bounds: if return type is impl Trait or dyn Trait,
         // check that the concrete body type implements the required trait bounds.
-        self.verify_trait_type_bounds(&expected_ret, &body_type_deref);
+        self.verify_trait_type_bounds(&expected_ret, &body_type);
 
         // Resolve inferred return type: if return type was omitted, apply substitutions
         // to resolve the type variable to the concrete type from the body.

@@ -38,7 +38,7 @@ fn test_parse_with_cfg_linux() {
     cfg.insert("target_os".to_string(), "linux".to_string());
     let module = parse_with_cfg(source, cfg).unwrap();
     // linux_only should be included
-    assert!(module.items.len() >= 1);
+    assert!(!module.items.is_empty());
 }
 
 #[test]
@@ -550,7 +550,7 @@ fn test_parse_nested_patterns() {
         }
     "#;
     let module = parse_ok(source);
-    assert!(module.items.len() >= 1);
+    assert!(!module.items.is_empty());
 }
 
 // ============================================================================

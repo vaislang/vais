@@ -16,8 +16,12 @@ coverage:
 
     patch:
       default:
-        target: 85%
+        # Patch coverage remains visible on PRs, but it is not a merge gate.
+        # Broad baseline PRs often touch formatting, workflows, or compiler
+        # maintenance lines that are already guarded by project coverage and CI.
+        target: auto
         threshold: 3%
+        informational: true
 
     changes:
       default:

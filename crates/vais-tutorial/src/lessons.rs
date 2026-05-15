@@ -1694,7 +1694,7 @@ mod tests {
         for chapter in &chapters {
             for lesson in &chapter.lessons {
                 for hint in &lesson.hints {
-                    assert!(hint.len() > 0, "Hint in {} is empty", lesson.id);
+                    assert!(!hint.is_empty(), "Hint in {} is empty", lesson.id);
                 }
             }
         }

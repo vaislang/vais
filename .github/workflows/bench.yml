@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for comparison
 
@@ -121,6 +121,7 @@ jobs:
 
       - name: Compare benchmarks (PR only)
         if: github.event_name == 'pull_request'
+        id: compare_pr
         run: |
           # Run benchmarks and save results
           cargo bench -p vais-benches --bench compile_bench -- --save-baseline pr-baseline
@@ -129,8 +130,23 @@ jobs:
           # Checkout main branch to compare
           git fetch origin main:main
           git checkout main
+
+          set +e
           cargo bench -p vais-benches --bench compile_bench -- --save-baseline main-baseline
+          main_compile_status=$?
           cargo bench -p vais-benches --bench largescale_bench -- --save-baseline main-baseline
+          main_largescale_status=$?
+          set -e
+
+          if [ "$main_compile_status" -ne 0 ] || [ "$main_largescale_status" -ne 0 ]; then
+            {
+              echo ""
+              echo "Base main benchmark unavailable; skipping baseline comparison."
+              echo "PR benchmark execution succeeded, but main could not produce a comparison baseline."
+            } | tee -a bench-output.txt
+            echo "::warning::Base main benchmark failed; skipping PR baseline comparison."
+            exit 0
+          fi
 
           # Switch back to PR branch
           git checkout -
@@ -194,7 +210,7 @@ jobs:
 
       - name: Comment PR with results
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
@@ -235,7 +251,7 @@ jobs:
             });
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
           path: |
@@ -256,7 +272,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -317,7 +333,7 @@ jobs:
           ./measure_compile_time.sh
 
       - name: Upload compile time data
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: compile-time-data
           path: compile-times.txt

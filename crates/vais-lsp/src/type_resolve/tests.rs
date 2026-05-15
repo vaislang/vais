@@ -754,7 +754,7 @@ fn test_infer_int() {
 #[test]
 fn test_infer_float() {
     let ctx = make_ctx();
-    let expr = spanned(Expr::Float(3.14));
+    let expr = spanned(Expr::Float(2.5));
     assert_eq!(
         ctx.infer_expr_type(&expr),
         LspType::Primitive("f64".to_string())

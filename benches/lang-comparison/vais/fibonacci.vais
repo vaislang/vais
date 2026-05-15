@@ -5,7 +5,7 @@ fn fib_rec(n) -> i =
 fn fib_iter(n) {
     a := mut 0
     b := mut 1
-    L _:0..n {
+    LF _:0..n {
         t := a + b
         a = b
         b = t

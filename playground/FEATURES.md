@@ -8,7 +8,7 @@ Comprehensive guide to all features available in the Vais Playground.
 
 The Monaco editor provides rich syntax highlighting for Vais:
 
-- **Keywords**: `F`, `S`, `E`, `I`, `L`, `M`, `T`, `U`, `R`, `C`, `O`
+- **Keywords**: `fn`, `struct`, `enum`, `match`, `return`, `use`, `pub`, `I`, `LF`, `LW`, `L`, `B`, `C`, `D`
 - **Types**: `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `bool`, `char`, `str`
 - **Operators**: `@`, `:=`, `=>`, `&&`, `||`, `==`, `!=`, etc.
 - **Comments**: Single-line (`#`) and multi-line (`/* */`)
@@ -21,12 +21,13 @@ Press `Ctrl+Space` or start typing to see intelligent suggestions:
 
 #### Keyword Snippets
 
-- `F` → Function template with parameters and return type
-- `S` → Struct definition template
-- `E` → Enum definition template
+- `fn` → Function template with parameters and return type
+- `struct` → Struct definition template
+- `enum` → Enum definition template
 - `I` → If-else expression
-- `L` → Loop with range
-- `M` → Match expression
+- `LF` → Range/foreach loop
+- `LW` → While-style loop
+- `match` → Match expression
 
 #### Built-in Functions
 
@@ -73,7 +74,7 @@ Customizable settings in the editor:
 Simple program demonstrating basic output.
 
 ```vais
-F main()->i64 {
+fn main() -> i64 {
     puts("Hello, Vais!")
     0
 }
@@ -83,17 +84,17 @@ F main()->i64 {
 Recursive function using self-recursion operator `@`.
 
 ```vais
-F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
-F main()->i64 = fib(10)
+fn fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
+fn main() -> i64 = fib(10)
 ```
 
 ### 3. Generics
 Type-generic functions with type inference.
 
 ```vais
-F identity<T>(x: T) -> T = x
+fn identity<T>(x: T) -> T = x
 
-F main() -> i64 {
+fn main() -> i64 {
     a := identity(42)
     0
 }
@@ -103,17 +104,17 @@ F main() -> i64 {
 If-else expressions and loop constructs.
 
 ```vais
-F main()->i64 {
+fn main() -> i64 {
     x := 10
     result := I x > 5 {
         puts("Greater than 5")
         1
-    } E {
+    } else {
         puts("Not greater")
         0
     }
 
-    L i:0..5 {
+    LF i:0..5 {
         putchar(i + 48)
     }
     0
@@ -124,14 +125,14 @@ F main()->i64 {
 Struct definitions with methods.
 
 ```vais
-S Point {
+struct Point {
     x: f64,
     y: f64
 }
 
-X Point {
-    F distance_from_origin() -> f64 {
-        sqrt(@.x * @.x + @.y * @.y)
+impl Point {
+    fn distance_from_origin(&self) -> f64 {
+        sqrt(self.x * self.x + self.y * self.y)
     }
 }
 ```
@@ -140,13 +141,13 @@ X Point {
 Algebraic data types with pattern matching.
 
 ```vais
-E Option<T> {
+enum Option<T> {
     Some(T),
     None
 }
 
-F get_value(opt: Option<i64>) -> i64 {
-    M opt {
+fn get_value(opt: Option<i64>) -> i64 {
+    match opt {
         Some(v) => v,
         None => 0
     }
@@ -157,8 +158,8 @@ F get_value(opt: Option<i64>) -> i64 {
 Exhaustive pattern matching with bindings.
 
 ```vais
-F classify(n: i64) -> i64 {
-    M n {
+fn classify(n: i64) -> i64 {
+    match n {
         0 => 0,
         1 => 1,
         _ => -1
@@ -170,9 +171,9 @@ F classify(n: i64) -> i64 {
 Range-based and while-style loops.
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     # Range loop
-    L i:0..10 {
+    LF i:0..10 {
         putchar(i + 48)
     }
 
@@ -191,22 +192,22 @@ F main() -> i64 {
 Using `@` operator for recursive calls.
 
 ```vais
-F factorial(n: i64) -> i64 =
-    I n <= 1 { 1 } E { n * @(n - 1) }
+fn factorial(n: i64) -> i64 =
+    I n <= 1 { 1 } else { n * @(n - 1) }
 ```
 
 ### 10. Type Inference
 Automatic type deduction.
 
 ```vais
-F main() -> i64 {
+fn main() -> i64 {
     x := 42          # Inferred as i64
     y := 3.14        # Inferred as f64
     z := add(10, 20) # Inferred from return type
     0
 }
 
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 ```
 
 ## UI Components
@@ -248,54 +249,29 @@ Real-time status updates:
 - "Execution completed" - Finished running
 - "Compilation failed" - Errors found
 
-## Compilation Features
+## Compilation Modes
 
-### Mock Compiler (Current)
+The playground uses automatic fallback. The current certified public baseline
+does not claim complete browser-only compilation or execution.
 
-The playground includes a demonstration compiler:
+1. **Server mode**
+   - Sends code to the playground API
+   - Uses `vaisc` for real compilation
+   - Can execute native examples when the API is available
 
-1. **Syntax Validation**
-   - Checks for empty files
-   - Validates brace matching
-   - Detects missing main function
+2. **Browser-JS mode**
+   - Runs without the playground API
+   - Uses the browser compiler smoke path: parser + JavaScript codegen
+   - Executes generated JavaScript for the supported smoke surface
 
-2. **Error Reporting**
-   - Line and column numbers
-   - Descriptive error messages
-   - Multiple error display
+3. **Server-WASM mode**
+   - The playground API compiles the WASM binary
+   - The browser executes the returned binary
+   - This is not browser-only WASM compilation
 
-3. **Warning System**
-   - Non-fatal issues
-   - Best practice suggestions
-
-4. **IR Generation**
-   - Mock LLVM IR output
-   - Shows compilation structure
-
-### Real Compiler (Future)
-
-When integrated with WASM:
-
-1. **Full Compilation Pipeline**
-   - Lexical analysis
-   - Parsing
-   - Type checking
-   - Code generation
-
-2. **Advanced Diagnostics**
-   - Precise error locations
-   - Suggested fixes
-   - Type mismatch details
-
-3. **Optimization**
-   - Constant folding
-   - Dead code elimination
-   - Inline expansion
-
-4. **Execution**
-   - Direct WASM execution
-   - Real stdout/stderr capture
-   - Exit code reporting
+4. **Preview mode**
+   - Syntax/demo fallback when compiler services are unavailable
+   - Not a certified compile/execute path
 
 ## Theme
 
@@ -377,7 +353,7 @@ Optimized for reduced eye strain:
 ### Minimum Requirements
 
 - ES6+ support
-- WebAssembly support (for real compiler)
+- WebAssembly support (for Server-WASM execution)
 - Local Storage API
 - Web Workers (for background compilation)
 
@@ -394,7 +370,7 @@ The playground checks for:
 
 1. **Lazy Loading**
    - Monaco editor loaded on demand
-   - WASM module loaded when needed
+- Browser compiler and WASM runner loaded only when needed
    - Examples loaded incrementally
 
 2. **Code Splitting**
@@ -404,12 +380,12 @@ The playground checks for:
 3. **Caching**
    - Service Worker for offline access
    - Browser cache headers
-   - WASM module caching
+- Browser compiler and WASM asset caching
 
 4. **Minification**
    - JavaScript minification
    - CSS minification
-   - WASM optimization
+- Production bundle optimization
 
 ### Benchmarks
 
@@ -417,9 +393,9 @@ Typical load times on fast connection:
 
 - Initial page load: ~500ms
 - Editor initialization: ~300ms
-- WASM module load: ~200ms
+- Browser compiler asset load: environment-dependent
 - Example switch: <50ms
-- Compilation: ~100ms (mock) / ~500ms (real)
+- Compilation: mode-dependent; use benchmark gates for publishable numbers
 
 ## Accessibility
 

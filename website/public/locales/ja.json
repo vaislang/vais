@@ -28,11 +28,11 @@
     "barNote": "Baseline は現在の integrity manifest から生成されます。cross-package schema 15/15 と multi-domain product schema 9/9 が locked gate です。"
   },
   "performance": {
-    "title": "ネイティブパフォーマンス",
-    "subtitle": "Vaisは最適化されたLLVM IRにコンパイルされます — 実行時にCおよびRustと同等で、高速なコンパイルを実現します。",
-    "runtimeTitle": "実行時間 — Fibonacci(35)",
+    "title": "ネイティブ性能エビデンス",
+    "subtitle": "Vais は native build で LLVM IR を生成します。compile-speed chart は current data で、runtime chart は runtime suite が更新されるまで scoped historical snapshot です。",
+    "runtimeTitle": "Historical Runtime Snapshot — Fibonacci(35)",
     "compileTitle": "コンパイル速度 — 単一ファイル",
-    "compileNote": "Vais <code>--emit-ir</code> vs 完全コンパイル。Cより8.6倍、Rustより19倍高速。2026-02-11更新。"
+    "compileNote": "Vais <code>--emit-ir</code> vs full binary compilation。Hyperfine、4 benchmark programs、Apple ARM64/macOS 基準: C/clang より9.3倍、Rustより15.6倍高速。2026-05-13更新。"
   },
   "features": {
     "title": "なぜVaisなのか？",

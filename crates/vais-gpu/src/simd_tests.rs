@@ -141,7 +141,7 @@ fn test_simd_target_name_all() {
 #[test]
 fn test_simd_target_clone_copy() {
     let t = SimdTarget::Avx512;
-    let cloned = t.clone();
+    let cloned = t;
     let copied = t;
     assert_eq!(t, cloned);
     assert_eq!(t, copied);

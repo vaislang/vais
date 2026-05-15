@@ -479,7 +479,7 @@ mod tests {
     #[test]
     fn test_gpu_target_clone_copy() {
         let target = GpuTarget::Cuda;
-        let cloned = target.clone();
+        let cloned = target;
         let copied = target;
         assert_eq!(target, cloned);
         assert_eq!(target, copied);
@@ -812,7 +812,7 @@ mod tests {
     #[test]
     fn test_gpu_result_ok() {
         let result: GpuResult<i32> = Ok(42);
-        assert_eq!(result.unwrap(), 42);
+        assert!(matches!(result, Ok(42)));
     }
 
     #[test]

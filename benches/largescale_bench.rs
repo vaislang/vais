@@ -84,7 +84,7 @@ fn generate_large_project(target_lines: usize) -> String {
                     // Recursive
                     code.push_str(&format!("F mod{}_rec{}(n: i64) -> i64 {{\n", m, f));
                     code.push_str(&format!("    I n <= 1 {{ R {} }}\n", f % 3 + 1));
-                    code.push_str(&format!("    R n * @(n - 1)\n"));
+                    code.push_str("    R n * @(n - 1)\n");
                     code.push_str("}\n\n");
                     lines += 5;
                 }

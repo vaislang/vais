@@ -134,6 +134,9 @@ pub struct Parser {
     /// Whether struct literals (Name{...}) are allowed in current context.
     /// Disabled when parsing loop/if conditions to avoid ambiguity with block start.
     allow_struct_literal: bool,
+    /// Whether the `return` token may be parsed as the postcondition result binding.
+    /// This is enabled only while parsing contract expressions such as `#[ensures(...)]`.
+    allow_contract_return_ident: bool,
     /// Current recursion depth for nested expression parsing
     depth: usize,
     /// Source code for newline detection (used to prevent cross-line postfix parsing).
@@ -172,6 +175,7 @@ impl Parser {
             errors: Vec::new(),
             recovery_mode: false,
             allow_struct_literal: true,
+            allow_contract_return_ident: false,
             depth: 0,
             source: String::new(),
             newline_positions: Vec::new(),
@@ -194,6 +198,7 @@ impl Parser {
             errors: Vec::new(),
             recovery_mode: false,
             allow_struct_literal: true,
+            allow_contract_return_ident: false,
             depth: 0,
             source: source.to_string(),
             newline_positions,
@@ -213,6 +218,7 @@ impl Parser {
             errors: Vec::new(),
             recovery_mode: true,
             allow_struct_literal: true,
+            allow_contract_return_ident: false,
             depth: 0,
             source: String::new(),
             newline_positions: Vec::new(),

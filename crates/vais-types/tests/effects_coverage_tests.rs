@@ -169,7 +169,7 @@ fn test_infer_literal_effects() {
 
     assert!(inferrer.infer_expr_effects(&Expr::Int(42), &fns).is_pure());
     assert!(inferrer
-        .infer_expr_effects(&Expr::Float(3.14), &fns)
+        .infer_expr_effects(&Expr::Float(2.5), &fns)
         .is_pure());
     assert!(inferrer
         .infer_expr_effects(&Expr::Bool(true), &fns)

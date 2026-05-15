@@ -2,8 +2,9 @@
 //!
 //! Measures performance of lexing, parsing, type checking, and code generation.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::fs;
+use std::hint::black_box;
 
 use vais_codegen::CodeGenerator;
 use vais_lexer::tokenize;
