@@ -117,14 +117,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-docs-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-docs-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-docs-
+            ${{ runner.os }}-cargo-docs-v2-
 
       - name: Check documentation
         env:
@@ -176,14 +175,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-clippy-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-clippy-
+            ${{ runner.os }}-cargo-clippy-v2-
 
       - name: Run clippy (Linux/macOS)
         if: runner.os != 'Windows'
@@ -245,14 +243,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-check-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-check-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-check-
+            ${{ runner.os }}-cargo-check-v2-
 
       - name: Run cargo check (Linux/macOS)
         if: runner.os != 'Windows'
@@ -314,14 +311,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-test-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-test-
+            ${{ runner.os }}-cargo-test-v2-
 
       - name: Run tests (Linux/macOS)
         if: runner.os != 'Windows'
@@ -372,14 +368,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-coverage-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-coverage-
+            ${{ runner.os }}-cargo-coverage-v2-
 
       - name: Generate coverage reports (lcov)
         # cargo-llvm-cov uses LLVM source-based coverage instrumentation.
@@ -484,14 +479,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-e2e-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-e2e-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-e2e-
+            ${{ runner.os }}-cargo-e2e-v2-
 
       - name: Build vaisc compiler
         run: cargo build --release -p vaisc
@@ -554,14 +548,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-bindings-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-bindings-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-bindings-
+            ${{ runner.os }}-cargo-bindings-v2-
 
       - name: Install Python & maturin (Ubuntu)
         id: python-setup-linux
@@ -651,12 +644,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             target/
-          key: ${{ runner.os }}-phase0-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-phase0-
+          key: ${{ runner.os }}-phase0-v2-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-phase0-v2-
 
       - name: Build vaisc
         run: cargo build --bin vaisc --release
