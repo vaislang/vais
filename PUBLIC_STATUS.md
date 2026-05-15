@@ -1,6 +1,6 @@
 # Vais Public Status
 
-Last verified: 2026-05-11
+Last verified: 2026-05-15
 
 This document is the public wording boundary for the Vais repositories and
 website. It separates the gates that are currently certified from broader
@@ -17,17 +17,20 @@ The latest local integrity pass covers:
 - Core compiler freeze bundle: passed
 - Downstream re-entry criteria: passed
 - Final integrity gate: passed via `scripts/check-integrity.sh`
+- DB/server/web runtime main gate: promoted via `scripts/check-integrity.sh`
 - Standard library package tests: `82/82`
 - VaisDB package tests: `261/261`
 - Backend package tests: `18/18`
 - `std/http_client` runtime smoke: `15/15`
 - TLS runtime smoke: `2/2`
 - VaisDB runtime smoke: `34/34`
-- Vais Server runtime smoke: `16/16`
+- Vais Server runtime smoke: `20/20`
 - Vais Web runtime smoke: `61/77` with credential/network-gated cases skipped
 - Vais Web unit tests: `390/390`
 - Ecosystem package tests: `3272/3272`
 - Vais Web full-build gate: `24/24`
+- Cross-package schema gate: `15/15`
+- Multi-domain product gate: `9/9`
 - Package full-build gate: `2/2`
 
 ## Public Non-Claims
