@@ -94,7 +94,7 @@ pub use types::{
 /// use vais_types::TypeChecker;
 /// use vais_parser::parse;
 ///
-/// let source = "F id<T>(x:T)->T=x";
+/// let source = "fn id<T>(x:T)->T=x";
 /// let module = parse(source).unwrap();
 ///
 /// let mut checker = TypeChecker::new();
@@ -206,7 +206,7 @@ pub struct TypeChecker {
     /// prevents span collisions between expressions in different source
     /// files. Prior to this, two expressions sharing the same byte range
     /// in different modules could poison each other's stored types
-    /// (observed as "body_size (I64) silently becomes Vec<u8>" in
+    /// (observed as "body_size (I64) silently becomes `Vec<u8>`" in
     /// vaisdb's cross-module builds).
     pub(crate) expr_types: HashMap<(u32, usize, usize), ResolvedType>,
 

@@ -1058,14 +1058,14 @@ fn parse_module(source: &str) -> Module {
 
 #[test]
 fn test_from_module_function() {
-    let ast = parse_module("F foo() -> i64 { 42 }");
+    let ast = parse_module("fn foo() -> i64 { 42 }");
     let ctx = TypeContext::from_module(&ast);
     assert!(ctx.function_returns.contains_key("foo"));
 }
 
 #[test]
 fn test_from_module_struct() {
-    let ast = parse_module("S Point { x: i64, y: i64 }");
+    let ast = parse_module("struct Point { x: i64, y: i64 }");
     let ctx = TypeContext::from_module(&ast);
     assert!(ctx.structs.contains_key("Point"));
     assert_eq!(ctx.structs["Point"].len(), 2);
@@ -1075,7 +1075,7 @@ fn test_from_module_struct() {
 
 #[test]
 fn test_from_module_enum() {
-    let ast = parse_module("E Color { Red, Green, Blue }");
+    let ast = parse_module("enum Color { Red, Green, Blue }");
     let ctx = TypeContext::from_module(&ast);
     assert!(ctx.enum_variants.contains_key("Color"));
     assert_eq!(ctx.enum_variants["Color"], vec!["Red", "Green", "Blue"]);
@@ -1083,7 +1083,8 @@ fn test_from_module_enum() {
 
 #[test]
 fn test_from_module_impl() {
-    let ast = parse_module("S Point { x: i64 }\nX Point { F get_x(self) -> i64 { self.x } }");
+    let ast =
+        parse_module("struct Point { x: i64 }\nimpl Point { fn get_x(self) -> i64 { self.x } }");
     let ctx = TypeContext::from_module(&ast);
     assert!(ctx.type_methods.contains_key("Point"));
     assert_eq!(ctx.type_methods["Point"].len(), 1);
@@ -1092,14 +1093,16 @@ fn test_from_module_impl() {
 
 #[test]
 fn test_from_module_trait() {
-    let ast = parse_module("W Printable { F print(self) -> i64 }");
+    let ast = parse_module("trait Printable { fn print(self) -> i64 }");
     let ctx = TypeContext::from_module(&ast);
     assert!(ctx.trait_methods.contains_key("Printable"));
 }
 
 #[test]
 fn test_from_module_trait_impl() {
-    let ast = parse_module("W Printable { F print(self) -> i64 }\nS Foo { x: i64 }\nX Foo: Printable { F print(self) -> i64 { self.x } }");
+    let ast = parse_module(
+        "trait Printable { fn print(self) -> i64 }\nstruct Foo { x: i64 }\nimpl Foo: Printable { fn print(self) -> i64 { self.x } }",
+    );
     let ctx = TypeContext::from_module(&ast);
     assert!(ctx.type_traits.contains_key("Foo"));
     assert!(ctx.type_traits["Foo"].contains(&"Printable".to_string()));
@@ -1107,7 +1110,7 @@ fn test_from_module_trait_impl() {
 
 #[test]
 fn test_from_module_function_no_return_type() {
-    let ast = parse_module("F noop() { }");
+    let ast = parse_module("fn noop() { }");
     let ctx = TypeContext::from_module(&ast);
     if let Some(ret) = ctx.function_returns.get("noop") {
         assert_eq!(*ret, LspType::Unit);
@@ -1582,7 +1585,7 @@ fn test_infer_block_with_let() {
 
 #[test]
 fn test_from_module_multiple_functions() {
-    let ast = parse_module("F foo() -> i64 { 0 }\nF bar() -> bool { true }");
+    let ast = parse_module("fn foo() -> i64 { 0 }\nfn bar() -> bool { true }");
     let ctx = TypeContext::from_module(&ast);
     assert!(ctx.function_returns.contains_key("foo"));
     assert!(ctx.function_returns.contains_key("bar"));
@@ -1590,7 +1593,7 @@ fn test_from_module_multiple_functions() {
 
 #[test]
 fn test_from_module_struct_with_typed_fields() {
-    let ast = parse_module("S Config { debug: bool, level: i64, name: str }");
+    let ast = parse_module("struct Config { debug: bool, level: i64, name: str }");
     let ctx = TypeContext::from_module(&ast);
     assert_eq!(ctx.structs["Config"].len(), 3);
     assert_eq!(ctx.structs["Config"][0].name, "debug");
@@ -1609,7 +1612,7 @@ fn test_from_module_empty() {
 
 #[test]
 fn test_from_module_multiple_enums() {
-    let ast = parse_module("E Color { Red, Blue }\nE Size { Small, Big }");
+    let ast = parse_module("enum Color { Red, Blue }\nenum Size { Small, Big }");
     let ctx = TypeContext::from_module(&ast);
     assert_eq!(ctx.enum_variants.len(), 2);
     assert_eq!(ctx.enum_variants["Color"].len(), 2);
@@ -1619,7 +1622,7 @@ fn test_from_module_multiple_enums() {
 #[test]
 fn test_from_module_impl_multiple_methods() {
     let ast = parse_module(
-        "S Vec { len: i64 }\nX Vec { F push(self, x: i64) -> i64 { 0 }\nF pop(self) -> i64 { 0 } }",
+        "struct Vec { len: i64 }\nimpl Vec { fn push(self, x: i64) -> i64 { 0 }\nfn pop(self) -> i64 { 0 } }",
     );
     let ctx = TypeContext::from_module(&ast);
     assert_eq!(ctx.type_methods["Vec"].len(), 2);

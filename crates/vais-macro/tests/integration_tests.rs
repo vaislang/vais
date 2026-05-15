@@ -8,9 +8,9 @@
 //! - AST expansion with HygienicContext
 
 use vais_ast::{
-    Delimiter, MacroDef, MacroInvoke, MacroLiteral, MacroPattern, MacroPatternElement, MacroRule,
-    MacroTemplate, MacroTemplateElement, MacroToken, MetaVarKind, Module, RepetitionKind, Span,
-    Spanned,
+    Delimiter, Item, MacroDef, MacroInvoke, MacroLiteral, MacroPattern, MacroPatternElement,
+    MacroRule, MacroTemplate, MacroTemplateElement, MacroToken, MetaVarKind, Module,
+    RepetitionKind, Span, Spanned,
 };
 use vais_macro::{
     // Expansion
@@ -403,7 +403,7 @@ fn test_async_select_two_arms() {
     let output = tokens_to_string(&result);
 
     assert!(output.contains("select"));
-    assert!(output.contains("M")); // match keyword
+    assert!(output.contains("match"));
     assert!(output.contains("Left"));
     assert!(output.contains("Right"));
 }
@@ -502,14 +502,27 @@ fn test_expand_macros_module() {
 
 #[test]
 fn test_collect_macros_from_module() {
-    use vais_parser::parse;
-
-    let source = r#"
-        macro double! { ($x:expr) => { $x + $x } }
-        fn test() = 1
-    "#;
-
-    let module = parse(source).unwrap();
+    let module = Module {
+        items: vec![Spanned::new(
+            Item::Macro(MacroDef {
+                name: Spanned::new("double".to_string(), Span::new(0, 6)),
+                rules: vec![MacroRule {
+                    pattern: MacroPattern::Sequence(vec![MacroPatternElement::MetaVar {
+                        name: "x".to_string(),
+                        kind: MetaVarKind::Expr,
+                    }]),
+                    template: MacroTemplate::Sequence(vec![
+                        MacroTemplateElement::MetaVar("x".to_string()),
+                        MacroTemplateElement::Token(MacroToken::Punct('+')),
+                        MacroTemplateElement::MetaVar("x".to_string()),
+                    ]),
+                }],
+                is_pub: false,
+            }),
+            Span::new(0, 0),
+        )],
+        modules_map: None,
+    };
     let mut registry = MacroRegistry::new();
 
     collect_macros(&module, &mut registry);

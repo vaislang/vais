@@ -716,13 +716,13 @@ fn find_unused_imports(module: &Module) -> Vec<UnusedImportInfo> {
 /// Get the names that an import brings into scope
 fn get_import_names(use_stmt: &Use) -> Vec<String> {
     if let Some(items) = &use_stmt.items {
-        // Selective import: `U mod.{A, B}`
+        // Selective import: `use mod.{A, B}`
         items.iter().map(|i| i.node.clone()).collect()
     } else if let Some(alias) = &use_stmt.alias {
-        // Aliased import: `U mod as alias`
+        // Aliased import: `use mod as alias`
         vec![alias.node.clone()]
     } else {
-        // Module import: `U mod.Item` -- the last path component
+        // Module import: `use mod.Item` -- the last path component
         use_stmt
             .path
             .last()
@@ -858,7 +858,7 @@ mod tests {
     #[test]
     fn test_unused_var_detection() {
         let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 5
     y := 10
     y
@@ -872,7 +872,7 @@ F main() -> i64 {
     #[test]
     fn test_no_unused_vars() {
         let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 5
     x + 1
 }
@@ -884,7 +884,7 @@ F main() -> i64 {
     #[test]
     fn test_underscore_prefix_exempt() {
         let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     _unused := 5
     0
 }
@@ -897,8 +897,8 @@ F main() -> i64 {
     fn test_unused_import_detection() {
         // Use items that import names not used in functions
         let source = r#"
-U std.io
-F main() -> i64 {
+use std.io
+fn main() -> i64 {
     0
 }
 "#;

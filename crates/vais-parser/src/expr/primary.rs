@@ -5,7 +5,7 @@
 //! pattern matching, and string interpolation.
 
 use vais_ast::*;
-use vais_lexer::Token;
+use vais_lexer::{SpannedToken, Token};
 
 use crate::{ParseError, ParseResult, Parser};
 
@@ -63,7 +63,7 @@ impl Parser {
     /// Parse primary expression
     pub(crate) fn parse_primary(&mut self) -> ParseResult<Spanned<Expr>> {
         self.enter_depth()?;
-        let result = self.parse_primary_inner();
+        let result = self.parse_primary_dispatch();
         self.exit_depth();
         result
     }
@@ -158,11 +158,49 @@ impl Parser {
         Ok(Expr::StringInterp(parts))
     }
 
-    fn parse_primary_inner(&mut self) -> ParseResult<Spanned<Expr>> {
-        let start = self.current_span().start;
+    fn parse_primary_dispatch(&mut self) -> ParseResult<Spanned<Expr>> {
         let span = self.current_span();
         let tok = self.advance().ok_or(ParseError::UnexpectedEof { span })?;
+        let start = tok.span.start;
 
+        if matches!(&tok.token, Token::LParen) {
+            return self.parse_paren_or_tuple_expr(start);
+        }
+
+        self.parse_primary_inner(start, tok)
+    }
+
+    fn parse_paren_or_tuple_expr(&mut self, start: usize) -> ParseResult<Spanned<Expr>> {
+        if self.check(&Token::RParen) {
+            self.advance_skip();
+            let end = self.prev_span().end;
+            return Ok(Spanned::new(Expr::Unit, Span::new(start, end)));
+        }
+
+        let expr = self.parse_expr()?;
+        if self.check(&Token::Comma) {
+            let mut exprs = vec![expr];
+            while self.check(&Token::Comma) {
+                self.advance_skip();
+                if self.check(&Token::RParen) {
+                    break;
+                }
+                exprs.push(self.parse_expr()?);
+            }
+            self.expect_skip(&Token::RParen)?;
+            let end = self.prev_span().end;
+            return Ok(Spanned::new(Expr::Tuple(exprs), Span::new(start, end)));
+        }
+
+        self.expect_skip(&Token::RParen)?;
+        Ok(expr)
+    }
+
+    fn parse_primary_inner(
+        &mut self,
+        start: usize,
+        tok: SpannedToken,
+    ) -> ParseResult<Spanned<Expr>> {
         let expr = match tok.token {
             Token::Int(n) => {
                 // Check for type suffix: 0u16, 1i32, etc.
@@ -296,29 +334,6 @@ impl Parser {
                     ));
                 }
                 Expr::Ident(name)
-            }
-            Token::LParen => {
-                if self.check(&Token::RParen) {
-                    self.advance_skip();
-                    Expr::Unit
-                } else {
-                    let expr = self.parse_expr()?;
-                    if self.check(&Token::Comma) {
-                        let mut exprs = vec![expr];
-                        while self.check(&Token::Comma) {
-                            self.advance_skip();
-                            if self.check(&Token::RParen) {
-                                break;
-                            }
-                            exprs.push(self.parse_expr()?);
-                        }
-                        self.expect_skip(&Token::RParen)?;
-                        let end = self.prev_span().end;
-                        return Ok(Spanned::new(Expr::Tuple(exprs), Span::new(start, end)));
-                    }
-                    self.expect_skip(&Token::RParen)?;
-                    return Ok(expr);
-                }
             }
             Token::LBracket => {
                 let mut exprs = Vec::new();

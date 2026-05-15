@@ -700,7 +700,7 @@ impl CodeGenerator {
                 };
                 let vec_llvm = self.type_to_llvm(&vec_resolved);
                 let with_capacity =
-                    vais_types::mangle_name("Vec_with_capacity", &[elem_ty.clone()]);
+                    vais_types::mangle_name("Vec_with_capacity", std::slice::from_ref(&elem_ty));
 
                 let data_i8 = self.next_temp(counter);
                 write_ir!(
@@ -995,7 +995,7 @@ impl CodeGenerator {
             .unwrap_or_else(|| inner_recv_type_owned.clone());
         let effective_recv_type = &effective_recv_type_owned;
         let full_method_name = if let ResolvedType::Named { name, generics } = effective_recv_type {
-            let resolved = self.resolve_struct_name(name);
+            let _resolved = self.resolve_struct_name(name);
             // Method names are mangled as `<base>_<method>$<typeargs>` (e.g.
             // `Vec_push$u8`), not `<specialized>_<method>` (e.g.
             // `Vec$u8_push`). Use the base struct name here even though
@@ -1267,7 +1267,7 @@ impl CodeGenerator {
             let actual_recv_ty = self.llvm_type_of_checked(&recv_val);
             if actual_recv_ty
                 .as_deref()
-                .map_or(true, |ty| ty == crate::vtable::TRAIT_OBJECT_TYPE)
+                .is_none_or(|ty| ty == crate::vtable::TRAIT_OBJECT_TYPE)
             {
                 let data_ptr = self.next_temp(counter);
                 write_ir!(

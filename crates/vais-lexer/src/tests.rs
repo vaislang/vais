@@ -1073,7 +1073,7 @@ fn test_deprecation_no_warnings_when_all_multichar() {
 }
 
 #[test]
-fn test_deprecation_single_warning_for_F() {
+fn test_deprecation_single_warning_for_f() {
     let source = "F main() -> i64 { return 0 }";
     let (_tokens, warnings) = tokenize_with_warnings(source).unwrap();
     assert_eq!(warnings.len(), 1);
@@ -1084,7 +1084,7 @@ fn test_deprecation_single_warning_for_F() {
 }
 
 #[test]
-fn test_deprecation_two_warnings_for_F_and_R() {
+fn test_deprecation_two_warnings_for_f_and_r() {
     let source = "F main() -> i64 { R 0 }";
     let (_tokens, warnings) = tokenize_with_warnings(source).unwrap();
     assert_eq!(warnings.len(), 2);

@@ -691,27 +691,22 @@ impl CodeGenerator {
                 }
                 // local says Ref(Vec<I64>) but TC says Ref(Vec<Tuple>)
                 (ResolvedType::Ref(l_inner), ResolvedType::Ref(r_inner))
-                | (ResolvedType::RefMut(l_inner), ResolvedType::RefMut(r_inner)) => {
-                    match (l_inner.as_ref(), r_inner.as_ref()) {
-                        (
-                            ResolvedType::Named {
-                                name: l_n,
-                                generics: l_g,
-                            },
-                            ResolvedType::Named {
-                                name: r_n,
-                                generics: r_g,
-                            },
-                        ) if l_n == r_n
-                            && l_g.len() == r_g.len()
-                            && l_g.iter().all(|g| matches!(g, ResolvedType::I64))
-                            && r_g.iter().any(|g| !matches!(g, ResolvedType::I64)) =>
-                        {
-                            true
-                        }
-                        _ => false,
-                    }
-                }
+                | (ResolvedType::RefMut(l_inner), ResolvedType::RefMut(r_inner)) => matches!(
+                    (l_inner.as_ref(), r_inner.as_ref()),
+                    (
+                        ResolvedType::Named {
+                            name: l_n,
+                            generics: l_g,
+                        },
+                        ResolvedType::Named {
+                            name: r_n,
+                            generics: r_g,
+                        },
+                    ) if l_n == r_n
+                        && l_g.len() == r_g.len()
+                        && l_g.iter().all(|g| matches!(g, ResolvedType::I64))
+                        && r_g.iter().any(|g| !matches!(g, ResolvedType::I64))
+                ),
                 _ => false,
             };
             if should_upgrade {
@@ -1463,11 +1458,11 @@ impl CodeGenerator {
                         } else {
                             vec![]
                         };
-                        let key_ty = generics.get(0).cloned().unwrap_or(ResolvedType::Str);
+                        let key_ty = generics.first().cloned().unwrap_or(ResolvedType::Str);
                         let val_ty = generics
                             .get(1)
                             .cloned()
-                            .or_else(|| generics.get(0).cloned())
+                            .or_else(|| generics.first().cloned())
                             .unwrap_or(ResolvedType::I64);
                         return match method.node.as_str() {
                             "keys" => ResolvedType::Named {

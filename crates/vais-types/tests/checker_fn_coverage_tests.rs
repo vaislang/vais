@@ -169,7 +169,7 @@ fn test_check_impl_multiple_methods() {
 
 #[test]
 fn test_check_generic_fn_basic() {
-    check_ok("F identity<T>(x: T) -> T = x");
+    check_ok("fn identity<T>(x: T) -> T = x");
 }
 
 #[test]

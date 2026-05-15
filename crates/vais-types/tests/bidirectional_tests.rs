@@ -116,7 +116,7 @@ fn test_if_else_type_check() {
 fn test_generic_identity() {
     // Generic identity function
     let source = r#"
-        F id<T>(x: T) -> T = x
+        fn id<T>(x: T) -> T = x
         fn main() -> i64 = id(42)
     "#;
     assert!(check_module(source).is_ok());
@@ -126,7 +126,7 @@ fn test_generic_identity() {
 fn test_generic_pair() {
     // Generic function with multiple type params
     let source = r#"
-        F first<T, U>(x: T, y: U) -> T = x
+        fn first<T, U>(x: T, y: U) -> T = x
         fn main() -> i64 = first(1, 2)
     "#;
     assert!(check_module(source).is_ok());

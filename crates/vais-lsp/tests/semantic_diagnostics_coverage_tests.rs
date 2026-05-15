@@ -41,27 +41,28 @@ fn test_semantic_tokens_if_else() {
 
 #[test]
 fn test_semantic_tokens_loop() {
-    let tokens = get_semantic_tokens("fn test() -> i64 { L { B }; R 0 }");
+    let tokens = get_semantic_tokens("fn test() -> i64 { L { B }; return 0 }");
     assert!(!tokens.is_empty());
 }
 
 #[test]
 fn test_semantic_tokens_match() {
-    let tokens = get_semantic_tokens("fn test(x: i64) -> i64 = M x { 0 => 1, _ => 2 }");
+    let tokens = get_semantic_tokens("fn test(x: i64) -> i64 = match x { 0 => 1, _ => 2 }");
     assert!(!tokens.is_empty());
 }
 
 #[test]
 fn test_semantic_tokens_trait_impl() {
     let tokens = get_semantic_tokens(
-        "trait Display { F show(self) -> i64 }\nS Num { v: i64 }\nX Num: Display { F show(self) -> i64 = self.v }",
+        "trait Display { fn show(self) -> i64 }\nstruct Num { v: i64 }\nimpl Num: Display { fn show(self) -> i64 = self.v }",
     );
     assert!(!tokens.is_empty());
 }
 
 #[test]
 fn test_semantic_tokens_return_break_continue() {
-    let tokens = get_semantic_tokens("fn test() -> i64 { L { I true { B } else { C } }; R 0 }");
+    let tokens =
+        get_semantic_tokens("fn test() -> i64 { L { I true { B } else { C } }; return 0 }");
     assert!(!tokens.is_empty());
 }
 
@@ -113,7 +114,7 @@ fn test_semantic_tokens_comment_only() {
 
 #[test]
 fn test_semantic_tokens_multiline() {
-    let source = "fn add(x: i64, y: i64) -> i64 {\n    R x + y\n}";
+    let source = "fn add(x: i64, y: i64) -> i64 {\n    return x + y\n}";
     let tokens = get_semantic_tokens(source);
     assert!(!tokens.is_empty());
 }
@@ -164,7 +165,7 @@ fn test_diagnostic_unexpected_token_with_span() {
         span: 2..5,
         expected: "identifier".to_string(),
     };
-    let source = "F 123 test";
+    let source = "fn 123 test";
     let diag = parse_error_to_diagnostic(&err, source);
     assert_eq!(diag.source, Some("vais".to_string()));
     assert!(diag.message.contains("Unexpected"));
@@ -204,14 +205,14 @@ fn test_ai_completion_empty_document() {
 
 #[test]
 fn test_ai_completion_after_f_keyword() {
-    let ctx = CompletionContext::from_document("F ", Position::new(0, 2), None);
+    let ctx = CompletionContext::from_document("fn ", Position::new(0, 2), None);
     let completions = generate_ai_completions(&ctx);
     let _ = completions;
 }
 
 #[test]
 fn test_ai_completion_after_s_keyword() {
-    let ctx = CompletionContext::from_document("S ", Position::new(0, 2), None);
+    let ctx = CompletionContext::from_document("struct ", Position::new(0, 2), None);
     let completions = generate_ai_completions(&ctx);
     let _ = completions;
 }
@@ -234,7 +235,7 @@ fn test_ai_completion_after_dot() {
 
 #[test]
 fn test_ai_completion_with_ast_context() {
-    let source = "fn add(x: i64, y: i64) -> i64 = x + y\nF test() -> i64 {\n    \n}";
+    let source = "fn add(x: i64, y: i64) -> i64 = x + y\nfn test() -> i64 {\n    \n}";
     let ast = vais_parser::parse(source).ok();
     let ctx = CompletionContext::from_document(source, Position::new(2, 4), ast.as_ref());
     let completions = generate_ai_completions(&ctx);
@@ -252,7 +253,7 @@ fn test_ai_completion_after_colon_type_position() {
 #[test]
 fn test_ai_completion_with_struct_in_ast() {
     let source =
-        "struct Point { x: i64, y: i64 }\nF test() -> i64 {\n    p := Point { x: 1, y: 2 }\n    p.\n}";
+        "struct Point { x: i64, y: i64 }\nfn test() -> i64 {\n    p := Point { x: 1, y: 2 }\n    p.\n}";
     let ast = vais_parser::parse(source).ok();
     let ctx = CompletionContext::from_document(source, Position::new(3, 6), ast.as_ref());
     let completions = generate_ai_completions(&ctx);
@@ -261,7 +262,7 @@ fn test_ai_completion_with_struct_in_ast() {
 
 #[test]
 fn test_ai_completion_trait_context() {
-    let source = "trait Printable {\n    F show(self) -> i64\n}\nX ";
+    let source = "trait Printable {\n    fn show(self) -> i64\n}\nimpl ";
     let ast = vais_parser::parse(source).ok();
     let ctx = CompletionContext::from_document(source, Position::new(3, 2), ast.as_ref());
     let completions = generate_ai_completions(&ctx);

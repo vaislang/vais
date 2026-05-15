@@ -143,7 +143,7 @@ fn suggest_function_body(ctx: &CompletionContext) -> Vec<CompletionItem> {
         // Check if we're inside a function
         for pline in ctx.prefix_lines.iter().rev() {
             let trimmed = pline.trim();
-            if trimmed.starts_with("F ") && trimmed.contains("->") {
+            if trimmed.starts_with("fn ") && trimmed.contains("->") {
                 // Extract return type
                 if let Some(ret) = trimmed.split("->").last() {
                     let ret = ret.trim().trim_end_matches('{').trim();
@@ -151,7 +151,7 @@ fn suggest_function_body(ctx: &CompletionContext) -> Vec<CompletionItem> {
                         "i64" | "i32" => {
                             items.push(ai_completion(
                                 "return 0",
-                                "R 0",
+                                "return 0",
                                 "Return zero (default integer)",
                                 "a_body",
                             ));
@@ -159,13 +159,13 @@ fn suggest_function_body(ctx: &CompletionContext) -> Vec<CompletionItem> {
                         "bool" => {
                             items.push(ai_completion(
                                 "return true",
-                                "R true",
+                                "return true",
                                 "Return true (default boolean)",
                                 "a_body",
                             ));
                             items.push(ai_completion(
                                 "return false",
-                                "R false",
+                                "return false",
                                 "Return false",
                                 "a_body2",
                             ));
@@ -173,7 +173,7 @@ fn suggest_function_body(ctx: &CompletionContext) -> Vec<CompletionItem> {
                         "str" => {
                             items.push(ai_completion(
                                 "return empty string",
-                                "R \"\"",
+                                "return \"\"",
                                 "Return empty string",
                                 "a_body",
                             ));
@@ -210,8 +210,8 @@ fn suggest_match_arms(ctx: &CompletionContext) -> Vec<CompletionItem> {
     let mut items = vec![];
     let line = ctx.current_line_prefix.trim();
 
-    // Detect "M expr {" pattern
-    if line.starts_with("M ") && line.ends_with('{') {
+    // Detect "match expr {" pattern
+    if line.starts_with("match ") && line.ends_with('{') {
         // Option match
         if line.contains("option") || line.contains("opt") {
             items.push(ai_snippet(
@@ -275,12 +275,12 @@ fn suggest_idioms(ctx: &CompletionContext) -> Vec<CompletionItem> {
     // Empty line → suggest common patterns
     if line.is_empty() {
         // Check context for appropriate suggestions
-        let in_function = ctx.prefix_lines.iter().any(|l| l.trim().starts_with("F "));
+        let in_function = ctx.prefix_lines.iter().any(|l| l.trim().starts_with("fn "));
 
         if in_function {
             items.push(ai_snippet(
                 "if-else expression",
-                "I ${1:condition} {\n    ${2:then_expr}\n} E {\n    ${3:else_expr}\n}",
+                "I ${1:condition} {\n    ${2:then_expr}\n} else {\n    ${3:else_expr}\n}",
                 "AI: if-else expression",
                 "b_if",
             ));
@@ -323,7 +323,7 @@ fn suggest_error_handling(ctx: &CompletionContext) -> Vec<CompletionItem> {
     if line.contains("Err(") || line.contains("error") {
         items.push(ai_snippet(
             "error propagation",
-            "M ${1:result} {\n    Ok(val) => val,\n    Err(e) => R Err(e)\n}",
+            "match ${1:result} {\n    Ok(val) => val,\n    Err(e) => return Err(e)\n}",
             "AI: propagate error with match",
             "c_err_prop",
         ));
@@ -401,7 +401,7 @@ mod tests {
 
     #[test]
     fn test_function_body_suggestion_i64() {
-        let ctx = make_context(&["F add(a: i64, b: i64) -> i64 {"], "");
+        let ctx = make_context(&["fn add(a: i64, b: i64) -> i64 {"], "");
         let items = suggest_function_body(&ctx);
         assert!(!items.is_empty());
         assert!(items[0].label.contains("return 0"));
@@ -409,14 +409,14 @@ mod tests {
 
     #[test]
     fn test_function_body_suggestion_bool() {
-        let ctx = make_context(&["F is_valid(x: i64) -> bool {"], "");
+        let ctx = make_context(&["fn is_valid(x: i64) -> bool {"], "");
         let items = suggest_function_body(&ctx);
         assert!(items.len() >= 2); // true and false
     }
 
     #[test]
     fn test_match_arms_option() {
-        let ctx = make_context(&[], "M option {");
+        let ctx = make_context(&[], "match option {");
         let items = suggest_match_arms(&ctx);
         assert!(!items.is_empty());
         assert!(items[0].label.contains("Option"));
@@ -424,7 +424,7 @@ mod tests {
 
     #[test]
     fn test_match_arms_result() {
-        let ctx = make_context(&[], "M result {");
+        let ctx = make_context(&[], "match result {");
         let items = suggest_match_arms(&ctx);
         assert!(!items.is_empty());
         assert!(items[0].label.contains("Result"));
@@ -432,7 +432,7 @@ mod tests {
 
     #[test]
     fn test_idiom_suggestions_in_function() {
-        let ctx = make_context(&["F main() -> i64 {"], "");
+        let ctx = make_context(&["fn main() -> i64 {"], "");
         let items = suggest_idioms(&ctx);
         assert!(items.len() >= 2); // if-else, loop, for
     }
@@ -454,7 +454,7 @@ mod tests {
 
     #[test]
     fn test_generate_ai_completions() {
-        let ctx = make_context(&["F test() -> i64 {"], "");
+        let ctx = make_context(&["fn test() -> i64 {"], "");
         let items = generate_ai_completions(&ctx);
         // Should include function body + idioms
         assert!(!items.is_empty());
@@ -468,7 +468,7 @@ mod tests {
 
     #[test]
     fn test_completion_context_from_document() {
-        let source = "F main() -> i64 {\n    \n}\n";
+        let source = "fn main() -> i64 {\n    \n}\n";
         let pos = Position {
             line: 1,
             character: 4,
@@ -480,14 +480,14 @@ mod tests {
 
     #[test]
     fn test_completion_context_first_line() {
-        let source = "F main() -> i64 { 0 }";
+        let source = "fn main() -> i64 { 0 }";
         let pos = Position {
             line: 0,
-            character: 2,
+            character: 3,
         };
         let ctx = CompletionContext::from_document(source, pos, None);
         assert!(ctx.prefix_lines.is_empty());
-        assert_eq!(ctx.current_line_prefix, "F ");
+        assert_eq!(ctx.current_line_prefix, "fn ");
     }
 
     #[test]
@@ -503,7 +503,7 @@ mod tests {
 
     #[test]
     fn test_completion_context_with_ast() {
-        let source = "F foo() -> i64 { 0 }\nS Bar { x: i64 }\n";
+        let source = "fn foo() -> i64 { 0 }\nstruct Bar { x: i64 }\n";
         let ast = vais_parser::parse(source).ok();
         let pos = Position {
             line: 1,
@@ -516,7 +516,7 @@ mod tests {
 
     #[test]
     fn test_function_body_suggestion_str() {
-        let ctx = make_context(&["F name() -> str {"], "");
+        let ctx = make_context(&["fn name() -> str {"], "");
         let items = suggest_function_body(&ctx);
         assert!(!items.is_empty());
         assert!(items[0].insert_text.as_ref().unwrap().contains("\"\""));
@@ -524,7 +524,7 @@ mod tests {
 
     #[test]
     fn test_function_body_suggestion_option() {
-        let ctx = make_context(&["F find() -> Option<i64> {"], "");
+        let ctx = make_context(&["fn find() -> Option<i64> {"], "");
         let items = suggest_function_body(&ctx);
         assert!(!items.is_empty());
         assert!(items[0].insert_text.as_ref().unwrap().contains("None"));
@@ -532,7 +532,7 @@ mod tests {
 
     #[test]
     fn test_function_body_suggestion_result() {
-        let ctx = make_context(&["F parse() -> Result<i64, str> {"], "");
+        let ctx = make_context(&["fn parse() -> Result<i64, str> {"], "");
         let items = suggest_function_body(&ctx);
         assert!(!items.is_empty());
         assert!(items[0].insert_text.as_ref().unwrap().contains("Ok"));
@@ -540,14 +540,14 @@ mod tests {
 
     #[test]
     fn test_function_body_no_suggestion_outside_function() {
-        let ctx = make_context(&["S Point { x: i64 }"], "");
+        let ctx = make_context(&["struct Point { x: i64 }"], "");
         let items = suggest_function_body(&ctx);
         assert!(items.is_empty());
     }
 
     #[test]
     fn test_match_arms_default_boolean() {
-        let ctx = make_context(&[], "M x {");
+        let ctx = make_context(&[], "match x {");
         let items = suggest_match_arms(&ctx);
         assert!(!items.is_empty());
         assert!(items[0].label.contains("Boolean"));
@@ -555,7 +555,7 @@ mod tests {
 
     #[test]
     fn test_match_arms_no_brace() {
-        let ctx = make_context(&[], "M x");
+        let ctx = make_context(&[], "match x");
         let items = suggest_match_arms(&ctx);
         assert!(items.is_empty());
     }
@@ -607,14 +607,14 @@ mod tests {
 
     #[test]
     fn test_idiom_assign_pattern() {
-        let ctx = make_context(&["F main() -> i64 {"], ":=");
+        let ctx = make_context(&["fn main() -> i64 {"], ":=");
         let items = suggest_idioms(&ctx);
         assert!(!items.is_empty());
     }
 
     #[test]
     fn test_idiom_assign_with_space() {
-        let ctx = make_context(&["F main() -> i64 {"], ":= ");
+        let ctx = make_context(&["fn main() -> i64 {"], ":= ");
         let items = suggest_idioms(&ctx);
         assert!(!items.is_empty());
     }
@@ -648,14 +648,14 @@ mod tests {
 
     #[test]
     fn test_function_body_i32() {
-        let ctx = make_context(&["F foo() -> i32 {"], "");
+        let ctx = make_context(&["fn foo() -> i32 {"], "");
         let items = suggest_function_body(&ctx);
         assert!(!items.is_empty());
     }
 
     #[test]
     fn test_no_suggestions_with_non_empty_line() {
-        let ctx = make_context(&["F main() -> i64 {"], "R 42");
+        let ctx = make_context(&["fn main() -> i64 {"], "return 42");
         let items = suggest_function_body(&ctx);
         assert!(items.is_empty());
     }
@@ -669,7 +669,7 @@ mod tests {
 
     #[test]
     fn test_match_option_variant_name() {
-        let ctx = make_context(&[], "M opt {");
+        let ctx = make_context(&[], "match opt {");
         let items = suggest_match_arms(&ctx);
         assert!(!items.is_empty());
         // "opt" should trigger Option pattern
@@ -678,7 +678,7 @@ mod tests {
 
     #[test]
     fn test_match_result_variant_name() {
-        let ctx = make_context(&[], "M res {");
+        let ctx = make_context(&[], "match res {");
         let items = suggest_match_arms(&ctx);
         assert!(!items.is_empty());
         assert!(items[0].label.contains("Result"));

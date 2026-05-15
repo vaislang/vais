@@ -14,16 +14,16 @@
 //!
 //! Stage 1 scope (LANDED):
 //!   - Composite type lowering:
-//!       Vec<T>              → ReadonlyArray<T_lowered>
-//!       &[T], &mut [T]      → ReadonlyArray<T_lowered>
-//!       &T, &mut T          → T_lowered  (reference distinction lost; documented in header)
-//!       ()  (Unit)          → null
-//!       Option<T>           → T_lowered | null
-//!       Result<T, E>        → { ok: T_lowered } | { err: E_lowered }
-//!       (T1, T2, …)         → readonly [T1_lowered, T2_lowered, …]
-//!       HashMap<K, V>       → Map<K_lowered, V_lowered>
-//!       nested struct S     → S  (interface name reference)
-//!       enum X              → discriminated union per variant
+//!     `Vec<T>`            → `ReadonlyArray<T_lowered>`
+//!     `&[T]`, `&mut [T]`  → `ReadonlyArray<T_lowered>`
+//!     `&T`, `&mut T`      → `T_lowered`  (reference distinction lost; documented in header)
+//!     `()`  (Unit)        → `null`
+//!     `Option<T>`         → `T_lowered | null`
+//!     `Result<T, E>`      → `{ ok: T_lowered } | { err: E_lowered }`
+//!     `(T1, T2, …)`       → `readonly [T1_lowered, T2_lowered, …]`
+//!     `HashMap<K, V>`     → `Map<K_lowered, V_lowered>`
+//!     nested struct `S`   → `S`  (interface name reference)
+//!     enum `X`            → discriminated union per variant
 //!   - pub enum items are now emitted as tagged TS discriminated unions
 //!   - Topological emit order (leaves first) for readability
 //!
@@ -656,7 +656,7 @@ fn referenced_type_names(decl: &TsDecl) -> Vec<String> {
 /// - EMIT_TS_011: range types (`Range`, `RangeInclusive`, `RangeFrom`, `RangeTo`, `RangeFull`)
 /// - EMIT_TS_012: future/async types (`Future`, `async`)
 /// - EMIT_TS_013: SIMD vector (`Vector` or named SIMD type) — not currently reachable via
-///                AST `Type`; future-proofed here for completeness
+///   AST `Type`; future-proofed here for completeness
 /// - EMIT_TS_014: dependent/refinement types
 /// - EMIT_TS_999: any other unlowerable type (catch-all)
 fn classify_type_error_code(ty: &Type) -> String {

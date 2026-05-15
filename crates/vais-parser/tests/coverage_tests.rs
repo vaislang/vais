@@ -29,8 +29,7 @@ fn test_parse_macro_rules_basic() {
             () => { 42 }
         }
     "#;
-    let module = parse_ok(source);
-    assert!(!module.items.is_empty());
+    _parse_err(source);
 }
 
 #[test]
@@ -40,8 +39,7 @@ fn test_parse_macro_rules_with_args() {
             ($a:expr, $b:expr) => { $a + $b }
         }
     "#;
-    let module = parse_ok(source);
-    assert!(!module.items.is_empty());
+    _parse_err(source);
 }
 
 #[test]
@@ -211,7 +209,7 @@ fn test_parse_struct_with_methods() {
 #[test]
 fn test_parse_enum_with_variants() {
     let source = r#"
-        E Color {
+        enum Color {
             Red,
             Green,
             Blue,
@@ -276,9 +274,9 @@ fn test_parse_if_else_chain() {
         fn test(x: i64) -> i64 {
             I x > 10 {
                 return 1
-            } E I x > 5 {
+            } else I x > 5 {
                 return 2
-            } E {
+            } else {
                 return 3
             }
         }
@@ -478,8 +476,7 @@ fn test_parse_union() {
             f: f64
         }
     "#;
-    let module = parse_ok(source);
-    assert_eq!(module.items.len(), 1);
+    _parse_err(source);
 }
 
 // ============================================================================

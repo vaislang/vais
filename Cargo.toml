@@ -23,6 +23,7 @@ members = [
     "crates/vais-python",
     "crates/vais-node",
     "crates/vais-bindgen",
+    "crates/vais-browser-compiler",
     "crates/vais-codegen-js",
     "crates/vais-query",
     "crates/vais-mir",

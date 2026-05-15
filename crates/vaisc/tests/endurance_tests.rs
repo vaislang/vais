@@ -491,7 +491,7 @@ fn test_endurance_parser_stress() {
 
     // Generate deeply nested expressions (reduced depth to avoid stack overflow)
     let depth = 20;
-    let mut source = String::from("fn compute() -> i64 {\n    R ");
+    let mut source = String::from("fn compute() -> i64 {\n    return ");
 
     for _ in 0..depth {
         source.push('(');

@@ -339,7 +339,11 @@ fn extract_let_name(stmt: &Stmt) -> &str {
 /// Convert a byte offset in `source` to a 1-based line number.
 fn byte_offset_to_line(source: &str, offset: usize) -> usize {
     let safe_offset = offset.min(source.len());
-    source[..safe_offset].lines().count().max(1)
+    source.as_bytes()[..safe_offset]
+        .iter()
+        .filter(|&&b| b == b'\n')
+        .count()
+        + 1
 }
 
 // ==================== Unit tests ====================

@@ -155,9 +155,9 @@ mod tests {
 
     #[test]
     fn test_offset_to_position_vais_code() {
-        let source = "F main() -> i64 {\n    R 42\n}";
-        // "R" is at offset 22 (line 1, col 4)
-        let pos = offset_to_position(source, 22);
+        let source = "fn main() -> i64 {\n    return 42\n}";
+        // "return" starts at offset 23 (line 1, col 4)
+        let pos = offset_to_position(source, 23);
         assert_eq!(pos.line, 1);
         assert_eq!(pos.character, 4);
     }
@@ -182,7 +182,7 @@ mod tests {
             span: 5..7,
             expected: "identifier".to_string(),
         };
-        let diag = parse_error_to_diagnostic(&err, "F 42() -> i64 { 0 }");
+        let diag = parse_error_to_diagnostic(&err, "fn 42() -> i64 { 0 }");
 
         assert_eq!(diag.severity, Some(DiagnosticSeverity::ERROR));
         assert_eq!(diag.source, Some("vais".to_string()));
@@ -193,7 +193,7 @@ mod tests {
     #[test]
     fn test_unexpected_eof_diagnostic() {
         let err = ParseError::UnexpectedEof { span: 10..10 };
-        let source = "F main() {";
+        let source = "fn main() {";
         let diag = parse_error_to_diagnostic(&err, source);
 
         assert_eq!(diag.severity, Some(DiagnosticSeverity::ERROR));
@@ -242,7 +242,7 @@ mod tests {
         let err = ParseError::UnexpectedToken {
             found: Token::Int(0),
             span: 0..3,
-            expected: "F".to_string(),
+            expected: "fn".to_string(),
         };
         let diag = parse_error_to_diagnostic(&err, "abc def");
 
@@ -254,10 +254,10 @@ mod tests {
 
     #[test]
     fn test_unexpected_token_multiline() {
-        let source = "F main() {\n    42\n}";
+        let source = "fn main() {\n    42\n}";
         let err = ParseError::UnexpectedToken {
             found: Token::Int(42),
-            span: 15..17,
+            span: 16..18,
             expected: "statement".to_string(),
         };
         let diag = parse_error_to_diagnostic(&err, source);

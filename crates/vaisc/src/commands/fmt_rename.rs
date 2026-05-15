@@ -105,6 +105,7 @@ impl CollisionKind {
 pub struct RenameReport {
     pub findings: Vec<CollisionFinding>,
     /// Always `false` in stage 0 (dry-run only).
+    #[allow(dead_code)]
     pub modified: bool,
 }
 

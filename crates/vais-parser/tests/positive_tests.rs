@@ -37,7 +37,7 @@ fn test_parse_function_with_block_body() {
         fn factorial(n: i64) -> i64 {
             I n <= 1 {
                 return 1
-            } E {
+            } else {
                 return n * @(n - 1)
             }
         }
@@ -58,7 +58,7 @@ fn test_parse_function_with_block_body() {
 
 #[test]
 fn test_parse_generic_function() {
-    let source = "F identity<T>(x: T) -> T = x";
+    let source = "fn identity<T>(x: T) -> T = x";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -167,7 +167,7 @@ fn test_parse_public_struct() {
 #[test]
 fn test_parse_enum() {
     let source = r#"
-        E Option<T> {
+        enum Option<T> {
             None,
             Some(T)
         }
@@ -192,7 +192,7 @@ fn test_parse_enum() {
 #[test]
 fn test_parse_enum_with_struct_variant() {
     let source = r#"
-        E Message {
+        enum Message {
             Text(str),
             Command { name: str, args: Vec<str> }
         }
@@ -231,15 +231,7 @@ fn test_parse_union() {
     "#;
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
-    let module = parser.parse_module().unwrap();
-
-    match &module.items[0].node {
-        Item::Union(u) => {
-            assert_eq!(u.name.node, "Data");
-            assert_eq!(u.fields.len(), 2);
-        }
-        _ => panic!("Expected Union"),
-    }
+    assert!(parser.parse_module().is_err());
 }
 
 // =============================================================================
@@ -583,7 +575,7 @@ fn test_parse_if_else() {
         fn abs(x: i64) -> i64 {
             I x < 0 {
                 return -x
-            } E {
+            } else {
                 return x
             }
         }

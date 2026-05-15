@@ -112,7 +112,7 @@ fn fuzz_functions_with_many_parameters() {
             }
             call_source.push_str(&format!("p{}:i64", i));
         }
-        call_source.push_str(")->i64=0 F test()->i64=f(");
+        call_source.push_str(")->i64=0 fn test()->i64=f(");
         for i in 0..param_count {
             if i > 0 {
                 call_source.push_str(", ");
@@ -164,7 +164,10 @@ fn fuzz_deeply_nested_types() {
                 for _ in 0..depth {
                     type_str = format!("Option<{}>", type_str);
                 }
-                let source = format!("enum Option<T>{{Some(T),None}} F test()->{}=None", type_str);
+                let source = format!(
+                    "enum Option<T>{{Some(T),None}} fn test()->{}=None",
+                    type_str
+                );
 
                 if let Err(panic_msg) = type_check_no_panic(&source) {
                     failures.push((format!("Option depth {}", depth), panic_msg));
@@ -220,13 +223,13 @@ fn fuzz_circular_type_references() {
         // Struct with field of its own type
         "struct Node { value: i64, next: Node }",
         // Mutual struct references
-        "struct A { b: B } S B { a: A }",
+        "struct A { b: B } struct B { a: A }",
         // Enum with recursive variant
         "enum List { Cons(i64, List), Nil }",
         // Type alias chain
         "Y A = B Y B = C Y C = A",
         // Complex circular dependency
-        "struct Foo { bar: Bar } S Bar { baz: Baz } S Baz { foo: Foo }",
+        "struct Foo { bar: Bar } struct Bar { baz: Baz } struct Baz { foo: Foo }",
         // Self-referential generic
         "enum Tree<T> { Node(T, Tree<Tree<T>>), Leaf }",
     ];
@@ -257,21 +260,21 @@ fn fuzz_circular_type_references() {
 fn fuzz_empty_trait_implementations() {
     let test_cases = [
         // Empty trait
-        "T Empty {}",
+        "trait Empty {}",
         // Empty trait impl
-        "T Show { F show(self)->str } I Show for i64 {}",
+        "trait Show { fn show(self)->str } impl i64: Show {}",
         // Trait with methods, empty impl
-        "T Display { F fmt(self)->str F debug(self)->str } I Display for bool {}",
+        "trait Display { fn fmt(self)->str fn debug(self)->str } impl bool: Display {}",
         // Multiple empty impls
-        "T T1 {} T T2 {} I T1 for i64 {} I T2 for i64 {} I T1 for bool {} I T2 for bool {}",
+        "trait T1 {} trait T2 {} impl i64: T1 {} impl i64: T2 {} impl bool: T1 {} impl bool: T2 {}",
         // Empty generic trait
-        "T Convert<T> {} I Convert<i64> for bool {}",
+        "trait Convert<T> {} impl bool: Convert<i64> {}",
         // Trait impl for non-existent type
-        "T Show { F show(self)->str } I Show for NonExistent {}",
+        "trait Show { fn show(self)->str } impl NonExistent: Show {}",
         // Duplicate trait impls
-        "T Show { F show(self)->str } I Show for i64 {} I Show for i64 {}",
+        "trait Show { fn show(self)->str } impl i64: Show {} impl i64: Show {}",
         // Impl for builtin type without trait definition
-        "I SomeTrait for i64 {}",
+        "impl i64: SomeTrait {}",
     ];
 
     let mut failures = Vec::new();
@@ -302,13 +305,13 @@ fn fuzz_functions_with_no_body() {
         // These should parse but might have issues in type checking
         "fn test()->i64",
         "fn test(x:i64)->i64",
-        "F test<T>(x:T)->T",
+        "fn test<T>(x:T)->T",
         // Function with just type signature
         "fn add(x:i64, y:i64)->i64",
         // Generic function without body
-        "F identity<T>(x:T)->T",
+        "fn identity<T>(x:T)->T",
         // Multiple functions without bodies
-        "fn f1()->i64 F f2()->bool F f3()->str",
+        "fn f1()->i64 fn f2()->bool fn f3()->str",
     ];
 
     let mut failures = Vec::new();
@@ -341,19 +344,19 @@ fn fuzz_very_long_identifiers() {
         let long_id = "x".repeat(len);
 
         // Long variable name
-        let source1 = format!("fn test()->i64{{{}:=42;R {}}}", long_id, long_id);
+        let source1 = format!("fn test()->i64{{{}:=42;return {}}}", long_id, long_id);
         if let Err(panic_msg) = type_check_no_panic(&source1) {
             failures.push((format!("var name len {}", len), panic_msg));
         }
 
         // Long function name
-        let source2 = format!("F {}()->i64=42", long_id);
+        let source2 = format!("fn {}()->i64=42", long_id);
         if let Err(panic_msg) = type_check_no_panic(&source2) {
             failures.push((format!("func name len {}", len), panic_msg));
         }
 
         // Long type name
-        let source3 = format!("S {}{{{}: i64}}", long_id, long_id);
+        let source3 = format!("struct {}{{{}: i64}}", long_id, long_id);
         if let Err(panic_msg) = type_check_no_panic(&source3) {
             failures.push((format!("type name len {}", len), panic_msg));
         }
@@ -386,17 +389,17 @@ fn fuzz_type_mismatches() {
         "fn test()->bool=42",
         "fn test()->str=123",
         // Wrong parameter type
-        "fn add(x:i64,y:i64)->i64=x+y F test()->i64=add(true, false)",
+        "fn add(x:i64,y:i64)->i64=x+y fn test()->i64=add(true, false)",
         // Type mismatch in assignment
         "fn test()->i64{x:i64=true;return x}",
         // Multiple type errors
         "fn test()->i64{x:bool=42;y:str=true;return false}",
         // Unresolved type variable
-        "F test<T>(x:T)->i64=x",
+        "fn test<T>(x:T)->i64=x",
         // Wrong number of type arguments
-        "enum Option<T>{Some(T),None} F test()->Option=None",
+        "enum Option<T>{Some(T),None} fn test()->Option=None",
         // Conflicting type constraints
-        "F test<T>(x:T, y:T)->T{return x} F main()->i64=test(42, true)",
+        "fn test<T>(x:T, y:T)->T{return x} fn main()->i64=test(42, true)",
     ];
 
     let mut failures = Vec::new();
@@ -431,11 +434,11 @@ fn fuzz_undefined_references() {
         // Undefined type
         "fn test()->UndefinedType=42",
         // Undefined struct field
-        "struct Point{x:i64} F test()->i64{p:=Point{x:1};return p.undefined_field}",
+        "struct Point{x:i64} fn test()->i64{p:=Point{x:1};return p.undefined_field}",
         // Undefined enum variant
-        "enum Option<T>{Some(T),None} F test()->Option<i64>=Option::Undefined",
+        "enum Option<T>{Some(T),None} fn test()->Option<i64>=Option::Undefined",
         // Undefined trait
-        "I UndefinedTrait for i64 {}",
+        "impl i64: UndefinedTrait {}",
         // Undefined generic parameter
         "fn test()->T=42",
         // Referencing non-existent module
@@ -468,19 +471,19 @@ fn fuzz_undefined_references() {
 fn fuzz_malformed_generics() {
     let test_cases = [
         // Too many type arguments
-        "enum Option<T>{Some(T),None} F test()->Option<i64,bool>=None",
+        "enum Option<T>{Some(T),None} fn test()->Option<i64,bool>=None",
         // Too few type arguments
-        "struct Pair<A,B>{first:A,second:B} F test()->Pair<i64>=Pair{first:1,second:2}",
+        "struct Pair<A,B>{first:A,second:B} fn test()->Pair<i64>=Pair{first:1,second:2}",
         // Generic without definition
         "fn test()->Vec<i64>=42",
         // Nested unresolved generics
-        "F test<T>()->Option<Option<Option<T>>>=None",
+        "fn test<T>()->Option<Option<Option<T>>>=None",
         // Conflicting generic bounds
-        "T Trait1 {} T Trait2 {} F test<T: Trait1 + Trait2>(x:T)->T=x F main()->i64=test(42)",
+        "trait Trait1 {} trait Trait2 {} fn test<T: Trait1 + Trait2>(x:T)->T=x fn main()->i64=test(42)",
         // Generic type in wrong position
         "fn test()->i64{T:=42;return T}",
         // Multiple definitions with same generic name
-        "F test<T,T>(x:T,y:T)->T=x",
+        "fn test<T,T>(x:T,y:T)->T=x",
     ];
 
     let mut failures = Vec::new();
@@ -538,7 +541,7 @@ fn fuzz_generated_valid_programs() {
                             // Generate function
                             let name = rng.gen_identifier();
                             let param_count = rng.next_range(0, 5);
-                            source.push_str(&format!("F {}(", name));
+                            source.push_str(&format!("fn {}(", name));
 
                             for j in 0..param_count {
                                 if j > 0 {
@@ -570,7 +573,7 @@ fn fuzz_generated_valid_programs() {
                             let name = rng.gen_identifier();
                             let field_count = rng.next_range(0, 5);
 
-                            source.push_str(&format!("S {}", name));
+                            source.push_str(&format!("struct {}", name));
                             if field_count == 0 {
                                 source.push(' ');
                             } else {
@@ -591,7 +594,7 @@ fn fuzz_generated_valid_programs() {
                             let name = rng.gen_identifier();
                             let variant_count = rng.next_range(1, 4);
 
-                            source.push_str(&format!("E {}", name));
+                            source.push_str(&format!("enum {}", name));
                             source.push('{');
                             for j in 0..variant_count {
                                 if j > 0 {
@@ -659,7 +662,7 @@ fn fuzz_edge_case_expressions() {
                 // Complex boolean expression
                 "fn test()->bool=true&&false||true&&false||true&&false||true",
                 // Deeply nested field access (if struct exists)
-                "struct A{b:B} S B{c:C} S C{d:D} S D{val:i64} F test(a:A)->i64=a.b.c.d.val",
+                "struct A{b:B} struct B{c:C} struct C{d:D} struct D{val:i64} fn test(a:A)->i64=a.b.c.d.val",
                 // Empty string operations
                 "fn test()->str=\"\"",
                 // Negative numbers

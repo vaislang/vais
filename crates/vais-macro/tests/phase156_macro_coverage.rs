@@ -13,8 +13,9 @@
 //! - ExpansionError display
 
 use vais_ast::{
-    Delimiter, MacroDef, MacroInvoke, MacroLiteral, MacroPattern, MacroPatternElement, MacroRule,
-    MacroTemplate, MacroTemplateElement, MacroToken, MetaVarKind, RepetitionKind, Span, Spanned,
+    Delimiter, Item, MacroDef, MacroInvoke, MacroLiteral, MacroPattern, MacroPatternElement,
+    MacroRule, MacroTemplate, MacroTemplateElement, MacroToken, MetaVarKind, Module,
+    RepetitionKind, Span, Spanned,
 };
 use vais_macro::{
     collect_macros, expand_macros, process_derives, register_async_macros,
@@ -643,15 +644,52 @@ fn test_expand_macros_with_undefined_macro_in_source() {
 
 #[test]
 fn test_collect_macros_multiple_defs() {
-    use vais_parser::parse;
-
-    let source = r#"
-        macro foo! { ($x:expr) => { $x } }
-        macro bar! { ($a:expr, $b:expr) => { $a + $b } }
-        fn dummy() = 1
-    "#;
-
-    let module = parse(source).unwrap();
+    let module = Module {
+        items: vec![
+            Spanned::new(
+                Item::Macro(MacroDef {
+                    name: Spanned::new("foo".to_string(), Span::new(0, 3)),
+                    rules: vec![MacroRule {
+                        pattern: MacroPattern::Sequence(vec![MacroPatternElement::MetaVar {
+                            name: "x".to_string(),
+                            kind: MetaVarKind::Expr,
+                        }]),
+                        template: MacroTemplate::Sequence(vec![MacroTemplateElement::MetaVar(
+                            "x".to_string(),
+                        )]),
+                    }],
+                    is_pub: false,
+                }),
+                Span::new(0, 0),
+            ),
+            Spanned::new(
+                Item::Macro(MacroDef {
+                    name: Spanned::new("bar".to_string(), Span::new(0, 3)),
+                    rules: vec![MacroRule {
+                        pattern: MacroPattern::Sequence(vec![
+                            MacroPatternElement::MetaVar {
+                                name: "a".to_string(),
+                                kind: MetaVarKind::Expr,
+                            },
+                            MacroPatternElement::Token(MacroToken::Punct(',')),
+                            MacroPatternElement::MetaVar {
+                                name: "b".to_string(),
+                                kind: MetaVarKind::Expr,
+                            },
+                        ]),
+                        template: MacroTemplate::Sequence(vec![
+                            MacroTemplateElement::MetaVar("a".to_string()),
+                            MacroTemplateElement::Token(MacroToken::Punct('+')),
+                            MacroTemplateElement::MetaVar("b".to_string()),
+                        ]),
+                    }],
+                    is_pub: false,
+                }),
+                Span::new(0, 0),
+            ),
+        ],
+        modules_map: None,
+    };
     let mut registry = MacroRegistry::new();
     collect_macros(&module, &mut registry);
 

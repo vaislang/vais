@@ -496,6 +496,7 @@ done:
     /// in trait-iteration order — required so `vtable_struct_type_typed`
     /// reproduces the same bitcast destination type used at vtable
     /// emission. `method_index` indexes into this same enumeration.
+    #[allow(clippy::too_many_arguments)]
     pub fn generate_dynamic_call_typed(
         &self,
         trait_object: &str,

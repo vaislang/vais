@@ -84,7 +84,7 @@ pub(crate) async fn handle_hover(
 
                             let is_async = if f.is_async { "A " } else { "" };
                             let signature = format!(
-                                "{}F {}({}){}",
+                                "{}fn {}({}){}",
                                 is_async,
                                 f.name.node,
                                 params_str.join(", "),
@@ -128,7 +128,7 @@ pub(crate) async fn handle_hover(
                             };
 
                             let signature = format!(
-                                "S {}{} {{\n{}\n}}",
+                                "struct {}{} {{\n{}\n}}",
                                 s.name.node,
                                 generics,
                                 fields_str.join(",\n")
@@ -172,7 +172,7 @@ pub(crate) async fn handle_hover(
                             };
 
                             let signature = format!(
-                                "E {}{} {{\n{}\n}}",
+                                "enum {}{} {{\n{}\n}}",
                                 e.name.node,
                                 generics,
                                 variants_str.join(",\n")
@@ -226,12 +226,12 @@ pub(crate) async fn handle_hover(
                                         .as_ref()
                                         .map(|r| format!(" -> {:?}", r.node))
                                         .unwrap_or_default();
-                                    format!("    F {}({}){}", m.name.node, params.join(", "), ret)
+                                    format!("    fn {}({}){}", m.name.node, params.join(", "), ret)
                                 })
                                 .collect();
 
                             let signature =
-                                format!("W {} {{\n{}\n}}", t.name.node, methods_str.join("\n"));
+                                format!("trait {} {{\n{}\n}}", t.name.node, methods_str.join("\n"));
 
                             return Ok(Some(Hover {
                                 contents: HoverContents::Markup(MarkupContent {
@@ -271,7 +271,7 @@ pub(crate) async fn handle_hover(
                                     .unwrap_or_default();
 
                                 let signature = format!(
-                                    "F {}({}){}",
+                                    "fn {}({}){}",
                                     method.node.name.node,
                                     params_str.join(", "),
                                     ret_str

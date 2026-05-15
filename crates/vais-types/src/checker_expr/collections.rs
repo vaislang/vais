@@ -1013,21 +1013,19 @@ impl TypeChecker {
                             a_builtin.cmp(&b_builtin).then_with(|| a.cmp(b))
                         });
                         for (enum_name_str, enum_def) in enum_entries {
-                            if let Some(variant_fields) = enum_def.variants.get(&name.node) {
-                                if let crate::types::VariantFieldTypes::Struct(expected_fields) =
-                                    variant_fields
-                                {
-                                    let covers_all = provided_field_names
-                                        .iter()
-                                        .all(|pfn| expected_fields.contains_key(pfn.as_str()));
-                                    if covers_all {
-                                        enum_snapshots.push((
-                                            enum_name_str.clone(),
-                                            enum_def.generics.clone(),
-                                            expected_fields.clone(),
-                                        ));
-                                        break; // prefer first sorted match
-                                    }
+                            if let Some(crate::types::VariantFieldTypes::Struct(expected_fields)) =
+                                enum_def.variants.get(&name.node)
+                            {
+                                let covers_all = provided_field_names
+                                    .iter()
+                                    .all(|pfn| expected_fields.contains_key(pfn.as_str()));
+                                if covers_all {
+                                    enum_snapshots.push((
+                                        enum_name_str.clone(),
+                                        enum_def.generics.clone(),
+                                        expected_fields.clone(),
+                                    ));
+                                    break; // prefer first sorted match
                                 }
                             }
                         }

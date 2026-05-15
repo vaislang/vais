@@ -54,7 +54,7 @@ impl SourceGenerator {
         let mut source = String::new();
         for i in 0..self.enum_count {
             source.push_str(&format!(
-                "E Enum{} {{ Variant{}A, Variant{}B(i64), Variant{}C{{ x: i64, y: i64 }} }}\n",
+                "enum Enum{} {{ Variant{}A, Variant{}B(i64), Variant{}C{{ x: i64, y: i64 }} }}\n",
                 i, i, i, i
             ));
         }

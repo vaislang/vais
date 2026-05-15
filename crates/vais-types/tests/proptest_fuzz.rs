@@ -41,7 +41,7 @@ proptest! {
             Just("\"hello\""),
         ],
     ) {
-        let source = format!("F {}() -> {} {}", name, ret_type, body);
+        let source = format!("fn {}() -> {} {}", name, ret_type, body);
         let _ = parse_and_check(&source);
     }
 
@@ -88,7 +88,7 @@ proptest! {
             .map(|i| format!("f{}: {}", i, i * 10))
             .collect();
         let source = format!(
-            "S {} {{\n{}\n}}\n\nfn main() -> i64 {{\n    s := {} {{ {} }}\n    s.f0\n}}",
+            "struct {} {{\n{}\n}}\n\nfn main() -> i64 {{\n    s := {} {{ {} }}\n    s.f0\n}}",
             name,
             fields.join(",\n"),
             name,
@@ -109,7 +109,7 @@ proptest! {
             .join(", ");
         let generics = type_params.join(", ");
         let source = format!(
-            "F identity<{generics}>({params}) -> {} {{\n    x0\n}}",
+            "fn identity<{generics}>({params}) -> {} {{\n    x0\n}}",
             type_params[0]
         );
         let _ = parse_and_check(&source);
@@ -121,7 +121,7 @@ proptest! {
     ) {
         let mut source = String::from("fn f(x: i64) -> i64 ");
         for i in 0..depth {
-            source.push_str(&format!("I x == {} {{ {} }} E ", i, i * 10));
+            source.push_str(&format!("if x == {} {{ {} }} else ", i, i * 10));
         }
         source.push_str("{ 0 }");
         let _ = parse_and_check(&source);
@@ -145,8 +145,8 @@ proptest! {
         let mut methods = Vec::new();
         let mut impls = Vec::new();
         for i in 0..method_count {
-            methods.push(format!("    F m{}(self) -> i64", i));
-            impls.push(format!("    F m{}(self) -> i64 {}", i, i * 100));
+            methods.push(format!("    fn m{}(self) -> i64", i));
+            impls.push(format!("    fn m{}(self) -> i64 {}", i, i * 100));
         }
         let source = format!(
             "trait MyTrait {{\n{}\n}}\n\nstruct MyStruct {{}}\n\nX MyStruct: MyTrait {{\n{}\n}}",

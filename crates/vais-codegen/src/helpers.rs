@@ -515,93 +515,94 @@ impl CodeGenerator {
             }
             _ => None,
         };
-        if (is_slice_source || is_vec_source) && slice_elem_ty.is_some() {
-            let base_i8 = if is_slice_source {
-                let data_ptr = self.next_temp(counter);
+        if is_slice_source || is_vec_source {
+            if let Some(slice_elem_ty) = slice_elem_ty {
+                let base_i8 = if is_slice_source {
+                    let data_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                        data_ptr,
+                        arr_val
+                    );
+                    self.fn_ctx.record_emitted_type(&data_ptr, "i8*");
+                    data_ptr
+                } else {
+                    let data_field = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 0",
+                        data_field,
+                        arr_val
+                    );
+                    self.fn_ctx.record_emitted_type(&data_field, "i64*");
+                    let data_i64 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_field);
+                    self.fn_ctx.record_emitted_type(&data_i64, "i64");
+                    let data_ptr = self.next_temp(counter);
+                    write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_ptr, data_i64);
+                    self.fn_ctx.record_emitted_type(&data_ptr, "i8*");
+                    data_ptr
+                };
+
+                let elem_size_val = if is_vec_source {
+                    let es_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 3",
+                        es_ptr,
+                        arr_val
+                    );
+                    self.fn_ctx.record_emitted_type(&es_ptr, "i64*");
+                    let es = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i64, i64* {}", es, es_ptr);
+                    self.fn_ctx.record_emitted_type(&es, "i64");
+                    es
+                } else {
+                    self.compute_sizeof(&slice_elem_ty).to_string()
+                };
+
+                let byte_offset = self.next_temp(counter);
                 write_ir!(
                     ir,
-                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
-                    data_ptr,
-                    arr_val
+                    "  {} = mul i64 {}, {}",
+                    byte_offset,
+                    start_val,
+                    elem_size_val
                 );
-                self.fn_ctx.record_emitted_type(&data_ptr, "i8*");
-                data_ptr
-            } else {
-                let data_field = self.next_temp(counter);
+                self.fn_ctx.record_emitted_type(&byte_offset, "i64");
+                let data_i8 = self.next_temp(counter);
                 write_ir!(
                     ir,
-                    "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 0",
-                    data_field,
-                    arr_val
+                    "  {} = getelementptr i8, i8* {}, i64 {}",
+                    data_i8,
+                    base_i8,
+                    byte_offset
                 );
-                self.fn_ctx.record_emitted_type(&data_field, "i64*");
-                let data_i64 = self.next_temp(counter);
-                write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_field);
-                self.fn_ctx.record_emitted_type(&data_i64, "i64");
-                let data_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_ptr, data_i64);
-                self.fn_ctx.record_emitted_type(&data_ptr, "i8*");
-                data_ptr
-            };
+                self.fn_ctx.record_emitted_type(&data_i8, "i8*");
 
-            let elem_size_val = if is_vec_source {
-                let es_ptr = self.next_temp(counter);
+                let length = self.next_temp(counter);
+                write_ir!(ir, "  {} = sub i64 {}, {}", length, end_val, start_val);
+                self.fn_ctx.record_emitted_type(&length, "i64");
+                let fat1 = self.next_temp(counter);
                 write_ir!(
                     ir,
-                    "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 3",
-                    es_ptr,
-                    arr_val
+                    "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+                    fat1,
+                    data_i8
                 );
-                self.fn_ctx.record_emitted_type(&es_ptr, "i64*");
-                let es = self.next_temp(counter);
-                write_ir!(ir, "  {} = load i64, i64* {}", es, es_ptr);
-                self.fn_ctx.record_emitted_type(&es, "i64");
-                es
-            } else {
-                self.compute_sizeof(&slice_elem_ty.expect("slice element type present"))
-                    .to_string()
-            };
-
-            let byte_offset = self.next_temp(counter);
-            write_ir!(
-                ir,
-                "  {} = mul i64 {}, {}",
-                byte_offset,
-                start_val,
-                elem_size_val
-            );
-            self.fn_ctx.record_emitted_type(&byte_offset, "i64");
-            let data_i8 = self.next_temp(counter);
-            write_ir!(
-                ir,
-                "  {} = getelementptr i8, i8* {}, i64 {}",
-                data_i8,
-                base_i8,
-                byte_offset
-            );
-            self.fn_ctx.record_emitted_type(&data_i8, "i8*");
-
-            let length = self.next_temp(counter);
-            write_ir!(ir, "  {} = sub i64 {}, {}", length, end_val, start_val);
-            self.fn_ctx.record_emitted_type(&length, "i64");
-            let fat1 = self.next_temp(counter);
-            write_ir!(
-                ir,
-                "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
-                fat1,
-                data_i8
-            );
-            self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
-            let fat2 = self.next_temp(counter);
-            write_ir!(
-                ir,
-                "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
-                fat2,
-                fat1,
-                length
-            );
-            self.fn_ctx.record_emitted_type(&fat2, "{ i8*, i64 }");
-            return Ok((fat2, ir));
+                self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
+                let fat2 = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
+                    fat2,
+                    fat1,
+                    length
+                );
+                self.fn_ctx.record_emitted_type(&fat2, "{ i8*, i64 }");
+                return Ok((fat2, ir));
+            }
         }
 
         // If source is a slice or Vec, extract the data pointer

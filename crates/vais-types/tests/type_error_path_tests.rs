@@ -137,7 +137,7 @@ fn test_undefined_type() {
 
 #[test]
 fn test_undefined_type_suggestion() {
-    if let Some(err) = check_error("struct Point{x:i64} F test(p:Poin)->i64=0") {
+    if let Some(err) = check_error("struct Point{x:i64} fn test(p:Poin)->i64=0") {
         assert_eq!(err.error_code(), "E003");
         let help = err.help();
         assert!(help.is_some());
@@ -150,7 +150,7 @@ fn test_undefined_type_suggestion() {
 
 #[test]
 fn test_undefined_function() {
-    if let Some(err) = check_error("fn add(a:i64,b:i64)->i64=a+b F main()->i64=ad(1,2)") {
+    if let Some(err) = check_error("fn add(a:i64,b:i64)->i64=a+b fn main()->i64=ad(1,2)") {
         let code = err.error_code();
         // May be E002 or E004 depending on resolution order
         assert!(code == "E002" || code == "E004", "Got: {}", code);
@@ -159,7 +159,7 @@ fn test_undefined_function() {
 
 #[test]
 fn test_undefined_function_help() {
-    if let Some(err) = check_error("fn add(a:i64,b:i64)->i64=a+b F main()->i64=ad(1,2)") {
+    if let Some(err) = check_error("fn add(a:i64,b:i64)->i64=a+b fn main()->i64=ad(1,2)") {
         let help = err.help();
         assert!(help.is_some(), "Undefined identifier should have help");
     }
@@ -171,7 +171,7 @@ fn test_undefined_function_help() {
 
 #[test]
 fn test_arg_count_too_few() {
-    if let Some(err) = check_error("fn add(a:i64,b:i64)->i64=a+b F main()->i64=add(1)") {
+    if let Some(err) = check_error("fn add(a:i64,b:i64)->i64=a+b fn main()->i64=add(1)") {
         assert_eq!(err.error_code(), "E006");
         let msg = format!("{}", err);
         assert!(
@@ -184,14 +184,14 @@ fn test_arg_count_too_few() {
 
 #[test]
 fn test_arg_count_too_many() {
-    if let Some(err) = check_error("fn inc(x:i64)->i64=x+1 F main()->i64=inc(1,2)") {
+    if let Some(err) = check_error("fn inc(x:i64)->i64=x+1 fn main()->i64=inc(1,2)") {
         assert_eq!(err.error_code(), "E006");
     }
 }
 
 #[test]
 fn test_arg_count_zero_expected() {
-    if let Some(err) = check_error("fn nop()->i64=0 F main()->i64=nop(42)") {
+    if let Some(err) = check_error("fn nop()->i64=0 fn main()->i64=nop(42)") {
         assert_eq!(err.error_code(), "E006");
         let help = err.help().unwrap();
         assert!(help.contains("no arguments"), "Help: {}", help);
@@ -200,7 +200,7 @@ fn test_arg_count_zero_expected() {
 
 #[test]
 fn test_arg_count_help_singular() {
-    if let Some(err) = check_error("fn one(x:i64)->i64=x F main()->i64=one(1,2)") {
+    if let Some(err) = check_error("fn one(x:i64)->i64=x fn main()->i64=one(1,2)") {
         assert_eq!(err.error_code(), "E006");
         let help = err.help().unwrap();
         assert!(help.contains("1 argument"), "Help: {}", help);
@@ -213,7 +213,7 @@ fn test_arg_count_help_singular() {
 
 #[test]
 fn test_duplicate_function() {
-    if let Some(err) = check_error("fn test()->i64=1 F test()->i64=2") {
+    if let Some(err) = check_error("fn test()->i64=1 fn test()->i64=2") {
         assert_eq!(err.error_code(), "E008");
         let help = err.help().unwrap();
         assert!(
@@ -226,7 +226,7 @@ fn test_duplicate_function() {
 
 #[test]
 fn test_duplicate_struct() {
-    if let Some(err) = check_error("struct Point{x:i64} S Point{y:i64}") {
+    if let Some(err) = check_error("struct Point{x:i64} struct Point{y:i64}") {
         assert_eq!(err.error_code(), "E008");
     }
 }
@@ -271,7 +271,7 @@ fn test_valid_loop() {
 
 #[test]
 fn test_valid_struct_field_access() {
-    check_ok("struct Point{x:i64,y:i64} F get_x(p:Point)->i64=p.x");
+    check_ok("struct Point{x:i64,y:i64} fn get_x(p:Point)->i64=p.x");
 }
 
 #[test]
@@ -286,7 +286,7 @@ fn test_valid_self_recursion() {
 
 #[test]
 fn test_valid_generic() {
-    check_ok("F id<T>(x:T)->T=x");
+    check_ok("fn id<T>(x:T)->T=x");
 }
 
 #[test]
@@ -296,17 +296,17 @@ fn test_valid_mutable_var() {
 
 #[test]
 fn test_valid_enum() {
-    check_ok("E Dir{N,S,E2,W}");
+    check_ok("enum Dir{N,S,E2,W}");
 }
 
 #[test]
 fn test_valid_trait() {
-    check_ok("W Printable{F to_str(self)->str}");
+    check_ok("trait Printable{fn to_str(self)->str}");
 }
 
 #[test]
 fn test_valid_impl() {
-    check_ok("struct Num{val:i64} X Num{F get(self)->i64=self.val}");
+    check_ok("struct Num{val:i64} impl Num{fn get(self)->i64=self.val}");
 }
 
 #[test]

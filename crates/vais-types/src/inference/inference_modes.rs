@@ -128,9 +128,10 @@ impl TypeChecker {
                             };
                             let span_key = (file_id, expr.span.start, expr.span.end);
                             self.expr_types.insert(span_key, resolved.clone());
-                            return Ok(resolved);
+                            Ok(resolved)
+                        } else {
+                            Ok(inferred)
                         }
-                        return Ok(inferred);
                     }
                     // For other expressions, infer then unify
                     _ => {

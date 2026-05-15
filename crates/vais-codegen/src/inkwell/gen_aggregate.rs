@@ -459,12 +459,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // any prior arm (Vec 4-field or Slice 2-field). Without this the
         // into_pointer_value() call below panics in inkwell.
         if arr_val.is_struct_value() {
-            return Err(CodegenError::TypeError(format!(
+            return Err(CodegenError::TypeError(
                 "Cannot index into this struct value directly at codegen. \
                  If this is `obj.vec_field[i]` with a struct-embedded Vec, \
                  the type lookup may have failed. Workaround: copy to a \
                  local first — `v := obj.vec_field; x := v[i]`."
-            )));
+                    .to_string(),
+            ));
         }
 
         // Phase 0 bug C6 fix: a fixed-size array value (e.g. extracted from

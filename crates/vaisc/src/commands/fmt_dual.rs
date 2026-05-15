@@ -247,7 +247,7 @@ pub fn convert_source(source: &str, target: DualForm) -> Result<String, String> 
 /// Step 19 P3 (2026-05-08, augment-2): narrowed to `T` and `E` only.
 /// In practice these are the only retired single-letter forms that
 /// commonly collide with generic-param identifiers (Result<T, E>,
-/// Option<T>, Vec<T>, ...). The other retired forms (F/S/M/R/U/P/W/X)
+/// `Option<T>`, `Vec<T>`, ...). The other retired forms (F/S/M/R/U/P/W/X)
 /// are declaration / statement keywords whose source positions never
 /// overlap with generic-param identifier positions in well-formed Vais
 /// code; preserving them in type-position turned out to misclassify

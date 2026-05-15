@@ -1,1 +1,1 @@
-Type error: UndefinedVar { name: "xyz", span: Some(Span { file_id: 0, start: 18, end: 21 }), suggestion: None }
+Type error: UndefinedVar { name: "xyz", span: Some(Span { file_id: 0, start: 19, end: 22 }), suggestion: None }

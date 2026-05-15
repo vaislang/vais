@@ -318,11 +318,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // reference payloads should be bound as pointers, which the primitive
         // decoder handles. Return None for those.
         let mut cur = payload_ty;
-        loop {
-            match cur {
-                R::Ref(inner) | R::RefMut(inner) | R::Pointer(inner) => cur = inner.as_ref(),
-                _ => break,
-            }
+        while let R::Ref(inner) | R::RefMut(inner) | R::Pointer(inner) = cur {
+            cur = inner.as_ref();
         }
         match cur {
             R::Named { name, .. } => self

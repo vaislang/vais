@@ -245,7 +245,7 @@ fn test_resolve_function_return_types() {
 fn test_resolve_generic_function() {
     check_ok(
         r#"
-        F id<T>(x: T) -> T = x
+        fn id<T>(x: T) -> T = x
         fn test() -> i64 = id(42)
     "#,
     );

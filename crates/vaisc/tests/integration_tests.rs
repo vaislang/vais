@@ -460,7 +460,7 @@ fn test_pub_function() {
 
 #[test]
 fn test_async_function() {
-    let source = "A F async_fn() -> i64 = 42";
+    let source = "A fn async_fn() -> i64 = 42";
     assert!(compiles(source));
 }
 
@@ -503,14 +503,12 @@ fn f() -> i64 = add(1, "two")
 }
 
 #[test]
-fn test_if_condition_lenient_integer_truthy() {
-    // Phase 254: `I`/`LW` conditions accept integer truthy alongside Bool.
-    // This is scoped to predicate position and does not conflict with
-    // Phase 158's bool↔i64 prohibition in value context.
-    // Mirror of crates/vais-types/src/tests.rs::test_if_condition_lenient_integer_truthy.
-    // Renamed from test_if_condition_non_bool_error (pre-254 expectation).
+fn test_if_condition_strict_integer_truthy_rejected() {
+    // A4-06 strict default: `I`/`LW`/ternary/while conditions require bool.
+    // Integer truthy is intentionally rejected to avoid implicit control-flow
+    // coercions.
     let source = "fn f() -> i64 = I 42 { 1 } else { 0 }";
-    assert!(compiles(source));
+    assert!(fails_to_compile(source));
 }
 
 // ==================== Complex Programs ====================

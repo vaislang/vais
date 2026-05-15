@@ -28,7 +28,7 @@ fn test_completion_context_empty() {
 
 #[test]
 fn test_completion_context_function_start() {
-    let source = "F ";
+    let source = "fn ";
     let ctx = CompletionContext::from_document(source, Position::new(0, 2), None);
     let completions = generate_ai_completions(&ctx);
     let _ = completions; // Exercise the path
@@ -104,7 +104,7 @@ fn test_completion_context_top_level() {
     let source = "";
     let ctx = CompletionContext::from_document(source, Position::new(0, 0), None);
     let completions = generate_ai_completions(&ctx);
-    // Should include top-level keywords like F, S, E, W, etc.
+    // Should include top-level keywords like fn, struct, enum, trait, etc.
     let _ = completions;
 }
 
@@ -112,7 +112,7 @@ fn test_completion_context_top_level() {
 fn test_completion_context_match_arm() {
     let source = r#"
         fn test(x: i64) -> i64 {
-            M x {
+            match x {
 
             }
         }
@@ -124,7 +124,7 @@ fn test_completion_context_match_arm() {
 
 #[test]
 fn test_completion_context_import() {
-    let source = "U ";
+    let source = "use ";
     let ctx = CompletionContext::from_document(source, Position::new(0, 2), None);
     let completions = generate_ai_completions(&ctx);
     let _ = completions;

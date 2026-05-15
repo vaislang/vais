@@ -602,7 +602,7 @@ impl<'a> AstExpander<'a> {
             vec![]
         } else {
             // Parse each comma-separated element
-            let wrapper = format!("F __vec_macro_wrapper() = [{}]", token_string);
+            let wrapper = format!("fn __vec_macro_wrapper() = [{}]", token_string);
             let parsed = parse(&wrapper).map_err(|e| {
                 ExpansionError::ParseError(format!(
                     "Failed to parse vec! elements '{}': {:?}",
@@ -708,7 +708,7 @@ impl<'a> AstExpander<'a> {
         let token_string = tokens_to_string(&expanded_tokens);
 
         // Parse the expanded tokens as an expression
-        let wrapper = format!("F __macro_wrapper() = {}", token_string);
+        let wrapper = format!("fn __macro_wrapper() = {}", token_string);
         let parsed = parse(&wrapper).map_err(|e| {
             ExpansionError::ParseError(format!(
                 "Failed to parse macro expansion '{}': {:?}",
@@ -787,7 +787,7 @@ mod tests {
             is_pub: false,
         });
 
-        let source = "F test() = answer!()";
+        let source = "fn test() = answer!()";
         let module = parse(source).unwrap();
 
         let expanded = expand_macros(module, &registry).unwrap();
@@ -840,7 +840,7 @@ mod tests {
             is_pub: false,
         });
 
-        let source = "F test() = empty!()";
+        let source = "fn test() = empty!()";
         let module = parse(source).unwrap();
         let expanded = expand_macros(module, &registry).unwrap();
 
@@ -875,7 +875,7 @@ mod tests {
             is_pub: false,
         });
 
-        let source = "F test() = inc!(5)";
+        let source = "fn test() = inc!(5)";
         let module = parse(source).unwrap();
         let expanded = expand_macros(module, &registry).unwrap();
 
@@ -912,7 +912,7 @@ mod tests {
             is_pub: false,
         });
 
-        let source = "F test() = recurse!()";
+        let source = "fn test() = recurse!()";
         let module = parse(source).unwrap();
         let result = expand_macros(module, &registry);
 
@@ -954,7 +954,7 @@ mod tests {
             is_pub: false,
         });
 
-        let source = "F test() = I truth!() { 1 } E { 0 }";
+        let source = "fn test() = I truth!() { 1 } else { 0 }";
         let module = parse(source).unwrap();
         let expanded = expand_macros(module, &registry).unwrap();
 

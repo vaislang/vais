@@ -12,7 +12,7 @@ fn test_type_substitution_cache_correctness() {
     let code = r#"
         struct Box<T> { value: i64 }
 
-        F create_box<T>() -> Box<T> = Box { value: 42 }
+        fn create_box<T>() -> Box<T> = Box { value: 42 }
 
         fn main() -> i64 = 0
     "#;
@@ -138,9 +138,9 @@ fn test_complex_generic_substitution() {
 #[test]
 fn test_pattern_matching_with_generics() {
     let code = r#"
-        E Option<T> { Some(T), None }
+        enum Option<T> { Some(T), None }
 
-        F unwrap_or<T>(opt: Option<T>, default: T) -> T = match opt {
+        fn unwrap_or<T>(opt: Option<T>, default: T) -> T = match opt {
             Some(val) => val,
             None => default
         }
@@ -164,7 +164,7 @@ fn test_multiple_instantiations_same_type() {
     let code = r#"
         struct Box<T> { value: T }
 
-        F create<T>(val: T) -> Box<T> = Box { value: val }
+        fn create<T>(val: T) -> Box<T> = Box { value: val }
 
         fn main() -> i64 = 0
     "#;

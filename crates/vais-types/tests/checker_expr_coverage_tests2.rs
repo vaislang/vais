@@ -140,7 +140,7 @@ fn test_call_too_many_args() {
 fn test_generic_function_call() {
     check_ok(
         r#"
-        F identity<T>(x: T) -> T = x
+        fn identity<T>(x: T) -> T = x
         fn test() -> i64 = identity(42)
     "#,
     );
@@ -150,7 +150,7 @@ fn test_generic_function_call() {
 fn test_generic_function_multiple_params() {
     check_ok(
         r#"
-        F first<A, B>(a: A, b: B) -> A = a
+        fn first<A, B>(a: A, b: B) -> A = a
         fn test() -> i64 = first(42, true)
     "#,
     );
@@ -233,7 +233,7 @@ fn test_assert_bool_condition() {
     // predated that rule.
     check_ok(
         r#"
-        partial F test(x: i64) -> i64 {
+        partial fn test(x: i64) -> i64 {
             assert(x > 0)
             return x
         }

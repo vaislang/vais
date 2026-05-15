@@ -136,12 +136,12 @@ pub(super) fn extract_function_doc(f: &Function, docs: Vec<String>) -> DocItem {
 
     let mut signature = String::new();
     if f.is_pub {
-        signature.push_str("P ");
+        signature.push_str("pub ");
     }
     if f.is_async {
         signature.push_str("A ");
     }
-    signature.push_str(&format!("F {}", f.name.node));
+    signature.push_str(&format!("fn {}", f.name.node));
 
     if !generics.is_empty() {
         signature.push('<');
@@ -208,16 +208,16 @@ pub(super) fn extract_struct_doc(s: &Struct, docs: Vec<String>) -> DocItem {
         .fields
         .iter()
         .map(|f| {
-            let vis = if f.is_pub { "P " } else { "" };
+            let vis = if f.is_pub { "pub " } else { "" };
             format!("{}{}: {}", vis, f.name.node, f.ty.node)
         })
         .collect();
 
     let mut signature = String::new();
     if s.is_pub {
-        signature.push_str("P ");
+        signature.push_str("pub ");
     }
-    signature.push_str(&format!("S {}", s.name.node));
+    signature.push_str(&format!("struct {}", s.name.node));
 
     if !generics.is_empty() {
         signature.push('<');
@@ -272,9 +272,9 @@ pub(super) fn extract_enum_doc(e: &Enum, docs: Vec<String>) -> DocItem {
 
     let mut signature = String::new();
     if e.is_pub {
-        signature.push_str("P ");
+        signature.push_str("pub ");
     }
-    signature.push_str(&format!("E {}", e.name.node));
+    signature.push_str(&format!("enum {}", e.name.node));
 
     if !generics.is_empty() {
         signature.push('<');
@@ -318,10 +318,10 @@ pub(super) fn extract_enum_doc(e: &Enum, docs: Vec<String>) -> DocItem {
 pub(super) fn extract_const_doc(c: &ConstDef, docs: Vec<String>) -> DocItem {
     let mut signature = String::new();
     if c.is_pub {
-        signature.push_str("P ");
+        signature.push_str("pub ");
     }
     signature.push_str(&format!(
-        "C {}: {} = {:?}",
+        "const {}: {} = {:?}",
         c.name.node, c.ty.node, c.value.node
     ));
 
@@ -357,7 +357,7 @@ pub(super) fn extract_extern_function_doc(f: &ExternFunction, docs: Vec<String>)
     let returns = f.ret_type.as_ref().map(|t| format!("{}", t.node));
 
     let mut signature = String::new();
-    signature.push_str("X F ");
+    signature.push_str("impl fn ");
     signature.push_str(&f.name.node);
 
     signature.push('(');
@@ -401,9 +401,9 @@ pub(super) fn extract_trait_doc(t: &Trait, docs: Vec<String>) -> DocItem {
 
     let mut signature = String::new();
     if t.is_pub {
-        signature.push_str("P ");
+        signature.push_str("pub ");
     }
-    signature.push_str(&format!("W {}", t.name.node));
+    signature.push_str(&format!("trait {}", t.name.node));
 
     if !generics.is_empty() {
         signature.push('<');

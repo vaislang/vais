@@ -397,6 +397,12 @@ impl TypeChecker {
             }
         }
         let receiver_type = effective_receiver_type;
+        let clone_result_type = |ty: &ResolvedType| match ty {
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref().clone(),
+            ResolvedType::RefLifetime { inner, .. }
+            | ResolvedType::RefMutLifetime { inner, .. } => inner.as_ref().clone(),
+            _ => ty.clone(),
+        };
 
         // Phase 300a: for HashMap<K,V>.get — bypass the stdlib struct lookup
         // (which returns V directly) and fall through to the builtin dispatch
@@ -416,8 +422,8 @@ impl TypeChecker {
             || inner_type == "StrHashMap"
             || inner_type == "BTreeMap"
             || inner_type == "IndexMap";
-        let bypass_struct_lookup = (is_map_type && method.node == "get")
-            || (is_map_type && method.node == "remove")
+        let bypass_struct_lookup = (is_map_type
+            && matches!(method.node.as_str(), "get" | "remove"))
             || (inner_type == "Vec" && method.node == "pop");
 
         // Phase 6.27d.a: if receiver is Box<T> and Box itself has no matching
@@ -1190,7 +1196,7 @@ impl TypeChecker {
                     }
                     "clone" => {
                         if args.is_empty() {
-                            return Ok(receiver_type.clone());
+                            return Ok(clone_result_type(&receiver_type));
                         }
                     }
                     "skip" => {
@@ -1495,7 +1501,7 @@ impl TypeChecker {
                     }
                     "clone" => {
                         if args.is_empty() {
-                            return Ok(receiver_type.clone());
+                            return Ok(clone_result_type(&receiver_type));
                         }
                     }
                     "to_vec" | "as_slice" => {
@@ -1674,7 +1680,7 @@ impl TypeChecker {
             }
             // Phase 226: generic `.clone()` on ANY Named type returns the same type.
             if method.node == "clone" && args.is_empty() {
-                return Ok(receiver_type.clone());
+                return Ok(clone_result_type(&receiver_type));
             }
             // Phase 290: generic `.cloned()` / `.copied()` — iterator/Option/Ref
             // semantics: identity at type level (with one-layer Ref unwrap).
@@ -1951,7 +1957,7 @@ impl TypeChecker {
         // Minimal builtin fallbacks (kept because VaisDB structs lack explicit impl blocks for these)
         // clone: identity-copy semantics for any struct
         if method.node == "clone" && args.is_empty() {
-            return Ok(receiver_type.clone());
+            return Ok(clone_result_type(&receiver_type));
         }
         // serialize: writes to ByteBuffer, returns unit
         if method.node == "serialize" {
@@ -2309,40 +2315,35 @@ impl TypeChecker {
             let fresh: Vec<ResolvedType> =
                 (0..n_type_vars).map(|_| checker.fresh_type_var()).collect();
             let ret = make_ret(&fresh);
-            if let Some(expected) = checker.current_expected_type() {
-                if let ResolvedType::Named {
-                    name: exp_name,
-                    generics: exp_generics,
-                } = &expected
-                {
-                    if exp_name == container_name && exp_generics.len() == fresh.len() {
-                        for (var, concrete) in fresh.iter().zip(exp_generics.iter()) {
-                            let _ = checker.unify(var, concrete);
-                        }
-                        // Record method + struct instantiation so codegen's
-                        // specialization lookup (by mangled name) finds the
-                        // symbol even when no prior call site in the same
-                        // module has registered it.
-                        let resolved_generics: Vec<ResolvedType> = exp_generics
-                            .iter()
-                            .map(|g| checker.apply_substitutions(g))
-                            .collect();
-                        let all_concrete = resolved_generics
-                            .iter()
-                            .all(|t| !matches!(t, ResolvedType::Var(_) | ResolvedType::Generic(_)));
-                        if all_concrete {
-                            let inst = GenericInstantiation::struct_type(
-                                container_name,
-                                resolved_generics.clone(),
-                            );
-                            checker.add_instantiation(inst);
-                            let method_inst = GenericInstantiation::method(
-                                container_name,
-                                "new",
-                                resolved_generics,
-                            );
-                            checker.add_instantiation(method_inst);
-                        }
+            if let Some(ResolvedType::Named {
+                name: exp_name,
+                generics: exp_generics,
+            }) = checker.current_expected_type().as_ref()
+            {
+                if exp_name == container_name && exp_generics.len() == fresh.len() {
+                    for (var, concrete) in fresh.iter().zip(exp_generics.iter()) {
+                        let _ = checker.unify(var, concrete);
+                    }
+                    // Record method + struct instantiation so codegen's
+                    // specialization lookup (by mangled name) finds the
+                    // symbol even when no prior call site in the same
+                    // module has registered it.
+                    let resolved_generics: Vec<ResolvedType> = exp_generics
+                        .iter()
+                        .map(|g| checker.apply_substitutions(g))
+                        .collect();
+                    let all_concrete = resolved_generics
+                        .iter()
+                        .all(|t| !matches!(t, ResolvedType::Var(_) | ResolvedType::Generic(_)));
+                    if all_concrete {
+                        let inst = GenericInstantiation::struct_type(
+                            container_name,
+                            resolved_generics.clone(),
+                        );
+                        checker.add_instantiation(inst);
+                        let method_inst =
+                            GenericInstantiation::method(container_name, "new", resolved_generics);
+                        checker.add_instantiation(method_inst);
                     }
                 }
             }

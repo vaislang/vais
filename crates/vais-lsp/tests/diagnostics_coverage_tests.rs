@@ -18,7 +18,7 @@ fn test_diagnostic_unexpected_token() {
         span: 5..8,
         expected: "identifier".to_string(),
     };
-    let source = "F 42 test";
+    let source = "fn 42 test";
     let diag = parse_error_to_diagnostic(&err, source);
 
     assert_eq!(diag.severity, Some(DiagnosticSeverity::ERROR));

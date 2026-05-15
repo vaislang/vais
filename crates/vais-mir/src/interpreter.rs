@@ -25,8 +25,7 @@ pub struct InterpreterRunOutput {
     /// `MirValue::Unit` → `0`, anything else → caller decides (we still
     /// return the raw value separately so the diff layer can short-circuit).
     pub exit_code: i64,
-    /// stdout captured during the run via the builtin print intercept
-    /// (see [`Interpreter::call_with_io`]).
+    /// stdout captured during the run via the builtin print intercept.
     pub stdout: String,
     /// The raw return value, for callers that want richer comparison than
     /// just exit code (e.g. `MirValue::Str` etc.). The diff oracle ignores

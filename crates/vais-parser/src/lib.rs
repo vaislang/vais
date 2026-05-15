@@ -1188,7 +1188,7 @@ fn to_snake_case(s: &str) -> String {
 /// ```
 /// use vais_parser::parse;
 ///
-/// let source = "F add(x:i64,y:i64)->i64=x+y";
+/// let source = "fn add(x:i64,y:i64)->i64=x+y";
 /// let module = parse(source).unwrap();
 /// assert_eq!(module.items.len(), 1);
 /// ```
@@ -1244,7 +1244,7 @@ pub fn parse_with_cfg(
 /// use vais_ast::Item;
 ///
 /// // Source with a broken function followed by a valid struct
-/// let source = "F broken(; S Valid{x:i64}";
+/// let source = "fn broken(; struct Valid{x:i64}";
 /// let (module, errors) = parse_with_recovery(source);
 /// assert!(!errors.is_empty());
 /// // The module still contains the valid struct after recovery

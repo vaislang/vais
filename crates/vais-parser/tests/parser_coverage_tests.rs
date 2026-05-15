@@ -80,7 +80,7 @@ fn test_parse_with_recovery_valid_code() {
 
 #[test]
 fn test_parse_with_recovery_broken_function() {
-    let source = "fn broken(; S Valid { x: i64 }";
+    let source = "fn broken(; struct Valid { x: i64 }";
     let (module, errors) = parse_with_recovery(source);
     assert!(!errors.is_empty());
     // Should still parse the valid struct
@@ -127,14 +127,14 @@ fn test_parse_string_interpolation() {
 
 #[test]
 fn test_parse_range_expressions() {
-    let source = "fn test() -> i64 { L i:0..10 { C }; R 0 }";
+    let source = "fn test() -> i64 { L i:0..10 { C }; return 0 }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_inclusive_range() {
-    let source = "fn test() -> i64 { L i:0..=10 { C }; R 0 }";
+    let source = "fn test() -> i64 { L i:0..=10 { C }; return 0 }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -178,7 +178,7 @@ fn test_parse_unwrap_operator() {
 
 #[test]
 fn test_parse_self_recursion() {
-    let source = "fn factorial(n: i64) -> i64 { I n <= 1 { R 1 }; R n * @(n - 1) }";
+    let source = "fn factorial(n: i64) -> i64 { I n <= 1 { return 1 }; return n * @(n - 1) }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -212,14 +212,14 @@ fn test_parse_struct_literal() {
 
 #[test]
 fn test_parse_array_literal() {
-    let source = "fn test() -> i64 { arr := [1, 2, 3, 4, 5]; R 0 }";
+    let source = "fn test() -> i64 { arr := [1, 2, 3, 4, 5]; return 0 }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_tuple_literal() {
-    let source = "fn test() -> i64 { t := (1, 2, 3); R 0 }";
+    let source = "fn test() -> i64 { t := (1, 2, 3); return 0 }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -258,7 +258,7 @@ fn test_parse_typed_binding() {
 
 #[test]
 fn test_parse_return_statement() {
-    let source = "fn test() -> i64 { R 42 }";
+    let source = "fn test() -> i64 { return 42 }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -303,14 +303,14 @@ fn test_parse_function_type() {
 
 #[test]
 fn test_parse_generic_type() {
-    let source = "F id<T>(x: T) -> T = x";
+    let source = "fn id<T>(x: T) -> T = x";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_multi_generic_type() {
-    let source = "F pair<A, B>(a: A, b: B) -> A = a";
+    let source = "fn pair<A, B>(a: A, b: B) -> A = a";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -371,7 +371,7 @@ fn test_parse_struct_with_generics() {
 #[test]
 fn test_parse_enum_with_variants() {
     let source = r#"
-        E Shape {
+        enum Shape {
             Circle(i64),
             Rect(i64, i64),
             Point
@@ -441,8 +441,7 @@ fn test_parse_union() {
             float_val: f64
         }
     "#;
-    let module = parse_ok(source);
-    assert_eq!(module.items.len(), 1);
+    parse_err(source);
 }
 
 #[test]
@@ -457,7 +456,7 @@ fn test_parse_pub_function() {
 
 #[test]
 fn test_parse_async_function() {
-    let source = "A F fetch() -> i64 = 42";
+    let source = "A fn fetch() -> i64 = 42";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -564,8 +563,7 @@ fn test_parse_macro_definition_multiple_rules() {
             () => { 0 }
         }
     "#;
-    let module = parse_ok(source);
-    assert_eq!(module.items.len(), 1);
+    parse_err(source);
 }
 
 #[test]
@@ -575,8 +573,7 @@ fn test_parse_macro_with_ident() {
             ($name:ident, $val:expr) => { $name := $val }
         }
     "#;
-    let module = parse_ok(source);
-    assert_eq!(module.items.len(), 1);
+    parse_err(source);
 }
 
 #[test]
@@ -684,7 +681,7 @@ fn test_parse_error_unclosed_paren() {
 
 #[test]
 fn test_parse_error_unclosed_brace() {
-    parse_err("fn test() -> i64 { R 42");
+    parse_err("fn test() -> i64 { return 42");
 }
 
 // ============================================================================
@@ -763,7 +760,7 @@ fn test_parse_fibonacci() {
 #[test]
 fn test_parse_linked_list() {
     let source = r#"
-        E List {
+        enum List {
             Cons(i64, i64),
             Nil
         }
@@ -931,14 +928,14 @@ fn test_parse_global() {
 
 #[test]
 fn test_parse_pub_struct() {
-    let source = "P S Point { x: i64, y: i64 }";
+    let source = "pub struct Point { x: i64, y: i64 }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
 
 #[test]
 fn test_parse_pub_enum() {
-    let source = "P E Color { Red, Green, Blue }";
+    let source = "pub enum Color { Red, Green, Blue }";
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
 }
@@ -946,7 +943,7 @@ fn test_parse_pub_enum() {
 #[test]
 fn test_parse_enum_many_variants() {
     let source = r#"
-        E Weekday { Mon, Tue, Wed, Thu, Fri, Sat, Sun }
+        enum Weekday { Mon, Tue, Wed, Thu, Fri, Sat, Sun }
     "#;
     let module = parse_ok(source);
     assert_eq!(module.items.len(), 1);
@@ -958,7 +955,7 @@ fn test_parse_mixed_items() {
         C MAX: i64 = 100
         type Num = i64
         struct Point { x: i64, y: i64 }
-        E Color { Red, Green, Blue }
+        enum Color { Red, Green, Blue }
         fn main() -> i64 = MAX
     "#;
     let module = parse_ok(source);

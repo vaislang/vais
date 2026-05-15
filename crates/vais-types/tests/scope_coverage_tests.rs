@@ -506,7 +506,7 @@ fn test_type_checker_get_type_aliases() {
 #[test]
 fn test_type_checker_generic_function_detection() {
     let source = r#"
-        F id<T>(x: T) -> T = x
+        fn id<T>(x: T) -> T = x
         fn add(x: i64, y: i64) -> i64 = x + y
     "#;
     let module = parse(source).unwrap();
@@ -563,7 +563,7 @@ fn test_type_checker_clear_warnings() {
 #[test]
 fn test_type_checker_generic_instantiations() {
     let source = r#"
-        F id<T>(x: T) -> T = x
+        fn id<T>(x: T) -> T = x
         fn main() -> i64 = id(42)
     "#;
     let module = parse(source).unwrap();

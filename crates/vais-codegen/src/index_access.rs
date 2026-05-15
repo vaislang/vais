@@ -23,7 +23,7 @@
 //! Each independently mapped `ResolvedType → (elem_llvm_ty, is_fat_ptr,
 //! elem_resolved)`. Drift between them caused vaisdb test_btree class of
 //! errors (Class 2 in ADR 0002): one path emits `getelementptr i32` while
-//! another emits `getelementptr i64` for the same Vec<i32>.
+//! another emits `getelementptr i64` for the same `Vec<i32>`.
 //!
 //! This module is the **single source** for the Text IR backend's 3 paths
 //! (Path 1, 2, eventually 3). Path 4 (inkwell) is intentionally separate.

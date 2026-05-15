@@ -72,13 +72,12 @@ impl CodeGenerator {
                     let has_i64_fallback = matches!(block_type, ResolvedType::I64)
                         || matches!(then_type, ResolvedType::I64)
                         || matches!(else_type_resolved, ResolvedType::I64);
-                    if matches!(expected, ResolvedType::Named { .. }) && has_i64_fallback {
-                        block_type = expected;
-                    } else if matches!(expected, ResolvedType::Str)
-                        && has_i64_fallback
-                        && (matches!(then_type, ResolvedType::Str)
-                            || matches!(else_type_resolved, ResolvedType::Str))
-                    {
+                    let should_use_expected = has_i64_fallback
+                        && (matches!(expected, ResolvedType::Named { .. })
+                            || (matches!(expected, ResolvedType::Str)
+                                && (matches!(then_type, ResolvedType::Str)
+                                    || matches!(else_type_resolved, ResolvedType::Str))));
+                    if should_use_expected {
                         block_type = expected;
                     }
                 }

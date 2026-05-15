@@ -1,10 +1,13 @@
 use super::*;
 use crate::types::LocalVar;
 
+type EnumStructVariantInfo = (String, i32, Vec<(String, ResolvedType)>);
+
 impl CodeGenerator {
     /// Generate code to check if a pattern matches (with explicit match type for correct type
     /// propagation, especially for nested tuple patterns where element types may be non-i64).
     #[inline(never)]
+    #[allow(clippy::blocks_in_conditions)]
     pub(crate) fn generate_pattern_check_typed(
         &mut self,
         pattern: &Spanned<Pattern>,
@@ -687,7 +690,7 @@ impl CodeGenerator {
     pub(crate) fn resolve_enum_struct_variant(
         &self,
         variant_name: &str,
-    ) -> Option<(String, i32, Vec<(String, ResolvedType)>)> {
+    ) -> Option<EnumStructVariantInfo> {
         self.resolve_enum_struct_variant_with_hint(variant_name, None)
     }
 
@@ -699,7 +702,7 @@ impl CodeGenerator {
         &self,
         variant_name: &str,
         enum_hint: Option<&str>,
-    ) -> Option<(String, i32, Vec<(String, ResolvedType)>)> {
+    ) -> Option<EnumStructVariantInfo> {
         self.resolve_enum_struct_variant_with_hint_and_fields(variant_name, enum_hint, &[])
     }
 
@@ -714,7 +717,7 @@ impl CodeGenerator {
         variant_name: &str,
         enum_hint: Option<&str>,
         requested_fields: &[&str],
-    ) -> Option<(String, i32, Vec<(String, ResolvedType)>)> {
+    ) -> Option<EnumStructVariantInfo> {
         use crate::types::EnumVariantFields;
         // First pass: if hint provided, look only within that enum.
         if let Some(hint) = enum_hint {
@@ -731,8 +734,8 @@ impl CodeGenerator {
         // Fallback: scan all enums. Prefer variants whose fields cover the
         // requested field-name set (exact or superset); fall back to the first
         // match if no candidate covers all requested names.
-        let mut best: Option<(String, i32, Vec<(String, ResolvedType)>)> = None;
-        let mut first: Option<(String, i32, Vec<(String, ResolvedType)>)> = None;
+        let mut best: Option<EnumStructVariantInfo> = None;
+        let mut first: Option<EnumStructVariantInfo> = None;
         for enum_info in self.types.enums.values() {
             for (tag, variant) in enum_info.variants.iter().enumerate() {
                 if variant.name == variant_name {

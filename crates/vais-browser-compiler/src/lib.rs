@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn compiles_basic_main_to_js() {
-        let raw = compile_to_js_json("F main() -> i64 = 42");
+        let raw = compile_to_js_json("fn main() -> i64 = 42");
         let value: Value = serde_json::from_str(&raw).expect("valid JSON response");
 
         assert_eq!(value["success"], true);
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn reports_parse_error_as_json() {
-        let raw = compile_to_js_json("F main( -> i64 = 42");
+        let raw = compile_to_js_json("fn main( -> i64 = 42");
         let value: Value = serde_json::from_str(&raw).expect("valid JSON response");
 
         assert_eq!(value["success"], false);
@@ -171,7 +171,7 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn wasm_compile_smoke() {
-        let raw = compile_to_js_json("F main() -> i64 = 7");
+        let raw = compile_to_js_json("fn main() -> i64 = 7");
         assert!(raw.contains(r#""success":true"#));
         assert!(raw.contains("function main()"));
     }

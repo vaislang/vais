@@ -1030,6 +1030,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ///   - PointerValue → ptrtoint to i64
     ///   - StructValue ≤8B → stack alloca + bitcast-load as i64
     ///   - StructValue >8B → malloc + store + ptrtoint to i64
+    ///
     /// The match-arm decoder inverts this based on the declared payload type.
     pub(crate) fn pack_enum_payload_i64(
         &mut self,

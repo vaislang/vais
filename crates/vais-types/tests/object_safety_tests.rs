@@ -148,7 +148,7 @@ fn test_not_object_safe_self_in_params() {
 fn test_not_object_safe_sized_bound() {
     // Trait with Sized bound
     let source = r#"
-        W SizedTrait: Sized {
+        trait SizedTrait: Sized {
             fn method(&self) -> i64
         }
 
@@ -285,7 +285,7 @@ fn test_not_object_safe_self_in_nested_type() {
 fn test_object_safe_with_generic_trait() {
     // Trait with generic parameters (not methods) can be object-safe
     let source = r#"
-        W Container<T> {
+        trait Container<T> {
             fn get(&self) -> T
         }
 
@@ -308,7 +308,7 @@ fn test_not_object_safe_associated_type_returns_self() {
     // Method returning associated type that could be Self
     let source = r#"
         trait Iterator {
-            T Item
+            type Item
             fn next(&mut self) -> Self::Item?
         }
 
@@ -405,7 +405,7 @@ fn test_object_safe_async_method() {
     // Async methods with &self should be object-safe
     let source = r#"
         trait AsyncTask {
-            async F run(&self) -> i64
+            async fn run(&self) -> i64
         }
 
         fn main() -> i64 = 0
@@ -421,7 +421,7 @@ fn test_trait_with_associated_types() {
     // Trait with associated types (no methods) is object-safe
     let source = r#"
         trait HasAssociatedType {
-            T Item
+            type Item
             fn get_item(&self) -> i64
         }
 
@@ -436,7 +436,7 @@ fn test_trait_with_associated_types() {
 fn test_multiple_violations() {
     // Trait violating multiple object safety rules
     let source = r#"
-        W BadTrait: Sized {
+        trait BadTrait: Sized {
             fn new() -> Self
             fn clone(&self) -> Self
             fn compare(&self, other: Self) -> i64
@@ -458,7 +458,7 @@ fn test_super_trait_doesnt_affect_object_safety() {
             fn base_method(&self) -> i64
         }
 
-        W Derived: Base {
+        trait Derived: Base {
             fn derived_method(&self) -> i64
         }
 

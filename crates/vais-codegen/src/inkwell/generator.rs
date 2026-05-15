@@ -227,7 +227,7 @@ pub struct InkwellCodeGenerator<'ctx> {
 
     /// B.1: The resolved type of the scrutinee of the currently-generating
     /// `match` expression. Used by `generate_pattern_bindings` (Pattern::Variant)
-    /// to recover the struct-payload type for Option<Struct> / Result<Struct,_>
+    /// to recover the struct-payload type for `Option<Struct>` / `Result<Struct,_>`
     /// when `enum_variant_struct_types` has no entry (those maps are only
     /// populated for user-defined enums via gen_declaration). Push/pop in
     /// `generate_match` around arm generation; stack-shaped so nested matches

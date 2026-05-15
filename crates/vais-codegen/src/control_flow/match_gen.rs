@@ -864,9 +864,7 @@ impl CodeGenerator {
                         && (body_val == "void" || body_val == "0" || looks_like_placeholder)
                     {
                         body_val = "{ i8* null, i64 0 }".to_string();
-                    } else if let ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) =
-                        &arm_body_type
-                    {
+                    } else if let ResolvedType::Ref(_) | ResolvedType::RefMut(_) = &arm_body_type {
                         let actual = self.llvm_type_of(&body_val);
                         let target = self.type_to_llvm(&arm_body_type);
                         if actual == "i64" && target.ends_with('*') {
@@ -1221,9 +1219,7 @@ impl CodeGenerator {
             let phi_args: Vec<String> = arm_values
                 .iter()
                 .map(|(val, label)| {
-                    let safe = if val == "void" {
-                        void_substitute
-                    } else if phi_type == "{ i8*, i64 }" && val == "0" {
+                    let safe = if val == "void" || (phi_type == "{ i8*, i64 }" && val == "0") {
                         void_substitute
                     } else {
                         val.as_str()

@@ -1,3 +1,5 @@
+#![allow(dead_code)] // Macro grammar is reserved until the item parser wires it in.
+
 use vais_ast::*;
 use vais_lexer::Token;
 

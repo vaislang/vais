@@ -498,8 +498,8 @@ impl TypeChecker {
                         Ok(()) // Permissive: allow Vec ↔ &T (legacy)
                     } else {
                         Err(crate::TypeError::Mismatch {
-                            expected: format!("Vec<T>"),
-                            found: format!("&T"),
+                            expected: "Vec<T>".to_string(),
+                            found: "&T".to_string(),
                             span: None,
                         })
                     }
@@ -555,8 +555,8 @@ impl TypeChecker {
                     Ok(())
                 } else {
                     Err(crate::TypeError::Mismatch {
-                        expected: format!("Pointer<T>"),
-                        found: format!("i64"),
+                        expected: "Pointer<T>".to_string(),
+                        found: "i64".to_string(),
                         span: None,
                     })
                 }
@@ -575,8 +575,8 @@ impl TypeChecker {
                     self.unify(p, s)
                 } else {
                     Err(crate::TypeError::Mismatch {
-                        expected: format!("Pointer<T>"),
-                        found: format!("Slice<T>"),
+                        expected: "Pointer<T>".to_string(),
+                        found: "Slice<T>".to_string(),
                         span: None,
                     })
                 }
@@ -594,8 +594,8 @@ impl TypeChecker {
             | (ResolvedType::Pointer(p), ResolvedType::Array(element)) => {
                 if std::env::var("VAIS_REJECT_A4_05").as_deref() == Ok("1") {
                     Err(crate::TypeError::Mismatch {
-                        expected: format!("Array<T>"),
-                        found: format!("Pointer<T>"),
+                        expected: "Array<T>".to_string(),
+                        found: "Pointer<T>".to_string(),
                         span: None,
                     })
                 } else {
@@ -632,8 +632,8 @@ impl TypeChecker {
                     self.unify(inner, other)
                 } else {
                     Err(crate::TypeError::Mismatch {
-                        expected: format!("&'a T"),
-                        found: format!("&T"),
+                        expected: "&'a T".to_string(),
+                        found: "&T".to_string(),
                         span: None,
                     })
                 }
@@ -644,8 +644,8 @@ impl TypeChecker {
                     self.unify(inner, other)
                 } else {
                     Err(crate::TypeError::Mismatch {
-                        expected: format!("&'a mut T"),
-                        found: format!("&mut T"),
+                        expected: "&'a mut T".to_string(),
+                        found: "&mut T".to_string(),
                         span: None,
                     })
                 }

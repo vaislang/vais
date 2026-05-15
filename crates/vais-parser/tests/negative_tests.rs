@@ -11,8 +11,8 @@ use vais_parser::{parse, parse_with_recovery};
 
 #[test]
 fn test_error_incomplete_function_no_name() {
-    // F keyword followed by opening paren without function name
-    let source = "F (x: i64) -> i64 = x";
+    // fn keyword followed by opening paren without function name
+    let source = "fn (x: i64) -> i64 = x";
     let result = parse(source);
     assert!(result.is_err(), "Expected error for function without name");
 }
@@ -116,7 +116,7 @@ fn test_error_incomplete_type_annotation() {
 #[test]
 fn test_error_incomplete_match_no_arms() {
     // Match expression without arms
-    let source = "fn test(x: i64) -> i64 = M x {}";
+    let source = "fn test(x: i64) -> i64 = match x {}";
     let result = parse(source);
     // This might parse successfully with zero arms, or might error
     // depending on parser strictness. We test that it's handled.
@@ -126,7 +126,7 @@ fn test_error_incomplete_match_no_arms() {
 #[test]
 fn test_error_incomplete_match_missing_arrow() {
     // Match arm without =>
-    let source = "fn test(x: i64) -> i64 = M x { 0 1, _ => 2 }";
+    let source = "fn test(x: i64) -> i64 = match x { 0 1, _ => 2 }";
     let result = parse(source);
     assert!(result.is_err(), "Expected error for match arm without =>");
 }
@@ -134,7 +134,7 @@ fn test_error_incomplete_match_missing_arrow() {
 #[test]
 fn test_error_incomplete_enum_no_variants() {
     // Enum with no variants (just opening and closing braces)
-    let source = "E Empty{}";
+    let source = "enum Empty{}";
     let result = parse(source);
     // Empty enum might be allowed or might be an error
     // We just verify it's handled consistently
@@ -144,7 +144,7 @@ fn test_error_incomplete_enum_no_variants() {
 #[test]
 fn test_error_enum_variant_missing_paren() {
     // Enum variant with unclosed parameter list
-    let source = "E Bad{Variant(i64}";
+    let source = "enum Bad{Variant(i64}";
     let result = parse(source);
     assert!(
         result.is_err(),
@@ -263,7 +263,7 @@ fn test() -> i64 {
 #[test]
 fn test_error_trait_without_name() {
     // Trait keyword without name
-    let source = "W { F method() -> i64 }";
+    let source = "trait { fn method() -> i64 }";
     let result = parse(source);
     assert!(result.is_err(), "Expected error for trait without name");
 }
@@ -271,7 +271,7 @@ fn test_error_trait_without_name() {
 #[test]
 fn test_error_impl_without_target() {
     // Impl keyword without target type
-    let source = "X { F method() -> i64 = 42 }";
+    let source = "impl { fn method() -> i64 = 42 }";
     let result = parse(source);
     assert!(
         result.is_err(),
@@ -282,7 +282,7 @@ fn test_error_impl_without_target() {
 #[test]
 fn test_error_use_without_path() {
     // Use keyword without path
-    let source = "U";
+    let source = "use";
     let result = parse(source);
     assert!(result.is_err(), "Expected error for use without path");
 }
@@ -290,7 +290,7 @@ fn test_error_use_without_path() {
 #[test]
 fn test_error_generic_unclosed() {
     // Generic parameter list not closed
-    let source = "F test<T(x: T) -> T = x";
+    let source = "fn test<T(x: T) -> T = x";
     let result = parse(source);
     assert!(result.is_err(), "Expected error for unclosed generic list");
 }
@@ -298,7 +298,7 @@ fn test_error_generic_unclosed() {
 #[test]
 fn test_error_generic_invalid_constraint() {
     // Generic with invalid constraint syntax
-    let source = "F test<T: >(x: T) -> T = x";
+    let source = "fn test<T: >(x: T) -> T = x";
     let result = parse(source);
     assert!(
         result.is_err(),
@@ -366,7 +366,7 @@ fn broken1(
 fn good1() -> i64 = 1
 struct Broken2{x
 fn good2() -> i64 = 2
-E Broken3{A(
+enum Broken3{A(
 fn good3() -> i64 = 3
 "#;
     let (module, errors) = parse_with_recovery(source);
@@ -403,7 +403,7 @@ fn test_recovery_error_then_valid_sequence() {
 fn broken(;
 fn valid1() -> i64 = 1
 struct ValidStruct { x: i64 }
-E ValidEnum { A, B }
+enum ValidEnum { A, B }
 trait ValidTrait { fn method() -> i64 }
 "#;
     let (module, errors) = parse_with_recovery(source);
@@ -636,7 +636,7 @@ fn recovered() -> i64 = 42
 fn test_recovery_continues_after_enum_error() {
     // Enum error followed by struct
     let source = r#"
-E Broken { A(i64
+enum Broken { A(i64
 struct Valid { x: i64 }
 "#;
     let (module, errors) = parse_with_recovery(source);
@@ -741,7 +741,7 @@ fn test_error_mixed_valid_and_invalid_items() {
 fn valid1() -> i64 = 1
 fn invalid1(
 struct Valid1 { x: i64 }
-E Invalid2 { A(
+enum Invalid2 { A(
 fn valid2() -> i64 = 2
 "#;
     let (module, errors) = parse_with_recovery(source);
@@ -778,7 +778,7 @@ fn valid2() -> i64 = 2
 
 #[test]
 fn test_error_use_dot_missing_ident() {
-    // U mod. without an identifier after the dot
+    // use mod. without an identifier after the dot
     let source = "use std/option.\nfn main() -> i64 = 42";
     let result = parse(source);
     assert!(result.is_err(), "Expected error for dot without identifier");
@@ -786,7 +786,7 @@ fn test_error_use_dot_missing_ident() {
 
 #[test]
 fn test_error_use_braces_missing_close() {
-    // U mod.{A, B without closing brace
+    // use mod.{A, B without closing brace
     let source = "use std/option.{Option, Some\nfn main() -> i64 = 42";
     let result = parse(source);
     assert!(result.is_err(), "Expected error for unclosed braces");

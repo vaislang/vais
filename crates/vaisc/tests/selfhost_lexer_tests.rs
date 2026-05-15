@@ -1462,17 +1462,17 @@ fn main() -> i64 {
 
 #[test]
 fn selfhost_rust_lexer_cross_check_keywords() {
-    // Verify the Rust lexer tokenizes single-char keywords correctly
+    // Verify the Rust lexer tokenizes canonical keyword spellings correctly.
     use vais_lexer::Token;
 
-    let tokens = tokenize("F").unwrap();
+    let tokens = tokenize("fn").unwrap();
     assert_eq!(
         tokens[0].token,
         Token::Function,
         "fn should lex as Function"
     );
 
-    let tokens = tokenize("S").unwrap();
+    let tokens = tokenize("struct").unwrap();
     assert_eq!(
         tokens[0].token,
         Token::Struct,
@@ -1482,20 +1482,16 @@ fn selfhost_rust_lexer_cross_check_keywords() {
     let tokens = tokenize("I").unwrap();
     assert_eq!(tokens[0].token, Token::If, "I should lex as If");
 
-    let tokens = tokenize("E").unwrap();
-    assert_eq!(
-        tokens[0].token,
-        Token::Enum,
-        "E should lex as Enum (also used as Else context)"
-    );
+    let tokens = tokenize("enum").unwrap();
+    assert_eq!(tokens[0].token, Token::Enum, "enum should lex as Enum");
 
     let tokens = tokenize("L").unwrap();
     assert_eq!(tokens[0].token, Token::Loop, "L should lex as Loop");
 
-    let tokens = tokenize("M").unwrap();
+    let tokens = tokenize("match").unwrap();
     assert_eq!(tokens[0].token, Token::Match, "match should lex as Match");
 
-    let tokens = tokenize("R").unwrap();
+    let tokens = tokenize("return").unwrap();
     assert_eq!(
         tokens[0].token,
         Token::Return,
@@ -1508,27 +1504,30 @@ fn selfhost_rust_lexer_cross_check_keywords() {
     let tokens = tokenize("C").unwrap();
     assert_eq!(tokens[0].token, Token::Continue, "C should lex as Continue");
 
-    let tokens = tokenize("W").unwrap();
-    assert_eq!(tokens[0].token, Token::Trait, "W should lex as Trait");
+    let tokens = tokenize("trait").unwrap();
+    assert_eq!(tokens[0].token, Token::Trait, "trait should lex as Trait");
 
-    let tokens = tokenize("X").unwrap();
+    let tokens = tokenize("impl").unwrap();
     assert_eq!(tokens[0].token, Token::Impl, "impl should lex as Impl");
 
-    let tokens = tokenize("T").unwrap();
+    let tokens = tokenize("type").unwrap();
     assert_eq!(
         tokens[0].token,
         Token::TypeKeyword,
-        "T should lex as TypeKeyword"
+        "type should lex as TypeKeyword"
     );
 
-    let tokens = tokenize("U").unwrap();
+    let tokens = tokenize("use").unwrap();
     assert_eq!(tokens[0].token, Token::Use, "use should lex as Use");
 
-    let tokens = tokenize("P").unwrap();
-    assert_eq!(tokens[0].token, Token::Pub, "P should lex as Pub");
+    let tokens = tokenize("pub").unwrap();
+    assert_eq!(tokens[0].token, Token::Pub, "pub should lex as Pub");
 
     let tokens = tokenize("A").unwrap();
     assert_eq!(tokens[0].token, Token::Async, "A should lex as Async");
+
+    let tokens = tokenize("else").unwrap();
+    assert_eq!(tokens[0].token, Token::Else, "else should lex as Else");
 }
 
 #[test]
@@ -1752,17 +1751,17 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::True => 16,       // TOK_KW_TRUE
         Token::False => 17,      // TOK_KW_FALSE
         Token::Mut => 18,        // TOK_KW_MUT
-        // Note: Else is context-dependent in Vais; E token is reused
-        Token::Defer => 20,     // TOK_KW_D
-        Token::Union => 21,     // TOK_KW_O
-        Token::Extern => 22,    // TOK_KW_N
-        Token::Global => 23,    // TOK_KW_G
-        Token::Await => 24,     // TOK_KW_Y
-        Token::SelfLower => 25, // TOK_KW_SELF
-        Token::SelfUpper => 26, // TOK_KW_SELF_UPPER
-        Token::As => 27,        // TOK_KW_AS
-        Token::Const => 28,     // TOK_KW_CONST
-        Token::Macro => 30,     // TOK_KW_MACRO
+        Token::Else => 19,       // TOK_KW_ELSE
+        Token::Defer => 20,      // TOK_KW_D
+        Token::Union => 21,      // TOK_KW_O
+        Token::Extern => 22,     // TOK_KW_N
+        Token::Global => 23,     // TOK_KW_G
+        Token::Await => 24,      // TOK_KW_Y
+        Token::SelfLower => 25,  // TOK_KW_SELF
+        Token::SelfUpper => 26,  // TOK_KW_SELF_UPPER
+        Token::As => 27,         // TOK_KW_AS
+        Token::Const => 28,      // TOK_KW_CONST
+        Token::Macro => 30,      // TOK_KW_MACRO
 
         // Additional keywords (121-128)
         Token::Comptime => 121, // TOK_KW_COMPTIME
@@ -1883,8 +1882,7 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::Yield => -1,         // yield keyword
         // New unambiguous keyword variants
         Token::EnumKeyword => 3, // same as Token::Enum (TOK_KW_E)
-        Token::Else => -1, // else is context-dependent (E token reused), not a separate selfhost token
-        Token::ForEach => 5, // same as Token::Loop (TOK_KW_L)
+        Token::ForEach => 5,     // same as Token::Loop (TOK_KW_L)
         Token::While => -1, // while is context-dependent (L token reused), not a separate selfhost token
     }
 }
@@ -2468,7 +2466,7 @@ fn selfhost_verify_token_sequence_if_else() {
     let tokens = tokenize(source).unwrap();
 
     // I x > 0 { 1 } else { 0 }
-    // 4 54 67 51 93 51 94 3 93 51 94
+    // 4 54 67 51 93 51 94 19 93 51 94
     let expected_ids: Vec<i64> = vec![
         4,  // I (If)
         54, // x (Ident)
@@ -2477,7 +2475,7 @@ fn selfhost_verify_token_sequence_if_else() {
         93, // {
         51, // 1 (Int)
         94, // }
-        3,  // E (Enum, used as Else)
+        19, // else
         93, // {
         51, // 0 (Int)
         94, // }

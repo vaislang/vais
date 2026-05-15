@@ -1,0 +1,4 @@
+# Vais diagnostics intentionally carry source spans, context, and suggestions.
+# The default 128-byte threshold started flagging stable parser/type errors on
+# newer toolchains without indicating a correctness issue.
+large-error-threshold = 256

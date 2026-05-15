@@ -12,10 +12,10 @@ impl TypeChecker {
         expr: &Spanned<Expr>,
     ) -> Option<TypeResult<ResolvedType>> {
         match &expr.node {
-            Expr::Int(_) => Some(Ok(ResolvedType::I64)),
-            Expr::Float(_) => Some(Ok(ResolvedType::F64)),
-            Expr::Bool(_) => Some(Ok(ResolvedType::Bool)),
-            Expr::String(_) => Some(Ok(ResolvedType::Str)),
+            Expr::Int(_) => Some(Ok(self.promote_literal_to_expected_ref(ResolvedType::I64))),
+            Expr::Float(_) => Some(Ok(self.promote_literal_to_expected_ref(ResolvedType::F64))),
+            Expr::Bool(_) => Some(Ok(self.promote_literal_to_expected_ref(ResolvedType::Bool))),
+            Expr::String(_) => Some(Ok(self.promote_literal_to_expected_ref(ResolvedType::Str))),
             Expr::StringInterp(parts) => {
                 // Type-check each interpolated expression
                 for part in parts {
@@ -53,6 +53,23 @@ impl TypeChecker {
                 }))
             }
             _ => None,
+        }
+    }
+
+    fn promote_literal_to_expected_ref(&self, literal_ty: ResolvedType) -> ResolvedType {
+        let Some(expected) = self.current_expected_type() else {
+            return literal_ty;
+        };
+        let inner = match &expected {
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
+            ResolvedType::RefLifetime { inner, .. }
+            | ResolvedType::RefMutLifetime { inner, .. } => inner.as_ref(),
+            _ => return literal_ty,
+        };
+        if inner == &literal_ty {
+            expected
+        } else {
+            literal_ty
         }
     }
 }

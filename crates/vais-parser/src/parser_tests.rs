@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn test_parse_simple_function() {
-    let source = "F add(a:i64,b:i64)->i64=a+b";
+    let source = "fn add(a:i64,b:i64)->i64=a+b";
     let module = parse(source).unwrap();
 
     assert_eq!(module.items.len(), 1);
@@ -15,7 +15,7 @@ fn test_parse_simple_function() {
 
 #[test]
 fn test_parse_fibonacci() {
-    let source = "F fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)";
+    let source = "fn fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)";
     let module = parse(source).unwrap();
 
     let Item::Function(f) = &module.items[0].node else {
@@ -33,7 +33,7 @@ fn test_parse_fibonacci() {
 
 #[test]
 fn test_parse_struct() {
-    let source = "S Point{x:f64,y:f64}";
+    let source = "struct Point{x:f64,y:f64}";
     let module = parse(source).unwrap();
 
     let Item::Struct(s) = &module.items[0].node else {
@@ -45,7 +45,7 @@ fn test_parse_struct() {
 
 #[test]
 fn test_parse_enum() {
-    let source = "E Option<T>{Some(T),None}";
+    let source = "enum Option<T>{Some(T),None}";
     let module = parse(source).unwrap();
 
     let Item::Enum(e) = &module.items[0].node else {
@@ -58,7 +58,7 @@ fn test_parse_enum() {
 
 #[test]
 fn test_parse_block_function() {
-    let source = "F sum(arr:[i64])->i64{s:=0;L x:arr{s+=x};s}";
+    let source = "fn sum(arr:[i64])->i64{s:=0;L x:arr{s+=x};s}";
     let module = parse(source).unwrap();
 
     let Item::Function(f) = &module.items[0].node else {
@@ -73,7 +73,7 @@ fn test_parse_block_function() {
 #[test]
 fn test_parse_generic_constraints() {
     // Test single trait bound
-    let source = "F print_value<T: Display>(x: T) -> () = println(x)";
+    let source = "fn print_value<T: Display>(x: T) -> () = println(x)";
     let module = parse(source).unwrap();
 
     let Item::Function(f) = &module.items[0].node else {
@@ -86,7 +86,7 @@ fn test_parse_generic_constraints() {
     assert_eq!(f.generics[0].bounds[0].node, "Display");
 
     // Test multiple trait bounds
-    let source2 = "F compare<T: Ord + Clone>(a: T, b: T) -> bool = a < b";
+    let source2 = "fn compare<T: Ord + Clone>(a: T, b: T) -> bool = a < b";
     let module2 = parse(source2).unwrap();
 
     let Item::Function(f2) = &module2.items[0].node else {
@@ -99,7 +99,7 @@ fn test_parse_generic_constraints() {
     assert_eq!(f2.generics[0].bounds[1].node, "Clone");
 
     // Test multiple generic params with bounds
-    let source3 = "F transform<A: Clone, B: Default>(x: A) -> B = x";
+    let source3 = "fn transform<A: Clone, B: Default>(x: A) -> B = x";
     let module3 = parse(source3).unwrap();
 
     let Item::Function(f3) = &module3.items[0].node else {
@@ -114,7 +114,7 @@ fn test_parse_generic_constraints() {
     assert_eq!(f3.generics[1].bounds[0].node, "Default");
 
     // Test generic without bounds (should still work)
-    let source4 = "F identity<T>(x: T) -> T = x";
+    let source4 = "fn identity<T>(x: T) -> T = x";
     let module4 = parse(source4).unwrap();
 
     let Item::Function(f4) = &module4.items[0].node else {
@@ -150,7 +150,7 @@ fn test_comment_only() {
 
 #[test]
 fn test_minimal_function() {
-    let source = "F f()->()=()";
+    let source = "fn f()->()=()";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -161,7 +161,7 @@ fn test_minimal_function() {
 
 #[test]
 fn test_empty_struct() {
-    let source = "S Empty{}";
+    let source = "struct Empty{}";
     let module = parse(source).unwrap();
     let Item::Struct(s) = &module.items[0].node else {
         unreachable!("Expected struct");
@@ -172,7 +172,7 @@ fn test_empty_struct() {
 
 #[test]
 fn test_single_field_struct() {
-    let source = "S Single{x:i64}";
+    let source = "struct Single{x:i64}";
     let module = parse(source).unwrap();
     let Item::Struct(s) = &module.items[0].node else {
         unreachable!("Expected struct");
@@ -182,7 +182,7 @@ fn test_single_field_struct() {
 
 #[test]
 fn test_minimal_enum() {
-    let source = "E Unit{A}";
+    let source = "enum Unit{A}";
     let module = parse(source).unwrap();
     let Item::Enum(e) = &module.items[0].node else {
         unreachable!("Expected enum");
@@ -193,7 +193,7 @@ fn test_minimal_enum() {
 
 #[test]
 fn test_enum_with_tuple_variants() {
-    let source = "E Shape{Circle(f64),Rectangle(f64,f64),Point}";
+    let source = "enum Shape{Circle(f64),Rectangle(f64,f64),Point}";
     let module = parse(source).unwrap();
     let Item::Enum(e) = &module.items[0].node else {
         unreachable!("Expected enum");
@@ -203,7 +203,7 @@ fn test_enum_with_tuple_variants() {
 
 #[test]
 fn test_enum_with_struct_variants() {
-    let source = "E Message{Quit,Move{x:i64,y:i64},Write(str)}";
+    let source = "enum Message{Quit,Move{x:i64,y:i64},Write(str)}";
     let module = parse(source).unwrap();
     let Item::Enum(e) = &module.items[0].node else {
         unreachable!("Expected enum");
@@ -213,7 +213,7 @@ fn test_enum_with_struct_variants() {
 
 #[test]
 fn test_empty_block_function() {
-    let source = "F f()->(){}";
+    let source = "fn f()->(){}";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -227,7 +227,7 @@ fn test_empty_block_function() {
 #[test]
 fn test_nested_generic_types() {
     // Use simple generic syntax that the parser supports
-    let source = "F f<T>(x:T)->T=x";
+    let source = "fn f<T>(x:T)->T=x";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -238,7 +238,7 @@ fn test_nested_generic_types() {
 
 #[test]
 fn test_deeply_nested_arrays() {
-    let source = "F f(x:[[[i64]]])->[[[i64]]]=x";
+    let source = "fn f(x:[[[i64]]])->[[[i64]]]=x";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -259,8 +259,8 @@ fn origin()->Point=new_point(0.0,0.0)
 
 #[test]
 fn test_trait_definition() {
-    // Trait uses W keyword with methods using regular identifiers
-    let source = "W Display{F display(s:&Self)->str=\"\"}";
+    // Trait uses trait keyword with methods using regular identifiers
+    let source = "trait Display{fn display(s:&Self)->str=\"\"}";
     let module = parse(source).unwrap();
     let Item::Trait(t) = &module.items[0].node else {
         unreachable!("Expected trait");
@@ -273,7 +273,7 @@ fn test_trait_definition() {
 fn test_impl_block() {
     let source = r#"
 struct Point{x:f64,y:f64}
-impl Point{F new(x:f64,y:f64)->Point=Point{x:x,y:y}}
+impl Point{fn new(x:f64,y:f64)->Point=Point{x:x,y:y}}
 "#;
     let module = parse(source).unwrap();
     assert_eq!(module.items.len(), 2);
@@ -286,7 +286,7 @@ impl Point{F new(x:f64,y:f64)->Point=Point{x:x,y:y}}
 
 #[test]
 fn test_if_without_else() {
-    let source = "F f(x:bool)->(){I x{print(1)}}";
+    let source = "fn f(x:bool)->(){I x{print(1)}}";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -297,7 +297,7 @@ fn test_if_without_else() {
 
 #[test]
 fn test_nested_if_else() {
-    let source = "F f(x:i64)->i64=I x>0{I x>10{100}E{10}}E{0}";
+    let source = "fn f(x:i64)->i64=I x>0{I x>10{100}else{10}}else{0}";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -307,7 +307,7 @@ fn test_nested_if_else() {
 
 #[test]
 fn test_match_with_wildcard() {
-    let source = "F f(x:i64)->i64=M x{0=>0,1=>1,_=>-1}";
+    let source = "fn f(x:i64)->i64=match x{0=>0,1=>1,_=>-1}";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -320,7 +320,7 @@ fn test_match_with_wildcard() {
 
 #[test]
 fn test_match_with_guard() {
-    let source = "F f(x:i64)->i64=M x{n I n>0=>n,_=>0}";
+    let source = "fn f(x:i64)->i64=match x{n I n>0=>n,_=>0}";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -330,7 +330,7 @@ fn test_match_with_guard() {
 
 #[test]
 fn test_lambda_expression() {
-    let source = "F f()->i64{g:=|x:i64|x*2;g(21)}";
+    let source = "fn f()->i64{g:=|x:i64|x*2;g(21)}";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -340,7 +340,7 @@ fn test_lambda_expression() {
 
 #[test]
 fn test_nested_lambda() {
-    let source = "F f()->i64{g:=|x:i64|(|y:i64|x+y);g(10)(32)}";
+    let source = "fn f()->i64{g:=|x:i64|(|y:i64|x+y);g(10)(32)}";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -350,7 +350,7 @@ fn test_nested_lambda() {
 
 #[test]
 fn test_method_chaining() {
-    let source = "F f(x:str)->i64=x.len().to_string().len()";
+    let source = "fn f(x:str)->i64=x.len().to_string().len()";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -360,7 +360,7 @@ fn test_method_chaining() {
 
 #[test]
 fn test_array_indexing_chain() {
-    let source = "F f(arr:[[i64]])->i64=arr[0][1]";
+    let source = "fn f(arr:[[i64]])->i64=arr[0][1]";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -370,7 +370,7 @@ fn test_array_indexing_chain() {
 
 #[test]
 fn test_self_recursion_operator() {
-    let source = "F factorial(n:i64)->i64=n<2?1:n*@(n-1)";
+    let source = "fn factorial(n:i64)->i64=n<2?1:n*@(n-1)";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -380,7 +380,7 @@ fn test_self_recursion_operator() {
 
 #[test]
 fn test_range_expression() {
-    let source = "F f()->(){L i:0..10{print(i)}}";
+    let source = "fn f()->(){L i:0..10{print(i)}}";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -391,7 +391,7 @@ fn test_range_expression() {
 #[test]
 fn test_ternary_operator() {
     // Test the ternary operator (cond ? then : else)
-    let source = "F f(x:i64)->i64=x>0?x:0";
+    let source = "fn f(x:i64)->i64=x>0?x:0";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -402,7 +402,7 @@ fn test_ternary_operator() {
 #[test]
 fn test_ternary_with_unary_minus() {
     // Test ternary with unary minus in then branch: x<0 ? -x : x
-    let source = "F abs(x:i64)->i64=x<0?-x:x";
+    let source = "fn abs(x:i64)->i64=x<0?-x:x";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -418,7 +418,7 @@ fn test_ternary_with_unary_minus() {
 #[test]
 fn test_try_operator() {
     // Test postfix try operator (?)
-    let source = "F f(x:i64?)->i64=x?";
+    let source = "fn f(x:i64?)->i64=x?";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -438,7 +438,7 @@ fn test_try_operator() {
 #[test]
 fn test_try_operator_in_expression() {
     // Test try operator followed by binary operator
-    let source = "F f(x:i64?)->i64=x?+1";
+    let source = "fn f(x:i64?)->i64=x?+1";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -457,7 +457,7 @@ fn test_try_operator_in_expression() {
 #[test]
 fn test_try_and_ternary_coexist() {
     // Test that try and ternary can coexist: (x?) ? 1 : 0
-    let source = "F f(x:i64?)->i64=(x?)?1:0";
+    let source = "fn f(x:i64?)->i64=(x?)?1:0";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -476,7 +476,7 @@ fn test_try_and_ternary_coexist() {
 #[test]
 fn test_simple_return_type() {
     // Test simple return type parsing
-    let source = "F f()->i64=42";
+    let source = "fn f()->i64=42";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -486,7 +486,7 @@ fn test_simple_return_type() {
 
 #[test]
 fn test_reference_types() {
-    let source = "F f(x:&i64,y:&mut i64)->()=()";
+    let source = "fn f(x:&i64,y:&mut i64)->()=()";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -496,7 +496,7 @@ fn test_reference_types() {
 
 #[test]
 fn test_pointer_type() {
-    let source = "F f(x:*i64)->*i64=x";
+    let source = "fn f(x:*i64)->*i64=x";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -506,7 +506,7 @@ fn test_pointer_type() {
 
 #[test]
 fn test_tuple_type() {
-    let source = "F f(x:(i64,str))->(i64,str)=x";
+    let source = "fn f(x:(i64,str))->(i64,str)=x";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -516,7 +516,7 @@ fn test_tuple_type() {
 
 #[test]
 fn test_function_type() {
-    let source = "F apply(f:(i64)->i64,x:i64)->i64=f(x)";
+    let source = "fn apply(f:(i64)->i64,x:i64)->i64=f(x)";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -527,7 +527,7 @@ fn test_function_type() {
 #[test]
 fn test_async_function() {
     // Async function with A prefix
-    let source = "A F fetch(url:str)->str=url";
+    let source = "A fn fetch(url:str)->str=url";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -537,7 +537,7 @@ fn test_async_function() {
 
 #[test]
 fn test_pub_function() {
-    let source = "P F public_fn()->()=()";
+    let source = "pub fn public_fn()->()=()";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -547,8 +547,8 @@ fn test_pub_function() {
 
 #[test]
 fn test_import_statement() {
-    // Use statement with U keyword
-    let source = "U std::fs";
+    // Use statement with use keyword
+    let source = "use std::fs";
     let module = parse(source).unwrap();
     let Item::Use(u) = &module.items[0].node else {
         unreachable!("Expected use statement");
@@ -558,7 +558,7 @@ fn test_import_statement() {
 
 #[test]
 fn test_import_colon_colon_selective_items() {
-    let source = "U std::io::{print, println}";
+    let source = "use std::io::{print, println}";
     let module = parse(source).unwrap();
     let Item::Use(u) = &module.items[0].node else {
         unreachable!("Expected use statement");
@@ -577,7 +577,7 @@ fn test_import_colon_colon_selective_items() {
 
 #[test]
 fn test_complex_expression() {
-    let source = "F f(a:i64,b:i64,c:i64)->i64=a+b*c-a/b%c";
+    let source = "fn f(a:i64,b:i64,c:i64)->i64=a+b*c-a/b%c";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -587,7 +587,7 @@ fn test_complex_expression() {
 
 #[test]
 fn test_bitwise_operations() {
-    let source = "F f(a:i64,b:i64)->i64=a&b|c^d<<2>>1";
+    let source = "fn f(a:i64,b:i64)->i64=a&b|c^d<<2>>1";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -597,7 +597,7 @@ fn test_bitwise_operations() {
 
 #[test]
 fn test_comparison_chain() {
-    let source = "F f(a:i64,b:i64,c:i64)->bool=a<b&&b<c||a==c";
+    let source = "fn f(a:i64,b:i64,c:i64)->bool=a<b&&b<c||a==c";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -607,7 +607,7 @@ fn test_comparison_chain() {
 
 #[test]
 fn test_unary_operators() {
-    let source = "F f(x:i64,b:bool)->i64=-x+~x*(!b?1:0)";
+    let source = "fn f(x:i64,b:bool)->i64=-x+~x*(!b?1:0)";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -618,7 +618,7 @@ fn test_unary_operators() {
 #[test]
 fn test_compound_assignment() {
     // In Vais, use := for mutable variable declaration
-    let source = "F f(x:i64)->i64{y:=x;y+=1;y-=2;y*=3;y}";
+    let source = "fn f(x:i64)->i64{y:=x;y+=1;y-=2;y*=3;y}";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -631,7 +631,7 @@ fn test_compound_assignment() {
 
 #[test]
 fn test_break_with_value() {
-    let source = "F f()->i64{L{B 42}}";
+    let source = "fn f()->i64{L{B 42}}";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -641,7 +641,7 @@ fn test_break_with_value() {
 
 #[test]
 fn test_continue_in_loop() {
-    let source = "F f()->(){L i:0..10{I i%2==0{C};print(i)}}";
+    let source = "fn f()->(){L i:0..10{I i%2==0{C};print(i)}}";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -652,7 +652,7 @@ fn test_continue_in_loop() {
 #[test]
 fn test_defer_statement() {
     // Test basic defer statement
-    let source = "F f() -> () { h := open(); D close(h); () }";
+    let source = "fn f() -> () { h := open(); D close(h); () }";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -670,7 +670,7 @@ fn test_defer_statement() {
 #[test]
 fn test_multiple_defer_statements() {
     // Test multiple defer statements (LIFO order)
-    let source = "F f() -> () { D cleanup1(); D cleanup2(); D cleanup3(); () }";
+    let source = "fn f() -> () { D cleanup1(); D cleanup2(); D cleanup3(); () }";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -687,7 +687,7 @@ fn test_multiple_defer_statements() {
 
 #[test]
 fn test_struct_literal() {
-    let source = "F f()->Point{Point{x:1.0,y:2.0}}";
+    let source = "fn f()->Point{Point{x:1.0,y:2.0}}";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -697,7 +697,7 @@ fn test_struct_literal() {
 
 #[test]
 fn test_array_literal() {
-    let source = "F f()->[i64]=[1,2,3,4,5]";
+    let source = "fn f()->[i64]=[1,2,3,4,5]";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -707,7 +707,7 @@ fn test_array_literal() {
 
 #[test]
 fn test_empty_array_literal() {
-    let source = "F f()->[i64]=[]";
+    let source = "fn f()->[i64]=[]";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -718,7 +718,7 @@ fn test_empty_array_literal() {
 #[test]
 fn test_array_with_values() {
     // Test array literal syntax [value, value, ...]
-    let source = "F f()->[i64]=[1,2,3]";
+    let source = "fn f()->[i64]=[1,2,3]";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -763,7 +763,7 @@ fn test(
 #[test]
 fn test_pattern_in_match() {
     let source = r#"
-fn f(opt:Option<i64>)->i64=M opt{
+fn f(opt:Option<i64>)->i64=match opt{
     Some(x)=>x,
     None=>0
 }
@@ -778,7 +778,7 @@ fn f(opt:Option<i64>)->i64=M opt{
 #[test]
 fn test_tuple_parameter() {
     // Test tuple type as parameter
-    let source = "F f(t:(i64,i64))->i64=42";
+    let source = "fn f(t:(i64,i64))->i64=42";
     let module = parse(source).unwrap();
     let Item::Function(f) = &module.items[0].node else {
         unreachable!("Expected function");
@@ -792,7 +792,7 @@ fn test_basic_struct_with_methods() {
     // Test struct with impl block using regular param names
     let source = r#"
 struct Counter{value:i64}
-impl Counter{F inc(c:&Counter)->i64=c.value+1}
+impl Counter{fn inc(c:&Counter)->i64=c.value+1}
 "#;
     let module = parse(source).unwrap();
     assert_eq!(module.items.len(), 2);
@@ -802,8 +802,8 @@ impl Counter{F inc(c:&Counter)->i64=c.value+1}
 fn test_enum_pattern_match() {
     // Test enum variant matching
     let source = r#"
-E Result{Ok(i64),Err(str)}
-fn handle(r:Result)->i64=M r{Ok(v)=>v,Err(_)=>0}
+enum Result{Ok(i64),Err(str)}
+fn handle(r:Result)->i64=match r{Ok(v)=>v,Err(_)=>0}
 "#;
     let module = parse(source).unwrap();
     assert_eq!(module.items.len(), 2);
@@ -814,7 +814,7 @@ fn handle(r:Result)->i64=M r{Ok(v)=>v,Err(_)=>0}
 #[test]
 fn test_nested_generic_vec_hashmap() {
     // Test nested generic: Vec<HashMap<K, V> > with spaces
-    let source = "S Container{data:Vec<HashMap<str,i64> >}";
+    let source = "struct Container{data:Vec<HashMap<str,i64> >}";
     let module = parse(source).unwrap();
 
     let Item::Struct(s) = &module.items[0].node else {
@@ -840,7 +840,7 @@ fn test_option_of_vec_generic() {
 #[test]
 fn test_hashmap_option_value() {
     // Test HashMap<K, Option<V> > with spaces
-    let source = "S Cache{entries:HashMap<str,Option<i64> >}";
+    let source = "struct Cache{entries:HashMap<str,Option<i64> >}";
     let module = parse(source).unwrap();
 
     let Item::Struct(s) = &module.items[0].node else {
@@ -852,7 +852,7 @@ fn test_hashmap_option_value() {
 #[test]
 fn test_deeply_nested_generics() {
     // Test Vec<HashMap<K, Option<Vec<T> > > > with spaces (need space before =)
-    let source = "F complex<T>()->Vec<HashMap<str,Option<Vec<T> > > > =[]";
+    let source = "fn complex<T>()->Vec<HashMap<str,Option<Vec<T> > > > =[]";
     let module = parse(source).unwrap();
 
     let Item::Function(f) = &module.items[0].node else {
@@ -864,7 +864,7 @@ fn test_deeply_nested_generics() {
 #[test]
 fn test_pattern_match_with_guard() {
     // Test pattern matching with guard condition
-    let source = "F classify(x:i64)->str=M x{n I n>0=>\"pos\",n I n<0=>\"neg\",_=>\"zero\"}";
+    let source = "fn classify(x:i64)->str=match x{n I n>0=>\"pos\",n I n<0=>\"neg\",_=>\"zero\"}";
     let module = parse(source).unwrap();
 
     let Item::Function(f) = &module.items[0].node else {
@@ -877,7 +877,7 @@ fn test_pattern_match_with_guard() {
 fn test_pattern_match_guard_complex() {
     // Test pattern match with complex guard
     let source = r#"
-fn filter(opt:Option<i64>)->i64=M opt{
+fn filter(opt:Option<i64>)->i64=match opt{
     Some(x) I x>0&&x<100=>x,
     Some(x) I x>=100=>100,
     Some(_)=>0,
@@ -896,8 +896,8 @@ fn filter(opt:Option<i64>)->i64=M opt{
 fn test_nested_pattern_destructuring() {
     // Test nested destructuring in pattern match
     let source = r#"
-E Nested{Pair((i64,i64)),Single(i64),None}
-fn sum(n:Nested)->i64=M n{
+enum Nested{Pair((i64,i64)),Single(i64),None}
+fn sum(n:Nested)->i64=match n{
     Pair((a,b))=>a+b,
     Single(x)=>x,
     None=>0
@@ -915,7 +915,8 @@ fn sum(n:Nested)->i64=M n{
 #[test]
 fn test_pattern_guard_with_multiple_conditions() {
     // Test guard with multiple && || conditions
-    let source = "F check(x:i64,y:i64)->bool=M (x,y){(a,b) I a>0&&b>0||a<0&&b<0=>true,_=>false}";
+    let source =
+        "fn check(x:i64,y:i64)->bool=match (x,y){(a,b) I a>0&&b>0||a<0&&b<0=>true,_=>false}";
     let module = parse(source).unwrap();
 
     let Item::Function(f) = &module.items[0].node else {
@@ -928,7 +929,7 @@ fn test_pattern_guard_with_multiple_conditions() {
 fn test_nested_option_pattern() {
     // Test nested Option patterns: Option<Option<T> > with spaces
     let source = r#"
-fn unwrap_twice(opt:Option<Option<i64> >)->i64=M opt{
+fn unwrap_twice(opt:Option<Option<i64> >)->i64=match opt{
     Some(Some(x))=>x,
     Some(None)=>-1,
     None=>-2
@@ -1007,7 +1008,7 @@ fn transform_b<T>(x:T)->T=x
 #[test]
 fn test_i8_boundary_parsing() {
     // Test i8 min/max: -128, 127
-    let source = "F i8_test()->(){min:i8=-128;max:i8=127}";
+    let source = "fn i8_test()->(){min:i8=-128;max:i8=127}";
     let module = parse(source).unwrap();
 
     let Item::Function(f) = &module.items[0].node else {
@@ -1019,7 +1020,7 @@ fn test_i8_boundary_parsing() {
 #[test]
 fn test_i16_boundaries() {
     // Test i16 boundaries: -32768, 32767
-    let source = "F i16_test()->(){min:i16=-32768;max:i16=32767}";
+    let source = "fn i16_test()->(){min:i16=-32768;max:i16=32767}";
     let module = parse(source).unwrap();
 
     let Item::Function(f) = &module.items[0].node else {
@@ -1031,7 +1032,7 @@ fn test_i16_boundaries() {
 #[test]
 fn test_i64_max_parsing() {
     // Test i64 max: 9223372036854775807
-    let source = "F i64_max()->i64=9223372036854775807";
+    let source = "fn i64_max()->i64=9223372036854775807";
     let module = parse(source).unwrap();
 
     let Item::Function(f) = &module.items[0].node else {
@@ -1044,7 +1045,7 @@ fn test_i64_max_parsing() {
 fn test_pattern_with_range() {
     // Test pattern matching with ranges
     let source = r#"
-fn grade(score:i64)->str=M score{
+fn grade(score:i64)->str=match score{
     x I x>=90=>"A",
     x I x>=80=>"B",
     x I x>=70=>"C",
@@ -1076,7 +1077,7 @@ fn length(line:Line)->i64=line.end.x-line.start.x
 #[test]
 fn test_guard_with_method_call() {
     // Test guard condition with method calls
-    let source = "F check_len(s:str)->bool=M s{x I x.len()>0=>true,_=>false}";
+    let source = "fn check_len(s:str)->bool=match s{x I x.len()>0=>true,_=>false}";
     let module = parse(source).unwrap();
 
     let Item::Function(f) = &module.items[0].node else {
@@ -1088,7 +1089,7 @@ fn test_guard_with_method_call() {
 #[test]
 fn test_multiple_generic_constraints() {
     // Test function with multiple generic parameters with bounds
-    let source = "F combine<A:Clone,B:Default,C:Ord>(a:A,b:B,c:C)->C=c";
+    let source = "fn combine<A:Clone,B:Default,C:Ord>(a:A,b:B,c:C)->C=c";
     let module = parse(source).unwrap();
 
     let Item::Function(f) = &module.items[0].node else {
@@ -1103,7 +1104,7 @@ fn test_multiple_generic_constraints() {
 #[test]
 fn test_enum_with_generic_variants() {
     // Test enum with generic variants
-    let source = "E Result<T,E>{Ok(T),Err(E)}";
+    let source = "enum Result<T,E>{Ok(T),Err(E)}";
     let module = parse(source).unwrap();
 
     let Item::Enum(e) = &module.items[0].node else {
@@ -1120,12 +1121,12 @@ fn test_deeply_nested_if_else() {
     let source = r#"
 fn classify(n:i64)->str{
     I n>1000{
-        I n>10000{"huge"}E{"large"}
-    }E{
+        I n>10000{"huge"}else{"large"}
+    }else{
         I n>100{
-            I n>500{"medium-large"}E{"medium"}
-        }E{
-            I n>10{"small"}E{"tiny"}
+            I n>500{"medium-large"}else{"medium"}
+        }else{
+            I n>10{"small"}else{"tiny"}
         }
     }
 }
@@ -1142,7 +1143,7 @@ fn classify(n:i64)->str{
 fn test_pattern_with_multiple_bindings() {
     // Test pattern with multiple variable bindings and guards
     let source = r#"
-fn process(a:i64,b:i64)->i64=M (a,b){
+fn process(a:i64,b:i64)->i64=match (a,b){
     (x,y) I x>0&&y>0=>x+y,
     (x,y) I x<0&&y<0=>x-y,
     (x,y) I x==0||y==0=>0,
@@ -1160,7 +1161,7 @@ fn process(a:i64,b:i64)->i64=M (a,b){
 #[test]
 fn test_self_recursion_with_multiple_params() {
     // Test self-recursion with multiple parameters
-    let source = "F gcd(a:i64,b:i64)->i64=b==0?a:@(b,a%b)";
+    let source = "fn gcd(a:i64,b:i64)->i64=b==0?a:@(b,a%b)";
     let module = parse(source).unwrap();
 
     let Item::Function(f) = &module.items[0].node else {
@@ -1263,7 +1264,7 @@ fn test_block()->i64{
 #[test]
 fn test_error_recovery_preserves_span() {
     // Test that error recovery preserves span information
-    let source = "F broken( F good()->i64=42";
+    let source = "fn broken( fn good()->i64=42";
     let (module, errors) = parse_with_recovery(source);
 
     // Check that errors have span information
@@ -1323,7 +1324,7 @@ struct Point{x:f64,y:f64}
 #[test]
 fn test_error_recovery_empty_after_errors() {
     // Test that errors() returns collected errors
-    let tokens = vais_lexer::tokenize("F broken(").unwrap();
+    let tokens = vais_lexer::tokenize("fn broken(").unwrap();
     let mut parser = Parser::new_with_recovery(tokens);
     let _ = parser.parse_module();
 
@@ -1334,7 +1335,7 @@ fn test_error_recovery_empty_after_errors() {
 #[test]
 fn test_error_recovery_take_errors() {
     // Test that take_errors() returns and clears errors
-    let tokens = vais_lexer::tokenize("F broken(").unwrap();
+    let tokens = vais_lexer::tokenize("fn broken(").unwrap();
     let mut parser = Parser::new_with_recovery(tokens);
     let _ = parser.parse_module();
 
@@ -1349,7 +1350,7 @@ fn test_error_recovery_take_errors() {
 #[test]
 fn test_no_recovery_mode_fails_fast() {
     // Test that without recovery mode, parsing fails on first error
-    let source = "F broken( F good()->i64=42";
+    let source = "fn broken( fn good()->i64=42";
     let result = parse(source);
     assert!(result.is_err(), "Without recovery, should fail immediately");
 }
@@ -1358,8 +1359,8 @@ fn test_no_recovery_mode_fails_fast() {
 fn test_error_recovery_enum_with_error() {
     // Test error recovery when enum has errors
     let source = r#"
-E Broken{A(i64,B}
-E Good{X,Y}
+enum Broken{A(i64,B}
+enum Good{X,Y}
 "#;
     let (module, errors) = parse_with_recovery(source);
 
@@ -1378,9 +1379,9 @@ fn test_error_recovery_mixed_items() {
     let source = r#"
 fn func1()->i64=1
 struct Broken{x
-E MyEnum{A,B}
+enum MyEnum{A,B}
 fn func2()->i64=2
-trait MyTrait{F method()->i64}
+trait MyTrait{fn method()->i64}
 "#;
     let (module, errors) = parse_with_recovery(source);
 
@@ -1475,7 +1476,7 @@ fn good() -> i64 = 42
 #[test]
 fn test_error_recovery_generic_invalid_param() {
     let source = r#"
-fn broken<T, 123, U>(x: T) -> type = x
+fn broken<T, 123, use>(x: T) -> type = x
 fn good() -> i64 = 42
 "#;
     let (module, errors) = parse_with_recovery(source);

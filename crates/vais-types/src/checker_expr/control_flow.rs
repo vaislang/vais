@@ -90,7 +90,7 @@ fn expr_has_direct_break(expr: &Spanned<Expr>) -> bool {
         Expr::Loop { .. } | Expr::While { .. } => false,
         // If/block/match: descend to find breaks for the current loop
         Expr::If { then, else_, .. } => {
-            stmts_have_direct_break(then) || else_.as_ref().map_or(false, ifelse_has_direct_break)
+            stmts_have_direct_break(then) || else_.as_ref().is_some_and(ifelse_has_direct_break)
         }
         Expr::Block(stmts) => stmts_have_direct_break(stmts),
         Expr::Match { arms, .. } => arms.iter().any(|arm| expr_has_direct_break(&arm.body)),
@@ -103,7 +103,7 @@ fn ifelse_has_direct_break(branch: &IfElse) -> bool {
         IfElse::Else(stmts) => stmts_have_direct_break(stmts),
         IfElse::ElseIf(_, stmts, next) => {
             stmts_have_direct_break(stmts)
-                || next.as_ref().map_or(false, |n| ifelse_has_direct_break(n))
+                || next.as_ref().is_some_and(|n| ifelse_has_direct_break(n))
         }
     }
 }

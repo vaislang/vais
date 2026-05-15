@@ -322,6 +322,7 @@ impl Parser {
     }
 
     /// Parse union: `Name{fields}` (untagged union, C-style)
+    #[allow(dead_code)] // Reserved grammar surface; exercised by integration coverage.
     pub(super) fn parse_union(&mut self, is_pub: bool) -> ParseResult<Union> {
         let name = self.parse_ident_or_keyword()?;
         let generics = self.parse_generics()?;

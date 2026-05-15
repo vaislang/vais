@@ -61,17 +61,17 @@ fn test_unify_str_same() {
 
 #[test]
 fn test_unify_generic_identity() {
-    tc_ok("F identity<T>(x: T) -> T = x\nfn test() -> i64 = identity(42)");
+    tc_ok("fn identity<T>(x: T) -> T = x\nfn test() -> i64 = identity(42)");
 }
 
 #[test]
 fn test_unify_generic_swap_types() {
-    tc_ok("F first<A, B>(a: A, b: B) -> A = a\nfn test() -> i64 = first(1, true)");
+    tc_ok("fn first<A, B>(a: A, b: B) -> A = a\nfn test() -> i64 = first(1, true)");
 }
 
 #[test]
 fn test_unify_generic_nested_call() {
-    tc_ok("F id<T>(x: T) -> T = x\nfn wrap<U>(y: U) -> U = id(y)\nfn test() -> i64 = wrap(99)");
+    tc_ok("fn id<T>(x: T) -> T = x\nfn wrap<U>(y: U) -> U = id(y)\nfn test() -> i64 = wrap(99)");
 }
 
 // ============================================================================
@@ -167,7 +167,7 @@ fn test_unify_integer_unsigned() {
 
 #[test]
 fn test_unify_result_generic() {
-    tc_ok("F ok_val<T>(x: T) -> T = x\nfn test() -> i64 = ok_val(42)");
+    tc_ok("fn ok_val<T>(x: T) -> T = x\nfn test() -> i64 = ok_val(42)");
 }
 
 // ============================================================================
@@ -194,7 +194,7 @@ fn test_unify_never_in_if() {
 
 #[test]
 fn test_unify_generic_passthrough() {
-    tc_ok("F id<T>(x: T) -> T = x\nfn test() -> i64 = id(id(42))");
+    tc_ok("fn id<T>(x: T) -> T = x\nfn test() -> i64 = id(id(42))");
 }
 
 // ============================================================================
@@ -335,7 +335,7 @@ fn test_substitution_nested_generic() {
 
 #[test]
 fn test_substitution_multiple_type_params() {
-    tc_ok("F pair<A, B>(a: A, b: B) -> A = a\nfn test() -> i64 = pair(1, true)");
+    tc_ok("fn pair<A, B>(a: A, b: B) -> A = a\nfn test() -> i64 = pair(1, true)");
 }
 
 #[test]

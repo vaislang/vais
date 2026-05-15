@@ -38,7 +38,7 @@ pub fn get_semantic_tokens(source: &str) -> Vec<SemanticToken> {
             // Doc comments
             Token::DocComment(_) => Some(TOKEN_COMMENT),
 
-            // Keywords (single letter in Vais)
+            // Keywords
             Token::Function
             | Token::If
             | Token::Loop
@@ -90,10 +90,10 @@ pub fn get_semantic_tokens(source: &str) -> Vec<SemanticToken> {
 
             // Track parentheses for function parameters
             Token::LParen => {
-                // If previous token was a function name (after F keyword or function call)
+                // If previous token was a function name (after fn keyword or function call)
                 // then we're entering function parameters
                 if matches!(prev_token, Some(Token::Ident(_))) {
-                    // Check if the identifier before LParen came after F keyword
+                    // Check if the identifier before LParen came after fn keyword
                     if idx >= 2 {
                         if let Token::Function = tokens[idx - 2].token {
                             in_function_params = true;
@@ -121,13 +121,13 @@ pub fn get_semantic_tokens(source: &str) -> Vec<SemanticToken> {
                 } else {
                     // Check previous token for context
                     match prev_token {
-                        // After F keyword: function definition
+                        // After fn keyword: function definition
                         Some(Token::Function) => Some(TOKEN_FUNCTION),
 
-                        // After S keyword: struct definition
+                        // After struct keyword: struct definition
                         Some(Token::Struct) => Some(TOKEN_STRUCT),
 
-                        // After E keyword: enum definition
+                        // After enum keyword: enum definition
                         Some(Token::Enum) => Some(TOKEN_ENUM),
 
                         // Uppercase first letter often indicates type/struct/enum usage
@@ -203,7 +203,7 @@ mod tests {
 
     #[test]
     fn test_semantic_tokens() {
-        let source = "F main() -> i64 { 42 }";
+        let source = "fn main() -> i64 { 42 }";
         let tokens = get_semantic_tokens(source);
         assert!(!tokens.is_empty());
     }
@@ -221,7 +221,7 @@ struct Point {
     y: i64,
 }
 
-E Option<T> {
+enum Option<T> {
     Some(T),
     None,
 }
@@ -237,7 +237,7 @@ fn main() -> i64 {
         // Should have tokens for:
         // - DocComment (TOKEN_COMMENT)
         // - Function keywords (TOKEN_KEYWORD)
-        // - Function names after F (TOKEN_FUNCTION)
+        // - Function names after fn (TOKEN_FUNCTION)
         // - Function parameters (TOKEN_PARAMETER)
         // - Struct keyword and name (TOKEN_KEYWORD + TOKEN_STRUCT)
         // - Enum keyword and name (TOKEN_KEYWORD + TOKEN_ENUM)
@@ -322,7 +322,7 @@ fn main() -> i64 {
 
     #[test]
     fn test_parameter_detection() {
-        let source = "F add(x: i64, y: i64) -> i64 { R x + y }";
+        let source = "fn add(x: i64, y: i64) -> i64 { return x + y }";
         let tokens = get_semantic_tokens(source);
 
         let param_tokens: Vec<_> = tokens
@@ -388,7 +388,7 @@ fn main() -> i64 {
 
     #[test]
     fn test_semantic_tokens_keyword_only() {
-        let source = "F";
+        let source = "fn";
         let tokens = get_semantic_tokens(source);
         assert!(!tokens.is_empty());
         assert_eq!(tokens[0].token_type, TOKEN_KEYWORD);
@@ -396,7 +396,7 @@ fn main() -> i64 {
 
     #[test]
     fn test_semantic_tokens_number_literal() {
-        let source = "F main() -> i64 { 42 }";
+        let source = "fn main() -> i64 { 42 }";
         let tokens = get_semantic_tokens(source);
         let number_tokens: Vec<_> = tokens
             .iter()
@@ -418,7 +418,7 @@ fn main() -> i64 {
 
     #[test]
     fn test_semantic_tokens_type_annotation() {
-        let source = "F foo(x: i64) -> f64 { 0.0 }";
+        let source = "fn foo(x: i64) -> f64 { 0.0 }";
         let tokens = get_semantic_tokens(source);
         let type_tokens: Vec<_> = tokens
             .iter()
@@ -432,7 +432,7 @@ fn main() -> i64 {
 
     #[test]
     fn test_semantic_tokens_variable() {
-        let source = "F main() -> i64 { x := 5\n R x }";
+        let source = "fn main() -> i64 { x := 5\n return x }";
         let tokens = get_semantic_tokens(source);
         let var_tokens: Vec<_> = tokens
             .iter()
@@ -443,7 +443,7 @@ fn main() -> i64 {
 
     #[test]
     fn test_semantic_tokens_delta_line() {
-        let source = "F main() -> i64 {\n    R 42\n}";
+        let source = "fn main() -> i64 {\n    return 42\n}";
         let tokens = get_semantic_tokens(source);
 
         // Tokens should have proper delta_line values
@@ -462,7 +462,7 @@ fn main() -> i64 {
 
     #[test]
     fn test_semantic_tokens_delta_start_same_line() {
-        let source = "F main() -> i64 = 42";
+        let source = "fn main() -> i64 = 42";
         let tokens = get_semantic_tokens(source);
 
         // All tokens on the same line should have delta_line == 0
@@ -477,25 +477,25 @@ fn main() -> i64 {
 
     #[test]
     fn test_semantic_tokens_bool_keywords() {
-        let source = "F main() -> bool { true }";
+        let source = "fn main() -> bool { true }";
         let tokens = get_semantic_tokens(source);
         let keyword_tokens: Vec<_> = tokens
             .iter()
             .filter(|t| t.token_type == TOKEN_KEYWORD)
             .collect();
-        // Should have F and true as keywords
+        // Should have fn and true as keywords
         assert!(keyword_tokens.len() >= 2);
     }
 
     #[test]
     fn test_semantic_tokens_all_keywords() {
-        let source = "F I L M R B C W X U A";
+        let source = "fn I L match return B C trait impl use A";
         let tokens = get_semantic_tokens(source);
         let keyword_tokens: Vec<_> = tokens
             .iter()
             .filter(|t| t.token_type == TOKEN_KEYWORD)
             .collect();
-        // All single-letter keywords should be detected
+        // Most representative keywords should be detected
         assert!(
             keyword_tokens.len() >= 8,
             "Should detect most single-letter keywords, got {}",
@@ -506,7 +506,7 @@ fn main() -> i64 {
     #[test]
     fn test_semantic_tokens_all_types() {
         let source =
-            "F foo(a: i8, b: i16, c: i32, d: i64, e: f32, f: f64, g: bool, h: str) -> i64 { 0 }";
+            "fn foo(a: i8, b: i16, c: i32, d: i64, e: f32, f: f64, g: bool, h: str) -> i64 { 0 }";
         let tokens = get_semantic_tokens(source);
         let type_tokens: Vec<_> = tokens
             .iter()
@@ -521,7 +521,7 @@ fn main() -> i64 {
 
     #[test]
     fn test_semantic_tokens_uppercase_identifier_is_struct() {
-        let source = "F main() -> i64 { x := MyType\n R 0 }";
+        let source = "fn main() -> i64 { x := MyType\n return 0 }";
         let tokens = get_semantic_tokens(source);
         let struct_tokens: Vec<_> = tokens
             .iter()
@@ -535,7 +535,7 @@ fn main() -> i64 {
 
     #[test]
     fn test_semantic_tokens_enum_definition() {
-        let source = "E Color { Red, Green, Blue }";
+        let source = "enum Color { Red, Green, Blue }";
         let tokens = get_semantic_tokens(source);
         let enum_tokens: Vec<_> = tokens
             .iter()
@@ -543,13 +543,13 @@ fn main() -> i64 {
             .collect();
         assert!(
             !enum_tokens.is_empty(),
-            "Should find enum name after E keyword"
+            "Should find enum name after enum keyword"
         );
     }
 
     #[test]
     fn test_semantic_tokens_modifiers_zero() {
-        let source = "F main() -> i64 { 0 }";
+        let source = "fn main() -> i64 { 0 }";
         let tokens = get_semantic_tokens(source);
         for token in &tokens {
             assert_eq!(
@@ -570,7 +570,7 @@ fn main() -> i64 {
 
     #[test]
     fn test_semantic_tokens_nested_calls() {
-        let source = "F main() -> i64 { R foo(bar(1)) }";
+        let source = "fn main() -> i64 { return foo(bar(1)) }";
         let tokens = get_semantic_tokens(source);
         let function_tokens: Vec<_> = tokens
             .iter()
@@ -586,7 +586,7 @@ fn main() -> i64 {
 
     #[test]
     fn test_semantic_tokens_doc_comment() {
-        let source = "/// A doc comment\nF main() -> i64 { 0 }";
+        let source = "/// A doc comment\nfn main() -> i64 { 0 }";
         let tokens = get_semantic_tokens(source);
         let comment_tokens: Vec<_> = tokens
             .iter()
@@ -597,7 +597,7 @@ fn main() -> i64 {
 
     #[test]
     fn test_semantic_tokens_multiple_functions() {
-        let source = "F foo() -> i64 { 0 }\nF bar() -> i64 { 0 }\nF baz() -> i64 { 0 }";
+        let source = "fn foo() -> i64 { 0 }\nfn bar() -> i64 { 0 }\nfn baz() -> i64 { 0 }";
         let tokens = get_semantic_tokens(source);
         let function_tokens: Vec<_> = tokens
             .iter()
@@ -611,19 +611,22 @@ fn main() -> i64 {
 
     #[test]
     fn test_semantic_tokens_return_keyword() {
-        let source = "F main() -> i64 { R 42 }";
+        let source = "fn main() -> i64 { return 42 }";
         let tokens = get_semantic_tokens(source);
         let keyword_tokens: Vec<_> = tokens
             .iter()
             .filter(|t| t.token_type == TOKEN_KEYWORD)
             .collect();
-        // Should have F and R as keywords (at minimum)
-        assert!(keyword_tokens.len() >= 2, "Should find F and R keywords");
+        // Should have fn and return as keywords (at minimum)
+        assert!(
+            keyword_tokens.len() >= 2,
+            "Should find fn and return keywords"
+        );
     }
 
     #[test]
     fn test_semantic_tokens_u_types() {
-        let source = "F foo(a: u8, b: u16, c: u32, d: u64, e: u128) -> i64 { 0 }";
+        let source = "fn foo(a: u8, b: u16, c: u32, d: u64, e: u128) -> i64 { 0 }";
         let tokens = get_semantic_tokens(source);
         let type_tokens: Vec<_> = tokens
             .iter()
@@ -639,7 +642,7 @@ fn main() -> i64 {
 
     #[test]
     fn test_semantic_tokens_float_literal() {
-        let source = "F main() -> f64 { 3.14 }";
+        let source = "fn main() -> f64 { 3.14 }";
         let tokens = get_semantic_tokens(source);
         let number_tokens: Vec<_> = tokens
             .iter()

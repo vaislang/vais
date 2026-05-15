@@ -223,7 +223,7 @@ fn test_large_source_parsing_and_caching() {
 
     let mut large_source = String::new();
     for i in 0..1000 {
-        large_source.push_str(&format!("F func{}() -> i64 {{ {} }}\n", i, i));
+        large_source.push_str(&format!("fn func{}() -> i64 {{ {} }}\n", i, i));
     }
 
     db.set_source_text("large.vais", &large_source);

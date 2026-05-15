@@ -14,6 +14,8 @@ source_of_truth: `PUBLIC_STATUS.md` (Last verified: 2026-05-13)
 
 현재 공개 baseline은 **Core compiler + promoted runtime gate** 입니다. 이 문서는 제품 완성도 선언이 아니라, 어떤 claim이 실제 gate로 뒷받침되는지 추적하는 조정 문서입니다.
 
+Status: Certified Core frozen for downstream re-entry
+
 이 문서에서 현재 active section은 이 `현재 조정 상태` 블록입니다. 아래 Phase 199 이하 section은 완료/보존 이력이며, 각 section 안의 `pending`, `auto`, `RED` 같은 과거 상태 단어는 상단 gate를 대체하지 않습니다.
 
 ### 인증된 gate

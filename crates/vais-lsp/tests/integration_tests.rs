@@ -176,22 +176,22 @@ async fn test_completion_provides_keywords() {
         let labels: Vec<_> = items.iter().map(|item| item.label.as_str()).collect();
 
         // Vais keywords
-        assert!(labels.contains(&"F"), "Should provide F (function) keyword");
-        assert!(labels.contains(&"S"), "Should provide S (struct) keyword");
-        assert!(labels.contains(&"E"), "Should provide E (enum) keyword");
+        assert!(labels.contains(&"fn"), "Should provide fn keyword");
+        assert!(labels.contains(&"struct"), "Should provide struct keyword");
+        assert!(labels.contains(&"enum"), "Should provide enum keyword");
         assert!(labels.contains(&"I"), "Should provide I (if) keyword");
         assert!(labels.contains(&"L"), "Should provide L (loop) keyword");
-        assert!(labels.contains(&"M"), "Should provide M (match) keyword");
-        assert!(labels.contains(&"R"), "Should provide R (return) keyword");
-        assert!(labels.contains(&"W"), "Should provide W (trait) keyword");
-        assert!(labels.contains(&"X"), "Should provide X (impl) keyword");
-        assert!(labels.contains(&"U"), "Should provide U (use) keyword");
+        assert!(labels.contains(&"match"), "Should provide match keyword");
+        assert!(labels.contains(&"return"), "Should provide return keyword");
+        assert!(labels.contains(&"trait"), "Should provide trait keyword");
+        assert!(labels.contains(&"impl"), "Should provide impl keyword");
+        assert!(labels.contains(&"use"), "Should provide use keyword");
         assert!(labels.contains(&"A"), "Should provide A (async) keyword");
 
         // Verify keyword items have correct kind
-        // Note: "E" appears both as a keyword (Enum) and constant (Euler's number)
+        // Note: "E" is still provided as Euler's number.
         for item in &items {
-            if (item.label == "F" || item.label == "S")
+            if (item.label == "fn" || item.label == "struct")
                 && item.kind == Some(CompletionItemKind::KEYWORD)
             {
                 // These should definitely be keywords

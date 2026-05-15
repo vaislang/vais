@@ -32,25 +32,7 @@ impl TypeChecker {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
-                match inner_type {
-                    ResolvedType::Ref(t) | ResolvedType::RefMut(t) | ResolvedType::Pointer(t) => {
-                        Some(Ok(*t))
-                    }
-                    ResolvedType::Named { name, generics }
-                        if name == "Box" && generics.len() == 1 =>
-                    {
-                        Some(Ok(generics[0].clone()))
-                    }
-                    // Phase 253: lenient deref. vaisdb often dereferences
-                    // Option<T> or generic ?-types directly. Treat Optional
-                    // and Result as identity (return inner type), and
-                    // unbound Var as identity too. Strict ownership/borrow
-                    // checking is enforced separately.
-                    ResolvedType::Optional(t) => Some(Ok(*t)),
-                    ResolvedType::Result(ok, _) => Some(Ok(*ok)),
-                    ResolvedType::Var(_) | ResolvedType::Unknown => Some(Ok(inner_type)),
-                    _ => Some(Ok(inner_type.clone())),
-                }
+                Some(Ok(deref_type(inner_type)))
             }
 
             Expr::Spread(inner) => {
@@ -63,5 +45,21 @@ impl TypeChecker {
 
             _ => None,
         }
+    }
+}
+
+fn deref_type(ty: ResolvedType) -> ResolvedType {
+    match ty {
+        ResolvedType::Ref(t) | ResolvedType::RefMut(t) | ResolvedType::Pointer(t) => *t,
+        ResolvedType::Named { name, generics } if name == "Box" && generics.len() == 1 => {
+            generics[0].clone()
+        }
+        // Phase 253: lenient deref. vaisdb often dereferences Option<T> or
+        // Result<T,E> directly. If the wrapped success type is itself a
+        // reference, `*opt_ref` should expose the pointee, not leave `&T`.
+        ResolvedType::Optional(t) => deref_type(*t),
+        ResolvedType::Result(ok, _) => deref_type(*ok),
+        other @ (ResolvedType::Var(_) | ResolvedType::Unknown) => other,
+        other => other,
     }
 }

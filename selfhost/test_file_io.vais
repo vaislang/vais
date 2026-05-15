@@ -526,7 +526,7 @@ fn test_binary_data() -> i64 {
         original := load_byte(data + i)
         read_byte := load_byte(read_data + i)
         I original != read_byte {
-            match = 0
+            matched = 0
         } else { 0 }
         i = i + 1
     }

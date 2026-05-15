@@ -1,1 +1,1 @@
-Type error: ArgCount { expected: 2, got: 1, span: Some(Span { file_id: 0, start: 54, end: 58 }) }
+Type error: ArgCount { expected: 2, got: 1, span: Some(Span { file_id: 0, start: 56, end: 60 }) }

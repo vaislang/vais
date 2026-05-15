@@ -407,7 +407,7 @@ mod tests {
     #[test]
     fn test_code_validator_valid_code() {
         let validator = CodeValidator::new("test".to_string());
-        let result = validator.validate("F main() -> i64 { 42 }").unwrap();
+        let result = validator.validate("fn main() -> i64 { 42 }").unwrap();
         assert!(result.success);
         assert_eq!(result.passed_tests, 1);
         assert_eq!(result.total_tests, 1);

@@ -29,7 +29,7 @@ fn test_semantic_tokens_single_function() {
 #[test]
 fn test_semantic_tokens_keyword_function() {
     let tokens = tokens_for("fn add(x: i64, y: i64) -> i64 = x + y");
-    // Should contain a token for the F keyword
+    // Should contain a token for the fn keyword
     assert!(!tokens.is_empty());
 }
 
@@ -62,7 +62,7 @@ fn test_semantic_tokens_match_keyword() {
 
 #[test]
 fn test_semantic_tokens_return_keyword() {
-    let tokens = tokens_for("fn f() -> i64 { R 42 }");
+    let tokens = tokens_for("fn f() -> i64 { return 42 }");
     assert!(!tokens.is_empty());
 }
 
@@ -80,7 +80,7 @@ fn test_semantic_tokens_enum_keyword() {
 
 #[test]
 fn test_semantic_tokens_trait_keyword() {
-    let tokens = tokens_for("trait Show { F show(self) -> str }");
+    let tokens = tokens_for("trait Show { fn show(self) -> str }");
     assert!(!tokens.is_empty());
 }
 
@@ -88,8 +88,8 @@ fn test_semantic_tokens_trait_keyword() {
 fn test_semantic_tokens_impl_keyword() {
     let tokens = tokens_for(
         r#"
-        struct pub { x: i64 }
-        impl pub { fn get(self) -> i64 = self.x }
+        struct Point { x: i64 }
+        impl Point { fn get(self) -> i64 = self.x }
     "#,
     );
     assert!(!tokens.is_empty());
@@ -121,7 +121,7 @@ fn test_semantic_tokens_type_keyword() {
 fn test_semantic_tokens_i64_type() {
     let tokens = tokens_for("fn f(x: i64) -> i64 = x");
     // Should have type tokens for i64
-    assert!(tokens.len() >= 2); // at least F keyword + some tokens
+    assert!(tokens.len() >= 2); // at least fn keyword + some tokens
 }
 
 #[test]
@@ -186,7 +186,7 @@ fn test_semantic_tokens_bool_false() {
 
 #[test]
 fn test_semantic_tokens_comment() {
-    let tokens = tokens_for("# This is a comment\nF f() -> i64 = 0");
+    let tokens = tokens_for("# This is a comment\nfn f() -> i64 = 0");
     assert!(!tokens.is_empty());
 }
 
@@ -253,7 +253,7 @@ fn test_semantic_tokens_complex_program() {
         trait Movable {
             fn move_to(self, x: i64) -> i64
         }
-        impl Movable for Point {
+        impl Point: Movable {
             fn move_to(self, x: i64) -> i64 = self.x + x
         }
         fn main() -> i64 {

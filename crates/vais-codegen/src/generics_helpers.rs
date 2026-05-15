@@ -356,17 +356,15 @@ impl CodeGenerator {
         // `Vec.with_capacity(cap: i64) -> Vec<T>`), pick the instantiation
         // whose type args match the return-type generics directly. This
         // bypasses the I64 fallback in the argument-only inference path.
-        if let Some(ret_ty) = expected_ret {
-            if let ResolvedType::Named {
-                generics: ret_generics,
-                ..
-            } = ret_ty
-            {
-                if !ret_generics.is_empty() {
-                    for (inst_types, mangled) in instantiations_list {
-                        if inst_types == ret_generics {
-                            return mangled.clone();
-                        }
+        if let Some(ResolvedType::Named {
+            generics: ret_generics,
+            ..
+        }) = expected_ret
+        {
+            if !ret_generics.is_empty() {
+                for (inst_types, mangled) in instantiations_list {
+                    if inst_types == ret_generics {
+                        return mangled.clone();
                     }
                 }
             }

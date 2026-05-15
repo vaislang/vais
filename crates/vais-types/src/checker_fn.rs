@@ -126,7 +126,7 @@ impl TypeChecker {
                 if !opt_out {
                     let param_names: std::collections::HashSet<_> =
                         params.iter().map(|p| p.name.node.clone()).collect();
-                    let captures = self.find_free_vars_in_expr(&*body, &param_names);
+                    let captures = self.find_free_vars_in_expr(body, &param_names);
                     if !captures.is_empty() {
                         return Err(TypeError::Mismatch {
                             expected: "named function pointer or capture-free closure".to_string(),

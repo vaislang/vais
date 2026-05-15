@@ -1082,7 +1082,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
         let target = &mut self.scope_str_stack[target_depth];
-        if !target.iter().any(|existing| *existing == slot) {
+        if !target.contains(&slot) {
             target.push(slot);
         }
     }
@@ -1444,6 +1444,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ///   - known str builtin methods (parse_*, char_at) via fixed signatures
     ///   - named function calls whose signature we already tracked in
     ///     `resolved_function_sigs`
+    ///
     /// Returns None when the type cannot be inferred — callers must leave
     /// `var_resolved_types` alone in that case.
     pub(super) fn infer_resolved_type_from_rhs(

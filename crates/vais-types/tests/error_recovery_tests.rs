@@ -72,7 +72,7 @@ fn test_error_undefined_var_no_suggestion_for_dissimilar() {
 
 #[test]
 fn test_error_code_undefined_function() {
-    let source = "fn add(a:i64,b:i64)->i64=a+b F main()->i64=ad(1,2)";
+    let source = "fn add(a:i64,b:i64)->i64=a+b fn main()->i64=ad(1,2)";
     if let Some(err) = check_error(source) {
         // Type checker may report as E002 (UndefinedVar) or E004 (UndefinedFunction)
         // depending on resolution order
@@ -93,7 +93,7 @@ fn test_error_code_undefined_function() {
 
 #[test]
 fn test_error_code_arg_count() {
-    let source = "fn add(a:i64,b:i64)->i64=a+b F main()->i64=add(1)";
+    let source = "fn add(a:i64,b:i64)->i64=a+b fn main()->i64=add(1)";
     if let Some(err) = check_error(source) {
         assert_eq!(err.error_code(), "E006");
         let msg = format!("{}", err);
@@ -310,7 +310,7 @@ fn test_find_similar_name_none() {
 
 #[test]
 fn test_parse_error_unexpected_token() {
-    let source = "F broken syntax here";
+    let source = "fn broken syntax here";
     let result = parse(source);
     assert!(result.is_err(), "Should fail to parse");
     let err = result.unwrap_err();

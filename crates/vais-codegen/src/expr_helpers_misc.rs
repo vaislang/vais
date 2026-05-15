@@ -693,9 +693,7 @@ impl CodeGenerator {
                         && Self::int_type_width(&actual) > 0
                         && Self::int_type_width(&try_llvm) > 0
                     {
-                        let coerced =
-                            self.coerce_int_width(&value, &actual, &try_llvm, counter, &mut ir);
-                        coerced
+                        self.coerce_int_width(&value, &actual, &try_llvm, counter, &mut ir)
                     } else {
                         value
                     }

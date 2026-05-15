@@ -26,6 +26,25 @@ pub fn compute_content_hash(content: &str) -> String {
     format!("{:x}", result)
 }
 
+fn span_text(source: &str, start: usize, end: usize) -> &str {
+    source.get(start..end).unwrap_or("")
+}
+
+fn line_range_for_span(source: &str, start: usize, end: usize) -> (u32, u32) {
+    let safe_start = start.min(source.len());
+    let safe_end = end.min(source.len());
+    let start_line = source.as_bytes()[..safe_start]
+        .iter()
+        .filter(|&&b| b == b'\n')
+        .count();
+    let end_line = source.as_bytes()[..safe_end]
+        .iter()
+        .filter(|&&b| b == b'\n')
+        .count();
+
+    (start_line as u32, end_line as u32)
+}
+
 /// Compute an aggregate SHA-256 digest of the Vais standard library at
 /// `std_root` (Task #11 / Phase 4a).
 ///
@@ -306,157 +325,61 @@ impl DefinitionExtractor {
         }
     }
 
-    /// Extract definitions from source content
-    /// This is a simplified parser that looks for function and type patterns
+    /// Extract definitions from source content.
+    ///
+    /// This intentionally uses the real parser instead of a parallel string
+    /// grammar, so incremental metadata follows the canonical Vais syntax.
     pub fn extract_from_source(&mut self, content: &str) -> Result<(), String> {
-        let lines: Vec<&str> = content.lines().collect();
-        let mut current_line = 0;
+        let module = vais_parser::parse(content)
+            .map_err(|e| format!("Cannot parse source for incremental metadata: {e:?}"))?;
 
-        while current_line < lines.len() {
-            let line = lines[current_line].trim();
+        for item in module.items {
+            let span = item.span;
+            let body = span_text(content, span.start, span.end);
+            let line_range = line_range_for_span(content, span.start, span.end);
 
-            // Function definition: F name(...) or F name<...>(...)
-            if let Some(func_info) = self.try_parse_function(line, &lines, current_line) {
-                let (name, start, end, body) = func_info;
-                let hash = compute_content_hash(&body);
-                let deps = self.extract_dependencies(&body);
-
-                self.functions.insert(
-                    name.clone(),
-                    FunctionMetadata {
-                        hash,
-                        line_range: (start as u32, end as u32),
-                        dependencies: deps,
-                        is_dirty: false,
-                    },
-                );
-
-                current_line = end + 1;
-                continue;
+            match item.node {
+                vais_ast::Item::Function(func) => {
+                    self.functions.insert(
+                        func.name.node,
+                        FunctionMetadata {
+                            hash: compute_content_hash(body),
+                            line_range,
+                            dependencies: self.extract_dependencies(body),
+                            is_dirty: false,
+                        },
+                    );
+                }
+                vais_ast::Item::Struct(struct_def) => {
+                    self.types.insert(
+                        struct_def.name.node,
+                        TypeMetadata {
+                            hash: compute_content_hash(body),
+                            line_range,
+                            dependencies: self.extract_type_dependencies(body),
+                        },
+                    );
+                }
+                vais_ast::Item::Enum(enum_def) => {
+                    self.types.insert(
+                        enum_def.name.node,
+                        TypeMetadata {
+                            hash: compute_content_hash(body),
+                            line_range,
+                            dependencies: self.extract_type_dependencies(body),
+                        },
+                    );
+                }
+                _ => {}
             }
-
-            // Struct definition: S name { ... }
-            if let Some(type_info) = self.try_parse_struct(line, &lines, current_line) {
-                let (name, start, end, body) = type_info;
-                let hash = compute_content_hash(&body);
-                let deps = self.extract_type_dependencies(&body);
-
-                self.types.insert(
-                    name.clone(),
-                    TypeMetadata {
-                        hash,
-                        line_range: (start as u32, end as u32),
-                        dependencies: deps,
-                    },
-                );
-
-                current_line = end + 1;
-                continue;
-            }
-
-            // Enum definition: E name { ... }
-            if let Some(type_info) = self.try_parse_enum(line, &lines, current_line) {
-                let (name, start, end, body) = type_info;
-                let hash = compute_content_hash(&body);
-                let deps = self.extract_type_dependencies(&body);
-
-                self.types.insert(
-                    name.clone(),
-                    TypeMetadata {
-                        hash,
-                        line_range: (start as u32, end as u32),
-                        dependencies: deps,
-                    },
-                );
-
-                current_line = end + 1;
-                continue;
-            }
-
-            current_line += 1;
         }
 
         Ok(())
     }
 
-    /// Try to parse a function definition, returns (name, start_line, end_line, body)
-    fn try_parse_function(
-        &self,
-        line: &str,
-        lines: &[&str],
-        start: usize,
-    ) -> Option<(String, usize, usize, String)> {
-        // Match patterns: "F name(", "F name<", "pub F name("
-        let line_trimmed = line.trim_start_matches("pub ").trim();
-        if !line_trimmed.starts_with("F ") {
-            return None;
-        }
-
-        // Extract function name
-        let after_f = line_trimmed[2..].trim();
-        let name_end = after_f.find(['(', '<']).unwrap_or(after_f.len());
-        let name = after_f[..name_end].trim().to_string();
-
-        if name.is_empty() {
-            return None;
-        }
-
-        // Find matching braces
-        let (end_line, body) = self.find_block_end(lines, start)?;
-
-        Some((name, start, end_line, body))
-    }
-
-    /// Try to parse a struct definition
-    fn try_parse_struct(
-        &self,
-        line: &str,
-        lines: &[&str],
-        start: usize,
-    ) -> Option<(String, usize, usize, String)> {
-        let line_trimmed = line.trim_start_matches("pub ").trim();
-        if !line_trimmed.starts_with("S ") {
-            return None;
-        }
-
-        let after_s = line_trimmed[2..].trim();
-        let name_end = after_s.find(['{', '<', ' ']).unwrap_or(after_s.len());
-        let name = after_s[..name_end].trim().to_string();
-
-        if name.is_empty() {
-            return None;
-        }
-
-        let (end_line, body) = self.find_block_end(lines, start)?;
-        Some((name, start, end_line, body))
-    }
-
-    /// Try to parse an enum definition
-    fn try_parse_enum(
-        &self,
-        line: &str,
-        lines: &[&str],
-        start: usize,
-    ) -> Option<(String, usize, usize, String)> {
-        let line_trimmed = line.trim_start_matches("pub ").trim();
-        if !line_trimmed.starts_with("E ") {
-            return None;
-        }
-
-        let after_e = line_trimmed[2..].trim();
-        let name_end = after_e.find(['{', '<', ' ']).unwrap_or(after_e.len());
-        let name = after_e[..name_end].trim().to_string();
-
-        if name.is_empty() {
-            return None;
-        }
-
-        let (end_line, body) = self.find_block_end(lines, start)?;
-        Some((name, start, end_line, body))
-    }
-
     /// Find the end of a block (matching braces)
     /// This version correctly handles comments and string literals
+    #[cfg(test)]
     fn find_block_end(&self, lines: &[&str], start: usize) -> Option<(usize, String)> {
         let mut brace_count = 0;
         let mut found_open = false;
@@ -586,19 +509,33 @@ impl Default for DefinitionExtractor {
 fn is_vais_keyword(word: &str) -> bool {
     matches!(
         word,
-        "F" | "S"
-            | "E"
-            | "T"
+        "fn" | "struct"
+            | "enum"
+            | "type"
+            | "use"
+            | "pub"
+            | "trait"
+            | "impl"
+            | "const"
+            | "partial"
+            | "pure"
+            | "io"
+            | "alloc"
+            | "unsafe"
+            | "comptime"
+            | "dyn"
             | "I"
-            | "M"
-            | "N"
-            | "C"
-            | "V"
             | "L"
-            | "W"
-            | "R"
             | "B"
-            | "P"
+            | "C"
+            | "D"
+            | "O"
+            | "N"
+            | "G"
+            | "A"
+            | "Y"
+            | "LF"
+            | "LW"
             | "if"
             | "else"
             | "for"
@@ -610,15 +547,13 @@ fn is_vais_keyword(word: &str) -> bool {
             | "false"
             | "self"
             | "Self"
-            | "pub"
             | "mut"
             | "async"
             | "await"
-            | "import"
-            | "from"
             | "as"
             | "match"
             | "defer"
+            | "yield"
     )
 }
 
@@ -830,7 +765,12 @@ mod tests {
     #[test]
     fn test_find_block_end_skips_comments() {
         let extractor = DefinitionExtractor::new();
-        let lines = vec!["F foo() {", "    # { this is a comment", "    x := 42", "}"];
+        let lines = vec![
+            "fn foo() {",
+            "    # { this is a comment",
+            "    x := 42",
+            "}",
+        ];
 
         let result = extractor.find_block_end(&lines, 0);
         assert!(result.is_some());
@@ -842,7 +782,7 @@ mod tests {
     fn test_find_block_end_skips_strings() {
         let extractor = DefinitionExtractor::new();
         let lines = vec![
-            "F bar() {",
+            "fn bar() {",
             r#"    msg := "{ string }"#,
             r#"    escaped := "say \"hello\""#,
             "}",

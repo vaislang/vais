@@ -41,7 +41,7 @@ impl TypeChecker {
                         if let Some(ret) = self.current_fn_ret.clone() {
                             if !is_result_or_option(&ret) {
                                 return Some(Err(crate::TypeError::Mismatch {
-                                    expected: format!("Result<_,_> or Option<_>"),
+                                    expected: "Result<_,_> or Option<_>".to_string(),
                                     found: ret.to_string(),
                                     span: Some(expr.span),
                                 }));

@@ -30,7 +30,7 @@ fn test_dyn_trait_type_parsing() {
 fn test_dyn_trait_with_generics() {
     // Test dyn Trait with generic parameters
     let source = r#"
-        W Iterator<T> {
+        trait Iterator<T> {
             fn next(&self) -> T?
         }
 

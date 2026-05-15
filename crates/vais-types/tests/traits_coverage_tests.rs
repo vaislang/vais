@@ -152,7 +152,7 @@ fn test_trait_super_trait() {
         trait Base {
             fn base_method(self) -> i64
         }
-        W Extended: Base {
+        trait Extended: Base {
             fn ext_method(self) -> i64
         }
         struct Impl { x: i64 }
@@ -319,13 +319,13 @@ fn test_trait_method_returning_self_type() {
 fn test_multiple_traits_for_one_type() {
     check_ok(
         r#"
-        trait TraitA { F a(self) -> i64 }
-        trait TraitB { F b(self) -> i64 }
-        trait TraitC { F c(self) -> i64 }
+        trait TraitA { fn a(self) -> i64 }
+        trait TraitB { fn b(self) -> i64 }
+        trait TraitC { fn c(self) -> i64 }
         struct Multi { x: i64 }
-        impl Multi: TraitA { F a(self) -> i64 = 1 }
-        impl Multi: TraitB { F b(self) -> i64 = 2 }
-        impl Multi: TraitC { F c(self) -> i64 = 3 }
+        impl Multi: TraitA { fn a(self) -> i64 = 1 }
+        impl Multi: TraitB { fn b(self) -> i64 = 2 }
+        impl Multi: TraitC { fn c(self) -> i64 = 3 }
     "#,
     );
 }

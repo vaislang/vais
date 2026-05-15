@@ -217,10 +217,10 @@ fn error_no_such_field_suggests_similar() {
 
 #[test]
 fn warning_extern_pointer_fn_wrong_return_type() {
-    // X F is the single extern function syntax
+    // `N fn` is the single extern function syntax.
     // dlopen is a known pointer-returning function that is NOT a builtin
     let warnings =
-        type_check_warnings("impl F dlopen(path: i64, mode: i64) -> bool\nfn main() -> i64 = 0");
+        type_check_warnings("N fn dlopen(path: i64, mode: i64) -> bool\nfn main() -> i64 = 0");
     let has_extern_warning = warnings
         .iter()
         .any(|w| w.contains("dlopen") && w.contains("should return"));
@@ -233,9 +233,9 @@ fn warning_extern_pointer_fn_wrong_return_type() {
 
 #[test]
 fn warning_extern_pointer_fn_correct_return_type_no_warning() {
-    // X F is the single extern function syntax
+    // `N fn` is the single extern function syntax.
     let warnings =
-        type_check_warnings("impl F dlopen(path: i64, mode: i64) -> i64\nfn main() -> i64 = 0");
+        type_check_warnings("N fn dlopen(path: i64, mode: i64) -> i64\nfn main() -> i64 = 0");
     let has_extern_warning = warnings
         .iter()
         .any(|w| w.contains("dlopen") && w.contains("should return"));

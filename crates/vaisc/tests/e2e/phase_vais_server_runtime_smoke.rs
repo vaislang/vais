@@ -1327,58 +1327,18 @@ fn run_vais_server_generated_retry_smoke(
 }
 
 fn accept_one_ssr_forwarding_request(listener: TcpListener) -> String {
-    let deadline = Instant::now() + Duration::from_secs(10);
-    let (mut stream, _) = loop {
-        match listener.accept() {
-            Ok(pair) => break pair,
-            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                assert!(
-                    Instant::now() < deadline,
-                    "timed out waiting for vais-server SSR forwarding connection"
-                );
-                thread::sleep(Duration::from_millis(25));
-            }
-            Err(err) => panic!("failed to accept vais-server SSR forwarding connection: {err}"),
-        }
-    };
-
-    stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .expect("set SSR upstream stream read timeout");
-
-    let mut request = Vec::new();
-    let mut buffer = [0_u8; 4096];
-    loop {
-        match stream.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(n) => {
-                request.extend_from_slice(&buffer[..n]);
-                if request_has_complete_http_body(&request) {
-                    break;
-                }
-            }
-            Err(err)
-                if err.kind() == std::io::ErrorKind::WouldBlock
-                    || err.kind() == std::io::ErrorKind::TimedOut =>
-            {
-                break;
-            }
-            Err(err) => panic!("failed to read vais-server SSR forwarding request: {err}"),
-        }
-    }
-
-    let body = r#"{"html":"<main data-route='/products/sku-42'>from-node</main>","head":"<title>remote</title>","status":202}"#;
-    let response = format!(
-        "HTTP/1.1 202 Accepted\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-        body.len(),
-        body
-    );
-    stream
-        .write_all(response.as_bytes())
-        .expect("write SSR upstream response");
-    stream.flush().expect("flush SSR upstream response");
-
-    String::from_utf8_lossy(&request).into_owned()
+    accept_one_ssr_request_and_then(listener, |stream| {
+        let body = r#"{"html":"<main data-route='/products/sku-42'>from-node</main>","head":"<title>remote</title>","status":202}"#;
+        let response = format!(
+            "HTTP/1.1 202 Accepted\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        stream
+            .write_all(response.as_bytes())
+            .expect("write SSR upstream response");
+        stream.flush().expect("flush SSR upstream response");
+    })
 }
 
 fn accept_one_ssr_timeout_request(listener: TcpListener) -> String {
@@ -1452,6 +1412,7 @@ fn accept_one_ssr_request_and_then(
 
     let mut request = Vec::new();
     let mut buffer = [0_u8; 4096];
+    let read_deadline = Instant::now() + Duration::from_secs(15);
     loop {
         match stream.read(&mut buffer) {
             Ok(0) => break,
@@ -1465,7 +1426,15 @@ fn accept_one_ssr_request_and_then(
                 if err.kind() == std::io::ErrorKind::WouldBlock
                     || err.kind() == std::io::ErrorKind::TimedOut =>
             {
-                break;
+                if request_has_complete_http_body(&request) {
+                    break;
+                }
+                assert!(
+                    Instant::now() < read_deadline,
+                    "timed out reading complete vais-server SSR forwarding request; partial request:\n{}",
+                    String::from_utf8_lossy(&request)
+                );
+                thread::sleep(Duration::from_millis(25));
             }
             Err(err) => panic!("failed to read vais-server SSR forwarding request: {err}"),
         }

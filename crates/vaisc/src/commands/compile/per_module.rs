@@ -58,7 +58,7 @@ pub(crate) fn module_artifact_stem(path: &Path) -> String {
 }
 
 /// Phase 17.H4.14: load generic struct templates (Vec, HashMap, Option,
-/// Result) from stdlib. Parsed once per build; the resulting Rc<Struct>s
+/// Result) from stdlib. Parsed once per build; the resulting `Rc<Struct>`s
 /// are injected into each per-module CodeGenerator's generics.struct_defs
 /// so method specialization (Vec_new$T, etc.) works even when the user
 /// didn't explicitly `U std/vec`.
