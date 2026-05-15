@@ -21,18 +21,21 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VAISDB_ROOT="${VAISDB_ROOT:-$REPO_ROOT/../lang/packages/vaisdb}"
 VAISC="${VAISC:-$HOME/.cargo/bin/vaisc}"
 STD_PATH="${STD_PATH:-/tmp/vais-lib/std}"
+MIGRATED_VAISDB_ROOT=""
 
 # Known-failure baselines (2026-04-26, iter 78 실측).
 # bash 3.2 (macOS 기본) 은 associative array 미지원 — parallel arrays + lookup 함수로 우회.
 # These clang errors are tracked as TEMP-SITE-FIX(adr-0001) — to be resolved
 # by Task #6 (stmt.rs Vec→fat-ptr ret) and Task #7 (slice indexing bitcast).
 WAVE1_TESTS=(test_btree test_wal test_buffer_pool test_graph test_migration)
+# test_btree/test_buffer_pool: legacy source canonicalization plus build
+# package-root import resolution lowered the clang-error baselines to zero.
 # test_graph: 2 → 1 (Phase Ω P1.2 iter 90+91, commits 7fcdd285+27f6b260).
 # Vec.push + HashMap.insert update_var_type fixes resolved 1+ Vec<T> indexing
 # erasures in graph.vais. Flaky between 0 and 1 in --all context (CLAUDE
 # known-issue: 제네릭 인스턴스 process leak); standalone is 0 or 1.
 # Conservative baseline 1 to avoid CI false-positive on flaky 0 measurements.
-WAVE1_BASELINES=(2 1 1 1 3)
+WAVE1_BASELINES=(0 1 0 1 3)
 WAVE1_PATHS=(
     "tests/storage/test_btree.vais"
     "tests/storage/test_wal.vais"
@@ -95,6 +98,36 @@ if [[ ! -e "$STD_PATH" ]]; then
     ln -sf "$REPO_ROOT/std" "$STD_PATH"
 fi
 
+cleanup_migrated_vaisdb_root() {
+    if [[ -n "${MIGRATED_VAISDB_ROOT:-}" && -d "$MIGRATED_VAISDB_ROOT" ]]; then
+        rm -rf "$MIGRATED_VAISDB_ROOT"
+    fi
+}
+
+canonicalize_vais_sources() {
+    local root="$1"
+    local failed=0
+    local file=""
+
+    while IFS= read -r -d '' file; do
+        if ! "$VAISC" fmt "$file" --to=multi >/dev/null 2>&1; then
+            echo "❌ canonical syntax migration failed for $file" >&2
+            failed=1
+        fi
+    done < <(find "$root" -name "*.vais" -type f -print0)
+
+    return "$failed"
+}
+
+echo "▶ Preparing canonical VaisDB source snapshot..."
+MIGRATED_VAISDB_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/vaisdb-regression.XXXXXX")"
+trap cleanup_migrated_vaisdb_root EXIT
+cp -R "$VAISDB_ROOT"/. "$MIGRATED_VAISDB_ROOT"/
+if ! canonicalize_vais_sources "$MIGRATED_VAISDB_ROOT"; then
+    exit 1
+fi
+VAISDB_ROOT="$MIGRATED_VAISDB_ROOT"
+
 # ─── Cache nuke (ADR 0001 §3, vaisdb iter 73 학습) ───────────────────────────
 # vaisc cache (.vais-cache)가 specialization 결과를 보존하여 fix 효과를 가린다.
 # clean rebuild 의무.
@@ -139,7 +172,7 @@ for TARGET_TEST in "${TESTS[@]}"; do
     echo "▶ Building $TARGET_TEST.vais (baseline: $BASELINE errors)..."
 
     BUILD_LOG=$(mktemp)
-    if ! VAIS_DEP_PATHS="$(pwd)/src:$STD_PATH" VAIS_STD_PATH="$STD_PATH" \
+    if ! VAIS_DEP_PATHS="$(pwd)/src:$(pwd):$STD_PATH" VAIS_STD_PATH="$STD_PATH" \
         "$VAISC" build "$TEST_PATH" \
         --emit-ir -o "/tmp/$TARGET_TEST.ll" --force-rebuild \
         > "$BUILD_LOG" 2>&1; then

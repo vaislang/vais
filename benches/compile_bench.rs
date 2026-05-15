@@ -182,7 +182,7 @@ fn generate_code(num_funcs: usize) -> String {
         ));
     }
 
-    code.push_str("F main()->i64 = func0(42)\n");
+    code.push_str("fn main()->i64 = func0(42)\n");
     code
 }
 

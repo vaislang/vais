@@ -23,24 +23,28 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVER_ROOT="${SERVER_ROOT:-$REPO_ROOT/../lang/packages/vais-server}"
 VAISC="${VAISC:-$HOME/.cargo/bin/vaisc}"
 STD_PATH="${STD_PATH:-/tmp/vais-lib/std}"
+MIGRATED_SERVER_ROOT=""
 
 # Known-failure baselines (ADR 0001 §1 R3).
 # These clang errors are tracked as TEMP-SITE-FIX(adr-0001) — to be resolved
 # by Pillar 1.x cross-cutting fixes (Vec_push undefined, var-to-llvm typing).
 
-# Wave 1 (2026-04-26, iter 86 실측): smoke tests — core + integration
+# Wave 1 (2026-04-26, iter 86 실측): smoke tests — core + integration.
+# Legacy source canonicalization plus build package-root import resolution
+# lowered both clang-error baselines to zero.
 WAVE1_TESTS=(test_shutdown test_http)
-WAVE1_BASELINES=(1 1)
+WAVE1_BASELINES=(0 0)
 WAVE1_PATHS=(
     "tests/core/test_shutdown.vais"
     "tests/integration/test_http.vais"
 )
 
 # Wave 2 (2026-04-28, iter 87 실측): coverage expansion — 6 additional areas
-# Domains: core/test_error(0), http/test_status(1), http/test_response(1),
-#          middleware/test_pipeline(1), util/test_yaml(3), ws/test_protocol(5)
+# Domains after canonicalization/root resolution:
+# core/test_error(0), http/test_status(1), http/test_response(0),
+# middleware/test_pipeline(0), util/test_yaml(2), ws/test_protocol(1)
 WAVE2_TESTS=(test_error test_status test_response test_pipeline test_yaml test_protocol)
-WAVE2_BASELINES=(0 1 1 1 3 5)
+WAVE2_BASELINES=(0 1 0 0 2 1)
 WAVE2_PATHS=(
     "tests/core/test_error.vais"
     "tests/http/test_status.vais"
@@ -109,6 +113,36 @@ if [[ ! -e "$STD_PATH" ]]; then
     ln -sf "$REPO_ROOT/std" "$STD_PATH"
 fi
 
+cleanup_migrated_server_root() {
+    if [[ -n "${MIGRATED_SERVER_ROOT:-}" && -d "$MIGRATED_SERVER_ROOT" ]]; then
+        rm -rf "$MIGRATED_SERVER_ROOT"
+    fi
+}
+
+canonicalize_vais_sources() {
+    local root="$1"
+    local failed=0
+    local file=""
+
+    while IFS= read -r -d '' file; do
+        if ! "$VAISC" fmt "$file" --to=multi >/dev/null 2>&1; then
+            echo "❌ canonical syntax migration failed for $file" >&2
+            failed=1
+        fi
+    done < <(find "$root" -name "*.vais" -type f -print0)
+
+    return "$failed"
+}
+
+echo "▶ Preparing canonical vais-server source snapshot..."
+MIGRATED_SERVER_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/vais-server-regression.XXXXXX")"
+trap cleanup_migrated_server_root EXIT
+cp -R "$SERVER_ROOT"/. "$MIGRATED_SERVER_ROOT"/
+if ! canonicalize_vais_sources "$MIGRATED_SERVER_ROOT"; then
+    exit 1
+fi
+SERVER_ROOT="$MIGRATED_SERVER_ROOT"
+
 # ─── Cache nuke (ADR 0001 §3 학습) ───────────────────────────────────────────
 
 echo "▶ Nuking vais-server caches and /tmp test artifacts..."
@@ -155,7 +189,7 @@ for TARGET_TEST in "${TESTS[@]}"; do
     echo "▶ Building $TARGET_TEST.vais (baseline: $BASELINE errors)..."
 
     BUILD_LOG=$(mktemp)
-    if ! VAIS_DEP_PATHS="$(pwd)/src:$STD_PATH" VAIS_STD_PATH="$STD_PATH" \
+    if ! VAIS_DEP_PATHS="$(pwd)/src:$(pwd):$STD_PATH" VAIS_STD_PATH="$STD_PATH" \
         "$VAISC" build "$TEST_PATH" \
         --emit-ir -o "/tmp/$TARGET_TEST.ll" --force-rebuild \
         > "$BUILD_LOG" 2>&1; then

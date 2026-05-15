@@ -1,4 +1,5 @@
 use crate::CodeGenerator;
+use vais_ast::{Expr, Span, Spanned};
 use vais_parser::parse;
 
 #[test]
@@ -21,6 +22,19 @@ fn test_fibonacci() {
 
     assert!(ir.contains("define i64 @fib"));
     assert!(ir.contains("call i64 @fib"));
+}
+
+#[test]
+fn test_generate_expr_repeat_does_not_trip_global_counter() {
+    let mut gen = CodeGenerator::new("test");
+    let expr = Spanned::new(Expr::Int(1), Span::default());
+    let mut counter = 0;
+
+    for _ in 0..100_005 {
+        let (value, ir) = gen.generate_expr(&expr, &mut counter).unwrap();
+        assert_eq!(value, "1");
+        assert!(ir.is_empty());
+    }
 }
 
 #[test]

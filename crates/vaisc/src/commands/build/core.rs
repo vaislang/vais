@@ -9,6 +9,19 @@ use crate::error_formatter;
 use crate::imports::{load_module_with_imports_internal, load_module_with_imports_parallel};
 use crate::incremental;
 use crate::utils::{print_plugin_diagnostics, print_suggested_fixes};
+use colored::Colorize;
+use std::collections::HashSet;
+use std::fs;
+use std::path::{Path, PathBuf};
+use vais_ast::{
+    Expr, FunctionBody, GenericParamKind, IfElse, Item, MatchArm, Module, Pattern, Span, Spanned,
+    Stmt, Type, VariantFields,
+};
+use vais_codegen::TargetTriple;
+use vais_macro::{collect_macros, expand_macros, process_derives, MacroRegistry};
+use vais_plugin::{DiagnosticLevel, PluginRegistry};
+use vais_query::QueryDatabase;
+use vais_types::TypeChecker;
 
 /// Phase 17.H1: FNV-1a 32 hash of a source path for use as TC file_id.
 /// Non-zero — 0 is reserved for synthetic spans.
@@ -26,19 +39,37 @@ fn phase17_fnv1a_file_id(s: &str) -> u32 {
         hash
     }
 }
-use colored::Colorize;
-use std::collections::HashSet;
-use std::fs;
-use std::path::{Path, PathBuf};
-use vais_ast::{
-    Expr, FunctionBody, GenericParamKind, IfElse, Item, MatchArm, Module, Pattern, Span, Spanned,
-    Stmt, Type, VariantFields,
-};
-use vais_codegen::TargetTriple;
-use vais_macro::{collect_macros, expand_macros, process_derives, MacroRegistry};
-use vais_plugin::{DiagnosticLevel, PluginRegistry};
-use vais_query::QueryDatabase;
-use vais_types::TypeChecker;
+
+/// Walk up from a build input and find the package root used for
+/// package-relative imports.
+fn find_package_source_root(start: &Path) -> Option<PathBuf> {
+    let mut cur = start.parent();
+    while let Some(dir) = cur {
+        if dir.join("vais.toml").is_file() {
+            let src = dir.join("src");
+            return Some(if src.is_dir() { src } else { dir.to_path_buf() });
+        }
+        cur = dir.parent();
+    }
+
+    let mut cur = start.parent();
+    while let Some(dir) = cur {
+        if dir.join("src").is_dir() {
+            return Some(dir.to_path_buf());
+        }
+        cur = dir.parent();
+    }
+
+    let mut cur = start.parent();
+    while let Some(dir) = cur {
+        if dir.file_name().map(|n| n == "src").unwrap_or(false) {
+            return Some(dir.to_path_buf());
+        }
+        cur = dir.parent();
+    }
+
+    None
+}
 
 /// Per-phase compilation timing profile.
 /// Used by `--profile` flag to display detailed pipeline breakdown.
@@ -289,6 +320,8 @@ pub(crate) fn cmd_build(
     let parse_start = std::time::Instant::now();
     let mut loaded_modules: HashSet<PathBuf> = HashSet::new();
     let mut loading_stack: Vec<PathBuf> = Vec::new();
+    let source_root =
+        find_package_source_root(input).or_else(|| input.parent().map(Path::to_path_buf));
     let merged_ast = if use_parallel {
         load_module_with_imports_parallel(
             input,
@@ -296,7 +329,7 @@ pub(crate) fn cmd_build(
             verbose,
             &main_source,
             &query_db,
-            input.parent().map(|p| p as &Path),
+            source_root.as_deref(),
         )?
     } else {
         load_module_with_imports_internal(
@@ -306,7 +339,7 @@ pub(crate) fn cmd_build(
             verbose,
             &main_source,
             &query_db,
-            input.parent().map(|p| p as &Path),
+            source_root.as_deref(),
         )?
     };
     let parse_time = parse_start.elapsed();

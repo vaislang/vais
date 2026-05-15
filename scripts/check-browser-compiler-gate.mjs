@@ -24,16 +24,16 @@ const compiler = new BrowserCompiler({
   wasmBytes,
 });
 
-const compiled = await compiler.compileToJs('F main() -> i64 = 42');
+const compiled = await compiler.compileToJs('fn main() -> i64 = 42');
 assert.equal(compiled.success, true);
 assert.match(compiled.jsCode, /function main\(\)/);
 
-const executed = await compiler.compileAndRun('F main() -> i64 = 42');
+const executed = await compiler.compileAndRun('fn main() -> i64 = 42');
 assert.equal(executed.success, true);
 assert.match(executed.output, /^42/);
 assert.match(executed.output, /Browser-JS mode\s+\u2014\s+browser compiled and executed JavaScript/);
 
-const invalid = await compiler.compileToJs('F main( -> i64 = 42');
+const invalid = await compiler.compileToJs('fn main( -> i64 = 42');
 assert.equal(invalid.success, false);
 assert.ok(invalid.errors.length > 0);
 

@@ -30,6 +30,19 @@ use vais_ast::*;
 
 use crate::{CodeGenerator, CodegenError, CodegenResult};
 
+const MAX_EXPR_CODEGEN_DEPTH: usize = 4096;
+
+struct ExprCodegenDepthGuard<'a> {
+    depth: &'a std::cell::Cell<usize>,
+    previous: usize,
+}
+
+impl Drop for ExprCodegenDepthGuard<'_> {
+    fn drop(&mut self) {
+        self.depth.set(self.previous);
+    }
+}
+
 mod loops;
 mod map_lit;
 mod misc_expr;
@@ -43,16 +56,30 @@ impl CodeGenerator {
         expr: &Spanned<Expr>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
-        // Use stacker to grow the stack on demand, preventing stack overflow
-        // for deeply nested expressions (e.g., complex struct specializations)
-        stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
-            use std::sync::atomic::{AtomicUsize, Ordering};
-            static CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
-            let count = CALL_COUNT.fetch_add(1, Ordering::Relaxed);
-            if count > 100000 {
-                std::process::abort();
+        thread_local! {
+            static EXPR_CODEGEN_DEPTH: std::cell::Cell<usize> =
+                const { std::cell::Cell::new(0) };
+        }
+
+        EXPR_CODEGEN_DEPTH.with(|depth| {
+            let current = depth.get();
+            if current >= MAX_EXPR_CODEGEN_DEPTH {
+                return Err(CodegenError::RecursionLimitExceeded(format!(
+                    "expression codegen depth limit ({}) exceeded",
+                    MAX_EXPR_CODEGEN_DEPTH
+                )));
             }
-            self.generate_expr_inner(expr, counter)
+
+            depth.set(current + 1);
+            let _guard = ExprCodegenDepthGuard {
+                depth,
+                previous: current,
+            };
+            // Use stacker to grow the stack on demand, preventing stack overflow
+            // for deeply nested expressions (e.g., complex struct specializations).
+            stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
+                self.generate_expr_inner(expr, counter)
+            })
         })
     }
 

@@ -183,10 +183,10 @@ fn bench_incremental_parse(c: &mut Criterion) {
     // Simulate small edits to the file
     let variants = [
         ("original", source.clone()),
-        ("small_edit", source.clone() + "\nF dummy()->i64 = 42"),
+        ("small_edit", source.clone() + "\nfn dummy()->i64 = 42"),
         (
             "medium_edit",
-            source.clone() + "\nF helper(x: i64)->i64 = x * 2\nF helper2(x: i64)->i64 = @(x) + 1",
+            source.clone() + "\nfn helper(x: i64)->i64 = x * 2\nfn helper2(x: i64)->i64 = @(x) + 1",
         ),
     ];
 
@@ -255,7 +255,7 @@ fn bench_error_handling(c: &mut Criterion) {
     });
 
     // Invalid code (syntax error)
-    let invalid_syntax = "F broken(x: i64 = x +";
+    let invalid_syntax = "fn broken(x: i64 = x +";
 
     group.bench_function("syntax_error", |b| {
         b.iter(|| {
@@ -298,7 +298,7 @@ fn bench_large_functions(c: &mut Criterion) {
 
 /// Generate a large function with N nested operations
 fn generate_large_function(n: usize) -> String {
-    let mut code = String::from("F large(x: i64)->i64 = ");
+    let mut code = String::from("fn large(x: i64)->i64 = ");
 
     for i in 0..n {
         if i > 0 {
@@ -308,7 +308,7 @@ fn generate_large_function(n: usize) -> String {
     }
 
     code.push('\n');
-    code.push_str("F main()->i64 = large(42)\n");
+    code.push_str("fn main()->i64 = large(42)\n");
     code
 }
 
@@ -355,7 +355,7 @@ fn generate_module_with_functions(n: usize) -> String {
     }
 
     // Main function that calls some of them
-    code.push_str("F main()->i64 = func0(42)");
+    code.push_str("fn main()->i64 = func0(42)");
     if n > 1 {
         code.push_str(" + func1(10)");
     }
