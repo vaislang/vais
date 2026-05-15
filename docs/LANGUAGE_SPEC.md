@@ -308,7 +308,7 @@ or panics.
 
 ```vais
 fn parse_and_double(s: str) -> Result<i64, str> {
-    n := parse_i64(s)?
+    n := parse_i64(s)?;
     Ok(n * 2)
 }
 

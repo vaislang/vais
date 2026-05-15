@@ -49,6 +49,21 @@ function validateRegistry() {
   requireStringArray(registry.sourceOfTruth, 'sourceOfTruth');
   requireStringArray(registry.generatedDocs, 'generatedDocs');
 
+  if (!registry.referenceApp || typeof registry.referenceApp !== 'object') {
+    fail('referenceApp must be an object');
+  } else {
+    requireString(registry.referenceApp.name, 'referenceApp.name');
+    requireString(registry.referenceApp.path, 'referenceApp.path');
+    requireString(registry.referenceApp.gate, 'referenceApp.gate');
+    requireString(registry.referenceApp.description, 'referenceApp.description');
+    if (!existsSync(resolve(root, registry.referenceApp.path))) {
+      fail(`${registry.referenceApp.path} does not exist`);
+    }
+    if (!existsSync(resolve(root, registry.referenceApp.gate))) {
+      fail(`${registry.referenceApp.gate} does not exist`);
+    }
+  }
+
   for (const path of [...registry.sourceOfTruth, ...registry.generatedDocs]) {
     if (!existsSync(resolve(root, path))) {
       fail(`${path} does not exist`);

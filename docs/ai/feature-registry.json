@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastReviewed": "2026-05-15",
+  "lastReviewed": "2026-05-16",
   "sourceOfTruth": [
     "docs/LANGUAGE_SPEC.md",
     "PUBLIC_STATUS.md",
@@ -16,8 +16,15 @@
     "rule": "When language, compiler, playground, DB, server, or web behavior changes, update this registry first and regenerate the AI docs.",
     "localCommands": [
       "node scripts/generate-ai-docs.mjs",
-      "node scripts/check-ai-docs-sync.mjs"
+      "node scripts/check-ai-docs-sync.mjs",
+      "bash scripts/check-ai-reference-app.sh"
     ]
+  },
+  "referenceApp": {
+    "name": "AI docs notes service",
+    "path": "tests/ai_reference_app/notes_service.vais",
+    "gate": "scripts/check-ai-reference-app.sh",
+    "description": "Small canonical Vais program that a new AI agent can reconstruct from docs/ai and docs/LANGUAGE_SPEC.md without relying on model memory."
   },
   "changeTriggers": [
     {
@@ -139,10 +146,12 @@
       "aiInstructions": [
         "Use Result<T, E> for recoverable failures and Option<T> for absence.",
         "Use match when all handled variants must be visible to the reader.",
-        "Use ? only where the surrounding function result type matches the propagated error shape."
+        "Use ? only where the surrounding function result type matches the propagated error shape.",
+        "Terminate statement-form ? bindings with ; before the next statement so the parser cannot read them as ternary expressions."
       ],
       "mustUse": [
         "fn checked_div(a: i64, b: i64) -> Result<i64, str>",
+        "value := fallible()?;",
         "return Err(\"message\")",
         "Ok(value)",
         "None",

@@ -2,7 +2,7 @@
 
 # Vais AI Developer Guide
 
-Last reviewed: 2026-05-15
+Last reviewed: 2026-05-16
 
 This guide is for AI agents that do not already know Vais. The expected workflow
 is documentation-first, compile-second, and claim-last.
