@@ -3,6 +3,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::sync::{Mutex, OnceLock};
 
 use vais_mir::interpreter::{interpret_function, MirValue};
 use vais_mir::lower::lower_module_checked;
@@ -805,6 +806,9 @@ fn require_success(out: &Output, label: &str) -> Result<(), String> {
 }
 
 fn run_check(path: &Path) -> Result<Output, String> {
+    let _guard = certification_build_lock()
+        .lock()
+        .expect("core certification build lock poisoned");
     let out = Command::new(vaisc_path())
         .arg("check")
         .arg(path)
@@ -818,6 +822,9 @@ fn run_check(path: &Path) -> Result<Output, String> {
 }
 
 fn run_codegen(path: &Path) -> Result<Output, String> {
+    let _guard = certification_build_lock()
+        .lock()
+        .expect("core certification build lock poisoned");
     let ir_path = unique_temp_path(path, "ll");
     let out = Command::new(vaisc_path())
         .arg("build")
@@ -842,6 +849,9 @@ struct BuildOutput {
 }
 
 fn run_build(path: &Path) -> Result<BuildOutput, String> {
+    let _guard = certification_build_lock()
+        .lock()
+        .expect("core certification build lock poisoned");
     let exe_path = unique_temp_path(path, "exe");
     let build = Command::new(vaisc_path())
         .arg("build")
@@ -856,6 +866,11 @@ fn run_build(path: &Path) -> Result<BuildOutput, String> {
         .map_err(|e| format!("failed to spawn vaisc build: {}", e))?;
     cleanup_generated_files(path);
     Ok(BuildOutput { build, exe_path })
+}
+
+fn certification_build_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
 }
 
 fn cleanup_generated_files(path: &Path) {
